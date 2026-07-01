@@ -14,6 +14,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import PageHeader from '@/app/components/ui/PageHeader'
 import { logger } from '@/lib/logger'
+import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
 
 interface BookmarkFolder {
   id: string
@@ -45,6 +46,14 @@ export default function FavoritesPageClient() {
   const [subscribedFolders, setSubscribedFolders] = useState<SubscribedFolder[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState<'my' | 'subscribed'>('my')
+  // B2 tabs a11y: my/subscribed folders share the single list region below.
+  const favTabsA11y = useTabsA11y({
+    tabs: ['my', 'subscribed'] as const,
+    active: activeTab,
+    onChange: setActiveTab,
+    idPrefix: 'fav',
+    sharedPanelId: 'fav-panel',
+  })
 
   // 新建收藏夹
   const [showCreateForm, setShowCreateForm] = useState(false)
@@ -287,7 +296,7 @@ export default function FavoritesPageClient() {
 
         {/* 标签切换 */}
         <Box
-          role="tablist"
+          {...favTabsA11y.getTabListProps()}
           aria-label={t('myFavorites')}
           style={{
             display: 'flex',
@@ -298,8 +307,7 @@ export default function FavoritesPageClient() {
         >
           <button
             type="button"
-            role="tab"
-            aria-selected={activeTab === 'my'}
+            {...favTabsA11y.getTabProps('my')}
             onClick={() => setActiveTab('my')}
             style={{
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -325,8 +333,7 @@ export default function FavoritesPageClient() {
           </button>
           <button
             type="button"
-            role="tab"
-            aria-selected={activeTab === 'subscribed'}
+            {...favTabsA11y.getTabProps('subscribed')}
             onClick={() => setActiveTab('subscribed')}
             style={{
               padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
@@ -435,17 +442,183 @@ export default function FavoritesPageClient() {
         )}
 
         {/* 收藏夹列表 */}
-        {loading ? (
-          <ListSkeleton count={5} gap={12} />
-        ) : activeTab === 'my' ? (
-          // 我的收藏夹
-          folders.length === 0 ? (
+        <div {...favTabsA11y.getSharedPanelProps()}>
+          {loading ? (
+            <ListSkeleton count={5} gap={12} />
+          ) : activeTab === 'my' ? (
+            // 我的收藏夹
+            folders.length === 0 ? (
+              <EmptyState
+                title={t('noFolders')}
+                description={t('noFoldersCta')}
+                action={
+                  <button
+                    onClick={() => setShowCreateForm(true)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minHeight: 44,
+                      padding: '10px 24px',
+                      background: tokens.colors.accent.brand,
+                      color: tokens.colors.white,
+                      borderRadius: tokens.radius.md,
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      fontSize: tokens.typography.fontSize.base,
+                    }}
+                  >
+                    + {t('newFolder')}
+                  </button>
+                }
+              />
+            ) : (
+              <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+                {folders.map((folder) => (
+                  <Link
+                    key={folder.id}
+                    href={`/favorites/${folder.id}`}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: tokens.spacing[4],
+                      padding: tokens.spacing[4],
+                      borderRadius: tokens.radius.lg,
+                      background: tokens.colors.bg.secondary,
+                      border: `1px solid ${tokens.colors.border.primary}`,
+                      textDecoration: 'none',
+                      color: 'inherit',
+                      transition: `all ${tokens.transition.base}`,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background =
+                        tokens.colors.bg.tertiary || 'var(--overlay-hover)'
+                      e.currentTarget.style.borderColor =
+                        tokens.colors.border.secondary || tokens.colors.border.primary
+                      e.currentTarget.style.transform = 'translateX(4px)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = tokens.colors.bg.secondary
+                      e.currentTarget.style.borderColor = tokens.colors.border.primary
+                      e.currentTarget.style.transform = 'translateX(0)'
+                    }}
+                  >
+                    {/* 收藏夹头像 */}
+                    <Box
+                      style={{
+                        width: 48,
+                        height: 48,
+                        borderRadius: tokens.radius.lg,
+                        backgroundColor: folder.avatar_url
+                          ? undefined
+                          : getDefaultAvatar(folder.name),
+                        backgroundImage: folder.avatar_url
+                          ? `url(${folder.avatar_url})`
+                          : undefined,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {!folder.avatar_url && (
+                        <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
+                          {(folder.is_default ? t('defaultFolderName') : folder.name)
+                            .charAt(0)
+                            .toUpperCase()}
+                        </Text>
+                      )}
+                    </Box>
+
+                    {/* 收藏夹信息 */}
+                    <Box style={{ flex: 1 }}>
+                      <Box
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: tokens.spacing[2],
+                          marginBottom: tokens.spacing[1],
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <Text size="base" weight="bold">
+                          {folder.is_default ? t('defaultFolderName') : folder.name}
+                        </Text>
+                        {folder.is_default && (
+                          <span
+                            style={{
+                              // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
+                              fontSize: 10,
+                              padding: '2px 6px',
+                              background: alpha(tokens.colors.accent.primary, 13),
+                              color: tokens.colors.accent.primary,
+                              borderRadius: tokens.radius.sm,
+                            }}
+                          >
+                            {t('defaultLabel')}
+                          </span>
+                        )}
+                        {folder.is_public ? (
+                          <span
+                            style={{
+                              // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
+                              fontSize: 10,
+                              padding: '2px 6px',
+                              background: alpha(tokens.colors.accent.success, 13),
+                              color: tokens.colors.accent.success,
+                              borderRadius: tokens.radius.sm,
+                            }}
+                          >
+                            {t('publicFolder')}
+                          </span>
+                        ) : (
+                          <span
+                            style={{
+                              // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
+                              fontSize: 10,
+                              padding: '2px 6px',
+                              background: 'var(--glass-bg-medium)',
+                              color: tokens.colors.text.tertiary,
+                              borderRadius: tokens.radius.sm,
+                            }}
+                          >
+                            {t('privateFolder')}
+                          </span>
+                        )}
+                      </Box>
+                      {folder.description && (
+                        <Text
+                          size="sm"
+                          color="secondary"
+                          style={{ marginBottom: tokens.spacing[1] }}
+                        >
+                          {folder.description}
+                        </Text>
+                      )}
+                      <Text size="xs" color="tertiary">
+                        {t('itemCount').replace('{n}', String(folder.post_count ?? 0))}
+                      </Text>
+                    </Box>
+
+                    {/* 箭头 */}
+                    <Text size="lg" color="tertiary">
+                      →
+                    </Text>
+                  </Link>
+                ))}
+              </Box>
+            )
+          ) : // 收藏的收藏夹
+          subscribedFolders.length === 0 ? (
             <EmptyState
-              title={t('noFolders')}
-              description={t('noFoldersCta')}
+              title={t('noSubscribedFolders')}
+              description={t('noSubscribedFoldersDesc')}
               action={
-                <button
-                  onClick={() => setShowCreateForm(true)}
+                <Link
+                  href="/rankings"
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -455,19 +628,18 @@ export default function FavoritesPageClient() {
                     background: tokens.colors.accent.brand,
                     color: tokens.colors.white,
                     borderRadius: tokens.radius.md,
-                    border: 'none',
-                    cursor: 'pointer',
+                    textDecoration: 'none',
                     fontWeight: tokens.typography.fontWeight.bold,
                     fontSize: tokens.typography.fontSize.base,
                   }}
                 >
-                  + {t('newFolder')}
-                </button>
+                  {t('browsePublicFolders')}
+                </Link>
               }
             />
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-              {folders.map((folder) => (
+              {subscribedFolders.map((folder) => (
                 <Link
                   key={folder.id}
                   href={`/favorites/${folder.id}`}
@@ -516,9 +688,7 @@ export default function FavoritesPageClient() {
                   >
                     {!folder.avatar_url && (
                       <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
-                        {(folder.is_default ? t('defaultFolderName') : folder.name)
-                          .charAt(0)
-                          .toUpperCase()}
+                        {folder.name.charAt(0).toUpperCase()}
                       </Text>
                     )}
                   </Box>
@@ -531,53 +701,23 @@ export default function FavoritesPageClient() {
                         alignItems: 'center',
                         gap: tokens.spacing[2],
                         marginBottom: tokens.spacing[1],
-                        flexWrap: 'wrap',
                       }}
                     >
                       <Text size="base" weight="bold">
-                        {folder.is_default ? t('defaultFolderName') : folder.name}
+                        {folder.name}
                       </Text>
-                      {folder.is_default && (
-                        <span
-                          style={{
-                            // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
-                            fontSize: 10,
-                            padding: '2px 6px',
-                            background: alpha(tokens.colors.accent.primary, 13),
-                            color: tokens.colors.accent.primary,
-                            borderRadius: tokens.radius.sm,
-                          }}
-                        >
-                          {t('defaultLabel')}
-                        </span>
-                      )}
-                      {folder.is_public ? (
-                        <span
-                          style={{
-                            // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
-                            fontSize: 10,
-                            padding: '2px 6px',
-                            background: alpha(tokens.colors.accent.success, 13),
-                            color: tokens.colors.accent.success,
-                            borderRadius: tokens.radius.sm,
-                          }}
-                        >
-                          {t('publicFolder')}
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
-                            fontSize: 10,
-                            padding: '2px 6px',
-                            background: 'var(--glass-bg-medium)',
-                            color: tokens.colors.text.tertiary,
-                            borderRadius: tokens.radius.sm,
-                          }}
-                        >
-                          {t('privateFolder')}
-                        </span>
-                      )}
+                      <span
+                        style={{
+                          // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
+                          fontSize: 10,
+                          padding: '2px 6px',
+                          background: alpha(tokens.colors.accent.warning, 13),
+                          color: tokens.colors.accent.warning,
+                          borderRadius: tokens.radius.sm,
+                        }}
+                      >
+                        {t('subscribed')}
+                      </span>
                     </Box>
                     {folder.description && (
                       <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[1] }}>
@@ -586,6 +726,9 @@ export default function FavoritesPageClient() {
                     )}
                     <Text size="xs" color="tertiary">
                       {t('itemCount').replace('{n}', String(folder.post_count ?? 0))}
+                      {folder.subscriber_count > 0 &&
+                        ` · ${t('subscriberCount').replace('{n}', String(folder.subscriber_count))}`}
+                      {folder.owner_handle && ` · @${folder.owner_handle}`}
                     </Text>
                   </Box>
 
@@ -596,134 +739,8 @@ export default function FavoritesPageClient() {
                 </Link>
               ))}
             </Box>
-          )
-        ) : // 收藏的收藏夹
-        subscribedFolders.length === 0 ? (
-          <EmptyState
-            title={t('noSubscribedFolders')}
-            description={t('noSubscribedFoldersDesc')}
-            action={
-              <Link
-                href="/rankings"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  minHeight: 44,
-                  padding: '10px 24px',
-                  background: tokens.colors.accent.brand,
-                  color: tokens.colors.white,
-                  borderRadius: tokens.radius.md,
-                  textDecoration: 'none',
-                  fontWeight: tokens.typography.fontWeight.bold,
-                  fontSize: tokens.typography.fontSize.base,
-                }}
-              >
-                {t('browsePublicFolders')}
-              </Link>
-            }
-          />
-        ) : (
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-            {subscribedFolders.map((folder) => (
-              <Link
-                key={folder.id}
-                href={`/favorites/${folder.id}`}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: tokens.spacing[4],
-                  padding: tokens.spacing[4],
-                  borderRadius: tokens.radius.lg,
-                  background: tokens.colors.bg.secondary,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  textDecoration: 'none',
-                  color: 'inherit',
-                  transition: `all ${tokens.transition.base}`,
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background =
-                    tokens.colors.bg.tertiary || 'var(--overlay-hover)'
-                  e.currentTarget.style.borderColor =
-                    tokens.colors.border.secondary || tokens.colors.border.primary
-                  e.currentTarget.style.transform = 'translateX(4px)'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = tokens.colors.bg.secondary
-                  e.currentTarget.style.borderColor = tokens.colors.border.primary
-                  e.currentTarget.style.transform = 'translateX(0)'
-                }}
-              >
-                {/* 收藏夹头像 */}
-                <Box
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: tokens.radius.lg,
-                    backgroundColor: folder.avatar_url ? undefined : getDefaultAvatar(folder.name),
-                    backgroundImage: folder.avatar_url ? `url(${folder.avatar_url})` : undefined,
-                    backgroundSize: 'cover',
-                    backgroundPosition: 'center',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  {!folder.avatar_url && (
-                    <Text size="lg" weight="bold" style={{ color: tokens.colors.white }}>
-                      {folder.name.charAt(0).toUpperCase()}
-                    </Text>
-                  )}
-                </Box>
-
-                {/* 收藏夹信息 */}
-                <Box style={{ flex: 1 }}>
-                  <Box
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: tokens.spacing[2],
-                      marginBottom: tokens.spacing[1],
-                    }}
-                  >
-                    <Text size="base" weight="bold">
-                      {folder.name}
-                    </Text>
-                    <span
-                      style={{
-                        // eslint-disable-next-line no-restricted-syntax -- off-scale micro badge by design
-                        fontSize: 10,
-                        padding: '2px 6px',
-                        background: alpha(tokens.colors.accent.warning, 13),
-                        color: tokens.colors.accent.warning,
-                        borderRadius: tokens.radius.sm,
-                      }}
-                    >
-                      {t('subscribed')}
-                    </span>
-                  </Box>
-                  {folder.description && (
-                    <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[1] }}>
-                      {folder.description}
-                    </Text>
-                  )}
-                  <Text size="xs" color="tertiary">
-                    {t('itemCount').replace('{n}', String(folder.post_count ?? 0))}
-                    {folder.subscriber_count > 0 &&
-                      ` · ${t('subscriberCount').replace('{n}', String(folder.subscriber_count))}`}
-                    {folder.owner_handle && ` · @${folder.owner_handle}`}
-                  </Text>
-                </Box>
-
-                {/* 箭头 */}
-                <Text size="lg" color="tertiary">
-                  →
-                </Text>
-              </Link>
-            ))}
-          </Box>
-        )}
+          )}
+        </div>
       </Box>
       {/* MobileBottomNav rendered in root layout */}
     </Box>
