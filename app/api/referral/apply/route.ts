@@ -1,12 +1,15 @@
 import { NextResponse } from 'next/server'
+import { createHash } from 'crypto'
 import { withAuth } from '@/lib/api/middleware'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
+import { getIdentifier } from '@/lib/utils/rate-limit'
 import { sendNotification } from '@/lib/data/notifications'
 import {
   REFERRAL_REWARD_THRESHOLD,
   REFERRAL_ADVOCATE_PRO_DAYS,
   REFERRED_FRIEND_TRIAL_DAYS,
+  REFERRAL_FRIEND_GRANTS_PER_DEVICE,
 } from '@/lib/constants/referral'
 
 const logger = createLogger('referral-apply')
@@ -97,27 +100,71 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Referral code already applied' }, { status: 400 })
     }
 
-    // Count total referrals for the referrer (including this new one)
-    // KEEP 'exact' — drives the REFERRAL_REWARD_THRESHOLD Pro-extension
-    // grant. Must be accurate to fire the reward on the exact Nth
-    // referral and not double-grant.
-    const { count: referralCount } = await supabase
-      .from('user_profiles')
-      .select('id', { count: 'exact', head: true })
-      .eq('referred_by', referrer.id)
+    // Anti-farming: record this attribution with a hashed device fingerprint
+    // (IP+UA bucket → sha256; no raw IP/PII stored). getIdentifier(request) with
+    // no userId returns the per-device bucket the rate limiter uses.
+    const deviceBucket = getIdentifier(request as Parameters<typeof getIdentifier>[0])
+    const signupIpHash =
+      deviceBucket === 'ip:unknown'
+        ? null
+        : createHash('sha256').update(deviceBucket).digest('hex').slice(0, 32)
 
-    const totalReferrals = referralCount ?? 0
-
-    // Friend-side (double-sided) reward — grant the newly-referred user a Pro
-    // trial. IDEMPOTENT: this only runs after referred_by was *just* set above;
-    // a second apply by the same user is rejected ("already applied"), so a
-    // friend can be granted at most once. Disabled when the constant is 0.
-    if (REFERRED_FRIEND_TRIAL_DAYS > 0) {
-      await grantProDays(supabase, user.id, REFERRED_FRIEND_TRIAL_DAYS, {
-        title: 'Welcome — Pro trial unlocked!',
-        message: `You joined via a referral and earned ${REFERRED_FRIEND_TRIAL_DAYS} days of Arena Pro. Enjoy!`,
-      })
+    // Upsert-safe insert (referred_id is UNIQUE; CAS above already guarantees a
+    // single winner, but ignore a 23505 defensively).
+    const { error: attrError } = await supabase.from('referral_attributions').insert({
+      referred_id: user.id,
+      referrer_id: referrer.id,
+      provider: (user.app_metadata?.provider as string | undefined) ?? null,
+      signup_ip_hash: signupIpHash,
+      friend_granted: false,
+    })
+    if (attrError && attrError.code !== '23505') {
+      logger.error('Failed to write referral attribution:', attrError.message)
     }
+
+    // Friend-side reward — grant the newly-referred user a Pro trial, but cap
+    // how many trials a single device fingerprint can harvest (REFERRAL_
+    // FRIEND_GRANTS_PER_DEVICE) so one attacker can't farm trials with throwaway
+    // accounts on the same machine. Unknown device (no hash) is not capped by
+    // device (falls back to the per-user "already applied" guard).
+    if (REFERRED_FRIEND_TRIAL_DAYS > 0) {
+      let deviceAllowsFriendGrant = true
+      if (signupIpHash) {
+        const { count: sameDeviceGrants } = await supabase
+          .from('referral_attributions')
+          .select('id', { count: 'exact', head: true })
+          .eq('signup_ip_hash', signupIpHash)
+          .eq('friend_granted', true)
+        deviceAllowsFriendGrant = (sameDeviceGrants ?? 0) < REFERRAL_FRIEND_GRANTS_PER_DEVICE
+      }
+
+      if (deviceAllowsFriendGrant) {
+        await grantProDays(supabase, user.id, REFERRED_FRIEND_TRIAL_DAYS, {
+          title: 'Welcome — Pro trial unlocked!',
+          message: `You joined via a referral and earned ${REFERRED_FRIEND_TRIAL_DAYS} days of Arena Pro. Enjoy!`,
+        })
+        await supabase
+          .from('referral_attributions')
+          .update({ friend_granted: true })
+          .eq('referred_id', user.id)
+      } else {
+        logger.info(`Friend trial skipped for ${user.id} — device grant cap reached`)
+      }
+    }
+
+    // Advocate reward count — count DISTINCT device fingerprints among this
+    // referrer's attributions (not raw referred_by rows), so a same-device farm
+    // of N throwaway accounts collapses to 1 toward the threshold. Rows with a
+    // null hash (unknown device) each count once.
+    const { data: attributionRows } = await supabase
+      .from('referral_attributions')
+      .select('id, signup_ip_hash')
+      .eq('referrer_id', referrer.id)
+
+    const distinctDevices = new Set(
+      (attributionRows ?? []).map((r) => r.signup_ip_hash ?? `row:${r.id}`)
+    )
+    const totalReferrals = distinctDevices.size
 
     // Advocate reward — fires once the referrer reaches the threshold. Uses a
     // persistent idempotency marker (referral_rewards, UNIQUE(referrer_id,
