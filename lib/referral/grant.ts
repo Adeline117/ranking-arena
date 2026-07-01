@@ -18,9 +18,9 @@ export async function grantProDays(
   userId: string,
   days: number,
   notification: { title: string; message: string }
-): Promise<void> {
+): Promise<boolean> {
   try {
-    const { data: existingSub } = await supabase
+    const { data: existingSub, error: readError } = await supabase
       .from('subscriptions')
       .select('id, current_period_end, status')
       .eq('user_id', userId)
@@ -28,6 +28,13 @@ export async function grantProDays(
       .order('created_at', { ascending: false })
       .limit(1)
       .maybeSingle()
+
+    // A dropped read error here would send us down the INSERT branch and create
+    // a DUPLICATE subscription (subscriptions has no unique(user_id)). Bail instead.
+    if (readError) {
+      logger.error('Failed to read existing subscription (skipping grant):', readError.message)
+      return false
+    }
 
     const now = new Date()
 
@@ -44,7 +51,7 @@ export async function grantProDays(
         .eq('id', existingSub.id)
       if (updateError) {
         logger.error('Failed to extend subscription:', updateError.message)
-        return
+        return false
       }
     } else {
       const endDate = new Date(now)
@@ -59,7 +66,7 @@ export async function grantProDays(
       })
       if (insertError) {
         logger.error('Failed to create referral subscription:', insertError.message)
-        return
+        return false
       }
 
       const { error: profileError } = await supabase
@@ -82,7 +89,9 @@ export async function grantProDays(
       },
       'Referral reward notification'
     )
+    return true
   } catch (err) {
     logger.error('Failed to grant Pro days:', err)
+    return false
   }
 }

@@ -29,11 +29,14 @@ export async function GET(request: NextRequest) {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
 
-    const { data: portfolios } = await supabase
+    const { data: portfolios, error: pErr } = await supabase
       .from('user_portfolios')
       .select('id')
       .eq('user_id', user.id)
 
+    // Distinguish a DB error from "no portfolios" — otherwise a read fault shows
+    // the user an empty equity chart as if they connected nothing.
+    if (pErr) throw pErr
     if (!portfolios?.length) return success([])
 
     const portfolioIds = portfolios.map((p: { id: string }) => p.id)

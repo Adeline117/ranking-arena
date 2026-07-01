@@ -38,18 +38,22 @@ export const POST = withAuth(
     }
 
     // Check if user already has a referrer
-    const { data: currentProfile } = await supabase
+    const { data: currentProfile, error: profileErr } = await supabase
       .from('user_profiles')
       .select('referred_by')
       .eq('id', user.id)
       .maybeSingle()
+    if (profileErr) {
+      logger.error('Failed to read current profile:', profileErr.message)
+      return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+    }
 
     if (currentProfile?.referred_by) {
       return NextResponse.json({ error: 'Referral code already applied' }, { status: 400 })
     }
 
     // Find the referrer by referral_code or handle
-    const { data: referrer } = await supabase
+    const { data: referrer, error: referrerErr } = await supabase
       .from('user_profiles')
       .select('id, referral_code, handle')
       // Safe: `code` is validated against ^[A-Za-z0-9_-]{2,64}$ above, so it
@@ -57,6 +61,11 @@ export const POST = withAuth(
       .or(`referral_code.eq.${code},handle.eq.${code}`)
       .limit(1)
       .maybeSingle()
+    if (referrerErr) {
+      // Don't misclassify a DB fault as "code not found".
+      logger.error('Failed to look up referrer:', referrerErr.message)
+      return NextResponse.json({ error: 'Failed to apply referral code' }, { status: 500 })
+    }
 
     if (!referrer) {
       return NextResponse.json({ error: 'Referral code not found' }, { status: 404 })
