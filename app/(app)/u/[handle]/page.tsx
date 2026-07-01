@@ -1,10 +1,23 @@
 import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getReadReplica } from '@/lib/supabase/read-replica'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import UserProfileClient from './UserProfileClient'
 import { logger } from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
+// M1 unified profile: claimed/bound traders render the SAME rich serving client
+// as /trader/[handle] (was a legacy-only TraderProfileView — "claim 后页面变穷").
+import TraderProfileClient, {
+  type UnregisteredTraderData,
+} from '@/app/(app)/trader/[handle]/TraderProfileClient'
+import { resolveServingTrader } from '@/lib/data/serving/resolve'
+import { getFirstScreen } from '@/lib/data/serving/first-screen'
+import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
+import { getDataMode } from '@/lib/constants/serving-cutover'
+import { getTraderAvatarSrc } from '@/lib/utils/avatar'
+import type { TraderFirstScreen } from '@/lib/data/serving/types'
+import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 
 export const revalidate = 60
 
@@ -136,6 +149,10 @@ interface UserProfileData {
   proBadgeTier: 'pro' | null
   role?: string
   traderHandle?: string
+  /** M1 unified profile: exact trader identity when known (claim OR exchange
+   *  bind), so the serving resolver can match by exchange_trader_id. */
+  traderPlatform?: string
+  traderSourceId?: string
   created_at?: string
 }
 
@@ -179,6 +196,8 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   let hasPro = userProfile.subscription_tier === 'pro'
   let hasClaimedTrader = false
   let traderHandle: string | undefined
+  let traderPlatform: string | undefined
+  let traderSourceId: string | undefined
 
   // followers / following served from the cached columns above.
   // trader_follows is scoped to a single user so the count stays cheap,
@@ -220,6 +239,8 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
 
     // If user has a claimed trader, fetch the trader handle
     if (claimedTraderRes?.data?.trader_id && claimedTraderRes?.data?.platform) {
+      traderPlatform = claimedTraderRes.data.platform
+      traderSourceId = claimedTraderRes.data.trader_id
       try {
         const { data: traderRow } = await supabase
           .from('trader_sources')
@@ -232,6 +253,26 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
         }
       } catch {
         // Intentionally swallowed: claimed trader handle lookup is optional enrichment
+      }
+    } else {
+      // M1-1b (unified profile): an exchange-BOUND user (verified API-key bind,
+      // no claim yet) also gets the trader-detail view — identity comes from the
+      // verified UID on the connection. Claim remains what sets the verified badge.
+      try {
+        const { data: conn } = await supabase
+          .from('user_exchange_connections')
+          .select('exchange, verified_uid')
+          .eq('user_id', userProfile.id)
+          .eq('is_active', true)
+          .not('verified_uid', 'is', null)
+          .limit(1)
+          .maybeSingle()
+        if (conn?.verified_uid && conn.exchange) {
+          traderPlatform = conn.exchange
+          traderSourceId = conn.verified_uid
+        }
+      } catch {
+        // Optional enrichment — bound-trader lookup failure never blocks the page.
       }
     }
   } catch (err) {
@@ -254,6 +295,8 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     proBadgeTier: hasPro && userProfile.show_pro_badge !== false ? 'pro' : null,
     role: userProfile.role || undefined,
     traderHandle,
+    traderPlatform,
+    traderSourceId,
     created_at: userProfile.created_at || undefined,
   }
 }
@@ -276,12 +319,127 @@ async function fetchTraderData(traderHandle: string) {
   }
 }
 
+/**
+ * M1 unified profile: resolve the claimed/bound trader against the arena.*
+ * serving read path. Success → the /u page renders the SAME TraderProfileClient
+ * as /trader/[handle] (rich serving modules, claimedUser overlay). Timeout or a
+ * non-serving source → null, and the caller falls back to the legacy view.
+ */
+async function resolveServingForUser(profile: {
+  traderHandle?: string
+  traderPlatform?: string
+  traderSourceId?: string
+}): Promise<{
+  source: string
+  exchangeTraderId: string
+  nickname: string | null
+  avatarMirrorUrl: string | null
+  avatarOriginUrl: string | null
+} | null> {
+  // arena_resolve_trader matches exchange_trader_id first (exact), so the bound
+  // UID works even when no legacy trader_sources handle exists.
+  const lookup = profile.traderHandle ?? profile.traderSourceId
+  if (!lookup) return null
+  try {
+    // Only pass the platform as a hint when it is itself a serving source —
+    // a stale legacy hint (e.g. "gateio") makes the RPC return nothing.
+    const hint =
+      profile.traderPlatform && (await getDataMode(profile.traderPlatform)) === 'serving'
+        ? profile.traderPlatform
+        : undefined
+    const resolved = await Promise.race([
+      resolveServingTrader(getReadReplica(), { handle: lookup, source: hint }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_TIMEOUT_MS)),
+    ])
+    if (!resolved) return null
+    if ((await getDataMode(resolved.source)) !== 'serving') return null
+    return resolved
+  } catch (err) {
+    logger.error('[u/page] serving resolve failed:', err instanceof Error ? err.message : err)
+    return null
+  }
+}
+
 export default async function UserHomePage({ params }: { params: Promise<{ handle: string }> }) {
   const { handle } = await params
 
   const profile = await fetchUserProfile(handle)
 
-  // If user is a trader, fetch their trading data
+  // ── M1 unified profile: serving-mode traders get the full /trader client ──
+  if (profile && (profile.traderHandle || profile.traderSourceId)) {
+    const servingResolved = await resolveServingForUser(profile)
+    if (servingResolved) {
+      const [firstScreenRaw, capabilities] = await Promise.all([
+        Promise.race([
+          getFirstScreen(
+            getReadReplica(),
+            servingResolved.source,
+            servingResolved.exchangeTraderId
+          ),
+          new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_TIMEOUT_MS)),
+        ]).catch(() => null),
+        getSourceCapabilities(getReadReplica()).catch(
+          () => ({}) as Awaited<ReturnType<typeof getSourceCapabilities>>
+        ),
+      ])
+      // Synthesize a minimal first-screen on timeout — same root-cause fix as
+      // /trader/page.tsx: never fall back to the legacy 404 path for a serving
+      // trader; the client fetches /core with its own skeletons.
+      const firstScreen: TraderFirstScreen = firstScreenRaw ?? {
+        source: servingResolved.source,
+        exchangeTraderId: servingResolved.exchangeTraderId,
+        nickname: servingResolved.nickname,
+        avatarMirrorUrl: servingResolved.avatarMirrorUrl,
+        avatarOriginUrl: servingResolved.avatarOriginUrl,
+        avatarSrc: getTraderAvatarSrc({
+          avatarMirrorUrl: servingResolved.avatarMirrorUrl,
+          avatarOriginUrl: servingResolved.avatarOriginUrl,
+        }),
+        walletAddress: null,
+        traderKind: 'human',
+        botStrategy: null,
+        entries: [],
+      }
+      const entries = firstScreen.entries ?? []
+      const best =
+        entries.find((e) => e.timeframe === 90) ??
+        entries.find((e) => e.timeframe === 30) ??
+        entries[0]
+      const servingTraderData: UnregisteredTraderData = {
+        handle: profile.handle,
+        avatar_url: profile.avatar_url ?? firstScreen.avatarSrc ?? null,
+        source: servingResolved.source,
+        source_trader_id: servingResolved.exchangeTraderId,
+        rank: best?.rank ?? null,
+        roi: best?.headlineRoi ?? null,
+        pnl: best?.headlinePnl?.value ?? null,
+        win_rate:
+          best?.headlineWinRate ??
+          (typeof best?.extras.win_rate === 'number' ? (best.extras.win_rate as number) : null),
+        max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
+      }
+      return (
+        <ErrorBoundary pageType="trader-profile">
+          <TraderProfileClient
+            data={servingTraderData}
+            serverTraderData={null}
+            claimedUser={{
+              id: profile.id,
+              handle: profile.handle,
+              bio: profile.bio ?? null,
+              avatar_url: profile.avatar_url ?? null,
+              cover_url: profile.cover_url ?? null,
+            }}
+            dataMode="serving"
+            servingFirstScreen={firstScreen}
+            servingCapability={capabilities[servingResolved.source] ?? null}
+          />
+        </ErrorBoundary>
+      )
+    }
+  }
+
+  // If user is a trader, fetch their trading data (legacy fallback path)
   let traderData = null
   if (profile?.traderHandle) {
     traderData = await fetchTraderData(profile.traderHandle)
