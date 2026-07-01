@@ -119,8 +119,11 @@ describe('parseBybitCopytradeProfile', () => {
       leader_user_id: '112764932',
       cum_follower_count: 1533,
       max_follower_count: 250,
+      total_roi: -94.61, // cumYieldRateE4 "-9461" (Phase A)
+      lifetime_trades: 62, // cumTradeCount
     })
     expect(st.extras.avg_pnl_per_trade).toBeCloseTo(138.3619, 4)
+    expect(st.extras.total_pnl as number).toBeCloseTo(-13702.5578, 3) // cumYieldE8
   })
 
   it('selects the per-TF prefix (30d/90d) from the same response', () => {
