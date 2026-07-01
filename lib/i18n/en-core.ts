@@ -380,7 +380,7 @@ const enCore = {
   rankingControlsPrev: 'Prev',
   rankingControlsNext: 'Next',
   rankingControlsLoading: 'Loading…',
-  rankingControlsShowingTop: 'Showing top {count} traders. Unlock all 34,000+ with Pro',
+  rankingControlsShowingTop: 'Showing top {count} traders. Unlock all 8,000+ with Pro',
   rankingControlsUpgrade: 'Upgrade →',
 } as const
 
