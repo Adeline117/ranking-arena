@@ -51,6 +51,13 @@ describe('parseBingxLeaderboardPage', () => {
     expect((first.raw as { rankStat: { riskLevel30Days: string } }).rankStat.riskLevel30Days).toBe(
       '7'
     )
+    // Phase A: lifetime_trades from totalTransactions; pnl_ratio omitted when
+    // pnlRateU is "+∞" (no-loss trader) — NULL-collapse, never a bad value.
+    const fe = first.headlineExtras as { lifetime_trades?: number; pnl_ratio?: number }
+    expect(fe.lifetime_trades).toBe(8)
+    expect(fe.pnl_ratio).toBeUndefined() // row0 pnlRateU = "+∞"
+    // row1 has a finite pnlRateU → pnl_ratio surfaces
+    expect((page.rows[1].headlineExtras as { pnl_ratio?: number }).pnl_ratio).toBeCloseTo(0.8997, 3)
   })
 
   it('selects the correct TF fields for 7d vs 90d', () => {
