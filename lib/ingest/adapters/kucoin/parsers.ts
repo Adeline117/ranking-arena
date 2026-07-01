@@ -111,6 +111,26 @@ function isTradePilot(item: Dict): boolean {
   return typeof ex === 'string' && ex.length > 0 && ex !== 'KU'
 }
 
+/** Board-row lead-principal / tenure / copier / min-copy fields (逐图核对). */
+function kucoinBoardExtras(item: Dict): Record<string, unknown> | null {
+  const ext: Record<string, unknown> = {}
+  const principal = num(item.leadPrincipal)
+  if (principal !== null) ext.lead_principal = principal
+  const days = int(item.daysAsLeader)
+  if (days !== null) ext.leading_days = days
+  const maxCopiers = int(item.maxCopyUserCount)
+  if (maxCopiers !== null) ext.max_copier_slots = maxCopiers
+  const followerPnl = num(item.followerPnl)
+  if (followerPnl !== null) ext.copier_total_profit = followerPnl
+  const totalPnl = num(item.totalPnl)
+  if (totalPnl !== null) ext.total_pnl = totalPnl
+  const totalRoi = num(item.totalPnlRatio)
+  if (totalRoi !== null) ext.total_roi = Math.round(totalRoi * 100 * 100) / 100
+  const minCopy = num(item.minCopyAmount)
+  if (minCopy !== null) ext.min_copy_amount = minCopy
+  return Object.keys(ext).length > 0 ? ext : null
+}
+
 export function parseKucoinLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
   const { items, total } = pagedItems(raw)
   const rows: ParsedLeaderboardRow[] = []
@@ -137,8 +157,12 @@ export function parseKucoinLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
       // leadAmount = Lead Size / AUM (absolute USD; identical to profile overview.aum)
       // — was raw-only, so board-tier traders had no AUM. (KuCoin exposes no MDD.)
       headlineAum: num(item.leadAmount),
+      headlineCopierCount: int(item.currentCopyUserCount),
+      // 逐图核对 image74/76: board row carries lead principal / tenure / copier
+      // slots / follower PnL / min-copy — promote so board-tier traders show them.
+      headlineExtras: kucoinBoardExtras(item),
       traderMeta: pilot ? { tradepilot: true, venue: item.exchange } : null,
-      // 30-point PnL sparkline, copier slots, days, leadPrincipal... verbatim
+      // 30-point PnL sparkline verbatim
       raw: item,
     })
   }
