@@ -58,10 +58,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ status: 'ok', events: 0 })
     }
 
-    const followersByTrader = new Map<string, string[]>() // `${trader_id}_${source}` → userIds
+    // Key separator is '|' — trader ids and source slugs can both contain '_'
+    // (e.g. bybit_copytrade), so '_' would be ambiguous to split back.
+    const followersByTrader = new Map<string, string[]>() // `${trader_id}|${source}` → userIds
     const traderIdSet = new Set<string>()
     for (const f of follows) {
-      const key = `${f.trader_id}_${f.source ?? ''}`
+      const key = `${f.trader_id}|${f.source ?? ''}`
       const arr = followersByTrader.get(key)
       if (arr) arr.push(f.user_id)
       else followersByTrader.set(key, [f.user_id])
@@ -81,7 +83,7 @@ export async function GET(request: NextRequest) {
       { rank: number | null; roi: number | null; pnl: number | null }
     >()
     for (const r of lr ?? []) {
-      curMap.set(`${r.source_trader_id}_${r.source ?? ''}`, {
+      curMap.set(`${r.source_trader_id}|${r.source ?? ''}`, {
         rank: r.rank ?? null,
         roi: r.roi ?? null,
         pnl: r.pnl ?? null,
@@ -101,7 +103,7 @@ export async function GET(request: NextRequest) {
       .eq('period', '90D')
       .eq('snapshot_date', yStr)
     for (const r of rh ?? []) {
-      if (r.rank != null) prevRank.set(`${r.trader_key}_${r.platform ?? ''}`, r.rank)
+      if (r.rank != null) prevRank.set(`${r.trader_key}|${r.platform ?? ''}`, r.rank)
     }
 
     const prevMetric = new Map<string, { roi: number | null; pnl: number | null }>()
@@ -111,7 +113,7 @@ export async function GET(request: NextRequest) {
       .in('trader_key', traderIds)
       .eq('date', yStr)
     for (const s of ds ?? []) {
-      prevMetric.set(`${s.trader_key}_${s.platform ?? ''}`, {
+      prevMetric.set(`${s.trader_key}|${s.platform ?? ''}`, {
         roi: s.roi ?? null,
         pnl: s.pnl ?? null,
       })
@@ -120,7 +122,7 @@ export async function GET(request: NextRequest) {
     // 4. Detect one notable event per followed trader (priority rank > roi > pnl).
     const events = new Map<string, TraderEvent>() // key → event
     for (const key of followersByTrader.keys()) {
-      const [traderId] = key.split('_')
+      const [traderId] = key.split('|')
       const cur = curMap.get(key)
       if (!cur) continue
       const pRank = prevRank.get(key)
@@ -158,15 +160,105 @@ export async function GET(request: NextRequest) {
       if (ev) events.set(key, ev)
     }
 
+    // 4b. New-position events. Pull each followed trader's CURRENT positions via
+    // the existing serving RPC (resolves source name + exchange trader id server-
+    // side) and diff against trader_position_seen (insert-once). A trader with no
+    // seen rows yet is SEEDED silently — no first-run alert spam.
+    const positionEvents = new Map<string, TraderEvent>()
+    const POSITION_TRADER_CAP = 200 // bound RPC fan-out per run
+    const followedKeys = [...followersByTrader.keys()].slice(0, POSITION_TRADER_CAP)
+    for (const key of followedKeys) {
+      const sep = key.indexOf('|')
+      const traderId = key.slice(0, sep)
+      const source = key.slice(sep + 1)
+      if (!source) continue
+      try {
+        const { data: page, error: pageErr } = await supabase.rpc('arena_records_page', {
+          p_source: source,
+          p_trader: traderId,
+          p_kind: 'positions',
+          p_tf: undefined,
+          p_cursor: undefined,
+          p_limit: 50,
+        })
+        if (pageErr) {
+          logger.warn(
+            `[broadcast-trader-events] positions fetch failed for ${key}:`,
+            pageErr.message
+          )
+          continue
+        }
+        const rows = Array.isArray((page as Record<string, unknown> | null)?.rows)
+          ? ((page as Record<string, unknown>).rows as Array<Record<string, unknown>>)
+          : []
+        if (rows.length === 0) continue
+
+        const current = rows
+          .map((r) => ({
+            symbol: typeof r.symbol === 'string' ? r.symbol : '',
+            side: typeof r.side === 'string' ? r.side : '',
+          }))
+          .filter((p) => p.symbol)
+        if (current.length === 0) continue
+
+        const { data: seen, error: seenErr } = await supabase
+          .from('trader_position_seen')
+          .select('symbol, side')
+          .eq('trader_id', traderId)
+          .eq('source', source)
+        if (seenErr) {
+          logger.error(
+            '[broadcast-trader-events] seen read failed (skipping trader):',
+            seenErr.message
+          )
+          continue
+        }
+        const seenKeys = new Set((seen ?? []).map((s) => `${s.symbol}|${s.side}`))
+        const isSeed = seenKeys.size === 0
+        const fresh = current.filter((p) => !seenKeys.has(`${p.symbol}|${p.side}`))
+        if (fresh.length === 0) continue
+
+        const { error: upErr } = await supabase.from('trader_position_seen').upsert(
+          fresh.map((p) => ({ trader_id: traderId, source, symbol: p.symbol, side: p.side })),
+          { onConflict: 'trader_id,source,symbol,side', ignoreDuplicates: true }
+        )
+        if (upErr) {
+          // Do NOT emit an event if we couldn't persist the seen-state — otherwise
+          // the same "new" position would re-alert every run.
+          logger.error('[broadcast-trader-events] seen upsert failed (no event):', upErr.message)
+          continue
+        }
+        if (isSeed) continue // first sighting of this trader: seed silently
+
+        const names = fresh.slice(0, 3).map((p) => `${p.symbol}${p.side ? ` ${p.side}` : ''}`)
+        positionEvents.set(key, {
+          title: 'New position from a trader you follow',
+          message:
+            fresh.length === 1
+              ? `${traderId} opened ${names[0]}`
+              : `${traderId} opened ${fresh.length} new positions (${names.join(', ')}${fresh.length > 3 ? ', …' : ''})`,
+        })
+      } catch (err) {
+        logger.warn(`[broadcast-trader-events] position check failed for ${key}`, { error: err })
+      }
+    }
+    // Merge: a trader can emit at most one metric event AND one position event.
+    for (const [key, ev] of positionEvents) {
+      if (!events.has(key)) events.set(key, ev)
+      else events.set(`${key}#pos`, ev) // second slot; fan-out resolves followers via base key
+    }
+
     if (events.size === 0) {
       await plog.success(0, { message: 'no notable events' })
       return NextResponse.json({ status: 'ok', events: 0 })
     }
 
     // 5. Filter audience by opt-out (notify_trader_events).
+    // Event keys may carry a '#pos' second-slot suffix — strip it to resolve followers.
+    const baseKey = (k: string) => (k.endsWith('#pos') ? k.slice(0, -4) : k)
     const candidateUserIds = new Set<string>()
     for (const key of events.keys())
-      for (const uid of followersByTrader.get(key) ?? []) candidateUserIds.add(uid)
+      for (const uid of followersByTrader.get(baseKey(key)) ?? []) candidateUserIds.add(uid)
     const optedOut = new Set<string>()
     const { data: prefs } = await supabase
       .from('user_profiles')
@@ -186,9 +278,12 @@ export async function GET(request: NextRequest) {
       reference_id: string
     }> = []
     for (const [key, ev] of events) {
-      const [traderId, source] = key.split('_')
+      const bk = baseKey(key)
+      const sep = bk.indexOf('|')
+      const traderId = bk.slice(0, sep)
+      const source = bk.slice(sep + 1)
       const link = `/trader/${encodeURIComponent(traderId)}${source ? `?platform=${source}` : ''}`
-      for (const uid of followersByTrader.get(key) ?? []) {
+      for (const uid of followersByTrader.get(bk) ?? []) {
         if (optedOut.has(uid)) continue
         rows.push({
           user_id: uid,

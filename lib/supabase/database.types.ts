@@ -6345,6 +6345,30 @@ export type Database = {
         }
         Relationships: []
       }
+      trader_position_seen: {
+        Row: {
+          first_seen_at: string
+          side: string
+          source: string
+          symbol: string
+          trader_id: string
+        }
+        Insert: {
+          first_seen_at?: string
+          side?: string
+          source?: string
+          symbol: string
+          trader_id: string
+        }
+        Update: {
+          first_seen_at?: string
+          side?: string
+          source?: string
+          symbol?: string
+          trader_id?: string
+        }
+        Relationships: []
+      }
       trader_sources: {
         Row: {
           activity_tier: string | null
