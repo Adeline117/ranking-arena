@@ -29,7 +29,8 @@ const GATE_FUTURES_EXTRAS = {
   last_trade_at: '2026-06-11T21:33:55.000Z',
   roi_net_value: -100,
   average_profit: 84.5,
-  trading_frequency: 1.57,
+  trading_frequency: 1.57, // raw per-day (must NOT be read as per-week)
+  trade_frequency: 10.99, // per-week (1.57 × 7) — the value the extractor uses
   copier_count_total: 0,
   last_liquidation_at: '2026-03-10T02:30:12.000Z',
 }
@@ -120,7 +121,10 @@ describe('extractFeatureVector — real prod shapes', () => {
     expect(fv.last_liquidation_at).toBe('2026-03-10T02:30:12.000Z')
     expect(fv.style_labels).toEqual(['long-line', 'high-frequence', 'radical'])
     expect(fv.settled_in_days).toBe(171) // leading_days alias
-    expect(fv.trade_frequency_per_week).toBe(1.57) // trading_frequency alias
+    // per-week comes from `trade_frequency` (10.99), NOT the raw per-day
+    // `trading_frequency` (1.57) — the extractor must not 7× under-count.
+    expect(fv.trade_frequency_per_week).toBe(10.99)
+    expect(fv.pnl_ratio).toBe(1.25) // pl_ratio alias
     expect(fv.nav).toBeNull() // roi_net_value is NOT nav
   })
 
@@ -202,6 +206,39 @@ describe('extractFeatureVector — real prod shapes', () => {
     expect(
       extractFeatureVector({ source: 'bingx_futures', extras: { risk_rating: 14.6 } }).risk_rating
     ).toBe(10)
+  })
+
+  it('risk-control block: sharpe/mdd from typed stats, sortino/calmar/pnl_ratio from extras', () => {
+    const fv = extractFeatureVector({
+      source: 'hyperliquid',
+      timeframe: 30,
+      stats: { sharpe: 3.1, mdd: 45.78 }, // typed trader_stats columns
+      extras: {
+        sortino: 6.04,
+        calmar: 1.2,
+        profit_loss_ratio: 2.4, // pnl_ratio alias
+        lifetime_trades: 512,
+        risk_derivation: 'daily-approx', // DEX Tier-0
+      },
+    })
+    expect(fv.sharpe).toBe(3.1)
+    expect(fv.mdd).toBe(45.78)
+    expect(fv.sortino).toBe(6.04)
+    expect(fv.calmar).toBe(1.2)
+    expect(fv.pnl_ratio).toBe(2.4)
+    expect(fv.lifetime_trades).toBe(512)
+    expect(fv.risk_is_approx).toBe(true) // down-weight signal for a v2 formula
+  })
+
+  it('risk block: exchange-reported (not approx) + extras.sharpe fallback + negative mdd rejected', () => {
+    const fv = extractFeatureVector({
+      source: 'bybit_copytrade',
+      extras: { sharpe: 1.8, mdd: -5, sortino: 2.1 }, // mdd<0 is invalid → null
+    })
+    expect(fv.sharpe).toBe(1.8) // extras fallback when no input.stats
+    expect(fv.mdd).toBeNull() // negative rejected
+    expect(fv.sortino).toBe(2.1)
+    expect(fv.risk_is_approx).toBe(false) // no daily-approx marker
   })
 })
 
