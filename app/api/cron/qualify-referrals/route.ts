@@ -28,6 +28,7 @@ import {
   REFERRED_FRIEND_TRIAL_DAYS,
   REFERRAL_FRIEND_GRANTS_PER_DEVICE,
   REFERRAL_QUALIFY_MIN_AGE_HOURS,
+  REFERRAL_VELOCITY_ALERT_MINUTES,
 } from '@/lib/constants/referral'
 
 export const dynamic = 'force-dynamic'
@@ -123,11 +124,26 @@ export async function GET(request: NextRequest) {
       // Advocate reward — count the referrer's QUALIFIED distinct-device referrals.
       const { data: qualRows } = await supabase
         .from('referral_attributions')
-        .select('id, signup_ip_hash')
+        .select('id, signup_ip_hash, created_at')
         .eq('referrer_id', attr.referrer_id)
         .not('qualified_at', 'is', null)
       const distinct = new Set((qualRows ?? []).map((r) => r.signup_ip_hash ?? `row:${r.id}`))
       if (distinct.size >= REFERRAL_REWARD_THRESHOLD) {
+        // Velocity monitoring (log-only): if the qualifying referrals all landed
+        // within a tight window, flag for a human look (possible farm the device
+        // + activity gates missed). Non-blocking — we still grant.
+        const times = (qualRows ?? [])
+          .map((r) => (r.created_at ? new Date(r.created_at).getTime() : 0))
+          .filter(Boolean)
+          .sort((a, b) => a - b)
+        if (times.length >= REFERRAL_REWARD_THRESHOLD) {
+          const spreadMin = (times[times.length - 1] - times[0]) / 60_000
+          if (spreadMin < REFERRAL_VELOCITY_ALERT_MINUTES) {
+            logger.warn(
+              `[qualify-referrals] VELOCITY FLAG referrer=${attr.referrer_id} — ${times.length} qualified referrals within ${Math.round(spreadMin)}min (threshold ${REFERRAL_VELOCITY_ALERT_MINUTES}min); possible farm, review`
+            )
+          }
+        }
         const { error: markerError } = await supabase.from('referral_rewards').insert({
           referrer_id: attr.referrer_id,
           reward_type: 'advocate_milestone',

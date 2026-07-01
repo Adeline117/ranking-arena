@@ -42,3 +42,13 @@ export const REFERRAL_FRIEND_GRANTS_PER_DEVICE = 3
  * earning the friend trial or counting toward the advocate threshold.
  */
 export const REFERRAL_QUALIFY_MIN_AGE_HOURS = 24
+
+/**
+ * Velocity monitoring (log-only, non-blocking): if a referrer's qualifying
+ * referrals all land within this window, it's a burst worth a human look
+ * (possible cross-device / patient farm that the device + activity gates don't
+ * catch). We LOG a structured warning rather than auto-block — blocking on
+ * velocity risks false-positiving a genuinely viral referrer. Tune / wire to an
+ * alert channel as needed.
+ */
+export const REFERRAL_VELOCITY_ALERT_MINUTES = 60
