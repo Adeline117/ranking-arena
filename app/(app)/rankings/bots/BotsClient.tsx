@@ -29,6 +29,7 @@ import { Box } from '@/app/components/base'
 import Metric from '@/app/components/ui/Metric'
 import { getScoreColorInfo } from '@/lib/utils/score-colors'
 import { NULL_DISPLAY } from '@/lib/utils/format'
+import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
 
 type BotCategory = 'all' | 'tg_bot' | 'ai_agent' | 'vault'
 type WindowOption = '7D' | '30D' | '90D'
@@ -430,6 +431,22 @@ function BotsContent({ initialBots }: BotsClientProps) {
     router.replace(`${pathname}?${params.toString()}`, { scroll: false })
   }
 
+  // B2 tabs a11y: both filter tablists control the single results region.
+  const windowTabsA11y = useTabsA11y({
+    tabs: ['7D', '30D', '90D'] as const,
+    active: activeWindow,
+    onChange: handleWindowChange,
+    idPrefix: 'bots-window',
+    sharedPanelId: 'bots-results',
+  })
+  const categoryTabsA11y = useTabsA11y({
+    tabs: ['all', 'tg_bot', 'ai_agent', 'vault'] as const,
+    active: activeCategory,
+    onChange: handleCategoryChange,
+    idPrefix: 'bots-cat',
+    sharedPanelId: 'bots-results',
+  })
+
   const [searchQuery, setSearchQueryRaw] = useState(() => searchParams.get('q') || '')
   const searchSyncRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const setSearchQuery = useCallback(
@@ -540,12 +557,15 @@ function BotsContent({ initialBots }: BotsClientProps) {
         />
 
         {/* Time window */}
-        <div role="tablist" aria-label={t('botsTitle')} className="flex flex-wrap gap-2 mb-4">
+        <div
+          {...windowTabsA11y.getTabListProps()}
+          aria-label={t('botsTitle')}
+          className="flex flex-wrap gap-2 mb-4"
+        >
           {(['7D', '30D', '90D'] as WindowOption[]).map((w) => (
             <button
               key={w}
-              role="tab"
-              aria-selected={activeWindow === w}
+              {...windowTabsA11y.getTabProps(w)}
               onClick={() => handleWindowChange(w)}
               className="ranking-filter-btn touch-target"
               style={{
@@ -571,14 +591,17 @@ function BotsContent({ initialBots }: BotsClientProps) {
         </div>
 
         {/* Category filter */}
-        <div role="tablist" aria-label={t('botsCategoryAll')} className="flex flex-wrap gap-2 mb-4">
+        <div
+          {...categoryTabsA11y.getTabListProps()}
+          aria-label={t('botsCategoryAll')}
+          className="flex flex-wrap gap-2 mb-4"
+        >
           {(['all', 'tg_bot', 'ai_agent', 'vault'] as BotCategory[]).map((cat) => {
             const count = facetCounts[cat]
             return (
               <button
                 key={cat}
-                role="tab"
-                aria-selected={activeCategory === cat}
+                {...categoryTabsA11y.getTabProps(cat)}
                 onClick={() => handleCategoryChange(cat)}
                 className="ranking-filter-btn touch-target"
                 style={{
@@ -655,6 +678,7 @@ function BotsContent({ initialBots }: BotsClientProps) {
           loadingComponent={<RankingSkeleton />}
         >
           <div
+            {...windowTabsA11y.getSharedPanelProps()}
             className="rounded-xl overflow-hidden"
             style={{
               background: 'var(--glass-bg-secondary, rgba(255,255,255,0.03))',
