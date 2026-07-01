@@ -12,6 +12,10 @@
  * Usage (from project root):
  *   npx tsx scripts/ingest-capture-xhr.mts coinex_futures
  *   npx tsx scripts/ingest-capture-xhr.mts coinex_futures '/copy-trading|traders'
+ *   # profile-page + tab-click capture (find access-gated per-uid endpoints):
+ *   npx tsx scripts/ingest-capture-xhr.mts bitget_futures 'balance|transfer|asset' \
+ *     --url 'https://www.bitget.com/copy-trading/futures/detail?traderId=XXX' \
+ *     --click 'text=余额历史' --click 'text=Balance History' --wait 5000
  *   # Run on the SG VPS too (INGEST_LOCAL_REGION=vps_sg ...) to isolate geo.
  *
  * Read-only: never writes to the DB or serving layer.
@@ -30,11 +34,29 @@ function rowCountOf(payload: unknown): number | null {
   return null
 }
 
+/** Parse a repeatable `--flag value` into a string[]. */
+function multiFlag(args: string[], flag: string): string[] {
+  const out: string[] = []
+  for (let i = 0; i < args.length; i++) if (args[i] === flag && args[i + 1]) out.push(args[i + 1])
+  return out
+}
+function oneFlag(args: string[], flag: string): string | null {
+  const i = args.indexOf(flag)
+  return i >= 0 && args[i + 1] ? args[i + 1] : null
+}
+
 async function main() {
   const args = process.argv.slice(2)
-  const slug = args.find((a) => !a.startsWith('--')) ?? 'coinex_futures'
-  const matcherSrc = args[1] && !args[1].startsWith('--') ? args[1] : 'copy-trading|copytrading|traders|leaderboard|public'
+  const positional = args.filter((a, i) => !a.startsWith('--') && !args[i - 1]?.startsWith('--'))
+  const slug = positional[0] ?? 'coinex_futures'
+  const matcherSrc = positional[1] ?? 'copy-trading|copytrading|traders|leaderboard|public|profile|history|order|position|transfer|balance|follow'
   const matcher = new RegExp(matcherSrc, 'i')
+  // --url <url>: navigate this URL (e.g. a trader profile) instead of the board.
+  // --click <selector>: after load, click each (repeatable) to trigger lazy XHRs.
+  // --wait <ms>: settle time after each nav/click (default 4000).
+  const overrideUrl = oneFlag(args, '--url')
+  const clicks = multiFlag(args, '--click')
+  const settleMs = Number(oneFlag(args, '--wait') ?? '4000')
 
   await import('@/lib/ingest/adapters/register')
   const { getSourceBySlug } = await import('@/lib/ingest/sources')
@@ -43,19 +65,30 @@ async function main() {
 
   const src = await getSourceBySlug(slug)
   if (!src) throw new Error(`source not found: ${slug}`)
-  const boardUrl = src.leaderboard_url
-  if (!boardUrl) throw new Error(`source ${slug} has no leaderboard_url`)
-  console.log(`[capture] ${slug} region=${src.fetch_region} board=${boardUrl}`)
-  console.log(`[capture] matcher=/${matcherSrc}/i`)
+  const targetUrl = overrideUrl ?? src.leaderboard_url
+  if (!targetUrl) throw new Error(`source ${slug} has no leaderboard_url (and no --url given)`)
+  console.log(`[capture] ${slug} region=${src.fetch_region} url=${targetUrl}`)
+  console.log(`[capture] matcher=/${matcherSrc}/i${clicks.length ? ` clicks=${clicks.length}` : ''}`)
 
   const session = await openSession(src)
   try {
     const capture = await session.capture(matcher)
     const page = await session.page()
     try {
-      await page.goto(boardUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
+      await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
       await page.waitForLoadState('networkidle', { timeout: 25_000 }).catch(() => {})
-      await page.waitForTimeout(4000)
+      await page.waitForTimeout(settleMs)
+      // Click through tabs (each may lazy-load a distinct endpoint) — best-effort.
+      for (const sel of clicks) {
+        try {
+          await page.click(sel, { timeout: 8000 })
+          await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {})
+          await page.waitForTimeout(settleMs)
+          console.log(`[capture] clicked: ${sel}`)
+        } catch (e) {
+          console.log(`[capture] click failed (${sel}):`, (e as Error).message)
+        }
+      }
     } catch (e) {
       console.log('[capture] goto note:', (e as Error).message)
     }
