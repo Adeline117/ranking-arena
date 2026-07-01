@@ -23,23 +23,35 @@
 
 import { useCallback } from 'react'
 
-export interface TabsA11yOptions<K extends string> {
+export interface TabsA11yOptions<K extends string | number> {
   /** Ordered tab keys (must match render order for arrow-key cycling). */
   tabs: readonly K[]
   active: K
   onChange: (key: K) => void
   /** Unique per tablist on the page; ids become `${idPrefix}-tab-${key}`. */
   idPrefix: string
+  /**
+   * Filter-pill style tablists (time-window/category pills) all control ONE
+   * results region rather than per-key panels. Set this to that region's id:
+   * every tab's aria-controls points at it, and getSharedPanelProps() labels
+   * it by the active tab (convention: CompetitionsPageClient.tsx:168,225).
+   * Omit for classic per-key panels (TraderTabs style).
+   */
+  sharedPanelId?: string
 }
 
-export function useTabsA11y<K extends string>({
+export function useTabsA11y<K extends string | number>({
   tabs,
   active,
   onChange,
   idPrefix,
+  sharedPanelId,
 }: TabsA11yOptions<K>) {
   const tabId = useCallback((key: K) => `${idPrefix}-tab-${key}`, [idPrefix])
-  const panelId = useCallback((key: K) => `${idPrefix}-panel-${key}`, [idPrefix])
+  const panelId = useCallback(
+    (key: K) => sharedPanelId ?? `${idPrefix}-panel-${key}`,
+    [idPrefix, sharedPanelId]
+  )
 
   const onKeyDown = useCallback(
     (key: K) => (e: React.KeyboardEvent) => {
@@ -84,5 +96,15 @@ export function useTabsA11y<K extends string>({
     [tabId, panelId]
   )
 
-  return { getTabListProps, getTabProps, getPanelProps }
+  /** For sharedPanelId mode: put on the single results region (labelled by the active tab). */
+  const getSharedPanelProps = useCallback(
+    () => ({
+      role: 'tabpanel' as const,
+      id: sharedPanelId ?? `${idPrefix}-panel`,
+      'aria-labelledby': tabId(active),
+    }),
+    [sharedPanelId, idPrefix, tabId, active]
+  )
+
+  return { getTabListProps, getTabProps, getPanelProps, getSharedPanelProps }
 }

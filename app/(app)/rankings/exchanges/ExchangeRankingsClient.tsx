@@ -23,6 +23,7 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import DerivedBoardBadge from '@/app/components/common/DerivedBoardBadge'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
+import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
 import type {
   ExchangeRankingRow,
   ExchangeRankings,
@@ -227,6 +228,14 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
   const { t, language } = useLanguage()
   const router = useRouter()
   const [tf, setTf] = useState<ExchangeRankingsTimeframe>(90)
+  // B2 tabs a11y: timeframe pills control the single rankings table region.
+  const tfTabsA11y = useTabsA11y({
+    tabs: TIMEFRAMES,
+    active: tf,
+    onChange: setTf,
+    idPrefix: 'ex-tf',
+    sharedPanelId: 'ex-results',
+  })
   const [sortKey, setSortKey] = useState<SortKey>('rankedTraders')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
@@ -310,12 +319,15 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
           style={{ marginBottom: 0 }}
         />
 
-        <Box style={{ display: 'flex', gap: tokens.spacing[1] }} role="tablist">
+        <Box
+          style={{ display: 'flex', gap: tokens.spacing[1] }}
+          {...tfTabsA11y.getTabListProps()}
+          aria-label={t('exchangeRankingsTitle')}
+        >
           {TIMEFRAMES.map((option) => (
             <button
               key={option}
-              role="tab"
-              aria-selected={tf === option}
+              {...tfTabsA11y.getTabProps(option)}
               onClick={() => setTf(option)}
               style={{
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -336,6 +348,7 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
 
       {rows.length === 0 ? (
         <Box
+          {...tfTabsA11y.getSharedPanelProps()}
           style={{
             padding: tokens.spacing[8],
             textAlign: 'center',
@@ -349,6 +362,7 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
         </Box>
       ) : (
         <Box
+          {...tfTabsA11y.getSharedPanelProps()}
           style={{
             overflowX: 'auto',
             border: '1px solid var(--color-border-primary)',
