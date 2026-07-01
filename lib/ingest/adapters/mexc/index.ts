@@ -223,7 +223,12 @@ const mexcAdapter: SourceAdapter = {
       `${accumUrl}?dataType=DAY_PNL&statsIntervalType=${interval}&uid=${uid}`
     )
     const ability = await get(`${abilityUrl}?intervalType=${interval}&uid=${uid}`)
+    // 持仓时长: 按订单 (ORDER) AND 按仓位 (POSITION) — the user asked for both
+    // toggles (逐图核对). Same endpoint, dataType param varies.
     const hold = await get(`${holdUrl}?dataType=ORDER&interval=${interval}&uid=${uid}`)
+    const holdByPosition = await get(
+      `${holdUrl}?dataType=POSITION&interval=${interval}&uid=${uid}`
+    ).catch(() => null)
     const contractStat = await get(`${contractUrl}?statsIntervalType=${interval}&uid=${uid}`)
 
     const fetchedAt = new Date().toISOString()
@@ -231,7 +236,16 @@ const mexcAdapter: SourceAdapter = {
       pages: [
         {
           pageIndex: 1,
-          payload: { trader, accumulate, dayPnl, ability, hold, contractStat, timeframe: tf },
+          payload: {
+            trader,
+            accumulate,
+            dayPnl,
+            ability,
+            hold,
+            holdByPosition,
+            contractStat,
+            timeframe: tf,
+          },
           url: traderUrl,
           fetchedAt,
         },
