@@ -289,8 +289,8 @@ export default function RankingSection({
             lineHeight: 1.6,
           }}
         >
-          {hasActiveFilters ? t('noTradersMatchFilters') : t('rankingsLoadingRefresh')}
-          {hasActiveFilters && (
+          {hasActiveFilters ? t('noTradersMatchFilters') : t('failedToLoadRankings')}
+          {hasActiveFilters ? (
             <button
               onClick={handleResetFilters}
               className="tap-target"
@@ -307,6 +307,29 @@ export default function RankingSection({
             >
               {t('resetFilters')}
             </button>
+          ) : (
+            onRetry && (
+              // Unfiltered + loaded + empty = the fetch came back empty (a soft
+              // failure). Offer a real retry instead of telling the user to
+              // "refresh shortly" (which read as if it were still loading).
+              <button
+                onClick={onRetry}
+                className="tap-target"
+                style={{
+                  display: 'block',
+                  margin: '12px auto 0',
+                  padding: '8px 20px',
+                  borderRadius: 6,
+                  border: '1px solid var(--color-border-primary)',
+                  background: 'var(--color-accent-primary)',
+                  color: '#fff',
+                  fontSize: 13,
+                  cursor: 'pointer',
+                }}
+              >
+                {t('retry')}
+              </button>
+            )
           )}
         </div>
       )}
