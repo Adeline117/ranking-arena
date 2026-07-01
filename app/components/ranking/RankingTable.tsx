@@ -1177,7 +1177,11 @@ function RankingTableInner(props: {
                           }
                         },
                       }
-                    : undefined
+                    : // Unfiltered + empty = soft fetch failure → offer a real retry
+                      // instead of the "try refreshing" copy asking the user to reload.
+                      onRetry
+                      ? { label: t('retry'), onClick: onRetry }
+                      : undefined
                 }
               />
             ) : viewMode === 'card' ? (
