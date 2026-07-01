@@ -146,27 +146,30 @@ function UserCenterPage() {
   useEffect(() => {
     async function init() {
       try {
+        // getUser() revalidates over the network and can race AHEAD of the
+        // session being restored from localStorage on a fresh load, returning
+        // null for a genuinely logged-in user → a false "Login Required" with no
+        // recovery. Fall back to the locally-restored session before giving up.
         const {
           data: { user },
         } = await supabase.auth.getUser()
-        if (!user) {
-          setLoading(false)
-          return
-        }
-        setUserId(user.id)
-        setEmail(user.email ?? null)
-
-        // /api/user/exp uses requireAuth (Bearer header only) — 401'd without the token
         const {
           data: { session },
         } = await supabase.auth.getSession()
+        const authedUser = user ?? session?.user ?? null
+        if (!authedUser) {
+          setLoading(false)
+          return
+        }
+        setUserId(authedUser.id)
+        setEmail(authedUser.email ?? null)
 
         // Fetch profile + exp in parallel (reduced from 5 separate queries)
         const [profileResult, expResult] = await Promise.all([
           supabase
             .from('user_profiles')
             .select('handle, avatar_url')
-            .eq('id', user.id)
+            .eq('id', authedUser.id)
             .maybeSingle(),
           fetch('/api/user/exp', {
             headers: session?.access_token
