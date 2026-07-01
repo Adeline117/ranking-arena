@@ -17,9 +17,13 @@ worker/dist
 **/*.spec.ts
 coverage
 
-# Development files
-.env.local
-.env.development
+# Development files + ALL env files (secrets must be mounted at runtime, never
+# baked into an image layer — an rsync build context can include gitignored .env)
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
 *.log
 
 # IDE
