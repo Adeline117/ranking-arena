@@ -13,17 +13,26 @@
  */
 
 import { useState, useEffect } from 'react'
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { t as translate, getLanguage, loadTranslations } from '@/lib/i18n'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
 import { tokens } from '@/lib/design-tokens'
 
 const DISMISS_KEY = 'pro-free-promo-dismissed'
 
+// English defaults so the banner NEVER renders a raw i18n key — this component
+// is mounted in the ROOT layout, which (for homepage LCP) omits LanguageProvider,
+// so it cannot use useLanguage(). It resolves the localized copy itself via the
+// static lib/i18n dictionary, falling back to these strings if load fails.
+const DEFAULT_TEXT =
+  '🎉 Pro features are free for a limited time — enjoy everything, no upgrade needed.'
+const DEFAULT_DISMISS = 'Dismiss'
+
 export default function ProPromoBanner() {
-  const { t } = useLanguage()
   // Start hidden: avoids a flash for dismissed users and keeps SSR/first-render
   // output identical (both render null), so there is no hydration mismatch.
   const [visible, setVisible] = useState(false)
+  const [text, setText] = useState(DEFAULT_TEXT)
+  const [dismissLabel, setDismissLabel] = useState(DEFAULT_DISMISS)
 
   useEffect(() => {
     if (!PRO_FREE_PROMO) return
@@ -32,7 +41,24 @@ export default function ProPromoBanner() {
     } catch {
       // localStorage unavailable (private mode) — still show the banner
     }
-    setVisible(true)
+    let cancelled = false
+    ;(async () => {
+      try {
+        await loadTranslations(getLanguage())
+        if (cancelled) return
+        const resolved = translate('proPromoBanner')
+        // translate() returns the key itself when missing — guard against that.
+        if (resolved && resolved !== 'proPromoBanner') setText(resolved)
+        const d = translate('proPromoBannerDismiss')
+        if (d && d !== 'proPromoBannerDismiss') setDismissLabel(d)
+      } catch {
+        // keep English defaults
+      }
+      if (!cancelled) setVisible(true)
+    })()
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   const dismiss = () => {
@@ -60,11 +86,11 @@ export default function ProPromoBanner() {
         zIndex: 1,
       }}
     >
-      <span>{t('proPromoBanner')}</span>
+      <span>{text}</span>
       <button
         type="button"
         onClick={dismiss}
-        aria-label={t('proPromoBannerDismiss')}
+        aria-label={dismissLabel}
         style={{
           position: 'absolute',
           right: tokens.spacing[1],
