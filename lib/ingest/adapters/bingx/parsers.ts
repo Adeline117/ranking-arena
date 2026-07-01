@@ -162,6 +162,12 @@ function bingxBoardExtras(rankStat: Dict, tf: RankingTimeframe): Record<string, 
   // registry already has the `risk_rating` key — this just wires it through.
   const risk = int(rankStat[`riskLevel${tf}Days`])
   if (risk !== null) ext.risk_rating = risk
+  // 盈亏比 + 累计交易数 (Phase A: were raw-only). pnlRateU can be "+∞"/"-∞"
+  // for no-loss/no-win traders → num() returns null (NULL-collapse), never a bad value.
+  const pnlRatio = num(rankStat.pnlRateU)
+  if (pnlRatio !== null) ext.pnl_ratio = pnlRatio
+  const lifetimeTrades = int(rankStat.totalTransactions)
+  if (lifetimeTrades !== null) ext.lifetime_trades = lifetimeTrades
   return Object.keys(ext).length > 0 ? ext : null
 }
 
