@@ -180,9 +180,30 @@ export default function TopTraders() {
             textAlign: 'center',
             color: tokens.colors.text.tertiary,
             fontSize: tokens.typography.fontSize.sm,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
           }}
         >
-          {t('noData')}
+          {/* Empty top-traders = a soft fetch failure. Offer a real retry rather
+              than the old "try refreshing later" copy (which offloads to the user). */}
+          <span>{t('noData')}</span>
+          <button
+            onClick={() => refetch()}
+            className="tap-target"
+            style={{
+              padding: '6px 16px',
+              borderRadius: 6,
+              border: '1px solid var(--color-border-primary)',
+              background: 'transparent',
+              color: 'var(--color-accent-primary)',
+              fontSize: tokens.typography.fontSize.sm,
+              cursor: 'pointer',
+            }}
+          >
+            {t('retry')}
+          </button>
         </div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
