@@ -168,6 +168,29 @@ function bingxBoardExtras(rankStat: Dict, tf: RankingTimeframe): Record<string, 
   if (pnlRatio !== null) ext.pnl_ratio = pnlRatio
   const lifetimeTrades = int(rankStat.totalTransactions)
   if (lifetimeTrades !== null) ext.lifetime_trades = lifetimeTrades
+  // 逐图核对 image62: the "profile" block fields are ALL already in the board
+  // rankStat (81 keys) — they only needed promoting. Principal / avg-holding /
+  // cumulative-copiers / earnings / tenure / loss-count / max-slots / growth.
+  const principal = num(rankStat.equity)
+  if (principal !== null) ext.principal = principal
+  const holdSecs = num(rankStat.avgHoldTime)
+  if (holdSecs !== null) ext.avg_hold_time_hours = Math.round((holdSecs / 3600) * 100) / 100
+  const cumCopiers = int(rankStat.strAccFollowerNum)
+  if (cumCopiers !== null) ext.copier_count_history = cumCopiers
+  const totalEarnings = parseDisplayPct(rankStat.totalEarnings)
+  if (totalEarnings !== null) ext.total_earnings = totalEarnings
+  const followerEarning = parseDisplayPct(rankStat.followerEarning)
+  if (followerEarning !== null) ext.copier_earnings = followerEarning
+  const tenure = int(rankStat.daysSinceBecameTrader)
+  if (tenure !== null) ext.trader_tenure_days = tenure
+  const lossCount = int(rankStat.lossCount)
+  if (lossCount !== null) ext.loss_trades = lossCount
+  const maxFollowers = int(rankStat.maxFollowerNum)
+  if (maxFollowers !== null) ext.max_copier_slots = maxFollowers
+  const growth30d = int(rankStat.recent30DayFollowerNumChange)
+  if (growth30d !== null) ext.copier_growth_30d = growth30d
+  const following = num(rankStat.followingAmount)
+  if (following !== null) ext.following_amount = following
   return Object.keys(ext).length > 0 ? ext : null
 }
 

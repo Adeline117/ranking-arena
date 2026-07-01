@@ -53,9 +53,18 @@ describe('parseBingxLeaderboardPage', () => {
     )
     // Phase A: lifetime_trades from totalTransactions; pnl_ratio omitted when
     // pnlRateU is "+∞" (no-loss trader) — NULL-collapse, never a bad value.
-    const fe = first.headlineExtras as { lifetime_trades?: number; pnl_ratio?: number }
+    const fe = first.headlineExtras as Record<string, number | undefined>
     expect(fe.lifetime_trades).toBe(8)
     expect(fe.pnl_ratio).toBeUndefined() // row0 pnlRateU = "+∞"
+    // 逐图核对 image62: profile-block fields promoted from board rankStat.
+    expect(fe.principal).toBeCloseTo(138.27, 2) // equity
+    expect(fe.avg_hold_time_hours).toBeCloseTo(9.06, 1) // avgHoldTime 32614s / 3600
+    expect(fe.copier_count_history).toBe(14) // strAccFollowerNum (cumulative)
+    expect(fe.trader_tenure_days).toBe(9) // daysSinceBecameTrader
+    expect(fe.loss_trades).toBe(1) // lossCount
+    expect(fe.max_copier_slots).toBe(2000) // maxFollowerNum
+    expect(fe.copier_growth_30d).toBe(2) // recent30DayFollowerNumChange
+    expect(fe.total_earnings).toBeCloseTo(108.33, 2) // totalEarnings "+108.33"
     // row1 has a finite pnlRateU → pnl_ratio surfaces
     expect((page.rows[1].headlineExtras as { pnl_ratio?: number }).pnl_ratio).toBeCloseTo(0.8997, 3)
   })
