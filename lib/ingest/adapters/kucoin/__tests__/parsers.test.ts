@@ -52,6 +52,15 @@ describe('parseKucoinLeaderboardPage', () => {
       headlineRoi: 432.1693, // thirtyDayPnlRatio "4.3216934574…"
       headlinePnl: 6310.43909344,
       headlineWinRate: null,
+      headlineCopierCount: 47, // currentCopyUserCount
+    })
+    // 逐图核对: board-row lead principal / tenure / copier / min-copy promoted
+    expect(page.rows[0].headlineExtras).toMatchObject({
+      lead_principal: 4797.39877728,
+      leading_days: 136,
+      max_copier_slots: 1000,
+      total_roi: 151.1, // totalPnlRatio 1.5110 ×100
+      min_copy_amount: 10,
     })
     // Native KuCoin rows stay human
     expect(page.rows[1]).toMatchObject({
