@@ -4401,6 +4401,15 @@ const ko = {
   portfolioAddFailed: '거래소 추가 실패',
   portfolioConnectSuccess: '거래소 연결 성공',
   portfolioSyncFailed: '동기화 실패, 다시 시도해 주세요',
+  portfolioSyncGeoUnavailable:
+    '이 거래소는 현재 지역에서 아직 동기화를 지원하지 않습니다 — 곧 지원 예정입니다.',
+  portfolioSyncPassphraseRequired:
+    '이 거래소는 API 패스프레이즈가 필요합니다. 곧 지원 예정이며, 지원 후 다시 연결해 주세요.',
+  portfolioSyncUnsupported: '이 거래소의 자동 동기화는 아직 지원되지 않습니다.',
+  portfolioSyncKeysUnreadable:
+    '저장된 API 키를 읽을 수 없습니다. 이 거래소를 삭제 후 다시 연결해 주세요.',
+  portfolioSyncExchangeError:
+    '거래소가 요청을 거부했습니다. API 키가 유효하고 읽기 권한이 있는지 확인하세요.',
   portfolioSyncSuccess: '동기화 성공',
   portfolioNetworkError: '네트워크 오류',
   portfolioRemoveExchange: '거래소 제거',

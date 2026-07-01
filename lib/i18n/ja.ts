@@ -4105,6 +4105,15 @@ const ja = {
   portfolioAddFailed: '取引所の追加に失敗しました',
   portfolioConnectSuccess: '取引所の接続に成功しました',
   portfolioSyncFailed: '同期に失敗しました。もう一度お試しください',
+  portfolioSyncGeoUnavailable:
+    'この取引所は現在の地域からの同期にまだ対応していません — 近日対応予定です。',
+  portfolioSyncPassphraseRequired:
+    'この取引所は API パスフレーズが必要です。対応は近日予定 — 対応後に再接続してください。',
+  portfolioSyncUnsupported: 'この取引所の自動同期はまだ対応していません。',
+  portfolioSyncKeysUnreadable:
+    '保存された API キーを読み取れませんでした。この取引所を削除して再接続してください。',
+  portfolioSyncExchangeError:
+    '取引所がリクエストを拒否しました。API キーが有効で読み取り権限があるか確認してください。',
   portfolioSyncSuccess: '同期に成功しました',
   portfolioNetworkError: 'ネットワークエラー',
   portfolioRemoveExchange: '取引所を削除',
