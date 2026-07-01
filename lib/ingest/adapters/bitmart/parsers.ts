@@ -90,6 +90,16 @@ export function dedupeHash(...fields: unknown[]): string {
     .digest('hex')
 }
 
+/** Board-row extras → trader_stats.extras via registry aliases (NULL-collapse). */
+function boardExtras(item: Dict): Record<string, unknown> | null {
+  const ext: Record<string, unknown> = {}
+  const nav = num(item.nav)
+  if (nav !== null) ext.nav = nav
+  const plRatio = num(item.pl_ratio)
+  if (plRatio !== null) ext.pnl_ratio = plRatio
+  return Object.keys(ext).length > 0 ? ext : null
+}
+
 /**
  * Master list (GET master/master-ranking?page&size&order&window_type&
  * master_type=1). NOTE: `total` counts ALL masters including hidden ones —
@@ -125,8 +135,15 @@ export function parseBitmartLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parse
       // were raw-only, so board-tier masters had no MDD/AUM.
       headlineMdd: pct(item.mdd),
       headlineAum: num(item.aum),
+      // 跟单人数 on every board row → trader_stats.copier_count for board-tier
+      // masters never deep-crawled (Phase A: was raw-only).
+      headlineCopierCount: int(item.copiers),
       traderMeta: item.master_tag !== undefined ? { master_tag: int(item.master_tag) } : null,
-      // NAV, scores, pl_ratio, copiers, profit share... verbatim
+      // Board-row NAV (unit net value, par 1.0) + 盈亏比 → trader_stats.extras via
+      // registry aliases (nav / pnl_ratio). Profile promotes these too; the board
+      // fills board-tier masters. Phase A.
+      headlineExtras: boardExtras(item),
+      // scores, profit share... verbatim
       raw: item,
     })
   }

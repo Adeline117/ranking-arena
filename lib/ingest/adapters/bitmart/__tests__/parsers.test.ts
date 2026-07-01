@@ -42,7 +42,10 @@ describe('parseBitmartLeaderboardPage', () => {
       headlinePnl: -159.7940409,
       headlineWinRate: 60.5769, // from the structured ai_comment block
       traderMeta: { master_tag: 6 },
+      headlineCopierCount: 18, // item.copiers → trader_stats.copier_count (Phase A)
     })
+    // board NAV + 盈亏比 → extras via registry aliases (was raw-only)
+    expect(page.rows[0].headlineExtras).toMatchObject({ nav: 1.0062559033, pnl_ratio: 1.428402 })
     const raw = page.rows[0].raw as Record<string, unknown>
     expect(raw.nav).toBe('1.0062559033') // Latest NAV — verbatim
     expect(raw.copiers).toBe('18')
