@@ -160,7 +160,7 @@ describe('parseMexcProfile', () => {
     expect(extras.settled_days).toBe(913)
     expect(extras.trade_frequency_per_week).toBe(13)
     expect(extras.total_equity).toBeCloseTo(12773.246, 2)
-    expect(extras.profit_and_loss_ratio).toBe('4.0:1')
+    expect(extras.profit_and_loss_ratio).toBe(4) // "4.0:1" parsed to a finite ratio (was a non-displaying string)
     expect(extras.max_hold_time_hours).toBeCloseTo(215932 / 3600, 4)
     expect(Array.isArray(extras.hold_histogram)).toBe(true)
   })

@@ -230,7 +230,18 @@ export function parseMexcProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     if (t.totalRoi !== undefined) extras.total_roi = pct(t.totalRoi)
     if (t.totalPnl !== undefined) extras.total_pnl = num(t.totalPnl)
     if (t.totalWinRate !== undefined) extras.total_win_rate = pct(t.totalWinRate)
-    if (t.profitAndLossRatio !== undefined) extras.profit_and_loss_ratio = t.profitAndLossRatio
+    // 盈亏比 comes as a display string like "4.0:1" — parse to a finite ratio so
+    // promoteExtrasMetrics can surface it (a bare string never Number()s → the
+    // pnl_ratio metric silently never displayed). Phase A fix.
+    if (typeof t.profitAndLossRatio === 'string' && t.profitAndLossRatio.includes(':')) {
+      const [a, b] = t.profitAndLossRatio.split(':').map((x) => Number(x))
+      if (Number.isFinite(a) && Number.isFinite(b) && b !== 0) {
+        extras.profit_and_loss_ratio = Math.round((a / b) * 100) / 100
+      }
+    } else if (t.profitAndLossRatio !== undefined) {
+      const plr = num(t.profitAndLossRatio)
+      if (plr !== null) extras.profit_and_loss_ratio = plr
+    }
     if (t.totalFollowers !== undefined) extras.copier_count_history = int(t.totalFollowers)
     if (t.interestedNum !== undefined) extras.interested_count = int(t.interestedNum)
     if (t.traderType === 'AI') extras.trader_type = 'AI'
