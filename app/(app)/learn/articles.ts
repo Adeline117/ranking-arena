@@ -52,11 +52,11 @@ This ensures consistent long-term performers rank higher than flash-in-the-pan t
     slug: 'understanding-trader-rankings',
     title: 'Understanding Crypto Trader Rankings',
     excerpt:
-      'How Arena aggregates rankings from 28+ exchanges into a single unified leaderboard with 34,000+ traders.',
+      'How Arena aggregates rankings from 45+ exchanges into a single unified leaderboard with 8,000+ traders.',
     content: `
 # Understanding Crypto Trader Rankings
 
-Arena aggregates trader performance data from **28+ exchanges** — both centralized (CEX) and decentralized (DEX) — into a single unified leaderboard.
+Arena aggregates trader performance data from **45+ exchanges** — both centralized (CEX) and decentralized (DEX) — into a single unified leaderboard.
 
 ## Data Collection
 
@@ -71,7 +71,7 @@ Different exchanges report data differently. Some give ROI as a decimal (0.25), 
 
 ## Ranking Methodology
 
-1. **Fetch**: Collect raw data from all 28+ exchange APIs
+1. **Fetch**: Collect raw data from all 45+ exchange APIs
 2. **Normalize**: Convert to standard units (ROI in %, PnL in USD)
 3. **Score**: Calculate Arena Score for each trader per timeframe
 4. **Composite**: Compute overall score (90D x 0.70 + 30D x 0.25 + 7D x 0.05)
@@ -179,7 +179,7 @@ Welcome to Arena! Here is how to get the most out of the platform.
 
 ## 1. Browse Rankings
 
-The homepage shows the **global leaderboard** — all 34,000+ traders ranked by Arena Score. Use the period selector to switch between 7D, 30D, and 90D views.
+The homepage shows the **global leaderboard** — all 8,000+ traders ranked by Arena Score. Use the period selector to switch between 7D, 30D, and 90D views.
 
 ## 2. Filter by Exchange
 
@@ -218,11 +218,12 @@ Arena has a built-in social layer. Join groups, post trade ideas, and discuss st
   {
     slug: 'top-traders-by-exchange',
     title: 'Top Traders by Exchange: Who Leads Each Platform?',
-    excerpt: 'A breakdown of trading performance across Binance, Bybit, Hyperliquid, and 25+ other exchanges.',
+    excerpt:
+      'A breakdown of trading performance across Binance, Bybit, Hyperliquid, and 25+ other exchanges.',
     content: `
 # Top Traders by Exchange
 
-Arena tracks **28+ exchanges** spanning centralized (CEX) and decentralized (DEX) platforms. Each exchange has its own leaderboard, ranked by Arena Score.
+Arena tracks **45+ exchanges** spanning centralized (CEX) and decentralized (DEX) platforms. Each exchange has its own leaderboard, ranked by Arena Score.
 
 ## CEX Leaders
 - **Binance Futures**: The largest exchange by volume. Top traders here tend to have high PnL but moderate ROI due to competition.
@@ -243,8 +244,9 @@ CEX traders typically show higher PnL (more capital), while DEX traders show hig
   },
   {
     slug: 'what-is-copy-trading',
-    title: 'What is Copy Trading? A Beginner\'s Guide',
-    excerpt: 'Learn how copy trading works, its benefits and risks, and how Arena helps you find the best traders to follow.',
+    title: "What is Copy Trading? A Beginner's Guide",
+    excerpt:
+      'Learn how copy trading works, its benefits and risks, and how Arena helps you find the best traders to follow.',
     content: `
 # What is Copy Trading?
 
@@ -275,7 +277,8 @@ Arena's **Arena Score** combines ROI and PnL into a single risk-adjusted metric.
   {
     slug: 'trading-styles-explained',
     title: 'Trading Styles Explained: Scalper, Swing, Trend, Position',
-    excerpt: 'Understand the four main trading styles and how Arena classifies traders automatically.',
+    excerpt:
+      'Understand the four main trading styles and how Arena classifies traders automatically.',
     content: `
 # Trading Styles Explained
 
@@ -312,7 +315,8 @@ Arena calculates **average holding hours** from a trader's position history. Com
   {
     slug: 'how-to-read-equity-curves',
     title: 'How to Read Equity Curves and Drawdown Charts',
-    excerpt: 'Learn to interpret the visual charts on trader profiles — equity curves, drawdown depth, and daily returns.',
+    excerpt:
+      'Learn to interpret the visual charts on trader profiles — equity curves, drawdown depth, and daily returns.',
     content: `
 # How to Read Equity Curves
 
@@ -354,7 +358,8 @@ A histogram showing how many days had positive vs negative returns.
   {
     slug: 'arena-pro-features',
     title: 'Arena Pro: What You Get with a Subscription',
-    excerpt: 'Detailed overview of Pro features including advanced analytics, trader comparison, rank alerts, and more.',
+    excerpt:
+      'Detailed overview of Pro features including advanced analytics, trader comparison, rank alerts, and more.',
     content: `
 # Arena Pro Features
 
@@ -398,5 +403,5 @@ Arena Pro unlocks powerful tools for serious traders and analysts. Here's what's
 ]
 
 export function getArticleBySlug(slug: string): Article | undefined {
-  return ARTICLES.find(a => a.slug === slug)
+  return ARTICLES.find((a) => a.slug === slug)
 }
