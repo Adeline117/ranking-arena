@@ -83,6 +83,8 @@ describe('parseXtProfile', () => {
     expect(s.extras.leading_days).toBe(234)
     expect(s.extras.style_labels).toEqual(['Short term', 'conservative'])
     expect(s.extras.intro).toBeTruthy()
+    expect(s.extras.copier_count_history).toBe(9) // followNumber
+    expect(s.extras.max_copier_slots).toBe(100) // maxFollowerSize
     expect(profile.nickname).toBe('阿阳')
     expect(profile.series).toHaveLength(0)
   })
