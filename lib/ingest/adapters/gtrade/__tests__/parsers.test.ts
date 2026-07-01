@@ -152,6 +152,24 @@ describe('parseGtradeHistory (orders = the trades table)', () => {
   it('rejects other kinds', () => {
     expect(() => parseGtradeHistory({}, 'copiers', ctx)).toThrow('not supported')
   })
+
+  it('position_history: rebuilds closed positions from open→close pairs (M3-3b)', () => {
+    const rows = parseGtradeHistory({ data: bundle.trades.data }, 'position_history', ctx)
+    // The 60-row fixture window contains exactly ONE complete open+close pair
+    // (BTC/USD tradeIndex 739); closes whose opens fell outside the window are
+    // skipped — entry data is never guessed.
+    expect(rows).toHaveLength(1)
+    const p = rows[0]
+    if (p.kind !== 'position_history') throw new Error('wrong kind')
+    expect(p.symbol).toBe('BTC/USD')
+    expect(p.openedAt).toMatch(/^2026-06-/)
+    expect(p.closedAt).toMatch(/^2026-06-11T16:34:44/)
+    expect(typeof p.entryPrice).toBe('number')
+    expect(p.exitPrice).toBeCloseTo(62638.9056, 3)
+    expect(typeof p.realizedPnl).toBe('number')
+    expect(p.side === 'long' || p.side === 'short').toBe(true)
+    expect(p.dedupeHash).toMatch(/^[0-9a-f]{40}$/)
+  })
 })
 
 describe('parseGtradePositions', () => {
@@ -181,6 +199,6 @@ describe('parseGtradeProfile — Tier-0 base-free risk', () => {
     expect(s.mdd).toBeNull() // base-dependent → honest NULL for gTrade
     expect(typeof s.extras.sortino).toBe('number')
     expect(s.extras.risk_derivation).toBe('daily-approx')
-    expect(s.extras.risk_samples).toBe(10)
+    expect(s.extras.risk_samples).toBe(9) // N-1 deltas from 10 daily points
   })
 })

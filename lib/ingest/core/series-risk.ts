@@ -119,7 +119,9 @@ export function ratiosFromCumulativePnl(
   return {
     sharpe: sharpeOfChanges(deltas),
     sortino: sortinoOfChanges(deltas),
-    samples: clean.length,
+    // Report the count the ratio gate actually uses (deltas = N-1 points), so a
+    // disclosed samples>=7 always implies a non-null ratio was attempted.
+    samples: deltas.length,
   }
 }
 
