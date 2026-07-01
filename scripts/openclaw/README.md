@@ -20,6 +20,7 @@ TELEGRAM_ALERT_CHAT_ID=<your-chat-id>
 Configure these skills in OpenClaw:
 
 #### Health Monitor (every 30 minutes)
+
 ```
 Trigger: Every 30 minutes
 Script: node scripts/openclaw/health-monitor.mjs
@@ -27,12 +28,14 @@ Action on alert: Send Telegram notification
 ```
 
 #### Daily Report (8:00 AM)
+
 ```
 Trigger: Daily at 08:00
 Script: node scripts/openclaw/health-monitor.mjs daily
 ```
 
 #### Auto-Fix Pipeline (on alert)
+
 ```
 Trigger: When health-monitor detects pipeline failure
 Action:
@@ -44,6 +47,7 @@ Action:
 ```
 
 #### Bug Report Handler
+
 ```
 Trigger: When receiving a bug report (Discord/Telegram)
 Action:
@@ -58,13 +62,14 @@ Action:
 
 ### 3. Auto-Deploy Rules
 
-| Condition | Action |
-|-----------|--------|
-| Tests pass + <3 files changed | Auto-deploy |
+| Condition                     | Action                |
+| ----------------------------- | --------------------- |
+| Tests pass + <3 files changed | Auto-deploy           |
 | Tests pass + 3+ files changed | Wait for confirmation |
-| Tests fail | Block + alert |
+| Tests fail                    | Block + alert         |
 
 #### Daily R2 Backup (3:00 AM)
+
 ```
 Trigger: Daily at 03:00
 Script: cd ~/ranking-arena && npm run backup:r2
@@ -94,15 +99,18 @@ Add these lines to `crontab -e`:
 
 # Sentry Error Convergence (Friday 10 AM)
 0 10 * * 5 cd ~/ranking-arena && node scripts/openclaw/sentry-convergence.mjs --resolve-stale >> /tmp/arena-sentry.log 2>&1
+
+# Field-coverage canary — detects silent field loss (parser/upstream drift) daily at 7:45
+45 7 * * * cd ~/ranking-arena && npx tsx --env-file=.env.local scripts/openclaw/field-coverage-canary.mts >> /tmp/arena-field-canary.log 2>&1
 ```
 
 ## Scripts
 
-| Script | Purpose |
-|--------|---------|
-| `health-monitor.mjs` | Health check (run every 30 min) |
-| `health-monitor.mjs daily` | Daily summary report (run at 8 AM) |
-| `ux-patrol.mjs` | UX health check — pages, APIs, data quality, SSR (daily at 9 AM) |
-| `../maintenance/backup-to-r2.mjs` | Daily trader data backup to R2 (3 AM) |
-| `../maintenance/backup-to-r2.mjs --full` | Full DB backup to R2 (Sunday 4 AM) |
-| `sentry-convergence.mjs` | Weekly Sentry error report + stale issue cleanup (Friday 10 AM) |
+| Script                                   | Purpose                                                          |
+| ---------------------------------------- | ---------------------------------------------------------------- |
+| `health-monitor.mjs`                     | Health check (run every 30 min)                                  |
+| `health-monitor.mjs daily`               | Daily summary report (run at 8 AM)                               |
+| `ux-patrol.mjs`                          | UX health check — pages, APIs, data quality, SSR (daily at 9 AM) |
+| `../maintenance/backup-to-r2.mjs`        | Daily trader data backup to R2 (3 AM)                            |
+| `../maintenance/backup-to-r2.mjs --full` | Full DB backup to R2 (Sunday 4 AM)                               |
+| `sentry-convergence.mjs`                 | Weekly Sentry error report + stale issue cleanup (Friday 10 AM)  |
