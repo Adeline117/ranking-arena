@@ -242,6 +242,7 @@ export function parseMexcProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       const plr = num(t.profitAndLossRatio)
       if (plr !== null) extras.profit_and_loss_ratio = plr
     }
+    if (t.lossTimes !== undefined) extras.loss_trades = int(t.lossTimes) // 亏损次数 (逐图核对)
     if (t.totalFollowers !== undefined) extras.copier_count_history = int(t.totalFollowers)
     if (t.interestedNum !== undefined) extras.interested_count = int(t.interestedNum)
     if (t.traderType === 'AI') extras.trader_type = 'AI'

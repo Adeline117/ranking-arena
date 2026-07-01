@@ -184,6 +184,12 @@ export function parseBitgetProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     }
     if (info) {
       if (info.settledInDays !== undefined) extras.settled_in_days = int(info.settledInDays)
+      // 总资产 (逐图核对 image22) — trace-path detailV2 carries totalEquity too
+      // (masked in some fixtures, real in prod). Was only captured on UTA path.
+      if (info.totalEquity !== undefined) {
+        const eq = num(info.totalEquity)
+        if (eq !== null) extras.total_equity = eq
+      }
       if (info.followerCount !== undefined) extras.copier_count_current = int(info.followerCount)
       if (info.maxFollowCount !== undefined) extras.copier_count_max = int(info.maxFollowCount)
       if (Array.isArray(info.labelVos)) {

@@ -164,6 +164,10 @@ function parseGateFuturesProfile(bundle: Dict, ctx: ParseCtx): ParsedProfile {
       }
     }
     if (block.total_invest !== undefined) extras.lead_size = num(block.total_invest)
+    // 跟单人数增长 + 当前跟单人数 (逐图核对 image56) — in the per-period block.
+    if (block.incremental_num !== undefined) extras.copier_growth = int(block.incremental_num)
+    if (block.curr_follow_num !== undefined)
+      extras.copier_count_current = int(block.curr_follow_num)
     if (allTime) {
       const liq = isoSecs(allTime.liquidation_time)
       if (liq !== null) extras.last_liquidation_at = liq // 最近强制平仓时间
