@@ -196,6 +196,18 @@ export function parseKucoinProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     if (summary?.allowCopyTraders !== undefined) {
       extras.max_copier_slots = int(summary.allowCopyTraders)
     }
+    // 交易频率 — inferred trades-per-DAY (cross-check: ~1028 lifetime positions /
+    // 137 leadDays ≈ 7.5/day, same order as the reported 10; a per-week reading
+    // would be ~5× too low). Same domain concept as gate's verified-per-day
+    // trading_frequency. Keep raw + a per-week alias (×7) so trades_per_week
+    // displays; provenance flagged here if a future capture disproves the unit.
+    if (overview?.tradingFrequency !== undefined) {
+      const perDay = num(overview.tradingFrequency)
+      if (perDay !== null) {
+        extras.trading_frequency = perDay
+        extras.trade_frequency = Math.round(perDay * 7 * 100) / 100
+      }
+    }
 
     stats.push({
       timeframe: tf,
