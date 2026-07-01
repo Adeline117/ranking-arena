@@ -12,9 +12,23 @@
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { displayableMetrics, type MetricDef } from '@/lib/constants/metric-registry'
+import {
+  displayableMetrics,
+  type MetricDef,
+  type MetricTier,
+} from '@/lib/constants/metric-registry'
 import { formatMoney } from '@/lib/utils/money'
 import type { ServingCurrency } from '@/lib/data/serving/types'
+
+// Tier-grouped rendering (eToro-style sectioning): the registry `tier` field
+// previously only sized the font, so 40+ co-populated metrics rendered as one
+// flat wall. Group order + i18n'd section headers keep the grid legible.
+const TIER_ORDER: readonly MetricTier[] = ['hero', 'standard', 'advanced']
+const TIER_I18N: Record<MetricTier, string> = {
+  hero: 'metricGroupPerformance',
+  standard: 'metricGroupActivity',
+  advanced: 'metricGroupAdvanced',
+}
 
 export interface MetricGridProps {
   stats: Record<string, number | string | null>
@@ -54,45 +68,88 @@ function valueColor(def: MetricDef, value: number | string): string {
   return tokens.colors.text.primary
 }
 
+function MetricCell({
+  def,
+  value,
+  currency,
+}: {
+  def: MetricDef
+  value: number | string
+  currency: ServingCurrency
+}) {
+  const { t } = useLanguage()
+  return (
+    <Box
+      style={{
+        padding: tokens.spacing[3],
+        background: tokens.colors.bg.tertiary,
+        borderRadius: tokens.radius.lg,
+        border: '1px solid ' + tokens.colors.border.primary,
+      }}
+    >
+      <Text size="xs" color="tertiary" style={{ display: 'block', marginBottom: 4 }}>
+        {t(def.i18nKey)}
+      </Text>
+      <Text
+        size={def.tier === 'hero' ? 'lg' : 'md'}
+        weight="bold"
+        style={{ color: valueColor(def, value), fontVariantNumeric: 'tabular-nums' }}
+      >
+        {formatValue(def, value, currency)}
+      </Text>
+    </Box>
+  )
+}
+
 export default function MetricGrid({ stats, capabilityMetrics, currency }: MetricGridProps) {
   const { t } = useLanguage()
   const defs = displayableMetrics(capabilityMetrics, stats)
   if (defs.length === 0) return null
 
+  // Group by tier, dropping cells whose value NULL-collapsed after promotion.
+  const groups = TIER_ORDER.map((tier) => ({
+    tier,
+    defs: defs.filter((d) => {
+      const v = stats[d.key]
+      return d.tier === tier && v !== null && v !== undefined
+    }),
+  })).filter((g) => g.defs.length > 0)
+  if (groups.length === 0) return null
+  // Headers only when ≥2 groups have content — a sparse-source grid stays chrome-free.
+  const showHeaders = groups.length > 1
+
   return (
-    <Box
-      style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
-        gap: tokens.spacing[3],
-      }}
-    >
-      {defs.map((def) => {
-        const value = stats[def.key]
-        if (value === null || value === undefined) return null
-        return (
+    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+      {groups.map((group) => (
+        <Box key={group.tier}>
+          {showHeaders && (
+            <Text
+              size="xs"
+              color="tertiary"
+              weight="bold"
+              style={{
+                display: 'block',
+                marginBottom: tokens.spacing[2],
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+              }}
+            >
+              {t(TIER_I18N[group.tier])}
+            </Text>
+          )}
           <Box
-            key={def.key}
             style={{
-              padding: tokens.spacing[3],
-              background: tokens.colors.bg.tertiary,
-              borderRadius: tokens.radius.lg,
-              border: '1px solid ' + tokens.colors.border.primary,
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+              gap: tokens.spacing[3],
             }}
           >
-            <Text size="xs" color="tertiary" style={{ display: 'block', marginBottom: 4 }}>
-              {t(def.i18nKey)}
-            </Text>
-            <Text
-              size={def.tier === 'hero' ? 'lg' : 'md'}
-              weight="bold"
-              style={{ color: valueColor(def, value), fontVariantNumeric: 'tabular-nums' }}
-            >
-              {formatValue(def, value, currency)}
-            </Text>
+            {group.defs.map((def) => (
+              <MetricCell key={def.key} def={def} value={stats[def.key]!} currency={currency} />
+            ))}
           </Box>
-        )
-      })}
+        </Box>
+      ))}
     </Box>
   )
 }
