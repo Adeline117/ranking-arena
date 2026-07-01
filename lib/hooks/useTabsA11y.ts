@@ -35,9 +35,12 @@ export interface TabsA11yOptions<K extends string | number> {
    * results region rather than per-key panels. Set this to that region's id:
    * every tab's aria-controls points at it, and getSharedPanelProps() labels
    * it by the active tab (convention: CompetitionsPageClient.tsx:168,225).
-   * Omit for classic per-key panels (TraderTabs style).
+   * Omit for classic per-key panels (TraderTabs style). Pass `null` when no
+   * panel element can be annotated (shared component whose results region
+   * lives in an unknown parent) — aria-controls is then omitted entirely,
+   * which beats emitting a dangling id reference.
    */
-  sharedPanelId?: string
+  sharedPanelId?: string | null
 }
 
 export function useTabsA11y<K extends string | number>({
@@ -80,11 +83,12 @@ export function useTabsA11y<K extends string | number>({
       role: 'tab' as const,
       id: tabId(key),
       'aria-selected': active === key,
-      'aria-controls': panelId(key),
+      // sharedPanelId === null → no annotatable panel; omit rather than dangle.
+      ...(sharedPanelId === null ? {} : { 'aria-controls': panelId(key) }),
       tabIndex: active === key ? 0 : -1,
       onKeyDown: onKeyDown(key),
     }),
-    [active, tabId, panelId, onKeyDown]
+    [active, tabId, panelId, onKeyDown, sharedPanelId]
   )
 
   const getPanelProps = useCallback(

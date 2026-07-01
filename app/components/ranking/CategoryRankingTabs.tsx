@@ -6,6 +6,7 @@ import { Box } from '../base'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
 import { PLATFORM_CATEGORY } from '@/lib/types/leaderboard'
+import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
 
 export type CategoryType = 'all' | 'futures' | 'spot' | 'web3'
 
@@ -19,7 +20,13 @@ interface CategoryRankingTabsProps {
 
 // 锁图标
 const LockIcon = ({ size = 10 }: { size?: number }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    xmlns="http://www.w3.org/2000/svg"
+  >
     <path
       d="M19 11H5C3.9 11 3 11.9 3 13V20C3 21.1 3.9 22 5 22H19C20.1 22 21 21.1 21 20V13C21 11.9 20.1 11 19 11Z"
       fill="currentColor"
@@ -44,7 +51,7 @@ export default function CategoryRankingTabs({
   const { showToast } = useToast()
   const [hoveredTab, setHoveredTab] = useState<CategoryType | null>(null)
 
-  const formatCount = (n: number) => n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n)
+  const formatCount = (n: number) => (n >= 1000 ? `${(n / 1000).toFixed(1)}k` : String(n))
 
   const CATEGORIES: Array<{ value: CategoryType; label: string; count?: number }> = [
     { value: 'all', label: t('categoryAll'), count: categoryCounts?.all },
@@ -59,19 +66,28 @@ export default function CategoryRankingTabs({
         onProRequired()
       } else {
         // 默认提示：如果父组件没有传入 onProRequired
-        showToast(
-          t('proRequired'),
-          'warning'
-        )
+        showToast(t('proRequired'), 'warning')
       }
       return
     }
     onCategoryChange(category)
   }
 
+  // B2 tabs a11y: keyboard nav + roving tabIndex. The results table lives in
+  // whichever parent renders this (home RankingSection — core path, no wrapper
+  // added there), so sharedPanelId: null omits aria-controls instead of dangling.
+  // Arrow-keying onto a Pro-locked tab routes through the same pro-gate as click.
+  const tabsA11y = useTabsA11y({
+    tabs: CATEGORIES.map((cat) => cat.value),
+    active: currentCategory,
+    onChange: handleTabClick,
+    idPrefix: 'cat-rank',
+    sharedPanelId: null,
+  })
+
   return (
     <Box
-      role="tablist"
+      {...tabsA11y.getTabListProps()}
       aria-label={t('rankingCategoriesLabel')}
       className="category-tabs swipe-container"
       style={{
@@ -95,8 +111,7 @@ export default function CategoryRankingTabs({
         return (
           <button
             key={cat.value}
-            role="tab"
-            aria-selected={isActive}
+            {...tabsA11y.getTabProps(cat.value)}
             aria-disabled={isLocked}
             onClick={() => handleTabClick(cat.value)}
             onMouseEnter={() => setHoveredTab(cat.value)}
@@ -133,18 +148,20 @@ export default function CategoryRankingTabs({
           >
             <span>{cat.label}</span>
             {cat.count != null && cat.count > 0 && (
-              <span style={{
-                fontSize: 11,
-                opacity: 0.7,
-                background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--color-bg-tertiary)',
-                borderRadius: tokens.radius.full,
-                padding: '1px 6px',
-                fontWeight: 500,
-              }}>{formatCount(cat.count)}</span>
+              <span
+                style={{
+                  fontSize: 11,
+                  opacity: 0.7,
+                  background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--color-bg-tertiary)',
+                  borderRadius: tokens.radius.full,
+                  padding: '1px 6px',
+                  fontWeight: 500,
+                }}
+              >
+                {formatCount(cat.count)}
+              </span>
             )}
-            {isLocked && (
-              <LockIcon size={12} />
-            )}
+            {isLocked && <LockIcon size={12} />}
           </button>
         )
       })}
@@ -161,7 +178,11 @@ const CATEGORY_TO_TRADING: Record<Exclude<CategoryType, 'all'>, string> = {
 
 // 从 PLATFORM_CATEGORY 构建分类平台集合（唯一真实来源）
 const _categoryPlatformSets = (() => {
-  const sets: Record<string, Set<string>> = { futures: new Set(), spot: new Set(), onchain: new Set() }
+  const sets: Record<string, Set<string>> = {
+    futures: new Set(),
+    spot: new Set(),
+    onchain: new Set(),
+  }
   for (const [platform, cat] of Object.entries(PLATFORM_CATEGORY)) {
     sets[cat]?.add(platform)
   }
