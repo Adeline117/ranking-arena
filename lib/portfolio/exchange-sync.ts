@@ -55,12 +55,18 @@ const SYNC_SUPPORTED = new Set([
   'coinex',
   'binance',
   'okx',
+  'htx',
+  'blofin',
 ])
+// NOTE: dydx is intentionally NOT here — dYdX v4 authenticates via wallet
+// signatures, not an API key/secret, so it doesn't fit this credential model.
+// Unsupported exchanges fall back gracefully to reason:'unsupported' (or
+// 'exchange_error' if CCXT can't complete) — no crash.
 /** Blocked from the serverless region (451). Only syncable when the VPS sync
  * proxy is configured (PORTFOLIO_SYNC_PROXY_URL/_KEY); otherwise refused. */
 const GEO_BLOCKED = new Set(['binance', 'okx'])
 /** Require an API passphrase (passed to CCXT as `password`). */
-const PASSPHRASE_REQUIRED = new Set(['bitget', 'kucoin', 'coinex', 'okx'])
+const PASSPHRASE_REQUIRED = new Set(['bitget', 'kucoin', 'coinex', 'okx', 'blofin'])
 
 /**
  * CCXT fetch adapter that tunnels every request through the SG VPS proxy
