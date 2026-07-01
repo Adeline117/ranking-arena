@@ -511,7 +511,7 @@ export default function NotificationsPageClient() {
             }}
           >
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <Text size="lg" weight="bold">
+              <Text as="h1" size="lg" weight="bold">
                 {t('notifications')}
               </Text>
               {unreadCount > 0 && (
