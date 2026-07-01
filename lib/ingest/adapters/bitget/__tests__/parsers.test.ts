@@ -159,6 +159,8 @@ describe('parseBitgetProfile (live-captured fixtures, 2026-06-11)', () => {
       settled_in_days: 891,
       copier_count_current: 91,
       copier_count_max: 100,
+      long_short_ratio: 0.68, // {longOrder:181, shortOrder:266} → 181/266 (was a non-numeric object → never displayed)
+      long_short_orders: { long: 181, short: 266 },
     })
     expect(profile.stats[0].extras.style_labels).toContain('高频')
     // P1: loss_trades + longest_holding + holding-duration distribution captured.
