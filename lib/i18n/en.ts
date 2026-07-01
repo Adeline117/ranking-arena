@@ -4354,6 +4354,7 @@ const en = {
   copyHandle: 'Copy',
   switchLanguage: 'Switch language',
   newsBreaking: 'Breaking',
+  flashNewsNewItems: '{count} new',
   newsAltcoins: 'Altcoins',
   newsMacroRegulation: 'Macro/Regulation',
   newsExchanges: 'Exchanges',

@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { Box, Text } from '@/app/components/base'
@@ -120,6 +120,15 @@ export default function FlashNewsPageClient() {
     hasPrev: false,
   })
   const sentinelRef = useRef<HTMLDivElement>(null)
+  // "N new" buffer — polled items are held here instead of shifting the list
+  // under the reader; revealed only when the pill is clicked.
+  const [buffered, setBuffered] = useState<FlashNews[]>([])
+  // Client-side view filters (server has no keyword search endpoint).
+  const [breakingOnly, setBreakingOnly] = useState(false)
+  const [query, setQuery] = useState('')
+  // Latest set of loaded ids, kept in a ref so the poll closure can dedup
+  // without re-subscribing every render.
+  const newsIdsRef = useRef<Set<string>>(new Set())
   // Translation cache for content: { [newsId]: translatedContent }
   const [translatedContent, setTranslatedContent] = useState<Record<string, string>>({})
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set())
@@ -169,23 +178,62 @@ export default function FlashNewsPageClient() {
 
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
+  // Keep the id ref in sync with the rendered list for the poll dedup.
+  useEffect(() => {
+    newsIdsRef.current = new Set(news.map((n) => n.id))
+  }, [news])
+
   // Initial load + category change
   useEffect(() => {
     setCurrentPage(1)
     setNews([])
+    setBuffered([])
     setHasMore(true)
     fetchNews(1, selectedCategory)
   }, [fetchNews, selectedCategory])
 
+  // Poll page 1 and stash genuinely-new items in the buffer (never mutate the
+  // visible list) so content doesn't jump under the reader.
+  const pollForNew = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ page: '1', limit: '20' })
+      if (selectedCategory !== 'all') params.append('category', selectedCategory)
+      const response = await fetch(`/api/flash-news?${params}`)
+      if (!response.ok) return
+      const raw = await response.json()
+      const data: FlashNewsResponse = raw.data || raw
+      const list = data.news || []
+      setBuffered((prev) => {
+        const known = new Set<string>([...newsIdsRef.current, ...prev.map((b) => b.id)])
+        const fresh = list.filter((item) => !known.has(item.id))
+        if (fresh.length === 0) return prev
+        return [...fresh, ...prev]
+      })
+    } catch {
+      // Best-effort poll — silent; the manual list stays intact.
+    }
+  }, [selectedCategory])
+
+  // Reveal buffered items: prepend (deduped) and scroll to top on demand.
+  const revealBuffered = useCallback(() => {
+    setBuffered((prev) => {
+      if (prev.length === 0) return prev
+      setNews((cur) => {
+        const ids = new Set(cur.map((c) => c.id))
+        const add = prev.filter((p) => !ids.has(p.id))
+        return [...add, ...cur]
+      })
+      return []
+    })
+    setLastUpdated(new Date())
+    if (typeof window !== 'undefined') window.scrollTo({ top: 0, behavior: 'smooth' })
+  }, [])
+
   // Auto-refresh: poll only when page is visible (saves bandwidth when tab is hidden)
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
-    // Auto-refresh only prepends new items (page 1), don't wipe accumulated scroll data
     const autoRefresh = () => {
-      fetchNews(1, selectedCategory).then(() => {
-        // Reset page counter so next scroll-load starts from page 2
-        setCurrentPage(1)
-      })
+      pollForNew()
     }
     const start = () => {
       if (!interval) interval = setInterval(autoRefresh, 120000)
@@ -209,7 +257,7 @@ export default function FlashNewsPageClient() {
       stop()
       document.removeEventListener('visibilitychange', onVisibility)
     }
-  }, [fetchNews, selectedCategory])
+  }, [pollForNew])
 
   // Infinite scroll via IntersectionObserver
   useEffect(() => {
@@ -333,6 +381,120 @@ export default function FlashNewsPageClient() {
     setCurrentPage(1)
   }
 
+  // Locale for date separators.
+  const locale =
+    ({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as Record<string, string>)[language] || 'en-US'
+
+  // Day-separator label: Today / Yesterday / localized date.
+  const dayLabelFor = useCallback(
+    (iso: string): string => {
+      const d = new Date(iso)
+      const now = new Date()
+      const startOf = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime()
+      const diffDays = Math.round((startOf(now) - startOf(d)) / 86_400_000)
+      if (diffDays <= 0) return t('today')
+      if (diffDays === 1) return t('yesterday')
+      return d.toLocaleDateString(locale, { year: 'numeric', month: 'short', day: 'numeric' })
+    },
+    [t, locale]
+  )
+
+  // Client-side view filters: breaking-only + keyword (searches every locale
+  // title/content field + tags so it works regardless of display language).
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return news.filter((n) => {
+      if (breakingOnly && n.importance !== 'breaking') return false
+      if (!q) return true
+      const hay = [
+        n.title,
+        n.title_zh,
+        n.title_en,
+        n.content,
+        n.content_zh,
+        n.content_en,
+        ...(n.tags || []),
+      ]
+        .filter(Boolean)
+        .join(' ')
+        .toLowerCase()
+      return hay.includes(q)
+    })
+  }, [news, breakingOnly, query])
+
+  // Pin the most recent breaking items to the top (skip when already breaking-only).
+  const pinnedBreaking = useMemo(
+    () => (breakingOnly ? [] : filtered.filter((n) => n.importance === 'breaking').slice(0, 3)),
+    [filtered, breakingOnly]
+  )
+
+  // Remaining items grouped by calendar day for date separators.
+  const groupedTimeline = useMemo(() => {
+    const pinnedIds = new Set(pinnedBreaking.map((p) => p.id))
+    const groups: { key: string; label: string; items: FlashNews[] }[] = []
+    for (const item of filtered) {
+      if (pinnedIds.has(item.id)) continue
+      const d = new Date(item.published_at)
+      const key = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`
+      let g = groups[groups.length - 1]
+      if (!g || g.key !== key) {
+        g = { key, label: dayLabelFor(item.published_at), items: [] }
+        groups.push(g)
+      }
+      g.items.push(item)
+    }
+    return groups
+  }, [filtered, pinnedBreaking, dayLabelFor])
+
+  // "N new" pill label. Uses the (reported) flashNewsNewItems key when present,
+  // otherwise degrades gracefully to a composed localized string.
+  const rawNewLabel = t('flashNewsNewItems')
+  const newLabelTemplate =
+    rawNewLabel === 'flashNewsNewItems' ? `{count} ${t('latest')}` : rawNewLabel
+  const newLabel = newLabelTemplate.replace('{count}', String(buffered.length))
+
+  // Shared NewsCard renderer (long prop list, reused for pinned + timeline).
+  const renderCard = (item: FlashNews) => (
+    <NewsCard
+      key={item.id}
+      item={item}
+      language={language}
+      categories={CATEGORIES}
+      categoryDisplayMap={CATEGORY_DISPLAY_MAP}
+      categoryColors={CATEGORY_COLORS_MAPPED}
+      importanceConfig={IMPORTANCE_CONFIG}
+      getNewsTitle={getNewsTitle}
+      getNewsContent={getNewsContent}
+      translatedContent={translatedContent}
+      formatPublishedTime={formatPublishedTime}
+    />
+  )
+
+  const DaySeparator = ({ label }: { label: string }) => (
+    <Box
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: tokens.spacing[2],
+        margin: `${tokens.spacing[4]} 0 ${tokens.spacing[3]}`,
+      }}
+    >
+      <Text
+        style={{
+          fontSize: tokens.typography.fontSize.xs,
+          fontWeight: tokens.typography.fontWeight.bold,
+          color: tokens.colors.text.tertiary,
+          textTransform: 'uppercase',
+          letterSpacing: '0.06em',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {label}
+      </Text>
+      <Box style={{ flex: 1, height: 1, background: tokens.colors.border.primary }} />
+    </Box>
+  )
+
   return (
     <Box
       style={{
@@ -396,6 +558,62 @@ export default function FlashNewsPageClient() {
           language={language}
         />
 
+        {/* Keyword search + breaking-only toggle */}
+        <Box
+          style={{
+            display: 'flex',
+            gap: tokens.spacing[2],
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            marginBottom: tokens.spacing[4],
+          }}
+        >
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t('search')}
+            aria-label={t('search')}
+            style={{
+              flex: '1 1 200px',
+              minWidth: 0,
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              borderRadius: tokens.radius.lg,
+              background: tokens.glass.bg.light,
+              border: tokens.glass.border.light,
+              color: tokens.colors.text.primary,
+              fontSize: tokens.typography.fontSize.sm,
+            }}
+          />
+          <button
+            type="button"
+            className="filter-chip"
+            data-active={breakingOnly ? 'true' : undefined}
+            aria-pressed={breakingOnly}
+            onClick={() => setBreakingOnly((v) => !v)}
+            style={{
+              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              borderRadius: tokens.radius.lg,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: breakingOnly
+                ? tokens.typography.fontWeight.bold
+                : tokens.typography.fontWeight.medium,
+              background: breakingOnly ? 'var(--color-accent-error)' : tokens.glass.bg.light,
+              color: breakingOnly ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
+              border: breakingOnly ? 'none' : tokens.glass.border.light,
+              cursor: 'pointer',
+              transition: `all ${tokens.transition.base}`,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: tokens.spacing[1],
+            }}
+          >
+            {/* Dot + text label = colorblind-safe (color is not the only cue) */}
+            <span aria-hidden="true">●</span>
+            {t('newsBreaking')}
+          </button>
+        </Box>
+
         {/* News Timeline */}
         <div style={{ transition: 'opacity 0.3s ease', opacity: loading ? 0.5 : 1 }}>
           {loading && news.length === 0 ? (
@@ -420,23 +638,114 @@ export default function FlashNewsPageClient() {
             />
           ) : (
             <Box>
-              <Box style={{ marginBottom: tokens.spacing[5] }}>
-                {news.map((item) => (
-                  <NewsCard
-                    key={item.id}
-                    item={item}
-                    language={language}
-                    categories={CATEGORIES}
-                    categoryDisplayMap={CATEGORY_DISPLAY_MAP}
-                    categoryColors={CATEGORY_COLORS_MAPPED}
-                    importanceConfig={IMPORTANCE_CONFIG}
-                    getNewsTitle={getNewsTitle}
-                    getNewsContent={getNewsContent}
-                    translatedContent={translatedContent}
-                    formatPublishedTime={formatPublishedTime}
-                  />
-                ))}
-              </Box>
+              {/* "N new" buffer pill — polled items surface here without shifting
+                  the list; clicking reveals them and scrolls to top. */}
+              {buffered.length > 0 && (
+                <Box
+                  style={{
+                    position: 'sticky',
+                    top: tokens.spacing[3],
+                    zIndex: 5,
+                    display: 'flex',
+                    justifyContent: 'center',
+                    marginBottom: tokens.spacing[3],
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={revealBuffered}
+                    style={{
+                      pointerEvents: 'auto',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: tokens.spacing[1],
+                      padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                      borderRadius: tokens.radius.full,
+                      background: tokens.gradient.primary,
+                      color: 'var(--color-on-accent)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      boxShadow: tokens.shadow.md,
+                    }}
+                  >
+                    <span aria-hidden="true">↑</span>
+                    {newLabel}
+                  </button>
+                </Box>
+              )}
+
+              {filtered.length === 0 ? (
+                <EmptyState
+                  icon={
+                    <svg
+                      width="28"
+                      height="28"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="1.5"
+                      aria-hidden="true"
+                    >
+                      <circle cx="11" cy="11" r="7" />
+                      <path d="M21 21l-4.35-4.35" />
+                    </svg>
+                  }
+                  title={t('noResults')}
+                  description={t('flashNewsNoNewsDesc')}
+                />
+              ) : (
+                <Box style={{ marginBottom: tokens.spacing[5] }}>
+                  {/* Pinned breaking group */}
+                  {pinnedBreaking.length > 0 && (
+                    <Box style={{ marginBottom: tokens.spacing[2] }}>
+                      <Box
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: tokens.spacing[2],
+                          margin: `0 0 ${tokens.spacing[3]}`,
+                        }}
+                      >
+                        <Text
+                          style={{
+                            fontSize: tokens.typography.fontSize.xs,
+                            fontWeight: tokens.typography.fontWeight.bold,
+                            color: 'var(--color-accent-error)',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.06em',
+                            whiteSpace: 'nowrap',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: tokens.spacing[1],
+                          }}
+                        >
+                          <span aria-hidden="true">●</span>
+                          {t('newsBreaking')}
+                        </Text>
+                        <Box
+                          style={{
+                            flex: 1,
+                            height: 1,
+                            background: 'var(--color-accent-error-20, var(--color-border-primary))',
+                          }}
+                        />
+                      </Box>
+                      {pinnedBreaking.map((item) => renderCard(item))}
+                    </Box>
+                  )}
+
+                  {/* Chronological timeline with day separators */}
+                  {groupedTimeline.map((group) => (
+                    <Box key={group.key}>
+                      <DaySeparator label={group.label} />
+                      {group.items.map((item) => renderCard(item))}
+                    </Box>
+                  ))}
+                </Box>
+              )}
 
               {/* Infinite scroll sentinel */}
               <div ref={sentinelRef} style={{ height: 1 }} />

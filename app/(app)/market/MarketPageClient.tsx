@@ -2,6 +2,7 @@
 
 import { lazy, Suspense, useState, useCallback, useEffect, useMemo, memo } from 'react'
 import Link from 'next/link'
+import { useQuery } from '@tanstack/react-query'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 // MobileBottomNav is rendered by root layout — do not duplicate here
@@ -9,9 +10,12 @@ import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
 import PageHeader from '@/app/components/ui/PageHeader'
+import Metric from '@/app/components/ui/Metric'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import ErrorState from '@/app/components/ui/ErrorState'
 import { supabase } from '@/lib/supabase/client'
+import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
+import { NULL_DISPLAY } from '@/lib/utils/format'
 import { useMarketSpotData, type SpotCoin } from '@/lib/hooks/useMarketSpot'
 
 // Core above-fold components: direct import for faster LCP
@@ -73,6 +77,165 @@ const useIsMobile = () => {
   }, [handleResize])
 
   return isMobile
+}
+
+/**
+ * Global market-state bar — surfaces the site-wide aggregates from
+ * /api/market/overview (CoinGecko global + Etherscan gas). Only metrics that
+ * actually have a data source are shown; when a fallback source (Coinbase /
+ * Binance) can't provide market cap / dominance the endpoint returns 0 and we
+ * hide those cells rather than render a fake zero.
+ */
+interface MarketOverview {
+  btcPrice: number
+  btcChange24h: number
+  ethPrice: number
+  ethChange24h: number
+  totalMarketCap: number
+  totalVolume24h: number
+  btcDominance: number
+  ethGasGwei: number | null
+  updatedAt: string
+}
+
+/** USD compact including trillions (formatCompact tops out at B). */
+function compactUsd(n: number): string {
+  if (!Number.isFinite(n) || n <= 0) return NULL_DISPLAY
+  if (n >= 1e12) return `$${(n / 1e12).toFixed(2)}T`
+  if (n >= 1e9) return `$${(n / 1e9).toFixed(2)}B`
+  if (n >= 1e6) return `$${(n / 1e6).toFixed(2)}M`
+  return `$${Math.round(n).toLocaleString('en-US')}`
+}
+
+/** Ticking "Xs / Xm / Xh" since an ISO timestamp; pauses when tab is hidden. */
+function useUpdatedAgo(iso?: string): string {
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    const id = setInterval(() => {
+      if (document.visibilityState === 'hidden') return
+      setNow(Date.now())
+    }, 10_000)
+    return () => clearInterval(id)
+  }, [])
+  if (!iso) return ''
+  const ts = new Date(iso).getTime()
+  if (!Number.isFinite(ts)) return ''
+  const s = Math.max(0, Math.floor((now - ts) / 1000))
+  if (s < 60) return `${s}s`
+  if (s < 3600) return `${Math.floor(s / 60)}m`
+  return `${Math.floor(s / 3600)}h`
+}
+
+function GlobalMarketBar() {
+  const { t } = useLanguage()
+  const { data } = useQuery<MarketOverview>({
+    queryKey: ['market-overview-bar'],
+    queryFn: async () => {
+      const res = await fetch('/api/market/overview')
+      if (!res.ok) throw new Error(`overview: ${res.status}`)
+      return res.json()
+    },
+    refetchInterval: 60_000,
+    refetchIntervalInBackground: false,
+    staleTime: STALE_STANDARD,
+    refetchOnWindowFocus: false,
+  })
+  const ago = useUpdatedAgo(data?.updatedAt)
+
+  const stats: { label: string; value: number; display: string }[] = []
+  if (data) {
+    if (data.totalMarketCap > 0)
+      stats.push({
+        label: t('marketCap'),
+        value: data.totalMarketCap,
+        display: compactUsd(data.totalMarketCap),
+      })
+    if (data.totalVolume24h > 0)
+      stats.push({
+        label: t('volume24h'),
+        value: data.totalVolume24h,
+        display: compactUsd(data.totalVolume24h),
+      })
+    if (data.btcDominance > 0)
+      stats.push({
+        label: t('btcDominance'),
+        value: data.btcDominance,
+        display: `${data.btcDominance.toFixed(1)}%`,
+      })
+    if (data.ethGasGwei != null)
+      stats.push({
+        label: t('ethGas'),
+        value: data.ethGasGwei,
+        display: `${data.ethGasGwei} Gwei`,
+      })
+  }
+
+  return (
+    <div
+      style={{
+        maxWidth: 1400,
+        margin: '0 auto',
+        padding: `${tokens.spacing[2]} ${tokens.spacing[5]} 0`,
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          gap: tokens.spacing[5],
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          background: tokens.glass.bg.light,
+          border: tokens.glass.border.light,
+          borderRadius: tokens.radius.lg,
+        }}
+      >
+        {stats.length === 0 ? (
+          <div
+            className="skeleton"
+            style={{ height: 36, flex: 1, minWidth: 200, borderRadius: tokens.radius.md }}
+          />
+        ) : (
+          stats.map((s) => (
+            <Metric
+              key={s.label}
+              value={s.value}
+              display={s.display}
+              label={s.label}
+              size="md"
+              colorBySign={false}
+            />
+          ))
+        )}
+        <div
+          style={{
+            marginLeft: 'auto',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            // eslint-disable-next-line no-restricted-syntax -- off-scale micro label by design
+            fontSize: 11,
+            color: tokens.colors.text.tertiary,
+          }}
+        >
+          <span
+            aria-hidden="true"
+            style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: tokens.colors.accent.success,
+              display: 'inline-block',
+              animation: 'pulse 2s infinite',
+            }}
+          />
+          <span suppressHydrationWarning>
+            {ago ? `${t('updatedAgo')}${ago}` : `${t('liveData')} · ${t('autoRefresh')}`}
+          </span>
+        </div>
+      </div>
+    </div>
+  )
 }
 
 // Mobile-specific components
@@ -234,6 +397,10 @@ function MobileSectorsTab({
                 } as React.CSSProperties
               }
             >
+              {/* Arrow = colorblind-safe redundant cue alongside the sign color */}
+              <span aria-hidden="true" style={{ marginRight: '0.25em', fontSize: '0.8em' }}>
+                {s.change >= 0 ? '▲' : '▼'}
+              </span>
               {s.change >= 0 ? '+' : ''}
               {s.change.toFixed(2)}%
             </div>
@@ -393,34 +560,12 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
         </Suspense>
       </SectionErrorBoundary>
 
-      {/* Live indicator */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: 6,
-          padding: '4px 20px 0',
-          maxWidth: 1400,
-          margin: '0 auto',
-          fontSize: 11,
-          color: tokens.colors.text.tertiary,
-        }}
-      >
-        <span
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: '50%',
-            background: tokens.colors.accent.success,
-            display: 'inline-block',
-            animation: 'pulse 2s infinite',
-          }}
-        />
-        <span suppressHydrationWarning>
-          {t('liveData')} · {t('autoRefresh')}
-        </span>
-      </div>
+      {/* Global market-state bar — total cap / 24h vol / BTC.D / gas + real
+          "updated Xs ago". Renders above the mobile/desktop split so it shows
+          on every viewport. */}
+      <SectionErrorBoundary fallbackMessage="Failed to load market overview">
+        <GlobalMarketBar />
+      </SectionErrorBoundary>
 
       {isMobile ? (
         /* Mobile: Tab Layout */
@@ -462,21 +607,23 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
               overflowX: 'hidden',
             }}
           >
-            <div style={{ height: 284, overflow: 'hidden' }}>
+            {/* minHeight (not fixed height) keeps the row visually aligned
+                while letting taller content grow instead of being clipped. */}
+            <div style={{ minHeight: 284 }}>
               <SectionErrorBoundary fallbackMessage="Failed to load Fear &amp; Greed index">
                 <Suspense fallback={<LoadingCard height={160} />}>
                   <FearGreedGauge />
                 </Suspense>
               </SectionErrorBoundary>
             </div>
-            <div style={{ height: 284, overflow: 'hidden' }}>
+            <div style={{ minHeight: 284 }}>
               <SectionErrorBoundary fallbackMessage="Failed to load arbitrage">
                 <Suspense fallback={<LoadingCard height={160} />}>
                   <ArbitrageOpportunities />
                 </Suspense>
               </SectionErrorBoundary>
             </div>
-            <div style={{ height: 284, overflow: 'hidden' }}>
+            <div style={{ minHeight: 284 }}>
               <SectionErrorBoundary fallbackMessage="Failed to load live trades">
                 <Suspense fallback={<LoadingCard height={160} />}>
                   <LiveTradesFeed />

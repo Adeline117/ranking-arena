@@ -4385,6 +4385,7 @@ const ja = {
 
   // News categories
   newsBreaking: '速報',
+  flashNewsNewItems: '新着 {count} 件',
   newsAltcoins: 'アルトコイン',
   newsMacroRegulation: 'マクロ/規制',
   newsExchanges: '取引所',

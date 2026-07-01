@@ -4210,6 +4210,7 @@ const ko = {
   copyHandle: '복사',
   switchLanguage: '언어 전환',
   newsBreaking: '속보',
+  flashNewsNewItems: '새 소식 {count}건',
   newsAltcoins: '알트코인',
   newsMacroRegulation: '매크로/규제',
   newsExchanges: '거래소',
