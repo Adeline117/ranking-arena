@@ -5865,6 +5865,8 @@ const ko = {
   colNotional: '명목 가치',
   colMargin: '증거금',
   colMarginMode: '모드',
+  marginIsolated: '격리',
+  marginCross: '교차',
   colRoe: 'ROE',
   colRoi: 'ROI',
   colMaxOpenInterest: '최대 보유',

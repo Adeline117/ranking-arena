@@ -96,12 +96,16 @@ export function historyToPositionHistory(rows: Row[]): PositionHistoryEntry[] {
     const realizedPnl = num(r.realized_pnl ?? r.pnl)
     const size = num(r.size ?? r.closed_size)
     const notional = entry && size ? entry * size : 0
+    // Prefer the exchange-reported ROI (arena_records_page surfaces raw->>'roi'),
+    // then a precomputed pct, then derive from realized_pnl / notional.
     const pnlPct =
-      r.realized_pnl_pct != null
-        ? num(r.realized_pnl_pct)
-        : notional
-          ? (realizedPnl / notional) * 100
-          : 0
+      r.roi != null
+        ? num(r.roi)
+        : r.realized_pnl_pct != null
+          ? num(r.realized_pnl_pct)
+          : notional
+            ? (realizedPnl / notional) * 100
+            : 0
     return {
       symbol: str(r.symbol),
       direction: toDirection(r.side ?? r.direction),
@@ -111,7 +115,7 @@ export function historyToPositionHistory(rows: Row[]): PositionHistoryEntry[] {
       closeTime: str(r.closed_at ?? r.closeTime),
       entryPrice: entry,
       exitPrice: exit,
-      maxPositionSize: num(r.max_position_size ?? r.size ?? r.closed_size),
+      maxPositionSize: num(r.max_open_interest ?? r.max_position_size ?? r.size ?? r.closed_size),
       closedSize: size,
       pnlUsd: realizedPnl,
       pnlPct,

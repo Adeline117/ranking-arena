@@ -5850,6 +5850,8 @@ const zh = {
   colNotional: '名义价值',
   colMargin: '保证金',
   colMarginMode: '模式',
+  marginIsolated: '逐仓',
+  marginCross: '全仓',
   colRoe: '回报率',
   colRoi: '收益率',
   colMaxOpenInterest: '最大持仓',

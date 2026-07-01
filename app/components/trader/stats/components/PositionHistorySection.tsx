@@ -181,6 +181,24 @@ function PositionHistoryCard({
                 : t('positionDelivery')}
             </Text>
           </Box>
+          {/* 逐图核对: 全仓/逐仓 mode badge — surfaced from arena_records_page raw. */}
+          {position.marginMode && (
+            <Box
+              style={{
+                padding: `2px 8px`,
+                borderRadius: tokens.radius.full,
+                background: tokens.colors.bg.tertiary,
+              }}
+            >
+              <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
+                {position.marginMode === 'isolated'
+                  ? t('marginIsolated')
+                  : position.marginMode === 'cross'
+                    ? t('marginCross')
+                    : position.marginMode}
+              </Text>
+            </Box>
+          )}
           <Box
             style={{
               padding: `2px 10px`,
@@ -270,6 +288,21 @@ function PositionHistoryCard({
             })}
           </Text>
         </Box>
+        {/* 逐图核对: 最大持仓 (Max Open Interest) — raw->>'maxOpenInterest'. */}
+        {position.maxPositionSize > 0 && (
+          <Box>
+            <Text size="xs" color="tertiary" style={{ marginBottom: 4, display: 'block' }}>
+              {t('colMaxOpenInterest')}
+            </Text>
+            <Text
+              size="sm"
+              weight="bold"
+              style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}
+            >
+              {position.maxPositionSize.toLocaleString('en-US', { maximumFractionDigits: 4 })}
+            </Text>
+          </Box>
+        )}
       </Box>
     </Box>
   )
