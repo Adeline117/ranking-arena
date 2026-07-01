@@ -124,6 +124,7 @@ describe('parsePhemexProfile', () => {
       position_hold_time_total_ns: 2994139773479394,
       preference_symbols: expect.arrayContaining(['SIRENUSDT']),
       lifetime_trades: 1071, // tradeData.totalTradeCount (Phase A)
+      min_copy_amount: 10, // copyTradeData.minCopyAmount {USD, "10"}
     })
     expect(s.extras.lifetime_win_rate as number).toBeCloseTo(60.13, 2) // 0.60130719 ×100
 

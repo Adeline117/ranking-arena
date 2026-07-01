@@ -217,6 +217,10 @@ export function parsePhemexProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     if (copy?.copierTotalRealizedPnl !== undefined) {
       extras.copier_total_realized_pnl = moneyAmount(copy.copierTotalRealizedPnl)
     }
+    // Min. Invest (最小跟单金额) — shown on the profile, was unextracted (逐图核对).
+    if (copy?.minCopyAmount !== undefined) {
+      extras.min_copy_amount = moneyAmount(copy.minCopyAmount)
+    }
     if (Array.isArray(trade?.preferenceSymbols)) {
       extras.preference_symbols = trade.preferenceSymbols
     }
