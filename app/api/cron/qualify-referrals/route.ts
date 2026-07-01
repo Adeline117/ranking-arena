@@ -101,32 +101,65 @@ export async function GET(request: NextRequest) {
       if (REFERRED_FRIEND_TRIAL_DAYS > 0 && !attr.friend_granted) {
         let deviceAllows = true
         if (attr.signup_ip_hash) {
-          const { count } = await supabase
+          const { count, error: capErr } = await supabase
             .from('referral_attributions')
             .select('id', { count: 'exact', head: true })
             .eq('signup_ip_hash', attr.signup_ip_hash)
             .eq('friend_granted', true)
-          deviceAllows = (count ?? 0) < REFERRAL_FRIEND_GRANTS_PER_DEVICE
+          if (capErr) {
+            // FAIL CLOSED: a fraud cap that silently fails open is worse than none.
+            logger.error(
+              '[qualify-referrals] device-cap check failed (skipping grant):',
+              capErr.message
+            )
+            deviceAllows = false
+          } else {
+            deviceAllows = (count ?? 0) < REFERRAL_FRIEND_GRANTS_PER_DEVICE
+          }
         }
         if (deviceAllows) {
-          await grantProDays(supabase, attr.referred_id, REFERRED_FRIEND_TRIAL_DAYS, {
-            title: 'Welcome — Pro trial unlocked!',
-            message: `You joined via a referral and earned ${REFERRED_FRIEND_TRIAL_DAYS} days of Arena Pro. Enjoy!`,
-          })
-          await supabase
+          // Set the idempotency flag FIRST (its only guard — subscriptions has no
+          // unique(user_id), so a granted-but-not-flagged row would be re-granted
+          // every 6h → duplicate Pro). Only grant once the flag is safely set.
+          const { error: flagErr } = await supabase
             .from('referral_attributions')
             .update({ friend_granted: true })
             .eq('id', attr.id)
-          friendGrants++
+            .eq('friend_granted', false)
+          if (flagErr) {
+            logger.error(
+              '[qualify-referrals] friend_granted flag set failed (skipping grant):',
+              flagErr.message
+            )
+          } else {
+            const ok = await grantProDays(supabase, attr.referred_id, REFERRED_FRIEND_TRIAL_DAYS, {
+              title: 'Welcome — Pro trial unlocked!',
+              message: `You joined via a referral and earned ${REFERRED_FRIEND_TRIAL_DAYS} days of Arena Pro. Enjoy!`,
+            })
+            if (ok) {
+              friendGrants++
+            } else {
+              // Grant failed after flag set — roll the flag back so it retries next run.
+              await supabase
+                .from('referral_attributions')
+                .update({ friend_granted: false })
+                .eq('id', attr.id)
+            }
+          }
         }
       }
 
       // Advocate reward — count the referrer's QUALIFIED distinct-device referrals.
-      const { data: qualRows } = await supabase
+      const { data: qualRows, error: qualErr } = await supabase
         .from('referral_attributions')
         .select('id, signup_ip_hash, created_at')
         .eq('referrer_id', attr.referrer_id)
         .not('qualified_at', 'is', null)
+      if (qualErr) {
+        // Don't silently under-count and deny a legit advocate their reward.
+        logger.error('[qualify-referrals] advocate count query failed:', qualErr.message)
+        continue
+      }
       const distinct = new Set((qualRows ?? []).map((r) => r.signup_ip_hash ?? `row:${r.id}`))
       if (distinct.size >= REFERRAL_REWARD_THRESHOLD) {
         // Velocity monitoring (log-only): if the qualifying referrals all landed
@@ -150,11 +183,25 @@ export async function GET(request: NextRequest) {
           granted_days: REFERRAL_ADVOCATE_PRO_DAYS,
         })
         if (!markerError) {
-          await grantProDays(supabase, attr.referrer_id, REFERRAL_ADVOCATE_PRO_DAYS, {
+          // Marker created by us → grant. If the grant fails, DELETE the marker so
+          // the referrer isn't permanently marked "rewarded" without receiving Pro
+          // (next run retries). Marker-first still prevents concurrent double-grant.
+          const ok = await grantProDays(supabase, attr.referrer_id, REFERRAL_ADVOCATE_PRO_DAYS, {
             title: 'Referral reward earned!',
             message: `You referred ${REFERRAL_REWARD_THRESHOLD} friends and earned ${REFERRAL_ADVOCATE_PRO_DAYS} days of Pro! Thank you for spreading the word.`,
           })
-          advocateGrants++
+          if (ok) {
+            advocateGrants++
+          } else {
+            logger.error(
+              `[qualify-referrals] advocate grant failed for ${attr.referrer_id} — rolling back marker for retry`
+            )
+            await supabase
+              .from('referral_rewards')
+              .delete()
+              .eq('referrer_id', attr.referrer_id)
+              .eq('reward_type', 'advocate_milestone')
+          }
         } else if (markerError.code !== '23505') {
           logger.error('[qualify-referrals] advocate marker failed:', markerError.message)
         }

@@ -20,6 +20,9 @@
  */
 
 import { decryptApiKey } from '@/lib/exchange/secure-encryption'
+import { createLogger } from '@/lib/utils/logger'
+
+const logger = createLogger('portfolio-sync')
 
 /** Our stored exchange id → CCXT module id. */
 const CCXT_ID: Record<string, string> = {
@@ -193,7 +196,11 @@ export async function syncExchangePortfolio(params: {
     if (params.apiPassphraseEncrypted) {
       passphrase = decryptApiKey(params.apiPassphraseEncrypted, params.userId)
     }
-  } catch {
+  } catch (err) {
+    // Log the failure CLASS (never the plaintext — a decrypt exception can't
+    // contain it) so a global key-rotation/config fault is distinguishable from
+    // one user's corrupt blob, instead of silently telling every user "reconnect".
+    logger.error(`[${ex}] key decrypt failed:`, err instanceof Error ? err.name : 'unknown')
     return { ok: false, reason: 'keys_unreadable' }
   }
   if (!apiKey || !apiSecret) return { ok: false, reason: 'keys_unreadable' }
@@ -242,15 +249,24 @@ export async function syncExchangePortfolio(params: {
     try {
       const bal = await client.fetchBalance()
       equity = num(bal?.total?.USDT ?? bal?.total?.USD)
-    } catch {
-      // balance is best-effort; positions still valid
+    } catch (err) {
+      // Best-effort (positions still valid) but LOG it — otherwise a broken
+      // fetchBalance silently persists equity=0 and flatlines the equity curve
+      // at a fake zero forever with no signal.
+      logger.warn(
+        `[${ex}] balance fetch failed (equity=0):`,
+        err instanceof Error ? err.name : 'unknown'
+      )
     }
 
     const pnl = rows.reduce((s, r) => s + r.pnl, 0)
     const pnlPct = equity > 0 ? (pnl / equity) * 100 : 0
     return { ok: true, positions: rows, equity, pnl, pnlPct, syncedAt }
-  } catch {
-    // Never surface the exchange error body (may echo signed params/secrets).
+  } catch (err) {
+    // Never surface the exchange error BODY (may echo signed params/secrets),
+    // but LOG the error class + exchange so integration breakage (CCXT change,
+    // auth regression, proxy outage) is discoverable instead of invisible.
+    logger.error(`[${ex}] sync fetch failed:`, err instanceof Error ? err.name : 'unknown')
     return { ok: false, reason: 'exchange_error' }
   }
 }
