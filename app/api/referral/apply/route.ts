@@ -1,29 +1,22 @@
 import { NextResponse } from 'next/server'
 import { createHash } from 'crypto'
 import { withAuth } from '@/lib/api/middleware'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { getIdentifier } from '@/lib/utils/rate-limit'
-import { sendNotification } from '@/lib/data/notifications'
-import {
-  REFERRAL_REWARD_THRESHOLD,
-  REFERRAL_ADVOCATE_PRO_DAYS,
-  REFERRED_FRIEND_TRIAL_DAYS,
-  REFERRAL_FRIEND_GRANTS_PER_DEVICE,
-} from '@/lib/constants/referral'
 
 const logger = createLogger('referral-apply')
 
 /**
  * POST /api/referral/apply
- * Apply a referral code during/after signup.
- * - Sets `referred_by` on the current user's profile (single source of truth —
- *   a second apply by the same user is rejected, which is what makes both the
- *   advocate and friend grants idempotent).
- * - Counts the referrer's total referrals.
- * - Friend (double-sided) reward: grants the newly-referred user a Pro trial.
- * - Advocate reward: when the referrer hits REFERRAL_REWARD_THRESHOLD, extends
- *   their Pro subscription by REFERRAL_ADVOCATE_PRO_DAYS.
+ * Attribute a referral code during/after signup. Attribution only — NO rewards
+ * are granted here (deferred qualification):
+ * - Sets `referred_by` on the current user via compare-and-swap (single source
+ *   of truth; a second apply is rejected).
+ * - Records a referral_attributions row (hashed device fingerprint, provider),
+ *   with qualified_at = null.
+ * - The qualify-referrals cron later grants the friend trial + counts the
+ *   advocate threshold, but ONLY for accounts that cross the activity bar — so
+ *   throwaway/farm accounts never earn rewards. See lib/referral/grant.ts.
  */
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
@@ -109,8 +102,12 @@ export const POST = withAuth(
         ? null
         : createHash('sha256').update(deviceBucket).digest('hex').slice(0, 32)
 
-    // Upsert-safe insert (referred_id is UNIQUE; CAS above already guarantees a
-    // single winner, but ignore a 23505 defensively).
+    // DEFERRED QUALIFICATION: we record attribution now but do NOT grant any
+    // reward here. A brand-new account has no activity signal and could be a
+    // throwaway/farm account. The qualify-referrals cron later flips qualified_at
+    // once the account shows real activity, and only then grants the friend trial
+    // + counts toward the advocate threshold. This makes rewards accrue to real
+    // users, not farms. referred_id is UNIQUE; ignore a 23505 defensively.
     const { error: attrError } = await supabase.from('referral_attributions').insert({
       referred_id: user.id,
       referrer_id: referrer.id,
@@ -122,175 +119,11 @@ export const POST = withAuth(
       logger.error('Failed to write referral attribution:', attrError.message)
     }
 
-    // Friend-side reward — grant the newly-referred user a Pro trial, but cap
-    // how many trials a single device fingerprint can harvest (REFERRAL_
-    // FRIEND_GRANTS_PER_DEVICE) so one attacker can't farm trials with throwaway
-    // accounts on the same machine. Unknown device (no hash) is not capped by
-    // device (falls back to the per-user "already applied" guard).
-    if (REFERRED_FRIEND_TRIAL_DAYS > 0) {
-      let deviceAllowsFriendGrant = true
-      if (signupIpHash) {
-        const { count: sameDeviceGrants } = await supabase
-          .from('referral_attributions')
-          .select('id', { count: 'exact', head: true })
-          .eq('signup_ip_hash', signupIpHash)
-          .eq('friend_granted', true)
-        deviceAllowsFriendGrant = (sameDeviceGrants ?? 0) < REFERRAL_FRIEND_GRANTS_PER_DEVICE
-      }
-
-      if (deviceAllowsFriendGrant) {
-        await grantProDays(supabase, user.id, REFERRED_FRIEND_TRIAL_DAYS, {
-          title: 'Welcome — Pro trial unlocked!',
-          message: `You joined via a referral and earned ${REFERRED_FRIEND_TRIAL_DAYS} days of Arena Pro. Enjoy!`,
-        })
-        await supabase
-          .from('referral_attributions')
-          .update({ friend_granted: true })
-          .eq('referred_id', user.id)
-      } else {
-        logger.info(`Friend trial skipped for ${user.id} — device grant cap reached`)
-      }
-    }
-
-    // Advocate reward count — count DISTINCT device fingerprints among this
-    // referrer's attributions (not raw referred_by rows), so a same-device farm
-    // of N throwaway accounts collapses to 1 toward the threshold. Rows with a
-    // null hash (unknown device) each count once.
-    const { data: attributionRows } = await supabase
-      .from('referral_attributions')
-      .select('id, signup_ip_hash')
-      .eq('referrer_id', referrer.id)
-
-    const distinctDevices = new Set(
-      (attributionRows ?? []).map((r) => r.signup_ip_hash ?? `row:${r.id}`)
-    )
-    const totalReferrals = distinctDevices.size
-
-    // Advocate reward — fires once the referrer reaches the threshold. Uses a
-    // persistent idempotency marker (referral_rewards, UNIQUE(referrer_id,
-    // reward_type)) instead of relying on the count being read at exactly N:
-    // we insert the marker FIRST, and only the request that actually creates
-    // the row performs the grant. This makes the grant exactly-once regardless
-    // of concurrent friend signups — no double-grant (cost leak) and no missed
-    // reward when the exact Nth count is skipped by a race. Hence `>=`, not `===`.
-    if (totalReferrals >= REFERRAL_REWARD_THRESHOLD) {
-      const { error: markerError } = await supabase.from('referral_rewards').insert({
-        referrer_id: referrer.id,
-        reward_type: 'advocate_milestone',
-        granted_days: REFERRAL_ADVOCATE_PRO_DAYS,
-      })
-
-      if (!markerError) {
-        // Marker was newly created by THIS request → grant exactly once.
-        await grantProDays(supabase, referrer.id, REFERRAL_ADVOCATE_PRO_DAYS, {
-          title: 'Referral reward earned!',
-          message: `You referred ${REFERRAL_REWARD_THRESHOLD} friends and earned ${REFERRAL_ADVOCATE_PRO_DAYS} days of Pro! Thank you for spreading the word.`,
-        })
-        logger.info(
-          `Referrer ${referrer.id} reached ${REFERRAL_REWARD_THRESHOLD} referrals — granted ${REFERRAL_ADVOCATE_PRO_DAYS}-day Pro extension`
-        )
-      } else if (markerError.code !== '23505') {
-        // 23505 = marker already exists (already granted) → skip silently.
-        // Any other error is a real failure — log it, never swallow silently.
-        logger.error('Failed to write referral reward marker:', markerError.message)
-      }
-    }
-
     return NextResponse.json({
       success: true,
       referrer_handle: referrer.handle,
-      referral_count: totalReferrals,
-      reward_earned: totalReferrals >= REFERRAL_REWARD_THRESHOLD,
-      friend_reward_days: REFERRED_FRIEND_TRIAL_DAYS,
+      pending: true, // reward is granted later by qualify-referrals once qualified
     })
   },
   { name: 'referral/apply', rateLimit: 'write' }
 )
-
-/**
- * Grant or extend a Pro subscription by `days` for the given user, then notify
- * them. Best-effort: DB errors are logged (never silently swallowed) but never
- * thrown, so a grant failure can't break the apply response.
- *
- * NOTE: advocate-reward idempotency is enforced by the caller via the
- * referral_rewards marker table (insert-once before grant), not here — so this
- * helper stays a pure best-effort grant/extend.
- */
-async function grantProDays(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  userId: string,
-  days: number,
-  notification: { title: string; message: string }
-) {
-  try {
-    // Check if user already has an active subscription
-    const { data: existingSub } = await supabase
-      .from('subscriptions')
-      .select('id, current_period_end, status')
-      .eq('user_id', userId)
-      .in('status', ['active', 'trialing'])
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    const now = new Date()
-
-    if (existingSub) {
-      // Extend existing subscription from the later of (now, current end)
-      const currentEnd = existingSub.current_period_end
-        ? new Date(existingSub.current_period_end)
-        : now
-      const newEnd = new Date(Math.max(currentEnd.getTime(), now.getTime()))
-      newEnd.setDate(newEnd.getDate() + days)
-
-      const { error: updateError } = await supabase
-        .from('subscriptions')
-        .update({ current_period_end: newEnd.toISOString() })
-        .eq('id', existingSub.id)
-      if (updateError) {
-        logger.error('Failed to extend subscription:', updateError.message)
-        return
-      }
-    } else {
-      // Create a new referral-based subscription
-      const endDate = new Date(now)
-      endDate.setDate(endDate.getDate() + days)
-
-      const { error: insertError } = await supabase.from('subscriptions').insert({
-        user_id: userId,
-        tier: 'pro',
-        status: 'active',
-        current_period_start: now.toISOString(),
-        current_period_end: endDate.toISOString(),
-      })
-      if (insertError) {
-        logger.error('Failed to create referral subscription:', insertError.message)
-        return
-      }
-
-      // Also flip the profile Pro flags so the UI unlocks immediately
-      const { error: profileError } = await supabase
-        .from('user_profiles')
-        .update({ subscription_tier: 'pro', is_pro: true })
-        .eq('id', userId)
-      if (profileError) {
-        logger.error('Failed to update profile Pro flags:', profileError.message)
-      }
-    }
-
-    // Notify the recipient
-    sendNotification(
-      supabase,
-      {
-        user_id: userId,
-        type: 'referral_reward',
-        title: notification.title,
-        message: notification.message,
-        link: '/settings',
-      },
-      'Referral reward notification'
-    )
-  } catch (err) {
-    logger.error('Failed to grant Pro days:', err)
-  }
-}

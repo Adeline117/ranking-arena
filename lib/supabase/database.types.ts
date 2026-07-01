@@ -4664,6 +4664,7 @@ export type Database = {
           friend_granted: boolean
           id: string
           provider: string | null
+          qualified_at: string | null
           referred_id: string
           referrer_id: string
           signup_ip_hash: string | null
@@ -4673,6 +4674,7 @@ export type Database = {
           friend_granted?: boolean
           id?: string
           provider?: string | null
+          qualified_at?: string | null
           referred_id: string
           referrer_id: string
           signup_ip_hash?: string | null
@@ -4682,6 +4684,7 @@ export type Database = {
           friend_granted?: boolean
           id?: string
           provider?: string | null
+          qualified_at?: string | null
           referred_id?: string
           referrer_id?: string
           signup_ip_hash?: string | null
