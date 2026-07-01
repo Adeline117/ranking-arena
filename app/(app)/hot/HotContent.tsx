@@ -19,6 +19,7 @@ const HotGroupsList = lazy(() =>
 )
 import { useHotPageData } from './useHotPageData'
 import type { Post } from './types'
+import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
 
 interface HotContentProps {
   initialPosts?: Post[]
@@ -60,6 +61,15 @@ export default function HotContent({ initialPosts }: HotContentProps) {
     toggleReaction,
     loadMoreComments,
   } = useHotPageData({ initialPosts })
+
+  // B2 tabs a11y: posts/groups share the single content region inside the card.
+  const hotTabsA11y = useTabsA11y({
+    tabs: ['posts', 'groups'] as const,
+    active: activeHotTab,
+    onChange: setActiveHotTab,
+    idPrefix: 'hot',
+    sharedPanelId: 'hot-panel',
+  })
 
   return (
     <Box
@@ -143,7 +153,7 @@ export default function HotContent({ initialPosts }: HotContentProps) {
 
                 {/* Tabbed Sections */}
                 <Box
-                  role="tablist"
+                  {...hotTabsA11y.getTabListProps()}
                   aria-label={t('hotList')}
                   style={{
                     display: 'flex',
@@ -159,8 +169,7 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                     <button
                       key={tab.value}
                       type="button"
-                      role="tab"
-                      aria-selected={activeHotTab === tab.value}
+                      {...hotTabsA11y.getTabProps(tab.value)}
                       onClick={() => setActiveHotTab(tab.value)}
                       style={{
                         padding: '7px 16px',
@@ -204,82 +213,85 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                   ))}
                 </Box>
 
-                {/* Tab Content: Hot Posts */}
-                {activeHotTab === 'posts' && (
-                  <>
-                    {loadingPosts ? (
-                      <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-                        <Text color="tertiary">{t('loading')}</Text>
-                      </Box>
-                    ) : visibleHot.length === 0 ? (
-                      <div className="empty-state" style={{ padding: '64px 24px' }}>
-                        <div className="empty-state-icon">
-                          <svg
-                            width="28"
-                            height="28"
-                            viewBox="0 0 24 24"
-                            fill="none"
-                            stroke="currentColor"
-                            strokeWidth="1.5"
-                          >
-                            <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-                          </svg>
+                {/* Tab panel (B2 a11y): wraps both tab-content branches */}
+                <div {...hotTabsA11y.getSharedPanelProps()}>
+                  {/* Tab Content: Hot Posts */}
+                  {activeHotTab === 'posts' && (
+                    <>
+                      {loadingPosts ? (
+                        <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                          <Text color="tertiary">{t('loading')}</Text>
+                        </Box>
+                      ) : visibleHot.length === 0 ? (
+                        <div className="empty-state" style={{ padding: '64px 24px' }}>
+                          <div className="empty-state-icon">
+                            <svg
+                              width="28"
+                              height="28"
+                              viewBox="0 0 24 24"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.5"
+                            >
+                              <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                            </svg>
+                          </div>
+                          <p className="empty-state-title">{t('noData')}</p>
                         </div>
-                        <p className="empty-state-title">{t('noData')}</p>
-                      </div>
-                    ) : (
-                      <Box
-                        className="stagger-fade"
-                        style={{
-                          display: 'flex',
-                          flexDirection: 'column',
-                          gap: tokens.spacing[2],
-                          position: 'relative',
-                        }}
-                      >
-                        {visibleHot.map((p, idx) => {
-                          const rank = idx + 1
-                          return (
-                            <PostCard
-                              key={p.id}
-                              post={p}
-                              rank={rank}
-                              hotTag={getHotTag(p, rank)}
-                              translatedTitle={translatedListPosts[p.id]?.title}
-                              translatedBody={translatedListPosts[p.id]?.body}
-                              isExpanded={!!expandedPosts[p.id]}
-                              onToggleExpand={() =>
-                                setExpandedPosts((prev) => ({ ...prev, [p.id]: !prev[p.id] }))
-                              }
-                              onOpenPost={handleOpenPost}
-                              localizedName={localizedName}
-                              t={t}
-                              language={_language}
-                            />
-                          )
-                        })}
-                      </Box>
-                    )}
-                  </>
-                )}
+                      ) : (
+                        <Box
+                          className="stagger-fade"
+                          style={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: tokens.spacing[2],
+                            position: 'relative',
+                          }}
+                        >
+                          {visibleHot.map((p, idx) => {
+                            const rank = idx + 1
+                            return (
+                              <PostCard
+                                key={p.id}
+                                post={p}
+                                rank={rank}
+                                hotTag={getHotTag(p, rank)}
+                                translatedTitle={translatedListPosts[p.id]?.title}
+                                translatedBody={translatedListPosts[p.id]?.body}
+                                isExpanded={!!expandedPosts[p.id]}
+                                onToggleExpand={() =>
+                                  setExpandedPosts((prev) => ({ ...prev, [p.id]: !prev[p.id] }))
+                                }
+                                onOpenPost={handleOpenPost}
+                                localizedName={localizedName}
+                                t={t}
+                                language={_language}
+                              />
+                            )
+                          })}
+                        </Box>
+                      )}
+                    </>
+                  )}
 
-                {/* Tab Content: Hot Groups -- lazy loaded */}
-                {activeHotTab === 'groups' && (
-                  <Suspense
-                    fallback={
-                      <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-                        <Text color="tertiary">{t('loading')}</Text>
-                      </Box>
-                    }
-                  >
-                    <HotGroupsList
-                      groups={groups}
-                      loading={loadingGroups}
-                      localizedName={localizedName}
-                      t={t}
-                    />
-                  </Suspense>
-                )}
+                  {/* Tab Content: Hot Groups -- lazy loaded */}
+                  {activeHotTab === 'groups' && (
+                    <Suspense
+                      fallback={
+                        <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
+                          <Text color="tertiary">{t('loading')}</Text>
+                        </Box>
+                      }
+                    >
+                      <HotGroupsList
+                        groups={groups}
+                        loading={loadingGroups}
+                        localizedName={localizedName}
+                        t={t}
+                      />
+                    </Suspense>
+                  )}
+                </div>
               </Card>
             </Box>
           </ThreeColumnLayout>
