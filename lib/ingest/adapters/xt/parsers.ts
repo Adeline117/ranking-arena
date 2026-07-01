@@ -198,43 +198,71 @@ export function isXtDegeneratePage(payload: unknown): boolean {
  * (intro, leadDays, follower counts, style labels).
  */
 export function parseXtProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
-  const bundle = (raw ?? {}) as { detail?: Dict; timeframe?: number }
+  const bundle = (raw ?? {}) as {
+    detail?: Dict
+    stats?: Dict
+    symbolPrefer?: Dict
+    timeframe?: number
+  }
   const tf = (num(bundle.timeframe) ?? 90) as Timeframe
   const info = ((bundle.detail as Dict)?.result ?? null) as Dict | null
+  // leader-stats = the full per-TF Performance block (live-captured 2026-07-01).
+  const perf = ((bundle.stats as Dict)?.result ?? null) as Dict | null
+  const prefRows = ((bundle.symbolPrefer as Dict)?.result ?? null) as unknown
 
   const stats: ParsedStats[] = []
-  if (info) {
+  if (info || perf) {
     const extras: Record<string, unknown> = {}
-    if (typeof info.intro === 'string' && info.intro.length > 0) extras.intro = info.intro
-    if (info.leadDays !== undefined) extras.leading_days = int(info.leadDays)
-    if (info.platformProfitRate !== undefined)
+    if (info && typeof info.intro === 'string' && info.intro.length > 0) extras.intro = info.intro
+    if (info?.leadDays !== undefined) extras.leading_days = int(info.leadDays)
+    if (info?.platformProfitRate !== undefined)
       extras.platform_profit_rate = pct(info.platformProfitRate)
-    if (typeof info.levelName === 'string') extras.level_name = info.levelName
-    const tags = labelTags(info.label)
+    if (info && typeof info.levelName === 'string') extras.level_name = info.levelName
+    const tags = labelTags(info?.label)
     if (tags) extras.style_labels = tags
-    // 历史跟单人数 + 最大跟单槽位 — present in the overview payload but were
-    // unpromoted (the detailed Performance block — avg profit/loss, P&L ratio,
-    // holding time — lives on a SEPARATE endpoint not fetched here).
-    if (info.followNumber !== undefined) extras.copier_count_history = int(info.followNumber)
-    if (info.maxFollowerSize !== undefined) extras.max_copier_slots = int(info.maxFollowerSize)
+    if (info?.followNumber !== undefined) extras.copier_count_history = int(info.followNumber)
+    if (info?.maxFollowerSize !== undefined) extras.max_copier_slots = int(info.maxFollowerSize)
+    // ── Performance block (leader-stats) — the img65 fields ──
+    if (perf) {
+      const avgProfit = num(perf.avgProfitAmount)
+      if (avgProfit !== null) extras.avg_profit = avgProfit
+      const avgLoss = num(perf.avgLossAmount)
+      if (avgLoss !== null) extras.avg_loss = avgLoss
+      const plr = num(perf.pnlRate) // "--" → null
+      if (plr !== null) extras.pnl_ratio = plr
+      const freq = num(perf.tradeFrequency)
+      if (freq !== null) extras.trade_frequency = freq
+      const tradeDays = int(perf.tradeDays)
+      if (tradeDays !== null) extras.trading_days = tradeDays
+      const lossCount = int(perf.lossCount)
+      if (lossCount !== null) extras.loss_trades = lossCount
+      const totalEarnings = num(perf.totalEarnings)
+      if (totalEarnings !== null) extras.total_pnl = totalEarnings
+    }
+
+    const holdSecs = perf ? num(perf.avgHoldTime) : null
 
     stats.push({
       timeframe: tf,
-      asOf: ctx.scrapedAt, // detail-v2 exposes no data-updated timestamp
-      roi: pct(info.profitRate), // overall ROI (not per-TF)
-      pnl: null, // not exposed on the overview block
-      sharpe: null,
-      mdd: null,
-      winRate: null,
-      winPositions: null,
-      totalPositions: null,
-      copierPnl: null,
-      copierCount: int(info.currentFollowNumber),
-      aum: num(info.totalRights), // 总权益 (displayEquity gate respected upstream)
-      volume: null,
+      // leader-stats has no data-updated ts; detail-v2 none either.
+      asOf: ctx.scrapedAt,
+      // Prefer the per-TF Performance ROI (recentRate, decimal→pct); fall back to
+      // the overview overall profitRate.
+      roi: perf ? pct(perf.recentRate) : pct(info?.profitRate),
+      pnl: perf ? num(perf.totalEarnings) : null,
+      sharpe: null, // XT exposes no Sharpe on any endpoint
+      mdd: perf ? pct(perf.maxRetraction) : null,
+      winRate: perf ? pct(perf.winRate) : null,
+      winPositions: perf ? int(perf.profitCount) : null,
+      totalPositions: perf ? int(perf.totalTransactions) : null,
+      copierPnl: perf ? num(perf.followersEarnings) : null,
+      copierCount: int(info?.currentFollowNumber),
+      // Lead AUM = follower margin under management (per-TF) — falls back to 总权益.
+      aum: perf ? num(perf.followerMargin) : num(info?.totalRights),
+      volume: null, // daily volume series available separately if needed
       profitShareRate: null,
-      holdingDurationAvgHours: null,
-      tradingPreferences: null,
+      holdingDurationAvgHours: holdSecs === null ? null : Math.round((holdSecs / 3600) * 100) / 100,
+      tradingPreferences: xtSymbolPrefer(prefRows),
       extras,
     })
   }
@@ -245,4 +273,18 @@ export function parseXtProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     nickname: info && typeof info.nickName === 'string' ? info.nickName : null,
     avatarUrlOrigin: info && typeof info.avatar === 'string' ? info.avatar : null,
   }
+}
+
+/** leader-symbol-prefer rows → 市场偏好 (symbol / count / percentage / pnl). */
+function xtSymbolPrefer(rows: unknown): Record<string, unknown> | null {
+  if (!Array.isArray(rows) || rows.length === 0) return null
+  const markets = rows
+    .map((r) => {
+      const d = r as Dict
+      const symbol = typeof d.symbol === 'string' ? d.symbol.toUpperCase() : null
+      if (!symbol) return null
+      return { symbol, count: int(d.count), percentage: num(d.percentage), pnl: num(d.pnl) }
+    })
+    .filter(Boolean)
+  return markets.length > 0 ? { markets } : null
 }

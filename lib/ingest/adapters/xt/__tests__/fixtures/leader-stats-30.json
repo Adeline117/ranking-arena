@@ -1,0 +1,24 @@
+{
+  "returnCode": 0,
+  "result": {
+    "recentRate": "3.2009",
+    "totalEarnings": "95.6269847",
+    "maxRetraction": 0.130089,
+    "followersEarnings": "-653.35898",
+    "winRate": "1",
+    "totalTransactions": 24,
+    "profitCount": 24,
+    "lossCount": 0,
+    "avgProfitAmount": "4.6326225",
+    "avgLossAmount": "0",
+    "pnlRate": "--",
+    "avgHoldTime": "63606.62",
+    "weeklyTradeFrequency": 0,
+    "tradeFrequency": 3.43,
+    "followerTradeAmount": null,
+    "followerMargin": "2570",
+    "tradeDays": 56,
+    "lastTradeTime": 1782885505444,
+    "cycleTradeDays": 7
+  }
+}

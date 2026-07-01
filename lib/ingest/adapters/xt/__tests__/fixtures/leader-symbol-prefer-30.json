@@ -1,0 +1,9 @@
+{
+  "returnCode": 0,
+  "result": [
+    { "index": 1, "symbol": "axs_usdt", "count": 11, "percentage": "0.4583", "pnl": "5.304" },
+    { "index": 2, "symbol": "near_usdt", "count": 11, "percentage": "0.4583", "pnl": "92.364" },
+    { "index": 3, "symbol": "btc_usdt", "count": 1, "percentage": "0.0416", "pnl": "7.10424" },
+    { "index": 4, "symbol": "eth_usdt", "count": 1, "percentage": "0.0416", "pnl": "6.4107" }
+  ]
+}
