@@ -3,6 +3,7 @@
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
 
 import type { ProfileTabKey } from './types'
 
@@ -31,10 +32,21 @@ export default function UserProfileTabs({
       : []),
   ]
 
+  // B2 tabs a11y: panel is rendered by the parent (UserProfileClient wraps
+  // UserProfileContent with id="uprofile-panel").
+  const tabsA11y = useTabsA11y({
+    tabs: profileTabs.map((tab) => tab.key),
+    active: activeTab,
+    onChange: onTabChange,
+    idPrefix: 'uprofile',
+    sharedPanelId: 'uprofile-panel',
+  })
+
   return (
     <Box
       className="profile-tabs"
-      role="tablist"
+      {...tabsA11y.getTabListProps()}
+      aria-label={t('traderProfileTabs')}
       style={{
         display: 'flex',
         gap: tokens.spacing[2],
@@ -57,9 +69,7 @@ export default function UserProfileTabs({
             key={tab.key}
             className="profile-tab-button interactive-scale"
             onClick={() => onTabChange(tab.key)}
-            role="tab"
-            aria-selected={isActive}
-            tabIndex={isActive ? 0 : -1}
+            {...tabsA11y.getTabProps(tab.key)}
             style={{
               background: isActive
                 ? `linear-gradient(135deg, ${alpha(tokens.colors.accent.primary, 8)}, ${alpha(tokens.colors.accent.primary, 3)})`

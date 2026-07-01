@@ -143,15 +143,21 @@ export default function UserProfileClient({
           isVerifiedTrader={profile.isVerifiedTrader}
         />
 
-        {/* Tab Content */}
-        <UserProfileContent
-          profile={profile}
-          handle={handle}
-          isOwnProfile={isOwnProfile}
-          activeTab={activeProfileTab}
-          traderData={traderData}
-          isVerifiedTrader={profile.isVerifiedTrader}
-        />
+        {/* Tab Content — tabpanel for the UserProfileTabs tablist (B2 a11y) */}
+        <div
+          id="uprofile-panel"
+          role="tabpanel"
+          aria-labelledby={`uprofile-tab-${activeProfileTab}`}
+        >
+          <UserProfileContent
+            profile={profile}
+            handle={handle}
+            isOwnProfile={isOwnProfile}
+            activeTab={activeProfileTab}
+            traderData={traderData}
+            isVerifiedTrader={profile.isVerifiedTrader}
+          />
+        </div>
 
         {/* Followers modal — hidden when social is off */}
         {features.social && profile.isRegistered && (
