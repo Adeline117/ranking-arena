@@ -11,7 +11,7 @@
  * the Supabase client; ESLint guard enforces the boundary).
  */
 
-import { Pool, types } from 'pg'
+import { Pool, types, type PoolClient } from 'pg'
 
 // node-pg returns NUMERIC/BIGINT as strings by default — the source of a
 // whole class of `.toFixed is not a function` / string-math bugs (freshness
@@ -80,11 +80,48 @@ export function getIngestPool(): Pool {
         : { rejectUnauthorized: false },
   })
 
+  // Catches errors on IDLE clients sitting in the pool. It does NOT cover a
+  // CHECKED-OUT client whose connection dies mid-use — that error surfaces on
+  // the client itself, and with no `client.on('error')` listener node-pg lets it
+  // bubble to process 'uncaughtException' → crash-restart. Use ingestClientConnect()
+  // for any pool.connect() so checked-out clients get their own error listener.
   pool.on('error', (err) => {
-    console.error('[ingest] pg pool error:', err.message)
+    console.error('[ingest] pg idle-client pool error (non-fatal):', err.message)
   })
 
   return pool
+}
+
+/**
+ * Checkout a pooled client WITH a checked-out error listener attached.
+ *
+ * ROOT FIX (2026-07-01, verified via scripts/test-edbhandler-repro.mts): when
+ * Supavisor closes a connection mid-transaction, the checked-out client emits
+ * one-or-more 'error' events (messages vary: "terminating connection due to
+ * administrator command", "(EDBHANDLEREXITED) connection to database closed",
+ * "Connection terminated unexpectedly"). Without a listener, EventEmitter throws
+ * → 'uncaughtException' → the worker crash-restarts (~60-90s re-warm). `pool.on
+ * ('error')` does NOT catch these (it only covers idle clients — proven). This
+ * absorbs them (message-independent, unlike a fragile string match) and removes
+ * the listener on release so it never accumulates on a reused healthy client.
+ */
+export async function ingestClientConnect(): Promise<PoolClient> {
+  const client = await getIngestPool().connect()
+  const onError = (err: Error) => {
+    console.error(
+      '[ingest] checked-out client connection drop (non-fatal, client discarded):',
+      err.message
+    )
+  }
+  client.on('error', onError)
+  const origRelease = client.release.bind(client)
+  ;(client as unknown as { release: (err?: Error | boolean) => void }).release = (
+    err?: Error | boolean
+  ) => {
+    client.removeListener('error', onError)
+    origRelease(err)
+  }
+  return client
 }
 
 export async function closeIngestPool(): Promise<void> {

@@ -10,7 +10,7 @@
  */
 
 import type { PoolClient } from 'pg'
-import { getIngestPool } from '../db'
+import { getIngestPool, ingestClientConnect } from '../db'
 import type {
   BoardSeriesBlock,
   ParsedLeaderboardRow,
@@ -143,7 +143,7 @@ export async function publishLeaderboardSnapshot(
     isBootstrap ? BOOTSTRAP_DEVIATION_PCT : ROLLING_DEVIATION_PCT
   )
 
-  const client = await getIngestPool().connect()
+  const client = await ingestClientConnect()
   try {
     await client.query('BEGIN')
 
@@ -295,7 +295,7 @@ export async function publishProfile(
   profile: ParsedProfile,
   opts: { fullSeries: boolean } // false → long-tail: latest snapshot only (spec §13.1)
 ): Promise<void> {
-  const client = await getIngestPool().connect()
+  const client = await ingestClientConnect()
   try {
     await client.query('BEGIN')
 
@@ -425,7 +425,7 @@ export async function publishBoardSeries(
 
   // Chunk the insert — boards reach thousands of traders × ~30-90 pts each.
   const CHUNK = 5000
-  const client = await getIngestPool().connect()
+  const client = await ingestClientConnect()
   try {
     for (let i = 0; i < flat.length; i += CHUNK) {
       const slice = flat.slice(i, i + CHUNK)
@@ -452,7 +452,7 @@ export async function publishPositions(
   positions: ParsedPosition[],
   asOf: string
 ): Promise<void> {
-  const client = await getIngestPool().connect()
+  const client = await ingestClientConnect()
   try {
     await client.query('BEGIN')
     await client.query(`DELETE FROM arena.positions_current WHERE trader_id = $1`, [traderId])
@@ -511,7 +511,7 @@ export async function publishHistoryRows(
   newCursor: string | null
 ): Promise<number> {
   if (rows.length === 0) return 0
-  const client = await getIngestPool().connect()
+  const client = await ingestClientConnect()
   try {
     await client.query('BEGIN')
     let written = 0
