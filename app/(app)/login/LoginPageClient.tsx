@@ -13,6 +13,7 @@ import { useMultiAccountStore } from '@/lib/stores/multiAccountStore'
 import { injectStyles, validateEmail, getPasswordStrength } from './components/loginHelpers'
 import { trackEvent } from '@/lib/analytics/track'
 import { authedFetch } from '@/lib/api/client'
+import { peekPendingReferral } from '@/lib/referral/pending'
 import SocialLogin, { WalletLogin } from './components/SocialLogin'
 import RegisterForm from './components/RegisterForm'
 import LoginForm from './components/LoginForm'
@@ -474,7 +475,10 @@ export default function LoginPageClient() {
       // idempotent source of truth — it rejects a second apply once referred_by
       // is set, which is what prevents double-counting / double-granting.
       // Best-effort: never block signup on referral attribution.
-      const refCode = searchParams.get('ref')
+      // Fall back to a pending ref captured on a prior (Provider-less) page —
+      // e.g. the homepage — so the same-page email signup path still applies it.
+      // The apply route is idempotent, so overlap with ReferralAutoApply is safe.
+      const refCode = searchParams.get('ref') || peekPendingReferral()
       if (refCode) {
         try {
           const {
