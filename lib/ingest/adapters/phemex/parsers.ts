@@ -108,6 +108,18 @@ function tfField(item: Dict, family: string, tf: number): unknown {
   return item[`${family}${tf}d`]
 }
 
+/** Board-row total balance / profit-share / min-copy → extras (逐图核对). */
+function phemexBoardExtras(item: Dict, copyData: Dict): Record<string, unknown> | null {
+  const ext: Record<string, unknown> = {}
+  const totalBalance = num(item.totalBalance)
+  if (totalBalance !== null) ext.total_balance = totalBalance
+  const shareRate = num(copyData.profitShareRateRr)
+  if (shareRate !== null) ext.profit_share_rate = shareRate
+  const minCopy = moneyAmount(copyData.minCopyAmount)
+  if (minCopy !== null) ext.min_copy_amount = minCopy
+  return Object.keys(ext).length > 0 ? ext : null
+}
+
 function cardRow(item: Dict, positionalRank: number, tf: number): ParsedLeaderboardRow | null {
   if (item.userId === null || item.userId === undefined) return null
   const ai = isAiTrader(item)
@@ -129,6 +141,10 @@ function cardRow(item: Dict, positionalRank: number, tf: number): ParsedLeaderbo
     // so board-tier traders had no MDD/AUM (profile captured them for top-N).
     headlineMdd: pct(tfField(item, 'mdd', tf)),
     headlineAum: num(item.aum),
+    headlineCopierCount: int(item.followerCount),
+    // 逐图核对 image82: board carries total balance + profit-share + min-copy —
+    // were raw-only, so board-tier traders lacked them (profile had them for top-N).
+    headlineExtras: phemexBoardExtras(item, copyData),
     traderMeta: ai ? { ai_trader: true } : null,
     // Both TF variants, copier slots, profit share, star flag,
     // aiDescription... kept verbatim (spec §3 raw JSONB note).
