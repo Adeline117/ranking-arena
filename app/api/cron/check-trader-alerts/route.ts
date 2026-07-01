@@ -37,6 +37,7 @@ interface TraderData {
   max_drawdown?: number
   win_rate?: number
   arena_score?: number
+  rank?: number
 }
 
 interface AlertConfig {
@@ -121,7 +122,9 @@ export async function GET(req: Request) {
     // 3. 获取这些交易员的当前数据 (from leaderboard_ranks, 90D period)
     const { data: lrData, error: tradersError } = await supabase
       .from('leaderboard_ranks')
-      .select('source_trader_id, source, roi, pnl, max_drawdown, win_rate, arena_score, season_id')
+      .select(
+        'source_trader_id, source, roi, pnl, max_drawdown, win_rate, arena_score, rank, season_id'
+      )
       .in('source_trader_id', traderIds)
       .eq('season_id', '90D')
 
@@ -140,6 +143,7 @@ export async function GET(req: Request) {
         max_drawdown: lr.max_drawdown ?? undefined,
         win_rate: lr.win_rate ?? undefined,
         arena_score: lr.arena_score ?? undefined,
+        rank: lr.rank ?? undefined,
       })) ?? null
 
     // 4. 获取昨天的快照数据 (from trader_daily_snapshots)
@@ -180,6 +184,24 @@ export async function GET(req: Request) {
           max_drawdown: snap.max_drawdown ?? undefined,
           arena_score: undefined, // daily snapshots don't have arena_score
         })
+      }
+    }
+
+    // Yesterday's ranks for rank_change alerts — trader_daily_snapshots has no
+    // rank column, so read from rank_history (written daily by snapshot-ranks).
+    const prevRankMap = new Map<string, number>()
+    const { data: prevRanks, error: prevRanksError } = await supabase
+      .from('rank_history')
+      .select('trader_key, platform, rank')
+      .in('trader_key', traderIds)
+      .eq('period', '90D')
+      .eq('snapshot_date', yesterdayStr)
+    if (prevRanksError) {
+      logger.error('[TraderAlerts Cron] 获取历史排名Failed:', prevRanksError)
+      // non-fatal — rank_change alerts simply won't fire this run
+    } else if (prevRanks) {
+      for (const r of prevRanks) {
+        if (r.rank != null) prevRankMap.set(`${r.trader_key}_${r.platform}`, r.rank)
       }
     }
 
@@ -334,6 +356,60 @@ export async function GET(req: Request) {
             new_value: currentData.arena_score,
             change_percent: change,
             message: `Arena Score ${direction} ${change.toFixed(1)} 分`,
+          })
+        }
+      }
+
+      // 检查 PnL 变动 (was configurable in the UI but never evaluated)
+      if (alert.alert_pnl_change && prevSnapshot.pnl_90d != null && currentData.pnl != null) {
+        const change = Math.abs(currentData.pnl - prevSnapshot.pnl_90d)
+        if (change >= alert.pnl_change_threshold) {
+          const direction = currentData.pnl > prevSnapshot.pnl_90d ? '上涨' : '下跌'
+          alertsToSend.push({
+            user_id: alert.user_id,
+            trader_id: alert.trader_id,
+            type: 'trader_alert',
+            title: 'PnL 变动提醒',
+            message: `Trader ${alert.trader_id} PnL ${direction} $${change.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+            link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
+          })
+          alertLogsToInsert.push({
+            alert_id: alert.id,
+            user_id: alert.user_id,
+            trader_id: alert.trader_id,
+            alert_type: 'pnl_change',
+            old_value: prevSnapshot.pnl_90d,
+            new_value: currentData.pnl,
+            change_percent: change,
+            message: `PnL ${direction} $${change.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
+          })
+        }
+      }
+
+      // 检查排名变动 (was configurable in the UI but never evaluated).
+      // Lower rank number = better; alert on absolute movement past the threshold.
+      const prevRank = prevRankMap.get(snapshotKey)
+      if (alert.alert_rank_change && prevRank != null && currentData.rank != null) {
+        const change = Math.abs(currentData.rank - prevRank)
+        if (change >= alert.rank_change_threshold) {
+          const direction = currentData.rank < prevRank ? '上升' : '下降'
+          alertsToSend.push({
+            user_id: alert.user_id,
+            trader_id: alert.trader_id,
+            type: 'trader_alert',
+            title: '排名变动提醒',
+            message: `Trader ${alert.trader_id} 排名${direction} ${change} 位（#${prevRank} → #${currentData.rank}）`,
+            link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
+          })
+          alertLogsToInsert.push({
+            alert_id: alert.id,
+            user_id: alert.user_id,
+            trader_id: alert.trader_id,
+            alert_type: 'rank_change',
+            old_value: prevRank,
+            new_value: currentData.rank,
+            change_percent: change,
+            message: `排名${direction} ${change} 位`,
           })
         }
       }
