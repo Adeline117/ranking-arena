@@ -158,6 +158,7 @@ interface ProfileBundle {
   dayPnl?: unknown
   ability?: unknown
   hold?: unknown
+  holdByPosition?: unknown
   contractStat?: unknown
   timeframe?: number
 }
@@ -196,6 +197,7 @@ export function parseMexcProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const t = data(bundle.trader)
   const ability = data(bundle.ability)
   const hold = data(bundle.hold)
+  const holdByPosition = data(bundle.holdByPosition)
   const contracts = (bundle.contractStat as Dict)?.data
   const accum = data(bundle.accumulate)
   const daily = data(bundle.dayPnl)
@@ -249,6 +251,14 @@ export function parseMexcProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     const maxHoldSecs = num(hold?.maxHoldTime)
     if (maxHoldSecs !== null) extras.max_hold_time_hours = maxHoldSecs / 3600
     if (Array.isArray(hold?.holdDetailList)) extras.hold_histogram = hold.holdDetailList
+    // 持仓时长 按仓位 variant (逐图核对) — the POSITION toggle the user wanted.
+    if (Array.isArray(holdByPosition?.holdDetailList)) {
+      extras.hold_histogram_by_position = holdByPosition.holdDetailList
+    }
+    if (holdByPosition?.avgHoldTime !== undefined) {
+      const secs = num(holdByPosition.avgHoldTime)
+      if (secs !== null) extras.avg_hold_time_by_position_hours = secs / 3600
+    }
 
     const avgHoldSecs = num(hold?.avgHoldTime)
     stats.push({
