@@ -75,6 +75,7 @@ export default function ProPromoBanner() {
   return (
     <div
       role="status"
+      className="pro-promo-banner"
       style={{
         background: tokens.gradient.success,
         color: 'white',
@@ -86,7 +87,7 @@ export default function ProPromoBanner() {
         zIndex: 1,
       }}
     >
-      <span>{text}</span>
+      <span className="pro-promo-text">{text}</span>
       <button
         type="button"
         onClick={dismiss}

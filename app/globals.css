@@ -3969,4 +3969,18 @@ td[data-numeric],
   .founding-member-banner .fm-sub {
     display: none;
   }
+  /* Pro promo banner: keep to ONE compact line on mobile (was wrapping to 2),
+     so the stacked banners don't push the core content off the first screen. */
+  .pro-promo-banner {
+    padding: 7px 38px 7px 12px !important;
+    font-size: 12px !important;
+    line-height: 1.35 !important;
+  }
+  .pro-promo-banner .pro-promo-text {
+    display: block;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
 }
