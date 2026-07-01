@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { useAdminAuth } from '../../hooks/useAdminAuth'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
+import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
 
 // ============================================
 // Types
@@ -319,6 +320,14 @@ export default function PipelineMonitoringDashboard() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<TabId>('overview')
+  // B2 tabs a11y: all five sections render into the single content region.
+  const tabsA11y = useTabsA11y({
+    tabs: ['overview', 'jobs', 'freshness', 'failures', 'enrichment'] as const,
+    active: activeTab,
+    onChange: setActiveTab,
+    idPrefix: 'pipeline',
+    sharedPanelId: 'pipeline-panel',
+  })
   const [autoRefresh, setAutoRefresh] = useState(true)
 
   const fetchData = useCallback(async () => {
@@ -485,7 +494,11 @@ export default function PipelineMonitoringDashboard() {
         )}
 
         {/* Tabs */}
-        <div style={sty.tabs} role="tablist" aria-label="Pipeline monitoring sections">
+        <div
+          style={sty.tabs}
+          {...tabsA11y.getTabListProps()}
+          aria-label="Pipeline monitoring sections"
+        >
           {(
             [
               ['overview', t('tabOverview')],
@@ -497,8 +510,7 @@ export default function PipelineMonitoringDashboard() {
           ).map(([id, label]) => (
             <button
               key={id}
-              role="tab"
-              aria-selected={activeTab === id}
+              {...tabsA11y.getTabProps(id)}
               style={sty.tab(activeTab === id)}
               onClick={() => setActiveTab(id)}
             >
@@ -523,11 +535,13 @@ export default function PipelineMonitoringDashboard() {
         </div>
 
         {/* Tab content */}
-        {activeTab === 'overview' && d && <OverviewTab data={d} enrichment={enrichmentData} />}
-        {activeTab === 'jobs' && d && <JobStatsTab stats={d.stats} />}
-        {activeTab === 'freshness' && d && <FreshnessTab platforms={d.platformHealth} />}
-        {activeTab === 'failures' && d && <FailuresTab failures={d.recentFailures} />}
-        {activeTab === 'enrichment' && <EnrichmentTab data={enrichmentData} />}
+        <div {...tabsA11y.getSharedPanelProps()}>
+          {activeTab === 'overview' && d && <OverviewTab data={d} enrichment={enrichmentData} />}
+          {activeTab === 'jobs' && d && <JobStatsTab stats={d.stats} />}
+          {activeTab === 'freshness' && d && <FreshnessTab platforms={d.platformHealth} />}
+          {activeTab === 'failures' && d && <FailuresTab failures={d.recentFailures} />}
+          {activeTab === 'enrichment' && <EnrichmentTab data={enrichmentData} />}
+        </div>
       </div>
     </div>
   )
