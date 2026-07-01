@@ -6,6 +6,8 @@ import { Text, Button } from '@/app/components/base'
 import ErrorState from '@/app/components/ui/ErrorState'
 import EmptyState from '@/app/components/ui/EmptyState'
 import Metric from '@/app/components/ui/Metric'
+import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
+import { formatTimeAgo } from '@/lib/utils/date'
 
 interface HealthData {
   status: 'healthy' | 'degraded' | 'unhealthy'
@@ -36,20 +38,10 @@ const LEVEL_COLOR: Record<Level, string> = {
   degraded: tokens.colors.accent.warning,
   down: tokens.colors.accent.error,
 }
-const LEVEL_LABEL: Record<Level, string> = {
-  operational: 'Operational',
-  degraded: 'Degraded',
-  down: 'Down',
-}
-
-function formatAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
-  const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'just now'
-  if (mins < 60) return `${mins}m ago`
-  const hours = Math.floor(mins / 60)
-  if (hours < 24) return `${hours}h ago`
-  return `${Math.floor(hours / 24)}d ago`
+const LEVEL_LABEL_KEY: Record<Level, string> = {
+  operational: 'statusLevelOperational',
+  degraded: 'statusLevelDegraded',
+  down: 'statusLevelDown',
 }
 
 /**
@@ -57,7 +49,15 @@ function formatAgo(iso: string): string {
  * SHAPE (check / triangle-alert / x) in addition to color. Mirrors the arrow
  * pattern in Metric — color is reinforcement, never the only signal.
  */
-function StatusIcon({ level, size = 14 }: { level: Level; size?: number }) {
+function StatusIcon({
+  level,
+  size = 14,
+  t,
+}: {
+  level: Level
+  size?: number
+  t: TranslationFunction
+}) {
   const color = LEVEL_COLOR[level]
   const common = {
     width: size,
@@ -70,7 +70,7 @@ function StatusIcon({ level, size = 14 }: { level: Level; size?: number }) {
     strokeLinejoin: 'round' as const,
     style: { flexShrink: 0, marginRight: tokens.spacing[2] },
     role: 'img',
-    'aria-label': LEVEL_LABEL[level],
+    'aria-label': t(LEVEL_LABEL_KEY[level]),
   }
   if (level === 'operational') {
     // circle + check
@@ -109,6 +109,7 @@ interface Incident {
 }
 
 export default function StatusPage() {
+  const { t, language } = useLanguage()
   const [health, setHealth] = useState<HealthData | null>(null)
   const [platforms, setPlatforms] = useState<PlatformHealthData | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -142,11 +143,11 @@ export default function StatusPage() {
         }
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to fetch status')
+      setError(e instanceof Error ? e.message : t('statusFetchFailed'))
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => {
     fetchData()
@@ -174,7 +175,9 @@ export default function StatusPage() {
             key: `svc:${name}`,
             name: name.charAt(0).toUpperCase() + name.slice(1),
             level,
-            message: check.message || (level === 'down' ? 'Check failed' : 'Degraded'),
+            message:
+              check.message ||
+              (level === 'down' ? t('statusCheckFailed') : t('statusLevelDegraded')),
           })
       }
     }
@@ -189,7 +192,7 @@ export default function StatusPage() {
             key: `plat:${platform}`,
             name: platform.charAt(0).toUpperCase() + platform.slice(1),
             level: 'degraded',
-            message: `Data ${formatAgo(ts)}`,
+            message: t('statusDataAgo').replace('{ago}', formatTimeAgo(ts, language)),
           })
       }
     }
@@ -203,7 +206,7 @@ export default function StatusPage() {
       monitoredCount: monitored,
       incidents: inc,
     }
-  }, [health, platforms])
+  }, [health, platforms, t, language])
 
   const overallLevel: Level = health ? levelFor(health.status) : 'degraded'
 
@@ -263,25 +266,28 @@ export default function StatusPage() {
         >
           <div>
             <Text as="h1" size="2xl" weight="bold" style={{ marginBottom: tokens.spacing[1] }}>
-              System Status
+              {t('statusSystemStatus')}
             </Text>
             <Text as="p" size="sm" color="secondary">
               {loading && !health
-                ? 'Checking…'
+                ? t('checking')
                 : error
                   ? error
-                  : `Last checked ${health ? formatAgo(health.timestamp) : '—'}`}
+                  : t('statusLastChecked').replace(
+                      '{ago}',
+                      health ? formatTimeAgo(health.timestamp, language) : '—'
+                    )}
             </Text>
           </div>
           <Button variant="secondary" size="sm" onClick={fetchData} disabled={loading}>
-            Refresh
+            {t('refresh')}
           </Button>
         </header>
 
         {hardError && (
           <ErrorState
-            title="Unable to load status"
-            description={error || 'The status service is not responding right now.'}
+            title={t('statusUnableToLoad')}
+            description={error || t('statusServiceUnavailable')}
             retry={fetchData}
           />
         )}
@@ -302,7 +308,7 @@ export default function StatusPage() {
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center' }}>
-                  <StatusIcon level={overallLevel} size={18} />
+                  <StatusIcon level={overallLevel} size={18} t={t} />
                   <span
                     style={{
                       fontSize: tokens.typography.fontSize.lg,
@@ -310,10 +316,10 @@ export default function StatusPage() {
                     }}
                   >
                     {overallLevel === 'operational'
-                      ? 'All Systems Operational'
+                      ? t('statusAllOperational')
                       : overallLevel === 'degraded'
-                        ? 'Degraded Performance'
-                        : 'Service Disruption'}
+                        ? t('statusDegraded')
+                        : t('statusDisruption')}
                   </span>
                 </div>
                 {availabilityPct != null && (
@@ -325,7 +331,7 @@ export default function StatusPage() {
                       colorBySign={false}
                       size="lg"
                       align="right"
-                      label="Availability now"
+                      label={t('statusAvailabilityNow')}
                     />
                     <Text
                       as="p"
@@ -333,7 +339,9 @@ export default function StatusPage() {
                       color="tertiary"
                       style={{ marginTop: tokens.spacing[1] }}
                     >
-                      {operationalCount}/{monitoredCount} components operational
+                      {t('statusComponentsOperational')
+                        .replace('{n}', String(operationalCount))
+                        .replace('{m}', String(monitoredCount))}
                     </Text>
                   </div>
                 )}
@@ -343,7 +351,7 @@ export default function StatusPage() {
             {/* Active incidents / recent status */}
             {health && (
               <div className="card-hover" style={cardStyle}>
-                <h2 style={sectionHeadingStyle}>Active Incidents</h2>
+                <h2 style={sectionHeadingStyle}>{t('statusActiveIncidents')}</h2>
                 {incidents.length === 0 ? (
                   <EmptyState
                     variant="compact"
@@ -362,14 +370,14 @@ export default function StatusPage() {
                         <path d="M8.5 12.5l2.5 2.5 4.5-5" />
                       </svg>
                     }
-                    title="No active incidents"
-                    description="All monitored services and data feeds are operating normally."
+                    title={t('statusNoIncidents')}
+                    description={t('statusNoIncidentsDesc')}
                   />
                 ) : (
                   incidents.map((item) => (
                     <div key={item.key} style={rowStyle}>
                       <div style={{ display: 'flex', alignItems: 'center', minWidth: 0 }}>
-                        <StatusIcon level={item.level} />
+                        <StatusIcon level={item.level} t={t} />
                         <span style={{ textTransform: 'capitalize' as const }}>{item.name}</span>
                       </div>
                       <span
@@ -391,13 +399,13 @@ export default function StatusPage() {
             {/* Service checks */}
             {health && (
               <div className="card-hover" style={cardStyle}>
-                <h2 style={sectionHeadingStyle}>Services</h2>
+                <h2 style={sectionHeadingStyle}>{t('statusServices')}</h2>
                 {Object.entries(health.checks).map(([name, check]) => {
                   const level = check.status === 'skip' ? 'degraded' : levelFor(check.status)
                   return (
                     <div key={name} style={rowStyle}>
                       <div style={{ display: 'flex', alignItems: 'center' }}>
-                        <StatusIcon level={level} />
+                        <StatusIcon level={level} t={t} />
                         <span style={{ textTransform: 'capitalize' as const }}>{name}</span>
                       </div>
                       <span
@@ -424,7 +432,7 @@ export default function StatusPage() {
                     color: tokens.colors.text.tertiary,
                   }}
                 >
-                  <span>Version</span>
+                  <span>{t('statusVersion')}</span>
                   <span style={{ fontFamily: tokens.typography.fontFamily.mono.join(', ') }}>
                     v{health.version}
                   </span>
@@ -435,7 +443,7 @@ export default function StatusPage() {
             {/* Platform data freshness */}
             {platforms && Object.keys(platforms.freshness).length > 0 && (
               <div className="card-hover" style={cardStyle}>
-                <h2 style={sectionHeadingStyle}>Data Freshness</h2>
+                <h2 style={sectionHeadingStyle}>{t('statusDataFreshness')}</h2>
                 {Object.entries(platforms.freshness)
                   .sort(([a], [b]) => a.localeCompare(b))
                   .map(([platform, timestamp]) => {
@@ -444,7 +452,7 @@ export default function StatusPage() {
                     return (
                       <div key={platform} style={rowStyle}>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
-                          <StatusIcon level={level} />
+                          <StatusIcon level={level} t={t} />
                           <span style={{ textTransform: 'capitalize' as const }}>{platform}</span>
                         </div>
                         <span
@@ -456,7 +464,7 @@ export default function StatusPage() {
                             fontFamily: tokens.typography.fontFamily.mono.join(', '),
                           }}
                         >
-                          {formatAgo(timestamp)}
+                          {formatTimeAgo(timestamp, language)}
                         </span>
                       </div>
                     )
@@ -474,7 +482,7 @@ export default function StatusPage() {
             marginTop: tokens.spacing[8],
           }}
         >
-          Auto-refreshes every 30 seconds
+          {t('statusAutoRefresh')}
         </p>
       </div>
     </div>
