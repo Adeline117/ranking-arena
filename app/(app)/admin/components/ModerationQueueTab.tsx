@@ -43,32 +43,35 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
   const [totalPages, setTotalPages] = useState(1)
   const [expandedContent, setExpandedContent] = useState<Record<string, boolean>>({})
 
-  const loadQueue = useCallback(async (pageNum: number = 1) => {
-    if (!accessToken) return
+  const loadQueue = useCallback(
+    async (pageNum: number = 1) => {
+      if (!accessToken) return
 
-    setLoading(true)
-    try {
-      const params = new URLSearchParams({
-        page: String(pageNum),
-        limit: String(PAGE_SIZE),
-      })
+      setLoading(true)
+      try {
+        const params = new URLSearchParams({
+          page: String(pageNum),
+          limit: String(PAGE_SIZE),
+        })
 
-      const res = await fetch(`/api/admin/moderation-queue?${params}`, {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      const data = await res.json()
+        const res = await fetch(`/api/admin/moderation-queue?${params}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        const data = await res.json()
 
-      if (data.success) {
-        setQueue(data.data.items)
-        setTotalPages(Math.ceil((data.data.total || 0) / PAGE_SIZE) || 1)
-        setPage(pageNum)
+        if (data.success) {
+          setQueue(data.data.items)
+          setTotalPages(Math.ceil((data.data.total || 0) / PAGE_SIZE) || 1)
+          setPage(pageNum)
+        }
+      } catch (err) {
+        logger.error('Error loading moderation queue:', err)
+      } finally {
+        setLoading(false)
       }
-    } catch (err) {
-      logger.error('Error loading moderation queue:', err)
-    } finally {
-      setLoading(false)
-    }
-  }, [accessToken])
+    },
+    [accessToken]
+  )
 
   useEffect(() => {
     if (accessToken) {
@@ -107,7 +110,9 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
       if (data.success) {
         // Remove from queue
         setQueue((prev) =>
-          prev.filter((item) => !(item.content_type === contentType && item.content_id === contentId))
+          prev.filter(
+            (item) => !(item.content_type === contentType && item.content_id === contentId)
+          )
         )
       }
     } catch (err) {
@@ -122,7 +127,7 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
   }
 
   return (
-    <Card title={t('moderationQueue') || 'Moderation Queue'}>
+    <Card title={t('moderationQueue')}>
       {loading ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
           <Text color="tertiary">{t('loading')}</Text>
@@ -150,13 +155,23 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
                   }}
                 >
                   {/* Header */}
-                  <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[3] }}>
+                  <Box
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'flex-start',
+                      marginBottom: tokens.spacing[3],
+                    }}
+                  >
                     <Box style={{ display: 'flex', gap: tokens.spacing[2], alignItems: 'center' }}>
                       <Box
                         style={{
                           padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                           borderRadius: tokens.radius.sm,
-                          background: item.content_type === 'post' ? tokens.colors.accent.primary : tokens.colors.accent.warning,
+                          background:
+                            item.content_type === 'post'
+                              ? tokens.colors.accent.primary
+                              : tokens.colors.accent.warning,
                           color: tokens.colors.white,
                           fontSize: tokens.typography.fontSize.xs,
                         }}
@@ -167,8 +182,14 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
                         style={{
                           padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                           borderRadius: tokens.radius.sm,
-                          background: item.report_count >= 5 ? tokens.colors.accent.error : tokens.colors.bg.tertiary,
-                          color: item.report_count >= 5 ? tokens.colors.white : tokens.colors.text.primary,
+                          background:
+                            item.report_count >= 5
+                              ? tokens.colors.accent.error
+                              : tokens.colors.bg.tertiary,
+                          color:
+                            item.report_count >= 5
+                              ? tokens.colors.white
+                              : tokens.colors.text.primary,
                           fontSize: tokens.typography.fontSize.xs,
                         }}
                       >
@@ -208,12 +229,21 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
                     onClick={() => toggleExpand(key)}
                     style={{ marginBottom: tokens.spacing[2] }}
                   >
-                    {isExpanded ? 'Hide reports' : `Show ${item.report_count} report${item.report_count !== 1 ? 's' : ''}`}
+                    {isExpanded
+                      ? 'Hide reports'
+                      : `Show ${item.report_count} report${item.report_count !== 1 ? 's' : ''}`}
                   </Button>
 
                   {/* Individual reports */}
                   {isExpanded && (
-                    <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}>
+                    <Box
+                      style={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: tokens.spacing[2],
+                        marginBottom: tokens.spacing[3],
+                      }}
+                    >
                       {item.reports.map((report) => (
                         <Box
                           key={report.id}
@@ -232,7 +262,11 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
                             </Text>
                           </Box>
                           {report.description && (
-                            <Text size="xs" color="tertiary" style={{ marginTop: tokens.spacing[1] }}>
+                            <Text
+                              size="xs"
+                              color="tertiary"
+                              style={{ marginTop: tokens.spacing[1] }}
+                            >
                               {report.description}
                             </Text>
                           )}
@@ -265,18 +299,28 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => handleAction(item.content_type, item.content_id, 'warn', item.author_id)}
+                          onClick={() =>
+                            handleAction(item.content_type, item.content_id, 'warn', item.author_id)
+                          }
                           disabled={isActing}
-                          style={{ background: tokens.colors.accent.warning, color: tokens.colors.white }}
+                          style={{
+                            background: tokens.colors.accent.warning,
+                            color: tokens.colors.white,
+                          }}
                         >
                           Warn User
                         </Button>
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => handleAction(item.content_type, item.content_id, 'ban', item.author_id)}
+                          onClick={() =>
+                            handleAction(item.content_type, item.content_id, 'ban', item.author_id)
+                          }
                           disabled={isActing}
-                          style={{ background: tokens.colors.accent.error, color: tokens.colors.white }}
+                          style={{
+                            background: tokens.colors.accent.error,
+                            color: tokens.colors.white,
+                          }}
                         >
                           Ban User
                         </Button>
@@ -290,7 +334,14 @@ export default function ModerationQueueTab({ accessToken }: ModerationQueueTabPr
 
           {/* Pagination */}
           {totalPages > 1 && (
-            <Box style={{ marginTop: tokens.spacing[4], display: 'flex', justifyContent: 'center', gap: tokens.spacing[2] }}>
+            <Box
+              style={{
+                marginTop: tokens.spacing[4],
+                display: 'flex',
+                justifyContent: 'center',
+                gap: tokens.spacing[2],
+              }}
+            >
               <Button
                 variant="secondary"
                 size="sm"

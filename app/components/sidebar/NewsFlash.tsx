@@ -136,7 +136,7 @@ export default function NewsFlash() {
                 cursor: 'pointer',
               }}
             >
-              {t('retry') || 'Retry'}
+              {t('retry')}
             </button>
           </div>
         ) : news.length === 0 ? (

@@ -402,7 +402,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
 
   return (
     <div>
-      <UpdatedAgoLabel timestamp={lastFetchedAt} label={t('lastUpdated') || 'Updated'} />
+      <UpdatedAgoLabel timestamp={lastFetchedAt} label={t('lastUpdated')} />
       <div
         className="core-cards-grid"
         style={{

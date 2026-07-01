@@ -262,7 +262,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
               cursor: 'pointer',
             }}
           >
-            {t('retry') || 'Retry'}
+            {t('retry')}
           </button>
         </div>
       ) : posts.length === 0 ? (

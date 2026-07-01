@@ -101,14 +101,22 @@ export function CommentThread({
         marginLeft: isReply ? 42 : 0,
         padding: '10px 0',
         borderBottom: isReply ? 'none' : `1px solid ${tokens.colors.border.primary}`,
-        borderLeft: isReply ? `2px solid var(--color-accent-primary-20, ${tokens.colors.border.primary})` : 'none',
+        borderLeft: isReply
+          ? `2px solid var(--color-accent-primary-20, ${tokens.colors.border.primary})`
+          : 'none',
         paddingLeft: isReply ? 12 : 0,
         opacity: isDeleting ? 0.5 : 1,
         transition: 'opacity 0.2s',
       }}
     >
       <div style={{ display: 'flex', gap: 10 }}>
-        <CommentAvatar handle={comment.author_handle} avatarUrl={comment.author_avatar_url} isReply={isReply} isPro={comment.author_is_pro} showProBadge={comment.author_show_pro_badge} />
+        <CommentAvatar
+          handle={comment.author_handle}
+          avatarUrl={comment.author_avatar_url}
+          isReply={isReply}
+          isPro={comment.author_is_pro}
+          showProBadge={comment.author_show_pro_badge}
+        />
 
         <div style={{ flex: 1, minWidth: 0 }}>
           {/* Author info */}
@@ -116,7 +124,12 @@ export function CommentThread({
             <Link
               href={authorHref}
               onClick={(e) => e.stopPropagation()}
-              style={{ fontSize: 13, fontWeight: 700, color: tokens.colors.text.primary, textDecoration: 'none' }}
+              style={{
+                fontSize: 13,
+                fontWeight: 700,
+                color: tokens.colors.text.primary,
+                textDecoration: 'none',
+              }}
             >
               {comment.author_handle || 'user'}
             </Link>
@@ -124,15 +137,21 @@ export function CommentThread({
             <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
               {formatTimeAgo(comment.created_at, language as Locale)}
               {comment.updated_at && comment.updated_at !== comment.created_at && (
-                <span title={new Date(comment.updated_at).toLocaleString()} style={{ marginLeft: 4, fontStyle: 'italic' }}>
-                  ({t('edited') || 'edited'})
+                <span
+                  title={new Date(comment.updated_at).toLocaleString()}
+                  style={{ marginLeft: 4, fontStyle: 'italic' }}
+                >
+                  ({t('edited')})
                 </span>
               )}
             </span>
           </div>
 
           {/* Content */}
-          <div translate="no" style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}>
+          <div
+            translate="no"
+            style={{ fontSize: 13, color: tokens.colors.text.primary, lineHeight: 1.6 }}
+          >
             {hasStickers(displayContent || '')
               ? renderWithStickers(displayContent || '', 64)
               : renderContentWithLinks(displayContent || '')}
@@ -143,7 +162,10 @@ export function CommentThread({
             <button
               className="interactive-scale"
               aria-label={t('upvote')}
-              onClick={(e) => { e.stopPropagation(); onToggleCommentLike(postId, comment.id) }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleCommentLike(postId, comment.id)
+              }}
               disabled={commentLikeLoading[comment.id]}
               style={{
                 ...commentStyles.actionButton,
@@ -155,32 +177,45 @@ export function CommentThread({
               }}
             >
               <ThumbsUpIcon size={14} />
-              {(comment.like_count || 0) > 0 && <span style={{ fontVariantNumeric: 'tabular-nums' }}>{comment.like_count}</span>}
+              {(comment.like_count || 0) > 0 && (
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{comment.like_count}</span>
+              )}
             </button>
 
             <button
               className="interactive-scale"
               aria-label={t('downvote')}
-              onClick={(e) => { e.stopPropagation(); onToggleCommentDislike?.(postId, comment.id) }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onToggleCommentDislike?.(postId, comment.id)
+              }}
               disabled={commentLikeLoading[comment.id]}
               style={{
                 ...commentStyles.actionButton,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 4,
-                color: comment.user_disliked ? tokens.colors.accent.error : tokens.colors.text.tertiary,
+                color: comment.user_disliked
+                  ? tokens.colors.accent.error
+                  : tokens.colors.text.tertiary,
                 background: comment.user_disliked ? 'var(--color-accent-error-12)' : 'transparent',
               }}
             >
               <ThumbsDownIcon size={14} />
-              {(comment.dislike_count || 0) > 0 && <span style={{ fontVariantNumeric: 'tabular-nums' }}>{comment.dislike_count}</span>}
+              {(comment.dislike_count || 0) > 0 && (
+                <span style={{ fontVariantNumeric: 'tabular-nums' }}>{comment.dislike_count}</span>
+              )}
             </button>
 
             {!isReply && (
               <button
                 onClick={(e) => {
                   e.stopPropagation()
-                  setReplyingTo(replyingTo?.commentId === comment.id ? null : { commentId: comment.id, handle: comment.author_handle || 'user' })
+                  setReplyingTo(
+                    replyingTo?.commentId === comment.id
+                      ? null
+                      : { commentId: comment.id, handle: comment.author_handle || 'user' }
+                  )
                 }}
                 style={commentStyles.actionButton}
               >
@@ -190,7 +225,10 @@ export function CommentThread({
 
             {isOwn && onStartEdit && (
               <button
-                onClick={(e) => { e.stopPropagation(); onStartEdit(comment) }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onStartEdit(comment)
+                }}
                 style={commentStyles.actionButton}
               >
                 {t('edit')}
@@ -199,7 +237,10 @@ export function CommentThread({
 
             {isOwn && (
               <button
-                onClick={(e) => { e.stopPropagation(); onDeleteComment(postId, comment.id) }}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteComment(postId, comment.id)
+                }}
                 disabled={isDeleting}
                 style={commentStyles.actionButton}
               >
@@ -329,7 +370,7 @@ export function CommentThread({
           {/* Replies */}
           {visibleReplies && visibleReplies.length > 0 && (
             <div style={{ marginTop: 8 }}>
-              {visibleReplies.map(reply => (
+              {visibleReplies.map((reply) => (
                 <CommentThread
                   key={reply.id}
                   comment={reply}
@@ -363,8 +404,16 @@ export function CommentThread({
               ))}
               {hiddenReplyCount > 0 && !expandedReplies[comment.id] && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); setExpandedReplies(prev => ({ ...prev, [comment.id]: true })) }}
-                  style={{ ...commentStyles.actionButton, color: ARENA_PURPLE, padding: '4px 0', marginTop: 4 }}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setExpandedReplies((prev) => ({ ...prev, [comment.id]: true }))
+                  }}
+                  style={{
+                    ...commentStyles.actionButton,
+                    color: ARENA_PURPLE,
+                    padding: '4px 0',
+                    marginTop: 4,
+                  }}
                 >
                   {t('expandReplies').replace('{count}', String(hiddenReplyCount))}
                 </button>

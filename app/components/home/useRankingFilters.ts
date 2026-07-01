@@ -772,10 +772,10 @@ export function useRankingFilters({
     navigator.clipboard
       .writeText(url)
       .then(() => {
-        showToast(t('linkCopied') || 'Link copied!', 'success')
+        showToast(t('linkCopied'), 'success')
       })
       .catch(() => {
-        showToast(t('copyFailed') || 'Copy failed', 'error')
+        showToast(t('copyFailed'), 'error')
       })
   }, [showToast, t])
 

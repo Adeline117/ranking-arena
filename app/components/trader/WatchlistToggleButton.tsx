@@ -14,7 +14,11 @@ interface WatchlistToggleButtonProps {
   handle?: string
 }
 
-export default function WatchlistToggleButton({ source, sourceTraderID, handle }: WatchlistToggleButtonProps) {
+export default function WatchlistToggleButton({
+  source,
+  sourceTraderID,
+  handle,
+}: WatchlistToggleButtonProps) {
   const { isLoggedIn } = useAuthSession()
   const { isWatched, addToWatchlist, removeFromWatchlist } = useWatchlist()
   const { showToast } = useToast()
@@ -36,13 +40,13 @@ export default function WatchlistToggleButton({ source, sourceTraderID, handle }
     try {
       if (watched) {
         await removeFromWatchlist(source, sourceTraderID)
-        showToast(t('removedFromWatchlist') || 'Removed from watchlist', 'info')
+        showToast(t('removedFromWatchlist'), 'info')
       } else {
         await addToWatchlist(source, sourceTraderID, handle)
-        showToast(t('addedToWatchlist') || 'Added to watchlist', 'success')
+        showToast(t('addedToWatchlist'), 'success')
       }
     } catch {
-      showToast(t('watchlistError') || 'Failed to update watchlist', 'error')
+      showToast(t('watchlistError'), 'error')
     } finally {
       pendingRef.current = false
       setIsLoading(false)
@@ -52,9 +56,9 @@ export default function WatchlistToggleButton({ source, sourceTraderID, handle }
   return (
     <button
       onClick={handleClick}
-      aria-label={watched ? (t('removeFromWatchlist') || 'Remove from watchlist') : (t('addToWatchlist') || 'Add to watchlist')}
+      aria-label={watched ? t('removeFromWatchlist') : t('addToWatchlist')}
       aria-pressed={watched}
-      title={watched ? (t('removeFromWatchlist') || 'Remove from watchlist') : (t('addToWatchlist') || 'Add to watchlist')}
+      title={watched ? t('removeFromWatchlist') : t('addToWatchlist')}
       className="interactive-scale"
       style={{
         padding: '8px 12px',
@@ -66,9 +70,7 @@ export default function WatchlistToggleButton({ source, sourceTraderID, handle }
         background: watched
           ? 'var(--color-accent-warning-10, rgba(245, 158, 11, 0.1))'
           : tokens.glass.bg.light,
-        color: watched
-          ? 'var(--color-accent-warning, #f59e0b)'
-          : tokens.colors.text.secondary,
+        color: watched ? 'var(--color-accent-warning, #f59e0b)' : tokens.colors.text.secondary,
         cursor: isLoading ? 'not-allowed' : 'pointer',
         opacity: isLoading ? 0.6 : 1,
         display: 'flex',
@@ -78,8 +80,12 @@ export default function WatchlistToggleButton({ source, sourceTraderID, handle }
         fontWeight: 600,
         transition: 'all 0.2s ease',
       }}
-      onMouseEnter={(e) => { if (!watched) e.currentTarget.style.borderColor = 'var(--color-accent-warning, #f59e0b)' }}
-      onMouseLeave={(e) => { if (!watched) e.currentTarget.style.borderColor = tokens.colors.border.primary }}
+      onMouseEnter={(e) => {
+        if (!watched) e.currentTarget.style.borderColor = 'var(--color-accent-warning, #f59e0b)'
+      }}
+      onMouseLeave={(e) => {
+        if (!watched) e.currentTarget.style.borderColor = tokens.colors.border.primary
+      }}
     >
       <svg
         width={16}

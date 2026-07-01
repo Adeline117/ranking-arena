@@ -204,7 +204,7 @@ export default function BookmarkModal({
             color="tertiary"
             style={{ marginBottom: tokens.spacing[4], display: 'block' }}
           >
-            {t('loginToBookmark') || 'Log in to save bookmarks'}
+            {t('loginToBookmark')}
           </Text>
           <Box style={{ display: 'flex', gap: tokens.spacing[2], justifyContent: 'center' }}>
             <Button
@@ -215,10 +215,10 @@ export default function BookmarkModal({
                 useLoginModal.getState().openLoginModal()
               }}
             >
-              {t('login') || 'Log In'}
+              {t('login')}
             </Button>
             <Button variant="text" size="sm" onClick={onClose}>
-              {t('cancel') || 'Cancel'}
+              {t('cancel')}
             </Button>
           </Box>
         </Box>

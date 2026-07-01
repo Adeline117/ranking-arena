@@ -169,7 +169,7 @@ export default function DataHealthPage() {
             fontSize: 14,
           }}
         >
-          {t('retry') || 'Retry'}
+          {t('retry')}
         </button>
       </div>
     )

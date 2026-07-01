@@ -87,7 +87,7 @@ export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
           }}
         >
           <Text size="sm" color="secondary">
-            {t('connectedTo') || 'Connected to'}
+            {t('connectedTo')}
           </Text>
           <ChainIndicator size="md" showName={true} />
         </Box>

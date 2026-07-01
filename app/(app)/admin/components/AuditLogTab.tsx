@@ -109,7 +109,7 @@ export default function AuditLogTab({ accessToken }: AuditLogTabProps) {
   }
 
   return (
-    <Card title={t('auditLog') || 'Audit Log'}>
+    <Card title={t('auditLog')}>
       {/* Filters */}
       <Box
         style={{
@@ -169,7 +169,7 @@ export default function AuditLogTab({ accessToken }: AuditLogTabProps) {
         </Box>
 
         <Button variant="secondary" size="sm" onClick={() => loadLogs(1)}>
-          {t('search') || 'Search'}
+          {t('search')}
         </Button>
       </Box>
 

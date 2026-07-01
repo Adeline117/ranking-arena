@@ -88,7 +88,7 @@ export function DrawdownChart({ equityCurve }: DrawdownChartProps) {
           textAlign: 'center',
         }}
       >
-        {t('noDrawdownRecorded') || 'No drawdown recorded'}
+        {t('noDrawdownRecorded')}
       </div>
     )
   }

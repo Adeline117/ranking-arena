@@ -293,7 +293,7 @@ export default function UserMenuDropdown({
               <path d="M22 21v-2a4 4 0 0 0-3-3.87" />
               <path d="M16 3.13a4 4 0 0 1 0 7.75" />
             </svg>
-            <span>{t('referral') || 'Referral'}</span>
+            <span>{t('referral')}</span>
           </Link>
           <Link
             href="/portfolio"
@@ -316,7 +316,7 @@ export default function UserMenuDropdown({
               <path d="M3 5v14a2 2 0 0 0 2 2h16v-5" />
               <path d="M18 12a2 2 0 0 0 0 4h4v-4z" />
             </svg>
-            <span>{t('portfolio') || 'Portfolio'}</span>
+            <span>{t('portfolio')}</span>
           </Link>
           <Link
             href="/api-docs"

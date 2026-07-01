@@ -154,11 +154,7 @@ export default function ShareButton({
   const openPopup = useCallback(
     (url: string) => {
       const popup = window.open(url, '_blank', 'noopener')
-      if (!popup)
-        showToast(
-          t('popupBlocked') || 'Popup blocked. Please allow popups for this site.',
-          'warning'
-        )
+      if (!popup) showToast(t('popupBlocked'), 'warning')
       setOpen(false)
     },
     [showToast, t]

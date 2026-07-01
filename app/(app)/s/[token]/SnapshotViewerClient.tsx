@@ -155,7 +155,7 @@ export default function SnapshotViewerClient({ snapshot, traders }: SnapshotView
       setTimeout(() => setCopied(false), 2000)
     } catch (error) {
       logger.error('Failed to copy link:', error)
-      showToast(t('copyFailed') || 'Copy failed', 'error')
+      showToast(t('copyFailed'), 'error')
     }
   }
 

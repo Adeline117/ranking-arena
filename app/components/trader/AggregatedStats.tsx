@@ -398,7 +398,7 @@ export default function AggregatedStats({
                     fontSize: 12,
                   }}
                 >
-                  {t('traderMetric') || 'Metric'}
+                  {t('traderMetric')}
                 </th>
                 {accounts.map((acc) => (
                   <th
@@ -452,7 +452,7 @@ export default function AggregatedStats({
               />
               {/* Win Rate */}
               <ComparisonRow
-                label={t('winRate') || 'Win Rate'}
+                label={t('winRate')}
                 accounts={accounts}
                 getValue={(a) => a.winRate ?? null}
                 format={(v) => `${v.toFixed(1)}%`}
@@ -460,7 +460,7 @@ export default function AggregatedStats({
               />
               {/* Max Drawdown */}
               <ComparisonRow
-                label={t('maxDrawdown') || 'Max DD'}
+                label={t('maxDrawdown')}
                 accounts={accounts}
                 getValue={(a) => a.maxDrawdown ?? null}
                 format={(v) => `${v.toFixed(1)}%`}

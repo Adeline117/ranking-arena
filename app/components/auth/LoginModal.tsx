@@ -608,8 +608,8 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
               }}
             >
               {resendCooldown > 0
-                ? `${t('authResendCode') || 'Resend code'} (${resendCooldown}s)`
-                : t('authResendCode') || 'Resend code'}
+                ? `${t('authResendCode')} (${resendCooldown}s)`
+                : t('authResendCode')}
             </button>
 
             {error && (

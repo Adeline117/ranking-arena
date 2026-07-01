@@ -34,11 +34,16 @@ function CompareToggle({
   handle,
   source,
   avatarUrl,
-}: { traderId: string; handle: string; source: string; avatarUrl?: string }) {
-  const isSelected = useComparisonStore(s => s.isSelected(traderId))
-  const addTrader = useComparisonStore(s => s.addTrader)
-  const removeTrader = useComparisonStore(s => s.removeTrader)
-  const canAddMore = useComparisonStore(s => s.canAddMore())
+}: {
+  traderId: string
+  handle: string
+  source: string
+  avatarUrl?: string
+}) {
+  const isSelected = useComparisonStore((s) => s.isSelected(traderId))
+  const addTrader = useComparisonStore((s) => s.addTrader)
+  const removeTrader = useComparisonStore((s) => s.removeTrader)
+  const canAddMore = useComparisonStore((s) => s.canAddMore())
   const { t } = useLanguage()
 
   const handleToggle = () => {
@@ -49,12 +54,12 @@ function CompareToggle({
     }
   }
 
-  const label = isSelected ? (t('comparing') || 'Comparing') : (t('compare') || 'Compare')
+  const label = isSelected ? t('comparing') : t('compare')
   const titleText = isSelected
-    ? (t('removeFromCompare') || 'Remove from Compare')
+    ? t('removeFromCompare')
     : !canAddMore
-      ? (t('compareListFull') || 'Compare list full (max 10)')
-      : (t('addToCompare') || 'Add to Compare')
+      ? t('compareListFull')
+      : t('addToCompare')
 
   return (
     <ActionButton
@@ -62,18 +67,36 @@ function CompareToggle({
       variant={isSelected ? 'accent' : 'ghost'}
       icon={
         isSelected ? (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <polyline points="20 6 9 17 4 12" />
           </svg>
         ) : (
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
             <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
           </svg>
         )
       }
     >
-      <span title={titleText} style={{ opacity: (!isSelected && !canAddMore) ? 0.5 : 1 }}>
+      <span title={titleText} style={{ opacity: !isSelected && !canAddMore ? 0.5 : 1 }}>
         {label}
       </span>
     </ActionButton>
@@ -123,7 +146,16 @@ export function TraderHeaderActions({
           onClick={() => router.push('/settings')}
           variant="accent"
           icon={
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
               <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
             </svg>
@@ -134,8 +166,9 @@ export function TraderHeaderActions({
       )}
 
       {/* Follow icon */}
-      {!isOwnProfile && userId && (
-        isRegistered ? (
+      {!isOwnProfile &&
+        userId &&
+        (isRegistered ? (
           <UserFollowButton targetUserId={traderId} currentUserId={userId} size="sm" />
         ) : (
           <TraderFollowButton
@@ -145,16 +178,11 @@ export function TraderHeaderActions({
               onFollowChange?.(isFollowing ? 1 : -1)
             }}
           />
-        )
-      )}
+        ))}
 
       {/* Watchlist star */}
       {source && (
-        <WatchlistToggleButton
-          source={source}
-          sourceTraderID={traderId}
-          handle={handle}
-        />
+        <WatchlistToggleButton source={source} sourceTraderID={traderId} handle={handle} />
       )}
 
       {/* Compare toggle (P0-4) */}
@@ -181,7 +209,10 @@ export function TraderHeaderActions({
       <ShareButton
         data={{
           type: 'trader',
-          url: typeof window !== 'undefined' ? window.location.href : `https://www.arenafi.org/trader/${encodeURIComponent(handle)}`,
+          url:
+            typeof window !== 'undefined'
+              ? window.location.href
+              : `https://www.arenafi.org/trader/${encodeURIComponent(handle)}`,
           traderName: resolvedDisplayName,
           roi: roi90d,
           period: '90D',

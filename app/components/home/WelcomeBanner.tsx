@@ -22,26 +22,30 @@ function WelcomeBannerInner() {
   if (!show) return null
 
   return (
-    <div style={{
-      margin: '0 auto',
-      maxWidth: 1400,
-      padding: '0 16px',
-    }}>
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-        background: 'color-mix(in srgb, var(--color-accent-success, #16c784) 10%, var(--color-bg-secondary))',
-        border: '1px solid color-mix(in srgb, var(--color-accent-success, #16c784) 25%, transparent)',
-        borderRadius: tokens.radius.lg,
-        marginTop: 8,
-        fontSize: 14,
-        color: 'var(--color-text-primary)',
-      }}>
-        <span style={{ fontWeight: 600 }}>
-          {t('welcomeMessage') || 'Welcome! Browse the leaderboard to find traders you\'re interested in and follow them.'}
-        </span>
+    <div
+      style={{
+        margin: '0 auto',
+        maxWidth: 1400,
+        padding: '0 16px',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          background:
+            'color-mix(in srgb, var(--color-accent-success, #16c784) 10%, var(--color-bg-secondary))',
+          border:
+            '1px solid color-mix(in srgb, var(--color-accent-success, #16c784) 25%, transparent)',
+          borderRadius: tokens.radius.lg,
+          marginTop: 8,
+          fontSize: 14,
+          color: 'var(--color-text-primary)',
+        }}
+      >
+        <span style={{ fontWeight: 600 }}>{t('welcomeMessage')}</span>
         <button
           onClick={() => setShow(false)}
           style={{

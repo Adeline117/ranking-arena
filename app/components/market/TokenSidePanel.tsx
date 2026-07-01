@@ -496,7 +496,7 @@ export default function TokenSidePanel({
                         fontSize: tokens.typography.fontSize.sm,
                       }}
                     >
-                      {t('chartUnavailable') || 'Chart data unavailable'}
+                      {t('chartUnavailable')}
                     </div>
                   )}
                   {ohlcData.length > 0 && (

@@ -636,7 +636,7 @@ function SearchContent() {
             type="search"
             value={inputValue}
             onChange={(e) => setInputValue(e.target.value)}
-            placeholder={t('searchPlaceholder') || 'Search traders, posts, groups...'}
+            placeholder={t('searchPlaceholder')}
             autoFocus={!query}
             enterKeyHint="search"
             style={{
@@ -788,7 +788,7 @@ function SearchContent() {
                   marginRight: 4,
                 }}
               >
-                {t('platform') || 'Platform'}:
+                {t('platform')}:
               </span>
               <Link
                 href={`/search?q=${encodeURIComponent(query)}${activeTab !== 'all' ? `&tab=${activeTab}` : ''}`}
@@ -806,7 +806,7 @@ function SearchContent() {
                   transition: 'all 0.15s',
                 }}
               >
-                {t('searchTabAll') || 'All'}
+                {t('searchTabAll')}
               </Link>
               {availablePlatforms.slice(0, 8).map((p) => {
                 const name = EXCHANGE_CONFIG[p as keyof typeof EXCHANGE_CONFIG]?.name || p

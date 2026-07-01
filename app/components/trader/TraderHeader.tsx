@@ -137,9 +137,9 @@ export default function TraderHeader({
     const ts = new Date(iso).getTime()
     if (!Number.isFinite(ts)) return ''
     const diff = Date.now() - ts
-    if (diff < 0) return t('justNow') || 'just now'
+    if (diff < 0) return t('justNow')
     const mins = Math.floor(diff / 60000)
-    if (mins < 1) return t('justNow') || 'just now'
+    if (mins < 1) return t('justNow')
     if (mins < 60) return t('minutesAgoShort').replace('{n}', String(mins))
     const hours = Math.floor(mins / 60)
     if (hours < 24) return t('hoursAgoShort').replace('{n}', String(hours))
@@ -156,7 +156,7 @@ export default function TraderHeader({
         _showToast(t('copiedToClipboard'), 'success', 2000)
       })
       .catch(() => {
-        _showToast(t('copyFailed') || 'Copy failed', 'error', 2000)
+        _showToast(t('copyFailed'), 'error', 2000)
       })
   }, [handle, _showToast, t])
 
@@ -197,15 +197,12 @@ export default function TraderHeader({
   // Build subtitle parts for the second line
   const subtitleParts: string[] = []
   if (linkedAccountCount && linkedAccountCount >= 2) {
-    subtitleParts.push(`${linkedAccountCount} ${t('verifiedAccounts') || 'verified accounts'}`)
+    subtitleParts.push(`${linkedAccountCount} ${t('verifiedAccounts')}`)
   }
   if (followerCount > 0)
-    subtitleParts.push(
-      `${followerCount.toLocaleString('en-US')} ${t('arenaFollowers') || 'followers'}`
-    )
+    subtitleParts.push(`${followerCount.toLocaleString('en-US')} ${t('arenaFollowers')}`)
   // copiers removed — only show platform internal followers
-  if (aum !== undefined && aum > 0)
-    subtitleParts.push(`${t('aumLabel') || 'AUM'} ${formatAum(aum)}`)
+  if (aum !== undefined && aum > 0) subtitleParts.push(`${t('aumLabel')} ${formatAum(aum)}`)
   if (activeDays !== null && activeDays >= 7) subtitleParts.push(formatActiveDays(activeDays, t))
   if (rank != null && rank > 0 && source && EXCHANGE_NAMES[source.toLowerCase()]) {
     subtitleParts.push(

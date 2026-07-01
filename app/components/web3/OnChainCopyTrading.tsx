@@ -92,18 +92,18 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
   const upcomingFeatures = [
     {
       icon: '1',
-      label: t('subscribeToTrader') || 'Subscribe to Trader',
+      label: t('subscribeToTrader'),
       desc: 'Auto-copy trades with custom allocation',
     },
-    { icon: '2', label: t('stopLoss') || 'Stop Loss', desc: 'Set automatic stop-loss protection' },
+    { icon: '2', label: t('stopLoss'), desc: 'Set automatic stop-loss protection' },
     {
       icon: '3',
-      label: t('leverage') || 'Leverage',
+      label: t('leverage'),
       desc: 'Control maximum leverage per position',
     },
     {
       icon: '4',
-      label: t('totalPnl') || 'Total PnL',
+      label: t('totalPnl'),
       desc: 'Track realized and unrealized profits',
     },
   ]
@@ -159,11 +159,10 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
           </Box>
           <Box>
             <Text size="md" weight="bold">
-              {t('onChainCopyTrading') || 'On-Chain Copy Trading'}
+              {t('onChainCopyTrading')}
             </Text>
             <Text size="xs" color="tertiary">
-              {t('onChainCopyTradingDesc') ||
-                'Automatically copy trading strategies via smart contracts'}
+              {t('onChainCopyTradingDesc')}
             </Text>
           </Box>
         </Box>
@@ -196,7 +195,7 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
           >
             <RocketIcon size={16} />
             <Text size="sm" weight="bold" style={{ color: tokens.colors.white }}>
-              {t('onChainCopyTradingComingSoon') || 'Coming Soon'}
+              {t('onChainCopyTradingComingSoon')}
             </Text>
           </Box>
 
@@ -205,8 +204,7 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
             color="secondary"
             style={{ marginBottom: tokens.spacing[5], lineHeight: 1.6 }}
           >
-            {t('onChainCopyTradingComingSoonDesc') ||
-              'On-chain copy trading is under development. Stay tuned!'}
+            {t('onChainCopyTradingComingSoonDesc')}
           </Text>
 
           {/* Feature Preview */}
@@ -279,7 +277,7 @@ export function OnChainCopyTrading({ traderHandle, className = '' }: OnChainCopy
               transition: `all ${tokens.transition.base}`,
             }}
             onClick={() => {
-              showToast(t('onChainCopyTradingComingSoon') || 'Coming soon!', 'info')
+              showToast(t('onChainCopyTradingComingSoon'), 'info')
             }}
           >
             Notify Me When Available

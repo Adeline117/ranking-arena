@@ -113,7 +113,7 @@ export function RepostModal({
         ref={dialogRef}
         role="dialog"
         aria-modal="true"
-        aria-label={t('repost') || 'Repost'}
+        aria-label={t('repost')}
         onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
@@ -125,7 +125,14 @@ export function RepostModal({
           boxShadow: '0 25px 50px -12px var(--color-overlay-dark)',
         }}
       >
-        <h2 style={{ fontSize: 18, fontWeight: 900, marginBottom: 16, color: tokens.colors.text.primary }}>
+        <h2
+          style={{
+            fontSize: 18,
+            fontWeight: 900,
+            marginBottom: 16,
+            color: tokens.colors.text.primary,
+          }}
+        >
           {t('repostToFeed')}
         </h2>
 
@@ -151,18 +158,23 @@ export function RepostModal({
         />
 
         {/* Toolbar */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 4,
-          marginTop: 4,
-          marginBottom: 16,
-        }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            marginTop: 4,
+            marginBottom: 16,
+          }}
+        >
           {/* Sticker picker */}
           <div style={{ position: 'relative' }}>
             <button
               type="button"
-              onClick={() => { setShowStickerPicker(prev => !prev); setShowEmojiPicker(false) }}
+              onClick={() => {
+                setShowStickerPicker((prev) => !prev)
+                setShowEmojiPicker(false)
+              }}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -176,7 +188,17 @@ export function RepostModal({
               aria-label={tLocal('postSticker')}
               title={tLocal('postSticker')}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <path d="M15.5 3H5a2 2 0 0 0-2 2v14c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2V8.5L15.5 3Z" />
                 <path d="M14 3v4a2 2 0 0 0 2 2h4" />
                 <circle cx="10" cy="13" r="2" />
@@ -197,7 +219,10 @@ export function RepostModal({
           <div style={{ position: 'relative' }}>
             <button
               type="button"
-              onClick={() => { setShowEmojiPicker(prev => !prev); setShowStickerPicker(false) }}
+              onClick={() => {
+                setShowEmojiPicker((prev) => !prev)
+                setShowStickerPicker(false)
+              }}
               style={{
                 background: 'transparent',
                 border: 'none',
@@ -216,25 +241,57 @@ export function RepostModal({
               :)
             </button>
             {showEmojiPicker && (
-              <div style={{
-                position: 'absolute',
-                bottom: 32,
-                left: 0,
-                background: tokens.colors.bg.secondary,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                borderRadius: tokens.radius.lg,
-                padding: 8,
-                display: 'grid',
-                gridTemplateColumns: 'repeat(8, 1fr)',
-                gap: 2,
-                zIndex: tokens.zIndex.dropdown,
-                boxShadow: tokens.shadow.lg,
-                width: 280,
-              }}>
-                {[':)',':D','XD','<3',';)',':P','B)',':/',
-                  '+1','-1','hot','100','go','$','up','dn',
-                  'bull','bear','gem','hi','!?','$$','strong','luv',
-                  'eye','aim','zap','moon','sun','deal','yay','rip'].map(emoji => (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 32,
+                  left: 0,
+                  background: tokens.colors.bg.secondary,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  borderRadius: tokens.radius.lg,
+                  padding: 8,
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(8, 1fr)',
+                  gap: 2,
+                  zIndex: tokens.zIndex.dropdown,
+                  boxShadow: tokens.shadow.lg,
+                  width: 280,
+                }}
+              >
+                {[
+                  ':)',
+                  ':D',
+                  'XD',
+                  '<3',
+                  ';)',
+                  ':P',
+                  'B)',
+                  ':/',
+                  '+1',
+                  '-1',
+                  'hot',
+                  '100',
+                  'go',
+                  '$',
+                  'up',
+                  'dn',
+                  'bull',
+                  'bear',
+                  'gem',
+                  'hi',
+                  '!?',
+                  '$$',
+                  'strong',
+                  'luv',
+                  'eye',
+                  'aim',
+                  'zap',
+                  'moon',
+                  'sun',
+                  'deal',
+                  'yay',
+                  'rip',
+                ].map((emoji) => (
                   <button
                     key={emoji}
                     onClick={() => {
@@ -250,8 +307,12 @@ export function RepostModal({
                       borderRadius: tokens.radius.sm,
                       lineHeight: 1.2,
                     }}
-                    onMouseEnter={(e) => { e.currentTarget.style.background = tokens.colors.bg.tertiary }}
-                    onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent' }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = tokens.colors.bg.tertiary
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent'
+                    }}
                   >
                     {emoji}
                   </button>
@@ -284,11 +345,14 @@ export function RepostModal({
           </button>
 
           {/* Character count */}
-          <span style={{
-            marginLeft: 'auto',
-            fontSize: 12,
-            color: comment.length > 260 ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
-          }}>
+          <span
+            style={{
+              marginLeft: 'auto',
+              fontSize: 12,
+              color:
+                comment.length > 260 ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+            }}
+          >
             {comment.length}/280
           </span>
         </div>

@@ -281,14 +281,14 @@ export default function PortfolioPage() {
           {/* Analytics Dashboard */}
           {!loading && positions.length > 0 && (
             <div style={styles.section}>
-              <h2 style={styles.sectionTitle}>{t('portfolioAnalytics') || 'Analytics'}</h2>
+              <h2 style={styles.sectionTitle}>{t('portfolioAnalytics')}</h2>
               <PortfolioAnalytics positions={positions} snapshots={snapshots} />
             </div>
           )}
 
           {/* Positions */}
           <div style={styles.section}>
-            <h2 style={styles.sectionTitle}>{t('openPositions') || 'Open Positions'}</h2>
+            <h2 style={styles.sectionTitle}>{t('openPositions')}</h2>
             <PositionList positions={positions} isLoading={loading} />
           </div>
         </div>

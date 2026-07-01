@@ -20,7 +20,7 @@ export default function Footer() {
         { href: '/market', label: t('footerMarket') },
         { href: '/claim', label: t('claimTrader') },
         { href: '/pricing', label: t('footerPricing') },
-        { href: '/api-docs', label: t('footerApi') || 'API' },
+        { href: '/api-docs', label: t('footerApi') },
       ],
     },
     {
@@ -43,7 +43,7 @@ export default function Footer() {
         { href: '/methodology', label: t('footerMethodology') },
         { href: '/u/adelinewen1107', label: t('footerContact') },
         { href: '/help', label: t('footerHelp') },
-        { href: '/status', label: t('footerStatus') || 'Status' },
+        { href: '/status', label: t('footerStatus') },
       ],
     },
   ]

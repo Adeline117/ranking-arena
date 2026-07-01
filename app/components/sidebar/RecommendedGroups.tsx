@@ -162,7 +162,7 @@ export default function RecommendedGroups() {
               cursor: 'pointer',
             }}
           >
-            {t('retry') || 'Retry'}
+            {t('retry')}
           </button>
         </div>
       ) : groups.length === 0 ? (

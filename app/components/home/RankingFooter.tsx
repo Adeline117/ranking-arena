@@ -61,7 +61,7 @@ export default function RankingFooter({
             textAlign: 'center',
           }}
         >
-          {t('dataStaleWarning') || 'Data may be delayed'}
+          {t('dataStaleWarning')}
         </Box>
       )}
 
@@ -96,7 +96,7 @@ export default function RankingFooter({
           </span>
           {lastRefreshFailed && (
             <span
-              title={t('refreshFailed') || 'Auto-refresh failed'}
+              title={t('refreshFailed')}
               style={{ color: 'var(--color-accent-warning, #f59e0b)', display: 'inline-flex' }}
             >
               <svg width={10} height={10} viewBox="0 0 24 24" fill="currentColor">

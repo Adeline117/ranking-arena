@@ -152,7 +152,7 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
             // Show copiers only when data exists
             if (data.profile.copiers != null && data.profile.copiers > 0) {
               statItems.push({
-                label: t('copiers') || 'Copiers',
+                label: t('copiers'),
                 value: data.profile.copiers,
                 format: 'number',
               })
@@ -246,7 +246,7 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
           {data.timeseries.asset_breakdown && data.timeseries.asset_breakdown.length > 0 && (
             <div className="space-y-3">
               <h2 className="text-lg font-semibold" style={{ color: tokens.colors.text.primary }}>
-                {t('assetBreakdown') || 'Asset Breakdown'}
+                {t('assetBreakdown')}
               </h2>
               <div
                 className="p-4 rounded-xl"

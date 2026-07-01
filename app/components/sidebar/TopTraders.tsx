@@ -170,7 +170,7 @@ export default function TopTraders() {
               cursor: 'pointer',
             }}
           >
-            {t('retry') || 'Retry'}
+            {t('retry')}
           </button>
         </div>
       ) : traders.length === 0 ? (

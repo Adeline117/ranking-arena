@@ -456,8 +456,8 @@ function SettingsContent() {
           {/* Linked Accounts (social logins, OAuth connections) */}
           <SectionCard
             id="linked-accounts"
-            title={t('linkedAccounts') || 'Linked Accounts'}
-            description={t('linkedAccountsDesc') || 'Manage your connected social accounts'}
+            title={t('linkedAccounts')}
+            description={t('linkedAccountsDesc')}
           >
             <Link
               href="/settings/linked-accounts"
@@ -467,7 +467,7 @@ function SettingsContent() {
                 fontSize: tokens.typography.fontSize.sm,
               }}
             >
-              {t('manageLinkedAccounts') || 'Manage linked accounts →'}
+              {t('manageLinkedAccounts')}
             </Link>
           </SectionCard>
 

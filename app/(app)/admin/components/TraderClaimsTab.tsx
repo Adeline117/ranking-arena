@@ -109,7 +109,7 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
   }
 
   return (
-    <Card title={t('traderClaims') || 'Trader Claims'}>
+    <Card title={t('traderClaims')}>
       {/* Filter buttons */}
       <Box
         style={{
@@ -127,7 +127,7 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
             size="sm"
             onClick={() => setFilter(f)}
           >
-            {f === 'all' ? t('all') || 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
+            {f === 'all' ? t('all') : f.charAt(0).toUpperCase() + f.slice(1)}
             {counts[f] > 0 && ` (${counts[f]})`}
           </Button>
         ))}
@@ -139,7 +139,7 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
         </Box>
       ) : filtered.length === 0 ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">{t('noClaims') || 'No claims found'}</Text>
+          <Text color="tertiary">{t('noClaims')}</Text>
         </Box>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
@@ -220,7 +220,7 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
                       onClick={() => handleReview(claim.id, true)}
                       disabled={actionLoading === claim.id}
                     >
-                      {actionLoading === claim.id ? '...' : t('approve') || 'Approve'}
+                      {actionLoading === claim.id ? '...' : t('approve')}
                     </Button>
                     {!rejectInputs[claim.id] ? (
                       <Button
@@ -228,7 +228,7 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
                         size="sm"
                         onClick={() => setRejectInputs((prev) => ({ ...prev, [claim.id]: true }))}
                       >
-                        {t('reject') || 'Reject'}
+                        {t('reject')}
                       </Button>
                     ) : (
                       <Box

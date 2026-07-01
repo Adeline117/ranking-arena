@@ -37,7 +37,7 @@ export function TraderStaleBanner({ show, t }: TraderStaleBannerProps) {
       }}
     >
       <Text size="xs" style={{ color: tokens.colors.accent.warning }}>
-        {t('dataOutdatedBanner') || 'Data may be outdated. Refresh to get the latest.'}
+        {t('dataOutdatedBanner')}
       </Text>
     </Box>
   )
@@ -70,8 +70,7 @@ export function TraderPlatformDeadBanner({ show, source, t }: TraderPlatformDead
       }}
     >
       <Text size="sm" style={{ color: tokens.colors.accent.error }}>
-        {t('platformDataUnavailable') ||
-          `Data for ${exchangeName} is temporarily unavailable. Historical data shown below may be outdated.`}
+        {t('platformDataUnavailable')}
       </Text>
     </Box>
   )

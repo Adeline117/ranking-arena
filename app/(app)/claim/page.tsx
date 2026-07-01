@@ -155,7 +155,7 @@ export default function ClaimPage() {
                       color: tokens.colors.text.primary,
                     }}
                   >
-                    {t('linkAdditionalAccount') || 'Link Additional Account'}
+                    {t('linkAdditionalAccount')}
                   </Text>
                   <Text
                     style={{
@@ -164,8 +164,7 @@ export default function ClaimPage() {
                       marginTop: tokens.spacing[1],
                     }}
                   >
-                    {t('linkAdditionalAccountDesc') ||
-                      'Search for another trader account to link to your profile.'}
+                    {t('linkAdditionalAccountDesc')}
                   </Text>
                 </Box>
               </>

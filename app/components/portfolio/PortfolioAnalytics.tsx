@@ -90,28 +90,28 @@ export default function PortfolioAnalytics({ positions, snapshots }: PortfolioAn
         }}
       >
         <StatCard
-          label={t('winRate') || 'Win Rate'}
+          label={t('winRate')}
           value={`${stats.winRate.toFixed(1)}%`}
           color={stats.winRate >= 50 ? tokens.colors.accent.success : tokens.colors.accent.error}
         />
         <StatCard
-          label={t('portfolioPositionCount') || 'Positions'}
+          label={t('portfolioPositionCount')}
           value={String(stats.total)}
           sublabel={`${stats.totalLongs}L / ${stats.totalShorts}S`}
         />
         <StatCard
-          label={t('avgLeverage') || 'Avg Leverage'}
+          label={t('avgLeverage')}
           value={`${stats.avgLeverage.toFixed(1)}x`}
           color={stats.avgLeverage > 10 ? tokens.colors.accent.error : tokens.colors.text.primary}
         />
         <StatCard
-          label={t('bestPosition') || 'Best'}
+          label={t('bestPosition')}
           value={formatPnl(stats.bestPosition.pnl)}
           sublabel={stats.bestPosition.symbol}
           color={pnlColor(stats.bestPosition.pnl)}
         />
         <StatCard
-          label={t('worstPosition') || 'Worst'}
+          label={t('worstPosition')}
           value={formatPnl(stats.worstPosition.pnl)}
           sublabel={stats.worstPosition.symbol}
           color={pnlColor(stats.worstPosition.pnl)}
@@ -134,7 +134,7 @@ export default function PortfolioAnalytics({ positions, snapshots }: PortfolioAn
             marginBottom: 10,
           }}
         >
-          {t('positionDistribution') || 'Position Distribution'}
+          {t('positionDistribution')}
         </div>
         <div
           style={{
@@ -197,7 +197,7 @@ export default function PortfolioAnalytics({ positions, snapshots }: PortfolioAn
               marginBottom: 10,
             }}
           >
-            {t('byExchange') || 'By Exchange'}
+            {t('byExchange')}
           </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {stats.byExchange.map(([exchange, data]) => (
@@ -222,7 +222,7 @@ export default function PortfolioAnalytics({ positions, snapshots }: PortfolioAn
                       color: tokens.colors.text.tertiary,
                     }}
                   >
-                    {data.count} {t('positions') || 'pos'}
+                    {data.count} {t('positions')}
                   </span>
                   <span
                     style={{
@@ -264,7 +264,7 @@ export default function PortfolioAnalytics({ positions, snapshots }: PortfolioAn
                 color: tokens.colors.text.secondary,
               }}
             >
-              {t('equityCurve') || 'Equity Curve'}
+              {t('equityCurve')}
             </span>
             <span
               style={{
@@ -272,7 +272,7 @@ export default function PortfolioAnalytics({ positions, snapshots }: PortfolioAn
                 color: tokens.colors.text.tertiary,
               }}
             >
-              {snapshots.length} {t('dataPoints') || 'data points'}
+              {snapshots.length} {t('dataPoints')}
             </span>
           </div>
           <EquityCurve snapshots={snapshots} />
