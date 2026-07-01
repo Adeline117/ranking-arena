@@ -37,7 +37,7 @@ export function LinkedAccountsSidebar({
           color: tokens.colors.text.primary,
         }}
       >
-        {t('linkedAccounts') || 'Linked Accounts'} ({linkedTraders.length})
+        {t('linkedAccounts')} ({linkedTraders.length})
       </Text>
       {linkedTraders.map((lt) => (
         <Box

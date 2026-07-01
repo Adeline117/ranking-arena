@@ -50,7 +50,7 @@ export default function MobileSearchOverlay({ open, onClose }: MobileSearchOverl
     <Box
       role="dialog"
       aria-modal="true"
-      aria-label={t('search') || 'Search'}
+      aria-label={t('search')}
       style={{
         position: 'fixed',
         top: 0,

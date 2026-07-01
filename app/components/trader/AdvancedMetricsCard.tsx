@@ -157,7 +157,7 @@ export default function AdvancedMetricsCard({
           <path d="M18.7 8l-5.1 5.2-2.8-2.7L7 14.3" />
         </svg>
         <Text size="md" weight="bold" style={{ color: tokens.colors.text.primary }}>
-          {t('advancedMetrics') || 'Advanced Metrics'}
+          {t('advancedMetrics')}
         </Text>
       </Box>
 
@@ -173,13 +173,10 @@ export default function AdvancedMetricsCard({
       >
         {/* Sortino Ratio */}
         <MetricCard
-          label={t('sortinoRatio') || 'Sortino'}
+          label={t('sortinoRatio')}
           value={formatRatio(metrics.sortino_ratio)}
           color={getRatioColor(metrics.sortino_ratio, { good: 1, excellent: 2 })}
-          tooltip={
-            t('sortinoTooltip') ||
-            'Risk-adjusted return using only downside volatility. Higher is better.'
-          }
+          tooltip={t('sortinoTooltip')}
           icon={
             <svg
               width="14"
@@ -196,12 +193,10 @@ export default function AdvancedMetricsCard({
 
         {/* Calmar Ratio */}
         <MetricCard
-          label={t('calmarRatio') || 'Calmar'}
+          label={t('calmarRatio')}
           value={formatRatio(metrics.calmar_ratio)}
           color={getRatioColor(metrics.calmar_ratio, { good: 1, excellent: 3 })}
-          tooltip={
-            t('calmarTooltip') || 'Annualized return divided by max drawdown. Higher is better.'
-          }
+          tooltip={t('calmarTooltip')}
           icon={
             <svg
               width="14"
@@ -219,13 +214,10 @@ export default function AdvancedMetricsCard({
 
         {/* Profit Factor */}
         <MetricCard
-          label={t('profitFactor') || 'Profit Factor'}
+          label={t('profitFactor')}
           value={formatRatio(metrics.profit_factor)}
           color={getRatioColor(metrics.profit_factor, { good: 1.5, excellent: 2 })}
-          tooltip={
-            t('profitFactorTooltip') ||
-            'Gross profit / gross loss. Above 1.5 is good, above 2 is excellent.'
-          }
+          tooltip={t('profitFactorTooltip')}
           icon={
             <svg
               width="14"
@@ -243,13 +235,10 @@ export default function AdvancedMetricsCard({
 
         {/* Recovery Factor */}
         <MetricCard
-          label={t('recoveryFactor') || 'Recovery'}
+          label={t('recoveryFactor')}
           value={formatRatio(metrics.recovery_factor)}
           color={getRatioColor(metrics.recovery_factor, { good: 1, excellent: 2 })}
-          tooltip={
-            t('recoveryFactorTooltip') ||
-            'Net profit / max drawdown. Shows ability to recover from losses.'
-          }
+          tooltip={t('recoveryFactorTooltip')}
           icon={
             <svg
               width="14"
@@ -268,7 +257,7 @@ export default function AdvancedMetricsCard({
         {/* Risk/Reward Ratio */}
         {avgProfit != null && avgLoss != null && Math.abs(avgLoss) > 0 && (
           <MetricCard
-            label={t('riskReward') || 'Risk/Reward'}
+            label={t('riskReward')}
             value={`1:${(avgProfit / Math.abs(avgLoss)).toFixed(1)}`}
             color={
               avgProfit / Math.abs(avgLoss) >= 1.5
@@ -277,9 +266,7 @@ export default function AdvancedMetricsCard({
                   ? tokens.colors.accent.warning
                   : tokens.colors.accent.error
             }
-            tooltip={
-              t('riskRewardTooltip') || 'Average win / average loss ratio. Above 1.5 is good.'
-            }
+            tooltip={t('riskRewardTooltip')}
             icon={
               <svg
                 width="14"
@@ -310,8 +297,7 @@ export default function AdvancedMetricsCard({
           }}
         >
           <Text size="xs" style={{ color: tokens.colors.text.tertiary, lineHeight: 1.5 }}>
-            {t('metricsInsufficientData') ||
-              'Insufficient trading history to compute these metrics. They will populate as more data becomes available.'}
+            {t('metricsInsufficientData')}
           </Text>
         </Box>
       )}
@@ -329,7 +315,7 @@ export default function AdvancedMetricsCard({
       >
         {/* Consecutive Wins */}
         <SecondaryBadge
-          label={t('maxConsecWins') || 'Max Wins'}
+          label={t('maxConsecWins')}
           value={metrics.max_consecutive_wins?.toString() ?? '—'}
           icon={
             <svg
@@ -348,7 +334,7 @@ export default function AdvancedMetricsCard({
 
         {/* Consecutive Losses */}
         <SecondaryBadge
-          label={t('maxConsecLosses') || 'Max Losses'}
+          label={t('maxConsecLosses')}
           value={metrics.max_consecutive_losses?.toString() ?? '—'}
           icon={
             <svg
@@ -368,7 +354,7 @@ export default function AdvancedMetricsCard({
 
         {/* Average Holding Time */}
         <SecondaryBadge
-          label={t('avgHolding') || 'Avg Hold'}
+          label={t('avgHolding')}
           value={formatHours(metrics.avg_holding_hours)}
           icon={
             <svg
@@ -387,7 +373,7 @@ export default function AdvancedMetricsCard({
 
         {/* Volatility */}
         <SecondaryBadge
-          label={t('volatility') || 'Volatility'}
+          label={t('volatility')}
           value={metrics.volatility_pct !== null ? `${metrics.volatility_pct.toFixed(1)}%` : '—'}
           icon={
             <svg
@@ -407,7 +393,7 @@ export default function AdvancedMetricsCard({
 
         {/* Downside Volatility */}
         <SecondaryBadge
-          label={t('downsideVol') || 'Downside Vol'}
+          label={t('downsideVol')}
           value={
             metrics.downside_volatility_pct !== null
               ? `${metrics.downside_volatility_pct.toFixed(1)}%`
@@ -464,7 +450,7 @@ export default function AdvancedMetricsCard({
                   marginBottom: 4,
                 }}
               >
-                {t('largestWin') || 'Largest Win'}
+                {t('largestWin')}
               </Text>
               <Text
                 style={{
@@ -502,7 +488,7 @@ export default function AdvancedMetricsCard({
                   marginBottom: 4,
                 }}
               >
-                {t('largestLoss') || 'Largest Loss'}
+                {t('largestLoss')}
               </Text>
               <Text
                 style={{

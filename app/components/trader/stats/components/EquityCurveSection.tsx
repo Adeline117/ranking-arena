@@ -221,7 +221,7 @@ export function EquityCurveSection({
                 URL.revokeObjectURL(link.href)
               }
             }}
-            aria-label={t('exportChart') || 'Export chart'}
+            aria-label={t('exportChart')}
             style={{
               background: 'none',
               border: `1px solid ${tokens.colors.border.primary}`,

@@ -48,7 +48,9 @@ export default function ChatSearchOverlay({
   // Escape key to close (global listener)
   useEffect(() => {
     if (!isOpen) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
   }, [isOpen, onClose])
@@ -71,39 +73,42 @@ export default function ChatSearchOverlay({
     }
   }, [])
 
-  const doSearch = useCallback(async (searchQuery: string, cursor?: string) => {
-    if (!searchQuery.trim()) {
-      setMatches([])
-      setHasSearched(false)
-      return
-    }
-
-    setLoading(true)
-    try {
-      let url = `/api/chat/${conversationId}/search?q=${encodeURIComponent(searchQuery.trim())}&limit=20`
-      if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`
-
-      const res = await fetch(url, {
-        headers: { 'Authorization': `Bearer ${accessToken}` },
-      })
-
-      if (res.ok) {
-        const data = await res.json()
-        if (cursor) {
-          setMatches(prev => [...prev, ...data.matches])
-        } else {
-          setMatches(data.matches)
-          setCurrentIndex(0)
-        }
-        setNextCursor(data.next_cursor)
+  const doSearch = useCallback(
+    async (searchQuery: string, cursor?: string) => {
+      if (!searchQuery.trim()) {
+        setMatches([])
+        setHasSearched(false)
+        return
       }
-    } catch (error) {
-      logger.error('Search failed:', error)
-    } finally {
-      setLoading(false)
-      setHasSearched(true)
-    }
-  }, [conversationId, accessToken])
+
+      setLoading(true)
+      try {
+        let url = `/api/chat/${conversationId}/search?q=${encodeURIComponent(searchQuery.trim())}&limit=20`
+        if (cursor) url += `&cursor=${encodeURIComponent(cursor)}`
+
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          if (cursor) {
+            setMatches((prev) => [...prev, ...data.matches])
+          } else {
+            setMatches(data.matches)
+            setCurrentIndex(0)
+          }
+          setNextCursor(data.next_cursor)
+        }
+      } catch (error) {
+        logger.error('Search failed:', error)
+      } finally {
+        setLoading(false)
+        setHasSearched(true)
+      }
+    },
+    [conversationId, accessToken]
+  )
 
   const handleInputChange = (value: string) => {
     setQuery(value)
@@ -155,7 +160,12 @@ export default function ChatSearchOverlay({
       return date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
     }
     const locale = getLocaleFromLanguage(language)
-    return date.toLocaleDateString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    return date.toLocaleDateString(locale, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+    })
   }
 
   // Highlight matched text in snippet
@@ -165,7 +175,10 @@ export default function ChatSearchOverlay({
     const parts = snippet.split(regex)
     return parts.map((part, i) =>
       regex.test(part) ? (
-        <span key={i} style={{ background: 'var(--color-highlight-bg)', borderRadius: 2, padding: '0 1px' }}>
+        <span
+          key={i}
+          style={{ background: 'var(--color-highlight-bg)', borderRadius: 2, padding: '0 1px' }}
+        >
           {part}
         </span>
       ) : (
@@ -205,7 +218,7 @@ export default function ChatSearchOverlay({
       >
         <button
           onClick={onClose}
-            aria-label="Close search"
+          aria-label="Close search"
           style={{
             width: 36,
             height: 36,
@@ -220,7 +233,16 @@ export default function ChatSearchOverlay({
             flexShrink: 0,
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <svg
+            width="20"
+            height="20"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
             <path d="M19 12H5M12 19l-7-7 7-7" />
           </svg>
         </button>
@@ -237,7 +259,14 @@ export default function ChatSearchOverlay({
             border: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={tokens.colors.text.tertiary} strokeWidth="2">
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={tokens.colors.text.tertiary}
+            strokeWidth="2"
+          >
             <circle cx="11" cy="11" r="8" />
             <line x1="21" y1="21" x2="16.65" y2="16.65" />
           </svg>
@@ -260,7 +289,11 @@ export default function ChatSearchOverlay({
           />
           {query && (
             <button
-              onClick={() => { setQuery(''); setMatches([]); setHasSearched(false) }}
+              onClick={() => {
+                setQuery('')
+                setMatches([])
+                setHasSearched(false)
+              }}
               style={{
                 border: 'none',
                 background: 'transparent',
@@ -270,7 +303,14 @@ export default function ChatSearchOverlay({
                 display: 'flex',
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
                 <line x1="18" y1="6" x2="6" y2="18" />
                 <line x1="6" y1="6" x2="18" y2="18" />
               </svg>
@@ -285,7 +325,7 @@ export default function ChatSearchOverlay({
               {currentIndex + 1}/{matches.length}
             </Text>
             <button
-              aria-label={t('previousResult') || 'Previous result'}
+              aria-label={t('previousResult')}
               onClick={goToPrev}
               disabled={currentIndex === 0}
               style={{
@@ -294,7 +334,8 @@ export default function ChatSearchOverlay({
                 borderRadius: tokens.radius.sm,
                 border: 'none',
                 background: 'transparent',
-                color: currentIndex === 0 ? tokens.colors.text.tertiary : tokens.colors.text.primary,
+                color:
+                  currentIndex === 0 ? tokens.colors.text.tertiary : tokens.colors.text.primary,
                 cursor: currentIndex === 0 ? 'default' : 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -302,12 +343,20 @@ export default function ChatSearchOverlay({
                 opacity: currentIndex === 0 ? 0.4 : 1,
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
                 <path d="M18 15l-6-6-6 6" />
               </svg>
             </button>
             <button
-              aria-label={t('nextResult') || 'Next result'}
+              aria-label={t('nextResult')}
               onClick={goToNext}
               disabled={isAtEnd}
               style={{
@@ -324,7 +373,15 @@ export default function ChatSearchOverlay({
                 opacity: isAtEnd ? 0.4 : 1,
               }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+              <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                aria-hidden="true"
+              >
                 <path d="M6 9l6 6 6-6" />
               </svg>
             </button>
@@ -336,19 +393,25 @@ export default function ChatSearchOverlay({
       <Box style={{ flex: 1, overflow: 'auto', padding: tokens.spacing[2] }}>
         {loading && matches.length === 0 && (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary">{t('searching')}</Text>
+            <Text size="sm" color="tertiary">
+              {t('searching')}
+            </Text>
           </Box>
         )}
 
         {!loading && hasSearched && matches.length === 0 && (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary">{t('noMessagesFound')}</Text>
+            <Text size="sm" color="tertiary">
+              {t('noMessagesFound')}
+            </Text>
           </Box>
         )}
 
         {!hasSearched && !loading && (
           <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
-            <Text size="sm" color="tertiary">{t('enterKeywordToSearch')}</Text>
+            <Text size="sm" color="tertiary">
+              {t('enterKeywordToSearch')}
+            </Text>
           </Box>
         )}
 
@@ -368,16 +431,27 @@ export default function ChatSearchOverlay({
               cursor: 'pointer',
               textAlign: 'left',
               transition: 'background 0.15s',
-              borderLeft: index === currentIndex ? `3px solid ${tokens.colors.accent.brandHover}` : '3px solid transparent',
+              borderLeft:
+                index === currentIndex
+                  ? `3px solid ${tokens.colors.accent.brandHover}`
+                  : '3px solid transparent',
             }}
             onMouseEnter={(e) => {
-              if (index !== currentIndex) e.currentTarget.style.background = tokens.colors.bg.secondary
+              if (index !== currentIndex)
+                e.currentTarget.style.background = tokens.colors.bg.secondary
             }}
             onMouseLeave={(e) => {
               if (index !== currentIndex) e.currentTarget.style.background = 'transparent'
             }}
           >
-            <Text size="sm" style={{ lineHeight: 1.5, color: tokens.colors.text.primary, wordBreak: 'break-word' }}>
+            <Text
+              size="sm"
+              style={{
+                lineHeight: 1.5,
+                color: tokens.colors.text.primary,
+                wordBreak: 'break-word',
+              }}
+            >
               {highlightSnippet(match.snippet)}
             </Text>
             <Text size="xs" color="tertiary">
@@ -388,7 +462,9 @@ export default function ChatSearchOverlay({
 
         {loading && matches.length > 0 && (
           <Box style={{ padding: tokens.spacing[3], textAlign: 'center' }}>
-            <Text size="xs" color="tertiary">{t('loadingMore')}</Text>
+            <Text size="xs" color="tertiary">
+              {t('loadingMore')}
+            </Text>
           </Box>
         )}
       </Box>

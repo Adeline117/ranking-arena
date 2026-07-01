@@ -121,11 +121,9 @@ export default function ClaimTraderButton({
       return
     }
 
-    const confirmTitle = hasVerifiedAccounts
-      ? t('confirmLink') || 'Link Account'
-      : t('confirmClaim')
+    const confirmTitle = hasVerifiedAccounts ? t('confirmLink') : t('confirmClaim')
     const confirmDesc = hasVerifiedAccounts
-      ? (t('confirmLinkDesc') || `Link ${handle} to your profile?`).replace('{handle}', handle)
+      ? t('confirmLinkDesc').replace('{handle}', handle)
       : `${t('confirmClaimDesc').replace('{handle}', handle)}\n${t('verifyOwnership')}`
 
     const confirmed = await showConfirm(confirmTitle, confirmDesc)
@@ -163,9 +161,7 @@ export default function ClaimTraderButton({
   }
 
   // If user already has verified accounts, show "Link to Profile" instead of "Claim"
-  const buttonLabel = hasVerifiedAccounts
-    ? t('linkToProfile') || 'Link to Profile'
-    : t('claimTrader')
+  const buttonLabel = hasVerifiedAccounts ? t('linkToProfile') : t('claimTrader')
 
   return (
     <Button variant="primary" size="sm" onClick={handleClaim} disabled={loading}>

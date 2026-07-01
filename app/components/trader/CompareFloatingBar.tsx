@@ -77,7 +77,7 @@ function CompareFloatingBar() {
                   color: tokens.colors.text.primary,
                 }}
               >
-                {t('compare') || 'Compare'}
+                {t('compare')}
               </span>
               <span
                 style={{
@@ -220,7 +220,7 @@ function CompareFloatingBar() {
                 cursor: 'pointer',
               }}
             >
-              {t('clearAll') || 'Clear'}
+              {t('clearAll')}
             </button>
 
             <Link
@@ -245,7 +245,7 @@ function CompareFloatingBar() {
               }}
             >
               <BarChart3 size={14} />
-              {t('viewComparison') || 'View Comparison'}
+              {t('viewComparison')}
             </Link>
           </div>
         </>

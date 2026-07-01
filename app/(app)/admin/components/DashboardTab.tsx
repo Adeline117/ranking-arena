@@ -30,9 +30,13 @@ function exportStatsAsCSV(stats: AdminStats) {
     ['Traders', 'Snapshots (24h)', stats.traders.snapshots24h],
     ['Library', 'Total Items', stats.library.total],
     ['Library', 'With PDF', stats.library.withPdf],
-    ...Object.entries(stats.traders.byPlatform).map(([platform, count]) => ['Traders', `Platform: ${platform}`, count]),
+    ...Object.entries(stats.traders.byPlatform).map(([platform, count]) => [
+      'Traders',
+      `Platform: ${platform}`,
+      count,
+    ]),
   ]
-  const csv = rows.map(r => r.map(v => `"${v}"`).join(',')).join('\n')
+  const csv = rows.map((r) => r.map((v) => `"${v}"`).join(',')).join('\n')
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
   const url = URL.createObjectURL(blob)
   const a = document.createElement('a')
@@ -100,10 +104,17 @@ export default function DashboardTab({ accessToken }: DashboardTabProps) {
 
   return (
     <Card title={t('adminDataDashboard')}>
-      <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', justifyContent: 'flex-end', gap: tokens.spacing[2] }}>
+      <Box
+        style={{
+          marginBottom: tokens.spacing[4],
+          display: 'flex',
+          justifyContent: 'flex-end',
+          gap: tokens.spacing[2],
+        }}
+      >
         {stats && (
           <Button variant="secondary" size="sm" onClick={() => exportStatsAsCSV(stats)}>
-            {t('adminExportCSV') || 'Export CSV'}
+            {t('adminExportCSV')}
           </Button>
         )}
         <Button variant="secondary" size="sm" onClick={loadStats} disabled={loading}>
@@ -163,7 +174,10 @@ export default function DashboardTab({ accessToken }: DashboardTabProps) {
                 subtitle={getChangeText(stats.posts.newToday, stats.posts.newYesterday)}
                 color={stats.posts.newToday > 0 ? tokens.colors.accent.success : undefined}
               />
-              <StatCard title={t('adminTotalComments')} value={stats.comments.total.toLocaleString()} />
+              <StatCard
+                title={t('adminTotalComments')}
+                value={stats.comments.total.toLocaleString()}
+              />
               <StatCard
                 title={t('adminNewCommentsToday')}
                 value={stats.comments.newToday}
@@ -187,14 +201,20 @@ export default function DashboardTab({ accessToken }: DashboardTabProps) {
               <StatCard
                 title={t('adminPendingReports')}
                 value={stats.reports.pending}
-                color={stats.reports.pending > 0 ? tokens.colors.accent.warning : tokens.colors.accent.success}
+                color={
+                  stats.reports.pending > 0
+                    ? tokens.colors.accent.warning
+                    : tokens.colors.accent.success
+                }
               />
               <StatCard title={t('adminReportsThisWeek')} value={stats.reports.thisWeek} />
               <StatCard title={t('adminTotalGroups')} value={stats.groups.total} />
               <StatCard
                 title={t('adminPendingGroupApps')}
                 value={stats.groups.pendingApplications}
-                color={stats.groups.pendingApplications > 0 ? tokens.colors.accent.warning : undefined}
+                color={
+                  stats.groups.pendingApplications > 0 ? tokens.colors.accent.warning : undefined
+                }
               />
             </Box>
           </Box>
@@ -219,12 +239,20 @@ export default function DashboardTab({ accessToken }: DashboardTabProps) {
               <StatCard
                 title={t('adminScraperStale')}
                 value={stats.scraperHealth.stale}
-                color={stats.scraperHealth.stale > 0 ? tokens.colors.accent.warning : tokens.colors.accent.success}
+                color={
+                  stats.scraperHealth.stale > 0
+                    ? tokens.colors.accent.warning
+                    : tokens.colors.accent.success
+                }
               />
               <StatCard
                 title={t('adminScraperCritical')}
                 value={stats.scraperHealth.critical}
-                color={stats.scraperHealth.critical > 0 ? tokens.colors.accent.error : tokens.colors.accent.success}
+                color={
+                  stats.scraperHealth.critical > 0
+                    ? tokens.colors.accent.error
+                    : tokens.colors.accent.success
+                }
               />
             </Box>
           </Box>
@@ -232,7 +260,7 @@ export default function DashboardTab({ accessToken }: DashboardTabProps) {
           {/* Trader Stats */}
           <Box>
             <Text size="md" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-              {t('adminTraderStats') || 'Trader Data'}
+              {t('adminTraderStats')}
             </Text>
             <Box
               style={{
@@ -241,20 +269,30 @@ export default function DashboardTab({ accessToken }: DashboardTabProps) {
                 gap: tokens.spacing[3],
               }}
             >
-              <StatCard title={t('adminTotalTraders') || 'Total Traders'} value={stats.traders.total.toLocaleString()} />
               <StatCard
-                title={t('adminSnapshots24h') || 'Snapshots (24h)'}
-                value={stats.traders.snapshots24h.toLocaleString()}
-                color={stats.traders.snapshots24h > 0 ? tokens.colors.accent.success : tokens.colors.accent.warning}
+                title={t('adminTotalTraders')}
+                value={stats.traders.total.toLocaleString()}
               />
-              <StatCard title={t('adminPlatformCount') || 'Platforms'} value={Object.keys(stats.traders.byPlatform).length} />
+              <StatCard
+                title={t('adminSnapshots24h')}
+                value={stats.traders.snapshots24h.toLocaleString()}
+                color={
+                  stats.traders.snapshots24h > 0
+                    ? tokens.colors.accent.success
+                    : tokens.colors.accent.warning
+                }
+              />
+              <StatCard
+                title={t('adminPlatformCount')}
+                value={Object.keys(stats.traders.byPlatform).length}
+              />
             </Box>
           </Box>
 
           {/* Library Stats */}
           <Box>
             <Text size="md" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-              {t('adminLibraryStats') || 'Library'}
+              {t('adminLibraryStats')}
             </Text>
             <Box
               style={{
@@ -263,8 +301,14 @@ export default function DashboardTab({ accessToken }: DashboardTabProps) {
                 gap: tokens.spacing[3],
               }}
             >
-              <StatCard title={t('adminLibraryTotal') || 'Total Items'} value={stats.library.total.toLocaleString()} />
-              <StatCard title={t('adminLibraryWithPdf') || 'With PDF'} value={stats.library.withPdf.toLocaleString()} />
+              <StatCard
+                title={t('adminLibraryTotal')}
+                value={stats.library.total.toLocaleString()}
+              />
+              <StatCard
+                title={t('adminLibraryWithPdf')}
+                value={stats.library.withPdf.toLocaleString()}
+              />
             </Box>
           </Box>
         </Box>

@@ -255,7 +255,7 @@ const OverviewTab = React.memo(function OverviewTab({
                 weight="bold"
                 style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}
               >
-                {t('drawdownChart') || 'Drawdown'} ({selectedPeriod})
+                {t('drawdownChart')} ({selectedPeriod})
               </Text>
               <SectionErrorBoundary>
                 <DrawdownChart equityCurve={curve} />
@@ -307,7 +307,7 @@ const OverviewTab = React.memo(function OverviewTab({
                 weight="bold"
                 style={{ color: 'var(--color-text-secondary)', marginBottom: tokens.spacing[3] }}
               >
-                {t('dailyReturnsDistribution') || 'Daily Returns Distribution'} ({selectedPeriod})
+                {t('dailyReturnsDistribution')} ({selectedPeriod})
               </Text>
               <SectionErrorBoundary>
                 <DailyReturnsChart data={dailyReturns} />

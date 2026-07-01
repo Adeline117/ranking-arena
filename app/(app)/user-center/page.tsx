@@ -277,7 +277,7 @@ function UserCenterPage() {
           paddingRight: tokens.spacing[6],
         }}
       >
-        <Breadcrumb items={[{ label: t('userCenter') || 'User Center' }]} />
+        <Breadcrumb items={[{ label: t('userCenter') }]} />
       </Box>
 
       <Box
@@ -405,7 +405,7 @@ function UserCenterPage() {
         {/* Tab Navigation */}
         <Box
           role="tablist"
-          aria-label={t('userCenter') || 'User Center'}
+          aria-label={t('userCenter')}
           style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[5] }}
         >
           {tabs.map((tab) => (

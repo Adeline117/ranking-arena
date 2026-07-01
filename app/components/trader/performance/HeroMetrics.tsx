@@ -130,10 +130,7 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
           }}
         >
           {t('pnl')}
-          <InfoTooltip
-            text={t('pnlTooltip') || 'Profit & Loss: Total dollar amount gained or lost.'}
-            size={11}
-          />
+          <InfoTooltip text={t('pnlTooltip')} size={11} />
         </Text>
         {/* Secondary supporting figure — demoted below the ROI hero. */}
         <Metric

@@ -225,7 +225,7 @@ export default function WatchlistMarket() {
               cursor: 'pointer',
             }}
           >
-            {t('retry') || 'Retry'}
+            {t('retry')}
           </button>
         </div>
       ) : coins.length === 0 ? (
@@ -252,7 +252,7 @@ export default function WatchlistMarket() {
               cursor: 'pointer',
             }}
           >
-            {t('retry') || 'Retry'}
+            {t('retry')}
           </button>
         </div>
       ) : (

@@ -206,7 +206,7 @@ export default function UserFollowButton({
         error instanceof TypeError && (error as TypeError).message.includes('fetch')
       showToast(
         isNetworkError
-          ? `${t('operationFailedRetry')} — ${t('tapToRetry') || 'Tap to retry'}`
+          ? `${t('operationFailedRetry')} — ${t('tapToRetry')}`
           : t('operationFailedRetry'),
         'error'
       )

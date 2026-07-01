@@ -201,10 +201,7 @@ export default function TraderFollowButton({
         } else {
           // #22: Show retry hint on network error (max 2 auto-retries)
           const isNetworkError = error instanceof TypeError && error.message.includes('fetch')
-          showToast(
-            isNetworkError ? `${errorMsg} — ${t('tapToRetry') || 'Tap to retry'}` : errorMsg,
-            'error'
-          )
+          showToast(isNetworkError ? `${errorMsg} — ${t('tapToRetry')}` : errorMsg, 'error')
           if (isNetworkError && retryCountRef.current < 2) {
             retryCountRef.current++
             setTimeout(() => executeFollow(failedAction), 2000)
@@ -213,7 +210,6 @@ export default function TraderFollowButton({
       } finally {
         setIsLoading(false)
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded to avoid re-creating callback on language change; translations are read at call time
     },
     [traderId, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange]
   )

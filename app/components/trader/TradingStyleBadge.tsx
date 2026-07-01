@@ -296,7 +296,7 @@ export function TradingStyleCard({
         }}
       >
         <Text size="sm" color="tertiary">
-          {t('styleNotClassified') || 'Trading style not yet classified'}
+          {t('styleNotClassified')}
         </Text>
       </Box>
     )
@@ -334,7 +334,7 @@ export function TradingStyleCard({
             </Text>
             {confidence !== null && (
               <Text size="xs" color="tertiary">
-                {t('confidence') || 'Confidence'}: {confidence}%
+                {t('confidence')}: {confidence}%
               </Text>
             )}
           </Box>
@@ -349,7 +349,7 @@ export function TradingStyleCard({
       {assetPreference && assetPreference.length > 0 && (
         <Box>
           <Text size="xs" color="tertiary" weight="bold" style={{ marginBottom: 6 }}>
-            {t('preferredAssets') || 'Preferred Assets'}
+            {t('preferredAssets')}
           </Text>
           <Box style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {assetPreference.slice(0, 5).map((asset) => (

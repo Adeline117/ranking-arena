@@ -103,7 +103,7 @@ function ExportRankingButton({ traders, source, timeRange }: ExportRankingButton
     const { exportToCSV, exportToJSON } = await import('@/lib/utils/export')
     if (format === 'json') exportToJSON(rows, filename)
     else exportToCSV(rows as unknown as Record<string, unknown>[], filename)
-    showToast(t('exportStarted') || `Exported Top ${count} (${format.toUpperCase()})`, 'success')
+    showToast(t('exportStarted'), 'success')
   }
 
   const counts = [10, 50, 100].filter((n) => n <= traders.length || n === 10)
@@ -903,7 +903,7 @@ export function RankingFilters({
                 cursor: 'pointer',
               }}
             >
-              {t('clearAll') || 'Clear All'}
+              {t('clearAll')}
             </button>
           )}
         </div>

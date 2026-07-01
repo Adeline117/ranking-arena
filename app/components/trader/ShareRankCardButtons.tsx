@@ -127,7 +127,7 @@ export default function ShareRankCardButtons({
       showToast(t('linkCopied'), 'success')
       setTimeout(() => setCopied(false), 2500)
     } catch {
-      showToast(t('copyFailed') || 'Failed to copy', 'error')
+      showToast(t('copyFailed'), 'error')
     }
   }, [buildShareUrl, showToast, t])
 
@@ -179,7 +179,7 @@ export default function ShareRankCardButtons({
     <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
       <button
         onClick={copyLink}
-        title={t('copyShareLink') || 'Copy share link'}
+        title={t('copyShareLink')}
         style={{
           ...btnBase,
           color: copied ? tokens.colors.accent.success : tokens.colors.text.secondary,
@@ -189,19 +189,17 @@ export default function ShareRankCardButtons({
         }}
       >
         {copied ? <CheckIconSmall /> : <CopyIcon />}
-        <span className="hide-below-sm">
-          {copied ? t('copied') || 'Copied!' : t('copyShareLink') || 'Copy Link'}
-        </span>
+        <span className="hide-below-sm">{copied ? t('copied') : t('copyShareLink')}</span>
       </button>
 
-      <button onClick={shareOnX} title={t('shareOnX') || 'Share on X'} style={btnBase}>
+      <button onClick={shareOnX} title={t('shareOnX')} style={btnBase}>
         <XIcon />
-        <span className="hide-below-sm">{t('shareOnX') || 'Share on X'}</span>
+        <span className="hide-below-sm">{t('shareOnX')}</span>
       </button>
 
       <button
         onClick={() => window.print()}
-        title={t('printOrPdf') || 'Print / Save as PDF'}
+        title={t('printOrPdf')}
         className="print-hide"
         style={btnBase}
       >
@@ -219,7 +217,7 @@ export default function ShareRankCardButtons({
           <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2" />
           <rect x="6" y="14" width="12" height="8" />
         </svg>
-        <span className="hide-below-sm">{t('printOrPdf') || 'Print / PDF'}</span>
+        <span className="hide-below-sm">{t('printOrPdf')}</span>
       </button>
     </div>
   )

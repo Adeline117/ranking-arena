@@ -480,7 +480,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         showToast(t('memberRemoved'), 'success')
       }
     } catch {
-      showToast(t('operationFailed') || 'Operation failed', 'error')
+      showToast(t('operationFailed'), 'error')
     }
   }
 
@@ -501,7 +501,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         router.push('/inbox')
       }
     } catch {
-      showToast(t('operationFailed') || 'Operation failed', 'error')
+      showToast(t('operationFailed'), 'error')
     }
   }
 
@@ -519,7 +519,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       })
       setMembers((prev) => prev.map((m) => (m.user_id === targetId ? { ...m, role: newRole } : m)))
     } catch {
-      showToast(t('operationFailed') || 'Operation failed', 'error')
+      showToast(t('operationFailed'), 'error')
     }
   }
 

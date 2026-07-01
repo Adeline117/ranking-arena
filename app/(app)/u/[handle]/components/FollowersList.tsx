@@ -51,7 +51,7 @@ export default function FollowersList({ profileId }: { profileId: string }) {
     return (
       <Box style={{ padding: tokens.spacing[6], textAlign: 'center' }}>
         <Text size="sm" color="tertiary">
-          {t('loading') || '...'}
+          {t('loading')}
         </Text>
       </Box>
     )
@@ -61,7 +61,7 @@ export default function FollowersList({ profileId }: { profileId: string }) {
     return (
       <Box bg="secondary" p={6} radius="lg" border="primary" style={{ textAlign: 'center' }}>
         <Text size="sm" color="tertiary">
-          {t('noFollowers') || 'No followers yet'}
+          {t('noFollowers')}
         </Text>
       </Box>
     )
@@ -70,7 +70,7 @@ export default function FollowersList({ profileId }: { profileId: string }) {
   return (
     <Box bg="secondary" p={4} radius="lg" border="primary">
       <Text size="lg" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-        {t('followers') || 'Followers'} ({followers.length})
+        {t('followers')} ({followers.length})
       </Text>
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
         {followers.map((f) => (

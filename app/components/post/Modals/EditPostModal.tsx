@@ -26,7 +26,7 @@ export function EditPostModal({
   t,
 }: EditPostModalProps) {
   return (
-    <ModalOverlay open onClose={onCancel} label={t('editPost') || 'Edit post'} maxWidth={500}>
+    <ModalOverlay open onClose={onCancel} label={t('editPost')} maxWidth={500}>
       <div style={{ padding: 24 }}>
         <h2
           style={{

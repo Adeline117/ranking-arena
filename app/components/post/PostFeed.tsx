@@ -694,9 +694,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             transition: 'all 0.15s ease',
           }}
         >
-          {newPostCount === 1
-            ? t('newPostAvailable') || '1 new post'
-            : `${newPostCount} ${t('newPostsAvailable') || 'new posts'}`}
+          {newPostCount === 1 ? t('newPostAvailable') : `${newPostCount} ${t('newPostsAvailable')}`}
         </button>
       )}
       {props.layout === 'masonry' && (

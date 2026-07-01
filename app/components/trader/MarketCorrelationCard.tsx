@@ -64,18 +64,14 @@ export default function MarketCorrelationCard({
     if (beta === null) return { text: '', color: tokens.colors.text.tertiary }
     if (beta > 1.5)
       return {
-        text: t('betaHighVolatile') || 'High volatility',
+        text: t('betaHighVolatile'),
         color: tokens.colors.accent.warning,
       }
-    if (beta > 1)
-      return { text: t('betaAboveMarket') || 'Above market', color: tokens.colors.accent.primary }
-    if (beta > 0.5)
-      return { text: t('betaModerate') || 'Moderate', color: tokens.colors.text.secondary }
-    if (beta > 0)
-      return { text: t('betaDefensive') || 'Defensive', color: tokens.colors.accent.success }
-    if (beta < 0)
-      return { text: t('betaInverse') || 'Inverse correlation', color: tokens.colors.accent.error }
-    return { text: t('betaNeutral') || 'Market neutral', color: tokens.colors.text.tertiary }
+    if (beta > 1) return { text: t('betaAboveMarket'), color: tokens.colors.accent.primary }
+    if (beta > 0.5) return { text: t('betaModerate'), color: tokens.colors.text.secondary }
+    if (beta > 0) return { text: t('betaDefensive'), color: tokens.colors.accent.success }
+    if (beta < 0) return { text: t('betaInverse'), color: tokens.colors.accent.error }
+    return { text: t('betaNeutral'), color: tokens.colors.text.tertiary }
   }
 
   const getAlphaColor = (alpha: number | null): string => {
@@ -129,11 +125,11 @@ export default function MarketCorrelationCard({
   const getConditionLabel = (condition: MarketCondition): string => {
     switch (condition) {
       case 'bull':
-        return t('bullMarket') || 'Bull Market'
+        return t('bullMarket')
       case 'bear':
-        return t('bearMarket') || 'Bear Market'
+        return t('bearMarket')
       case 'sideways':
-        return t('sidewaysMarket') || 'Sideways'
+        return t('sidewaysMarket')
     }
   }
 
@@ -204,7 +200,7 @@ export default function MarketCorrelationCard({
           <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
         </svg>
         <Text size="md" weight="bold" style={{ color: tokens.colors.text.primary }}>
-          {t('marketCorrelation') || 'Market Correlation'}
+          {t('marketCorrelation')}
         </Text>
       </Box>
 
@@ -356,9 +352,7 @@ export default function MarketCorrelationCard({
           </Text>
           {correlation.alpha !== null && (
             <Text size="xs" style={{ color: tokens.colors.text.tertiary, marginTop: 4 }}>
-              {correlation.alpha > 0
-                ? t('excessReturns') || 'Excess returns'
-                : t('underperforming') || 'Below benchmark'}
+              {correlation.alpha > 0 ? t('excessReturns') : t('underperforming')}
             </Text>
           )}
         </Box>
@@ -382,7 +376,7 @@ export default function MarketCorrelationCard({
               letterSpacing: '0.5px',
             }}
           >
-            {t('performanceByCondition') || 'Performance by Market Condition'}
+            {t('performanceByCondition')}
           </Text>
           <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
             {(['bull', 'bear', 'sideways'] as MarketCondition[]).map((condition) => {

@@ -67,65 +67,80 @@ export function MetricBadgesGrid({
         label={t('sharpe')}
         value={isValidRatio(sharpeRatio) ? sharpeRatio.toFixed(2) : '—'}
         highlight={isValidRatio(sharpeRatio) && sharpeRatio > 1}
-        tooltip={!isValidRatio(sharpeRatio) ? t('sharpeNotAvailable') : (t('sharpeTooltip') || 'Risk-adjusted return per unit of risk. > 1 good, > 2 excellent.')}
+        tooltip={!isValidRatio(sharpeRatio) ? t('sharpeNotAvailable') : t('sharpeTooltip')}
       />
       <MetricBadge
         label={t('maxDrawdownShort')}
-        value={maxDrawdown != null && Math.abs(maxDrawdown) <= 100 ? (Math.abs(maxDrawdown) < 0.05 ? '< -0.1%' : `-${Math.abs(maxDrawdown).toFixed(1)}%`) : '—'}
+        value={
+          maxDrawdown != null && Math.abs(maxDrawdown) <= 100
+            ? Math.abs(maxDrawdown) < 0.05
+              ? '< -0.1%'
+              : `-${Math.abs(maxDrawdown).toFixed(1)}%`
+            : '—'
+        }
         negative
-        tooltip={maxDrawdown == null || Math.abs(maxDrawdown) > 100 ? t('drawdownNotAvailable') : (t('mddTooltip') || 'Largest peak-to-trough decline. Lower = better risk control.')}
+        tooltip={
+          maxDrawdown == null || Math.abs(maxDrawdown) > 100
+            ? t('drawdownNotAvailable')
+            : t('mddTooltip')
+        }
       />
       <MetricBadge
         label={t('winRateShort')}
         value={winRate != null ? `${winRate.toFixed(1)}%` : '—'}
         highlight={winRate != null && winRate > 60}
-        tooltip={winRate == null ? t('winRateNotAvailable') : (t('winRateTooltip') || 'Percentage of profitable trades. Higher = more consistent.')}
+        tooltip={winRate == null ? t('winRateNotAvailable') : t('winRateTooltip')}
       />
       <MetricBadge
         label={t('winningPositions')}
-        value={winningPositions != null && totalPositions != null && totalPositions > 0
-          ? `${winningPositions} / ${totalPositions}`
-          : '—'}
-        tooltip={winningPositions == null
-          ? t('positionStatsNotAvailable')
-          : `${winningPositions} winning out of ${totalPositions} total positions`}
+        value={
+          winningPositions != null && totalPositions != null && totalPositions > 0
+            ? `${winningPositions} / ${totalPositions}`
+            : '—'
+        }
+        tooltip={
+          winningPositions == null
+            ? t('positionStatsNotAvailable')
+            : `${winningPositions} winning out of ${totalPositions} total positions`
+        }
       />
       <MetricBadge
-        label={t('sortino') || 'Sortino'}
+        label={t('sortino')}
         value={isValidRatio(sortinoRatio) ? sortinoRatio.toFixed(2) : '—'}
         highlight={isValidRatio(sortinoRatio) && sortinoRatio >= 2}
-        tooltip={!isValidRatio(sortinoRatio) ? (t('sortinoNotAvailable') || 'Not enough data') : (t('sortinoTooltip') || 'Risk-adjusted return using downside volatility')}
+        tooltip={!isValidRatio(sortinoRatio) ? t('sortinoNotAvailable') : t('sortinoTooltip')}
       />
       <MetricBadge
-        label={t('calmar') || 'Calmar'}
+        label={t('calmar')}
         value={isValidRatio(calmarRatio) ? calmarRatio.toFixed(2) : '—'}
         highlight={isValidRatio(calmarRatio) && calmarRatio >= 3}
-        tooltip={!isValidRatio(calmarRatio) ? (t('calmarNotAvailable') || 'Not enough data') : (t('calmarTooltip') || 'Annualized return / max drawdown')}
+        tooltip={!isValidRatio(calmarRatio) ? t('calmarNotAvailable') : t('calmarTooltip')}
       />
       {alpha != null && (
         <MetricBadge
-          label={t('alpha') || 'Alpha'}
+          label={t('alpha')}
           value={`${alpha >= 0 ? '+' : ''}${alpha.toFixed(2)}%`}
           highlight={alpha > 0}
           negative={alpha < 0}
-          tooltip={t('alphaTooltip') || 'Excess return vs market benchmark'}
+          tooltip={t('alphaTooltip')}
         />
       )}
       {tradesCount != null && (
-        <MetricBadge
-          label={t('tradesLabel') || 'Trades'}
-          value={tradesCount.toLocaleString('en-US')}
-        />
+        <MetricBadge label={t('tradesLabel')} value={tradesCount.toLocaleString('en-US')} />
       )}
       {avgHoldingTimeHours != null && (
         <MetricBadge
-          label={t('avgHoldingTime') || 'Avg Hold'}
-          value={avgHoldingTimeHours < 1 ? `${Math.round(avgHoldingTimeHours * 60)}m` : `${Math.round(avgHoldingTimeHours)}h`}
+          label={t('avgHoldingTime')}
+          value={
+            avgHoldingTimeHours < 1
+              ? `${Math.round(avgHoldingTimeHours * 60)}m`
+              : `${Math.round(avgHoldingTimeHours)}h`
+          }
         />
       )}
       {copiersPnl != null && (
         <MetricBadge
-          label={t('copiersPnl') || 'Copiers PnL'}
+          label={t('copiersPnl')}
           value={`${copiersPnl >= 0 ? '+' : ''}$${Math.abs(copiersPnl).toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
           highlight={copiersPnl > 0}
           negative={copiersPnl < 0}
@@ -133,17 +148,17 @@ export function MetricBadgesGrid({
       )}
       {avgLeverage != null && avgLeverage > 0 && (
         <MetricBadge
-          label={t('avgLeverage') || 'Avg Leverage'}
+          label={t('avgLeverage')}
           value={`${avgLeverage.toFixed(1)}x`}
           highlight={avgLeverage >= 10}
-          tooltip={t('avgLeverageTooltip') || 'Average leverage across current open positions'}
+          tooltip={t('avgLeverageTooltip')}
         />
       )}
-      {longPositions != null && shortPositions != null && (longPositions + shortPositions) > 0 && (
+      {longPositions != null && shortPositions != null && longPositions + shortPositions > 0 && (
         <MetricBadge
-          label={t('longShort') || 'Long/Short'}
+          label={t('longShort')}
           value={`${longPositions}/${shortPositions}`}
-          tooltip={t('longShortTooltip') || `${longPositions} long and ${shortPositions} short positions currently open`}
+          tooltip={t('longShortTooltip')}
         />
       )}
     </Box>

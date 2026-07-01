@@ -663,7 +663,7 @@ export default function TraderProfileClient({
             }}
           >
             <Text size="xs" color="tertiary">
-              {t('rankTrend') || 'Rank trend (7d)'}
+              {t('rankTrend')}
             </Text>
             <RankSparkline data={rankSparklineData} width={80} height={24} />
           </Box>

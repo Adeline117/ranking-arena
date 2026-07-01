@@ -704,7 +704,7 @@ function RankingTableInner(props: {
         data-density={density}
         {...hiddenColAttrs}
         role="table"
-        aria-label={t('rankingTable') || 'Trader Rankings'}
+        aria-label={t('rankingTable')}
         p={0}
         radius="none"
         style={{
@@ -840,10 +840,7 @@ function RankingTableInner(props: {
               >
                 {t('score')}
                 <span
-                  title={
-                    t('arenaScoreHeaderTooltip') ||
-                    'Arena Score is a 0-100 composite metric combining ROI (60%) and PnL (40%), adjusted for confidence and platform trust. Higher = better risk-adjusted performance.'
-                  }
+                  title={t('arenaScoreHeaderTooltip')}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',
@@ -861,10 +858,7 @@ function RankingTableInner(props: {
                     opacity: 0.65,
                     fontStyle: 'normal',
                   }}
-                  aria-label={
-                    t('arenaScoreHeaderTooltip') ||
-                    'Arena Score is a 0-100 composite metric combining ROI (60%) and PnL (40%), adjusted for confidence and platform trust. Higher = better risk-adjusted performance.'
-                  }
+                  aria-label={t('arenaScoreHeaderTooltip')}
                 >
                   i
                 </span>
@@ -889,7 +883,7 @@ function RankingTableInner(props: {
                 className={`col-pnl sort-header sort-header-end${sortColumn === 'pnl' ? ' sort-header-active' : ''} ${justSortedColumn === 'pnl' ? 'just-sorted' : ''}`}
                 as="button"
                 onClick={() => handleSort('pnl')}
-                title={t('pnlTooltip') || 'Profit & Loss'}
+                title={t('pnlTooltip')}
                 role="columnheader"
                 aria-label={`${t('pnl')} — click to sort`}
                 aria-sort={
@@ -903,7 +897,7 @@ function RankingTableInner(props: {
                 className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`}
                 as="button"
                 onClick={() => handleSort('winrate')}
-                title={t('winRateTooltip') || 'Percentage of profitable trading days.'}
+                title={t('winRateTooltip')}
                 role="columnheader"
                 aria-label={`${t('winRateShort')} — click to sort`}
                 aria-sort={
@@ -922,19 +916,14 @@ function RankingTableInner(props: {
                 }}
               >
                 {t('winRateShort')}
-                <InfoTooltip
-                  text={
-                    t('winRateTooltip') ||
-                    'Win Rate: Percentage of profitable trades.\nHigher = more consistent profits.'
-                  }
-                />
+                <InfoTooltip text={t('winRateTooltip')} />
                 <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
               </Box>
               <Box
                 className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`}
                 as="button"
                 onClick={() => handleSort('mdd')}
-                title={t('mddTooltip') || 'Largest peak-to-trough decline. Lower is better.'}
+                title={t('mddTooltip')}
                 role="columnheader"
                 aria-label={`${t('maxDrawdownShort')} — click to sort`}
                 aria-sort={
@@ -949,12 +938,7 @@ function RankingTableInner(props: {
                 }}
               >
                 {t('maxDrawdownShort')}
-                <InfoTooltip
-                  text={
-                    t('mddTooltip') ||
-                    'Max Drawdown: Largest peak-to-trough decline.\nLower = better risk control.'
-                  }
-                />
+                <InfoTooltip text={t('mddTooltip')} />
                 <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
               </Box>
               {visibleColumns.includes('sharpe') && (
@@ -975,12 +959,7 @@ function RankingTableInner(props: {
                   >
                     Sharpe
                   </Text>
-                  <InfoTooltip
-                    text={
-                      t('sharpeTooltip') ||
-                      'Sharpe Ratio: Risk-adjusted return per unit of risk.\n> 1 good, > 2 excellent, > 3 outstanding.'
-                    }
-                  />
+                  <InfoTooltip text={t('sharpeTooltip')} />
                 </Box>
               )}
               {visibleColumns.includes('sortino') && (
@@ -988,9 +967,7 @@ function RankingTableInner(props: {
                   className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`}
                   as="button"
                   onClick={() => handleSort('sortino')}
-                  title={
-                    t('sortinoTooltip') || 'Risk-adjusted return. Higher = better risk/reward.'
-                  }
+                  title={t('sortinoTooltip')}
                   role="columnheader"
                   aria-label={`${t('sortinoRatio')} — click to sort`}
                   aria-sort={
@@ -1009,12 +986,7 @@ function RankingTableInner(props: {
                   }}
                 >
                   {t('sortinoRatio')}
-                  <InfoTooltip
-                    text={
-                      t('sortinoTooltip') ||
-                      'Sortino: Like Sharpe but only penalizes downside risk.\nHigher = better risk-adjusted return.'
-                    }
-                  />
+                  <InfoTooltip text={t('sortinoTooltip')} />
                   <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
                 </Box>
               )}
@@ -1023,7 +995,7 @@ function RankingTableInner(props: {
                   className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`}
                   as="button"
                   onClick={() => handleSort('alpha')}
-                  title={t('alphaTooltip') || 'Alpha (excess return)'}
+                  title={t('alphaTooltip')}
                   role="columnheader"
                   aria-label="Alpha — click to sort"
                   aria-sort={
@@ -1050,7 +1022,7 @@ function RankingTableInner(props: {
                       fontSize: tokens.typography.fontSize.sm,
                     }}
                   >
-                    {t('tradingStyle') || 'Style'}
+                    {t('tradingStyle')}
                   </Text>
                 </Box>
               )}
@@ -1062,7 +1034,7 @@ function RankingTableInner(props: {
                     color="tertiary"
                     style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
                   >
-                    {t('followers') || 'Followers'}
+                    {t('followers')}
                   </Text>
                 </Box>
               )}
@@ -1074,7 +1046,7 @@ function RankingTableInner(props: {
                     color="tertiary"
                     style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
                   >
-                    {t('trades') || 'Trades'}
+                    {t('trades')}
                   </Text>
                 </Box>
               )}
@@ -1301,7 +1273,7 @@ function RankingTableInner(props: {
                         transition: `all ${tokens.transition.fast}`,
                       }}
                     >
-                      {t('switchToTableView') || 'Switch to table view for full list'}
+                      {t('switchToTableView')}
                     </button>
                   </Box>
                 )}
@@ -1310,7 +1282,7 @@ function RankingTableInner(props: {
                   sortedTraders.length <= MAX_CARD_COUNT && (
                     <Box style={{ textAlign: 'center', padding: tokens.spacing[4], opacity: 0.5 }}>
                       <Text size="xs" color="tertiary">
-                        {t('endOfList') || `All ${sortedTraders.length} traders shown`}
+                        {t('endOfList')}
                       </Text>
                     </Box>
                   )}

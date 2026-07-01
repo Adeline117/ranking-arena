@@ -84,7 +84,7 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
           marginBottom: tokens.spacing[4],
         }}
       >
-        {t('copyTradeSimulator') || 'Copy-Trade Simulator'}
+        {t('copyTradeSimulator')}
       </div>
 
       {/* Inputs */}
@@ -106,7 +106,7 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
               marginBottom: 4,
             }}
           >
-            {t('investmentAmount') || 'Investment Amount'}
+            {t('investmentAmount')}
           </label>
           <div style={{ position: 'relative' }}>
             <span
@@ -125,7 +125,7 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
             <input
               type="number"
               value={investment}
-              aria-label={t('investmentAmount') || 'Investment amount in USD'}
+              aria-label={t('investmentAmount')}
               onChange={(e) => {
                 const val = parseFloat(e.target.value)
                 if (!isNaN(val) && val >= 0) setInvestment(val)
@@ -157,14 +157,14 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
               marginBottom: 4,
             }}
           >
-            {t('startDate') || 'Start Date'}: {equityCurve[startIdx]?.date ?? ''}
+            {t('startDate')}: {equityCurve[startIdx]?.date ?? ''}
           </label>
           <input
             type="range"
             min={0}
             max={Math.max(0, equityCurve.length - 2)}
             value={startIdx}
-            aria-label={t('startDate') || 'Start date for simulation'}
+            aria-label={t('startDate')}
             onChange={(e) => setStartIdx(parseInt(e.target.value, 10))}
             style={{
               width: '100%',
@@ -206,7 +206,7 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
               lineHeight: 1.5,
             }}
           >
-            {(t('copyTradeResult') || 'If you invested ${amount} on {date}, you would have:')
+            {t('copyTradeResult')
               .replace('${amount}', `$${investment.toLocaleString('en-US')}`)
               .replace('{date}', simulation.startDate)}
           </div>
@@ -296,8 +296,7 @@ export default function CopyTradeSimulator({ equityCurve }: CopyTradeSimulatorPr
           lineHeight: 1.4,
         }}
       >
-        {t('copyTradeDisclaimer') ||
-          'Simulated returns based on historical ROI. Past performance does not guarantee future results. Does not account for fees, slippage, or liquidation risk.'}
+        {t('copyTradeDisclaimer')}
       </div>
     </div>
   )

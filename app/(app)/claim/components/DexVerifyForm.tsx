@@ -39,7 +39,9 @@ export function DexVerifyForm({
   const handleWalletVerify = async () => {
     setLoading(true)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
       if (!session) {
         showToast(t('pleaseLoginFirst'), 'warning')
         return
@@ -59,7 +61,10 @@ export function DexVerifyForm({
         }
 
         const connectTimeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Wallet connection timed out. Please try again.')), 30000)
+          setTimeout(
+            () => reject(new Error('Wallet connection timed out. Please try again.')),
+            30000
+          )
         )
         const resp = await Promise.race([solanaProvider.connect(), connectTimeout])
         walletAddress = resp.publicKey.toString()
@@ -82,12 +87,15 @@ export function DexVerifyForm({
         }
 
         const ethTimeout = new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error('Wallet connection timed out. Please try again.')), 30000)
+          setTimeout(
+            () => reject(new Error('Wallet connection timed out. Please try again.')),
+            30000
+          )
         )
-        const accounts = await Promise.race([
+        const accounts = (await Promise.race([
           window.ethereum.request({ method: 'eth_requestAccounts' }),
           ethTimeout,
-        ]) as string[]
+        ])) as string[]
         walletAddress = accounts[0]
 
         if (!walletAddress) {
@@ -100,10 +108,10 @@ export function DexVerifyForm({
           return
         }
 
-        signature = await window.ethereum.request({
+        signature = (await window.ethereum.request({
           method: 'personal_sign',
           params: [message, walletAddress],
-        }) as string
+        })) as string
       }
 
       // Verify on server
@@ -162,11 +170,15 @@ export function DexVerifyForm({
       onSuccess()
     } catch (error) {
       const msg = error instanceof Error ? error.message : ''
-      if (msg.includes('User rejected') || msg.includes('user rejected') || msg.includes('timed out')) {
+      if (
+        msg.includes('User rejected') ||
+        msg.includes('user rejected') ||
+        msg.includes('timed out')
+      ) {
         // User cancelled wallet interaction or timeout
         setLoading(false)
         if (msg.includes('timed out')) {
-          showToast(t('claimWalletTimeout') || 'Wallet connection timed out', 'warning')
+          showToast(t('claimWalletTimeout'), 'warning')
         }
         return
       }
@@ -179,26 +191,38 @@ export function DexVerifyForm({
   return (
     <Box style={{ maxWidth: '500px', margin: '0 auto', textAlign: 'center' }}>
       <h3 style={{ marginBottom: tokens.spacing[3] }}>{t('claimWalletVerifyTitle')}</h3>
-      <p style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[4], fontSize: tokens.typography.fontSize.sm }}>
+      <p
+        style={{
+          color: tokens.colors.text.secondary,
+          marginBottom: tokens.spacing[4],
+          fontSize: tokens.typography.fontSize.sm,
+        }}
+      >
         {t('claimWalletVerifyDesc')}
       </p>
 
-      <Box style={{
-        padding: tokens.spacing[4],
-        backgroundColor: tokens.colors.bg.secondary,
-        borderRadius: tokens.radius.lg,
-        marginBottom: tokens.spacing[4],
-      }}>
-        <Text style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}>
+      <Box
+        style={{
+          padding: tokens.spacing[4],
+          backgroundColor: tokens.colors.bg.secondary,
+          borderRadius: tokens.radius.lg,
+          marginBottom: tokens.spacing[4],
+        }}
+      >
+        <Text
+          style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}
+        >
           Wallet to verify:
         </Text>
-        <Text style={{
-          fontFamily: 'monospace',
-          fontSize: tokens.typography.fontSize.sm,
-          wordBreak: 'break-all',
-          color: tokens.colors.text.primary,
-          marginTop: tokens.spacing[1],
-        }}>
+        <Text
+          style={{
+            fontFamily: 'monospace',
+            fontSize: tokens.typography.fontSize.sm,
+            wordBreak: 'break-all',
+            color: tokens.colors.text.primary,
+            marginTop: tokens.spacing[1],
+          }}
+        >
           {trader.source_trader_id}
         </Text>
       </Box>

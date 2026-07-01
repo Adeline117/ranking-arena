@@ -115,7 +115,7 @@ export function ImageCropper({
 
   const handleConfirm = async () => {
     if (!croppedAreaPixels) {
-      onError?.(t('noCropAreaSelected') || 'Please select an area to crop')
+      onError?.(t('noCropAreaSelected'))
       return
     }
 
@@ -125,8 +125,7 @@ export function ImageCropper({
       onCropComplete(croppedBlob)
     } catch (error) {
       logger.error('Error cropping image:', error)
-      const errorMessage =
-        error instanceof Error ? error.message : t('cropFailed') || 'Failed to crop image'
+      const errorMessage = error instanceof Error ? error.message : t('cropFailed')
       onError?.(errorMessage)
     } finally {
       setProcessing(false)

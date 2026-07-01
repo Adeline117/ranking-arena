@@ -345,7 +345,7 @@ function MobileSectorsTab({
           fontSize: 14,
         }}
       >
-        {t('noData') || 'No sector data available'}
+        {t('noData')}
       </div>
     )
 
@@ -532,7 +532,7 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
                   fontWeight: 600,
                 }}
               >
-                {t('fundingRates') || 'Funding Rates'}
+                {t('fundingRates')}
               </Link>
               <Link
                 href="/market/open-interest"
@@ -546,7 +546,7 @@ function MarketPageContent({ initialSpotData }: { initialSpotData?: SpotCoinSSR[
                   fontWeight: 600,
                 }}
               >
-                {t('openInterest') || 'Open Interest'}
+                {t('openInterest')}
               </Link>
             </div>
           }
