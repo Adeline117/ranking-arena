@@ -37,7 +37,7 @@ export async function POST(request: NextRequest) {
     // Verify ownership and get exchange info
     const { data: portfolio, error: pErr } = await supabase
       .from('user_portfolios')
-      .select('id, exchange, api_key_encrypted, api_secret_encrypted')
+      .select('id, exchange, api_key_encrypted, api_secret_encrypted, api_passphrase_encrypted')
       .eq('id', portfolio_id)
       .eq('user_id', user.id)
       .single()
@@ -55,6 +55,7 @@ export async function POST(request: NextRequest) {
       exchange: portfolio.exchange,
       apiKeyEncrypted: portfolio.api_key_encrypted,
       apiSecretEncrypted: portfolio.api_secret_encrypted,
+      apiPassphraseEncrypted: portfolio.api_passphrase_encrypted,
       userId: user.id,
     })
 

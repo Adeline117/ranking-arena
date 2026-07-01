@@ -22,6 +22,9 @@ const SUPPORTED_EXCHANGES = [
   'bitmart',
 ]
 
+// Exchanges whose API keys require an additional passphrase.
+const PASSPHRASE_EXCHANGES = new Set(['bitget', 'kucoin', 'coinex', 'okx'])
+
 interface AddExchangeModalProps {
   open: boolean
   onClose: () => void
@@ -29,6 +32,7 @@ interface AddExchangeModalProps {
     exchange: string
     api_key: string
     api_secret: string
+    api_passphrase?: string
     label: string
   }) => Promise<void>
 }
@@ -38,16 +42,23 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
   const [exchange, setExchange] = useState(SUPPORTED_EXCHANGES[0])
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
+  const [apiPassphrase, setApiPassphrase] = useState('')
   const [label, setLabel] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
 
   if (!open) return null
 
+  const needsPassphrase = PASSPHRASE_EXCHANGES.has(exchange)
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!apiKey.trim() || !apiSecret.trim()) {
       setError(t('apiKeySecretRequired'))
+      return
+    }
+    if (needsPassphrase && !apiPassphrase.trim()) {
+      setError(t('apiPassphraseRequired'))
       return
     }
     setError('')
@@ -57,10 +68,12 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
         exchange,
         api_key: apiKey.trim(),
         api_secret: apiSecret.trim(),
+        api_passphrase: needsPassphrase ? apiPassphrase.trim() : undefined,
         label: label.trim() || exchange,
       })
       setApiKey('')
       setApiSecret('')
+      setApiPassphrase('')
       setLabel('')
       onClose()
     } catch (err) {
@@ -150,6 +163,22 @@ export default function AddExchangeModal({ open, onClose, onSubmit }: AddExchang
             autoComplete="off"
           />
         </div>
+
+        {needsPassphrase && (
+          <div style={styles.field}>
+            <label htmlFor="exchange-api-passphrase" style={styles.label}>
+              {t('apiPassphrase')} <span style={{ color: 'var(--color-accent-error)' }}>*</span>
+            </label>
+            <PasswordInput
+              id="exchange-api-passphrase"
+              value={apiPassphrase}
+              onChange={(e) => setApiPassphrase(e.target.value)}
+              placeholder={t('enterApiPassphrasePlaceholder')}
+              style={styles.input}
+              autoComplete="off"
+            />
+          </div>
+        )}
 
         {error && <p style={styles.error}>{error}</p>}
 
