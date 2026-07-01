@@ -98,6 +98,27 @@ const SORT_KEY_METRIC: Record<string, string> = {
  * Board columns are display strings (see module docs). There is no master
  * PnL column → headlinePnl stays NULL (profile stats provide pnl).
  */
+/** Board-row copier PnL / max-slots / P-L ratio → extras (逐图核对). */
+function ctBoardExtras(
+  item: Dict,
+  metrics: Record<string, unknown>
+): Record<string, unknown> | null {
+  const ext: Record<string, unknown> = {}
+  const copierPnl = num(metrics.follower_pnl)
+  if (copierPnl !== null) ext.copier_total_profit = copierPnl
+  const maxSlots = int(item.maxFollowerCount)
+  if (maxSlots !== null) ext.max_copier_slots = maxSlots
+  // "45.49 : 0" win:loss ratio string → numeric (skip when denominator is 0).
+  const plr = metrics.profit_loss_ratio
+  if (typeof plr === 'string' && plr.includes(':')) {
+    const [a, b] = plr.split(':').map((x) => Number(x.trim()))
+    if (Number.isFinite(a) && Number.isFinite(b) && b > 0) {
+      ext.profit_to_loss_ratio = Math.round((a / b) * 100) / 100
+    }
+  }
+  return Object.keys(ext).length > 0 ? ext : null
+}
+
 export function parseBybitCopytradeLeaderboardPage(
   payload: unknown,
   _ctx: ParseCtx
@@ -152,6 +173,12 @@ export function parseBybitCopytradeLeaderboardPage(
       // display value is already a percent like roi/win_rate, so num() not pct().
       // Was unread → bybit-copytrade sat at ~9% MDD capture (top-N profiles only).
       headlineMdd: num(metrics.drawdown),
+      // 逐图核对 image17: board also carries Sharpe + copier count + follower PnL +
+      // P/L ratio (in metricValues / item) — were raw._metrics only, so board-tier
+      // traders lacked them. Promote (profile has them typed for crawled traders).
+      headlineSharpe: num(metrics.sharpe),
+      headlineCopierCount: int(item.currentFollowerCount),
+      headlineExtras: ctBoardExtras(item, metrics),
       traderMeta: Object.keys(traderMeta).length > 0 ? traderMeta : null,
       raw: { ...item, _metrics: metrics },
     })
