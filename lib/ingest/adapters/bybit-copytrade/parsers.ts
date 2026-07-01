@@ -278,6 +278,13 @@ export function parseBybitCopytradeProfile(raw: unknown, ctx: ParseCtx): ParsedP
     if (lossCount !== null) extras.loss_trades = lossCount
     const walletBalance = e(info.walletBalanceE8, 8)
     if (walletBalance !== null) extras.wallet_balance = walletBalance
+    // Lifetime (cumulative, TF-independent) leader stats (Phase A: were raw-only).
+    const totalRoi = pctE4(inc.cumYieldRateE4) // 累计收益率 %
+    if (totalRoi !== null) extras.total_roi = totalRoi
+    const totalPnl = e(inc.cumYieldE8, 8) // 累计收益额
+    if (totalPnl !== null) extras.total_pnl = totalPnl
+    const lifetimeTrades = int(inc.cumTradeCount)
+    if (lifetimeTrades !== null) extras.lifetime_trades = lifetimeTrades
 
     stats.push({
       timeframe: tf as Timeframe,
