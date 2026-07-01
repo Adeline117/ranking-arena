@@ -17,7 +17,7 @@ function epId(name: string): string {
 export const metadata: Metadata = {
   title: 'API Documentation — Arena Data API',
   description:
-    'Access crypto trader rankings, performance data, and search across 32+ exchanges and 34,000+ traders. Free tier: 100 requests/day.',
+    'Access crypto trader rankings, performance data, and search across 45+ exchanges and 8,000+ traders. Free tier: 100 requests/day.',
 }
 
 // ---------------------------------------------------------------------------
@@ -213,7 +213,7 @@ const ENDPOINTS = [
       "rank": 1
     }
   ],
-  "meta": { "total": 34000, "endpoint": "bulk", "version": "v3" }
+  "meta": { "total": 8493, "endpoint": "bulk", "version": "v3" }
 }`,
     },
   },
@@ -341,7 +341,7 @@ export default async function ApiDocsPage() {
             margin: '0 auto',
           }}
         >
-          Crypto trader rankings across 32+ exchanges and 34,000+ traders. Risk-adjusted scores,
+          Crypto trader rankings across 45+ exchanges and 8,000+ traders. Risk-adjusted scores,
           equity curves, and performance data — updated every 30 minutes.
         </p>
       </div>
