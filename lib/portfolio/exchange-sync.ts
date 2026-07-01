@@ -40,12 +40,25 @@ const CCXT_ID: Record<string, string> = {
   blofin: 'blofin',
 }
 
-/** Reachable from Vercel hnd1 + no passphrase + CCXT fetchPositions validated. */
-const SYNC_SUPPORTED = new Set(['bybit', 'mexc', 'gateio', 'bitmart', 'phemex', 'hyperliquid'])
-/** Blocked from the serverless region — need a VPS/CF proxy, do not attempt. */
+/** Reachable from Vercel hnd1 + CCXT fetchPositions validated. Includes
+ * passphrase exchanges (bitget/kucoin/coinex) — those additionally require a
+ * stored passphrase (see PASSPHRASE_REQUIRED). */
+const SYNC_SUPPORTED = new Set([
+  'bybit',
+  'mexc',
+  'gateio',
+  'bitmart',
+  'phemex',
+  'hyperliquid',
+  'bitget',
+  'kucoin',
+  'coinex',
+])
+/** Blocked from the serverless region — need a VPS/CF proxy, do not attempt.
+ * (okx also needs a passphrase, but geo takes precedence.) */
 const GEO_BLOCKED = new Set(['binance', 'okx'])
-/** Require an API passphrase the connect flow does not yet store. */
-const PASSPHRASE_REQUIRED = new Set(['bitget', 'okx', 'kucoin', 'coinex'])
+/** Require an API passphrase (passed to CCXT as `password`). */
+const PASSPHRASE_REQUIRED = new Set(['bitget', 'kucoin', 'coinex'])
 
 export interface SyncedPositionRow {
   portfolio_id: string
@@ -108,13 +121,17 @@ export async function syncExchangePortfolio(params: {
   exchange: string
   apiKeyEncrypted: string
   apiSecretEncrypted: string
+  apiPassphraseEncrypted?: string | null
   userId: string
 }): Promise<SyncOutcome> {
   const ex = params.exchange.toLowerCase()
 
   if (GEO_BLOCKED.has(ex)) return { ok: false, reason: 'geo_unavailable' }
-  if (PASSPHRASE_REQUIRED.has(ex)) return { ok: false, reason: 'passphrase_required' }
   if (!SYNC_SUPPORTED.has(ex)) return { ok: false, reason: 'unsupported' }
+  const needsPassphrase = PASSPHRASE_REQUIRED.has(ex)
+  if (needsPassphrase && !params.apiPassphraseEncrypted) {
+    return { ok: false, reason: 'passphrase_required' }
+  }
 
   const ccxtId = CCXT_ID[ex]
   if (!ccxtId) return { ok: false, reason: 'unsupported' }
@@ -122,13 +139,18 @@ export async function syncExchangePortfolio(params: {
   // Decrypt in-scope only. Never log the plaintext.
   let apiKey: string
   let apiSecret: string
+  let passphrase: string | undefined
   try {
     apiKey = decryptApiKey(params.apiKeyEncrypted, params.userId)
     apiSecret = decryptApiKey(params.apiSecretEncrypted, params.userId)
+    if (params.apiPassphraseEncrypted) {
+      passphrase = decryptApiKey(params.apiPassphraseEncrypted, params.userId)
+    }
   } catch {
     return { ok: false, reason: 'keys_unreadable' }
   }
   if (!apiKey || !apiSecret) return { ok: false, reason: 'keys_unreadable' }
+  if (needsPassphrase && !passphrase) return { ok: false, reason: 'keys_unreadable' }
 
   const mod = await import('ccxt')
   const registry = ((mod as { default?: unknown }).default ?? mod) as unknown as CcxtRegistry
@@ -139,6 +161,7 @@ export async function syncExchangePortfolio(params: {
     const client = new ExClass({
       apiKey,
       secret: apiSecret,
+      ...(passphrase ? { password: passphrase } : {}),
       enableRateLimit: true,
       timeout: 8000, // fail fast — sequential calls must stay well under maxDuration
       options: { defaultType: 'swap' },

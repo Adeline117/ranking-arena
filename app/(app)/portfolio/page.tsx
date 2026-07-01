@@ -136,6 +136,7 @@ export default function PortfolioPage() {
     exchange: string
     api_key: string
     api_secret: string
+    api_passphrase?: string
     label: string
   }) => {
     const res = await fetch('/api/portfolio', {

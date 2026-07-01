@@ -18,6 +18,25 @@ import { encryptApiKey } from '@/lib/exchange/secure-encryption'
 
 export const dynamic = 'force-dynamic'
 
+// Exchanges the connect UI offers (mirror of AddExchangeModal's list). Stored
+// values are validated against this so only known exchange ids get persisted.
+const ALLOWED_EXCHANGES = new Set([
+  'binance',
+  'bybit',
+  'okx',
+  'bitget',
+  'mexc',
+  'kucoin',
+  'gateio',
+  'htx',
+  'phemex',
+  'dydx',
+  'hyperliquid',
+  'blofin',
+  'coinex',
+  'bitmart',
+])
+
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
   if (rateLimitResponse) return rateLimitResponse
@@ -48,9 +67,17 @@ export async function POST(request: NextRequest) {
     const user = await requireAuth(request)
     const body = await request.json()
 
-    const { exchange, api_key, api_secret, label } = body
+    const { exchange, api_key, api_secret, api_passphrase, label } = body
     if (!exchange || !api_key || !api_secret) {
-      return NextResponse.json({ error: 'Missing required fields: exchange, api_key, api_secret' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Missing required fields: exchange, api_key, api_secret' },
+        { status: 400 }
+      )
+    }
+    // Validate exchange against the allowlist at storage time (defense-in-depth;
+    // sync also allowlists). Prevents persisting arbitrary/garbage exchange ids.
+    if (typeof exchange !== 'string' || !ALLOWED_EXCHANGES.has(exchange.toLowerCase())) {
+      return NextResponse.json({ error: 'Unsupported exchange' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
@@ -59,9 +86,13 @@ export async function POST(request: NextRequest) {
       .from('user_portfolios')
       .insert({
         user_id: user.id,
-        exchange,
+        exchange: exchange.toLowerCase(),
         api_key_encrypted: encryptApiKey(api_key, user.id),
         api_secret_encrypted: encryptApiKey(api_secret, user.id),
+        api_passphrase_encrypted:
+          typeof api_passphrase === 'string' && api_passphrase.trim()
+            ? encryptApiKey(api_passphrase.trim(), user.id)
+            : null,
         label: label || exchange,
       })
       .select('id, exchange, label, created_at')
@@ -102,10 +133,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Portfolio not found' }, { status: 404 })
     }
 
-    const { error } = await supabase
-      .from('user_portfolios')
-      .delete()
-      .eq('id', id)
+    const { error } = await supabase.from('user_portfolios').delete().eq('id', id)
 
     if (error) throw error
 

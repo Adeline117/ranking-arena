@@ -3407,6 +3407,9 @@ const ja = {
   connectExchange: '取引所を接続',
   apiKey: 'API Key',
   apiSecret: 'API Secret',
+  apiPassphrase: 'API パスフレーズ',
+  apiPassphraseRequired: 'この取引所には API パスフレーズが必要です',
+  enterApiPassphrasePlaceholder: 'API パスフレーズを入力',
   apiKeySecretRequired: 'API KeyとSecretは必須です',
   failedToAddExchange: '取引所の追加に失敗しました',
   apiKeyReadOnlyHint:

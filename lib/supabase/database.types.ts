@@ -6935,6 +6935,7 @@ export type Database = {
       user_portfolios: {
         Row: {
           api_key_encrypted: string
+          api_passphrase_encrypted: string | null
           api_secret_encrypted: string
           created_at: string
           exchange: string
@@ -6944,6 +6945,7 @@ export type Database = {
         }
         Insert: {
           api_key_encrypted: string
+          api_passphrase_encrypted?: string | null
           api_secret_encrypted: string
           created_at?: string
           exchange: string
@@ -6953,6 +6955,7 @@ export type Database = {
         }
         Update: {
           api_key_encrypted?: string
+          api_passphrase_encrypted?: string | null
           api_secret_encrypted?: string
           created_at?: string
           exchange?: string
