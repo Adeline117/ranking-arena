@@ -226,7 +226,17 @@ export default function CompetitionsPageClient() {
           {loading ? (
             <LoadingSkeleton variant="list" count={5} />
           ) : competitions.length === 0 ? (
-            <EmptyState title={t('compNoCompetitions')} variant="compact" />
+            <EmptyState
+              title={t('compNoCompetitions')}
+              description={t('compNoCompetitionsDesc')}
+              action={
+                <Link href="/competitions/create" style={{ textDecoration: 'none' }}>
+                  <Button variant="primary" size="sm">
+                    {t('compCreateBtn')}
+                  </Button>
+                </Link>
+              }
+            />
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
               {competitions.map((comp) => (
