@@ -100,18 +100,34 @@ export const POST = withAuth(
       })
     }
 
-    // Advocate reward — fires only on the EXACT Nth referral. Each distinct
-    // friend increments the count by 1 (referred_by is set once per friend),
-    // so under serial signups this grants at most once. See route header / the
-    // report for the concurrency caveat (no persistent idempotency marker).
-    if (totalReferrals === REFERRAL_REWARD_THRESHOLD) {
-      await grantProDays(supabase, referrer.id, REFERRAL_ADVOCATE_PRO_DAYS, {
-        title: 'Referral reward earned!',
-        message: `You referred ${REFERRAL_REWARD_THRESHOLD} friends and earned ${REFERRAL_ADVOCATE_PRO_DAYS} days of Pro! Thank you for spreading the word.`,
+    // Advocate reward — fires once the referrer reaches the threshold. Uses a
+    // persistent idempotency marker (referral_rewards, UNIQUE(referrer_id,
+    // reward_type)) instead of relying on the count being read at exactly N:
+    // we insert the marker FIRST, and only the request that actually creates
+    // the row performs the grant. This makes the grant exactly-once regardless
+    // of concurrent friend signups — no double-grant (cost leak) and no missed
+    // reward when the exact Nth count is skipped by a race. Hence `>=`, not `===`.
+    if (totalReferrals >= REFERRAL_REWARD_THRESHOLD) {
+      const { error: markerError } = await supabase.from('referral_rewards').insert({
+        referrer_id: referrer.id,
+        reward_type: 'advocate_milestone',
+        granted_days: REFERRAL_ADVOCATE_PRO_DAYS,
       })
-      logger.info(
-        `Referrer ${referrer.id} reached ${REFERRAL_REWARD_THRESHOLD} referrals — granted ${REFERRAL_ADVOCATE_PRO_DAYS}-day Pro extension`
-      )
+
+      if (!markerError) {
+        // Marker was newly created by THIS request → grant exactly once.
+        await grantProDays(supabase, referrer.id, REFERRAL_ADVOCATE_PRO_DAYS, {
+          title: 'Referral reward earned!',
+          message: `You referred ${REFERRAL_REWARD_THRESHOLD} friends and earned ${REFERRAL_ADVOCATE_PRO_DAYS} days of Pro! Thank you for spreading the word.`,
+        })
+        logger.info(
+          `Referrer ${referrer.id} reached ${REFERRAL_REWARD_THRESHOLD} referrals — granted ${REFERRAL_ADVOCATE_PRO_DAYS}-day Pro extension`
+        )
+      } else if (markerError.code !== '23505') {
+        // 23505 = marker already exists (already granted) → skip silently.
+        // Any other error is a real failure — log it, never swallow silently.
+        logger.error('Failed to write referral reward marker:', markerError.message)
+      }
     }
 
     return NextResponse.json({
@@ -130,9 +146,9 @@ export const POST = withAuth(
  * them. Best-effort: DB errors are logged (never silently swallowed) but never
  * thrown, so a grant failure can't break the apply response.
  *
- * NOTE: the `subscriptions` table has no `plan`/source column in prod, so we
- * cannot persist a referral marker here (see report — relevant for advocate
- * idempotency at scale).
+ * NOTE: advocate-reward idempotency is enforced by the caller via the
+ * referral_rewards marker table (insert-once before grant), not here — so this
+ * helper stays a pure best-effort grant/extend.
  */
 async function grantProDays(
   supabase: ReturnType<typeof getSupabaseAdmin>,

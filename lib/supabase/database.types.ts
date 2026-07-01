@@ -4658,6 +4658,38 @@ export type Database = {
         }
         Relationships: []
       }
+      referral_rewards: {
+        Row: {
+          created_at: string
+          granted_days: number | null
+          id: string
+          referrer_id: string
+          reward_type: string
+        }
+        Insert: {
+          created_at?: string
+          granted_days?: number | null
+          id?: string
+          referrer_id: string
+          reward_type: string
+        }
+        Update: {
+          created_at?: string
+          granted_days?: number | null
+          id?: string
+          referrer_id?: string
+          reward_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'referral_rewards_referrer_id_fkey'
+            columns: ['referrer_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       reports: {
         Row: {
           created_at: string
