@@ -135,6 +135,8 @@ describe('parseKucoinProfile', () => {
       tradepilot: true,
       total_return_rate: 151.1014,
       lead_principal: 4797.39877728,
+      trading_frequency: 10, // raw per-day
+      trade_frequency: 70, // 10 × 7 → per-week alias for display
     })
 
     const metrics = profile.series.map((x) => x.metric).sort()
