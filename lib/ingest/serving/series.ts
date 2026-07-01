@@ -7,7 +7,7 @@
  * WORKER-ONLY MODULE (direct PG).
  */
 
-import { getIngestPool } from '../db'
+import { getIngestPool, ingestClientConnect } from '../db'
 
 export interface DownsampleResult {
   weeklyUpserted: number
@@ -16,7 +16,7 @@ export interface DownsampleResult {
 
 /** Roll up trader_series points older than `keepDays` into weekly. */
 export async function downsampleOldSeries(keepDays = 90): Promise<DownsampleResult> {
-  const client = await getIngestPool().connect()
+  const client = await ingestClientConnect()
   try {
     await client.query('BEGIN')
 
