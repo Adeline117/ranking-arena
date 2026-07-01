@@ -28,7 +28,10 @@ ARG PW_VERSION=v1.59.1-jammy
 # NAPI prebuilds (ABI-stable across node versions) and Linux-x64 on both stages.
 FROM node:20-bookworm-slim AS deps
 WORKDIR /app
-COPY package.json package-lock.json ./
+# .npmrc carries `legacy-peer-deps=true` — REQUIRED: the privy/solana passkey deps
+# have a peerOptional typescript/@solana-kit conflict that strict `npm ci` rejects
+# with ERESOLVE (the whole repo installs with legacy-peer-deps; ci.yml does too).
+COPY package.json package-lock.json .npmrc ./
 RUN npm ci --no-audit --no-fund
 
 # ── runtime ──
