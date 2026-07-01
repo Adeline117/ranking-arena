@@ -90,6 +90,22 @@ function side(isLong: unknown): string | null {
 
 // ── Leaderboard ──
 
+/** Board-row cumulative-copiers / max-lead / order-count / profit-share (逐图核对). */
+function toobitBoardExtras(item: Record<string, unknown>): Record<string, unknown> | null {
+  const ext: Record<string, unknown> = {}
+  const totalFollowers = int(item.totalFollowerCount)
+  if (totalFollowers !== null) ext.copier_count_history = totalFollowers
+  const maxLead = int(item.maxLeadCount)
+  if (maxLead !== null) ext.max_copier_slots = maxLead
+  const orderCount = int(item.leaderOrderCount)
+  if (orderCount !== null) ext.trade_count_lifetime = orderCount
+  const shareRate = pct(item.profitSharingRate)
+  if (shareRate !== null) ext.profit_share_rate = shareRate
+  const followProfit = num(item.followTotalProfit)
+  if (followProfit !== null) ext.copier_total_profit = followProfit
+  return Object.keys(ext).length > 0 ? ext : null
+}
+
 export function parseToobitLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
   const payload = (raw ?? {}) as { board?: { list?: unknown; total?: unknown } }
   const list = objects(payload.board?.list)
@@ -115,9 +131,12 @@ export function parseToobitLeaderboardPage(raw: unknown, _ctx: ParseCtx): Parsed
       // takes effect once a VPS region can reach it.)
       headlineAum: num(item.totalLeadAmount),
       headlineSharpe: num(item.sharpeRatio),
+      headlineCopierCount: int(item.currentFollowerCount),
+      // 逐图核对: board carries cumulative copiers / max-lead / order-count /
+      // profit-share / follow-profit — were raw-only, so board-tier traders lacked them.
+      headlineExtras: toobitBoardExtras(item),
       traderMeta: null,
-      // followTotalProfit / the embedded cumulative-ROI sparkline
-      // (leaderTradeProfit) — kept verbatim.
+      // the embedded cumulative-ROI sparkline (leaderTradeProfit) — kept verbatim.
       raw: item,
     })
   }
