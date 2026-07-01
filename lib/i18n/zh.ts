@@ -5040,6 +5040,7 @@ const zh = {
   compCreateSubmit: '创建竞赛',
   competitionCreateFailed: '创建竞赛失败，请重试。',
   compNoCompetitions: '暂无竞赛',
+  compNoCompetitionsDesc: '发起一场交易竞赛，邀请其他人一起比拼。',
   compMetric: '指标',
   compParticipants: '参与人数',
   compPrize: '奖池',

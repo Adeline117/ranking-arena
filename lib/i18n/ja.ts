@@ -4768,6 +4768,7 @@ const ja = {
   compCreateTitle: 'コンペティション作成',
   compCreateSubmit: '作成する',
   compNoCompetitions: 'コンペティションがありません',
+  compNoCompetitionsDesc: 'トレーディングコンペを開催して、他のユーザーを招待しましょう。',
   compMetric: '指標',
   compParticipants: '参加者数',
   compPrize: '賞金',

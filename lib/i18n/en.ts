@@ -5153,6 +5153,7 @@ const en = {
   compCreateSubmit: 'Create Competition',
   competitionCreateFailed: 'Failed to create competition. Please try again.',
   compNoCompetitions: 'No competitions found',
+  compNoCompetitionsDesc: 'Start a trading competition and invite others to compete.',
   compMetric: 'Metric',
   compParticipants: 'Participants',
   compPrize: 'Prize',

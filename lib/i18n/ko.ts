@@ -5013,6 +5013,7 @@ const ko = {
   compCreateTitle: '대회 만들기',
   compCreateSubmit: '대회 생성',
   compNoCompetitions: '대회가 없습니다',
+  compNoCompetitionsDesc: '트레이딩 대회를 열고 다른 사람들을 초대해 겨뤄보세요.',
   compMetric: '지표',
   compParticipants: '참가자',
   compPrize: '상금',
