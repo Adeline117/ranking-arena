@@ -193,6 +193,11 @@ export function parseXtProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     if (typeof info.levelName === 'string') extras.level_name = info.levelName
     const tags = labelTags(info.label)
     if (tags) extras.style_labels = tags
+    // 历史跟单人数 + 最大跟单槽位 — present in the overview payload but were
+    // unpromoted (the detailed Performance block — avg profit/loss, P&L ratio,
+    // holding time — lives on a SEPARATE endpoint not fetched here).
+    if (info.followNumber !== undefined) extras.copier_count_history = int(info.followNumber)
+    if (info.maxFollowerSize !== undefined) extras.max_copier_slots = int(info.maxFollowerSize)
 
     stats.push({
       timeframe: tf,
