@@ -2,8 +2,10 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
+import ErrorState from '@/app/components/ui/ErrorState'
 import PageHeader from '@/app/components/ui/PageHeader'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { supabase } from '@/lib/supabase/client'
@@ -59,23 +61,47 @@ function formatScore(score: number | null | undefined): string {
 
 type SortKey = 'added' | 'roi' | 'pnl' | 'score' | 'rank'
 
+function traderHref(item: WatchlistItem): string {
+  return `/trader/${encodeURIComponent(item.handle || item.source_trader_id)}?platform=${item.source}`
+}
+
 export default function WatchlistClient() {
   const { t } = useLanguage()
-  const [email, setEmail] = useState<string | null>(null)
+  const router = useRouter()
+  const [, setEmail] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [removing, setRemoving] = useState<string | null>(null)
   const [confirmRemove, setConfirmRemove] = useState<string | null>(null)
   const [sortBy, setSortBy] = useState<SortKey>('added')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [platformFilter, setPlatformFilter] = useState<string>('all')
+  const [isMobile, setIsMobile] = useState(false)
 
+  // Responsive: below 640px render cards instead of a wide table. Starts false on
+  // server + first client render (no hydration mismatch), then syncs.
   useEffect(() => {
-    async function init() {
+    const mq = window.matchMedia('(max-width: 640px)')
+    const sync = () => setIsMobile(mq.matches)
+    sync()
+    mq.addEventListener('change', sync)
+    return () => mq.removeEventListener('change', sync)
+  }, [])
+
+  // Retryable loader — distinguishes a real fetch/auth failure (ERROR) from a
+  // genuinely empty watchlist (EMPTY). Previously a fetch error was swallowed
+  // into console.error and looked identical to an empty list.
+  const loadWatchlist = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
       const {
         data: { user },
+        error: userErr,
       } = await supabase.auth.getUser()
+      if (userErr) throw new Error(userErr.message)
       if (!user) {
         setIsAuthenticated(false)
         setLoading(false)
@@ -87,24 +113,28 @@ export default function WatchlistClient() {
         data: { session },
       } = await supabase.auth.getSession()
       if (!session) {
-        setLoading(false)
-        return
+        // Authenticated but no usable session token → treat as a real error, not empty.
+        throw new Error('Session expired — please sign in again')
       }
-      try {
-        const res = await fetch('/api/watchlist', {
-          headers: { Authorization: `Bearer ${session.access_token}` },
-        })
-        if (res.ok) {
-          const json = await res.json()
-          setWatchlist(json.watchlist || [])
-        }
-      } catch (err) {
-        console.error('[watchlist] fetch failed:', err)
+      const res = await fetch('/api/watchlist', {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      })
+      if (!res.ok) {
+        throw new Error(`Watchlist request failed (${res.status})`)
       }
+      const json = await res.json()
+      setWatchlist(json.watchlist || [])
+    } catch (err) {
+      console.error('[watchlist] fetch failed:', err)
+      setError(err instanceof Error ? err.message : 'Failed to load watchlist')
+    } finally {
       setLoading(false)
     }
-    init()
   }, [])
+
+  useEffect(() => {
+    loadWatchlist()
+  }, [loadWatchlist])
 
   const handleRemove = useCallback(async (source: string, id: string) => {
     setRemoving(`${source}:${id}`)
@@ -174,6 +204,89 @@ export default function WatchlistClient() {
     }
   }
 
+  // Remove control shared by the desktop table and the mobile cards. `stop`
+  // prevents the click from bubbling to the row/card navigation.
+  const renderRemoveControl = (item: WatchlistItem) => {
+    const key = `${item.source}:${item.source_trader_id}`
+    const isRemoving = removing === key
+    const stop = (e: React.MouseEvent) => {
+      e.stopPropagation()
+      e.preventDefault()
+    }
+    if (confirmRemove === key) {
+      return (
+        <span style={{ display: 'inline-flex', gap: 4 }}>
+          <button
+            onClick={(e) => {
+              stop(e)
+              handleRemove(item.source, item.source_trader_id)
+              setConfirmRemove(null)
+            }}
+            style={{
+              padding: '4px 8px',
+              borderRadius: tokens.radius.sm,
+              border: 'none',
+              background: 'var(--color-accent-error)',
+              color: tokens.colors.white,
+              // eslint-disable-next-line no-restricted-syntax -- off-scale micro label by design
+              fontSize: 11,
+              fontWeight: tokens.typography.fontWeight.semibold,
+              cursor: 'pointer',
+            }}
+          >
+            {t('watchlistConfirmYes')}
+          </button>
+          <button
+            onClick={(e) => {
+              stop(e)
+              setConfirmRemove(null)
+            }}
+            style={{
+              padding: '4px 8px',
+              borderRadius: tokens.radius.sm,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              background: 'transparent',
+              color: tokens.colors.text.secondary,
+              // eslint-disable-next-line no-restricted-syntax -- off-scale micro label by design
+              fontSize: 11,
+              cursor: 'pointer',
+            }}
+          >
+            {t('watchlistConfirmNo')}
+          </button>
+        </span>
+      )
+    }
+    return (
+      <button
+        onClick={(e) => {
+          stop(e)
+          setConfirmRemove(key)
+        }}
+        disabled={isRemoving}
+        style={{
+          padding: '4px 12px',
+          borderRadius: tokens.radius.sm,
+          border: '1px solid var(--color-accent-error)',
+          background: 'transparent',
+          color: 'var(--color-accent-error)',
+          fontSize: tokens.typography.fontSize.xs,
+          fontWeight: tokens.typography.fontWeight.medium,
+          cursor: isRemoving ? 'not-allowed' : 'pointer',
+          transition: 'background 0.15s',
+        }}
+        onMouseEnter={(e) => {
+          if (!isRemoving) e.currentTarget.style.background = alpha('var(--color-accent-error)', 10)
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.background = 'transparent'
+        }}
+      >
+        {t('watchlistRemove')}
+      </button>
+    )
+  }
+
   return (
     <div
       style={{
@@ -222,7 +335,10 @@ export default function WatchlistClient() {
           />
         )}
         {loading && isAuthenticated !== false && <LoadingSkeleton variant="list" count={5} />}
-        {!loading && isAuthenticated && watchlist.length === 0 && (
+        {!loading && isAuthenticated && error && (
+          <ErrorState title={t('failedToLoad')} description={t('tryAgain')} retry={loadWatchlist} />
+        )}
+        {!loading && isAuthenticated && !error && watchlist.length === 0 && (
           <EmptyState
             variant="card"
             icon={
@@ -258,7 +374,7 @@ export default function WatchlistClient() {
             }
           />
         )}
-        {!loading && isAuthenticated && watchlist.length > 0 && (
+        {!loading && isAuthenticated && !error && watchlist.length > 0 && (
           <>
             <div
               style={{
@@ -306,239 +422,273 @@ export default function WatchlistClient() {
                 </select>
               )}
             </div>
-            <div style={{ overflowX: 'auto' }}>
-              <table
-                style={{
-                  width: '100%',
-                  borderCollapse: 'collapse',
-                  fontSize: tokens.typography.fontSize.base,
-                }}
-              >
-                <thead>
-                  <tr style={{ borderBottom: `1px solid var(--color-border-primary)` }}>
-                    <th scope="col" style={thStyle}>
-                      {t('trader')}
-                    </th>
-                    <th scope="col" style={thStyle}>
-                      {t('exchange')}
-                    </th>
-                    <th
-                      scope="col"
-                      aria-sort={ariaSort('roi')}
-                      tabIndex={0}
-                      style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }}
-                      onClick={() => doSort('roi')}
-                      onKeyDown={onSortKeyDown('roi')}
+            {isMobile && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {displayList.map((item) => {
+                  const key = `${item.source}:${item.source_trader_id}`
+                  const isRemoving = removing === key
+                  const roiColor =
+                    item.roi != null
+                      ? item.roi >= 0
+                        ? 'var(--color-sentiment-bull)'
+                        : 'var(--color-sentiment-bear)'
+                      : 'var(--color-text-tertiary)'
+                  return (
+                    <Link
+                      key={key}
+                      href={traderHref(item)}
+                      style={{
+                        display: 'block',
+                        textDecoration: 'none',
+                        color: 'inherit',
+                        border: '1px solid var(--color-border-secondary)',
+                        borderRadius: tokens.radius.lg,
+                        background: tokens.colors.bg.secondary,
+                        padding: 14,
+                        opacity: isRemoving ? 0.5 : 1,
+                      }}
                     >
-                      {t('roi')}
-                      {sa('roi')}
-                    </th>
-                    <th
-                      scope="col"
-                      aria-sort={ariaSort('pnl')}
-                      tabIndex={0}
-                      style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }}
-                      onClick={() => doSort('pnl')}
-                      onKeyDown={onSortKeyDown('pnl')}
-                    >
-                      {t('pnl')}
-                      {sa('pnl')}
-                    </th>
-                    <th
-                      scope="col"
-                      aria-sort={ariaSort('rank')}
-                      tabIndex={0}
-                      style={{ ...thStyle, textAlign: 'center', cursor: 'pointer' }}
-                      onClick={() => doSort('rank')}
-                      onKeyDown={onSortKeyDown('rank')}
-                    >
-                      {t('rank')}
-                      {sa('rank')}
-                    </th>
-                    <th
-                      scope="col"
-                      aria-sort={ariaSort('score')}
-                      tabIndex={0}
-                      style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }}
-                      onClick={() => doSort('score')}
-                      onKeyDown={onSortKeyDown('score')}
-                    >
-                      {t('score')}
-                      {sa('score')}
-                    </th>
-                    <th scope="col" style={{ ...thStyle, textAlign: 'center', width: 100 }}>
-                      {t('watchlistActions')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {displayList.map((item) => {
-                    const key = `${item.source}:${item.source_trader_id}`
-                    const isRemoving = removing === key
-                    const roiColor =
-                      item.roi != null
-                        ? item.roi >= 0
-                          ? 'var(--color-sentiment-bull)'
-                          : 'var(--color-sentiment-bear)'
-                        : 'var(--color-text-tertiary)'
-                    return (
-                      <tr
-                        key={key}
+                      <div
                         style={{
-                          borderBottom: '1px solid var(--color-border-secondary)',
-                          transition: 'background 0.15s',
-                          opacity: isRemoving ? 0.5 : 1,
-                          cursor: 'pointer',
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.background = 'var(--color-bg-hover)'
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.background = 'transparent'
-                        }}
-                        onClick={() => {
-                          window.location.href = `/trader/${encodeURIComponent(item.handle || item.source_trader_id)}?platform=${item.source}`
+                          display: 'flex',
+                          alignItems: 'flex-start',
+                          justifyContent: 'space-between',
+                          gap: 8,
+                          marginBottom: 10,
                         }}
                       >
-                        <td style={{ padding: '12px 16px' }}>
-                          <Link
-                            href={`/trader/${encodeURIComponent(item.handle || item.source_trader_id)}?platform=${item.source}`}
+                        <div style={{ minWidth: 0 }}>
+                          <div
+                            style={{
+                              fontWeight: tokens.typography.fontWeight.semibold,
+                              color: 'var(--color-text-primary)',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {item.handle || item.source_trader_id}
+                          </div>
+                          <div
+                            style={{
+                              fontSize: tokens.typography.fontSize.xs,
+                              color: 'var(--color-text-secondary)',
+                              marginTop: 2,
+                            }}
+                          >
+                            {PLATFORM_LABELS[item.source] || item.source}
+                            {item.rank != null ? ` · #${item.rank}` : ''}
+                          </div>
+                        </div>
+                        {renderRemoveControl(item)}
+                      </div>
+                      <div
+                        style={{
+                          display: 'grid',
+                          gridTemplateColumns: 'repeat(3, 1fr)',
+                          gap: 8,
+                          fontVariantNumeric: 'tabular-nums',
+                        }}
+                      >
+                        <div>
+                          <div style={mobileStatLabel}>{t('roi')}</div>
+                          <div
+                            style={{
+                              color: roiColor,
+                              fontWeight: tokens.typography.fontWeight.semibold,
+                            }}
+                          >
+                            {formatRoi(item.roi)}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={mobileStatLabel}>{t('pnl')}</div>
+                          <div style={{ color: 'var(--color-text-secondary)' }}>
+                            {item.pnl != null ? formatPnL(item.pnl) : '--'}
+                          </div>
+                        </div>
+                        <div>
+                          <div style={mobileStatLabel}>{t('score')}</div>
+                          <div
                             style={{
                               color: 'var(--color-text-primary)',
                               fontWeight: tokens.typography.fontWeight.semibold,
-                              textDecoration: 'none',
                             }}
-                            onClick={(e) => e.stopPropagation()}
                           >
-                            {item.handle || item.source_trader_id}
-                          </Link>
-                        </td>
-                        <td style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}>
-                          {PLATFORM_LABELS[item.source] || item.source}
-                        </td>
-                        <td
+                            {formatScore(item.arena_score)}
+                          </div>
+                        </div>
+                      </div>
+                    </Link>
+                  )
+                })}
+              </div>
+            )}
+            {!isMobile && (
+              <div style={{ overflowX: 'auto' }}>
+                <table
+                  style={{
+                    width: '100%',
+                    borderCollapse: 'collapse',
+                    fontSize: tokens.typography.fontSize.base,
+                  }}
+                >
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid var(--color-border-primary)` }}>
+                      <th scope="col" style={thStyle}>
+                        {t('trader')}
+                      </th>
+                      <th scope="col" style={thStyle}>
+                        {t('exchange')}
+                      </th>
+                      <th
+                        scope="col"
+                        aria-sort={ariaSort('roi')}
+                        tabIndex={0}
+                        style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }}
+                        onClick={() => doSort('roi')}
+                        onKeyDown={onSortKeyDown('roi')}
+                      >
+                        {t('roi')}
+                        {sa('roi')}
+                      </th>
+                      <th
+                        scope="col"
+                        aria-sort={ariaSort('pnl')}
+                        tabIndex={0}
+                        style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }}
+                        onClick={() => doSort('pnl')}
+                        onKeyDown={onSortKeyDown('pnl')}
+                      >
+                        {t('pnl')}
+                        {sa('pnl')}
+                      </th>
+                      <th
+                        scope="col"
+                        aria-sort={ariaSort('rank')}
+                        tabIndex={0}
+                        style={{ ...thStyle, textAlign: 'center', cursor: 'pointer' }}
+                        onClick={() => doSort('rank')}
+                        onKeyDown={onSortKeyDown('rank')}
+                      >
+                        {t('rank')}
+                        {sa('rank')}
+                      </th>
+                      <th
+                        scope="col"
+                        aria-sort={ariaSort('score')}
+                        tabIndex={0}
+                        style={{ ...thStyle, textAlign: 'right', cursor: 'pointer' }}
+                        onClick={() => doSort('score')}
+                        onKeyDown={onSortKeyDown('score')}
+                      >
+                        {t('score')}
+                        {sa('score')}
+                      </th>
+                      <th scope="col" style={{ ...thStyle, textAlign: 'center', width: 100 }}>
+                        {t('watchlistActions')}
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {displayList.map((item) => {
+                      const key = `${item.source}:${item.source_trader_id}`
+                      const isRemoving = removing === key
+                      const roiColor =
+                        item.roi != null
+                          ? item.roi >= 0
+                            ? 'var(--color-sentiment-bull)'
+                            : 'var(--color-sentiment-bear)'
+                          : 'var(--color-text-tertiary)'
+                      return (
+                        <tr
+                          key={key}
                           style={{
-                            padding: '12px 16px',
-                            textAlign: 'right',
-                            color: roiColor,
-                            fontWeight: tokens.typography.fontWeight.semibold,
-                            fontVariantNumeric: 'tabular-nums',
+                            borderBottom: '1px solid var(--color-border-secondary)',
+                            transition: 'background 0.15s',
+                            opacity: isRemoving ? 0.5 : 1,
+                            cursor: 'pointer',
+                          }}
+                          onMouseEnter={(e) => {
+                            e.currentTarget.style.background = 'var(--color-bg-hover)'
+                          }}
+                          onMouseLeave={(e) => {
+                            e.currentTarget.style.background = 'transparent'
+                          }}
+                          onClick={() => {
+                            router.push(traderHref(item))
                           }}
                         >
-                          {formatRoi(item.roi)}
-                        </td>
-                        <td
-                          style={{
-                            padding: '12px 16px',
-                            textAlign: 'right',
-                            color: 'var(--color-text-secondary)',
-                            fontVariantNumeric: 'tabular-nums',
-                          }}
-                        >
-                          {item.pnl != null ? formatPnL(item.pnl) : '--'}
-                        </td>
-                        <td
-                          style={{
-                            padding: '12px 16px',
-                            textAlign: 'center',
-                            color: 'var(--color-text-secondary)',
-                            fontVariantNumeric: 'tabular-nums',
-                          }}
-                        >
-                          {item.rank != null ? `#${item.rank}` : '--'}
-                        </td>
-                        <td
-                          style={{
-                            padding: '12px 16px',
-                            textAlign: 'right',
-                            color: 'var(--color-text-primary)',
-                            fontWeight: tokens.typography.fontWeight.semibold,
-                            fontVariantNumeric: 'tabular-nums',
-                          }}
-                        >
-                          {formatScore(item.arena_score)}
-                        </td>
-                        <td style={{ padding: '12px 16px', textAlign: 'center' }}>
-                          {confirmRemove === key ? (
-                            <span style={{ display: 'inline-flex', gap: 4 }}>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  handleRemove(item.source, item.source_trader_id)
-                                  setConfirmRemove(null)
-                                }}
-                                style={{
-                                  padding: '4px 8px',
-                                  borderRadius: tokens.radius.sm,
-                                  border: 'none',
-                                  background: 'var(--color-accent-error)',
-                                  color: tokens.colors.white,
-                                  // eslint-disable-next-line no-restricted-syntax -- off-scale micro label by design
-                                  fontSize: 11,
-                                  fontWeight: tokens.typography.fontWeight.semibold,
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                {t('watchlistConfirmYes')}
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setConfirmRemove(null)
-                                }}
-                                style={{
-                                  padding: '4px 8px',
-                                  borderRadius: tokens.radius.sm,
-                                  border: `1px solid ${tokens.colors.border.primary}`,
-                                  background: 'transparent',
-                                  color: tokens.colors.text.secondary,
-                                  // eslint-disable-next-line no-restricted-syntax -- off-scale micro label by design
-                                  fontSize: 11,
-                                  cursor: 'pointer',
-                                }}
-                              >
-                                {t('watchlistConfirmNo')}
-                              </button>
-                            </span>
-                          ) : (
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setConfirmRemove(key)
-                              }}
-                              disabled={isRemoving}
+                          <td style={{ padding: '12px 16px' }}>
+                            <Link
+                              href={traderHref(item)}
                               style={{
-                                padding: '4px 12px',
-                                borderRadius: tokens.radius.sm,
-                                border: '1px solid var(--color-accent-error)',
-                                background: 'transparent',
-                                color: 'var(--color-accent-error)',
-                                fontSize: tokens.typography.fontSize.xs,
-                                fontWeight: tokens.typography.fontWeight.medium,
-                                cursor: isRemoving ? 'not-allowed' : 'pointer',
-                                transition: 'background 0.15s',
+                                color: 'var(--color-text-primary)',
+                                fontWeight: tokens.typography.fontWeight.semibold,
+                                textDecoration: 'none',
                               }}
-                              onMouseEnter={(e) => {
-                                if (!isRemoving)
-                                  e.currentTarget.style.background = alpha(
-                                    'var(--color-accent-error)',
-                                    10
-                                  )
-                              }}
-                              onMouseLeave={(e) => {
-                                e.currentTarget.style.background = 'transparent'
-                              }}
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              {t('watchlistRemove')}
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
+                              {item.handle || item.source_trader_id}
+                            </Link>
+                          </td>
+                          <td
+                            style={{ padding: '12px 16px', color: 'var(--color-text-secondary)' }}
+                          >
+                            {PLATFORM_LABELS[item.source] || item.source}
+                          </td>
+                          <td
+                            style={{
+                              padding: '12px 16px',
+                              textAlign: 'right',
+                              color: roiColor,
+                              fontWeight: tokens.typography.fontWeight.semibold,
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            {formatRoi(item.roi)}
+                          </td>
+                          <td
+                            style={{
+                              padding: '12px 16px',
+                              textAlign: 'right',
+                              color: 'var(--color-text-secondary)',
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            {item.pnl != null ? formatPnL(item.pnl) : '--'}
+                          </td>
+                          <td
+                            style={{
+                              padding: '12px 16px',
+                              textAlign: 'center',
+                              color: 'var(--color-text-secondary)',
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            {item.rank != null ? `#${item.rank}` : '--'}
+                          </td>
+                          <td
+                            style={{
+                              padding: '12px 16px',
+                              textAlign: 'right',
+                              color: 'var(--color-text-primary)',
+                              fontWeight: tokens.typography.fontWeight.semibold,
+                              fontVariantNumeric: 'tabular-nums',
+                            }}
+                          >
+                            {formatScore(item.arena_score)}
+                          </td>
+                          <td style={{ padding: '12px 16px', textAlign: 'center' }}>
+                            {renderRemoveControl(item)}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
       </div>
@@ -555,4 +705,12 @@ const thStyle: React.CSSProperties = {
   fontSize: tokens.typography.fontSize.xs,
   textTransform: 'uppercase',
   letterSpacing: '0.5px',
+}
+
+const mobileStatLabel: React.CSSProperties = {
+  fontSize: tokens.typography.fontSize.xs,
+  color: 'var(--color-text-tertiary)',
+  textTransform: 'uppercase',
+  letterSpacing: '0.04em',
+  marginBottom: 2,
 }
