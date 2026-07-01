@@ -184,6 +184,11 @@ export function parseLbankProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     if (head?.totalTransactionNum !== undefined) {
       extras.lifetime_trades = int(head.totalTransactionNum)
     }
+    // 累计跟单人数 + 带单天数 (逐图核对) — headInfo carries both, were unpromoted.
+    if (head?.accumulatedFollowers !== undefined) {
+      extras.copier_count_history = int(head.accumulatedFollowers)
+    }
+    if (head?.days !== undefined) extras.leading_days = int(head.days)
 
     stats.push({
       timeframe: tf,
