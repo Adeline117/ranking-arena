@@ -7088,6 +7088,7 @@ export type Database = {
           notify_like: boolean | null
           notify_mention: boolean | null
           notify_message: boolean | null
+          notify_trader_events: boolean
           onboarding_completed: boolean | null
           original_email: string | null
           original_handle: string | null
@@ -7155,6 +7156,7 @@ export type Database = {
           notify_like?: boolean | null
           notify_mention?: boolean | null
           notify_message?: boolean | null
+          notify_trader_events?: boolean
           onboarding_completed?: boolean | null
           original_email?: string | null
           original_handle?: string | null
@@ -7222,6 +7224,7 @@ export type Database = {
           notify_like?: boolean | null
           notify_mention?: boolean | null
           notify_message?: boolean | null
+          notify_trader_events?: boolean
           onboarding_completed?: boolean | null
           original_email?: string | null
           original_handle?: string | null
