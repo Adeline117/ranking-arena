@@ -127,7 +127,8 @@ function PositionHistoryCard({
   const formatTime = (timeStr: string) => {
     if (!timeStr) return '--'
     const date = new Date(timeStr)
-    return date.toLocaleString('zh-CN', {
+    // Browser locale (was hardcoded zh-CN — the one non-locale-aware date on the page).
+    return date.toLocaleString(undefined, {
       month: '2-digit',
       day: '2-digit',
       hour: '2-digit',

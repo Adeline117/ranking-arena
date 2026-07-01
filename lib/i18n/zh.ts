@@ -5856,6 +5856,8 @@ const zh = {
   metricGroupPerformance: '核心表现',
   metricLossTrades: '亏损笔数',
   copyCardTitle: '跟单详情',
+  holdByOrder: '按订单',
+  holdByPosition: '按仓位',
   copyCardCurrentCopiers: '当前跟单',
   copyCardCumulativeCopiers: '累计跟单人数',
   copyCardGrowth30d: '跟单增长(30天)',
