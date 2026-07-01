@@ -23,7 +23,7 @@ const SUPPORTED_EXCHANGES = [
 ]
 
 // Exchanges whose API keys require an additional passphrase.
-const PASSPHRASE_EXCHANGES = new Set(['bitget', 'kucoin', 'coinex', 'okx'])
+const PASSPHRASE_EXCHANGES = new Set(['bitget', 'kucoin', 'coinex', 'okx', 'blofin'])
 
 interface AddExchangeModalProps {
   open: boolean
