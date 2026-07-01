@@ -162,7 +162,18 @@ export function parseBitgetProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     if (st.tradeFrequency !== undefined) extras.trade_frequency = num(st.tradeFrequency)
     if (st.largestProfit !== undefined) extras.largest_profit = num(st.largestProfit)
     if (st.largestLoss !== undefined) extras.largest_loss = num(st.largestLoss)
-    if (st.longShortRatio !== undefined) extras.long_short_ratio = st.longShortRatio
+    // 多空比 — raw is an object {longOrder, shortOrder}; the registry metric
+    // wants a finite ratio (long÷short), so promoteExtrasMetrics never surfaced
+    // the object. Write the numeric ratio; keep the order breakdown separately.
+    if (st.longShortRatio && typeof st.longShortRatio === 'object') {
+      const lsr = st.longShortRatio as Record<string, unknown>
+      const lo = num(lsr.longOrder)
+      const so = num(lsr.shortOrder)
+      if (lo !== null && so !== null && so > 0) {
+        extras.long_short_ratio = Math.round((lo / so) * 100) / 100
+      }
+      if (lo !== null && so !== null) extras.long_short_orders = { long: lo, short: so }
+    }
     if (st.lossTrades !== undefined) extras.loss_trades = int(st.lossTrades)
     if (positionTime) {
       // 平均/最长持仓时长 + 按时长桶的盈亏分布(positionTimeDTO.rows),供前端
