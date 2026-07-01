@@ -191,6 +191,11 @@ export function parseBtccProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
         pnl: num(profitInfo.totalNetProfit),
         win_rate: num(profitInfo.winRate),
       }
+      // Also surface all-time ROI as a top-level registry-aliased key — the
+      // nested all_time.roi is invisible to promoteExtrasMetrics. Phase A.
+      // (total_pnl already covered by extras.cumulative_net_profit.)
+      const totalRoi = num(profitInfo.totalProfitRate)
+      if (totalRoi !== null) extras.total_roi = totalRoi
     }
 
     const avgHoldSecs = num(gain.avgPostionTimes)
