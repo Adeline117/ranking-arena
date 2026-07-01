@@ -121,6 +121,98 @@ describe('parseHyperliquidProfile', () => {
     expect(pnlSeries?.points[pnlSeries.points.length - 1].value).toBeCloseTo(1147414.886682, 3)
   })
 
+  it('fills replay fills winRate/positions/holding + pnl_ratio (M3-3a)', () => {
+    // Two synthetic round-trips inside the 30d window: BTC win (4h), ETH loss (2h).
+    const T = Date.parse(ctx.scrapedAt) - 3 * 86_400_000
+    const H = 3_600_000
+    const fills = [
+      {
+        coin: 'BTC',
+        time: T,
+        side: 'B',
+        sz: '1',
+        px: '100',
+        startPosition: '0',
+        closedPnl: '0',
+        fee: '0',
+      },
+      {
+        coin: 'BTC',
+        time: T + 4 * H,
+        side: 'A',
+        sz: '1',
+        px: '110',
+        startPosition: '1',
+        closedPnl: '20',
+        fee: '0',
+      },
+      {
+        coin: 'ETH',
+        time: T + 10 * H,
+        side: 'B',
+        sz: '1',
+        px: '100',
+        startPosition: '0',
+        closedPnl: '0',
+        fee: '0',
+      },
+      {
+        coin: 'ETH',
+        time: T + 12 * H,
+        side: 'A',
+        sz: '1',
+        px: '90',
+        startPosition: '1',
+        closedPnl: '-10',
+        fee: '0',
+      },
+    ]
+    const profile = parseHyperliquidProfile({ ...bundle, fills, timeframe: 30 }, ctx)
+    const st = profile.stats[0]
+    expect(st.winRate).toBe(50)
+    expect(st.winPositions).toBe(1)
+    expect(st.totalPositions).toBe(2)
+    expect(st.holdingDurationAvgHours).toBeCloseTo(3, 1)
+    expect(st.extras.fills_derivation).toBe('fills-replay')
+    expect(st.extras.pnl_ratio).toBeCloseTo(2, 2)
+  })
+
+  it('position_history: round-trips from fills (M3-3a)', () => {
+    const T = Date.parse('2026-06-01T00:00:00Z')
+    const fills = [
+      {
+        coin: 'SOL',
+        time: T,
+        side: 'B',
+        sz: '2',
+        px: '50',
+        startPosition: '0',
+        closedPnl: '0',
+        fee: '0',
+      },
+      {
+        coin: 'SOL',
+        time: T + 7_200_000,
+        side: 'A',
+        sz: '2',
+        px: '55',
+        startPosition: '2',
+        closedPnl: '10',
+        fee: '1',
+      },
+    ]
+    const rows = parseHyperliquidHistory({ fills }, 'position_history', ctx)
+    expect(rows).toHaveLength(1)
+    const p = rows[0]
+    if (p.kind !== 'position_history') throw new Error('wrong kind')
+    expect(p.symbol).toBe('SOL')
+    expect(p.side).toBe('long')
+    expect(p.entryPrice).toBeCloseTo(50, 6)
+    expect(p.exitPrice).toBeCloseTo(55, 6)
+    expect(p.realizedPnl).toBeCloseTo(9, 6) // closedPnl − fee
+    expect(p.dedupeHash).toMatch(/^[0-9a-f]{40}$/)
+  })
+
   it('timeframe 0 (inception) falls back to the 90d derivation', () => {
     const profile = parseHyperliquidProfile({ ...bundle, timeframe: 0 }, ctx)
     expect(profile.stats[0].timeframe).toBe(90)

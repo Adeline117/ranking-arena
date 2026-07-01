@@ -131,7 +131,12 @@ function effectiveDepth(src: SourceRow): number {
 interface ProfilePair {
   portfolio: unknown
   clearinghouse: unknown
+  /** userFillsByTime over the last 90d (M3-3a fills replay). Null on fetch
+   *  failure — the parser NULL-collapses the fills-derived stats. */
+  fills: unknown
 }
+
+const FILLS_WINDOW_MS = 90 * 86_400_000
 
 const profileCache = new WeakMap<FetchSession, Map<string, Promise<ProfilePair>>>()
 
@@ -157,7 +162,19 @@ function getProfilePair(
         method: 'POST',
         body: { type: 'clearinghouseState', user: address },
       })
-      return { portfolio, clearinghouse }
+      // Fills replay (M3-3a): ONE 90d fetch per trader per session — the parser
+      // slices per-TF windows from it. userFillsByTime caps at ~2000 fills; for
+      // hyperactive accounts that truncates the tail (disclosed via count).
+      // Failure never blocks the profile (winRate etc. just stay null).
+      const fills = await fetchJson(session, url, {
+        method: 'POST',
+        body: {
+          type: 'userFillsByTime',
+          user: address,
+          startTime: Date.now() - FILLS_WINDOW_MS,
+        },
+      }).catch(() => null)
+      return { portfolio, clearinghouse, fills }
     })()
     perSession.set(address, cached)
     cached.catch(() => perSession!.delete(address))
@@ -168,9 +185,11 @@ function getProfilePair(
 const hyperliquidAdapter: SourceAdapter = {
   slug: 'hyperliquid',
   capabilities: {
-    profile: true, // portfolio + clearinghouseState
+    profile: true, // portfolio + clearinghouseState + 90d fills
     positions: true, // clearinghouseState.assetPositions
-    positionHistory: false, // fills replay out of v1 (spike §8.3)
+    // M3-3a: closed positions rebuilt from userFillsByTime round-trips
+    // (lib/ingest/adapters/hyperliquid/fills.ts) — the spike-§8.3 replay, now in.
+    positionHistory: true,
     orders: false,
     transfers: false,
     copiers: false, // DEX — no copy trading
@@ -259,12 +278,24 @@ const hyperliquidAdapter: SourceAdapter = {
   },
 
   async *getHistory(
-    _session: FetchSession,
-    _src: SourceRow,
-    _exchangeTraderId: string,
+    session: FetchSession,
+    src: SourceRow,
+    exchangeTraderId: string,
     kind: HistoryKind
   ): AsyncIterable<RawPage> {
-    throw new Error(`[hyperliquid] history surface ${kind} not supported`)
+    if (kind !== 'position_history') {
+      throw new Error(`[hyperliquid] history surface ${kind} not supported`)
+    }
+    // Reuses the memoized profile pair — position_history costs ZERO extra
+    // requests when the Tier-B profile crawl already ran this session.
+    const address = exchangeTraderId.toLowerCase()
+    const pair = await getProfilePair(session, src, address)
+    yield {
+      pageIndex: 1,
+      payload: { fills: pair.fills },
+      url: endpoint(src, 'info', INFO_URL),
+      fetchedAt: new Date().toISOString(),
+    }
   },
 
   parseLeaderboard: parseHyperliquidLeaderboardPage,
