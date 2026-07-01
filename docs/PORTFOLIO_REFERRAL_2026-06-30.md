@@ -70,11 +70,12 @@ qualify age, velocity window) — single source of truth, cost-sensitive.
 
 ## Ops actions still needed (not code — decisions/config)
 
-1. **Enable binance/okx sync** (optional): set on Vercel
-   - `PORTFOLIO_SYNC_PROXY_URL` = the SG VPS proxy base (e.g. `http://45.76.152.169:3456`)
-   - `PORTFOLIO_SYNC_PROXY_KEY` = the proxy `X-Proxy-Key` (`PROXY_KEY` on the VPS)
-     Verify the VPS proxy (`arena-proxy.mjs` on `:3456`) is running + reachable from Vercel
-     first. Routing signed read-only traffic through the SG VPS is the trade-off.
+1. **binance/okx sync — ACTIVATED 2026-07-01** (no ops action needed). The geo-proxy
+   reuses the already-provisioned `VPS_PROXY_SG` + `VPS_PROXY_KEY` (Vercel prod, used by
+   ingest), so it's live on deploy. Verified end-to-end: SG VPS proxy healthy + a binance
+   ping through it returns 200. `PORTFOLIO_SYNC_PROXY_URL`/`_KEY` override for an independent
+   endpoint. Trade-off (accepted): signed read-only traffic routes through the SG VPS — the
+   API secret never leaves Vercel (CCXT signs locally).
 
 2. **Turn off the Pro-free promo** when ready: `PRO_FREE_PROMO = false` in
    `lib/types/premium.ts` (one flag; disables the unlock + the banner together).

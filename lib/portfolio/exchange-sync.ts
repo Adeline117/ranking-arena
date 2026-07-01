@@ -80,8 +80,11 @@ const PASSPHRASE_REQUIRED = new Set(['bitget', 'kucoin', 'coinex', 'okx', 'blofi
  * geo-blocked exchanges cleanly fall back to `geo_unavailable` (no regression).
  */
 function makeProxyFetch(): ((url: string | URL, init?: RequestInit) => Promise<Response>) | null {
-  const proxyUrl = process.env.PORTFOLIO_SYNC_PROXY_URL
-  const proxyKey = process.env.PORTFOLIO_SYNC_PROXY_KEY
+  // Reuse the already-provisioned SG VPS proxy (VPS_PROXY_SG / VPS_PROXY_KEY, set
+  // in prod for ingest) so binance/okx sync is active without extra config. The
+  // PORTFOLIO_SYNC_PROXY_* vars override if you want an independent endpoint/key.
+  const proxyUrl = process.env.PORTFOLIO_SYNC_PROXY_URL || process.env.VPS_PROXY_SG
+  const proxyKey = process.env.PORTFOLIO_SYNC_PROXY_KEY || process.env.VPS_PROXY_KEY
   if (!proxyUrl || !proxyKey) return null
   return async (url, init) => {
     const headers: Record<string, string> = {}
