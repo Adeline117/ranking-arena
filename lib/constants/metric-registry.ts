@@ -34,7 +34,15 @@ export const METRIC_REGISTRY: readonly MetricDef[] = [
   { key: 'copier_count', i18nKey: 'metricCopierCount', format: 'count', tier: 'standard' },
   { key: 'aum', i18nKey: 'metricAum', format: 'money', tier: 'standard' },
   { key: 'win_positions', i18nKey: 'metricWinPositions', format: 'count', tier: 'standard' },
+  {
+    key: 'loss_trades',
+    i18nKey: 'metricLossTrades',
+    format: 'count',
+    tier: 'standard',
+    inverted: true,
+  },
   { key: 'total_positions', i18nKey: 'metricTotalPositions', format: 'count', tier: 'standard' },
+  { key: 'min_copy_amount', i18nKey: 'metricMinCopyAmount', format: 'money', tier: 'standard' },
   { key: 'profit_share_rate', i18nKey: 'metricProfitShare', format: 'pct', tier: 'standard' },
   { key: 'volume', i18nKey: 'metricVolume', format: 'money', tier: 'standard' },
   {
@@ -82,6 +90,12 @@ export const METRIC_REGISTRY: readonly MetricDef[] = [
   { key: 'avg_profit', i18nKey: 'metricAvgProfit', format: 'money', tier: 'advanced' },
   { key: 'avg_loss', i18nKey: 'metricAvgLoss', format: 'money', tier: 'advanced', inverted: true },
   { key: 'avg_pnl_per_trade', i18nKey: 'metricAvgPnlPerTrade', format: 'money', tier: 'advanced' },
+  {
+    key: 'avg_hold_time_by_position',
+    i18nKey: 'metricAvgHoldByPosition',
+    format: 'duration',
+    tier: 'advanced',
+  },
   { key: 'long_short_ratio', i18nKey: 'metricLongShortRatio', format: 'ratio', tier: 'advanced' },
   { key: 'trades_per_week', i18nKey: 'metricTradesPerWeek', format: 'count', tier: 'standard' },
   { key: 'profit_days', i18nKey: 'metricProfitDays', format: 'count', tier: 'advanced' },
@@ -135,7 +149,13 @@ export const EXTRAS_METRIC_ALIASES: Readonly<Record<string, readonly string[]>> 
   // safe — promoteExtrasMetrics only promotes finite numbers, so string labels
   // are ignored rather than mis-shown).
   total_roi: ['total_roi', 'total_return_rate'],
-  total_pnl: ['total_pnl', 'total_profit_amount', 'cumulative_net_profit'],
+  total_pnl: ['total_pnl', 'total_profit_amount', 'cumulative_net_profit', 'total_earnings'],
+  // 逐图核对 M2-2c: previously captured-but-invisible scalar keys.
+  loss_trades: ['loss_trades', 'loss_count'],
+  min_copy_amount: ['min_copy_amount'],
+  profit_share_rate: ['profit_share_rate'],
+  holding_duration_avg: ['avg_hold_time_hours', 'avg_holding_time'],
+  avg_hold_time_by_position: ['avg_hold_time_by_position_hours'],
   largest_profit: ['largest_profit'],
   largest_loss: ['largest_loss'],
   avg_profit: ['avg_profit', 'average_profit'],
