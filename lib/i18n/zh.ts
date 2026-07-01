@@ -4260,6 +4260,7 @@ const zh = {
   copyHandle: '复制',
   switchLanguage: '切换语言',
   newsBreaking: '突发',
+  flashNewsNewItems: '{count} 条新快讯',
   newsAltcoins: '山寨币',
   newsMacroRegulation: '宏观/监管',
   newsExchanges: '交易所',
