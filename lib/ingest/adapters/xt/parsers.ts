@@ -84,6 +84,20 @@ function isPlaceholderRow(item: Dict): boolean {
  * v3 (futures) exposes result.total; v2 (spot) does not. Spot all-zero
  * placeholder rows are dropped so they never reach serving.
  */
+
+/** Board-row copier/tenure/growth fields → trader_stats.extras (逐图核对). */
+function xtBoardExtras(item: Dict): Record<string, unknown> | null {
+  const ext: Record<string, unknown> = {}
+  const copierPnl = num(item.totalFollowerProfit)
+  if (copierPnl !== null) ext.copier_total_profit = copierPnl
+  const tradeDays = int(item.tradeDays ?? item.days)
+  if (tradeDays !== null) ext.trading_days = tradeDays
+  const growth = int(item.newFollowNumber)
+  if (growth !== null) ext.copier_growth = growth
+  const followerMargin = num(item.followerMargin)
+  if (followerMargin !== null) ext.follower_margin = followerMargin
+  return Object.keys(ext).length > 0 ? ext : null
+}
 export function parseXtLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedLeaderboardPage {
   const rows: ParsedLeaderboardRow[] = []
   const list = items(payload)
@@ -121,6 +135,11 @@ export function parseXtLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedL
       // so even board-tier traders (never deep-crawled) show a copier count. Was
       // previously left in raw only. Phase A.
       headlineCopierCount: int(item.followerCount),
+      // Lead AUM = total follower margin under management (img63 "Lead AUM").
+      headlineAum: num(item.totalFollowerMargin),
+      // 逐图核对 image63/65: the board row (24 keys) carries copier profit /
+      // tenure / growth that the thin leader-detail-v2 profile lacks. Promote them.
+      headlineExtras: xtBoardExtras(item),
       traderMeta: Object.keys(traderMeta).length > 0 ? traderMeta : null,
       raw: item,
     })

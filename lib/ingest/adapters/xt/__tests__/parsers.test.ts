@@ -37,6 +37,12 @@ describe('parseXtLeaderboardPage', () => {
     expect(first.headlineMdd).toBeCloseTo(0.4257, 4)
     // 跟单人数 (followerCount) → headlineCopierCount → trader_stats.copier_count
     expect(first.headlineCopierCount).toBe(43)
+    // 逐图核对 image63: Lead AUM + copier profit/tenure/growth from the board row
+    expect(first.headlineAum).toBeCloseTo(262477.24, 1) // totalFollowerMargin
+    const xe = first.headlineExtras as Record<string, number>
+    expect(xe.copier_total_profit).toBeCloseTo(2359.04, 1)
+    expect(xe.trading_days).toBe(480)
+    expect(xe.copier_growth).toBe(51)
     // Lvl badge → traderMeta
     expect(first.traderMeta).toMatchObject({ xt_level: 2, xt_level_name: 'Lvl 2' })
     // chart series preserved verbatim in raw
