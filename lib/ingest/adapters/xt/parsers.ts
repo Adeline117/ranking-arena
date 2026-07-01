@@ -117,6 +117,10 @@ export function parseXtLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedL
       // trader_stats.mdd — matching blofin/bingx (which capture MDD at 90%+). Was
       // previously unread, leaving XT at 0% MDD capture.
       headlineMdd: num(item.maxRetraction),
+      // 跟单人数 on every board row — publish writes it to trader_stats.copier_count,
+      // so even board-tier traders (never deep-crawled) show a copier count. Was
+      // previously left in raw only. Phase A.
+      headlineCopierCount: int(item.followerCount),
       traderMeta: Object.keys(traderMeta).length > 0 ? traderMeta : null,
       raw: item,
     })

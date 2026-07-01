@@ -35,6 +35,8 @@ describe('parseXtLeaderboardPage', () => {
     // maxRetraction 0.4257 (already percent) → headlineMdd, so XT captures MDD
     // (was previously dropped → 0% MDD capture in prod).
     expect(first.headlineMdd).toBeCloseTo(0.4257, 4)
+    // 跟单人数 (followerCount) → headlineCopierCount → trader_stats.copier_count
+    expect(first.headlineCopierCount).toBe(43)
     // Lvl badge → traderMeta
     expect(first.traderMeta).toMatchObject({ xt_level: 2, xt_level_name: 'Lvl 2' })
     // chart series preserved verbatim in raw
