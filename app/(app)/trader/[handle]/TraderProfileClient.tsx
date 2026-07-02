@@ -21,6 +21,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
+import { useSourceCapabilities } from '@/lib/hooks/useSourceCapabilities'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { trackEvent } from '@/lib/analytics/track'
 import { Box, Text } from '@/app/components/base'
@@ -283,11 +284,23 @@ export default function TraderProfileClient({
       ? accountOverride
       : null
   const servingFirstScreen = override ? override.firstScreen : serverFirstScreen
-  const servingCapability = override ? override.capability : serverCapability
   const data = useMemo<UnregisteredTraderData>(
     () => (override ? firstScreenToTraderData(override.firstScreen, urlHandle) : serverData),
     [override, serverData, urlHandle]
   )
+  // ROOT-CAUSE FIX (2026-07-02): the page is ISR-static, and the server's
+  // cachedCapabilities() races a 2s timeout → {} — a slow render bakes
+  // servingCapability:null INTO the cached HTML for the whole revalidate
+  // window. Null capability permanently disables every /records fetch in
+  // useServingTabData (capability?.surfaces?.positions is false), so the
+  // Portfolio tab rendered "No portfolio data available" while
+  // /api/traders/:id/records returned rows. Fall back to the client-fetched
+  // near-static capability matrix ONLY when the server prop is missing.
+  const serverOrOverrideCapability = override ? override.capability : serverCapability
+  const { capabilities: clientCapabilities } = useSourceCapabilities(
+    isServing && !serverOrOverrideCapability
+  )
+  const servingCapability = serverOrOverrideCapability ?? clientCapabilities?.[data.source] ?? null
 
   // Period URL ↔ store sync extracted into hook (see ./hooks/useTraderPeriodSync)
   const selectedPeriod = useTraderPeriodSync()
