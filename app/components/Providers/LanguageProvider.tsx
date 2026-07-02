@@ -9,6 +9,7 @@ import {
   useCallback,
   ReactNode,
 } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   type Language,
   getLanguage,
@@ -43,6 +44,7 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   // Start with 'en' to match SSR output — getLanguage() reads localStorage which is only
   // available after hydration. We update in useEffect once mounted.
   const [language, setLanguageState] = useState<Language>('en')
+  const router = useRouter()
   // Bump when English translations finish async loading — forces t() consumers to re-render.
   // The version value MUST feed the t/contextValue memo deps below, otherwise the bump
   // re-renders the provider but produces an identical context reference and stale consumers
@@ -85,14 +87,21 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const setLanguage = useCallback((lang: Language) => {
-    setLang(lang)
-    if (lang !== 'en') {
-      loadTranslations(lang).then(() => setLanguageState(lang))
-    } else {
-      setLanguageState(lang)
-    }
-  }, [])
+  const setLanguage = useCallback(
+    (lang: Language) => {
+      setLang(lang) // writes the `language` cookie synchronously
+      if (lang !== 'en') {
+        loadTranslations(lang).then(() => setLanguageState(lang))
+      } else {
+        setLanguageState(lang)
+      }
+      // Re-fetch server components so SSR-only content (e.g. the homepage hero,
+      // which reads the cookie via getServerTranslation) updates to the new
+      // language immediately instead of staying stale until a full reload.
+      router.refresh()
+    },
+    [router]
+  )
 
   // Stable translation function — only recreated when language actually changes, not on mount
   const t = useMemo((): TranslationFunction => {
