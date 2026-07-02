@@ -6,9 +6,13 @@ on:
   pull_request:
     branches: [main]
 
+# Per-SHA group, no cancel: 7 个并发会话高频直推 main，per-ref cancel-in-progress
+# 会让每个 run 都被下一次 push 取消——CI 在忙碌时段永远跑不完（2026-07-02 差距
+# 审计发现"CI 全红"的一半根因是 cancelled 而非 failure）。快速作业必须每个
+# commit 跑完才能充当部署门禁；E2E 成本高，在 job 级单独设 per-ref cancel。
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.ref }}-${{ github.sha }}
+  cancel-in-progress: false
 
 env:
   NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
@@ -231,6 +235,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     timeout-minutes: 30
+    # E2E 只保留"最新 commit"一份在跑（成本控制）；被取消不影响部署门禁
+    # （门禁只看 pre-checks/lint-typecheck/unit/build），全量 E2E 有 nightly 兜底
+    concurrency:
+      group: ci-e2e-${{ github.ref }}
+      cancel-in-progress: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v6
