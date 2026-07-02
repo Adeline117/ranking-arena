@@ -1224,6 +1224,7 @@ const en = {
   compareMetrics: 'Metrics',
   compareScoreBars: 'Score Bars',
   compareTableCaption: 'Trader metrics comparison table',
+  compareBestValue: 'Best value for this metric',
   compareEquityCurve: 'Equity Curve',
   compareArenaScore: 'Arena Score',
   compareROI90D: 'ROI (90D)',
