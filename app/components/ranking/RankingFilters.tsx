@@ -1,7 +1,7 @@
 'use client'
 
 import type { TranslationKey } from '@/lib/i18n'
-import React, { useRef, useEffect, useMemo, useCallback } from 'react'
+import React, { useRef, useEffect, useMemo, useCallback, useId } from 'react'
 import Link from 'next/link'
 import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
@@ -366,9 +366,11 @@ export function RankingFilters({
 }: RankingFiltersProps) {
   const { t, language } = useLanguage()
   const columnSettingsRef = useRef<HTMLDivElement>(null)
+  const columnSettingsBtnRef = useRef<HTMLButtonElement>(null)
+  const columnSettingsPanelId = useId()
   const filterPanelRef = useRef<HTMLDivElement>(null)
 
-  // Close column dropdown on outside click
+  // Close column dropdown on outside click / Escape (Escape restores focus to trigger)
   useEffect(() => {
     if (!showColumnSettings) return
     const handler = (e: MouseEvent) => {
@@ -376,8 +378,18 @@ export function RankingFilters({
         onShowColumnSettings(false)
       }
     }
+    const keyHandler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onShowColumnSettings(false)
+        columnSettingsBtnRef.current?.focus()
+      }
+    }
     document.addEventListener('click', handler, true)
-    return () => document.removeEventListener('click', handler, true)
+    document.addEventListener('keydown', keyHandler)
+    return () => {
+      document.removeEventListener('click', handler, true)
+      document.removeEventListener('keydown', keyHandler)
+    }
   }, [showColumnSettings, onShowColumnSettings])
 
   // Close filter panel on outside click
@@ -693,25 +705,23 @@ export function RankingFilters({
 
           {/* Column settings */}
           <div ref={columnSettingsRef} style={{ position: 'relative' }}>
-            <Box
+            <button
+              ref={columnSettingsBtnRef}
+              type="button"
               onClick={() => onShowColumnSettings(!showColumnSettings)}
-              onKeyDown={(e: React.KeyboardEvent) => {
-                if (e.key === 'Enter' || e.key === ' ') {
-                  e.preventDefault()
-                  onShowColumnSettings(!showColumnSettings)
-                }
-              }}
               title={t('columnSettingsTitle')}
               aria-label={t('columnSettingsTitle')}
               aria-expanded={showColumnSettings}
-              role="button"
-              tabIndex={0}
+              aria-controls={showColumnSettings ? columnSettingsPanelId : undefined}
               className={`toolbar-btn touch-target-sm${showColumnSettings ? ' toolbar-btn-active' : ''}`}
             >
               <SettingsIcon size={11} />
-            </Box>
+            </button>
             {showColumnSettings && (
               <Box
+                id={columnSettingsPanelId}
+                role="group"
+                aria-label={t('columnSettingsTitle')}
                 className="dropdown-enter"
                 style={{
                   position: 'absolute',
