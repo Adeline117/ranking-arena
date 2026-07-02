@@ -1,6 +1,6 @@
 'use client'
 
-import { localizedLabel } from '@/lib/utils/format'
+import type { TranslationKey } from '@/lib/i18n'
 import React, { useRef, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
@@ -23,18 +23,26 @@ const ALL_TOGGLEABLE_COLUMNS: ColumnKey[] = [
   'followers',
   'trades',
 ]
-const COLUMN_LABELS: Record<ColumnKey, { zh: string; en: string }> = {
-  score: { zh: 'Arena Score', en: 'Arena Score' },
-  roi: { zh: 'ROI', en: 'ROI' },
-  pnl: { zh: 'PnL', en: 'PnL' },
-  winrate: { zh: '胜率', en: 'Win Rate' },
-  mdd: { zh: '最大回撤', en: 'Max Drawdown' },
-  sharpe: { zh: 'Sharpe', en: 'Sharpe' },
-  sortino: { zh: 'Sortino', en: 'Sortino' },
-  alpha: { zh: 'Alpha', en: 'Alpha' },
-  style: { zh: '交易风格', en: 'Style' },
-  followers: { zh: '跟单人数', en: 'Followers' },
-  trades: { zh: '交易次数', en: 'Trades' },
+// Brand/metric abbreviations (score/roi/pnl/sharpe/sortino/alpha) are
+// language-neutral literals; the rest resolve via t() for native ja/ko.
+const COLUMN_LITERALS: Partial<Record<ColumnKey, string>> = {
+  score: 'Arena Score',
+  roi: 'ROI',
+  pnl: 'PnL',
+  sharpe: 'Sharpe',
+  sortino: 'Sortino',
+  alpha: 'Alpha',
+}
+const COLUMN_LABEL_KEYS: Partial<Record<ColumnKey, TranslationKey>> = {
+  winrate: 'winRate',
+  mdd: 'maxDrawdown',
+  style: 'tradingStyleLabel',
+  followers: 'followers',
+  trades: 'trades',
+}
+const columnLabel = (col: ColumnKey, t: (k: TranslationKey) => string): string => {
+  const key = COLUMN_LABEL_KEYS[col]
+  return key ? t(key) : COLUMN_LITERALS[col] || col
 }
 
 const SCORE_TIERS = [
@@ -742,7 +750,7 @@ export function RankingFilters({
                       onChange={() => onToggleColumn(col)}
                       style={{ cursor: 'pointer' }}
                     />
-                    {localizedLabel(COLUMN_LABELS[col].zh, COLUMN_LABELS[col].en, language)}
+                    {columnLabel(col, t)}
                   </label>
                 ))}
                 <button
@@ -839,7 +847,9 @@ export function RankingFilters({
                     <FilterChip
                       key={s.style}
                       active={styleFilter === s.style}
-                      label={localizedLabel(s.label, s.labelEn, language)}
+                      label={t(
+                        `tradingStyle${s.style.charAt(0).toUpperCase()}${s.style.slice(1)}` as TranslationKey
+                      )}
                       count={n}
                       disabled={n === 0 && styleFilter !== s.style}
                       onClick={() => handleStyleChange(s.style)}
