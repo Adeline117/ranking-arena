@@ -9,32 +9,32 @@ const supabase = createClient(
 
 async function main() {
   console.log('🔍 检查失败的任务...\n')
-  
+
   // 检查指定的失败任务
   const targetTasks = [
     'batch-enrich-30D',
     'batch-enrich-7D',
     'batch-enrich-90D',
     'batch-fetch-traders-a4',
-    'batch-fetch-traders-d2'
+    'batch-fetch-traders-d2',
   ]
-  
+
   const { data, error } = await supabase
     .from('cron_tasks')
     .select('task_name, status, last_run, error_message, success_count, failure_count')
     .in('task_name', targetTasks)
     .order('task_name')
-  
+
   if (error) {
     console.error('❌ 查询失败:', error.message)
     return
   }
-  
+
   if (!data || data.length === 0) {
     console.log('⚠️  未找到这些任务的记录')
     return
   }
-  
+
   console.log('📊 任务状态：\n')
   for (const task of data) {
     const status = task.status === 'success' ? '✅' : '❌'
@@ -48,7 +48,7 @@ async function main() {
     }
     console.log()
   }
-  
+
   // 检查所有失败的任务
   console.log('\n🚨 所有失败任务：\n')
   const { data: allFailed, error: err2 } = await supabase
@@ -57,18 +57,20 @@ async function main() {
     .eq('status', 'failure')
     .order('last_run', { ascending: false })
     .limit(20)
-  
+
   if (err2) {
     console.error('❌ 查询失败:', err2.message)
     return
   }
-  
+
   if (!allFailed || allFailed.length === 0) {
     console.log('✅ 无失败任务')
   } else {
     for (const task of allFailed) {
       console.log(`❌ ${task.task_name}`)
-      console.log(`   最后运行: ${task.last_run ? new Date(task.last_run).toLocaleString() : 'N/A'}`)
+      console.log(
+        `   最后运行: ${task.last_run ? new Date(task.last_run).toLocaleString() : 'N/A'}`
+      )
       if (task.error_message) {
         console.log(`   错误: ${task.error_message.substring(0, 150)}`)
       }

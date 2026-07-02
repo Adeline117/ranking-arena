@@ -1,6 +1,6 @@
 /**
  * VPS Scraper Health Check & Performance Test
- * 
+ *
  * Usage:
  *   npx tsx scripts/test-vps-scrapers.ts
  */
@@ -42,16 +42,16 @@ async function checkHealth(): Promise<HealthResponse | null> {
 
 async function testBybit(): Promise<TestResult> {
   const start = Date.now()
-  
+
   try {
     const url = `${VPS_SCRAPER_URL}/bybit/leaderboard-batch?pageSize=50&durations=DATA_DURATION_THIRTY_DAY`
     const res = await fetch(url, {
       headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
       signal: AbortSignal.timeout(90_000),
     })
-    
+
     const duration = Date.now() - start
-    
+
     if (!res.ok) {
       return {
         platform: 'Bybit',
@@ -62,10 +62,10 @@ async function testBybit(): Promise<TestResult> {
         error: `HTTP ${res.status}`,
       }
     }
-    
+
     const data: any = await res.json()
     const traders = data.DATA_DURATION_THIRTY_DAY?.result?.leaderDetails?.length || 0
-    
+
     return {
       platform: 'Bybit',
       endpoint: '/bybit/leaderboard-batch',
@@ -87,16 +87,16 @@ async function testBybit(): Promise<TestResult> {
 
 async function testMexc(): Promise<TestResult> {
   const start = Date.now()
-  
+
   try {
     const url = `${VPS_SCRAPER_URL}/mexc/leaderboard?periodType=2&pageSize=50`
     const res = await fetch(url, {
       headers: { 'X-Proxy-Key': VPS_SCRAPER_KEY },
       signal: AbortSignal.timeout(90_000),
     })
-    
+
     const duration = Date.now() - start
-    
+
     if (!res.ok) {
       return {
         platform: 'MEXC',
@@ -107,14 +107,14 @@ async function testMexc(): Promise<TestResult> {
         error: `HTTP ${res.status}`,
       }
     }
-    
+
     const data: any = await res.json()
     const traders =
       data?.data?.resultList?.length ||
       data?.data?.list?.length ||
       data?.data?.comprehensives?.length ||
       0
-    
+
     return {
       platform: 'MEXC',
       endpoint: '/mexc/leaderboard',
@@ -136,14 +136,14 @@ async function testMexc(): Promise<TestResult> {
 
 async function main() {
   console.log('🏥 VPS Scraper Health Check\n')
-  
+
   // Check health
   const health = await checkHealth()
   if (!health) {
     console.error('❌ VPS scraper is not responding')
     process.exit(1)
   }
-  
+
   console.log('✅ VPS Scraper Status:')
   console.log(`   URL: ${VPS_SCRAPER_URL}`)
   console.log(`   Version: ${health.version}`)
@@ -152,7 +152,7 @@ async function main() {
   console.log(`   Queue: ${health.queued}`)
   console.log(`   Endpoints: ${health.endpoints.length}`)
   console.log('')
-  
+
   // Test Bybit
   console.log('🧪 Testing Bybit...')
   const bybitResult = await testBybit()
@@ -162,7 +162,7 @@ async function main() {
       : `❌ Bybit failed: ${bybitResult.error} (${(bybitResult.duration / 1000).toFixed(1)}s)`
   )
   console.log('')
-  
+
   // Test MEXC
   console.log('🧪 Testing MEXC...')
   const mexcResult = await testMexc()
@@ -172,22 +172,22 @@ async function main() {
       : `❌ MEXC failed: ${mexcResult.error} (${(mexcResult.duration / 1000).toFixed(1)}s)`
   )
   console.log('')
-  
+
   // Summary
   const results = [bybitResult, mexcResult]
   const successful = results.filter((r) => r.success).length
   const avgDuration = results.reduce((sum, r) => sum + r.duration, 0) / results.length / 1000
-  
+
   console.log('📊 Summary:')
   console.log(`   Success Rate: ${successful}/${results.length}`)
   console.log(`   Avg Duration: ${avgDuration.toFixed(1)}s`)
   console.log('')
-  
+
   if (successful < results.length) {
     console.warn('⚠️  Some platforms failed. Check VPS scraper logs.')
     process.exit(1)
   }
-  
+
   console.log('✅ All platforms working')
 }
 

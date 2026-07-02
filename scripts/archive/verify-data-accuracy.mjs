@@ -44,7 +44,9 @@ async function fetchJson(url, opts = {}) {
 async function getArenaTopTraders(source, seasonId, limit = 5) {
   const { data, error } = await supabase
     .from('leaderboard_ranks')
-    .select('source_trader_id, handle, roi, pnl, arena_score, rank, win_rate, max_drawdown, sharpe_ratio, trades_count, computed_at')
+    .select(
+      'source_trader_id, handle, roi, pnl, arena_score, rank, win_rate, max_drawdown, sharpe_ratio, trades_count, computed_at'
+    )
     .eq('season_id', seasonId)
     .eq('source', source)
     .or('is_outlier.is.null,is_outlier.eq.false')
@@ -58,7 +60,9 @@ async function getArenaTopTraders(source, seasonId, limit = 5) {
 async function getArenaTopOverall() {
   const { data, error } = await supabase
     .from('leaderboard_ranks')
-    .select('source_trader_id, handle, roi, pnl, arena_score, rank, source, season_id, win_rate, max_drawdown, sharpe_ratio, trades_count, computed_at')
+    .select(
+      'source_trader_id, handle, roi, pnl, arena_score, rank, source, season_id, win_rate, max_drawdown, sharpe_ratio, trades_count, computed_at'
+    )
     .eq('season_id', '90D')
     .gt('arena_score', 0)
     .or('is_outlier.is.null,is_outlier.eq.false')
@@ -86,28 +90,41 @@ async function getV2Snapshot(platform, traderKey, window) {
 // Binance Futures: use new copy-trade API
 async function fetchBinanceLive(encryptedUid) {
   // Get performance data
-  const perf = await fetchJson('https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getOtherPerformance', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ encryptedUid, tradeType: 'PERPETUAL' })
-  })
+  const perf = await fetchJson(
+    'https://www.binance.com/bapi/futures/v1/public/future/leaderboard/getOtherPerformance',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ encryptedUid, tradeType: 'PERPETUAL' }),
+    }
+  )
 
   // Also try copy-trade detail for more metrics
-  const detail = await fetchJson('https://www.binance.com/bapi/futures/v2/friendly/future/copy-trade/lead-portfolio/detail', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ portfolioId: encryptedUid })
-  })
+  const detail = await fetchJson(
+    'https://www.binance.com/bapi/futures/v2/friendly/future/copy-trade/lead-portfolio/detail',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ portfolioId: encryptedUid }),
+    }
+  )
 
-  let roi30d = null, pnl30d = null
+  let roi30d = null,
+    pnl30d = null
   if (perf?.data && Array.isArray(perf.data)) {
     for (const entry of perf.data) {
-      if ((entry.periodType === 'MONTHLY' || entry.periodType === '30D') && entry.statisticsType === 'ROI') {
+      if (
+        (entry.periodType === 'MONTHLY' || entry.periodType === '30D') &&
+        entry.statisticsType === 'ROI'
+      ) {
         // Old format: decimal, New format: already percentage
         const val = Number(entry.value)
         roi30d = Math.abs(val) <= 10 ? val * 100 : val // Smart detect decimal vs pct
       }
-      if ((entry.periodType === 'MONTHLY' || entry.periodType === '30D') && entry.statisticsType === 'PNL') {
+      if (
+        (entry.periodType === 'MONTHLY' || entry.periodType === '30D') &&
+        entry.statisticsType === 'PNL'
+      ) {
         pnl30d = Number(entry.value)
       }
     }
@@ -118,7 +135,7 @@ async function fetchBinanceLive(encryptedUid) {
     pnl30d,
     winRate: detail?.data?.winRate != null ? Number(detail.data.winRate) : null,
     maxDrawdown: detail?.data?.mdd != null ? Number(detail.data.mdd) : null,
-    raw: { perf: perf?.error || 'ok', detail: detail?.error || 'ok' }
+    raw: { perf: perf?.error || 'ok', detail: detail?.error || 'ok' },
   }
 }
 
@@ -135,7 +152,7 @@ async function fetchBybitLive(leaderMark) {
       pnl30d: r.pnl != null ? Number(r.pnl) : null,
       winRate: r.winRate != null ? Number(r.winRate) : null,
       maxDrawdown: r.maxDrawdown != null ? Number(r.maxDrawdown) : null,
-      raw: 'direct-api'
+      raw: 'direct-api',
     }
   }
 
@@ -148,13 +165,13 @@ async function fetchBybitLive(leaderMark) {
       { headers: { 'X-Proxy-Key': vpsKey } }
     )
     if (vpsData?.result?.leaderDetails) {
-      const match = vpsData.result.leaderDetails.find(t => t.leaderMark === leaderMark)
+      const match = vpsData.result.leaderDetails.find((t) => t.leaderMark === leaderMark)
       if (match) {
         return {
           roi30d: match.roi != null ? Number(match.roi) : null,
           pnl30d: match.pnl != null ? Number(match.pnl) : null,
           winRate: match.winRate != null ? Number(match.winRate) : null,
-          raw: 'vps-scraper-match'
+          raw: 'vps-scraper-match',
         }
       }
       // Return first trader for comparison
@@ -164,7 +181,7 @@ async function fetchBybitLive(leaderMark) {
         pnl30d: first.pnl != null ? Number(first.pnl) : null,
         note: `Could not find ${leaderMark} in top 10; returning #1 for reference`,
         firstTrader: first.leaderMark || first.nickName,
-        raw: 'vps-scraper-first'
+        raw: 'vps-scraper-first',
       }
     }
   }
@@ -178,25 +195,27 @@ async function fetchHyperliquidLive(address) {
   const state = await fetchJson('https://api.hyperliquid.xyz/info', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'clearinghouseState', user: address })
+    body: JSON.stringify({ type: 'clearinghouseState', user: address }),
   })
 
   // Portfolio performance
   const perf = await fetchJson('https://api.hyperliquid.xyz/info', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'portfolio', user: address })
+    body: JSON.stringify({ type: 'portfolio', user: address }),
   })
 
   // Also try leaderboard for cross-reference
   const lb = await fetchJson('https://stats-data.hyperliquid.xyz/Mainnet/leaderboard')
   let lbMatch = null
   if (lb?.leaderboardRows) {
-    lbMatch = lb.leaderboardRows.find(r => r.ethAddress?.toLowerCase() === address.toLowerCase())
+    lbMatch = lb.leaderboardRows.find((r) => r.ethAddress?.toLowerCase() === address.toLowerCase())
   }
 
-  const accountValue = state?.marginSummary?.accountValue != null ? Number(state.marginSummary.accountValue) : null
-  const totalPnl = state?.marginSummary?.totalRawPnl != null ? Number(state.marginSummary.totalRawPnl) : null
+  const accountValue =
+    state?.marginSummary?.accountValue != null ? Number(state.marginSummary.accountValue) : null
+  const totalPnl =
+    state?.marginSummary?.totalRawPnl != null ? Number(state.marginSummary.totalRawPnl) : null
 
   // Get performance windows
   let roi30d = null
@@ -217,8 +236,8 @@ async function fetchHyperliquidLive(address) {
     leaderboardRank: lbMatch ? lb.leaderboardRows.indexOf(lbMatch) + 1 : null,
     raw: {
       state: state?.error || 'ok',
-      lb: lb?.error || (lbMatch ? 'found' : 'not-in-top')
-    }
+      lb: lb?.error || (lbMatch ? 'found' : 'not-in-top'),
+    },
   }
 }
 
@@ -242,13 +261,22 @@ async function main() {
 
     const live = await fetchBinanceLive(t.source_trader_id)
     console.log(`  Live  ROI: ${fmt(live.roi30d)}%  PnL: $${fmt(live.pnl30d)}`)
-    console.log(`  API status: perf=${live.raw?.perf || live.raw}, detail=${live.raw?.detail || 'n/a'}`)
+    console.log(
+      `  API status: perf=${live.raw?.perf || live.raw}, detail=${live.raw?.detail || 'n/a'}`
+    )
 
     if (live.roi30d != null && t.roi != null) {
       const diff = pct(t.roi, live.roi30d)
       console.log(`  ROI diff: ${fmt(diff)}%`)
       if (diff > 5) {
-        issues.push({ exchange: 'binance_futures', trader: t.handle, field: 'roi', arena: t.roi, live: live.roi30d, diff })
+        issues.push({
+          exchange: 'binance_futures',
+          trader: t.handle,
+          field: 'roi',
+          arena: t.roi,
+          live: live.roi30d,
+          diff,
+        })
         console.log(`  ⚠️  EXCEEDS 5% THRESHOLD`)
       } else {
         console.log(`  ✓ Within tolerance`)
@@ -287,7 +315,14 @@ async function main() {
         const diff = pct(t.roi, live.roi30d)
         console.log(`  ROI diff: ${fmt(diff)}%`)
         if (diff > 5) {
-          issues.push({ exchange: 'bybit', trader: t.handle, field: 'roi', arena: t.roi, live: live.roi30d, diff })
+          issues.push({
+            exchange: 'bybit',
+            trader: t.handle,
+            field: 'roi',
+            arena: t.roi,
+            live: live.roi30d,
+            diff,
+          })
           console.log(`  ⚠️  EXCEEDS 5% THRESHOLD`)
         } else {
           console.log(`  ✓ Within tolerance`)
@@ -313,13 +348,22 @@ async function main() {
 
     const live = await fetchHyperliquidLive(t.source_trader_id)
     console.log(`  Live  ROI: ${fmt(live.roi30d)}%  TotalPnL: $${fmt(live.totalPnl)}`)
-    console.log(`  Live  AccountValue: $${fmt(live.accountValue)}  LB Rank: ${live.leaderboardRank || 'not in top'}`)
+    console.log(
+      `  Live  AccountValue: $${fmt(live.accountValue)}  LB Rank: ${live.leaderboardRank || 'not in top'}`
+    )
 
     if (live.roi30d != null && t.roi != null) {
       const diff = pct(t.roi, live.roi30d)
       console.log(`  ROI diff: ${fmt(diff)}%`)
       if (diff > 5) {
-        issues.push({ exchange: 'hyperliquid', trader: t.handle, field: 'roi', arena: t.roi, live: live.roi30d, diff })
+        issues.push({
+          exchange: 'hyperliquid',
+          trader: t.handle,
+          field: 'roi',
+          arena: t.roi,
+          live: live.roi30d,
+          diff,
+        })
         console.log(`  ⚠️  EXCEEDS 5% THRESHOLD`)
       } else {
         console.log(`  ✓ Within tolerance`)
@@ -342,7 +386,9 @@ async function main() {
   for (const t of top5) {
     console.log(`  #${t.rank || '?'} ${t.handle || t.source_trader_id} (${t.source})`)
     console.log(`     Score: ${fmt(t.arena_score)}  ROI: ${fmt(t.roi)}%  PnL: $${fmt(t.pnl)}`)
-    console.log(`     WinRate: ${fmt(t.win_rate)}%  MDD: ${fmt(t.max_drawdown)}%  Sharpe: ${fmt(t.sharpe_ratio)}  Trades: ${t.trades_count}`)
+    console.log(
+      `     WinRate: ${fmt(t.win_rate)}%  MDD: ${fmt(t.max_drawdown)}%  Sharpe: ${fmt(t.sharpe_ratio)}  Trades: ${t.trades_count}`
+    )
     console.log(`     Computed: ${t.computed_at}`)
 
     // Sanity checks
@@ -350,8 +396,10 @@ async function main() {
     if (t.roi > 10000) flags.push('ROI >10000% (should be capped)')
     if (t.roi < 0 && t.arena_score > 50) flags.push('Negative ROI but high score')
     if (t.pnl != null && t.pnl < 0 && t.arena_score > 60) flags.push('Negative PnL but score >60')
-    if (t.win_rate != null && t.win_rate > 99 && t.trades_count > 50) flags.push('99%+ win rate with many trades (possible bot)')
-    if (t.trades_count != null && t.trades_count < 3) flags.push('Very few trades — unreliable stats')
+    if (t.win_rate != null && t.win_rate > 99 && t.trades_count > 50)
+      flags.push('99%+ win rate with many trades (possible bot)')
+    if (t.trades_count != null && t.trades_count < 3)
+      flags.push('Very few trades — unreliable stats')
     if (t.arena_score > 95) flags.push('Score >95 — verify legitimacy')
 
     if (flags.length > 0) {
@@ -375,7 +423,9 @@ async function main() {
     .order('computed_at', { ascending: false })
     .limit(20)
 
-  let consistent = 0, inconsistent = 0, v2Missing = 0
+  let consistent = 0,
+    inconsistent = 0,
+    v2Missing = 0
   for (const lr of (sampleLR || []).slice(0, 10)) {
     const v2 = await getV2Snapshot(lr.source, lr.source_trader_id, lr.season_id)
     if (!v2) {
@@ -385,15 +435,26 @@ async function main() {
     const roiDiff = pct(lr.roi, v2.roi_pct)
     if (roiDiff != null && roiDiff > 1) {
       inconsistent++
-      console.log(`  ⚠️  ${lr.source}/${lr.source_trader_id}: LR roi=${fmt(lr.roi)} vs V2 roi_pct=${fmt(v2.roi_pct)} (diff: ${fmt(roiDiff)}%)`)
+      console.log(
+        `  ⚠️  ${lr.source}/${lr.source_trader_id}: LR roi=${fmt(lr.roi)} vs V2 roi_pct=${fmt(v2.roi_pct)} (diff: ${fmt(roiDiff)}%)`
+      )
       if (roiDiff > 5) {
-        issues.push({ exchange: lr.source, trader: lr.source_trader_id, field: 'internal-consistency', lrRoi: lr.roi, v2Roi: v2.roi_pct, diff: roiDiff })
+        issues.push({
+          exchange: lr.source,
+          trader: lr.source_trader_id,
+          field: 'internal-consistency',
+          lrRoi: lr.roi,
+          v2Roi: v2.roi_pct,
+          diff: roiDiff,
+        })
       }
     } else {
       consistent++
     }
   }
-  console.log(`  Results: ${consistent} consistent, ${inconsistent} inconsistent (>1%), ${v2Missing} V2 missing\n`)
+  console.log(
+    `  Results: ${consistent} consistent, ${inconsistent} inconsistent (>1%), ${v2Missing} V2 missing\n`
+  )
 
   // ── Summary ──
   console.log('═══════════════════════════════════════════════════════════')
@@ -406,7 +467,9 @@ async function main() {
       if (issue.flags) {
         console.log(`    ${issue.exchange}/${issue.trader}: ${issue.flags.join('; ')}`)
       } else {
-        console.log(`    ${issue.exchange}/${issue.trader}: ${issue.field} diff=${fmt(issue.diff)}% (arena=${fmt(issue.arena)}, live=${fmt(issue.live)})`)
+        console.log(
+          `    ${issue.exchange}/${issue.trader}: ${issue.field} diff=${fmt(issue.diff)}% (arena=${fmt(issue.arena)}, live=${fmt(issue.live)})`
+        )
       }
     }
   }
@@ -415,4 +478,7 @@ async function main() {
   return issues
 }
 
-main().catch(e => { console.error('FATAL:', e); process.exit(1) })
+main().catch((e) => {
+  console.error('FATAL:', e)
+  process.exit(1)
+})
