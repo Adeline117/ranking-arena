@@ -2724,6 +2724,9 @@ const en = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: 'Deleted user',
+  privyAccountSyncFailed: 'Account sync failed, please try again',
+  privyLoginFailed: 'Login failed, please try again',
+  privyQuickLogin: 'Quick Login (Google / Email / Wallet)',
   userLabel: 'User',
   notifGroupedCount: '{n} notifications',
   loginTooManyAttemptsCode: 'Too many attempts, please request a new code',
