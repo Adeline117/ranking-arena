@@ -361,12 +361,24 @@ async function sweepRoute(page, route, ledger, counters) {
       }
       counters.clicked++
     } catch (e) {
-      // A click timeout (e.g. off-screen a11y skip-links) is an interaction
-      // failure, NOT an app error — keep it in its own field so it doesn't
-      // pollute the real-error signal.
-      record.status = 'fail:click'
-      record.clickError = summarizeClickError(e)
-      counters.failed++
+      // Live-data surfaces re-render on a timer (e.g. /market SectorTreemap:
+      // spot data refetches every 30s and re-lays-out the squarified tiles),
+      // so an element that passed the isVisible pre-check can DETACH before
+      // the click lands — the [data-qa-idx] locator then matches nothing and
+      // times out. That is a tool artifact, not an app failure: if the tagged
+      // element is gone at failure time, record skip:vanished, not fail:click.
+      const stillAttached = (await el.count().catch(() => 0)) > 0
+      if (!stillAttached) {
+        record.status = 'skip:vanished'
+        counters.skipped++
+      } else {
+        // A click timeout (e.g. off-screen a11y skip-links) is an interaction
+        // failure, NOT an app error — keep it in its own field so it doesn't
+        // pollute the real-error signal.
+        record.status = 'fail:click'
+        record.clickError = summarizeClickError(e)
+        counters.failed++
+      }
     }
 
     // Collect genuine app errors this interaction produced (console/page/http).

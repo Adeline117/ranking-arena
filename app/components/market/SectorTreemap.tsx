@@ -319,6 +319,10 @@ export default function SectorTreemap({
                 key={node.name}
                 role="button"
                 tabIndex={0}
+                // Stable locator anchor: aria-label embeds live spot numbers that
+                // tick every 30s (useMarketSpot REFETCH_REALTIME), so label-based
+                // selectors go stale mid-session. Tests/scanners must target this.
+                data-testid={`treemap-tile-${node.name}`}
                 aria-label={`${node.name} (${node.category}): ${node.changePct >= 0 ? '+' : ''}${node.changePct.toFixed(1)}%, ${t('sectorTreemapMCap')} $${(node.marketCap / 1e9).toFixed(1)}B`}
                 onClick={() => onSectorClick?.(node.category)}
                 onKeyDown={(e) => {
