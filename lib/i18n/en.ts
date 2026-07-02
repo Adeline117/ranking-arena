@@ -1211,9 +1211,11 @@ const en = {
   compareTraders: 'Trader Comparison',
   compareDesc: 'Compare up to 10 traders side by side',
   compareAddTrader: 'Add Trader',
-  // compareSearchPlaceholder: moved to compare section below (line ~1158)
+  compareSearchPlaceholder: 'Search traders by name or ID...',
   compareSearchBtn: 'Search',
   compareSearching: 'Searching...',
+  compareSearchNoResults: 'No matching traders found',
+  compareAddFromRankings: 'Add from rankings',
   compareMax5: 'Maximum 5 traders for comparison',
   compareMax10: 'Maximum 10 traders for comparison',
   compareAlreadyAdded: 'Trader already in comparison',
