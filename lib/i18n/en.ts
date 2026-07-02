@@ -4473,6 +4473,7 @@ const en = {
   botsBot: 'Bot',
   botsUsers: 'Users',
   botsVolume: 'Volume',
+  botsColumnNoData: 'Data not yet available',
   botsTotalCount: '{count} bots total',
   botsDataStaleWarning:
     'This leaderboard has not been refreshed for {days} days — rankings may be outdated',

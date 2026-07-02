@@ -231,21 +231,46 @@ function BotAvatar({ bot }: { bot: BotEntry }) {
 }
 
 /** Sortable column header — a real <button role=columnheader> (native Enter/Space)
- *  carrying aria-sort. Sort glyph is aria-hidden (color is not the only cue). */
+ *  carrying aria-sort. Sort glyph is aria-hidden (color is not the only cue).
+ *  When `sortable` is false (column is all-null in the loaded data, e.g. TVL /
+ *  Users while the collection pipeline is down) it degrades to a plain,
+ *  non-interactive header — no dead-click sort button on a column of "—". */
 function SortHeader({
   label,
   columnKey,
   sort,
   onSort,
   align = 'right',
+  sortable = true,
 }: {
   label: string
   columnKey: SortKey
   sort: SortState
   onSort: (key: SortKey) => void
   align?: 'right' | 'center'
+  sortable?: boolean
 }) {
+  const { t } = useLanguage()
   const active = sort.key === columnKey
+  if (!sortable) {
+    return (
+      <div
+        role="columnheader"
+        title={t('botsColumnNoData')}
+        style={{
+          display: 'flex',
+          justifyContent: align === 'center' ? 'center' : 'flex-end',
+          color: 'var(--color-text-tertiary)',
+          textTransform: 'uppercase',
+          letterSpacing: '0.5px',
+          fontSize: 11,
+          fontWeight: 600,
+        }}
+      >
+        {label}
+      </div>
+    )
+  }
   return (
     <button
       type="button"
@@ -352,7 +377,7 @@ function BotRow({ bot, index }: { bot: BotEntry; index: number }) {
           color: m.tvl != null ? 'var(--color-text-primary)' : 'var(--color-text-tertiary)',
           fontWeight: 500,
         }}
-        title={m.tvl == null ? 'Data not yet available' : undefined}
+        title={m.tvl == null ? t('botsColumnNoData') : undefined}
       >
         {formatLargeNumber(m.tvl)}
       </div>
@@ -366,7 +391,7 @@ function BotRow({ bot, index }: { bot: BotEntry; index: number }) {
           color:
             m.unique_users != null ? 'var(--color-text-secondary)' : 'var(--color-text-tertiary)',
         }}
-        title={m.unique_users == null ? 'Data not yet available' : undefined}
+        title={m.unique_users == null ? t('botsColumnNoData') : undefined}
       >
         {formatUsers(m.unique_users)}
       </div>
@@ -487,6 +512,20 @@ function BotsContent({ initialBots }: BotsClientProps) {
         (b.token_symbol && b.token_symbol.toLowerCase().includes(q))
     )
   }, [data, searchQuery])
+
+  // Columns that actually have data in the loaded set. All-null columns (TVL /
+  // Users while bot_snapshots collection is down) render as plain headers —
+  // sorting a column of "—" is an unobservable no-op (dead click).
+  const sortableKeys = useMemo(() => {
+    const keys: SortKey[] = ['tvl', 'unique_users', 'apy', 'total_volume', 'arena_score']
+    const s = new Set<SortKey>()
+    for (const bot of data?.bots ?? []) {
+      for (const key of keys) {
+        if (!s.has(key) && botSortValue(bot, key) != null) s.add(key)
+      }
+    }
+    return s
+  }, [data])
 
   const sortedBots = useMemo(() => {
     if (!sort.key) return filteredBots
@@ -763,21 +802,41 @@ function BotsContent({ initialBots }: BotsClientProps) {
                   #
                 </div>
                 <div role="columnheader">{t('botsBot')}</div>
-                <SortHeader label="TVL" columnKey="tvl" sort={sort} onSort={handleSort} />
+                <SortHeader
+                  label="TVL"
+                  columnKey="tvl"
+                  sort={sort}
+                  onSort={handleSort}
+                  sortable={sortableKeys.has('tvl')}
+                />
                 <SortHeader
                   label={t('botsUsers')}
                   columnKey="unique_users"
                   sort={sort}
                   onSort={handleSort}
+                  sortable={sortableKeys.has('unique_users')}
                 />
-                <SortHeader label="APY/ROI" columnKey="apy" sort={sort} onSort={handleSort} />
+                <SortHeader
+                  label="APY/ROI"
+                  columnKey="apy"
+                  sort={sort}
+                  onSort={handleSort}
+                  sortable={sortableKeys.has('apy')}
+                />
                 <SortHeader
                   label={t('botsVolume')}
                   columnKey="total_volume"
                   sort={sort}
                   onSort={handleSort}
+                  sortable={sortableKeys.has('total_volume')}
                 />
-                <SortHeader label="Score" columnKey="arena_score" sort={sort} onSort={handleSort} />
+                <SortHeader
+                  label="Score"
+                  columnKey="arena_score"
+                  sort={sort}
+                  onSort={handleSort}
+                  sortable={sortableKeys.has('arena_score')}
+                />
               </div>
 
               {sortedBots.map((bot, idx) => (
