@@ -2649,6 +2649,12 @@ const zh = {
 
   // 瀑布流卡片 / 小组帖子列表
   deletedUser: '已注销用户',
+  pollDuration1h: '1小时',
+  pollDuration6h: '6小时',
+  pollDuration12h: '12小时',
+  pollDuration1d: '1天',
+  pollDuration3d: '3天',
+  pollDuration7d: '7天',
   myWatchlist: '我的 Watchlist',
   tradingStyleLabel: '交易风格',
   presetAll: '全部',
@@ -4531,6 +4537,7 @@ const zh = {
   sectorTreemap7d: '7天',
   sectorTreemapLoading: '加载中...',
   sectorTreemapMCap: '市值',
+  sectorTreemapOthers: '其他',
   sectorTreemapBigDrop: '大跌',
   sectorTreemapDip: '小跌',
   sectorTreemapRise: '小涨',

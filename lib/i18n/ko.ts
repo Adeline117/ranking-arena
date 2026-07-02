@@ -2625,6 +2625,12 @@ const ko = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: '삭제된 사용자',
+  pollDuration1h: '1시간',
+  pollDuration6h: '6시간',
+  pollDuration12h: '12시간',
+  pollDuration1d: '1일',
+  pollDuration3d: '3일',
+  pollDuration7d: '7일',
   myWatchlist: '내 워치리스트',
   tradingStyleLabel: '스타일',
   presetAll: '전체',
@@ -4484,6 +4490,7 @@ const ko = {
   sectorTreemap7d: '7일',
   sectorTreemapLoading: '로딩 중...',
   sectorTreemapMCap: '시가총액',
+  sectorTreemapOthers: '기타',
   sectorTreemapBigDrop: '급락',
   sectorTreemapDip: '하락',
   sectorTreemapRise: '상승',
