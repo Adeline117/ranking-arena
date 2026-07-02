@@ -42,6 +42,11 @@ export interface BscQuoteConfig {
   quotes: Record<string, QuoteAsset>
 }
 
+/** Sentinel token id for a NATIVE BNB leg (getAssetTransfers external/internal,
+ *  no contract). Quoted at bnbUsd like WBNB — most BSC memecoin swaps pay in
+ *  native BNB, so this leg is essential or every swap looks quote-less. */
+export const NATIVE_BNB = 'native:bnb'
+
 /** Canonical BSC quote set (addresses lowercased). All 18-decimals on BSC. */
 export function bscQuoteConfig(bnbUsd: number): BscQuoteConfig {
   return {
@@ -51,6 +56,7 @@ export function bscQuoteConfig(bnbUsd: number): BscQuoteConfig {
       '0x8ac76a51cc950d9822d68b83fe1ad97b32cd580d': { decimals: 18, usdPerUnit: 1 }, // USDC
       '0xe9e7cea3dedca5984780bafc599bd69add087d56': { decimals: 18, usdPerUnit: 1 }, // BUSD
       '0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c': { decimals: 18, usdPerUnit: bnbUsd }, // WBNB
+      [NATIVE_BNB]: { decimals: 18, usdPerUnit: bnbUsd }, // native BNB (external/internal legs)
     },
   }
 }
@@ -152,6 +158,76 @@ export function decodeBscSwaps(
     const side: 'buy' | 'sell' = tokenLeg.incoming ? 'buy' : 'sell'
     const ts = blockTs[g.block] ?? isoFromBlock(g.block)
     swaps.push({ token: tokenLeg.token, ts, side, tokenAmount, usdValue: quoteLeg.usd })
+  }
+  return swaps
+}
+
+/**
+ * A provider-decoded transfer (e.g. Alchemy alchemy_getAssetTransfers): amount
+ * is ALREADY in human units (decimals applied), so no hex/decimals handling —
+ * the cleaner, primary input. token = contract (lowercase).
+ */
+export interface NormalizedTransfer {
+  token: string
+  from: string
+  to: string
+  amount: number
+  tx: string
+  ts: string
+}
+
+/**
+ * Decode normalized transfers into swaps (shares the quote/token pairing logic
+ * with decodeBscSwaps but skips hex/decimals). usdValue = quote amount ×
+ * usdPerUnit; token amount is the human value (consistent per token → avg-cost
+ * accounting holds). Txs without a clean single-quote pairing are skipped.
+ */
+export function decodeTransfersToSwaps(
+  transfers: NormalizedTransfer[],
+  walletAddress: string,
+  cfg: BscQuoteConfig
+): OnchainSwap[] {
+  const wallet = walletAddress.toLowerCase()
+  const byTx = new Map<string, NormalizedTransfer[]>()
+  for (const tr of transfers) {
+    if (!tr || typeof tr.token !== 'string') continue
+    const from = tr.from?.toLowerCase()
+    const to = tr.to?.toLowerCase()
+    if (from !== wallet && to !== wallet) continue
+    if (!Number.isFinite(tr.amount) || tr.amount <= 0) continue
+    const arr = byTx.get(tr.tx) ?? []
+    arr.push({ ...tr, token: tr.token.toLowerCase(), from, to })
+    byTx.set(tr.tx, arr)
+  }
+
+  const swaps: OnchainSwap[] = []
+  for (const [, legs] of byTx) {
+    let quote: { usd: number } | null = null
+    let tokenLeg: { token: string; amount: number; incoming: boolean; ts: string } | null = null
+    let quoteCount = 0
+    let tokenCount = 0
+    for (const leg of legs) {
+      const incoming = leg.to === wallet
+      const q = cfg.quotes[leg.token]
+      if (q) {
+        quoteCount += 1
+        const usd = leg.amount * q.usdPerUnit
+        if (!quote || usd > quote.usd) quote = { usd }
+      } else {
+        tokenCount += 1
+        if (!tokenLeg || leg.amount > tokenLeg.amount)
+          tokenLeg = { token: leg.token, amount: leg.amount, incoming, ts: leg.ts }
+      }
+    }
+    if (!quote || !tokenLeg || quoteCount === 0 || tokenCount === 0) continue
+    if (!Number.isFinite(quote.usd) || quote.usd <= 0) continue
+    swaps.push({
+      token: tokenLeg.token,
+      ts: tokenLeg.ts,
+      side: tokenLeg.incoming ? 'buy' : 'sell',
+      tokenAmount: tokenLeg.amount,
+      usdValue: quote.usd,
+    })
   }
   return swaps
 }
