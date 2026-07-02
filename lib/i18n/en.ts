@@ -6227,6 +6227,8 @@ const en = {
   compFilterPlatform: 'Platform',
   compAllPlatforms: 'All Platforms',
   compPlatformSelect: 'Select platform',
+  compRankUp: 'Moved up',
+  compRankDown: 'Moved down',
   compErrTitleRequired: 'Title is required',
   compErrStartRequired: 'Start date is required',
   compErrStartFuture: 'Start must be in the future',

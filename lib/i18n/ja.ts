@@ -5873,6 +5873,8 @@ const ja = {
   compFilterPlatform: 'プラットフォーム',
   compAllPlatforms: 'すべてのプラットフォーム',
   compPlatformSelect: 'プラットフォームを選択',
+  compRankUp: '上昇',
+  compRankDown: '下降',
   compErrTitleRequired: 'タイトルを入力してください',
   compErrStartRequired: '開始日時を選択してください',
   compErrStartFuture: '開始日時は現在より後にしてください',
