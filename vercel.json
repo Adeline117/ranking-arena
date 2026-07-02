@@ -1,5 +1,6 @@
 {
   "buildCommand": "next build",
+  "ignoreCommand": "bash scripts/vercel-ignore-build.sh",
   "regions": ["hnd1"],
   "crons": [
     {

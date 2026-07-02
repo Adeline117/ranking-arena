@@ -78,10 +78,13 @@ jobs:
 
             if [ -n "$PREV_ID" ]; then
               echo "Promoting previous deployment: $PREV_ID"
+              # v10 projects/promote 是唯一真实存在的 promote 端点——旧的
+              # /v6/deployments/{id}/promote 返回 404（2026-07-02 实测），
+              # 即这段回滚代码在修正前从未可能成功过
               PROMOTE_RESULT=$(curl -s -X POST \
                 -H "Authorization: Bearer $VERCEL_TOKEN" \
                 -H "Content-Type: application/json" \
-                "https://api.vercel.com/v6/deployments/$PREV_ID/promote" 2>&1)
+                "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$PREV_ID" 2>&1)
               echo "Promote result: $PROMOTE_RESULT"
               ROLLED_BACK="true"
               echo "✅ Auto-rollback complete"
