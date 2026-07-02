@@ -31,9 +31,10 @@
 - [x] post-deploy-check.sh + CLAUDE.md 铁律"每次 push 后必须运行"
 - [x] post-deploy-smoke.yml 自动 smoke（GET 路径）
 - [x] 写路径金丝雀（schema-canary-sentinel，每日 + 部署后）
-- [ ] smoke 失败自动回滚——**代码已写好但 GH secrets 缺 VERCEL_TOKEN，处于死态**
-      （2026-07-02 差距审计发现，见 ENTERPRISE_GAP_ANALYSIS_2026-07.md）
-- [ ] CI 绿灯门禁部署（Batch C2，进行中）
+- [x] smoke 失败自动回滚（2026-07-02 激活：secrets 配齐 + 修正 promote 端点
+      v6→v10——实测旧端点 404，此前这段回滚代码从未可能成功）
+- [x] CI 绿灯门禁部署（2026-07-02 上线：vercel-ignore-build.sh + deploy-gate.yml，
+      push 不再直通生产，[deploy-force] 逃生口，详见 RUNBOOK「部署管线」）
 
 ## 教训
 
