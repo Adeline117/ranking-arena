@@ -95,10 +95,21 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
       } else {
         setLanguageState(lang)
       }
-      // Re-fetch server components so SSR-only content (e.g. the homepage hero,
-      // which reads the cookie via getServerTranslation) updates to the new
-      // language immediately instead of staying stale until a full reload.
-      router.refresh()
+      // Update client-rendered content immediately (soft), then re-fetch server
+      // components. router.refresh() handles dynamic SSR pages, but the homepage
+      // hero is SSR-only AND edge-cached, so router.refresh() can't re-render it.
+      // For any route carrying SSR-rendered localized text that the client tree
+      // won't update, fall back to a hard reload so the whole page reflects the
+      // new language. The homepage (#ssr-hero-shell / #ssr-ranking-table) is the
+      // one such route today. Language switching is rare, so the reload cost is
+      // acceptable in exchange for guaranteed consistency.
+      const hasSsrOnlyLocalized =
+        typeof document !== 'undefined' && !!document.getElementById('ssr-hero-shell')
+      if (hasSsrOnlyLocalized) {
+        window.location.reload()
+      } else {
+        router.refresh()
+      }
     },
     [router]
   )
