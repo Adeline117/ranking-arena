@@ -190,15 +190,24 @@ const TradeRow = memo(function TradeRow({
   )
 })
 
-function ConnectionDot({ connected }: { connected: boolean }) {
+function ConnectionDot({ connected, label }: { connected: boolean; label: string }) {
+  // B3 colorblind redundancy (WCAG 1.4.1): the adjacent text is the feed TITLE,
+  // not the connection state, so color must not be the only signal. Shape
+  // redundancy: filled dot = connected, hollow ring = disconnected; plus an
+  // accessible name for screen readers.
   return (
     <span
+      role="img"
+      aria-label={label}
+      title={label}
       style={{
         display: 'inline-block',
         width: 6,
         height: 6,
         borderRadius: '50%',
-        background: connected ? tokens.colors.accent.success : tokens.colors.accent.error,
+        background: connected ? tokens.colors.accent.success : 'transparent',
+        border: connected ? 'none' : `1.5px solid ${tokens.colors.accent.error}`,
+        boxSizing: 'border-box',
         marginRight: 4,
       }}
     />
@@ -271,7 +280,10 @@ export default function LiveTradesFeed() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-          <ConnectionDot connected={connected} />
+          <ConnectionDot
+            connected={connected}
+            label={connected ? t('connected') : t('disconnected')}
+          />
           <span
             style={{
               color: tokens.colors.text.primary,
