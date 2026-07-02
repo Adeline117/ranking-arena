@@ -101,16 +101,35 @@ function getChangeColor(changePct: number, isLight = false): string {
   return clamped >= 0 ? mix(mid, [34, 197, 94]) : mix(mid, [120, 22, 35])
 }
 
-interface TreemapNode {
+interface TreemapDatum {
   name: string
   category: string
   marketCap: number
   changePct: number
+  /** Aggregated long-tail tile — rendered with the i18n "Others" label. */
+  isOthers?: boolean
+  /** Symbols folded into the aggregate (shown in the tooltip). */
+  members?: string[]
+}
+
+interface TreemapNode extends TreemapDatum {
   x: number
   y: number
   width: number
   height: number
 }
+
+// Internal sentinel name for the aggregated tile (never a real ticker symbol);
+// the user-visible label goes through t('sectorTreemapOthers').
+const OTHERS_NAME = '__others__'
+
+// WCAG 2.5.8 minimum pointer target is 24×24 CSS px. Squarified tiles stay
+// near-square (worst aspect ratio in practice ≲ 2.5), so a tile needs roughly
+// 2.5× the minimum square's AREA to keep its short side above 24px. Coins
+// whose area ∝ market cap would fall below this are folded into one "Others"
+// aggregate tile instead of rendering as untappable slivers.
+const MIN_TILE_SIDE = 24
+const MIN_TILE_AREA = MIN_TILE_SIDE * MIN_TILE_SIDE * 2.5
 
 // True squarified treemap (Bruls, Huizing & van Wijk 2000): pack items into
 // rows along the shorter side of the remaining rectangle, accepting a new item
@@ -118,13 +137,7 @@ interface TreemapNode {
 // ratio. Keeps tiles near-square so long-tail coins stay clickable targets —
 // the previous naive strip-slice produced 6px-wide slivers under BTC dominance
 // (WCAG 2.5.8 target-size failure). Area remains exactly ∝ market cap.
-function squarify(
-  data: { name: string; category: string; marketCap: number; changePct: number }[],
-  x: number,
-  y: number,
-  w: number,
-  h: number
-): TreemapNode[] {
+function squarify(data: TreemapDatum[], x: number, y: number, w: number, h: number): TreemapNode[] {
   if (data.length === 0 || w <= 0 || h <= 0) return []
   const total = data.reduce((s, d) => s + d.marketCap, 0)
   if (total === 0) return []
@@ -279,11 +292,38 @@ export default function SectorTreemap({
     return () => observer.disconnect()
   }, [])
 
-  const coinsWithPct = coins.map((c) => ({
-    ...c,
+  const coinsWithPct: TreemapDatum[] = coins.map((c) => ({
+    name: c.name,
+    category: c.category,
+    marketCap: c.marketCap,
     changePct: timeframe === '1h' ? c.change1h : timeframe === '7d' ? c.change7d : c.change24h,
   }))
-  const nodes = squarify(coinsWithPct, 0, 0, size.width, size.height)
+  // Long-tail aggregation (WCAG 2.5.8): coins whose area-∝-market-cap tile
+  // would land under the 24px pointer target get merged into one "Others"
+  // tile. Its click reuses the existing onSectorClick path with the 'Other'
+  // category; its change % is the market-cap-weighted average of members.
+  const totalCap = coinsWithPct.reduce((s, c) => s + c.marketCap, 0)
+  const areaScale = totalCap > 0 ? (size.width * size.height) / totalCap : 0
+  const isTiny = (c: TreemapDatum) => areaScale > 0 && c.marketCap * areaScale < MIN_TILE_AREA
+  const tiny = coinsWithPct.filter(isTiny)
+  let layoutData = coinsWithPct
+  if (tiny.length >= 2) {
+    const tinyCap = tiny.reduce((s, c) => s + c.marketCap, 0)
+    const weightedPct =
+      tinyCap > 0 ? tiny.reduce((s, c) => s + c.changePct * c.marketCap, 0) / tinyCap : 0
+    layoutData = [
+      ...coinsWithPct.filter((c) => !isTiny(c)),
+      {
+        name: OTHERS_NAME,
+        category: 'Other',
+        marketCap: tinyCap,
+        changePct: weightedPct,
+        isOthers: true,
+        members: tiny.map((c) => c.name),
+      },
+    ]
+  }
+  const nodes = squarify(layoutData, 0, 0, size.width, size.height)
   const timeframes: { key: TimeFrame; label: string }[] = [
     { key: '1h', label: t('sectorTreemap1h') },
     { key: '24h', label: t('sectorTreemap24h') },
@@ -375,6 +415,7 @@ export default function SectorTreemap({
         ) : (
           nodes.map((node) => {
             const isHovered = hoveredNode === node.name
+            const displayName = node.isOthers ? t('sectorTreemapOthers') : node.name
             const showName = node.width > 36 && node.height > 28
             const showPct = node.width > 44 && node.height > 44
             const showCat = node.width > 70 && node.height > 60
@@ -391,7 +432,7 @@ export default function SectorTreemap({
                 // selectors churn mid-session. Volatile numbers live in the
                 // aria-describedby sr-only span below instead.
                 data-testid={`treemap-tile-${node.name}`}
-                aria-label={`${node.name} (${node.category})`}
+                aria-label={`${displayName} (${node.category})`}
                 aria-describedby={`treemap-desc-${node.name}`}
                 onClick={() => onSectorClick?.(node.category)}
                 onKeyDown={(e) => {
@@ -454,7 +495,7 @@ export default function SectorTreemap({
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {node.name}
+                    {displayName}
                   </span>
                 )}
                 {showPct && (
@@ -519,11 +560,18 @@ export default function SectorTreemap({
                 whiteSpace: 'nowrap',
               }}
             >
-              <strong>{node.name}</strong> / {node.category}
+              <strong>{node.isOthers ? t('sectorTreemapOthers') : node.name}</strong> /{' '}
+              {node.category}
               <br />
               {t('sectorTreemapMCap')}: ${(node.marketCap / 1e9).toFixed(1)}B &middot;{' '}
               {node.changePct >= 0 ? '+' : ''}
               {node.changePct.toFixed(2)}%
+              {node.isOthers && node.members && node.members.length > 0 && (
+                <>
+                  <br />
+                  {node.members.join(' · ')}
+                </>
+              )}
             </div>
           )
         })()}
