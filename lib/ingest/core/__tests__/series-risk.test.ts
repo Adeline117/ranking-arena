@@ -118,23 +118,45 @@ describe('deriveMissingRatios (CEX self-derivation from stored series)', () => {
     const stats = [{ timeframe: 30, sharpe: null, mdd: 42, extras: {} as Record<string, unknown> }]
     deriveMissingRatios(stats, [series('pnl', [10, -5, 12, -3, 8, -2, 15, -4])])
     expect(typeof stats[0].sharpe).toBe('number')
-    expect(stats[0].extras.sharpe_derivation).toBe('series-derived')
+    expect(stats[0].extras.risk_self_derived).toBe(true)
     expect(typeof stats[0].extras.sortino).toBe('number')
     expect(stats[0].mdd).toBe(42) // exchange mdd left untouched
   })
 
-  it('NEVER overrides an exchange-reported sharpe', () => {
-    const stats = [{ timeframe: 30, sharpe: 1.5, mdd: null, extras: {} as Record<string, unknown> }]
+  it('NEVER overrides an exchange-reported sharpe or sortino', () => {
+    const stats = [
+      {
+        timeframe: 30,
+        sharpe: 1.5,
+        mdd: null,
+        extras: { sortino: 2.2 } as Record<string, unknown>,
+      },
+    ]
     deriveMissingRatios(stats, [series('pnl', [10, -5, 12, -3, 8, -2, 15, -4])])
     expect(stats[0].sharpe).toBe(1.5)
-    expect(stats[0].extras.sharpe_derivation).toBeUndefined()
+    expect(stats[0].extras.sortino).toBe(2.2)
   })
 
-  it('prefers pnl but falls back to a roi series', () => {
+  it('derives Sortino + volatility even when Sharpe is already present (Blofin case)', () => {
+    const stats = [{ timeframe: 30, sharpe: 1.8, mdd: 20, extras: {} as Record<string, unknown> }]
+    deriveMissingRatios(stats, [series('roi', [2, -1, 3, -1, 2, -1, 4, -2, 3, -2])])
+    expect(stats[0].sharpe).toBe(1.8) // exchange value untouched
+    expect(typeof stats[0].extras.sortino).toBe('number')
+    expect(typeof stats[0].extras.volatility).toBe('number')
+    expect(stats[0].extras.risk_self_derived).toBe(true)
+  })
+
+  it('volatility only from ROI series, never from a pnl (USD) series', () => {
+    const stats = [{ timeframe: 30, sharpe: 1, mdd: null, extras: {} as Record<string, unknown> }]
+    deriveMissingRatios(stats, [series('pnl', [10, -5, 12, -3, 8, -2, 15, -4])])
+    expect(stats[0].extras.volatility).toBeUndefined() // pnl deltas are $, not %
+  })
+
+  it('prefers pnl but falls back to a roi series for sharpe', () => {
     const stats = [{ timeframe: 7, sharpe: null, mdd: null, extras: {} as Record<string, unknown> }]
     deriveMissingRatios(stats, [series('roi', [2, -1, 3, -1, 2, -1, 4, -2], 7)])
     expect(typeof stats[0].sharpe).toBe('number')
-    expect(stats[0].extras.sharpe_derivation).toBe('series-derived')
+    expect(stats[0].extras.risk_self_derived).toBe(true)
   })
 
   it('stays NULL when the series is too short (no dishonest fill)', () => {
@@ -143,7 +165,7 @@ describe('deriveMissingRatios (CEX self-derivation from stored series)', () => {
     ]
     deriveMissingRatios(stats, [series('pnl', [10, -5, 12])])
     expect(stats[0].sharpe).toBeNull()
-    expect(stats[0].extras.sharpe_derivation).toBeUndefined()
+    expect(stats[0].extras.risk_self_derived).toBeUndefined()
   })
 
   it('ignores _daily metrics (uncertain per-period semantics)', () => {

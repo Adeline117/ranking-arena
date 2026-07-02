@@ -241,13 +241,36 @@ interface RiskDerivableSeries {
  *  (per-day semantics vary by adapter — never guess). */
 const DERIVABLE_METRICS = ['pnl', 'roi'] as const
 
+/** Annualised volatility (%) = sample-stddev of period ROI deltas × √365.
+ *  ROI series only — a pnl (USD) series' stddev is dollars, not a percent. */
+function volatilityFromRoiSeries(points: CumulativePnlPoint[]): number | null {
+  const clean = points
+    .filter((p) => p && typeof p.ts === 'string' && p.value != null && isFinite(p.value))
+    .slice()
+    .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+  if (clean.length < MIN_RATIO_POINTS + 1) return null
+  const deltas: number[] = []
+  for (let i = 1; i < clean.length; i++) deltas.push(clean[i].value - clean[i - 1].value)
+  if (deltas.length < MIN_RATIO_POINTS) return null
+  const mu = mean(deltas)
+  const variance = deltas.reduce((s, x) => s + (x - mu) * (x - mu), 0) / (deltas.length - 1)
+  const vol = Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR)
+  if (!isFinite(vol) || vol <= 0) return null
+  return Math.round(vol * 100) / 100
+}
+
 /**
- * Fill missing Sharpe/Sortino on stats IN PLACE from a matching-timeframe
- * cumulative series. Only touches stats where `sharpe` is already NULL (never
- * overrides an exchange-reported value), gates on ≥MIN_RATIO_POINTS deltas,
- * and stamps `extras.sharpe_derivation='series-derived'` for provenance. MDD is
- * left untouched (base-free ratios can't yield a percent drawdown honestly).
- * Pure w.r.t. inputs it doesn't own; returns the same array for chaining.
+ * Fill missing risk ratios on stats IN PLACE from matching-timeframe cumulative
+ * series — the "compute it ourselves" path for CEX sources that ship a chart
+ * series but never a Sharpe/Sortino/volatility (bitget/xt/mexc/bitunix/
+ * okx_web3_solana) OR ship Sharpe but not the rest (blofin — its Sortino/vol
+ * live behind an SPA-gated profile we can't hit, so we derive them from the
+ * board's ROI series instead).
+ *
+ * Each metric fills INDEPENDENTLY and ONLY when currently NULL/absent — an
+ * exchange-reported value is never overridden. Gates on ≥MIN_RATIO_POINTS
+ * deltas; stamps provenance. MDD untouched (base-free ratios can't yield an
+ * honest percent drawdown). Pure w.r.t. inputs it doesn't own.
  */
 export function deriveMissingRatios<T extends RiskDerivableStat>(
   stats: T[],
@@ -255,21 +278,38 @@ export function deriveMissingRatios<T extends RiskDerivableStat>(
 ): T[] {
   if (!Array.isArray(stats) || !Array.isArray(series)) return stats
   for (const s of stats) {
-    if (s.sharpe !== null && s.sharpe !== undefined) continue // never override exchange value
-    let picked: RiskDerivableSeries | undefined
-    for (const metric of DERIVABLE_METRICS) {
-      picked = series.find(
+    const cumSeries = DERIVABLE_METRICS.map((metric) =>
+      series.find(
         (ser) => ser.timeframe === s.timeframe && ser.metric === metric && ser.points.length >= 2
       )
-      if (picked) break
+    ).filter(Boolean) as RiskDerivableSeries[]
+    if (cumSeries.length === 0) continue
+    const primary = cumSeries[0] // pnl preferred, else roi
+    const roiSeries = cumSeries.find((ser) => ser.metric === 'roi')
+
+    let derivedAny = false
+    // Sharpe + Sortino from the cumulative series (base-free deltas).
+    const { sharpe, sortino, samples } = ratiosFromCumulativePnl(primary.points)
+    if ((s.sharpe === null || s.sharpe === undefined) && sharpe !== null) {
+      s.sharpe = sharpe
+      derivedAny = true
     }
-    if (!picked) continue
-    const { sharpe, sortino, samples } = ratiosFromCumulativePnl(picked.points)
-    if (sharpe === null) continue // insufficient samples / flat curve — stay honest NULL
-    s.sharpe = sharpe
-    if (s.extras.sortino === undefined && sortino !== null) s.extras.sortino = sortino
-    s.extras.sharpe_derivation = 'series-derived'
-    s.extras.sharpe_samples = samples
+    if (s.extras.sortino === undefined && sortino !== null) {
+      s.extras.sortino = sortino
+      derivedAny = true
+    }
+    // Volatility from the ROI series only (percentage-meaningful).
+    if (s.extras.volatility === undefined && s.extras.roe_volatility === undefined && roiSeries) {
+      const vol = volatilityFromRoiSeries(roiSeries.points)
+      if (vol !== null) {
+        s.extras.volatility = vol
+        derivedAny = true
+      }
+    }
+    if (derivedAny) {
+      s.extras.risk_self_derived = true
+      s.extras.risk_derived_samples = samples
+    }
   }
   return stats
 }
