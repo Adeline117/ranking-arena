@@ -2506,6 +2506,10 @@ const ja = {
   commentFailedRetry: 'コメントに失敗しました。再試行してください',
 
   deletedUser: '削除済みユーザー',
+  botCatTgBot: 'Telegramトレーディングボット',
+  botCatAiAgent: 'AIトレーディングエージェント',
+  botCatVault: 'オンチェーン保管庫',
+  botCatStrategy: '取引戦略',
   pollDuration1h: '1時間',
   pollDuration6h: '6時間',
   pollDuration12h: '12時間',

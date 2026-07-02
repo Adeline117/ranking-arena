@@ -2724,6 +2724,10 @@ const en = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: 'Deleted user',
+  botCatTgBot: 'Telegram Trading Bot',
+  botCatAiAgent: 'AI Trading Agent',
+  botCatVault: 'On-chain Vault',
+  botCatStrategy: 'Trading Strategy',
   pollDuration1h: '1 hour',
   pollDuration6h: '6 hours',
   pollDuration12h: '12 hours',

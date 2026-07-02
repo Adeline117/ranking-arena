@@ -2625,6 +2625,10 @@ const ko = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: '삭제된 사용자',
+  botCatTgBot: '텔레그램 트레이딩 봇',
+  botCatAiAgent: 'AI 트레이딩 에이전트',
+  botCatVault: '온체인 볼트',
+  botCatStrategy: '트레이딩 전략',
   pollDuration1h: '1시간',
   pollDuration6h: '6시간',
   pollDuration12h: '12시간',

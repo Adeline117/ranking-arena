@@ -2649,6 +2649,10 @@ const zh = {
 
   // 瀑布流卡片 / 小组帖子列表
   deletedUser: '已注销用户',
+  botCatTgBot: 'Telegram 交易Bot',
+  botCatAiAgent: 'AI 交易代理',
+  botCatVault: '链上金库',
+  botCatStrategy: '量化策略',
   pollDuration1h: '1小时',
   pollDuration6h: '6小时',
   pollDuration12h: '12小时',

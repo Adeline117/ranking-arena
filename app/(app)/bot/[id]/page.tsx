@@ -1,6 +1,7 @@
 'use client'
 
-import { localizedLabel, NULL_DISPLAY } from '@/lib/utils/format'
+import { NULL_DISPLAY } from '@/lib/utils/format'
+import type { TranslationKey } from '@/lib/i18n'
 /**
  * Bot Detail Page - /bot/[id]
  * Shows performance, stats, and on-chain info for a specific bot.
@@ -115,11 +116,11 @@ function MetricStatCard({
   )
 }
 
-const CATEGORY_LABELS: Record<string, { zh: string; en: string }> = {
-  tg_bot: { zh: 'Telegram 交易Bot', en: 'Telegram Trading Bot' },
-  ai_agent: { zh: 'AI 交易代理', en: 'AI Trading Agent' },
-  vault: { zh: '链上金库', en: 'On-chain Vault' },
-  strategy: { zh: '量化策略', en: 'Trading Strategy' },
+const CATEGORY_LABEL_KEYS: Record<string, TranslationKey> = {
+  tg_bot: 'botCatTgBot',
+  ai_agent: 'botCatAiAgent',
+  vault: 'botCatVault',
+  strategy: 'botCatStrategy',
 }
 
 type SortKey = 'total_volume' | 'apy' | 'roi' | 'arena_score'
@@ -186,7 +187,8 @@ function BotDetailContent({ id }: { id: string }) {
   const snapshots: Record<string, unknown>[] = data.snapshots || []
   // Use 90D snapshot as primary
   const snap = snapshots.find((s) => s.season_id === '90D') || snapshots[0]
-  const catLabel = CATEGORY_LABELS[bot.category] || { zh: bot.category, en: bot.category }
+  const catLabelKey = CATEGORY_LABEL_KEYS[bot.category]
+  const catLabel = catLabelKey ? t(catLabelKey) : bot.category
 
   const locale =
     // eslint-disable-next-line no-restricted-syntax -- Intl date-locale mapping, not user-facing copy
@@ -364,7 +366,7 @@ function BotDetailContent({ id }: { id: string }) {
                   color: 'var(--color-accent-brand)',
                 }}
               >
-                {localizedLabel(catLabel.zh, catLabel.en, language)}
+                {catLabel}
               </span>
               {bot.chain && (
                 <span
