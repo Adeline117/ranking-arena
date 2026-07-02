@@ -36,7 +36,9 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
   return (
     <section
       style={{
-        padding: `${tokens.spacing[10]} ${tokens.spacing[8]} ${tokens.spacing[8]}`,
+        // Tighter vertical padding so the box hugs its content (heading +
+        // subtitle + CTA) instead of leaving a large empty band below.
+        padding: `${tokens.spacing[8]} ${tokens.spacing[8]} ${tokens.spacing[6]}`,
         marginBottom: tokens.spacing[5],
         background:
           'linear-gradient(145deg, var(--color-bg-secondary) 0%, var(--color-bg-primary) 100%)',
@@ -44,7 +46,7 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
         border: '1px solid var(--color-border-primary, rgba(255,255,255,0.1))',
         position: 'relative',
         overflow: 'hidden',
-        minHeight: 200,
+        minHeight: 160,
         contain: 'layout style',
       }}
     >
