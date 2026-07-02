@@ -225,9 +225,15 @@ async function main() {
       note(`删评论 ${delC.status}（清理）`)
     }
 
-    // 删帖（清理）
+    // 删帖（清理）+ GET 回查确认 404 —— 2026-07-02 教训：deletePost 0 行
+    // 匹配曾静默 no-op 仍回 200，QA 测试帖公开残留生产多日
     const del = await apiCall(`/api/posts/${postId}`, { method: 'DELETE', headers: apiHeaders })
-    note(`${del.status < 300 ? 'OK' : 'FAIL'} 删帖 ${del.status}（清理）`)
+    const gone = await apiCall(`/api/posts/${postId}`, { headers: apiHeaders })
+    note(
+      del.status < 300 && gone.status === 404
+        ? `OK 删帖 ${del.status}（清理，回查 404 已确认）`
+        : `FAIL 删帖 ${del.status} / 回查 ${gone.status}（post ${postId} 可能残留在生产!）`
+    )
   }
 
   // ---------- Step 4: watchlist 加/移除 ----------
