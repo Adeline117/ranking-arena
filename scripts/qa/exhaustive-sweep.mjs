@@ -224,6 +224,33 @@ function fingerprint(desc) {
   return `${desc.tag}|${desc.type}|${desc.role}|${desc.text}|${desc.ariaLabel}|${desc.href}`
 }
 
+// Playwright buries the DECISIVE failure cause ("<header> subtree intercepts
+// pointer events", "element is not stable", "outside of the viewport", …) in
+// the call-log lines BELOW the generic first line ("Timeout 2500ms exceeded").
+// Keeping only line 1 made every fail:click indistinguishable and forced live
+// re-diagnosis. Extract the first cause-bearing line and append it. Call-log
+// lines carry ANSI escape codes (\x1b[2m…\x1b[22m) — strip them so the JSONL
+// ledger stays clean. (Blindly joining the first N lines is useless: they are
+// "waiting for locator(...)" filler.)
+const CLICK_CAUSE_PATTERNS = [
+  /intercepts pointer events/i,
+  /not stable/i,
+  /not attached/i,
+  /outside of the viewport/i,
+  /element is not visible/i,
+  /element is not enabled/i,
+]
+function summarizeClickError(e) {
+  const stripAnsi = (s) => s.replace(/\x1b\[[0-9;]*m/g, '')
+  const lines = String(e.message)
+    .split('\n')
+    .map((l) => stripAnsi(l).trim().replace(/^-\s+/, ''))
+    .filter(Boolean)
+  const first = lines[0] || 'unknown click error'
+  const cause = lines.slice(1).find((l) => CLICK_CAUSE_PATTERNS.some((re) => re.test(l)))
+  return (cause ? `${first} — ${cause}` : first).slice(0, 300)
+}
+
 async function hydrate(page, route) {
   const resp = await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded', timeout: 30000 })
   await page.waitForTimeout(4000) // hydration + first data
@@ -338,7 +365,7 @@ async function sweepRoute(page, route, ledger, counters) {
       // failure, NOT an app error — keep it in its own field so it doesn't
       // pollute the real-error signal.
       record.status = 'fail:click'
-      record.clickError = String(e.message).split('\n')[0].slice(0, 160)
+      record.clickError = summarizeClickError(e)
       counters.failed++
     }
 
