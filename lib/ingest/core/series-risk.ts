@@ -216,3 +216,60 @@ function clampRatio(x: number): number | null {
   const v = Math.max(-RATIO_CAP, Math.min(RATIO_CAP, x))
   return Math.round(v * 100) / 100
 }
+
+// ── CEX self-derivation (spec §Tier-0-CEX) ─────────────────────────────────
+// Many CEX sources hand over a cumulative pnl/roi chart series but NEVER a
+// Sharpe/Sortino (bitget/xt/mexc/bitunix/okx_web3_solana all captured the
+// series yet stored sharpe=NULL). Rather than wait for an API that will never
+// expose it, we compute it ourselves from the series we already store — the
+// exact same engine + provenance discipline as the DEX Tier-0 path.
+
+interface RiskDerivableStat {
+  timeframe: number
+  sharpe: number | null
+  mdd: number | null
+  extras: Record<string, unknown>
+}
+interface RiskDerivableSeries {
+  timeframe: number
+  metric: string
+  points: CumulativePnlPoint[]
+}
+
+/** Cumulative-series metrics we can honestly take period-deltas from. Ordered
+ *  by preference. `pnl`/`roi` verified cumulative in prod; `*_daily` excluded
+ *  (per-day semantics vary by adapter — never guess). */
+const DERIVABLE_METRICS = ['pnl', 'roi'] as const
+
+/**
+ * Fill missing Sharpe/Sortino on stats IN PLACE from a matching-timeframe
+ * cumulative series. Only touches stats where `sharpe` is already NULL (never
+ * overrides an exchange-reported value), gates on ≥MIN_RATIO_POINTS deltas,
+ * and stamps `extras.sharpe_derivation='series-derived'` for provenance. MDD is
+ * left untouched (base-free ratios can't yield a percent drawdown honestly).
+ * Pure w.r.t. inputs it doesn't own; returns the same array for chaining.
+ */
+export function deriveMissingRatios<T extends RiskDerivableStat>(
+  stats: T[],
+  series: RiskDerivableSeries[]
+): T[] {
+  if (!Array.isArray(stats) || !Array.isArray(series)) return stats
+  for (const s of stats) {
+    if (s.sharpe !== null && s.sharpe !== undefined) continue // never override exchange value
+    let picked: RiskDerivableSeries | undefined
+    for (const metric of DERIVABLE_METRICS) {
+      picked = series.find(
+        (ser) => ser.timeframe === s.timeframe && ser.metric === metric && ser.points.length >= 2
+      )
+      if (picked) break
+    }
+    if (!picked) continue
+    const { sharpe, sortino, samples } = ratiosFromCumulativePnl(picked.points)
+    if (sharpe === null) continue // insufficient samples / flat curve — stay honest NULL
+    s.sharpe = sharpe
+    if (s.extras.sortino === undefined && sortino !== null) s.extras.sortino = sortino
+    s.extras.sharpe_derivation = 'series-derived'
+    s.extras.sharpe_samples = samples
+  }
+  return stats
+}

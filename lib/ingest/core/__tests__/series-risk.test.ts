@@ -2,6 +2,7 @@ import {
   riskFromCumulativePnl,
   ratiosFromCumulativePnl,
   riskFromEquitySeries,
+  deriveMissingRatios,
 } from '../series-risk'
 
 /** Build a cumulative-PnL series from per-day deltas. */
@@ -103,6 +104,54 @@ describe('ratiosFromCumulativePnl (base-free, for DEX without capital base)', ()
     const aware = riskFromCumulativePnl(cum(deltas), 1e9)
     expect(free.sharpe).toBeCloseTo(aware.sharpe as number, 2)
     expect(free.sortino).toBeCloseTo(aware.sortino as number, 2)
+  })
+})
+
+describe('deriveMissingRatios (CEX self-derivation from stored series)', () => {
+  const series = (metric: string, deltas: number[], timeframe = 30) => ({
+    timeframe,
+    metric,
+    points: cum(deltas),
+  })
+
+  it('fills sharpe/sortino on a null-sharpe stat from a matching pnl series', () => {
+    const stats = [{ timeframe: 30, sharpe: null, mdd: 42, extras: {} as Record<string, unknown> }]
+    deriveMissingRatios(stats, [series('pnl', [10, -5, 12, -3, 8, -2, 15, -4])])
+    expect(typeof stats[0].sharpe).toBe('number')
+    expect(stats[0].extras.sharpe_derivation).toBe('series-derived')
+    expect(typeof stats[0].extras.sortino).toBe('number')
+    expect(stats[0].mdd).toBe(42) // exchange mdd left untouched
+  })
+
+  it('NEVER overrides an exchange-reported sharpe', () => {
+    const stats = [{ timeframe: 30, sharpe: 1.5, mdd: null, extras: {} as Record<string, unknown> }]
+    deriveMissingRatios(stats, [series('pnl', [10, -5, 12, -3, 8, -2, 15, -4])])
+    expect(stats[0].sharpe).toBe(1.5)
+    expect(stats[0].extras.sharpe_derivation).toBeUndefined()
+  })
+
+  it('prefers pnl but falls back to a roi series', () => {
+    const stats = [{ timeframe: 7, sharpe: null, mdd: null, extras: {} as Record<string, unknown> }]
+    deriveMissingRatios(stats, [series('roi', [2, -1, 3, -1, 2, -1, 4, -2], 7)])
+    expect(typeof stats[0].sharpe).toBe('number')
+    expect(stats[0].extras.sharpe_derivation).toBe('series-derived')
+  })
+
+  it('stays NULL when the series is too short (no dishonest fill)', () => {
+    const stats = [
+      { timeframe: 30, sharpe: null, mdd: null, extras: {} as Record<string, unknown> },
+    ]
+    deriveMissingRatios(stats, [series('pnl', [10, -5, 12])])
+    expect(stats[0].sharpe).toBeNull()
+    expect(stats[0].extras.sharpe_derivation).toBeUndefined()
+  })
+
+  it('ignores _daily metrics (uncertain per-period semantics)', () => {
+    const stats = [
+      { timeframe: 30, sharpe: null, mdd: null, extras: {} as Record<string, unknown> },
+    ]
+    deriveMissingRatios(stats, [series('pnl_daily', [10, -5, 12, -3, 8, -2, 15, -4])])
+    expect(stats[0].sharpe).toBeNull()
   })
 })
 

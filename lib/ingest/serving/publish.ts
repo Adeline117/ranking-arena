@@ -21,6 +21,7 @@ import type {
   SourceRow,
 } from '../core/types'
 import type { RejectedRow } from '../staging/validate'
+import { deriveMissingRatios } from '../core/series-risk'
 import {
   BOOTSTRAP_DEVIATION_PCT,
   ROLLING_DEVIATION_PCT,
@@ -309,6 +310,12 @@ export async function publishProfile(
         [traderId, profile.nickname, profile.avatarUrlOrigin]
       )
     }
+
+    // CEX self-derivation: fill Sharpe/Sortino from the cumulative pnl/roi
+    // series we already captured, for sources the exchange never gives it
+    // (bitget/xt/mexc/bitunix/okx_web3_solana). Same engine as DEX Tier-0;
+    // only fills NULLs, tags provenance. Mutates profile.stats in place.
+    deriveMissingRatios(profile.stats, profile.series)
 
     for (const s of profile.stats) {
       await client.query(
