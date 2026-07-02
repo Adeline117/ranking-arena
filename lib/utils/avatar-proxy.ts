@@ -5,7 +5,12 @@
  */
 
 // Domains that serve images without CORS/Referrer restrictions — bypass proxy entirely.
-// All of these are in next.config.ts remotePatterns (or are data: URIs) so next/image handles them.
+// Bitmap sources here are in next.config.ts remotePatterns, so /_next/image optimizes them.
+// NOTE: SVG sources (dicebear `/svg` endpoints, `*.svg` paths) are NOT handled by the
+// optimizer — next.config.ts sets `dangerouslyAllowSVG: false`, so /_next/image rejects
+// them with 400 INVALID_IMAGE_OPTIMIZE_REQUEST. Render those with `unoptimized` on
+// <Image> (see isSvgAvatarSource below). Direct <img> loading is safe: CSP img-src
+// allows https:, and SVG scripts never execute in an <img> context.
 const DIRECT_DOMAINS = new Set([
   // Avatar generators — public, no restrictions
   'api.dicebear.com',
@@ -29,6 +34,32 @@ const DIRECT_DOMAINS = new Set([
   'img.meimaobing.top',
   'public.mocortech.com',
 ])
+
+// Avatar-generator hosts whose endpoints serve SVG (dicebear URLs are
+// `/7.x/<style>/svg?seed=...`). Kept separate from DIRECT_DOMAINS because
+// membership here changes *how* the URL is rendered, not *where* it loads from.
+const SVG_AVATAR_HOSTS = new Set(['api.dicebear.com'])
+
+/**
+ * True when the avatar URL points at an SVG source that must bypass the
+ * Next.js image optimizer (`unoptimized` on <Image>): /_next/image returns
+ * 400 for any SVG because `dangerouslyAllowSVG` is disabled.
+ * Do NOT route these through /api/avatar either — the proxy deliberately
+ * rejects image/svg+xml (audit P1-3) and forces content-type to png.
+ */
+export function isSvgAvatarSource(url: string | null | undefined): boolean {
+  if (!url) return false
+  if (url.startsWith('data:')) return url.startsWith('data:image/svg')
+  try {
+    const parsed = new URL(url, 'https://www.arenafi.org')
+    if (SVG_AVATAR_HOSTS.has(parsed.hostname)) return true
+    const pathname = parsed.pathname.toLowerCase()
+    // robohash & friends serve SVG only on explicit `.svg` / `/svg` paths
+    return pathname.endsWith('.svg') || pathname.endsWith('/svg')
+  } catch (_err) {
+    return false
+  }
+}
 
 export function avatarSrc(url: string | null | undefined): string {
   if (!url) return ''
