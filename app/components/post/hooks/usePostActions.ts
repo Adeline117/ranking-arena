@@ -529,6 +529,20 @@ export function usePostActions({
     [accessToken, bookmarkingPostId, showToast]
   )
 
+  // Open repost editor — auth-gated so anonymous users get the login modal
+  // immediately instead of after composing a repost comment.
+  const openRepostModal = useCallback(
+    async (postId: string) => {
+      if (!accessToken) {
+        const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
+        useLoginModal.getState().openLoginModal()
+        return
+      }
+      setShowRepostModal(postId)
+    },
+    [accessToken]
+  )
+
   // Repost
   const handleRepost = useCallback(
     async (postId: string, comment?: string) => {
@@ -724,6 +738,7 @@ export function usePostActions({
     repostLoading,
     showRepostModal,
     setShowRepostModal,
+    openRepostModal,
     repostComment,
     setRepostComment,
     userBookmarks,

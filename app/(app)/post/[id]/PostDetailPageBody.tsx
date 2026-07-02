@@ -244,7 +244,7 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
           onToggleReaction={actions.toggleReaction}
           onBookmark={actions.handleBookmark}
           onOpenBookmarkFolder={actions.openBookmarkFolderModal}
-          onRepost={(id) => actions.setShowRepostModal(id)}
+          onRepost={(id) => actions.openRepostModal(id)}
           showToast={showToast}
           comments={comments}
           loadingComments={commentsHook.loadingComments}
