@@ -165,9 +165,9 @@ export function TraderHeaderActions({
         </ActionButton>
       )}
 
-      {/* Follow icon */}
+      {/* Follow icon — rendered for anonymous users too: the buttons themselves
+          open the login modal (TraderFollowButton also queues pendingFollow) */}
       {!isOwnProfile &&
-        userId &&
         (isRegistered ? (
           <UserFollowButton targetUserId={traderId} currentUserId={userId} size="sm" />
         ) : (

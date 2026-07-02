@@ -60,7 +60,7 @@ export default function TraderAboutCard({
       })
       .catch(() => {
         /* Intentionally swallowed: auth check non-critical for about card */
-      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
   }, [])
 
   const handleFollowersClick = () => {
@@ -174,7 +174,9 @@ export default function TraderAboutCard({
 
       {/* Action buttons -- only on other profiles */}
       <Box style={{ position: 'relative', zIndex: 1 }}>
-        {!isOwnProfile && traderId && userId ? (
+        {/* Rendered for anonymous users too — Follow/Message buttons open the
+            login modal themselves when userId is null */}
+        {!isOwnProfile && traderId ? (
           <Box
             style={{
               display: 'flex',
