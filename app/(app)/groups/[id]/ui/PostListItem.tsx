@@ -9,6 +9,7 @@ import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { getAvatarGradient } from '@/lib/utils/avatar'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { resolveUserDisplayName } from '@/lib/utils/user-display'
 import CommentsSection from './CommentsSection'
 import type { Post, CommentWithAuthor } from '../hooks/useGroupPosts'
 
@@ -63,6 +64,7 @@ export interface PostListItemProps {
 
 export default function PostListItem(props: PostListItemProps) {
   const { t } = useLanguage()
+  const authorName = resolveUserDisplayName({ handle: props.post.author_handle }, t)
   const {
     post,
     language,
@@ -148,9 +150,9 @@ export default function PostListItem(props: PostListItemProps) {
           }}
         >
           <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-            {post.author_handle && !post.author_handle.startsWith('deleted_') ? (
+            {authorName.linkHandle ? (
               <Link
-                href={`/u/${encodeURIComponent(post.author_handle)}`}
+                href={`/u/${encodeURIComponent(authorName.linkHandle)}`}
                 onClick={(e) => e.stopPropagation()}
                 style={{
                   display: 'flex',
@@ -170,7 +172,7 @@ export default function PostListItem(props: PostListItemProps) {
                     flexShrink: 0,
                     background: post.author_avatar_url
                       ? undefined
-                      : getAvatarGradient(post.author_id || post.author_handle),
+                      : getAvatarGradient(post.author_id || authorName.linkHandle || 'user'),
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -188,11 +190,11 @@ export default function PostListItem(props: PostListItemProps) {
                     />
                   ) : (
                     <span style={{ color: tokens.colors.white, fontSize: 12, fontWeight: 700 }}>
-                      {(post.author_handle || 'U').charAt(0).toUpperCase()}
+                      {(authorName.label || 'U').charAt(0).toUpperCase()}
                     </span>
                   )}
                 </span>
-                @{post.author_handle}
+                @{authorName.label}
               </Link>
             ) : (
               <Text size="xs" color="tertiary" style={{ fontStyle: 'italic' }}>

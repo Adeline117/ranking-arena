@@ -18,6 +18,8 @@ import { tokens } from '@/lib/design-tokens'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
 import { ARENA_PURPLE, renderContentWithLinks, truncateText } from '@/lib/utils/content'
 import { localizedLabel } from '@/lib/utils/format'
+import { t } from '@/lib/i18n'
+import { resolveUserDisplayName } from '@/lib/utils/user-display'
 
 export interface PostContentData {
   id: string
@@ -113,23 +115,27 @@ export function PostContent({
               style={{ borderRadius: '50%', objectFit: 'cover' }}
             />
           )}
-          {p.author_handle ? (
-            <Link
-              href={`/u/${encodeURIComponent(p.author_handle)}`}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                color: 'var(--color-text-secondary)',
-                textDecoration: 'none',
-                fontWeight: 700,
-              }}
-            >
-              @{p.author_handle}
-            </Link>
-          ) : (
-            <span style={{ color: 'var(--color-text-tertiary)' }}>
-              {p.author_display_name || 'user'}
-            </span>
-          )}
+          {(() => {
+            const name = resolveUserDisplayName(
+              { handle: p.author_handle, displayName: p.author_display_name },
+              t
+            )
+            return name.linkHandle ? (
+              <Link
+                href={`/u/${encodeURIComponent(name.linkHandle)}`}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  color: 'var(--color-text-secondary)',
+                  textDecoration: 'none',
+                  fontWeight: 700,
+                }}
+              >
+                @{name.label}
+              </Link>
+            ) : (
+              <span style={{ color: 'var(--color-text-tertiary)' }}>{name.label}</span>
+            )
+          })()}
         </span>
         {p.created_at && (
           <span style={{ color: 'var(--color-text-tertiary)', flexShrink: 0 }}>

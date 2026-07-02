@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/ui/icons'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { resolveUserDisplayName } from '@/lib/utils/user-display'
 
 interface MasonryPostCardProps {
   post: {
@@ -24,15 +25,18 @@ interface MasonryPostCardProps {
   onComment?: (postId: string) => void
 }
 
-export default function MasonryPostCard({ post, language = 'zh', onLike, onComment }: MasonryPostCardProps) {
+export default function MasonryPostCard({
+  post,
+  language = 'zh',
+  onLike,
+  onComment,
+}: MasonryPostCardProps) {
   const { t } = useLanguage()
-  const isDeletedUser = !post.author_handle || post.author_handle.startsWith('deleted_')
+  const authorName = resolveUserDisplayName({ handle: post.author_handle }, t)
+  const isDeletedUser = authorName.isDeleted
 
   return (
-    <Link
-      href={`/post/${post.id}`}
-      style={{ textDecoration: 'none', color: 'inherit' }}
-    >
+    <Link href={`/post/${post.id}`} style={{ textDecoration: 'none', color: 'inherit' }}>
       <Box
         className="masonry-card glass-card-hover"
         style={{
@@ -45,7 +49,9 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
       >
         {/* Cover image */}
         {post.images && post.images.length > 0 && (
-          <Box style={{ position: 'relative', width: '100%', aspectRatio: '4/3', overflow: 'hidden' }}>
+          <Box
+            style={{ position: 'relative', width: '100%', aspectRatio: '4/3', overflow: 'hidden' }}
+          >
             <img
               src={post.images[0]}
               alt="Post image"
@@ -53,7 +59,9 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
               height={300}
               style={{ width: '100%', height: '100%', objectFit: 'cover' }}
               loading="lazy"
-              onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
+              onError={(e) => {
+                ;(e.target as HTMLImageElement).style.display = 'none'
+              }}
             />
           </Box>
         )}
@@ -94,19 +102,21 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
           )}
 
           {/* Author row */}
-          <Box style={{
-            marginTop: tokens.spacing[2],
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-          }}>
+          <Box
+            style={{
+              marginTop: tokens.spacing[2],
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+            }}
+          >
             {isDeletedUser ? (
               <Text size="xs" color="tertiary">
                 {t('deletedUser')}
               </Text>
             ) : (
               <Text size="xs" style={{ color: tokens.colors.accent.brand }}>
-                @{post.author_handle}
+                @{authorName.label}
               </Text>
             )}
             <Text size="xs" color="tertiary">
@@ -115,30 +125,44 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
           </Box>
 
           {/* Action row — hide zero counts, show CTA when no engagement */}
-          <Box style={{
-            marginTop: tokens.spacing[2],
-            paddingTop: tokens.spacing[2],
-            borderTop: `1px solid ${tokens.colors.border.primary}`,
-            display: 'flex',
-            gap: tokens.spacing[3],
-            alignItems: 'center',
-          }}>
+          <Box
+            style={{
+              marginTop: tokens.spacing[2],
+              paddingTop: tokens.spacing[2],
+              borderTop: `1px solid ${tokens.colors.border.primary}`,
+              display: 'flex',
+              gap: tokens.spacing[3],
+              alignItems: 'center',
+            }}
+          >
             {(post.like_count ?? 0) > 0 && (
               <Box
                 style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onLike?.(post.id) }}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onLike?.(post.id)
+                }}
               >
                 <ThumbsUpIcon size={12} />
-                <Text size="xs" color="secondary">{post.like_count}</Text>
+                <Text size="xs" color="secondary">
+                  {post.like_count}
+                </Text>
               </Box>
             )}
             {(post.comment_count ?? 0) > 0 && (
               <Box
                 style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
-                onClick={(e) => { e.preventDefault(); e.stopPropagation(); onComment?.(post.id) }}
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onComment?.(post.id)
+                }}
               >
                 <CommentIcon size={12} />
-                <Text size="xs" color="secondary">{post.comment_count}</Text>
+                <Text size="xs" color="secondary">
+                  {post.comment_count}
+                </Text>
               </Box>
             )}
             {!(post.like_count ?? 0) && !(post.comment_count ?? 0) && (
@@ -148,7 +172,6 @@ export default function MasonryPostCard({ post, language = 'zh', onLike, onComme
             )}
           </Box>
         </Box>
-
       </Box>
     </Link>
   )
