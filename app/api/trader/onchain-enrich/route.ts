@@ -10,9 +10,10 @@
  *
  * Dedup: skips if the wallet was enriched within DEDUP_MINUTES.
  */
-import { NextResponse } from 'next/server'
+import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { chainForSource, enrichWeb3Wallet, enrichmentExtras } from '@/lib/ingest/onchain/enrich'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 
 export const runtime = 'nodejs'
@@ -21,7 +22,12 @@ export const maxDuration = 60
 const logger = createLogger('onchain-enrich-api')
 const DEDUP_MINUTES = 30
 
-export async function POST(req: Request) {
+export async function POST(req: NextRequest) {
+  // 公开端点但每次调用消耗付费链上 API 配额（Alchemy/Etherscan）——
+  // sensitive 限流(15/min, fail-close)防换钱包地址刷接口的成本放大攻击
+  const rateLimitResponse = await checkRateLimit(req, RateLimitPresets.sensitive)
+  if (rateLimitResponse) return rateLimitResponse
+
   let source: string
   let exchangeTraderId: string
   try {

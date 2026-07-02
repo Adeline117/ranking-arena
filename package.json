@@ -73,6 +73,7 @@
     "backup:r2:full": "node scripts/maintenance/backup-to-r2.mjs --full",
     "qa:serving": "node scripts/qa/serving-acceptance.mjs",
     "qa:schema": "node scripts/qa/schema-contract-check.mjs",
+    "qa:api-auth": "node scripts/qa/api-auth-coverage-check.mjs",
     "qa:migrations": "node scripts/qa/check-migration-ledger.mjs",
     "qa:buttons": "node scripts/qa/button-sweep.mjs",
     "qa:coverage": "tsx --env-file=.env.local scripts/ingest-field-coverage-ledger.mts",
