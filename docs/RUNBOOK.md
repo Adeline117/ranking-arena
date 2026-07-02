@@ -213,6 +213,9 @@ Preview/PR 分支构建不受影响。
 
 - **紧急逃生口**：commit message 含 `[deploy-force]` → 跳过 CI 门禁立即
   git 直接构建（走老路径，post-deploy-smoke.yml 兜底）。用后必须在此补记原因。
+  ⚠️ 匹配的是**完整 commit message 含正文**——不要在普通提交的说明文字里
+  字面写出这个标记（2026-07-02 实测：一条讨论该标记的 commit 正文触发了
+  直接部署）。文档里提及时用「deploy-force 标记」这类改写。
 - **正常延迟**：生产部署滞后 push 约 8-12 分钟（CI 时长）。
 - **彻底停用门禁（回到旧行为）**：revert 掉 `vercel.json` 里的
   `ignoreCommand` 一行即可，git push 立即恢复直接部署。
