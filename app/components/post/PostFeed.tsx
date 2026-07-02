@@ -217,7 +217,11 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const { comments, setComments, loadComments } = commentsHook
 
   // Translation hook
-  const translation = usePostTranslation({ accessToken, showToast, t })
+  const translation = usePostTranslation({ accessToken, showToast, t, language })
+  // Translation target: zh users get Chinese; everyone else (en/ja/ko) gets
+  // English — the translate API only supports en/zh, so ja/ko fall back to
+  // English (readable) instead of Chinese.
+  const translateTarget: 'zh' | 'en' = language === 'zh' ? 'zh' : 'en'
   const {
     translatedListPosts,
     translatedContent,
@@ -438,10 +442,17 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // Translation effects — only for authenticated users (translate API requires auth)
   useEffect(() => {
     if (!accessToken) return
-    if (posts.length > 0) translateListPosts(posts, language as 'zh' | 'en')
-    if (comments.length > 0 && openPost)
-      translateComments(comments, language === 'en' ? 'en' : 'zh')
-  }, [language, posts, translateListPosts, comments, openPost, translateComments, accessToken])
+    if (posts.length > 0) translateListPosts(posts, translateTarget)
+    if (comments.length > 0 && openPost) translateComments(comments, translateTarget)
+  }, [
+    translateTarget,
+    posts,
+    translateListPosts,
+    comments,
+    openPost,
+    translateComments,
+    accessToken,
+  ])
 
   const sortedPosts = useMemo(() => {
     if (!props.authorHandle) return posts
@@ -466,17 +477,20 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       const titleIsChinese = post.title ? isChineseText(post.title) : false
       const needsContentTranslation =
         post.content &&
-        ((language === 'en' && contentIsChinese) || (language === 'zh' && !contentIsChinese))
+        ((translateTarget === 'en' && contentIsChinese) ||
+          (translateTarget === 'zh' && !contentIsChinese))
       const needsTitleTranslation =
         post.title &&
-        ((language === 'en' && titleIsChinese) || (language === 'zh' && !titleIsChinese))
+        ((translateTarget === 'en' && titleIsChinese) ||
+          (translateTarget === 'zh' && !titleIsChinese))
       const hasTranslatedTitle = !!translatedListPosts[post.id]?.title
       if (needsContentTranslation || needsTitleTranslation || hasTranslatedTitle)
         setShowingOriginal(false)
       else setShowingOriginal(true)
-      if (accessToken && needsContentTranslation) translateContent(post.id, post.content!, language)
+      if (accessToken && needsContentTranslation)
+        translateContent(post.id, post.content!, translateTarget)
       if (accessToken && !hasTranslatedTitle && needsTitleTranslation)
-        translateListPosts([post], language as 'zh' | 'en')
+        translateListPosts([post], translateTarget)
     },
     [
       loadComments,
