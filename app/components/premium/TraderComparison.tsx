@@ -626,7 +626,8 @@ export default function TraderComparison({
                                   color: tokens.colors.accent.success,
                                 }}
                               >
-                                👑
+                                <span aria-hidden="true">👑</span>
+                                <span className="sr-only">{t('compareBestValue')}</span>
                               </span>
                             )}
                           </Text>

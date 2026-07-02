@@ -1111,6 +1111,7 @@ const ja = {
   compareMetrics: '指標',
   compareScoreBars: 'スコアバー',
   compareTableCaption: 'トレーダー指標比較表',
+  compareBestValue: 'この指標で最高値',
   compareEquityCurve: '資産曲線',
   compareArenaScore: 'Arena Score',
   compareROI90D: 'ROI (90日)',

@@ -1206,6 +1206,7 @@ const zh = {
   compareMetrics: '指标对比',
   compareScoreBars: '评分条形图',
   compareTableCaption: '交易员指标对比表',
+  compareBestValue: '该指标最佳',
   compareEquityCurve: '权益曲线',
   compareArenaScore: 'Arena Score',
   compareROI90D: 'ROI (90D)',
