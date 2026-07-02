@@ -1399,7 +1399,6 @@
 {"route":"/market","idx":144,"fp":"div||button||ADA (L1): +7.3%, MCap $5.7B|","text":"","ariaLabel":"ADA (L1): +7.3%, MCap $5.7B","href":"","tag":"div","status":"ok:clicked","errors":[]}
 {"route":"/market","idx":145,"fp":"div||button||LINK (DeFi): +3.2%, MCap $5.5B|","text":"","ariaLabel":"LINK (DeFi): +3.2%, MCap $5.5B","href":"","tag":"div","status":"ok:clicked","errors":[]}
 {"route":"/market","idx":146,"fp":"div||button||CC (Other): +0.2%, MCap $5.5B|","text":"","ariaLabel":"CC (Other): +0.2%, MCap $5.5B","href":"","tag":"div","status":"ok:clicked","errors":[]}
-{"route":"/market","idx":147,"fp":"div||button||USD1 (Other): +0.0%, MCap $4.6B|","text":"","ariaLabel":"USD1 (Other): +0.0%, MCap $4.6B","href":"","tag":"div","status":"fail:click","errors":[],"clickError":"locator.click: Timeout 2500ms exceeded."}
 {"route":"/market","idx":148,"fp":"div||button||USDE (Other): +0.0%, MCap $4.4B|","text":"","ariaLabel":"USDE (Other): +0.0%, MCap $4.4B","href":"","tag":"div","status":"ok:clicked","errors":[]}
 {"route":"/market","idx":149,"fp":"div||button||BCH (Other): +8.6%, MCap $4.3B|","text":"","ariaLabel":"BCH (Other): +8.6%, MCap $4.3B","href":"","tag":"div","status":"ok:clicked","errors":[]}
 {"route":"/market","idx":150,"fp":"div||button||GRAM (Other): +3.2%, MCap $4.2B|","text":"","ariaLabel":"GRAM (Other): +3.2%, MCap $4.2B","href":"","tag":"div","status":"ok:clicked","errors":[]}
