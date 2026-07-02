@@ -7,6 +7,7 @@ import { usePostStore } from '@/lib/stores/postStore'
 import { logger } from '@/lib/logger'
 import { haptic } from '@/lib/utils/haptics'
 import { getNetworkErrorMessage } from '@/lib/utils/network-error'
+import { trackEvent } from '@/lib/analytics/track'
 import { type PollChoice, type PostWithUserState } from '@/lib/types'
 
 type Post = PostWithUserState
@@ -213,6 +214,10 @@ export function usePostActions({
             reaction: result.reaction,
           })
           if (openPost?.id === postId) setOpenPost({ ...openPost, ...serverUpdate } as Post)
+          // Analytics: only count a NEW reaction, not an un-react (result.reaction null)
+          if (result.reaction) {
+            trackEvent('post_reaction', { post_id: postId, reaction: result.reaction })
+          }
         } else {
           // Rollback — reverse the delta from CURRENT state (not a stale snapshot)
           setPosts((prev) =>
@@ -452,6 +457,10 @@ export function usePostActions({
           )
           if (openPost?.id === postId)
             setOpenPost({ ...openPost, bookmark_count: result.bookmark_count } as Post)
+          // Analytics: only count adding a bookmark, not removing one
+          if (result.bookmarked) {
+            trackEvent('post_bookmark', { post_id: postId })
+          }
           showToast(result.bookmarked ? t('bookmarked') : t('unbookmarked'), 'success')
         } else {
           // Rollback on server error
@@ -547,6 +556,7 @@ export function usePostActions({
         if (response.ok) {
           setShowRepostModal(null)
           setRepostComment('')
+          trackEvent('post_repost', { post_id: postId, with_comment: comment ? 1 : 0 })
           showToast(t('reposted'), 'success')
         } else {
           showToast(result.error || t('repostFailed'), 'error')
