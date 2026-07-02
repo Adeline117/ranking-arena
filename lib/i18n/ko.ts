@@ -2625,6 +2625,14 @@ const ko = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: '삭제된 사용자',
+  presetAll: '전체',
+  presetCexFutures: 'CEX 선물',
+  presetCexSpot: 'CEX 현물',
+  presetOnchainDex: '온체인 DEX',
+  presetLowRisk: '저위험',
+  presetHighPnl: '고수익',
+  presetConsistent: '안정 수익',
+  presetTopScorers: '최고 점수',
   privyAccountSyncFailed: '계정 동기화에 실패했습니다. 다시 시도해 주세요',
   privyLoginFailed: '로그인에 실패했습니다. 다시 시도해 주세요',
   privyQuickLogin: '빠른 로그인 (Google / 이메일 / 지갑)',
