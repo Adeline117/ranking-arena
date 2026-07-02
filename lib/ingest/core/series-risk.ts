@@ -332,11 +332,13 @@ export function deriveRiskFromBlocks(
 
 /**
  * Fill missing risk ratios on stats IN PLACE from matching-timeframe cumulative
- * series — the "compute it ourselves" path for CEX sources that ship a chart
- * series but never a Sharpe/Sortino/volatility (bitget/xt/mexc/bitunix/
- * okx_web3_solana) OR ship Sharpe but not the rest (blofin — its Sortino/vol
- * live behind an SPA-gated profile we can't hit, so we derive them from the
- * board's ROI series instead).
+ * series — the "compute it ourselves" path, now GATED to pure-DEX sources only
+ * (SELF_DERIVE_RISK_SOURCES in publish.ts: hyperliquid/gmx/gtrade). CEX and
+ * blofin ship the real Sharpe/Sortino/calmar/volatility on their (harvestable)
+ * profile endpoints, so self-filling would masquerade an inaccurate daily-approx
+ * as the exchange value — harvest real or leave honest NULL (user directive
+ * 2026-07-02). blofin's profile is reachable via unsigned uapi stat endpoints
+ * (adapters/blofin), so it is NO LONGER a self-derive source.
  *
  * Each metric fills INDEPENDENTLY and ONLY when currently NULL/absent — an
  * exchange-reported value is never overridden. Gates on ≥MIN_RATIO_POINTS
