@@ -52,7 +52,7 @@ interface BookmarkedPost {
 }
 
 export default function FolderDetailPage({ params }: { params: Promise<{ folderId: string }> }) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const resolvedParams = use(params)
   const folderId = resolvedParams.folderId
   const router = useRouter()
@@ -729,7 +729,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                       </Text>
                     )}
                     <Text size="xs" color="tertiary">
-                      {formatTimeAgo(post.created_at)}
+                      {formatTimeAgo(post.created_at, language)}
                     </Text>
                     <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
                       <Text size="xs" color="tertiary">
