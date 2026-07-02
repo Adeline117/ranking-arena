@@ -37,6 +37,7 @@ interface BookmarkRepostState {
   repostLoading: Record<string, boolean>
   showRepostModal: string | null
   setShowRepostModal: (v: string | null) => void
+  openRepostModal: (postId: string) => Promise<void>
   repostComment: string
   setRepostComment: (v: string) => void
   userBookmarks: Record<string, boolean>
