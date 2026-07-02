@@ -238,6 +238,18 @@ async function sweepRoute(page, route, ledger, counters) {
       continue
     }
 
+    // Internal navigation links: record the target as covered WITHOUT clicking.
+    // Physically clicking every link forces a 4s re-hydrate each and turns a
+    // route into an hours-long crawl — and the link targets are themselves in
+    // the route set (or reachable), so coverage is not lost. We still click
+    // non-link controls (buttons/tabs/toggles) since those mutate in-page state.
+    if (desc.tag === 'a' && /^\/(?!\/)/.test(desc.href)) {
+      record.status = `link:${desc.href}`
+      counters.links++
+      ledger.push(record)
+      continue
+    }
+
     // Reset error buckets for this single interaction.
     const bucket = { pageErrors: [], consoleErrors: [], httpErrors: [] }
     counters._bucket = bucket
@@ -353,6 +365,7 @@ async function main() {
   const counters = {
     clicked: 0,
     filled: 0,
+    links: 0,
     denied: 0,
     skipped: 0,
     failed: 0,
@@ -393,6 +406,7 @@ async function main() {
   console.log('\n=== Ledger summary ===')
   console.log(`  elements recorded : ${ledger.length}`)
   console.log(`  clicked/filled    : ${counters.clicked}`)
+  console.log(`  links recorded    : ${counters.links}`)
   console.log(`  denied (safety)   : ${counters.denied}`)
   console.log(`  skipped (hid/dis) : ${counters.skipped}`)
   console.log(`  click failures    : ${counters.failed}`)
