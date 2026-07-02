@@ -18,8 +18,9 @@ import type { NormalizedTransfer } from '@/lib/ingest/onchain/bsc-swaps'
 import { logger } from '@/lib/logger'
 
 const WEB3_SOURCES = ['okx_web3_solana', 'binance_web3_bsc'] as const
-/** Per-source deep-profile cap — keeps the run inside the free Alchemy tier. */
-const TOP_N = Number(process.env.ONCHAIN_ENRICH_TOPN) || 30
+/** Per-source batch cap per run. Coverage grows across runs via stale-first
+ *  rotation (below), so this bounds each 12h run, not total reach. */
+const TOP_N = Number(process.env.ONCHAIN_ENRICH_TOPN) || 150
 
 export async function processOnchainEnrich(
   _job: Job
@@ -31,13 +32,19 @@ export async function processOnchainEnrich(
   for (const slug of WEB3_SOURCES) {
     const chain = chainForSource(slug)
     if (!chain) continue
+    // Stale-first rotation: never-enriched wallets first, then the oldest
+    // enrichment, tie-broken by PnL (surface high-value traders sooner). Over
+    // successive runs this advances coverage across ALL wallets instead of
+    // re-doing the same top-N every time (the old ORDER BY pnl bug).
     const { rows } = await pool.query<{ wallet: string }>(
       `SELECT t.exchange_trader_id AS wallet
          FROM arena.trader_stats ts
          JOIN arena.traders t ON t.id = ts.trader_id
          JOIN arena.sources s ON s.id = t.source_id
         WHERE s.slug = $1 AND ts.timeframe = 90 AND ts.pnl IS NOT NULL
-        ORDER BY ts.pnl DESC
+        ORDER BY (ts.extras ? 'onchain_enriched_at') ASC,
+                 (ts.extras->>'onchain_enriched_at') ASC NULLS FIRST,
+                 ts.pnl DESC
         LIMIT $2`,
       [slug, TOP_N]
     )
@@ -64,7 +71,7 @@ export async function processOnchainEnrich(
           bscInternalBnb:
             chain === 'bsc' ? (internalByWallet.get(wallet.toLowerCase()) ?? []) : undefined,
         })
-        const extras = enrichmentExtras(e)
+        const extras = { ...enrichmentExtras(e), onchain_enriched_at: new Date().toISOString() }
         await pool.query(
           `UPDATE arena.trader_stats ts SET
              extras = ts.extras || $3::jsonb,
