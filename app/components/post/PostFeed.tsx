@@ -900,7 +900,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           onToggleReaction={actions.toggleReaction}
           onBookmark={actions.handleBookmark}
           onOpenBookmarkFolder={actions.openBookmarkFolderModal}
-          onRepost={(id) => actions.setShowRepostModal(id)}
+          onRepost={(id) => actions.openRepostModal(id)}
           showToast={showToast}
           comments={comments}
           loadingComments={commentsHook.loadingComments}
