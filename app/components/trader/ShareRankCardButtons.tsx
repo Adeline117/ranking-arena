@@ -12,6 +12,7 @@ import { useState, useCallback } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import { platformLabel, formatRoiShort } from '@/lib/constants/platform-labels'
 
 interface ShareRankCardButtonsProps {
   handle: string
@@ -73,27 +74,6 @@ function XIcon() {
   )
 }
 
-const PLATFORM_LABELS: Record<string, string> = {
-  binance_futures: 'Binance',
-  binance_spot: 'Binance Spot',
-  bybit: 'Bybit',
-  bitget_futures: 'Bitget',
-  okx: 'OKX',
-  okx_futures: 'OKX',
-  hyperliquid: 'Hyperliquid',
-  gmx: 'GMX',
-  mexc: 'MEXC',
-  gateio: 'Gate.io',
-  dydx: 'dYdX',
-}
-
-function formatRoiShort(roi: number): string {
-  const sign = roi >= 0 ? '+' : '-'
-  const abs = Math.abs(roi)
-  if (abs >= 1000) return `${sign}${(abs / 1000).toFixed(1)}K%`
-  return `${sign}${abs.toFixed(1)}%`
-}
-
 export default function ShareRankCardButtons({
   handle,
   displayName,
@@ -134,13 +114,13 @@ export default function ShareRankCardButtons({
   const shareOnX = useCallback(() => {
     const url = buildShareUrl()
     const name = displayName || handle
-    const platformLabel = platform ? (PLATFORM_LABELS[platform] ?? platform.replace(/_/g, ' ')) : ''
+    const platLabel = platformLabel(platform)
 
     const lines: string[] = []
     if (rank && rank > 0) {
-      lines.push(`Ranked #${rank} on Arena${platformLabel ? ` (${platformLabel})` : ''}`)
+      lines.push(`Ranked #${rank} on Arena${platLabel ? ` (${platLabel})` : ''}`)
     } else {
-      lines.push(`${name} on Arena${platformLabel ? ` | ${platformLabel}` : ''}`)
+      lines.push(`${name} on Arena${platLabel ? ` | ${platLabel}` : ''}`)
     }
     if (roi != null) {
       lines.push(

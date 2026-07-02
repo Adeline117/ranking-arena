@@ -19,6 +19,7 @@
 import { useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { usePeriodStore } from '@/lib/stores/periodStore'
+import { platformLabel, formatRoiShort } from '@/lib/constants/platform-labels'
 
 interface ShareOnXButtonProps {
   handle: string
@@ -27,21 +28,6 @@ interface ShareOnXButtonProps {
   rank?: number | null
   roi?: number | null
   window?: string
-}
-
-const PLATFORM_LABELS: Record<string, string> = {
-  binance_futures: 'Binance', binance_spot: 'Binance Spot',
-  bybit: 'Bybit', bybit_spot: 'Bybit Spot',
-  bitget_futures: 'Bitget', okx: 'OKX', okx_futures: 'OKX',
-  hyperliquid: 'Hyperliquid', gmx: 'GMX', mexc: 'MEXC',
-  kucoin: 'KuCoin', coinex: 'CoinEx',
-}
-
-function formatRoiShort(roi: number): string {
-  const sign = roi >= 0 ? '+' : '-'
-  const abs = Math.abs(roi)
-  if (abs >= 1000) return `${sign}${(abs / 1000).toFixed(1)}K%`
-  return `${sign}${abs.toFixed(1)}%`
 }
 
 function XIcon() {
@@ -66,30 +52,28 @@ export default function ShareOnXButton({
   roi,
   window: windowProp,
 }: ShareOnXButtonProps) {
-  const storePeriod = usePeriodStore(s => s.period)
+  const storePeriod = usePeriodStore((s) => s.period)
   // Use prop if explicitly provided, otherwise read from global period store
   const windowParam = windowProp || storePeriod.toLowerCase()
   const name = displayName || handle
 
   const buildXUrl = useCallback(() => {
     const base =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}`
-        : 'https://www.arenafi.org'
+      typeof window !== 'undefined' ? `${window.location.origin}` : 'https://www.arenafi.org'
 
     const params = new URLSearchParams()
     if (platform) params.set('platform', platform)
     params.set('window', windowParam)
     const sharePageUrl = `${base}/wrapped/${encodeURIComponent(handle)}?${params}`
 
-    const platformLabel = platform ? (PLATFORM_LABELS[platform] ?? platform.replace(/_/g, ' ')) : ''
+    const platLabel = platformLabel(platform)
     const windowLabel = windowParam.toUpperCase()
 
     const lines: string[] = []
     if (rank) {
-      lines.push(`Ranked ${rank} on Arena${platformLabel ? ` (${platformLabel})` : ''}`)
+      lines.push(`Ranked ${rank} on Arena${platLabel ? ` (${platLabel})` : ''}`)
     } else {
-      lines.push(`${name} on Arena${platformLabel ? ` | ${platformLabel}` : ''}`)
+      lines.push(`${name} on Arena${platLabel ? ` | ${platLabel}` : ''}`)
     }
     if (roi != null) {
       lines.push(`${formatRoiShort(roi)} ROI — ${windowLabel}`)
@@ -130,11 +114,11 @@ export default function ShareOnXButton({
         whiteSpace: 'nowrap' as const,
         lineHeight: 1,
       }}
-      onMouseEnter={e => {
+      onMouseEnter={(e) => {
         e.currentTarget.style.background = 'var(--glass-bg-heavy)'
         e.currentTarget.style.borderColor = 'var(--color-border-secondary)'
       }}
-      onMouseLeave={e => {
+      onMouseLeave={(e) => {
         e.currentTarget.style.background = 'var(--glass-bg-medium)'
         e.currentTarget.style.borderColor = 'var(--glass-border-medium)'
       }}

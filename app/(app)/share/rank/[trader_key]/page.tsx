@@ -15,6 +15,7 @@ import { resolveTrader as resolveTraderUnified } from '@/lib/data/unified'
 import WrappedCardClient from '@/app/(app)/wrapped/[handle]/WrappedCardClient'
 import type { WrappedTraderData } from '@/app/(app)/wrapped/[handle]/page'
 import { BASE_URL } from '@/lib/constants/urls'
+import { platformLabel } from '@/lib/constants/platform-labels'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('share-rank')
@@ -25,16 +26,6 @@ export const revalidate = 300
 // for 30+ seconds. Race against this timeout so users see a fast 404 instead.
 const SSR_TIMEOUT_MS = 3000
 
-const PLATFORM_LABELS: Record<string, string> = {
-  binance_futures: 'Binance', binance_spot: 'Binance Spot', binance_web3: 'Binance Web3',
-  bybit: 'Bybit', bybit_spot: 'Bybit Spot',
-  bitget_futures: 'Bitget', bitget_spot: 'Bitget Spot',
-  okx: 'OKX', okx_spot: 'OKX Spot', okx_web3: 'OKX Web3', okx_futures: 'OKX',
-  hyperliquid: 'Hyperliquid', gmx: 'GMX', dydx: 'dYdX',
-  mexc: 'MEXC', kucoin: 'KuCoin', gateio: 'Gate.io',
-  htx_futures: 'HTX', weex: 'Weex', blofin: 'Blofin', coinex: 'CoinEx',
-}
-
 interface Props {
   params: Promise<{ trader_key: string }>
   searchParams: Promise<{ platform?: string; window?: string }>
@@ -43,13 +34,17 @@ interface Props {
 async function resolveTraderForWrapped(
   traderKey: string,
   platform?: string,
-  windowParam = '7d',
+  windowParam = '7d'
 ): Promise<{ handle: string | null; data: WrappedTraderData | null }> {
   try {
     const supabase = getSupabaseAdmin()
     const seasonMap: Record<string, string> = {
-      '7d': '7D', '30d': '30D', '90d': '90D',
-      '7D': '7D', '30D': '30D', '90D': '90D',
+      '7d': '7D',
+      '30d': '30D',
+      '90d': '90D',
+      '7D': '7D',
+      '30D': '30D',
+      '90D': '90D',
     }
     const seasonId = seasonMap[windowParam] ?? '7D'
 
@@ -63,8 +58,7 @@ async function resolveTraderForWrapped(
     if (!resolved) return { handle: null, data: null }
 
     const effectivePlatform = platform || resolved.platform
-    const platformLabel = PLATFORM_LABELS[effectivePlatform]
-      ?? effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    const platLabel = platformLabel(effectivePlatform)
 
     const { data: lr } = await Promise.race([
       supabase
@@ -74,7 +68,9 @@ async function resolveTraderForWrapped(
         .eq('source_trader_id', resolved.traderKey)
         .eq('season_id', seasonId)
         .maybeSingle(),
-      new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)),
+      new Promise<{ data: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
+      ),
     ])
 
     // Estimated — displayed as "Rank X of ~N" on a shareable rank card;
@@ -85,14 +81,16 @@ async function resolveTraderForWrapped(
         .select('*', { count: 'estimated', head: true })
         .eq('source', resolved.platform)
         .eq('season_id', seasonId),
-      new Promise<{ count: null }>((resolve) => setTimeout(() => resolve({ count: null }), SSR_TIMEOUT_MS)),
+      new Promise<{ count: null }>((resolve) =>
+        setTimeout(() => resolve({ count: null }), SSR_TIMEOUT_MS)
+      ),
     ])
 
     const data: WrappedTraderData = {
       handle: resolved.handle || traderKey,
       displayName: resolved.handle || traderKey,
       platform: effectivePlatform,
-      platformLabel,
+      platformLabel: platLabel,
       rank: lr?.rank ?? null,
       total: count ?? null,
       roi: lr?.roi ?? null,
@@ -104,7 +102,10 @@ async function resolveTraderForWrapped(
 
     return { handle: resolved.handle || null, data }
   } catch (error) {
-    logger.warn('[share/rank] resolve failed:', error instanceof Error ? error.message : String(error))
+    logger.warn(
+      '[share/rank] resolve failed:',
+      error instanceof Error ? error.message : String(error)
+    )
     return { handle: null, data: null }
   }
 }
