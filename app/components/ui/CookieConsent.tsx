@@ -60,10 +60,10 @@ export default function CookieConsent() {
         right: 0,
         zIndex: tokens.zIndex.overlay,
         padding: '4px 12px',
-        background: tokens.glass.bg.darkHeavy,
+        background: tokens.glass.bg.heavy,
         backdropFilter: tokens.glass.blur.lg,
         WebkitBackdropFilter: tokens.glass.blur.lg,
-        borderTop: tokens.glass.border.medium,
+        borderTop: `1px solid ${tokens.colors.border.primary}`,
         animation: 'fadeIn 0.3s ease-out',
       }}
     >
