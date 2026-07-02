@@ -14,6 +14,7 @@ import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
 import { logger } from '@/lib/logger'
 import { AvatarUploadSection } from './components/AvatarUploadSection'
 import { ProGroupOption } from './components/ProGroupOption'
@@ -48,6 +49,14 @@ export default function ApplyGroupPage() {
   // 表单状态 - 英文
   const [nameEn, setNameEn] = useState('')
   const [descriptionEn, setDescriptionEn] = useState('')
+
+  // Draft-loss guard: prompt on tab close/refresh while the application has
+  // content and isn't mid-submit (audit 实体/详情).
+  useUnsavedChangesGuard(
+    Boolean(nameZh.trim() || descriptionZh.trim() || nameEn.trim() || descriptionEn.trim()) &&
+      !loading &&
+      !success
+  )
 
   // 小组规则（支持多条，中英文）
   const [rules, setRules] = useState<Rule[]>([])

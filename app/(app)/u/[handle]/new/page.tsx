@@ -23,6 +23,7 @@ import { ImageUploader, VideoUploader } from './components/MediaUploader'
 import { PollEditor } from './components/PollEditor'
 import type { UploadedImage, UploadedVideo, PollOption } from './types'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
 import {
   TITLE_MAX_LENGTH,
   CONTENT_MAX_LENGTH,
@@ -51,6 +52,8 @@ export default function NewPostPage() {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
+  // Draft-loss guard: prompt on tab close/refresh while composing (audit 实体/详情)
+  useUnsavedChangesGuard(Boolean(title.trim() || content.trim()) && !loading)
   const [images, setImages] = useState<UploadedImage[]>([])
   const [uploading, setUploading] = useState(false)
   const [showPreview, setShowPreview] = useState(false)

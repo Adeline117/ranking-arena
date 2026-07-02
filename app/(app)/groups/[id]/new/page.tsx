@@ -28,6 +28,7 @@ import { ContentEditor } from './components/ContentEditor'
 import { PollEditor } from './components/PollEditor'
 import { ImageUploader } from './components/ImageUploader'
 import { VideoUploader } from './components/VideoUploader'
+import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
 
 export default function NewGroupPostPage(): React.ReactElement {
   if (!features.social) redirect('/')
@@ -51,6 +52,8 @@ export default function NewGroupPostPage(): React.ReactElement {
   const [title, setTitle] = useState('')
   const [content, setContent] = useState('')
   const [loading, setLoading] = useState(false)
+  // Draft-loss guard (audit 实体/详情)
+  useUnsavedChangesGuard(Boolean(title.trim() || content.trim()) && !loading)
   const [showPreview, setShowPreview] = useState(false)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
   const [draftSaved, setDraftSaved] = useState(false)
