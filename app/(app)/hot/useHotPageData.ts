@@ -7,6 +7,7 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { localizedLabel } from '@/lib/utils/format'
+import { normalizePostTitle } from '@/lib/utils/post-display'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
@@ -135,7 +136,9 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
             group: groupName,
             group_en: groupNameEn,
             group_id: (post.group_id as string) || undefined,
-            title: (post.title as string) || t('noTitle'),
+            // Keep parity with the server mapper (page.tsx): empty/placeholder
+            // titles stay '' in data; render points decide the fallback.
+            title: normalizePostTitle(post.title as string),
             author: (post.author_handle as string) || 'user',
             author_handle: post.author_handle as string,
             time: timeStr,

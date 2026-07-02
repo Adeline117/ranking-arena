@@ -9,6 +9,7 @@ import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/ui/i
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { getLanguage } from '@/lib/i18n'
+import { resolvePostDisplayTitle } from '@/lib/utils/post-display'
 import type { Post, Comment } from '../types'
 
 const ARENA_PURPLE = tokens.colors.accent.brand
@@ -58,6 +59,11 @@ export function PostDetailModal({
 }: PostDetailModalProps) {
   const panelRef = useRef<HTMLDivElement>(null)
 
+  // Same title resolution as the list card: real title, else body excerpt.
+  // t('noTitle') guarantees a non-empty dialog accessible name (a11y) —
+  // display placeholders live at render points only, never in the data.
+  const displayTitle = resolvePostDisplayTitle(post.title, post.body) || t('noTitle')
+
   // Shared modal a11y: scroll lock, Escape, focus trap, auto-focus, focus restore.
   // Layout stays custom (mobile bottom-sheet via .post-modal-* CSS), so we use
   // useModalA11y directly instead of ModalOverlay.
@@ -68,7 +74,7 @@ export function PostDetailModal({
       onClick={onClose}
       role="dialog"
       aria-modal="true"
-      aria-label={post.title}
+      aria-label={displayTitle}
       className="post-modal-overlay"
       style={{
         position: 'fixed',
@@ -143,7 +149,7 @@ export function PostDetailModal({
 
         {/* Title */}
         <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 8 }}>
-          <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.25 }}>{post.title}</div>
+          <div style={{ fontSize: 20, fontWeight: 900, lineHeight: 1.25 }}>{displayTitle}</div>
         </div>
 
         {/* Author */}
