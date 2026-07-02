@@ -13,6 +13,7 @@
 
 import { useEffect, useRef } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 function isWeb3Source(source: string): boolean {
   return source.includes('solana') || source.includes('web3_bsc') || source.includes('_bsc')
@@ -42,7 +43,7 @@ export function useOnchainEnrichTrigger(params: {
       try {
         const res = await fetch('/api/trader/onchain-enrich', {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', ...getCsrfHeaders() },
           body: JSON.stringify({ source, exchangeTraderId }),
           signal: controller.signal,
         })
