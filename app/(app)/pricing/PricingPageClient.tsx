@@ -282,7 +282,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
         >
           {[
             {
-              value: '8,000+',
+              value: '34,000+',
               label: resolved(
                 t('pricingStatTradersRanked'),
                 'pricingStatTradersRanked',

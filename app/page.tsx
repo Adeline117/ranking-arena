@@ -56,7 +56,7 @@ const organizationJsonLd = {
   logo: `${BASE_URL}/logo-symbol.png`,
   sameAs: ['https://twitter.com/arenafi'],
   description:
-    'Arena aggregates trader rankings from 30+ exchanges. Follow top traders, share insights, and level up your trading.',
+    'Arena aggregates trader rankings from 32+ exchanges. Follow top traders, share insights, and level up your trading.',
 }
 
 const PER_PAGE = 50
