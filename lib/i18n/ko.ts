@@ -2625,6 +2625,7 @@ const ko = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: '삭제된 사용자',
+  notifGroupedCount: '{n}개의 알림',
   loginTooManyAttemptsCode: '시도 횟수가 너무 많습니다. 새 코드를 다시 요청하세요',
   loginIncorrectCredentials: '이메일 또는 비밀번호가 올바르지 않습니다. 다시 시도해 주세요.',
   loginEmailNotVerified: '이메일이 아직 인증되지 않았습니다. 받은편지함을 확인해 주세요.',

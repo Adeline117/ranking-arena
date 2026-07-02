@@ -158,25 +158,19 @@ const severityIcons = {
 }
 
 // Notification type display config
-const NOTIFICATION_TYPE_CONFIG: Record<
-  string,
-  { icon: string; color: string; filterLabel?: { zh: string; en: string } }
-> = {
+const NOTIFICATION_TYPE_CONFIG: Record<string, { icon: string; color: string }> = {
   trader_alert: { icon: 'chart', color: 'var(--color-score-profitability)' },
   post_reply: {
     icon: 'reply',
     color: 'var(--color-verified-web3)',
-    filterLabel: { zh: '帖子回复', en: 'Replies' },
   },
   new_follower: {
     icon: 'user',
     color: 'var(--color-score-great)',
-    filterLabel: { zh: '新粉丝', en: 'Followers' },
   },
   group_update: {
     icon: 'megaphone',
     color: 'var(--color-score-average)',
-    filterLabel: { zh: '群组更新', en: 'Groups' },
   },
   follow: { icon: 'user', color: 'var(--color-score-great)' },
   like: { icon: 'heart', color: 'var(--color-accent-error)' },
@@ -187,7 +181,6 @@ const NOTIFICATION_TYPE_CONFIG: Record<
   ranking_change: {
     icon: 'chart',
     color: 'var(--color-score-average)',
-    filterLabel: { zh: '排名变动', en: 'Rankings' },
   },
   referral_reward: { icon: 'bell', color: 'var(--color-score-great)' },
 }
@@ -795,14 +788,7 @@ export default function NotificationsPageClient() {
                       )}
                       {n.isGrouped && (
                         <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
-                          {n.count}{' '}
-                          {language === 'zh'
-                            ? '条通知'
-                            : language === 'ja'
-                              ? '件の通知'
-                              : language === 'ko'
-                                ? '개의 알림'
-                                : 'notifications'}
+                          {t('notifGroupedCount').replace('{n}', String(n.count))}
                         </Text>
                       )}
                       {n.link && (
@@ -860,13 +846,7 @@ export default function NotificationsPageClient() {
                     minHeight: 44,
                   }}
                 >
-                  {loadingMore
-                    ? language === 'zh'
-                      ? '加载中...'
-                      : 'Loading...'
-                    : language === 'zh'
-                      ? '加载更多'
-                      : 'Load More'}
+                  {loadingMore ? t('loading') : t('loadMore')}
                 </button>
               )}
             </Box>
