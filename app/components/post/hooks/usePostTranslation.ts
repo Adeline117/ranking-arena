@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { getCsrfHeaders } from '@/lib/api/client'
 import type { Comment } from './usePostComments'
 
@@ -32,10 +32,14 @@ export function usePostTranslation({
   accessToken,
   showToast,
   t,
+  language,
 }: {
   accessToken: string | null
   showToast: (msg: string, type: 'error' | 'success' | 'warning' | 'info') => void
   t: (key: string) => string
+  /** Current UI language — switching it clears all translation caches so posts
+   *  re-translate for the new language instead of showing stale results. */
+  language?: string
 }): PostTranslationState {
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
   const [showingOriginal, setShowingOriginal] = useState(true)
@@ -47,6 +51,24 @@ export function usePostTranslation({
   const [translatingList, setTranslatingList] = useState(false)
   const [translatedComments, setTranslatedComments] = useState<Record<string, string>>({})
   const [translatingComments, setTranslatingComments] = useState(false)
+
+  // Clear every translation cache when the UI language changes. Without this the
+  // id-keyed caches (translatedListPosts / translatedComments) would keep serving
+  // the previous language's translation (and the skip-guards below would never
+  // re-translate), which is the "translation stops working after switching
+  // language" bug. The first render (mount) is skipped so we don't wipe SSR/初始 state.
+  const langMountRef = useRef(true)
+  useEffect(() => {
+    if (langMountRef.current) {
+      langMountRef.current = false
+      return
+    }
+    setTranslatedListPosts({})
+    setTranslatedComments({})
+    setTranslationCache({})
+    setTranslatedContent(null)
+    setShowingOriginal(true)
+  }, [language])
 
   // Refs to hold current state values inside stable callbacks (prevents infinite re-render loops
   // when translateListPosts/translateComments are used as useEffect dependencies in consumers)
@@ -136,7 +158,6 @@ export function usePostTranslation({
       } finally {
         setTranslating(false)
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- t is excluded to avoid re-creating callback on language change; error messages read at call time
     },
     [translationCache, showToast, extractImagesFromContent, removeImagesFromContent, accessToken]
   )

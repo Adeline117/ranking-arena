@@ -321,7 +321,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
   // Trigger translation when posts change
   useEffect(() => {
     if (postsHook.posts.length > 0 && !translatingPosts) {
-      translatePosts(postsHook.posts, language as 'zh' | 'en')
+      // en/ja/ko → English (API only supports en/zh); zh → Chinese
+      translatePosts(postsHook.posts, language === 'zh' ? 'zh' : 'en')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- translatePosts excluded to avoid infinite loop; only trigger on posts/language change
   }, [postsHook.posts, language])

@@ -165,7 +165,8 @@ export function usePostTranslation({
   // Trigger translation when posts change
   useEffect(() => {
     if (translatingEnabled && posts.length > 0 && !translatingPosts) {
-      translatePosts(posts, language as 'zh' | 'en')
+      // en/ja/ko → English (API only supports en/zh); zh → Chinese
+      translatePosts(posts, language === 'zh' ? 'zh' : 'en')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- translatePosts excluded to avoid infinite loop; only trigger on posts/language change
   }, [posts, language])

@@ -403,6 +403,17 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     [translatingList, translatedListPosts, isChineseText, accessToken]
   )
 
+  // Clear the id-keyed title/body cache when language changes so posts
+  // re-translate for the new language instead of showing the previous one.
+  const hotLangMountRef = useRef(true)
+  useEffect(() => {
+    if (hotLangMountRef.current) {
+      hotLangMountRef.current = false
+      return
+    }
+    setTranslatedListPosts({})
+  }, [language])
+
   // Translate list when posts load or language changes (requires auth — translation uses OpenAI credits)
   useEffect(() => {
     if (posts.length > 0 && email) {
@@ -500,8 +511,9 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
       if (post.body) {
         const isChinese = isChineseText(post.body)
-        const needsTranslation =
-          (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
+        // zh → translate non-Chinese; en/ja/ko → translate Chinese (to English,
+        // since the API only supports en/zh, ja/ko fall back to English).
+        const needsTranslation = language === 'zh' ? !isChinese : isChinese
 
         if (needsTranslation) {
           translateContent(post.id, post.body, (language === 'zh' ? 'zh' : 'en') as 'zh' | 'en')
@@ -559,7 +571,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   useEffect(() => {
     if (openPost && openPost.body) {
       const isChinese = isChineseText(openPost.body)
-      const needsTranslation = (language === 'en' && isChinese) || (language === 'zh' && !isChinese)
+      const needsTranslation = language === 'zh' ? !isChinese : isChinese
 
       setTranslatedContent(null)
       setShowingOriginal(true)
