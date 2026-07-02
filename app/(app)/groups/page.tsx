@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { features } from '@/lib/features'
 import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getPosts } from '@/lib/data/posts'
+import { logger } from '@/lib/logger'
 import { unstable_cache } from 'next/cache'
 import GroupsFeedPage from '@/app/components/groups/GroupsFeedPage'
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -38,30 +40,19 @@ const getRecommendedPosts = unstable_cache(
   async () => {
     try {
       const supabase = getSupabaseAdmin()
-      // NOTE: posts.author_id references auth.users (not public.user_profiles),
-      // so a PostgREST embed fails with PGRST200. Two-step query: fetch posts,
-      // then look up author profiles by id and merge as `user_profiles`.
-      const { data } = await supabase
-        .from('posts')
-        .select(
-          'id, title, content, created_at, author_id, group_id, like_count, comment_count, hot_score'
-        )
-        .order('hot_score', { ascending: false })
-        .limit(10)
-      if (!data || data.length === 0) return []
-
-      const authorIds = [...new Set(data.map((p) => p.author_id).filter(Boolean))]
-      // (user_profiles has no display_name column — selecting it 400s with 42703)
-      const { data: authorProfiles } = authorIds.length
-        ? await supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
-        : { data: null }
-      const profileById = new Map((authorProfiles || []).map((p) => [p.id, p]))
-
-      return data.map((post) => ({
-        ...post,
-        user_profiles: profileById.get(post.author_id) ?? null,
-      }))
-    } catch {
+      // Reuse the canonical data-layer mapping (same path as /api/posts) so the
+      // SSR payload carries the flat author_* fields that PostListItem /
+      // MasonryPostCard read (author_handle, author_avatar_url, author_is_pro).
+      // A previous hand-rolled query merged authors as a nested `user_profiles`
+      // object, which the renderers never read → every author showed as
+      // "Deleted user". No viewer_id here (anonymous SSR) → public posts only.
+      return await getPosts(supabase, {
+        limit: 10,
+        sort_by: 'hot_score',
+        sort_order: 'desc',
+      })
+    } catch (error) {
+      logger.error('[groups] getRecommendedPosts failed', error)
       return []
     }
   },
