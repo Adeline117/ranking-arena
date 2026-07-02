@@ -214,10 +214,7 @@ export default function SearchDropdown({
             <line x1="12" y1="20" x2="12.01" y2="20" />
           </svg>
           <Text size="sm" color="tertiary">
-            {t('offlineSearchHint') ||
-              (language === 'zh'
-                ? '当前处于离线状态，无法搜索'
-                : "You're offline — search is unavailable")}
+            {t('offlineSearchHint')}
           </Text>
         </Box>
       )}
@@ -256,7 +253,6 @@ export default function SearchDropdown({
                 category="traders"
                 items={searchData.results.traders}
                 query={query}
-                language={language}
                 selectedIndex={selectedIndex}
                 offset={getCategoryOffset('traders')}
                 onResultClick={handleResultClick}
@@ -268,7 +264,6 @@ export default function SearchDropdown({
                   category="posts"
                   items={searchData.results.posts}
                   query={query}
-                  language={language}
                   selectedIndex={selectedIndex}
                   offset={getCategoryOffset('posts')}
                   onResultClick={handleResultClick}
@@ -282,7 +277,6 @@ export default function SearchDropdown({
                   category="users"
                   items={searchData.results.users}
                   query={query}
-                  language={language}
                   selectedIndex={selectedIndex}
                   offset={getCategoryOffset('users')}
                   onResultClick={handleResultClick}
@@ -295,7 +289,6 @@ export default function SearchDropdown({
                   category="groups"
                   items={searchData.results.groups || []}
                   query={query}
-                  language={language}
                   selectedIndex={selectedIndex}
                   offset={getCategoryOffset('groups')}
                   onResultClick={handleResultClick}
