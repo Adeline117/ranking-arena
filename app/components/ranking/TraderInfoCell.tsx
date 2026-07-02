@@ -1,11 +1,10 @@
 'use client'
 
 import React, { memo } from 'react'
-import { localizedLabel } from '@/lib/utils/format'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
-import { t as i18nT } from '@/lib/i18n'
+import { t as i18nT, type TranslationKey } from '@/lib/i18n'
 import { TraderAvatar } from './shared/TraderDisplay'
 import { HighlightedName } from './RankingSearch'
 import { CopyButton } from './HeroSection'
@@ -50,7 +49,6 @@ export const TraderInfoCell = memo(function TraderInfoCell({
   traderHandle,
   sourceInfo,
   searchQuery,
-  language,
   tradingStyleInfo,
 }: TraderInfoCellProps) {
   return (
@@ -178,7 +176,9 @@ export const TraderInfoCell = memo(function TraderInfoCell({
                 border: `1px solid ${tradingStyleInfo.borderColor}`,
               }}
             >
-              {localizedLabel(tradingStyleInfo.label, tradingStyleInfo.labelEn, language)}
+              {i18nT(
+                `tradingStyle${tradingStyleInfo.style.charAt(0).toUpperCase()}${tradingStyleInfo.style.slice(1)}` as TranslationKey
+              )}
             </span>
           )}
           {trader.also_on && trader.also_on.length > 0 && (
