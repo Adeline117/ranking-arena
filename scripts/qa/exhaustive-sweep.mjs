@@ -17,9 +17,11 @@
  * Safety: destructive/irreversible controls (logout, delete, pay, disconnect,
  * dissolve group, remove, unsubscribe…) are matched by DENYLIST and SKIPPED
  * (recorded as `denied`, never clicked). Any confirm() dialog is auto-dismissed
- * (cancel). Anon mode cannot mutate server state at all; auth mode relies on the
- * denylist + dialog-cancel as the guardrail. Write-flow creation/cleanup is NOT
- * this tool's job — that stays in auth-button-sweep's scripted self-cleaning flows.
+ * (cancel). In --auth mode, WRITE controls (follow/like/bookmark/comment/post/
+ * tip/subscribe/vote/claim) are ALSO denied — a real session makes those mutate
+ * production + notify real users. Authed write-flow testing must go through
+ * auth-button-sweep's scripted self-cleaning flows, NOT this blind clicker.
+ * Anon mode clicks writes freely (they only open a login modal — safe + useful).
  */
 import { chromium } from 'playwright'
 import fs from 'node:fs'
@@ -62,6 +64,24 @@ const DENYLIST = [
   /block|report|拉黑|举报/i,
   /reset|revoke|吊销|重置密码/i,
   /transfer|withdraw|提现|转账/i,
+]
+
+// Write/mutation controls — denied in --auth mode ONLY. In anon mode these are
+// SAFE to click (they open a login modal, which is valuable coverage), but when
+// a real session is injected, blindly clicking them mutates production state as
+// the QA user AND fires notifications to real users. Authed write-flow testing
+// must go through auth-button-sweep's scripted self-cleaning flows instead —
+// never through this blind clicker.
+const WRITE_ACTION_PATTERNS = [
+  /follow|关注|取关/i,
+  /\blike\b|点赞|reaction|react/i,
+  /bookmark|save\b|收藏|保存/i,
+  /repost|转发|quote/i,
+  /comment|reply|评论|回复|发布|post\b|send|发送/i,
+  /tip|打赏|donate/i,
+  /subscribe|订阅|join\b|加入|apply|申请/i,
+  /vote|投票/i,
+  /claim|认领|verify|验证/i,
 ]
 
 // Following links off-site or to auth-provider flows would derail the sweep.
@@ -142,6 +162,9 @@ function isWhitelisted(url) {
 function isDenied(desc) {
   const hay = `${desc.text} ${desc.ariaLabel} ${desc.name} ${desc.id} ${desc.href}`
   if (DENYLIST.some((re) => re.test(hay))) return 'denylist'
+  // In authed mode, also refuse write/mutation controls so the sweep never
+  // creates follows/likes/posts as the QA user or notifies real users.
+  if (AUTH && WRITE_ACTION_PATTERNS.some((re) => re.test(hay))) return 'write-deny'
   if (desc.href && NAV_DENY_HREF.some((re) => re.test(desc.href))) return 'nav-deny'
   return null
 }
