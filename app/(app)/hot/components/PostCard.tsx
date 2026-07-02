@@ -6,7 +6,8 @@ import { Box, Text } from '@/app/components/base'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { CommentIcon, ThumbsUpIcon } from '@/app/components/ui/icons'
 import { renderContentWithLinks } from '@/lib/utils/content'
-import type { Language } from '@/lib/i18n'
+import { t, type Language } from '@/lib/i18n'
+import { resolveUserDisplayName } from '@/lib/utils/user-display'
 import type { Post } from '../types'
 
 const ARENA_PURPLE = tokens.colors.accent.brand
@@ -264,24 +265,30 @@ export function PostCard({
               style={{ borderRadius: '50%', objectFit: 'cover' }}
             />
           )}
-          {p.author_handle ? (
-            <Link
-              href={`/u/${encodeURIComponent(p.author_handle)}`}
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                fontSize: tokens.typography.fontSize.xs,
-                color: 'var(--color-text-secondary)',
-                textDecoration: 'none',
-                fontWeight: 700,
-              }}
-            >
-              @{p.author}
-            </Link>
-          ) : (
-            <Text size="xs" color="tertiary">
-              {p.author}
-            </Text>
-          )}
+          {(() => {
+            const name = resolveUserDisplayName(
+              { handle: p.author_handle, displayName: p.author },
+              t
+            )
+            return name.linkHandle ? (
+              <Link
+                href={`/u/${encodeURIComponent(name.linkHandle)}`}
+                onClick={(e) => e.stopPropagation()}
+                style={{
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: 'var(--color-text-secondary)',
+                  textDecoration: 'none',
+                  fontWeight: 700,
+                }}
+              >
+                @{name.label}
+              </Link>
+            ) : (
+              <Text size="xs" color="tertiary">
+                {name.label}
+              </Text>
+            )
+          })()}
         </span>
         <Text size="xs" color="tertiary">
           {p.created_at ? formatTimeAgo(p.created_at, language) : p.time}
