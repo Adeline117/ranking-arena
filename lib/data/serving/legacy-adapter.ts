@@ -67,16 +67,45 @@ function toDirection(v: unknown): 'long' | 'short' {
   return s === 'short' || s === 'sell' ? 'short' : 'long'
 }
 
-/** Serving `positions` records → legacy PortfolioItem (current holdings). */
+/** Serving `positions` records → legacy PortfolioItem (current holdings).
+ *
+ *  PortfolioItem.invested / .pnl are PERCENTAGES (legacy trader_portfolio
+ *  weight_pct / pnl_pct semantics — PortfolioCurrentView renders `%`), while
+ *  serving position rows carry USD absolutes (margin / unrealized_pnl /
+ *  notional). Derive:
+ *    weight% = |notional| share of Σ|notional| — NOT margin share (cross-margin
+ *              rows report margin:0) — clamped to [0,100];
+ *    pnl%    = exchange-reported roe, else unrealized_pnl/margin, else
+ *              unrealized_pnl/|notional| (cross rows), else NaN → the view's
+ *              Number.isFinite guard renders '—'. */
 export function positionsToPortfolio(rows: Row[]): PortfolioItem[] {
+  const notionalOf = (r: Row): number => {
+    const explicit = Math.abs(num(r.notional))
+    if (explicit > 0) return explicit
+    return num(r.mark_price ?? r.price) * Math.abs(num(r.size))
+  }
+  const totalNotional = rows.reduce((sum, r) => sum + notionalOf(r), 0)
   return rows.map((r) => {
     const markPrice = num(r.mark_price ?? r.price)
     const size = num(r.size)
+    const margin = num(r.margin)
+    const upnl = num(r.unrealized_pnl ?? r.pnl)
+    const notional = notionalOf(r)
+    const pnlPct =
+      r.roe != null
+        ? num(r.roe)
+        : margin > 0
+          ? (upnl / margin) * 100
+          : notional > 0
+            ? (upnl / notional) * 100
+            : NaN
+    const weightPct =
+      totalNotional > 0 ? Math.min(Math.max((notional / totalNotional) * 100, 0), 100) : NaN
     return {
       market: str(r.symbol ?? r.market),
       direction: toDirection(r.side ?? r.direction),
-      invested: num(r.margin ?? r.invested),
-      pnl: num(r.unrealized_pnl ?? r.pnl),
+      invested: weightPct,
+      pnl: pnlPct,
       value: markPrice && size ? markPrice * size : num(r.value),
       price: markPrice,
     }

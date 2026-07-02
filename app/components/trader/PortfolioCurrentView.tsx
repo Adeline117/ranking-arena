@@ -141,7 +141,9 @@ export default function PortfolioCurrentView({
                       textAlign: 'right',
                     }}
                   >
-                    {Number.isFinite(item.invested) ? item.invested.toFixed(1) : '—'}%
+                    {Number.isFinite(item.invested)
+                      ? `${Math.min(item.invested, 100).toFixed(1)}%`
+                      : '—'}
                   </Text>
                 </Box>
               </td>
