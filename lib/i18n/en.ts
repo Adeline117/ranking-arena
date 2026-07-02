@@ -2724,6 +2724,7 @@ const en = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: 'Deleted user',
+  notifGroupedCount: '{n} notifications',
   loginTooManyAttemptsCode: 'Too many attempts, please request a new code',
   loginIncorrectCredentials: 'Incorrect email or password. Please try again.',
   loginEmailNotVerified: 'Email not yet verified. Please check your inbox.',
