@@ -27,7 +27,7 @@ concurrency:
   cancel-in-progress: false
 
 permissions:
-  contents: write # smoke 绿后更新 last-known-good tag
+  contents: read
   actions: read
 
 jobs:
@@ -143,13 +143,8 @@ jobs:
             exit 1
           fi
           echo "✅ deploy + smoke green for ${HEAD_SHA:0:8}"
-
-      - name: Update last-known-good tag
-        if: steps.fresh.outputs.deploy == 'true'
-        continue-on-error: true
-        run: |
-          git config user.name "deploy-gate"
-          git config user.email "deploy-gate@arenafi.org"
-          git tag -f last-known-good "$HEAD_SHA"
-          git push -f origin last-known-good
-          echo "last-known-good → ${HEAD_SHA:0:8}"
+          # 回滚锚点 = Vercel 部署历史本身：每个 READY 生产部署都带
+          # --meta gateSha 记录其 commit，且 smoke 通过后才成为最新 READY。
+          # promote API 直接选"上一个 READY"即可，无需额外 git tag
+          # （曾尝试推 last-known-good tag，被仓库 PR-only ruleset 拒绝——
+          # 且与 Vercel 历史冗余，已移除）。
