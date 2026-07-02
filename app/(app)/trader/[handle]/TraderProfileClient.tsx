@@ -152,6 +152,7 @@ import { useTraderPeriodSync } from './hooks/useTraderPeriodSync'
 import { useTraderActiveAccount } from './hooks/useTraderActiveAccount'
 import { useTraderTabs } from './hooks/useTraderTabs'
 import { useServingTabData } from './hooks/useServingTabData'
+import { useOnchainEnrichTrigger } from './hooks/useOnchainEnrichTrigger'
 import { TraderProfileError } from './components/TraderProfileError'
 import { TraderStaleBanner, TraderPlatformDeadBanner } from './components/TraderStatusBanners'
 
@@ -504,6 +505,16 @@ export default function TraderProfileClient({
     servingCapability ?? null,
     useThreeTab
   )
+  // 即看即算: for a web3 wallet with no on-chain data yet, compute it on demand
+  // (bounded) instead of waiting for the 12h rotation, then refetch.
+  useOnchainEnrichTrigger({
+    source: data.source,
+    exchangeTraderId: data.source_trader_id,
+    extras: servingTab.metaExtras,
+    enabled: useThreeTab,
+    loaded: useThreeTab && !servingTab.loading,
+  })
+
   // Effective tab props: serving-derived under the flag, legacy otherwise.
   const effProfile = useThreeTab ? servingTab.traderProfile : traderProfile
   const effPerformance = useThreeTab ? servingTab.traderPerformance : traderPerformance

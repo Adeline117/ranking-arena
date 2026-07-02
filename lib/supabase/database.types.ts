@@ -7599,6 +7599,15 @@ export type Database = {
         Returns: undefined
       }
       archive_old_notifications: { Args: never; Returns: undefined }
+      arena_apply_onchain_enrichment: {
+        Args: {
+          p_source: string
+          p_exchange_trader_id: string
+          p_extras: Json
+          p_win_rate?: number
+        }
+        Returns: number
+      }
       arena_copier_aggregate: {
         Args: { p_source: string; p_trader: string }
         Returns: Json
