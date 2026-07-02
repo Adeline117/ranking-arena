@@ -124,6 +124,13 @@ jobs:
       - name: Schema contract check (代码 DB 依赖 vs 生产 schema)
         run: npm run qa:schema
 
+      # API 鉴权覆盖兜底(默认拒绝)：无根级 middleware，313+ route 靠自觉调 auth
+      # wrapper——本检查强制每个 route 要么有 auth 原语要么在显式公开白名单，
+      # 堵住"忘加鉴权=fail-open"（ENTERPRISE_GAP_ANALYSIS_2026-07 差距 #3）。
+      # 纯本地 fs 扫描 <1s，无外部依赖。
+      - name: API auth coverage check (route 级默认拒绝)
+        run: npm run qa:api-auth
+
       - name: Migration lint — block dangerous DDL
         run: |
           CHANGED=$(git diff --name-only origin/main -- 'supabase/migrations/' 2>/dev/null || true)
