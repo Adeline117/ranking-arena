@@ -13,6 +13,8 @@
 import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { chainForSource, enrichWeb3Wallet, enrichmentExtras } from '@/lib/ingest/onchain/enrich'
+import { fetchBscInternalBnb } from '@/lib/ingest/onchain/dune-bsc-internal'
+import type { NormalizedTransfer } from '@/lib/ingest/onchain/bsc-swaps'
 import { logger } from '@/lib/logger'
 
 const WEB3_SOURCES = ['okx_web3_solana', 'binance_web3_bsc'] as const
@@ -40,9 +42,28 @@ export async function processOnchainEnrich(
       [slug, TOP_N]
     )
 
+    // BSC only: one batched Dune query for all wallets' native-BNB sell
+    // receipts (item C — Alchemy omits BSC internal txs). $0, existing key.
+    let internalByWallet = new Map<string, NormalizedTransfer[]>()
+    if (chain === 'bsc' && rows.length > 0) {
+      try {
+        internalByWallet = await fetchBscInternalBnb(rows.map((r) => r.wallet))
+        logger.info(
+          `[onchain-enrich] ${slug}: Dune internal-BNB for ${internalByWallet.size} wallets`
+        )
+      } catch (err) {
+        logger.error(`[onchain-enrich] ${slug}: Dune internal fetch failed:`, err)
+      }
+    }
+
     for (const { wallet } of rows) {
       try {
-        const e = await enrichWeb3Wallet(chain, wallet, { lookbackDays: 90, maxSigs: 400 })
+        const e = await enrichWeb3Wallet(chain, wallet, {
+          lookbackDays: 90,
+          maxSigs: 400,
+          bscInternalBnb:
+            chain === 'bsc' ? (internalByWallet.get(wallet.toLowerCase()) ?? []) : undefined,
+        })
         const extras = enrichmentExtras(e)
         await pool.query(
           `UPDATE arena.trader_stats ts SET

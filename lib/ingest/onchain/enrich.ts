@@ -17,6 +17,7 @@ import { computeBscWalletOnchain } from './bsc-fetch'
 import { computeSolanaWalletOnchain } from './solana-fetch'
 import { fetchTokenPricesUsd, unrealizedFromHoldings } from './token-prices'
 import type { PerTokenPnl } from './pnl-accounting'
+import type { NormalizedTransfer } from './bsc-swaps'
 
 export type OnchainChain = 'bsc' | 'solana'
 
@@ -62,7 +63,13 @@ async function priceUnrealized(perToken: PerTokenPnl[]) {
 export async function enrichWeb3Wallet(
   chain: OnchainChain,
   wallet: string,
-  opts: { lookbackDays?: number; maxSigs?: number; maxPages?: number } = {}
+  opts: {
+    lookbackDays?: number
+    maxSigs?: number
+    maxPages?: number
+    /** Dune-sourced native-BNB SELL receipts (item C) — completes BSC sells. */
+    bscInternalBnb?: NormalizedTransfer[]
+  } = {}
 ): Promise<OnchainEnrichment> {
   const lookbackDays = opts.lookbackDays ?? 90
 
@@ -71,11 +78,16 @@ export async function enrichWeb3Wallet(
     const u = await priceUnrealized(r.pnl.perToken)
     return normalize('solana', wallet, lookbackDays, r.pnl, u, false)
   }
-  const r = await computeBscWalletOnchain(wallet, { lookbackDays, maxPages: opts.maxPages })
+  const r = await computeBscWalletOnchain(wallet, {
+    lookbackDays,
+    maxPages: opts.maxPages,
+    extraTransfers: opts.bscInternalBnb,
+  })
   const u = await priceUnrealized(r.pnl.perToken)
-  // BSC native-BNB sell legs aren't captured via Alchemy (no internal txs), so
-  // realized understates for native-BNB sellers → flag partial.
-  return normalize('bsc', wallet, lookbackDays, r.pnl, u, true)
+  // With Dune internal-BNB legs injected, native-BNB sells ARE captured →
+  // realized complete. Only flag partial when we had NO Dune data to inject.
+  const partial = !opts.bscInternalBnb
+  return normalize('bsc', wallet, lookbackDays, r.pnl, u, partial)
 }
 
 function normalize(

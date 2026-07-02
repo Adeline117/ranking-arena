@@ -194,10 +194,17 @@ export interface BscWalletResult {
   pnl: WalletPnl
 }
 
-/** End-to-end: fetch → decode → PnL for one BSC wallet over the last N days. */
+/** End-to-end: fetch → decode → PnL for one BSC wallet over the last N days.
+ *  `extraTransfers` injects legs Alchemy omits (Dune-sourced native-BNB SELL
+ *  receipts — item C) so those sells complete. */
 export async function computeBscWalletOnchain(
   wallet: string,
-  opts: RpcOpts & { lookbackDays?: number; maxPages?: number; bnbUsd?: number } = {}
+  opts: RpcOpts & {
+    lookbackDays?: number
+    maxPages?: number
+    bnbUsd?: number
+    extraTransfers?: NormalizedTransfer[]
+  } = {}
 ): Promise<BscWalletResult> {
   const lookbackDays = opts.lookbackDays ?? 90
   const sinceMs = Date.now() - lookbackDays * 86_400_000
@@ -205,11 +212,12 @@ export async function computeBscWalletOnchain(
     fetchWalletTransfers(wallet, { ...opts, sinceMs }),
     opts.bnbUsd !== undefined ? Promise.resolve(opts.bnbUsd) : fetchBnbUsd(opts),
   ])
-  const swaps = decodeTransfersToSwaps(transfers, wallet, bscQuoteConfig(bnbUsd))
+  const allTransfers = opts.extraTransfers ? [...transfers, ...opts.extraTransfers] : transfers
+  const swaps = decodeTransfersToSwaps(allTransfers, wallet, bscQuoteConfig(bnbUsd))
   return {
     wallet,
     lookbackDays,
-    transfers: transfers.length,
+    transfers: allTransfers.length,
     swaps: swaps.length,
     bnbUsd,
     pnl: computeWalletPnl(swaps),
