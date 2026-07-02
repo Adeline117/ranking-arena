@@ -137,7 +137,10 @@
     "@walletconnect/sign-client": "2.23.6",
     "@walletconnect/types": "2.23.6",
     "@walletconnect/utils": "2.23.6",
-    "viem": "$viem",
+    "viem": {
+      ".": "$viem",
+      "ws": "^8.21.0"
+    },
     "postcss": "8.5.14"
   },
   "pnpm": {
@@ -148,7 +151,10 @@
       "@walletconnect/sign-client": "2.23.6",
       "@walletconnect/types": "2.23.6",
       "@walletconnect/utils": "2.23.6",
-      "viem": "$viem",
+      "viem": {
+        ".": "$viem",
+        "ws": "^8.21.0"
+      },
       "postcss": "8.5.14"
     }
   },
