@@ -113,13 +113,6 @@ export default function HomeHero({
         >
           {[
             {
-              num: Math.floor(traderNum / 1000),
-              suffix: 'K+',
-              fallback: traderCountStr,
-              label: t('heroStatTraders' as Parameters<typeof t>[0]),
-              delay: 0,
-            },
-            {
               num: exchangeNum,
               suffix: '+',
               fallback: exchangeCountStr,

@@ -16,30 +16,19 @@ import { tokens } from '@/lib/design-tokens'
 import { getServerTranslation } from '@/lib/i18n/server'
 
 interface HomeHeroSSRProps {
-  traderCount?: number
   exchangeCount?: number
 }
 
-function formatCount(n: number): string {
-  if (n >= 1000) return `${Math.floor(n / 1000)}K+`
-  return `${n}+`
-}
-
-export default async function HomeHeroSSR({
-  traderCount = 17000,
-  exchangeCount = 27,
-}: HomeHeroSSRProps) {
+export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRProps) {
   const { t } = await getServerTranslation()
-  const traderCountStr = formatCount(traderCount)
   const exchangeCountStr = `${exchangeCount}+`
 
   const headline = t('heroHeadline')
-  const subtitle = t('heroSubtitle')
-    .replace('{exchanges}', String(exchangeCount))
-    .replace('{traders}', traderCountStr)
+  const subtitle = t('heroSubtitle').replace('{exchanges}', String(exchangeCount))
 
+  // Trader-count stat intentionally dropped — the hero leads with exchange
+  // coverage; the trader total lives in the leaderboard itself.
   const stats = [
-    { value: traderCountStr, label: t('heroStatTraders') },
     { value: exchangeCountStr, label: t('heroStatExchanges') },
     { value: '30 min', label: t('heroStatUpdated') },
   ]

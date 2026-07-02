@@ -2955,8 +2955,7 @@ const ko = {
 
   // Hero section
   heroHeadline: '세계 최고의 암호화폐 트레이더를 추적하세요',
-  heroSubtitle:
-    '{exchanges}개 이상의 거래소에서 실시간 순위. {traders}명의 트레이더를 Arena Score로 평가',
+  heroSubtitle: '{exchanges}개 이상의 거래소에서 실시간 순위, Arena Score로 평가',
   heroCTABrowse: '순위 둘러보기',
   heroCTASignUp: '무료 가입',
   heroStatTraders: '트레이더',

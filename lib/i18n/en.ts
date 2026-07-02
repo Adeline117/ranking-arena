@@ -3066,8 +3066,7 @@ const en = {
 
   // Hero section
   heroHeadline: "Track the World's Best Crypto Traders",
-  heroSubtitle:
-    'Real-time rankings across {exchanges} exchanges. {traders} traders ranked by Arena Score.',
+  heroSubtitle: 'Real-time rankings across {exchanges}+ exchanges, ranked by Arena Score.',
   heroCTABrowse: 'Browse Rankings',
   heroCTASignUp: 'Sign Up Free',
   heroStatTraders: 'Traders',

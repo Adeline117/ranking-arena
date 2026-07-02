@@ -2982,7 +2982,7 @@ const zh = {
 
   // Hero section
   heroHeadline: '追踪全球最优秀的加密交易员',
-  heroSubtitle: '跨 {exchanges} 家交易所实时排名，{traders} 名交易员以 Arena Score 评分',
+  heroSubtitle: '跨 {exchanges}+ 家交易所实时排名，以 Arena Score 评分',
   heroCTABrowse: '查看排行榜',
   heroCTASignUp: '免费注册',
   heroStatTraders: '交易员',
