@@ -341,11 +341,7 @@ export default function LoginPageClient() {
   const handleVerifyCode = async () => {
     if (submittingRef.current || loading) return
     if (otpLocked) {
-      setError(
-        lang === 'zh'
-          ? '尝试次数过多，请重新获取验证码'
-          : 'Too many attempts, please request a new code'
-      )
+      setError(t('loginTooManyAttemptsCode'))
       return
     }
     if (!code) {
@@ -376,11 +372,7 @@ export default function LoginPageClient() {
         otpAttemptsRef.current++
         if (otpAttemptsRef.current >= 5) {
           setOtpLocked(true)
-          setError(
-            lang === 'zh'
-              ? '尝试次数过多，请重新获取验证码'
-              : 'Too many attempts, please request a new code'
-          )
+          setError(t('loginTooManyAttemptsCode'))
         } else if (
           verifyError.message.includes('expired') ||
           verifyError.message.includes('过期')
@@ -575,18 +567,8 @@ export default function LoginPageClient() {
       if (loginError) {
         clearTimeout(timeoutId)
         const msg = loginError.message
-        if (msg.includes('Invalid login credentials'))
-          setError(
-            lang === 'zh'
-              ? '邮箱或密码不正确，请重试'
-              : 'Incorrect email or password. Please try again.'
-          )
-        else if (msg.includes('Email not confirmed'))
-          setError(
-            lang === 'zh'
-              ? '邮箱尚未验证，请检查收件箱'
-              : 'Email not yet verified. Please check your inbox.'
-          )
+        if (msg.includes('Invalid login credentials')) setError(t('loginIncorrectCredentials'))
+        else if (msg.includes('Email not confirmed')) setError(t('loginEmailNotVerified'))
         else if (msg.includes('Too many requests') || msg.includes('rate limit')) {
           const RATE_LIMIT_SECONDS = 30
           setRateLimitCountdown(RATE_LIMIT_SECONDS)
@@ -596,11 +578,7 @@ export default function LoginPageClient() {
               : `Too many attempts. Try again in ${RATE_LIMIT_SECONDS}s.`
           )
         } else if (msg.toLowerCase().includes('banned')) {
-          setError(
-            lang === 'zh'
-              ? '此账号已申请注销。如需恢复账号，请点击下方按钮。'
-              : 'This account is pending deletion. To recover your account, click the button below.'
-          )
+          setError(t('loginAccountPendingDeletion'))
           setShowRecoveryPrompt(true)
         } else setError(msg)
         setLoading(false)
@@ -660,10 +638,7 @@ export default function LoginPageClient() {
       const data = await res.json()
       if (res.ok && data.success) {
         setShowRecoveryPrompt(false)
-        showToast(
-          lang === 'zh' ? '账号已恢复，正在登录...' : 'Account recovered! Signing you in...',
-          'success'
-        )
+        showToast(t('loginAccountRecovered'), 'success')
         // Now sign in normally since the ban has been lifted
         const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
         if (loginError) {
@@ -685,13 +660,11 @@ export default function LoginPageClient() {
           }
         }
       } else {
-        setError(
-          data.error || (lang === 'zh' ? '恢复失败，请重试' : 'Recovery failed. Please try again.')
-        )
+        setError(data.error || t('loginRecoveryFailed'))
       }
     } catch (err) {
       logger.error('Account recovery error:', err)
-      setError(lang === 'zh' ? '网络错误，请稍后重试' : 'Network error. Please try again later.')
+      setError(t('networkErrorRetry'))
     } finally {
       setRecovering(false)
     }
@@ -1126,13 +1099,7 @@ export default function LoginPageClient() {
                   transition: `all ${tokens.transition.base}`,
                 }}
               >
-                {recovering
-                  ? lang === 'zh'
-                    ? '恢复中...'
-                    : 'Recovering...'
-                  : lang === 'zh'
-                    ? '恢复我的账号'
-                    : 'Recover My Account'}
+                {recovering ? t('loginRecovering') : t('loginRecoverMyAccount')}
               </button>
             )}
           </div>

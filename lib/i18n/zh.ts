@@ -2649,6 +2649,14 @@ const zh = {
 
   // 瀑布流卡片 / 小组帖子列表
   deletedUser: '已注销用户',
+  loginTooManyAttemptsCode: '尝试次数过多，请重新获取验证码',
+  loginIncorrectCredentials: '邮箱或密码不正确，请重试',
+  loginEmailNotVerified: '邮箱尚未验证，请检查收件箱',
+  loginAccountPendingDeletion: '此账号已申请注销。如需恢复账号，请点击下方按钮。',
+  loginAccountRecovered: '账号已恢复，正在登录...',
+  loginRecoveryFailed: '恢复失败，请重试',
+  loginRecovering: '恢复中...',
+  loginRecoverMyAccount: '恢复我的账号',
 
   // 小组页面
   inviteInvalidOrExpired: '邀请链接无效或已过期',

@@ -2625,6 +2625,15 @@ const ko = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: '삭제된 사용자',
+  loginTooManyAttemptsCode: '시도 횟수가 너무 많습니다. 새 코드를 다시 요청하세요',
+  loginIncorrectCredentials: '이메일 또는 비밀번호가 올바르지 않습니다. 다시 시도해 주세요.',
+  loginEmailNotVerified: '이메일이 아직 인증되지 않았습니다. 받은편지함을 확인해 주세요.',
+  loginAccountPendingDeletion:
+    '이 계정은 삭제 대기 중입니다. 계정을 복구하려면 아래 버튼을 클릭하세요.',
+  loginAccountRecovered: '계정이 복구되었습니다. 로그인 중입니다...',
+  loginRecoveryFailed: '복구에 실패했습니다. 다시 시도해 주세요.',
+  loginRecovering: '복구 중...',
+  loginRecoverMyAccount: '내 계정 복구',
 
   // Group page
   inviteInvalidOrExpired: '초대 링크가 유효하지 않거나 만료되었습니다',
