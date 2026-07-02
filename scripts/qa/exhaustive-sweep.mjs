@@ -271,9 +271,36 @@ async function hydrate(page, route) {
   return resp?.status()
 }
 
-async function sweepRoute(page, route, ledger, counters) {
+async function sweepRoute(page, route, ledger, counters, sweptPaths) {
   const status = await hydrate(page, route)
   const routeUrl = new URL(`${BASE}${route}`).pathname
+  // Redirect dedup (2026-07-02): auth-gated routes (/compare, /onboarding, …)
+  // client-redirect anonymous visitors to /login. Enumerating that destination
+  // under the ORIGINAL route re-attributes the same /login elements to N
+  // routes — 1 real finding balloons into N phantom per-route findings.
+  // Key by final PATHNAME (not full URL: /login?redirect=/compare and
+  // /login?returnUrl=/onboarding differ only in query but are the same page).
+  // First landing on a redirect target still enumerates it (coverage kept);
+  // later routes redirecting to an already-swept path record one
+  // `redirected:` marker and skip.
+  const finalPath = new URL(page.url()).pathname
+  const redirected = finalPath !== routeUrl
+  if (redirected && sweptPaths.has(finalPath)) {
+    console.log(`  ${route} [${status}] — redirected→${finalPath} (already swept, deduped)`)
+    ledger.push({
+      route,
+      idx: -1,
+      ts: new Date().toISOString(),
+      status: `redirected:${finalPath}`,
+      finalPath,
+      errors: [],
+    })
+    counters.redirected++
+    return finalPath
+  }
+  if (redirected) {
+    console.log(`  ${route} — redirected→${finalPath} (first landing, enumerating destination)`)
+  }
   let descs = await injectIndices(page)
   const total = descs.length
   const cap = Math.min(total, MAX_PER_ROUTE)
@@ -299,6 +326,9 @@ async function sweepRoute(page, route, ledger, counters) {
       status: null,
       errors: [],
     }
+    // On redirected routes, stamp the page the element ACTUALLY lives on so
+    // downstream consumers can dedupe by finalPath+fp instead of route+fp.
+    if (redirected) record.finalPath = finalPath
 
     const denied = isDenied(desc)
     if (denied) {
@@ -397,8 +427,11 @@ async function sweepRoute(page, route, ledger, counters) {
     ledger.push(record)
 
     // Recover navigation / modal state before the next element.
+    // Compare against finalPath (the page actually enumerated): on a
+    // redirected route, comparing against routeUrl would flag EVERY click as
+    // a navigation and force a pointless re-hydrate per element.
     const afterUrl = page.url()
-    const navigated = new URL(afterUrl).pathname !== routeUrl
+    const navigated = new URL(afterUrl).pathname !== finalPath
     if (navigated) {
       record.status += `→nav:${new URL(afterUrl).pathname}`
       await hydrate(page, route)
@@ -409,6 +442,7 @@ async function sweepRoute(page, route, ledger, counters) {
       await page.waitForTimeout(150)
     }
   }
+  return finalPath
 }
 
 // ---------------------------------------------------------------------------
@@ -521,6 +555,7 @@ async function main() {
     failed: 0,
     withErrors: 0,
     tainted: 0,
+    redirected: 0,
     _bucket: null,
   }
   // Session-kill signals seen during the CURRENT route (AUTH mode) — presence
@@ -598,6 +633,10 @@ async function main() {
   }
 
   const ledger = []
+  // Pathnames already enumerated this run — used to dedupe auth-gate redirect
+  // targets (see sweepRoute). Populated only AFTER a route survives the taint
+  // gate, so a voided attempt never marks its landing page as covered.
+  const sweptPaths = new Set()
   for (const route of routes) {
     if (AUTH && !(await ensureLiveSession())) {
       ledger.push({
@@ -614,8 +653,9 @@ async function main() {
       attempt++
       taintSignals.length = 0
       const ledgerMark = ledger.length
+      let sweptFinalPath = null
       try {
-        await sweepRoute(page, route, ledger, counters)
+        sweptFinalPath = await sweepRoute(page, route, ledger, counters, sweptPaths)
       } catch (e) {
         console.log(`  ✗ ${route}: ${String(e.message).slice(0, 160)}`)
         ledger.push({
@@ -657,6 +697,10 @@ async function main() {
         }
         continue // retry the route once with a fresh session
       }
+      // Only mark the enumerated pathname as covered once the records are
+      // final (past the taint gate) — a voided attempt must not suppress a
+      // later re-enumeration of the same landing page.
+      if (sweptFinalPath) sweptPaths.add(sweptFinalPath)
       break
     }
   }
@@ -673,6 +717,7 @@ async function main() {
   console.log(`  skipped (hid/dis) : ${counters.skipped}`)
   console.log(`  click failures    : ${counters.failed}`)
   console.log(`  elements w/ errors: ${counters.withErrors}`)
+  console.log(`  redirects deduped : ${counters.redirected} (auth-gate → already-swept page)`)
   console.log(
     `  tainted routes    : ${counters.tainted} (session-kill artifacts voided, not in ledger)`
   )
