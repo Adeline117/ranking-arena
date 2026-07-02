@@ -18,6 +18,7 @@ import {
   type MetricTier,
 } from '@/lib/constants/metric-registry'
 import { formatMoney } from '@/lib/utils/money'
+import { formatROI } from '@/lib/utils/format'
 import type { ServingCurrency } from '@/lib/data/serving/types'
 
 // Tier-grouped rendering (eToro-style sectioning): the registry `tier` field
@@ -40,6 +41,15 @@ function formatValue(def: MetricDef, value: number | string, currency: ServingCu
   if (typeof value === 'string') return value
   switch (def.format) {
     case 'pct':
+      // ROI-semantic metrics reuse the shared Overview formatter so ingest-
+      // clamped ±10000% values render '>10K%' instead of a fake '+10000.00%'.
+      if (def.roiFormat) return formatROI(value)
+      // Loss magnitudes stored positive (mdd) render as a loss, matching Overview.
+      if (def.displaySign === 'negative') {
+        return value === 0 ? '0.00%' : `-${Math.abs(value).toFixed(2)}%`
+      }
+      // Rates/magnitudes (win rate, volatility) where '+' would read as a delta.
+      if (def.displaySign === 'none') return `${value.toFixed(2)}%`
       return `${value > 0 ? '+' : ''}${value.toFixed(2)}%`
     case 'money':
       return formatMoney({ value, currency }, { compact: true, signed: true })
