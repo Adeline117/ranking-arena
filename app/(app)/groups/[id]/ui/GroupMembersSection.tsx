@@ -191,12 +191,14 @@ export function GroupInfoModal({
   onShowMembers,
 }: GroupInfoModalProps): React.ReactElement {
   const { t } = useLanguage()
+  // Non-zh users (en/ja/ko) prefer the English text; only zh sees the Chinese
+  // primary. Previously ja/ko leaked the Chinese description/rules.
   const description =
-    language === 'en' && group.description_en ? group.description_en : group.description
+    language !== 'zh' && group.description_en ? group.description_en : group.description
   // Use rules_json for bilingual rules, fallback to rules
   const rules = group.rules_json
     ? group.rules_json
-        .map((r) => (language === 'en' ? r.en : r.zh))
+        .map((r) => (language === 'zh' ? r.zh : r.en || r.zh))
         .filter(Boolean)
         .join('\n')
     : group.rules
