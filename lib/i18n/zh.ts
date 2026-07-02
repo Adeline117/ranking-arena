@@ -4248,6 +4248,8 @@ const zh = {
 
   // News flash labels (快讯标签)
   newsFlash_imp_breaking: '突发',
+  newsFlash_imp_normal: '一般',
+  newsFlash_cat_all: '全部',
   newsFlash_imp_important: '重要',
   newsFlash_cat_btc_eth: 'BTC/ETH',
   newsFlash_cat_altcoin: '山寨币',
@@ -4289,7 +4291,6 @@ const zh = {
   copiedToClipboard: '已复制！',
   copyHandle: '复制',
   switchLanguage: '切换语言',
-  newsBreaking: '突发',
   flashNewsNewItems: '{count} 条新快讯',
   statusSystemStatus: '系统状态',
   statusAllOperational: '所有系统正常运行',
@@ -4313,9 +4314,7 @@ const zh = {
   statusServiceUnavailable: '状态服务当前无响应。',
   statusFetchFailed: '无法获取状态',
   statusDataAgo: '数据更新于 {ago}',
-  newsAltcoins: '山寨币',
   newsMacroRegulation: '宏观/监管',
-  newsExchanges: '交易所',
   newsDeFi: 'DeFi',
   newsBtcEth: 'BTC & ETH',
 

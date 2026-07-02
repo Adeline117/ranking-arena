@@ -458,8 +458,6 @@ export default function FlashNewsPageClient() {
     <NewsCard
       key={item.id}
       item={item}
-      language={language}
-      categories={CATEGORIES}
       categoryDisplayMap={CATEGORY_DISPLAY_MAP}
       categoryColors={CATEGORY_COLORS_MAPPED}
       importanceConfig={IMPORTANCE_CONFIG}
@@ -555,7 +553,6 @@ export default function FlashNewsPageClient() {
           categories={CATEGORIES}
           selectedCategory={selectedCategory}
           onCategoryChange={handleCategoryChange}
-          language={language}
         />
 
         {/* Keyword search + breaking-only toggle */}
