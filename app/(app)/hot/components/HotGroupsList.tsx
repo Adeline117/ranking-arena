@@ -1,6 +1,6 @@
 'use client'
 
-import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 
@@ -22,9 +22,14 @@ interface HotGroupsListProps {
   t: (key: string) => string
 }
 
-export function HotGroupsList({ groups, loading, error, onRetry, localizedName, t }: HotGroupsListProps) {
-  const router = useRouter()
-
+export function HotGroupsList({
+  groups,
+  loading,
+  error,
+  onRetry,
+  localizedName,
+  t,
+}: HotGroupsListProps) {
   if (loading) {
     return (
       <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
@@ -36,9 +41,23 @@ export function HotGroupsList({ groups, loading, error, onRetry, localizedName, 
   if (error) {
     return (
       <Box style={{ padding: '48px 24px', textAlign: 'center' }}>
-        <Text color="tertiary" style={{ marginBottom: 12 }}>{t('loadFailed')}</Text>
+        <Text color="tertiary" style={{ marginBottom: 12 }}>
+          {t('loadFailed')}
+        </Text>
         {onRetry && (
-          <button onClick={onRetry} style={{ color: tokens.colors.accent.primary, cursor: 'pointer', background: 'none', border: 'none', textDecoration: 'underline', fontSize: 14 }}>{t('retry')}</button>
+          <button
+            onClick={onRetry}
+            style={{
+              color: tokens.colors.accent.primary,
+              cursor: 'pointer',
+              background: 'none',
+              border: 'none',
+              textDecoration: 'underline',
+              fontSize: 14,
+            }}
+          >
+            {t('retry')}
+          </button>
         )}
       </Box>
     )
@@ -55,9 +74,11 @@ export function HotGroupsList({ groups, loading, error, onRetry, localizedName, 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
       {groups.map((group, idx) => (
-        <Box
+        <Link
           key={group.id}
+          href={`/groups/${group.id}`}
           style={{
+            display: 'block',
             padding: '12px 16px',
             borderRadius: tokens.radius.lg,
             background: 'var(--color-bg-secondary)',
@@ -65,8 +86,9 @@ export function HotGroupsList({ groups, loading, error, onRetry, localizedName, 
             boxShadow: 'none',
             cursor: 'pointer',
             transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            textDecoration: 'none',
+            color: 'inherit',
           }}
-          onClick={() => router.push(`/groups/${group.id}`)}
           onMouseEnter={(e) => {
             e.currentTarget.style.boxShadow = `0 4px 16px var(--color-accent-primary-12)`
             e.currentTarget.style.borderColor = `${ARENA_PURPLE}40`
@@ -80,7 +102,13 @@ export function HotGroupsList({ groups, loading, error, onRetry, localizedName, 
         >
           <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-              <Text size="sm" weight="black" style={{ color: idx < 3 ? 'var(--color-accent-warning)' : 'var(--color-text-secondary)' }}>
+              <Text
+                size="sm"
+                weight="black"
+                style={{
+                  color: idx < 3 ? 'var(--color-accent-warning)' : 'var(--color-text-secondary)',
+                }}
+              >
                 #{idx + 1}
               </Text>
               <Text size="base" weight="bold">
@@ -91,7 +119,7 @@ export function HotGroupsList({ groups, loading, error, onRetry, localizedName, 
               {group.member_count.toLocaleString('en-US')} {t('membersUnit')}
             </Text>
           </Box>
-        </Box>
+        </Link>
       ))}
     </Box>
   )
