@@ -484,10 +484,14 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
   // NOTE: searchParams removed from server component to fix DYNAMIC_SERVER_USAGE error.
   // Accessing searchParams in a page with generateStaticParams + revalidate causes
-  // Next.js 16 to throw at runtime because it conflicts with ISR static generation.
-  // The ?platform= param for exchange disambiguation is handled client-side by
-  // TraderProfileClient via useSearchParams(). resolveTrader without a platform hint
-  // picks the highest-scored exchange automatically.
+  // Next.js 16 to throw at runtime because it conflicts with ISR static generation —
+  // one cached HTML serves EVERY ?platform= variant, so the param cannot affect
+  // server rendering at all. Both resolvers below therefore run WITHOUT a platform
+  // hint and pick an account automatically; when the URL carries ?platform= for a
+  // DIFFERENT account sharing this handle (e.g. okx_futures vs okx_spot share an
+  // exchange_trader_id), TraderProfileClient detects the mismatch, validates the
+  // platform via /api/traders/[handle]/first-screen, and switches the whole page
+  // (header + capability + /core + /records) onto that account client-side.
 
   let decodedHandle = handle
   try {

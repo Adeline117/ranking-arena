@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter, useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Image from 'next/image'
 import dynamic from 'next/dynamic'
@@ -14,6 +14,8 @@ import { useQuery } from '@tanstack/react-query'
 import { STALE_STANDARD, STALE_RELAXED } from '@/lib/hooks/cache-presets'
 import { traderFetcher } from '@/lib/hooks/traderFetcher'
 import { fetcher } from '@/lib/hooks/fetchers'
+import type { TraderFirstScreen, TraderFirstScreenResponse } from '@/lib/data/serving/types'
+import type { ApiSuccessResponse } from '@/lib/types/index'
 import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
@@ -167,6 +169,33 @@ interface ClaimedUserProfile {
   cover_url?: string | null
 }
 
+/** Map a Tier-A first screen onto the header data shape — the SAME field
+ *  mapping the server component uses to build `servingTraderData` (page.tsx
+ *  serving branch), so a client-side ?platform= account switch renders the
+ *  header identically to a server-resolved page. */
+function firstScreenToTraderData(
+  fs: TraderFirstScreen,
+  fallbackHandle: string
+): UnregisteredTraderData {
+  const entries = fs.entries ?? []
+  const best =
+    entries.find((e) => e.timeframe === 90) ?? entries.find((e) => e.timeframe === 30) ?? entries[0]
+  const bestWinRate =
+    best?.headlineWinRate ??
+    (typeof best?.extras.win_rate === 'number' ? (best.extras.win_rate as number) : null)
+  return {
+    handle: fs.nickname ?? fallbackHandle,
+    avatar_url: fs.avatarSrc,
+    source: fs.source,
+    source_trader_id: fs.exchangeTraderId,
+    rank: best?.rank ?? null,
+    roi: best?.headlineRoi ?? null,
+    pnl: best?.headlinePnl?.value ?? null,
+    win_rate: bestWinRate,
+    max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
+  }
+}
+
 interface TraderProfileClientProps {
   data: UnregisteredTraderData
   serverTraderData?: TraderPageData | null
@@ -180,12 +209,12 @@ interface TraderProfileClientProps {
 }
 
 export default function TraderProfileClient({
-  data,
+  data: serverData,
   serverTraderData,
   claimedUser,
   dataMode = 'legacy',
-  servingFirstScreen,
-  servingCapability,
+  servingFirstScreen: serverFirstScreen,
+  servingCapability: serverCapability,
 }: TraderProfileClientProps) {
   // ROOT-CAUSE FIX (2026-06-11): key serving mode off dataMode ALONE, not the
   // presence of servingFirstScreen. A serving source must never fall back to the
@@ -196,9 +225,68 @@ export default function TraderProfileClient({
   const isServing = dataMode === 'serving'
   const router = useRouter()
   const searchParams = useSearchParams()
+  const routeParams = useParams<{ handle: string }>()
   const { t, language: _language } = useLanguage()
   const { isPro } = useSubscription()
   const { userId: currentUserId } = useAuthSession()
+
+  // ── ?platform= account disambiguation (serving mode) ─────────────────────
+  // ROOT-CAUSE FIX (2026-07-02): the page is ISR-static, so the server
+  // component CANNOT read searchParams (one cached HTML serves every
+  // ?platform= variant) and arena_resolve_trader ran WITHOUT a platform hint.
+  // For a handle that exists on multiple serving sources (okx_futures rank-16
+  // and okx_spot share the same exchange_trader_id) the server may have
+  // resolved the WRONG account — the header then shows "OKX Spot / $0" for an
+  // okx_futures leaderboard link. Detect the mismatch here, VALIDATE the URL
+  // platform against the serving resolver (a stale/forged ?platform= must
+  // never break a good page → 404 keeps the server's account), then switch
+  // the WHOLE page — header numbers, capability, and every /core + /records
+  // fetch — onto the requested account.
+  const urlPlatform = searchParams?.get('platform') ?? null
+  const rawUrlHandle = typeof routeParams?.handle === 'string' ? routeParams.handle : ''
+  let urlHandle = rawUrlHandle
+  try {
+    urlHandle = decodeURIComponent(rawUrlHandle)
+  } catch {
+    // Intentionally swallowed: malformed URI encoding, use raw handle as-is
+    // (same behavior as the server component).
+  }
+  const platformMismatch =
+    isServing && !!urlPlatform && !!urlHandle && urlPlatform !== serverData.source
+  const { data: accountOverride } = useQuery<TraderFirstScreenResponse | null>({
+    queryKey: ['trader-first-screen', urlHandle, urlPlatform],
+    queryFn: async () => {
+      try {
+        const res = await fetcher<ApiSuccessResponse<TraderFirstScreenResponse>>(
+          `/api/traders/${encodeURIComponent(urlHandle)}/first-screen?source=${encodeURIComponent(urlPlatform ?? '')}`
+        )
+        return res.data
+      } catch (err) {
+        // 404 = the handle does not exist on the requested platform (stale or
+        // forged link) → null keeps the server-resolved account rendering.
+        if ((err as Error & { status?: number }).status === 404) return null
+        throw err
+      }
+    },
+    enabled: platformMismatch,
+    staleTime: STALE_STANDARD,
+    refetchOnWindowFocus: false,
+    retry: (failureCount, error) => {
+      if ((error as Error & { status?: number }).status === 404) return false
+      return failureCount < 2
+    },
+  })
+  // Adopt ONLY a validated account on the exact requested platform.
+  const override =
+    platformMismatch && accountOverride && accountOverride.firstScreen.source === urlPlatform
+      ? accountOverride
+      : null
+  const servingFirstScreen = override ? override.firstScreen : serverFirstScreen
+  const servingCapability = override ? override.capability : serverCapability
+  const data = useMemo<UnregisteredTraderData>(
+    () => (override ? firstScreenToTraderData(override.firstScreen, urlHandle) : serverData),
+    [override, serverData, urlHandle]
+  )
 
   // Period URL ↔ store sync extracted into hook (see ./hooks/useTraderPeriodSync)
   const selectedPeriod = useTraderPeriodSync()
