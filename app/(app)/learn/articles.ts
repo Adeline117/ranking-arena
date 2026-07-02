@@ -52,7 +52,7 @@ This ensures consistent long-term performers rank higher than flash-in-the-pan t
     slug: 'understanding-trader-rankings',
     title: 'Understanding Crypto Trader Rankings',
     excerpt:
-      'How Arena aggregates rankings from 45+ exchanges into a single unified leaderboard with 8,000+ traders.',
+      'How Arena aggregates rankings from 32+ exchanges into a single unified leaderboard with 34,000+ traders.',
     content: `
 # Understanding Crypto Trader Rankings
 
@@ -179,7 +179,7 @@ Welcome to Arena! Here is how to get the most out of the platform.
 
 ## 1. Browse Rankings
 
-The homepage shows the **global leaderboard** — all 8,000+ traders ranked by Arena Score. Use the period selector to switch between 7D, 30D, and 90D views.
+The homepage shows the **global leaderboard** — all 34,000+ traders ranked by Arena Score. Use the period selector to switch between 7D, 30D, and 90D views.
 
 ## 2. Filter by Exchange
 
