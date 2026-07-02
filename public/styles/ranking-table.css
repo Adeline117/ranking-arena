@@ -610,23 +610,32 @@
          everything fits there is ZERO change: no sticky cells, no backgrounds,
          no divider, no scrollbar — byte-identical to the prior layout.
 
-   .ranking-hscroll is the single scroll container shared by the sticky header
-   and the rows, so the frozen rank (1st grid cell) and name (2nd grid cell)
-   pin to the same left edge in both.
+   .ranking-hscroll is the rows' single scroll container. The sticky header
+   sits OUTSIDE it (so position:sticky pins against the viewport, not the
+   wrapper scrollport) and mirrors the wrapper's scrollLeft via a JS transform
+   in RankingTable's scroll-sync effect; the same effect counter-translates the
+   header's two frozen cells, while the rows' frozen cells use position:sticky
+   left inside the wrapper. Both are gated on the same data-hscroll flag
+   (mirrored onto the header element), so rank (1st grid cell) and name
+   (2nd grid cell) pin to the same left edge in both.
    ============================================================ */
 @media (min-width: 768px) and (hover: hover) and (pointer: fine) {
   /* Un-clip rows so a wider-than-viewport grid can overflow into the shared
      horizontal scroll container instead of being clipped per-row. Gated on
      data-hscroll so that when the table fits, the per-row overflow:hidden (and
      therefore the exact current hero-glow clipping) is fully preserved. The
-     always-un-clipped sticky header is what trips data-hscroll, so there is no
-     chicken-and-egg: header and rows share the same min-width threshold. */
+     always-un-clipped header (outside the wrapper) carries the grid min-width,
+     and JS compares its width against the wrapper scrollport to trip
+     data-hscroll, so there is no chicken-and-egg: header and rows share the
+     same min-width threshold. */
   .ranking-hscroll[data-hscroll='true'] .swipe-row-wrapper {
     overflow: visible;
   }
 
-  /* Freeze the first two grid cells (rank + trader-name) of both the header row
-     and every data row. Only engaged once the table overflows (data-hscroll). */
+  /* Freeze the first two grid cells (rank + trader-name) of every data row.
+     Only engaged once the table overflows (data-hscroll). The header's frozen
+     cells are handled by the JS counter-transform (see rules further down) —
+     these sticky-left rules no longer reach it since it left the wrapper. */
   .ranking-hscroll[data-hscroll='true'] .ranking-table-grid-custom > :nth-child(1),
   .ranking-hscroll[data-hscroll='true'] .ranking-table-grid-custom > :nth-child(2) {
     position: sticky;
@@ -642,11 +651,18 @@
     box-shadow: 6px 0 8px -4px rgba(0, 0, 0, 0.35);
   }
 
-  /* Opaque backgrounds so the scrolling columns never bleed through the frozen
-     cells. Header sits on bg-secondary, rows on bg-primary (= .swipe-row-content). */
-  .ranking-hscroll[data-hscroll='true'] .ranking-table-header > :nth-child(1),
-  .ranking-hscroll[data-hscroll='true'] .ranking-table-header > :nth-child(2) {
+  /* Header frozen cells (rank + name): the JS scroll-sync effect translates the
+     whole header by -scrollLeft and counter-translates these two cells back, so
+     they stay put like the rows' sticky cells. Give them the same stacking +
+     opaque background + divider shadow as the row cells (z-index works on grid
+     items without position). */
+  .ranking-table-header[data-hscroll='true'] > :nth-child(1),
+  .ranking-table-header[data-hscroll='true'] > :nth-child(2) {
+    z-index: 3;
     background: var(--color-bg-secondary, #151320);
+  }
+  .ranking-table-header[data-hscroll='true'] > :nth-child(2) {
+    box-shadow: 6px 0 8px -4px rgba(0, 0, 0, 0.35);
   }
   .ranking-hscroll[data-hscroll='true'] .ranking-row > :nth-child(1),
   .ranking-hscroll[data-hscroll='true'] .ranking-row > :nth-child(2) {
