@@ -1,0 +1,121 @@
+name: Deploy Gate (CI-green production deploy)
+
+# 企业级差距整改 C2：main 的生产部署由本 workflow 在 CI 门禁作业全绿后执行。
+# 配套 scripts/vercel-ignore-build.sh（git push 不再直接触发生产构建）。
+#
+# 门禁只看 4 个 gate 作业：Pre-flight Checks / Lint & Type Check / Unit Tests /
+# Build。E2E 按设计被更新的 push 折叠取消（per-ref concurrency），Data
+# Consistency 是 continue-on-error 的 advisory——都不算门禁。
+#
+# 防乱序：CI 完成顺序 ≠ push 顺序，部署前核对该 run 的 SHA 仍是 origin/main
+# HEAD，被超越则跳过（否则旧 commit 的迟到 CI 会把生产回滚到旧版本）。
+#
+# 部署后内嵌 smoke + 自动回滚（CLI 部署不产生 deployment_status 事件，
+# post-deploy-smoke.yml 只覆盖 [deploy-force] 的 git 直接部署路径）。
+
+on:
+  workflow_run:
+    workflows: ['CI']
+    types: [completed]
+    branches: [main]
+
+concurrency:
+  group: deploy-gate-main
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    if: github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+      HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+    steps:
+      - name: Check gate jobs (ignore E2E / advisory jobs)
+        id: gate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+        run: |
+          JOBS=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/jobs?per_page=50" \
+            --jq '[.jobs[] | {name, conclusion}]')
+          echo "$JOBS"
+          PASS=true
+          for JOB in "Pre-flight Checks" "Lint & Type Check" "Unit Tests" "Build"; do
+            C=$(echo "$JOBS" | jq -r --arg n "$JOB" '.[] | select(.name==$n) | .conclusion')
+            echo "gate job [$JOB] => $C"
+            [ "$C" = "success" ] || PASS=false
+          done
+          echo "pass=$PASS" >> "$GITHUB_OUTPUT"
+
+      - name: Alert on red gate (deploy withheld)
+        if: steps.gate.outputs.pass != 'true'
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
+              -d "text=🛑 Deploy Gate：CI 门禁作业未全绿，已扣留生产部署%0ACommit: ${HEAD_SHA:0:8}%0A修复后 push 即重新排队；紧急可用 [deploy-force]" || true
+          fi
+          echo "::error::CI gate jobs not green — production deploy withheld for ${HEAD_SHA:0:8}"
+          exit 1
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if superseded (SHA no longer main HEAD)
+        id: fresh
+        run: |
+          git fetch origin main --quiet
+          LATEST=$(git rev-parse origin/main)
+          if [ "$LATEST" != "$HEAD_SHA" ]; then
+            echo "superseded: run SHA ${HEAD_SHA:0:8} != main HEAD ${LATEST:0:8} — newer run will deploy"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Deploy to Vercel (build on Vercel infra)
+        if: steps.fresh.outputs.deploy == 'true'
+        run: |
+          git checkout --quiet "$HEAD_SHA"
+          npx vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN" > /tmp/deploy-url.txt
+          echo "Deployed: $(cat /tmp/deploy-url.txt)"
+
+      - name: Smoke test + auto-rollback
+        if: steps.fresh.outputs.deploy == 'true'
+        run: |
+          sleep 45
+          BASE="https://www.arenafi.org"
+          FAIL=0
+          for path in "/" "/trader/soul" "/login" "/pricing" "/api/health"; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${BASE}${path}?_smoke=$(date +%s)")
+            if [ "$STATUS" = "500" ] || [ "$STATUS" = "000" ]; then
+              echo "❌ FAIL [$STATUS] $path"; FAIL=$((FAIL+1))
+            else
+              echo "✅ PASS [$STATUS] $path"
+            fi
+          done
+          if [ "$FAIL" -gt 0 ]; then
+            echo "🔄 smoke failed — rolling back to previous READY deployment"
+            PREV_ID=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+              "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&target=production&limit=5&state=READY" \
+              | jq -r '.deployments[1].uid // empty')
+            if [ -n "$PREV_ID" ]; then
+              curl -s -X POST -H "Authorization: Bearer $VERCEL_TOKEN" \
+                "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$PREV_ID" || true
+              ROLLED="已自动回滚到上一个部署"
+            else
+              ROLLED="⚠️ 未找到可回滚的部署，需人工处理"
+            fi
+            if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
+              curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+                -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
+                -d "text=🚨 Deploy Gate smoke 失败（${FAIL}/5）%0ACommit: ${HEAD_SHA:0:8}%0A${ROLLED}" || true
+            fi
+            exit 1
+          fi
+          echo "✅ deploy + smoke green for ${HEAD_SHA:0:8}"

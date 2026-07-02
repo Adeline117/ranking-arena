@@ -201,6 +201,23 @@ Source: `lib/utils/arena-score.ts`
 
 ## Deployment Rollback
 
+### 部署管线（2026-07-02 起：CI 门禁部署）
+
+**push main 不再直接触发生产构建。** 流程：push → CI（`ci.yml`）→ 4 个门禁
+作业（Pre-flight / Lint & Type / Unit / Build）全绿 → `deploy-gate.yml` 用
+Vercel CLI 部署 → 内嵌 smoke（5 URL）→ 失败自动 promote 回滚 + Telegram。
+E2E 被更新 push 折叠取消不影响门禁；CI 红则扣留部署并 Telegram 告警。
+Preview/PR 分支构建不受影响。
+
+- **紧急逃生口**：commit message 含 `[deploy-force]` → 跳过 CI 门禁立即
+  git 直接构建（走老路径，post-deploy-smoke.yml 兜底）。用后必须在此补记原因。
+- **正常延迟**：生产部署滞后 push 约 8-12 分钟（CI 时长）。
+- **彻底停用门禁（回到旧行为）**：revert 掉 `vercel.json` 里的
+  `ignoreCommand` 一行即可，git push 立即恢复直接部署。
+- **自动回滚 API**：唯一真实端点是
+  `POST https://api.vercel.com/v10/projects/{projectId}/promote/{deploymentId}`
+  （旧 `/v6/deployments/{id}/promote` 是 404，2026-07-02 实测修正）。
+
 ### Vercel instant rollback
 
 ```bash
