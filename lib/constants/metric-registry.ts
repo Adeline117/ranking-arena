@@ -158,7 +158,13 @@ export const EXTRAS_METRIC_ALIASES: Readonly<Record<string, readonly string[]>> 
   // safe — promoteExtrasMetrics only promotes finite numbers, so string labels
   // are ignored rather than mis-shown).
   total_roi: ['total_roi', 'total_return_rate'],
-  total_pnl: ['total_pnl', 'total_profit_amount', 'cumulative_net_profit', 'total_earnings'],
+  total_pnl: [
+    'total_pnl',
+    'total_profit_amount',
+    'cumulative_net_profit',
+    'total_earnings',
+    'onchain_total_pnl',
+  ],
   // 逐图核对 M2-2c: previously captured-but-invisible scalar keys.
   loss_trades: ['loss_trades', 'loss_count'],
   min_copy_amount: ['min_copy_amount'],
@@ -179,21 +185,28 @@ export const EXTRAS_METRIC_ALIASES: Readonly<Record<string, readonly string[]>> 
   ],
   profit_days: ['profit_days', 'win_days'],
   loss_days: ['loss_days'],
-  // On-chain / lifetime
-  unrealized_pnl: ['unrealized_pnl'],
-  realized_pnl: ['realized_pnl', 'realized_pnl_usd', 'top_tokens_total_pnl'],
+  // On-chain / lifetime. onchain_* = OUR chain-recomputed values (Phase A;
+  // enrich.ts) — appended so a board-provided value wins, else our computed one
+  // fills the gap (the durable replacement for WAF-blocked profile detail).
+  unrealized_pnl: ['unrealized_pnl', 'onchain_unrealized_pnl'],
+  realized_pnl: [
+    'realized_pnl',
+    'realized_pnl_usd',
+    'top_tokens_total_pnl',
+    'onchain_realized_pnl',
+  ],
   closed_count: ['closed_count', 'closed_positions'],
   lifetime_trades: ['lifetime_trades', 'trade_count_lifetime'],
   lifetime_volume: ['lifetime_volume', 'total_trade_volume'],
   lifetime_win_rate: ['lifetime_win_rate'],
   // On-chain wallet activity
   avg_buy: ['avg_buy', 'avg_buy_volume', 'avg_cost_buy'],
-  total_traded_tokens: ['total_traded_tokens'],
+  total_traded_tokens: ['total_traded_tokens', 'onchain_tokens_traded'],
   total_txns: ['total_txns', 'total_tx_count'],
-  txs_buy: ['txs_buy'],
-  txs_sell: ['txs_sell'],
-  volume_buy: ['volume_buy'],
-  volume_sell: ['volume_sell'],
+  txs_buy: ['txs_buy', 'onchain_txs_buy'],
+  txs_sell: ['txs_sell', 'onchain_txs_sell'],
+  volume_buy: ['volume_buy', 'onchain_buy_volume'],
+  volume_sell: ['volume_sell', 'onchain_sell_volume'],
   native_balance_usd: ['native_balance_usd'],
   unrealized_pnl_roi: ['unrealized_pnl_roi'],
 } as const
