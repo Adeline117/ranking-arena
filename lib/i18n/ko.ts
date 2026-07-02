@@ -6102,6 +6102,8 @@ const ko = {
   compFilterPlatform: '플랫폼',
   compAllPlatforms: '모든 플랫폼',
   compPlatformSelect: '플랫폼 선택',
+  compRankUp: '상승',
+  compRankDown: '하락',
   compErrTitleRequired: '제목을 입력하세요',
   compErrStartRequired: '시작 일시를 선택하세요',
   compErrStartFuture: '시작 일시는 현재 이후여야 합니다',

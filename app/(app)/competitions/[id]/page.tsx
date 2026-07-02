@@ -271,6 +271,7 @@ function StandingsTable({
   isLive,
   lastUpdate,
   currentUserId,
+  rankMoves,
   t,
 }: {
   entries: CompetitionEntry[]
@@ -278,6 +279,8 @@ function StandingsTable({
   isLive: boolean
   lastUpdate: Date | null
   currentUserId: string | null
+  /** entry.id → rank places moved since an earlier live poll (positive = climbed). */
+  rankMoves: Record<string, number>
   t: (key: string) => string
 }) {
   // Platform filter — only surfaced when >1 distinct platform is present.
@@ -431,6 +434,26 @@ function StandingsTable({
                       }}
                     >
                       {entry.rank ?? '-'}
+                      {/* Observed movement since an earlier live poll — ▲/▼ shape
+                          + color (never color alone, DESIGN.md redundancy rule). */}
+                      {rankMoves[entry.id] != null && (
+                        <span
+                          aria-label={`${rankMoves[entry.id] > 0 ? t('compRankUp') : t('compRankDown')} ${Math.abs(rankMoves[entry.id])}`}
+                          style={{
+                            marginLeft: tokens.spacing[1],
+                            fontSize: tokens.typography.fontSize.xs,
+                            fontWeight: tokens.typography.fontWeight.semibold,
+                            fontVariantNumeric: 'tabular-nums',
+                            color:
+                              rankMoves[entry.id] > 0
+                                ? 'var(--color-accent-success)'
+                                : 'var(--color-accent-error)',
+                          }}
+                        >
+                          {rankMoves[entry.id] > 0 ? '▲' : '▼'}
+                          {Math.abs(rankMoves[entry.id])}
+                        </span>
+                      )}
                     </td>
                     <td
                       style={{
@@ -531,6 +554,10 @@ export default function CompetitionDetailPage() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [shareCopied, setShareCopied] = useState(false)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Ranks from the previous fetch (entry.id → rank) so live polls can surface
+  // observed rank movement. null until the first fetch lands.
+  const prevRanksRef = useRef<Map<string, number> | null>(null)
+  const [rankMoves, setRankMoves] = useState<Record<string, number>>({})
 
   const hasJoined = entries.some((e) => e.user_id === userId)
 
@@ -542,9 +569,28 @@ export default function CompetitionDetailPage() {
         const res = await fetch(`/api/competitions/${id}`)
         const json = await res.json()
         if (json.success) {
+          const nextEntries: CompetitionEntry[] = json.data.entries
           setCompetition(json.data.competition)
-          setEntries(json.data.entries)
+          setEntries(nextEntries)
           setLastUpdate(new Date())
+          // Diff ranks vs the previous fetch → ▲/▼ movement badges. Only real,
+          // observed changes (no prev_rank column exists server-side).
+          const prev = prevRanksRef.current
+          if (prev) {
+            const moves: Record<string, number> = {}
+            for (const e of nextEntries) {
+              const before = prev.get(e.id)
+              if (before != null && e.rank != null && before !== e.rank) {
+                moves[e.id] = before - e.rank // positive = climbed
+              }
+            }
+            if (Object.keys(moves).length > 0) {
+              setRankMoves((cur) => ({ ...cur, ...moves }))
+            }
+          }
+          prevRanksRef.current = new Map(
+            nextEntries.filter((e) => e.rank != null).map((e) => [e.id, e.rank as number] as const)
+          )
         }
       } catch {
         // silent
@@ -990,6 +1036,7 @@ export default function CompetitionDetailPage() {
               isLive={competition.status === 'active'}
               lastUpdate={lastUpdate}
               currentUserId={userId ?? null}
+              rankMoves={rankMoves}
               t={t}
             />
           ) : (

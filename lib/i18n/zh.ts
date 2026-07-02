@@ -6085,6 +6085,8 @@ const zh = {
   compFilterPlatform: '平台',
   compAllPlatforms: '全部平台',
   compPlatformSelect: '选择平台',
+  compRankUp: '上升',
+  compRankDown: '下降',
   compErrTitleRequired: '请输入标题',
   compErrStartRequired: '请选择开始时间',
   compErrStartFuture: '开始时间必须晚于现在',
