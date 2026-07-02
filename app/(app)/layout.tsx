@@ -33,6 +33,10 @@ const DeferredLayoutWidgets = dynamic(() => import('../components/layout/Deferre
 // (email/OAuth signup + Privy → /onboarding all live under (app)). Applies any
 // pending `?ref` captured on an earlier (Provider-less) page. Renders null.
 const ReferralAutoApply = dynamic(() => import('../components/referral/ReferralAutoApply'))
+// PresenceHeartbeat — fires POST /api/presence for every logged-in user so
+// last_seen_at (the active-user sensor) actually records. Previously only
+// mounted inside DM/channel pages, so it never fired. Renders null.
+const PresenceHeartbeat = dynamic(() => import('../components/presence/PresenceHeartbeat'))
 
 /**
  * App layout — wraps ALL pages except the homepage.
@@ -65,6 +69,7 @@ export default function AppLayout({
             </main>
           </PageErrorBoundary>
           <ReferralAutoApply />
+          <PresenceHeartbeat />
           <MobileBottomNav />
           <Suspense fallback={null}>
             <DeferredLayoutWidgets />
