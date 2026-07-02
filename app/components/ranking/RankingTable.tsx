@@ -10,6 +10,7 @@ import React, {
   useDeferredValue,
 } from 'react'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
+import { getCsrfHeaders } from '@/lib/api/csrf'
 import { useTableKeyboardNav } from '@/lib/hooks/useTableKeyboardNav'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { RankingSkeleton } from '../ui/Skeleton'
@@ -524,7 +525,7 @@ function RankingTableInner(props: {
         try {
           const res = await fetch('/api/rankings/rank-history', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', ...getCsrfHeaders() },
             body: JSON.stringify({ traders: chunk, period: seriesPeriod, days: 7 }),
             signal: controller.signal,
           })
