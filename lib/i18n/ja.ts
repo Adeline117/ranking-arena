@@ -2506,6 +2506,16 @@ const ja = {
   commentFailedRetry: 'コメントに失敗しました。再試行してください',
 
   deletedUser: '削除済みユーザー',
+  loginTooManyAttemptsCode: '試行回数が多すぎます。新しいコードを再取得してください',
+  loginIncorrectCredentials:
+    'メールアドレスまたはパスワードが正しくありません。もう一度お試しください。',
+  loginEmailNotVerified: 'メールがまだ確認されていません。受信トレイをご確認ください。',
+  loginAccountPendingDeletion:
+    'このアカウントは削除保留中です。アカウントを復元するには、下のボタンをクリックしてください。',
+  loginAccountRecovered: 'アカウントが復元されました。ログインしています...',
+  loginRecoveryFailed: '復元に失敗しました。もう一度お試しください。',
+  loginRecovering: '復元中...',
+  loginRecoverMyAccount: 'アカウントを復元',
 
   inviteInvalidOrExpired: '招待リンクが無効または期限切れです',
   proMembersOnly: 'このグループはProメンバー限定です',

@@ -2724,6 +2724,15 @@ const en = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: 'Deleted user',
+  loginTooManyAttemptsCode: 'Too many attempts, please request a new code',
+  loginIncorrectCredentials: 'Incorrect email or password. Please try again.',
+  loginEmailNotVerified: 'Email not yet verified. Please check your inbox.',
+  loginAccountPendingDeletion:
+    'This account is pending deletion. To recover your account, click the button below.',
+  loginAccountRecovered: 'Account recovered! Signing you in...',
+  loginRecoveryFailed: 'Recovery failed. Please try again.',
+  loginRecovering: 'Recovering...',
+  loginRecoverMyAccount: 'Recover My Account',
 
   // Group page
   inviteInvalidOrExpired: 'Invite link is invalid or expired',
