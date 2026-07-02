@@ -40,7 +40,10 @@ function formatRoi(roi: number): string {
 }
 
 function getTopPercent(rank: number, total: number): string {
-  if (!total || !rank || rank <= 0) return ''
+  // rank > total means the total is unreliable (stale/estimated) — never
+  // render an absurd "Top 266%" badge. Beyond 25% we show nothing, matching
+  // the generateMetadata gate in page.tsx.
+  if (!total || !rank || rank <= 0 || rank > total) return ''
   const pct = rank / total
   if (pct <= 0.001) return 'Top 0.1%'
   if (pct <= 0.01) return 'Top 1%'
@@ -48,7 +51,7 @@ function getTopPercent(rank: number, total: number): string {
   if (pct <= 0.05) return 'Top 5%'
   if (pct <= 0.1) return 'Top 10%'
   if (pct <= 0.25) return 'Top 25%'
-  return `Top ${Math.ceil(pct * 100)}%`
+  return ''
 }
 
 function formatWindow(w: string): string {
@@ -75,7 +78,10 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
   const roiStr = roiValid ? formatRoi(roi) : '--'
   const topPct = rank && total ? getTopPercent(rank, total) : ''
   const rankDisplay = rank ? (rank <= 9999 ? `${rank}` : `${Math.round(rank / 1000)}K`) : '--'
-  const totalDisplay = total ? `${total.toLocaleString('en-US')}+` : null
+  // Hide "/ N+ traders" when total contradicts rank (total < rank) — showing
+  // "RANKED 1970 / 743+ traders" is worse than showing no total at all.
+  const totalDisplay =
+    total && (!rank || total >= rank) ? `${total.toLocaleString('en-US')}+` : null
   const windowLabel = formatWindow(data.window)
 
   // Build X share text and link
