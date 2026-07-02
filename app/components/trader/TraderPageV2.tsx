@@ -89,7 +89,7 @@ export default function TraderPageV2({ platform, traderKey }: TraderPageV2Props)
                 ) : (
                   <span
                     className="text-2xl font-bold"
-                    style={{ color: '#fff', textShadow: '0 1px 3px rgba(0,0,0,0.3)' }}
+                    style={{ color: tokens.colors.white, textShadow: '0 1px 3px rgba(0,0,0,0.3)' }}
                   >
                     {(data.profile.display_name || traderKey).charAt(0).toUpperCase()}
                   </span>
@@ -622,13 +622,13 @@ function AssetBreakdownChart({
     tokens.colors.accent.brand,
     tokens.colors.accent.success,
     tokens.colors.accent.error,
-    '#8B5CF6',
-    '#F59E0B',
-    '#06B6D4',
-    '#EC4899',
-    '#10B981',
-    '#6366F1',
-    '#EF4444',
+    'var(--color-chart-violet)',
+    'var(--color-chart-amber)',
+    'var(--color-chart-teal)',
+    'var(--color-chart-pink)',
+    'var(--color-chart-mint)',
+    'var(--color-chart-indigo)',
+    'var(--color-chart-orange)',
   ]
 
   return (
