@@ -28,10 +28,14 @@ import fs from 'node:fs'
 
 const BASE = process.env.BASE_URL || 'https://www.arenafi.org'
 const AUTH = process.argv.includes('--auth')
-const ROUTES_ARG = (process.argv.find((a) => a.startsWith('--routes=')) || '').split('=')[1]
-const MAX_PER_ROUTE = Number(
-  (process.argv.find((a) => a.startsWith('--max-per-route=')) || '').split('=')[1] || 300
-)
+// Value = everything after the FIRST '=' so query-string routes survive
+// (e.g. --routes=/search?q=btc must not truncate at the query's '=').
+const flagValue = (name) => {
+  const arg = process.argv.find((a) => a.startsWith(`${name}=`))
+  return arg ? arg.slice(name.length + 1) : undefined
+}
+const ROUTES_ARG = flagValue('--routes')
+const MAX_PER_ROUTE = Number(flagValue('--max-per-route') || 300)
 const LEDGER_PATH = process.env.QA_LEDGER || 'scripts/qa/.exhaustive-ledger.jsonl'
 
 // Interactive-element selector — the universe we must cover on each route.
