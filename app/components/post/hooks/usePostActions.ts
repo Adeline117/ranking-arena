@@ -484,14 +484,15 @@ export function usePostActions({
   const openBookmarkFolderModal = useCallback(
     (postId: string) => {
       if (!accessToken) {
-        showToast(t('pleaseLogin'), 'warning')
+        import('@/lib/hooks/useLoginModal').then(({ useLoginModal }) =>
+          useLoginModal.getState().openLoginModal()
+        )
         return
       }
       setBookmarkingPostId(postId)
       setShowBookmarkModal(true)
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, showToast]
+    [accessToken]
   )
 
   const handleBookmarkToFolder = useCallback(

@@ -4,6 +4,7 @@ import { useState, useCallback, useRef } from 'react'
 import { authedFetch, getHttpErrorMessage } from '@/lib/api/client'
 import { trackEvent } from '@/lib/analytics/track'
 import { usePostStore, type CommentData } from '@/lib/stores/postStore'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 export type Comment = {
@@ -125,14 +126,14 @@ export function usePostComments({
   const submittingCommentRef = useRef(false)
   const submittingReplyRef = useRef(false)
 
-  // Auth guard helper
+  // Auth guard helper — opens the login modal (consistent with usePostActions gates)
   const requireAuth = useCallback((): boolean => {
     if (!accessToken) {
-      showToast(t('pleaseLogin'), 'warning')
+      useLoginModal.getState().openLoginModal()
       return false
     }
     return true
-  }, [accessToken, showToast, t])
+  }, [accessToken])
 
   const loadComments = useCallback(
     async (postId: string, sort: 'best' | 'time' = 'best'): Promise<void> => {
