@@ -1793,8 +1793,8 @@ const ja = {
   loginWelcomeBack: 'おかえりなさい',
   loginCreateAccount: 'アカウントを作成',
   loginSubtitle: 'Arenaは暗号資産のすべてをランキングします',
-  loginValueProp1: '15,000人以上のトレーダーをリアルタイムでトラッキング',
-  loginValueProp2: '27取引所のROIを比較',
+  loginValueProp1: '160,000人以上の収録トレーダーをリアルタイムでトラッキング',
+  loginValueProp2: '20以上の取引所のROIを比較',
   loginValueProp3: 'トレーディングコミュニティに参加',
   loginConnectWallet: 'ウォレットを接続',
   loginWalletSignIn: 'ウォレットでサインイン',
@@ -1915,7 +1915,7 @@ const ja = {
   helpGettingStartedTitle: '使い始め',
   helpWhatIsArenaQ: 'Arenaとは？',
   helpWhatIsArenaA:
-    'Arenaは暗号資産トレーダーのランキングとコミュニティプラットフォームです。27取引所の15,000人以上のトレーダーをトラッキングし、ROI、リスク管理、一貫性でランク付けして、トップパフォーマーを発見できます。',
+    'Arenaは暗号資産トレーダーのランキングとコミュニティプラットフォームです。20以上の取引所で160,000人以上のトレーダーをトラッキングし、ROI、リスク管理、一貫性でランク付けして、トップパフォーマーを発見できます。',
   helpHowToStartQ: '始め方は？',
   helpHowToStartA:
     'Google、メール、または暗号資産ウォレットで登録します。登録後、興味を選択してトップトレーダーをフォローすることで体験をパーソナライズできます。その後、ランキングページでトレーダーを探索しましょう。',
@@ -2726,7 +2726,7 @@ const ja = {
   aboutSubtitle: '暗号資産トレーダーのためのオープンランキングプラットフォーム',
   aboutIntroTitle: 'Arenaとは？',
   aboutIntroP1:
-    'Arenaはデータ駆動型の暗号資産トレーダーランキングプラットフォームです。27以上の中央集権型・分散型取引所からオンチェーンおよび取引所データを集約し、54K+のトレーダーを追跡して透明で検証可能なパフォーマンスリーダーボードを構築しています。',
+    'Arenaはデータ駆動型の暗号資産トレーダーランキングプラットフォームです。20以上の中央集権型・分散型取引所からオンチェーンおよび取引所データを集約し、160K+のトレーダーを収録して透明で検証可能なパフォーマンスリーダーボードを構築しています。',
   aboutIntroP2:
     'フォローするトップパフォーマーを探す場合も、取引所間の戦略を比較する場合も、自分のトラックレコードを紹介する場合も、Arenaは必要なツールとデータを提供します。',
   aboutFeaturesTitle: 'コア機能',
@@ -2758,9 +2758,9 @@ const ja = {
   aboutVisionDesc:
     '透明性が信頼を生むと信じています。水増しされたスクリーンショットや偽のPnLが横行する空間で、Arenaはパフォーマンスが自ら語る、中立的でデータに裏付けられたアリーナを提供します。世界中の暗号資産トレーダー評価のスタンダードになることが目標です。',
   aboutStatsTitle: 'Arenaの数字',
-  aboutStatTraders: '54K+',
+  aboutStatTraders: '160K+',
   aboutStatTradersLabel: '追跡トレーダー数',
-  aboutStatExchanges: '27+',
+  aboutStatExchanges: '20+',
   aboutStatExchangesLabel: '対応取引所',
   aboutStatResources: '56K+',
   aboutStatResourcesLabel: 'ライブラリリソース',

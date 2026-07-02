@@ -1934,8 +1934,8 @@ const zh = {
   loginWelcomeBack: '欢迎回来',
   loginCreateAccount: '创建账号',
   loginSubtitle: 'Arena ranks everything in crypto',
-  loginValueProp1: '追踪 15,000+ 交易员实时排名',
-  loginValueProp2: '跨 27 个交易所对比收益与风控',
+  loginValueProp1: '160,000+ 已收录交易员实时追踪',
+  loginValueProp2: '跨 20+ 交易所对比收益与风控',
   loginValueProp3: '加入交易社区，发现投资机会',
   loginConnectWallet: '连接钱包',
   loginWalletSignIn: '使用钱包登录',
@@ -2895,7 +2895,7 @@ const zh = {
   aboutSubtitle: '开放的加密货币交易员排名平台',
   aboutIntroTitle: '什么是 Arena？',
   aboutIntroP1:
-    'Arena 是一个数据驱动的加密货币交易员排名平台。我们从 27+ 家中心化和去中心化交易所聚合链上及交易所数据，追踪 54K+ 名交易员，构建透明、可验证的绩效排行榜。',
+    'Arena 是一个数据驱动的加密货币交易员排名平台。我们从 20+ 家中心化和去中心化交易所聚合链上及交易所数据，收录 160K+ 名交易员，构建透明、可验证的绩效排行榜。',
   aboutIntroP2:
     '无论你是在寻找值得关注的优秀交易员、比较不同交易所的策略表现，还是展示自己的交易记录，Arena 都能提供所需的工具和数据。',
   aboutFeaturesTitle: '核心功能',
@@ -2904,7 +2904,7 @@ const zh = {
     '持续更新的排名数据，涵盖已验证的盈亏、ROI、胜率和风险指标，支持多个时间维度。',
   aboutFeature2Title: '多交易所覆盖',
   aboutFeature2Desc:
-    '聚合来自 Binance、Bybit、OKX、Bitget、Gate.io、MEXC、Hyperliquid、dYdX、Drift 等 27+ 家交易所的数据。',
+    '聚合来自 Binance、Bybit、OKX、Bitget、Gate.io、MEXC、Hyperliquid、dYdX、Drift 等 20+ 家交易所的数据。',
   aboutFeature3Title: '交易员对比',
   aboutFeature3Desc: '最多 4 位交易员并排对比，提供详细的指标分解和绩效图表。',
   aboutFeature4Title: '组合追踪',
@@ -2924,9 +2924,9 @@ const zh = {
   aboutVisionDesc:
     '我们相信透明带来信任。在一个充斥着虚假截图和伪造盈亏的行业中，Arena 提供一个中立的、数据支撑的竞技场，让实力说话。我们的目标是成为全球加密交易员评估的标准。',
   aboutStatsTitle: 'Arena 数据一览',
-  aboutStatTraders: '54K+',
+  aboutStatTraders: '160K+',
   aboutStatTradersLabel: '追踪交易员',
-  aboutStatExchanges: '27+',
+  aboutStatExchanges: '20+',
   aboutStatExchangesLabel: '覆盖交易所',
   aboutStatResources: '56K+',
   aboutStatResourcesLabel: '知识库资源',

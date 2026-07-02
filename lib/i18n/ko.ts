@@ -1889,8 +1889,8 @@ const ko = {
   loginWelcomeBack: '다시 오신 것을 환영합니다',
   loginCreateAccount: '계정 만들기',
   loginSubtitle: 'Arena는 암호화폐의 모든 것을 순위화합니다',
-  loginValueProp1: '15,000명 이상의 트레이더를 실시간 추적',
-  loginValueProp2: '27개 거래소의 ROI 비교',
+  loginValueProp1: '160,000명 이상의 등록 트레이더를 실시간 추적',
+  loginValueProp2: '20개 이상 거래소의 ROI 비교',
   loginValueProp3: '트레이딩 커뮤니티 참여',
   loginConnectWallet: '지갑 연결',
   loginWalletSignIn: '지갑으로 로그인',
@@ -2010,7 +2010,7 @@ const ko = {
   helpGettingStartedTitle: '시작하기',
   helpWhatIsArenaQ: 'Arena란 무엇인가요?',
   helpWhatIsArenaA:
-    'Arena는 암호화폐 트레이더 리더보드 및 커뮤니티 플랫폼입니다. 27개 거래소에서 15,000명 이상의 트레이더를 추적하여 ROI, 위험 관리, 일관성 기준으로 순위를 매겨 최고의 성과자를 발견할 수 있도록 돕습니다.',
+    'Arena는 암호화폐 트레이더 리더보드 및 커뮤니티 플랫폼입니다. 20개 이상 거래소에서 160,000명 이상의 트레이더를 추적하여 ROI, 위험 관리, 일관성 기준으로 순위를 매겨 최고의 성과자를 발견할 수 있도록 돕습니다.',
   helpHowToStartQ: '어떻게 시작하나요?',
   helpHowToStartA:
     'Google, 이메일 또는 암호화폐 지갑으로 가입하세요. 가입 후 관심사를 선택하고 최고의 트레이더를 팔로우하여 경험을 개인화할 수 있습니다. 그런 다음 순위 페이지에서 트레이더를 탐색해 보세요.',
@@ -2864,7 +2864,7 @@ const ko = {
   aboutSubtitle: '암호화폐 트레이더를 위한 오픈 순위 플랫폼',
   aboutIntroTitle: 'Arena란?',
   aboutIntroP1:
-    'Arena는 데이터 기반 암호화폐 트레이더 순위 플랫폼입니다. 27개 이상의 CEX 및 DEX에서 온체인 및 거래소 데이터를 집계하여 54K+ 트레이더를 추적하고 투명하고 검증 가능한 성과 리더보드를 구축합니다.',
+    'Arena는 데이터 기반 암호화폐 트레이더 순위 플랫폼입니다. 20개 이상의 CEX 및 DEX에서 온체인 및 거래소 데이터를 집계하여 160K+ 트레이더를 등록하고 투명하고 검증 가능한 성과 리더보드를 구축합니다.',
   aboutIntroP2:
     '팔로우할 최고 성과 트레이더를 찾거나, 거래소 간 전략을 비교하거나, 자신의 실적을 선보이려는 경우 Arena는 필요한 도구와 데이터를 제공합니다.',
   aboutFeaturesTitle: '핵심 기능',
@@ -2896,9 +2896,9 @@ const ko = {
   aboutVisionDesc:
     '투명성이 신뢰를 만든다고 믿습니다. 부풀려진 스크린샷과 가짜 PnL이 난무하는 세상에서 Arena는 실적이 스스로 말하는 중립적이고 데이터 기반의 경기장을 제공합니다. 전 세계 암호화폐 트레이더 평가의 표준이 되는 것이 목표입니다.',
   aboutStatsTitle: 'Arena 숫자로 보기',
-  aboutStatTraders: '54K+',
+  aboutStatTraders: '160K+',
   aboutStatTradersLabel: '추적 트레이더',
-  aboutStatExchanges: '27+',
+  aboutStatExchanges: '20+',
   aboutStatExchangesLabel: '지원 거래소',
   aboutStatResources: '56K+',
   aboutStatResourcesLabel: '라이브러리 리소스',
