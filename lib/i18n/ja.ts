@@ -5872,6 +5872,7 @@ const ja = {
   compYouTag: 'あなた',
   compFilterPlatform: 'プラットフォーム',
   compAllPlatforms: 'すべてのプラットフォーム',
+  compPlatformSelect: 'プラットフォームを選択',
   compErrTitleRequired: 'タイトルを入力してください',
   compErrStartRequired: '開始日時を選択してください',
   compErrStartFuture: '開始日時は現在より後にしてください',
