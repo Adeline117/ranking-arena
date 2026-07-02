@@ -1950,6 +1950,16 @@ button:focus-visible,
     min-height: auto;
     min-width: auto;
   }
+  /* Compare checkbox: keep the native input at 16px — the 44px tap target
+     is provided by the wrapping .compare-checkbox-cell box (WCAG 2.5.8).
+     Without this, the blanket rule above inflates the native checkbox into
+     a 44px white square that covers the Arena Score badge on ranking cards. */
+  .compare-checkbox-cell input[type='checkbox'] {
+    min-width: 16px;
+    min-height: 16px;
+    width: 16px;
+    height: 16px;
+  }
   /* Adequate padding for tappable cards */
   .trader-card-contained {
     padding: 16px;
