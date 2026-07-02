@@ -21,23 +21,53 @@ interface RpcOpts {
   timeoutMs?: number
 }
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+/** Retryable = throughput/rate-limit/transient (429, CU cap, empty body). */
+function isTransient(msg: string): boolean {
+  const m = msg.toLowerCase()
+  return (
+    m.includes('compute unit') ||
+    m.includes('throughput') ||
+    m.includes('rate') ||
+    m.includes('429') ||
+    m.includes('unexpected end of json') ||
+    m.includes('timeout') ||
+    m.includes('aborted') ||
+    m.includes('fetch failed') ||
+    m.includes('econnreset')
+  )
+}
+
 async function solRpc<T>(method: string, params: unknown[], opts: RpcOpts = {}): Promise<T> {
   const url = opts.rpcUrl ?? alchemySolUrl()
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 20_000)
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-      signal: ctrl.signal,
-    })
-    const json = (await res.json()) as { result?: T; error?: { message?: string } }
-    if (json.error) throw new Error(`sol ${method}: ${json.error.message ?? 'error'}`)
-    return json.result as T
-  } finally {
-    clearTimeout(timer)
+  const attempts = 5
+  for (let i = 0; i < attempts; i++) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 20_000)
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+        signal: ctrl.signal,
+      })
+      const text = await res.text()
+      const json = (text ? JSON.parse(text) : {}) as { result?: T; error?: { message?: string } }
+      if (json.error) throw new Error(`sol ${method}: ${json.error.message ?? 'error'}`)
+      return json.result as T
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (i < attempts - 1 && isTransient(msg)) {
+        await sleep(400 * 2 ** i) // 400,800,1600,3200ms backoff
+        continue
+      }
+      throw err
+    } finally {
+      clearTimeout(timer)
+    }
   }
+  throw new Error(`sol ${method}: exhausted retries`)
 }
 
 interface SigInfo {
@@ -167,7 +197,7 @@ export async function computeSolanaWalletOnchain(
   ])
 
   // Fetch tx metas with bounded concurrency (public/free RPC friendliness).
-  const conc = opts.concurrency ?? 5
+  const conc = opts.concurrency ?? 3 // free-tier CU/s friendly
   const metas: SolTxMeta[] = []
   for (let i = 0; i < sigs.length; i += conc) {
     const slice = sigs.slice(i, i + conc)
