@@ -112,6 +112,12 @@ interface TreemapNode {
   height: number
 }
 
+// True squarified treemap (Bruls, Huizing & van Wijk 2000): pack items into
+// rows along the shorter side of the remaining rectangle, accepting a new item
+// into the current row only while it does not worsen the row's worst aspect
+// ratio. Keeps tiles near-square so long-tail coins stay clickable targets —
+// the previous naive strip-slice produced 6px-wide slivers under BTC dominance
+// (WCAG 2.5.8 target-size failure). Area remains exactly ∝ market cap.
 function squarify(
   data: { name: string; category: string; marketCap: number; changePct: number }[],
   x: number,
@@ -122,29 +128,76 @@ function squarify(
   if (data.length === 0 || w <= 0 || h <= 0) return []
   const total = data.reduce((s, d) => s + d.marketCap, 0)
   if (total === 0) return []
-  const sorted = [...data].sort((a, b) => b.marketCap - a.marketCap)
+  const scale = (w * h) / total
+  const items = [...data]
+    .sort((a, b) => b.marketCap - a.marketCap)
+    .map((d) => ({ item: d, area: d.marketCap * scale }))
   const nodes: TreemapNode[] = []
   let cx = x,
     cy = y,
     cw = w,
-    ch = h,
-    remaining = total
-  for (let i = 0; i < sorted.length; i++) {
-    const item = sorted[i]
-    const ratio = item.marketCap / remaining
-    if (cw > ch) {
-      const itemW = cw * ratio
-      nodes.push({ ...item, x: cx, y: cy, width: itemW, height: ch })
-      cx += itemW
-      cw -= itemW
-    } else {
-      const itemH = ch * ratio
-      nodes.push({ ...item, x: cx, y: cy, width: cw, height: itemH })
-      cy += itemH
-      ch -= itemH
+    ch = h
+
+  // Worst (largest) aspect ratio in a row of the given areas laid along a side
+  // of length `side`. Row thickness = sum/side; each cell length = area/thickness.
+  const worst = (areas: number[], sum: number, side: number): number => {
+    if (areas.length === 0 || sum <= 0 || side <= 0) return Infinity
+    const thickness = sum / side
+    let max = 0
+    for (const a of areas) {
+      const len = a / thickness
+      const ratio = Math.max(thickness / len, len / thickness)
+      if (ratio > max) max = ratio
     }
-    remaining -= item.marketCap
+    return max
   }
+
+  const layoutRow = (row: { item: (typeof data)[number]; area: number }[], sum: number) => {
+    if (row.length === 0 || sum <= 0) return
+    if (cw >= ch) {
+      // Vertical row against the left edge
+      const rowW = sum / ch
+      let ry = cy
+      for (const { item, area } of row) {
+        const cellH = area / rowW
+        nodes.push({ ...item, x: cx, y: ry, width: rowW, height: cellH })
+        ry += cellH
+      }
+      cx += rowW
+      cw -= rowW
+    } else {
+      // Horizontal row against the top edge
+      const rowH = sum / cw
+      let rx = cx
+      for (const { item, area } of row) {
+        const cellW = area / rowH
+        nodes.push({ ...item, x: rx, y: cy, width: cellW, height: rowH })
+        rx += cellW
+      }
+      cy += rowH
+      ch -= rowH
+    }
+  }
+
+  let row: { item: (typeof data)[number]; area: number }[] = []
+  let rowSum = 0
+  for (const entry of items) {
+    const side = Math.min(cw, ch)
+    const currentAreas = row.map((r) => r.area)
+    const withEntry = [...currentAreas, entry.area]
+    if (
+      row.length === 0 ||
+      worst(withEntry, rowSum + entry.area, side) <= worst(currentAreas, rowSum, side)
+    ) {
+      row.push(entry)
+      rowSum += entry.area
+    } else {
+      layoutRow(row, rowSum)
+      row = [entry]
+      rowSum = entry.area
+    }
+  }
+  layoutRow(row, rowSum)
   return nodes
 }
 
