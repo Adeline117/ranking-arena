@@ -2,28 +2,21 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { localizedLabel } from '@/lib/utils/format'
+import { t, type TranslationKey } from '@/lib/i18n'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '../base'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import type { UnifiedSearchResult } from '@/app/api/search/route'
 
 // Category config for search results grouping
+// Label comes from t(category) — the keys traders/posts/users/groups exist in
+// all 4 locales. (Was a zh/en-only labelZh/labelEn map that showed English to
+// ja/ko users.)
 export const CATEGORY_CONFIG = {
-  traders: {
-    icon: 'T',
-    labelZh: '交易员',
-    labelEn: 'Traders',
-    color: 'var(--color-verified-web3)',
-  },
-  posts: {
-    icon: 'P',
-    labelZh: '帖子',
-    labelEn: 'Posts',
-    color: 'var(--color-score-profitability)',
-  },
-  users: { icon: 'U', labelZh: '用户', labelEn: 'Users', color: 'var(--color-score-average)' },
-  groups: { icon: 'G', labelZh: '小组', labelEn: 'Groups', color: 'var(--color-score-average)' },
+  traders: { icon: 'T', color: 'var(--color-verified-web3)' },
+  posts: { icon: 'P', color: 'var(--color-score-profitability)' },
+  users: { icon: 'U', color: 'var(--color-score-average)' },
+  groups: { icon: 'G', color: 'var(--color-score-average)' },
 } as const
 
 export type CategoryKey = keyof typeof CATEGORY_CONFIG
@@ -63,7 +56,6 @@ interface SearchResultGroupProps {
   category: CategoryKey
   items: UnifiedSearchResult[]
   query: string
-  language: string
   selectedIndex: number
   offset: number
   onResultClick: (resultId?: string, resultType?: string) => void
@@ -75,7 +67,6 @@ export function SearchResultGroup({
   category,
   items,
   query,
-  language,
   selectedIndex,
   offset,
   onResultClick,
@@ -84,7 +75,7 @@ export function SearchResultGroup({
 }: SearchResultGroupProps) {
   if (items.length === 0) return null
   const config = CATEGORY_CONFIG[category]
-  const label = localizedLabel(config.labelZh, config.labelEn, language)
+  const label = t(category as TranslationKey)
 
   return (
     <Box key={category}>
