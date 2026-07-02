@@ -592,18 +592,31 @@ export async function updatePost(
 
 /**
  * 删除帖子
+ *
+ * Returns whether a row was actually deleted. A bare `.delete().eq(...)` that
+ * matches 0 rows (post missing, or caller is not the author) succeeds silently
+ * — that silent no-op let QA canary posts leak into production because the
+ * API kept answering 200 "Delete successful". `.select('id')` surfaces the
+ * affected rows so callers can distinguish "deleted" from "nothing matched".
  */
 export async function deletePost(
   supabase: SupabaseClient,
   postId: string,
   userId: string
-): Promise<void> {
-  const { error } = await supabase.from('posts').delete().eq('id', postId).eq('author_id', userId)
+): Promise<boolean> {
+  const { data, error } = await supabase
+    .from('posts')
+    .delete()
+    .eq('id', postId)
+    .eq('author_id', userId)
+    .select('id')
 
   if (error) throw error
+  if (!data || data.length === 0) return false
 
   // M-6: Invalidate post list caches after deletion
   await invalidatePostListCache()
+  return true
 }
 
 // incrementViewCount was removed: it had no production callers and the
