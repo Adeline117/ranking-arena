@@ -19,9 +19,12 @@ on:
     types: [completed]
     branches: [main]
 
+# cancel-in-progress 必须 false：杀死正在 vercel deploy 的 run 并不能撤销
+# 已上传的部署——它会在服务端继续构建并可能晚于新部署抢占生产别名（回退）。
+# false = 串行排队；排队中的旧 run 启动时会被 ancestry 检查拦下。
 concurrency:
   group: deploy-gate-main
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 permissions:
   contents: write # smoke 绿后更新 last-known-good tag
@@ -70,23 +73,40 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Skip if superseded (SHA no longer main HEAD)
+      # 部署条件 = 本 run 的 SHA 比当前线上 SHA 新（git 祖先关系）。
+      # 不再要求恰好等于 HEAD——连续推送爆发期里 HEAD 永远前移会饿死部署
+      # （2026-07-02 实测连续 4 轮 superseded）；部署"已验证但稍旧"的 SHA
+      # 是净改善，且 ancestry 检查杜绝旧 SHA 迟到回退生产。
+      - name: Deploy decision (run SHA newer than serving SHA?)
         id: fresh
         run: |
           git fetch origin main --quiet
-          LATEST=$(git rev-parse origin/main)
-          if [ "$LATEST" != "$HEAD_SHA" ]; then
-            echo "superseded: run SHA ${HEAD_SHA:0:8} != main HEAD ${LATEST:0:8} — newer run will deploy"
-            echo "deploy=false" >> "$GITHUB_OUTPUT"
-          else
+          SERVING=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&target=production&state=READY&limit=1" \
+            | jq -r '.deployments[0].meta.gateSha // .deployments[0].meta.githubCommitSha // empty')
+          echo "serving=$SERVING run=$HEAD_SHA"
+          if [ -z "$SERVING" ]; then
+            echo "serving SHA unknown — deploy"
             echo "deploy=true" >> "$GITHUB_OUTPUT"
+          elif [ "$SERVING" = "$HEAD_SHA" ]; then
+            echo "already serving ${HEAD_SHA:0:8} — skip"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
+          elif git merge-base --is-ancestor "$SERVING" "$HEAD_SHA" 2>/dev/null; then
+            echo "run ${HEAD_SHA:0:8} is newer than serving ${SERVING:0:8} — deploy"
+            echo "deploy=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run ${HEAD_SHA:0:8} is NOT newer than serving ${SERVING:0:8} — skip (would regress)"
+            echo "deploy=false" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Deploy to Vercel (build on Vercel infra)
         if: steps.fresh.outputs.deploy == 'true'
         run: |
           git checkout --quiet "$HEAD_SHA"
-          npx vercel@latest deploy --prod --yes --token="$VERCEL_TOKEN" > /tmp/deploy-url.txt
+          # gateSha meta：CLI 部署没有 githubCommitSha，后续 run 的 ancestry
+          # 判断靠它读出"当前线上是哪个 commit"
+          npx vercel@latest deploy --prod --yes --meta gateSha="$HEAD_SHA" \
+            --token="$VERCEL_TOKEN" > /tmp/deploy-url.txt
           echo "Deployed: $(cat /tmp/deploy-url.txt)"
 
       - name: Smoke test + auto-rollback
