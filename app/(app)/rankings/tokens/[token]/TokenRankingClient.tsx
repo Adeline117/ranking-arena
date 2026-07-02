@@ -107,6 +107,7 @@ function TraderAvatar({
   )
 }
 
+/* eslint-disable no-restricted-syntax -- official token BRAND colors (external identities like BTC orange; not themeable design tokens) */
 const TOKEN_COLORS: Record<string, string> = {
   BTC: '#F7931A',
   ETH: '#627EEA',
@@ -123,6 +124,7 @@ const TOKEN_COLORS: Record<string, string> = {
   ARB: '#12AAFF',
   OP: '#FF0420',
 }
+/* eslint-enable no-restricted-syntax */
 
 function PeriodSelector({
   period,
