@@ -198,6 +198,12 @@ async function injectIndices(page) {
         id: (el.id || '').slice(0, 40),
         href: el.getAttribute('href') || '',
         disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true',
+        // Standard off-screen a11y pattern (e.g. skip-to-content link:
+        // position:absolute left:-9999px, 1x1, moves into viewport onFocus).
+        // These are keyboard-reachable by design but un-clickable at rest —
+        // Playwright's hit-target check times out on them. Flag separately so
+        // the sweep records skip:offscreen-a11y instead of a bogus fail:click.
+        offscreenA11y: (rect.width <= 1 && rect.height <= 1) || rect.right <= 0 || rect.bottom <= 0,
         visible:
           rect.width > 0 &&
           rect.height > 0 &&
@@ -268,6 +274,24 @@ async function sweepRoute(page, route, ledger, counters) {
     }
     if (!desc.visible || desc.disabled) {
       record.status = desc.disabled ? 'skip:disabled' : 'skip:hidden'
+      counters.skipped++
+      ledger.push(record)
+      continue
+    }
+    if (desc.offscreenA11y) {
+      // sr-only / off-screen a11y elements (skip links): correct product code,
+      // physically un-clickable at rest — not an app failure.
+      record.status = 'skip:offscreen-a11y'
+      counters.skipped++
+      ledger.push(record)
+      continue
+    }
+
+    // Pure in-page anchors (e.g. skip-to-content `<a href="#main-content">`)
+    // don't mutate app state and are keyboard-focus patterns — record without
+    // clicking, mirroring the internal-link branch below.
+    if (desc.tag === 'a' && desc.href.startsWith('#')) {
+      record.status = 'skip:anchor-link'
       counters.skipped++
       ledger.push(record)
       continue
