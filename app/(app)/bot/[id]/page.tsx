@@ -621,16 +621,12 @@ function BotDetailContent({ id }: { id: string }) {
                 value={formatUsers(snap.unique_users as number | null)}
               />
               {/* APY and ROI split into clearly separate, labeled figures. */}
-              <MetricStatCard
-                label={t('botApy')}
-                value={snap.apy as number | null}
-                format="percent"
-              />
+              <MetricStatCard label={t('botApy')} value={snap.apy as number | null} format="roi" />
               {snap.roi != null && (
                 <MetricStatCard
                   label={t('botRoi')}
                   value={snap.roi as number | null}
-                  format="percent"
+                  format="roi"
                 />
               )}
               <StatCard
@@ -647,7 +643,7 @@ function BotDetailContent({ id }: { id: string }) {
               <MetricStatCard
                 label={t('botMaxDrawdown')}
                 value={snap.max_drawdown != null ? -Number(snap.max_drawdown) : null}
-                format="percent"
+                format="roi"
                 sub={t('botMaxDrawdownHint')}
               />
               {snap.token_price != null && (
@@ -729,7 +725,7 @@ function BotDetailContent({ id }: { id: string }) {
                       <td style={{ ...tdStyle, textAlign: 'right' }}>
                         <Metric
                           value={s.apy as number | null}
-                          format="percent"
+                          format="roi"
                           size="sm"
                           align="right"
                           showArrow
@@ -739,7 +735,7 @@ function BotDetailContent({ id }: { id: string }) {
                       <td style={{ ...tdStyle, textAlign: 'right' }}>
                         <Metric
                           value={s.roi as number | null}
-                          format="percent"
+                          format="roi"
                           size="sm"
                           align="right"
                           showArrow
