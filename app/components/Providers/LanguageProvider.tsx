@@ -9,7 +9,6 @@ import {
   useCallback,
   ReactNode,
 } from 'react'
-import { useRouter } from 'next/navigation'
 import {
   type Language,
   getLanguage,
@@ -44,7 +43,6 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   // Start with 'en' to match SSR output — getLanguage() reads localStorage which is only
   // available after hydration. We update in useEffect once mounted.
   const [language, setLanguageState] = useState<Language>('en')
-  const router = useRouter()
   // Bump when English translations finish async loading — forces t() consumers to re-render.
   // The version value MUST feed the t/contextValue memo deps below, otherwise the bump
   // re-renders the provider but produces an identical context reference and stale consumers
@@ -87,32 +85,17 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
-  const setLanguage = useCallback(
-    (lang: Language) => {
-      setLang(lang) // writes the `language` cookie synchronously
-      if (lang !== 'en') {
-        loadTranslations(lang).then(() => setLanguageState(lang))
-      } else {
-        setLanguageState(lang)
-      }
-      // Update client-rendered content immediately (soft), then re-fetch server
-      // components. router.refresh() handles dynamic SSR pages, but the homepage
-      // hero is SSR-only AND edge-cached, so router.refresh() can't re-render it.
-      // For any route carrying SSR-rendered localized text that the client tree
-      // won't update, fall back to a hard reload so the whole page reflects the
-      // new language. The homepage (#ssr-hero-shell / #ssr-ranking-table) is the
-      // one such route today. Language switching is rare, so the reload cost is
-      // acceptable in exchange for guaranteed consistency.
-      const hasSsrOnlyLocalized =
-        typeof document !== 'undefined' && !!document.getElementById('ssr-hero-shell')
-      if (hasSsrOnlyLocalized) {
-        window.location.reload()
-      } else {
-        router.refresh()
-      }
-    },
-    [router]
-  )
+  const setLanguage = useCallback((lang: Language) => {
+    // setLang writes the cookie, fires languageChange (client re-render), and
+    // hard-reloads when the page has SSR-only localized content the client tree
+    // can't update (e.g. the homepage hero). See lib/i18n.ts setLanguage.
+    setLang(lang)
+    if (lang !== 'en') {
+      loadTranslations(lang).then(() => setLanguageState(lang))
+    } else {
+      setLanguageState(lang)
+    }
+  }, [])
 
   // Stable translation function — only recreated when language actually changes, not on mount
   const t = useMemo((): TranslationFunction => {
