@@ -1,0 +1,29 @@
+# 拿不到字段对账台账(Unreachable Fields Ledger)
+
+> 逐个"墙"的实测结论。2026-07-01 全部重新活体验证/攻克(SG live probe + 生产直查 +
+> 自派生)。区分**真墙**(数据源侧限制,活体证据)与**假墙**(我之前误判,已攻克)。
+
+## 假墙 — 已攻克/本就不是缺口
+
+| 项                                    | 之前误判          | 真相 + 处置                                                                                                                                                                                                                            |
+| ------------------------------------- | ----------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **okx_web3**                          | "已退役"          | ❌ 错。退役的是旧 slug；活的是 `okx_web3_solana`(23,730 交易员、13 链上字段:txs_buy/sell、volume_buy/sell、avg_cost_buy、native_balance、unrealized_pnl、win_rate_distribution、top_tokens_total_pnl…、今日仍更新)。**在库正常流动。** |
+| **OKX/bitunix/xt/mexc/bitget Sharpe** | "公开 API 不返回" | ✅ **自己算**。5 源已抓累计 pnl/roi 序列但 sharpe=0。`deriveMissingRatios`(DEX Tier-0 同引擎)从序列派生 Sharpe/Sortino,~1.1 万交易员。标 `extras.risk_self_derived`。序列累计性先直查生产验证(bitget 0→0.96→34.77 单调)。              |
+| **Blofin Sortino/波动率**             | "SPA 无端点"      | ✅ **自己算**。Blofin 有 sharpe 但缺 Sortino/波动率(SPA profile 门控)。从板 roi 序列(1709 交易员)直接派生 Sortino + 年化波动率,绕过 SPA。(Calmar/年化 ROI 未派生——90d 外推风险,诚实留空。)                                             |
+| **HTX followers**                     | "登录门控"        | ❌ 非真缺口。copier_count(798 行,最多 923)+ copier_pnl **已抓**。门控的只是**私密 copier 身份名单**——所有交易所都不公开,产品也不展示单个跟单人身份。有意义的跟单指标齐了。                                                             |
+
+## 真墙 — 数据源侧限制(活体证据)
+
+| 项                            | 活体证据(2026-07-01)                                                                                                | 性质                                                |
+| ----------------------------- | ------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| **CoinEx 板**                 | 无参数调用 `code:0 Success total:0`——端点活着但**上游零交易员**。多 data_type/time_range 组合均空。                 | 上游停服(与 memory 2026-07-01 记录一致)。不可恢复。 |
+| **Gate CFD 当前仓位/划转**    | 端点 WAF `Access Denied`(裸请求),需 auth-gated 内部 user ID。板级指标(1328 交易员+自派生 sharpe/sortino/波动率)齐。 | 短暂性+私密明细 auth 门控。核心已覆盖。             |
+| **binance_web3 profile 明细** | board 公开可用(富数据);profile detail 无公开 XHR,address 页 202 challenge(3 种捕获法穷尽 2026-06-12 + 本次复核)。   | bot-shield。board(Tier-A)已覆盖。                   |
+| **Bitget 余额历史**           | live SG 实测:UTA profile 仅总览/订单/跟单者/勋章,余额历史 tab **已从站点移除**(用户截图为旧版 classic UI)。         | 交易所下线该功能。                                  |
+
+## 原则
+
+- **"拿不到"必须有活体证据**(SG live probe / 生产 total:0 / 202 challenge),不凭先验断言。
+- **能自己算的一律自己算**(序列派生),不等交易所 API。
+- **私密/短暂明细**(单个跟单人身份、他人实时仓位)非产品需求,auth 门控不算缺口。
+- 自派生值一律标 provenance(`risk_self_derived` / `risk_derivation='daily-approx'`),UI/评分不当交易所精度。
