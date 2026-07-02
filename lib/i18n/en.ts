@@ -1967,8 +1967,8 @@ const en = {
   loginWelcomeBack: 'Welcome Back',
   loginCreateAccount: 'Create Account',
   loginSubtitle: 'Arena ranks everything in crypto',
-  loginValueProp1: 'Track 15,000+ traders in real-time',
-  loginValueProp2: 'Compare ROI across 27 exchanges',
+  loginValueProp1: '160,000+ traders tracked in real-time',
+  loginValueProp2: 'Compare ROI across 20+ exchanges',
   loginValueProp3: 'Join trading communities',
   loginConnectWallet: 'Connect Wallet',
   loginWalletSignIn: 'Sign in with Wallet',
@@ -2089,7 +2089,7 @@ const en = {
   helpGettingStartedTitle: 'Getting Started',
   helpWhatIsArenaQ: 'What is Arena?',
   helpWhatIsArenaA:
-    'Arena is a crypto trader leaderboard and community platform. We track 15,000+ traders across 27 exchanges, ranking them by ROI, risk management, and consistency so you can discover top performers.',
+    'Arena is a crypto trader leaderboard and community platform. We track 160,000+ traders across 20+ exchanges, ranking them by ROI, risk management, and consistency so you can discover top performers.',
   helpHowToStartQ: 'How do I get started?',
   helpHowToStartA:
     'Sign up with Google, email, or a crypto wallet. After registration, you can personalize your experience by selecting interests and following top traders. Then explore the Rankings page to discover traders.',
@@ -2975,7 +2975,7 @@ const en = {
   aboutSubtitle: 'The open ranking platform for crypto traders',
   aboutIntroTitle: 'What is Arena?',
   aboutIntroP1:
-    'Arena is a data-driven crypto trader ranking platform. We aggregate on-chain and exchange data from 27+ centralized and decentralized exchanges, tracking 54K+ traders to build transparent, verifiable performance leaderboards.',
+    'Arena is a data-driven crypto trader ranking platform. We aggregate on-chain and exchange data from 20+ centralized and decentralized exchanges, tracking 160K+ traders to build transparent, verifiable performance leaderboards.',
   aboutIntroP2:
     'Whether you are looking for top-performing traders to follow, comparing strategies across exchanges, or showcasing your own track record, Arena provides the tools and data you need.',
   aboutFeaturesTitle: 'Core Features',
@@ -3007,9 +3007,9 @@ const en = {
   aboutVisionDesc:
     'We believe transparency breeds trust. In a space where inflated screenshots and fake PnL run rampant, Arena provides a neutral, data-backed arena where performance speaks for itself. Our goal is to become the standard for crypto trader evaluation worldwide.',
   aboutStatsTitle: 'Arena in Numbers',
-  aboutStatTraders: '54K+',
+  aboutStatTraders: '160K+',
   aboutStatTradersLabel: 'Traders Tracked',
-  aboutStatExchanges: '27+',
+  aboutStatExchanges: '20+',
   aboutStatExchangesLabel: 'Exchanges Covered',
   aboutStatResources: '56K+',
   aboutStatResourcesLabel: 'Library Resources',
