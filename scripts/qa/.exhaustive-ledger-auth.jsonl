@@ -1,0 +1,254 @@
+{"route":"/settings/linked-accounts","idx":0,"fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/settings/linked-accounts","idx":1,"fp":"button|button||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/settings/linked-accounts","idx":3,"fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/settings/linked-accounts","idx":4,"fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/settings/linked-accounts","idx":5,"fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
+{"route":"/settings/linked-accounts","idx":6,"fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
+{"route":"/settings/linked-accounts","idx":7,"fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
+{"route":"/settings/linked-accounts","idx":8,"fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled","errors":[]}
+{"route":"/settings/linked-accounts","idx":9,"fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/settings/linked-accounts","idx":10,"fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/settings/linked-accounts","idx":11,"fp":"button||||System Theme|","text":"","ariaLabel":"System Theme","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/settings/linked-accounts","idx":12,"fp":"button||||Messages|","text":"","ariaLabel":"Messages","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/settings/linked-accounts","idx":13,"fp":"button|||Q|User menu|","text":"Q","ariaLabel":"User menu","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/settings/linked-accounts","idx":14,"fp":"a|||Home||/","text":"Home","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/settings/linked-accounts","idx":15,"fp":"a|||Settings||/settings","text":"Settings","ariaLabel":"","href":"/settings","tag":"a","status":"link:/settings","errors":[]}
+{"route":"/settings/linked-accounts","idx":16,"fp":"button||button|Link New Account|Link New Account|","text":"Link New Account","ariaLabel":"Link New Account","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/settings/linked-accounts","idx":17,"fp":"button||button|← Settings|Button|","text":"← Settings","ariaLabel":"Button","href":"","tag":"button","status":"skip:vanished","errors":[]}
+{"route":"/settings/linked-accounts","idx":18,"fp":"a|||Rankings|Rankings|/","text":"Rankings","ariaLabel":"Rankings","href":"/","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/settings/linked-accounts","idx":19,"fp":"a|||Market|Market|/market","text":"Market","ariaLabel":"Market","href":"/market","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/settings/linked-accounts","idx":20,"fp":"a|||Groups|Groups|/groups","text":"Groups","ariaLabel":"Groups","href":"/groups","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/settings/linked-accounts","idx":21,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/settings/linked-accounts","idx":22,"fp":"a|||Me|Me|/u/qa_button_test","text":"Me","ariaLabel":"Me","href":"/u/qa_button_test","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/watchlist","idx":0,"fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/watchlist","idx":2,"fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/watchlist","idx":3,"fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/watchlist","idx":4,"fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
+{"route":"/watchlist","idx":5,"fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
+{"route":"/watchlist","idx":6,"fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
+{"route":"/watchlist","idx":7,"fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled","errors":[]}
+{"route":"/watchlist","idx":8,"fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/watchlist","idx":9,"fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/watchlist","idx":10,"fp":"button||||Dark Mode|","text":"","ariaLabel":"Dark Mode","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/watchlist","idx":11,"fp":"button||||Messages|","text":"","ariaLabel":"Messages","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/watchlist","idx":12,"fp":"button|||Q|User menu|","text":"Q","ariaLabel":"User menu","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/watchlist","idx":13,"fp":"a|||Browse Rankings||/rankings","text":"Browse Rankings","ariaLabel":"","href":"/rankings","tag":"a","status":"link:/rankings","errors":[]}
+{"route":"/watchlist","idx":14,"fp":"a|||Rankings|Rankings|/","text":"Rankings","ariaLabel":"Rankings","href":"/","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/watchlist","idx":15,"fp":"a|||Market|Market|/market","text":"Market","ariaLabel":"Market","href":"/market","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/watchlist","idx":16,"fp":"a|||Groups|Groups|/groups","text":"Groups","ariaLabel":"Groups","href":"/groups","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/watchlist","idx":17,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/watchlist","idx":18,"fp":"a|||Me|Me|/u/qa_button_test","text":"Me","ariaLabel":"Me","href":"/u/qa_button_test","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/watchlist","idx":20,"fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/favorites","idx":0,"fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/favorites","idx":2,"fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/favorites","idx":3,"fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/favorites","idx":4,"fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
+{"route":"/favorites","idx":5,"fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
+{"route":"/favorites","idx":6,"fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
+{"route":"/favorites","idx":7,"fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled","errors":[]}
+{"route":"/favorites","idx":8,"fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/favorites","idx":9,"fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/favorites","idx":10,"fp":"button||||Light Mode|","text":"","ariaLabel":"Light Mode","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/favorites","idx":11,"fp":"button||||Messages|","text":"","ariaLabel":"Messages","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/favorites","idx":12,"fp":"button|||Q|User menu|","text":"Q","ariaLabel":"User menu","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/favorites","idx":13,"fp":"a|||Home||/","text":"Home","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/favorites","idx":14,"fp":"button||button|+ New Folder|Button|","text":"+ New Folder","ariaLabel":"Button","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/favorites","idx":15,"fp":"button|button|tab|My Folders (1)||","text":"My Folders (1)","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/favorites","idx":16,"fp":"button|button|tab|Subscribed Folders (0)||","text":"Subscribed Folders (0)","ariaLabel":"","href":"","tag":"button","status":"denied:write-deny","errors":[]}
+{"route":"/favorites","idx":17,"fp":"a|||D\n\nDefault Folder\n\nDefault\nPrivate\n\n0 items\n\n→||/favorites/36f673d7-0a03-40fa-b36f-5fbb10ff334e","text":"D\n\nDefault Folder\n\nDefault\nPrivate\n\n0 items\n\n→","ariaLabel":"","href":"/favorites/36f673d7-0a03-40fa-b36f-5fbb10ff334e","tag":"a","status":"link:/favorites/36f673d7-0a03-40fa-b36f-5fbb10ff334e","errors":[]}
+{"route":"/favorites","idx":18,"fp":"a|||Rankings|Rankings|/","text":"Rankings","ariaLabel":"Rankings","href":"/","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/favorites","idx":19,"fp":"a|||Market|Market|/market","text":"Market","ariaLabel":"Market","href":"/market","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/favorites","idx":20,"fp":"a|||Groups|Groups|/groups","text":"Groups","ariaLabel":"Groups","href":"/groups","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/favorites","idx":21,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/favorites","idx":22,"fp":"a|||Me|Me|/u/qa_button_test","text":"Me","ariaLabel":"Me","href":"/u/qa_button_test","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/favorites","idx":24,"fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/portfolio","idx":0,"fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/portfolio","idx":2,"fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/portfolio","idx":3,"fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/portfolio","idx":4,"fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
+{"route":"/portfolio","idx":5,"fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
+{"route":"/portfolio","idx":6,"fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
+{"route":"/portfolio","idx":7,"fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled","errors":[]}
+{"route":"/portfolio","idx":8,"fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/portfolio","idx":9,"fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/portfolio","idx":10,"fp":"button||||System Theme|","text":"","ariaLabel":"System Theme","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/portfolio","idx":11,"fp":"button||||Messages|","text":"","ariaLabel":"Messages","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/portfolio","idx":12,"fp":"button|||Q|User menu|","text":"Q","ariaLabel":"User menu","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/portfolio","idx":13,"fp":"button|||+ Connect Exchange||","text":"+ Connect Exchange","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/portfolio","idx":14,"fp":"button|||+ Connect Exchange||","text":"+ Connect Exchange","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/portfolio","idx":15,"fp":"a|||Rankings|Rankings|/","text":"Rankings","ariaLabel":"Rankings","href":"/","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/portfolio","idx":16,"fp":"a|||Market|Market|/market","text":"Market","ariaLabel":"Market","href":"/market","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/portfolio","idx":17,"fp":"a|||Groups|Groups|/groups","text":"Groups","ariaLabel":"Groups","href":"/groups","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/portfolio","idx":18,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/portfolio","idx":19,"fp":"a|||Me|Me|/u/qa_button_test","text":"Me","ariaLabel":"Me","href":"/u/qa_button_test","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/portfolio","idx":21,"fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/following","idx":0,"fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/following","idx":2,"fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/following","idx":3,"fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/following","idx":4,"fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
+{"route":"/following","idx":5,"fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
+{"route":"/following","idx":6,"fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
+{"route":"/following","idx":7,"fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled","errors":[]}
+{"route":"/following","idx":8,"fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/following","idx":9,"fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/following","idx":10,"fp":"button||||Dark Mode|","text":"","ariaLabel":"Dark Mode","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/following","idx":11,"fp":"button||||Messages|","text":"","ariaLabel":"Messages","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/following","idx":12,"fp":"button|||Q|User menu|","text":"Q","ariaLabel":"User menu","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/following","idx":13,"fp":"a|||Home||/","text":"Home","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/following","idx":14,"fp":"a|||Browse Rankings||/rankings","text":"Browse Rankings","ariaLabel":"","href":"/rankings","tag":"a","status":"link:/rankings","errors":[]}
+{"route":"/following","idx":15,"fp":"a|||Rankings|Rankings|/","text":"Rankings","ariaLabel":"Rankings","href":"/","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/following","idx":16,"fp":"a|||Market|Market|/market","text":"Market","ariaLabel":"Market","href":"/market","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/following","idx":17,"fp":"a|||Groups|Groups|/groups","text":"Groups","ariaLabel":"Groups","href":"/groups","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/following","idx":18,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/following","idx":19,"fp":"a|||Me|Me|/u/qa_button_test","text":"Me","ariaLabel":"Me","href":"/u/qa_button_test","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/following","idx":21,"fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/messages","idx":0,"fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/messages","idx":1,"fp":"a|||Skip to main content||#main-content","text":"Skip to main content","ariaLabel":"","href":"#main-content","tag":"a","status":"fail:click→nav:/inbox","errors":[],"clickError":"locator.click: Timeout 2500ms exceeded."}
+{"route":"/messages","idx":2,"fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/messages","idx":3,"fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/messages","idx":4,"fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
+{"route":"/messages","idx":5,"fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
+{"route":"/messages","idx":6,"fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
+{"route":"/messages","idx":7,"fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled→nav:/inbox","errors":[]}
+{"route":"/messages","idx":8,"fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/messages","idx":9,"fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked→nav:/inbox","errors":[]}
+{"route":"/messages","idx":10,"fp":"button||||Light Mode|","text":"","ariaLabel":"Light Mode","href":"","tag":"button","status":"ok:clicked→nav:/inbox","errors":[]}
+{"route":"/messages","idx":11,"fp":"button||||Messages|","text":"","ariaLabel":"Messages","href":"","tag":"button","status":"ok:clicked→nav:/inbox","errors":[]}
+{"route":"/messages","idx":12,"fp":"button|||Q|User menu|","text":"Q","ariaLabel":"User menu","href":"","tag":"button","status":"ok:clicked→nav:/inbox","errors":[]}
+{"route":"/messages","idx":13,"fp":"button|||Notifications||","text":"Notifications","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/inbox","errors":[]}
+{"route":"/messages","idx":14,"fp":"button|||Messages||","text":"Messages","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/inbox","errors":[]}
+{"route":"/messages","idx":15,"fp":"button|||All||","text":"All","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/inbox","errors":[]}
+{"route":"/messages","idx":16,"fp":"button|||Follows||","text":"Follows","ariaLabel":"","href":"","tag":"button","status":"denied:write-deny","errors":[]}
+{"route":"/messages","idx":17,"fp":"button|||Likes||","text":"Likes","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/inbox","errors":[]}
+{"route":"/messages","idx":18,"fp":"button|||Comments||","text":"Comments","ariaLabel":"","href":"","tag":"button","status":"denied:write-deny","errors":[]}
+{"route":"/messages","idx":19,"fp":"button|||Mentions||","text":"Mentions","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/inbox","errors":[]}
+{"route":"/messages","idx":20,"fp":"a|||Rankings|Rankings|/","text":"Rankings","ariaLabel":"Rankings","href":"/","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/messages","idx":21,"fp":"a|||Market|Market|/market","text":"Market","ariaLabel":"Market","href":"/market","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/messages","idx":22,"fp":"a|||Groups|Groups|/groups","text":"Groups","ariaLabel":"Groups","href":"/groups","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/messages","idx":23,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/messages","idx":24,"fp":"a|||Me|Me|/u/qa_button_test","text":"Me","ariaLabel":"Me","href":"/u/qa_button_test","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/messages","idx":26,"fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked→nav:/inbox","errors":[]}
+{"route":"/inbox","idx":0,"fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/inbox","idx":2,"fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/inbox","idx":3,"fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/inbox","idx":4,"fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
+{"route":"/inbox","idx":5,"fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
+{"route":"/inbox","idx":6,"fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
+{"route":"/inbox","idx":7,"fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled","errors":[]}
+{"route":"/inbox","idx":8,"fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/inbox","idx":9,"fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/inbox","idx":10,"fp":"button||||System Theme|","text":"","ariaLabel":"System Theme","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/inbox","idx":11,"fp":"button||||Messages|","text":"","ariaLabel":"Messages","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/inbox","idx":12,"fp":"button|||Q|User menu|","text":"Q","ariaLabel":"User menu","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/inbox","idx":13,"fp":"button|||Notifications||","text":"Notifications","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/inbox","idx":14,"fp":"button|||Messages||","text":"Messages","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/inbox","idx":15,"fp":"button|||All||","text":"All","ariaLabel":"","href":"","tag":"button","status":"skip:vanished","errors":[]}
+{"route":"/inbox","idx":16,"fp":"button|||Follows||","text":"Follows","ariaLabel":"","href":"","tag":"button","status":"denied:write-deny","errors":[]}
+{"route":"/inbox","idx":17,"fp":"button|||Likes||","text":"Likes","ariaLabel":"","href":"","tag":"button","status":"skip:vanished","errors":[]}
+{"route":"/inbox","idx":18,"fp":"button|||Comments||","text":"Comments","ariaLabel":"","href":"","tag":"button","status":"denied:write-deny","errors":[]}
+{"route":"/inbox","idx":19,"fp":"button|||Mentions||","text":"Mentions","ariaLabel":"","href":"","tag":"button","status":"skip:vanished","errors":[]}
+{"route":"/inbox","idx":20,"fp":"a|||Rankings|Rankings|/","text":"Rankings","ariaLabel":"Rankings","href":"/","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/inbox","idx":21,"fp":"a|||Market|Market|/market","text":"Market","ariaLabel":"Market","href":"/market","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/inbox","idx":22,"fp":"a|||Groups|Groups|/groups","text":"Groups","ariaLabel":"Groups","href":"/groups","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/inbox","idx":23,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/inbox","idx":24,"fp":"a|||Me|Me|/u/qa_button_test","text":"Me","ariaLabel":"Me","href":"/u/qa_button_test","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/inbox","idx":26,"fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/my-posts","idx":0,"fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/my-posts","idx":1,"fp":"a|||Skip to main content||#main-content","text":"Skip to main content","ariaLabel":"","href":"#main-content","tag":"a","status":"fail:click→nav:/u/qa_button_test","errors":[],"clickError":"locator.click: Timeout 2500ms exceeded."}
+{"route":"/my-posts","idx":2,"fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/my-posts","idx":3,"fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/my-posts","idx":4,"fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
+{"route":"/my-posts","idx":5,"fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
+{"route":"/my-posts","idx":6,"fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
+{"route":"/my-posts","idx":7,"fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":8,"fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/my-posts","idx":9,"fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":10,"fp":"button||||Dark Mode|","text":"","ariaLabel":"Dark Mode","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":11,"fp":"button||||Messages|","text":"","ariaLabel":"Messages","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":12,"fp":"button|||Q|User menu|","text":"Q","ariaLabel":"User menu","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":13,"fp":"a|||Home||/","text":"Home","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/my-posts","idx":14,"fp":"a|||Community||/","text":"Community","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/my-posts","idx":15,"fp":"button|button||0Following|0 Following|","text":"0Following","ariaLabel":"0 Following","href":"","tag":"button","status":"denied:write-deny","errors":[]}
+{"route":"/my-posts","idx":16,"fp":"button|button||0Followers|0 Followers|","text":"0Followers","ariaLabel":"0 Followers","href":"","tag":"button","status":"denied:write-deny","errors":[]}
+{"route":"/my-posts","idx":17,"fp":"button|||← Back||","text":"← Back","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/","errors":[]}
+{"route":"/my-posts","idx":18,"fp":"button|||Edit Profile||","text":"Edit Profile","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/settings","errors":[]}
+{"route":"/my-posts","idx":19,"fp":"button||tab|Overview||","text":"Overview","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":20,"fp":"button|||New Update||","text":"New Update","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test/new","errors":[]}
+{"route":"/my-posts","idx":21,"fp":"button|||Latest||","text":"Latest","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":22,"fp":"button|||Hot||","text":"Hot","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":23,"fp":"div||button|Q\nqa_button_test\n@qa_button_test\n· just now\ncanary — auto-deleted\n[sentinel] dai|canary — auto-deleted|","text":"Q\nqa_button_test\n@qa_button_test\n· just now\ncanary — auto-deleted\n[sentinel] dai","ariaLabel":"canary — auto-deleted","href":"","tag":"div","status":"denied:denylist","errors":[]}
+{"route":"/my-posts","idx":24,"fp":"a|||Q\nqa_button_test||/u/qa_button_test","text":"Q\nqa_button_test","ariaLabel":"","href":"/u/qa_button_test","tag":"a","status":"link:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":25,"fp":"a|||@qa_button_test||/u/qa_button_test","text":"@qa_button_test","ariaLabel":"","href":"/u/qa_button_test","tag":"a","status":"link:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":26,"fp":"button|||0||","text":"0","ariaLabel":"","href":"","tag":"button","status":"fail:click→nav:/u/qa_button_test","errors":[],"clickError":"locator.click: Timeout 2500ms exceeded."}
+{"route":"/my-posts","idx":27,"fp":"button|||||","text":"","ariaLabel":"","href":"","tag":"button","status":"fail:click→nav:/u/qa_button_test","errors":[],"clickError":"locator.click: Timeout 2500ms exceeded."}
+{"route":"/my-posts","idx":28,"fp":"div||button|Q\nqa_button_test\n@qa_button_test\n· 1 day ago\ncanary — auto-deleted\n[sentinel] da|canary — auto-deleted|","text":"Q\nqa_button_test\n@qa_button_test\n· 1 day ago\ncanary — auto-deleted\n[sentinel] da","ariaLabel":"canary — auto-deleted","href":"","tag":"div","status":"denied:denylist","errors":[]}
+{"route":"/my-posts","idx":29,"fp":"a|||Q\nqa_button_test||/u/qa_button_test","text":"Q\nqa_button_test","ariaLabel":"","href":"/u/qa_button_test","tag":"a","status":"link:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":30,"fp":"a|||@qa_button_test||/u/qa_button_test","text":"@qa_button_test","ariaLabel":"","href":"/u/qa_button_test","tag":"a","status":"link:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":31,"fp":"button|||2||","text":"2","ariaLabel":"","href":"","tag":"button","status":"fail:click→nav:/u/qa_button_test","errors":[],"clickError":"locator.click: Timeout 2500ms exceeded."}
+{"route":"/my-posts","idx":32,"fp":"button|||||","text":"","ariaLabel":"","href":"","tag":"button","status":"fail:click→nav:/u/qa_button_test","errors":[],"clickError":"locator.click: Timeout 2500ms exceeded."}
+{"route":"/my-posts","idx":33,"fp":"div||button|Q\nqa_button_test\n@qa_button_test\n· 2 weeks ago\nQA automated test post — will be |QA automated test post — will be deleted|","text":"Q\nqa_button_test\n@qa_button_test\n· 2 weeks ago\nQA automated test post — will be ","ariaLabel":"QA automated test post — will be deleted","href":"","tag":"div","status":"denied:denylist","errors":[]}
+{"route":"/my-posts","idx":34,"fp":"a|||Q\nqa_button_test||/u/qa_button_test","text":"Q\nqa_button_test","ariaLabel":"","href":"/u/qa_button_test","tag":"a","status":"link:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":35,"fp":"a|||@qa_button_test||/u/qa_button_test","text":"@qa_button_test","ariaLabel":"","href":"/u/qa_button_test","tag":"a","status":"link:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":36,"fp":"button|||0||","text":"0","ariaLabel":"","href":"","tag":"button","status":"fail:click→nav:/u/qa_button_test","errors":[],"clickError":"locator.click: Timeout 2500ms exceeded."}
+{"route":"/my-posts","idx":37,"fp":"button|||||","text":"","ariaLabel":"","href":"","tag":"button","status":"fail:click→nav:/u/qa_button_test","errors":[],"clickError":"locator.click: Timeout 2500ms exceeded."}
+{"route":"/my-posts","idx":38,"fp":"a|||Rankings|Rankings|/","text":"Rankings","ariaLabel":"Rankings","href":"/","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/my-posts","idx":39,"fp":"a|||Market|Market|/market","text":"Market","ariaLabel":"Market","href":"/market","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/my-posts","idx":40,"fp":"a|||Groups|Groups|/groups","text":"Groups","ariaLabel":"Groups","href":"/groups","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/my-posts","idx":41,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/my-posts","idx":42,"fp":"a|||Me|Me|/settings","text":"Me","ariaLabel":"Me","href":"/settings","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/my-posts","idx":44,"fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"fail:click→nav:/u/qa_button_test","errors":[],"clickError":"locator.click: Timeout 2500ms exceeded."}
+{"route":"/my-posts","idx":45,"fp":"button||||Close|","text":"","ariaLabel":"Close","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":46,"fp":"button|||Continue with Google||","text":"Continue with Google","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/v3/signin/identifier","errors":[]}
+{"route":"/my-posts","idx":47,"fp":"button|||Email code||","text":"Email code","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":48,"fp":"button|||Sign in with Wallet||","text":"Sign in with Wallet","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/my-posts","idx":49,"fp":"a|||Terms of Service||/terms","text":"Terms of Service","ariaLabel":"","href":"/terms","tag":"a","status":"link:/terms","errors":[]}
+{"route":"/my-posts","idx":50,"fp":"a|||Privacy Policy||/privacy","text":"Privacy Policy","ariaLabel":"","href":"/privacy","tag":"a","status":"link:/privacy","errors":[]}
+{"route":"/my-posts","idx":51,"fp":"button|||×|Dismiss notification|","text":"×","ariaLabel":"Dismiss notification","href":"","tag":"button","status":"ok:clicked→nav:/u/qa_button_test","errors":[]}
+{"route":"/user-center","idx":0,"fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/user-center","idx":2,"fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/user-center","idx":3,"fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/user-center","idx":4,"fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
+{"route":"/user-center","idx":5,"fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
+{"route":"/user-center","idx":6,"fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
+{"route":"/user-center","idx":7,"fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled","errors":[]}
+{"route":"/user-center","idx":8,"fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/user-center","idx":9,"fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/user-center","idx":10,"fp":"button||||Light Mode|","text":"","ariaLabel":"Light Mode","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/user-center","idx":11,"fp":"button||||Messages|","text":"","ariaLabel":"Messages","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/user-center","idx":12,"fp":"button|||Q|User menu|","text":"Q","ariaLabel":"User menu","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/user-center","idx":13,"fp":"button||button|Sign In|Sign In|","text":"Sign In","ariaLabel":"Sign In","href":"","tag":"button","status":"ok:clicked→nav:/","errors":[]}
+{"route":"/user-center","idx":14,"fp":"a|||Market|Market|/market","text":"Market","ariaLabel":"Market","href":"/market","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/user-center","idx":15,"fp":"a|||Groups|Groups|/groups","text":"Groups","ariaLabel":"Groups","href":"/groups","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/user-center","idx":16,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/user-center","idx":17,"fp":"a|||Me|Me|/settings","text":"Me","ariaLabel":"Me","href":"/settings","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/user-center","idx":19,"fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/claim","idx":0,"fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/claim","idx":2,"fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/claim","idx":3,"fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
+{"route":"/claim","idx":4,"fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
+{"route":"/claim","idx":5,"fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
+{"route":"/claim","idx":6,"fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
+{"route":"/claim","idx":7,"fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled","errors":[]}
+{"route":"/claim","idx":8,"fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
+{"route":"/claim","idx":9,"fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/claim","idx":10,"fp":"button||||System Theme|","text":"","ariaLabel":"System Theme","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/claim","idx":11,"fp":"button||||Messages|","text":"","ariaLabel":"Messages","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/claim","idx":12,"fp":"button|||Q|User menu|","text":"Q","ariaLabel":"User menu","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/claim","idx":13,"fp":"input|text||||","text":"","ariaLabel":"","href":"","tag":"input","status":"ok:filled","errors":[]}
+{"route":"/claim","idx":14,"fp":"button|||What is claiming a profile?\n▼||","text":"What is claiming a profile?\n▼","ariaLabel":"","href":"","tag":"button","status":"denied:write-deny","errors":[]}
+{"route":"/claim","idx":15,"fp":"button|||How do I verify my identity?\n▼||","text":"How do I verify my identity?\n▼","ariaLabel":"","href":"","tag":"button","status":"denied:write-deny","errors":[]}
+{"route":"/claim","idx":16,"fp":"button|||Which exchanges are supported?\n▼||","text":"Which exchanges are supported?\n▼","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/claim","idx":17,"fp":"button|||Is it safe to provide my API key?\n▼||","text":"Is it safe to provide my API key?\n▼","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/claim","idx":18,"fp":"a|||Rankings|Rankings|/","text":"Rankings","ariaLabel":"Rankings","href":"/","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/claim","idx":19,"fp":"a|||Market|Market|/market","text":"Market","ariaLabel":"Market","href":"/market","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/claim","idx":20,"fp":"a|||Groups|Groups|/groups","text":"Groups","ariaLabel":"Groups","href":"/groups","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/claim","idx":21,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/claim","idx":22,"fp":"a|||Me|Me|/settings","text":"Me","ariaLabel":"Me","href":"/settings","tag":"a","status":"skip:hidden","errors":[]}
+{"route":"/claim","idx":24,"fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked","errors":[]}
+{"route":"/claim","idx":25,"fp":"button||||Close|","text":"","ariaLabel":"Close","href":"","tag":"button","status":"skip:vanished","errors":[]}
+{"route":"/claim","idx":26,"fp":"button|||Continue with Google||","text":"Continue with Google","ariaLabel":"","href":"","tag":"button","status":"skip:vanished","errors":[]}
+{"route":"/claim","idx":27,"fp":"button|||Email code||","text":"Email code","ariaLabel":"","href":"","tag":"button","status":"skip:vanished","errors":[]}
+{"route":"/claim","idx":28,"fp":"button|||Sign in with Wallet||","text":"Sign in with Wallet","ariaLabel":"","href":"","tag":"button","status":"skip:vanished","errors":[]}
+{"route":"/claim","idx":29,"fp":"a|||Terms of Service||/terms","text":"Terms of Service","ariaLabel":"","href":"/terms","tag":"a","status":"link:/terms","errors":[]}
+{"route":"/claim","idx":30,"fp":"a|||Privacy Policy||/privacy","text":"Privacy Policy","ariaLabel":"","href":"/privacy","tag":"a","status":"link:/privacy","errors":[]}
+{"route":"/claim","idx":31,"fp":"button|||×|Dismiss notification|","text":"×","ariaLabel":"Dismiss notification","href":"","tag":"button","status":"skip:vanished","errors":[]}
