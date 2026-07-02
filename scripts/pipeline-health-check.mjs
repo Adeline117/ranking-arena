@@ -48,7 +48,7 @@ const results = {
   errorHandling: [],
   dataFreshness: [],
   apiReachability: [],
-  suggestions: []
+  suggestions: [],
 }
 
 // ============================================
@@ -57,12 +57,25 @@ const results = {
 
 const REQUIRED_PATTERNS = [
   { name: 'try-catch', pattern: /try\s*\{[\s\S]*catch\s*\(/, required: true },
-  { name: 'Sentry/logger', pattern: /captureMessage|captureException|logger\.(error|warn)/, required: true },
+  {
+    name: 'Sentry/logger',
+    pattern: /captureMessage|captureException|logger\.(error|warn)/,
+    required: true,
+  },
   { name: 'rate limiting', pattern: /sleep|delay|setTimeout|rateLim/, required: false },
   // fetchJsonWithRetry / fetchWithFallback / fetchWithVpsFallback from shared.ts provide retry
-  { name: 'retry logic', pattern: /retry|attempt|maxRetries|fetchJsonWithRetry|fetchWithFallback|fetchWithVpsFallback|withRetry/, required: false },
+  {
+    name: 'retry logic',
+    pattern:
+      /retry|attempt|maxRetries|fetchJsonWithRetry|fetchWithFallback|fetchWithVpsFallback|withRetry/,
+    required: false,
+  },
   // config-driven-fetcher and batch-fetch-traders provide circuit breaker at infrastructure level
-  { name: 'circuit breaker', pattern: /circuitBreaker|failureCount|isOpen|createConfigDrivenFetcher|getInlineFetcher/, required: false },
+  {
+    name: 'circuit breaker',
+    pattern: /circuitBreaker|failureCount|isOpen|createConfigDrivenFetcher|getInlineFetcher/,
+    required: false,
+  },
 ]
 
 function checkFetcherErrorHandling() {
@@ -72,8 +85,44 @@ function checkFetcherErrorHandling() {
   // Skip non-fetcher utility files (DB ops, math calculations, type definitions, config helpers)
   // Skip utility files: DB ops, math, types, configs, enrichment sub-modules (called by enrichment-runner.ts with withRetry)
   // Skip ALL enrichment-*.ts sub-modules — they are called by enrichment-runner.ts with withRetry/circuit breaker
-  const SKIP_FILES = new Set(['index.ts', 'shared.ts', 'enrichment.ts', 'enrichment-types.ts', 'enrichment-db.ts', 'enrichment-metrics.ts', 'enrichment-binance.ts', 'enrichment-binance-spot.ts', 'enrichment-bybit.ts', 'enrichment-bitget.ts', 'enrichment-bitfinex.ts', 'enrichment-bingx.ts', 'enrichment-blofin.ts', 'enrichment-dex.ts', 'enrichment-htx.ts', 'enrichment-okx.ts', 'enrichment-bitunix.ts', 'enrichment-btcc.ts', 'enrichment-coinex.ts', 'enrichment-copin.ts', 'enrichment-drift.ts', 'enrichment-dydx.ts', 'enrichment-etoro.ts', 'enrichment-gateio.ts', 'enrichment-jupiter.ts', 'enrichment-mexc.ts', 'enrichment-onchain.ts', 'enrichment-phemex.ts', 'enrichment-toobit.ts', 'enrichment-wallet.ts', 'enrichment-xt.ts', 'exchange-configs.ts', 'scraper-config.ts', 'verify-registry.ts', 'vertex.ts'])
-  const files = readdirSync(fetcherDir).filter(f => f.endsWith('.ts') && !SKIP_FILES.has(f))
+  const SKIP_FILES = new Set([
+    'index.ts',
+    'shared.ts',
+    'enrichment.ts',
+    'enrichment-types.ts',
+    'enrichment-db.ts',
+    'enrichment-metrics.ts',
+    'enrichment-binance.ts',
+    'enrichment-binance-spot.ts',
+    'enrichment-bybit.ts',
+    'enrichment-bitget.ts',
+    'enrichment-bitfinex.ts',
+    'enrichment-bingx.ts',
+    'enrichment-blofin.ts',
+    'enrichment-dex.ts',
+    'enrichment-htx.ts',
+    'enrichment-okx.ts',
+    'enrichment-bitunix.ts',
+    'enrichment-btcc.ts',
+    'enrichment-coinex.ts',
+    'enrichment-copin.ts',
+    'enrichment-drift.ts',
+    'enrichment-dydx.ts',
+    'enrichment-etoro.ts',
+    'enrichment-gateio.ts',
+    'enrichment-jupiter.ts',
+    'enrichment-mexc.ts',
+    'enrichment-onchain.ts',
+    'enrichment-phemex.ts',
+    'enrichment-toobit.ts',
+    'enrichment-wallet.ts',
+    'enrichment-xt.ts',
+    'exchange-configs.ts',
+    'scraper-config.ts',
+    'verify-registry.ts',
+    'vertex.ts',
+  ])
+  const files = readdirSync(fetcherDir).filter((f) => f.endsWith('.ts') && !SKIP_FILES.has(f))
 
   // Read index.ts to check which fetchers are registered (and thus get retry wrapper)
   const indexContent = readFileSync(join(fetcherDir, 'index.ts'), 'utf-8')
@@ -103,8 +152,8 @@ function checkFetcherErrorHandling() {
       checks.push({ ...pattern, found: hasPattern })
     }
 
-    const requiredMissing = checks.filter(c => c.required && !c.found)
-    const optionalMissing = checks.filter(c => !c.required && !c.found)
+    const requiredMissing = checks.filter((c) => c.required && !c.found)
+    const optionalMissing = checks.filter((c) => !c.required && !c.found)
 
     let status = 'PASS'
     if (requiredMissing.length > 0) {
@@ -121,7 +170,7 @@ function checkFetcherErrorHandling() {
     console.log(`${icon} ${platform.padEnd(20)} ${status}`)
 
     if (status !== 'PASS') {
-      const missing = [...requiredMissing, ...optionalMissing].map(c => c.name).join(', ')
+      const missing = [...requiredMissing, ...optionalMissing].map((c) => c.name).join(', ')
       console.log(`   Missing: ${missing}`)
       results.errorHandling.push({ platform, status, missing })
     }
@@ -143,15 +192,27 @@ function checkFetcherErrorHandling() {
 // plus platforms that exist in DB but compute-leaderboard ignores them.
 const FRESHNESS_SKIP_PLATFORMS = new Set([
   // Dead/blocked
-  'perpetual_protocol', 'whitebit', 'bitmart', 'btse', 'vertex', 'apex_pro',
-  'rabbitx', 'lbank', 'bitget_spot',
+  'perpetual_protocol',
+  'whitebit',
+  'bitmart',
+  'btse',
+  'vertex',
+  'apex_pro',
+  'rabbitx',
+  'lbank',
+  'bitget_spot',
   // Excluded from leaderboard_ranks but still has scattered snapshot rows
   'web3_bot',
   // Mac Mini only — pipeline-health-check.mjs has no visibility into
   // residential-IP scrapers so they always look stale from this script.
-  'phemex', 'blofin', 'kucoin',
+  'phemex',
+  'blofin',
+  'kucoin',
   // Not in the active fetch groups currently
-  'paradex', 'kwenta', 'mux', 'synthetix',
+  'paradex',
+  'kwenta',
+  'mux',
+  'synthetix',
 ])
 
 async function checkDataFreshness() {
@@ -167,24 +228,24 @@ async function checkDataFreshness() {
 
   try {
     // Get latest snapshot for each platform
-    const res = await fetch(
-      `${SUPABASE_URL}/rest/v1/rpc/get_platform_freshness`,
-      {
-        method: 'POST',
-        headers: {
-          'apikey': SUPABASE_KEY,
-          'Authorization': `Bearer ${SUPABASE_KEY}`,
-          'Content-Type': 'application/json'
-        },
-        body: '{}'
-      }
-    )
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/get_platform_freshness`, {
+      method: 'POST',
+      headers: {
+        apikey: SUPABASE_KEY,
+        Authorization: `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: '{}',
+    })
 
     if (res.ok) {
       // RPC success — use the structured response
       const rpcData = await res.json()
       const now = Date.now()
-      let freshCount = 0, staleCount = 0, criticalCount = 0, skippedCount = 0
+      let freshCount = 0,
+        staleCount = 0,
+        criticalCount = 0,
+        skippedCount = 0
 
       for (const row of rpcData) {
         if (FRESHNESS_SKIP_PLATFORMS.has(row.platform)) {
@@ -199,38 +260,75 @@ async function checkDataFreshness() {
           status = 'CRITICAL'
           icon = '🔴'
           criticalCount++
-          results.dataFreshness.push({ platform: row.platform, status, ageHours: Math.round(ageHours) })
+          results.dataFreshness.push({
+            platform: row.platform,
+            status,
+            ageHours: Math.round(ageHours),
+          })
         } else if (ageHours >= STALE_HOURS) {
           status = 'STALE'
           icon = '🟡'
           staleCount++
-          results.dataFreshness.push({ platform: row.platform, status, ageHours: Math.round(ageHours) })
+          results.dataFreshness.push({
+            platform: row.platform,
+            status,
+            ageHours: Math.round(ageHours),
+          })
         } else {
           freshCount++
         }
 
-        console.log(`${icon} ${row.platform.padEnd(20)} ${Math.round(ageHours)}h ago  (${row.trader_count} traders)`)
+        console.log(
+          `${icon} ${row.platform.padEnd(20)} ${Math.round(ageHours)}h ago  (${row.trader_count} traders)`
+        )
       }
 
-      console.log(`\n总计: ${freshCount} 新鲜, ${staleCount} 陈旧, ${criticalCount} 严重${skippedCount > 0 ? `, ${skippedCount} 已跳过(dead/mac-mini)` : ''}`)
+      console.log(
+        `\n总计: ${freshCount} 新鲜, ${staleCount} 陈旧, ${criticalCount} 严重${skippedCount > 0 ? `, ${skippedCount} 已跳过(dead/mac-mini)` : ''}`
+      )
       return { freshCount, staleCount, criticalCount }
     } else {
       // Fallback: Query each known platform's latest snapshot individually
       // The old limit=500 approach only captured 2-3 platforms
       const KNOWN_PLATFORMS = [
-        'binance_futures', 'binance_spot', 'binance_web3',
-        'bybit', 'bybit_spot', 'okx_futures', 'okx_spot', 'okx_web3',
-        'bitget_futures', 'hyperliquid', 'gmx', 'bitunix',
-        'gains', 'htx_futures', 'bitfinex', 'coinex',
-        'mexc', 'bingx', 'bingx_spot', 'gateio', 'btcc',
-        'drift', 'jupiter_perps', 'aevo', 'dydx',
-        'web3_bot', 'toobit', 'xt', 'etoro',
-        'kucoin', 'weex', 'blofin', 'phemex'
+        'binance_futures',
+        'binance_spot',
+        'binance_web3',
+        'bybit',
+        'bybit_spot',
+        'okx_futures',
+        'okx_spot',
+        'okx_web3',
+        'bitget_futures',
+        'hyperliquid',
+        'gmx',
+        'bitunix',
+        'gains',
+        'htx_futures',
+        'bitfinex',
+        'coinex',
+        'mexc',
+        'bingx',
+        'bingx_spot',
+        'gateio',
+        'btcc',
+        'drift',
+        'jupiter_perps',
+        'aevo',
+        'dydx',
+        'web3_bot',
+        'toobit',
+        'xt',
+        'etoro',
+        'kucoin',
+        'weex',
+        'blofin',
+        'phemex',
       ]
 
       // Fetch latest timestamp per platform in parallel (one row each).
       // Skip dead/mac-mini-only platforms — they always look stale from this script.
-      const ACTIVE_PLATFORMS = KNOWN_PLATFORMS.filter(p => !FRESHNESS_SKIP_PLATFORMS.has(p))
+      const ACTIVE_PLATFORMS = KNOWN_PLATFORMS.filter((p) => !FRESHNESS_SKIP_PLATFORMS.has(p))
       const platformResults = await Promise.all(
         ACTIVE_PLATFORMS.map(async (p) => {
           try {
@@ -238,14 +336,16 @@ async function checkDataFreshness() {
               `${SUPABASE_URL}/rest/v1/trader_snapshots_v2?select=platform,as_of_ts&platform=eq.${p}&order=as_of_ts.desc&limit=1`,
               {
                 headers: {
-                  'apikey': SUPABASE_KEY,
-                  'Authorization': `Bearer ${SUPABASE_KEY}`,
-                }
+                  apikey: SUPABASE_KEY,
+                  Authorization: `Bearer ${SUPABASE_KEY}`,
+                },
               }
             )
             const rows = await r.json()
             return rows[0] || null
-          } catch { return null }
+          } catch {
+            return null
+          }
         })
       )
 
@@ -257,7 +357,9 @@ async function checkDataFreshness() {
       }
 
       const now = Date.now()
-      let freshCount = 0, staleCount = 0, criticalCount = 0
+      let freshCount = 0,
+        staleCount = 0,
+        criticalCount = 0
 
       for (const [platform, captured_at] of Object.entries(latestByPlatform)) {
         const ageHours = (now - new Date(captured_at).getTime()) / (1000 * 60 * 60)
@@ -290,6 +392,76 @@ async function checkDataFreshness() {
 }
 
 // ============================================
+// 2b. bot_snapshots 新鲜度哨兵（/rankings/bots）
+// ============================================
+//
+// 背景（2026-07-02 审计）：bot_snapshots 全仓库只有读取方（app/api/bots/*），
+// 没有任何写入方/cron —— 数据 2026-02-11 一次性灌入后再未刷新，页面停更近
+// 5 个月无人发现。此哨兵让停更可见，防止再次静默腐烂。
+//
+// 注意：报 🟡 WARN + 建议，不翻 exit code —— 没有可修的 fetcher（重建采集
+// 应走 worker/ingest 通道 vs 下线页面，待产品决策），恒 CRITICAL 会让脚本
+// 永远 exit(1)、掩盖其他新增严重问题。决策落地后再收紧为 CRITICAL。
+
+async function checkBotSnapshotsFreshness() {
+  console.log('\n=== 2b. bot_snapshots 新鲜度哨兵 (/rankings/bots) ===\n')
+
+  if (!SUPABASE_URL || !SUPABASE_KEY) {
+    console.log('跳过：未配置 Supabase 环境变量')
+    return
+  }
+
+  const STALE_DAYS = 7
+
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/bot_snapshots?select=captured_at&order=captured_at.desc&limit=1`,
+      {
+        headers: {
+          apikey: SUPABASE_KEY,
+          Authorization: `Bearer ${SUPABASE_KEY}`,
+        },
+      }
+    )
+
+    if (!res.ok) {
+      console.log(`⚠️  bot_snapshots 查询失败 (HTTP ${res.status}) — 表可能不存在或权限问题`)
+      return
+    }
+
+    const rows = await res.json()
+    if (!Array.isArray(rows) || rows.length === 0) {
+      console.log('⚪ bot_snapshots 无数据（页面应展示空态）')
+      return
+    }
+
+    const ageDays = Math.floor(
+      (Date.now() - new Date(rows[0].captured_at).getTime()) / (1000 * 60 * 60 * 24)
+    )
+
+    if (ageDays >= STALE_DAYS) {
+      console.log(`🟡 bot_snapshots 停更 ${ageDays} 天（最新 captured_at: ${rows[0].captured_at}）`)
+      console.log('   /rankings/bots 正在展示过期快照（页面已有 stale 警示横幅兜底）')
+      results.dataFreshness.push({
+        platform: 'bot_snapshots',
+        status: 'STALE',
+        ageHours: ageDays * 24,
+      })
+      results.suggestions.push({
+        platform: 'bot_snapshots',
+        priority: 'MEDIUM',
+        action: `/rankings/bots 数据停更 ${ageDays} 天 — 无写入方。待产品决策：重建采集（走 worker/ingest 通道，勿新增 Vercel cron）或下线该页`,
+        command: '# 产品决策后执行：重建 bot_snapshots 采集 job 或下线 /rankings/bots',
+      })
+    } else {
+      console.log(`🟢 bot_snapshots 新鲜（${ageDays} 天前）`)
+    }
+  } catch (err) {
+    console.error('bot_snapshots 哨兵检查失败:', err.message)
+  }
+}
+
+// ============================================
 // 3. 生成修复建议
 // ============================================
 
@@ -303,7 +475,7 @@ function generateSuggestions() {
         platform: item.platform,
         priority: 'HIGH',
         action: `添加 try-catch 和 Sentry 日志到 ${item.platform}.ts`,
-        command: `claude -p "在 lib/cron/fetchers/${item.platform}.ts 中添加标准错误处理模板"`
+        command: `claude -p "在 lib/cron/fetchers/${item.platform}.ts 中添加标准错误处理模板"`,
       })
     }
   }
@@ -315,7 +487,7 @@ function generateSuggestions() {
         platform: item.platform,
         priority: 'HIGH',
         action: `修复 ${item.platform} 数据抓取（已停止 ${item.ageHours}h）`,
-        command: `/fix-pipeline ${item.platform}`
+        command: `/fix-pipeline ${item.platform}`,
       })
     }
   }
@@ -326,8 +498,8 @@ function generateSuggestions() {
   } else {
     console.log(`发现 ${results.suggestions.length} 个待修复项：\n`)
 
-    const highPriority = results.suggestions.filter(s => s.priority === 'HIGH')
-    const medPriority = results.suggestions.filter(s => s.priority === 'MEDIUM')
+    const highPriority = results.suggestions.filter((s) => s.priority === 'HIGH')
+    const medPriority = results.suggestions.filter((s) => s.priority === 'MEDIUM')
 
     if (highPriority.length > 0) {
       console.log('🔴 高优先级:')
@@ -366,11 +538,15 @@ function generateFixScript() {
 
 set -e
 
-${results.suggestions.map(s => `
+${results.suggestions
+  .map(
+    (s) => `
 # 修复 ${s.platform}
 echo "修复 ${s.platform}..."
 ${s.command}
-`).join('\n')}
+`
+  )
+  .join('\n')}
 
 echo "修复完成！"
 `
@@ -400,6 +576,8 @@ async function main() {
 
   await checkDataFreshness()
 
+  await checkBotSnapshotsFreshness()
+
   generateSuggestions()
 
   if (fixMode) {
@@ -407,15 +585,15 @@ async function main() {
   }
 
   // 返回退出码
-  const criticalCount = results.dataFreshness.filter(d => d.status === 'CRITICAL').length
-  const failCount = results.errorHandling.filter(e => e.status === 'FAIL').length
+  const criticalCount = results.dataFreshness.filter((d) => d.status === 'CRITICAL').length
+  const failCount = results.errorHandling.filter((e) => e.status === 'FAIL').length
 
   if (criticalCount > 0 || failCount > 0) {
     process.exit(1)
   }
 }
 
-main().catch(err => {
+main().catch((err) => {
   console.error('健康检查失败:', err)
   process.exit(1)
 })
