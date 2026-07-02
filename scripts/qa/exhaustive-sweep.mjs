@@ -410,12 +410,25 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
         record.status = 'skip:vanished'
         counters.skipped++
       } else {
-        // A click timeout (e.g. off-screen a11y skip-links) is an interaction
-        // failure, NOT an app error — keep it in its own field so it doesn't
-        // pollute the real-error signal.
-        record.status = 'fail:click'
-        record.clickError = summarizeClickError(e)
-        counters.failed++
+        // Still attached but the click failed — on those same live surfaces the
+        // element can be mid-relayout ("element is not stable") exactly when the
+        // click lands. Retry ONCE: the locator re-resolves against the settled
+        // layout, so only a repeat failure is a genuine fail:click. (Timeout
+        // fires during Playwright's pre-dispatch actionability checks, so the
+        // first click never landed — the retry cannot double-fire an action.)
+        try {
+          await el.click({ timeout: 2500 })
+          await page.waitForTimeout(500)
+          record.status = 'ok:clicked-retry'
+          counters.clicked++
+        } catch (e2) {
+          // A click timeout (e.g. off-screen a11y skip-links) is an interaction
+          // failure, NOT an app error — keep it in its own field so it doesn't
+          // pollute the real-error signal.
+          record.status = 'fail:click'
+          record.clickError = summarizeClickError(e2)
+          counters.failed++
+        }
       }
     }
 

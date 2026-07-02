@@ -384,11 +384,15 @@ export default function SectorTreemap({
                 key={node.name}
                 role="button"
                 tabIndex={0}
-                // Stable locator anchor: aria-label embeds live spot numbers that
-                // tick every 30s (useMarketSpot REFETCH_REALTIME), so label-based
-                // selectors go stale mid-session. Tests/scanners must target this.
+                // Stable locator anchor for tests/scanners. The accessible NAME
+                // stays stable too (name + category only) — live spot numbers
+                // tick every 30s (useMarketSpot REFETCH_REALTIME), and putting
+                // them in aria-label made the SR focus name + label-based
+                // selectors churn mid-session. Volatile numbers live in the
+                // aria-describedby sr-only span below instead.
                 data-testid={`treemap-tile-${node.name}`}
-                aria-label={`${node.name} (${node.category}): ${node.changePct >= 0 ? '+' : ''}${node.changePct.toFixed(1)}%, ${t('sectorTreemapMCap')} $${(node.marketCap / 1e9).toFixed(1)}B`}
+                aria-label={`${node.name} (${node.category})`}
+                aria-describedby={`treemap-desc-${node.name}`}
                 onClick={() => onSectorClick?.(node.category)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -428,6 +432,12 @@ export default function SectorTreemap({
                   padding: 2,
                 }}
               >
+                {/* Volatile live numbers exposed as accessible DESCRIPTION
+                    (not name) so the tile's name stays stable across the 30s
+                    spot refetch — see aria-describedby on the tile div. */}
+                <span id={`treemap-desc-${node.name}`} className="sr-only">
+                  {`${node.changePct >= 0 ? '+' : ''}${node.changePct.toFixed(1)}%, ${t('sectorTreemapMCap')} $${(node.marketCap / 1e9).toFixed(1)}B`}
+                </span>
                 {showName && (
                   <span
                     style={{
