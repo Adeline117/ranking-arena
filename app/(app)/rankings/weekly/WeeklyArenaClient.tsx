@@ -328,6 +328,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
   const [sortKey, setSortKey] = useState<SortKey>('roi')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [copied, setCopied] = useState(false)
+  const [copyFailed, setCopyFailed] = useState(false)
 
   // Canonical pooled ranking is by ROI — podium always reflects that, regardless
   // of how the user re-sorts the explorable table below.
@@ -409,11 +410,20 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
       }
     }
     try {
-      await nav?.clipboard?.writeText(url)
+      // Guard BEFORE awaiting: `nav?.clipboard?.writeText` short-circuits to
+      // undefined (no throw) when the Clipboard API is missing, which would
+      // falsely report success below.
+      if (!nav?.clipboard?.writeText) throw new Error('Clipboard API unavailable')
+      await nav.clipboard.writeText(url)
+      setCopyFailed(false)
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
-    } catch {
-      // clipboard blocked (insecure context / permissions) — nothing to do
+    } catch (err) {
+      // clipboard blocked (insecure context / permissions) — surface it on the button
+      console.warn('[WeeklyArena] copy link failed:', err)
+      setCopied(false)
+      setCopyFailed(true)
+      setTimeout(() => setCopyFailed(false), 2000)
     }
   }
 
@@ -460,14 +470,14 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               fontSize: tokens.typography.fontSize.sm,
               fontWeight: 600,
-              color: 'var(--color-text-secondary)',
+              color: copyFailed ? 'var(--color-error)' : 'var(--color-text-secondary)',
               background: 'transparent',
               border: '1px solid var(--color-border-primary)',
               borderRadius: tokens.radius.md,
               cursor: 'pointer',
             }}
           >
-            {copied ? t('linkCopied') : t('share')}
+            {copied ? t('linkCopied') : copyFailed ? t('copyFailed') : t('share')}
           </button>
         )}
       </Box>
