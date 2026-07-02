@@ -82,7 +82,7 @@ interface SecuritySectionProps {
 }
 
 export const SecuritySection = React.memo(function SecuritySection(props: SecuritySectionProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const { showToast } = useToast()
   const newPasswordValidation = validatePassword(props.newPassword, t)
   const confirmPasswordValidation = validatePasswordMatch(
@@ -682,11 +682,11 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                   </Text>
                   <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
                     <Text size="xs" color="tertiary">
-                      {t('passkeyAddedOn')} {formatTimeAgo(passkey.createdAt)}
+                      {t('passkeyAddedOn')} {formatTimeAgo(passkey.createdAt, language)}
                     </Text>
                     {passkey.lastUsedAt && (
                       <Text size="xs" color="tertiary">
-                        {t('passkeyLastUsed')} {formatTimeAgo(passkey.lastUsedAt)}
+                        {t('passkeyLastUsed')} {formatTimeAgo(passkey.lastUsedAt, language)}
                       </Text>
                     )}
                   </Box>
@@ -775,7 +775,7 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
                     )}
                     {session.lastActiveAt && (
                       <Text size="xs" color="tertiary">
-                        {formatTimeAgo(session.lastActiveAt)}
+                        {formatTimeAgo(session.lastActiveAt, language)}
                       </Text>
                     )}
                   </Box>

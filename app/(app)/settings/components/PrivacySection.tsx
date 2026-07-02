@@ -31,7 +31,7 @@ interface PrivacySectionProps {
 }
 
 export const PrivacySection = React.memo(function PrivacySection(props: PrivacySectionProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
 
   return (
     <SectionCard id="privacy" title={t('privacySection')} description={t('dmPermissions')}>
@@ -208,7 +208,7 @@ export const PrivacySection = React.memo(function PrivacySection(props: PrivacyS
                       {blockedUser.handle || t('unknownUser')}
                     </Text>
                     <Text size="xs" color="tertiary">
-                      {t('blockedAt')} {formatTimeAgo(blockedUser.createdAt)}
+                      {t('blockedAt')} {formatTimeAgo(blockedUser.createdAt, language)}
                     </Text>
                   </Box>
                 </Box>

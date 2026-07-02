@@ -8,6 +8,7 @@ import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { CommentIcon, ThumbsUpIcon, ThumbsDownIcon } from '@/app/components/ui/icons'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { getLanguage } from '@/lib/i18n'
 import type { Post, Comment } from '../types'
 
 const ARENA_PURPLE = tokens.colors.accent.brand
@@ -406,7 +407,7 @@ export function PostDetailModal({
                       </span>
                     )}
                     <span style={{ fontSize: 11, color: 'var(--color-text-tertiary)' }}>
-                      {formatTimeAgo(comment.created_at)}
+                      {formatTimeAgo(comment.created_at, getLanguage())}
                     </span>
                   </div>
                   <div

@@ -5,6 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { Box, Text } from '@/app/components/base'
 import { formatTimeAgo } from '@/lib/utils/date'
+import { getLanguage } from '@/lib/i18n'
 
 interface BookmarkedPost {
   id: string
@@ -85,7 +86,7 @@ export default function PostDetailModal({
             </Link>
           )}
           <Text size="sm" color="tertiary">
-            {formatTimeAgo(post.created_at)}
+            {formatTimeAgo(post.created_at, getLanguage())}
           </Text>
         </Box>
 
