@@ -9,18 +9,54 @@ import {
 } from '../legacy-adapter'
 
 describe('serving → legacy adapter', () => {
-  it('maps positions records to PortfolioItem (value = mark × size, direction normalized)', () => {
+  it('maps positions records to PortfolioItem — invested/pnl are PERCENTAGES, not USD', () => {
     const [item] = positionsToPortfolio([
       { symbol: 'BTCUSDT', side: 'SELL', size: 2, mark_price: 100, unrealized_pnl: -5, margin: 40 },
     ])
     expect(item).toEqual({
       market: 'BTCUSDT',
       direction: 'short',
-      invested: 40,
-      pnl: -5,
+      invested: 100, // sole position → 100% of Σ|notional|
+      pnl: -12.5, // no roe → unrealized_pnl / margin × 100
       value: 200,
       price: 100,
     })
+  })
+
+  it('prefers exchange-reported roe for pnl%, weights by |notional| share', () => {
+    const items = positionsToPortfolio([
+      {
+        symbol: 'BTCUSDT',
+        side: 'short',
+        size: -1,
+        mark_price: 60000,
+        notional: -60000,
+        margin: 10000,
+        unrealized_pnl: 10500,
+        roe: 105.01,
+      },
+      {
+        // cross-margin: margin 0, roe null → pnl% falls back to upnl/|notional|
+        symbol: 'ETHUSDT',
+        side: 'short',
+        size: -10,
+        mark_price: 2000,
+        notional: -20000,
+        margin: 0,
+        unrealized_pnl: 400,
+        roe: null,
+      },
+    ])
+    expect(items[0].pnl).toBe(105.01)
+    expect(items[0].invested).toBe(75) // 60k / 80k
+    expect(items[1].pnl).toBeCloseTo(2, 5) // 400 / 20000 × 100
+    expect(items[1].invested).toBe(25) // 20k / 80k
+  })
+
+  it('NaN-collapses pnl%/weight% when margin, roe AND notional are all absent', () => {
+    const [item] = positionsToPortfolio([{ symbol: 'X', side: 'long', unrealized_pnl: 5 }])
+    expect(Number.isNaN(item.pnl)).toBe(true) // view renders '—'
+    expect(Number.isNaN(item.invested)).toBe(true)
   })
 
   it('maps position_history records, deriving pnlPct from notional when absent', () => {
