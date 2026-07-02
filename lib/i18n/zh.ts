@@ -2472,6 +2472,8 @@ const zh = {
   memberCount: '成员数',
   membersUnit: '位成员',
   groupMembers: '小组成员',
+  viewGroupInfoAria: '查看群组信息与规则',
+  viewGroupMembersAria: '查看成员列表',
 
   // 交易员页面 i18n - TraderPageV2, TraderRefreshButton, TraderFeed 等
   aumLabel: '管理资金',

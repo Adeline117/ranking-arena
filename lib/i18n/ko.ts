@@ -2442,6 +2442,8 @@ const ko = {
   memberCount: '멤버',
   membersUnit: '명',
   groupMembers: '멤버',
+  viewGroupInfoAria: '그룹 정보 및 규칙 보기',
+  viewGroupMembersAria: '멤버 목록 보기',
 
   // Trader page i18n
   aumLabel: 'AUM',

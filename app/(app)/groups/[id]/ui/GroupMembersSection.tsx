@@ -225,10 +225,20 @@ export function GroupInfoModal({
           <InfoRow label={t('memberCount')}>
             <Text
               size="md"
+              role="button"
+              tabIndex={0}
+              aria-label={`${group.member_count || 0} ${t('membersUnit')} — ${t('viewGroupMembersAria')}`}
               style={{ cursor: 'pointer', textDecoration: 'underline' }}
               onClick={() => {
                 onClose()
                 onShowMembers()
+              }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  onClose()
+                  onShowMembers()
+                }
               }}
             >
               {group.member_count || 0} {t('membersUnit')}

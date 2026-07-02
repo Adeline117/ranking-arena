@@ -2337,6 +2337,8 @@ const ja = {
   memberCount: 'メンバー数',
   membersUnit: '人',
   groupMembers: 'メンバー',
+  viewGroupInfoAria: 'グループ情報とルールを表示',
+  viewGroupMembersAria: 'メンバー一覧を表示',
 
   aumLabel: 'AUM',
   verifiedAccounts: '認証済みアカウント',
