@@ -6,6 +6,7 @@ import HomeHeroSSR from './components/home/HomeHeroSSR'
 import RankingControls from './components/home/RankingControls'
 import TopNav from './components/layout/TopNav'
 import HomePageLoader from './components/home/HomePageLoader'
+import { SkipLink } from './components/Providers/Accessibility'
 import { JsonLd } from './components/Providers/JsonLd'
 import { PageErrorBoundary } from './components/utils/ErrorBoundary'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -88,55 +89,62 @@ export default async function Page() {
   ])
 
   return (
-    <main id="main-content">
+    <>
+      {/* First focusable element on the page — lets keyboard/SR users skip the
+          nav. SkipLink uses useLanguage()'s hydration-safe fallback, so it works
+          without Providers (homepage deliberately omits them for LCP). */}
+      <SkipLink targetId="main-content" />
       <JsonLd data={organizationJsonLd} />
 
-      {/* SSR TopNav — hidden when Phase 2 mounts (HomePage renders its own) */}
+      {/* SSR TopNav — stays visible permanently (see HomePage.tsx). Outside
+          <main> so the skip link actually skips it in the tab order. */}
       <div id="ssr-topnav">
         <TopNav />
       </div>
 
-      {/* WelcomeBanner moved to HomePageLoader Phase 2 (client-only) */}
+      <main id="main-content" tabIndex={-1}>
+        {/* WelcomeBanner moved to HomePageLoader Phase 2 (client-only) */}
 
-      {/* SSR Hero — stays visible permanently. Outside #ssr-ranking-table so
+        {/* SSR Hero — stays visible permanently. Outside #ssr-ranking-table so
           Phase 2 hiding the table doesn't affect it. Constrained to center
           column width via max-width + margin for alignment with three-col grid. */}
-      <div id="ssr-hero-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '0 20px' }}>
-        <HomeHeroSSR
-          traderCount={heroStats?.traderCount}
-          exchangeCount={heroStats?.exchangeCount}
-        />
-      </div>
+        <div id="ssr-hero-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '0 20px' }}>
+          <HomeHeroSSR
+            traderCount={heroStats?.traderCount}
+            exchangeCount={heroStats?.exchangeCount}
+          />
+        </div>
 
-      {/* SSR ranking table — visible until React takes over.
+        {/* SSR ranking table — visible until React takes over.
           The HomePageClient useLayoutEffect hides this BEFORE first paint
           (when initialTraders is provided, loading starts as false).
           On slow mobile without JS, this stays visible as the primary content. */}
-      <div id="ssr-ranking-table" className="three-col-layout">
-        <div className="three-col-left hide-tablet" aria-hidden="true" />
-        <div className="three-col-center">
-          <div className="ssr-t" style={{ marginTop: 8 }}>
-            <RankingControls
-              activeRange={timeRange}
-              page={page}
-              totalCount={totalCount}
-              perPage={PER_PAGE}
-            />
-            <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
+        <div id="ssr-ranking-table" className="three-col-layout">
+          <div className="three-col-left hide-tablet" aria-hidden="true" />
+          <div className="three-col-center">
+            <div className="ssr-t" style={{ marginTop: 8 }}>
+              <RankingControls
+                activeRange={timeRange}
+                page={page}
+                totalCount={totalCount}
+                perPage={PER_PAGE}
+              />
+              <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
+            </div>
           </div>
+          <div className="three-col-right hide-mobile" aria-hidden="true" />
         </div>
-        <div className="three-col-right hide-mobile" aria-hidden="true" />
-      </div>
 
-      <PageErrorBoundary>
-        <HomePageLoader
-          initialTraders={traders}
-          initialLastUpdated={lastUpdated}
-          heroStats={heroStats}
-          initialTotalCount={totalCount}
-          initialCategoryCounts={categoryCounts}
-        />
-      </PageErrorBoundary>
-    </main>
+        <PageErrorBoundary>
+          <HomePageLoader
+            initialTraders={traders}
+            initialLastUpdated={lastUpdated}
+            heroStats={heroStats}
+            initialTotalCount={totalCount}
+            initialCategoryCounts={categoryCounts}
+          />
+        </PageErrorBoundary>
+      </main>
+    </>
   )
 }
