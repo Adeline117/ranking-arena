@@ -36,7 +36,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession, ReplayRequestTemplate } from '../../fetch/types'
 import { apiFetcher, replayPaged } from '../../fetch/capture'
-import { parseBingxLeaderboardPage } from './parsers'
+import { parseBingxLeaderboardPage, parseBingxHistory, parseBingxPositions } from './parsers'
 
 const SEARCH_RE = /copy-trade-facade\/v\d+\/trader\/search/
 
@@ -83,17 +83,86 @@ function withPageId(rawUrl: string, pageId: number): string {
   return u.toString()
 }
 
+const ACCOUNT_ENUM: Record<string, string> = {
+  futures: 'BINGX_SWAP_FUTURES',
+  spot: 'BINGX_SPOT',
+}
+/** Detail-page record endpoints (signed GET; sign covers the query so pages
+ *  can't be replayed — we capture the browser's own signed response). */
+const POSITION_RE = /copy-trade-processor\/trader-open\/current-position/
+const HISTORY_RE = /copy-trade-processor\/trader-open\/history-order/
+const FOLLOWERS_RE = /copy-trade-processor\/trader-open\/followers/
+
+function boardKey(src: SourceRow): 'futures' | 'spot' {
+  return src.meta.boardKey === 'spot' ? 'spot' : 'futures'
+}
+
+function detailUrl(src: SourceRow, uid: string, apiIdentity: string): string {
+  const account = ACCOUNT_ENUM[boardKey(src)] ?? ACCOUNT_ENUM.futures
+  return `https://bingx.com/en/CopyTrading/${uid}?accountEnum=${account}&apiIdentity=${apiIdentity}`
+}
+
+/**
+ * Harvest ONE record surface from the trader detail SPA: navigate (uid +
+ * apiIdentity route the API account), then capture the browser's own signed
+ * response — the sign covers the URL query so a plain replay 401s (code
+ * 100005). `tabLabel` triggers tab-lazy surfaces (Trades/Copier Data);
+ * positions load on the default tab. Returns the parsed JSON or null.
+ */
+async function harvestRecordSurface(
+  session: FetchSession,
+  src: SourceRow,
+  uid: string,
+  traderMeta: Record<string, unknown> | null | undefined,
+  matcher: RegExp,
+  tabLabel: string | null
+): Promise<unknown> {
+  const apiIdentity = traderMeta?.bingx_api_identity
+  if (typeof apiIdentity !== 'string' || apiIdentity === '') return null // can't route without it
+  const page = await session.page()
+  const capture = await session.capture(matcher)
+  try {
+    await page.goto(detailUrl(src, uid, apiIdentity), {
+      waitUntil: 'domcontentloaded',
+      timeout: 60_000,
+    })
+    // Activity/marketing overlays can intercept the tab click.
+    await page
+      .evaluate(() =>
+        document
+          .querySelectorAll('[class*=mask],[class*=Modal],[class*=modal]')
+          .forEach((e) => e.remove())
+      )
+      .catch(() => {})
+    if (tabLabel) {
+      await page
+        .getByText(tabLabel, { exact: true })
+        .first()
+        .click({ timeout: 8_000 })
+        .catch(() => {})
+    }
+    const exchange = await capture.first(20_000)
+    return exchange.responseJson
+  } catch {
+    return null // one dead surface must never sink the tier-C job
+  } finally {
+    capture.dispose()
+  }
+}
+
 const bingxAdapter: SourceAdapter = {
   slug: 'bingx',
   capabilities: {
-    // Per-TF stats come from the board's all-period rankStat; the dedicated
-    // profile/surfaces are signed SPA routes not yet harvested (future work).
+    // Per-TF stats come from the board's all-period rankStat. Records
+    // (positions/orders/copiers) harvested from the signed detail SPA
+    // (headful capture 2026-07-02). No position_history endpoint (open+close
+    // are separate order rows → orders); no transfers surface.
     profile: false,
-    positions: false,
+    positions: true,
     positionHistory: false,
-    orders: false,
+    orders: true,
     transfers: false,
-    copiers: false,
+    copiers: true,
   },
 
   async *listLeaderboard(
@@ -139,21 +208,76 @@ const bingxAdapter: SourceAdapter = {
     }
   },
 
-  // Signed SPA-route surfaces — not yet harvested (see module header).
+  // Profile stats are fully covered by the board rankStat superset — no
+  // separate profile fetch needed (parseProfile is a no-op).
   async getProfile(): Promise<RawBundle> {
     return { pages: [], fetchedAt: new Date().toISOString() }
   },
-  async getPositions(): Promise<RawBundle> {
-    return { pages: [], fetchedAt: new Date().toISOString() }
+
+  async getPositions(
+    session: FetchSession,
+    src: SourceRow,
+    exchangeTraderId: string,
+    traderMeta?: Record<string, unknown> | null
+  ): Promise<RawBundle> {
+    const fetchedAt = new Date().toISOString()
+    const url =
+      'https://bingx.com/api/copy-trade-facade/v1/copy-trade-processor/trader-open/current-position'
+    const payload = await harvestRecordSurface(
+      session,
+      src,
+      exchangeTraderId,
+      traderMeta,
+      POSITION_RE,
+      null
+    )
+    if (payload === null) return { pages: [], fetchedAt }
+    return { pages: [{ pageIndex: 1, payload, url, fetchedAt }], fetchedAt }
   },
-  async *getHistory(): AsyncIterable<RawPage> {
-    return
+
+  /** Records via the signed detail SPA (headful). The sign covers the query so
+   *  pages can't be replayed — we harvest the browser's first-page response
+   *  (deeper pagination is served from arena.* by the records route). */
+  async *getHistory(
+    session: FetchSession,
+    src: SourceRow,
+    exchangeTraderId: string,
+    kind: HistoryKind,
+    _cursor: string | null,
+    traderMeta?: Record<string, unknown> | null
+  ): AsyncIterable<RawPage> {
+    const fetchedAt = new Date().toISOString()
+    let matcher: RegExp
+    let tab: string
+    let url: string
+    if (kind === 'orders') {
+      matcher = HISTORY_RE
+      tab = 'Trades'
+      url =
+        'https://bingx.com/api/copy-trade-facade/v1/copy-trade-processor/trader-open/history-order'
+    } else if (kind === 'copiers') {
+      matcher = FOLLOWERS_RE
+      tab = 'Copier Data'
+      url = 'https://bingx.com/api/copy-trade-facade/v1/copy-trade-processor/trader-open/followers'
+    } else {
+      return // position_history / transfers not exposed by bingx
+    }
+    const payload = await harvestRecordSurface(
+      session,
+      src,
+      exchangeTraderId,
+      traderMeta,
+      matcher,
+      tab
+    )
+    if (payload === null) return
+    yield { pageIndex: 1, payload, url, fetchedAt }
   },
 
   parseLeaderboard: parseBingxLeaderboardPage,
   parseProfile: () => ({ stats: [], series: [], nickname: null, avatarUrlOrigin: null }),
-  parsePositions: (): ParsedPosition[] => [],
-  parseHistory: (_raw: unknown, _kind: HistoryKind): ParsedHistoryRow[] => [],
+  parsePositions: parseBingxPositions,
+  parseHistory: parseBingxHistory,
 }
 
 registerAdapter(bingxAdapter)

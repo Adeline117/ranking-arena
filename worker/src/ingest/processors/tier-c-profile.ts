@@ -141,7 +141,7 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
       if (!adapter.capabilities.positions) {
         throw new Error(`[tier-c] ${sourceSlug} does not expose positions`)
       }
-      const bundle = await adapter.getPositions(session, src, exchangeTraderId)
+      const bundle = await adapter.getPositions(session, src, exchangeTraderId, traderMeta)
       rawPayload = bundle.pages
       const positions = bundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctx))
       rows = positions.map((p) => ({ ...p, currency: src.currency }))
@@ -171,7 +171,14 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
       const pages: import('@/lib/ingest/core/types').RawPage[] = []
       // On-demand view needs the freshest page or two; deeper pagination is
       // served from arena.* by the records route, not by re-fetching.
-      for await (const page of adapter.getHistory(session, src, exchangeTraderId, kind, cursor)) {
+      for await (const page of adapter.getHistory(
+        session,
+        src,
+        exchangeTraderId,
+        kind,
+        cursor,
+        traderMeta
+      )) {
         pages.push(page)
         if (pages.length >= 2) break
       }
