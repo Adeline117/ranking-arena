@@ -14,7 +14,9 @@ export default memo(function ScrollToTop() {
   // Pages where FAB is shown — keep scroll-to-top from overlapping
   // When social is off, FAB only shows on '/' (groups pages are 404)
   const fabPages = features.social ? ['/', '/groups'] : ['/']
-  const hasFab = fabPages.some(p => pathname === p || (features.social && pathname.startsWith('/groups/')))
+  const hasFab = fabPages.some(
+    (p) => pathname === p || (features.social && pathname.startsWith('/groups/'))
+  )
 
   useEffect(() => {
     const handleScroll = () => {
@@ -32,10 +34,14 @@ export default memo(function ScrollToTop() {
     <button
       onClick={scrollToTop}
       aria-label={t('scrollToTop')}
+      aria-hidden={!visible}
+      tabIndex={visible ? 0 : -1}
       className="scroll-to-top-btn"
       style={{
         position: 'fixed',
-        bottom: hasFab ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 80px)' : 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 16px)',
+        bottom: hasFab
+          ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 80px)'
+          : 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 16px)',
         right: 16,
         zIndex: tokens.zIndex.sticky + 1,
         width: 44,
@@ -50,20 +56,32 @@ export default memo(function ScrollToTop() {
         justifyContent: 'center',
         boxShadow: 'var(--shadow-sm-dark)',
         opacity: visible ? 1 : 0,
+        visibility: visible ? 'visible' : 'hidden',
         pointerEvents: visible ? 'auto' : 'none',
         transform: visible ? 'translateY(0)' : 'translateY(8px)',
-        transition: 'opacity 0.3s ease, transform 0.3s ease, background 0.2s ease, border-color 0.2s ease',
+        transition:
+          'opacity 0.3s ease, visibility 0.3s ease, transform 0.3s ease, background 0.2s ease, border-color 0.2s ease',
       }}
       onMouseEnter={(e) => {
         e.currentTarget.style.borderColor = 'var(--color-brand, #8b6fa8)'
         e.currentTarget.style.color = 'var(--color-brand, #8b6fa8)'
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.borderColor = 'var(--color-border-secondary, var(--glass-border-light))'
+        e.currentTarget.style.borderColor =
+          'var(--color-border-secondary, var(--glass-border-light))'
         e.currentTarget.style.color = 'var(--color-text-secondary, #A8A8B3)'
       }}
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <svg
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      >
         <polyline points="18 15 12 9 6 15" />
       </svg>
     </button>
