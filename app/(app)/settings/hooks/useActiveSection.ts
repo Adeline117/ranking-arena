@@ -24,7 +24,18 @@ export function useActiveSection() {
   // Scroll-based active section detection
   useEffect(() => {
     const handleScroll = () => {
-      const sections = SECTION_IDS.map(id => document.getElementById(id))
+      // Bottom clamp: when the page is scrolled to (or within a couple px of) the
+      // very bottom, the last section may still start below scrollY+120 — the
+      // reverse loop would then pick the previous section forever. Force-select
+      // the last section instead (also fixes ?section=<last> deep links).
+      if (
+        Math.ceil(window.innerHeight + window.scrollY) >=
+        document.documentElement.scrollHeight - 2
+      ) {
+        setActiveSection(SECTION_IDS[SECTION_IDS.length - 1])
+        return
+      }
+      const sections = SECTION_IDS.map((id) => document.getElementById(id))
       const scrollTop = window.scrollY + 120
       for (let i = sections.length - 1; i >= 0; i--) {
         const section = sections[i]
