@@ -48,13 +48,19 @@ route-level crash recovery.
 
 - **A3 (owner)**: register PostHog, set `NEXT_PUBLIC_POSTHOG_KEY` → funnel lights up with zero more code.
 - **X login (owner)**: configure the Twitter/X provider in Supabase Auth, then flip `NEXT_PUBLIC_ENABLE_X_LOGIN=true`.
-- **C5** (priority surfaces done): hardcoded/zh-en-only strings shown
-  untranslated to ja/ko. **All 5 named-priority surfaces cleared** — search
-  (dead `t()||中文` + zh/en category labels), login (9 ternaries + 8 keys),
-  notifications (dead filterLabel removed + load-more/grouped-count), following
-  (ja/ko no longer leak Chinese "合约/现货/链上"; `userLabel` key), favorites
-  (verified already clean). Remainder = ~100 lower-traffic files, same pattern;
-  do as dedicated batches (locale files = single serial writer).
+- **C5** (all meaningful work done): hardcoded/zh-en-only strings untranslated to
+  ja/ko. **Every real ja/ko-Chinese LEAK fixed** (exhaustively hunted `=== 'en' ?`,
+  `|| .zh`, `[lang]||zh` patterns): following, group rules/description ×2 renders,
+  exchange API-key steps. **All 5 named-priority surfaces + all core-path fixed-
+  config labels native ja/ko**: search, login (+8 keys), notifications, following
+  (+userLabel), favorites, ranking presets (+8), ranking columns/style, trader-row
+  style badge, mobile profile menu (+myWatchlist), Privy login (+3), flash-news
+  card/filter, poll durations (+6), bot categories (+4). Verified 0 regressions
+  across touched routes. **Remaining is English-is-fine or not-a-bug**: user-
+  generated content (group/post names — English fallback correct, can't auto-
+  translate), 22 sticker hover-names (universal crypto slang: Bullish/HODL/Moon),
+  dead config fields (TradingStyleBadge labelZh etc — never rendered), legitimate
+  zh values (the zh branch of working bilingual configs), and page metadata.
 - **D3**: bespoke not-found pages for 6 dynamic routes (the 4 that call `notFound()` already render the functional root 404; 2 are soft-404 SEO polish). Not crashes.
 - **`app/sitemap.ts`**: dead `/sitemap.xml` (not advertised by robots) — deleting an endpoint possibly registered in Search Console is outward-facing; owner decision.
 - **North-star metric**: pick one activation metric (now measurable since the presence + interaction sensors work) and gate future "should we build X?" against it.
