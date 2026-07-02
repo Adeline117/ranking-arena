@@ -26,7 +26,10 @@ describe('enrichmentExtras', () => {
     closedPositions: 2,
     pricedTokens: 3,
     unpricedTokens: 1,
-    topTokens: [],
+    tokenDistribution: { gt_500: 1, p0_500: 2, n50_0: 0, lt_n50: 1 },
+    topEarningTokens: [
+      { symbol: 'WIF', address: '0xabc', logo: null, profit_pct: 50, realized_pnl: 1000 },
+    ],
     provenance: 'onchain-computed',
     realizedPartial: false,
   }
@@ -38,6 +41,9 @@ describe('enrichmentExtras', () => {
     expect(x.onchain_win_rate).toBe(66.67)
     expect(x.onchain_derivation).toBe('onchain-computed')
     expect(x.onchain_realized_partial).toBeUndefined() // not partial
+    // OnchainInsights blocks surfaced when tokens exist
+    expect(x.token_distribution).toEqual({ gt_500: 1, p0_500: 2, n50_0: 0, lt_n50: 1 })
+    expect(Array.isArray(x.top_earning_tokens)).toBe(true)
     // never emits board-owned keys
     expect('pnl' in x).toBe(false)
     expect('roi' in x).toBe(false)
