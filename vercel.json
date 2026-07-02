@@ -1,6 +1,6 @@
 {
   "buildCommand": "next build",
-  "ignoreCommand": "if [ \"$VERCEL_ENV\" != \"production\" ]; then exit 1; fi; if echo \"$VERCEL_GIT_COMMIT_MESSAGE\" | grep -qF \"[deploy-force]\"; then exit 1; fi; if [ \"$VERCEL_GIT_COMMIT_REF\" = \"main\" ]; then echo skip-main-git-build-deploy-gate-owns-production; exit 0; fi; exit 1",
+  "ignoreCommand": "[ \"$VERCEL_ENV\" = production ] || exit 1; case \"$VERCEL_GIT_COMMIT_MESSAGE\" in *\"[deploy-force]\"*) exit 1;; esac; [ \"$VERCEL_GIT_COMMIT_REF\" = main ] && exit 0 || exit 1",
   "regions": ["hnd1"],
   "crons": [
     {
