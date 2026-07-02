@@ -146,8 +146,18 @@ export default function TradingViewChart({
         },
         crosshair: {
           mode: lc.CrosshairMode.Normal,
-          vertLine: { color: c.crosshair, style: lc.LineStyle.Dashed, width: 1, labelBackgroundColor: c.crosshair },
-          horzLine: { color: c.crosshair, style: lc.LineStyle.Dashed, width: 1, labelBackgroundColor: c.crosshair },
+          vertLine: {
+            color: c.crosshair,
+            style: lc.LineStyle.Dashed,
+            width: 1,
+            labelBackgroundColor: c.crosshair,
+          },
+          horzLine: {
+            color: c.crosshair,
+            style: lc.LineStyle.Dashed,
+            width: 1,
+            labelBackgroundColor: c.crosshair,
+          },
         },
         rightPriceScale: {
           borderColor: c.border,
@@ -185,8 +195,8 @@ export default function TradingViewChart({
             scaleMargins: { top: 0.8, bottom: 0 },
           })
           const volumeData = (data as OHLCVDataPoint[])
-            .filter(d => d.volume !== undefined)
-            .map(d => ({
+            .filter((d) => d.volume !== undefined)
+            .map((d) => ({
               time: d.time,
               value: d.volume!,
               color: d.close >= d.open ? c.volumeUp : c.volumeDown,
@@ -227,6 +237,37 @@ export default function TradingViewChart({
       containerEl!.appendChild(tooltip)
       tooltipRef.current = tooltip
 
+      // Format crosshair time for the tooltip. lightweight-charts' Time is
+      // UTCTimestamp (unix seconds) | BusinessDay | string — raw String()
+      // on a numeric timestamp renders e.g. "1767398400". Format in UTC to
+      // match the chart's own UTC time-axis labels.
+      const intlLocale = locale === 'zh' ? 'zh-CN' : 'en-US'
+      const formatTooltipTime = (t: Time): string => {
+        if (typeof t === 'number') {
+          const date = new Date(t * 1000)
+          const dateStr = date.toLocaleDateString(intlLocale, {
+            month: 'short',
+            day: 'numeric',
+            year: 'numeric',
+            timeZone: 'UTC',
+          })
+          // Intraday candle (not midnight UTC) → append HH:mm
+          if (t % 86400 !== 0) {
+            const timeStr = date.toLocaleTimeString(intlLocale, {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false,
+              timeZone: 'UTC',
+            })
+            return `${dateStr} ${timeStr}`
+          }
+          return dateStr
+        }
+        if (typeof t === 'string') return t
+        // BusinessDay { year, month, day }
+        return `${t.year}-${String(t.month).padStart(2, '0')}-${String(t.day).padStart(2, '0')}`
+      }
+
       chart.subscribeCrosshairMove((param) => {
         if (!param.time || !param.seriesData || param.seriesData.size === 0) {
           tooltip.style.display = 'none'
@@ -234,14 +275,17 @@ export default function TradingViewChart({
         }
 
         const mainData = param.seriesData.get(seriesRef.current!)
-        if (!mainData) { tooltip.style.display = 'none'; return }
+        if (!mainData) {
+          tooltip.style.display = 'none'
+          return
+        }
 
         let html = ''
         if (type === 'candlestick' && 'open' in mainData) {
           const d = mainData as CandlestickData
           const volData = volumeRef.current ? param.seriesData.get(volumeRef.current) : null
           html = `
-            <div style="margin-bottom:4px;color:${c.text}">${String(param.time)}</div>
+            <div style="margin-bottom:4px;color:${c.text}">${formatTooltipTime(param.time)}</div>
             <div>${labels.open}: <b>${d.open.toFixed(2)}</b></div>
             <div>${labels.high}: <b>${d.high.toFixed(2)}</b></div>
             <div>${labels.low}: <b>${d.low.toFixed(2)}</b></div>
@@ -251,7 +295,7 @@ export default function TradingViewChart({
         } else if ('value' in mainData) {
           const d = mainData as LineData
           html = `
-            <div style="margin-bottom:4px;color:${c.text}">${String(param.time)}</div>
+            <div style="margin-bottom:4px;color:${c.text}">${formatTooltipTime(param.time)}</div>
             <div>${labels.value}: <b>${d.value.toFixed(2)}</b></div>
           `
         }
@@ -261,7 +305,7 @@ export default function TradingViewChart({
 
         const container = containerEl!
         const toolW = tooltip.offsetWidth
-        const x = (param.point?.x ?? 0)
+        const x = param.point?.x ?? 0
         tooltip.style.left = `${x + toolW + 20 > container.clientWidth ? x - toolW - 10 : x + 10}px`
         tooltip.style.top = `${Math.max(0, (param.point?.y ?? 0) - 60)}px`
       })
@@ -284,7 +328,7 @@ export default function TradingViewChart({
 
     return () => {
       cancelled = true
-      const container = containerEl as HTMLDivElement & { _ro?: ResizeObserver } | null
+      const container = containerEl as (HTMLDivElement & { _ro?: ResizeObserver }) | null
       container?._ro?.disconnect()
       chartRef.current?.remove()
       tooltipRef.current?.remove()
@@ -292,7 +336,7 @@ export default function TradingViewChart({
       seriesRef.current = null
       volumeRef.current = null
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally using only primary deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally using only primary deps
   }, [data, type, height, theme, color, topColor, bottomColor, showVolume, locale])
 
   if (!data || data.length === 0) {
@@ -315,10 +359,5 @@ export default function TradingViewChart({
     )
   }
 
-  return (
-    <div
-      ref={containerRef}
-      style={{ position: 'relative', width: '100%', height }}
-    />
-  )
+  return <div ref={containerRef} style={{ position: 'relative', width: '100%', height }} />
 }
