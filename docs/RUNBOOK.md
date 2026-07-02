@@ -206,6 +206,8 @@ Source: `lib/utils/arena-score.ts`
 **push main 不再直接触发生产构建。** 流程：push → CI（`ci.yml`）→ 4 个门禁
 作业（Pre-flight / Lint & Type / Unit / Build）全绿 → `deploy-gate.yml` 用
 Vercel CLI 部署 → 内嵌 smoke（5 URL）→ 失败自动 promote 回滚 + Telegram。
+跳过逻辑内联在 `vercel.json` 的 `ignoreCommand`（不要改成依赖 scripts/ 下的
+文件——.vercelignore 目录级排除无法负向穿透，会 ENOENT 把全部部署打成 ERROR）。
 E2E 被更新 push 折叠取消不影响门禁；CI 红则扣留部署并 Telegram 告警。
 Preview/PR 分支构建不受影响。
 
