@@ -16,6 +16,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
 
 interface UploadedImage {
   url: string
@@ -283,6 +284,15 @@ export default function EditPostPage() {
   const [originalPost, setOriginalPost] = useState<Record<string, unknown> | null>(null)
   const [cursorPosition, setCursorPosition] = useState<number | null>(null)
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null)
+
+  // Draft-loss guard: prompt on tab close/refresh when edits diverge from the
+  // loaded post and aren't mid-save (audit 实体/详情).
+  useUnsavedChangesGuard(
+    originalPost != null &&
+      !saving &&
+      (title !== ((originalPost.title as string) ?? '') ||
+        content !== ((originalPost.content as string) ?? ''))
+  )
 
   // 获取用户信息
   useEffect(() => {
