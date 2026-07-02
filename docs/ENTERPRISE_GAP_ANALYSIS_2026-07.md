@@ -157,19 +157,19 @@
 
 ### Phase 1 — 单人+AI 更稳（2026-07 起，本轮连续落地）
 
-| #   | 项                                                                              | 状态          |
-| --- | ------------------------------------------------------------------------------- | ------------- |
-| A   | 仓库卫生：undefined//lighthouse 产物清理 + gitignore + 脚本归档                 | ✅ 2026-07-02 |
-| B   | 本差距报告                                                                      | ✅ 2026-07-02 |
-| C1  | post-deploy smoke 失败自动回滚（Vercel promote API + last-known-good 自动维护） | 进行中        |
-| C2  | CI 修真绿 → vercel ignoreCommand 门禁部署（`[deploy-force]` 逃生口）            | 进行中        |
-| D   | api-auth-coverage-check：route 级默认拒绝 CI 兜底 + 存量判定                    | 进行中        |
-| E1  | postmortem 制度 + 回填 3 起（629-commit、迁移漂移、EDBHANDLEREXITED）           | 进行中        |
-| E2  | GH Actions 冗余备份 + 备份新鲜度哨兵                                            | 进行中        |
-| E3  | docs/SLO.md + health-monitor 分级告警                                           | 进行中        |
-| F1  | .tsc-legacy-errors.txt 烧减 ≥50 条 + 只减不增断言                               | 进行中        |
-| F2  | 货币/日期格式化整并 shim + import 棘轮                                          | 进行中        |
-| F3  | 核心组件补测试 + coverage 棘轮上调                                              | 进行中        |
+| #   | 项                                                                       | 状态                 |
+| --- | ------------------------------------------------------------------------ | -------------------- |
+| A   | 仓库卫生：undefined//lighthouse 产物清理 + gitignore + 脚本归档          | ✅ 2026-07-02        |
+| B   | 本差距报告                                                               | ✅ 2026-07-02        |
+| C1  | post-deploy smoke 失败自动回滚（代码已在库，激活待 VERCEL_TOKEN secret） | ⏳ 待用户配 secret   |
+| C2  | CI 修真绿（npm audit 清零 + per-SHA concurrency）→ 门禁部署待 token      | ✅ CI 真绿 / ⏳ 门禁 |
+| D   | api-auth-coverage-check：route 级默认拒绝 CI 兜底 + 321 route 全量判定   | ✅ 2026-07-02        |
+| E1  | postmortem 制度 + 回填 4 起（含新发现的备份静默失败 SEV2）               | ✅ 2026-07-02        |
+| E2  | 备份新鲜度哨兵（首跑抓出 SEV2 并已止血）；GH 冗余备份待 secrets          | ✅ 哨兵 / ⏳ 冗余    |
+| E3  | docs/SLO.md 首版 5 条                                                    | ✅ 2026-07-02        |
+| F1  | .tsc-legacy-errors.txt 全量清零（166 条全是死条目，超预期完成）          | ✅ 2026-07-02        |
+| F2  | 货币格式化 import 棘轮（error 级禁新增，存量 13 文件迁一删一）           | ✅ 2026-07-02        |
+| F3  | coverage 棘轮上调 14→20（实测 2300 测试全绿；组件补测列长期棘轮）        | ✅ 2026-07-02        |
 
 ### Phase 1.5 — 独立专项（单独会话/窗口）
 
