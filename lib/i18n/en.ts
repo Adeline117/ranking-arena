@@ -6226,6 +6226,7 @@ const en = {
   compYouTag: 'You',
   compFilterPlatform: 'Platform',
   compAllPlatforms: 'All Platforms',
+  compPlatformSelect: 'Select platform',
   compErrTitleRequired: 'Title is required',
   compErrStartRequired: 'Start date is required',
   compErrStartFuture: 'Start must be in the future',

@@ -6101,6 +6101,7 @@ const ko = {
   compYouTag: '나',
   compFilterPlatform: '플랫폼',
   compAllPlatforms: '모든 플랫폼',
+  compPlatformSelect: '플랫폼 선택',
   compErrTitleRequired: '제목을 입력하세요',
   compErrStartRequired: '시작 일시를 선택하세요',
   compErrStartFuture: '시작 일시는 현재 이후여야 합니다',

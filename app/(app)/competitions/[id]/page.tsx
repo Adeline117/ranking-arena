@@ -12,6 +12,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import Metric from '@/app/components/ui/Metric'
 import CompetitionCountdown from '../CompetitionCountdown'
 import CompetitionCapacityBar from '../CompetitionCapacityBar'
+import { SUPPORTED_PLATFORMS } from '@/lib/types/trading-platform'
 import Link from 'next/link'
 
 interface Competition {
@@ -52,6 +53,34 @@ function metricLabel(metric: string): string {
     max_drawdown: 'Max Drawdown',
   }
   return labels[metric] || metric.toUpperCase()
+}
+
+// Brand-cased display names for platform ids whose simple Title Case is wrong.
+const PLATFORM_LABEL_OVERRIDES: Record<string, string> = {
+  okx_futures: 'OKX Futures',
+  okx_spot: 'OKX Spot',
+  okx_web3: 'OKX Web3',
+  htx_futures: 'HTX Futures',
+  mexc: 'MEXC',
+  gmx: 'GMX',
+  dydx: 'dYdX',
+  xt: 'XT',
+  btcc: 'BTCC',
+  bingx: 'BingX',
+  weex: 'WEEX',
+  woox: 'WOO X',
+  gateio: 'Gate.io',
+}
+
+/** 'binance_futures' → 'Binance Futures' (submitted value stays the raw id). */
+function platformLabel(p: string): string {
+  return (
+    PLATFORM_LABEL_OVERRIDES[p] ??
+    p
+      .split('_')
+      .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+      .join(' ')
+  )
 }
 
 function formatValue(value: number | null, metric: string): string {
@@ -835,10 +864,10 @@ export default function CompetitionDetailPage() {
                   outline: 'none',
                 }}
               />
-              <input
-                type="text"
-                aria-label={t('compPlatformPlaceholder')}
-                placeholder={t('compPlatformPlaceholder')}
+              {/* Dropdown (not free text): value must exactly match
+                  leaderboard_ranks.source or the baseline lookup silently nulls. */}
+              <select
+                aria-label={t('compFilterPlatform')}
                 value={platform}
                 onChange={(e) => setPlatform(e.target.value)}
                 style={{
@@ -846,13 +875,23 @@ export default function CompetitionDetailPage() {
                   minWidth: 200,
                   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                   background: tokens.colors.bg.primary,
-                  color: tokens.colors.text.primary,
+                  color: platform ? tokens.colors.text.primary : tokens.colors.text.tertiary,
                   border: `1px solid ${tokens.colors.border.primary}`,
                   borderRadius: tokens.radius.md,
                   fontSize: tokens.typography.fontSize.sm,
                   outline: 'none',
+                  cursor: 'pointer',
                 }}
-              />
+              >
+                <option value="" disabled>
+                  {t('compPlatformSelect')}
+                </option>
+                {SUPPORTED_PLATFORMS.map((p) => (
+                  <option key={p} value={p}>
+                    {platformLabel(p)}
+                  </option>
+                ))}
+              </select>
             </Box>
             {joinError && (
               <Text
