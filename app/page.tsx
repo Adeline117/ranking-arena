@@ -57,7 +57,7 @@ const organizationJsonLd = {
   logo: `${BASE_URL}/logo-symbol.png`,
   sameAs: ['https://twitter.com/arenafi'],
   description:
-    'Arena aggregates trader rankings from 32+ exchanges. Follow top traders, share insights, and level up your trading.',
+    'Arena aggregates trader rankings from 45+ exchanges. Follow top traders, share insights, and level up your trading.',
 }
 
 const PER_PAGE = 50
@@ -109,10 +109,7 @@ export default async function Page() {
           Phase 2 hiding the table doesn't affect it. Constrained to center
           column width via max-width + margin for alignment with three-col grid. */}
         <div id="ssr-hero-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '0 20px' }}>
-          <HomeHeroSSR
-            traderCount={heroStats?.traderCount}
-            exchangeCount={heroStats?.exchangeCount}
-          />
+          <HomeHeroSSR exchangeCount={heroStats?.exchangeCount} />
         </div>
 
         {/* SSR ranking table — visible until React takes over.

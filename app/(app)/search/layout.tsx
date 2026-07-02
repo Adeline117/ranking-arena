@@ -12,8 +12,8 @@ export async function generateMetadata({
   const title = query ? `"${query}" - Search Results | Arena` : 'Search Traders & Resources | Arena'
 
   const description = query
-    ? `Search results for "${query}" — Find traders and resources on Arena. Comprehensive search across 32+ exchanges.`
-    : 'Search for top crypto traders and trading resources on Arena. Find performance data from 32+ exchanges.'
+    ? `Search results for "${query}" — Find traders and resources on Arena. Comprehensive search across 45+ exchanges.`
+    : 'Search for top crypto traders and trading resources on Arena. Find performance data from 45+ exchanges.'
 
   return {
     title,

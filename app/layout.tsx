@@ -35,7 +35,7 @@ export const metadata: Metadata = {
     template: '%s | Arena',
   },
   description:
-    'All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 32+ exchanges — ranked by ROI, Arena Score, and PnL.',
+    'All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 45+ exchanges — ranked by ROI, Arena Score, and PnL.',
   metadataBase: new URL(BASE_URL),
   verification: {
     google: 'nnTiBxpNMeCgo9rCLyUbZV9Z-OE8Nr-BLh7E-o2T1R8',
@@ -88,7 +88,7 @@ export const metadata: Metadata = {
     type: 'website',
     title: 'Arena ranks everything in crypto',
     description:
-      'All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 32+ exchanges — ranked by ROI, Arena Score, and PnL.',
+      'All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 45+ exchanges — ranked by ROI, Arena Score, and PnL.',
     url: BASE_URL,
     siteName: 'Arena',
     locale: 'en_US',
@@ -105,7 +105,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'Arena ranks everything in crypto',
     description:
-      'All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 32+ exchanges — ranked by ROI, Arena Score, and PnL.',
+      'All rankings in crypto. Arena tracks top traders from Binance, Bybit, OKX, Hyperliquid, and 45+ exchanges — ranked by ROI, Arena Score, and PnL.',
     images: [`${BASE_URL}/api/og?title=Arena&subtitle=All+rankings+in+crypto`],
     creator: '@arenafi',
     site: '@arenafi',
@@ -223,7 +223,7 @@ export default function RootLayout({
             '@type': 'WebSite',
             name: 'Arena',
             url: BASE_URL,
-            description: 'Crypto trader rankings across 32+ exchanges.',
+            description: 'Crypto trader rankings across 45+ exchanges.',
             potentialAction: {
               '@type': 'SearchAction',
               target: {
