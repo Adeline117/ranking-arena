@@ -56,8 +56,8 @@ export const GET = withCron('update-competitions', async (_request: NextRequest)
     if (!entries?.length) continue
 
     // Batch fetch current values for ALL entries in one query (avoid N+1)
-    const traderIds = entries.map(e => e.trader_id)
-    const platforms = [...new Set(entries.map(e => e.platform))]
+    const traderIds = entries.map((e) => e.trader_id)
+    const platforms = [...new Set(entries.map((e) => e.platform))]
 
     const { data: allTraderData } = await supabase
       .from('leaderboard_ranks')
@@ -66,7 +66,15 @@ export const GET = withCron('update-competitions', async (_request: NextRequest)
       .in('source_trader_id', traderIds)
 
     // Build lookup map
-    const traderMap = new Map<string, { roi: number | null; pnl: number | null; sharpe_ratio: number | null; max_drawdown: number | null }>()
+    const traderMap = new Map<
+      string,
+      {
+        roi: number | null
+        pnl: number | null
+        sharpe_ratio: number | null
+        max_drawdown: number | null
+      }
+    >()
     for (const td of allTraderData || []) {
       traderMap.set(`${td.source}:${td.source_trader_id}`, td)
     }
@@ -88,8 +96,11 @@ export const GET = withCron('update-competitions', async (_request: NextRequest)
     // Batch update current values + ranks in parallel
     if (updates.length) {
       await Promise.all(
-        updates.map(u =>
-          supabase.from('competition_entries').update({ current_value: u.current_value }).eq('id', u.id)
+        updates.map((u) =>
+          supabase
+            .from('competition_entries')
+            .update({ current_value: u.current_value })
+            .eq('id', u.id)
         )
       )
     }
@@ -97,7 +108,7 @@ export const GET = withCron('update-competitions', async (_request: NextRequest)
     // Recompute ranks: sort by (current_value - baseline_value) descending
     const { data: allEntries } = await supabase
       .from('competition_entries')
-      .select('id, baseline_value, current_value')
+      .select('id, baseline_value, current_value, rank')
       .eq('competition_id', comp.id)
 
     if (allEntries?.length) {
@@ -106,13 +117,19 @@ export const GET = withCron('update-competitions', async (_request: NextRequest)
       const sorted = allEntries
         .map((e) => ({
           id: e.id,
+          // Preserve the outgoing rank so standings can show ▲/▼ movement
+          // across recomputes (migration 20260701220308 prev_rank).
+          prevRank: e.rank as number | null,
           delta: (e.current_value ?? 0) - (e.baseline_value ?? 0),
         }))
-        .sort((a, b) => isLowerBetter ? a.delta - b.delta : b.delta - a.delta)
+        .sort((a, b) => (isLowerBetter ? a.delta - b.delta : b.delta - a.delta))
 
       await Promise.all(
         sorted.map((s, i) =>
-          supabase.from('competition_entries').update({ rank: i + 1 }).eq('id', s.id)
+          supabase
+            .from('competition_entries')
+            .update({ rank: i + 1, prev_rank: s.prevRank })
+            .eq('id', s.id)
         )
       )
     }

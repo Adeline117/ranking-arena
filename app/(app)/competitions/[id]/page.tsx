@@ -40,6 +40,8 @@ interface CompetitionEntry {
   baseline_value: number | null
   current_value: number | null
   rank: number | null
+  /** Rank before the latest 30-min recompute (migration 20260701220308). */
+  prev_rank: number | null
   joined_at: string
 }
 
@@ -573,20 +575,29 @@ export default function CompetitionDetailPage() {
           setCompetition(json.data.competition)
           setEntries(nextEntries)
           setLastUpdate(new Date())
-          // Diff ranks vs the previous fetch → ▲/▼ movement badges. Only real,
-          // observed changes (no prev_rank column exists server-side).
+          // Diff ranks vs the previous fetch → ▲/▼ movement badges. On the FIRST
+          // fetch, seed from the server-side prev_rank (written by the 30-min
+          // update-competitions recompute, migration 20260701220308) so movement
+          // since the last cron cycle shows immediately; later polls use the
+          // fresher observed diffs.
           const prev = prevRanksRef.current
+          const moves: Record<string, number> = {}
           if (prev) {
-            const moves: Record<string, number> = {}
             for (const e of nextEntries) {
               const before = prev.get(e.id)
               if (before != null && e.rank != null && before !== e.rank) {
                 moves[e.id] = before - e.rank // positive = climbed
               }
             }
-            if (Object.keys(moves).length > 0) {
-              setRankMoves((cur) => ({ ...cur, ...moves }))
+          } else {
+            for (const e of nextEntries) {
+              if (e.prev_rank != null && e.rank != null && e.prev_rank !== e.rank) {
+                moves[e.id] = e.prev_rank - e.rank
+              }
             }
+          }
+          if (Object.keys(moves).length > 0) {
+            setRankMoves((cur) => ({ ...cur, ...moves }))
           }
           prevRanksRef.current = new Map(
             nextEntries.filter((e) => e.rank != null).map((e) => [e.id, e.rank as number] as const)
