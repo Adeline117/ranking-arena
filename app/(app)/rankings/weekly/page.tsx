@@ -8,7 +8,6 @@
  */
 
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { BASE_URL } from '@/lib/constants/urls'
 import { getWeeklyLeaders } from '@/lib/data/serving/weekly-leaders'
@@ -60,8 +59,22 @@ export default async function WeeklyArenaPage() {
   const data = await getWeeklyLeaders(getReadReplica(), LEADER_LIMIT)
 
   // Same gate as /rankings/exchanges: below 3 serving sources a
-  // cross-exchange weekly competition is noise, not signal.
-  if (!data || data.nonLegacyCount < MIN_SERVING_SOURCES) notFound()
+  // cross-exchange weekly competition is noise, not signal. A transient
+  // serving-data gap must NOT 404 a core rankings page — with ISR
+  // (revalidate 1800) a notFound() here gets pinned in the cache for up to
+  // 30 minutes and this page is in the sitemap, amplifying the SEO damage.
+  // Render the client's i18n'd "no data yet" empty state instead (TopNav
+  // stays interactive) and log loudly so the gap is not silent.
+  if (!data || data.nonLegacyCount < MIN_SERVING_SOURCES) {
+    console.error(
+      `[serving-gate] /rankings/weekly gate triggered (nonLegacyCount=${data?.nonLegacyCount ?? 'null'} < ${MIN_SERVING_SOURCES}) — rendering empty state instead of 404`
+    )
+    return (
+      <WeeklyArenaClient
+        data={{ nonLegacyCount: data?.nonLegacyCount ?? 0, rows: [], bitmart: null }}
+      />
+    )
+  }
 
   return <WeeklyArenaClient data={data} />
 }

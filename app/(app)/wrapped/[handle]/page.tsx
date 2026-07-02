@@ -61,17 +61,36 @@ interface Props {
 }
 
 // SSR timeout: during cron contention, resolveTrader can block on row locks
-// for 30+ seconds. Race against this timeout so users see a fast 404 instead.
+// for 30+ seconds. Race against this timeout so users get a fast, retryable
+// error page (NOT a 404 — the trader may well exist).
 const SSR_TIMEOUT_MS = 3000
 
-async function fetchWrappedData(handle: string, platform?: string, windowParam = '7d'): Promise<WrappedTraderData | null> {
+// Discriminated result so the page can tell "handle genuinely does not
+// exist" (→ notFound) apart from transient timeouts / DB errors (→ error
+// boundary, retryable). Collapsing both into null was serving 404s for
+// traders that exist whenever the DB was slow.
+type WrappedFetchResult =
+  | { ok: true; data: WrappedTraderData }
+  | { ok: false; reason: 'not_found' | 'timeout' | 'error' }
+
+const RESOLVE_TIMEOUT = Symbol('resolve-timeout')
+
+async function fetchWrappedData(
+  handle: string,
+  platform?: string,
+  windowParam = '7d'
+): Promise<WrappedFetchResult> {
   try {
     const supabase = getSupabaseAdmin()
 
     // Map UI window param to season_id used in the DB
     const seasonMap: Record<string, string> = {
-      '7d': '7D', '30d': '30D', '90d': '90D',
-      '7D': '7D', '30D': '30D', '90D': '90D',
+      '7d': '7D',
+      '30d': '30D',
+      '90d': '90D',
+      '7D': '7D',
+      '30D': '30D',
+      '90D': '90D',
     }
     const seasonId = seasonMap[windowParam] ?? '7D'
 
@@ -79,13 +98,23 @@ async function fetchWrappedData(handle: string, platform?: string, windowParam =
     // during compute-leaderboard cron contention
     const resolved = await Promise.race([
       resolveTrader(supabase, { handle, platform }),
-      new Promise<null>((resolve) => setTimeout(() => resolve(null), SSR_TIMEOUT_MS)),
+      new Promise<typeof RESOLVE_TIMEOUT>((resolve) =>
+        setTimeout(() => resolve(RESOLVE_TIMEOUT), SSR_TIMEOUT_MS)
+      ),
     ])
 
-    if (!resolved) return null
+    if (resolved === RESOLVE_TIMEOUT) {
+      console.error(
+        `[wrapped] resolveTrader timed out after ${SSR_TIMEOUT_MS}ms (handle=${handle}, platform=${platform ?? '-'}) — transient, not a 404`
+      )
+      return { ok: false, reason: 'timeout' }
+    }
+    if (!resolved) return { ok: false, reason: 'not_found' }
 
     const effectivePlatform = platform || resolved.platform
-    const platformLabel = PLATFORM_LABELS[effectivePlatform] ?? effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
+    const platformLabel =
+      PLATFORM_LABELS[effectivePlatform] ??
+      effectivePlatform.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
 
     // Fetch leaderboard rank for this trader + window
     const { data: lr } = await Promise.race([
@@ -96,7 +125,9 @@ async function fetchWrappedData(handle: string, platform?: string, windowParam =
         .eq('source_trader_id', resolved.traderKey)
         .eq('season_id', seasonId)
         .maybeSingle(),
-      new Promise<{ data: null }>((resolve) => setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)),
+      new Promise<{ data: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
+      ),
     ])
 
     // Fetch total traders on this platform for percentile
@@ -108,24 +139,35 @@ async function fetchWrappedData(handle: string, platform?: string, windowParam =
         .select('*', { count: 'estimated', head: true })
         .eq('source', resolved.platform)
         .eq('season_id', seasonId),
-      new Promise<{ count: null }>((resolve) => setTimeout(() => resolve({ count: null }), SSR_TIMEOUT_MS)),
+      new Promise<{ count: null }>((resolve) =>
+        setTimeout(() => resolve({ count: null }), SSR_TIMEOUT_MS)
+      ),
     ])
 
     return {
-      handle: resolved.handle || handle,
-      displayName: resolved.handle || handle,
-      platform: effectivePlatform,
-      platformLabel,
-      rank: lr?.rank ?? null,
-      total: count ?? null,
-      roi: lr?.roi ?? null,
-      winRate: lr?.win_rate ?? null,
-      score: lr?.arena_score ?? null,
-      maxDrawdown: lr?.max_drawdown ?? null,
-      window: seasonId,
+      ok: true,
+      data: {
+        handle: resolved.handle || handle,
+        displayName: resolved.handle || handle,
+        platform: effectivePlatform,
+        platformLabel,
+        rank: lr?.rank ?? null,
+        total: count ?? null,
+        roi: lr?.roi ?? null,
+        winRate: lr?.win_rate ?? null,
+        score: lr?.arena_score ?? null,
+        maxDrawdown: lr?.max_drawdown ?? null,
+        window: seasonId,
+      },
     }
-  } catch {
-    return null
+  } catch (error) {
+    // NEVER swallow DB errors silently (CLAUDE.md hard rule) — and a DB
+    // error is transient, not proof the handle does not exist.
+    console.error(
+      `[wrapped] fetchWrappedData failed (handle=${handle}, platform=${platform ?? '-'}):`,
+      error
+    )
+    return { ok: false, reason: 'error' }
   }
 }
 
@@ -134,7 +176,8 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const { platform, window: windowParam = '7d' } = await searchParams
   const decoded = decodeURIComponent(handle)
 
-  const data = await fetchWrappedData(decoded, platform, windowParam)
+  const result = await fetchWrappedData(decoded, platform, windowParam)
+  const data = result.ok ? result.data : null
 
   const name = data?.displayName || decoded
   const rank = data?.rank
@@ -196,8 +239,15 @@ export default async function WrappedPage({ params, searchParams }: Props) {
   const { platform, window: windowParam = '7d' } = await searchParams
   const decoded = decodeURIComponent(handle)
 
-  const data = await fetchWrappedData(decoded, platform, windowParam)
-  if (!data) notFound()
+  const result = await fetchWrappedData(decoded, platform, windowParam)
+  if (!result.ok) {
+    // Only a genuinely unknown handle is a 404. Transient timeouts / DB
+    // errors surface the segment's error.tsx (retryable) instead of
+    // mislabeling an existing trader's card as not found.
+    if (result.reason === 'not_found') notFound()
+    throw new Error(`wrapped card temporarily unavailable (${result.reason}) for handle=${decoded}`)
+  }
+  const data = result.data
 
   // Build the OG image URL to pass to the client for download
   const ogParams = new URLSearchParams({
