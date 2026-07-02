@@ -188,6 +188,8 @@ export const INGEST_JOB = {
   FRESHNESS: 'maint:freshness',
   /** Daily digest of non-paging alerts (spec §15). */
   DAILY_DIGEST: 'maint:daily-digest',
+  /** On-chain recompute of top-N web3 wallet profile detail (Phase A). */
+  ONCHAIN_ENRICH: 'maint:onchain-enrich',
 } as const
 
 export interface TierJobData {
