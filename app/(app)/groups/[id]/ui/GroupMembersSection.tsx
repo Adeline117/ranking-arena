@@ -2,11 +2,11 @@
 
 import { useRef } from 'react'
 import Link from 'next/link'
-import Image from 'next/image'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
+import Avatar from '@/app/components/ui/Avatar'
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -105,46 +105,6 @@ function InfoRow({ label, children }: InfoRowProps): React.ReactElement {
         {label}
       </Text>
       {children}
-    </Box>
-  )
-}
-
-// Member avatar component
-interface MemberAvatarProps {
-  avatarUrl?: string | null
-  handle?: string | null
-  size?: number
-}
-
-function MemberAvatar({ avatarUrl, handle, size = 36 }: MemberAvatarProps): React.ReactElement {
-  return (
-    <Box
-      style={{
-        width: size,
-        height: size,
-        borderRadius: '50%',
-        background: tokens.colors.bg.tertiary || tokens.colors.bg.secondary,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        overflow: 'hidden',
-        flexShrink: 0,
-        position: 'relative',
-      }}
-    >
-      {avatarUrl ? (
-        <Image
-          src={avatarUrl}
-          alt={handle || 'User'}
-          fill
-          sizes="36px"
-          style={{ objectFit: 'cover' }}
-        />
-      ) : (
-        <Text size="sm" color="tertiary">
-          {(handle || 'U').charAt(0).toUpperCase()}
-        </Text>
-      )}
     </Box>
   )
 }
@@ -320,7 +280,14 @@ function MemberRow({ member }: MemberRowProps): React.ReactElement {
         e.currentTarget.style.background = 'transparent'
       }}
     >
-      <MemberAvatar avatarUrl={member.avatar_url} handle={member.handle} />
+      {/* Shared Avatar: SVG-source unoptimized bypass (dicebear seeds would 400
+          through /_next/image) + onError initial fallback (expired upstream URLs). */}
+      <Avatar
+        userId={member.user_id}
+        name={member.handle}
+        avatarUrl={member.avatar_url}
+        size={36}
+      />
       <Box style={{ flex: 1 }}>
         <Text size="sm" weight="medium">
           @{member.handle || 'Unknown'}

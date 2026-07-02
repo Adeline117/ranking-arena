@@ -12,6 +12,7 @@ import {
   needsProxy,
   type AvatarProps,
 } from '@/lib/utils/avatar'
+import { isSvgAvatarSource } from '@/lib/utils/avatar-proxy'
 
 function resolveAvatarUrl(
   isTrader: boolean,
@@ -109,7 +110,9 @@ export default function Avatar({
             width={size}
             height={size}
             sizes={`${size}px`}
-            unoptimized={finalAvatarUrl?.startsWith('data:') || false}
+            // data: URIs and SVG sources (dicebear etc.) must bypass /_next/image —
+            // the optimizer 400s on SVG (dangerouslyAllowSVG: false).
+            unoptimized={finalAvatarUrl.startsWith('data:') || isSvgAvatarSource(finalAvatarUrl)}
             style={{
               width: '100%',
               height: '100%',

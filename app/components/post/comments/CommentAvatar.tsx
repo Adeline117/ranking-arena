@@ -4,7 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { ProBadgeOverlay } from '../../ui/ProBadge'
 import { commentStyles } from './commentStyles'
-import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { avatarSrc, isSvgAvatarSource } from '@/lib/utils/avatar-proxy'
 
 // Pro badge inline icon (used next to usernames)
 export function ProBadge({ size = 14 }: { size?: number }): React.ReactNode {
@@ -65,7 +65,9 @@ export function CommentAvatar({
           height={size}
           sizes={`${size}px`}
           loading="lazy"
-          unoptimized={avatarUrl?.startsWith('data:') || false}
+          // data: URIs and SVG sources (dicebear etc.) must bypass /_next/image —
+          // the optimizer 400s on SVG (dangerouslyAllowSVG: false).
+          unoptimized={avatarUrl.startsWith('data:') || isSvgAvatarSource(avatarUrl)}
           style={commentStyles.avatar(size)}
           onError={(e) => {
             ;(e.currentTarget as HTMLImageElement).style.display = 'none'
