@@ -11,7 +11,6 @@ import { formatDisplayName } from './utils'
 import { RankDisplay, ArenaScoreCircle, areTraderPropsEqual } from './shared/TraderDisplay'
 import ScoreMiniBar from './ScoreMiniBar'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
-import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { classifyStyle, getStyleInfo, type TradingStyle } from '@/lib/utils/trading-style'
 
 // Sub-components
@@ -118,36 +117,11 @@ export const TraderRow = memo(
       return computed !== 'unknown' ? getStyleInfo(computed) : null
     }, [trader.trading_style, trader.avg_holding_hours, trader.trades_count, trader.win_rate])
 
-    // Prefetch trader detail on hover with debounce
-    const hoverTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-    useEffect(
-      () => () => {
-        if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
-      },
-      []
-    )
-    const handleMouseEnter = useCallback(() => {
-      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
-      hoverTimerRef.current = setTimeout(async () => {
-        try {
-          const detailUrl = `/api/traders/${encodeURIComponent(traderHandle)}`
-          const [{ queryClient }, { fetcher: sharedFetcher }] = await Promise.all([
-            import('@/app/components/Providers'),
-            import('@/lib/hooks/fetchers'),
-          ])
-          queryClient.prefetchQuery({
-            queryKey: ['trader-profile', detailUrl],
-            queryFn: () => sharedFetcher(detailUrl),
-            staleTime: STALE_STANDARD,
-          })
-        } catch {
-          /* prefetch is best-effort */
-        }
-      }, 100)
-    }, [traderHandle])
-    const handleMouseLeave = useCallback(() => {
-      if (hoverTimerRef.current) clearTimeout(hoverTimerRef.current)
-    }, [])
+    // NOTE: the old hover-prefetch was removed intentionally. It requested
+    // `/api/traders/${trader.handle}` where handle is a *truncated display
+    // string* (e.g. '0xf822...e01a') → guaranteed 404 on every hover, and its
+    // queryKey never matched the detail page's real queries (serving mode
+    // uses /core + /records with SSR initialData), so it was pure waste.
 
     const handleCompareToggle = (e: React.MouseEvent) => {
       e.preventDefault()
@@ -217,8 +191,6 @@ export const TraderRow = memo(
                 e.currentTarget.click()
               }
             }}
-            onMouseEnter={handleMouseEnter}
-            onMouseLeave={handleMouseLeave}
           >
             <Box
               className={`ranking-row ranking-table-grid ranking-table-grid-custom touch-target${rankClass}${flashClass ? ` ${flashClass}` : ''}`}
