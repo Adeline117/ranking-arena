@@ -384,7 +384,6 @@ async function main() {
   // Auto-cancel every confirm/beforeunload dialog — the destructive backstop.
   ctx.on('page', (p) => p.on('dialog', (d) => d.dismiss().catch(() => {})))
 
-  const page = await ctx.newPage()
   const counters = {
     clicked: 0,
     filled: 0,
@@ -395,17 +394,24 @@ async function main() {
     withErrors: 0,
     _bucket: null,
   }
-  page.on('pageerror', (e) => counters._bucket?.pageErrors.push(e.message.slice(0, 200)))
-  page.on('console', (m) => {
-    if (m.type() === 'error') counters._bucket?.consoleErrors.push(m.text().slice(0, 200))
-  })
-  page.on('response', (r) => {
-    if (r.status() >= 400 && !isWhitelisted(r.url())) {
-      counters._bucket?.httpErrors.push(
-        `${r.status()} ${r.request().method()} ${r.url()}`.slice(0, 200)
-      )
-    }
-  })
+  // Collectors are attached per-page so a recreated page (after a crash) still
+  // reports errors. Returns a fresh page with listeners wired.
+  const newTrackedPage = async () => {
+    const p = await ctx.newPage()
+    p.on('pageerror', (e) => counters._bucket?.pageErrors.push(e.message.slice(0, 200)))
+    p.on('console', (m) => {
+      if (m.type() === 'error') counters._bucket?.consoleErrors.push(m.text().slice(0, 200))
+    })
+    p.on('response', (r) => {
+      if (r.status() >= 400 && !isWhitelisted(r.url())) {
+        counters._bucket?.httpErrors.push(
+          `${r.status()} ${r.request().method()} ${r.url()}`.slice(0, 200)
+        )
+      }
+    })
+    return p
+  }
+  let page = await newTrackedPage()
 
   const ledger = []
   for (const route of routes) {
@@ -419,6 +425,15 @@ async function main() {
         status: 'fail:route',
         errors: [String(e.message).slice(0, 200)],
       })
+      // A route failure (esp. ERR_ABORTED) can leave the page/context wedged so
+      // every subsequent goto aborts too. Recreate the page to recover so one
+      // bad route doesn't sink the rest of the sweep.
+      try {
+        if (!page.isClosed()) await page.close().catch(() => {})
+        page = await newTrackedPage()
+      } catch {
+        /* if we can't recreate, the next iteration's goto will record its own failure */
+      }
     }
   }
 
