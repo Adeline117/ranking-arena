@@ -2724,6 +2724,12 @@ const en = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: 'Deleted user',
+  pollDuration1h: '1 hour',
+  pollDuration6h: '6 hours',
+  pollDuration12h: '12 hours',
+  pollDuration1d: '1 day',
+  pollDuration3d: '3 days',
+  pollDuration7d: '7 days',
   myWatchlist: 'My Watchlist',
   tradingStyleLabel: 'Style',
   presetAll: 'All',
@@ -4634,6 +4640,7 @@ const en = {
   sectorTreemap7d: '7D',
   sectorTreemapLoading: 'Loading...',
   sectorTreemapMCap: 'MCap',
+  sectorTreemapOthers: 'Others',
   sectorTreemapBigDrop: 'Big Drop',
   sectorTreemapDip: 'Dip',
   sectorTreemapRise: 'Rise',

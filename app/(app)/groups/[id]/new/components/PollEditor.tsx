@@ -1,6 +1,5 @@
 'use client'
 
-import { localizedLabel } from '@/lib/utils/format'
 import { Box, Text } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import type { PollOption } from '../types'
@@ -18,10 +17,13 @@ interface PollEditorProps {
 }
 
 export function PollEditor({
-  pollOptions, setPollOptions,
-  pollType, setPollType,
-  pollDuration, setPollDuration,
-  language, t,
+  pollOptions,
+  setPollOptions,
+  pollType,
+  setPollType,
+  pollDuration,
+  setPollDuration,
+  t,
 }: PollEditorProps): React.ReactElement {
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
@@ -30,8 +32,18 @@ export function PollEditor({
           {t('pollOptionsLabel')}
         </Text>
         {pollOptions.map((option, index) => (
-          <Box key={index} style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2], marginBottom: tokens.spacing[2] }}>
-            <Text size="xs" color="tertiary" style={{ width: 20 }}>{index + 1}.</Text>
+          <Box
+            key={index}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
+              marginBottom: tokens.spacing[2],
+            }}
+          >
+            <Text size="xs" color="tertiary" style={{ width: 20 }}>
+              {index + 1}.
+            </Text>
             <input
               type="text"
               placeholder={`${t('pollOptionPlaceholder')} ${index + 1}`}
@@ -46,7 +58,7 @@ export function PollEditor({
                 flex: 1,
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
-                border: ('1px solid ' + tokens.colors.border.primary),
+                border: '1px solid ' + tokens.colors.border.primary,
                 background: tokens.colors.bg.primary,
                 color: tokens.colors.text.primary,
                 fontSize: tokens.typography.fontSize.sm,
@@ -54,7 +66,8 @@ export function PollEditor({
               }}
             />
             {pollOptions.length > 2 && (
-              <button aria-label="Close"
+              <button
+                aria-label="Close"
                 onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== index))}
                 style={{
                   width: 28,
@@ -77,7 +90,7 @@ export function PollEditor({
             onClick={() => setPollOptions([...pollOptions, { text: '', votes: 0 }])}
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              border: ('1px dashed ' + tokens.colors.border.primary),
+              border: '1px dashed ' + tokens.colors.border.primary,
               background: 'transparent',
               color: tokens.colors.text.secondary,
               borderRadius: tokens.radius.md,
@@ -93,7 +106,11 @@ export function PollEditor({
 
       <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
         <Box style={{ flex: 1, minWidth: 150 }}>
-          <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+          <Text
+            size="xs"
+            weight="bold"
+            style={{ marginBottom: tokens.spacing[2], display: 'block' }}
+          >
             {t('pollTypeLabel')}
           </Text>
           <Box style={{ display: 'flex', gap: tokens.spacing[2] }}>
@@ -104,8 +121,10 @@ export function PollEditor({
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
                 border: `1px solid ${pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
-                background: pollType === 'single' ? 'var(--color-accent-primary-20)' : 'transparent',
-                color: pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
+                background:
+                  pollType === 'single' ? 'var(--color-accent-primary-20)' : 'transparent',
+                color:
+                  pollType === 'single' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
                 cursor: 'pointer',
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: 600,
@@ -120,8 +139,12 @@ export function PollEditor({
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                 borderRadius: tokens.radius.md,
                 border: `1px solid ${pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.border.primary}`,
-                background: pollType === 'multiple' ? 'var(--color-accent-primary-20)' : 'transparent',
-                color: pollType === 'multiple' ? tokens.colors.accent.brand : tokens.colors.text.secondary,
+                background:
+                  pollType === 'multiple' ? 'var(--color-accent-primary-20)' : 'transparent',
+                color:
+                  pollType === 'multiple'
+                    ? tokens.colors.accent.brand
+                    : tokens.colors.text.secondary,
                 cursor: 'pointer',
                 fontSize: tokens.typography.fontSize.sm,
                 fontWeight: 600,
@@ -133,7 +156,11 @@ export function PollEditor({
         </Box>
 
         <Box style={{ flex: 1, minWidth: 150 }}>
-          <Text size="xs" weight="bold" style={{ marginBottom: tokens.spacing[2], display: 'block' }}>
+          <Text
+            size="xs"
+            weight="bold"
+            style={{ marginBottom: tokens.spacing[2], display: 'block' }}
+          >
             {t('pollDurationLabel')}
           </Text>
           <select
@@ -143,7 +170,7 @@ export function PollEditor({
               width: '100%',
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.md,
-              border: ('1px solid ' + tokens.colors.border.primary),
+              border: '1px solid ' + tokens.colors.border.primary,
               background: tokens.colors.bg.primary,
               color: tokens.colors.text.primary,
               fontSize: tokens.typography.fontSize.sm,
@@ -151,8 +178,10 @@ export function PollEditor({
               cursor: 'pointer',
             }}
           >
-            {POLL_DURATION_OPTIONS.map(opt => (
-              <option key={opt.value} value={opt.value}>{localizedLabel(opt.label_zh, opt.label_en, language)}</option>
+            {POLL_DURATION_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {t(opt.labelKey)}
+              </option>
             ))}
           </select>
         </Box>
