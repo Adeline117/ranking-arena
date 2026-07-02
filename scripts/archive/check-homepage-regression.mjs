@@ -40,16 +40,22 @@ async function main() {
   const ssrRows = (html.match(/class="ssr-row/g) || []).length
   const roiVals = (html.match(/ssr-roi-val/g) || []).length
   const dataCount = Math.max(traderLinks, ssrRows, roiVals)
-  check('SSR table has trader data (≥5 rows)', dataCount >= 5,
-    `${traderLinks} trader links, ${ssrRows} ssr-rows, ${roiVals} roi values`)
+  check(
+    'SSR table has trader data (≥5 rows)',
+    dataCount >= 5,
+    `${traderLinks} trader links, ${ssrRows} ssr-rows, ${roiVals} roi values`
+  )
 
   // TopNav present
   check('TopNav present', html.includes('ssr-topnav'), null)
 
   // Hero stats (check for K+ pattern = real data, not empty)
   const kPlusMatches = html.match(/\d+K\+/g) || []
-  check('Hero stats with real numbers', kPlusMatches.length >= 1,
-    `found: ${kPlusMatches.join(', ')}`)
+  check(
+    'Hero stats with real numbers',
+    kPlusMatches.length >= 1,
+    `found: ${kPlusMatches.join(', ')}`
+  )
 
   // ─── 2. Check codebase (components exist in source) ───
   console.log('\nPhase 2: Source code component checks')
@@ -76,13 +82,13 @@ async function main() {
 
   // ─── 3. Summary ───
   console.log('\n' + '═'.repeat(50))
-  const passed = results.filter(r => r.pass).length
-  const failed = results.filter(r => !r.pass).length
+  const passed = results.filter((r) => r.pass).length
+  const failed = results.filter((r) => !r.pass).length
   console.log(`  ${passed} passed, ${failed} failed`)
 
   if (failed > 0) {
     console.log('\n  ❌ FAIL — Homepage has regressions:')
-    for (const r of results.filter(r => !r.pass)) {
+    for (const r of results.filter((r) => !r.pass)) {
       console.log(`     - ${r.name}`)
     }
     process.exit(1)
@@ -91,4 +97,7 @@ async function main() {
   }
 }
 
-main().catch(e => { console.error('FATAL:', e.message); process.exit(1) })
+main().catch((e) => {
+  console.error('FATAL:', e.message)
+  process.exit(1)
+})

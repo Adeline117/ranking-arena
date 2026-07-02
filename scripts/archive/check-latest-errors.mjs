@@ -9,7 +9,7 @@ const supabase = createClient(
 
 async function main() {
   console.log('🔍 检查最新错误详情...\n')
-  
+
   // Get most recent error logs with full metadata
   const { data, error } = await supabase
     .from('pipeline_logs')
@@ -17,17 +17,17 @@ async function main() {
     .eq('status', 'error')
     .order('started_at', { ascending: false })
     .limit(5)
-  
+
   if (error) {
     console.error('❌ 查询失败:', error.message)
     return
   }
-  
+
   if (!data || data.length === 0) {
     console.log('✅ 无错误日志')
     return
   }
-  
+
   for (const log of data) {
     console.log(`\n${'='.repeat(80)}`)
     console.log(`任务: ${log.job_name}`)
