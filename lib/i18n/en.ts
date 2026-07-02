@@ -4474,6 +4474,8 @@ const en = {
   botsUsers: 'Users',
   botsVolume: 'Volume',
   botsTotalCount: '{count} bots total',
+  botsDataStaleWarning:
+    'This leaderboard has not been refreshed for {days} days — rankings may be outdated',
   botsCategoryAll: 'All',
   botsCategoryTgBot: 'TG Bots',
   botsCategoryAiAgent: 'AI Agents',
