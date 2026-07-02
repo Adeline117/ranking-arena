@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens, alpha } from '@/lib/design-tokens'
+import { t } from '@/lib/i18n'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { RoiDisplay } from './components'
@@ -81,9 +82,7 @@ export default function FollowingListItem({
           >
             {item.type === 'trader'
               ? getSourceDisplayName(item.source || 'binance', language)
-              : language === 'en'
-                ? 'User'
-                : '用户'}
+              : t('userLabel')}
           </span>
         </Box>
 

@@ -2649,6 +2649,7 @@ const zh = {
 
   // 瀑布流卡片 / 小组帖子列表
   deletedUser: '已注销用户',
+  userLabel: '用户',
   notifGroupedCount: '{n} 条通知',
   loginTooManyAttemptsCode: '尝试次数过多，请重新获取验证码',
   loginIncorrectCredentials: '邮箱或密码不正确，请重试',

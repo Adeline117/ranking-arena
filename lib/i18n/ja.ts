@@ -2506,6 +2506,7 @@ const ja = {
   commentFailedRetry: 'コメントに失敗しました。再試行してください',
 
   deletedUser: '削除済みユーザー',
+  userLabel: 'ユーザー',
   notifGroupedCount: '{n} 件の通知',
   loginTooManyAttemptsCode: '試行回数が多すぎます。新しいコードを再取得してください',
   loginIncorrectCredentials:
