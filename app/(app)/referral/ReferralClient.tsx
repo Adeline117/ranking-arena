@@ -71,7 +71,15 @@ export default function ReferralClient() {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Fallback: select text
+      // Fallback for older browsers / clipboard permission denied
+      const textarea = document.createElement('textarea')
+      textarea.value = referral.referral_link
+      document.body.appendChild(textarea)
+      textarea.select()
+      document.execCommand('copy')
+      document.body.removeChild(textarea)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
     }
   }, [referral])
 
