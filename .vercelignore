@@ -25,6 +25,9 @@ docs/
 # 脚本（除非需要）
 scripts/
 !scripts/**/*.mjs
+# ignoreCommand 依赖此脚本——被 .vercelignore 排除会让所有部署（含 preview）
+# 直接 ERROR 'No such file'（2026-07-02 实测），必须显式放行
+!scripts/vercel-ignore-build.sh
 
 # 构建工具
 .storybook/
