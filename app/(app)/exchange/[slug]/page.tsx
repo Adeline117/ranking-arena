@@ -354,6 +354,7 @@ export default async function ExchangeLandingPage({
                         style={{
                           padding: '12px',
                           textAlign: 'right',
+                          // eslint-disable-next-line no-restricted-syntax -- brand gold (matches purpleGold gradient) by design
                           color: '#D4AF37',
                           fontWeight: 700,
                         }}
@@ -368,8 +369,8 @@ export default async function ExchangeLandingPage({
                           color:
                             trader.roi != null
                               ? trader.roi >= 0
-                                ? '#2FE57D'
-                                : '#FF5555'
+                                ? 'var(--color-accent-success)'
+                                : 'var(--color-accent-error)'
                               : 'var(--text-secondary, rgba(255,255,255,0.5))',
                         }}
                       >
@@ -383,8 +384,8 @@ export default async function ExchangeLandingPage({
                           color:
                             trader.pnl != null
                               ? trader.pnl >= 0
-                                ? '#2FE57D'
-                                : '#FF5555'
+                                ? 'var(--color-accent-success)'
+                                : 'var(--color-accent-error)'
                               : 'var(--text-secondary, rgba(255,255,255,0.5))',
                         }}
                       >
@@ -406,8 +407,9 @@ export default async function ExchangeLandingPage({
               display: 'inline-block',
               padding: '12px 32px',
               borderRadius: 8,
+              // eslint-disable-next-line no-restricted-syntax -- vivid CTA gradient by design (no token equivalent)
               background: 'linear-gradient(135deg, #8B5CF6, #6366f1)',
-              color: '#fff',
+              color: 'var(--color-on-accent)',
               fontWeight: 700,
               fontSize: 15,
               textDecoration: 'none',
