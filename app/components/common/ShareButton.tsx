@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import { trackEvent } from '@/lib/analytics/track'
 
 export type ShareContentType = 'trader' | 'post'
 
@@ -93,13 +94,19 @@ export default function ShareButton({
 
   const text = buildShareText(data, t)
 
+  const trackShare = useCallback(
+    (channel: string) => trackEvent('share', { content_type: data.type, channel }),
+    [data.type]
+  )
+
   const handleNativeShare = useCallback(async () => {
     try {
       await navigator.share({ text, url: data.url })
+      trackShare('native')
     } catch {
       // Intentionally swallowed: user cancelled share dialog or Web Share API unavailable
     }
-  }, [text, data.url])
+  }, [text, data.url, trackShare])
 
   const handleClick = useCallback(() => {
     if (
@@ -147,9 +154,10 @@ export default function ShareButton({
 
   const copyLink = useCallback(async () => {
     const success = await copyToClipboard(data.url)
+    if (success) trackShare('copy_link')
     showToast(success ? t('linkCopied') : t('copyFailed'), success ? 'success' : 'error', 2000)
     setOpen(false)
-  }, [data.url, showToast, t, copyToClipboard])
+  }, [data.url, showToast, t, copyToClipboard, trackShare])
 
   const openPopup = useCallback(
     (url: string) => {
@@ -163,20 +171,23 @@ export default function ShareButton({
   const shareToTwitter = useCallback(() => {
     const shareUrl = withUtm(data.url, 'twitter')
     const shareText = text.replace(data.url, shareUrl)
+    trackShare('twitter')
     openPopup(`https://x.com/intent/post?text=${encodeURIComponent(shareText)}`)
-  }, [text, data.url, openPopup])
+  }, [text, data.url, openPopup, trackShare])
 
   const shareToTelegram = useCallback(() => {
     const shareUrl = withUtm(data.url, 'telegram')
     const shareText = text.replace(data.url, shareUrl)
+    trackShare('telegram')
     openPopup(
       `https://t.me/share/url?url=${encodeURIComponent(shareUrl)}&text=${encodeURIComponent(shareText)}`
     )
-  }, [text, data.url, openPopup])
+  }, [text, data.url, openPopup, trackShare])
 
   const shareToWhatsApp = useCallback(() => {
     const shareUrl = withUtm(data.url, 'whatsapp')
     const shareText = text.replace(data.url, shareUrl)
+    trackShare('whatsapp')
     openPopup(`https://wa.me/?text=${encodeURIComponent(shareText)}`)
   }, [text, data.url, openPopup])
 
