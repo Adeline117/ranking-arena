@@ -34,9 +34,10 @@ scraper/checkpoint 等，没迁备份）
 ## 防再犯
 
 - [x] backup-freshness-check.mjs：备份过期告警 + 哨兵执行失败也告警（fail-loud）
-- [ ] crontab 两条目恢复（用户授权后写入）
-- [ ] GH secrets 配置（复活 health-monitor.yml / post-deploy-smoke 的全部告警）
-- [ ] 季度恢复演练（SLO #4：只备不演练等于没备）
+- [x] crontab 两条目恢复（2026-07-02 用户授权后写入：日备 03:30 + 哨兵 09:00）
+- [x] GH secrets 配置（2026-07-02：TELEGRAM_BOT_TOKEN/ALERT_CHAT_ID/CRON_SECRET/
+      VERCEL_TOKEN/ORG_ID/PROJECT_ID 全部配入——告警与自动回滚复活）
+- [ ] 季度恢复演练（SLO #4：只备不演练等于没备）——下次演练 2026-10 前
 
 ## 教训
 

@@ -205,10 +205,13 @@
   已补跑备份恢复 RPO，复盘 PM-20260702-backup-silent-failure.md。
 - 2026-07-02：Batch F——tsc 豁免名单 166 条全量清零（实测 0 error，全是
   死条目，a0b53152b）；货币格式化 import 棘轮（303b59e5b）。
-- **待用户动作（权限边界，Claude 无法代办）**：
-  1. `gh secret set`：TELEGRAM_BOT_TOKEN / TELEGRAM_ALERT_CHAT_ID /
-     CRON_SECRET（值在 .env.local）+ VERCEL_TOKEN（Vercel Dashboard →
-     Settings → Tokens 新建）+ VERCEL_PROJECT_ID（.vercel/project.json）
-     —— 复活 post-deploy-smoke 的自动回滚与全部 GH 告警
-  2. crontab 恢复两条目：日备 03:30 + 备份哨兵 09:00（命令见会话总结）
-  3. Vercel 部署门禁（ignoreCommand 或 Deploy Hook 方案）依赖 #1 的 token
+- 2026-07-02（用户授权后）：**三项待办全部落地**——
+  1. GH secrets 配齐（TELEGRAM×2/CRON_SECRET/VERCEL_TOKEN/ORG_ID/PROJECT_ID），
+     全部 GH 告警与自动回滚复活。注意 VERCEL_TOKEN 用的是本机 CLI 登录 token
+     （全账户权限）——建议后续在 Vercel Dashboard 换发 scoped token 替换。
+  2. crontab 恢复（日备 03:30 + 备份哨兵 09:00）。
+  3. **CI 门禁部署上线（d16fc157a）**：push main 不再直通生产；
+     4 门禁作业全绿 → deploy-gate.yml CLI 部署 → 内嵌 smoke → 失败自动
+     promote 回滚。逃生口 `[deploy-force]`；一行 revert vercel.json
+     ignoreCommand 可回旧行为。附带发现并修复：promote API 端点 v6 是 404，
+     旧 post-deploy-smoke 的回滚代码从未可能成功（改 v10 并实测 409 no-op 验证）。
