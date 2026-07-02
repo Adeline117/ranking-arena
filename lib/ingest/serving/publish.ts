@@ -22,6 +22,12 @@ import type {
 } from '../core/types'
 import type { RejectedRow } from '../staging/validate'
 import { deriveMissingRatios, deriveRiskFromBlocks } from '../core/series-risk'
+
+/** PURE-DEX sources the spec authorizes to self-compute risk from chain data
+ *  (§31/32/34: "所有数据要靠我们链上算"). CEX gives real Sharpe on its page —
+ *  self-deriving a daily-approx there is inaccurate (user directive 2026-07-02),
+ *  so it's gated OUT for every CEX source. */
+const SELF_DERIVE_RISK_SOURCES = new Set(['hyperliquid', 'gmx', 'gtrade'])
 import {
   BOOTSTRAP_DEVIATION_PCT,
   ROLLING_DEVIATION_PCT,
@@ -311,11 +317,15 @@ export async function publishProfile(
       )
     }
 
-    // CEX self-derivation: fill Sharpe/Sortino from the cumulative pnl/roi
-    // series we already captured, for sources the exchange never gives it
-    // (bitget/xt/mexc/bitunix/okx_web3_solana). Same engine as DEX Tier-0;
-    // only fills NULLs, tags provenance. Mutates profile.stats in place.
-    deriveMissingRatios(profile.stats, profile.series)
+    // Self-derived risk ratios are only legitimate for PURE-DEX sources whose
+    // data has no exchange-provided value to harvest (spec §31/32/34: HL/GMX/
+    // gTrade "所有数据要靠我们链上算"). For CEX the exchange provides the real
+    // Sharpe on its page (e.g. Binance) — a daily-approx self-fill would be
+    // INACCURATE and must NOT masquerade as the exchange value. Harvest real or
+    // leave honest NULL. (User directive 2026-07-02.)
+    if (SELF_DERIVE_RISK_SOURCES.has(src.slug)) {
+      deriveMissingRatios(profile.stats, profile.series)
+    }
 
     for (const s of profile.stats) {
       await client.query(
@@ -447,11 +457,9 @@ export async function publishBoardSeries(
       )
     }
 
-    // Board-path self-derivation (spec §Tier-0-CEX): board-ONLY sources
-    // (okx_web3_solana etc.) never hit publishProfile, so this is where their
-    // Sharpe/Sortino/volatility get computed from the board series we just
-    // wrote. Fills trader_stats ONLY where the exchange left it NULL — never
-    // overrides a real value. One UPDATE per (trader, tf) with a derivable series.
+    // Board-path self-derivation — PURE-DEX only (see publishProfile note +
+    // user directive 2026-07-02). CEX gets no self-filled risk ratios: harvest
+    // the exchange's real value or leave honest NULL.
     const derived: Array<{
       trader_id: number
       timeframe: number
@@ -459,22 +467,24 @@ export async function publishBoardSeries(
       sortino: number | null
       volatility: number | null
     }> = []
-    for (const [exchangeTraderId, blocks] of seriesByTrader) {
-      const traderId = traderIds.get(exchangeTraderId)
-      if (traderId === undefined) continue
-      const byTf = new Map<number, BoardSeriesBlock[]>()
-      for (const b of blocks) {
-        const arr = byTf.get(b.timeframe) ?? []
-        arr.push(b)
-        byTf.set(b.timeframe, arr)
-      }
-      for (const [timeframe, tfBlocks] of byTf) {
-        const r = deriveRiskFromBlocks(tfBlocks)
-        if (r && (r.sharpe !== null || r.sortino !== null || r.volatility !== null)) {
-          derived.push({ trader_id: traderId, timeframe, ...r })
+    if (SELF_DERIVE_RISK_SOURCES.has(src.slug)) {
+      for (const [exchangeTraderId, blocks] of seriesByTrader) {
+        const traderId = traderIds.get(exchangeTraderId)
+        if (traderId === undefined) continue
+        const byTf = new Map<number, BoardSeriesBlock[]>()
+        for (const b of blocks) {
+          const arr = byTf.get(b.timeframe) ?? []
+          arr.push(b)
+          byTf.set(b.timeframe, arr)
+        }
+        for (const [timeframe, tfBlocks] of byTf) {
+          const r = deriveRiskFromBlocks(tfBlocks)
+          if (r && (r.sharpe !== null || r.sortino !== null || r.volatility !== null)) {
+            derived.push({ trader_id: traderId, timeframe, ...r })
+          }
         }
       }
-    }
+    } // end SELF_DERIVE_RISK_SOURCES gate
     for (let i = 0; i < derived.length; i += CHUNK) {
       const slice = derived.slice(i, i + CHUNK)
       await client.query(
