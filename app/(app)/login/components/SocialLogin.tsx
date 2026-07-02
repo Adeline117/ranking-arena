@@ -185,32 +185,38 @@ export default function SocialLogin({
         Google
       </button>
 
-      {/* X + Discord in a row */}
+      {/* X + Discord in a row.
+          X (Twitter) OAuth is hidden unless NEXT_PUBLIC_ENABLE_X_LOGIN=true —
+          the Twitter provider is not configured in Supabase, so the button
+          dead-ended on a 400 authorize page. Flip the flag once the provider is
+          set up in Supabase Auth. */}
       <div style={{ display: 'flex', gap: 8 }}>
-        <button
-          onClick={getOAuthHandler('twitter', 'X')}
-          className="login-button"
-          style={{
-            flex: 1,
-            padding: '10px 12px',
-            borderRadius: 10,
-            border: '1px solid var(--glass-border-light)',
-            background: 'transparent',
-            color: 'var(--color-text-secondary)',
-            fontWeight: 600,
-            fontSize: 13,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 6,
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
-            <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
-          </svg>
-          X
-        </button>
+        {process.env.NEXT_PUBLIC_ENABLE_X_LOGIN === 'true' && (
+          <button
+            onClick={getOAuthHandler('twitter', 'X')}
+            className="login-button"
+            style={{
+              flex: 1,
+              padding: '10px 12px',
+              borderRadius: 10,
+              border: '1px solid var(--glass-border-light)',
+              background: 'transparent',
+              color: 'var(--color-text-secondary)',
+              fontWeight: 600,
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 6,
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+            X
+          </button>
+        )}
 
         <button
           onClick={getOAuthHandler('discord', 'Discord')}
