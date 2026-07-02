@@ -33,13 +33,14 @@ const customJestConfig = {
   testTimeout: 10000,
   coverageThreshold: {
     global: {
-      // Ratchet: set just above current levels (14-15%) so coverage can only go UP.
+      // Ratchet: set just below current levels so coverage can only go UP.
       // Raise these after each coverage improvement. Never lower them.
-      // Current (2026-05-05): statements 14.5%, branches 12.5%, lines 15.1%, functions 10.7%
-      branches: 12,
-      functions: 10,
-      lines: 14,
-      statements: 14,
+      // Current (2026-07-02): statements 20.29%, branches 18.5%, lines 20.55%, functions 15.71%
+      // (2026-05-05 was: statements 14.5%, branches 12.5%, lines 15.1%, functions 10.7%)
+      branches: 18,
+      functions: 15,
+      lines: 20,
+      statements: 19.5,
     },
   },
 }

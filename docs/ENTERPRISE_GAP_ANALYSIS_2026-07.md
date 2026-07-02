@@ -191,3 +191,24 @@
 
 - 2026-07-02：Batch A 完成（gitignore 加固 cbd8c60ca、脚本归档 e932f0946）。
   docs/ 日期报告归档暂缓（5/7 是在用台账）。
+- 2026-07-02：**CI 修真绿达成**——两个根因：① npm audit 16 high 阻断
+  （audit fix + viem 嵌套 override 压 ws，b879c2fe9）；② per-ref
+  cancel-in-progress 让高频直推互相取消、CI 忙时永远跑不完（改 per-SHA 分组
+  - E2E job 级 per-ref cancel，9abb80f5c）。改后四个门禁作业
+    （pre-checks/lint-typecheck/unit/build）全绿。
+- 2026-07-02：Batch D 完成——api-auth-coverage-check（321 route 全量判定，
+  64 公开白名单登记理由；唯一真问题 onchain-enrich 公开 POST 无限流已补
+  sensitive 15/min fail-close，2d8648942）；接入 ci.yml 阻断 + pre-push 有界。
+- 2026-07-02：Batch E 完成——postmortem 制度 + 回填 3 起（df5dbe086）；
+  SLO 首版 5 条 + 备份新鲜度哨兵（42f776a05）。**哨兵首跑即抓出 SEV2：
+  日备静默失败 3 周**（crontab 调度丢失 + GH 兜底告警 secrets 未配双死），
+  已补跑备份恢复 RPO，复盘 PM-20260702-backup-silent-failure.md。
+- 2026-07-02：Batch F——tsc 豁免名单 166 条全量清零（实测 0 error，全是
+  死条目，a0b53152b）；货币格式化 import 棘轮（303b59e5b）。
+- **待用户动作（权限边界，Claude 无法代办）**：
+  1. `gh secret set`：TELEGRAM_BOT_TOKEN / TELEGRAM_ALERT_CHAT_ID /
+     CRON_SECRET（值在 .env.local）+ VERCEL_TOKEN（Vercel Dashboard →
+     Settings → Tokens 新建）+ VERCEL_PROJECT_ID（.vercel/project.json）
+     —— 复活 post-deploy-smoke 的自动回滚与全部 GH 告警
+  2. crontab 恢复两条目：日备 03:30 + 备份哨兵 09:00（命令见会话总结）
+  3. Vercel 部署门禁（ignoreCommand 或 Deploy Hook 方案）依赖 #1 的 token
