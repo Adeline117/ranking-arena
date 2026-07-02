@@ -2103,35 +2103,35 @@
 {"route":"/u/arena_bot","idx":16,"fp":"a|||Hot|Hot|/hot","text":"Hot","ariaLabel":"Hot","href":"/hot","tag":"a","status":"skip:hidden","errors":[]}
 {"route":"/u/arena_bot","idx":17,"fp":"a|||Me|Me|/settings","text":"Me","ariaLabel":"Me","href":"/settings","tag":"a","status":"skip:hidden","errors":[]}
 {"route":"/u/arena_bot","idx":19,"fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked","errors":[]}
-{"route":"/compare","idx":0,"ts":"2026-07-02T11:42:50.491Z","fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":1,"ts":"2026-07-02T11:42:55.141Z","fp":"button|button||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":2,"ts":"2026-07-02T11:42:59.743Z","fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
-{"route":"/compare","idx":3,"ts":"2026-07-02T11:42:59.743Z","fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
-{"route":"/compare","idx":4,"ts":"2026-07-02T11:42:59.743Z","fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
-{"route":"/compare","idx":5,"ts":"2026-07-02T11:42:59.743Z","fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
-{"route":"/compare","idx":6,"ts":"2026-07-02T11:42:59.743Z","fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
-{"route":"/compare","idx":7,"ts":"2026-07-02T11:42:59.743Z","fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled→nav:/login","errors":[]}
-{"route":"/compare","idx":8,"ts":"2026-07-02T11:43:03.850Z","fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
-{"route":"/compare","idx":9,"ts":"2026-07-02T11:43:03.850Z","fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":10,"ts":"2026-07-02T11:43:08.490Z","fp":"button||||System Theme|","text":"","ariaLabel":"System Theme","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":11,"ts":"2026-07-02T11:43:13.147Z","fp":"button|||Login|Login|","text":"Login","ariaLabel":"Login","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":12,"ts":"2026-07-02T11:43:17.757Z","fp":"button|||中文||","text":"中文","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":13,"ts":"2026-07-02T11:43:22.366Z","fp":"button|||EN||","text":"EN","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":14,"ts":"2026-07-02T11:43:26.974Z","fp":"button|||Google||","text":"Google","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/v3/signin/identifier","errors":[]}
-{"route":"/compare","idx":15,"ts":"2026-07-02T11:43:31.969Z","fp":"button|||Discord||","text":"Discord","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/oauth2/authorize","errors":[]}
-{"route":"/compare","idx":16,"ts":"2026-07-02T11:43:37.190Z","fp":"button|||Sign in with passkey||","text":"Sign in with passkey","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":17,"ts":"2026-07-02T11:43:41.818Z","fp":"button|||Sign in with Wallet||","text":"Sign in with Wallet","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":18,"ts":"2026-07-02T11:43:46.439Z","fp":"input|email||||","text":"","ariaLabel":"","href":"","tag":"input","status":"ok:filled→nav:/login","errors":[]}
-{"route":"/compare","idx":19,"ts":"2026-07-02T11:43:50.528Z","fp":"input|password||||","text":"","ariaLabel":"","href":"","tag":"input","status":"ok:filled→nav:/login","errors":[]}
-{"route":"/compare","idx":20,"ts":"2026-07-02T11:43:54.646Z","fp":"button|button||Show||","text":"Show","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":21,"ts":"2026-07-02T11:43:59.274Z","fp":"button|submit||Login||","text":"Login","ariaLabel":"","href":"","tag":"button","status":"skip:disabled","errors":[]}
-{"route":"/compare","idx":22,"ts":"2026-07-02T11:43:59.274Z","fp":"a|||Forgot password?||/reset-password","text":"Forgot password?","ariaLabel":"","href":"/reset-password","tag":"a","status":"denied:denylist","errors":[]}
-{"route":"/compare","idx":23,"ts":"2026-07-02T11:43:59.274Z","fp":"button|button||Or login with verification code||","text":"Or login with verification code","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":24,"ts":"2026-07-02T11:44:03.896Z","fp":"button|||No account? Register with code||","text":"No account? Register with code","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/compare","idx":25,"ts":"2026-07-02T11:44:08.513Z","fp":"a|||Terms of Service||/terms","text":"Terms of Service","ariaLabel":"","href":"/terms","tag":"a","status":"link:/terms","errors":[]}
-{"route":"/compare","idx":26,"ts":"2026-07-02T11:44:08.513Z","fp":"a|||Privacy Policy||/privacy","text":"Privacy Policy","ariaLabel":"","href":"/privacy","tag":"a","status":"link:/privacy","errors":[]}
-{"route":"/compare","idx":27,"ts":"2026-07-02T11:44:08.513Z","fp":"button||||Back to top|","text":"","ariaLabel":"Back to top","href":"","tag":"button","status":"skip:hidden","errors":[]}
-{"route":"/compare","idx":28,"ts":"2026-07-02T11:44:08.513Z","fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
+{"route":"/compare","idx":0,"ts":"2026-07-02T20:15:14.298Z","fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":1,"ts":"2026-07-02T20:15:14.998Z","fp":"button|button||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":2,"ts":"2026-07-02T20:15:15.680Z","fp":"a|||Skip to main content||#main-content","text":"Skip to main content","ariaLabel":"","href":"#main-content","tag":"a","status":"skip:offscreen-a11y","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":3,"ts":"2026-07-02T20:15:15.680Z","fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":4,"ts":"2026-07-02T20:15:15.680Z","fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":5,"ts":"2026-07-02T20:15:15.680Z","fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":6,"ts":"2026-07-02T20:15:15.680Z","fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":7,"ts":"2026-07-02T20:15:15.680Z","fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":8,"ts":"2026-07-02T20:15:15.680Z","fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":9,"ts":"2026-07-02T20:15:15.863Z","fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":10,"ts":"2026-07-02T20:15:15.863Z","fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":11,"ts":"2026-07-02T20:15:16.597Z","fp":"button||||System Theme|","text":"","ariaLabel":"System Theme","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":12,"ts":"2026-07-02T20:15:17.303Z","fp":"button|||Login|Login|","text":"Login","ariaLabel":"Login","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":13,"ts":"2026-07-02T20:15:18.003Z","fp":"button|||中文||","text":"中文","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":14,"ts":"2026-07-02T20:15:18.730Z","fp":"button|||EN||","text":"EN","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":15,"ts":"2026-07-02T20:15:19.420Z","fp":"button|||Google||","text":"Google","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/v3/signin/identifier","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":16,"ts":"2026-07-02T20:15:24.414Z","fp":"button|||Sign in with passkey||","text":"Sign in with passkey","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":17,"ts":"2026-07-02T20:15:25.096Z","fp":"button|||Sign in with Wallet||","text":"Sign in with Wallet","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":18,"ts":"2026-07-02T20:15:25.803Z","fp":"input|email||||","text":"","ariaLabel":"","href":"","tag":"input","status":"ok:filled","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":19,"ts":"2026-07-02T20:15:26.000Z","fp":"input|password||||","text":"","ariaLabel":"","href":"","tag":"input","status":"ok:filled","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":20,"ts":"2026-07-02T20:15:26.175Z","fp":"button|button||Show||","text":"Show","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":21,"ts":"2026-07-02T20:15:26.877Z","fp":"button|submit||Login||","text":"Login","ariaLabel":"","href":"","tag":"button","status":"skip:disabled","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":22,"ts":"2026-07-02T20:15:26.877Z","fp":"a|||Forgot password?||/reset-password","text":"Forgot password?","ariaLabel":"","href":"/reset-password","tag":"a","status":"denied:denylist","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":23,"ts":"2026-07-02T20:15:26.877Z","fp":"button|button||Or login with verification code||","text":"Or login with verification code","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":24,"ts":"2026-07-02T20:15:27.573Z","fp":"button|||No account? Register with code||","text":"No account? Register with code","ariaLabel":"","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":25,"ts":"2026-07-02T20:15:28.268Z","fp":"a|||Terms of Service||/terms","text":"Terms of Service","ariaLabel":"","href":"/terms","tag":"a","status":"link:/terms","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":26,"ts":"2026-07-02T20:15:28.268Z","fp":"a|||Privacy Policy||/privacy","text":"Privacy Policy","ariaLabel":"","href":"/privacy","tag":"a","status":"link:/privacy","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":27,"ts":"2026-07-02T20:15:28.268Z","fp":"button||||Back to top|","text":"","ariaLabel":"Back to top","href":"","tag":"button","status":"skip:hidden","errors":[],"finalPath":"/login"}
+{"route":"/compare","idx":28,"ts":"2026-07-02T20:15:28.268Z","fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked","errors":[],"finalPath":"/login"}
 {"route":"/login","idx":0,"ts":"2026-07-02T11:44:17.207Z","fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
 {"route":"/login","idx":1,"ts":"2026-07-02T11:44:17.207Z","fp":"a|||Skip to main content||#main-content","text":"Skip to main content","ariaLabel":"","href":"#main-content","tag":"a","status":"skip:offscreen-a11y","errors":[]}
 {"route":"/login","idx":2,"ts":"2026-07-02T11:44:17.207Z","fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
@@ -2161,32 +2161,4 @@
 {"route":"/login","idx":26,"ts":"2026-07-02T11:44:34.370Z","fp":"a|||Privacy Policy||/privacy","text":"Privacy Policy","ariaLabel":"","href":"/privacy","tag":"a","status":"link:/privacy","errors":[]}
 {"route":"/login","idx":27,"ts":"2026-07-02T11:44:34.370Z","fp":"button||||Back to top|","text":"","ariaLabel":"Back to top","href":"","tag":"button","status":"skip:hidden","errors":[]}
 {"route":"/login","idx":28,"ts":"2026-07-02T11:44:34.370Z","fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked","errors":[]}
-{"route":"/onboarding","idx":0,"ts":"2026-07-02T11:44:39.652Z","fp":"button|||✕|Dismiss|","text":"✕","ariaLabel":"Dismiss","href":"","tag":"button","status":"skip:hidden","errors":[]}
-{"route":"/onboarding","idx":1,"ts":"2026-07-02T11:44:39.652Z","fp":"a|||Skip to main content||#main-content","text":"Skip to main content","ariaLabel":"","href":"#main-content","tag":"a","status":"skip:offscreen-a11y","errors":[]}
-{"route":"/onboarding","idx":2,"ts":"2026-07-02T11:44:39.652Z","fp":"a|||arena|Back to Home|/","text":"arena","ariaLabel":"Back to Home","href":"/","tag":"a","status":"link:/","errors":[]}
-{"route":"/onboarding","idx":3,"ts":"2026-07-02T11:44:39.652Z","fp":"a|||Rankings||/","text":"Rankings","ariaLabel":"","href":"/","tag":"a","status":"link:/","errors":[]}
-{"route":"/onboarding","idx":4,"ts":"2026-07-02T11:44:39.652Z","fp":"a|||Market||/market","text":"Market","ariaLabel":"","href":"/market","tag":"a","status":"link:/market","errors":[]}
-{"route":"/onboarding","idx":5,"ts":"2026-07-02T11:44:39.652Z","fp":"a|||Groups||/groups","text":"Groups","ariaLabel":"","href":"/groups","tag":"a","status":"link:/groups","errors":[]}
-{"route":"/onboarding","idx":6,"ts":"2026-07-02T11:44:39.652Z","fp":"a|||Hot||/hot","text":"Hot","ariaLabel":"","href":"/hot","tag":"a","status":"link:/hot","errors":[]}
-{"route":"/onboarding","idx":7,"ts":"2026-07-02T11:44:39.652Z","fp":"input|search|combobox||Search traders, pairs...|","text":"","ariaLabel":"Search traders, pairs...","href":"","tag":"input","status":"ok:filled→nav:/login","errors":[]}
-{"route":"/onboarding","idx":8,"ts":"2026-07-02T11:44:43.738Z","fp":"button||||Search|","text":"","ariaLabel":"Search","href":"","tag":"button","status":"skip:hidden","errors":[]}
-{"route":"/onboarding","idx":9,"ts":"2026-07-02T11:44:43.738Z","fp":"button|||EN|Switch language|","text":"EN","ariaLabel":"Switch language","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/onboarding","idx":10,"ts":"2026-07-02T11:44:48.340Z","fp":"button||||Light Mode|","text":"","ariaLabel":"Light Mode","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/onboarding","idx":11,"ts":"2026-07-02T11:44:52.958Z","fp":"button|||Login|Login|","text":"Login","ariaLabel":"Login","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/onboarding","idx":12,"ts":"2026-07-02T11:44:57.606Z","fp":"button|||中文||","text":"中文","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/onboarding","idx":13,"ts":"2026-07-02T11:45:02.253Z","fp":"button|||EN||","text":"EN","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/onboarding","idx":14,"ts":"2026-07-02T11:45:06.936Z","fp":"button|||Google||","text":"Google","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/v3/signin/identifier","errors":[]}
-{"route":"/onboarding","idx":15,"ts":"2026-07-02T11:45:12.030Z","fp":"button|||Discord||","text":"Discord","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/oauth2/authorize","errors":[]}
-{"route":"/onboarding","idx":16,"ts":"2026-07-02T11:45:17.121Z","fp":"button|||Sign in with passkey||","text":"Sign in with passkey","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/onboarding","idx":17,"ts":"2026-07-02T11:45:21.736Z","fp":"button|||Sign in with Wallet||","text":"Sign in with Wallet","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/onboarding","idx":18,"ts":"2026-07-02T11:45:26.368Z","fp":"input|email||||","text":"","ariaLabel":"","href":"","tag":"input","status":"ok:filled→nav:/login","errors":[]}
-{"route":"/onboarding","idx":19,"ts":"2026-07-02T11:45:30.476Z","fp":"input|password||||","text":"","ariaLabel":"","href":"","tag":"input","status":"ok:filled→nav:/login","errors":[]}
-{"route":"/onboarding","idx":20,"ts":"2026-07-02T11:45:34.576Z","fp":"button|button||Show||","text":"Show","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/onboarding","idx":21,"ts":"2026-07-02T11:45:39.207Z","fp":"button|submit||Login||","text":"Login","ariaLabel":"","href":"","tag":"button","status":"skip:disabled","errors":[]}
-{"route":"/onboarding","idx":22,"ts":"2026-07-02T11:45:39.207Z","fp":"a|||Forgot password?||/reset-password","text":"Forgot password?","ariaLabel":"","href":"/reset-password","tag":"a","status":"denied:denylist","errors":[]}
-{"route":"/onboarding","idx":23,"ts":"2026-07-02T11:45:39.207Z","fp":"button|button||Or login with verification code||","text":"Or login with verification code","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/onboarding","idx":24,"ts":"2026-07-02T11:45:43.862Z","fp":"button|||No account? Register with code||","text":"No account? Register with code","ariaLabel":"","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
-{"route":"/onboarding","idx":25,"ts":"2026-07-02T11:45:48.505Z","fp":"a|||Terms of Service||/terms","text":"Terms of Service","ariaLabel":"","href":"/terms","tag":"a","status":"link:/terms","errors":[]}
-{"route":"/onboarding","idx":26,"ts":"2026-07-02T11:45:48.505Z","fp":"a|||Privacy Policy||/privacy","text":"Privacy Policy","ariaLabel":"","href":"/privacy","tag":"a","status":"link:/privacy","errors":[]}
-{"route":"/onboarding","idx":27,"ts":"2026-07-02T11:45:48.505Z","fp":"button||||Back to top|","text":"","ariaLabel":"Back to top","href":"","tag":"button","status":"skip:hidden","errors":[]}
-{"route":"/onboarding","idx":28,"ts":"2026-07-02T11:45:48.505Z","fp":"button||||Feedback|","text":"","ariaLabel":"Feedback","href":"","tag":"button","status":"ok:clicked→nav:/login","errors":[]}
+{"route":"/onboarding","idx":-1,"ts":"2026-07-02T20:15:33.434Z","status":"redirected:/login","finalPath":"/login","errors":[]}
