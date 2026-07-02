@@ -127,15 +127,23 @@ export default function ActivityFeed({
     initialPageParam: null as string | null,
     getNextPageParam: (lastPage) =>
       lastPage.pagination.hasMore ? lastPage.pagination.nextCursor : undefined,
-    initialData: {
-      pages: [
-        {
-          activities: initialActivities,
-          pagination: { hasMore: initialHasMore, nextCursor: initialNextCursor },
-        },
-      ],
-      pageParams: [null],
-    },
+    // Seed SSR data ONLY for the query state it was fetched under (platform at
+    // its initial value). queryKey includes `platform`, so switching filter tabs
+    // creates a NEW query — unconditionally providing initialData would re-seed
+    // the same unfiltered SSR page into every new key with dataUpdatedAt=now,
+    // marking it fresh within staleTime and suppressing the filtered fetch.
+    initialData:
+      platform === (fixedPlatform ?? null)
+        ? {
+            pages: [
+              {
+                activities: initialActivities,
+                pagination: { hasMore: initialHasMore, nextCursor: initialNextCursor },
+              },
+            ],
+            pageParams: [null as string | null],
+          }
+        : undefined,
     staleTime: STALE_RELAXED,
     refetchOnWindowFocus: false,
   })
