@@ -1193,9 +1193,11 @@ const zh = {
   compareTraders: '交易员对比',
   compareDesc: '最多可对比 10 位交易员，快速比较各项指标',
   compareAddTrader: '添加交易员',
-  // compareSearchPlaceholder: moved to compare section below (line ~1158)
+  compareSearchPlaceholder: '搜索交易员名称或 ID...',
   compareSearchBtn: '搜索',
   compareSearching: '搜索中...',
+  compareSearchNoResults: '未找到匹配的交易员',
+  compareAddFromRankings: '从排行榜添加',
   compareMax5: '最多只能对比 5 位交易员',
   compareMax10: '最多只能对比 10 位交易员',
   compareAlreadyAdded: '该交易员已在对比列表中',

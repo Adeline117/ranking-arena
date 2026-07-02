@@ -3,6 +3,7 @@
 export const dynamic = 'force-dynamic'
 
 import { useState, useEffect, Suspense } from 'react'
+import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import nextDynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase/client'
@@ -24,6 +25,7 @@ import ProGate from '@/app/components/ui/ProGate'
 import { logger } from '@/lib/logger'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import type { UnifiedSearchResult } from '@/app/api/search/route'
 
 interface TraderCompareData {
   id: string
@@ -56,7 +58,11 @@ function CompareContent() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [traders, setTraders] = useState<TraderCompareData[]>([])
-  // Search state removed - traders added from followed list only
+  // Trader search (unified /api/search, traders category) — debounced
+  const [searchInput, setSearchInput] = useState('')
+  const [searchResults, setSearchResults] = useState<UnifiedSearchResult[]>([])
+  const [searching, setSearching] = useState(false)
+  const [searchDone, setSearchDone] = useState(false)
   const [isPro, setIsPro] = useState(BETA_PRO_FEATURES_FREE)
   const [followedTraders, setFollowedTraders] = useState<
     Array<{
@@ -161,6 +167,47 @@ function CompareContent() {
     fetchFollowed()
   }, [accessToken])
 
+  // Debounced trader search via the unified search API (same backend as site-wide search)
+  useEffect(() => {
+    const q = searchInput.trim()
+    if (q.length < 2) {
+      setSearchResults([])
+      setSearching(false)
+      setSearchDone(false)
+      return
+    }
+
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      setSearching(true)
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=8`, {
+          signal: controller.signal,
+        })
+        if (!res.ok) throw new Error(`Search failed: ${res.status}`)
+        const json = await res.json()
+        const data = (json.data || json) as { results?: { traders?: UnifiedSearchResult[] } }
+        if (!controller.signal.aborted) {
+          setSearchResults(data.results?.traders ?? [])
+          setSearchDone(true)
+        }
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          logger.error('Compare trader search failed:', err)
+          setSearchResults([])
+          setSearchDone(true)
+        }
+      } finally {
+        if (!controller.signal.aborted) setSearching(false)
+      }
+    }, 300)
+
+    return () => {
+      clearTimeout(timer)
+      controller.abort()
+    }
+  }, [searchInput])
+
   // Load traders with equity curve data
   const loadTraders = async (traderIds: string[]) => {
     if (!accessToken || traderIds.length === 0) return
@@ -206,6 +253,18 @@ function CompareContent() {
     const newIds = [...traders.map((tr) => tr.id), traderId]
     await loadTraders(newIds)
     router.replace(`/compare?ids=${newIds.join(',')}`, { scroll: false })
+  }
+
+  // Add trader picked from a search result. Search result ids are
+  // `platform:traderKey`; /api/compare resolves by traderKey (source_trader_id).
+  const handleAddFromSearch = async (result: UnifiedSearchResult) => {
+    const traderKey = result.id.includes(':')
+      ? result.id.slice(result.id.indexOf(':') + 1)
+      : result.id
+    await handleAddTrader(traderKey)
+    setSearchInput('')
+    setSearchResults([])
+    setSearchDone(false)
   }
 
   // Remove trader
@@ -322,6 +381,202 @@ function CompareContent() {
             <Text size="sm" style={{ color: tokens.colors.accent.error }}>
               {error}
             </Text>
+          </Box>
+        )}
+
+        {/* Trader search — add any trader to the comparison */}
+        {isPro && (
+          <Box
+            style={{
+              marginBottom: tokens.spacing[4],
+              padding: tokens.spacing[4],
+              background: tokens.colors.bg.secondary,
+              borderRadius: tokens.radius.xl,
+              border: `1px solid ${tokens.colors.border.primary}`,
+            }}
+          >
+            <Box
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                flexWrap: 'wrap',
+                gap: tokens.spacing[2],
+                marginBottom: tokens.spacing[3],
+              }}
+            >
+              <Text size="sm" weight="bold">
+                {t('compareAddTrader')} ({traders.length}/10)
+              </Text>
+              <Link
+                href="/rankings"
+                style={{
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  color: tokens.colors.accent.primary,
+                  textDecoration: 'none',
+                }}
+              >
+                {t('compareAddFromRankings')} →
+              </Link>
+            </Box>
+
+            <input
+              type="search"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              placeholder={t('compareSearchPlaceholder')}
+              aria-label={t('compareSearchPlaceholder')}
+              style={{
+                width: '100%',
+                padding: tokens.spacing[3],
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                background: tokens.colors.bg.primary,
+                color: tokens.colors.text.primary,
+                fontSize: tokens.typography.fontSize.sm,
+                outline: 'none',
+                transition: 'border-color 0.2s, box-shadow 0.2s',
+              }}
+              onFocus={(e) => {
+                e.currentTarget.style.borderColor = tokens.colors.accent.primary
+                e.currentTarget.style.boxShadow = `0 0 0 2px ${alpha(tokens.colors.accent.primary, 25)}`
+              }}
+              onBlur={(e) => {
+                e.currentTarget.style.borderColor = tokens.colors.border.primary
+                e.currentTarget.style.boxShadow = 'none'
+              }}
+            />
+
+            {(searching || searchDone) && searchInput.trim().length >= 2 && (
+              <Box
+                style={{
+                  marginTop: tokens.spacing[3],
+                  maxHeight: 320,
+                  overflowY: 'auto',
+                  background: tokens.colors.bg.primary,
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                }}
+              >
+                {searching ? (
+                  <Text
+                    as="span"
+                    size="sm"
+                    color="tertiary"
+                    style={{ display: 'block', padding: tokens.spacing[3] }}
+                  >
+                    {t('compareSearching')}
+                  </Text>
+                ) : searchResults.length === 0 ? (
+                  <Text
+                    as="span"
+                    size="sm"
+                    color="tertiary"
+                    style={{ display: 'block', padding: tokens.spacing[3] }}
+                  >
+                    {t('compareSearchNoResults')}
+                  </Text>
+                ) : (
+                  searchResults.map((result, idx) => {
+                    const traderKey = result.id.includes(':')
+                      ? result.id.slice(result.id.indexOf(':') + 1)
+                      : result.id
+                    const isAdded = traders.some((tr) => tr.id === traderKey)
+                    return (
+                      <button
+                        key={result.id}
+                        type="button"
+                        disabled={isAdded}
+                        onClick={() => handleAddFromSearch(result)}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: tokens.spacing[2],
+                          width: '100%',
+                          padding: tokens.spacing[3],
+                          background: 'transparent',
+                          border: 'none',
+                          borderBottom:
+                            idx < searchResults.length - 1
+                              ? `1px solid ${tokens.colors.border.primary}`
+                              : 'none',
+                          cursor: isAdded ? 'not-allowed' : 'pointer',
+                          opacity: isAdded ? 0.45 : 1,
+                          textAlign: 'left',
+                          color: tokens.colors.text.primary,
+                        }}
+                      >
+                        {result.avatar ? (
+                          <img
+                            src={avatarSrc(result.avatar)}
+                            alt=""
+                            width={28}
+                            height={28}
+                            loading="lazy"
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: tokens.radius.full,
+                              objectFit: 'cover',
+                              flexShrink: 0,
+                            }}
+                            onError={(e) => {
+                              ;(e.target as HTMLImageElement).style.display = 'none'
+                            }}
+                          />
+                        ) : (
+                          <Box
+                            style={{
+                              width: 28,
+                              height: 28,
+                              borderRadius: tokens.radius.full,
+                              background: tokens.colors.bg.tertiary,
+                              flexShrink: 0,
+                            }}
+                          />
+                        )}
+                        <Box style={{ minWidth: 0, flex: 1 }}>
+                          <Text
+                            as="span"
+                            size="sm"
+                            weight="semibold"
+                            style={{
+                              display: 'block',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {result.title}
+                          </Text>
+                          {result.subtitle && (
+                            <Text
+                              as="span"
+                              size="xs"
+                              color="tertiary"
+                              style={{
+                                display: 'block',
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {result.subtitle}
+                            </Text>
+                          )}
+                        </Box>
+                        {isAdded && (
+                          <Text as="span" size="xs" color="tertiary" style={{ flexShrink: 0 }}>
+                            {t('compareAdded')}
+                          </Text>
+                        )}
+                      </button>
+                    )
+                  })
+                )}
+              </Box>
+            )}
           </Box>
         )}
 
@@ -476,8 +731,6 @@ function CompareContent() {
             )}
           </Box>
         )}
-
-        {/* Search bar removed - traders can only be added from followed list above */}
 
         {/* Comparison component */}
         {isPro && (
