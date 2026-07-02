@@ -1,53 +1,13 @@
-'use client'
-
 /**
- * Trader Authorization Page
- * Now redirects to the unified /claim page.
- * Authorization (live data sync) is automatically triggered when a claim is verified.
+ * Trader Authorization Page — server-side redirect to the unified /claim page.
+ *
+ * Was a client page that showed a 2s empty flash before router.replace('/claim')
+ * (UIUX_PERPAGE_AUDIT_2026-06-30 实体/详情). Authorization (live data sync) is
+ * triggered automatically when a claim is verified, so this route only redirects.
  */
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
-// MobileBottomNav is rendered by root layout — do not duplicate here
-import { Box } from '@/app/components/base'
-import { tokens } from '@/lib/design-tokens'
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { redirect } from 'next/navigation'
 
 export default function TraderAuthorizePage() {
-  const router = useRouter()
-  const { t } = useLanguage()
-
-  useEffect(() => {
-    // Redirect to the unified claim page after a brief delay
-    const timer = setTimeout(() => {
-      router.replace('/claim')
-    }, 2000)
-    return () => clearTimeout(timer)
-  }, [router])
-
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', minHeight: '100vh' }}>
-      <Box
-        style={{
-          padding: tokens.spacing[6],
-          maxWidth: '600px',
-          margin: '0 auto',
-          textAlign: 'center',
-        }}
-      >
-        <h1
-          style={{ fontSize: tokens.typography.fontSize['2xl'], marginBottom: tokens.spacing[3] }}
-        >
-          {t('authorizeRealData')}
-        </h1>
-        <p style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[4] }}>
-          {t('authorizeDesc')}
-        </p>
-        <p style={{ color: tokens.colors.text.tertiary }}>
-          Redirecting to the unified Claim flow...
-        </p>
-      </Box>
-      {/* MobileBottomNav rendered in root layout */}
-    </div>
-  )
+  redirect('/claim')
 }
