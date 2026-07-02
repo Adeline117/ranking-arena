@@ -24,6 +24,11 @@ interface SearchResult {
   title: string
   subtitle?: string
   meta?: string
+  /**
+   * Pre-built destination URL from the API (trader results). Already
+   * percent-encoded server-side — must be used verbatim, never re-encoded.
+   */
+  href?: string
   /** Structured metrics (trader results) for sign/tier-colored subtitle. */
   roi?: number | null
   score?: number | null
@@ -154,8 +159,12 @@ function SearchContent() {
 
     const mappedTraders = data.results.traders.map((tr) => ({
       type: 'trader' as const,
-      id: tr.href.replace('/trader/', ''),
+      // `tr.id` is the API's unique `platform:traderKey` (used only as React key).
+      // Do NOT derive an id from href — it carries `?platform=...` which, once
+      // re-encoded into the path, 404s the trader page (Trader Not Found bug).
+      id: tr.id,
       title: tr.title,
+      href: tr.href,
       subtitle: tr.subtitle || undefined,
       roi: typeof tr.meta?.roi === 'number' ? tr.meta.roi : null,
       score: typeof tr.meta?.arena_score === 'number' ? tr.meta.arena_score : null,
@@ -291,7 +300,9 @@ function SearchContent() {
   const getHref = (result: SearchResult) => {
     if (result.type === 'group') return `/groups/${result.id}`
     if (result.type === 'post') return `/post/${result.id}`
-    if (result.type === 'trader') return `/trader/${encodeURIComponent(result.id)}`
+    // Use the API-built href verbatim: it is already encoded once server-side,
+    // so re-encoding here would double-encode handles with special characters.
+    if (result.type === 'trader') return result.href ?? '#'
     return '#'
   }
 
@@ -479,7 +490,7 @@ function SearchContent() {
           const globalIndex = indexOffset + idx
           return (
             <Link
-              key={`${result.type}-${result.id}`}
+              key={`${result.type}-${result.id}-${idx}`}
               href={getHref(result)}
               ref={(el) => {
                 linkRefs.current[globalIndex] = el
