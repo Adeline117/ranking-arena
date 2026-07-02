@@ -7,6 +7,13 @@
  * fingerprint + click result. The ledger IS the coverage account — a route is
  * "done" only when every non-denied element in it has a recorded outcome.
  *
+ * STALENESS: every record carries `ts` (capture time, ISO). The ledger is a
+ * point-in-time snapshot of PRODUCTION — before treating an errored record as
+ * a live bug, compare its `ts` against the fix/deploy timeline and re-verify
+ * live. (2026-07-02 lesson: a scan finished at 18:46, the X-OAuth gating fix
+ * landed at 18:51, and the pre-fix 400 records were later re-reported as a
+ * live bug. Records without `ts` predate this patch — treat as stale.)
+ *
  * Usage:
  *   node scripts/qa/exhaustive-sweep.mjs                 # anon, prod
  *   BASE_URL=http://localhost:3000 node scripts/qa/exhaustive-sweep.mjs
@@ -283,6 +290,7 @@ async function sweepRoute(page, route, ledger, counters) {
     const record = {
       route,
       idx: i,
+      ts: new Date().toISOString(),
       fp: fingerprint(desc),
       text: desc.text,
       ariaLabel: desc.ariaLabel,
@@ -595,6 +603,7 @@ async function main() {
       ledger.push({
         route,
         idx: -1,
+        ts: new Date().toISOString(),
         status: 'fail:auth-dead',
         errors: ['QA session invalid and re-bootstrap failed — route not swept'],
       })
@@ -612,6 +621,7 @@ async function main() {
         ledger.push({
           route,
           idx: -1,
+          ts: new Date().toISOString(),
           status: 'fail:route',
           errors: [String(e.message).slice(0, 200)],
         })
@@ -639,6 +649,7 @@ async function main() {
           ledger.push({
             route,
             idx: -1,
+            ts: new Date().toISOString(),
             status: 'fail:tainted',
             errors: taintSignals.slice(0, 3).map((s) => `session-kill: ${s}`),
           })
