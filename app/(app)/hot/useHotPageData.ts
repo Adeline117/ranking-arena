@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -11,7 +10,7 @@ import { localizedLabel } from '@/lib/utils/format'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
-import type { Trader, Post, Comment } from './types'
+import type { Post, Comment } from './types'
 
 interface UseHotPageDataOptions {
   initialPosts?: Post[]
@@ -36,8 +35,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   >({})
   const [translatingList, setTranslatingList] = useState(false)
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
-  const [_traders, setTraders] = useState<Trader[]>([])
-  const [_loadingTraders, setLoadingTraders] = useState(true)
   const [posts, setPosts] = useState<Post[]>(options.initialPosts || [])
   const [loadingPosts, setLoadingPosts] = useState(
     !options.initialPosts || options.initialPosts.length === 0
@@ -87,66 +84,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
   // Suppress unused variable warning
   void currentUserId
-
-  // Load trader data
-  useEffect(() => {
-    const load = async () => {
-      setLoadingTraders(true)
-      try {
-        const { data, error: supabaseError } = await supabase
-          .from('leaderboard_ranks')
-          .select('source, source_trader_id, handle, roi, arena_score, followers, win_rate')
-          .not('arena_score', 'is', null)
-          .gt('arena_score', 0)
-          .or('is_outlier.is.null,is_outlier.eq.false')
-          .order('arena_score', { ascending: false })
-          .limit(30)
-
-        if (supabaseError) {
-          logger.error('Trader load error:', supabaseError)
-          setTraders([])
-          return
-        }
-
-        const seen = new Set<string>()
-        const uniqueData = (data || [])
-          .filter((row) => {
-            const key = `${row.source}:${row.source_trader_id}`
-            if (seen.has(key)) return false
-            seen.add(key)
-            return true
-          })
-          .slice(0, 10)
-
-        // Use handle from leaderboard_ranks directly (no trader_sources lookup needed)
-        const isAddr = (v: string) => /^0x[0-9a-fA-F]{10,}$/.test(v)
-        const fmtAddr = (v: string) => `${v.slice(0, 6)}...${v.slice(-4)}`
-
-        setTraders(
-          uniqueData.map((item) => {
-            const h = (item as Record<string, unknown>).handle as string | null
-            const sid = item.source_trader_id || ''
-            const displayHandle = h && !isAddr(h) ? h : h ? fmtAddr(h) : sid ? fmtAddr(sid) : null
-            return {
-              id: sid,
-              handle: displayHandle,
-              roi: typeof item.roi === 'string' ? parseFloat(item.roi) : item.roi || 0,
-              win_rate:
-                typeof item.win_rate === 'string' ? parseFloat(item.win_rate) : item.win_rate || 0,
-              followers: item.followers || 0,
-              source: item.source || 'binance',
-            }
-          })
-        )
-      } catch (error) {
-        logger.error('Trader load error:', error)
-        setTraders([])
-      } finally {
-        setLoadingTraders(false)
-      }
-    }
-    load()
-  }, [])
 
   // AbortController for loadPosts — prevents stale setState after unmount
   // and allows the auto-refresh interval to cancel in-flight requests on cleanup.
