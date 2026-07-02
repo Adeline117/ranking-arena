@@ -401,7 +401,7 @@ interface BotsClientProps {
 }
 
 function BotsContent({ initialBots }: BotsClientProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const searchParams = useSearchParams()
   const router = useRouter()
   const pathname = usePathname()
@@ -508,6 +508,23 @@ function BotsContent({ initialBots }: BotsClientProps) {
     ai_agent: 0,
     vault: 0,
   })
+  // Data-freshness "as of" — bot_snapshots is refreshed out-of-band; the API
+  // reports the newest capture time plus stale/stale_days when it exceeds 7 days.
+  // Surfacing it here keeps users from mistaking an old snapshot for live data.
+  const locale =
+    // eslint-disable-next-line no-restricted-syntax -- Intl date-locale mapping, not user-facing copy
+    language === 'zh'
+      ? 'zh-CN'
+      : language === 'ja'
+        ? 'ja-JP'
+        : language === 'ko'
+          ? 'ko-KR'
+          : 'en-US'
+  const asOf = data?.as_of
+    ? new Date(data.as_of).toLocaleString(locale, { dateStyle: 'medium' })
+    : null
+  const isStale = Boolean(data?.stale)
+
   const facetCounts = useMemo(() => {
     if (activeCategory === 'all' && data?.bots) {
       const c: Record<BotCategory, number> = {
@@ -555,6 +572,40 @@ function BotsContent({ initialBots }: BotsClientProps) {
             </Link>
           }
         />
+
+        {/* Data freshness — always show as-of; escalate to warning banner when stale */}
+        {asOf &&
+          (isStale ? (
+            <div
+              role="status"
+              className="mb-4 flex flex-wrap items-center gap-x-2 gap-y-1"
+              style={{
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid color-mix(in srgb, ${tokens.colors.accent.warning} 35%, transparent)`,
+                background: `color-mix(in srgb, ${tokens.colors.accent.warning} 10%, transparent)`,
+                color: tokens.colors.accent.warning,
+                fontSize: tokens.typography.fontSize.xs,
+                lineHeight: 1.5,
+              }}
+            >
+              <span aria-hidden="true">⚠</span>
+              <span style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
+                {t('botsDataStaleWarning').replace('{days}', String(data?.stale_days ?? ''))}
+              </span>
+              <span style={{ opacity: 0.85 }}>{t('botDataAsOf').replace('{date}', asOf)}</span>
+            </div>
+          ) : (
+            <div
+              className="mb-4"
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: 'var(--color-text-tertiary)',
+              }}
+            >
+              {t('botDataAsOf').replace('{date}', asOf)}
+            </div>
+          ))}
 
         {/* Time window */}
         <div

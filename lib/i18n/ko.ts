@@ -4325,6 +4325,8 @@ const ko = {
   botsUsers: '사용자',
   botsVolume: '거래량',
   botsTotalCount: '총 {count}개 봇',
+  botsDataStaleWarning:
+    '이 리더보드는 {days}일 동안 업데이트되지 않았습니다. 순위가 오래되었을 수 있습니다',
   botsCategoryAll: '전체',
   botsCategoryTgBot: 'TG 봇',
   botsCategoryAiAgent: 'AI 에이전트',

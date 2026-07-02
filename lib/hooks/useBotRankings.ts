@@ -42,6 +42,9 @@ export interface BotRankingsResponse {
   window: string
   total_count: number
   as_of: string
+  /** Present when the newest snapshot is older than 7 days (see app/api/bots/route.ts). */
+  stale?: boolean
+  stale_days?: number
 }
 
 const fetcher = async (url: string) => {

@@ -4379,6 +4379,7 @@ const zh = {
   botsUsers: '用户',
   botsVolume: '交易量',
   botsTotalCount: '共 {count} 个机器人',
+  botsDataStaleWarning: '该榜单已 {days} 天未更新，排名可能已过时',
   botsCategoryAll: '全部',
   botsCategoryTgBot: 'TG交易Bot',
   botsCategoryAiAgent: 'AI Agent',
