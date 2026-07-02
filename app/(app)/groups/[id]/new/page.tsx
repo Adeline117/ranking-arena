@@ -10,6 +10,7 @@ import { tokens } from '@/lib/design-tokens'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { trackEvent } from '@/lib/analytics/track'
 import { compressImage } from '@/lib/utils/image-compress'
 import { logger } from '@/lib/logger'
 import { ContentWarningToggle } from '@/app/components/post/components/ContentWarningToggle'
@@ -579,6 +580,7 @@ export default function NewGroupPostPage(): React.ReactElement {
       if (typeof window !== 'undefined') {
         localStorage.setItem('last_post_group_id', groupId)
       }
+      trackEvent('create_post', { context: 'group', group_id: groupId })
       showToast(t('publishSuccess'), 'success')
       router.push(`/groups/${groupId}`)
     } catch (_error) {

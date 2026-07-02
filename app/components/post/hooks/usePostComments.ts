@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useRef } from 'react'
 import { authedFetch, getHttpErrorMessage } from '@/lib/api/client'
+import { trackEvent } from '@/lib/analytics/track'
 import { usePostStore, type CommentData } from '@/lib/stores/postStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -198,6 +199,7 @@ export function usePostComments({
           const serverComment = data.data.comment
           setComments((prev) => prev.map((c) => (c.id === tempId ? serverComment : c)))
           usePostStore.getState().addComment(postId, toCommentData(serverComment))
+          trackEvent('comment_created', { post_id: postId })
         } else {
           // Rollback optimistic comment
           setComments((prev) => prev.filter((c) => c.id !== tempId))
