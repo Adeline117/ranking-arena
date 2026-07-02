@@ -94,8 +94,9 @@
 
 - **事实**：version 永远 0.1.0、无 CHANGELOG、git tag 仅一个 `last-known-good`
   回滚锚点。无法回答"哪个版本引入了什么"。
-- **对策**：Phase 1 自动回滚会自动维护 `last-known-good`；semver+CHANGELOG
-  （release-please）列 Phase 2（solo 模式收益有限）。
+- **对策**：回滚锚点用 Vercel 部署历史（每个 READY 部署带 `gateSha` meta +
+  smoke 通过才成为最新，promote API 直接选上一个 READY）——比 git tag 可靠且
+  不受仓库 PR-only ruleset 阻挡；semver+CHANGELOG（release-please）列 Phase 2。
 
 ### 9. 重复与数据层不统一（comprehension debt 的典型症状）
 

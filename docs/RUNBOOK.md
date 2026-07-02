@@ -217,9 +217,13 @@ Preview/PR 分支构建不受影响。
   字面写出这个标记（2026-07-02 实测：一条讨论该标记的 commit 正文触发了
   直接部署）。文档里提及时用「deploy-force 标记」这类改写。
 - **正常延迟**：生产部署滞后 push 约 8-12 分钟（CI 时长）。
-- **连续推送爆发期**：每轮 gate 完成时若 HEAD 已前移则 superseded 跳过
-  （严格有序，防旧 SHA 迟到回滚生产）——生产在爆发期内不更新，
-  最后一次 push 后 ~10-15 分钟收敛。急需上线用 deploy-force 标记。
+- **部署判定 = ancestry**：gate 部署"CI 绿且比当前线上更新"的 SHA
+  （`git merge-base --is-ancestor` 判祖先，旧 SHA 迟到直接拒绝，杜绝回退）。
+  线上 SHA 经 `vercel deploy --meta gateSha=<sha>` 写入、下轮读回核对。
+  连续推送爆发期里生产会跳到**最新已验证**的那个 commit，不会饿死落后
+  （早期"只部署恰好 HEAD"的版本实测连续 4 轮 superseded，已废弃）。
+  gate 的 concurrency 是**排队不取消**：杀死部署中的 run 无法撤销已上传
+  构建，反而可能晚到抢占生产别名造成回退。
 - **彻底停用门禁（回到旧行为）**：revert 掉 `vercel.json` 里的
   `ignoreCommand` 一行即可，git push 立即恢复直接部署。
 - **自动回滚 API**：唯一真实端点是
