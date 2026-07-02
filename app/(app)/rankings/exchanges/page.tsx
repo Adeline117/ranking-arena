@@ -7,7 +7,6 @@
  */
 
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { BASE_URL } from '@/lib/constants/urls'
 import {
@@ -64,8 +63,18 @@ export default async function ExchangeRankingsPage() {
 
   // Gate (plan E.11): the page only exists once >= 3 sources read from
   // arena.* — below that a cross-exchange comparison is noise, not signal.
+  // A transient serving-data gap must NOT 404 a core rankings page — with
+  // ISR (revalidate 1800) a notFound() here gets pinned in the cache for up
+  // to 30 minutes and this page is in the sitemap, amplifying the SEO
+  // damage. Render the client's i18n'd "no data yet" empty state instead
+  // (TopNav stays interactive) and log loudly so the gap is not silent.
   const gateCount = tf90?.nonLegacyCount ?? tf30?.nonLegacyCount ?? tf7?.nonLegacyCount ?? 0
-  if (gateCount < MIN_SERVING_SOURCES) notFound()
+  if (gateCount < MIN_SERVING_SOURCES) {
+    console.error(
+      `[serving-gate] /rankings/exchanges gate triggered (nonLegacyCount=${gateCount} < ${MIN_SERVING_SOURCES}) — rendering empty state instead of 404`
+    )
+    return <ExchangeRankingsClient byTimeframe={{ 7: null, 30: null, 90: null }} />
+  }
 
   const byTimeframe: Record<ExchangeRankingsTimeframe, ExchangeRankings | null> = {
     7: tf7,
