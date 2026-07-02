@@ -4038,6 +4038,7 @@ const ja = {
   botsBot: 'ボット',
   botsUsers: 'ユーザー',
   botsVolume: '出来高',
+  botsColumnNoData: 'データは準備中です',
   botsTotalCount: '合計{count}ボット',
   botsDataStaleWarning: 'このランキングは{days}日間更新されていません。順位が古い可能性があります',
   botsCategoryAll: 'すべて',

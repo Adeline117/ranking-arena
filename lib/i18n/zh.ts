@@ -4378,6 +4378,7 @@ const zh = {
   botsBot: '机器人',
   botsUsers: '用户',
   botsVolume: '交易量',
+  botsColumnNoData: '数据暂未收录',
   botsTotalCount: '共 {count} 个机器人',
   botsDataStaleWarning: '该榜单已 {days} 天未更新，排名可能已过时',
   botsCategoryAll: '全部',
