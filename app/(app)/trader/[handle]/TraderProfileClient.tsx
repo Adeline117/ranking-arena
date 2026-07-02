@@ -108,6 +108,14 @@ const HoldingDistribution = dynamic(
 const MetricGrid = dynamic(() => import('@/app/components/trader/serving/MetricGrid'), {
   ssr: false,
 })
+// M1: records section (positions/position-history/orders/transfers/copiers with
+// keyset pagination) — the doc's required record surfaces. Was escape-hatch-only;
+// promoted to the DEFAULT Stats tab so captured orders/transfers/copiers are
+// actually visible. capability-gated + NULL-collapses.
+const ServingRecordsSection = dynamic(
+  () => import('@/app/components/trader/serving/ServingRecordsSection'),
+  { ssr: false }
+)
 // M2-2a: eToro "Copiers Card" — copy-trading commercials (copiers/principal/
 // min-copy/profit-share/growth) on the Overview decision zone. NULL-collapses.
 const CopyTradingCard = dynamic(() => import('@/app/components/trader/serving/CopyTradingCard'), {
@@ -957,6 +965,19 @@ export default function TraderProfileClient({
                           stats={servingTab.gridStats}
                           capabilityMetrics={servingTab.gridCapabilityMetrics}
                           currency={servingTab.currency}
+                        />
+                      )}
+                      {/* M1: doc-required record surfaces (positions/history/
+                          orders/transfers/copiers) on the DEFAULT Stats tab —
+                          not just the ?threetab=0 escape hatch. NULL-collapses. */}
+                      {useThreeTab && (
+                        <ServingRecordsSection
+                          source={data.source}
+                          exchangeTraderId={data.source_trader_id}
+                          capability={servingCapability ?? null}
+                          tf={90}
+                          exchangeName={servingCapability?.exchangeName}
+                          excludeKinds={['positions', 'position_history']}
                         />
                       )}
                       <StatsTab

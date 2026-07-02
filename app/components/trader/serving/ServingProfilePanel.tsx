@@ -21,7 +21,6 @@ import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderCore } from '@/lib/hooks/useTraderCore'
 import { useBotHeader } from '@/lib/hooks/useBotHeader'
-import { useTraderRecords, useCopierAggregate } from '@/lib/hooks/useTraderRecords'
 import { PeriodSelector, type Period } from '@/app/components/trader/performance/PeriodSelector'
 import { promoteExtrasMetrics, EXTRAS_PROMOTABLE_KEYS } from '@/lib/constants/metric-registry'
 import MetricGrid from './MetricGrid'
@@ -34,69 +33,14 @@ import AssetPreference from './AssetPreference'
 import HoldingDistribution from './HoldingDistribution'
 import AbilityRadar from './AbilityRadar'
 import ModuleDegraded from './ModuleDegraded'
-import RecordsTable, { type RecordColumn } from './RecordsTable'
-import CopierAggregatePanel from './CopierAggregatePanel'
+import ServingRecordsSection from './ServingRecordsSection'
 import BotHeaderCard from './BotHeaderCard'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
 import type {
-  RecordKind,
   ServingTimeframe,
   SourceCapability,
   TraderFirstScreen,
 } from '@/lib/data/serving/types'
-
-const RECORD_COLUMNS: Record<Exclude<RecordKind, 'copiers'>, RecordColumn[]> = {
-  positions: [
-    { key: 'symbol', i18nKey: 'colSymbol' },
-    { key: 'side', i18nKey: 'colSide' },
-    { key: 'margin_mode', i18nKey: 'colMarginMode' },
-    { key: 'leverage', i18nKey: 'colLeverage', format: 'number', align: 'right' },
-    { key: 'size', i18nKey: 'colSize', format: 'number', align: 'right' },
-    { key: 'entry_price', i18nKey: 'colEntryPrice', format: 'number', align: 'right' },
-    { key: 'mark_price', i18nKey: 'colMarkPrice', format: 'number', align: 'right' },
-    { key: 'notional', i18nKey: 'colNotional', format: 'money', align: 'right' },
-    { key: 'margin', i18nKey: 'colMargin', format: 'money', align: 'right' },
-    { key: 'unrealized_pnl', i18nKey: 'colUnrealizedPnl', format: 'money', align: 'right' },
-    { key: 'roe', i18nKey: 'colRoe', format: 'pct', align: 'right' },
-  ],
-  position_history: [
-    { key: 'symbol', i18nKey: 'colSymbol' },
-    { key: 'side', i18nKey: 'colSide' },
-    { key: 'margin_mode', i18nKey: 'colMarginMode' },
-    { key: 'leverage', i18nKey: 'colLeverage', format: 'number', align: 'right' },
-    { key: 'entry_price', i18nKey: 'colEntryPrice', format: 'number', align: 'right' },
-    { key: 'exit_price', i18nKey: 'colExitPrice', format: 'number', align: 'right' },
-    { key: 'max_open_interest', i18nKey: 'colMaxOpenInterest', format: 'number', align: 'right' },
-    { key: 'realized_pnl', i18nKey: 'colRealizedPnl', format: 'money', align: 'right' },
-    { key: 'roi', i18nKey: 'colRoi', format: 'pct', align: 'right' },
-    { key: 'opened_at', i18nKey: 'colOpenedAt', format: 'datetime' },
-    { key: 'closed_at', i18nKey: 'colClosedAt', format: 'datetime' },
-  ],
-  orders: [
-    { key: 'ts', i18nKey: 'colTime', format: 'datetime' },
-    { key: 'kind', i18nKey: 'colType' },
-    { key: 'symbol', i18nKey: 'colSymbol' },
-    { key: 'side', i18nKey: 'colSide' },
-    { key: 'price', i18nKey: 'colPrice', format: 'number', align: 'right' },
-    { key: 'qty', i18nKey: 'colQty', format: 'number', align: 'right' },
-    { key: 'notional', i18nKey: 'colNotional', format: 'money', align: 'right' },
-    { key: 'realized_pnl', i18nKey: 'colRealizedPnl', format: 'money', align: 'right' },
-  ],
-  transfers: [
-    { key: 'ts', i18nKey: 'colTime', format: 'datetime' },
-    { key: 'direction', i18nKey: 'colDirection' },
-    { key: 'asset', i18nKey: 'colAsset' },
-    { key: 'amount', i18nKey: 'colAmount', format: 'money', align: 'right' },
-  ],
-}
-
-const KIND_TAB_I18N: Record<RecordKind, string> = {
-  positions: 'tabPositions',
-  position_history: 'tabPositionHistory',
-  orders: 'tabOrders',
-  transfers: 'tabTransfers',
-  copiers: 'tabCopiers',
-}
 
 function ModuleSkeleton({ height }: { height: number }) {
   return (
@@ -109,69 +53,6 @@ function ModuleSkeleton({ height }: { height: number }) {
         backgroundSize: '200% 100%',
         animation: 'servingPulse 1.4s ease infinite',
       }}
-    />
-  )
-}
-
-/** One heavy record tab — own component so its hook mounts lazily. */
-function RecordKindPanel({
-  source,
-  exchangeTraderId,
-  kind,
-  tf,
-  exchangeName,
-}: {
-  source: string
-  exchangeTraderId: string
-  kind: Exclude<RecordKind, 'copiers'>
-  tf: ServingTimeframe
-  exchangeName?: string
-}) {
-  const records = useTraderRecords({ source, exchangeTraderId, kind, tf, enabled: true })
-
-  if (records.isLoading) return <ModuleSkeleton height={160} />
-  if (records.error) return <ModuleDegraded onRetry={() => records.refetch()} />
-  if (records.isPendingUpstream && records.rows.length === 0) {
-    return <ModuleDegraded onRetry={() => records.refetch()} />
-  }
-
-  return (
-    <Box>
-      <RecordsTable
-        columns={RECORD_COLUMNS[kind]}
-        rows={records.rows}
-        hasNextPage={records.hasNextPage}
-        isFetchingNextPage={records.isFetchingNextPage}
-        onLoadMore={() => records.fetchNextPage()}
-      />
-      {records.provenance && (
-        <ProvenanceFooter provenance={records.provenance} exchangeName={exchangeName} />
-      )}
-    </Box>
-  )
-}
-
-function CopiersPanel({
-  source,
-  exchangeTraderId,
-  exchangeName,
-}: {
-  source: string
-  exchangeTraderId: string
-  exchangeName?: string
-}) {
-  const { aggregate, isLoading, refetch } = useCopierAggregate({
-    source,
-    exchangeTraderId,
-    enabled: true,
-  })
-  if (isLoading) return <ModuleSkeleton height={160} />
-  return (
-    <CopierAggregatePanel
-      aggregate={aggregate}
-      isLoading={isLoading}
-      exchangeName={exchangeName}
-      onRetry={() => refetch()}
     />
   )
 }
@@ -259,30 +140,7 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
     return allZero && core_keys.some((k) => gridStats[k] !== undefined)
   }, [core.modules, gridStats])
 
-  // Record sub-tabs: capability-driven; only opened tabs ever fetch.
-  const kinds: RecordKind[] = capability
-    ? (Object.keys(KIND_TAB_I18N) as RecordKind[]).filter((k) => capability.surfaces[k])
-    : []
-  // Auto-select a record tab so the table (with its keyset "load more")
-  // renders immediately on open. A null default made the whole records area
-  // show an empty placeholder until the user happened to click a tab — read as
-  // "the data and paging are gone". Prefer the data-rich CLOSED-trade history
-  // as the landing tab: open `positions` is frequently empty (trader flat right
-  // now) so defaulting to it still looks dataless; position_history is the
-  // long, paginated record the user remembers. Tabs still display in the
-  // conventional order; only the default selection is reordered. Once the user
-  // clicks, `activeKind` takes over.
-  const AUTO_SELECT_ORDER: RecordKind[] = [
-    'position_history',
-    'positions',
-    'orders',
-    'transfers',
-    'copiers',
-  ]
-  const [activeKind, setActiveKind] = useState<RecordKind | null>(null)
-  const defaultKind = AUTO_SELECT_ORDER.find((k) => kinds.includes(k)) ?? kinds[0] ?? null
-  const effectiveKind: RecordKind | null = activeKind ?? defaultKind
-
+  // Record sub-tabs now live in the shared <ServingRecordsSection>.
   const availability = capability
     ? {
         '7D': capability.timeframes['7'],
@@ -359,68 +217,14 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
         </Box>
       )}
 
-      {/* ── Heavy record tabs (spec §2.4-3): lazy, only if opened ── */}
-      {kinds.length > 0 && (
-        <Box style={{ marginTop: tokens.spacing[6] }}>
-          <Box
-            style={{
-              display: 'flex',
-              gap: tokens.spacing[1],
-              borderBottom: '1px solid ' + tokens.colors.border.primary,
-              marginBottom: tokens.spacing[4],
-              overflowX: 'auto',
-            }}
-          >
-            {kinds.map((kind) => (
-              <button
-                key={kind}
-                onClick={() => setActiveKind(kind)}
-                aria-pressed={effectiveKind === kind}
-                style={{
-                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                  border: 'none',
-                  background: 'transparent',
-                  borderBottom:
-                    effectiveKind === kind
-                      ? '2px solid var(--color-accent-primary, #6366f1)'
-                      : '2px solid transparent',
-                  color:
-                    effectiveKind === kind
-                      ? tokens.colors.text.primary
-                      : tokens.colors.text.secondary,
-                  fontSize: 13,
-                  fontWeight: effectiveKind === kind ? 600 : 400,
-                  cursor: 'pointer',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {t(KIND_TAB_I18N[kind])}
-              </button>
-            ))}
-          </Box>
-
-          {effectiveKind === 'copiers' ? (
-            <CopiersPanel
-              source={source}
-              exchangeTraderId={exchangeTraderId}
-              exchangeName={capability?.exchangeName}
-            />
-          ) : effectiveKind ? (
-            <RecordKindPanel
-              key={effectiveKind}
-              source={source}
-              exchangeTraderId={exchangeTraderId}
-              kind={effectiveKind}
-              tf={tf}
-              exchangeName={capability?.exchangeName}
-            />
-          ) : (
-            <Text size="xs" color="tertiary" style={{ opacity: 0.6 }}>
-              {t('recordsEmpty')}
-            </Text>
-          )}
-        </Box>
-      )}
+      {/* ── Record sub-tabs (spec §2.4-3) — shared with the default three-tab. ── */}
+      <ServingRecordsSection
+        source={source}
+        exchangeTraderId={exchangeTraderId}
+        capability={capability}
+        tf={tf}
+        exchangeName={capability?.exchangeName}
+      />
     </Box>
   )
 }
