@@ -109,11 +109,42 @@ async function writeCanary() {
     return { status: res.status, body }
   }
 
+  // 删帖 + GET 回查确认真的删掉了。教训（2026-07-02）：deletePost 曾对
+  // 0 行匹配静默 no-op 仍返回 200，且进程中途被杀时 finally 不执行 →
+  // 3 条 canary 帖公开残留在生产帖子流最新位置多日无人发现。
+  const deleteAndVerify = async (id) => {
+    const del = await api(`/api/posts/${id}`, { method: 'DELETE' })
+    if (del.status >= 400) throw new Error(`删帖失败 ${del.status} (post ${id} 可能残留!)`)
+    const check = await api(`/api/posts/${id}`)
+    if (check.status !== 404)
+      throw new Error(`删帖后回查非 404 (GET ${check.status}) — post ${id} 残留在生产!`)
+  }
+
+  // 自愈：清扫历史残留 canary 帖（上次运行进程被杀 / 删除失败告警被忽略的残留），
+  // 不依赖人工发现。按 QA 账号 author_id + canary 标题精确匹配，绝不误伤真实用户帖。
+  const qaUserId = JSON.parse(
+    Buffer.from(session.access_token.split('.')[1], 'base64url').toString()
+  ).sub
+  const CANARY_TITLE = 'canary — auto-deleted'
+  try {
+    const res = await tfetch(
+      `${SUPA_URL}/rest/v1/posts?author_id=eq.${qaUserId}&title=eq.${encodeURIComponent(CANARY_TITLE)}&select=id`,
+      { headers: { apikey: SRK, Authorization: `Bearer ${SRK}` } }
+    )
+    const leftovers = res.ok ? await res.json() : []
+    for (const p of Array.isArray(leftovers) ? leftovers : []) {
+      await deleteAndVerify(p.id)
+      console.log(`🧹 已清扫上次残留 canary 帖: ${p.id}`)
+    }
+  } catch (e) {
+    failures.push(`残留 canary 帖清扫失败: ${e.message}`)
+  }
+
   // 发帖
   const create = await api('/api/posts', {
     method: 'POST',
     body: JSON.stringify({
-      title: 'canary — auto-deleted',
+      title: CANARY_TITLE,
       content: '[sentinel] daily write-path canary. Auto-cleaned.',
     }),
   })
@@ -146,9 +177,13 @@ async function writeCanary() {
     })
     if (delC.status >= 400) throw new Error(`删评论失败 ${delC.status}`)
   } finally {
-    // 删帖（无论中途失败与否都清理）
-    const del = await api(`/api/posts/${postId}`, { method: 'DELETE' })
-    if (del.status >= 400) throw new Error(`删帖清理失败 ${del.status} (post ${postId} 可能残留!)`)
+    // 删帖（无论中途失败与否都清理）+ GET 回查确认 404。
+    // 用 failures.push 而非 throw：finally 里 throw 会吞掉 try 块的原始错误。
+    try {
+      await deleteAndVerify(postId)
+    } catch (e) {
+      failures.push(`金丝雀删帖清理失败: ${e.message}`)
+    }
   }
   console.log('✅ 写路径金丝雀通过: 发帖→点赞→评论→删除 全 2xx，零残留')
 }
