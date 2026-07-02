@@ -2724,6 +2724,14 @@ const en = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: 'Deleted user',
+  presetAll: 'All',
+  presetCexFutures: 'CEX Futures',
+  presetCexSpot: 'CEX Spot',
+  presetOnchainDex: 'On-chain DEX',
+  presetLowRisk: 'Low Risk',
+  presetHighPnl: 'High PnL',
+  presetConsistent: 'Consistent',
+  presetTopScorers: 'Top Scorers',
   privyAccountSyncFailed: 'Account sync failed, please try again',
   privyLoginFailed: 'Login failed, please try again',
   privyQuickLogin: 'Quick Login (Google / Email / Wallet)',

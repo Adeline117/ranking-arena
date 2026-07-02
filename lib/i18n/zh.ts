@@ -2649,6 +2649,14 @@ const zh = {
 
   // 瀑布流卡片 / 小组帖子列表
   deletedUser: '已注销用户',
+  presetAll: '全部',
+  presetCexFutures: 'CEX合约',
+  presetCexSpot: 'CEX现货',
+  presetOnchainDex: '链上DEX',
+  presetLowRisk: '低风险',
+  presetHighPnl: '高收益',
+  presetConsistent: '稳定盈利',
+  presetTopScorers: '顶级评分',
   privyAccountSyncFailed: '账户同步失败，请重试',
   privyLoginFailed: '登录失败，请重试',
   privyQuickLogin: '一键登录（Google / 邮箱 / 钱包）',
