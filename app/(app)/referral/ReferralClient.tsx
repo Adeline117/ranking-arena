@@ -106,7 +106,7 @@ export default function ReferralClient() {
   }, [])
 
   const shareUrl = referral?.referral_link || ''
-  const shareText = 'Check out Arena - the crypto trader ranking platform!'
+  const shareText = t('referralShareText')
 
   const referralCount = referral?.referral_count ?? 0
   const progress = Math.min(referralCount / REFERRAL_REWARD_THRESHOLD, 1)
@@ -152,7 +152,7 @@ export default function ReferralClient() {
               lineHeight: 1.15,
             }}
           >
-            Referral Program
+            {t('referralTitle')}
           </h1>
           <p
             style={{
@@ -161,7 +161,7 @@ export default function ReferralClient() {
               marginTop: tokens.spacing[2],
             }}
           >
-            Invite friends to Arena and track your referrals.
+            {t('referralPageSubtitle')}
           </p>
         </div>
 
@@ -268,7 +268,7 @@ export default function ReferralClient() {
                 margin: `0 0 ${tokens.spacing[2]}`,
               }}
             >
-              Sign in to get your referral link
+              {t('referralSignInGateTitle')}
             </h2>
             <p
               style={{
@@ -277,7 +277,7 @@ export default function ReferralClient() {
                 margin: `0 0 ${tokens.spacing[5]}`,
               }}
             >
-              Create an account or log in to start inviting friends.
+              {t('referralSignInGateDesc')}
             </p>
             <Link
               href="/login"
@@ -292,7 +292,7 @@ export default function ReferralClient() {
                 textDecoration: 'none',
               }}
             >
-              Sign In
+              {t('login')}
             </Link>
           </div>
         )}
@@ -400,7 +400,7 @@ export default function ReferralClient() {
                   margin: `0 0 ${tokens.spacing[3]}`,
                 }}
               >
-                Your Referral Link
+                {t('referralYourLink')}
               </h3>
               {referral?.referral_code ? (
                 <>
@@ -444,7 +444,7 @@ export default function ReferralClient() {
                         transition: `background ${tokens.transition.fast}`,
                       }}
                     >
-                      {copied ? 'Copied!' : 'Copy'}
+                      {copied ? t('copied') : t('copy')}
                     </button>
                   </div>
 
@@ -463,7 +463,7 @@ export default function ReferralClient() {
                       cursor: generating ? 'not-allowed' : 'pointer',
                     }}
                   >
-                    {generating ? 'Generating...' : 'Regenerate Code'}
+                    {generating ? t('referralGenerating') : t('referralRegenerate')}
                   </button>
                 </>
               ) : (
@@ -481,7 +481,7 @@ export default function ReferralClient() {
                     cursor: generating ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  {generating ? 'Generating...' : 'Generate Referral Link'}
+                  {generating ? t('referralGenerating') : t('referralGenerate')}
                 </button>
               )}
             </div>
@@ -503,7 +503,7 @@ export default function ReferralClient() {
                     margin: `0 0 ${tokens.spacing[3]}`,
                   }}
                 >
-                  Share
+                  {t('share')}
                 </h3>
                 <div style={{ display: 'flex', gap: tokens.spacing[3], flexWrap: 'wrap' }}>
                   <a
@@ -529,7 +529,7 @@ export default function ReferralClient() {
                     Telegram
                   </a>
                   <a
-                    href={`mailto:?subject=${encodeURIComponent('Check out Arena')}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`}
+                    href={`mailto:?subject=${encodeURIComponent(t('referralShareEmailSubject'))}&body=${encodeURIComponent(shareText + '\n\n' + shareUrl)}`}
                     style={shareBtnStyle}
                   >
                     <svg
