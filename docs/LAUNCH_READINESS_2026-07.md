@@ -37,10 +37,12 @@ route-level crash recovery.
 - **Anon sweep**: 40 routes, 2163 interactive elements. One real bug (X login) →
   fixed. All click-failures were off-screen/menu-nested elements (skip-links,
   back-to-top), not defects.
-- **Auth sweep**: auth-only routes (settings/inbox/favorites/watchlist/portfolio/
-  …) all return 200 and are healthy. (First auth run exposed a tool-safety hole —
-  it was clicking Follow/Like as the QA user; **verified 0 rows / 0 notifications
-  created** before kill — then hardened with write-denial + page recovery.)
+- **Auth sweep**: 10 auth-only routes (settings/linked-accounts/watchlist/
+  favorites/portfolio/following/messages/inbox/my-posts/user-center/claim), 272
+  elements, **0 errors** (12 write-actions safely denied). All return 200. (First
+  auth run exposed a tool-safety hole — it was clicking Follow/Like as the QA
+  user; **verified 0 rows / 0 notifications created** before kill — then hardened
+  with write-denial + page recovery, after which it achieved full clean coverage.)
 
 ## Remaining (owner action or follow-up — not launch blockers)
 
