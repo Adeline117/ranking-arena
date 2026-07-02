@@ -2724,6 +2724,7 @@ const en = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: 'Deleted user',
+  tradingStyleLabel: 'Style',
   presetAll: 'All',
   presetCexFutures: 'CEX Futures',
   presetCexSpot: 'CEX Spot',

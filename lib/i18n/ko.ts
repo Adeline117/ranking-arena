@@ -2625,6 +2625,7 @@ const ko = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: '삭제된 사용자',
+  tradingStyleLabel: '스타일',
   presetAll: '전체',
   presetCexFutures: 'CEX 선물',
   presetCexSpot: 'CEX 현물',
