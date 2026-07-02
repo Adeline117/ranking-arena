@@ -5840,6 +5840,15 @@ const ja = {
   referralRewardUnlocked: '特典をゲット！',
   referralFriendTrialNote:
     '特典：友達があなたのリンクから参加すると、{days}日間のProトライアルを獲得できます。',
+  referralPageSubtitle: '友達をArenaに招待して、紹介状況をトラッキングしましょう。',
+  referralSignInGateTitle: 'ログインして紹介リンクを取得',
+  referralSignInGateDesc: 'アカウントを作成またはログインして、友達の招待を始めましょう。',
+  referralYourLink: 'あなたの紹介リンク',
+  referralGenerating: '生成中...',
+  referralRegenerate: 'コードを再生成',
+  referralGenerate: '紹介リンクを生成',
+  referralShareText: 'Arenaをチェック——暗号資産トレーダーランキングプラットフォーム！',
+  referralShareEmailSubject: 'Arenaをチェック',
 
   // Pro onboarding / tipping / receipts / bot share (i18n batch 2026-06-30)
   proGetStarted: 'Proを使い始める',

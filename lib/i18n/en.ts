@@ -6194,6 +6194,15 @@ const en = {
   referralRewardUnlocked: 'Reward unlocked!',
   referralFriendTrialNote:
     'Bonus: your friends get a {days}-day Pro trial when they join via your link.',
+  referralPageSubtitle: 'Invite friends to Arena and track your referrals.',
+  referralSignInGateTitle: 'Sign in to get your referral link',
+  referralSignInGateDesc: 'Create an account or log in to start inviting friends.',
+  referralYourLink: 'Your Referral Link',
+  referralGenerating: 'Generating...',
+  referralRegenerate: 'Regenerate Code',
+  referralGenerate: 'Generate Referral Link',
+  referralShareText: 'Check out Arena - the crypto trader ranking platform!',
+  referralShareEmailSubject: 'Check out Arena',
 
   // Pro onboarding / tipping / receipts / bot share (i18n batch 2026-06-30)
   proGetStarted: 'Get started with Pro',

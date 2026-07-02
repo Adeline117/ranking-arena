@@ -6053,6 +6053,15 @@ const zh = {
   referralFriendsReferred: '已邀请好友',
   referralRewardUnlocked: '奖励已解锁！',
   referralFriendTrialNote: '额外福利：好友通过你的链接加入即可获得 {days} 天 Pro 试用。',
+  referralPageSubtitle: '邀请好友加入 Arena，追踪你的邀请进度。',
+  referralSignInGateTitle: '登录以获取你的邀请链接',
+  referralSignInGateDesc: '创建账号或登录，开始邀请好友。',
+  referralYourLink: '你的邀请链接',
+  referralGenerating: '生成中...',
+  referralRegenerate: '重新生成邀请码',
+  referralGenerate: '生成邀请链接',
+  referralShareText: '来看看 Arena——加密交易员排行榜平台！',
+  referralShareEmailSubject: '来看看 Arena',
 
   // Pro onboarding / tipping / receipts / bot share (i18n batch 2026-06-30)
   proGetStarted: '开启你的 Pro 之旅',

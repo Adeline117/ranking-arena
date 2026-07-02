@@ -6069,6 +6069,15 @@ const ko = {
   referralFriendsReferred: '초대한 친구',
   referralRewardUnlocked: '보상 잠금 해제!',
   referralFriendTrialNote: '보너스: 친구가 내 링크로 가입하면 {days}일 Pro 체험을 받습니다.',
+  referralPageSubtitle: '친구를 Arena에 초대하고 추천 현황을 확인하세요.',
+  referralSignInGateTitle: '로그인하고 추천 링크 받기',
+  referralSignInGateDesc: '계정을 만들거나 로그인하여 친구 초대를 시작하세요.',
+  referralYourLink: '내 추천 링크',
+  referralGenerating: '생성 중...',
+  referralRegenerate: '코드 재생성',
+  referralGenerate: '추천 링크 생성',
+  referralShareText: 'Arena를 확인해 보세요 — 암호화폐 트레이더 랭킹 플랫폼!',
+  referralShareEmailSubject: 'Arena를 확인해 보세요',
 
   // Pro onboarding / tipping / receipts / bot share (i18n batch 2026-06-30)
   proGetStarted: 'Pro 시작하기',
