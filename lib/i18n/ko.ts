@@ -1159,6 +1159,7 @@ const ko = {
   compareEmptyDesc: '최대 10명의 트레이더를 비교하세요',
   compareMetrics: '지표',
   compareScoreBars: '점수 바 차트',
+  compareTableCaption: '트레이더 지표 비교표',
   compareEquityCurve: '자산 곡선',
   compareArenaScore: 'Arena Score',
   compareROI90D: 'ROI (90일)',

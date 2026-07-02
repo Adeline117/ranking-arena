@@ -260,8 +260,173 @@ export default function TraderComparison({
     { key: 'equity', label: t('compareEquityCurve') },
   ]
 
+  // Shared grid geometry: label column + one column per trader.
+  // Used by the div header (chart tabs) and the semantic table rows (metrics tab)
+  // so columns always align.
+  const gridTemplateColumns = `minmax(80px, 140px) repeat(${traders.length}, minmax(80px, 1fr))`
+  const rowMinWidth = traders.length > 2 ? `${140 + traders.length * 120}px` : undefined
+
+  const traderHeaderCellStyle: React.CSSProperties = {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: tokens.spacing[2],
+    position: 'relative',
+  }
+
+  // Header cell content (avatar + name + bot badge + source) — rendered inside a
+  // <th scope="col"> on the metrics tab and inside a plain grid cell on chart tabs.
+  const renderTraderHeaderContent = (trader: TraderCompareData) => (
+    <>
+      {showRemoveButton && onRemove && (
+        <button
+          aria-label="Close"
+          onClick={() => onRemove(trader.id)}
+          style={{
+            position: 'absolute',
+            top: -8,
+            right: -8,
+            width: 24,
+            height: 24,
+            borderRadius: tokens.radius.full,
+            background: tokens.colors.accent.error,
+            border: 'none',
+            color: tokens.colors.white,
+            cursor: 'pointer',
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (pre-existing close glyph size)
+            fontSize: 14,
+            fontWeight: 'bold',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'transform 0.2s',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.1)')}
+          onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+        >
+          ×
+        </button>
+      )}
+
+      <Link href={`/trader/${encodeURIComponent(trader.id)}`}>
+        {(() => {
+          const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
+          return (
+            <Box
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: tokens.radius.full,
+                background: getAvatarGradient(trader.id),
+                border: `2px solid ${tokens.colors.border.primary}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                cursor: 'pointer',
+                transition: 'border-color 0.2s',
+                position: 'relative',
+              }}
+            >
+              <Text size="lg" weight="black" style={{ color: tokens.colors.white }}>
+                {getAvatarInitial(trader.handle || trader.id)}
+              </Text>
+              {proxyAvatarUrl ? (
+                <img
+                  src={proxyAvatarUrl}
+                  alt={trader.handle || trader.id}
+                  width={48}
+                  height={48}
+                  loading="lazy"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    position: 'absolute',
+                    inset: 0,
+                  }}
+                  onError={(e) => {
+                    ;(e.currentTarget as HTMLImageElement).style.display = 'none'
+                  }}
+                />
+              ) : isWalletAddress(trader.id) ? (
+                <img
+                  src={generateBlockieSvg(trader.id, 112)}
+                  alt={trader.handle || trader.id}
+                  width={56}
+                  height={56}
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    imageRendering: 'pixelated',
+                    position: 'absolute',
+                    inset: 0,
+                  }}
+                />
+              ) : null}
+            </Box>
+          )
+        })()}
+      </Link>
+
+      <Link href={`/trader/${encodeURIComponent(trader.id)}`} style={{ textDecoration: 'none' }}>
+        <Text
+          size="sm"
+          weight="bold"
+          style={{
+            color: tokens.colors.text.primary,
+            maxWidth: 100,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            textAlign: 'center',
+          }}
+        >
+          {trader.handle || trader.id.slice(0, 10)}
+        </Text>
+      </Link>
+
+      {(trader.is_bot || trader.source === 'web3_bot') && (
+        <span
+          style={{
+            padding: '0px 5px',
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (pre-existing micro badge)
+            borderRadius: 4,
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (pre-existing micro badge)
+            fontSize: 10,
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (pre-existing micro badge)
+            fontWeight: 600,
+            color: 'var(--color-brand)',
+            background: 'var(--color-brand-muted)',
+            border: '1px solid color-mix(in srgb, var(--color-brand) 25%, transparent)',
+            lineHeight: 1.4,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 2,
+            marginTop: 2,
+          }}
+        >
+          <span
+            style={{
+              // eslint-disable-next-line no-restricted-syntax -- off-scale by design (pre-existing micro glyph)
+              fontSize: 8,
+            }}
+          >
+            {'⚡'}
+          </span>
+          Bot
+        </span>
+      )}
+
+      <Text size="xs" color="tertiary">
+        {sourceLabels[trader.source] || trader.source}
+      </Text>
+    </>
+  )
+
   return (
-    <div ref={comparisonRef}>
+    <div ref={comparisonRef} className="compare-mobile-stack">
       {/* Mobile responsive: stack vertically on small screens */}
       <style>{`
         @media (max-width: 640px) {
@@ -325,242 +490,154 @@ export default function TraderComparison({
           overflowY: 'hidden',
         }}
       >
-        {/* Header: trader avatars */}
-        <Box
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `minmax(80px, 140px) repeat(${traders.length}, minmax(80px, 1fr))`,
-            gap: tokens.spacing[2],
-            padding: tokens.spacing[4],
-            borderBottom: `1px solid ${tokens.colors.border.primary}`,
-            background: tokens.colors.bg.tertiary,
-            minWidth: traders.length > 2 ? `${140 + traders.length * 120}px` : undefined,
-          }}
-        >
-          <Box />
-          {traders.map((trader) => (
-            <Box
-              key={trader.id}
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: tokens.spacing[2],
-                position: 'relative',
-              }}
-            >
-              {showRemoveButton && onRemove && (
-                <button
-                  aria-label="Close"
-                  onClick={() => onRemove(trader.id)}
-                  style={{
-                    position: 'absolute',
-                    top: -8,
-                    right: -8,
-                    width: 24,
-                    height: 24,
-                    borderRadius: tokens.radius.full,
-                    background: tokens.colors.accent.error,
-                    border: 'none',
-                    color: tokens.colors.white,
-                    cursor: 'pointer',
-                    fontSize: 14,
-                    fontWeight: 'bold',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    transition: 'transform 0.2s',
-                  }}
-                  onMouseEnter={(e) => (e.currentTarget.style.transform = 'scale(1.1)')}
-                  onMouseLeave={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                >
-                  ×
-                </button>
-              )}
+        {/* Header: trader avatars (chart tabs only — the metrics table carries its own <thead>) */}
+        {activeTab !== 'metrics' && (
+          <Box
+            className="compare-header-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns,
+              gap: tokens.spacing[2],
+              padding: tokens.spacing[4],
+              borderBottom: `1px solid ${tokens.colors.border.primary}`,
+              background: tokens.colors.bg.tertiary,
+              minWidth: rowMinWidth,
+            }}
+          >
+            <Box className="compare-label-col" />
+            {traders.map((trader) => (
+              <Box key={trader.id} style={traderHeaderCellStyle}>
+                {renderTraderHeaderContent(trader)}
+              </Box>
+            ))}
+          </Box>
+        )}
 
-              <Link href={`/trader/${encodeURIComponent(trader.id)}`}>
-                {(() => {
-                  const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
-                  return (
-                    <Box
-                      style={{
-                        width: 56,
-                        height: 56,
-                        borderRadius: tokens.radius.full,
-                        background: getAvatarGradient(trader.id),
-                        border: `2px solid ${tokens.colors.border.primary}`,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        overflow: 'hidden',
-                        cursor: 'pointer',
-                        transition: 'border-color 0.2s',
-                        position: 'relative',
-                      }}
-                    >
-                      <Text size="lg" weight="black" style={{ color: tokens.colors.white }}>
-                        {getAvatarInitial(trader.handle || trader.id)}
-                      </Text>
-                      {proxyAvatarUrl ? (
-                        <img
-                          src={proxyAvatarUrl}
-                          alt={trader.handle || trader.id}
-                          width={48}
-                          height={48}
-                          loading="lazy"
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            position: 'absolute',
-                            inset: 0,
-                          }}
-                          onError={(e) => {
-                            ;(e.currentTarget as HTMLImageElement).style.display = 'none'
-                          }}
-                        />
-                      ) : isWalletAddress(trader.id) ? (
-                        <img
-                          src={generateBlockieSvg(trader.id, 112)}
-                          alt={trader.handle || trader.id}
-                          width={56}
-                          height={56}
-                          style={{
-                            width: '100%',
-                            height: '100%',
-                            objectFit: 'cover',
-                            imageRendering: 'pixelated',
-                            position: 'absolute',
-                            inset: 0,
-                          }}
-                        />
-                      ) : null}
-                    </Box>
-                  )
-                })()}
-              </Link>
-
-              <Link
-                href={`/trader/${encodeURIComponent(trader.id)}`}
-                style={{ textDecoration: 'none' }}
-              >
-                <Text
-                  size="sm"
-                  weight="bold"
-                  style={{
-                    color: tokens.colors.text.primary,
-                    maxWidth: 100,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    textAlign: 'center',
-                  }}
-                >
-                  {trader.handle || trader.id.slice(0, 10)}
-                </Text>
-              </Link>
-
-              {(trader.is_bot || trader.source === 'web3_bot') && (
-                <span
-                  style={{
-                    padding: '0px 5px',
-                    borderRadius: 4,
-                    fontSize: 10,
-                    fontWeight: 600,
-                    color: 'var(--color-brand)',
-                    background: 'var(--color-brand-muted)',
-                    border: '1px solid color-mix(in srgb, var(--color-brand) 25%, transparent)',
-                    lineHeight: 1.4,
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 2,
-                    marginTop: 2,
-                  }}
-                >
-                  <span style={{ fontSize: 8 }}>{'⚡'}</span>Bot
-                </span>
-              )}
-
-              <Text size="xs" color="tertiary">
-                {sourceLabels[trader.source] || trader.source}
-              </Text>
-            </Box>
-          ))}
-        </Box>
-
-        {/* Tab content */}
+        {/* Tab content — metrics matrix as a semantic table (caption + row/column headers).
+            display overrides keep the original grid layout, explicit ARIA roles keep
+            table semantics that display:grid would otherwise strip. */}
         {activeTab === 'metrics' && (
-          <>
-            {metrics.map((metric, metricIdx) => {
-              const values = traders.map(
-                (tr) => (tr as unknown as Record<string, unknown>)[metric.key] as number | undefined
-              )
-              const bestIdx = getBestIndex(values, metric.higherBetter)
+          <table
+            role="table"
+            style={{ display: 'block', width: '100%', borderCollapse: 'collapse' }}
+          >
+            <caption className="sr-only">{t('compareTableCaption')}</caption>
+            <thead role="rowgroup" style={{ display: 'block' }}>
+              <tr
+                role="row"
+                className="compare-header-grid"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns,
+                  gap: tokens.spacing[2],
+                  padding: tokens.spacing[4],
+                  borderBottom: `1px solid ${tokens.colors.border.primary}`,
+                  background: tokens.colors.bg.tertiary,
+                  minWidth: rowMinWidth,
+                }}
+              >
+                <td role="cell" className="compare-label-col" />
+                {traders.map((trader) => (
+                  <th
+                    key={trader.id}
+                    role="columnheader"
+                    scope="col"
+                    style={{ ...traderHeaderCellStyle, padding: 0, fontWeight: 'inherit' }}
+                  >
+                    {renderTraderHeaderContent(trader)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody role="rowgroup" style={{ display: 'block' }}>
+              {metrics.map((metric, metricIdx) => {
+                const values = traders.map(
+                  (tr) =>
+                    (tr as unknown as Record<string, unknown>)[metric.key] as number | undefined
+                )
+                const bestIdx = getBestIndex(values, metric.higherBetter)
 
-              return (
-                <Box
-                  key={metric.key}
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: `minmax(80px, 140px) repeat(${traders.length}, minmax(80px, 1fr))`,
-                    gap: tokens.spacing[2],
-                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                    minWidth: traders.length > 2 ? `${140 + traders.length * 120}px` : undefined,
-                    borderBottom:
-                      metricIdx < metrics.length - 1
-                        ? `1px solid ${tokens.colors.border.primary}`
-                        : 'none',
-                    background:
-                      metricIdx % 2 === 0
-                        ? 'transparent'
-                        : `${alpha(tokens.colors.bg.tertiary, 31)}`,
-                  }}
-                >
-                  <Text size="sm" weight="semibold" color="secondary">
-                    {metric.label}
-                  </Text>
+                return (
+                  <tr
+                    key={metric.key}
+                    role="row"
+                    className="compare-metric-row"
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns,
+                      gap: tokens.spacing[2],
+                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                      minWidth: rowMinWidth,
+                      borderBottom:
+                        metricIdx < metrics.length - 1
+                          ? `1px solid ${tokens.colors.border.primary}`
+                          : 'none',
+                      background:
+                        metricIdx % 2 === 0
+                          ? 'transparent'
+                          : `${alpha(tokens.colors.bg.tertiary, 31)}`,
+                    }}
+                  >
+                    <th
+                      role="rowheader"
+                      scope="row"
+                      className="compare-metric-label"
+                      style={{ textAlign: 'left', padding: 0, fontWeight: 'inherit' }}
+                    >
+                      <Text as="span" size="sm" weight="semibold" color="secondary">
+                        {metric.label}
+                      </Text>
+                    </th>
 
-                  {traders.map((trader, traderIdx) => {
-                    const value = (trader as unknown as Record<string, unknown>)[metric.key] as
-                      | number
-                      | undefined
-                    const isBest = traderIdx === bestIdx && value != null && isFinite(value)
-                    const color =
-                      metric.isPercent || metric.isNegative
-                        ? getValueColor(value, metric.higherBetter)
-                        : isBest
-                          ? tokens.colors.accent.success
-                          : tokens.colors.text.primary
+                    {traders.map((trader, traderIdx) => {
+                      const value = (trader as unknown as Record<string, unknown>)[metric.key] as
+                        | number
+                        | undefined
+                      const isBest = traderIdx === bestIdx && value != null && isFinite(value)
+                      const color =
+                        metric.isPercent || metric.isNegative
+                          ? getValueColor(value, metric.higherBetter)
+                          : isBest
+                            ? tokens.colors.accent.success
+                            : tokens.colors.text.primary
 
-                    return (
-                      <Box key={trader.id} style={{ textAlign: 'center', position: 'relative' }}>
-                        <Text
-                          size="sm"
-                          weight={isBest ? 'black' : 'semibold'}
-                          style={{ color, position: 'relative' }}
+                      return (
+                        <td
+                          key={trader.id}
+                          role="cell"
+                          className="compare-metric-cell"
+                          style={{ textAlign: 'center', position: 'relative', padding: 0 }}
                         >
-                          {value != null ? metric.format(value) : '—'}
-                          {isBest && (
-                            <span
-                              style={{
-                                position: 'absolute',
-                                top: -2,
-                                right: -16,
-                                fontSize: 10,
-                                color: tokens.colors.accent.success,
-                              }}
-                            >
-                              👑
-                            </span>
-                          )}
-                        </Text>
-                      </Box>
-                    )
-                  })}
-                </Box>
-              )
-            })}
-          </>
+                          <Text
+                            as="span"
+                            size="sm"
+                            weight={isBest ? 'black' : 'semibold'}
+                            style={{ color, position: 'relative' }}
+                          >
+                            {value != null ? metric.format(value) : '—'}
+                            {isBest && (
+                              <span
+                                style={{
+                                  position: 'absolute',
+                                  top: -2,
+                                  right: -16,
+                                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design (pre-existing crown marker)
+                                  fontSize: 10,
+                                  color: tokens.colors.accent.success,
+                                }}
+                              >
+                                👑
+                              </span>
+                            )}
+                          </Text>
+                        </td>
+                      )
+                    })}
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
         )}
 
         {activeTab === 'bars' && (
