@@ -2506,6 +2506,7 @@ const ja = {
   commentFailedRetry: 'コメントに失敗しました。再試行してください',
 
   deletedUser: '削除済みユーザー',
+  myWatchlist: 'マイウォッチリスト',
   tradingStyleLabel: 'スタイル',
   presetAll: 'すべて',
   presetCexFutures: 'CEX先物',

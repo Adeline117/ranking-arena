@@ -1,6 +1,6 @@
 'use client'
 
-import { localizedLabel } from '@/lib/utils/format'
+import type { TranslationKey } from '@/lib/i18n'
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -21,28 +21,24 @@ const ALL_MENU_ITEMS = [
   {
     href: '/watchlist',
     iconPath: 'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z',
-    labelZh: '我的 Watchlist',
-    labelEn: 'My Watchlist',
+    labelKey: 'myWatchlist',
   },
   {
     href: '/compare',
     iconPath: 'M18 20V10M12 20V4M6 20v-6',
-    labelZh: '对比交易员',
-    labelEn: 'Compare Traders',
+    labelKey: 'compareTraders',
   },
   {
     href: '/groups',
     iconPath:
       'M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75',
-    labelZh: '我的群组',
-    labelEn: 'My Groups',
+    labelKey: 'myGroups',
     social: true,
   },
   {
     href: '/notifications',
     iconPath: 'M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 0 1-3.46 0',
-    labelZh: '通知',
-    labelEn: 'Notifications',
+    labelKey: 'notifications',
   },
 ] as const
 
@@ -55,15 +51,13 @@ const SETTINGS_ITEMS = [
     href: '/settings',
     iconPath:
       'M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z',
-    labelZh: '设置',
-    labelEn: 'Settings',
+    labelKey: 'settings',
   },
   {
     href: '/pricing',
     iconPath:
       'M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z',
-    labelZh: '升级 Pro',
-    labelEn: 'Upgrade to Pro',
+    labelKey: 'upgradeToPro',
     highlight: true,
   },
 ] as const
@@ -73,7 +67,7 @@ const SETTINGS_ITEMS = [
  * Displays user info + quick navigation links in iOS Settings-like layout
  */
 export default function MobileProfileMenu() {
-  const { t, language } = useLanguage()
+  const { t } = useLanguage()
   const [user, setUser] = useState<UserInfo | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -225,7 +219,7 @@ export default function MobileProfileMenu() {
             key={item.href}
             href={item.href}
             iconPath={item.iconPath}
-            label={localizedLabel(item.labelZh, item.labelEn, language)}
+            label={t(item.labelKey as TranslationKey)}
             showDivider={i < MENU_ITEMS.length - 1}
           />
         ))}
@@ -245,7 +239,7 @@ export default function MobileProfileMenu() {
             key={item.href}
             href={item.href}
             iconPath={item.iconPath}
-            label={localizedLabel(item.labelZh, item.labelEn, language)}
+            label={t(item.labelKey as TranslationKey)}
             showDivider={i < SETTINGS_ITEMS.length - 1}
             highlight={'highlight' in item ? item.highlight : false}
           />

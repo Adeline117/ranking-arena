@@ -2649,6 +2649,7 @@ const zh = {
 
   // 瀑布流卡片 / 小组帖子列表
   deletedUser: '已注销用户',
+  myWatchlist: '我的 Watchlist',
   tradingStyleLabel: '交易风格',
   presetAll: '全部',
   presetCexFutures: 'CEX合约',
