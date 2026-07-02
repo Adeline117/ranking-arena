@@ -523,9 +523,17 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   // Track whether this modal was opened via navigation
   const openedViaNav = useRef(false)
 
+  // Guard against the URL-restore effect re-opening a just-closed post:
+  // handleClosePost sets openPost to null and then router.replace()s the
+  // ?post= param away, but the effect re-runs on that same render while
+  // searchParams still holds the stale ?post= value — without this ref it
+  // would immediately re-open the modal (close button appears dead).
+  const justClosedIdRef = useRef<string | null>(null)
+
   // Open post detail
   const handleOpenPost = useCallback(
     (post: Post, fromUrlRestore = false) => {
+      justClosedIdRef.current = null
       setOpenPost(post)
       openPostIdRef.current = post.id
       // Restore draft comment for this post
@@ -565,6 +573,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
   // Close post detail
   const handleClosePost = useCallback(() => {
+    justClosedIdRef.current = searchParams.get('post')
     setOpenPost(null)
     openedViaNav.current = false
     const params = new URLSearchParams(searchParams.toString())
@@ -578,7 +587,12 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   // Post modal: URL restore + browser back button
   useEffect(() => {
     const postId = searchParams.get('post')
-    if (postId && posts.length > 0 && !openPost) {
+    if (postId !== justClosedIdRef.current) {
+      // URL has moved past the just-closed post — clear the guard so a
+      // later back/forward navigation or shared link can re-open it.
+      justClosedIdRef.current = null
+    }
+    if (postId && posts.length > 0 && !openPost && postId !== justClosedIdRef.current) {
       const post = posts.find((p) => p.id === postId)
       if (post) {
         handleOpenPost(post, true)
