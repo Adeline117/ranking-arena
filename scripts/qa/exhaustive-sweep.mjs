@@ -202,7 +202,12 @@ async function injectIndices(page) {
           rect.width > 0 &&
           rect.height > 0 &&
           style.visibility !== 'hidden' &&
-          style.display !== 'none',
+          style.display !== 'none' &&
+          // opacity:0 / pointer-events:none elements (e.g. back-to-top at
+          // scrollY=0) are visually hidden and cannot receive clicks —
+          // Playwright's hit-target check would time out. Treat as skip:hidden.
+          parseFloat(style.opacity) > 0.01 &&
+          style.pointerEvents !== 'none',
       })
     })
     return out
