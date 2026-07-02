@@ -48,11 +48,13 @@ route-level crash recovery.
 
 - **A3 (owner)**: register PostHog, set `NEXT_PUBLIC_POSTHOG_KEY` → funnel lights up with zero more code.
 - **X login (owner)**: configure the Twitter/X provider in Supabase Auth, then flip `NEXT_PUBLIC_ENABLE_X_LOGIN=true`.
-- **C5** (in progress): hardcoded/zh-en-only strings shown untranslated to ja/ko.
-  Core-path batches done — **search** (dead `t()||中文` fallback + zh/en-only
-  category labels → `t()`) and **login** (9 ternaries → `t()` + 8 new keys ×4
-  locales). Remainder (notifications/following/favorites + ~100 other files) is
-  the same pattern; do as dedicated batches (locale files = single serial writer).
+- **C5** (priority surfaces done): hardcoded/zh-en-only strings shown
+  untranslated to ja/ko. **All 5 named-priority surfaces cleared** — search
+  (dead `t()||中文` + zh/en category labels), login (9 ternaries + 8 keys),
+  notifications (dead filterLabel removed + load-more/grouped-count), following
+  (ja/ko no longer leak Chinese "合约/现货/链上"; `userLabel` key), favorites
+  (verified already clean). Remainder = ~100 lower-traffic files, same pattern;
+  do as dedicated batches (locale files = single serial writer).
 - **D3**: bespoke not-found pages for 6 dynamic routes (the 4 that call `notFound()` already render the functional root 404; 2 are soft-404 SEO polish). Not crashes.
 - **`app/sitemap.ts`**: dead `/sitemap.xml` (not advertised by robots) — deleting an endpoint possibly registered in Search Console is outward-facing; owner decision.
 - **North-star metric**: pick one activation metric (now measurable since the presence + interaction sensors work) and gate future "should we build X?" against it.
