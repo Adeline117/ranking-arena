@@ -29,6 +29,9 @@ const STATIC_SCHEDULERS = [
   // steady-state weekly refresh is naturally rate-limited by the 7d staleness check.
   { id: 'maint:avatar-mirror', name: INGEST_JOB.AVATAR_MIRROR, everyMs: 2 * 3600_000 },
   { id: 'maint:daily-digest', name: INGEST_JOB.DAILY_DIGEST, everyMs: 24 * 3600_000 },
+  // Top-N web3 wallets recomputed on-chain (durable; replaces WAF-blocked
+  // profile detail). 12h cadence — bounded by ONCHAIN_ENRICH_TOPN + retry.
+  { id: 'maint:onchain-enrich', name: INGEST_JOB.ONCHAIN_ENRICH, everyMs: 12 * 3600_000 },
 ] as const
 
 export async function reconcileSchedulers(): Promise<void> {

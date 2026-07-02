@@ -92,6 +92,10 @@ async function route(job: Job): Promise<unknown> {
       const { processDailyDigest } = await import('./ingest/processors/daily-digest')
       return processDailyDigest(job)
     }
+    case INGEST_JOB.ONCHAIN_ENRICH: {
+      const { processOnchainEnrich } = await import('./ingest/processors/onchain-enrich')
+      return processOnchainEnrich(job)
+    }
     default:
       throw new Error(`[ingest-worker] unknown job: ${job.name}`)
   }
