@@ -22,6 +22,20 @@ export interface SearchHistoryItem {
 }
 
 /**
+ * Session-invalid errors: the client still holds a localStorage session but
+ * the server has revoked it (e.g. password changed on another device), so
+ * requests run as anon → 42501 permission denied / PGRST301 JWT expired /
+ * HTTP 401. Not actionable client-side until re-login — callers degrade to
+ * local history with logger.warn (still visible at prod minLevel=warn),
+ * reserving logger.error for genuinely unexpected failures.
+ */
+function isSessionInvalidError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false
+  const e = error as { code?: string; status?: number }
+  return e.code === '42501' || e.code === 'PGRST301' || e.status === 401
+}
+
+/**
  * Get search history from localStorage
  */
 export function getLocalHistory(): string[] {
@@ -77,7 +91,7 @@ export async function addToHistory(query: string, userId?: string): Promise<stri
     try {
       await syncHistoryToServer(userId, newHistory)
     } catch (error) {
-      logger.error('Failed to sync search history:', error)
+      logSyncError(error)
     }
   }
 
@@ -98,7 +112,7 @@ export async function removeFromHistory(query: string, userId?: string): Promise
     try {
       await syncHistoryToServer(userId, newHistory)
     } catch (error) {
-      logger.error('Failed to sync search history:', error)
+      logSyncError(error)
     }
   }
 
@@ -116,8 +130,17 @@ export async function clearHistory(userId?: string): Promise<void> {
     try {
       await syncHistoryToServer(userId, [])
     } catch (error) {
-      logger.error('Failed to clear search history:', error)
+      logSyncError(error)
     }
+  }
+}
+
+/** Sync failures: warn for session-invalid (local copy already saved), error otherwise. */
+function logSyncError(error: unknown): void {
+  if (isSessionInvalidError(error)) {
+    logger.warn('Search history sync skipped (session revoked/expired):', error)
+  } else {
+    logger.error('Failed to sync search history:', error)
   }
 }
 
@@ -217,7 +240,14 @@ export async function loadAndMergeHistory(userId: string): Promise<string[]> {
 
     return merged
   } catch (error) {
-    logger.error('Failed to load search history from server:', error)
+    if (isSessionInvalidError(error)) {
+      logger.warn(
+        'Search history server load skipped (session revoked/expired), using local history:',
+        error
+      )
+    } else {
+      logger.error('Failed to load search history from server:', error)
+    }
     return getLocalHistory()
   }
 }
