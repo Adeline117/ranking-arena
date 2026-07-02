@@ -5,7 +5,7 @@
  *   npx tsx scripts/test-vps-scrapers.ts
  */
 
-import { logger } from '../lib/logger'
+import { logger } from '../../lib/logger'
 
 const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
 const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || 'arena-proxy-sg-2026'
