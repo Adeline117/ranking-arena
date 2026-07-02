@@ -116,10 +116,19 @@ export const METRIC_REGISTRY: readonly MetricDef[] = [
   { key: 'lifetime_volume', i18nKey: 'metricLifetimeVolume', format: 'money', tier: 'advanced' },
   { key: 'lifetime_win_rate', i18nKey: 'metricLifetimeWinRate', format: 'pct', tier: 'advanced' },
 
-  // On-chain wallet activity (binance_web3 / okx_web3 board carries these).
+  // On-chain wallet activity (binance_web3 / okx_web3_solana board carries these).
   { key: 'avg_buy', i18nKey: 'metricAvgBuy', format: 'money', tier: 'advanced' },
   { key: 'total_traded_tokens', i18nKey: 'metricTradedTokens', format: 'count', tier: 'advanced' },
   { key: 'total_txns', i18nKey: 'metricTotalTxns', format: 'count', tier: 'advanced' },
+  // okx_web3_solana wallet buy/sell breakdown + native balance + unrealized ROI
+  // (captured but previously unaliased → invisible). Scalars only; the array
+  // fields (win_rate_distribution / mcap_txs_buy) need a dedicated viz, not the grid.
+  { key: 'txs_buy', i18nKey: 'metricTxsBuy', format: 'count', tier: 'advanced' },
+  { key: 'txs_sell', i18nKey: 'metricTxsSell', format: 'count', tier: 'advanced' },
+  { key: 'volume_buy', i18nKey: 'metricVolumeBuy', format: 'money', tier: 'advanced' },
+  { key: 'volume_sell', i18nKey: 'metricVolumeSell', format: 'money', tier: 'advanced' },
+  { key: 'native_balance_usd', i18nKey: 'metricNativeBalance', format: 'money', tier: 'advanced' },
+  { key: 'unrealized_pnl_roi', i18nKey: 'metricUnrealizedRoi', format: 'pct', tier: 'advanced' },
 ] as const
 
 /**
@@ -181,6 +190,12 @@ export const EXTRAS_METRIC_ALIASES: Readonly<Record<string, readonly string[]>> 
   avg_buy: ['avg_buy', 'avg_buy_volume', 'avg_cost_buy'],
   total_traded_tokens: ['total_traded_tokens'],
   total_txns: ['total_txns', 'total_tx_count'],
+  txs_buy: ['txs_buy'],
+  txs_sell: ['txs_sell'],
+  volume_buy: ['volume_buy'],
+  volume_sell: ['volume_sell'],
+  native_balance_usd: ['native_balance_usd'],
+  unrealized_pnl_roi: ['unrealized_pnl_roi'],
 } as const
 
 /**
