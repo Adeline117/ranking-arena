@@ -206,7 +206,7 @@ export function GroupInfoModal({
                 {group.rules_json.map((rule, index) => (
                   <Box as="li" key={index} style={{ marginBottom: tokens.spacing[1] }}>
                     <Text size="md" style={{ lineHeight: 1.6 }}>
-                      {language === 'en' && rule.en ? rule.en : rule.zh}
+                      {language === 'zh' ? rule.zh : rule.en || rule.zh}
                     </Text>
                   </Box>
                 ))}
