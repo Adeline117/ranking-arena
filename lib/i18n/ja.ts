@@ -1110,6 +1110,7 @@ const ja = {
   compareEmptyDesc: '最大10人のトレーダーを比較できます',
   compareMetrics: '指標',
   compareScoreBars: 'スコアバー',
+  compareTableCaption: 'トレーダー指標比較表',
   compareEquityCurve: '資産曲線',
   compareArenaScore: 'Arena Score',
   compareROI90D: 'ROI (90日)',

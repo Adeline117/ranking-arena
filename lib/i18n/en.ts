@@ -1223,6 +1223,7 @@ const en = {
   compareEmptyDesc: 'Compare up to 10 traders',
   compareMetrics: 'Metrics',
   compareScoreBars: 'Score Bars',
+  compareTableCaption: 'Trader metrics comparison table',
   compareEquityCurve: 'Equity Curve',
   compareArenaScore: 'Arena Score',
   compareROI90D: 'ROI (90D)',
