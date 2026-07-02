@@ -15,7 +15,7 @@
 
 import { computeBscWalletOnchain } from './bsc-fetch'
 import { computeSolanaWalletOnchain } from './solana-fetch'
-import { fetchTokenPricesUsd, unrealizedFromHoldings } from './token-prices'
+import { fetchTokenInfo, unrealizedFromHoldings, type TokenInfo } from './token-prices'
 import type { PerTokenPnl } from './pnl-accounting'
 import type { NormalizedTransfer } from './bsc-swaps'
 
@@ -44,19 +44,65 @@ export interface OnchainEnrichment {
   closedPositions: number
   pricedTokens: number
   unpricedTokens: number
-  /** Top tokens by realized PnL (for a "top tokens" UI card). */
-  topTokens: Array<{ token: string; realizedPnlUsd: number; holding: number }>
+  /** OnchainInsights token_distribution buckets (by realized PnL). */
+  tokenDistribution: Record<string, number>
+  /** OnchainInsights top_earning_tokens ({symbol,address,logo,profit_pct,realized_pnl}). */
+  topEarningTokens: Array<Record<string, unknown>>
   provenance: 'onchain-computed'
   /** True when realized may understate (BSC native-BNB sells not yet captured). */
   realizedPartial: boolean
 }
 
-async function priceUnrealized(perToken: PerTokenPnl[]) {
-  const held = perToken.filter((t) => t.holding > 0 && t.costBasisUsd > 0)
-  if (held.length === 0)
-    return { unrealizedUsd: 0, pricedTokens: 0, unpricedTokens: 0, heldValueUsd: 0 }
-  const prices = await fetchTokenPricesUsd(held.map((t) => t.token))
-  return unrealizedFromHoldings(perToken, prices)
+/** Price held tokens + surface symbols for the OnchainInsights token blocks. */
+async function priceAndMeta(perToken: PerTokenPnl[]) {
+  // Fetch info for BOTH held tokens (unrealized) and top realized tokens (for
+  // the top-earning-tokens card) so both blocks get symbols/prices.
+  const addrs = new Set<string>()
+  for (const t of perToken) {
+    if (t.holding > 0 && t.costBasisUsd > 0) addrs.add(t.token)
+  }
+  for (const t of [...perToken].sort((a, b) => b.realizedPnlUsd - a.realizedPnlUsd).slice(0, 10)) {
+    addrs.add(t.token)
+  }
+  const info = addrs.size > 0 ? await fetchTokenInfo([...addrs]) : new Map<string, TokenInfo>()
+  const prices = new Map<string, number>()
+  for (const [k, v] of info) prices.set(k, v.priceUsd)
+  return { u: unrealizedFromHoldings(perToken, prices), info }
+}
+
+/** Bucket per-token realized PnL into the OnchainInsights token_distribution. */
+function tokenDistribution(perToken: PerTokenPnl[]): Record<string, number> {
+  const d = { gt_500: 0, p0_500: 0, n50_0: 0, lt_n50: 0 }
+  for (const t of perToken) {
+    const r = t.realizedPnlUsd
+    if (r > 500) d.gt_500 += 1
+    else if (r > 0) d.p0_500 += 1
+    else if (r >= -50) d.n50_0 += 1
+    else d.lt_n50 += 1
+  }
+  return d
+}
+
+/** Top earning tokens (realized) with symbols/logos for the insights card. */
+function topEarningTokens(
+  perToken: PerTokenPnl[],
+  info: Map<string, TokenInfo>
+): Array<Record<string, unknown>> {
+  return [...perToken]
+    .filter((t) => t.realizedPnlUsd !== 0)
+    .sort((a, b) => b.realizedPnlUsd - a.realizedPnlUsd)
+    .slice(0, 10)
+    .map((t) => {
+      const meta = info.get(t.token.toLowerCase())
+      return {
+        symbol: meta?.symbol ?? t.token.slice(0, 6), // fallback to short addr
+        address: t.token,
+        logo: meta?.logo ?? null,
+        profit_pct:
+          t.costBasisUsd > 0 ? Math.round((t.realizedPnlUsd / t.costBasisUsd) * 10000) / 100 : null,
+        realized_pnl: t.realizedPnlUsd,
+      }
+    })
 }
 
 /** Run the full on-chain recompute + pricing for one wallet. */
@@ -75,19 +121,19 @@ export async function enrichWeb3Wallet(
 
   if (chain === 'solana') {
     const r = await computeSolanaWalletOnchain(wallet, { lookbackDays, maxSigs: opts.maxSigs })
-    const u = await priceUnrealized(r.pnl.perToken)
-    return normalize('solana', wallet, lookbackDays, r.pnl, u, false)
+    const { u, info } = await priceAndMeta(r.pnl.perToken)
+    return normalize('solana', wallet, lookbackDays, r.pnl, u, info, false)
   }
   const r = await computeBscWalletOnchain(wallet, {
     lookbackDays,
     maxPages: opts.maxPages,
     extraTransfers: opts.bscInternalBnb,
   })
-  const u = await priceUnrealized(r.pnl.perToken)
+  const { u, info } = await priceAndMeta(r.pnl.perToken)
   // With Dune internal-BNB legs injected, native-BNB sells ARE captured →
   // realized complete. Only flag partial when we had NO Dune data to inject.
   const partial = !opts.bscInternalBnb
-  return normalize('bsc', wallet, lookbackDays, r.pnl, u, partial)
+  return normalize('bsc', wallet, lookbackDays, r.pnl, u, info, partial)
 }
 
 function normalize(
@@ -96,6 +142,7 @@ function normalize(
   lookbackDays: number,
   pnl: import('./pnl-accounting').WalletPnl,
   u: { unrealizedUsd: number; pricedTokens: number; unpricedTokens: number },
+  info: Map<string, TokenInfo>,
   realizedPartial: boolean
 ): OnchainEnrichment {
   return {
@@ -114,16 +161,17 @@ function normalize(
     closedPositions: pnl.closedPositions,
     pricedTokens: u.pricedTokens,
     unpricedTokens: u.unpricedTokens,
-    topTokens: pnl.perToken
-      .slice(0, 10)
-      .map((t) => ({ token: t.token, realizedPnlUsd: t.realizedPnlUsd, holding: t.holding })),
+    tokenDistribution: tokenDistribution(pnl.perToken),
+    topEarningTokens: topEarningTokens(pnl.perToken, info),
     provenance: 'onchain-computed',
     realizedPartial: realizedPartial && pnl.txsSell === 0,
   }
 }
 
-/** The trader_stats.extras patch — only onchain_* keys + provenance. */
+/** The trader_stats.extras patch — onchain_* scalars + the OnchainInsights
+ *  token blocks (token_distribution / top_earning_tokens) our compute fills. */
 export function enrichmentExtras(e: OnchainEnrichment): Record<string, unknown> {
+  const hasTokens = e.topEarningTokens.length > 0
   return {
     onchain_realized_pnl: e.realizedPnlUsd,
     onchain_unrealized_pnl: e.unrealizedPnlUsd,
@@ -135,6 +183,9 @@ export function enrichmentExtras(e: OnchainEnrichment): Record<string, unknown> 
     onchain_sell_volume: e.sellVolumeUsd,
     onchain_tokens_traded: e.tokensTraded,
     onchain_derivation: e.provenance,
+    // OnchainInsights blocks — only when we actually have tokens (NULL-collapse).
+    ...(hasTokens ? { token_distribution: e.tokenDistribution } : {}),
+    ...(hasTokens ? { top_earning_tokens: e.topEarningTokens } : {}),
     ...(e.realizedPartial ? { onchain_realized_partial: true } : {}),
   }
 }
