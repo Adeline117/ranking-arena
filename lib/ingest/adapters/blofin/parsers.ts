@@ -28,6 +28,8 @@ import type {
   ParseCtx,
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
+  ParsedProfile,
+  ParsedStats,
   RankingTimeframe,
 } from '../../core/types'
 
@@ -107,6 +109,96 @@ export function parseBlofinLeaderboardPage(
  * no-op), so the board is the ONLY series source. The board is per-TF
  * (range_time), so points belong to `timeframe`.
  */
+/**
+ * Per-trader profile (headful-discovered endpoints, 2026-07-02). Adds the
+ * risk metrics the board omits — sharpe/sortino/calmar/volatility/annualized_roi
+ * — plus per-symbol trading preferences + the roi/pnl chart. Scales match the
+ * board (roi/mdd/win_ratio are decimal fractions → pct()×100); sharpe/sortino/
+ * calmar are raw ratios blofin computes itself. Every field NULL-collapses.
+ */
+export function parseBlofinProfile(rawPayload: unknown, ctx: ParseCtx): ParsedProfile {
+  const p = (rawPayload ?? {}) as Dict
+  const tf = (num(p.timeframe) ?? 90) as RankingTimeframe
+  const ind = ((p.indicators as Dict)?.data ?? null) as Dict | null
+  const info = ((p.info as Dict)?.data ?? null) as Dict | null
+  const symbolPerf = ((p.symbolPerf as Dict)?.data as Dict | null)?.symbols
+  const perf = (p.performance as Dict)?.data
+
+  const stats: ParsedStats[] = []
+  if (ind) {
+    const extras: Record<string, unknown> = {}
+    const put = (k: string, v: number | null) => {
+      if (v !== null) extras[k] = v
+    }
+    put('sortino', num(ind.sortino_ratio))
+    put('calmar', num(ind.calmar_ratio))
+    put('volatility', num(ind.volatility))
+    put('down_risk', num(ind.down_risk))
+    put('annualized_roi', pct(ind.annualized_roi))
+    put('copier_pnl', num(ind.copier_volume))
+
+    // Per-symbol trading preferences (AssetPreference reads .assets[{asset,volume}]).
+    let tradingPreferences: Record<string, unknown> | null = null
+    if (Array.isArray(symbolPerf) && symbolPerf.length > 0) {
+      const assets = (symbolPerf as Dict[])
+        .map((s) => ({
+          asset: typeof s.symbol === 'string' ? s.symbol : null,
+          volume: num(s.ratio),
+          win_rate: pct(s.win_ratio),
+          trades: int(s.trades),
+        }))
+        .filter((a) => a.asset !== null)
+      if (assets.length > 0) tradingPreferences = { assets }
+    }
+
+    stats.push({
+      timeframe: tf,
+      asOf: ctx.scrapedAt,
+      roi: pct(ind.roi),
+      pnl: num(ind.real_pnl ?? ind.pnl_all),
+      sharpe: num(ind.sharpe_ratio),
+      mdd: pct(ind.max_drawdown),
+      winRate: pct(ind.win_ratio_all),
+      winPositions: int(ind.winning_trades),
+      totalPositions: int(ind.trades),
+      copierPnl: null,
+      copierCount: null,
+      aum: null,
+      volume: num(ind.trade_volume),
+      profitShareRate: null,
+      holdingDurationAvgHours: null,
+      tradingPreferences,
+      extras,
+    })
+  }
+
+  const series: ParsedProfile['series'] = []
+  if (Array.isArray(perf)) {
+    const roiPts: Array<{ ts: string; value: number }> = []
+    const pnlPts: Array<{ ts: string; value: number }> = []
+    for (const row of perf as Dict[]) {
+      const t = num(row.time)
+      if (t === null || t <= 0) continue
+      const ts = new Date(t).toISOString()
+      const r = pct(row.roi)
+      const pnl = num(row.total_pnl)
+      if (r !== null) roiPts.push({ ts, value: r })
+      if (pnl !== null) pnlPts.push({ ts, value: pnl })
+    }
+    roiPts.sort((a, b) => (a.ts < b.ts ? -1 : 1))
+    pnlPts.sort((a, b) => (a.ts < b.ts ? -1 : 1))
+    if (roiPts.length > 0) series.push({ timeframe: tf, metric: 'roi', points: roiPts })
+    if (pnlPts.length > 0) series.push({ timeframe: tf, metric: 'pnl', points: pnlPts })
+  }
+
+  return {
+    stats,
+    series,
+    nickname: info && typeof info.nick_name === 'string' ? info.nick_name : null,
+    avatarUrlOrigin: info && typeof info.profile === 'string' ? info.profile : null,
+  }
+}
+
 export function parseBlofinLeaderboardSeries(
   payload: unknown,
   _ctx: ParseCtx,

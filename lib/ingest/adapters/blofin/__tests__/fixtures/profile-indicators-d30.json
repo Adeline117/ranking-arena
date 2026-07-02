@@ -1,0 +1,27 @@
+{
+  "code": 200,
+  "msg": "succeed",
+  "data": {
+    "rio_d7": "0",
+    "pnl_d7": null,
+    "pnl_all": "119321.479941318907682396",
+    "max_drawdown_all": "0.690759781235903362",
+    "win_ratio_all": "0.5156",
+    "trades": 64,
+    "winning_trades": 33,
+    "roi": "35.202683440338173985",
+    "annualized_roi": "428.299315190781116817",
+    "max_drawdown": "0.690759781235903362",
+    "sharpe_ratio": "9.2657",
+    "volatility": "170.8284",
+    "down_risk": "11.0739",
+    "calmar_ratio": "50.962265604627036318",
+    "sortino_ratio": "142.9351",
+    "update_time": 1783029815507,
+    "trader_volume": "7970176.2473599985",
+    "copier_volume": "11749346.136759998",
+    "trade_volume": "19719522.3841199965",
+    "real_pnl": "119814.643478697422793841"
+  },
+  "alert": null
+}
