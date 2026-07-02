@@ -40,6 +40,23 @@ interface RpcOpts {
 
 const DEFAULT_RPCS = [] as string[] // set lazily to alchemyBscUrl()
 
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
+
+function isTransient(msg: string): boolean {
+  const m = msg.toLowerCase()
+  return (
+    m.includes('compute unit') ||
+    m.includes('throughput') ||
+    m.includes('rate') ||
+    m.includes('429') ||
+    m.includes('unexpected end of json') ||
+    m.includes('timeout') ||
+    m.includes('aborted') ||
+    m.includes('fetch failed') ||
+    m.includes('econnreset')
+  )
+}
+
 async function rpc<T>(
   method: string,
   params: unknown[],
@@ -48,21 +65,33 @@ async function rpc<T>(
 ): Promise<T> {
   const urls = opts.rpcUrls && opts.rpcUrls.length > 0 ? opts.rpcUrls : [alchemyBscUrl()]
   const url = urls[rpcIndex % urls.length]
-  const ctrl = new AbortController()
-  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 15_000)
-  try {
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
-      signal: ctrl.signal,
-    })
-    const json = (await res.json()) as { result?: T; error?: { message?: string } }
-    if (json.error) throw new Error(`rpc ${method}: ${json.error.message ?? 'error'}`)
-    return json.result as T
-  } finally {
-    clearTimeout(timer)
+  const attempts = 5
+  for (let i = 0; i < attempts; i++) {
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 15_000)
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+        signal: ctrl.signal,
+      })
+      const text = await res.text()
+      const json = (text ? JSON.parse(text) : {}) as { result?: T; error?: { message?: string } }
+      if (json.error) throw new Error(`rpc ${method}: ${json.error.message ?? 'error'}`)
+      return json.result as T
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      if (i < attempts - 1 && isTransient(msg)) {
+        await sleep(400 * 2 ** i)
+        continue
+      }
+      throw err
+    } finally {
+      clearTimeout(timer)
+    }
   }
+  throw new Error(`rpc ${method}: exhausted retries`)
 }
 
 export async function getBscHead(opts: RpcOpts = {}): Promise<number> {
