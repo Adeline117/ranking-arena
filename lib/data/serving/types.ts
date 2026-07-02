@@ -52,6 +52,15 @@ export interface TraderFirstScreen {
   }>
 }
 
+/** /api/traders/[handle]/first-screen payload — used by the client-side
+ *  ?platform= account disambiguation (the trader page is ISR-static, so the
+ *  server component cannot read searchParams and resolves without a platform
+ *  hint; the client validates + re-fetches the requested account here). */
+export interface TraderFirstScreenResponse {
+  firstScreen: TraderFirstScreen
+  capability: SourceCapability | null
+}
+
 export type CoreCacheState = 'warm' | 'cold-fetched' | 'pending'
 
 /** One on-demand request per timeframe (spec §2.4-2). */
