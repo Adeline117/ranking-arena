@@ -17,14 +17,51 @@
  * Verified by live capture 2026-06-11 (bingx-*-debug scripts, deleted).
  */
 
+import { createHash } from 'crypto'
 import type {
+  HistoryKind,
   ParseCtx,
+  ParsedHistoryRow,
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
+  ParsedPosition,
   RankingTimeframe,
 } from '../../core/types'
 
 type Dict = Record<string, unknown>
+
+/** Stable natural identity for idempotent record upserts (spec §2.3). */
+function dedupeHash(...fields: unknown[]): string {
+  return createHash('sha1')
+    .update(fields.map((f) => String(f ?? '')).join('|'))
+    .digest('hex')
+}
+
+/** bingx timestamps are "2026-07-02T18:03:39.000+0800" (ISO w/ offset). */
+function isoTime(v: unknown): string | null {
+  if (typeof v !== 'string' || v === '') return null
+  const t = Date.parse(v)
+  return Number.isNaN(t) ? null : new Date(t).toISOString()
+}
+
+/** "30X" → 30; "10" → 10. */
+function parseLeverage(v: unknown): number | null {
+  if (typeof v === 'string') return num(v.replace(/[xX]/g, ''))
+  return num(v)
+}
+
+/** bingx order side Bid=Buy / Ask=Sell. */
+function orderSide(v: unknown): string | null {
+  if (v === 'Bid') return 'Buy'
+  if (v === 'Ask') return 'Sell'
+  return typeof v === 'string' && v ? v : null
+}
+
+function recordRows(raw: unknown): Dict[] {
+  const data = (raw as Dict)?.data as Dict | undefined
+  const list = data?.result ?? data?.searchResult
+  return Array.isArray(list) ? (list as Dict[]) : []
+}
 
 function num(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null
@@ -205,4 +242,91 @@ export function bingxPerTfExtras(rankStat: Dict, tf: RankingTimeframe): Record<s
   const risk = int(rankStat[`riskLevel${tf}Days`])
   if (risk !== null) extras.risk_rating = risk
   return extras
+}
+
+// ── Record surfaces (headful-harvested 2026-07-02, spec §17/18) ──────────────
+// Detail SPA: bingx.com/en/CopyTrading/{uid}?accountEnum=BINGX_SWAP_FUTURES&
+//   apiIdentity={apiIdentity}. Three signed GET endpoints (api-app host):
+//   .../copy-trade-processor/trader-open/current-position → open positions
+//   .../copy-trade-processor/trader-open/history-order     → order/trade records
+//   .../copy-trade-processor/trader-open/followers         → copiers (aggregate)
+// The `sign` header covers the URL query (verified: mutating pageId → code
+// 100005), so pages can't be replayed — the adapter captures the browser's own
+// signed response per surface. Parsers stay pure over the stored RAW.
+
+/** Current open positions → ParsedPosition[] (data.result[]). */
+export function parseBingxPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  const out: ParsedPosition[] = []
+  for (const item of recordRows(raw)) {
+    const symbol = typeof item.symbol === 'string' ? item.symbol : null
+    if (!symbol) continue
+    out.push({
+      symbol,
+      side: typeof item.positionSide === 'string' ? item.positionSide : null,
+      leverage: parseLeverage(item.leverageNum ?? item.leverage),
+      size: num(item.volume),
+      entryPrice: num(item.avgPrice),
+      markPrice: num(item.fairPrice ?? item.tradePrice),
+      unrealizedPnl: num(item.unrealisedPNL),
+      raw: item,
+    })
+  }
+  return out
+}
+
+/** Order/trade history (history-order) + copiers (followers) → history rows.
+ *  bingx has no distinct closed-position endpoint (open+close are separate
+ *  order rows), so trade records map to `orders` (round-trip PnL/leverage/
+ *  avgOpenPrice ride along in raw). Copier labels are already exchange-masked
+ *  (se***5@…) and stored for dedupe/aggregation only — the render path emits
+ *  aggregates only (spec §6). */
+export function parseBingxHistory(
+  raw: unknown,
+  kind: HistoryKind,
+  ctx: ParseCtx
+): ParsedHistoryRow[] {
+  if (kind === 'copiers') {
+    const list = ((raw as Dict)?.data as Dict | undefined)?.followerDetailsVoList
+    const rows = Array.isArray(list) ? (list as Dict[]) : []
+    const out: ParsedHistoryRow[] = []
+    for (const c of rows) {
+      const label = typeof c.nickName === 'string' ? c.nickName : null
+      out.push({
+        kind: 'copiers',
+        ts: ctx.scrapedAt,
+        copierLabel: label,
+        copierPnl: num(c.followingProfitLoss),
+        copierInvested: num(c.copyAmount),
+        copyDurationDays: int(c.followingDays),
+        dedupeHash: dedupeHash('bingx_cp', label, c.copyAmount),
+        raw: c,
+      })
+    }
+    return out
+  }
+
+  if (kind === 'orders') {
+    const out: ParsedHistoryRow[] = []
+    for (const o of recordRows(raw)) {
+      const ts = isoTime(o.filledTime) ?? isoTime(o.entrustTime) ?? isoTime(o.updateTime)
+      if (ts === null) continue
+      const orderKind =
+        [o.action, o.orderType].filter((x) => typeof x === 'string' && x).join(' ') || null
+      out.push({
+        kind: 'orders',
+        ts,
+        orderKind,
+        symbol: typeof o.symbol === 'string' ? o.symbol : null,
+        side: orderSide(o.side),
+        price: num(o.avgFilledPrice ?? o.entrustPrice),
+        qty: num(o.cumFilledVolume ?? o.entrustVolume),
+        dedupeHash: dedupeHash('bingx_ord', o.orderId),
+        raw: o,
+      })
+    }
+    return out
+  }
+
+  // position_history / transfers not exposed by bingx's detail surfaces.
+  return []
 }

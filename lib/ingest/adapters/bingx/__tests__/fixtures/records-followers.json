@@ -1,0 +1,109 @@
+{
+  "code": 0,
+  "timestamp": 1783036134124,
+  "data": {
+    "followerBasicInfoVo": {
+      "followerGrowNums": 12,
+      "followerGrowRate": 100,
+      "statTime": "2026-07-03T00:00:00.000+08:00"
+    },
+    "followerDetailsVoList": [
+      {
+        "nickName": "se***5@yandex.ru",
+        "avatar": "https://static-app.bb-os.com/avatar/20230901/avatar_1.png",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "101.60000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "ng***e@gmail.com",
+        "avatar": "https://static-app.bb-os.com/avatar/20230901/avatar_3.png",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "46.35000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "wigga90",
+        "avatar": "https://static-app.bb-os.com/avatar/20230901/avatar_2.png",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "100.00000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "copytrading01052026",
+        "avatar": "https://static-app.bb-os.com/avatar/20230901/avatar_1.png",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "20.00000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "vw***g@ukr.net",
+        "avatar": "https://static-app.bb-os.com/avatar/20230901/avatar_1.png",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "20.00000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "gracias1",
+        "avatar": "https://static-app.bb-os.com/avatar/20220816/99e6d1b7254fbe645eac1a1bd4856d64.jpg",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "20.00000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "sa***s@gmail.com",
+        "avatar": "https://static-app.bb-os.com/avatar/20230901/avatar_5.png",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "100.00000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "le***3@gmail.com",
+        "avatar": "https://static-app.bb-os.com/avatar/20230901/avatar_1.png",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "20.00000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "mu***s@gmail.com",
+        "avatar": "https://static-app.bb-os.com/avatar/20230901/avatar_1.png",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "20.00000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "ko***3@gmail.com",
+        "avatar": "https://static-app.bb-os.com/avatar/20230901/avatar_4.png",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "24.56000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "sh***i@gmail.com",
+        "avatar": "https://static-app.bb-os.com/avatar/20230901/avatar_4.png",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "20.00000000",
+        "followingProfitLoss": "0.00000000"
+      },
+      {
+        "nickName": "撈油水的Fu",
+        "avatar": "https://static-app.bb-os.com/avatar/20260703/BingX_iOS_920a1b67d405f49fdbde1030e7e8d540.jpg",
+        "totalProfit": 0,
+        "followingDays": 1,
+        "copyAmount": "20.00000000",
+        "followingProfitLoss": "0.00000000"
+      }
+    ]
+  }
+}
