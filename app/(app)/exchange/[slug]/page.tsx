@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { notFound, redirect } from 'next/navigation'
 import { createClient } from '@supabase/supabase-js'
 import { EXCHANGE_CONFIG, resolveExchangeSlug } from '@/lib/constants/exchanges'
+import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
 import { BASE_URL } from '@/lib/constants/urls'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import PageHeader from '@/app/components/ui/PageHeader'
@@ -13,25 +14,6 @@ import {
 
 // ISR: regenerate exchange pages every 30 minutes
 export const revalidate = 1800
-
-// Top exchanges to pre-generate at build time
-const TOP_EXCHANGE_SLUGS = [
-  'binance-futures',
-  'hyperliquid',
-  'okx-futures',
-  'bybit',
-  'bitget-futures',
-  'gmx',
-  'dydx',
-  'mexc',
-  'drift',
-  'htx-futures',
-  'gateio',
-  'jupiter-perps',
-  'aevo',
-  'coinex',
-  'etoro',
-]
 
 export function generateStaticParams() {
   return TOP_EXCHANGE_SLUGS.map((slug) => ({ slug }))

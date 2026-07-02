@@ -17,6 +17,8 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
+import { ARTICLES } from '@/app/(app)/learn/articles'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -82,6 +84,23 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       { url: '/privacy', priority: 0.2, freq: 'yearly' },
       { url: '/terms', priority: 0.2, freq: 'yearly' },
       { url: '/disclaimer', priority: 0.2, freq: 'yearly' },
+      // Rankings subpages that were previously missing from the sitemap.
+      { url: '/rankings', priority: 0.9, freq: 'hourly' },
+      { url: '/rankings/exchanges', priority: 0.7, freq: 'daily' },
+      { url: '/rankings/weekly', priority: 0.7, freq: 'daily' },
+      // High-SEO exchange landing pages ("binance leaderboard" etc.) — one per
+      // prerendered slug, previously absent from the sitemap entirely.
+      ...TOP_EXCHANGE_SLUGS.map((slug) => ({
+        url: `/exchange/${slug}`,
+        priority: 0.75,
+        freq: 'daily' as const,
+      })),
+      // Individual learn articles (only the /learn index was listed before).
+      ...ARTICLES.map((a) => ({
+        url: `/learn/${a.slug}`,
+        priority: 0.6,
+        freq: 'weekly' as const,
+      })),
     ]
     return xmlResponse(
       urlsetXml(
