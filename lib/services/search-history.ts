@@ -8,15 +8,16 @@
  * Storage key: 'arena_search_history'
  */
 
-import { supabase as _supabase } from '@/lib/supabase/client'
-import type { SupabaseClient } from '@supabase/supabase-js'
-const supabase = _supabase as SupabaseClient
+import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 
 const STORAGE_KEY = 'arena_search_history'
 const MAX_HISTORY_ITEMS = 10
 
-export interface SearchHistoryItem {
+// type (not interface): type aliases get an implicit index signature, so
+// SearchHistoryItem[] is assignable to the generated `Json` column type
+// without any client-level cast.
+export type SearchHistoryItem = {
   query: string
   timestamp: number
 }
