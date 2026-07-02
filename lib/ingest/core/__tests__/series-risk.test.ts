@@ -3,6 +3,8 @@ import {
   ratiosFromCumulativePnl,
   riskFromEquitySeries,
   deriveMissingRatios,
+  deriveRiskFromSeries,
+  deriveRiskFromBlocks,
 } from '../series-risk'
 
 /** Build a cumulative-PnL series from per-day deltas. */
@@ -174,6 +176,48 @@ describe('deriveMissingRatios (CEX self-derivation from stored series)', () => {
     ]
     deriveMissingRatios(stats, [series('pnl_daily', [10, -5, 12, -3, 8, -2, 15, -4])])
     expect(stats[0].sharpe).toBeNull()
+  })
+})
+
+describe('deriveRiskFromSeries / deriveRiskFromBlocks (board-path, per-day + cumulative)', () => {
+  const pts = (vals: number[]) =>
+    vals.map((v, i) => ({ ts: `2026-06-${String(i + 1).padStart(2, '0')}T00:00:00Z`, value: v }))
+
+  it('per-day pnl_daily: values ARE the returns (no diff), sharpe/sortino, no volatility', () => {
+    // okx_web3_solana shape: signed daily PnL deltas.
+    const r = deriveRiskFromSeries('pnl_daily', pts([120, -40, 90, -30, 70, -20, 110, -50]))
+    expect(typeof r.sharpe).toBe('number')
+    expect(typeof r.sortino).toBe('number')
+    expect(r.volatility).toBeNull() // USD deltas → no percent volatility
+  })
+
+  it('cumulative roi: diffs into returns, gives sharpe + volatility', () => {
+    const r = deriveRiskFromSeries(
+      'roi',
+      pts(cum([2, -1, 3, -1, 2, -1, 4, -2]).map((p) => p.value))
+    )
+    expect(typeof r.sharpe).toBe('number')
+    expect(typeof r.volatility).toBe('number') // roi basis → percent vol
+  })
+
+  it('roi_daily: per-day percent returns → volatility present', () => {
+    const r = deriveRiskFromSeries('roi_daily', pts([2, -1, 3, -1, 2, -1, 4, -2]))
+    expect(typeof r.sharpe).toBe('number')
+    expect(typeof r.volatility).toBe('number')
+  })
+
+  it('deriveRiskFromBlocks prefers a real cumulative pnl over daily', () => {
+    const r = deriveRiskFromBlocks([
+      { metric: 'volume_daily', points: pts([1, 2, 3, 4, 5, 6, 7, 8]) }, // ignored
+      { metric: 'pnl_daily', points: pts([120, -40, 90, -30, 70, -20, 110, -50]) },
+    ])
+    expect(r).not.toBeNull()
+    expect(typeof r!.sharpe).toBe('number')
+  })
+
+  it('returns null when no derivable series / too short', () => {
+    expect(deriveRiskFromBlocks([{ metric: 'volume_daily', points: pts([1, 2, 3]) }])).toBeNull()
+    expect(deriveRiskFromSeries('pnl_daily', pts([1, 2, 3])).sharpe).toBeNull()
   })
 })
 

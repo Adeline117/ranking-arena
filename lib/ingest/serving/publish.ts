@@ -21,7 +21,7 @@ import type {
   SourceRow,
 } from '../core/types'
 import type { RejectedRow } from '../staging/validate'
-import { deriveMissingRatios } from '../core/series-risk'
+import { deriveMissingRatios, deriveRiskFromBlocks } from '../core/series-risk'
 import {
   BOOTSTRAP_DEVIATION_PCT,
   ROLLING_DEVIATION_PCT,
@@ -444,6 +444,54 @@ export async function publishBoardSeries(
          ON CONFLICT (trader_id, timeframe, metric, ts)
          DO UPDATE SET value = EXCLUDED.value`,
         [JSON.stringify(slice), src.currency]
+      )
+    }
+
+    // Board-path self-derivation (spec §Tier-0-CEX): board-ONLY sources
+    // (okx_web3_solana etc.) never hit publishProfile, so this is where their
+    // Sharpe/Sortino/volatility get computed from the board series we just
+    // wrote. Fills trader_stats ONLY where the exchange left it NULL — never
+    // overrides a real value. One UPDATE per (trader, tf) with a derivable series.
+    const derived: Array<{
+      trader_id: number
+      timeframe: number
+      sharpe: number | null
+      sortino: number | null
+      volatility: number | null
+    }> = []
+    for (const [exchangeTraderId, blocks] of seriesByTrader) {
+      const traderId = traderIds.get(exchangeTraderId)
+      if (traderId === undefined) continue
+      const byTf = new Map<number, BoardSeriesBlock[]>()
+      for (const b of blocks) {
+        const arr = byTf.get(b.timeframe) ?? []
+        arr.push(b)
+        byTf.set(b.timeframe, arr)
+      }
+      for (const [timeframe, tfBlocks] of byTf) {
+        const r = deriveRiskFromBlocks(tfBlocks)
+        if (r && (r.sharpe !== null || r.sortino !== null || r.volatility !== null)) {
+          derived.push({ trader_id: traderId, timeframe, ...r })
+        }
+      }
+    }
+    for (let i = 0; i < derived.length; i += CHUNK) {
+      const slice = derived.slice(i, i + CHUNK)
+      await client.query(
+        `UPDATE arena.trader_stats ts SET
+           sharpe = COALESCE(ts.sharpe, d.sharpe),
+           extras = ts.extras
+             || CASE WHEN ts.extras ? 'sortino' OR d.sortino IS NULL THEN '{}'::jsonb
+                     ELSE jsonb_build_object('sortino', d.sortino) END
+             || CASE WHEN ts.extras ? 'volatility' OR d.volatility IS NULL THEN '{}'::jsonb
+                     ELSE jsonb_build_object('volatility', d.volatility) END
+             || CASE WHEN ts.sharpe IS NOT NULL OR d.sharpe IS NULL THEN '{}'::jsonb
+                     ELSE '{"risk_self_derived": true}'::jsonb END
+         FROM jsonb_to_recordset($1::jsonb) AS d(
+           trader_id bigint, timeframe int, sharpe numeric, sortino numeric, volatility numeric)
+         WHERE ts.trader_id = d.trader_id AND ts.timeframe = d.timeframe
+           AND (ts.sharpe IS NULL OR NOT (ts.extras ? 'sortino') OR NOT (ts.extras ? 'volatility'))`,
+        [JSON.stringify(slice)]
       )
     }
   } finally {

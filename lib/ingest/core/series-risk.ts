@@ -252,11 +252,82 @@ function volatilityFromRoiSeries(points: CumulativePnlPoint[]): number | null {
   const deltas: number[] = []
   for (let i = 1; i < clean.length; i++) deltas.push(clean[i].value - clean[i - 1].value)
   if (deltas.length < MIN_RATIO_POINTS) return null
-  const mu = mean(deltas)
-  const variance = deltas.reduce((s, x) => s + (x - mu) * (x - mu), 0) / (deltas.length - 1)
+  return annualizedVol(deltas)
+}
+
+/** Annualised % volatility from an array of per-period returns (already deltas). */
+function annualizedVol(changes: number[]): number | null {
+  if (changes.length < MIN_RATIO_POINTS) return null
+  const mu = mean(changes)
+  const variance = changes.reduce((s, x) => s + (x - mu) * (x - mu), 0) / (changes.length - 1)
   const vol = Math.sqrt(variance) * Math.sqrt(TRADING_DAYS_PER_YEAR)
   if (!isFinite(vol) || vol <= 0) return null
   return Math.round(vol * 100) / 100
+}
+
+/** Clean + sort a series' values (ascending by ts). */
+function sortedValues(points: CumulativePnlPoint[]): number[] {
+  return points
+    .filter((p) => p && typeof p.ts === 'string' && p.value != null && isFinite(p.value))
+    .slice()
+    .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0))
+    .map((p) => p.value)
+}
+
+export interface DerivedRisk {
+  sharpe: number | null
+  sortino: number | null
+  /** Annualised % volatility — only from a ROI-basis series (percent). */
+  volatility: number | null
+}
+
+/**
+ * Derive Sharpe/Sortino/volatility from ONE series block, handling both shapes:
+ *   cumulative (`pnl`/`roi`)      → period changes are consecutive diffs
+ *   per-day     (`pnl_daily`/`roi_daily`) → the values ARE the period changes
+ * Volatility is percent-meaningful only for a ROI basis (roi / roi_daily);
+ * a USD PnL series yields Sharpe/Sortino (scale-invariant) but no volatility.
+ * The board-path counterpart to deriveMissingRatios (which is cumulative-only).
+ */
+export function deriveRiskFromSeries(metric: string, points: CumulativePnlPoint[]): DerivedRisk {
+  const empty: DerivedRisk = { sharpe: null, sortino: null, volatility: null }
+  const vals = sortedValues(points)
+  if (vals.length < 2) return empty
+  const isDaily = metric.endsWith('_daily')
+  const isRoi = metric === 'roi' || metric === 'roi_daily'
+  let changes: number[]
+  if (isDaily) {
+    changes = vals // per-day values are already the returns/deltas
+  } else {
+    changes = []
+    for (let i = 1; i < vals.length; i++) changes.push(vals[i] - vals[i - 1])
+  }
+  return {
+    sharpe: sharpeOfChanges(changes),
+    sortino: sortinoOfChanges(changes),
+    volatility: isRoi ? annualizedVol(changes) : null,
+  }
+}
+
+/** Metric preference for board-path derivation: a real cumulative pnl/roi wins;
+ *  else a per-day daily series. Never a volume/lead_size series. */
+const BOARD_DERIVABLE_METRICS = ['pnl', 'roi', 'pnl_daily', 'roi_daily'] as const
+
+/**
+ * Pick the best derivable series among a trader's board blocks (for one
+ * timeframe) and derive risk from it. Returns null when none qualifies.
+ */
+export function deriveRiskFromBlocks(
+  blocks: Array<{ metric: string; points: CumulativePnlPoint[] }>
+): DerivedRisk | null {
+  for (const metric of BOARD_DERIVABLE_METRICS) {
+    const b = blocks.find((x) => x.metric === metric && x.points.length >= 2)
+    if (b) {
+      const r = deriveRiskFromSeries(metric, b.points)
+      if (r.sharpe !== null || r.sortino !== null || r.volatility !== null) return r
+    }
+  }
+  return null
 }
 
 /**
