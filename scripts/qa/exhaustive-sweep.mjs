@@ -154,6 +154,21 @@ const ANON_ROUTES = [
   '/u/arena_bot',
 ]
 
+// Redirect-only routes: the page component renders null and client-redirects
+// in a useEffect (async — may fire AFTER hydrate()'s wait). Enumerating
+// elements there indexes the transient shell DOM, and every later click fails
+// mid-redirect ("Timeout 2500ms exceeded" → fail:click→nav noise; 2026-07-01
+// auth ledger had 50+ such phantom records for /my-posts). For these routes we
+// only assert the FINAL landing pathname matches the expected pattern — the
+// landing page's own elements are covered when the sweep visits it as a route
+// (or via the redirect-dedup path below), so element scanning here is pure
+// duplication. Value = regex the final pathname must match to pass.
+const REDIRECT_ONLY_ROUTES = new Map([
+  // /my-posts → /u/<handle> (authed), /login (anon), '/' (authed, no handle
+  // yet / social feature-flagged off). app/(app)/my-posts/page.tsx.
+  ['/my-posts', /^\/(?:u\/[^/]+|login)?$/],
+])
+
 // Auth-only surfaces worth exhaustive coverage once a session is injected.
 const AUTH_EXTRA_ROUTES = [
   '/notifications',
@@ -274,6 +289,36 @@ async function hydrate(page, route) {
 async function sweepRoute(page, route, ledger, counters, sweptPaths) {
   const status = await hydrate(page, route)
   const routeUrl = new URL(`${BASE}${route}`).pathname
+  // Redirect-only routes: assert the final landing pathname, record ONE
+  // outcome, and skip element enumeration entirely (see REDIRECT_ONLY_ROUTES).
+  const redirectRule = REDIRECT_ONLY_ROUTES.get(routeUrl)
+  if (redirectRule) {
+    // The redirect is a client-side useEffect (session read + profile fetch) —
+    // it can land after hydrate()'s fixed wait. Wait for the URL to leave the
+    // route, then a short settle for chained replaces (e.g. → /login → final).
+    await page
+      .waitForURL((u) => new URL(u).pathname !== routeUrl, { timeout: 15000 })
+      .catch(() => {})
+    await page.waitForTimeout(1000)
+    const landedPath = new URL(page.url()).pathname
+    const pass = landedPath !== routeUrl && redirectRule.test(landedPath)
+    console.log(
+      `  ${route} [${status}] — redirect-only route → ${landedPath} (${pass ? 'expected' : 'UNEXPECTED'})`
+    )
+    ledger.push({
+      route,
+      idx: -1,
+      ts: new Date().toISOString(),
+      status: pass ? `redirect-ok:${landedPath}` : `fail:redirect:${landedPath}`,
+      finalPath: landedPath,
+      errors: pass ? [] : [`redirect-only route landed on ${landedPath}, expected ${redirectRule}`],
+    })
+    if (pass) counters.redirected++
+    else counters.failed++
+    // Do NOT return landedPath: the landing page was not enumerated here, so
+    // it must stay eligible for a full sweep via its own route / later dedup.
+    return null
+  }
   // Redirect dedup (2026-07-02): auth-gated routes (/compare, /onboarding, …)
   // client-redirect anonymous visitors to /login. Enumerating that destination
   // under the ORIGINAL route re-attributes the same /login elements to N
