@@ -6,6 +6,30 @@
 > 前序会话已上线：首页榜单(密度/ScoreMiniBar/showArrow/真 sparkline/冻结列)、核心 6 面、二级面一致性、
 > DM/群聊反应回复、passkey、定价信任。prod 5/5 绿。
 
+## ✅ 2026-07-02 收官标记(五轨连推,verify-before-fix 逐条核实)
+
+- **P0 批(7 条)**:全部完成 — hashtag 泄漏/onboarding/reset-password/wrapped/群聊已读(Wave A)、
+  referral 发放接通(referral-system 会话)、portfolio 管道(portfolio-sync 会话)。
+- **B1-B7 跨切面**:B1(Wave B)、B6(a11y(b6) commit)先行完成;**B2** 本轮收尾 — 共享 `useTabsA11y`
+  hook + 8 文件全接线(bots/exchanges/favorites/u-profile/user-center/hot/admin-pipeline/CategoryRankingTabs);
+  **B3** 唯一真缺口 ConnectionDot 已修(其余 6 处核实为假阳性——旁有文字/形状固有);**B4** 25 处 hex →
+  tokens/vars + 品牌常量注释(og/\* satori 合法、learn 是 var 回退);**B5 整体假阳性**(globals.css:706
+  全局 `:focus-visible !important` 已覆盖);**B7 假阳性**(hover 全为装饰,焦点环全局有)。
+- **i18n 回归**:Wave C + 并行波已清(ApiKeysSection/funding/OI 复核已修);**T8 口径**已落地 —
+  四语言统一为「160K+/160,000+ 已收录 · 20+ 交易所」(生产实测 167,742 traders / 23 exchanges)。
+- **转化/激活**:pricing/success、tip/success、pricing 余项(Wave D);auth/callback(Wave A)。
+- **实体/详情**:bot/[id]、/u/[handle](Wave E);**/compare 四项**本轮完成(搜索恢复+从榜单加入/
+  雷达→分组条+RadarChart 删除/矩阵语义表/👑 sr-only);**composer 守卫**本轮完成(useUnsavedChangesGuard
+  × 4 编辑器);**/trader/authorize** 本轮改服务端 redirect(灭 2s 空跳);exchange/[slug] token 化(B4)。
+- **市场/事件**:funding APR/OI/热力图/搜索、market 全局态条、flash-news(并行波);**competitions
+  9 子项**本轮收尾 — 7 项核实已做,2 项新修(join 平台自由文本→下拉[真数据 bug]、名次 ▲/▼ 轮询差分)。
+- **内容/Admin/法务**:TOC/锚点/learn hub/api-docs、admin shell nav/reports/data-health/KPI、
+  /status、watchlist error-empty、settings、legal 单语言+TOC(并行波)。
+- **/post/[id] SSR 重构**:已由 6b15e9921(06-30)完成,本轮逐文件复核零缺口。
+- **验证**:lint 0 error、test 2264/2264、post-deploy 5/5、qa:schema 绿。
+- **仍开放**:admin 内部低优先残项;competitions 跨会话名次历史需 prev_rank 列(schema 单通道,
+  已 flag 为 follow-up);Wave4 旗舰落地 gated on owner review(/design-system 原型就绪)。
+
 ---
 
 ## ⚠️ 审计有误 / 已纠正(核实后)
