@@ -118,7 +118,12 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
 
-    await deletePost(supabase, id, user.id)
+    const deleted = await deletePost(supabase, id, user.id)
+    if (!deleted) {
+      // 0 rows matched: post doesn't exist or caller isn't the author.
+      // Surface it instead of a fake 200 (silent no-op left QA canary posts live).
+      return notFound('Post not found')
+    }
 
     return success({ message: 'Delete successful' })
   } catch (error: unknown) {

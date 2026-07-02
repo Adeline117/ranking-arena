@@ -258,30 +258,37 @@ describe('updatePost', () => {
 })
 
 describe('deletePost', () => {
-  test('should delete a post', async () => {
+  const mockDeleteChain = (result: { data: unknown; error: Error | null }) => {
     const mockSupabase = createMockSupabase()
-
-    mockSupabase.eq.mockReturnValueOnce({
-      ...mockSupabase,
-      eq: jest
-        .fn()
-        .mockReturnValue({ then: (resolve: MockResolve<unknown>) => resolve({ error: null }) }),
-    })
-
-    await expect(
-      deletePost(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
-    ).resolves.toBeUndefined()
-  })
-
-  test('should throw error on deletion failure', async () => {
-    const mockSupabase = createMockSupabase()
-
     mockSupabase.eq.mockReturnValueOnce({
       ...mockSupabase,
       eq: jest.fn().mockReturnValue({
-        then: (resolve: MockResolve<unknown>) => resolve({ error: new Error('Delete failed') }),
+        select: jest
+          .fn()
+          .mockReturnValue({ then: (resolve: MockResolve<unknown>) => resolve(result) }),
       }),
     })
+    return mockSupabase
+  }
+
+  test('should delete a post and return true', async () => {
+    const mockSupabase = mockDeleteChain({ data: [{ id: 'post1' }], error: null })
+
+    await expect(
+      deletePost(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    ).resolves.toBe(true)
+  })
+
+  test('should return false when no row matched (missing post or wrong author)', async () => {
+    const mockSupabase = mockDeleteChain({ data: [], error: null })
+
+    await expect(
+      deletePost(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
+    ).resolves.toBe(false)
+  })
+
+  test('should throw error on deletion failure', async () => {
+    const mockSupabase = mockDeleteChain({ data: null, error: new Error('Delete failed') })
 
     await expect(
       deletePost(mockSupabase as unknown as SupabaseClient, 'post1', 'user1')
