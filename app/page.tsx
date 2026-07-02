@@ -108,7 +108,10 @@ export default async function Page() {
         {/* SSR Hero — stays visible permanently. Outside #ssr-ranking-table so
           Phase 2 hiding the table doesn't affect it. Constrained to center
           column width via max-width + margin for alignment with three-col grid. */}
-        <div id="ssr-hero-shell" style={{ maxWidth: 1400, margin: '0 auto', padding: '0 20px' }}>
+        <div
+          id="ssr-hero-shell"
+          style={{ maxWidth: 1400, margin: '0 auto', padding: '12px 20px 0' }}
+        >
           <HomeHeroSSR exchangeCount={heroStats?.exchangeCount} />
         </div>
 

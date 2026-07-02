@@ -1103,7 +1103,11 @@ function RankingTableInner(props: {
               pointerEvents: isRefreshing ? 'none' : undefined,
             }}
           >
-            {loading && sortedTraders.length === 0 ? (
+            {(loading || isRefreshing) && sortedTraders.length === 0 ? (
+              // Show a skeleton whenever the body would otherwise be blank during
+              // a load OR a filter/time-range refetch that cleared the rows —
+              // previously isRefreshing with no rows left a ~400px empty band that
+              // read as "the filter did nothing / ugly whitespace".
               <Box style={{ animation: 'fadeIn 0.2s ease-in' }}>
                 <RankingSkeleton />
               </Box>
