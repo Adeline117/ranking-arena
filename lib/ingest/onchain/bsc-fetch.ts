@@ -18,22 +18,27 @@
  * timestamp storm; PnL accounting only needs a monotonic order.
  */
 
-import { decodeBscSwaps, bscQuoteConfig, TRANSFER_TOPIC, type RawLog } from './bsc-swaps'
+import {
+  bscQuoteConfig,
+  decodeTransfersToSwaps,
+  NATIVE_BNB,
+  type NormalizedTransfer,
+} from './bsc-swaps'
 import { computeWalletPnl, type WalletPnl } from './pnl-accounting'
 
-const DEFAULT_RPCS = [
-  'https://bsc-dataseed.binance.org',
-  'https://bsc-dataseed1.defibit.io',
-  'https://bsc-dataseed1.ninicoin.io',
-]
-const BSC_BLOCKS_PER_DAY = 28_800 // ~3s blocks
-const DEFAULT_WINDOW = 10_000 // conservative getLogs block span
-const MIN_WINDOW = 500
+/** Alchemy BNB endpoint from the shared key (BNB network enabled 2026-07-01). */
+function alchemyBscUrl(): string {
+  const key = process.env.ALCHEMY_API_KEY
+  if (!key) throw new Error('[onchain] ALCHEMY_API_KEY missing')
+  return `https://bnb-mainnet.g.alchemy.com/v2/${key}`
+}
 
 interface RpcOpts {
   rpcUrls?: string[]
   timeoutMs?: number
 }
+
+const DEFAULT_RPCS = [] as string[] // set lazily to alchemyBscUrl()
 
 async function rpc<T>(
   method: string,
@@ -41,7 +46,7 @@ async function rpc<T>(
   opts: RpcOpts = {},
   rpcIndex = 0
 ): Promise<T> {
-  const urls = opts.rpcUrls ?? DEFAULT_RPCS
+  const urls = opts.rpcUrls && opts.rpcUrls.length > 0 ? opts.rpcUrls : [alchemyBscUrl()]
   const url = urls[rpcIndex % urls.length]
   const ctrl = new AbortController()
   const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 15_000)
@@ -65,58 +70,67 @@ export async function getBscHead(opts: RpcOpts = {}): Promise<number> {
   return Number(BigInt(hex))
 }
 
-const walletTopic = (addr: string) => '0x' + '0'.repeat(24) + addr.toLowerCase().replace(/^0x/, '')
-
-/** Is this a public-RPC "range too wide / too many results" complaint? */
-function isRangeError(msg: string): boolean {
-  const m = msg.toLowerCase()
-  return (
-    m.includes('range') ||
-    m.includes('limit') ||
-    m.includes('too many') ||
-    m.includes('exceed') ||
-    m.includes('more than')
-  )
+interface AlchemyTransfer {
+  hash: string
+  from: string
+  to: string | null
+  value: number | null
+  asset?: string | null
+  category?: string
+  rawContract?: { address?: string | null }
+  metadata?: { blockTimestamp?: string }
+}
+interface AlchemyTransfersPage {
+  transfers: AlchemyTransfer[]
+  pageKey?: string
 }
 
 /**
- * Fetch all Transfer logs where the wallet is sender OR receiver, over
- * [fromBlock, toBlock]. Two topic-filtered getLogs per window (from-slot,
- * to-slot). Adaptively halves the window on range errors down to MIN_WINDOW.
+ * Fetch a wallet's ERC-20 transfers (both directions) via
+ * alchemy_getAssetTransfers — address-indexed, decoded values + timestamps, no
+ * block scan. Paginates by pageKey; `sinceMs` stops once transfers predate the
+ * lookback window (order desc). Two directions merged.
  */
-export async function fetchWalletTransferLogs(
+export async function fetchWalletTransfers(
   wallet: string,
-  fromBlock: number,
-  toBlock: number,
-  opts: RpcOpts & { window?: number; maxCalls?: number } = {}
-): Promise<RawLog[]> {
-  const wt = walletTopic(wallet)
-  const out: RawLog[] = []
-  let window = opts.window ?? DEFAULT_WINDOW
-  const maxCalls = opts.maxCalls ?? 400
-  let calls = 0
-  let start = fromBlock
+  opts: RpcOpts & { sinceMs?: number; maxPages?: number } = {}
+): Promise<NormalizedTransfer[]> {
+  const out: NormalizedTransfer[] = []
+  const sinceMs = opts.sinceMs ?? 0
+  const maxPages = opts.maxPages ?? 20
 
-  while (start <= toBlock && calls < maxCalls) {
-    const end = Math.min(start + window - 1, toBlock)
-    const base = { fromBlock: '0x' + start.toString(16), toBlock: '0x' + end.toString(16) }
-    try {
-      // from = wallet (topic1), and to = wallet (topic2) — two calls.
-      const [asFrom, asTo] = await Promise.all([
-        rpc<RawLog[]>('eth_getLogs', [{ ...base, topics: [TRANSFER_TOPIC, wt] }], opts),
-        rpc<RawLog[]>('eth_getLogs', [{ ...base, topics: [TRANSFER_TOPIC, null, wt] }], opts),
-      ])
-      calls += 2
-      if (Array.isArray(asFrom)) out.push(...asFrom)
-      if (Array.isArray(asTo)) out.push(...asTo)
-      start = end + 1
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      if (isRangeError(msg) && window > MIN_WINDOW) {
-        window = Math.max(MIN_WINDOW, Math.floor(window / 2)) // shrink + retry same start
-        continue
+  // erc20 = token legs; external/internal = NATIVE BNB legs (most BSC memecoin
+  // swaps pay in native BNB — without these every swap looks quote-less).
+  const categories = ['erc20', 'external', 'internal']
+  for (const dir of ['fromAddress', 'toAddress'] as const) {
+    let pageKey: string | undefined
+    for (let page = 0; page < maxPages; page++) {
+      const params: Record<string, unknown> = {
+        [dir]: wallet,
+        category: categories,
+        withMetadata: true,
+        order: 'desc',
+        maxCount: '0x3e8', // 1000
       }
-      throw err
+      if (pageKey) params.pageKey = pageKey
+      const res = await rpc<AlchemyTransfersPage>('alchemy_getAssetTransfers', [params], opts)
+      const rows = res?.transfers ?? []
+      let reachedOld = false
+      for (const t of rows) {
+        const ts = t.metadata?.blockTimestamp
+        if (!ts || t.value == null || !Number.isFinite(t.value) || t.value <= 0) continue
+        if (sinceMs && Date.parse(ts) < sinceMs) {
+          reachedOld = true
+          continue
+        }
+        // Native BNB leg (no contract) → sentinel token; else the ERC-20 contract.
+        const contract = t.rawContract?.address?.toLowerCase()
+        const token = contract ?? (t.asset === 'BNB' ? NATIVE_BNB : null)
+        if (!token) continue
+        out.push({ token, from: t.from, to: t.to ?? '', amount: t.value, tx: t.hash, ts })
+      }
+      pageKey = res?.pageKey
+      if (!pageKey || reachedOld) break // done or crossed the window boundary
     }
   }
   return out
@@ -144,9 +158,8 @@ export async function fetchBnbUsd(opts: { timeoutMs?: number } = {}): Promise<nu
 
 export interface BscWalletResult {
   wallet: string
-  fromBlock: number
-  toBlock: number
-  logs: number
+  lookbackDays: number
+  transfers: number
   swaps: number
   bnbUsd: number
   pnl: WalletPnl
@@ -155,26 +168,19 @@ export interface BscWalletResult {
 /** End-to-end: fetch → decode → PnL for one BSC wallet over the last N days. */
 export async function computeBscWalletOnchain(
   wallet: string,
-  opts: RpcOpts & {
-    lookbackDays?: number
-    window?: number
-    maxCalls?: number
-    bnbUsd?: number
-  } = {}
+  opts: RpcOpts & { lookbackDays?: number; maxPages?: number; bnbUsd?: number } = {}
 ): Promise<BscWalletResult> {
-  const head = await getBscHead(opts)
   const lookbackDays = opts.lookbackDays ?? 90
-  const fromBlock = Math.max(0, head - lookbackDays * BSC_BLOCKS_PER_DAY)
-  const [logs, bnbUsd] = await Promise.all([
-    fetchWalletTransferLogs(wallet, fromBlock, head, opts),
+  const sinceMs = Date.now() - lookbackDays * 86_400_000
+  const [transfers, bnbUsd] = await Promise.all([
+    fetchWalletTransfers(wallet, { ...opts, sinceMs }),
     opts.bnbUsd !== undefined ? Promise.resolve(opts.bnbUsd) : fetchBnbUsd(opts),
   ])
-  const swaps = decodeBscSwaps(logs, wallet, bscQuoteConfig(bnbUsd))
+  const swaps = decodeTransfersToSwaps(transfers, wallet, bscQuoteConfig(bnbUsd))
   return {
     wallet,
-    fromBlock,
-    toBlock: head,
-    logs: logs.length,
+    lookbackDays,
+    transfers: transfers.length,
     swaps: swaps.length,
     bnbUsd,
     pnl: computeWalletPnl(swaps),
