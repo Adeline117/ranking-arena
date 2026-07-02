@@ -588,6 +588,10 @@ function RankingTableInner(props: {
   // We flip data-hscroll only while it actually overflows so wide screens (where
   // everything fits) keep the exact current layout — no sticky cells, no scrollbar.
   const hScrollRef = useRef<HTMLDivElement>(null)
+  // Sticky column header (table view). It lives OUTSIDE the h-scroll wrapper so
+  // its position:sticky pins against the viewport; the scroll-sync effect below
+  // keeps it column-aligned with the horizontally-scrolled rows.
+  const headerRef = useRef<HTMLDivElement>(null)
   const resetKey = useMemo(
     () =>
       `${currentPage}-${sortColumn}-${sortDir}-${debouncedSearch}-${styleFilter}-${scoreGradeFilter}-${traderTypeFilter}`,
@@ -606,11 +610,19 @@ function RankingTableInner(props: {
   }, [resetKey])
 
   // Detect horizontal overflow on the desktop table wrapper and toggle
-  // data-hscroll. The frozen-column CSS (sticky cells + backgrounds + divider
-  // shadow) is gated entirely on data-hscroll="true", so on wide screens where
-  // the grid fits there is zero visual/layout change. Re-measures on viewport
-  // resize (ResizeObserver) and whenever column visibility / density / row count
+  // data-hscroll (mirrored onto the header, which sits outside the wrapper).
+  // The frozen-column CSS (sticky cells + backgrounds + divider shadow) is
+  // gated entirely on data-hscroll="true", so on wide screens where the grid
+  // fits there is zero visual/layout change. Re-measures on viewport resize
+  // (ResizeObserver) and whenever column visibility / density / row count
   // changes the intrinsic grid width.
+  //
+  // Header scroll-sync: the sticky header is NOT inside the scroll wrapper
+  // (any overflow other than visible/clip would make the wrapper its sticky
+  // scrollport and stop it pinning to the viewport — see render comment), so
+  // while the rows are h-scrolled we mirror scrollLeft onto the header via
+  // translateX, and counter-translate its two frozen cells (rank + name) so
+  // they stay put exactly like the rows' sticky-left cells.
   useEffect(() => {
     const el = hScrollRef.current
     if (!el) return
@@ -618,13 +630,43 @@ function RankingTableInner(props: {
       el.removeAttribute('data-hscroll')
       return
     }
+    // Same gate as the frozen-column CSS block in ranking-table.css: coarse
+    // pointers / mobile keep the plain synced-header behavior (no frozen cells).
+    const frozenColsMq = window.matchMedia(
+      '(min-width: 768px) and (hover: hover) and (pointer: fine)'
+    )
+    const syncHeader = () => {
+      const header = headerRef.current
+      if (!header) return
+      const x = el.scrollLeft
+      header.style.transform = x ? `translate3d(${-x}px, 0, 0)` : ''
+      const counter = x && frozenColsMq.matches ? `translate3d(${x}px, 0, 0)` : ''
+      for (const cell of [header.children[0], header.children[1]]) {
+        if (cell instanceof HTMLElement) cell.style.transform = counter
+      }
+    }
     const measure = () => {
-      el.dataset.hscroll = el.scrollWidth > el.clientWidth + 1 ? 'true' : 'false'
+      // The rows are per-row clipped until data-hscroll unclips them, so the
+      // wrapper's own scrollWidth cannot bootstrap the flag. The header carries
+      // the grid's min-width unclipped (it sits outside the wrapper, in the
+      // overflow:clip container), so ITS width is the overflow signal:
+      // header wider than the wrapper's scrollport = the grid doesn't fit.
+      const header = headerRef.current
+      const gridWidth = header ? header.offsetWidth : el.scrollWidth
+      const overflowing = gridWidth > el.clientWidth + 1 ? 'true' : 'false'
+      el.dataset.hscroll = overflowing
+      if (header) header.dataset.hscroll = overflowing
+      syncHeader()
     }
     measure()
     const ro = new ResizeObserver(measure)
     ro.observe(el)
-    return () => ro.disconnect()
+    if (headerRef.current) ro.observe(headerRef.current)
+    el.addEventListener('scroll', syncHeader, { passive: true })
+    return () => {
+      ro.disconnect()
+      el.removeEventListener('scroll', syncHeader)
+    }
   }, [viewMode, visibleColumns, density, paginatedTraders.length])
 
   // Wrap parseSourceInfo with translation function
@@ -710,7 +752,11 @@ function RankingTableInner(props: {
         radius="none"
         style={{
           boxShadow: `0 0 0 1px var(--glass-border-light)`,
-          overflow: viewMode === 'card' ? 'visible' : 'hidden',
+          // 'clip' (NOT 'hidden'): clips identically but does not create a
+          // scroll container, so the header's position:sticky keeps the
+          // viewport as its scrollport and pins under the nav. 'hidden' makes
+          // this Box the sticky scrollport and the header never pins.
+          overflow: viewMode === 'card' ? 'visible' : 'clip',
           background: 'var(--color-bg-secondary, #14121C)',
           border: tokens.glass.border.light,
           // Dynamic grid template via CSS variable — no <style> element needed.
@@ -750,159 +796,217 @@ function RankingTableInner(props: {
           />
         )}
 
-        {/* Horizontal-scroll wrapper — header + rows share ONE scroll container so
-            they scroll together and stay column-aligned. overflow-x:auto only
-            engages when the grid is wider than the viewport (narrow window / many
-            columns); on wide screens the grid expands to fit and nothing scrolls.
-            overflow-y:hidden mirrors the container so the sticky top header still
-            pins under the nav exactly as before. In card view it is inert. */}
-        <div
-          ref={hScrollRef}
-          className="ranking-hscroll"
-          role="presentation"
-          style={{
-            overflowX: viewMode === 'table' ? 'auto' : 'visible',
-            overflowY: viewMode === 'table' ? 'hidden' : 'visible',
-          }}
-        >
-          {/* Table Header (only in table view) - sticky */}
-          {viewMode === 'table' && (
-            <Box
-              className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
-              role="row"
+        {/* Table Header (only in table view) — sticky. It deliberately lives
+            OUTSIDE the .ranking-hscroll wrapper below: any overflow value other
+            than visible/clip turns that wrapper into a scroll container, which
+            would make position:sticky resolve against the wrapper's scrollport
+            instead of the viewport — the header then stops pinning under the
+            nav and instead gets pushed 56px down over the #1 row. Out here its
+            nearest scrollport is the viewport again (the container uses
+            overflow:clip, not hidden, for the same reason). Column alignment
+            with the h-scrolled rows is maintained by the scroll-sync effect
+            (translateX = -scrollLeft; frozen rank/name cells counter-translated). */}
+        {viewMode === 'table' && (
+          <Box
+            ref={headerRef}
+            className="ranking-table-header ranking-table-grid ranking-table-grid-custom"
+            role="row"
+            style={{
+              display: 'grid',
+              gap: tokens.spacing[2],
+              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              borderBottom: `1px solid var(--glass-border-light)`,
+              boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+              background: 'var(--color-bg-secondary, #14121C)',
+              borderRadius: onCategoryChange ? '0' : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
+              position: 'sticky',
+              top: 56,
+              zIndex: tokens.zIndex.sticky,
+            }}
+          >
+            <Text
+              size="xs"
+              weight="bold"
+              color="tertiary"
+              role="columnheader"
+              aria-label={t('rank')}
               style={{
-                display: 'grid',
-                gap: tokens.spacing[2],
-                padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
-                borderBottom: `1px solid var(--glass-border-light)`,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                background: 'var(--color-bg-secondary, #14121C)',
-                borderRadius: onCategoryChange
-                  ? '0'
-                  : `${tokens.radius.xl} ${tokens.radius.xl} 0 0`,
-                position: 'sticky',
-                top: 56,
-                zIndex: tokens.zIndex.sticky,
+                textAlign: 'center',
+                textTransform: 'uppercase',
+                letterSpacing: '0.8px',
+                whiteSpace: 'nowrap',
+                fontSize: tokens.typography.fontSize.xs,
               }}
             >
+              {t('rank')}
+            </Text>
+            <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
               <Text
                 size="xs"
                 weight="bold"
                 color="tertiary"
                 role="columnheader"
-                aria-label={t('rank')}
+                aria-label={t('trader')}
                 style={{
-                  textAlign: 'center',
                   textTransform: 'uppercase',
                   letterSpacing: '0.8px',
                   whiteSpace: 'nowrap',
                   fontSize: tokens.typography.fontSize.xs,
                 }}
               >
-                {t('rank')}
+                {t('trader')}
               </Text>
-              <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+              <button
+                onClick={() => setShowRules(!showRules)}
+                className="info-btn-circle"
+                title={t('rankingRules')}
+                aria-label={t('rankingRules')}
+                aria-expanded={showRules}
+              >
+                ?
+              </button>
+            </Box>
+            <Box
+              className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`}
+              as="button"
+              onClick={() => handleSort('score')}
+              role="columnheader"
+              aria-label={`${t('score')} — click to sort`}
+              aria-sort={
+                sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+              }
+              data-sortable
+              style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}
+            >
+              {t('score')}
+              <span
+                title={t('arenaScoreHeaderTooltip')}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 13,
+                  height: 13,
+                  borderRadius: '50%',
+                  border: `1px solid var(--color-text-tertiary)`,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  color: 'var(--color-text-tertiary)',
+                  lineHeight: 1,
+                  cursor: 'help',
+                  flexShrink: 0,
+                  opacity: 0.65,
+                  fontStyle: 'normal',
+                }}
+                aria-label={t('arenaScoreHeaderTooltip')}
+              >
+                i
+              </span>
+              <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
+            </Box>
+            <Box
+              className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`}
+              as="button"
+              onClick={() => handleSort('roi')}
+              title={t('roiTooltip').replace('{range}', timeRange)}
+              role="columnheader"
+              aria-label={`${t('roi')} (${timeRange}) — click to sort`}
+              aria-sort={
+                sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+              }
+              data-sortable
+            >
+              {t('roi')} ({timeRange}) <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
+            </Box>
+            <Box
+              className={`col-pnl sort-header sort-header-end${sortColumn === 'pnl' ? ' sort-header-active' : ''} ${justSortedColumn === 'pnl' ? 'just-sorted' : ''}`}
+              as="button"
+              onClick={() => handleSort('pnl')}
+              title={t('pnlTooltip')}
+              role="columnheader"
+              aria-label={`${t('pnl')} — click to sort`}
+              aria-sort={
+                sortColumn === 'pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+              }
+              data-sortable
+            >
+              {t('pnl')} <SortIndicator active={sortColumn === 'pnl'} dir={sortDir} />
+            </Box>
+            <Box
+              className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`}
+              as="button"
+              onClick={() => handleSort('winrate')}
+              title={t('winRateTooltip')}
+              role="columnheader"
+              aria-label={`${t('winRateShort')} — click to sort`}
+              aria-sort={
+                sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+              }
+              data-sortable
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 2,
+              }}
+            >
+              {t('winRateShort')}
+              <InfoTooltip text={t('winRateTooltip')} />
+              <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
+            </Box>
+            <Box
+              className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`}
+              as="button"
+              onClick={() => handleSort('mdd')}
+              title={t('mddTooltip')}
+              role="columnheader"
+              aria-label={`${t('maxDrawdownShort')} — click to sort`}
+              aria-sort={
+                sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+              }
+              data-sortable
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 2,
+              }}
+            >
+              {t('maxDrawdownShort')}
+              <InfoTooltip text={t('mddTooltip')} />
+              <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
+            </Box>
+            {visibleColumns.includes('sharpe') && (
+              <Box
+                className="col-sharpe sort-header sort-header-end"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'flex-end',
+                  gap: 2,
+                }}
+              >
                 <Text
                   size="xs"
                   weight="bold"
                   color="tertiary"
-                  role="columnheader"
-                  aria-label={t('trader')}
-                  style={{
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.8px',
-                    whiteSpace: 'nowrap',
-                    fontSize: tokens.typography.fontSize.xs,
-                  }}
+                  style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
                 >
-                  {t('trader')}
+                  Sharpe
                 </Text>
-                <button
-                  onClick={() => setShowRules(!showRules)}
-                  className="info-btn-circle"
-                  title={t('rankingRules')}
-                  aria-label={t('rankingRules')}
-                  aria-expanded={showRules}
-                >
-                  ?
-                </button>
+                <InfoTooltip text={t('sharpeTooltip')} />
               </Box>
+            )}
+            {visibleColumns.includes('sortino') && (
               <Box
-                className={`col-score sort-header sort-header-center${sortColumn === 'score' ? ' sort-header-active' : ''} ${justSortedColumn === 'score' ? 'just-sorted' : ''}`}
+                className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`}
                 as="button"
-                onClick={() => handleSort('score')}
+                onClick={() => handleSort('sortino')}
+                title={t('sortinoTooltip')}
                 role="columnheader"
-                aria-label={`${t('score')} — click to sort`}
+                aria-label={`${t('sortinoRatio')} — click to sort`}
                 aria-sort={
-                  sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-                }
-                data-sortable
-                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 3 }}
-              >
-                {t('score')}
-                <span
-                  title={t('arenaScoreHeaderTooltip')}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    width: 13,
-                    height: 13,
-                    borderRadius: '50%',
-                    border: `1px solid var(--color-text-tertiary)`,
-                    fontSize: 10,
-                    fontWeight: 700,
-                    color: 'var(--color-text-tertiary)',
-                    lineHeight: 1,
-                    cursor: 'help',
-                    flexShrink: 0,
-                    opacity: 0.65,
-                    fontStyle: 'normal',
-                  }}
-                  aria-label={t('arenaScoreHeaderTooltip')}
-                >
-                  i
-                </span>
-                <SortIndicator active={sortColumn === 'score'} dir={sortDir} />
-              </Box>
-              <Box
-                className={`roi-cell sort-header sort-header-end${sortColumn === 'roi' ? ' sort-header-active' : ''} ${justSortedColumn === 'roi' ? 'just-sorted' : ''}`}
-                as="button"
-                onClick={() => handleSort('roi')}
-                title={t('roiTooltip').replace('{range}', timeRange)}
-                role="columnheader"
-                aria-label={`${t('roi')} (${timeRange}) — click to sort`}
-                aria-sort={
-                  sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-                }
-                data-sortable
-              >
-                {t('roi')} ({timeRange}){' '}
-                <SortIndicator active={sortColumn === 'roi'} dir={sortDir} />
-              </Box>
-              <Box
-                className={`col-pnl sort-header sort-header-end${sortColumn === 'pnl' ? ' sort-header-active' : ''} ${justSortedColumn === 'pnl' ? 'just-sorted' : ''}`}
-                as="button"
-                onClick={() => handleSort('pnl')}
-                title={t('pnlTooltip')}
-                role="columnheader"
-                aria-label={`${t('pnl')} — click to sort`}
-                aria-sort={
-                  sortColumn === 'pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
-                }
-                data-sortable
-              >
-                {t('pnl')} <SortIndicator active={sortColumn === 'pnl'} dir={sortDir} />
-              </Box>
-              <Box
-                className={`col-winrate sort-header sort-header-end${sortColumn === 'winrate' ? ' sort-header-active' : ''} ${justSortedColumn === 'winrate' ? 'just-sorted' : ''}`}
-                as="button"
-                onClick={() => handleSort('winrate')}
-                title={t('winRateTooltip')}
-                role="columnheader"
-                aria-label={`${t('winRateShort')} — click to sort`}
-                aria-sort={
-                  sortColumn === 'winrate'
+                  sortColumn === 'sortino'
                     ? sortDir === 'asc'
                       ? 'ascending'
                       : 'descending'
@@ -916,144 +1020,85 @@ function RankingTableInner(props: {
                   gap: 2,
                 }}
               >
-                {t('winRateShort')}
-                <InfoTooltip text={t('winRateTooltip')} />
-                <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
+                {t('sortinoRatio')}
+                <InfoTooltip text={t('sortinoTooltip')} />
+                <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
               </Box>
+            )}
+            {visibleColumns.includes('alpha') && (
               <Box
-                className={`col-mdd sort-header sort-header-end${sortColumn === 'mdd' ? ' sort-header-active' : ''} ${justSortedColumn === 'mdd' ? 'just-sorted' : ''}`}
+                className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`}
                 as="button"
-                onClick={() => handleSort('mdd')}
-                title={t('mddTooltip')}
+                onClick={() => handleSort('alpha')}
+                title={t('alphaTooltip')}
                 role="columnheader"
-                aria-label={`${t('maxDrawdownShort')} — click to sort`}
+                aria-label="Alpha — click to sort"
                 aria-sort={
-                  sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
+                  sortColumn === 'alpha' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
                 }
                 data-sortable
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'flex-end',
-                  gap: 2,
-                }}
               >
-                {t('maxDrawdownShort')}
-                <InfoTooltip text={t('mddTooltip')} />
-                <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
+                Alpha <SortIndicator active={sortColumn === 'alpha'} dir={sortDir} />
               </Box>
-              {visibleColumns.includes('sharpe') && (
-                <Box
-                  className="col-sharpe sort-header sort-header-end"
+            )}
+            {visibleColumns.includes('style') && (
+              <Box className="col-style" style={{ textAlign: 'center' }}>
+                <Text
+                  size="sm"
+                  weight="bold"
+                  color="tertiary"
                   style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    gap: 2,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.5px',
+                    fontSize: tokens.typography.fontSize.sm,
                   }}
                 >
-                  <Text
-                    size="xs"
-                    weight="bold"
-                    color="tertiary"
-                    style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
-                  >
-                    Sharpe
-                  </Text>
-                  <InfoTooltip text={t('sharpeTooltip')} />
-                </Box>
-              )}
-              {visibleColumns.includes('sortino') && (
-                <Box
-                  className={`col-sortino sort-header sort-header-end${sortColumn === 'sortino' ? ' sort-header-active' : ''} ${justSortedColumn === 'sortino' ? 'just-sorted' : ''}`}
-                  as="button"
-                  onClick={() => handleSort('sortino')}
-                  title={t('sortinoTooltip')}
-                  role="columnheader"
-                  aria-label={`${t('sortinoRatio')} — click to sort`}
-                  aria-sort={
-                    sortColumn === 'sortino'
-                      ? sortDir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  }
-                  data-sortable
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-end',
-                    gap: 2,
-                  }}
+                  {t('tradingStyle')}
+                </Text>
+              </Box>
+            )}
+            {visibleColumns.includes('followers') && (
+              <Box className="col-followers" style={{ textAlign: 'right' }}>
+                <Text
+                  size="xs"
+                  weight="bold"
+                  color="tertiary"
+                  style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
                 >
-                  {t('sortinoRatio')}
-                  <InfoTooltip text={t('sortinoTooltip')} />
-                  <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
-                </Box>
-              )}
-              {visibleColumns.includes('alpha') && (
-                <Box
-                  className={`col-alpha sort-header sort-header-end${sortColumn === 'alpha' ? ' sort-header-active' : ''} ${justSortedColumn === 'alpha' ? 'just-sorted' : ''}`}
-                  as="button"
-                  onClick={() => handleSort('alpha')}
-                  title={t('alphaTooltip')}
-                  role="columnheader"
-                  aria-label="Alpha — click to sort"
-                  aria-sort={
-                    sortColumn === 'alpha'
-                      ? sortDir === 'asc'
-                        ? 'ascending'
-                        : 'descending'
-                      : 'none'
-                  }
-                  data-sortable
+                  {t('followers')}
+                </Text>
+              </Box>
+            )}
+            {visibleColumns.includes('trades') && (
+              <Box className="col-trades" style={{ textAlign: 'right' }}>
+                <Text
+                  size="xs"
+                  weight="bold"
+                  color="tertiary"
+                  style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
                 >
-                  Alpha <SortIndicator active={sortColumn === 'alpha'} dir={sortDir} />
-                </Box>
-              )}
-              {visibleColumns.includes('style') && (
-                <Box className="col-style" style={{ textAlign: 'center' }}>
-                  <Text
-                    size="sm"
-                    weight="bold"
-                    color="tertiary"
-                    style={{
-                      textTransform: 'uppercase',
-                      letterSpacing: '0.5px',
-                      fontSize: tokens.typography.fontSize.sm,
-                    }}
-                  >
-                    {t('tradingStyle')}
-                  </Text>
-                </Box>
-              )}
-              {visibleColumns.includes('followers') && (
-                <Box className="col-followers" style={{ textAlign: 'right' }}>
-                  <Text
-                    size="xs"
-                    weight="bold"
-                    color="tertiary"
-                    style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
-                  >
-                    {t('followers')}
-                  </Text>
-                </Box>
-              )}
-              {visibleColumns.includes('trades') && (
-                <Box className="col-trades" style={{ textAlign: 'right' }}>
-                  <Text
-                    size="xs"
-                    weight="bold"
-                    color="tertiary"
-                    style={{ textTransform: 'uppercase', letterSpacing: '0.5px' }}
-                  >
-                    {t('trades')}
-                  </Text>
-                </Box>
-              )}
-            </Box>
-          )}
+                  {t('trades')}
+                </Text>
+              </Box>
+            )}
+          </Box>
+        )}
 
+        {/* Horizontal-scroll wrapper — the rows' single scroll container.
+            overflow-x:auto only engages when the grid is wider than the
+            viewport (narrow window / many columns); on wide screens the grid
+            expands to fit and nothing scrolls. The sticky header sits OUTSIDE
+            (see comment above) and mirrors this wrapper's scrollLeft via the
+            scroll-sync effect. In card view it is inert. */}
+        <div
+          ref={hScrollRef}
+          className="ranking-hscroll"
+          role="presentation"
+          style={{
+            overflowX: viewMode === 'table' ? 'auto' : 'visible',
+            overflowY: viewMode === 'table' ? 'hidden' : 'visible',
+          }}
+        >
           {/* Rules explanation */}
           {showRules && (
             <Box
