@@ -1,28 +1,24 @@
 'use client'
 
-import { localizedLabel } from '@/lib/utils/format'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import type { TranslationKey } from '@/lib/i18n'
 
 interface CategoryOption {
   key: string
-  label: string
-  label_en: string
 }
 
 interface CategoryFilterProps {
   categories: CategoryOption[]
   selectedCategory: string
   onCategoryChange: (category: string) => void
-  language: string
 }
 
 export default function CategoryFilter({
   categories,
   selectedCategory,
   onCategoryChange,
-  language,
 }: CategoryFilterProps) {
   const { t } = useLanguage()
   return (
@@ -66,7 +62,7 @@ export default function CategoryFilter({
               outline: 'none',
             }}
           >
-            {localizedLabel(cat.label, cat.label_en, language)}
+            {t(`newsFlash_cat_${cat.key}` as TranslationKey)}
           </button>
         )
       })}

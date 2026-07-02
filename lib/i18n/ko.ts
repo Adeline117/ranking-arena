@@ -4199,6 +4199,8 @@ const ko = {
 
   // News flash labels
   newsFlash_imp_breaking: '속보',
+  newsFlash_imp_normal: '일반',
+  newsFlash_cat_all: '전체',
   newsFlash_imp_important: '중요',
   newsFlash_cat_btc_eth: 'BTC/ETH',
   newsFlash_cat_altcoin: '알트코인',
@@ -4240,7 +4242,6 @@ const ko = {
   copiedToClipboard: '복사됨!',
   copyHandle: '복사',
   switchLanguage: '언어 전환',
-  newsBreaking: '속보',
   flashNewsNewItems: '새 소식 {count}건',
   statusSystemStatus: '시스템 상태',
   statusAllOperational: '모든 시스템 정상',
@@ -4264,9 +4265,7 @@ const ko = {
   statusServiceUnavailable: '상태 서비스가 현재 응답하지 않습니다.',
   statusFetchFailed: '상태를 가져오지 못했습니다',
   statusDataAgo: '데이터 {ago}',
-  newsAltcoins: '알트코인',
   newsMacroRegulation: '매크로/규제',
-  newsExchanges: '거래소',
   newsDeFi: 'DeFi',
   newsBtcEth: 'BTC & ETH',
 

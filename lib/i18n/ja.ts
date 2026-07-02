@@ -3983,6 +3983,8 @@ const ja = {
   dexViewOn: '{platform} で表示',
 
   newsFlash_imp_breaking: '速報',
+  newsFlash_imp_normal: '通常',
+  newsFlash_cat_all: 'すべて',
   newsFlash_imp_important: '重要',
   newsFlash_cat_btc_eth: 'BTC/ETH',
   newsFlash_cat_altcoin: 'アルトコイン',
@@ -4428,7 +4430,6 @@ const ja = {
   switchLanguage: '言語を切り替え',
 
   // News categories
-  newsBreaking: '速報',
   flashNewsNewItems: '新着 {count} 件',
   statusSystemStatus: 'システムステータス',
   statusAllOperational: 'すべてのシステム正常',
@@ -4452,9 +4453,7 @@ const ja = {
   statusServiceUnavailable: 'ステータスサービスが現在応答していません。',
   statusFetchFailed: 'ステータスを取得できませんでした',
   statusDataAgo: 'データ {ago}',
-  newsAltcoins: 'アルトコイン',
   newsMacroRegulation: 'マクロ/規制',
-  newsExchanges: '取引所',
   newsDeFi: 'DeFi',
   newsBtcEth: 'BTC & ETH',
 

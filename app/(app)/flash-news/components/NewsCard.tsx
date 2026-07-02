@@ -1,6 +1,6 @@
 'use client'
 
-import { localizedLabel } from '@/lib/utils/format'
+import type { TranslationKey } from '@/lib/i18n'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
@@ -31,16 +31,8 @@ interface FlashNews {
   created_at: string
 }
 
-interface CategoryOption {
-  key: string
-  label: string
-  label_en: string
-}
-
 interface NewsCardProps {
   item: FlashNews
-  language: string
-  categories: CategoryOption[]
   categoryDisplayMap: Record<string, string>
   categoryColors: Record<string, string>
   importanceConfig: Record<string, { color: string; label: string; label_en: string }>
@@ -52,8 +44,6 @@ interface NewsCardProps {
 
 export default function NewsCard({
   item,
-  language,
-  categories,
   categoryDisplayMap,
   categoryColors,
   importanceConfig,
@@ -120,7 +110,7 @@ export default function NewsCard({
                 borderRadius: `0 0 ${tokens.radius.sm} 0`,
               }}
             >
-              {localizedLabel(impConfig.label, impConfig.label_en, language)}
+              {t(`newsFlash_imp_${item.importance}` as TranslationKey)}
             </Box>
           )}
 
@@ -148,11 +138,9 @@ export default function NewsCard({
                   fontWeight: '600',
                 }}
               >
-                {
-                  categories.find(
-                    (c) => c.key === (categoryDisplayMap[item.category] || item.category)
-                  )?.[language === 'zh' ? 'label' : 'label_en']
-                }
+                {t(
+                  `newsFlash_cat_${categoryDisplayMap[item.category] || item.category}` as TranslationKey
+                )}
               </Box>
             </Box>
 

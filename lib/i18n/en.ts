@@ -4343,6 +4343,8 @@ const en = {
 
   // News flash labels
   newsFlash_imp_breaking: 'Breaking',
+  newsFlash_imp_normal: 'Normal',
+  newsFlash_cat_all: 'All',
   newsFlash_imp_important: 'Important',
   newsFlash_cat_btc_eth: 'BTC/ETH',
   newsFlash_cat_altcoin: 'Altcoins',
@@ -4384,7 +4386,6 @@ const en = {
   copiedToClipboard: 'Copied!',
   copyHandle: 'Copy',
   switchLanguage: 'Switch language',
-  newsBreaking: 'Breaking',
   flashNewsNewItems: '{count} new',
   statusSystemStatus: 'System Status',
   statusAllOperational: 'All Systems Operational',
@@ -4408,9 +4409,7 @@ const en = {
   statusServiceUnavailable: 'The status service is not responding right now.',
   statusFetchFailed: 'Failed to fetch status',
   statusDataAgo: 'Data {ago}',
-  newsAltcoins: 'Altcoins',
   newsMacroRegulation: 'Macro/Regulation',
-  newsExchanges: 'Exchanges',
   newsDeFi: 'DeFi',
   newsBtcEth: 'BTC & ETH',
 
