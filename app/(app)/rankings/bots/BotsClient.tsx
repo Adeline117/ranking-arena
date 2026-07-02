@@ -89,7 +89,12 @@ function formatUsers(n: number | null): string {
   return n.toString()
 }
 
-function formatPercent(n: number | null): string {
+/**
+ * Render a value that is ALREADY a percentage (e.g. bot_snapshots.roi = 12.3
+ * means 12.3%). Intentionally different from lib/utils/format.ts formatPercent,
+ * which multiplies ratios by 100 — do not swap them.
+ */
+function formatAlreadyPercent(n: number | null): string {
   if (n == null) return NULL_DISPLAY
   return `${n.toFixed(1)}%`
 }
@@ -370,7 +375,7 @@ function BotRow({ bot, index }: { bot: BotEntry; index: number }) {
       <div role="cell" data-label="APY/ROI" className="text-right bots-cell">
         <Metric
           value={apyVal}
-          display={apyVal != null ? formatPercent(apyVal) : undefined}
+          display={apyVal != null ? formatAlreadyPercent(apyVal) : undefined}
           colorBySign
           showArrow
           size="sm"
