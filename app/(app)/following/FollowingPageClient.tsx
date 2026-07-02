@@ -55,7 +55,9 @@ const sourceConfig: Record<string, { label: string; labelEn: string; color: stri
 }
 
 const getSourceDisplayName = (source: string, lang: string) =>
-  lang === 'en' ? sourceConfig[source]?.labelEn || source : sourceConfig[source]?.label || source
+  // Only zh shows the Chinese label; en/ja/ko fall back to the English label
+  // (previously ja/ko leaked the Chinese "合约/现货/链上" text).
+  lang === 'zh' ? sourceConfig[source]?.label || source : sourceConfig[source]?.labelEn || source
 
 const getSourceColor = (source: string) =>
   sourceConfig[source]?.color || 'var(--color-text-secondary)'
