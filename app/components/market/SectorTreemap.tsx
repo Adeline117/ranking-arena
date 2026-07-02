@@ -58,6 +58,15 @@ const CATEGORY_MAP: Record<string, string> = {
   USDT: 'Stable',
   USDC: 'Stable',
   DAI: 'Stable',
+  USDS: 'Stable',
+  USDE: 'Stable',
+  USD1: 'Stable',
+  USYC: 'Stable',
+  USDG: 'Stable',
+  FDUSD: 'Stable',
+  TUSD: 'Stable',
+  BUSD: 'Stable',
+  PYUSD: 'Stable',
   XLM: 'L1',
   ALGO: 'L1',
   ICP: 'L1',
@@ -184,7 +193,10 @@ export default function SectorTreemap({
         (c) =>
           c.marketCap > 0 &&
           c.change24h !== null &&
-          !['USDT', 'USDC', 'DAI', 'BUSD', 'TUSD', 'FDUSD'].includes(c.symbol)
+          // Stablecoins are excluded by category rule (not a hardcoded symbol
+          // list) — a % change heatmap has no signal for pegged assets, and
+          // their ~+0.0% tiles would crowd out real movers in the top-30 cut.
+          CATEGORY_MAP[c.symbol] !== 'Stable'
       )
       .slice(0, 30)
       .map((c) => ({
