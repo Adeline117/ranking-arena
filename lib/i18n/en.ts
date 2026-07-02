@@ -2539,6 +2539,8 @@ const en = {
   memberCount: 'Members',
   membersUnit: 'members',
   groupMembers: 'Members',
+  viewGroupInfoAria: 'View group info & rules',
+  viewGroupMembersAria: 'View member list',
 
   // Trader page i18n - TraderPageV2, TraderRefreshButton, TraderFeed, etc.
   aumLabel: 'AUM',

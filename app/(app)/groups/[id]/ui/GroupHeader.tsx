@@ -52,6 +52,7 @@ export default function GroupHeader({
   memberPreviews = [],
 }: GroupHeaderProps) {
   const { t } = useLanguage()
+  const displayName = language === 'en' && group.name_en ? group.name_en : group.name
   return (
     <Box
       style={{
@@ -139,14 +140,23 @@ export default function GroupHeader({
               <Text
                 size="2xl"
                 weight="black"
+                role="button"
+                tabIndex={0}
+                aria-label={`${displayName} — ${t('viewGroupInfoAria')}`}
                 style={{
                   marginBottom: tokens.spacing[1],
                   cursor: 'pointer',
                   lineHeight: 1.3,
                 }}
                 onClick={onShowGroupInfo}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    onShowGroupInfo()
+                  }
+                }}
               >
-                {language === 'en' && group.name_en ? group.name_en : group.name}
+                {displayName}
                 {group.is_premium_only && (
                   <span
                     style={{
@@ -164,6 +174,7 @@ export default function GroupHeader({
                   </span>
                 )}
                 <span
+                  aria-hidden="true"
                   style={{
                     fontSize: 11,
                     color: tokens.colors.text.tertiary,
@@ -186,13 +197,17 @@ export default function GroupHeader({
                 }}
               >
                 {group.member_count !== null && group.member_count !== undefined && (
-                  <span
+                  <button
+                    type="button"
                     className="member-badge"
+                    aria-label={`${group.member_count} ${t('groupMembers')} — ${t('viewGroupMembersAria')}`}
                     style={{
                       cursor: 'pointer',
                       display: 'inline-flex',
                       alignItems: 'center',
                       gap: 6,
+                      margin: 0,
+                      fontFamily: 'inherit',
                     }}
                     onClick={onShowMembers}
                   >
@@ -222,7 +237,7 @@ export default function GroupHeader({
                             {m.avatar_url ? (
                               <img
                                 src={avatarSrc(m.avatar_url)}
-                                alt={m.handle || 'Member'}
+                                alt=""
                                 width={20}
                                 height={20}
                                 style={{ width: '100%', height: '100%', objectFit: 'cover' }}
@@ -254,7 +269,7 @@ export default function GroupHeader({
                       </svg>
                     )}
                     {group.member_count} {t('groupMembers')}
-                  </span>
+                  </button>
                 )}
 
                 {group.owner_handle && (
