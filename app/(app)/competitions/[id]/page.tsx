@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
-import { tokens, alpha } from '@/lib/design-tokens'
+import { tokens, alpha, rankColors } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import EmptyState from '@/app/components/ui/EmptyState'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
@@ -95,7 +95,7 @@ function Podium({
     .sort((a, b) => (a.rank ?? 99) - (b.rank ?? 99))
   if (top3.length === 0) return null
 
-  const medalColors = ['#FFD700', '#C0C0C0', '#CD7F32'] // gold, silver, bronze
+  const medalColors = [rankColors.gold, rankColors.silver, rankColors.bronze] // gold, silver, bronze
   const medalLabels = [t('compPodium1st'), t('compPodium2nd'), t('compPodium3rd')]
   const medalEmojis = ['\u{1F947}', '\u{1F948}', '\u{1F949}']
   // Prize distribution: 60/25/15 if 3+ participants, 70/30 if 2, 100% if 1
@@ -186,8 +186,8 @@ function Podium({
                   fontWeight: tokens.typography.fontWeight.semibold,
                   color:
                     (entry.current_value ?? 0) - (entry.baseline_value ?? 0) >= 0
-                      ? '#22c55e'
-                      : '#ef4444',
+                      ? 'var(--color-accent-success)'
+                      : 'var(--color-accent-error)',
                 }}
               >
                 {formatDelta(entry.baseline_value, entry.current_value, metric)}
@@ -287,7 +287,7 @@ function StandingsTable({
                 width: 8,
                 height: 8,
                 borderRadius: '50%',
-                background: '#22c55e',
+                background: 'var(--color-accent-success)',
                 boxShadow: '0 0 6px rgba(34,197,94,0.6)',
               }}
             />
@@ -368,11 +368,11 @@ function StandingsTable({
                 const isCurrentUser = currentUserId != null && entry.user_id === currentUserId
                 const medalColor =
                   entry.rank === 1
-                    ? '#FFD700'
+                    ? rankColors.gold
                     : entry.rank === 2
-                      ? '#C0C0C0'
+                      ? rankColors.silver
                       : entry.rank === 3
-                        ? '#CD7F32'
+                        ? rankColors.bronze
                         : undefined
                 const rowBg = isCurrentUser
                   ? alpha(tokens.colors.accent.primary, 12)
@@ -428,7 +428,7 @@ function StandingsTable({
                               padding: `0 ${tokens.spacing[1]}`,
                               borderRadius: tokens.radius.sm,
                               background: tokens.colors.accent.primary,
-                              color: '#fff',
+                              color: tokens.colors.white,
                               fontSize: tokens.typography.fontSize.xs,
                               fontWeight: tokens.typography.fontWeight.semibold,
                             }}
@@ -857,7 +857,7 @@ export default function CompetitionDetailPage() {
             {joinError && (
               <Text
                 style={{
-                  color: '#ef4444',
+                  color: 'var(--color-accent-error)',
                   fontSize: tokens.typography.fontSize.sm,
                   marginBottom: tokens.spacing[2],
                 }}
@@ -927,7 +927,7 @@ export default function CompetitionDetailPage() {
                       width: 6,
                       height: 6,
                       borderRadius: '50%',
-                      background: '#22c55e',
+                      background: 'var(--color-accent-success)',
                       marginLeft: tokens.spacing[1],
                       verticalAlign: 'middle',
                     }}
@@ -1062,7 +1062,9 @@ export default function CompetitionDetailPage() {
                                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
                                 fontSize: tokens.typography.fontSize.sm,
                                 fontWeight: tokens.typography.fontWeight.semibold,
-                                color: isPositive ? '#22c55e' : '#ef4444',
+                                color: isPositive
+                                  ? 'var(--color-accent-success)'
+                                  : 'var(--color-accent-error)',
                               }}
                             >
                               {formatDelta(
