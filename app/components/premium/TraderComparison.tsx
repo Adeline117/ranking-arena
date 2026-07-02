@@ -17,8 +17,7 @@ import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import ShareCompareButton from './ShareCompareButton'
 import { formatPnL, formatRatio } from '@/lib/utils/format'
 
-// Lazy load chart components — only rendered when user switches to radar/equity tabs
-const RadarChart = dynamic(() => import('./RadarChart'), { ssr: false })
+// Lazy load chart components — only rendered when user switches to the equity tab
 const EquityCurveOverlay = dynamic(() => import('./EquityCurveOverlay'), { ssr: false })
 
 /** Chart colors used for trader comparison overlays (duplicated from EquityCurveOverlay to avoid eager import). */
@@ -28,11 +27,11 @@ const CHART_COLORS = [
   'var(--color-score-average)',
   'var(--color-score-great)',
   'var(--color-accent-error)',
-  '#8b5cf6', // purple
-  '#ec4899', // pink
-  '#14b8a6', // teal
-  '#f97316', // orange
-  '#84cc16', // lime
+  'var(--color-chart-violet)',
+  'var(--color-chart-pink)',
+  'var(--color-chart-teal)',
+  'var(--color-chart-orange)',
+  'var(--color-chart-blue)',
 ]
 
 interface TraderCompareData {
@@ -62,7 +61,7 @@ interface TraderComparisonProps {
   showRemoveButton?: boolean
 }
 
-type TabKey = 'metrics' | 'radar' | 'equity'
+type TabKey = 'metrics' | 'bars' | 'equity'
 
 // Format helpers — formatPnL and formatRatio imported from @/lib/utils/format
 
@@ -226,8 +225,8 @@ export default function TraderComparison({
     },
   ]
 
-  // Radar chart data
-  const radarData = [
+  // Grouped-bar dimensions (0-100 normalized scores), one group per metric dimension
+  const dimensionData = [
     {
       label: t('compareReturnScore'),
       values: traders.map((tr) => Math.min(tr.return_score ?? 0, 100)),
@@ -257,7 +256,7 @@ export default function TraderComparison({
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'metrics', label: t('compareMetrics') },
-    { key: 'radar', label: t('compareRadar') },
+    { key: 'bars', label: t('compareScoreBars') },
     { key: 'equity', label: t('compareEquityCurve') },
   ]
 
@@ -564,14 +563,105 @@ export default function TraderComparison({
           </>
         )}
 
-        {activeTab === 'radar' && (
-          <Box style={{ padding: tokens.spacing[6], display: 'flex', justifyContent: 'center' }}>
-            <RadarChart
-              data={radarData}
-              traderNames={traders.map((tr) => tr.handle || tr.id.slice(0, 10))}
-              colors={CHART_COLORS}
-              size={340}
-            />
+        {activeTab === 'bars' && (
+          <Box
+            style={{
+              padding: tokens.spacing[6],
+              display: 'flex',
+              flexDirection: 'column',
+              gap: tokens.spacing[5],
+            }}
+          >
+            {dimensionData.map((dim) => (
+              <Box key={dim.label}>
+                <Text
+                  as="h3"
+                  size="sm"
+                  weight="semibold"
+                  color="secondary"
+                  style={{ marginBottom: tokens.spacing[2] }}
+                >
+                  {dim.label}
+                </Text>
+                <Box
+                  style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}
+                  role="list"
+                >
+                  {dim.values.map((rawValue, i) => {
+                    const trader = traders[i]
+                    const value = Math.max(0, Math.min(rawValue, 100))
+                    const color = CHART_COLORS[i % CHART_COLORS.length]
+                    return (
+                      <Box
+                        key={trader.id}
+                        role="listitem"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: tokens.spacing[2],
+                        }}
+                      >
+                        <Box
+                          aria-hidden="true"
+                          style={{
+                            width: 8,
+                            height: 8,
+                            borderRadius: tokens.radius.full,
+                            background: color,
+                            flexShrink: 0,
+                          }}
+                        />
+                        <Text
+                          as="span"
+                          size="xs"
+                          color="tertiary"
+                          style={{
+                            width: 96,
+                            flexShrink: 0,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {trader.handle || trader.id.slice(0, 10)}
+                        </Text>
+                        <Box
+                          style={{
+                            flex: 1,
+                            height: 8,
+                            borderRadius: tokens.radius.full,
+                            background: alpha(tokens.colors.text.tertiary, 14),
+                            overflow: 'hidden',
+                          }}
+                        >
+                          <Box
+                            style={{
+                              width: `${value}%`,
+                              height: '100%',
+                              borderRadius: tokens.radius.full,
+                              background: color,
+                            }}
+                          />
+                        </Box>
+                        <Text
+                          as="span"
+                          size="xs"
+                          weight="semibold"
+                          style={{
+                            width: 36,
+                            flexShrink: 0,
+                            textAlign: 'right',
+                            fontVariantNumeric: 'tabular-nums',
+                          }}
+                        >
+                          {formatRatio(value, 0)}
+                        </Text>
+                      </Box>
+                    )
+                  })}
+                </Box>
+              </Box>
+            ))}
           </Box>
         )}
 
