@@ -287,6 +287,99 @@ const eslintConfig = defineConfig([
               message:
                 'Worker-only ingest module (Playwright/pg). app code may only import lib/ingest/core/* and lib/ingest/fetch/types.',
             },
+            // 货币格式化单一真相源棘轮（F2）：与 ingest 禁令并在同一 rule 值里
+            // （flat config rule 整体覆盖，拆两块会互相冲掉）
+            {
+              group: ['@/lib/utils/money', '**/lib/utils/money'],
+              message:
+                '货币格式化单一真相源是 @/lib/utils/format（formatCurrency 等）。money.ts 为遗留，禁新增引用。',
+            },
+            {
+              group: ['@/lib/utils/currency', '**/lib/utils/currency'],
+              message:
+                '货币格式化单一真相源是 @/lib/utils/format。currency.ts 为遗留，禁新增引用。',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // F2 存量豁免：下列文件在棘轮建立前已引用 money/currency——恢复为仅 ingest
+  // 禁令（迁移到 format.ts 后逐个从此列表删除，让上面的完整禁令重新生效）
+  {
+    files: [
+      'app/components/trader/serving/CopierAggregatePanel.tsx',
+      'app/components/trader/serving/CopyTradingCard.tsx',
+      'app/components/trader/serving/MetricGrid.tsx',
+      'app/components/trader/serving/OnchainInsights.tsx',
+      'app/components/trader/serving/RecordsTable.tsx',
+      'app/components/trader/serving/TraderMetaStrip.tsx',
+      'lib/data/serving/first-screen.ts',
+      'lib/data/serving/records.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@/lib/ingest/fetch/fetcher',
+                '@/lib/ingest/fetch/capture',
+                '@/lib/ingest/db',
+                '@/lib/ingest/raw',
+                '@/lib/ingest/adapters/*',
+                '**/lib/ingest/fetch/fetcher',
+                '**/lib/ingest/fetch/capture',
+                '**/lib/ingest/db',
+                '**/lib/ingest/raw',
+              ],
+              message:
+                'Worker-only ingest module (Playwright/pg). app code may only import lib/ingest/core/* and lib/ingest/fetch/types.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  // ============================================
+  // 货币/数字格式化单一真相源棘轮（2026-07-02 企业级差距整改 F2）
+  // 现状 3 套并存：lib/utils/format.ts(50 importers, 事实标准) vs
+  // money.ts(8) / currency.ts(5)。禁新增 money/currency 引用。
+  // 注意 flat config 的 rule 值是整体覆盖不是合并——本块 files 必须与上面
+  // ingest 边界块不重叠（app/lib-data/lib-hooks 的 money 禁令并在下一块），
+  // 这里只管其余 lib/**。存量豁免见块内 ignores，迁完一个删一个。
+  // ============================================
+  {
+    files: ['lib/**/*.ts', 'lib/**/*.tsx'],
+    ignores: [
+      'lib/data/**', // ingest 边界块管辖（含其 money 禁令合并版）
+      'lib/hooks/**',
+      // 存量豁免（迁移到 @/lib/utils/format 后逐个删除）
+      'lib/utils/advanced-metrics.ts',
+      'lib/utils/arena-score.ts',
+      'lib/utils/calculate-mdd.ts',
+      'lib/utils/index.ts',
+      'lib/utils/portfolio-builder.ts',
+      // 被限制模块自身
+      'lib/utils/money.ts',
+      'lib/utils/currency.ts',
+    ],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['@/lib/utils/money', '**/lib/utils/money'],
+              message:
+                '货币格式化单一真相源是 @/lib/utils/format（formatCurrency 等）。money.ts 为遗留，禁新增引用。',
+            },
+            {
+              group: ['@/lib/utils/currency', '**/lib/utils/currency'],
+              message:
+                '货币格式化单一真相源是 @/lib/utils/format。currency.ts 为遗留，禁新增引用。',
+            },
           ],
         },
       ],
