@@ -8,6 +8,7 @@ import { CommentIcon, ThumbsUpIcon } from '@/app/components/ui/icons'
 import { renderContentWithLinks } from '@/lib/utils/content'
 import { t, type Language } from '@/lib/i18n'
 import { resolveUserDisplayName } from '@/lib/utils/user-display'
+import { resolvePostDisplayTitle } from '@/lib/utils/post-display'
 import type { Post } from '../types'
 
 const ARENA_PURPLE = tokens.colors.accent.brand
@@ -40,8 +41,8 @@ export function PostCard({
   language,
 }: PostCardProps) {
   const displayBody = translatedBody || p.body
-  const displayTitle =
-    translatedTitle || (p.title && p.title !== 'Untitled' && p.title !== 'untitled' ? p.title : '')
+  // Real title when present, body excerpt otherwise (shared with PostDetailModal).
+  const displayTitle = translatedTitle || resolvePostDisplayTitle(p.title, p.body)
   // Skip body when it's the same as the title (avoid duplication)
   const bodyIsDuplicate =
     displayBody.trim() === displayTitle.trim() || displayBody.trim() === p.title?.trim()
@@ -180,10 +181,7 @@ export function PostCard({
             textOverflow: 'ellipsis',
           }}
         >
-          {translatedTitle ||
-            (p.title && p.title !== 'Untitled' && p.title !== 'untitled'
-              ? p.title
-              : p.body?.slice(0, 80) || '')}
+          {displayTitle}
           {translatedTitle && (
             <span
               style={{
