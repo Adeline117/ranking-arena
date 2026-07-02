@@ -162,7 +162,7 @@ export const PostCard = memo(function PostCard({
                 marginLeft: 4,
               }}
             >
-              译
+              {t('hotTranslatedBadge')}
             </span>
           )}
         </div>
@@ -322,7 +322,7 @@ export const PostCard = memo(function PostCard({
                   verticalAlign: 'middle',
                 }}
               >
-                译
+                {t('hotTranslatedBadge')}
               </span>
             )}
           </div>
@@ -371,7 +371,7 @@ export const PostCard = memo(function PostCard({
                   verticalAlign: 'middle',
                 }}
               >
-                译
+                {t('hotTranslatedBadge')}
               </span>
             )}
           </div>
