@@ -2506,6 +2506,9 @@ const ja = {
   commentFailedRetry: 'コメントに失敗しました。再試行してください',
 
   deletedUser: '削除済みユーザー',
+  privyAccountSyncFailed: 'アカウント同期に失敗しました。もう一度お試しください',
+  privyLoginFailed: 'ログインに失敗しました。もう一度お試しください',
+  privyQuickLogin: 'クイックログイン（Google / メール / ウォレット）',
   userLabel: 'ユーザー',
   notifGroupedCount: '{n} 件の通知',
   loginTooManyAttemptsCode: '試行回数が多すぎます。新しいコードを再取得してください',

@@ -2649,6 +2649,9 @@ const zh = {
 
   // 瀑布流卡片 / 小组帖子列表
   deletedUser: '已注销用户',
+  privyAccountSyncFailed: '账户同步失败，请重试',
+  privyLoginFailed: '登录失败，请重试',
+  privyQuickLogin: '一键登录（Google / 邮箱 / 钱包）',
   userLabel: '用户',
   notifGroupedCount: '{n} 条通知',
   loginTooManyAttemptsCode: '尝试次数过多，请重新获取验证码',

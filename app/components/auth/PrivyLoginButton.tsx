@@ -22,7 +22,7 @@ interface PrivyLoginButtonProps {
 export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginButtonProps) {
   const { login, authenticated, user, ready } = usePrivy()
   const router = useRouter()
-  const { language: lang } = useLanguage()
+  const { t } = useLanguage()
   const hasRedirected = useRef(false)
 
   // When user becomes authenticated via Privy, sync and redirect
@@ -50,7 +50,7 @@ export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginBut
       } catch (err) {
         logger.error('Privy sync error:', err)
         hasRedirected.current = false
-        onError?.(lang === 'zh' ? '账户同步失败，请重试' : 'Account sync failed, please try again')
+        onError?.(t('privyAccountSyncFailed'))
       }
     }
 
@@ -64,9 +64,9 @@ export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginBut
       login()
     } catch (err) {
       logger.error('Privy login exception:', err)
-      onError?.(lang === 'zh' ? '登录失败，请重试' : 'Login failed, please try again')
+      onError?.(t('privyLoginFailed'))
     }
-  }, [authenticated, login, onError, lang])
+  }, [authenticated, login, onError, t])
 
   if (!ready) return null
 
@@ -103,7 +103,7 @@ export default function PrivyLoginButton({ redirectUrl, onError }: PrivyLoginBut
         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
         <path d="M9 12l2 2 4-4" />
       </svg>
-      {lang === 'zh' ? '一键登录（Google / 邮箱 / 钱包）' : 'Quick Login (Google / Email / Wallet)'}
+      {t('privyQuickLogin')}
     </button>
   )
 }

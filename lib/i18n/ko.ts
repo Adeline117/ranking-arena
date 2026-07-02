@@ -2625,6 +2625,9 @@ const ko = {
 
   // MasonryPostCard / GroupPostList
   deletedUser: '삭제된 사용자',
+  privyAccountSyncFailed: '계정 동기화에 실패했습니다. 다시 시도해 주세요',
+  privyLoginFailed: '로그인에 실패했습니다. 다시 시도해 주세요',
+  privyQuickLogin: '빠른 로그인 (Google / 이메일 / 지갑)',
   userLabel: '사용자',
   notifGroupedCount: '{n}개의 알림',
   loginTooManyAttemptsCode: '시도 횟수가 너무 많습니다. 새 코드를 다시 요청하세요',
