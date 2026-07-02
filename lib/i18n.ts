@@ -179,6 +179,16 @@ export function setLanguage(lang: Language) {
     // Sync to cookie so Server Components can read the language preference
     document.cookie = `language=${lang};path=/;max-age=31536000;SameSite=Lax`
     window.dispatchEvent(new CustomEvent('languageChange', { detail: lang }))
+    // Client components re-render off the languageChange event, but SSR-only
+    // content can't — the homepage hero (#ssr-hero-shell) is server-rendered
+    // AND edge-cached, and the homepage omits the LanguageProvider for LCP, so
+    // its toggle lands here (the fallback path). When such SSR-only localized
+    // content is present, hard-reload so the whole page reflects the new
+    // language (with the cookie now set, the SSR render comes back localized).
+    // Language switching is rare, so the reload cost is acceptable.
+    if (document.getElementById('ssr-hero-shell')) {
+      window.location.reload()
+    }
   }
 }
 
