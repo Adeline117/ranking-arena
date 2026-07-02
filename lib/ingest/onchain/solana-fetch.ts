@@ -1,0 +1,188 @@
+/**
+ * Solana on-chain fetcher (Phase A network half; decoder is solana-swaps.ts).
+ *
+ * getSignaturesForAddress (paginated, time-bounded) → getTransaction per sig
+ * (jsonParsed) → extract the balance-delta {@link SolTxMeta} → decode → PnL.
+ * Uses the shared ALCHEMY_API_KEY (Solana network enabled 2026-07-01); $0 on
+ * the free tier for the top-N deep-profile scope.
+ */
+
+import { decodeSolanaSwaps, type SolTxMeta, type SolTokenBalance } from './solana-swaps'
+import { computeWalletPnl, type WalletPnl } from './pnl-accounting'
+
+function alchemySolUrl(): string {
+  const key = process.env.ALCHEMY_API_KEY
+  if (!key) throw new Error('[onchain] ALCHEMY_API_KEY missing')
+  return `https://solana-mainnet.g.alchemy.com/v2/${key}`
+}
+
+interface RpcOpts {
+  rpcUrl?: string
+  timeoutMs?: number
+}
+
+async function solRpc<T>(method: string, params: unknown[], opts: RpcOpts = {}): Promise<T> {
+  const url = opts.rpcUrl ?? alchemySolUrl()
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 20_000)
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+      signal: ctrl.signal,
+    })
+    const json = (await res.json()) as { result?: T; error?: { message?: string } }
+    if (json.error) throw new Error(`sol ${method}: ${json.error.message ?? 'error'}`)
+    return json.result as T
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+interface SigInfo {
+  signature: string
+  blockTime: number | null
+  err: unknown
+}
+
+/** Paginated signatures for an address, newest first, stopping at `sinceMs`. */
+export async function fetchSignatures(
+  wallet: string,
+  opts: RpcOpts & { sinceMs?: number; maxSigs?: number } = {}
+): Promise<string[]> {
+  const sinceSec = opts.sinceMs ? opts.sinceMs / 1000 : 0
+  const maxSigs = opts.maxSigs ?? 1000
+  const sigs: string[] = []
+  let before: string | undefined
+  while (sigs.length < maxSigs) {
+    const batch = await solRpc<SigInfo[]>(
+      'getSignaturesForAddress',
+      [wallet, { limit: 1000, ...(before ? { before } : {}) }],
+      opts
+    )
+    if (!Array.isArray(batch) || batch.length === 0) break
+    let reachedOld = false
+    for (const s of batch) {
+      if (s.err) continue // failed tx — no balance change of interest
+      if (sinceSec && s.blockTime && s.blockTime < sinceSec) {
+        reachedOld = true
+        break
+      }
+      sigs.push(s.signature)
+    }
+    if (reachedOld || batch.length < 1000) break
+    before = batch[batch.length - 1].signature
+  }
+  return sigs
+}
+
+interface RawTx {
+  blockTime: number | null
+  transaction: { message: { accountKeys: Array<string | { pubkey: string }> } }
+  meta: {
+    fee: number
+    preBalances: number[]
+    postBalances: number[]
+    preTokenBalances?: SolTokenBalance[]
+    postTokenBalances?: SolTokenBalance[]
+  } | null
+}
+
+function accountKeyStr(k: string | { pubkey: string }): string {
+  return typeof k === 'string' ? k : k.pubkey
+}
+
+/** getTransaction → the balance-delta SolTxMeta the decoder needs (or null). */
+export async function fetchTxMeta(
+  signature: string,
+  wallet: string,
+  opts: RpcOpts = {}
+): Promise<SolTxMeta | null> {
+  const tx = await solRpc<RawTx | null>(
+    'getTransaction',
+    [signature, { maxSupportedTransactionVersion: 0, encoding: 'jsonParsed' }],
+    opts
+  )
+  if (!tx || !tx.meta) return null
+  const keys = tx.transaction.message.accountKeys.map(accountKeyStr)
+  const walletIndex = keys.indexOf(wallet)
+  if (walletIndex < 0) return null
+  return {
+    signature,
+    blockTime: tx.blockTime,
+    fee: tx.meta.fee,
+    walletIndex,
+    preSol: tx.meta.preBalances[walletIndex] ?? 0,
+    postSol: tx.meta.postBalances[walletIndex] ?? 0,
+    preTokenBalances: tx.meta.preTokenBalances ?? [],
+    postTokenBalances: tx.meta.postTokenBalances ?? [],
+  }
+}
+
+/** Public SOL/USD spot (keyless). */
+export async function fetchSolUsd(opts: { timeoutMs?: number } = {}): Promise<number> {
+  const ctrl = new AbortController()
+  const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 8000)
+  try {
+    const res = await fetch('https://coins.llama.fi/prices/current/coingecko:solana', {
+      signal: ctrl.signal,
+    })
+    const json = (await res.json()) as { coins?: Record<string, { price?: number }> }
+    const p = json.coins?.['coingecko:solana']?.price
+    if (typeof p === 'number' && p > 0) return p
+  } catch {
+    /* fall through */
+  } finally {
+    clearTimeout(timer)
+  }
+  return 150
+}
+
+export interface SolWalletResult {
+  wallet: string
+  lookbackDays: number
+  signatures: number
+  txsFetched: number
+  swaps: number
+  solUsd: number
+  pnl: WalletPnl
+}
+
+/** End-to-end: signatures → tx metas → decode → PnL for one Solana wallet. */
+export async function computeSolanaWalletOnchain(
+  wallet: string,
+  opts: RpcOpts & {
+    lookbackDays?: number
+    maxSigs?: number
+    concurrency?: number
+    solUsd?: number
+  } = {}
+): Promise<SolWalletResult> {
+  const lookbackDays = opts.lookbackDays ?? 90
+  const sinceMs = Date.now() - lookbackDays * 86_400_000
+  const [sigs, solUsd] = await Promise.all([
+    fetchSignatures(wallet, { ...opts, sinceMs }),
+    opts.solUsd !== undefined ? Promise.resolve(opts.solUsd) : fetchSolUsd(opts),
+  ])
+
+  // Fetch tx metas with bounded concurrency (public/free RPC friendliness).
+  const conc = opts.concurrency ?? 5
+  const metas: SolTxMeta[] = []
+  for (let i = 0; i < sigs.length; i += conc) {
+    const slice = sigs.slice(i, i + conc)
+    const got = await Promise.all(slice.map((s) => fetchTxMeta(s, wallet, opts).catch(() => null)))
+    for (const m of got) if (m) metas.push(m)
+  }
+
+  const swaps = decodeSolanaSwaps(metas, wallet, solUsd)
+  return {
+    wallet,
+    lookbackDays,
+    signatures: sigs.length,
+    txsFetched: metas.length,
+    swaps: swaps.length,
+    solUsd,
+    pnl: computeWalletPnl(swaps),
+  }
+}
