@@ -1,0 +1,12 @@
+{
+  "code": 200,
+  "msg": "succeed",
+  "data": {
+    "symbols": [
+      { "symbol": "BTC-USDT", "trades": 49, "ratio": "0.7656", "win_ratio": "0.551" },
+      { "symbol": "ETH-USDT", "trades": 11, "ratio": "0.1718", "win_ratio": "0.1818" },
+      { "symbol": "SPCX-USDT", "trades": 4, "ratio": "0.0626", "win_ratio": "1" }
+    ]
+  },
+  "alert": null
+}

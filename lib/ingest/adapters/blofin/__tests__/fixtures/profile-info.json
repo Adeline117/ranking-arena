@@ -1,0 +1,39 @@
+{
+  "code": 200,
+  "msg": "succeed",
+  "data": {
+    "uid": 2870883001,
+    "nick_name": "ISHIRO",
+    "verified": false,
+    "profile": "https://blofin.com/cdn-cgi/image/width=64,height=64,format=webp,quality=100,fit=cover/https://s2.blofin.com/static/user/img/profile/6f199ca4a26945f4be4dbe97439474ed.png",
+    "followers": 102,
+    "followers_max": 200,
+    "aum": "107846",
+    "profit_sharing_ratio": "0.1",
+    "joined_date": 1765243345101,
+    "follow_state": 0,
+    "roi_d7": "26.217989441778258952",
+    "real_pnl": "119321.479941318907682396",
+    "max_draw_down": "0.690759781235903362",
+    "win_rate": "0.3855",
+    "self_introduction": "I have been in Crypto since 2017 and managed to turn a $20k investment into over $500k at the peak of the 2021 bull market. Unfortunately I then lost most of it as I didn't understand much about trading and technical analysis. After I lost most of the money when the bear market started, beleiving it was just a dip based on all the influencers I was following, I kept buying and buying until I was 90% down.\n\nIn 2022 I decided to stop listening to all the influencers and started to seriously study technical analysis and trading,  and since then have developed an edge in the market and have been able to provide many market insights that most influencers don't even catch.",
+    "sharing_period": "WEEKLY",
+    "hidden_order": false,
+    "can_copy": true,
+    "hidden_all": false,
+    "copier_whitelist": false,
+    "whitelist_copier": false,
+    "source": 0,
+    "order_amount_limit": 1000,
+    "forbidden_follow_type": 0,
+    "tag_list": [
+      { "style": 1, "type": "top_roi" },
+      { "style": 1, "type": "top_profit" },
+      { "style": 0, "type": "high_frequency" },
+      { "style": 0, "type": "high_leverage" }
+    ],
+    "reset_times": 0,
+    "contract_type": "linear"
+  },
+  "alert": null
+}
