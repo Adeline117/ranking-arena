@@ -25,9 +25,12 @@
  */
 import { chromium } from 'playwright'
 import fs from 'node:fs'
+import { execSync } from 'node:child_process'
+import { readEnv, qaAuthStatus } from './qa-auth.mjs'
 
 const BASE = process.env.BASE_URL || 'https://www.arenafi.org'
 const AUTH = process.argv.includes('--auth')
+const SESSION_PATH = '/tmp/qa-session.json'
 // Value = everything after the FIRST '=' so query-string routes survive
 // (e.g. --routes=/search?q=btc must not truncate at the query's '=').
 const flagValue = (name) => {
@@ -332,8 +335,47 @@ async function sweepRoute(page, route, ledger, counters) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// AUTH session lifecycle（2026-07-01 事故根治 — 见 qa-auth.mjs 头注释）
+//
+// 曾发生：注入的 refresh_token 被并发进程（sentinel cron / 另一 sweep 的
+// bootstrap 密码重置）吊销 → 整轮登录态扫描退化为匿名态 → 大规模伪 401/
+// 伪 fail:click→nav。三道防线：
+//   1. 扫描开始前 preflight `GET /auth/v1/user`，非 200 先重 bootstrap，
+//      仍非 200 直接拒跑（绝不带死 session 开扫）。
+//   2. 每个路由开始前廉价校验 token；死了就在互斥锁内重 bootstrap（qa-auth
+//      持久化密码 → 正常路径不重置密码、不吊销别人的 session）并重建 context。
+//   3. taint 判定：路由扫描期间出现 `400 …grant_type=refresh_token` 或
+//      `/auth/v1/user` 401/403 → 该路由记录整体作废（不进 ledger），刷新
+//      session 后重扫一次；再 taint 则记 fail:tainted，最终 exit 3。
+// ---------------------------------------------------------------------------
+
+function isSessionKillSignal(status, url) {
+  return (
+    (status === 400 &&
+      url.includes('/auth/v1/token') &&
+      url.includes('grant_type=refresh_token')) ||
+    ((status === 401 || status === 403) && url.includes('/auth/v1/user'))
+  )
+}
+
+async function sessionStatus(supaUrl, anonKey) {
+  try {
+    const session = JSON.parse(fs.readFileSync(SESSION_PATH, 'utf8'))
+    return await qaAuthStatus(supaUrl, anonKey, session.access_token)
+  } catch {
+    return 0
+  }
+}
+
+// 重 bootstrap 走 bootstrap-qa-session.mjs（其内部经 qa-auth 互斥锁串行，
+// 持久化密码优先 — 不会反过来吊销其他并发进程正在用的 session）。
+function rebootstrap() {
+  execSync('node scripts/qa/bootstrap-qa-session.mjs', { stdio: 'inherit', timeout: 120_000 })
+}
+
 async function buildAuthContext(browser) {
-  const session = JSON.parse(fs.readFileSync('/tmp/qa-session.json', 'utf8'))
+  const session = JSON.parse(fs.readFileSync(SESSION_PATH, 'utf8'))
   const ctx = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     userAgent:
@@ -377,16 +419,22 @@ async function main() {
 
   console.log(`Exhaustive sweep — ${AUTH ? 'AUTH' : 'anon'} — ${BASE} — ${routes.length} routes`)
   const browser = await chromium.launch({ headless: true })
-  const ctx = AUTH
-    ? await buildAuthContext(browser)
-    : await browser.newContext({
-        viewport: { width: 1280, height: 900 },
-        userAgent:
-          'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 ArenaQA',
-      })
+  const supaUrl = AUTH ? readEnv('NEXT_PUBLIC_SUPABASE_URL') : null
+  const anonKey = AUTH ? readEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY') : null
+
+  const buildContext = async () =>
+    AUTH
+      ? await buildAuthContext(browser)
+      : await browser.newContext({
+          viewport: { width: 1280, height: 900 },
+          userAgent:
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 ArenaQA',
+        })
+  let ctx = await buildContext()
 
   // Auto-cancel every confirm/beforeunload dialog — the destructive backstop.
-  ctx.on('page', (p) => p.on('dialog', (d) => d.dismiss().catch(() => {})))
+  const wireContext = (c) => c.on('page', (p) => p.on('dialog', (d) => d.dismiss().catch(() => {})))
+  wireContext(ctx)
 
   const counters = {
     clicked: 0,
@@ -396,8 +444,13 @@ async function main() {
     skipped: 0,
     failed: 0,
     withErrors: 0,
+    tainted: 0,
     _bucket: null,
   }
+  // Session-kill signals seen during the CURRENT route (AUTH mode) — presence
+  // means every result gathered in this route is a session artifact, not an
+  // app bug, and must NOT enter the ledger.
+  const taintSignals = []
   // Collectors are attached per-page so a recreated page (after a crash) still
   // reports errors. Returns a fresh page with listeners wired.
   const newTrackedPage = async () => {
@@ -407,6 +460,9 @@ async function main() {
       if (m.type() === 'error') counters._bucket?.consoleErrors.push(m.text().slice(0, 200))
     })
     p.on('response', (r) => {
+      if (AUTH && isSessionKillSignal(r.status(), r.url())) {
+        taintSignals.push(`${r.status()} ${r.request().method()} ${r.url()}`.slice(0, 200))
+      }
       if (r.status() >= 400 && !isWhitelisted(r.url())) {
         counters._bucket?.httpErrors.push(
           `${r.status()} ${r.request().method()} ${r.url()}`.slice(0, 200)
@@ -417,27 +473,112 @@ async function main() {
   }
   let page = await newTrackedPage()
 
+  // Rebuild the ENTIRE context (not just the page) after a session refresh —
+  // cookies + localStorage init-script hold the old, now-revoked tokens.
+  const refreshAuthedContext = async () => {
+    await ctx.close().catch(() => {})
+    ctx = await buildContext()
+    wireContext(ctx)
+    page = await newTrackedPage()
+  }
+
+  // Validate token; on 401/403/parse-failure re-bootstrap (serialized via the
+  // qa-auth mutex — never kills sessions other processes are using) and
+  // rebuild the browser context. Returns true iff a live session is injected.
+  const ensureLiveSession = async () => {
+    let st = await sessionStatus(supaUrl, anonKey)
+    if (st === 200) return true
+    console.log(`  ⚠ QA session dead (auth/v1/user → ${st}) — re-bootstrapping`)
+    try {
+      rebootstrap()
+    } catch (e) {
+      console.log(`  ✗ re-bootstrap failed: ${String(e.message).slice(0, 160)}`)
+      return false
+    }
+    await refreshAuthedContext()
+    st = await sessionStatus(supaUrl, anonKey)
+    return st === 200
+  }
+
+  // Preflight（拒跑闸门）: never START a sweep on a dead session — that is how
+  // an entire authed run silently degrades to anon and floods the ledger with
+  // fake 401s. One bootstrap attempt is allowed; still dead → refuse to run.
+  if (AUTH) {
+    if (!(await ensureLiveSession())) {
+      console.error(
+        '✗ 拒跑: QA session invalid and re-bootstrap could not revive it (auth/v1/user ≠ 200)'
+      )
+      await browser.close()
+      process.exit(2)
+    }
+    const bootedAt = (() => {
+      try {
+        return JSON.parse(fs.readFileSync(SESSION_PATH, 'utf8')).qa_bootstrap_at || 'unknown'
+      } catch {
+        return 'unknown'
+      }
+    })()
+    console.log(`Preflight OK — QA session live (bootstrapped at ${bootedAt})`)
+  }
+
   const ledger = []
   for (const route of routes) {
-    try {
-      await sweepRoute(page, route, ledger, counters)
-    } catch (e) {
-      console.log(`  ✗ ${route}: ${String(e.message).slice(0, 160)}`)
+    if (AUTH && !(await ensureLiveSession())) {
       ledger.push({
         route,
         idx: -1,
-        status: 'fail:route',
-        errors: [String(e.message).slice(0, 200)],
+        status: 'fail:auth-dead',
+        errors: ['QA session invalid and re-bootstrap failed — route not swept'],
       })
-      // A route failure (esp. ERR_ABORTED) can leave the page/context wedged so
-      // every subsequent goto aborts too. Recreate the page to recover so one
-      // bad route doesn't sink the rest of the sweep.
+      continue
+    }
+    let attempt = 0
+    for (;;) {
+      attempt++
+      taintSignals.length = 0
+      const ledgerMark = ledger.length
       try {
-        if (!page.isClosed()) await page.close().catch(() => {})
-        page = await newTrackedPage()
-      } catch {
-        /* if we can't recreate, the next iteration's goto will record its own failure */
+        await sweepRoute(page, route, ledger, counters)
+      } catch (e) {
+        console.log(`  ✗ ${route}: ${String(e.message).slice(0, 160)}`)
+        ledger.push({
+          route,
+          idx: -1,
+          status: 'fail:route',
+          errors: [String(e.message).slice(0, 200)],
+        })
+        // A route failure (esp. ERR_ABORTED) can leave the page/context wedged so
+        // every subsequent goto aborts too. Recreate the page to recover so one
+        // bad route doesn't sink the rest of the sweep.
+        try {
+          if (!page.isClosed()) await page.close().catch(() => {})
+          page = await newTrackedPage()
+        } catch {
+          /* if we can't recreate, the next iteration's goto will record its own failure */
+        }
+        break
       }
+      // Taint gate: session-kill signals mean everything recorded for this
+      // route is an artifact of a dead session, not app behavior. Void those
+      // records, refresh the session, re-sweep once.
+      if (AUTH && taintSignals.length) {
+        const dropped = ledger.splice(ledgerMark)
+        counters.tainted++
+        console.log(
+          `  ☠ ${route}: session-kill signal (${taintSignals[0]}) — ${dropped.length} tainted records voided (attempt ${attempt})`
+        )
+        if (attempt >= 2 || !(await ensureLiveSession())) {
+          ledger.push({
+            route,
+            idx: -1,
+            status: 'fail:tainted',
+            errors: taintSignals.slice(0, 3).map((s) => `session-kill: ${s}`),
+          })
+          break
+        }
+        continue // retry the route once with a fresh session
+      }
+      break
     }
   }
 
@@ -453,6 +594,9 @@ async function main() {
   console.log(`  skipped (hid/dis) : ${counters.skipped}`)
   console.log(`  click failures    : ${counters.failed}`)
   console.log(`  elements w/ errors: ${counters.withErrors}`)
+  console.log(
+    `  tainted routes    : ${counters.tainted} (session-kill artifacts voided, not in ledger)`
+  )
   console.log(`  ledger → ${LEDGER_PATH}`)
   if (errored.length) {
     console.log('\n=== Elements that produced errors (first 25) ===')
@@ -462,7 +606,17 @@ async function main() {
     }
   }
   // Non-zero exit if genuine app errors surfaced (not mere click-fails on
-  // transient overlays), so CI can gate on it.
+  // transient overlays), so CI can gate on it. exit 3 = auth-taint: results
+  // for those routes are session artifacts and MUST NOT be trusted/re-used.
+  const authTainted = ledger.filter(
+    (r) => r.status === 'fail:tainted' || r.status === 'fail:auth-dead'
+  )
+  if (authTainted.length) {
+    console.error(
+      `\n☠ ${authTainted.length} route(s) unresolvably tainted by session death — rerun after fixing auth`
+    )
+    process.exit(3)
+  }
   const realErrors = errored.filter((r) =>
     r.errors.some((e) => e.startsWith('pageerror:') || e.startsWith('http: 5'))
   )

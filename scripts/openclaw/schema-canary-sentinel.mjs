@@ -13,15 +13,16 @@
  * 用法（crontab，环境变量同 health-monitor）:
  *   node scripts/openclaw/schema-canary-sentinel.mjs
  *
- * QA 账号密码: 每次运行用 service role 重置为随机值（不持久化）。
+ * QA 账号密码: 持久化（env QA_TEST_PASSWORD / ~/.arena-qa-password.json），
+ * 经 scripts/qa/qa-auth.mjs 单一通道登录 — 绝不无脑重置（重置吊销全部既存
+ * session，会杀死并发 QA sweep 的登录态）。
  */
 import { execSync } from 'node:child_process'
 import fs from 'node:fs'
 import crypto from 'node:crypto'
 import path from 'node:path'
+import { loginQa } from '../qa/qa-auth.mjs'
 
-const QA_EMAIL = 'qa.button.test@arenafi.org'
-const QA_USER_ID = '1c533890-01e8-4c34-a895-657f389ab4b2'
 const BASE = 'https://www.arenafi.org'
 
 // cron 场景铁律：任何网络请求必须有超时，否则挂起连接 = 僵尸 cron 堆积
@@ -81,24 +82,10 @@ async function writeCanary() {
   const SRK = readEnv('SUPABASE_SERVICE_ROLE_KEY')
   const ANON = readEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
 
-  // 重置 QA 账号密码（随机，不持久化）
-  const pw = crypto.randomBytes(18).toString('base64')
-  const resetRes = await tfetch(`${SUPA_URL}/auth/v1/admin/users/${QA_USER_ID}`, {
-    method: 'PUT',
-    headers: { apikey: SRK, Authorization: `Bearer ${SRK}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ password: pw }),
-  })
-  if (!resetRes.ok) throw new Error(`QA 密码重置失败 ${resetRes.status}`)
-
-  // 登录
-  const loginRes = await tfetch(`${SUPA_URL}/auth/v1/token?grant_type=password`, {
-    method: 'POST',
-    headers: { apikey: ANON, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: QA_EMAIL, password: pw }),
-  })
-  const session = await loginRes.json()
-  if (!session.access_token)
-    throw new Error(`QA 登录失败: ${JSON.stringify(session).slice(0, 120)}`)
+  // 2026-07-01 根治：不再每次运行重置密码（重置吊销 QA 账号全部既存 session，
+  // 会杀死并发 sweep 正在使用的登录态）。走 qa-auth 单一通道：持久化密码
+  // password-grant 优先，登录失败才在 /tmp 互斥锁内 fallback 重置（串行化）。
+  const session = await loginQa({ supaUrl: SUPA_URL, anon: ANON, srk: SRK })
 
   // CSRF（proxy.ts 格式：base36 时间戳.64hex）
   const csrf = `${Date.now().toString(36)}.${crypto.randomBytes(32).toString('hex')}`
