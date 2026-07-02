@@ -349,7 +349,7 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
                         flexShrink: 0,
                       }}
                     >
-                      译
+                      {t('hotTranslatedBadge')}
                     </span>
                   )}
                   <HotTag score={post.hot_score} />
