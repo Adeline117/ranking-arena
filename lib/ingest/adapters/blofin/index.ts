@@ -27,9 +27,13 @@
  *          → roi/pnl time-series (chart)
  *
  * GAPS (documented):
- *  - Positions/histories/copiers records: the Trades/Copiers tabs' record
- *    endpoints weren't surfaced in the capture (login-gated copiers, positions
- *    need deeper tab nav) — future work; stats/charts/preferences are covered.
+ *  - Positions/histories/copiers records: HARD LIMIT — the public (unauthenticated)
+ *    detail page exposes ONLY profile stats + the All/Trades/Bots chart-scope +
+ *    per-symbol chips (all harvested above). It has NO Positions/Trade-History/
+ *    Copiers record tabs; those live behind login (verified 2026-07-02 headful
+ *    capture: copy_trading/user/info + uc/user/info return 401, no record tabs
+ *    render). Harvesting them would need an authenticated blofin session we don't
+ *    have — NOT capturable without credentials. Stats/charts/preferences complete.
  *  - Bot/human split + bot-scope chart series (spec §11.14 All|Trades|Bots):
  *    the board row has no per-row bot flag — only the trading_bots_type FILTER
  *    distinguishes them — so trader_kind defaults to human; a separate
