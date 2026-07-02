@@ -73,7 +73,10 @@ function formatPnl(pnl: number): string {
 }
 
 function getTopPercent(rank: number, total: number): string {
-  if (!total || !rank || rank <= 0) return ''
+  // rank > total means the total is unreliable (stale/estimated) — never
+  // render an absurd "Top 266%" badge. Beyond 25% show nothing, matching
+  // the wrapped page's generateMetadata gate.
+  if (!total || !rank || rank <= 0 || rank > total) return ''
   const pct = rank / total
   if (pct <= 0.001) return 'Top 0.1%'
   if (pct <= 0.01) return 'Top 1%'
@@ -81,7 +84,7 @@ function getTopPercent(rank: number, total: number): string {
   if (pct <= 0.05) return 'Top 5%'
   if (pct <= 0.1) return 'Top 10%'
   if (pct <= 0.25) return 'Top 25%'
-  return 'Top ' + Math.ceil(pct * 100) + '%'
+  return ''
 }
 
 function formatWindow(w: string): string {
@@ -153,7 +156,10 @@ export async function GET(request: NextRequest) {
       ? String(rank)
       : (rank / 1000).toFixed(0) + 'K'
     : '--'
-  const totalDisplay = total > 0 ? total.toLocaleString('en-US') + '+' : '8,000+'
+  // Hide "/ N+ traders" when total contradicts rank (total < rank) — a
+  // "RANKED 1970 / 743+ traders" line is worse than no total at all.
+  const totalDisplay: string | null =
+    total > 0 ? (rankValid && total < rank ? null : total.toLocaleString('en-US') + '+') : '8,000+'
 
   return new ImageResponse(
     <div
@@ -487,7 +493,9 @@ export async function GET(request: NextRequest) {
               >
                 {rankDisplay}
               </span>
-              <span style={{ fontSize: 14, color: C.dim }}>/ {totalDisplay} traders</span>
+              {totalDisplay && (
+                <span style={{ fontSize: 14, color: C.dim }}>/ {totalDisplay} traders</span>
+              )}
             </div>
             {/* Top % badge */}
             {topPct && (

@@ -130,19 +130,26 @@ async function fetchWrappedData(
       ),
     ])
 
-    // Fetch total traders on this platform for percentile
-    // Estimated — wrapped/year-in-review page shows a rounded "ranked
-    // X of ~N" headline; N is a marketing number.
-    const { count } = await Promise.race([
+    // Fetch total traders on this platform for percentile.
+    // Use MAX(rank) over the same filter — NOT a planner-estimated count.
+    // `{ count: 'estimated' }` returned e.g. 743 while ranks went past 1970
+    // (and exact count matched the estimate, so the count itself is not the
+    // real population), producing absurd "RANKED 1970 / 743+ traders" and
+    // "Top 266%" cards. MAX(rank) guarantees total >= rank by construction.
+    const { data: maxRankRow } = await Promise.race([
       supabase
         .from('leaderboard_ranks')
-        .select('*', { count: 'estimated', head: true })
+        .select('rank')
         .eq('source', resolved.platform)
-        .eq('season_id', seasonId),
-      new Promise<{ count: null }>((resolve) =>
-        setTimeout(() => resolve({ count: null }), SSR_TIMEOUT_MS)
+        .eq('season_id', seasonId)
+        .order('rank', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle(),
+      new Promise<{ data: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
       ),
     ])
+    const total = maxRankRow?.rank ?? null
 
     return {
       ok: true,
@@ -152,7 +159,7 @@ async function fetchWrappedData(
         platform: effectivePlatform,
         platformLabel,
         rank: lr?.rank ?? null,
-        total: count ?? null,
+        total,
         roi: lr?.roi ?? null,
         winRate: lr?.win_rate ?? null,
         score: lr?.arena_score ?? null,
