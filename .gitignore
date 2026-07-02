@@ -132,9 +132,14 @@ backups/
 *.old-working
 debug_*.png
 lighthouse-report.*
+.lighthouse-report.json
+docs/lighthouse-results-*.json
 screenshots/
 .archived/
 .swc/
+
+# Ad-hoc browse/screenshot sessions with unset output dir (2026-07 cleanup)
+/undefined/
 
 # One-off scripts and ad-hoc test runners
 check_gaps.mjs
