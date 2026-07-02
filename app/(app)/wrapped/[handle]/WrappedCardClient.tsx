@@ -567,7 +567,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
 
           {/* View full profile */}
           <a
-            href={`/trader/${encodeURIComponent(data.handle)}`}
+            href={`/trader/${encodeURIComponent(data.handle)}${data.platform ? `?platform=${encodeURIComponent(data.platform)}` : ''}`}
             style={{
               display: 'inline-flex',
               alignItems: 'center',
