@@ -22,27 +22,48 @@ const ctx: ParseCtx = {
 describe('parseBlofinPositions', () => {
   const rows = parseBlofinPositions(fx('records-positions.json'), ctx)
 
-  it('maps open positions (close_time null) with side/leverage/entry', () => {
-    expect(rows.length).toBe(3)
+  it('aggregates NET-mode sub-orders into one net position per (symbol, side)', () => {
+    // fixture: 3 open BTC-USDT/SELL sub-orders → 1 net position (size summed,
+    // entry size-weighted) so the (trader,symbol,side) upsert key can't collide.
+    expect(rows.length).toBe(1)
     const p = rows[0]
     expect(p.symbol).toBe('BTC-USDT')
     expect(p.side).toBe('SELL')
     expect(p.leverage).toBe(20)
-    expect(p.size).toBeCloseTo(0.3181, 4)
-    expect(p.entryPrice).toBeCloseTo(61863.1, 1)
+    expect(p.size).toBeCloseTo(3.2005, 3) // 0.3181 + 0.6591 + 2.2233
+    expect(p.entryPrice).toBeCloseTo(61606.91, 0) // size-weighted avg
   })
 
-  it('drops closed rows (only open positions belong here)', () => {
+  it('drops closed rows and keeps distinct (symbol, side) positions separate', () => {
     const mixed = {
       code: 200,
       data: [
-        { symbol: 'X-USDT', close_time: 123 },
-        { symbol: 'Y-USDT', close_time: null },
+        {
+          symbol: 'X-USDT',
+          order_side: 'BUY',
+          quantity: '1',
+          avg_open_price: '10',
+          close_time: 123,
+        },
+        {
+          symbol: 'Y-USDT',
+          order_side: 'BUY',
+          quantity: '2',
+          avg_open_price: '20',
+          close_time: null,
+        },
+        {
+          symbol: 'Y-USDT',
+          order_side: 'SELL',
+          quantity: '3',
+          avg_open_price: '30',
+          close_time: null,
+        },
       ],
     }
     const out = parseBlofinPositions(mixed, ctx)
-    expect(out.length).toBe(1)
-    expect(out[0].symbol).toBe('Y-USDT')
+    expect(out.length).toBe(2) // Y-USDT BUY + Y-USDT SELL; X dropped (closed)
+    expect(out.map((p) => `${p.symbol}/${p.side}`).sort()).toEqual(['Y-USDT/BUY', 'Y-USDT/SELL'])
   })
 })
 

@@ -256,25 +256,61 @@ export function parseBlofinLeaderboardSeries(
 // (BUY=long, SELL=short). History rows expose roe (return ratio) but not a
 // per-position realized-PnL amount → realizedPnl left honest-null, roe in raw.
 
-/** Current open positions (order/list, close_time==null) → ParsedPosition[]. */
+/** Current open positions (order/list, close_time==null) → ParsedPosition[].
+ *  Blofin is NET mode and order/list returns per-ORDER rows, so multiple
+ *  sub-orders share one (symbol, side) net position — they MUST be aggregated
+ *  (size summed, entry size-weighted) or the (trader,symbol,side) upsert key
+ *  collides ("ON CONFLICT cannot affect row a second time"). */
 export function parseBlofinPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
-  const out: ParsedPosition[] = []
+  const byKey = new Map<
+    string,
+    {
+      symbol: string
+      side: string | null
+      leverage: number | null
+      size: number
+      notional: number
+      upnl: number | null
+      mark: number | null
+      rows: Dict[]
+    }
+  >()
   for (const r of dataRows(raw)) {
     if (r.close_time !== null && r.close_time !== undefined) continue // closed → history surface
     const symbol = typeof r.symbol === 'string' ? r.symbol : null
     if (!symbol) continue
-    out.push({
+    const side = typeof r.order_side === 'string' ? r.order_side : null
+    const key = `${symbol}|${side}`
+    const size = num(r.quantity) ?? 0
+    const entry = num(r.avg_open_price)
+    const upnl = num(r.unrealized_pnl)
+    const agg = byKey.get(key) ?? {
       symbol,
-      side: typeof r.order_side === 'string' ? r.order_side : null,
+      side,
       leverage: num(r.leverage),
-      size: num(r.quantity),
-      entryPrice: num(r.avg_open_price),
-      markPrice: num(r.mark_price),
-      unrealizedPnl: num(r.unrealized_pnl),
-      raw: r,
-    })
+      size: 0,
+      notional: 0,
+      upnl: null,
+      mark: num(r.mark_price),
+      rows: [],
+    }
+    agg.size += size
+    if (entry !== null) agg.notional += size * entry
+    if (upnl !== null) agg.upnl = (agg.upnl ?? 0) + upnl
+    if (agg.mark === null) agg.mark = num(r.mark_price)
+    agg.rows.push(r)
+    byKey.set(key, agg)
   }
-  return out
+  return [...byKey.values()].map((a) => ({
+    symbol: a.symbol,
+    side: a.side,
+    leverage: a.leverage,
+    size: a.size > 0 ? a.size : null,
+    entryPrice: a.size > 0 && a.notional > 0 ? a.notional / a.size : null, // size-weighted avg
+    markPrice: a.mark,
+    unrealizedPnl: a.upnl,
+    raw: a.rows.length === 1 ? a.rows[0] : { aggregated_orders: a.rows },
+  }))
 }
 
 /** Closed-position history (order/history) + copiers (trader/copiers). */
