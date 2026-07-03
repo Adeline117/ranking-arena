@@ -133,8 +133,17 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
     const item = list[i]
     const trader = (item.trader ?? {}) as Dict
     const rankStat = (item.rankStat ?? {}) as Dict
-    // uid loses precision as a JSON number — prefer a string form if present.
-    const uid = trader.uidStr ?? trader.uid
+    // CRITICAL: uid + apiIdentity are 19-digit snowflake IDs > 2^53, so the bare
+    // JSON numbers `trader.uid` / `rankStat.apiIdentity` arrive already
+    // float-truncated (…299 → …300, …651 → …00). Recover the EXACT values from
+    // the string field `trader.uidAndApi` = "{uid}_{apiIdentity}" (present on
+    // every row). Without this the stored identity is wrong → the detail page /
+    // record harvest 404s for ~every 19-digit trader.
+    const uidAndApi =
+      typeof trader.uidAndApi === 'string' && trader.uidAndApi.includes('_')
+        ? trader.uidAndApi.split('_')
+        : null
+    const uid = uidAndApi?.[0] ?? trader.uidStr ?? trader.uid
     if (uid === null || uid === undefined) continue
 
     // Only TF-INDEPENDENT routing facts belong on traderMeta (it is one row
@@ -143,8 +152,9 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
     // belongs in per-TF trader_stats.extras, NOT here (it would be clobbered
     // by whichever TF wrote last).
     const traderMeta: Record<string, unknown> = {}
-    if (rankStat.apiIdentity !== undefined)
-      traderMeta.bingx_api_identity = String(rankStat.apiIdentity)
+    const apiIdentity =
+      uidAndApi?.[1] ?? (rankStat.apiIdentity !== undefined ? String(rankStat.apiIdentity) : null)
+    if (apiIdentity) traderMeta.bingx_api_identity = apiIdentity
 
     rows.push({
       exchangeTraderId: String(uid),

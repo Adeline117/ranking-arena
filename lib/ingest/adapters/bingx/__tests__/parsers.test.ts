@@ -83,6 +83,44 @@ describe('parseBingxLeaderboardPage', () => {
       parseBingxLeaderboardPage({ search: { data: { result: 'x' } }, timeframe: 30 }, ctx).rows
     ).toHaveLength(0)
   })
+
+  it('recovers EXACT 19-digit uid + apiIdentity from uidAndApi (not the float-truncated numbers)', () => {
+    // Real snowflake IDs > 2^53: the bare JSON numbers arrive already truncated
+    // (…299 → …300). uidAndApi carries the exact string form.
+    const search = {
+      data: {
+        total: 1,
+        result: [
+          {
+            trader: {
+              uid: 1316650541126967300, // truncated (real ends …299)
+              uidAndApi: '1316650541126967299_1413302534032539651',
+              nickName: 'Precise',
+            },
+            rankStat: { apiIdentity: 1413302534032539600, strRecent30DaysRate: '+1%' }, // truncated
+          },
+        ],
+      },
+    }
+    const page = parseBingxLeaderboardPage({ search, timeframe: 30 }, ctx)
+    expect(page.rows[0].exchangeTraderId).toBe('1316650541126967299') // exact, not …300
+    expect(page.rows[0].traderMeta).toMatchObject({
+      bingx_api_identity: '1413302534032539651', // exact, not …600
+    })
+  })
+
+  it('falls back to uidStr / apiIdentity when uidAndApi is absent', () => {
+    const search = {
+      data: {
+        result: [
+          { trader: { uid: 123, uidStr: '123', nickName: 'X' }, rankStat: { apiIdentity: 999 } },
+        ],
+      },
+    }
+    const page = parseBingxLeaderboardPage({ search, timeframe: 30 }, ctx)
+    expect(page.rows[0].exchangeTraderId).toBe('123')
+    expect(page.rows[0].traderMeta).toMatchObject({ bingx_api_identity: '999' })
+  })
 })
 
 describe('bingxPerTfExtras', () => {
