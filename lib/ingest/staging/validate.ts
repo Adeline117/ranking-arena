@@ -98,11 +98,22 @@ export function validateStats(
       rejects.push({ reason: `missing_required_field:${String(missing)}`, payload: block })
       continue
     }
+    // Invariant: winning positions can never exceed total positions. When a
+    // source returns garbage that violates it (seen on mexc_futures), we can't
+    // tell which count is wrong — null the offending winPositions rather than
+    // fabricate, so the impossible value never reaches serving.
+    const winPositions =
+      block.winPositions !== null &&
+      block.totalPositions !== null &&
+      block.winPositions > block.totalPositions
+        ? null
+        : block.winPositions
     valid.push({
       ...block,
       roi: clampRoi(block.roi),
       mdd: boundPct(block.mdd),
       winRate: boundPct(block.winRate),
+      winPositions,
     })
   }
   return { valid, rejects }
