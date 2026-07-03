@@ -141,6 +141,17 @@ screenshots/
 # Ad-hoc browse/screenshot sessions with unset output dir (2026-07 cleanup)
 /undefined/
 
+# Runtime STATE files — tooling mutates these on every run; tracking them made
+# git status perpetually dirty across all sessions (2026-07-03 cleanup).
+scripts/openclaw/.health-monitor-state.json
+scripts/qa/.exhaustive-ledger.jsonl
+scripts/qa/.exhaustive-ledger-auth.jsonl
+scripts/qa/.queue-idle-check.mjs
+
+# Ad-hoc QA/scan outputs
+results.json
+*.log
+
 # One-off scripts and ad-hoc test runners
 check_gaps.mjs
 convert-img-to-image.sh
