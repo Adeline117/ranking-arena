@@ -106,6 +106,25 @@ export function useServingTabData(
       ...(m30?.extras ?? {}),
       ...(m90?.extras ?? {}),
     }
+    // M2-2e extended (2026-07-03 display audit): same cross-TF fill for TYPED
+    // stat columns. Risk metrics (mdd/sharpe/win_positions) are often computed
+    // only on shorter TFs, so a 90d-primary grid dashed them even though the
+    // trader HAS them at 30d/7d (audit saw MDD/Sharpe "--" in the grid but
+    // present in the Stats section + drawdown chart). 90d wins; a null 90d
+    // column borrows the first non-null shorter-TF value — mirrors mergedExtras.
+    const mergedGridStats: Record<string, number | string | null> = { ...(m90?.stats ?? {}) }
+    for (const src of [m30?.stats, m7?.stats]) {
+      if (!src) continue
+      for (const [k, v] of Object.entries(src)) {
+        if (
+          (mergedGridStats[k] === null || mergedGridStats[k] === undefined) &&
+          v !== null &&
+          v !== undefined
+        ) {
+          mergedGridStats[k] = v
+        }
+      }
+    }
     const best = entries?.find((e) => e.timeframe === 90) ?? entries?.[0]
     const copierExtra = best?.extras?.copier_count ?? best?.extras?.copiers
     return {
@@ -136,7 +155,7 @@ export function useServingTabData(
       traderPositionHistory: historyToPositionHistory(histRows ?? []),
       metaExtras: mergedExtras,
       currency: m90?.currency ?? 'USD',
-      gridStats: promoteExtrasMetrics(m90?.stats ?? {}, mergedExtras),
+      gridStats: promoteExtrasMetrics(mergedGridStats, mergedExtras),
       gridCapabilityMetrics: [
         ...(capability?.metrics ?? Object.keys(m90?.stats ?? {})),
         // Extras-sourced metrics (sortino, volatility…) aren't in the capability
