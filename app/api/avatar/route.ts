@@ -234,6 +234,8 @@ export async function GET(request: NextRequest) {
       // eToro
       'etorostatic.com',
       'etoro.com',
+      // Bitunix (img.bitunix.com serves bitunix trader avatars — actively served source)
+      'bitunix.com',
       // Aevo
       'aevo.xyz',
       // Hyperliquid

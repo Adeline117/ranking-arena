@@ -289,6 +289,7 @@ const PROXY_REQUIRED_DOMAINS = [
   'xt.com',
   'pionex.com',
   'blofin.com',
+  'bitunix.com',
 ]
 
 /**
