@@ -40,8 +40,6 @@ const STATIC_ROUTES = [
   // 社交 / 内容
   '/groups',
   '/groups/apply',
-  '/competitions',
-  '/competitions/create', // 未登录应跳登录墙
   '/flash-news',
   '/quiz',
   '/quiz/questions',
@@ -306,10 +304,6 @@ async function main() {
   await addDynamic('/share/rank/[trader_key]', async () => {
     const key = (await jget('/api/rankings?window=30d&limit=1'))?.data?.traders?.[0]?.trader_key
     return key && `/share/rank/${key}`
-  })
-  await addDynamic('/competitions/[id]', async () => {
-    const id = (await jget('/api/competitions?limit=1'))?.data?.competitions?.[0]?.id
-    return id && `/competitions/${id}`
   })
 
   const browser = await chromium.launch({ headless: true })

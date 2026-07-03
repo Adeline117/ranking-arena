@@ -84,7 +84,6 @@ const PUBLIC_API_ROUTES = new Set([
   'bots/[id]',
   'hashtags/[tag]',
   'hashtags/trending',
-  'competitions/[id]',
   'users/[handle]/activities',
   'users/[handle]/collections',
   'users/[handle]/full',

@@ -34,7 +34,7 @@ export interface TabsA11yOptions<K extends string | number> {
    * Filter-pill style tablists (time-window/category pills) all control ONE
    * results region rather than per-key panels. Set this to that region's id:
    * every tab's aria-controls points at it, and getSharedPanelProps() labels
-   * it by the active tab (convention: CompetitionsPageClient.tsx:168,225).
+   * it by the active tab (e.g. filter-pill rows on the rankings pages).
    * Omit for classic per-key panels (TraderTabs style). Pass `null` when no
    * panel element can be annotated (shared component whose results region
    * lives in an unknown parent) — aria-controls is then omitted entirely,

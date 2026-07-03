@@ -163,7 +163,6 @@ const ANON_ROUTES = [
   '/market/open-interest',
   '/groups',
   '/groups/apply',
-  '/competitions',
   '/flash-news',
   '/quiz',
   '/pricing',

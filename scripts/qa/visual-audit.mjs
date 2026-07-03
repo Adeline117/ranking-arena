@@ -40,7 +40,6 @@ const SECONDARY_ROUTES = [
   '/market/funding-rates',
   '/market/open-interest',
   '/groups',
-  '/competitions',
   '/flash-news',
   '/quiz',
   '/learn',
