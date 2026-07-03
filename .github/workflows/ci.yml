@@ -131,6 +131,7 @@ jobs:
       - name: Column-drift check (写/读列 vs 生产 schema)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STRICT_READS: '1' # 读漂移已清零(19/19)——升级为硬门,锁死不回退
         run: npm run qa:insert-drift
 
       # API 鉴权覆盖兜底(默认拒绝)：无根级 middleware，313+ route 靠自觉调 auth
