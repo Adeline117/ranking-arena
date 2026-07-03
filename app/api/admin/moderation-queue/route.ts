@@ -237,10 +237,8 @@ export async function POST(req: NextRequest) {
             .update({ deleted_at: new Date().toISOString() })
             .eq('id', content_id)
         } else if (content_type === 'comment') {
-          await supabase
-            .from('comments')
-            .update({ deleted_at: new Date().toISOString() })
-            .eq('id', content_id)
+          // comments 表无软删列(deleted_at)且读路径不过滤——硬删，与全站标准一致
+          await supabase.from('comments').delete().eq('id', content_id)
         }
 
         // Mark reports as actioned
@@ -300,10 +298,8 @@ export async function POST(req: NextRequest) {
             .update({ deleted_at: new Date().toISOString() })
             .eq('id', content_id)
         } else if (content_type === 'comment') {
-          await supabase
-            .from('comments')
-            .update({ deleted_at: new Date().toISOString() })
-            .eq('id', content_id)
+          // comments 表无软删列(deleted_at)且读路径不过滤——硬删，与全站标准一致
+          await supabase.from('comments').delete().eq('id', content_id)
         }
 
         // Mark reports as actioned
