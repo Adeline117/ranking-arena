@@ -92,6 +92,7 @@ const ACCOUNT_ENUM: Record<string, string> = {
 const POSITION_RE = /copy-trade-processor\/trader-open\/current-position/
 const HISTORY_RE = /copy-trade-processor\/trader-open\/history-order/
 const FOLLOWERS_RE = /copy-trade-processor\/trader-open\/followers/
+const TRANSFER_RE = /copy-trade-processor\/trader-open\/transfer-detail/
 
 function boardKey(src: SourceRow): 'futures' | 'spot' {
   return src.meta.boardKey === 'spot' ? 'spot' : 'futures'
@@ -161,7 +162,7 @@ const bingxAdapter: SourceAdapter = {
     positions: true,
     positionHistory: false,
     orders: true,
-    transfers: false,
+    transfers: true,
     copiers: true,
   },
 
@@ -259,8 +260,13 @@ const bingxAdapter: SourceAdapter = {
       matcher = FOLLOWERS_RE
       tab = 'Copier Data'
       url = 'https://bingx.com/api/copy-trade-facade/v1/copy-trade-processor/trader-open/followers'
+    } else if (kind === 'transfers') {
+      matcher = TRANSFER_RE
+      tab = 'Transfer Records'
+      url =
+        'https://bingx.com/api/copy-trade-facade/v1/copy-trade-processor/trader-open/transfer-detail'
     } else {
-      return // position_history / transfers not exposed by bingx
+      return // position_history not exposed by bingx
     }
     const payload = await harvestRecordSurface(
       session,

@@ -80,3 +80,40 @@ describe('parseBingxHistory copiers', () => {
     expect(c.dedupeHash).toMatch(/^[a-f0-9]{40}$/)
   })
 })
+
+describe('parseBingxHistory transfers', () => {
+  const rows = parseBingxHistory(fx('records-transfers.json'), 'transfers', ctx)
+
+  it('maps fund flows (transfer-detail) with direction/asset/amount', () => {
+    expect(rows.length).toBe(1)
+    const t = rows[0]
+    expect(t.kind).toBe('transfers')
+    if (t.kind !== 'transfers') return
+    expect(t.direction).toBe('in') // positive=1
+    expect(t.asset).toBe('USDT')
+    expect(t.amount).toBe(80)
+    expect(typeof t.ts).toBe('string')
+    expect(t.dedupeHash).toMatch(/^[a-f0-9]{40}$/)
+  })
+
+  it('maps positive=0 to out direction', () => {
+    const out = parseBingxHistory(
+      {
+        data: {
+          result: [
+            {
+              assetAmount: 5,
+              marginCoinName: 'USDT',
+              positive: 0,
+              transactionTime: '2026-06-30T00:00:00.000+08:00',
+              exchangeOrderNo: 'x',
+            },
+          ],
+        },
+      },
+      'transfers',
+      ctx
+    )
+    expect(out[0].kind === 'transfers' && out[0].direction).toBe('out')
+  })
+})
