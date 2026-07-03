@@ -63,13 +63,17 @@
 - **对策**：Phase 1 建 postmortem 制度固化事故学习；Phase 2 知识文档化冲刺
   （CLAUDE.md 教训升格为 docs/ 制度文档）+ PR 流程。
 
-### 5. 数据库迁移漂移未根治
+### 5. 数据库迁移漂移 ✅ 已根治（2026-07-02）
 
-- **事实**：378 个迁移文件中约 200 个曾与生产 ledger 失配（字母后缀命名无法进
-  ledger），已造成发帖/点赞/订阅/支付记录长期静默 500。现靠
-  `check-migration-ledger.mjs` 的 `BASELINE='20260611000000'` 冻结既往，
-  之后的迁移已可靠核对，但历史漂移只是被"接受"而非对账。
-- **对策**：Phase 1.5 专门会话做历史对账/基线压缩（需生产窗口，不与日常迭代混跑）。
+- **事实**：377 个迁移文件中 317 个与生产 ledger 失配（文件名↔version 对不上，
+  字母后缀命名无法进 ledger），曾造成发帖/点赞/订阅/支付记录长期静默 500。
+- **已根治**：完整只读三方审计（`docs/MIGRATION_DRIFT_AUDIT_2026-07-02.md`）证明
+  运行系统零风险（qa:schema 绿=代码依赖全在生产），漂移是记账错位而非 schema
+  缺失。经 Supabase MCP 单一通道补记 317 版本到 ledger（186→504，纯记账零 DDL），
+  全量验证 377 个仓库版本**全部在 ledger**（`repo_versions_missing_from_ledger=0`），
+  `supabase db push` 已变 no-op，footgun 消除。可逆（created_by 标记）。
+- **后续（可选，非紧急）**：377 文件杂乱可择日 squash 到单一 baseline 清理
+  （需 shadow-DB 验证），本次不做——先安全消危，不为减文件数赌未验证 baseline。
 
 ### 6. 测试深度不足
 

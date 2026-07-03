@@ -1,9 +1,11 @@
+-- ✅ 已执行 2026-07-02（经 Supabase MCP 单一通道）。ledger 186→504（含并发 +1）；
+--    全量验证 repo_versions_missing_from_ledger=0，supabase db push 已变 no-op。
+--    零 DDL，生产 schema 未被触碰。保留此文件作对账记录与可逆凭据。
+--
 -- 迁移 ledger 补记（对账）—— 详见 docs/MIGRATION_DRIFT_AUDIT_2026-07-02.md
 -- 把 317 个"仓库有文件、ledger 无记录"的版本标记为已应用（纯记账，无 DDL）。
 -- 目的：让 supabase db push 变 no-op，消除人工 footgun。
 -- 可逆：DELETE FROM supabase_migrations.schema_migrations WHERE created_by='ledger-reconcile-20260702';
--- ⚠️ 这是生产 ledger 写操作，执行前确认无其他会话正在应用迁移（schema 单一通道）。
--- 生成时间戳来自审计会话 2026-07-02。
 
 INSERT INTO supabase_migrations.schema_migrations (version, name, created_by) VALUES
   ('00057', 'library_lang_sort', 'ledger-reconcile-20260702'),
