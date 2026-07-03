@@ -201,8 +201,8 @@ export function servingStatsToPerformance(byTf: {
   if (s7) {
     perf.roi_7d = num(s7.roi)
     perf.pnl_7d = num(s7.pnl)
-    perf.win_rate_7d = num(s7.win_rate)
-    perf.max_drawdown_7d = num(s7.mdd)
+    perf.win_rate_7d = set(s7.win_rate)
+    perf.max_drawdown_7d = set(s7.mdd)
     perf.sharpe_ratio_7d = set(s7.sharpe)
     perf.winning_positions_7d = set(s7.win_positions)
     perf.total_positions_7d = set(s7.total_positions)
@@ -210,8 +210,8 @@ export function servingStatsToPerformance(byTf: {
   if (s30) {
     perf.roi_30d = num(s30.roi)
     perf.pnl_30d = num(s30.pnl)
-    perf.win_rate_30d = num(s30.win_rate)
-    perf.max_drawdown_30d = num(s30.mdd)
+    perf.win_rate_30d = set(s30.win_rate)
+    perf.max_drawdown_30d = set(s30.mdd)
     perf.sharpe_ratio_30d = set(s30.sharpe)
     perf.winning_positions_30d = set(s30.win_positions)
     perf.total_positions_30d = set(s30.total_positions)
@@ -219,8 +219,8 @@ export function servingStatsToPerformance(byTf: {
   if (s90) {
     perf.roi_90d = num(s90.roi)
     perf.pnl = num(s90.pnl)
-    perf.win_rate = num(s90.win_rate)
-    perf.max_drawdown = num(s90.mdd)
+    perf.win_rate = set(s90.win_rate)
+    perf.max_drawdown = set(s90.mdd)
     perf.sharpe_ratio = set(s90.sharpe)
     perf.sortino_ratio = set(s90.sortino)
     perf.calmar_ratio = set(s90.calmar)

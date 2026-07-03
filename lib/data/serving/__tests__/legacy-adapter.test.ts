@@ -135,6 +135,25 @@ describe('serving → legacy adapter', () => {
     expect(perf.sortino_ratio).toBeUndefined()
   })
 
+  it('NULL-collapses win_rate / max_drawdown when the source omits them (no misleading 0.0%)', () => {
+    // hyperliquid's stats payload carries no win_rate key — it must render '—',
+    // not 'Win 0.0%'. Same for mdd. (roi/pnl keep num() — a genuine 0 is plausible.)
+    const perf = servingStatsToPerformance({
+      tf7: { roi: 5, pnl: 50 },
+      tf30: { roi: 12, pnl: 120 },
+      tf90: { roi: 30, pnl: 300 },
+    })
+    expect(perf.win_rate).toBeUndefined()
+    expect(perf.max_drawdown).toBeUndefined()
+    expect(perf.win_rate_7d).toBeUndefined()
+    expect(perf.max_drawdown_7d).toBeUndefined()
+    expect(perf.win_rate_30d).toBeUndefined()
+    expect(perf.max_drawdown_30d).toBeUndefined()
+    // roi/pnl still populate (genuine values, not collapsed)
+    expect(perf.roi_90d).toBe(30)
+    expect(perf.pnl).toBe(300)
+  })
+
   it('NULL-collapses missing timeframes (only 90d present)', () => {
     const perf = servingStatsToPerformance({ tf90: { roi: 30, pnl: 300, win_rate: 70, mdd: 15 } })
     expect(perf.roi_90d).toBe(30)
