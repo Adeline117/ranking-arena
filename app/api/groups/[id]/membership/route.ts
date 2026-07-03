@@ -53,7 +53,7 @@ export const POST = withAuth(
       // Check if user is banned from this group
       const { data: ban } = await sb
         .from('group_bans')
-        .select('id')
+        .select('user_id') // group_bans 无 id(复合主键)——旧 select('id') 400→封禁检查永远失效
         .eq('group_id', groupId)
         .eq('user_id', user.id)
         .maybeSingle()

@@ -21,7 +21,9 @@ export const GET = withAuth(
         .maybeSingle(),
       supabase
         .from('subscriptions')
-        .select('tier, expires_at')
+        // subscriptions 无 expires_at 列(用 current_period_end)——旧 select 400→
+        // 订阅永远读不出→account 永远显示 tier:free(被 PRO_FREE_PROMO 掩盖)
+        .select('tier, current_period_end')
         .eq('user_id', user.id)
         .maybeSingle(),
     ])
@@ -31,7 +33,12 @@ export const GET = withAuth(
         id: user.id,
         email: user.email,
         profile: profileResult.data || null,
-        subscription: subscriptionResult.data || { tier: 'free', expires_at: null },
+        subscription: subscriptionResult.data
+          ? {
+              tier: subscriptionResult.data.tier,
+              expires_at: subscriptionResult.data.current_period_end,
+            }
+          : { tier: 'free', expires_at: null },
       },
     })
   },
