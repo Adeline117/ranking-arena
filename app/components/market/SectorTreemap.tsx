@@ -81,13 +81,22 @@ const CATEGORY_MAP: Record<string, string> = {
 // losses toward a *dark* red (low luminance). Protan/deutan viewers who can't
 // separate the two hues can still read direction by lightness. A continuous
 // per-tile ramp can't be a design token, so rgb() interpolation is intentional.
-function getChangeColor(changePct: number, isLight = false): string {
+// Returns the interpolated tile background as an [r,g,b] tuple so callers can
+// both paint it AND measure its luminance to pick legible text (see
+// getTileTextTheme). Keeping one source of truth avoids bg/text drift.
+function getChangeRgb(changePct: number, isLight = false): [number, number, number] {
   const maxPct = 10
   const clamped = Math.max(-maxPct, Math.min(maxPct, changePct))
   const intensity = Math.abs(clamped) / maxPct // 0 at 0%, 1 at ±maxPct
   const lerp = (a: number, b: number, t: number) => Math.round(a + (b - a) * t)
-  const mix = (mid: [number, number, number], end: [number, number, number]) =>
-    `rgb(${lerp(mid[0], end[0], intensity)}, ${lerp(mid[1], end[1], intensity)}, ${lerp(mid[2], end[2], intensity)})`
+  const mix = (
+    mid: [number, number, number],
+    end: [number, number, number]
+  ): [number, number, number] => [
+    lerp(mid[0], end[0], intensity),
+    lerp(mid[1], end[1], intensity),
+    lerp(mid[2], end[2], intensity),
+  ]
 
   if (isLight) {
     // Light theme: neutral light-slate midpoint
@@ -99,6 +108,48 @@ function getChangeColor(changePct: number, isLight = false): string {
   const mid: [number, number, number] = [51, 65, 85]
   // gain → bright green (high luminance) | loss → dark crimson (low luminance)
   return clamped >= 0 ? mix(mid, [34, 197, 94]) : mix(mid, [120, 22, 35])
+}
+
+function getChangeColor(changePct: number, isLight = false): string {
+  const [r, g, b] = getChangeRgb(changePct, isLight)
+  return `rgb(${r}, ${g}, ${b})`
+}
+
+// WCAG relative luminance of an sRGB tuple (0 = black, 1 = white).
+function relativeLuminance([r, g, b]: [number, number, number]): number {
+  const channel = (c: number) => {
+    const s = c / 255
+    return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+  }
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+}
+
+// Picks legible tile-label colors from the tile's own background luminance.
+// Low-|change| tiles in LIGHT theme lerp toward a pale slate midpoint
+// (rgb 210,216,224) — white text on those washes out to ~1.7:1. When the
+// background is light we switch to dark glyphs (and drop the white text-shadow
+// that was smearing them). Dark backgrounds keep white text with a dark shadow.
+function getTileTextTheme(
+  changePct: number,
+  isLight: boolean
+): { name: string; pct: string; cat: string; nameShadow: string; softShadow: string } {
+  const lightBg = isLight && relativeLuminance(getChangeRgb(changePct, isLight)) > 0.4
+  if (lightBg) {
+    return {
+      name: 'rgb(20, 25, 35)',
+      pct: 'rgba(20, 25, 35, 0.9)',
+      cat: 'rgba(20, 25, 35, 0.6)',
+      nameShadow: 'none',
+      softShadow: 'none',
+    }
+  }
+  return {
+    name: 'var(--color-on-accent)',
+    pct: 'rgba(255, 255, 255, 0.9)',
+    cat: 'rgba(255, 255, 255, 0.65)',
+    nameShadow: '0 1px 4px rgba(0,0,0,0.7), 0 0px 1px rgba(0,0,0,0.5)',
+    softShadow: '0 1px 3px rgba(0,0,0,0.6)',
+  }
 }
 
 interface TreemapDatum {
@@ -420,6 +471,7 @@ export default function SectorTreemap({
             const showPct = node.width > 44 && node.height > 44
             const showCat = node.width > 70 && node.height > 60
             const fontSize = Math.max(9, Math.min(14, Math.min(node.width / 6, node.height / 4)))
+            const textTheme = getTileTextTheme(node.changePct, isLight)
             return (
               <div
                 key={node.name}
@@ -484,10 +536,8 @@ export default function SectorTreemap({
                     style={{
                       fontSize,
                       fontWeight: 800,
-                      color: 'var(--color-on-accent)',
-                      textShadow: isLight
-                        ? '0 1px 2px rgba(255,255,255,0.6)'
-                        : '0 1px 4px rgba(0,0,0,0.7), 0 0px 1px rgba(0,0,0,0.5)',
+                      color: textTheme.name,
+                      textShadow: textTheme.nameShadow,
                       lineHeight: 1.1,
                       maxWidth: '90%',
                       overflow: 'hidden',
@@ -504,10 +554,8 @@ export default function SectorTreemap({
                       {
                         fontSize: Math.max(9, fontSize * 0.7),
                         fontWeight: 700,
-                        color: isLight ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.9)',
-                        textShadow: isLight
-                          ? '0 1px 3px rgba(0,0,0,0.4)'
-                          : '0 1px 3px rgba(0,0,0,0.6)',
+                        color: textTheme.pct,
+                        textShadow: textTheme.softShadow,
                         lineHeight: 1.1,
                         fontFamily: 'var(--font-mono, monospace)',
                         fontVariantNumeric: 'tabular-nums',
@@ -523,8 +571,8 @@ export default function SectorTreemap({
                     style={{
                       fontSize: 10,
                       fontWeight: 500,
-                      color: 'rgba(255,255,255,0.65)',
-                      textShadow: isLight ? 'none' : '0 1px 2px rgba(0,0,0,0.5)',
+                      color: textTheme.cat,
+                      textShadow: textTheme.softShadow,
                       marginTop: 2,
                       maxWidth: '90%',
                       overflow: 'hidden',
