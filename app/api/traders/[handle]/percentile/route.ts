@@ -17,6 +17,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { resolveTrader } from '@/lib/data/unified'
 import { hasFeatureAccess } from '@/lib/types/premium'
 import _logger from '@/lib/logger'
+import { escapeLikePattern } from '@/lib/sanitize'
 
 export const runtime = 'nodejs'
 
@@ -50,7 +51,7 @@ async function calculatePercentileSQL(
     .from('leaderboard_ranks')
     .select('id', { count: 'estimated', head: true })
     .eq('season_id', '90D')
-    .ilike('source', `%${categoryFilter}%`)
+    .ilike('source', `%${escapeLikePattern(categoryFilter)}%`)
     .not(column, 'is', null)
     .lt(column, myScore)
 
@@ -59,7 +60,7 @@ async function calculatePercentileSQL(
     .from('leaderboard_ranks')
     .select('id', { count: 'estimated', head: true })
     .eq('season_id', '90D')
-    .ilike('source', `%${categoryFilter}%`)
+    .ilike('source', `%${escapeLikePattern(categoryFilter)}%`)
     .not(column, 'is', null)
 
   if (!totalCount || totalCount === 0) return 50
@@ -138,7 +139,7 @@ export async function GET(
       .from('leaderboard_ranks')
       .select('id', { count: 'estimated', head: true })
       .eq('season_id', '90D')
-      .ilike('source', `%${categoryFilter}%`)
+      .ilike('source', `%${escapeLikePattern(categoryFilter)}%`)
       .not('arena_score', 'is', null)
 
     if (!totalInCategory || totalInCategory === 0) {
