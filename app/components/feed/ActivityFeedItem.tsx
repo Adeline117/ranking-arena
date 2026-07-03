@@ -279,7 +279,6 @@ export default function ActivityFeedItem({
             type="button"
             onClick={handleShare}
             title={t('copyShareLink')}
-            aria-label={t('copyShareLink')}
             style={{
               background: 'none',
               border: `1px solid ${alpha(tokens.colors.border.primary, 38)}`,
