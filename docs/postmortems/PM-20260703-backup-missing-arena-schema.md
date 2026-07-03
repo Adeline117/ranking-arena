@@ -13,8 +13,8 @@
 - 迁移后：`scripts/maintenance/backup-to-r2.mjs` 默认模式仍 dump `public.*` TRADER_TABLES。
 - 2026-07-03：查表大小发现主数据在 arena._（leaderboard_entries 2.8GB、
   trader_series 1.1GB、trader_stats 271MB、position_history 等），而备份的 public._
-  trader 表大多已空（数据仅 trader_daily_snapshots 181MB 等少数残留）。
-  → **日备的 381MB 只是 public._ 残留，arena._ 几 GB 主数据从未进备份**。
+  trader 表大多已空（数据仅 trader*daily_snapshots 181MB 等少数残留）。
+  → \*\*日备的 381MB 只是 public.* 残留，arena.\_ 几 GB 主数据从未进备份\*\*。
 
 ## 根因
 
@@ -36,10 +36,12 @@
 ## 防再犯
 
 - [x] schema 模式备份（跟随 schema 而非硬编码表名）
-- [x] GH Actions 完整备份 + 只读角色（冗余 Mac Mini + 降爆炸半径）
-- [ ] 备份完整性校验：新鲜度哨兵扩展为"最新备份大小 >阈值"（几 GB 级，
-      防止再次退化成只备残留表的小备份）——下一步
-- [ ] Mac crontab 切 schema 模式
+- [x] GH Actions 完整备份 + 只读角色（冗余 Mac Mini + 降爆炸半径）——实测 3.87GB 完整备份上 R2
+- [x] 备份完整性校验：新鲜度哨兵加"大小 <1GB 告警"（完整 3.9GB vs 残缺 381MB）
+- [x] Mac crontab 切 schema 模式（BACKUP_SCHEMAS=arena,public，与 GH 15:30 错峰 03:30）
+
+**结果**：两条完整备份（Mac 03:30 + GH Actions 15:30）错峰冗余，各 ~3.9GB 含 arena.\*
+主数据；哨兵同时守新鲜度 + 完整性。
 
 ## 教训
 
