@@ -43,11 +43,14 @@ export const GET = withAdminAuth(
     }
 
     // Group reports by content
-    const grouped: Record<string, {
-      content_type: string
-      content_id: string
-      reports: typeof reports
-    }> = {}
+    const grouped: Record<
+      string,
+      {
+        content_type: string
+        content_id: string
+        reports: typeof reports
+      }
+    > = {}
 
     for (const report of reports) {
       const key = `${report.content_type}:${report.content_id}`
@@ -64,7 +67,9 @@ export const GET = withAdminAuth(
     // Sort by report count descending, then by earliest report
     const sortedGroups = Object.values(grouped).sort((a, b) => {
       if (b.reports.length !== a.reports.length) return b.reports.length - a.reports.length
-      return new Date(a.reports[0].created_at).getTime() - new Date(b.reports[0].created_at).getTime()
+      return (
+        new Date(a.reports[0].created_at).getTime() - new Date(b.reports[0].created_at).getTime()
+      )
     })
 
     const total = sortedGroups.length
@@ -78,7 +83,10 @@ export const GET = withAdminAuth(
       .filter((g) => g.content_type === 'comment')
       .map((g) => g.content_id)
 
-    const postPreviews: Record<string, { title: string | null; content: string | null; user_id: string | null }> = {}
+    const postPreviews: Record<
+      string,
+      { title: string | null; content: string | null; user_id: string | null }
+    > = {}
     const commentPreviews: Record<string, { content: string | null; user_id: string | null }> = {}
 
     if (postIds.length > 0) {
@@ -139,16 +147,15 @@ export const GET = withAdminAuth(
     // Build response
     const items = paginatedGroups.map((g) => {
       const preview =
-        g.content_type === 'post'
-          ? postPreviews[g.content_id]
-          : commentPreviews[g.content_id]
+        g.content_type === 'post' ? postPreviews[g.content_id] : commentPreviews[g.content_id]
 
       const authorId = preview?.user_id || null
 
       return {
         content_type: g.content_type,
         content_id: g.content_id,
-        content_title: g.content_type === 'post' ? (preview as typeof postPreviews[string])?.title : null,
+        content_title:
+          g.content_type === 'post' ? (preview as (typeof postPreviews)[string])?.title : null,
         content_preview: preview?.content || null,
         author_id: authorId,
         author_handle: authorId ? userHandles[authorId] || null : null,
@@ -209,7 +216,7 @@ export async function POST(req: NextRequest) {
             .from('content_reports')
             .update({
               status: 'dismissed',
-              reviewer_id: admin.id,
+              resolved_by: admin.id,
               action_taken: 'approved_content',
             })
             .in('id', reportIds)
@@ -242,7 +249,7 @@ export async function POST(req: NextRequest) {
             .from('content_reports')
             .update({
               status: 'actioned',
-              reviewer_id: admin.id,
+              resolved_by: admin.id,
               action_taken: 'content_deleted',
             })
             .in('id', reportIds)
@@ -257,7 +264,12 @@ export async function POST(req: NextRequest) {
         })
       } else if (action === 'warn' && author_id) {
         // Auto-escalate warning for the author
-        await autoEscalate(supabase, author_id, `Reported ${content_type} (${content_id})`, admin.id)
+        await autoEscalate(
+          supabase,
+          author_id,
+          `Reported ${content_type} (${content_id})`,
+          admin.id
+        )
 
         // Mark reports as actioned
         if (reportIds.length > 0) {
@@ -265,7 +277,7 @@ export async function POST(req: NextRequest) {
             .from('content_reports')
             .update({
               status: 'actioned',
-              reviewer_id: admin.id,
+              resolved_by: admin.id,
               action_taken: 'user_warned',
             })
             .in('id', reportIds)
@@ -300,7 +312,7 @@ export async function POST(req: NextRequest) {
             .from('content_reports')
             .update({
               status: 'actioned',
-              reviewer_id: admin.id,
+              resolved_by: admin.id,
               action_taken: 'user_banned',
             })
             .in('id', reportIds)
