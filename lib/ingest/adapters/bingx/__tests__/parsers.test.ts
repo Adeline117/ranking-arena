@@ -42,8 +42,9 @@ describe('parseBingxLeaderboardPage', () => {
     // Rich rankStat extras → trader_stats.extras (registry/meta-strip surfaced)
     expect(first.headlineExtras && typeof first.headlineExtras).toBe('object')
     expect(Object.keys(first.headlineExtras ?? {}).length).toBeGreaterThan(0)
-    // apiIdentity routing fact on traderMeta (TF-independent)
-    expect(first.traderMeta).toMatchObject({ bingx_api_identity: '1579905006518878200' })
+    // apiIdentity routing fact on traderMeta (TF-independent) — EXACT value from
+    // traderAccountGradeVO.uidAndApi (…211), not the float-truncated number (…200).
+    expect(first.traderMeta).toMatchObject({ bingx_api_identity: '1579905006518878211' })
     // per-TF risk rating: NOT on traderMeta (TF-independent), but IS wired into
     // per-TF headlineExtras (spec §11.12 — was previously dropped, only in raw)
     expect(first.traderMeta?.risk_rating).toBeUndefined()
@@ -94,9 +95,10 @@ describe('parseBingxLeaderboardPage', () => {
           {
             trader: {
               uid: 1316650541126967300, // truncated (real ends …299)
-              uidAndApi: '1316650541126967299_1413302534032539651',
               nickName: 'Precise',
             },
+            // uidAndApi lives on traderAccountGradeVO (verified live 2026-07-02)
+            traderAccountGradeVO: { uidAndApi: '1316650541126967299_1413302534032539651' },
             rankStat: { apiIdentity: 1413302534032539600, strRecent30DaysRate: '+1%' }, // truncated
           },
         ],

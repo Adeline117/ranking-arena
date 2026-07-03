@@ -136,12 +136,14 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
     // CRITICAL: uid + apiIdentity are 19-digit snowflake IDs > 2^53, so the bare
     // JSON numbers `trader.uid` / `rankStat.apiIdentity` arrive already
     // float-truncated (…299 → …300, …651 → …00). Recover the EXACT values from
-    // the string field `trader.uidAndApi` = "{uid}_{apiIdentity}" (present on
-    // every row). Without this the stored identity is wrong → the detail page /
-    // record harvest 404s for ~every 19-digit trader.
+    // the string field `traderAccountGradeVO.uidAndApi` = "{uid}_{apiIdentity}"
+    // (verified live 2026-07-02 — it is on traderAccountGradeVO, NOT `trader`).
+    // Without this the stored identity is wrong → the detail page / record
+    // harvest 404s for ~every 19-digit trader. Some rows lack the VO → fallback.
+    const gradeVO = (item.traderAccountGradeVO ?? {}) as Dict
     const uidAndApi =
-      typeof trader.uidAndApi === 'string' && trader.uidAndApi.includes('_')
-        ? trader.uidAndApi.split('_')
+      typeof gradeVO.uidAndApi === 'string' && gradeVO.uidAndApi.includes('_')
+        ? gradeVO.uidAndApi.split('_')
         : null
     const uid = uidAndApi?.[0] ?? trader.uidStr ?? trader.uid
     if (uid === null || uid === undefined) continue
