@@ -29,11 +29,17 @@ git push origin vX.Y.Z
 版本可回滚到任意 tag。生产回滚锚点 = Vercel 部署历史（每个 READY 部署带
 `--meta gateSha`），promote 上一个 READY 即可（RUNBOOK「Deployment Rollback」）。
 
-## 分支保护 recipe（团队化时启用，当前 owner bypass 不影响单人流）
+## 分支保护 required checks（✅ 已启用 2026-07-02，owner bypass 保留不影响单人流）
 
-现状 `protect main` ruleset = deletion + non_fast_forward + pull_request，
-owner 角色 bypass 全部。团队化时补 **required status checks**，让 CI 门禁在
-GitHub 层强制（与 Vercel 门禁互补）：
+**现状（已应用）**：`protect main` ruleset = deletion + non_fast_forward +
+pull_request + **required_status_checks**（Pre-flight Checks / Lint & Type Check /
+Unit Tests / Build，strict=false）。owner 角色（RepositoryRole）仍 bypass 全部——
+单人直推 main 不受影响；一旦有 PR 或移除 bypass，CI 四门禁作业即成 merge 前置
+（与 Vercel deploy-gate 互补）。ruleset id=17004325。
+
+**团队化下一步**：把 pull_request 的 `required_approving_review_count` 提到 1、
+`require_code_owner_review` 设 true，并清空 `bypass_actors` 强制 PR review。
+下面是当时应用的 recipe（可据此调整）：
 
 ```bash
 # 把 CI 四个门禁作业设为 required（context 名必须精确匹配 job name）
