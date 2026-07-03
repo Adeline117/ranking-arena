@@ -537,6 +537,56 @@ async function main() {
     }
   }
 
+  // ---------- Step 13: 群组创建 → 解散生命周期（自包含，仅 A，B-4）----------
+  // 群创建走 /api/groups/apply（auto-approved），A 即 owner；A dissolve 清理。
+  // 只做 create+dissolve（核心群写生命周期）——不在群内发帖，避免真实群污染。
+  newBucket('13-group-create-dissolve')
+  {
+    const uniqueName = `[QA] test-${Date.now().toString(36)}`
+    const apply = await apiCall('/api/groups/apply', {
+      method: 'POST',
+      headers: apiHeaders,
+      body: JSON.stringify({
+        name: uniqueName,
+        description: '[automated-qa] group lifecycle test — auto-dissolved',
+      }),
+    })
+    const gid = apply.body?.group?.id || null
+    note(
+      gid
+        ? `OK 建群 ${apply.status} id=${gid}（auto-approved）`
+        : `WARN 建群 ${apply.status}: ${JSON.stringify(apply.body)?.slice(0, 140)}`
+    )
+    if (gid) {
+      const diss = await apiCall(`/api/groups/${gid}/dissolve`, {
+        method: 'POST',
+        headers: apiHeaders,
+      })
+      note(
+        diss.status < 300 && diss.body?.success
+          ? 'OK 解散群（已清理）'
+          : `FAIL 解散群 ${diss.status}: ${JSON.stringify(diss.body)?.slice(0, 120)}（群 ${gid} 可能残留!）`
+      )
+    }
+  }
+
+  // ---------- Step 14: Pro 付费墙锁定态（B-5）----------
+  // 前置约束：PRO_FREE_PROMO=true 时客户端 effectiveIsPremium 对**所有**账号短路为
+  // Pro（含 is_pro=false 的 QA-B），锁定分支在生产不可达。此步仅记录 promo 状态，
+  // 真正的锁定态测试必须在 PRO_FREE_PROMO=false 的 preview 部署上跑（见计划 B-5）。
+  newBucket('14-pro-locked-state')
+  {
+    // 用 QA-B（is_pro=false）打开一个 Pro 门控面，看是否出现锁定 UI
+    await goto('/pricing')
+    const proBadge = await page
+      .evaluate(() => /Pro|升级|Upgrade/i.test(document.body.innerText))
+      .catch(() => false)
+    note(
+      `Pro 门控可达性检查（promo 期所有账号客户端均 Pro）：pricing 渲染=${proBadge ? 'OK' : 'WARN'}。` +
+        `锁定态需 PRO_FREE_PROMO=false preview 部署验证 — 本环境 promo 开启，锁定分支不可达（设计如此，B-5 deferred）。`
+    )
+  }
+
   await browser.close()
 
   fs.writeFileSync('/tmp/arena-auth-sweep.json', JSON.stringify(steps, null, 2))
