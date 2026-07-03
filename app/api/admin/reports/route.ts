@@ -16,7 +16,7 @@ export const GET = withAdminAuth(
     const { data, error } = await supabase
       .from('content_reports')
       .select(
-        'id, content_type, content_id, reporter_id, reason, details, status, created_at, resolved_by, resolved_at, action_taken'
+        'id, content_type, content_id, reporter_id, reason, details:description, status, created_at, resolved_by, resolved_at, action_taken'
       )
       .eq('status', status)
       .order('created_at', { ascending: false })
