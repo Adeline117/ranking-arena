@@ -24,10 +24,18 @@ HEADER="// AUTO-GENERATED from production schema via scripts/gen-types.sh — DO
 // Regenerate: npm run gen:types   |   Drift gate: CI 'gen-types-check' job.
 "
 
-if ! command -v supabase >/dev/null 2>&1; then
-  echo "❌ gen-types: supabase CLI 未安装。装:" >&2
-  echo "   brew install supabase/tap/supabase   或   npm i -g supabase" >&2
-  exit 1
+# CLI 解析:优先全局 supabase,否则回退 npx（CI 无需预装全局）
+if command -v supabase >/dev/null 2>&1; then
+  SUPABASE_BIN="supabase"
+else
+  SUPABASE_BIN="npx --yes supabase"
+fi
+
+# CHECK 模式（CI 门禁）在缺认证时优雅跳过——这样把本 job 接进 CI 不会在
+# SUPABASE_ACCESS_TOKEN secret 配好前就把 CI 弄红。设 token 即激活硬门。
+if [ "${CHECK:-0}" = "1" ] && [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
+  echo "⏭️  gen-types CHECK 跳过 —— 未设 SUPABASE_ACCESS_TOKEN（设 secret 即启用类型漂移门）"
+  exit 0
 fi
 
 TMP="$(mktemp)"
@@ -35,7 +43,7 @@ trap 'rm -f "$TMP"' EXIT
 
 # 生产 public schema → TypeScript
 echo "$HEADER" > "$TMP"
-supabase gen types typescript --project-id "$PROJECT_REF" --schema public >> "$TMP"
+$SUPABASE_BIN gen types typescript --project-id "$PROJECT_REF" --schema public >> "$TMP"
 
 if [ "${CHECK:-0}" = "1" ]; then
   # CI 模式：与已提交版本比对,有 diff 即非零退出
