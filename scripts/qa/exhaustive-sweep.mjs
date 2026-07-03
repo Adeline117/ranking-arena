@@ -317,13 +317,27 @@ function summarizeClickError(e) {
 // "clicked but nothing happens" bugs survive earlier sweeps.
 async function snapshotEffect(page) {
   try {
-    return await page.evaluate(() => ({
-      url: location.href,
-      textLen: document.body ? document.body.innerText.length : 0,
-      overlays: document.querySelectorAll('[role="dialog"],[aria-modal="true"],[data-state="open"]')
-        .length,
-      nodes: document.querySelectorAll('*').length,
-    }))
+    return await page.evaluate(() => {
+      const text = document.body ? document.body.innerText : ''
+      // Order-sensitive content hash: a client-side SORT reorders rows without
+      // changing total text LENGTH, so a length-only check false-flags working
+      // sort headers as dead. A djb2 hash of the ordered text changes on reorder,
+      // so a working sort registers as an effect. (Live-data pages mutate text on
+      // a ~30s timer, but the ~2s click window rarely coincides — occasional
+      // background mutation → "has effect" → misses a true dead button, which is
+      // the safe direction for a non-gating signal.)
+      let h = 5381
+      for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0
+      return {
+        url: location.href,
+        textLen: text.length,
+        textHash: h,
+        overlays: document.querySelectorAll(
+          '[role="dialog"],[aria-modal="true"],[data-state="open"]'
+        ).length,
+        nodes: document.querySelectorAll('*').length,
+      }
+    })
   } catch {
     // Snapshot taken mid-navigation throws; null → treat as "changed" so a
     // navigating click is never mislabelled dead.
@@ -335,6 +349,7 @@ function hasEffect(before, after, reqDelta) {
   if (!before || !after) return true // couldn't measure → never flag as dead
   if (reqDelta > 0) return true // click fired a request → had an effect
   if (before.url !== after.url) return true
+  if (before.textHash !== after.textHash) return true // content changed/reordered (catches client-side sort)
   if (Math.abs(before.textLen - after.textLen) > 2) return true // >2 tolerates ticking timestamps/counters
   if (before.overlays !== after.overlays) return true
   if (Math.abs(before.nodes - after.nodes) > 2) return true
