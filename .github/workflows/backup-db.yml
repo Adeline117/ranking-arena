@@ -1,0 +1,61 @@
+# DB 备份冗余 → R2（企业级差距 #2 单点消除 · Phase 2）
+#
+# 消除 Mac Mini 备份单点：GH Actions 每日 pg_dump→R2，与 Mac Mini crontab(03:30)
+# 错峰。关键改进(2026-07 发现)：**用 schema 模式抓 arena+public 主数据层**——
+# Mac 的默认模式只 dump public.* 遗留表(数据已迁 arena.*，漏了 2.8GB leaderboard_entries
+# + trader_series/trader_stats 等主数据)。
+#
+# 安全：连接用**只读角色 arena_backup_ro**(pg_read_all_data + BYPASSRLS)而非主
+# service DATABASE_URL——GH secret 泄露最坏只能读(可 exfiltrate)、不能写(不可
+# 破坏/勒索)。已实测 ro 角色读 arena.trader_stats=415544 行与主 URL 一致(完整)。
+
+name: DB Backup to R2
+
+on:
+  schedule:
+    - cron: '30 15 * * *' # 每日 15:30 UTC（错峰 Mac Mini 本地 03:30）
+  workflow_dispatch: {}
+
+concurrency:
+  group: backup-db
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+
+      - name: Install PostgreSQL 17 client（匹配 Supabase 服务器）
+        run: |
+          sudo sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/pgdg.gpg
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+          /usr/lib/postgresql/17/bin/pg_dump --version
+
+      - name: Backup arena+public schemas → R2（只读角色）
+        env:
+          DATABASE_URL: ${{ secrets.BACKUP_DATABASE_URL }}
+          BACKUP_SCHEMAS: arena,public
+          PG_DUMP_PATH: /usr/lib/postgresql/17/bin/pg_dump
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: node scripts/maintenance/backup-to-r2.mjs
+
+      - name: Alert on failure
+        if: failure()
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
+              -d "text=🚨 [GH Actions] DB 备份失败（arena+public → R2）—— 人工查 workflow 日志" || true
+          fi

@@ -92,22 +92,41 @@ const s3 = new S3Client({
 const now = new Date()
 const dateStr = now.toISOString().slice(0, 10).replace(/-/g, '')
 const fullMode = process.argv.includes('--full')
+// Schema 模式：BACKUP_SCHEMAS=arena,public → dump 这些 schema 全部（含主数据层
+// arena.*）。默认的 public.* TRADER_TABLES 模式**漏掉了 arena.* 主数据层**
+// （数据已迁 arena schema，见 2026-07 发现），GH Actions 备份用此模式抓完整 app 数据，
+// 跳过 storage.objects(2.2GB 文件元数据，实体在 Supabase Storage)/auth 系统 schema。
+const schemasEnv = (process.env.BACKUP_SCHEMAS || '').trim()
+const schemaMode = schemasEnv.length > 0
+const backupSchemas = schemaMode
+  ? schemasEnv
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
+  : []
 
 async function run() {
-  console.log(
-    `[backup] Starting ${fullMode ? 'FULL' : 'trader tables'} backup — ${now.toISOString()}`
-  )
+  const modeLabel = schemaMode
+    ? `schemas [${backupSchemas.join(',')}]`
+    : fullMode
+      ? 'FULL'
+      : 'trader tables'
+  console.log(`[backup] Starting ${modeLabel} backup — ${now.toISOString()}`)
 
-  const tableArgs = fullMode
-    ? '' // dump everything
-    : TRADER_TABLES.map((t) => `-t public.${t}`).join(' ')
+  const tableArgs = schemaMode
+    ? backupSchemas.map((s) => `-n ${s}`).join(' ')
+    : fullMode
+      ? '' // dump everything
+      : TRADER_TABLES.map((t) => `-t public.${t}`).join(' ')
 
-  const filename = `arena-backup-${dateStr}${fullMode ? '-full' : ''}.sql.gz`
+  const modeSuffix = schemaMode ? '-schemas' : fullMode ? '-full' : ''
+  const filename = `arena-backup-${dateStr}${modeSuffix}.sql.gz`
   const localPath = `/tmp/${filename}`
 
   try {
-    // pg_dump → gzip (使用 PostgreSQL 17 版本以匹配 Supabase 服务器)
-    const pgDumpPath = '/opt/homebrew/opt/postgresql@17/bin/pg_dump'
+    // pg_dump → gzip (PostgreSQL 17 匹配 Supabase 服务器)
+    // 路径可 env 覆盖：Mac 本机默认 Homebrew pg17；GH Actions 装 client 后设 PG_DUMP_PATH=pg_dump
+    const pgDumpPath = process.env.PG_DUMP_PATH || '/opt/homebrew/opt/postgresql@17/bin/pg_dump'
     console.log(
       `[backup] Dumping${fullMode ? ' full database' : ` ${TRADER_TABLES.length} tables`}...`
     )
