@@ -29,30 +29,33 @@ export default function LanguageToggle() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
 
-  const switchLanguage = useCallback((newLang: Language) => {
-    if (isChanging || newLang === language) {
+  const switchLanguage = useCallback(
+    (newLang: Language) => {
+      if (isChanging || newLang === language) {
+        setIsOpen(false)
+        return
+      }
+      setIsChanging(true)
       setIsOpen(false)
-      return
-    }
-    setIsChanging(true)
-    setIsOpen(false)
 
-    const main = document.getElementById('main-content')
-    const target = main || document.body
-    target.style.transition = 'opacity 0.12s ease-out'
-    target.style.opacity = '0.7'
+      const main = document.getElementById('main-content')
+      const target = main || document.body
+      target.style.transition = 'opacity 0.12s ease-out'
+      target.style.opacity = '0.7'
 
-    requestAnimationFrame(() => {
-      setLanguage(newLang)
       requestAnimationFrame(() => {
-        target.style.opacity = '1'
-        setTimeout(() => {
-          target.style.transition = ''
-          setIsChanging(false)
-        }, 180)
+        setLanguage(newLang)
+        requestAnimationFrame(() => {
+          target.style.opacity = '1'
+          setTimeout(() => {
+            target.style.transition = ''
+            setIsChanging(false)
+          }, 180)
+        })
       })
-    })
-  }, [isChanging, language, setLanguage])
+    },
+    [isChanging, language, setLanguage]
+  )
 
   return (
     <div ref={dropdownRef} style={{ position: 'relative' }}>
@@ -83,22 +86,29 @@ export default function LanguageToggle() {
         {LANG_LABELS[language] || 'EN'}
       </button>
       {isOpen && (
-        <div className="dropdown-enter" style={{
-          position: 'absolute',
-          top: '100%',
-          right: 0,
-          marginTop: tokens.spacing[1],
-          background: tokens.colors.bg.secondary,
-          border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: tokens.radius.md,
-          overflow: 'hidden',
-          zIndex: tokens.zIndex.dropdown,
-          minWidth: 120,
-          boxShadow: '0 4px 12px var(--color-overlay-medium, rgba(0,0,0,0.3))',
-        }}>
-          {SUPPORTED_LANGUAGES.map(lang => (
+        <div
+          className="dropdown-enter"
+          role="listbox"
+          aria-label={t('switchLanguage')}
+          style={{
+            position: 'absolute',
+            top: '100%',
+            right: 0,
+            marginTop: tokens.spacing[1],
+            background: tokens.colors.bg.secondary,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            borderRadius: tokens.radius.md,
+            overflow: 'hidden',
+            zIndex: tokens.zIndex.dropdown,
+            minWidth: 120,
+            boxShadow: '0 4px 12px var(--color-overlay-medium, rgba(0,0,0,0.3))',
+          }}
+        >
+          {SUPPORTED_LANGUAGES.map((lang) => (
             <button
               key={lang.code}
+              role="option"
+              aria-selected={lang.code === language}
               onClick={() => switchLanguage(lang.code)}
               style={{
                 display: 'flex',
@@ -106,16 +116,24 @@ export default function LanguageToggle() {
                 gap: tokens.spacing[2],
                 width: '100%',
                 padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                background: lang.code === language ? 'var(--color-accent-primary-15, rgba(124,58,237,0.15))' : 'transparent',
+                background:
+                  lang.code === language
+                    ? 'var(--color-accent-primary-15, rgba(124,58,237,0.15))'
+                    : 'transparent',
                 border: 'none',
-                color: lang.code === language ? 'var(--color-accent-primary, #a78bfa)' : tokens.colors.text.secondary,
+                color:
+                  lang.code === language
+                    ? 'var(--color-accent-primary, #a78bfa)'
+                    : tokens.colors.text.secondary,
                 fontSize: tokens.typography.fontSize.sm,
                 cursor: 'pointer',
                 textAlign: 'left',
                 transition: 'background 0.15s',
               }}
               onMouseEnter={(e) => {
-                if (lang.code !== language) e.currentTarget.style.background = 'var(--color-bg-tertiary, rgba(255,255,255,0.05))'
+                if (lang.code !== language)
+                  e.currentTarget.style.background =
+                    'var(--color-bg-tertiary, rgba(255,255,255,0.05))'
               }}
               onMouseLeave={(e) => {
                 if (lang.code !== language) e.currentTarget.style.background = 'transparent'
