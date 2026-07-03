@@ -21,33 +21,25 @@ export const GET = withCron('expire-mutes', async (_request: NextRequest) => {
   let mutesCleared = 0
   let bansCleared = 0
 
-  // 1. Clear expired group mutes
-  const { data: expiredMutes, error: muteQueryError } = await supabase
+  // 1. Clear expired group mutes. group_members 是复合主键(group_id,user_id)无 id 列——
+  // 旧代码 select('id') 400→整块跳过→静音永不过期。直接按 muted_until 过滤 UPDATE，
+  // .select('group_id') 用于计数。
+  const { data: clearedMutes, error: muteUpdateError } = await supabase
     .from('group_members')
-    .select('id, group_id, user_id')
+    .update({
+      muted_until: null,
+      mute_reason: null,
+      muted_by: null,
+    })
     .not('muted_until', 'is', null)
     .lt('muted_until', now)
+    .select('group_id')
 
-  if (muteQueryError) {
-    logger.error('[expire-mutes] Error querying expired mutes:', muteQueryError)
-  } else if (expiredMutes && expiredMutes.length > 0) {
-    const ids = expiredMutes.map((m) => m.id)
-
-    const { error: muteUpdateError } = await supabase
-      .from('group_members')
-      .update({
-        muted_until: null,
-        mute_reason: null,
-        muted_by: null,
-      })
-      .in('id', ids)
-
-    if (muteUpdateError) {
-      logger.error('[expire-mutes] Error clearing mutes:', muteUpdateError)
-    } else {
-      mutesCleared = ids.length
-      logger.info(`[expire-mutes] Cleared ${mutesCleared} expired group mutes`)
-    }
+  if (muteUpdateError) {
+    logger.error('[expire-mutes] Error clearing mutes:', muteUpdateError)
+  } else if (clearedMutes && clearedMutes.length > 0) {
+    mutesCleared = clearedMutes.length
+    logger.info(`[expire-mutes] Cleared ${mutesCleared} expired group mutes`)
   }
 
   // 2. Clear expired temp bans from user_strikes + unban from user_profiles
@@ -64,9 +56,7 @@ export const GET = withCron('expire-mutes', async (_request: NextRequest) => {
     bansCleared = expiredBans.length
 
     // Get unique user IDs with expired temp_bans to unban them
-    const userIdsToUnban = [
-      ...new Set(expiredBans.map((b) => b.user_id)),
-    ]
+    const userIdsToUnban = [...new Set(expiredBans.map((b) => b.user_id))]
 
     // For each user, check if they have any OTHER active bans before unbanning
     for (const userId of userIdsToUnban) {
@@ -77,9 +67,11 @@ export const GET = withCron('expire-mutes', async (_request: NextRequest) => {
         .in('strike_type', ['temp_ban', 'perm_ban'])
         .or(`expires_at.is.null,expires_at.gt.${now}`)
 
-      const hasActiveBan = activeStrikes && activeStrikes.some(
-        (s) => s.strike_type === 'perm_ban' || (s.expires_at && s.expires_at > now)
-      )
+      const hasActiveBan =
+        activeStrikes &&
+        activeStrikes.some(
+          (s) => s.strike_type === 'perm_ban' || (s.expires_at && s.expires_at > now)
+        )
 
       if (!hasActiveBan) {
         // No other active bans — unban the user
