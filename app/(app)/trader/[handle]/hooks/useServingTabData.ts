@@ -139,6 +139,11 @@ export function useServingTabData(
         tf7: m7?.stats ?? null,
         tf30: m30?.stats ?? null,
         tf90: m90?.stats ?? null,
+        // sortino/calmar live in extras (not typed columns) — the Overview
+        // MetricBadgesGrid dashed them without this (audit 2026-07-03).
+        extras7: m7?.extras ?? null,
+        extras30: m30?.extras ?? null,
+        extras90: m90?.extras ?? null,
       }),
       traderEquityCurve: servingSeriesToEquityCurve({
         tf7: m7?.series ?? null,

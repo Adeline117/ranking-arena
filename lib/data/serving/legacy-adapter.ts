@@ -186,6 +186,13 @@ export function servingStatsToPerformance(byTf: {
   tf7?: Record<string, number | string | null> | null
   tf30?: Record<string, number | string | null> | null
   tf90?: Record<string, number | string | null> | null
+  // Sortino/Calmar/Volatility live in trader_stats.EXTRAS (not typed columns)
+  // for every CEX that provides them (bybit/blofin/…). The Overview
+  // MetricBadgesGrid reads sortino_ratio_{7d,30d,90d}/calmar; passing only stats
+  // dashed them (audit 2026-07-03: read s90.sortino from stats, always undefined).
+  extras7?: Record<string, unknown> | null
+  extras30?: Record<string, unknown> | null
+  extras90?: Record<string, unknown> | null
 }): ExtendedPerformance {
   const perf: ExtendedPerformance = {}
   const s7 = byTf.tf7
@@ -198,12 +205,17 @@ export function servingStatsToPerformance(byTf: {
     const n = Number(v)
     return Number.isFinite(n) ? n : undefined
   }
+  // Risk ratios from extras (per-TF). sortino/calmar are never typed columns.
+  const ex = (o: Record<string, unknown> | null | undefined, k: string): number | undefined =>
+    set(o?.[k])
   if (s7) {
     perf.roi_7d = num(s7.roi)
     perf.pnl_7d = num(s7.pnl)
     perf.win_rate_7d = set(s7.win_rate)
     perf.max_drawdown_7d = set(s7.mdd)
     perf.sharpe_ratio_7d = set(s7.sharpe)
+    perf.sortino_ratio_7d = ex(byTf.extras7, 'sortino')
+    perf.calmar_ratio_7d = ex(byTf.extras7, 'calmar')
     perf.winning_positions_7d = set(s7.win_positions)
     perf.total_positions_7d = set(s7.total_positions)
   }
@@ -213,6 +225,8 @@ export function servingStatsToPerformance(byTf: {
     perf.win_rate_30d = set(s30.win_rate)
     perf.max_drawdown_30d = set(s30.mdd)
     perf.sharpe_ratio_30d = set(s30.sharpe)
+    perf.sortino_ratio_30d = ex(byTf.extras30, 'sortino')
+    perf.calmar_ratio_30d = ex(byTf.extras30, 'calmar')
     perf.winning_positions_30d = set(s30.win_positions)
     perf.total_positions_30d = set(s30.total_positions)
   }
@@ -222,8 +236,12 @@ export function servingStatsToPerformance(byTf: {
     perf.win_rate = set(s90.win_rate)
     perf.max_drawdown = set(s90.mdd)
     perf.sharpe_ratio = set(s90.sharpe)
-    perf.sortino_ratio = set(s90.sortino)
-    perf.calmar_ratio = set(s90.calmar)
+    // 90d-primary, fall back to shorter TFs (risk ratios are often only computed
+    // on a subset of timeframes) — mirrors the registry MetricGrid cross-TF fill.
+    perf.sortino_ratio =
+      ex(byTf.extras90, 'sortino') ?? ex(byTf.extras30, 'sortino') ?? ex(byTf.extras7, 'sortino')
+    perf.calmar_ratio =
+      ex(byTf.extras90, 'calmar') ?? ex(byTf.extras30, 'calmar') ?? ex(byTf.extras7, 'calmar')
     perf.winning_positions = set(s90.win_positions)
     perf.total_positions = set(s90.total_positions)
   }
