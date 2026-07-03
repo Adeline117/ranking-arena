@@ -55,8 +55,12 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
   }
 
   if (!snapshot) {
+    // Invalid/expired share tokens stream a soft-404 (headers commit at 200
+    // before notFound() runs, because this segment has loading.tsx +
+    // revalidate). Emit noindex so crawlers don't index dead share links.
     return {
       title: 'Snapshot Not Found',
+      robots: { index: false, follow: false },
     }
   }
 
