@@ -12,8 +12,7 @@ const SQL_INJECTION_PATTERN =
 const XSS_PATTERN =
   /(<\s*script|javascript\s*:|on\w+\s*=|<\s*iframe|<\s*img\s+[^>]*onerror|<\s*svg|<\s*object|<\s*embed|data\s*:\s*text\/html|vbscript\s*:)/i
 
-const COMMAND_INJECTION_PATTERN =
-  /(\||&&|`|;|\$\(|>\s*\/|<\s*\/|\\x[0-9a-f]{2}|%0[ad])/i
+const COMMAND_INJECTION_PATTERN = /(\||&&|`|;|\$\(|>\s*\/|<\s*\/|\\x[0-9a-f]{2}|%0[ad])/i
 
 /**
  * Returns true if a search query looks malicious / is clearly not a legitimate
@@ -26,8 +25,13 @@ export function isMaliciousSearchQuery(q: string): boolean {
   if (SQL_INJECTION_PATTERN.test(q)) return true
   if (XSS_PATTERN.test(q)) return true
   if (COMMAND_INJECTION_PATTERN.test(q)) return true
-  // Excessive special characters (legitimate search terms are mostly alphanumeric)
-  const specialCharRatio = q.replace(/[a-zA-Z0-9\s@._\-#$/]/g, '').length / q.length
+  // Excessive special characters (legitimate search terms are mostly letters/digits).
+  // Use Unicode property escapes (\p{L}\p{N}) not [a-zA-Z0-9] — the ASCII-only class
+  // counted every CJK/Cyrillic/Arabic char as "special", so any non-ASCII search
+  // (e.g. Chinese trader names "聪明的交易员") tripped the >0.4 ratio and got dropped
+  // from Popular Searches + search_analytics → CJK search behavior was invisible.
+  // (bug fixed 2026-07-03)
+  const specialCharRatio = q.replace(/[\p{L}\p{N}\s@._\-#$/]/gu, '').length / q.length
   if (q.length > 3 && specialCharRatio > 0.4) return true
   return false
 }
