@@ -1,5 +1,7 @@
 import type { Metadata } from 'next'
+import { notFound } from 'next/navigation'
 import { BASE_URL } from '@/lib/constants/urls'
+import { features } from '@/lib/features'
 
 export const metadata: Metadata = {
   // Root layout template appends ' | Arena'; OG/Twitter titles below bypass it
@@ -30,5 +32,8 @@ export const metadata: Metadata = {
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
+  // 比赛功能预上线封存：无 NEXT_PUBLIC_FEATURE_COMPETITIONS=true 时全部页面 404
+  // （更新 cron 未挂→榜是死的、无导航入口）。覆盖 list/create/[id] 所有子页。
+  if (!features.competitions) notFound()
   return children
 }
