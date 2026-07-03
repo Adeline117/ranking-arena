@@ -175,13 +175,21 @@ export async function reconcileSchedulers(): Promise<void> {
         reason = `iteration stuck in ${state}`
       }
       const tmplData = scheduler.template?.data ?? {}
+      // take-6 (2026-07-03): preserve the template OPTS on rebuild. The old
+      // rebuild passed only {name, data}, silently dropping opts.priority —
+      // every revived scheduler's future iterations ran at default priority.
+      const tmplOpts = (scheduler.template?.opts ?? {}) as { priority?: number }
       await q.removeJobScheduler(key)
-      await q.upsertJobScheduler(key, { every }, { name: scheduler.name, data: tmplData })
+      await q.upsertJobScheduler(
+        key,
+        { every },
+        { name: scheduler.name, data: tmplData, opts: tmplOpts }
+      )
       // CRITICAL (2026-06-13 take-4): upsertJobScheduler's first iteration only
       // fires after a full `every` interval — for a 5h-cadence Tier-A that means
       // a revived source waits 5h to crawl (bitget×5 sat idle 1.5h post-revival
-      // producing zero RAW). Enqueue an immediate priority-1 one-off so the
-      // source crawls NOW; the scheduler then resumes its normal cadence.
+      // producing zero RAW). Enqueue an immediate one-off so the source crawls
+      // NOW; the scheduler then resumes its normal cadence.
       //
       // take-5 (2026-06-13): jobId MUST NOT contain ':' — BullMQ throws
       // "Custom Id cannot contain :" and, because this add() is awaited inside
@@ -192,10 +200,23 @@ export async function reconcileSchedulers(): Promise<void> {
       // Defense in depth: a kick failure must never abort the reconcile loop
       // (that was the take-4 blast radius). The scheduler is already rebuilt
       // above; the kick is a best-effort latency optimization on top.
+      //
+      // take-6 (2026-07-03): the kick was the wedge engine. Two flaws compounded
+      // into a 4.6k-job prioritized clog (oldest 06-16) that starved tier-A/B/D
+      // for hours-to-days:
+      //   1. Hardcoded priority:1 — a revived tierbs (priority 9 by design,
+      //      180s each) kick jumped AHEAD of tier-A boards. 400+ prio-1
+      //      tierb:series kicks monopolized the 5 worker slots.
+      //   2. Timestamped jobId — every reconcile minted a NEW kick even when
+      //      the previous kick was still sitting unprocessed in the queue.
+      //      Clogged queue → schedulers look stuck → more kicks → more clog.
+      // Fix: inherit the template priority, and use a STABLE jobId so a pending
+      // kick dedups (BullMQ ignores add() with an existing jobId; the id frees
+      // on completion via removeOnComplete, so the next genuine revive re-kicks).
       try {
         await q.add(scheduler.name, tmplData, {
-          priority: 1,
-          jobId: `revive-kick-${key.replace(/:/g, '-')}-${now}`,
+          priority: tmplOpts.priority ?? 1,
+          jobId: `revive-kick-${key.replace(/:/g, '-')}`,
           removeOnComplete: true,
           removeOnFail: { age: 3600 },
         })

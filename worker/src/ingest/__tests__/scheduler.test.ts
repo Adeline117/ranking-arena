@@ -137,6 +137,43 @@ describe('reconcileSchedulers cleanup/revival', () => {
     expect(kick?.[2]?.jobId).not.toContain(':')
   })
 
+  it('take-6: revive kick inherits template priority + stable jobId; rebuild preserves opts', async () => {
+    // A tierbs (series backfill) scheduler is priority 9 BY DESIGN. The old kick
+    // hardcoded priority:1 + a timestamped jobId — revive-kicks of 180s series
+    // jobs jumped ahead of tier-A and re-minted on every reconcile, compounding
+    // into a 4.6k-job prioritized clog (2026-07-03 incident, oldest job 06-16).
+    const staleNext = Date.now() - 3 * HOUR
+    // srcx must OPT INTO the series band or tierbs:srcx isn't `wanted` and gets
+    // removed as stale instead of revived.
+    const base = (await (getActiveSources as jest.Mock)())[0]
+    ;(getActiveSources as jest.Mock).mockResolvedValue([
+      { ...base, meta: { series_backfill_topn: 100000 } },
+    ])
+    mockQueue.getJobSchedulers.mockResolvedValue([
+      {
+        key: 'tierbs:srcx',
+        name: 'tierb:series',
+        next: staleNext,
+        every: HOUR,
+        template: { data: { sourceSlug: 'srcx' }, opts: { priority: 9 } },
+      },
+    ])
+    mockQueue.getJob.mockResolvedValue({
+      id: `repeat:tierbs:srcx:${staleNext}`,
+      getState: async () => 'waiting',
+    })
+    await reconcileSchedulers()
+    const kick = mockQueue.add.mock.calls.find((c) =>
+      c[2]?.jobId?.startsWith('revive-kick-tierbs-srcx')
+    )
+    expect(kick).toBeDefined()
+    expect(kick?.[2]?.priority).toBe(9) // inherited, NOT hardcoded 1
+    expect(kick?.[2]?.jobId).toBe('revive-kick-tierbs-srcx') // stable — no timestamp suffix
+    // Rebuild must carry template opts through (old code dropped priority).
+    const rebuild = mockQueue.upsertJobScheduler.mock.calls.find((c) => c[0] === 'tierbs:srcx')
+    expect(rebuild?.[2]?.opts).toEqual({ priority: 9 })
+  })
+
   it('never interrupts an active long crawl even if the scheduler is >2x overdue', async () => {
     const staleNext = Date.now() - 3 * HOUR
     mockQueue.getJobSchedulers.mockResolvedValue([scheduler('tiera:srcx', staleNext)])
