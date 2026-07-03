@@ -101,6 +101,7 @@ export default function ClaimPage() {
   const handleTraderSelect = (result: SearchResult) => {
     if (!user) {
       showToast(t('pleaseLoginFirst'), 'warning')
+      useLoginModal.getState().openLoginModal()
       return
     }
     setSelectedTrader(result)
