@@ -6,6 +6,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { getCsrfHeaders } from '@/lib/api/client'
 import Link from 'next/link'
 
@@ -234,7 +235,12 @@ export default function CreateCompetitionPage() {
               border: `1px solid ${tokens.colors.border.primary}`,
             }}
           >
-            <Text style={{ color: tokens.colors.text.secondary }}>{t('compLoginRequired')}</Text>
+            <Text style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[4] }}>
+              {t('compLoginRequired')}
+            </Text>
+            <Button onClick={() => useLoginModal.getState().openLoginModal()}>
+              {t('compLoginToCreate')}
+            </Button>
           </Box>
         ) : (
           <form onSubmit={handleSubmit} noValidate>

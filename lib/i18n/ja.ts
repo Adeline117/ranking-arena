@@ -4840,6 +4840,7 @@ const ja = {
   compColCurrent: '現在値',
   compColDelta: '変動',
   compLoginRequired: 'ログインしてコンペティションを作成してください',
+  compLoginToCreate: 'ログインして作成',
   compFieldTitle: 'タイトル',
   compFieldTitlePlaceholder: '例: 週間ROIチャレンジ',
   compFieldDescription: '説明',

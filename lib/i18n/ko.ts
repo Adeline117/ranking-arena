@@ -5085,6 +5085,7 @@ const ko = {
   compColCurrent: '현재값',
   compColDelta: '변동',
   compLoginRequired: '대회를 만들려면 로그인하세요',
+  compLoginToCreate: '로그인하여 만들기',
   compFieldTitle: '제목',
   compFieldTitlePlaceholder: '예: 주간 ROI 챌린지',
   compFieldDescription: '설명',
