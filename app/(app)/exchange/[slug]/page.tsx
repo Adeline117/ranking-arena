@@ -6,6 +6,7 @@ import { TOP_EXCHANGE_SLUGS } from '@/lib/constants/exchange-slugs'
 import { BASE_URL } from '@/lib/constants/urls'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import PageHeader from '@/app/components/ui/PageHeader'
+import { formatDisplayName } from '@/app/components/ranking/utils'
 import {
   generateExchangeCollectionPageSchema,
   generateBreadcrumbSchema,
@@ -46,7 +47,12 @@ interface ExchangeData {
   sourceType: string
   traderCount: number
   topTraders: Array<{
-    handle: string
+    // Human-readable label (truncated wallet / real handle) — never a fabricated "Trader N".
+    displayName: string
+    // Value to build the /trader/<id> link from; empty string when no valid target exists.
+    linkTarget: string
+    // Stable unique identity (composite key) used for React keys.
+    sourceTraderId: string
     arena_score: number | null
     roi: number | null
     pnl: number | null
@@ -63,7 +69,7 @@ async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null
   const [topResult, countResult] = await Promise.all([
     supabase
       .from('leaderboard_ranks')
-      .select('handle, arena_score, roi, pnl, rank')
+      .select('handle, source_trader_id, arena_score, roi, pnl, rank')
       .eq('source', sourceKey)
       .eq('season_id', '90D')
       .not('arena_score', 'is', null)
@@ -81,13 +87,21 @@ async function fetchExchangeData(sourceKey: string): Promise<ExchangeData | null
       .or('is_outlier.is.null,is_outlier.eq.false'),
   ])
 
-  const topTraders = (topResult.data || []).map((t, i) => ({
-    handle: (t.handle as string) || `Trader ${i + 1}`,
-    arena_score: t.arena_score as number | null,
-    roi: t.roi as number | null,
-    pnl: t.pnl as number | null,
-    rank: i + 1,
-  }))
+  const topTraders = (topResult.data || []).map((t, i) => {
+    const sourceTraderId = (t.source_trader_id as string) || ''
+    // Prefer the real handle; fall back to the wallet address (never a fabricated
+    // "Trader N" that would link to a non-existent /trader/Trader%20N page).
+    const linkTarget = (t.handle as string) || sourceTraderId
+    return {
+      displayName: linkTarget ? formatDisplayName(linkTarget, sourceKey) : `#${i + 1}`,
+      linkTarget,
+      sourceTraderId,
+      arena_score: t.arena_score as number | null,
+      roi: t.roi as number | null,
+      pnl: t.pnl as number | null,
+      rank: i + 1,
+    }
+  })
 
   return {
     displayName: config.name,
@@ -119,7 +133,7 @@ export async function generateMetadata({
   const title = `${displayName} Top Traders & Rankings | Arena`
   const description =
     traderCount > 0
-      ? `Explore ${traderCount.toLocaleString()} ranked ${displayName} traders on Arena. ${topTrader ? `Top trader: ${topTrader.handle}${topTrader.roi != null ? ` (${topTrader.roi >= 0 ? '+' : ''}${topTrader.roi.toFixed(1)}% ROI)` : ''}.` : ''} Compare Arena Scores, ROI, PnL, and risk metrics.`
+      ? `Explore ${traderCount.toLocaleString()} ranked ${displayName} traders on Arena. ${topTrader ? `Top trader: ${topTrader.displayName}${topTrader.roi != null ? ` (${topTrader.roi >= 0 ? '+' : ''}${topTrader.roi.toFixed(1)}% ROI)` : ''}.` : ''} Compare Arena Scores, ROI, PnL, and risk metrics.`
       : `View ${displayName} crypto trader rankings on Arena. Compare performance, Arena Scores, ROI, and PnL across top traders.`
 
   const ogImageUrl = `${BASE_URL}/api/og/exchange?exchange=${encodeURIComponent(sourceKey)}`
@@ -196,7 +210,7 @@ export default async function ExchangeLandingPage({
     sourceType: data.sourceType,
     traderCount: data.traderCount,
     topTraders: data.topTraders.map((t) => ({
-      handle: t.handle,
+      handle: t.displayName,
       arenaScore: t.arena_score,
       roi: t.roi,
     })),
@@ -308,7 +322,7 @@ export default async function ExchangeLandingPage({
                 <tbody>
                   {data.topTraders.map((trader) => (
                     <tr
-                      key={trader.handle}
+                      key={trader.sourceTraderId || trader.rank}
                       style={{ borderBottom: '1px solid rgba(255,255,255,0.05)' }}
                     >
                       <td
@@ -321,16 +335,22 @@ export default async function ExchangeLandingPage({
                         #{trader.rank}
                       </td>
                       <td style={{ padding: '12px' }}>
-                        <a
-                          href={`/trader/${encodeURIComponent(trader.handle)}`}
-                          style={{
-                            color: 'var(--text-primary, #fff)',
-                            fontWeight: 600,
-                            textDecoration: 'none',
-                          }}
-                        >
-                          {trader.handle}
-                        </a>
+                        {trader.linkTarget ? (
+                          <a
+                            href={`/trader/${encodeURIComponent(trader.linkTarget)}?platform=${encodeURIComponent(sourceKey)}`}
+                            style={{
+                              color: 'var(--text-primary, #fff)',
+                              fontWeight: 600,
+                              textDecoration: 'none',
+                            }}
+                          >
+                            {trader.displayName}
+                          </a>
+                        ) : (
+                          <span style={{ color: 'var(--text-primary, #fff)', fontWeight: 600 }}>
+                            {trader.displayName}
+                          </span>
+                        )}
                       </td>
                       <td
                         style={{
