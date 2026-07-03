@@ -23,6 +23,9 @@ const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
 const TELEGRAM_CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID || process.env.TELEGRAM_CHAT_ID
 
 const MAX_AGE_HOURS = 26
+// 完整备份(arena+public schema)约 3.9GB；残缺备份(只 public.* 残留表)约 381MB。
+// 下限 1GB 捕捉"备份范围退化"(PM-20260703：日备曾漏 arena.* 主数据层)。
+const MIN_SIZE_MB = 1024
 
 async function sendTelegram(text) {
   if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
@@ -74,18 +77,29 @@ async function main() {
   }
 
   const ageHours = (Date.now() - newest.LastModified.getTime()) / 3_600_000
-  const sizeMB = (newest.Size / 1024 / 1024).toFixed(1)
+  const sizeMB = newest.Size / 1024 / 1024
+  const sizeStr = sizeMB.toFixed(1)
   if (ageHours > MAX_AGE_HOURS) {
     console.error(
-      `🚨 备份过期：${newest.Key}（${sizeMB}MB）已 ${ageHours.toFixed(1)}h > ${MAX_AGE_HOURS}h`
+      `🚨 备份过期：${newest.Key}（${sizeStr}MB）已 ${ageHours.toFixed(1)}h > ${MAX_AGE_HOURS}h`
     )
     await sendTelegram(
-      `🚨 *备份过期*（SLO #4 违约）\n最新备份 \`${newest.Key}\`（${sizeMB}MB）已 ${ageHours.toFixed(1)}h（阈值 ${MAX_AGE_HOURS}h）\n查 Mac Mini local-cron-backup；手动补：\`npm run backup:r2\``
+      `🚨 *备份过期*（SLO #4 违约）\n最新备份 \`${newest.Key}\`（${sizeStr}MB）已 ${ageHours.toFixed(1)}h（阈值 ${MAX_AGE_HOURS}h）\n查 Mac Mini local-cron-backup；手动补：\`npm run backup:r2\``
+    )
+    process.exit(1)
+  }
+  // 完整性校验：大小骤降 = 备份范围退化（PM-20260703）
+  if (sizeMB < MIN_SIZE_MB) {
+    console.error(
+      `🚨 备份不完整：${newest.Key}（${sizeStr}MB）< ${MIN_SIZE_MB}MB —— 疑范围退化（漏 arena.* 主数据层？）`
+    )
+    await sendTelegram(
+      `🚨 *备份疑范围退化*\n最新备份 \`${newest.Key}\`（${sizeStr}MB）< ${MIN_SIZE_MB}MB 下限\n完整备份应含 arena.* 主数据层（约 3.9GB）。查 backup-db.yml / crontab 的 BACKUP_SCHEMAS。见 PM-20260703。`
     )
     process.exit(1)
   }
   console.log(
-    `✅ 备份新鲜：${newest.Key}（${sizeMB}MB，${ageHours.toFixed(1)}h 前）≤ ${MAX_AGE_HOURS}h`
+    `✅ 备份新鲜且完整：${newest.Key}（${sizeStr}MB，${ageHours.toFixed(1)}h 前）≤ ${MAX_AGE_HOURS}h、≥ ${MIN_SIZE_MB}MB`
   )
 }
 
