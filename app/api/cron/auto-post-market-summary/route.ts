@@ -168,21 +168,22 @@ async function fetchMarketPrices(supabase: AnySupabase): Promise<MarketPrice[]> 
 }
 
 async function fetchTopPerformers(supabase: AnySupabase): Promise<TopTrader[]> {
+  // leaderboard_ranks 有 handle/roi（无 display_name/roi_pct——旧 select 会 400→空段）
   const { data } = await supabase
     .from('leaderboard_ranks')
-    .select('display_name, handle, source, source_trader_id, arena_score, roi_pct')
+    .select('handle, source, source_trader_id, arena_score, roi')
     .eq('season_id', '7D')
     .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .limit(3)
 
   return (data || []).map((row) => ({
-    display_name: row.display_name,
+    display_name: null,
     handle: row.handle,
     source: row.source,
     source_trader_id: row.source_trader_id,
     arena_score: Number(row.arena_score ?? 0),
-    roi_pct: row.roi_pct != null ? Number(row.roi_pct) : null,
+    roi_pct: row.roi != null ? Number(row.roi) : null,
   }))
 }
 
@@ -190,19 +191,19 @@ async function fetchTrendingTraders(supabase: AnySupabase): Promise<TopTrader[]>
   // Trending = highest view count from trader_details in last 24h, or fallback to top by followers
   const { data } = await supabase
     .from('leaderboard_ranks')
-    .select('display_name, handle, source, source_trader_id, arena_score, roi_pct')
+    .select('handle, source, source_trader_id, arena_score, roi')
     .eq('season_id', '30D')
     .or('is_outlier.is.null,is_outlier.eq.false')
     .order('arena_score', { ascending: false })
     .range(3, 5) // offset to get different traders from top performers
 
   return (data || []).map((row) => ({
-    display_name: row.display_name,
+    display_name: null,
     handle: row.handle,
     source: row.source,
     source_trader_id: row.source_trader_id,
     arena_score: Number(row.arena_score ?? 0),
-    roi_pct: row.roi_pct != null ? Number(row.roi_pct) : null,
+    roi_pct: row.roi != null ? Number(row.roi) : null,
   }))
 }
 
