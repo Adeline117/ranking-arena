@@ -290,12 +290,6 @@ export default async function sitemap({
         changeFrequency: 'monthly' as const,
         priority: 0.7,
       })),
-      {
-        url: `${BASE_URL}/competitions`,
-        lastModified: now,
-        changeFrequency: 'daily',
-        priority: 0.7,
-      },
       { url: `${BASE_URL}/help`, lastModified: now, changeFrequency: 'monthly', priority: 0.5 },
       { url: `${BASE_URL}/status`, lastModified: now, changeFrequency: 'always', priority: 0.4 },
       { url: `${BASE_URL}/feed`, lastModified: now, changeFrequency: 'hourly', priority: 0.7 },

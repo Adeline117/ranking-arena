@@ -77,7 +77,6 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       { url: '/flash-news', priority: 0.7, freq: 'hourly' },
       { url: '/feed', priority: 0.7, freq: 'hourly' },
       { url: '/compare', priority: 0.6, freq: 'weekly' },
-      { url: '/competitions', priority: 0.7, freq: 'daily' },
       { url: '/claim', priority: 0.6, freq: 'monthly' },
       { url: '/about', priority: 0.4, freq: 'monthly' },
       { url: '/help', priority: 0.5, freq: 'monthly' },
