@@ -144,6 +144,17 @@ describe('validateStats', () => {
     const { rejects } = validateStats([stats({ pnl: null })], ['pnl'])
     expect(rejects[0].reason).toBe('missing_required_field:pnl')
   })
+
+  it('winPositions > totalPositions（不可能）→ null winPositions，保留 total', () => {
+    const { valid } = validateStats([stats({ winPositions: 20, totalPositions: 10 })])
+    expect(valid[0].winPositions).toBeNull()
+    expect(valid[0].totalPositions).toBe(10)
+  })
+
+  it('winPositions ≤ totalPositions → 原样保留', () => {
+    const { valid } = validateStats([stats({ winPositions: 6, totalPositions: 10 })])
+    expect(valid[0].winPositions).toBe(6)
+  })
 })
 
 describe('roiCrossCheckOk', () => {
