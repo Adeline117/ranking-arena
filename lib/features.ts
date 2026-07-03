@@ -17,6 +17,13 @@ import { NextResponse } from 'next/server'
 export const features = {
   /** Social features: groups, posts, comments, feed, messaging, user follows */
   social: process.env.NEXT_PUBLIC_FEATURE_SOCIAL !== 'false',
+  /**
+   * Trader competitions (报名比 ROI/PnL 涨幅). SEALED by default (pre-launch):
+   * code is complete but the update-competitions cron is unscheduled (leaderboard
+   * would be frozen) and there is no nav entry. Set NEXT_PUBLIC_FEATURE_COMPETITIONS
+   * =true to launch — AND schedule app/api/cron/update-competitions first.
+   */
+  competitions: process.env.NEXT_PUBLIC_FEATURE_COMPETITIONS === 'true',
 }
 
 // Runtime flags with Redis cache (server-side only)

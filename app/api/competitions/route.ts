@@ -4,6 +4,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { features } from '@/lib/features'
 import { withPublic, withAuth } from '@/lib/api/middleware'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -12,6 +13,7 @@ import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 // GET: List competitions
 export const GET = withPublic(
   async ({ request }) => {
+    if (!features.competitions) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'active' // upcoming, active, completed
     const limit = parseLimit(searchParams.get('limit'), 20, 50)
@@ -61,7 +63,7 @@ export const GET = withPublic(
     const competitions = (dataResult.data || []).map((comp) => ({
       ...comp,
       participant_count: Array.isArray(comp.competition_entries)
-        ? comp.competition_entries[0]?.count ?? 0
+        ? (comp.competition_entries[0]?.count ?? 0)
         : 0,
       competition_entries: undefined,
     }))
@@ -74,7 +76,7 @@ export const GET = withPublic(
           limit,
           offset,
           total: countResult.count || 0,
-          has_more: (offset + limit) < (countResult.count || 0),
+          has_more: offset + limit < (countResult.count || 0),
         },
       },
     })
@@ -85,18 +87,35 @@ export const GET = withPublic(
 // POST: Create competition
 export const POST = withAuth(
   async ({ user, request }) => {
+    if (!features.competitions) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const body = await request.json()
-    const { title, description, metric, start_at, end_at, max_participants, entry_fee_cents, prize_pool_cents, rules } = body
+    const {
+      title,
+      description,
+      metric,
+      start_at,
+      end_at,
+      max_participants,
+      entry_fee_cents,
+      prize_pool_cents,
+      rules,
+    } = body
 
     // Validate required fields
     if (!title || typeof title !== 'string' || title.trim().length === 0) {
       return NextResponse.json({ success: false, error: 'Title is required' }, { status: 400 })
     }
     if (title.trim().length > 100) {
-      return NextResponse.json({ success: false, error: 'Title cannot exceed 100 characters' }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: 'Title cannot exceed 100 characters' },
+        { status: 400 }
+      )
     }
     if (!start_at || !end_at) {
-      return NextResponse.json({ success: false, error: 'Start and end dates are required' }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: 'Start and end dates are required' },
+        { status: 400 }
+      )
     }
 
     const startDate = new Date(start_at)
@@ -106,7 +125,10 @@ export const POST = withAuth(
       return NextResponse.json({ success: false, error: 'Invalid date format' }, { status: 400 })
     }
     if (endDate <= startDate) {
-      return NextResponse.json({ success: false, error: 'End date must be after start date' }, { status: 400 })
+      return NextResponse.json(
+        { success: false, error: 'End date must be after start date' },
+        { status: 400 }
+      )
     }
 
     const validMetrics = ['roi', 'pnl', 'sharpe', 'max_drawdown']
@@ -133,7 +155,10 @@ export const POST = withAuth(
       .single()
 
     if (error) {
-      return NextResponse.json({ success: false, error: 'Failed to create competition' }, { status: 500 })
+      return NextResponse.json(
+        { success: false, error: 'Failed to create competition' },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ success: true, data: competition })

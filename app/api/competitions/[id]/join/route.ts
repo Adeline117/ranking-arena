@@ -3,6 +3,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import { features } from '@/lib/features'
 import { withAuth } from '@/lib/api/middleware'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
@@ -18,6 +19,7 @@ function extractCompetitionId(url: string): string {
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
+    if (!features.competitions) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     const competitionId = extractCompetitionId(request.url)
 
     let body: Record<string, unknown>

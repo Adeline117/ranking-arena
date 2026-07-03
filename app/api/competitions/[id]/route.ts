@@ -3,10 +3,12 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { features } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  if (!features.competitions) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { id } = await params
 
   if (!id) {
