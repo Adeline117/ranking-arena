@@ -374,13 +374,12 @@ export async function getTraderPortfolio(handle: string): Promise<DataResult<Por
           direction: string | null
           weight_pct: number | null
           entry_price: number | null
-          pnl_pct: number | null
         }) => ({
           market: item.symbol || '',
           direction:
             item.direction === 'long' || item.direction === 'short' ? item.direction : 'long',
           invested: item.weight_pct ?? 0,
-          pnl: item.pnl_pct ?? 0,
+          pnl: 0, // trader_portfolio has no pnl_pct column (not in the select)
           value: item.weight_pct ?? 0,
           price: item.entry_price ?? 0,
           priceChange: undefined,

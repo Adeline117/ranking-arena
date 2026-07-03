@@ -140,7 +140,9 @@ async function checkDatabaseAndCron(): Promise<{
           if (platformLog) {
             let success = true
             try {
-              const result = JSON.parse(platformLog.result || '[]')
+              // cron_logs has no `result` column (dropped from the select) —
+              // access safely; undefined → '[]' fallback keeps success=true.
+              const result = JSON.parse((platformLog as { result?: string }).result || '[]')
               success =
                 Array.isArray(result) && result.every((r: { success?: boolean }) => r.success)
             } catch {
