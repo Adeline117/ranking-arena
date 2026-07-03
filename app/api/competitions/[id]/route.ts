@@ -23,19 +23,19 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const [compResult, entriesResult] = await Promise.all([
       supabase
         .from('competitions')
-        // 读旧命名对不上表——建赛 insert(competitions/route.ts:118)证实真列是 title/start_at/
-        // end_at/prize_pool_cents。别名保持前端 key，选真列；season_id 表无(去掉)。
+        // 前端([id]/page.tsx)用真列名 title/start_at/end_at/metric/status/description。
+        // (旧代码读 name/start_date/prizes——表没有,且前端也不读那些。)
         .select(
-          'id, name:title, description, start_date:start_at, end_date:end_at, status, rules, prizes:prize_pool_cents, created_at, updated_at'
+          'id, title, description, start_at, end_at, status, metric, prize_pool_cents, rules, created_at, updated_at'
         )
         .eq('id', id)
         .single(),
       supabase
         .from('competition_entries')
-        // 报名 insert(join/route.ts:97)证实真列 platform/current_value;roi/pnl/updated_at 表无
-        // (只有 baseline_value/current_value,roi/pnl 应由前端从这俩派生)——去掉。
+        // 前端用 entry.platform/current_value/baseline_value/rank/trader_id/user_id(真列名)。
+        // baseline_value 必须选(前端 formatDelta 用它算涨跌)——之前漏了。
         .select(
-          'id, competition_id, user_id, trader_id, source:platform, rank, prev_rank, score:current_value, joined_at'
+          'id, competition_id, user_id, trader_id, platform, rank, prev_rank, current_value, baseline_value, joined_at'
         )
         .eq('competition_id', id)
         .order('rank', { ascending: true, nullsFirst: false }),
