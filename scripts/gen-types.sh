@@ -45,6 +45,10 @@ trap 'rm -f "$TMP"' EXIT
 echo "$HEADER" > "$TMP"
 $SUPABASE_BIN gen types typescript --project-id "$PROJECT_REF" --schema public >> "$TMP"
 
+# 用仓库 prettier 统一格式(CLI 输出是双引号,已提交文件是 prettier 单引号)——
+# 否则 CHECK 模式的 diff 永远因引号/换行差异误判为 schema 漂移(2026-07 修)。
+npx prettier --config "$(git rev-parse --show-toplevel)/.prettierrc" --parser typescript --write "$TMP" >/dev/null 2>&1 || true
+
 if [ "${CHECK:-0}" = "1" ]; then
   # CI 模式：与已提交版本比对,有 diff 即非零退出
   if ! diff -q "$TMP" "$OUT" >/dev/null 2>&1; then

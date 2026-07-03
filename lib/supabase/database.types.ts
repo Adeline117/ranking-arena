@@ -1,5 +1,6 @@
-// AUTO-GENERATED from production schema via Supabase MCP — DO NOT EDIT BY HAND.
-// Regenerate: npm run gen:types   |   Drift gate: schema-contract-check / gen:types:check
+// AUTO-GENERATED from production schema via scripts/gen-types.sh — DO NOT EDIT BY HAND.
+// Regenerate: npm run gen:types   |   Drift gate: CI 'gen-types-check' job.
+
 export type Json = string | number | boolean | null | { [key: string]: Json | undefined } | Json[]
 
 export type Database = {
@@ -786,6 +787,38 @@ export type Database = {
           },
         ]
       }
+      channel_message_reactions: {
+        Row: {
+          created_at: string | null
+          emoji: string
+          id: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          emoji: string
+          id?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          emoji?: string
+          id?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'channel_message_reactions_message_id_fkey'
+            columns: ['message_id']
+            isOneToOne: false
+            referencedRelation: 'channel_messages'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       channel_message_reads: {
         Row: {
           channel_id: string
@@ -821,6 +854,7 @@ export type Database = {
           media_name: string | null
           media_type: string | null
           media_url: string | null
+          reply_to_id: string | null
           sender_id: string
         }
         Insert: {
@@ -831,6 +865,7 @@ export type Database = {
           media_name?: string | null
           media_type?: string | null
           media_url?: string | null
+          reply_to_id?: string | null
           sender_id: string
         }
         Update: {
@@ -841,6 +876,7 @@ export type Database = {
           media_name?: string | null
           media_type?: string | null
           media_url?: string | null
+          reply_to_id?: string | null
           sender_id?: string
         }
         Relationships: [
@@ -849,6 +885,13 @@ export type Database = {
             columns: ['channel_id']
             isOneToOne: false
             referencedRelation: 'chat_channels'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'channel_messages_reply_to_id_fkey'
+            columns: ['reply_to_id']
+            isOneToOne: false
+            referencedRelation: 'channel_messages'
             referencedColumns: ['id']
           },
         ]
@@ -1035,6 +1078,7 @@ export type Database = {
           id: string
           joined_at: string | null
           platform: string
+          prev_rank: number | null
           rank: number | null
           trader_id: string
           user_id: string
@@ -1046,6 +1090,7 @@ export type Database = {
           id?: string
           joined_at?: string | null
           platform: string
+          prev_rank?: number | null
           rank?: number | null
           trader_id: string
           user_id: string
@@ -1057,6 +1102,7 @@ export type Database = {
           id?: string
           joined_at?: string | null
           platform?: string
+          prev_rank?: number | null
           rank?: number | null
           trader_id?: string
           user_id?: string
@@ -1364,6 +1410,7 @@ export type Database = {
           read: boolean | null
           read_at: string | null
           receiver_id: string
+          reply_to_id: string | null
           sender_id: string
         }
         Insert: {
@@ -1378,6 +1425,7 @@ export type Database = {
           read?: boolean | null
           read_at?: string | null
           receiver_id: string
+          reply_to_id?: string | null
           sender_id: string
         }
         Update: {
@@ -1392,6 +1440,7 @@ export type Database = {
           read?: boolean | null
           read_at?: string | null
           receiver_id?: string
+          reply_to_id?: string | null
           sender_id?: string
         }
         Relationships: [
@@ -1400,6 +1449,13 @@ export type Database = {
             columns: ['conversation_id']
             isOneToOne: false
             referencedRelation: 'conversations'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'direct_messages_reply_to_id_fkey'
+            columns: ['reply_to_id']
+            isOneToOne: false
+            referencedRelation: 'direct_messages'
             referencedColumns: ['id']
           },
         ]
@@ -1604,6 +1660,7 @@ export type Database = {
           group_id: string
           id: string
           post_id: string
+          to_user_id: string | null
         }
         Insert: {
           amount: number
@@ -1613,6 +1670,7 @@ export type Database = {
           group_id: string
           id?: string
           post_id: string
+          to_user_id?: string | null
         }
         Update: {
           amount?: number
@@ -1622,6 +1680,7 @@ export type Database = {
           group_id?: string
           id?: string
           post_id?: string
+          to_user_id?: string | null
         }
         Relationships: [
           {
@@ -2129,6 +2188,7 @@ export type Database = {
           rules: string | null
           rules_json: Json | null
           rules_text: string | null
+          slug: string | null
           subscription_price_monthly: number | null
           subscription_price_yearly: number | null
           trial_days: number | null
@@ -2157,6 +2217,7 @@ export type Database = {
           rules?: string | null
           rules_json?: Json | null
           rules_text?: string | null
+          slug?: string | null
           subscription_price_monthly?: number | null
           subscription_price_yearly?: number | null
           trial_days?: number | null
@@ -2185,6 +2246,7 @@ export type Database = {
           rules?: string | null
           rules_json?: Json | null
           rules_text?: string | null
+          slug?: string | null
           subscription_price_monthly?: number | null
           subscription_price_yearly?: number | null
           trial_days?: number | null
@@ -3403,6 +3465,38 @@ export type Database = {
         }
         Relationships: []
       }
+      message_reactions: {
+        Row: {
+          created_at: string | null
+          emoji: string
+          id: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          emoji: string
+          id?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          emoji?: string
+          id?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'message_reactions_message_id_fkey'
+            columns: ['message_id']
+            isOneToOne: false
+            referencedRelation: 'direct_messages'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       notifications: {
         Row: {
           actor_id: string | null
@@ -3447,6 +3541,7 @@ export type Database = {
       }
       oauth_states: {
         Row: {
+          code_verifier: string | null
           created_at: string | null
           exchange: string
           expires_at: string
@@ -3455,6 +3550,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          code_verifier?: string | null
           created_at?: string | null
           exchange: string
           expires_at: string
@@ -3463,6 +3559,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          code_verifier?: string | null
           created_at?: string | null
           exchange?: string
           expires_at?: string
@@ -3603,7 +3700,9 @@ export type Database = {
           created_at: string
           field: string
           id: number
+          last_seen_at: string | null
           metadata: Json | null
+          occurrence_count: number
           platform: string
           reason: string
           target_table: string
@@ -3614,7 +3713,9 @@ export type Database = {
           created_at?: string
           field: string
           id?: never
+          last_seen_at?: string | null
           metadata?: Json | null
+          occurrence_count?: number
           platform: string
           reason: string
           target_table: string
@@ -3625,7 +3726,9 @@ export type Database = {
           created_at?: string
           field?: string
           id?: never
+          last_seen_at?: string | null
           metadata?: Json | null
+          occurrence_count?: number
           platform?: string
           reason?: string
           target_table?: string
@@ -4586,6 +4689,128 @@ export type Database = {
         }
         Relationships: []
       }
+      referral_attributions: {
+        Row: {
+          created_at: string
+          friend_granted: boolean
+          id: string
+          provider: string | null
+          qualified_at: string | null
+          referred_id: string
+          referrer_id: string
+          signup_ip_hash: string | null
+        }
+        Insert: {
+          created_at?: string
+          friend_granted?: boolean
+          id?: string
+          provider?: string | null
+          qualified_at?: string | null
+          referred_id: string
+          referrer_id: string
+          signup_ip_hash?: string | null
+        }
+        Update: {
+          created_at?: string
+          friend_granted?: boolean
+          id?: string
+          provider?: string | null
+          qualified_at?: string | null
+          referred_id?: string
+          referrer_id?: string
+          signup_ip_hash?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'referral_attributions_referred_id_fkey'
+            columns: ['referred_id']
+            isOneToOne: true
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'referral_attributions_referred_id_fkey'
+            columns: ['referred_id']
+            isOneToOne: true
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'referral_attributions_referred_id_fkey'
+            columns: ['referred_id']
+            isOneToOne: true
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'referral_attributions_referrer_id_fkey'
+            columns: ['referrer_id']
+            isOneToOne: false
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'referral_attributions_referrer_id_fkey'
+            columns: ['referrer_id']
+            isOneToOne: false
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'referral_attributions_referrer_id_fkey'
+            columns: ['referrer_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      referral_rewards: {
+        Row: {
+          created_at: string
+          granted_days: number | null
+          id: string
+          referrer_id: string
+          reward_type: string
+        }
+        Insert: {
+          created_at?: string
+          granted_days?: number | null
+          id?: string
+          referrer_id: string
+          reward_type: string
+        }
+        Update: {
+          created_at?: string
+          granted_days?: number | null
+          id?: string
+          referrer_id?: string
+          reward_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'referral_rewards_referrer_id_fkey'
+            columns: ['referrer_id']
+            isOneToOne: false
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'referral_rewards_referrer_id_fkey'
+            columns: ['referrer_id']
+            isOneToOne: false
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'referral_rewards_referrer_id_fkey'
+            columns: ['referrer_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       refresh_jobs: {
         Row: {
           attempts: number
@@ -4657,86 +4882,6 @@ export type Database = {
           window?: string | null
         }
         Relationships: []
-      }
-      referral_attributions: {
-        Row: {
-          created_at: string
-          friend_granted: boolean
-          id: string
-          provider: string | null
-          qualified_at: string | null
-          referred_id: string
-          referrer_id: string
-          signup_ip_hash: string | null
-        }
-        Insert: {
-          created_at?: string
-          friend_granted?: boolean
-          id?: string
-          provider?: string | null
-          qualified_at?: string | null
-          referred_id: string
-          referrer_id: string
-          signup_ip_hash?: string | null
-        }
-        Update: {
-          created_at?: string
-          friend_granted?: boolean
-          id?: string
-          provider?: string | null
-          qualified_at?: string | null
-          referred_id?: string
-          referrer_id?: string
-          signup_ip_hash?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'referral_attributions_referred_id_fkey'
-            columns: ['referred_id']
-            isOneToOne: true
-            referencedRelation: 'user_profiles'
-            referencedColumns: ['id']
-          },
-          {
-            foreignKeyName: 'referral_attributions_referrer_id_fkey'
-            columns: ['referrer_id']
-            isOneToOne: false
-            referencedRelation: 'user_profiles'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      referral_rewards: {
-        Row: {
-          created_at: string
-          granted_days: number | null
-          id: string
-          referrer_id: string
-          reward_type: string
-        }
-        Insert: {
-          created_at?: string
-          granted_days?: number | null
-          id?: string
-          referrer_id: string
-          reward_type: string
-        }
-        Update: {
-          created_at?: string
-          granted_days?: number | null
-          id?: string
-          referrer_id?: string
-          reward_type?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'referral_rewards_referrer_id_fkey'
-            columns: ['referrer_id']
-            isOneToOne: false
-            referencedRelation: 'user_profiles'
-            referencedColumns: ['id']
-          },
-        ]
       }
       reports: {
         Row: {
@@ -5067,12 +5212,15 @@ export type Database = {
         Row: {
           api_calls_reset_at: string | null
           api_calls_today: number
+          cancel_at_period_end: boolean
+          canceled_at: string | null
           comparison_reports_this_month: number
           created_at: string
           current_period_end: string | null
           current_period_start: string | null
           exports_this_month: number
           id: string
+          plan: string | null
           status: string
           stripe_customer_id: string | null
           stripe_subscription_id: string | null
@@ -5084,12 +5232,15 @@ export type Database = {
         Insert: {
           api_calls_reset_at?: string | null
           api_calls_today?: number
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
           comparison_reports_this_month?: number
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
           exports_this_month?: number
           id?: string
+          plan?: string | null
           status?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -5101,12 +5252,15 @@ export type Database = {
         Update: {
           api_calls_reset_at?: string | null
           api_calls_today?: number
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
           comparison_reports_this_month?: number
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
           exports_this_month?: number
           id?: string
+          plan?: string | null
           status?: string
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
@@ -5640,36 +5794,48 @@ export type Database = {
       trader_attestations: {
         Row: {
           arena_score: number | null
+          attestation_uid: string | null
           chain_id: number | null
           created_at: string | null
           id: string
           minted_by: string | null
+          published_at: string | null
           score_period: string | null
           source: string
+          trader_handle: string | null
           trader_id: string
           tx_hash: string | null
+          updated_at: string | null
         }
         Insert: {
           arena_score?: number | null
+          attestation_uid?: string | null
           chain_id?: number | null
           created_at?: string | null
           id?: string
           minted_by?: string | null
+          published_at?: string | null
           score_period?: string | null
           source: string
+          trader_handle?: string | null
           trader_id: string
           tx_hash?: string | null
+          updated_at?: string | null
         }
         Update: {
           arena_score?: number | null
+          attestation_uid?: string | null
           chain_id?: number | null
           created_at?: string | null
           id?: string
           minted_by?: string | null
+          published_at?: string | null
           score_period?: string | null
           source?: string
+          trader_handle?: string | null
           trader_id?: string
           tx_hash?: string | null
+          updated_at?: string | null
         }
         Relationships: []
       }
@@ -6075,6 +6241,30 @@ export type Database = {
         }
         Relationships: []
       }
+      trader_position_seen: {
+        Row: {
+          first_seen_at: string
+          side: string
+          source: string
+          symbol: string
+          trader_id: string
+        }
+        Insert: {
+          first_seen_at?: string
+          side?: string
+          source?: string
+          symbol: string
+          trader_id: string
+        }
+        Update: {
+          first_seen_at?: string
+          side?: string
+          source?: string
+          symbol?: string
+          trader_id?: string
+        }
+        Relationships: []
+      }
       trader_position_summary: {
         Row: {
           avg_leverage: number | null
@@ -6342,30 +6532,6 @@ export type Database = {
           roi?: number | null
           source?: string
           source_trader_id?: string
-        }
-        Relationships: []
-      }
-      trader_position_seen: {
-        Row: {
-          first_seen_at: string
-          side: string
-          source: string
-          symbol: string
-          trader_id: string
-        }
-        Insert: {
-          first_seen_at?: string
-          side?: string
-          source?: string
-          symbol: string
-          trader_id: string
-        }
-        Update: {
-          first_seen_at?: string
-          side?: string
-          source?: string
-          symbol?: string
-          trader_id?: string
         }
         Relationships: []
       }
@@ -6924,6 +7090,42 @@ export type Database = {
         }
         Relationships: []
       }
+      user_passkeys: {
+        Row: {
+          counter: number
+          created_at: string | null
+          credential_id: string
+          device_name: string | null
+          id: string
+          last_used_at: string | null
+          public_key: string
+          transports: string[] | null
+          user_id: string
+        }
+        Insert: {
+          counter?: number
+          created_at?: string | null
+          credential_id: string
+          device_name?: string | null
+          id?: string
+          last_used_at?: string | null
+          public_key: string
+          transports?: string[] | null
+          user_id: string
+        }
+        Update: {
+          counter?: number
+          created_at?: string | null
+          credential_id?: string
+          device_name?: string | null
+          id?: string
+          last_used_at?: string | null
+          public_key?: string
+          transports?: string[] | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_portfolio_snapshots: {
         Row: {
           id: string
@@ -7107,6 +7309,8 @@ export type Database = {
           last_seen_at: string | null
           linked_trader_count: number | null
           market_pairs: Json | null
+          nft_minted_at: string | null
+          nft_token_id: string | null
           notify_comment: boolean | null
           notify_follow: boolean | null
           notify_like: boolean | null
@@ -7127,6 +7331,7 @@ export type Database = {
           show_followers: boolean | null
           show_following: boolean | null
           show_pro_badge: boolean | null
+          stripe_customer_id: string | null
           stripe_subscription_id: string | null
           subscription_tier: string | null
           totp_enabled: boolean | null
@@ -7175,6 +7380,8 @@ export type Database = {
           last_seen_at?: string | null
           linked_trader_count?: number | null
           market_pairs?: Json | null
+          nft_minted_at?: string | null
+          nft_token_id?: string | null
           notify_comment?: boolean | null
           notify_follow?: boolean | null
           notify_like?: boolean | null
@@ -7195,6 +7402,7 @@ export type Database = {
           show_followers?: boolean | null
           show_following?: boolean | null
           show_pro_badge?: boolean | null
+          stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_tier?: string | null
           totp_enabled?: boolean | null
@@ -7243,6 +7451,8 @@ export type Database = {
           last_seen_at?: string | null
           linked_trader_count?: number | null
           market_pairs?: Json | null
+          nft_minted_at?: string | null
+          nft_token_id?: string | null
           notify_comment?: boolean | null
           notify_follow?: boolean | null
           notify_like?: boolean | null
@@ -7263,6 +7473,7 @@ export type Database = {
           show_followers?: boolean | null
           show_following?: boolean | null
           show_pro_badge?: boolean | null
+          stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           subscription_tier?: string | null
           totp_enabled?: boolean | null
@@ -7436,6 +7647,15 @@ export type Database = {
         }
         Relationships: []
       }
+      mv_popular_tokens_90d: {
+        Row: {
+          token: string | null
+          total_pnl: number | null
+          trade_count: number | null
+          trader_count: number | null
+        }
+        Relationships: []
+      }
       pipeline_job_stats: {
         Row: {
           avg_duration_ms: number | null
@@ -7601,12 +7821,24 @@ export type Database = {
       archive_old_notifications: { Args: never; Returns: undefined }
       arena_apply_onchain_enrichment: {
         Args: {
-          p_source: string
           p_exchange_trader_id: string
           p_extras: Json
+          p_source: string
           p_win_rate?: number
         }
         Returns: number
+      }
+      arena_avatar_mirrors: {
+        Args: { p_sources: string[]; p_trader_ids: string[] }
+        Returns: {
+          avatar_url_mirror: string
+          exchange_trader_id: string
+          source: string
+        }[]
+      }
+      arena_bot_header: {
+        Args: { p_source: string; p_trader_key: string }
+        Returns: Json
       }
       arena_copier_aggregate: {
         Args: { p_source: string; p_trader: string }
@@ -8207,6 +8439,7 @@ export type Database = {
           notify_like: boolean
           notify_mention: boolean
           notify_message: boolean
+          notify_trader_events: boolean
           onboarding_completed: boolean
           original_email: string
           pro_expires_at: string
@@ -8549,6 +8782,7 @@ export type Database = {
           score: number
         }[]
       }
+      record_rejected_writes: { Args: { p_rows: Json }; Returns: undefined }
       recount_all_follow_counts: {
         Args: never
         Returns: {
@@ -8563,6 +8797,8 @@ export type Database = {
       refresh_hot_scores_incremental: { Args: never; Returns: number }
       refresh_leaderboard_count_cache: { Args: never; Returns: undefined }
       refresh_materialized_views: { Args: never; Returns: undefined }
+      refresh_popular_tokens_mv: { Args: never; Returns: undefined }
+      refresh_source_capabilities_mv: { Args: never; Returns: undefined }
       release_leaderboard_lock: { Args: { season: string }; Returns: boolean }
       release_stale_locks: { Args: never; Returns: number }
       rerank_leaderboard: { Args: { p_season_id: string }; Returns: number }
