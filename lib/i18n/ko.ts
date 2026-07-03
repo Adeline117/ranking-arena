@@ -389,7 +389,7 @@ const ko = {
   noCurrentPositions: '현재 포지션이 없습니다',
   noCurrentPositionsDesc: '트레이더에게 열린 포지션이 없을 수 있습니다',
   noPositionHistory: '포지션 히스토리가 없습니다',
-  noPositionHistoryDesc: '다음 데이터 동기화 후 포지션 히스토리를 확인할 수 있습니다',
+  noPositionHistoryDesc: '이 트레이더의 청산된 포지션 기록이 아직 없습니다',
   tradingPair: '거래 쌍',
   // Pro membership features
   pro: 'Pro',

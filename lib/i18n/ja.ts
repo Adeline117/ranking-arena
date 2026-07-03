@@ -377,7 +377,7 @@ const ja = {
   noCurrentPositions: '現在のポジションはありません',
   noCurrentPositionsDesc: 'トレーダーにオープンポジションがない可能性があります',
   noPositionHistory: 'ポジション履歴はありません',
-  noPositionHistoryDesc: '次のデータ同期後にポジション履歴が利用可能になります',
+  noPositionHistoryDesc: 'このトレーダーの決済済みポジションはまだありません',
   tradingPair: '取引ペア',
   pro: 'Pro',
   proMembership: 'Pro メンバーシップ',
