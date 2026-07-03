@@ -128,7 +128,7 @@ async function run() {
     // 路径可 env 覆盖：Mac 本机默认 Homebrew pg17；GH Actions 装 client 后设 PG_DUMP_PATH=pg_dump
     const pgDumpPath = process.env.PG_DUMP_PATH || '/opt/homebrew/opt/postgresql@17/bin/pg_dump'
     console.log(
-      `[backup] Dumping${fullMode ? ' full database' : ` ${TRADER_TABLES.length} tables`}...`
+      `[backup] Dumping ${schemaMode ? backupSchemas.join('+') + ' schemas' : fullMode ? 'full database' : `${TRADER_TABLES.length} tables`}...`
     )
     // 30 tables over network to Supabase can take 15-20min depending on
     // trader_snapshots_v2 size. 30min budget prevents false ETIMEDOUT.
@@ -154,8 +154,12 @@ async function run() {
         ContentLength: size,
         Metadata: {
           'backup-date': now.toISOString(),
-          'backup-type': fullMode ? 'full' : 'trader-tables',
-          tables: fullMode ? 'all' : TRADER_TABLES.join(','),
+          'backup-type': schemaMode
+            ? `schemas:${backupSchemas.join('+')}`
+            : fullMode
+              ? 'full'
+              : 'trader-tables',
+          tables: schemaMode ? backupSchemas.join(',') : fullMode ? 'all' : TRADER_TABLES.join(','),
         },
       })
     )
