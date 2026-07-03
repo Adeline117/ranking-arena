@@ -19,6 +19,7 @@ on:
     - cron: '20 7 * * *' # ux-patrol 每日 07:20 UTC
     - cron: '40 8 * * *' # backup-freshness 每日 08:40 UTC（R2 备份 >26h 告警）
     - cron: '0 10 * * 1' # sentry-convergence 周一 10:00 UTC（Sentry 错误聚合）
+    - cron: '50 5 * * *' # sweep-lang 四语言点击哨兵 每日 05:50 UTC（playwright 打生产）
   workflow_dispatch: {}
 
 concurrency:
@@ -192,3 +193,39 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: node scripts/openclaw/sentry-convergence.mjs
+
+  sweep-lang:
+    # 四语言点击哨兵（A-4/A-5）：playwright 打生产，机判死按钮/i18n-leak/对比度/5xx/
+    # error-boundary。matrix 4 语言并行；硬发现→Telegram 告警，软发现→artifact 供人工
+    # 审回归 diff。取代手工全站重扫。GH Actions runner 无 Mac Mini 的 syspolicyd/内存单点。
+    if: github.event.schedule == '50 5 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false # 一个语言失败不取消其他三个
+      matrix:
+        lang: [en, zh, ja, ko]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npx playwright install --with-deps chromium
+      - name: lang-sweep-sentinel (${{ matrix.lang }})
+        continue-on-error: true
+        # LANG_SWEEP（不是 LANG）——GH runner 会设 POSIX LANG，会冲突。
+        env:
+          BASE_URL: https://www.arenafi.org
+          LANG_SWEEP: ${{ matrix.lang }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+        run: node scripts/openclaw/lang-sweep-sentinel.mjs
+      - name: Upload sweep ledger
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lang-sweep-ledger-${{ matrix.lang }}
+          path: /tmp/lang-sweep-${{ matrix.lang }}.jsonl
+          retention-days: 14
