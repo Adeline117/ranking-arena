@@ -92,14 +92,14 @@ export const GET = withAdminAuth(
     if (postIds.length > 0) {
       const { data: posts } = await supabase
         .from('posts')
-        .select('id, title, content, user_id')
+        .select('id, title, content, author_id') // posts 用 author_id（无 user_id 列→旧 select 400）
         .in('id', postIds)
 
       for (const p of posts || []) {
         postPreviews[p.id] = {
           title: p.title,
           content: p.content ? String(p.content).substring(0, 200) : null,
-          user_id: p.user_id,
+          user_id: p.author_id,
         }
       }
     }

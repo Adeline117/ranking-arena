@@ -307,7 +307,7 @@ export const POST = withAuth(
 
     let { data: conversation } = await supabase
       .from('conversations')
-      .select('id, user1_id, user2_id, created_at, updated_at')
+      .select('id, user1_id, user2_id, created_at')
       .eq('user1_id', orderedUser1)
       .eq('user2_id', orderedUser2)
       .maybeSingle()
@@ -323,7 +323,7 @@ export const POST = withAuth(
         if (convError.code === '23505') {
           const { data: existingConv } = await supabase
             .from('conversations')
-            .select('id, user1_id, user2_id, created_at, updated_at')
+            .select('id, user1_id, user2_id, created_at')
             .eq('user1_id', orderedUser1)
             .eq('user2_id', orderedUser2)
             .single()

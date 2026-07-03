@@ -56,8 +56,10 @@ export const POST = withAuth(
     }
 
     // Permission check via single RPC call (replaces multiple queries)
-    const { data: permCheck, error: permError } = await (supabase as SupabaseClient)
-      .rpc('check_dm_permission', { p_sender_id: senderId, p_receiver_id: receiverId })
+    const { data: permCheck, error: permError } = await (supabase as SupabaseClient).rpc(
+      'check_dm_permission',
+      { p_sender_id: senderId, p_receiver_id: receiverId }
+    )
 
     if (permError) {
       logger.error('[Start Message API] check_dm_permission RPC error:', permError)
@@ -99,7 +101,7 @@ export const POST = withAuth(
 
     let { data: conversation } = await supabase
       .from('conversations')
-      .select('id, user1_id, user2_id, created_at, updated_at')
+      .select('id, user1_id, user2_id, created_at')
       .eq('user1_id', orderedUser1)
       .eq('user2_id', orderedUser2)
       .maybeSingle()
@@ -117,7 +119,7 @@ export const POST = withAuth(
         if (convError.code === '23505') {
           const { data: existingConv } = await supabase
             .from('conversations')
-            .select('id, user1_id, user2_id, created_at, updated_at')
+            .select('id, user1_id, user2_id, created_at')
             .eq('user1_id', orderedUser1)
             .eq('user2_id', orderedUser2)
             .single()
@@ -149,7 +151,7 @@ export const POST = withAuth(
       can_message: canMessage,
       is_mutual_follow: isMutualFollow,
       message_limit: messageLimit,
-      receiver_handle: receiverProfile?.handle || null
+      receiver_handle: receiverProfile?.handle || null,
     })
   },
   { name: 'messages-start', rateLimit: 'write' }
