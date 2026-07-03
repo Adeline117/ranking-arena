@@ -510,13 +510,58 @@ export async function publishBoardSeries(
   return { traders: tradersWithSeries, points: flat.length }
 }
 
+/**
+ * Collapse per-order position rows into one net position per (symbol, side).
+ * Several sources return the open-orders list rather than netted positions
+ * (blofin, btcc, gate), so multiple rows share the (trader, symbol, side)
+ * upsert key → "ON CONFLICT cannot affect row a second time". Aggregate: size
+ * summed, entry/mark size-weighted, unrealized_pnl summed, leverage = first.
+ * Rows without a symbol are dropped (can't key). NULL side is preserved (it is
+ * an honest "direction unverified" for CTP-style sources, not a collision).
+ */
+export function netPositions(positions: ParsedPosition[]): ParsedPosition[] {
+  const byKey = new Map<
+    string,
+    { p: ParsedPosition; size: number; notional: number; markNotional: number; upnl: number | null }
+  >()
+  for (const p of positions) {
+    if (!p.symbol) continue
+    const key = `${p.symbol}|${p.side ?? ''}`
+    const size = p.size ?? 0
+    const agg = byKey.get(key)
+    if (!agg) {
+      byKey.set(key, {
+        p: { ...p },
+        size,
+        notional: p.entryPrice !== null ? size * p.entryPrice : 0,
+        markNotional: p.markPrice !== null ? size * p.markPrice : 0,
+        upnl: p.unrealizedPnl,
+      })
+      continue
+    }
+    agg.size += size
+    if (p.entryPrice !== null) agg.notional += size * p.entryPrice
+    if (p.markPrice !== null) agg.markNotional += size * p.markPrice
+    if (p.unrealizedPnl !== null) agg.upnl = (agg.upnl ?? 0) + p.unrealizedPnl
+    if (agg.p.leverage === null) agg.p.leverage = p.leverage
+  }
+  return [...byKey.values()].map((a) => ({
+    ...a.p,
+    size: a.size > 0 ? a.size : a.p.size,
+    entryPrice: a.size > 0 && a.notional > 0 ? a.notional / a.size : a.p.entryPrice,
+    markPrice: a.size > 0 && a.markNotional > 0 ? a.markNotional / a.size : a.p.markPrice,
+    unrealizedPnl: a.upnl,
+  }))
+}
+
 /** Tier-D: fully replace a trader's open-positions snapshot (spec §2.3). */
 export async function publishPositions(
   src: SourceRow,
   traderId: number,
-  positions: ParsedPosition[],
+  rawPositions: ParsedPosition[],
   asOf: string
 ): Promise<void> {
+  const positions = netPositions(rawPositions)
   const client = await ingestClientConnect()
   try {
     await client.query('BEGIN')
