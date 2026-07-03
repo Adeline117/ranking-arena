@@ -17,8 +17,11 @@ const DEFAULT_STATS = {
   traderCount: 17000,
 }
 
-const CACHE_KEY = 'hero-stats:v1'
-const FALLBACK_MARKER_KEY = 'hero-stats:v1:fallback-marker'
+// v2: bumped 2026-07-02 to evict stale exchangeCount (old get_hero_stats counted
+// raw sources ~45; now dedupes by exchange prefix → ~18). Old v1 entries linger
+// up to their 1h TTL, so a fresh key forces the corrected value immediately.
+const CACHE_KEY = 'hero-stats:v2'
+const FALLBACK_MARKER_KEY = 'hero-stats:v2:fallback-marker'
 // Success path ('cold' tier): 1h Redis TTL on CACHE_KEY (stats only change on cron runs).
 // Fallback path: a SEPARATE marker key with 60s TTL, NOT overwriting CACHE_KEY.
 // Previously we wrote defaults to CACHE_KEY, which meant a single RPC failure
@@ -78,7 +81,7 @@ export async function getHeroStats(): Promise<HeroStats> {
       }
       // Write ONLY the marker — leave CACHE_KEY untouched so the last
       // known-good value is preserved for the next request.
-      // eslint-disable-next-line no-restricted-syntax
+
       void tieredSet(FALLBACK_MARKER_KEY, { failedAt: Date.now() }, 'hot', [
         'hero-stats',
         'fallback',
