@@ -41,7 +41,9 @@ export async function GET(request: NextRequest) {
 
       const { data, error } = await supabase
         .from('user_positions')
-        .select('id, portfolio_id, symbol, side, size, entry_price, mark_price, pnl, pnl_pct, leverage, margin, liquidation_price, opened_at, updated_at')
+        .select(
+          'id, portfolio_id, symbol, side, size, entry_price, mark_price, pnl, pnl_pct, leverage, updated_at'
+        ) // user_positions 无 margin/liquidation_price/opened_at 列
         .eq('portfolio_id', portfolioId)
         .order('pnl', { ascending: false })
 
