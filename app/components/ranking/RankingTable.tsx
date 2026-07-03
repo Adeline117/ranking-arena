@@ -24,10 +24,6 @@ import { CategoryType } from './CategoryRankingTabs'
 
 // Lazy-load non-LCP components to reduce initial bundle
 const Pagination = dynamic(() => import('../ui/Pagination'), { ssr: false })
-const _ScoreBreakdownTooltip = dynamic(
-  () => import('./ScoreBreakdownTooltip').then((m) => ({ default: m.ScoreBreakdownTooltip })),
-  { ssr: false }
-)
 
 // Extracted components — keep TraderRow/TraderCard static (LCP-critical)
 import { TraderRow } from './TraderRow'
