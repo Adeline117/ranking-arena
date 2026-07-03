@@ -74,8 +74,15 @@ function topKeys(body) {
       let start = j
       while (start >= 0 && /[\w'"$]/.test(body[start])) start--
       const key = body.slice(start + 1, end).replace(/['"]/g, '')
+      // A real object key sits at a property boundary: the char before it (past
+      // whitespace) is `{` or `,` or the start of the body. If it's anything
+      // else (`?`, `(`, an operator …) this `:` is a TERNARY (`a ? b : c`) and
+      // `b` is a value, not a column — skip it (was the quiz matchPercent FP).
+      let b = start
+      while (b >= 0 && /\s/.test(body[b])) b--
+      const atBoundary = b < 0 || body[b] === '{' || body[b] === ','
       // real column identifiers only — drops numeric artifacts + computed keys
-      if (key && /^[a-zA-Z_]\w*$/.test(key)) keys.push(key)
+      if (atBoundary && key && /^[a-zA-Z_]\w*$/.test(key)) keys.push(key)
     }
   }
   return keys
