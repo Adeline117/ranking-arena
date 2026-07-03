@@ -17,10 +17,7 @@ import {
 } from '@/lib/api'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params
     const supabase = getSupabaseAdmin()
@@ -45,7 +42,9 @@ export async function GET(
     // Get items
     const { data: items } = await supabase
       .from('collection_items')
-      .select('id, collection_id, trader_id, source, source_trader_id, note, added_at')
+      // collection_items 是多态 item_id/item_type('post'/'activity')——旧代码读
+      // trader_id/source/source_trader_id(不存在且非此模型)→400→集合详情永远空。
+      .select('id, collection_id, item_id, item_type, note, added_at')
       .eq('collection_id', id)
       .order('added_at', { ascending: false })
 
@@ -55,10 +54,7 @@ export async function GET(
   }
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 
@@ -69,8 +65,15 @@ export async function PATCH(
 
     const body = await request.json()
     const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
-    if (body.name !== undefined) updates.name = validateString(body.name, { required: true, minLength: 1, maxLength: 50, fieldName: 'name' })
-    if (body.description !== undefined) updates.description = validateString(body.description, { maxLength: 200 })
+    if (body.name !== undefined)
+      updates.name = validateString(body.name, {
+        required: true,
+        minLength: 1,
+        maxLength: 50,
+        fieldName: 'name',
+      })
+    if (body.description !== undefined)
+      updates.description = validateString(body.description, { maxLength: 200 })
     if (body.is_public !== undefined) updates.is_public = validateBoolean(body.is_public)
 
     const { data, error } = await supabase
