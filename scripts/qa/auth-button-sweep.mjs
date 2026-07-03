@@ -462,6 +462,81 @@ async function main() {
       )
   }
 
+  // ---------- Step 12: bookmark + 评论点赞（每写 GET 复查落库，B-3）----------
+  // 在 A 自己的帖上做（无通知副作用）。价值 = 每个写后 GET 复读确认 DB 真变了，
+  // 而不只是 200（"按钮翻转" 背后要有 "数据库真的改了"）。
+  newBucket('12-bookmark-commentlike-verify')
+  {
+    const create = await apiCall('/api/posts', {
+      method: 'POST',
+      headers: apiHeaders,
+      body: JSON.stringify({
+        title: '[automated-qa] B-3 write-verify post — will be deleted',
+        content: '[automated-qa] bookmark + comment-like GET-recheck. Safe to ignore.',
+        visibility: 'followers',
+      }),
+    })
+    const pid = create.body?.data?.post?.id || create.body?.data?.id || null
+    note(pid ? `OK 发帖 ${create.status} id=${pid}` : `FAIL 发帖 ${create.status}`)
+    if (pid) {
+      // --- bookmark: POST 切换 → GET 复查 true → POST 再切 → GET 复查 false ---
+      await apiCall(`/api/posts/${pid}/bookmark`, { method: 'POST', headers: apiHeaders })
+      const bOn = await apiCall(`/api/posts/${pid}/bookmark`, {
+        method: 'GET',
+        headers: apiHeaders,
+      })
+      note(
+        bOn.body?.bookmarked === true
+          ? 'OK bookmark 已落库（GET bookmarked=true）'
+          : `FAIL bookmark GET 复查=${JSON.stringify(bOn.body)}`
+      )
+      await apiCall(`/api/posts/${pid}/bookmark`, { method: 'POST', headers: apiHeaders }) // toggle off
+      const bOff = await apiCall(`/api/posts/${pid}/bookmark`, {
+        method: 'GET',
+        headers: apiHeaders,
+      })
+      note(
+        bOff.body?.bookmarked === false
+          ? 'OK bookmark 已移除（GET bookmarked=false，已清理）'
+          : `WARN bookmark 移除后 GET=${JSON.stringify(bOff.body)}`
+      )
+
+      // --- 评论点赞: A 评论自己帖 → 点赞 → 再点赞 toggle off ---
+      const cmt = await apiCall(`/api/posts/${pid}/comments`, {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({ content: '[automated-qa] B-3 comment for like test' }),
+      })
+      const cid = cmt.body?.data?.comment?.id || cmt.body?.data?.id || null
+      if (cid) {
+        const lk = await apiCall(`/api/posts/${pid}/comments/like`, {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({ comment_id: cid, type: 'like' }),
+        })
+        const un = await apiCall(`/api/posts/${pid}/comments/like`, {
+          method: 'POST',
+          headers: apiHeaders,
+          body: JSON.stringify({ comment_id: cid, type: 'like' }), // 同 type 再点 = toggle off
+        })
+        note(`评论点赞 ${lk.status} → 取消 ${un.status}（清理）`)
+        await apiCall(`/api/posts/${pid}/comments`, {
+          method: 'DELETE',
+          headers: apiHeaders,
+          body: JSON.stringify({ comment_id: cid }),
+        })
+      }
+      // 清理帖 + 回查 404
+      const del = await apiCall(`/api/posts/${pid}`, { method: 'DELETE', headers: apiHeaders })
+      const gone = await apiCall(`/api/posts/${pid}`, { method: 'GET', headers: apiHeaders })
+      note(
+        del.status < 300 && gone.status === 404
+          ? 'OK 清理: 帖已删（回查 404）'
+          : `FAIL 清理: 删 ${del.status}/回查 ${gone.status}（可能残留!）`
+      )
+    }
+  }
+
   await browser.close()
 
   fs.writeFileSync('/tmp/arena-auth-sweep.json', JSON.stringify(steps, null, 2))
