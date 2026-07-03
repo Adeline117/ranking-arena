@@ -15,7 +15,9 @@ export const GET = withAdminAuth(
 
     const { data, error } = await supabase
       .from('content_reports')
-      .select('id, content_type, content_id, reporter_id, reason, details, status, created_at, resolved_by, resolved_at, action_taken')
+      .select(
+        'id, content_type, content_id, reporter_id, reason, details, status, created_at, resolved_by, resolved_at, action_taken'
+      )
       .eq('status', status)
       .order('created_at', { ascending: false })
       .limit(100)
@@ -48,7 +50,7 @@ export async function POST(req: NextRequest) {
         .from('content_reports')
         .update({
           status,
-          reviewer_id: admin.id,
+          resolved_by: admin.id,
           action_taken: action_taken || null,
         })
         .eq('id', reportId)
