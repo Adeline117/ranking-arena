@@ -258,10 +258,11 @@ export function bingxPerTfExtras(rankStat: Dict, tf: RankingTimeframe): Record<s
 
 // ── Record surfaces (headful-harvested 2026-07-02, spec §17/18) ──────────────
 // Detail SPA: bingx.com/en/CopyTrading/{uid}?accountEnum=BINGX_SWAP_FUTURES&
-//   apiIdentity={apiIdentity}. Three signed GET endpoints (api-app host):
+//   apiIdentity={apiIdentity}. Signed GET endpoints (api-app host):
 //   .../copy-trade-processor/trader-open/current-position → open positions
 //   .../copy-trade-processor/trader-open/history-order     → order/trade records
 //   .../copy-trade-processor/trader-open/followers         → copiers (aggregate)
+//   .../copy-trade-processor/trader-open/transfer-detail   → fund transfers
 // The `sign` header covers the URL query (verified: mutating pageId → code
 // 100005), so pages can't be replayed — the adapter captures the browser's own
 // signed response per surface. Parsers stay pure over the stored RAW.
@@ -339,6 +340,27 @@ export function parseBingxHistory(
     return out
   }
 
-  // position_history / transfers not exposed by bingx's detail surfaces.
+  if (kind === 'transfers') {
+    // trader-open/transfer-detail → fund flows into/out of the copy account.
+    // positive=1 → in (deposit), else out.
+    const out: ParsedHistoryRow[] = []
+    for (const t of recordRows(raw)) {
+      const ts = isoTime(t.transactionTime)
+      if (ts === null) continue
+      out.push({
+        kind: 'transfers',
+        ts,
+        direction: num(t.positive) === 1 ? 'in' : 'out',
+        asset: typeof t.marginCoinName === 'string' ? t.marginCoinName : null,
+        amount: num(t.assetAmount),
+        dedupeHash: dedupeHash('bingx_tr', t.exchangeOrderNo, t.transactionTime),
+        raw: t,
+      })
+    }
+    return out
+  }
+
+  // position_history not exposed by bingx's detail surfaces (open+close are
+  // separate order rows → orders).
   return []
 }

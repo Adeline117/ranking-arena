@@ -1,0 +1,19 @@
+{
+  "code": 0,
+  "timestamp": 1783057721840,
+  "data": {
+    "result": [
+      {
+        "assetAmount": 80,
+        "marginCoinName": "USDT",
+        "exchangeOrderNo": "1781169290045106085_309_18949001",
+        "symbol": "",
+        "transactionTime": "2026-06-30T00:58:25.000+08:00",
+        "positive": 1
+      }
+    ],
+    "pageId": 0,
+    "searchResult": true,
+    "total": 1
+  }
+}
