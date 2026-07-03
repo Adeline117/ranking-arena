@@ -45,16 +45,12 @@ export async function POST(
       // 获取评论信息，检查是否属于此小组的帖子
       const { data: commentData } = await supabase
         .from('comments')
-        .select('id, post_id, deleted_at')
+        .select('id, post_id')
         .eq('id', commentId)
         .single()
 
       if (!commentData) {
         return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
-      }
-
-      if (commentData.deleted_at) {
-        return NextResponse.json({ error: 'Comment already deleted' }, { status: 400 })
       }
 
       // 检查帖子是否属于此小组
@@ -71,18 +67,12 @@ export async function POST(
         )
       }
 
-      // 软删除评论
-      const { error: updateError } = await supabase
-        .from('comments')
-        .update({
-          deleted_at: new Date().toISOString(),
-          deleted_by: user.id,
-          delete_reason: 'Deleted by admin',
-        })
-        .eq('id', commentId)
+      // 硬删除评论（与全站标准 lib/data/comments.ts deleteComment 一致——
+      // comments 表无软删列，读路径也不过滤，软删只会 500 且形同虚设）
+      const { error: deleteError } = await supabase.from('comments').delete().eq('id', commentId)
 
-      if (updateError) {
-        logger.error('Delete comment error:', updateError)
+      if (deleteError) {
+        logger.error('Delete comment error:', deleteError)
         return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
       }
 
