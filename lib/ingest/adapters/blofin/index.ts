@@ -26,14 +26,17 @@
  *     POST /uapi/v1/copy/trader/stat/performance    {uid, stat_period, type:"all"}
  *          → roi/pnl time-series (chart)
  *
+ * Records (positions/position_history/copiers) — the detail UI TABS are
+ *   login-gated, but the underlying uapi endpoints are PUBLIC + unsigned (probe
+ *   2026-07-02, overturning the earlier "hard limit" note):
+ *     POST /uapi/v1/copy/trader/order/list    {uid} → current open positions
+ *     POST /uapi/v1/copy/trader/order/history {uid} → closed position history
+ *     POST /uapi/v1/copy/trader/copiers       {uid} → copiers (nick_name masked)
+ *   Same lightweight replayJson POST as getProfile — no browser needed.
+ *
  * GAPS (documented):
- *  - Positions/histories/copiers records: HARD LIMIT — the public (unauthenticated)
- *    detail page exposes ONLY profile stats + the All/Trades/Bots chart-scope +
- *    per-symbol chips (all harvested above). It has NO Positions/Trade-History/
- *    Copiers record tabs; those live behind login (verified 2026-07-02 headful
- *    capture: copy_trading/user/info + uc/user/info return 401, no record tabs
- *    render). Harvesting them would need an authenticated blofin session we don't
- *    have — NOT capturable without credentials. Stats/charts/preferences complete.
+ *  - Orders/transfers surfaces: blofin has no distinct order-event or transfer
+ *    record endpoint (order/list + order/history are position-level).
  *  - Bot/human split + bot-scope chart series (spec §11.14 All|Trades|Bots):
  *    the board row has no per-row bot flag — only the trading_bots_type FILTER
  *    distinguishes them — so trader_kind defaults to human; a separate
@@ -56,8 +59,10 @@ import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, replayPaged } from '../../fetch/capture'
 import {
+  parseBlofinHistory,
   parseBlofinLeaderboardPage,
   parseBlofinLeaderboardSeries,
+  parseBlofinPositions,
   parseBlofinProfile,
 } from './parsers'
 
@@ -92,13 +97,15 @@ const blofinAdapter: SourceAdapter = {
   capabilities: {
     // Profile harvested (headful capture 2026-07-02): stat/indicators (sharpe/
     // sortino/calmar/volatility — NOT on board) + symbol_performance (prefs) +
-    // performance (chart). Records surfaces still gated (see header GAPS).
+    // performance (chart). Records (positions/position_history/copiers) via the
+    // PUBLIC unsigned uapi endpoints (probe 2026-07-02 — the UI tabs are
+    // login-gated but the APIs are open). No orders/transfers surface.
     profile: true,
-    positions: false,
-    positionHistory: false,
+    positions: true,
+    positionHistory: true,
     orders: false,
     transfers: false,
-    copiers: false,
+    copiers: true,
   },
 
   async *listLeaderboard(
@@ -198,18 +205,55 @@ const blofinAdapter: SourceAdapter = {
       fetchedAt,
     }
   },
-  async getPositions(): Promise<RawBundle> {
-    return { pages: [], fetchedAt: new Date().toISOString() }
+  /** Current open positions — public unsigned POST trader/order/list {uid}
+   *  (close_time==null rows; the parser drops closed ones). */
+  async getPositions(
+    session: FetchSession,
+    _src: SourceRow,
+    exchangeTraderId: string
+  ): Promise<RawBundle> {
+    const fetcher = apiFetcher(await session.api())
+    const fetchedAt = new Date().toISOString()
+    const url = `${ORIGIN}/uapi/v1/copy/trader/order/list`
+    const payload = await replayJson(session, fetcher, {
+      url,
+      method: 'POST',
+      headers: PROFILE_HEADERS,
+      body: { uid: exchangeTraderId, limit: 50, page: 1 },
+    }).catch(() => null)
+    if (payload === null) return { pages: [], fetchedAt }
+    return { pages: [{ pageIndex: 1, payload, url, fetchedAt }], fetchedAt }
   },
-  async *getHistory(): AsyncIterable<RawPage> {
-    return
+
+  /** Closed-position history + copiers — public unsigned POST endpoints. First
+   *  page suffices for the on-demand view (arena.* serves deeper pagination). */
+  async *getHistory(
+    session: FetchSession,
+    _src: SourceRow,
+    exchangeTraderId: string,
+    kind: HistoryKind
+  ): AsyncIterable<RawPage> {
+    let path: string
+    if (kind === 'position_history') path = 'trader/order/history'
+    else if (kind === 'copiers') path = 'trader/copiers'
+    else return // orders / transfers not exposed
+    const fetcher = apiFetcher(await session.api())
+    const url = `${ORIGIN}/uapi/v1/copy/${path}`
+    const payload = await replayJson(session, fetcher, {
+      url,
+      method: 'POST',
+      headers: PROFILE_HEADERS,
+      body: { uid: exchangeTraderId, limit: 50, page: 1 },
+    }).catch(() => null)
+    if (payload === null) return
+    yield { pageIndex: 1, payload, url, fetchedAt: new Date().toISOString() }
   },
 
   parseLeaderboard: parseBlofinLeaderboardPage,
   parseLeaderboardSeries: parseBlofinLeaderboardSeries,
   parseProfile: parseBlofinProfile,
-  parsePositions: (): ParsedPosition[] => [],
-  parseHistory: (_raw: unknown, _kind: HistoryKind): ParsedHistoryRow[] => [],
+  parsePositions: parseBlofinPositions,
+  parseHistory: parseBlofinHistory,
 }
 
 registerAdapter(blofinAdapter)

@@ -23,17 +23,41 @@
  * Verified by live capture 2026-06-11 (blofin-*-debug scripts, deleted).
  */
 
+import { createHash } from 'crypto'
 import type {
   BoardSeriesBlock,
+  HistoryKind,
   ParseCtx,
+  ParsedHistoryRow,
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
+  ParsedPosition,
   ParsedProfile,
   ParsedStats,
   RankingTimeframe,
 } from '../../core/types'
 
 type Dict = Record<string, unknown>
+
+/** Stable natural identity for idempotent record upserts (spec §2.3). */
+function blofinDedupeHash(...fields: unknown[]): string {
+  return createHash('sha1')
+    .update(fields.map((f) => String(f ?? '')).join('|'))
+    .digest('hex')
+}
+
+/** ms epoch → ISO, or null. */
+function isoMs(v: unknown): string | null {
+  const n = num(v)
+  if (n === null || n <= 0) return null
+  return new Date(n).toISOString()
+}
+
+/** data[] of a {code,data} record envelope. */
+function dataRows(raw: unknown): Dict[] {
+  const d = (raw as Dict)?.data
+  return Array.isArray(d) ? (d as Dict[]) : []
+}
 
 function num(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null
@@ -218,4 +242,87 @@ export function parseBlofinLeaderboardSeries(
     if (points.length > 0) out.set(String(id), [{ timeframe, metric: 'roi', points }])
   }
   return out
+}
+
+// ── Record surfaces (public unsigned uapi, discovered 2026-07-02) ────────────
+// The detail-page UI tabs are login-gated, but the underlying uapi endpoints
+// are PUBLIC + unsigned (same as the profile stat endpoints):
+//   POST /uapi/v1/copy/trader/order/list    {uid} → current OPEN positions
+//        (close_time=null; mark_price/unrealized_pnl)
+//   POST /uapi/v1/copy/trader/order/history {uid} → CLOSED positions
+//        (open/close time+price, order_side, leverage, roe)
+//   POST /uapi/v1/copy/trader/copiers       {uid} → copiers (nick_name masked)
+// Blofin order rows carry position_side=NET, so direction = order_side
+// (BUY=long, SELL=short). History rows expose roe (return ratio) but not a
+// per-position realized-PnL amount → realizedPnl left honest-null, roe in raw.
+
+/** Current open positions (order/list, close_time==null) → ParsedPosition[]. */
+export function parseBlofinPositions(raw: unknown, _ctx: ParseCtx): ParsedPosition[] {
+  const out: ParsedPosition[] = []
+  for (const r of dataRows(raw)) {
+    if (r.close_time !== null && r.close_time !== undefined) continue // closed → history surface
+    const symbol = typeof r.symbol === 'string' ? r.symbol : null
+    if (!symbol) continue
+    out.push({
+      symbol,
+      side: typeof r.order_side === 'string' ? r.order_side : null,
+      leverage: num(r.leverage),
+      size: num(r.quantity),
+      entryPrice: num(r.avg_open_price),
+      markPrice: num(r.mark_price),
+      unrealizedPnl: num(r.unrealized_pnl),
+      raw: r,
+    })
+  }
+  return out
+}
+
+/** Closed-position history (order/history) + copiers (trader/copiers). */
+export function parseBlofinHistory(
+  raw: unknown,
+  kind: HistoryKind,
+  ctx: ParseCtx
+): ParsedHistoryRow[] {
+  if (kind === 'position_history') {
+    const out: ParsedHistoryRow[] = []
+    for (const r of dataRows(raw)) {
+      const symbol = typeof r.symbol === 'string' ? r.symbol : null
+      if (!symbol) continue
+      out.push({
+        kind: 'position_history',
+        openedAt: isoMs(r.open_time),
+        closedAt: isoMs(r.close_time) ?? ctx.scrapedAt,
+        symbol,
+        side: typeof r.order_side === 'string' ? r.order_side : null,
+        leverage: num(r.leverage),
+        size: num(r.quantity),
+        entryPrice: num(r.avg_open_price),
+        exitPrice: num(r.avg_close_price),
+        realizedPnl: num(r.real_pnl), // often null; roe rides in raw
+        dedupeHash: blofinDedupeHash('blofin_ph', r.id_md5 ?? r.id, r.close_time),
+        raw: r,
+      })
+    }
+    return out
+  }
+
+  if (kind === 'copiers') {
+    const out: ParsedHistoryRow[] = []
+    for (const c of dataRows(raw)) {
+      const label = typeof c.nick_name === 'string' ? c.nick_name : null
+      out.push({
+        kind: 'copiers',
+        ts: ctx.scrapedAt,
+        copierLabel: label, // exchange-masked; stored for dedupe/aggregation only (spec §6)
+        copierPnl: num(c.return_amount),
+        copierInvested: num(c.cum_invested ?? c.amount),
+        copyDurationDays: int(c.follower_days),
+        dedupeHash: blofinDedupeHash('blofin_cp', c.id ?? label, c.follow_time),
+        raw: c,
+      })
+    }
+    return out
+  }
+
+  return [] // orders / transfers not exposed by blofin
 }
