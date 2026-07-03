@@ -64,6 +64,9 @@ export interface Trader {
   max_drawdown?: number | null
   trades_count?: number | null
   followers: number
+  /** Exchange copier count (populated; `followers` is 0 for ~all rows). The
+   *  Followers column renders `copiers ?? followers` (audit 2026-07-03). */
+  copiers?: number | null
   source?: string
   avatar_url?: string | null
   /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatar_url. */
