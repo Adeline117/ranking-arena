@@ -5382,6 +5382,11 @@ const ko = {
   alreadyProMember: '이미 활성화된 Pro 구독이 있습니다!',
   thisUsuallyTakesSeconds: '보통 몇 초 정도 소요됩니다...',
   perMonthBilledYearly: '월 (연간 결제)',
+  pricingPlanFree: '무료',
+  perMonthShort: '월',
+  perYearShort: '년',
+  pricingSpotsTaken: '{taken} / {total} 자리 마감',
+  pricingSpotsRemaining: '{count}자리 남음',
   avgLeverageTooltip:
     '현재 오픈 포지션의 평균 레버리지입니다. 레버리지가 높을수록 리스크가 큽니다.',
   longShort: '롱/숏',

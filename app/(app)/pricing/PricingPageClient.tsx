@@ -407,7 +407,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 color: tokens.colors.text.secondary,
               }}
             >
-              Free
+              {resolved(t('pricingPlanFree'), 'pricingPlanFree', 'Free')}
             </h3>
             <p
               style={{
@@ -419,7 +419,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             >
               $0
               <span style={{ fontSize: 15, fontWeight: 400, color: tokens.colors.text.secondary }}>
-                /mo
+                /{resolved(t('perMonthShort'), 'perMonthShort', 'mo')}
               </span>
             </p>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0, flex: 1 }}>
@@ -533,7 +533,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 /
                 {billing === 'yearly'
                   ? resolved(t('perMonthBilledYearly'), 'perMonthBilledYearly', 'mo')
-                  : 'mo'}
+                  : resolved(t('perMonthShort'), 'perMonthShort', 'mo')}
               </span>
             </p>
             {/* Lifetime anchor cue — surfaces lifetime value next to Pro */}
@@ -562,7 +562,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                   marginBottom: tokens.spacing[6],
                 }}
               >
-                ${currentPrice.price}/year{' '}
+                ${currentPrice.price}/{resolved(t('perYearShort'), 'perYearShort', 'year')}{' '}
                 {'original' in currentPrice && currentPrice.original ? (
                   <s style={{ opacity: 0.6 }}>${currentPrice.original.toFixed(2)}</s>
                 ) : null}{' '}
@@ -881,10 +881,20 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                         color: 'var(--color-founding-accent)',
                       }}
                     >
-                      {taken} / {TOTAL_SPOTS} spots taken
+                      {resolved(
+                        t('pricingSpotsTaken'),
+                        'pricingSpotsTaken',
+                        '{taken} / {total} spots taken'
+                      )
+                        .replace('{taken}', String(taken))
+                        .replace('{total}', String(TOTAL_SPOTS))}
                     </span>
                     <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
-                      {remaining} remaining
+                      {resolved(
+                        t('pricingSpotsRemaining'),
+                        'pricingSpotsRemaining',
+                        '{count} remaining'
+                      ).replace('{count}', String(remaining))}
                     </span>
                   </div>
                   <div
@@ -1022,7 +1032,9 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               }}
             >
               <span>{resolved(t('pricingFeatureHeader'), 'pricingFeatureHeader', 'Feature')}</span>
-              <span style={{ textAlign: 'center' }}>Free</span>
+              <span style={{ textAlign: 'center' }}>
+                {resolved(t('pricingPlanFree'), 'pricingPlanFree', 'Free')}
+              </span>
               <span style={{ textAlign: 'center', color: tokens.colors.accent.brand }}>Pro</span>
             </div>
             {/* Rows — single source of truth: membership-config */}
