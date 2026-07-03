@@ -68,6 +68,15 @@ export async function GET(request: NextRequest) {
     const importance = searchParams.get('importance')
     const offset = (page - 1) * limit
 
+    // 筛选条件 — support new broad categories + legacy DB values.
+    const CATEGORY_MAP: Record<string, string[]> = {
+      btc_eth: ['crypto', 'btc_eth'], // BTC/ETH: legacy 'crypto' + new 'btc_eth'
+      altcoin: ['market', 'altcoin'], // 山寨币: legacy 'market' + new 'altcoin'
+      defi: ['defi'],
+      macro: ['macro', 'regulation'], // 宏观/监管 combines both
+      exchange: ['exchange'], // 交易所
+    }
+
     // Core DB fetch logic — extracted so it can be called with or without cache
     const fetchFromDb = async () => {
       // 构建查询
@@ -82,14 +91,6 @@ export async function GET(request: NextRequest) {
         .order('published_at', { ascending: false })
         .range(offset, offset + limit - 1)
 
-      // 添加筛选条件 — support new broad categories + legacy DB values
-      const CATEGORY_MAP: Record<string, string[]> = {
-        btc_eth: ['crypto', 'btc_eth'], // BTC/ETH: legacy 'crypto' + new 'btc_eth'
-        altcoin: ['market', 'altcoin'], // 山寨币: legacy 'market' + new 'altcoin'
-        defi: ['defi'],
-        macro: ['macro', 'regulation'], // 宏观/监管 combines both
-        exchange: ['exchange'], // 交易所
-      }
       if (category) {
         const mapped = CATEGORY_MAP[category]
         if (mapped && mapped.length === 1) {
@@ -109,6 +110,41 @@ export async function GET(request: NextRequest) {
       const { data, error: queryError, count } = await query
 
       if (queryError) {
+        // PostgREST returns PGRST103 ("Requested range not satisfiable") when the
+        // offset is past the row count — e.g. page 2+ of a category with fewer
+        // than `offset+1` rows, or an empty category like 'exchange' (total 0).
+        // That is NOT a server error, it just means "this page is past the end".
+        // Re-fetch the true count (cheap HEAD) and return an empty page so
+        // pagination stays correct instead of 500-ing.
+        if (
+          queryError.code === 'PGRST103' ||
+          /range not satisfiable/i.test(queryError.message || '')
+        ) {
+          let countQuery = supabase.from('flash_news').select('id', { count: 'exact', head: true })
+          if (category) {
+            const mapped = CATEGORY_MAP[category]
+            if (mapped && mapped.length === 1) countQuery = countQuery.eq('category', mapped[0])
+            else if (mapped && mapped.length > 1) countQuery = countQuery.in('category', mapped)
+            else if (['crypto', 'macro', 'defi', 'regulation', 'market'].includes(category))
+              countQuery = countQuery.eq('category', category)
+          }
+          if (importance && ['breaking', 'important', 'normal'].includes(importance)) {
+            countQuery = countQuery.eq('importance', importance)
+          }
+          const { count: total } = await countQuery
+          const t = total || 0
+          return {
+            news: [],
+            pagination: {
+              page,
+              limit,
+              total: t,
+              totalPages: Math.ceil(t / limit),
+              hasNext: false,
+              hasPrev: page > 1,
+            },
+          }
+        }
         throw new Error(queryError.message)
       }
 
