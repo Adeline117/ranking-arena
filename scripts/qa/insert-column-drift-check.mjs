@@ -146,8 +146,18 @@ function selectColumns(sel) {
 }
 
 async function main() {
+  const dbUrl = readEnv('DATABASE_URL', { optional: true })
+  if (!dbUrl) {
+    // CI-safe: without prod DB access the guard cannot run. Skip (exit 0) rather
+    // than fail so wiring this into CI never breaks the build before the
+    // DATABASE_URL secret is configured. Set it to activate the hard gate.
+    console.log(
+      '⏭️  insert-column-drift-check SKIPPED — DATABASE_URL not set (set it to enable the gate)'
+    )
+    process.exit(0)
+  }
   const client = new pg.Client({
-    connectionString: readEnv('DATABASE_URL'),
+    connectionString: dbUrl,
     ssl: { rejectUnauthorized: false },
   })
   await client.connect()
