@@ -279,7 +279,12 @@ export async function GET(request: NextRequest) {
     )
 
     if (!isAllowed) {
-      return new NextResponse('Domain not allowed', { status: 403 })
+      // Allowlist gap (e.g. a serving source's avatar CDN not yet enumerated, like
+      // img.meimaobing.top backing some Bitunix traders). Returning a 403 here
+      // surfaces a console error + broken <img>. Degrade gracefully to a 200
+      // transparent PNG (short cache) so the client shows its CSS fallback and no
+      // error is logged — the same treatment given to upstream 401/403/5xx below.
+      return gracefulAvatarFallback(request.headers.get('Origin'))
     }
 
     // SSRF defense: resolve hostname and reject if it points to a private/reserved IP.
