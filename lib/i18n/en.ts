@@ -5306,6 +5306,9 @@ const en = {
 
   // PnL Calendar Heatmap
   dailyPnlHeatmap: 'Daily PnL Heatmap',
+  weekdayMon: 'Mon',
+  weekdayWed: 'Wed',
+  weekdayFri: 'Fri',
   profit: 'Profit',
   loss: 'Loss',
 
