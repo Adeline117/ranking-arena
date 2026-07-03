@@ -96,6 +96,11 @@ export function parseGateLeaderboardPage(payload: unknown, _ctx: ParseCtx): Pars
       // 0.297 = 29.7%), so extract it to headlineMdd (publish writes trader_stats.mdd).
       // Was raw-only → gate captured MDD only for top-N profiles (~36-65%).
       headlineMdd: pct(item.max_drawdown),
+      // The board row ALSO carries sharp_ratio (gate exposes Sharpe — verified
+      // against the doc screenshot 夏普率; fixture sharp_ratio=-1.31). Was
+      // profile-only (deep-crawl), so Sharpe dashed for every non-top-N gate
+      // trader. Capture it on the board → all traders get it (audit 2026-07-03).
+      headlineSharpe: num(item.sharp_ratio),
       headlineAum: num(item.aum),
       raw: item,
     })

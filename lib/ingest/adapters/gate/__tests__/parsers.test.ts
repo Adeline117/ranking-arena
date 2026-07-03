@@ -36,6 +36,7 @@ describe('parseGateLeaderboardPage', () => {
     expect(first.headlineRoi).toBeCloseTo(1448.97, 1)
     expect(first.headlineWinRate).toBeCloseTo(50, 5)
     expect(first.headlineMdd).toBeCloseTo(29.7, 1) // max_drawdown 0.297 decimal → percent
+    expect(first.headlineSharpe).toBeCloseTo(-1.31, 2) // board sharp_ratio (gate exposes Sharpe)
     expect(first.headlineAum).toBeCloseTo(10, 5)
     expect(first.raw).toMatchObject({ leader_id: 3355 })
   })
