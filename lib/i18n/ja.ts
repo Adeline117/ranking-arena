@@ -5824,6 +5824,9 @@ const ja = {
   proPromoBanner:
     '🎉 Pro機能が期間限定で無料 —— すべての有料機能を、アップグレードなしでお使いいただけます。',
   proPromoBannerDismiss: '閉じる',
+  // サイト全体のクローズドベータバナー（サーバーレンダリング、BetaBanner で描画前にローカライズ）
+  betaBannerFull: 'Arena はクローズドベータ中です —— データを更新中で、一部の機能は開発中です。',
+  betaBannerShort: 'クローズドベータ —— データ更新中、機能は開発中です。',
   tokenRankingsSortLabel: '並び替え',
   tokenRankingsSortTraders: 'トレーダー数',
   tokenRankingsSortTrades: '取引数',

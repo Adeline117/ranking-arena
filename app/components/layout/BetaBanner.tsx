@@ -8,7 +8,26 @@
  * Now rendered as a server component with fixed positioning (no layout shift).
  * Dismiss logic is handled via a tiny inline script that reads localStorage
  * before paint, avoiding a flash of the banner for dismissed users.
+ *
+ * i18n: because this is server-rendered in the root layout (which stays static
+ * for homepage LCP and does NOT read the language cookie), we render all four
+ * localized variants and let the same pre-paint inline script pick the one that
+ * matches localStorage.getItem('language'). English is the default (shown when
+ * JS is disabled or no preference is stored). This keeps the component fully
+ * static — no dynamic layout, no LCP/SSG regression — while still localizing.
  */
+
+import en from '@/lib/i18n/en'
+import ja from '@/lib/i18n/ja'
+import ko from '@/lib/i18n/ko'
+import zh from '@/lib/i18n/zh'
+
+const LANGS = [
+  { code: 'en', dict: en },
+  { code: 'ja', dict: ja },
+  { code: 'ko', dict: ko },
+  { code: 'zh', dict: zh },
+] as const
 
 export default function BetaBanner() {
   // Shown by default on all pages (rendered in root layout); set
@@ -31,11 +50,21 @@ export default function BetaBanner() {
           zIndex: 1 /* flows in document — no longer overlaps sticky header */,
         }}
       >
-        {/* Terser copy on mobile (toggled via CSS) to cut the banner's height. */}
-        <span className="beta-full">
-          Arena is in closed beta — data is being updated and some features are under development.
-        </span>
-        <span className="beta-short">Closed beta — data updating, features in progress.</span>
+        {/* One wrapper per language. English shows by default; the inline script
+            reveals the wrapper matching localStorage.language and hides the rest.
+            Within the shown wrapper, .beta-full/.beta-short toggle via CSS on
+            small screens (terser copy on mobile). */}
+        {LANGS.map(({ code, dict }) => (
+          <span
+            key={code}
+            className="beta-lang"
+            data-beta-lang={code}
+            style={code === 'en' ? undefined : { display: 'none' }}
+          >
+            <span className="beta-full">{dict.betaBannerFull}</span>
+            <span className="beta-short">{dict.betaBannerShort}</span>
+          </span>
+        ))}
         <button
           id="beta-banner-dismiss"
           aria-label="Dismiss"
@@ -62,11 +91,11 @@ export default function BetaBanner() {
           ✕
         </button>
       </div>
-      {/* Inline script: hide if dismissed <24h ago, attach click handler.
-          Runs synchronously before paint to avoid flash. */}
+      {/* Inline script: pick the localized variant, hide if dismissed <30d ago,
+          attach click handler. Runs synchronously before paint to avoid flash. */}
       <script
         dangerouslySetInnerHTML={{
-          __html: `(function(){var k='beta-banner-dismissed-at',b=document.getElementById('beta-banner');if(!b)return;try{var d=localStorage.getItem(k);if(d&&Date.now()-Number(d)<2592e6){b.style.display='none';return}}catch(e){}var btn=document.getElementById('beta-banner-dismiss');if(btn)btn.onclick=function(){try{localStorage.setItem(k,String(Date.now()))}catch(e){}b.style.display='none'}})()`,
+          __html: `(function(){var k='beta-banner-dismissed-at',b=document.getElementById('beta-banner');if(!b)return;try{var lang=localStorage.getItem('language');if(lang!=='ja'&&lang!=='ko'&&lang!=='zh')lang='en';var ws=b.querySelectorAll('.beta-lang');for(var i=0;i<ws.length;i++){ws[i].style.display=ws[i].getAttribute('data-beta-lang')===lang?'':'none'}}catch(e){}try{var d=localStorage.getItem(k);if(d&&Date.now()-Number(d)<2592e6){b.style.display='none';return}}catch(e){}var btn=document.getElementById('beta-banner-dismiss');if(btn)btn.onclick=function(){try{localStorage.setItem(k,String(Date.now()))}catch(e){}b.style.display='none'}})()`,
         }}
       />
     </>

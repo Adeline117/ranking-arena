@@ -6178,6 +6178,10 @@ const en = {
   proPromoBanner:
     '🎉 Pro features are free for a limited time — enjoy everything, no upgrade needed.',
   proPromoBannerDismiss: 'Dismiss',
+  // Site-wide closed-beta banner (server-rendered; localized pre-paint in BetaBanner)
+  betaBannerFull:
+    'Arena is in closed beta — data is being updated and some features are under development.',
+  betaBannerShort: 'Closed beta — data updating, features in progress.',
   tokenRankingsSortLabel: 'Sort by',
   tokenRankingsSortTraders: 'Traders',
   tokenRankingsSortTrades: 'Trades',
