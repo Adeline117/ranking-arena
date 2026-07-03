@@ -607,7 +607,7 @@ export default function FlashNewsPageClient() {
           >
             {/* Dot + text label = colorblind-safe (color is not the only cue) */}
             <span aria-hidden="true">●</span>
-            {t('newsBreaking')}
+            {t('newsFlash_imp_breaking')}
           </button>
         </Box>
 
@@ -720,7 +720,7 @@ export default function FlashNewsPageClient() {
                           }}
                         >
                           <span aria-hidden="true">●</span>
-                          {t('newsBreaking')}
+                          {t('newsFlash_imp_breaking')}
                         </Text>
                         <Box
                           style={{
