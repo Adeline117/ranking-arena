@@ -75,8 +75,17 @@ export async function GET(
       // is a not-found, not an error (client falls back to the server account).
       if ((await getDataMode(source)) !== 'serving') throw ApiError.notFound('Trader not found')
 
+      // arena_resolve_trader already constrains the row to the requested source
+      // via `s.slug = p_source OR s.meta->>'legacy_platform' = p_source`, so a
+      // non-null result is GUARANTEED to belong to the requested source — either
+      // by its arena slug or by its legacy platform alias. Do NOT additionally
+      // compare `resolved.source === source`: for legacy-alias platforms the RPC
+      // returns the arena slug (e.g. 'bitunix_futures') while `source` is the
+      // alias the search href carries (e.g. 'bitunix'), and the string mismatch
+      // was false-404ing every search→trader click on alias sources
+      // (bitunix/xt/blofin/btcc) plus defeating ?platform= disambiguation there.
       const resolved = await resolveServingTrader(supabase, { handle: decodedHandle, source })
-      if (!resolved || resolved.source !== source) throw ApiError.notFound('Trader not found')
+      if (!resolved) throw ApiError.notFound('Trader not found')
 
       const [firstScreenRaw, capabilities] = await Promise.all([
         getFirstScreen(supabase, resolved.source, resolved.exchangeTraderId),
