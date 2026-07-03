@@ -27,7 +27,11 @@ import { readEnv } from './qa-auth.mjs'
 
 // (file:table:column) or (table:column) entries that are known-OK. Document why.
 const ALLOWLIST = new Set([
-  // e.g. 'some_table:jsonb_subkey  // extracted from a nested JSONB literal',
+  // mis-association: the .eq('author_id'/'author_handle') is on a `posts` query
+  // variable (which HAS those cols), but a user_profiles .from() sits between the
+  // query build and the .eq, so nearest-.from picks user_profiles wrongly.
+  'lib/data/posts.ts:user_profiles:author_id',
+  'lib/data/posts.ts:user_profiles:author_handle',
 ])
 
 const SCAN_DIRS = ['app/api', 'lib/data']
@@ -221,6 +225,27 @@ async function main() {
         ),
       ]
       if (missing.length) selectFindings.push({ file: rel, table, missing })
+    }
+
+    // ---- filter/order: .order/.eq/.gt/... first arg is a column that must exist ----
+    // (found manually: .order('updated_at') on trader_portfolio which has captured_at;
+    //  posts .eq('user_id') which has author_id — export silently returned nothing)
+    const reFilter = /\.(order|eq|neq|gt|gte|lt|lte|like|ilike|in)\(\s*(['"`])([a-z_][a-z0-9_]*)\2/g
+    let ff
+    while ((ff = reFilter.exec(src))) {
+      const col = ff[3]
+      const before = src.slice(Math.max(0, ff.index - 400), ff.index)
+      const froms = [...before.matchAll(/\.from\(\s*['"`](\w+)['"`]\s*\)/g)]
+      if (!froms.length) continue
+      const table = froms[froms.length - 1][1]
+      if (!schema[table]) continue
+      if (
+        !schema[table].has(col) &&
+        !ALLOWLIST.has(`${rel}:${table}:${col}`) &&
+        !ALLOWLIST.has(`${table}:${col}`)
+      ) {
+        selectFindings.push({ file: rel, table, missing: [`${ff[1]}(${col})`] })
+      }
     }
   }
 
