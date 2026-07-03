@@ -19,7 +19,10 @@ export async function generateMetadata({
   const article = getArticleBySlug(slug)
   if (!article) return { title: 'Not Found' }
   return {
-    title: `${article.title} | Arena Learn`,
+    // `absolute` opts out of the root layout template ('%s | Arena'); this page
+    // uses its own 'Arena Learn' branding suffix and must not have ' | Arena'
+    // appended on top of it.
+    title: { absolute: `${article.title} | Arena Learn` },
     description: article.excerpt,
   }
 }

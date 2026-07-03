@@ -2,8 +2,11 @@ import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
-  title: 'Trading Competitions | Arena',
-  description: 'Compete with traders worldwide. Join trading competitions on Arena to test your skills and climb the leaderboard.',
+  // Root layout template appends ' | Arena'; OG/Twitter titles below bypass it
+  // and keep the explicit suffix.
+  title: 'Trading Competitions',
+  description:
+    'Compete with traders worldwide. Join trading competitions on Arena to test your skills and climb the leaderboard.',
   alternates: {
     canonical: `${BASE_URL}/competitions`,
   },
@@ -13,7 +16,9 @@ export const metadata: Metadata = {
     url: `${BASE_URL}/competitions`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Competitions' }],
+    images: [
+      { url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Competitions' },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
@@ -24,4 +29,6 @@ export const metadata: Metadata = {
   },
 }
 
-export default function Layout({ children }: { children: React.ReactNode }) { return children }
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return children
+}

@@ -130,7 +130,10 @@ export async function generateMetadata({
   const traderCount = data?.traderCount ?? 0
   const topTrader = data?.topTraders?.[0]
 
-  const title = `${displayName} Top Traders & Rankings | Arena`
+  // Root layout template appends ' | Arena' to the metadata title; keep it out
+  // here to avoid a doubled '… | Arena | Arena'. OG/Twitter bypass the template.
+  const title = `${displayName} Top Traders & Rankings`
+  const ogTitle = `${title} | Arena`
   const description =
     traderCount > 0
       ? `Explore ${traderCount.toLocaleString()} ranked ${displayName} traders on Arena. ${topTrader ? `Top trader: ${topTrader.displayName}${topTrader.roi != null ? ` (${topTrader.roi >= 0 ? '+' : ''}${topTrader.roi.toFixed(1)}% ROI)` : ''}.` : ''} Compare Arena Scores, ROI, PnL, and risk metrics.`
@@ -143,7 +146,7 @@ export async function generateMetadata({
     title,
     description,
     openGraph: {
-      title,
+      title: ogTitle,
       description,
       url: canonicalUrl,
       siteName: 'Arena',
@@ -159,7 +162,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title,
+      title: ogTitle,
       description: description.length > 160 ? description.substring(0, 157) + '...' : description,
       images: [ogImageUrl],
       creator: '@arenafi',
