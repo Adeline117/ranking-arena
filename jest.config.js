@@ -35,12 +35,12 @@ const customJestConfig = {
     global: {
       // Ratchet: set just below current levels so coverage can only go UP.
       // Raise these after each coverage improvement. Never lower them.
-      // Current (2026-07-03): statements 21.47%, branches 19.58%, lines 21.68%, functions 16.68%
-      // (2026-07-02 was 20.29/18.5/20.55/15.71; 2026-05-05 was 14.5/12.5/15.1/10.7)
-      branches: 19,
-      functions: 16,
-      lines: 21,
-      statements: 21,
+      // Current (2026-07-03 batch 6): statements 21.96%, branches 20.11%, lines 22.16%, functions 17.16%
+      // (earlier 2026-07-03: 21.47/19.58/21.68/16.68; 2026-07-02: 20.29/18.5/20.55/15.71)
+      branches: 20,
+      functions: 17,
+      lines: 22,
+      statements: 21.9,
     },
   },
 }
