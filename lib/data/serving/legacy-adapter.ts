@@ -236,6 +236,7 @@ function mergeRoiPnl(series: Series | undefined): TfChartPoint[] {
   if (!series) return []
   const roi = series.roi ?? series.roi_trading ?? []
   const pnl = series.pnl ?? series.cumulative_pnl ?? series.pnl_trading ?? []
+  const accountValue = series.account_value ?? series.equity ?? []
   const byDate = new Map<string, TfChartPoint>()
   for (const p of roi) {
     const date = p.ts.slice(0, 10)
@@ -247,7 +248,27 @@ function mergeRoiPnl(series: Series | undefined): TfChartPoint[] {
     row.pnl = p.value
     byDate.set(date, row)
   }
-  return Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
+  const points = Array.from(byDate.values()).sort((a, b) => a.date.localeCompare(b.date))
+
+  // Some sources (e.g. hyperliquid) expose only a pnl + account_value series and
+  // NO roi series — every point above defaulted roi:0, which silently poisoned
+  // the Copy-Trade Simulator (always +0.0%) and the Daily-Returns histogram
+  // (every day bucketed at 0%). Derive roi from pnl against the deployed
+  // principal at each point: base_t = account_value_t − pnl_t (net capital,
+  // deposit-aware — a plain account_value_0 base blows up when the account
+  // started tiny then took a large deposit). Only when a genuine roi series is
+  // truly absent — never to overwrite real (possibly flat) roi values.
+  if (roi.length === 0 && pnl.length > 0 && accountValue.length > 0) {
+    const avByDate = new Map<string, number>()
+    for (const p of accountValue) avByDate.set(p.ts.slice(0, 10), p.value)
+    for (const row of points) {
+      const av = avByDate.get(row.date)
+      if (av == null) continue
+      const base = av - row.pnl
+      if (base > 0) row.roi = (row.pnl / base) * 100
+    }
+  }
+  return points
 }
 
 /** Per-timeframe serving series → legacy EquityCurveData ({7D,30D,90D}). */
