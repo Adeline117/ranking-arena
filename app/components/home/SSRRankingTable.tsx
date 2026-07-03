@@ -73,6 +73,7 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
               ? 'Futures'
               : 'Spot'
         const winRate = trader.win_rate != null ? `${Number(trader.win_rate).toFixed(1)}%` : '—'
+        const sharpe = trader.sharpe != null ? Number(trader.sharpe).toFixed(2) : '—'
         const mdd =
           trader.max_drawdown != null
             ? Math.abs(trader.max_drawdown) < 0.05
@@ -83,7 +84,7 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
         // PnL / MDD render through the shared Metric so they carry the same
         // colorblind-safe arrow cue (audit 1.2) as the hydrated TraderCard.
         const stats: { label: string; value: string; color?: string; node?: ReactNode }[] = [
-          { label: 'Sharpe', value: '—' },
+          { label: 'Sharpe', value: sharpe },
           {
             label: 'PnL',
             value: formatPnL(trader.pnl),
