@@ -170,7 +170,10 @@ export async function generateMetadata({
   const { token: rawToken } = await params
   const token = rawToken.toUpperCase()
 
-  const title = `Best ${token} Traders ${CURRENT_YEAR} — Who Trades ${token} Best? | Arena`
+  // Root layout template appends ' | Arena' to the metadata title; keep it out
+  // here to avoid a doubled '… | Arena | Arena'. OG/Twitter bypass the template.
+  const title = `Best ${token} Traders ${CURRENT_YEAR} — Who Trades ${token} Best?`
+  const ogTitle = `${title} | Arena`
   const description = `Top traders for ${token} ranked by PnL. See who profits most trading ${token} across 27+ crypto exchanges. Updated hourly.`
 
   return {
@@ -188,7 +191,7 @@ export async function generateMetadata({
       'Arena',
     ],
     openGraph: {
-      title,
+      title: ogTitle,
       description,
       url: `${BASE_URL}/rankings/tokens/${token}`,
       siteName: 'Arena',
@@ -204,7 +207,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title,
+      title: ogTitle,
       description,
       images: [`${BASE_URL}/og-image.png`],
       creator: '@arenafi',

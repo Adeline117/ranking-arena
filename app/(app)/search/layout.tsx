@@ -9,7 +9,11 @@ export async function generateMetadata({
   const resolved = searchParams ? await searchParams : {}
   const query = resolved.q?.trim()
 
-  const title = query ? `"${query}" - Search Results | Arena` : 'Search Traders & Resources | Arena'
+  // Root layout template appends ' | Arena' to the metadata title, so it must
+  // not already include the suffix (else it doubles to '… | Arena | Arena').
+  // OG/Twitter titles bypass the template, so they keep the explicit suffix.
+  const title = query ? `"${query}" - Search Results` : 'Search Traders & Resources'
+  const ogTitle = `${title} | Arena`
 
   const description = query
     ? `Search results for "${query}" — Find traders and resources on Arena. Comprehensive search across 45+ exchanges.`
@@ -22,7 +26,7 @@ export async function generateMetadata({
       canonical: `${BASE_URL}/search`,
     },
     openGraph: {
-      title,
+      title: ogTitle,
       description,
       url: `${BASE_URL}/search`,
       siteName: 'Arena',
@@ -38,7 +42,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title,
+      title: ogTitle,
       description: description.length > 160 ? description.substring(0, 157) + '...' : description,
       images: [`${BASE_URL}/og-image.png`],
       creator: '@arenafi',

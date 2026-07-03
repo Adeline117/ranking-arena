@@ -436,7 +436,11 @@ export async function generateMetadata({
 
   const pnl = typeof lr?.pnl === 'number' ? lr.pnl : null
 
-  const title = `${name} — Performance & Stats | Arena`
+  // Root layout template appends ' | Arena', so the metadata title must NOT
+  // include it (else the tab/SEO title doubles to '… | Arena | Arena').
+  // OG/Twitter titles are NOT run through the template, so they keep the suffix.
+  const title = `${name} — Performance & Stats`
+  const ogTitle = `${title} | Arena`
   const rawDescription = parts.length
     ? `${name} is a ${exchange} trader with ${parts.join(', ')}${pnl != null ? `. PnL: $${pnl >= 0 ? '+' : ''}${pnl >= 1000 || pnl <= -1000 ? (pnl / 1000).toFixed(1) + 'K' : pnl.toFixed(0)}` : ''}. Track performance history, analytics, and rankings on Arena.`
     : `${name} is a ${exchange} crypto trader. View performance analytics, trading history, risk metrics, and rankings on Arena.`
@@ -454,7 +458,7 @@ export async function generateMetadata({
     title,
     description,
     openGraph: {
-      title,
+      title: ogTitle,
       description,
       url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
       siteName: 'Arena',
@@ -465,7 +469,7 @@ export async function generateMetadata({
     },
     twitter: {
       card: 'summary_large_image',
-      title,
+      title: ogTitle,
       description: description.length > 160 ? description.substring(0, 157) + '...' : description,
       images: [ogImageUrl],
       creator: '@arenafi',
