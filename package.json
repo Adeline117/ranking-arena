@@ -74,6 +74,7 @@
     "qa:serving": "node scripts/qa/serving-acceptance.mjs",
     "qa:schema": "node scripts/qa/schema-contract-check.mjs",
     "qa:insert-drift": "node scripts/qa/insert-column-drift-check.mjs",
+    "qa:cast-ratchet": "node scripts/qa/supabase-cast-ratchet.mjs",
     "qa:api-auth": "node scripts/qa/api-auth-coverage-check.mjs",
     "qa:migrations": "node scripts/qa/check-migration-ledger.mjs",
     "qa:buttons": "node scripts/qa/button-sweep.mjs",

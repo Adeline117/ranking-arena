@@ -140,6 +140,12 @@ jobs:
       - name: API auth coverage check (route 级默认拒绝)
         run: npm run qa:api-auth
 
+      # Supabase 类型旁路棘轮：`as SupabaseClient`(裸)/`as any`-on-.from/.rpc 剥掉
+      # <Database> 泛型→列漂移能编译过(2026-07 漂移类的根源)。计数只许降不许升。
+      # 纯本地 fs 扫描 <1s，无外部依赖。
+      - name: Supabase typed-client bypass ratchet
+        run: npm run qa:cast-ratchet
+
       - name: Migration lint — block dangerous DDL
         run: |
           CHANGED=$(git diff --name-only origin/main -- 'supabase/migrations/' 2>/dev/null || true)
