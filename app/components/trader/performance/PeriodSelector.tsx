@@ -328,7 +328,10 @@ export function PeriodSelector({
             const isAbsent = availability?.[p] === 'absent'
             const isDisabled = !!(sourceNote && sourceNote.periods[p] === '--') || isAbsent
             const isActive = period === p && !inceptionSelected
-            const label = p === '7D' ? '7D' : p === '30D' ? '30D' : '90D'
+            // Localize the period pills to match the rankings/home selectors
+            // (which use t('days7/30/90')) — same concept must read the same
+            // convention one click apart. Keys already have en/zh/ja/ko parity.
+            const label = t(p === '7D' ? 'days7' : p === '30D' ? 'days30' : 'days90')
             return (
               <button
                 key={p}
@@ -337,7 +340,7 @@ export function PeriodSelector({
                 }}
                 disabled={isDisabled}
                 aria-pressed={isActive}
-                aria-label={`${label} period`}
+                aria-label={`${p} period`}
                 style={{
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                   minHeight: 44,
