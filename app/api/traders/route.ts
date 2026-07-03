@@ -39,7 +39,7 @@ const tradersQuerySchema = z.object({
   exchange: z.string().optional(),
   category: z.enum(['futures', 'spot', 'onchain']).optional(),
   sortBy: z
-    .enum(['arena_score', 'roi', 'pnl', 'win_rate', 'max_drawdown', 'sortino_ratio', 'alpha'])
+    .enum(['arena_score', 'roi', 'pnl', 'win_rate', 'max_drawdown', 'sortino_ratio'])
     .catch('arena_score'),
   order: z.enum(['asc', 'desc']).catch('desc'),
   cursor: z.coerce.number().int().min(0).optional(),
@@ -127,7 +127,8 @@ const SORT_COLUMN: Record<string, string> = {
   win_rate: 'win_rate',
   max_drawdown: 'max_drawdown',
   sortino_ratio: 'sortino_ratio',
-  alpha: 'alpha',
+  // NOTE: no `alpha` — leaderboard_ranks has no such column; ?sort=alpha used to
+  // reach query.order('alpha') → PostgREST 42703 500 (audit 2026-07-03).
 }
 
 async function fetchFromLeaderboard(

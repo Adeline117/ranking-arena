@@ -204,18 +204,23 @@ export const TraderMetricCells = memo(function TraderMetricCells({
         )}
       </Box>
 
-      {/* Followers — show exchange copier count; hide 0 (likely missing data) */}
-      <Box className="col-followers" style={RIGHT_CELL_STYLE}>
-        {trader.followers != null && Number(trader.followers) > 0 ? (
-          <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
-            {Number(trader.followers) >= 1000
-              ? `${(Number(trader.followers) / 1000).toFixed(1)}K`
-              : trader.followers}
-          </Text>
-        ) : (
-          <span style={NA_DASH_STYLE}>&mdash;</span>
-        )}
-      </Box>
+      {/* Followers — exchange copier count. Prefer `copiers` (populated: 90D max
+          4756); `followers` is 0 for 100% of rows so it read as a dead dash
+          (audit 2026-07-03). Fall back to followers for any source that fills it. */}
+      {(() => {
+        const copierN = Number(trader.copiers ?? trader.followers ?? 0)
+        return (
+          <Box className="col-followers" style={RIGHT_CELL_STYLE}>
+            {copierN > 0 ? (
+              <Text size="sm" weight="semibold" style={STAT_TEXT_TERTIARY_STYLE}>
+                {copierN >= 1000 ? `${(copierN / 1000).toFixed(1)}K` : copierN}
+              </Text>
+            ) : (
+              <span style={NA_DASH_STYLE}>&mdash;</span>
+            )}
+          </Box>
+        )
+      })()}
 
       {/* Trades Count */}
       <Box className="col-trades" style={RIGHT_CELL_STYLE}>
