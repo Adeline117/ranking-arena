@@ -9,11 +9,7 @@ interface PeriodSelectorProps {
   t: (key: string) => string
 }
 
-export function PeriodSelector({
-  value,
-  onChange,
-  t: _t
-}: PeriodSelectorProps) {
+export function PeriodSelector({ value, onChange, t }: PeriodSelectorProps) {
   return (
     <Box
       style={{
@@ -44,7 +40,7 @@ export function PeriodSelector({
             boxShadow: value === p ? '0 2px 8px var(--color-overlay-subtle)' : 'none',
           }}
         >
-          {p}
+          {t(p === '7D' ? 'days7' : p === '30D' ? 'days30' : 'days90')}
         </button>
       ))}
     </Box>
@@ -59,7 +55,7 @@ interface EquityCurveData {
 
 // Check if ROI data has any meaningful non-zero values
 export function hasNonZeroRoi(data: Array<{ date: string; roi: number; pnl: number }>): boolean {
-  return data.some(d => d.roi !== 0 && d.roi != null)
+  return data.some((d) => d.roi !== 0 && d.roi != null)
 }
 
 // Determine the best initial chart type based on available data
@@ -72,7 +68,9 @@ export function getBestChartType(equityCurve: EquityCurveData | undefined): 'roi
 }
 
 // Auto-select the best period that has data (prefers 90D -> 30D -> 7D)
-export function getBestInitialPeriod(equityCurve: EquityCurveData | undefined): '7D' | '30D' | '90D' {
+export function getBestInitialPeriod(
+  equityCurve: EquityCurveData | undefined
+): '7D' | '30D' | '90D' {
   if (equityCurve?.['90D']?.length) return '90D'
   if (equityCurve?.['30D']?.length) return '30D'
   if (equityCurve?.['7D']?.length) return '7D'
