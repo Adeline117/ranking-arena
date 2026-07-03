@@ -19,19 +19,19 @@ interface DayData {
 
 // Color intensity levels for profit/loss
 const PROFIT_COLORS = [
-  'rgba(47, 229, 125, 0.15)',  // very light green
-  'rgba(47, 229, 125, 0.35)',  // light green
-  'rgba(47, 229, 125, 0.55)',  // medium green
-  'rgba(47, 229, 125, 0.75)',  // strong green
-  'rgba(47, 229, 125, 0.95)',  // intense green
+  'rgba(47, 229, 125, 0.15)', // very light green
+  'rgba(47, 229, 125, 0.35)', // light green
+  'rgba(47, 229, 125, 0.55)', // medium green
+  'rgba(47, 229, 125, 0.75)', // strong green
+  'rgba(47, 229, 125, 0.95)', // intense green
 ]
 
 const LOSS_COLORS = [
-  'rgba(255, 124, 124, 0.15)',  // very light red
-  'rgba(255, 124, 124, 0.35)',  // light red
-  'rgba(255, 124, 124, 0.55)',  // medium red
-  'rgba(255, 124, 124, 0.75)',  // strong red
-  'rgba(255, 124, 124, 0.95)',  // intense red
+  'rgba(255, 124, 124, 0.15)', // very light red
+  'rgba(255, 124, 124, 0.35)', // light red
+  'rgba(255, 124, 124, 0.55)', // medium red
+  'rgba(255, 124, 124, 0.75)', // strong red
+  'rgba(255, 124, 124, 0.95)', // intense red
 ]
 
 const NO_DATA_COLOR = 'var(--color-bg-tertiary)'
@@ -43,11 +43,21 @@ function getColor(pnl: number, maxAbsPnl: number): string {
   return pnl > 0 ? PROFIT_COLORS[index] : LOSS_COLORS[index]
 }
 
-const DAY_LABELS = ['', 'Mon', '', 'Wed', '', 'Fri', '']
+const LOCALE_BY_LANGUAGE: Record<string, string> = {
+  zh: 'zh-CN',
+  ja: 'ja-JP',
+  ko: 'ko-KR',
+  en: 'en',
+}
 
 export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const [tooltip, setTooltip] = useState<{ x: number; y: number; day: DayData } | null>(null)
+
+  const monthLocale = LOCALE_BY_LANGUAGE[language] ?? 'en'
+
+  // Weekday row labels (Sun..Sat); only Mon/Wed/Fri are shown, matching GitHub-style graphs
+  const DAY_LABELS = ['', t('weekdayMon'), '', t('weekdayWed'), '', t('weekdayFri'), '']
 
   const { grid, weeks, monthLabels, maxAbsPnl } = useMemo(() => {
     if (!data || data.length === 0) return { grid: [], weeks: 0, monthLabels: [], maxAbsPnl: 0 }
@@ -66,7 +76,9 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
 
     // Generate last N days (all UTC to avoid timezone date shift)
     const today = new Date()
-    const startDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - days + 1))
+    const startDate = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate() - days + 1)
+    )
 
     // Align start to the beginning of the week (Sunday) using UTC
     const startDay = startDate.getUTCDay()
@@ -74,7 +86,9 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
 
     const gridData: (DayData | null)[] = []
     const current = new Date(startDate)
-    const endDate = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()))
+    const endDate = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate())
+    )
 
     while (current <= endDate) {
       const dateStr = current.toISOString().split('T')[0]
@@ -93,6 +107,7 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
     // Month labels
     const labels: Array<{ label: string; week: number }> = []
     let lastMonth = -1
+    let lastLabelWeek = -Infinity
     for (let i = 0; i < gridData.length; i++) {
       const weekIndex = Math.floor(i / 7)
       const dayIndex = i % 7
@@ -101,26 +116,32 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
       d.setUTCDate(d.getUTCDate() + i)
       if (d.getUTCMonth() !== lastMonth) {
         lastMonth = d.getUTCMonth()
-        const monthName = d.toLocaleString('en', { month: 'short', timeZone: 'UTC' })
+        // Suppress a label that lands within 3 weeks of the previous one so
+        // adjacent short month names (e.g. "Mar"/"Apr") never overlap into "MarApr".
+        if (weekIndex - lastLabelWeek < 3) continue
+        lastLabelWeek = weekIndex
+        const monthName = d.toLocaleString(monthLocale, { month: 'short', timeZone: 'UTC' })
         labels.push({ label: monthName, week: weekIndex })
       }
     }
 
     // Max absolute PnL for color scaling
-    const pnlValues = Array.from(dailyMap.values()).map(d => Math.abs(d.pnl))
+    const pnlValues = Array.from(dailyMap.values()).map((d) => Math.abs(d.pnl))
     const maxPnl = pnlValues.length > 0 ? Math.max(...pnlValues) : 1
 
     return { grid: gridData, weeks: numWeeks, monthLabels: labels, maxAbsPnl: maxPnl }
-  }, [data, days])
+  }, [data, days, monthLocale])
 
   if (!data || data.length < 3) {
     return (
-      <div style={{
-        padding: tokens.spacing[4],
-        color: tokens.colors.text.tertiary,
-        fontSize: tokens.typography.fontSize.sm,
-        textAlign: 'center',
-      }}>
+      <div
+        style={{
+          padding: tokens.spacing[4],
+          color: tokens.colors.text.tertiary,
+          fontSize: tokens.typography.fontSize.sm,
+          textAlign: 'center',
+        }}
+      >
         {t('insufficientDataForChart')}
       </div>
     )
@@ -137,29 +158,41 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
   return (
     <div style={{ position: 'relative' }}>
       {/* Header */}
-      <div style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        marginBottom: tokens.spacing[3],
-      }}>
-        <span style={{
-          fontSize: tokens.typography.fontSize.sm,
-          fontWeight: tokens.typography.fontWeight.bold,
-          color: 'var(--color-text-secondary)',
-        }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginBottom: tokens.spacing[3],
+        }}
+      >
+        <span
+          style={{
+            fontSize: tokens.typography.fontSize.sm,
+            fontWeight: tokens.typography.fontWeight.bold,
+            color: 'var(--color-text-secondary)',
+          }}
+        >
           {t('dailyPnlHeatmap')}
         </span>
 
         {/* Legend */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 10 }}>
           <span style={{ color: 'var(--color-text-tertiary)' }}>{t('loss')}</span>
-          {LOSS_COLORS.slice().reverse().map((c, i) => (
-            <div key={`loss-${i}`} style={{ width: 10, height: 10, borderRadius: 2, background: c }} />
-          ))}
+          {LOSS_COLORS.slice()
+            .reverse()
+            .map((c, i) => (
+              <div
+                key={`loss-${i}`}
+                style={{ width: 10, height: 10, borderRadius: 2, background: c }}
+              />
+            ))}
           <div style={{ width: 10, height: 10, borderRadius: 2, background: NO_DATA_COLOR }} />
           {PROFIT_COLORS.map((c, i) => (
-            <div key={`profit-${i}`} style={{ width: 10, height: 10, borderRadius: 2, background: c }} />
+            <div
+              key={`profit-${i}`}
+              style={{ width: 10, height: 10, borderRadius: 2, background: c }}
+            />
           ))}
           <span style={{ color: 'var(--color-text-tertiary)' }}>{t('profit')}</span>
         </div>
@@ -186,7 +219,7 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
         ))}
 
         {/* Day labels */}
-        {DAY_LABELS.map((label, i) => (
+        {DAY_LABELS.map((label, i) =>
           label ? (
             <text
               key={i}
@@ -199,7 +232,7 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
               {label}
             </text>
           ) : null
-        ))}
+        )}
 
         {/* Cells */}
         {grid.map((day, i) => {
@@ -223,7 +256,9 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
               onMouseEnter={(e) => {
                 if (day) {
                   const rect = (e.target as SVGRectElement).getBoundingClientRect()
-                  const parent = (e.target as SVGRectElement).closest('div')?.getBoundingClientRect()
+                  const parent = (e.target as SVGRectElement)
+                    .closest('div')
+                    ?.getBoundingClientRect()
                   if (parent) {
                     setTooltip({
                       x: rect.left - parent.left + rect.width / 2,
@@ -261,13 +296,25 @@ export function PnlCalendarHeatmap({ data, days = 90 }: PnlCalendarHeatmapProps)
           <div style={{ fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 2 }}>
             {tooltip.day.date}
           </div>
-          <div style={{ color: tooltip.day.pnl >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)' }}>
-            PnL: {tooltip.day.pnl >= 0 ? '+' : ''}{tooltip.day.pnl < 1000 && tooltip.day.pnl > -1000
+          <div
+            style={{
+              color:
+                tooltip.day.pnl >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
+            }}
+          >
+            PnL: {tooltip.day.pnl >= 0 ? '+' : ''}
+            {tooltip.day.pnl < 1000 && tooltip.day.pnl > -1000
               ? `$${tooltip.day.pnl.toFixed(2)}`
               : `$${tooltip.day.pnl.toLocaleString('en-US', { maximumFractionDigits: 0 })}`}
           </div>
-          <div style={{ color: tooltip.day.roi >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)' }}>
-            ROI: {tooltip.day.roi >= 0 ? '+' : ''}{tooltip.day.roi.toFixed(2)}%
+          <div
+            style={{
+              color:
+                tooltip.day.roi >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
+            }}
+          >
+            ROI: {tooltip.day.roi >= 0 ? '+' : ''}
+            {tooltip.day.roi.toFixed(2)}%
           </div>
         </div>
       )}

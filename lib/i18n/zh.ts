@@ -5204,6 +5204,9 @@ const zh = {
 
   // Daily PnL Heatmap
   dailyPnlHeatmap: '每日盈亏热力图',
+  weekdayMon: '周一',
+  weekdayWed: '周三',
+  weekdayFri: '周五',
 
   // Data Source Indicators (Claim System)
   dataSourceVerified: '已验证数据',
