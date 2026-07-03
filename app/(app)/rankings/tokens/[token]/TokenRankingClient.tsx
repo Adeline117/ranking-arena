@@ -416,7 +416,7 @@ export default function TokenRankingClient({
             {token.charAt(0)}
           </Box>
           <Box>
-            <Text size="2xl" weight="bold" style={{ color: tokens.colors.text.primary }}>
+            <Text as="h1" size="2xl" weight="bold" style={{ color: tokens.colors.text.primary }}>
               {t('tokenRankingHeader').replace('{token}', token)}
             </Text>
             <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
