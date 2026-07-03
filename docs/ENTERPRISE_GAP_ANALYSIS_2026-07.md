@@ -101,11 +101,18 @@
 ### 9. 重复与数据层不统一（comprehension debt 的典型症状）
 
 - **事实**：3 套货币格式化（`formatMoney`/`formatUSD`/`formatCurrency`）、
-  2 套日期格式化、2 套 i18n 系统（lib/i18n.ts 旧 + lib/i18n/ 新）并存；
-  React Query 仅 30 文件 vs 手写 fetch 108 文件；8 个 >1,100 行巨型页面组件
-  （最大 channels page 1,465 行）。
-- **对策**（Phase 1）：格式化整并为 shim + `no-restricted-imports` 棘轮。
-  i18n 合并与巨型组件拆分列 backlog（大重构，独立任务）。
+  2 套日期格式化；React Query 29 文件 vs 手写 fetch 109 文件；10 个 >1,000 行
+  巨型页面组件（最大 channels page 1,465、RankingTable 1,458）。
+- **⚠️ 审计误报更正（2026-07-02）**：原报告称"2 套 i18n 系统"是**误报**。
+  `lib/i18n.ts`（客户端运行时 t()/loadTranslations）与 `lib/i18n/*.ts`（翻译数据 +
+  服务端 helper）是**刻意的运行时/数据分离 + 代码分割**（避免 180KB en.ts 静态
+  打包，en-core/zh-core 供 SSR、完整字典水合时懒加载）——正确架构，**不该合并**。
+  已移除其中 2 个确认死掉的 `@deprecated load*Translations` 导出。
+  → [[feedback-verify-before-fix]] 的又一例证：审计发现不是事实，核实后再动。
+- **对策**：货币格式化已建 import 棘轮（Batch F2，禁新增引用）。真实剩余 =
+  巨型组件拆分（10）+ 手写 fetch→React Query（109）——**高回归风险、需跑应用
+  点击验证**，组件测试近零，不能在无验证批量 pass 里盲改；列 Phase 1.5 逐文件
+  带验证增量推进（见路线图）。
 
 ### 10. 仓库卫生
 

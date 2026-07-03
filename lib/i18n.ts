@@ -143,17 +143,8 @@ if (typeof window !== 'undefined') {
   // but core keys cover SSR output. Full dict loads on client hydration.
 }
 
-export async function loadZhTranslations(): Promise<void> {
-  return loadLang('zh')
-}
-
 export async function loadTranslations(lang: Language): Promise<void> {
   return loadLang(lang)
-}
-
-/** @deprecated Use loadTranslations instead */
-export async function loadEnTranslations(): Promise<void> {
-  return loadLang('en')
 }
 
 // Keep backward compatibility: synchronous translations object
