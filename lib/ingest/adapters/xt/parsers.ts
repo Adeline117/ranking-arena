@@ -320,28 +320,51 @@ function normalizeSymbol(v: unknown): string | null {
 }
 
 export function parseXtHistory(raw: unknown, kind: HistoryKind, ctx: ParseCtx): ParsedHistoryRow[] {
-  if (kind !== 'position_history') return [] // only closed-position history is exposed
-  const result = (raw as Dict)?.result as Dict | undefined
-  const list = result?.items
-  const rows = Array.isArray(list) ? (list as Dict[]) : []
-  const out: ParsedHistoryRow[] = []
-  for (const r of rows) {
-    const symbol = normalizeSymbol(r.symbolName)
-    if (!symbol) continue
-    out.push({
-      kind: 'position_history',
-      openedAt: isoMs(r.openTime),
-      closedAt: isoMs(r.closeTime) ?? ctx.scrapedAt,
-      symbol,
-      side: typeof r.positionSide === 'string' ? r.positionSide : null,
-      leverage: num(r.openLeverage),
-      size: num(r.positionSize ?? r.openSize ?? r.closeSize),
-      entryPrice: num(r.openPrice ?? r.entryPrice),
-      exitPrice: num(r.closePrice),
-      realizedPnl: num(r.realizedPnl),
-      dedupeHash: xtDedupeHash('xt_ph', r.id ?? r.orderId, r.openTime),
-      raw: r,
-    })
+  const rows = ((raw as Dict)?.result as Dict | undefined)?.items
+  const list = Array.isArray(rows) ? (rows as Dict[]) : []
+
+  if (kind === 'position_history') {
+    const out: ParsedHistoryRow[] = []
+    for (const r of list) {
+      const symbol = normalizeSymbol(r.symbolName)
+      if (!symbol) continue
+      out.push({
+        kind: 'position_history',
+        openedAt: isoMs(r.openTime),
+        closedAt: isoMs(r.closeTime) ?? ctx.scrapedAt,
+        symbol,
+        side: typeof r.positionSide === 'string' ? r.positionSide : null,
+        leverage: num(r.openLeverage),
+        size: num(r.positionSize ?? r.openSize ?? r.closeSize),
+        entryPrice: num(r.openPrice ?? r.entryPrice),
+        exitPrice: num(r.closePrice),
+        realizedPnl: num(r.realizedPnl),
+        dedupeHash: xtDedupeHash('xt_ph', r.id ?? r.orderId, r.openTime),
+        raw: r,
+      })
+    }
+    return out
   }
-  return out
+
+  if (kind === 'copiers') {
+    // leader-follower-page → copiers. followerName is PII → stored for dedupe/
+    // aggregation only; the render path emits aggregates (spec §6).
+    const out: ParsedHistoryRow[] = []
+    for (const c of list) {
+      const label = typeof c.followerName === 'string' ? c.followerName : null
+      out.push({
+        kind: 'copiers',
+        ts: ctx.scrapedAt,
+        copierLabel: label,
+        copierPnl: num(c.followProfitU),
+        copierInvested: num(c.followMarginU ?? c.followAmountTotal),
+        copyDurationDays: int(c.days),
+        dedupeHash: xtDedupeHash('xt_cp', c.id ?? label),
+        raw: c,
+      })
+    }
+    return out
+  }
+
+  return [] // orders / transfers / current positions not exposed publicly
 }

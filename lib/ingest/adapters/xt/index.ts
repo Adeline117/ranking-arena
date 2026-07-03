@@ -69,15 +69,15 @@ const xtAdapter: SourceAdapter = {
   slug: 'xt',
   capabilities: {
     profile: true,
-    // position_history harvested from the public leader-order-history endpoint
-    // (unsigned, same host as profile — discovered 2026-07-02). Current-open
-    // positions + copier list endpoints weren't discoverable via public probing
-    // (detail page login-gated); left disabled.
+    // position_history (leader-order-history) + copiers (leader-follower-page)
+    // harvested from public unsigned endpoints (same host as profile). Current
+    // open positions (leader-order-page) return empty publicly (80 traders
+    // probed 2026-07-02) = login-gated → positions stays disabled.
     positions: false,
     positionHistory: true,
     orders: false,
     transfers: false,
-    copiers: false,
+    copiers: true,
   },
 
   async *listLeaderboard(
@@ -185,9 +185,10 @@ const xtAdapter: SourceAdapter = {
   },
 
   /**
-   * Closed-position history via the public leader-order-history endpoint
-   * (unsigned GET, `leaderAccountId` param). Newest→older; stop on !hasNext,
-   * short page, or a page whose newest close overlaps the stored cursor.
+   * Public unsigned record surfaces (`leaderAccountId` param, {result:{items,
+   * hasNext}} envelope): position_history ← leader-order-history (closed
+   * round-trips), copiers ← leader-follower-page. Paginate until !hasNext /
+   * short page; position_history also stops on cursor overlap (closeTime).
    */
   async *getHistory(
     session: FetchSession,
@@ -196,7 +197,11 @@ const xtAdapter: SourceAdapter = {
     kind: HistoryKind,
     cursor: string | null
   ): AsyncIterable<RawPage> {
-    if (kind !== 'position_history') return // only closed-position history exposed
+    let endpointName: string
+    if (kind === 'position_history') endpointName = 'leader-order-history'
+    else if (kind === 'copiers') endpointName = 'leader-follower-page'
+    else return // orders / transfers / current positions not exposed publicly
+
     const fetcher = apiFetcher(await session.api())
     const size = Number(src.meta.history_page_size) || 20
     const maxPages = Number(src.meta.history_max_pages ?? 10) || 10
@@ -204,7 +209,7 @@ const xtAdapter: SourceAdapter = {
 
     for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
       const url =
-        `${base(src)}/leader-order-history?leaderAccountId=${exchangeTraderId}` +
+        `${base(src)}/${endpointName}?leaderAccountId=${exchangeTraderId}` +
         `&page=${pageNo}&size=${size}`
       const payload = await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
       const result = (payload as Record<string, unknown>)?.result as
@@ -215,8 +220,8 @@ const xtAdapter: SourceAdapter = {
 
       yield { pageIndex: pageNo, payload, url, fetchedAt: new Date().toISOString() }
 
-      // Stop once this page's oldest close predates the stored cursor (overlap).
-      if (!Number.isNaN(cursorMs)) {
+      // position_history: stop once this page's oldest close overlaps the cursor.
+      if (kind === 'position_history' && !Number.isNaN(cursorMs)) {
         const oldest = Math.min(
           ...rows.map((r) => Number(r.closeTime)).filter((n) => Number.isFinite(n))
         )

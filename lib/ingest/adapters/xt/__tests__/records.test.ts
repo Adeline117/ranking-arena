@@ -11,6 +11,9 @@ import type { ParseCtx } from '../../../core/types'
 const raw = JSON.parse(
   readFileSync(join(__dirname, 'fixtures', 'records-position-history.json'), 'utf8')
 )
+const followers = JSON.parse(
+  readFileSync(join(__dirname, 'fixtures', 'records-followers.json'), 'utf8')
+)
 
 const ctx: ParseCtx = {
   sourceSlug: 'xt_futures',
@@ -44,12 +47,32 @@ describe('parseXtHistory position_history', () => {
     expect(hashes.size).toBe(rows.length)
   })
 
-  it('ignores non-position_history kinds', () => {
+  it('ignores orders/transfers kinds', () => {
     expect(parseXtHistory(raw, 'orders', ctx)).toEqual([])
-    expect(parseXtHistory(raw, 'copiers', ctx)).toEqual([])
+    expect(parseXtHistory(raw, 'transfers', ctx)).toEqual([])
   })
 
   it('returns [] for an empty payload', () => {
     expect(parseXtHistory({ result: { items: [] } }, 'position_history', ctx)).toEqual([])
+  })
+})
+
+describe('parseXtHistory copiers', () => {
+  const rows = parseXtHistory(followers, 'copiers', ctx)
+
+  it('maps copier aggregate fields (invested/pnl/duration); label dedupe-only', () => {
+    expect(rows.length).toBe(20)
+    const c = rows[0]
+    expect(c.kind).toBe('copiers')
+    if (c.kind !== 'copiers') return
+    expect(typeof c.copierLabel).toBe('string') // followerName — dedupe only, aggregate render
+    expect(c.copierInvested).toBeCloseTo(376.7, 1) // followMarginU
+    expect(c.copierPnl).toBeCloseTo(747.83012, 3)
+    expect(c.copyDurationDays).toBe(230)
+    expect(c.dedupeHash).toMatch(/^[a-f0-9]{40}$/)
+  })
+
+  it('assigns unique dedupeHashes', () => {
+    expect(new Set(rows.map((r) => r.dedupeHash)).size).toBe(rows.length)
   })
 })
