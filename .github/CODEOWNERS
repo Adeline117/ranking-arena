@@ -1,0 +1,35 @@
+# CODEOWNERS — 代码归属（团队化脚手架，2026-07-02）
+#
+# 当前单人项目，全部归 @Adeline117；随团队扩张按模块拆分 owner。
+# 生效前提：需在 branch protection ruleset 开启 "require review from
+# Code Owners"（见 docs/RELEASE.md 的 recipe）。现在先立文件，行为不变。
+#
+# 语法：<path-glob>  <owner...>，后匹配优先。
+
+# 默认：全仓库
+*                           @Adeline117
+
+# —— 高风险区（未来应要求更严 review）——
+# 支付：任何改动都影响真实资金
+/app/api/stripe/            @Adeline117
+/lib/stripe.ts              @Adeline117
+/lib/stripe/                @Adeline117
+
+# 鉴权 / RLS / 安全边界
+/lib/auth/                  @Adeline117
+/lib/api/with-admin-auth.ts @Adeline117
+/lib/api/with-cron.ts       @Adeline117
+/supabase/migrations/       @Adeline117
+/lib/exchange/secure-encryption.ts @Adeline117
+
+# CI / 部署 / 质量门禁（改这些影响所有会话与生产部署）
+/.github/workflows/         @Adeline117
+/vercel.json                @Adeline117
+/scripts/git-hooks/         @Adeline117
+/eslint.config.mjs          @Adeline117
+/tsconfig.json              @Adeline117
+
+# 数据管道核心
+/lib/ingest/                @Adeline117
+/lib/pipeline/validate-before-write.ts @Adeline117
+/worker/                    @Adeline117
