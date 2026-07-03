@@ -111,6 +111,40 @@ function objAfter(src, idx) {
   return null
 }
 
+// Extract top-level column names from a PostgREST `.select('...')` string.
+// Skips `*`, embedded resources `rel(...)` (foreign tables, not columns of this
+// table), json/cast ops, and resolves `alias:real_col` to the real column.
+function selectColumns(sel) {
+  if (!sel || sel.includes('*')) return []
+  // split on top-level commas (respect parens of embedded resources)
+  const parts = []
+  let depth = 0
+  let cur = ''
+  for (const c of sel) {
+    if (c === '(') {
+      depth++
+      cur += c
+    } else if (c === ')') {
+      depth--
+      cur += c
+    } else if (c === ',' && depth === 0) {
+      parts.push(cur)
+      cur = ''
+    } else cur += c
+  }
+  if (cur) parts.push(cur)
+  const out = []
+  for (let p of parts) {
+    p = p.trim()
+    if (!p || p.includes('(')) continue // embedded resource rel(...) — not a column here
+    if (p.includes(':')) p = p.split(':').pop().trim() // alias:real_col → real_col
+    p = p.split('->')[0].split('::')[0].trim() // strip json ops / casts
+    // `count` is the PostgREST count() aggregate (valid on any query), not a column
+    if (p !== 'count' && /^[a-z_][a-z0-9_]*$/i.test(p)) out.push(p)
+  }
+  return out
+}
+
 async function main() {
   const client = new pg.Client({
     connectionString: readEnv('DATABASE_URL'),
@@ -127,6 +161,7 @@ async function main() {
   const files = SCAN_DIRS.flatMap((d) => walk(path.join(REPO, d)))
   const reMethod = /\.(insert|update|upsert)\(\s*\[?\s*\{/g
   const findings = []
+  const selectFindings = []
   for (const f of files) {
     const src = fs.readFileSync(f, 'utf8')
     const rel = f.replace(REPO + '/', '')
@@ -154,21 +189,58 @@ async function main() {
       ]
       if (missing.length) findings.push({ file: rel, table, method: m[1], missing })
     }
+
+    // ---- read-path: .from('t').select('cols') columns must exist too ----
+    const reSelect = /\.select\(\s*(['"`])([\s\S]*?)\1/g
+    let s
+    while ((s = reSelect.exec(src))) {
+      const before = src.slice(Math.max(0, s.index - 400), s.index)
+      const froms = [...before.matchAll(/\.from\(\s*['"`](\w+)['"`]\s*\)/g)]
+      if (!froms.length) continue
+      const table = froms[froms.length - 1][1]
+      if (!schema[table]) continue
+      const cols = schema[table]
+      const missing = [
+        ...new Set(
+          selectColumns(s[2]).filter(
+            (k) =>
+              !cols.has(k) &&
+              !ALLOWLIST.has(`${rel}:${table}:${k}`) &&
+              !ALLOWLIST.has(`${table}:${k}`)
+          )
+        ),
+      ]
+      if (missing.length) selectFindings.push({ file: rel, table, missing })
+    }
   }
 
-  if (!findings.length) {
-    console.log('✅ insert/update column-drift check passed — every written column exists in prod')
+  const report = (list, verb, consequence) => {
+    console.error(`\n❌ ${list.length} ${verb}:\n`)
+    for (const f of list) {
+      console.error(
+        `  ${f.file}\n    ${f.method ? f.method + ' ' : 'select '}${f.table} → missing: ${f.missing.join(', ')}`
+      )
+    }
+    console.error(consequence)
+  }
+  if (!findings.length && !selectFindings.length) {
+    console.log('✅ column-drift check passed — every written AND selected column exists in prod')
     process.exit(0)
   }
-  console.error(`\n❌ ${findings.length} write(s) reference columns missing from production:\n`)
-  for (const f of findings) {
-    console.error(`  ${f.file}\n    ${f.method} ${f.table} → missing: ${f.missing.join(', ')}`)
-  }
-  console.error(
-    `\nEach 500s at runtime (PGRST204). Fix = add the column via migration, OR correct the` +
-      ` code (renamed/camelCase column, wrong table). Genuine false positives (JSONB sub-keys,` +
-      ` dynamic keys) → add to ALLOWLIST at the top with a reason.`
-  )
+  if (findings.length)
+    report(
+      findings,
+      'write(s) reference columns missing from production',
+      `Each 500s at runtime (PGRST204). Fix = add the column via migration, OR correct the code` +
+        ` (renamed/camelCase column, wrong table). False positives (JSONB sub-keys, dynamic keys) → ALLOWLIST.`
+    )
+  if (selectFindings.length)
+    report(
+      selectFindings,
+      'select(s) read columns missing from production',
+      `Each 400s at runtime (PGRST). Fix = correct the column name, or add the column. False positives` +
+        ` (embedded-resource columns, computed aliases) → ALLOWLIST.`
+    )
   process.exit(1)
 }
 
