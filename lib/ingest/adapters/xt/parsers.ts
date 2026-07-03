@@ -26,9 +26,12 @@
  * Verified by live capture 2026-06-11 (xt-*-debug scripts, deleted).
  */
 
+import { createHash } from 'crypto'
 import type {
   BoardSeriesBlock,
+  HistoryKind,
   ParseCtx,
+  ParsedHistoryRow,
   ParsedLeaderboardPage,
   ParsedLeaderboardRow,
   ParsedProfile,
@@ -287,4 +290,58 @@ function xtSymbolPrefer(rows: unknown): Record<string, unknown> | null {
     })
     .filter(Boolean)
   return markets.length > 0 ? { markets } : null
+}
+
+// ── Record surfaces (public direct-API, discovered 2026-07-02) ───────────────
+// GET {base}/leader-order-history?leaderAccountId={id}&page&size → closed
+// positions (open/close time+price, side, leverage, realizedPnl, profitRate).
+// Envelope: {returnCode, result:{hasPrev, hasNext, items[]}}. Unsigned, public
+// (same host as the profile endpoints) — no browser/sign needed. Rows are
+// round-trip closed positions → position_history (not order-level).
+
+/** Stable natural identity for idempotent record upserts (spec §2.3). */
+function xtDedupeHash(...fields: unknown[]): string {
+  return createHash('sha1')
+    .update(fields.map((f) => String(f ?? '')).join('|'))
+    .digest('hex')
+}
+
+/** ms epoch → ISO, or null. */
+function isoMs(v: unknown): string | null {
+  const n = num(v)
+  if (n === null || n <= 0) return null
+  return new Date(n).toISOString()
+}
+
+/** eth_usdt → ETH-USDT (align with the board symbol shape). */
+function normalizeSymbol(v: unknown): string | null {
+  if (typeof v !== 'string' || v === '') return null
+  return v.toUpperCase().replace(/_/g, '-')
+}
+
+export function parseXtHistory(raw: unknown, kind: HistoryKind, ctx: ParseCtx): ParsedHistoryRow[] {
+  if (kind !== 'position_history') return [] // only closed-position history is exposed
+  const result = (raw as Dict)?.result as Dict | undefined
+  const list = result?.items
+  const rows = Array.isArray(list) ? (list as Dict[]) : []
+  const out: ParsedHistoryRow[] = []
+  for (const r of rows) {
+    const symbol = normalizeSymbol(r.symbolName)
+    if (!symbol) continue
+    out.push({
+      kind: 'position_history',
+      openedAt: isoMs(r.openTime),
+      closedAt: isoMs(r.closeTime) ?? ctx.scrapedAt,
+      symbol,
+      side: typeof r.positionSide === 'string' ? r.positionSide : null,
+      leverage: num(r.openLeverage),
+      size: num(r.positionSize ?? r.openSize ?? r.closeSize),
+      entryPrice: num(r.openPrice ?? r.entryPrice),
+      exitPrice: num(r.closePrice),
+      realizedPnl: num(r.realizedPnl),
+      dedupeHash: xtDedupeHash('xt_ph', r.id ?? r.orderId, r.openTime),
+      raw: r,
+    })
+  }
+  return out
 }

@@ -42,7 +42,12 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { apiFetcher, replayJson, replayPaged } from '../../fetch/capture'
-import { parseXtLeaderboardPage, parseXtLeaderboardSeries, parseXtProfile } from './parsers'
+import {
+  parseXtHistory,
+  parseXtLeaderboardPage,
+  parseXtLeaderboardSeries,
+  parseXtProfile,
+} from './parsers'
 
 const ORIGIN = 'https://www.xt.com'
 const BASES: Record<string, string> = {
@@ -64,10 +69,12 @@ const xtAdapter: SourceAdapter = {
   slug: 'xt',
   capabilities: {
     profile: true,
-    // SPA-route-gated surfaces (see module header GAP). Per-TF stats are
-    // delivered by the board crawl, not these.
+    // position_history harvested from the public leader-order-history endpoint
+    // (unsigned, same host as profile — discovered 2026-07-02). Current-open
+    // positions + copier list endpoints weren't discoverable via public probing
+    // (detail page login-gated); left disabled.
     positions: false,
-    positionHistory: false,
+    positionHistory: true,
     orders: false,
     transfers: false,
     copiers: false,
@@ -173,20 +180,57 @@ const xtAdapter: SourceAdapter = {
     }
   },
 
-  // SPA-route-gated surfaces — disabled (see module header GAP).
   async getPositions(): Promise<RawBundle> {
     return { pages: [], fetchedAt: new Date().toISOString() }
   },
 
-  async *getHistory(): AsyncIterable<RawPage> {
-    return
+  /**
+   * Closed-position history via the public leader-order-history endpoint
+   * (unsigned GET, `leaderAccountId` param). Newest→older; stop on !hasNext,
+   * short page, or a page whose newest close overlaps the stored cursor.
+   */
+  async *getHistory(
+    session: FetchSession,
+    src: SourceRow,
+    exchangeTraderId: string,
+    kind: HistoryKind,
+    cursor: string | null
+  ): AsyncIterable<RawPage> {
+    if (kind !== 'position_history') return // only closed-position history exposed
+    const fetcher = apiFetcher(await session.api())
+    const size = Number(src.meta.history_page_size) || 20
+    const maxPages = Number(src.meta.history_max_pages ?? 10) || 10
+    const cursorMs = cursor ? Date.parse(cursor) : NaN
+
+    for (let pageNo = 1; pageNo <= maxPages; pageNo++) {
+      const url =
+        `${base(src)}/leader-order-history?leaderAccountId=${exchangeTraderId}` +
+        `&page=${pageNo}&size=${size}`
+      const payload = await replayJson(session, fetcher, { url, method: 'GET', headers: HEADERS })
+      const result = (payload as Record<string, unknown>)?.result as
+        | Record<string, unknown>
+        | undefined
+      const rows = Array.isArray(result?.items) ? (result!.items as Record<string, unknown>[]) : []
+      if (rows.length === 0) break
+
+      yield { pageIndex: pageNo, payload, url, fetchedAt: new Date().toISOString() }
+
+      // Stop once this page's oldest close predates the stored cursor (overlap).
+      if (!Number.isNaN(cursorMs)) {
+        const oldest = Math.min(
+          ...rows.map((r) => Number(r.closeTime)).filter((n) => Number.isFinite(n))
+        )
+        if (Number.isFinite(oldest) && oldest <= cursorMs) break
+      }
+      if (result?.hasNext === false || rows.length < size) break
+    }
   },
 
   parseLeaderboard: parseXtLeaderboardPage,
   parseLeaderboardSeries: parseXtLeaderboardSeries,
   parseProfile: parseXtProfile,
   parsePositions: (): ParsedPosition[] => [],
-  parseHistory: (_raw: unknown, _kind: HistoryKind): ParsedHistoryRow[] => [],
+  parseHistory: parseXtHistory,
 }
 
 registerAdapter(xtAdapter)
