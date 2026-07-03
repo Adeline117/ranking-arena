@@ -1,6 +1,6 @@
 # Exchange Field Coverage Ledger
 
-> **Machine-generated** from production `arena.trader_stats` by `scripts/ingest-field-coverage-ledger.mts`. Do NOT hand-edit. Generated: 2026-07-01T23:59:58Z.
+> **Machine-generated** from production `arena.trader_stats` by `scripts/ingest-field-coverage-ledger.mts`. Do NOT hand-edit. Generated: (run date not stamped).
 
 Fill % = share of a source×timeframe's rows where the field is non-NULL. A typed column or extras key at a low/zero rate is either not exposed by that exchange or a promotion gap. A key that regresses to 0 is a silent field loss — see `scripts/openclaw/field-coverage-canary.mjs`.
 
@@ -8,7 +8,7 @@ Fill % = share of a source×timeframe's rows where the field is non-NULL. A type
 
 ## binance_futures
 
-Timeframes: 7, 30, 90 · rows: 14927 / 13396 / 12341
+Timeframes: 7, 30, 90 · rows: 15038 / 13513 / 12676
 
 **Typed columns** (fill % per timeframe)
 
@@ -16,34 +16,33 @@ Timeframes: 7, 30, 90 · rows: 14927 / 13396 / 12341
 | ----------------- | ----- | ----- | ----- |
 | roi               | 100%  | 100%  | 100%  |
 | pnl               | 100%  | 100%  | 100%  |
-| sharpe            | 6.1%  | 6.8%  | 7.4%  |
-| mdd               | 14.3% | 16%   | 17.3% |
+| mdd               | 14.2% | 15.8% | 16.9% |
 | win_rate          | 100%  | 100%  | 100%  |
-| win_positions     | 14.3% | 16%   | 17.4% |
-| total_positions   | 14.3% | 13.8% | 17.4% |
-| copier_pnl        | 14.3% | 16%   | 17.4% |
-| copier_count      | 12.4% | 13.8% | 15%   |
-| aum               | 72.1% | 80.2% | 83.6% |
-| profit_share_rate | 12.4% | 13.8% | 15%   |
+| win_positions     | 14.2% | 15.8% | 16.9% |
+| total_positions   | 14.2% | 13.7% | 16.9% |
+| copier_pnl        | 14.2% | 15.8% | 16.9% |
+| copier_count      | 12.3% | 13.7% | 14.6% |
+| aum               | 72.3% | 80.4% | 84%   |
+| profit_share_rate | 12.3% | 13.7% | 14.6% |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key                | 7d    | 30d   | 90d  |
-| ------------------------- | ----- | ----- | ---- |
-| badge_name                | 1.4%  | 1.6%  | 1.7% |
-| copier_count_max          | 12.4% | 13.8% | 15%  |
-| copier_count_total        | 12.4% | 13.8% | 15%  |
-| favorite_count            | 12.4% | 13.8% | 15%  |
-| futures_type              | 12.4% | 13.8% | 15%  |
-| last_trade_time           | 12.4% | 13.8% | 15%  |
-| lead_start_time           | 12.4% | 13.8% | 15%  |
-| margin_balance            | 12.4% | 13.8% | 15%  |
-| min_copy_fixed_amount_usd | 12.4% | 13.8% | 15%  |
-| min_copy_fixed_ratio_usd  | 12.4% | 13.8% | 15%  |
+| extras key                | 7d    | 30d   | 90d   |
+| ------------------------- | ----- | ----- | ----- |
+| badge_name                | 1.4%  | 1.6%  | 1.7%  |
+| copier_count_max          | 12.3% | 13.7% | 14.6% |
+| copier_count_total        | 12.3% | 13.7% | 14.6% |
+| favorite_count            | 12.3% | 13.7% | 14.6% |
+| futures_type              | 12.3% | 13.7% | 14.6% |
+| last_trade_time           | 12.3% | 13.7% | 14.6% |
+| lead_start_time           | 12.3% | 13.7% | 14.6% |
+| margin_balance            | 12.3% | 13.7% | 14.6% |
+| min_copy_fixed_amount_usd | 12.3% | 13.7% | 14.6% |
+| min_copy_fixed_ratio_usd  | 12.3% | 13.7% | 14.6% |
 
 ## binance_spot
 
-Timeframes: 7, 30, 90 · rows: 2706 / 2660 / 2654
+Timeframes: 7, 30, 90 · rows: 2725 / 2680 / 2676
 
 **Typed columns** (fill % per timeframe)
 
@@ -51,33 +50,32 @@ Timeframes: 7, 30, 90 · rows: 2706 / 2660 / 2654
 | ----------------- | ----- | ----- | ----- |
 | roi               | 100%  | 100%  | 100%  |
 | pnl               | 100%  | 100%  | 100%  |
-| sharpe            | 48.9% | 49.7% | 49.8% |
-| mdd               | 61.9% | 63%   | 63.1% |
-| win_rate          | 61.9% | 63%   | 63.1% |
-| copier_pnl        | 61.9% | 63%   | 63.1% |
-| copier_count      | 60.3% | 61.4% | 61.5% |
-| aum               | 95.5% | 97.1% | 97.4% |
-| profit_share_rate | 60.3% | 61.4% | 61.5% |
+| mdd               | 61.5% | 62.5% | 62.6% |
+| win_rate          | 61.5% | 62.5% | 62.6% |
+| copier_pnl        | 61.5% | 62.5% | 62.6% |
+| copier_count      | 59.9% | 60.9% | 61%   |
+| aum               | 95.5% | 97.2% | 97.4% |
+| profit_share_rate | 59.9% | 60.9% | 61%   |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key                | 7d    | 30d   | 90d   |
 | ------------------------- | ----- | ----- | ----- |
 | badge_name                | 0.3%  | 0.3%  | 0.3%  |
-| copier_count_max          | 60.3% | 61.4% | 61.5% |
-| copier_count_total        | 60.3% | 61.4% | 61.5% |
-| days_trading              | 60.3% | 61.4% | 61.5% |
-| favorite_count            | 60.3% | 61.4% | 61.5% |
-| last_trade_time           | 54%   | 54.9% | 55%   |
-| lead_start_time           | 60.3% | 61.4% | 61.5% |
-| margin_balance            | 60.3% | 61.4% | 61.5% |
-| min_copy_fixed_amount_usd | 60.3% | 61.4% | 61.5% |
-| min_copy_fixed_ratio_usd  | 60.3% | 61.4% | 61.5% |
-| win_days                  | 61.9% | 63%   | 63.1% |
+| copier_count_max          | 59.9% | 60.9% | 61%   |
+| copier_count_total        | 59.9% | 60.9% | 61%   |
+| days_trading              | 59.9% | 60.9% | 61%   |
+| favorite_count            | 59.9% | 60.9% | 61%   |
+| last_trade_time           | 53.6% | 54.5% | 54.6% |
+| lead_start_time           | 59.9% | 60.9% | 61%   |
+| margin_balance            | 59.9% | 60.9% | 61%   |
+| min_copy_fixed_amount_usd | 59.9% | 60.9% | 61%   |
+| min_copy_fixed_ratio_usd  | 59.9% | 60.9% | 61%   |
+| win_days                  | 61.5% | 62.5% | 62.6% |
 
 ## binance_web3_bsc
 
-Timeframes: 7, 30, 90 · rows: 1791 / 1833 / 1567
+Timeframes: 7, 30, 90 · rows: 1805 / 1855 / 1597
 
 **Typed columns** (fill % per timeframe)
 
@@ -86,25 +84,37 @@ Timeframes: 7, 30, 90 · rows: 1791 / 1833 / 1567
 | roi      | 100%  | 100%  | 100%  |
 | pnl      | 100%  | 100%  | 100%  |
 | win_rate | 100%  | 100%  | 100%  |
-| aum      | 86.3% | 86.3% | 91.1% |
-| volume   | 88.3% | 89.9% | 92.7% |
+| aum      | 85.6% | 85.3% | 89.4% |
+| volume   | 88.5% | 90%   | 92.9% |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key          | 7d    | 30d   | 90d   |
-| ------------------- | ----- | ----- | ----- |
-| avg_buy             | 88%   | 89.9% | 92.6% |
-| buy_txns            | 85.9% | 88.7% | 90.4% |
-| buy_volume          | 85.9% | 88.7% | 90.4% |
-| last_trade_time     | 88.3% | 89.9% | 92.7% |
-| sell_txns           | 85.9% | 88.7% | 90.4% |
-| sell_volume         | 85.9% | 88.7% | 90.4% |
-| total_traded_tokens | 88.3% | 89.9% | 92.7% |
-| total_txns          | 88.3% | 89.9% | 92.7% |
+| extras key               | 7d    | 30d   | 90d   |
+| ------------------------ | ----- | ----- | ----- |
+| avg_buy                  | 88.2% | 90%   | 92.8% |
+| buy_txns                 | 86.1% | 88.8% | 90.6% |
+| buy_volume               | 86.1% | 88.8% | 90.6% |
+| last_trade_time          | 88.5% | 90%   | 92.9% |
+| onchain_buy_volume       | 0%    | 0%    | 100%  |
+| onchain_derivation       | 0%    | 0%    | 100%  |
+| onchain_enriched_at      | 0%    | 0%    | 100%  |
+| onchain_realized_partial | 0%    | 0%    | 1.9%  |
+| onchain_realized_pnl     | 0%    | 0%    | 100%  |
+| onchain_sell_volume      | 0%    | 0%    | 100%  |
+| onchain_tokens_traded    | 0%    | 0%    | 100%  |
+| onchain_total_pnl        | 0%    | 0%    | 100%  |
+| onchain_txs_buy          | 0%    | 0%    | 100%  |
+| onchain_txs_sell         | 0%    | 0%    | 100%  |
+| onchain_unrealized_pnl   | 0%    | 0%    | 100%  |
+| onchain_win_rate         | 0%    | 0%    | 57.7% |
+| sell_txns                | 86.1% | 88.8% | 90.6% |
+| sell_volume              | 86.1% | 88.8% | 90.6% |
+| total_traded_tokens      | 88.5% | 90%   | 92.9% |
+| total_txns               | 88.5% | 90%   | 92.9% |
 
 ## bingx_futures
 
-Timeframes: 7, 30, 90 · rows: 4297 / 4264 / 4246
+Timeframes: 7, 30, 90 · rows: 4455 / 4417 / 4402
 
 **Typed columns** (fill % per timeframe)
 
@@ -112,51 +122,51 @@ Timeframes: 7, 30, 90 · rows: 4297 / 4264 / 4246
 | --------------- | ----- | ----- | ----- |
 | roi             | 100%  | 100%  | 100%  |
 | pnl             | 100%  | 100%  | 100%  |
-| sharpe          | 89%   | 89.4% | 89.6% |
-| mdd             | 93%   | 93.1% | 93.1% |
+| sharpe          | 89.5% | 89.9% | 90%   |
+| mdd             | 93.4% | 93.5% | 93.4% |
 | win_rate        | 100%  | 100%  | 100%  |
-| win_positions   | 92.6% | 92.4% | 92.3% |
-| total_positions | 92.6% | 92.4% | 92.3% |
-| copier_count    | 93%   | 93.1% | 93.1% |
-| aum             | 93%   | 93.1% | 93.1% |
+| win_positions   | 93.1% | 92.9% | 92.8% |
+| total_positions | 93.1% | 92.9% | 92.8% |
+| copier_count    | 93.4% | 93.5% | 93.4% |
+| aum             | 93.4% | 93.5% | 93.4% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key           | 7d    | 30d   | 90d   |
 | -------------------- | ----- | ----- | ----- |
-| avg_hold_time_hours  | 56.1% | 56.4% | 55.8% |
-| avg_loss             | 92.9% | 93.1% | 93.1% |
-| avg_profit           | 92.9% | 93.1% | 93.1% |
-| copier_count_history | 56.2% | 56.4% | 55.8% |
-| copier_earnings      | 56.2% | 56.4% | 55.8% |
-| copier_growth_30d    | 56.2% | 56.4% | 55.8% |
-| following_amount     | 8.1%  | 8.1%  | 8.1%  |
-| last_trade_time      | 92.9% | 93.1% | 93.1% |
-| lifetime_trades      | 56.6% | 57%   | 56.3% |
-| loss_trades          | 56.2% | 56.4% | 55.8% |
-| max_copier_slots     | 56.2% | 56.4% | 55.8% |
-| pnl_ratio            | 54.9% | 55.3% | 54.5% |
-| principal            | 35.8% | 35.9% | 35.4% |
-| risk_rating          | 59.5% | 59.8% | 59.3% |
-| total_earnings       | 56.2% | 56.4% | 55.8% |
-| trader_tenure_days   | 56.2% | 56.4% | 55.8% |
-| trades_per_week      | 92.9% | 93.1% | 93.1% |
-| trading_days         | 92.9% | 93.1% | 93.1% |
+| avg_hold_time_hours  | 61%   | 61.2% | 61.1% |
+| avg_loss             | 93.4% | 93.5% | 93.4% |
+| avg_profit           | 93.4% | 93.5% | 93.4% |
+| copier_count_history | 61.1% | 61.4% | 61.2% |
+| copier_earnings      | 61.1% | 61.4% | 61.2% |
+| copier_growth_30d    | 61.1% | 61.4% | 61.2% |
+| following_amount     | 9%    | 9.1%  | 9.1%  |
+| last_trade_time      | 93.4% | 93.5% | 93.4% |
+| lifetime_trades      | 61.4% | 61.7% | 61.4% |
+| loss_trades          | 61.1% | 61.4% | 61.2% |
+| max_copier_slots     | 61.1% | 61.4% | 61.2% |
+| pnl_ratio            | 59.7% | 60%   | 59.7% |
+| principal            | 40.2% | 40.3% | 39.9% |
+| risk_rating          | 63.8% | 64.1% | 63.8% |
+| total_earnings       | 61.1% | 61.4% | 61.2% |
+| trader_tenure_days   | 61.1% | 61.4% | 61.2% |
+| trades_per_week      | 93.4% | 93.5% | 93.4% |
+| trading_days         | 93.4% | 93.5% | 93.4% |
 
 ## bitfinex
 
-Timeframes: 7, 30 · rows: 413 / 373
+Timeframes: 7, 30 · rows: 415 / 387
 
 **Typed columns** (fill % per timeframe)
 
 | column | 7d    | 30d   |
 | ------ | ----- | ----- |
 | pnl    | 100%  | 100%  |
-| volume | 34.9% | 47.2% |
+| volume | 35.4% | 46.3% |
 
 ## bitget_bots_futures
 
-Timeframes: 0, 7, 30, 90 · rows: 385 / 383 / 457 / 383
+Timeframes: 0, 7, 30, 90 · rows: 401 / 397 / 471 / 397
 
 **Typed columns** (fill % per timeframe)
 
@@ -164,7 +174,7 @@ Timeframes: 0, 7, 30, 90 · rows: 385 / 383 / 457 / 383
 | ------------ | ---- | ---- | ----- | ---- |
 | roi          | 100% | 100% | 100%  | 100% |
 | pnl          | 100% | 100% | 100%  | 100% |
-| mdd          | 0%   | 0%   | 51.4% | 0%   |
+| mdd          | 0%   | 0%   | 53.5% | 0%   |
 | copier_pnl   | 100% | 0%   | 0%    | 0%   |
 | copier_count | 100% | 0%   | 0%    | 0%   |
 | aum          | 100% | 0%   | 0%    | 0%   |
@@ -173,17 +183,17 @@ Timeframes: 0, 7, 30, 90 · rows: 385 / 383 / 457 / 383
 
 | extras key        | 0d    | 7d   | 30d   | 90d  |
 | ----------------- | ----- | ---- | ----- | ---- |
-| bot_strategy_id   | 100%  | 100% | 83.8% | 100% |
+| bot_strategy_id   | 100%  | 100% | 84.3% | 100% |
 | created_at_origin | 100%  | 0%   | 0%    | 0%   |
-| investment_amount | 100%  | 100% | 83.8% | 100% |
-| leverage          | 97.7% | 100% | 83.8% | 100% |
-| owner_name        | 100%  | 100% | 83.8% | 100% |
+| investment_amount | 100%  | 100% | 84.3% | 100% |
+| leverage          | 97.3% | 100% | 84.3% | 100% |
+| owner_name        | 100%  | 100% | 84.3% | 100% |
 | runtime_days      | 100%  | 0%   | 0%    | 0%   |
-| symbol            | 100%  | 100% | 83.8% | 100% |
+| symbol            | 100%  | 100% | 84.3% | 100% |
 
 ## bitget_bots_spot
 
-Timeframes: 0, 7, 30, 90 · rows: 389 / 378 / 524 / 378
+Timeframes: 0, 7, 30, 90 · rows: 389 / 378 / 553 / 378
 
 **Typed columns** (fill % per timeframe)
 
@@ -191,7 +201,7 @@ Timeframes: 0, 7, 30, 90 · rows: 389 / 378 / 524 / 378
 | ------------ | ---- | ---- | ----- | ---- |
 | roi          | 100% | 100% | 100%  | 100% |
 | pnl          | 100% | 100% | 100%  | 100% |
-| mdd          | 0%   | 0%   | 34.2% | 0%   |
+| mdd          | 0%   | 0%   | 40.5% | 0%   |
 | copier_pnl   | 100% | 0%   | 0%    | 0%   |
 | copier_count | 100% | 0%   | 0%    | 0%   |
 | aum          | 100% | 0%   | 0%    | 0%   |
@@ -200,52 +210,52 @@ Timeframes: 0, 7, 30, 90 · rows: 389 / 378 / 524 / 378
 
 | extras key        | 0d    | 7d    | 30d   | 90d   |
 | ----------------- | ----- | ----- | ----- | ----- |
-| bot_strategy_id   | 100%  | 100%  | 72.1% | 100%  |
+| bot_strategy_id   | 100%  | 100%  | 68.4% | 100%  |
 | created_at_origin | 100%  | 0%    | 0%    | 0%    |
-| investment_amount | 100%  | 100%  | 72.1% | 100%  |
-| leverage          | 52.4% | 55.3% | 39.9% | 55.3% |
-| owner_name        | 100%  | 100%  | 72.1% | 100%  |
+| investment_amount | 100%  | 100%  | 68.4% | 100%  |
+| leverage          | 52.4% | 55.3% | 37.8% | 55.3% |
+| owner_name        | 100%  | 100%  | 68.4% | 100%  |
 | runtime_days      | 100%  | 0%    | 0%    | 0%    |
-| symbol            | 100%  | 100%  | 72.1% | 100%  |
+| symbol            | 100%  | 100%  | 68.4% | 100%  |
 
 ## bitget_cfd
 
-Timeframes: 7, 30, 90 · rows: 592 / 573 / 566
+Timeframes: 7, 30, 90 · rows: 613 / 598 / 590
 
 **Typed columns** (fill % per timeframe)
 
 | column               | 7d    | 30d   | 90d   |
 | -------------------- | ----- | ----- | ----- |
 | roi                  | 100%  | 100%  | 100%  |
-| pnl                  | 10.6% | 11%   | 11.3% |
-| mdd                  | 10.6% | 10.5% | 10.4% |
+| pnl                  | 10.6% | 10.9% | 11.2% |
+| mdd                  | 10.6% | 10.4% | 10.3% |
 | win_rate             | 100%  | 100%  | 100%  |
-| win_positions        | 6.4%  | 6.6%  | 6.9%  |
-| total_positions      | 6.4%  | 6.6%  | 6.9%  |
-| copier_pnl           | 10.6% | 11%   | 11.3% |
-| copier_count         | 6.4%  | 6.6%  | 6.9%  |
-| aum                  | 10.6% | 11%   | 11.3% |
-| profit_share_rate    | 10.6% | 11%   | 11.3% |
-| holding_duration_avg | 6.4%  | 6.6%  | 6.9%  |
+| win_positions        | 6.4%  | 6.5%  | 6.8%  |
+| total_positions      | 6.4%  | 6.5%  | 6.8%  |
+| copier_pnl           | 10.6% | 10.9% | 11.2% |
+| copier_count         | 6.4%  | 6.5%  | 6.8%  |
+| aum                  | 10.6% | 10.9% | 11.2% |
+| profit_share_rate    | 10.6% | 10.9% | 11.2% |
+| holding_duration_avg | 6.4%  | 6.5%  | 6.8%  |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key                | 7d    | 30d  | 90d   |
-| ------------------------- | ----- | ---- | ----- |
-| copier_count_current      | 6.4%  | 6.6% | 6.9%  |
-| copier_count_max          | 6.4%  | 6.6% | 6.9%  |
-| largest_loss              | 6.4%  | 6.6% | 6.9%  |
-| largest_profit            | 6.4%  | 6.6% | 6.9%  |
-| long_short_ratio          | 0.2%  | 0.3% | 1.1%  |
-| longest_holding_time_secs | 5.6%  | 5.8% | 5.8%  |
-| loss_trades               | 9.1%  | 9.4% | 9.5%  |
-| settled_in_days           | 6.4%  | 6.6% | 6.9%  |
-| total_equity              | 0.8%  | 0.9% | 0.9%  |
-| trade_frequency           | 10.6% | 11%  | 11.3% |
+| extras key                | 7d    | 30d   | 90d   |
+| ------------------------- | ----- | ----- | ----- |
+| copier_count_current      | 6.4%  | 6.5%  | 6.8%  |
+| copier_count_max          | 6.4%  | 6.5%  | 6.8%  |
+| largest_loss              | 6.4%  | 6.5%  | 6.8%  |
+| largest_profit            | 6.4%  | 6.5%  | 6.8%  |
+| long_short_ratio          | 0.2%  | 0.3%  | 1.2%  |
+| longest_holding_time_secs | 5.5%  | 5.7%  | 5.8%  |
+| loss_trades               | 9.1%  | 9.4%  | 9.5%  |
+| settled_in_days           | 6.4%  | 6.5%  | 6.8%  |
+| total_equity              | 1.1%  | 1.2%  | 1.2%  |
+| trade_frequency           | 10.6% | 10.9% | 11.2% |
 
 ## bitget_futures
 
-Timeframes: 7, 30, 90 · rows: 4462 / 4039 / 3539
+Timeframes: 7, 30, 90 · rows: 4520 / 4121 / 3616
 
 **Typed columns** (fill % per timeframe)
 
@@ -253,38 +263,38 @@ Timeframes: 7, 30, 90 · rows: 4462 / 4039 / 3539
 | -------------------- | ----- | ----- | ----- |
 | roi                  | 100%  | 100%  | 100%  |
 | pnl                  | 100%  | 100%  | 100%  |
-| mdd                  | 34.6% | 33.8% | 27.9% |
+| mdd                  | 35.8% | 35.1% | 29%   |
 | win_rate             | 100%  | 100%  | 100%  |
-| win_positions        | 36.4% | 40.2% | 45.8% |
-| total_positions      | 36.4% | 40.2% | 45.8% |
-| copier_pnl           | 36.6% | 40.5% | 46.2% |
-| copier_count         | 36.4% | 40.2% | 45.8% |
-| aum                  | 36.4% | 40.2% | 45.8% |
-| profit_share_rate    | 36.4% | 40.2% | 45.8% |
-| holding_duration_avg | 27.8% | 30.7% | 35%   |
+| win_positions        | 37.7% | 41.3% | 47%   |
+| total_positions      | 37.7% | 41.3% | 47%   |
+| copier_pnl           | 37.9% | 41.6% | 47.4% |
+| copier_count         | 37.7% | 41.3% | 47%   |
+| aum                  | 37.7% | 41.3% | 47%   |
+| profit_share_rate    | 37.7% | 41.3% | 47%   |
+| holding_duration_avg | 28.4% | 31.2% | 35.5% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key                | 7d    | 30d   | 90d   |
 | ------------------------- | ----- | ----- | ----- |
-| bitget_trader_type        | 8.9%  | 9.8%  | 11.2% |
-| copier_count_current      | 36.4% | 40.2% | 45.8% |
-| copier_count_max          | 36.4% | 40.2% | 45.8% |
-| copier_pnl_30d            | 6.9%  | 7.6%  | 8.6%  |
-| largest_loss              | 27.8% | 30.7% | 35%   |
-| largest_profit            | 27.8% | 30.7% | 35%   |
-| last_order_time           | 8.6%  | 9.5%  | 10.8% |
-| long_short_ratio          | 1.4%  | 2.2%  | 2.7%  |
-| longest_holding_time_secs | 22.5% | 24.9% | 28.3% |
-| loss_trades               | 22.5% | 24.9% | 28.3% |
-| settled_in_days           | 27.8% | 30.7% | 35%   |
-| total_equity              | 6.1%  | 6.8%  | 7.7%  |
-| trade_frequency           | 27.8% | 30.7% | 35%   |
-| trading_days              | 8.6%  | 9.5%  | 10.8% |
+| bitget_trader_type        | 9.5%  | 10.4% | 11.9% |
+| copier_count_current      | 37.7% | 41.3% | 47%   |
+| copier_count_max          | 37.7% | 41.3% | 47%   |
+| copier_pnl_30d            | 7.6%  | 8.3%  | 9.5%  |
+| largest_loss              | 28.4% | 31.2% | 35.5% |
+| largest_profit            | 28.4% | 31.2% | 35.5% |
+| last_order_time           | 9.2%  | 10.1% | 11.5% |
+| long_short_ratio          | 3.8%  | 6%    | 7.7%  |
+| longest_holding_time_secs | 23.5% | 25.8% | 29.4% |
+| loss_trades               | 23.5% | 25.8% | 29.4% |
+| settled_in_days           | 28.4% | 31.2% | 35.5% |
+| total_equity              | 8.1%  | 8.8%  | 10.1% |
+| trade_frequency           | 28.4% | 31.2% | 35.5% |
+| trading_days              | 9.2%  | 10.1% | 11.5% |
 
 ## bitget_spot
 
-Timeframes: 7, 30, 90 · rows: 5557 / 5557 / 5558
+Timeframes: 7, 30, 90 · rows: 5559 / 5559 / 5560
 
 **Typed columns** (fill % per timeframe)
 
@@ -292,72 +302,72 @@ Timeframes: 7, 30, 90 · rows: 5557 / 5557 / 5558
 | -------------------- | ---- | ---- | ---- |
 | roi                  | 100% | 100% | 100% |
 | pnl                  | 6.5% | 6.5% | 6.5% |
-| mdd                  | 6.5% | 6.3% | 6.2% |
+| mdd                  | 6.5% | 6.4% | 6.2% |
 | win_rate             | 100% | 100% | 100% |
-| win_positions        | 6.1% | 6.1% | 6.1% |
-| total_positions      | 6.1% | 6.1% | 6.1% |
+| win_positions        | 6.2% | 6.2% | 6.2% |
+| total_positions      | 6.2% | 6.2% | 6.2% |
 | copier_pnl           | 6.5% | 6.5% | 6.5% |
-| copier_count         | 6.1% | 6.1% | 6.1% |
+| copier_count         | 6.2% | 6.2% | 6.2% |
 | aum                  | 6.5% | 6.5% | 6.5% |
 | profit_share_rate    | 6.5% | 6.5% | 6.5% |
-| holding_duration_avg | 6.1% | 6.1% | 6.1% |
+| holding_duration_avg | 6.2% | 6.2% | 6.2% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key                | 7d   | 30d  | 90d  |
 | ------------------------- | ---- | ---- | ---- |
-| copier_count_current      | 6.1% | 6.1% | 6.1% |
-| copier_count_max          | 6.1% | 6.1% | 6.1% |
-| largest_loss              | 6.1% | 6.1% | 6.1% |
-| largest_profit            | 6.1% | 6.1% | 6.1% |
-| long_short_ratio          | 0%   | 0.1% | 0.1% |
-| longest_holding_time_secs | 6.1% | 6.1% | 6.1% |
-| loss_trades               | 6.4% | 6.4% | 6.4% |
-| settled_in_days           | 6.1% | 6.1% | 6.1% |
-| total_equity              | 0.3% | 0.3% | 0.3% |
+| copier_count_current      | 6.2% | 6.2% | 6.2% |
+| copier_count_max          | 6.2% | 6.2% | 6.2% |
+| largest_loss              | 6.2% | 6.2% | 6.2% |
+| largest_profit            | 6.2% | 6.2% | 6.2% |
+| long_short_ratio          | 0.3% | 0.5% | 0.9% |
+| longest_holding_time_secs | 6.2% | 6.2% | 6.2% |
+| loss_trades               | 6.5% | 6.5% | 6.5% |
+| settled_in_days           | 6.2% | 6.2% | 6.2% |
+| total_equity              | 2.2% | 2.2% | 2.2% |
 | trade_frequency           | 6.5% | 6.5% | 6.5% |
 
 ## bitmart_futures
 
-Timeframes: 7, 30, 90 · rows: 154 / 149 / 142
+Timeframes: 7, 30, 90 · rows: 166 / 161 / 142
 
 **Typed columns** (fill % per timeframe)
 
 | column               | 7d    | 30d   | 90d   |
 | -------------------- | ----- | ----- | ----- |
-| roi                  | 86.4% | 85.9% | 85.2% |
-| pnl                  | 86.4% | 85.9% | 85.2% |
-| mdd                  | 80.5% | 83.2% | 85.2% |
-| win_rate             | 86.4% | 85.9% | 85.2% |
-| copier_pnl           | 78.6% | 81.2% | 85.2% |
-| copier_count         | 94.2% | 97.3% | 100%  |
-| aum                  | 80.5% | 83.2% | 85.2% |
-| profit_share_rate    | 85.7% | 88.6% | 93%   |
-| holding_duration_avg | 78.6% | 81.2% | 85.2% |
+| roi                  | 87.3% | 87%   | 85.2% |
+| pnl                  | 87.3% | 87%   | 85.2% |
+| mdd                  | 81.9% | 84.5% | 85.2% |
+| win_rate             | 87.3% | 87%   | 85.2% |
+| copier_pnl           | 72.9% | 75.2% | 85.2% |
+| copier_count         | 87.3% | 90.1% | 100%  |
+| aum                  | 81.9% | 84.5% | 85.2% |
+| profit_share_rate    | 79.5% | 82%   | 93%   |
+| holding_duration_avg | 72.9% | 75.2% | 85.2% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key              | 7d    | 30d   | 90d   |
 | ----------------------- | ----- | ----- | ----- |
-| bio                     | 39.6% | 40.9% | 43%   |
-| last_traded_at          | 71.4% | 73.8% | 77.5% |
-| leverage_limit          | 3.2%  | 3.4%  | 3.5%  |
-| master_since            | 85.7% | 88.6% | 93%   |
-| min_copy_amount         | 85.7% | 88.6% | 93%   |
-| nav                     | 80.5% | 83.2% | 85.2% |
-| pnl_ratio               | 51.3% | 53%   | 0%    |
-| profit_loss_ratio       | 78.6% | 81.2% | 85.2% |
-| realized_profit_sharing | 78.6% | 81.2% | 85.2% |
-| run_time_seconds        | 92.2% | 95.3% | 100%  |
-| start_at                | 78.6% | 81.2% | 85.2% |
-| top_volume_share        | 78.6% | 81.2% | 85.2% |
-| total_equity            | 78.6% | 81.2% | 85.2% |
-| trades_per_day          | 78.6% | 81.2% | 85.2% |
-| unrealized_pnl          | 78.6% | 81.2% | 85.2% |
+| bio                     | 36.7% | 37.9% | 43%   |
+| last_traded_at          | 66.3% | 68.3% | 77.5% |
+| leverage_limit          | 3%    | 3.1%  | 3.5%  |
+| master_since            | 79.5% | 82%   | 93%   |
+| min_copy_amount         | 79.5% | 82%   | 93%   |
+| nav                     | 74.7% | 77%   | 85.2% |
+| pnl_ratio               | 47.6% | 49.1% | 0%    |
+| profit_loss_ratio       | 72.9% | 75.2% | 85.2% |
+| realized_profit_sharing | 72.9% | 75.2% | 85.2% |
+| run_time_seconds        | 85.5% | 88.2% | 100%  |
+| start_at                | 72.9% | 75.2% | 85.2% |
+| top_volume_share        | 72.9% | 75.2% | 85.2% |
+| total_equity            | 72.9% | 75.2% | 85.2% |
+| trades_per_day          | 72.9% | 75.2% | 85.2% |
+| unrealized_pnl          | 72.9% | 75.2% | 85.2% |
 
 ## bitunix_futures
 
-Timeframes: 7, 30, 90 · rows: 4486 / 4487 / 4485
+Timeframes: 7, 30, 90 · rows: 4532 / 4533 / 4531
 
 **Typed columns** (fill % per timeframe)
 
@@ -365,47 +375,63 @@ Timeframes: 7, 30, 90 · rows: 4486 / 4487 / 4485
 | ----------------- | ----- | ----- | ----- |
 | roi               | 99.9% | 99.9% | 99.9% |
 | pnl               | 99.9% | 99.9% | 99.9% |
-| mdd               | 94.4% | 94.4% | 94.4% |
-| win_rate          | 18.1% | 24%   | 30.4% |
-| win_positions     | 19.6% | 19.6% | 19.6% |
-| total_positions   | 19.6% | 19.6% | 19.6% |
-| copier_pnl        | 19.6% | 19.6% | 19.6% |
-| copier_count      | 19.6% | 19.6% | 19.6% |
-| aum               | 94.4% | 94.4% | 94.4% |
-| profit_share_rate | 19.6% | 19.6% | 19.6% |
+| mdd               | 94.5% | 94.5% | 94.5% |
+| win_rate          | 17.9% | 24.1% | 30.7% |
+| win_positions     | 21%   | 21%   | 20.9% |
+| total_positions   | 21%   | 21%   | 20.9% |
+| copier_pnl        | 21%   | 21%   | 20.9% |
+| copier_count      | 21%   | 21%   | 20.9% |
+| aum               | 94.5% | 94.5% | 94.5% |
+| profit_share_rate | 21%   | 21%   | 20.9% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key            | 7d    | 30d   | 90d   |
 | --------------------- | ----- | ----- | ----- |
-| bio                   | 12.3% | 12.3% | 12.2% |
-| copier_limit          | 19.6% | 19.6% | 19.6% |
-| lead_margin_balance   | 19.6% | 19.6% | 19.6% |
-| loss_count            | 19.6% | 19.6% | 19.6% |
-| min_invest            | 18.6% | 18.6% | 18.6% |
-| private_mode          | 19.6% | 19.6% | 19.6% |
-| total_copiers_history | 19.6% | 19.6% | 19.6% |
-| trade_amount          | 19.6% | 19.6% | 19.6% |
-| trade_days            | 19.6% | 19.6% | 19.6% |
+| bio                   | 13.1% | 13.1% | 13%   |
+| copier_limit          | 21%   | 21%   | 20.9% |
+| lead_margin_balance   | 21%   | 21%   | 20.9% |
+| loss_count            | 21%   | 21%   | 20.9% |
+| min_invest            | 20%   | 20%   | 20%   |
+| private_mode          | 21%   | 21%   | 20.9% |
+| sortino               | 0%    | 71%   | 66.2% |
+| total_copiers_history | 21%   | 21%   | 20.9% |
+| trade_amount          | 21%   | 21%   | 20.9% |
+| trade_days            | 21%   | 21%   | 20.9% |
 
 ## blofin_futures
 
-Timeframes: 7, 30, 90 · rows: 1709 / 1709 / 1709
+Timeframes: 7, 30, 90 · rows: 1714 / 1714 / 1714
 
 **Typed columns** (fill % per timeframe)
 
-| column       | 7d    | 30d   | 90d   |
-| ------------ | ----- | ----- | ----- |
-| roi          | 100%  | 100%  | 100%  |
-| pnl          | 100%  | 100%  | 100%  |
-| sharpe       | 100%  | 100%  | 100%  |
-| mdd          | 99.9% | 99.9% | 99.4% |
-| copier_count | 100%  | 100%  | 100%  |
-| aum          | 100%  | 100%  | 100%  |
+| column          | 7d    | 30d   | 90d   |
+| --------------- | ----- | ----- | ----- |
+| roi             | 100%  | 100%  | 100%  |
+| pnl             | 100%  | 100%  | 100%  |
+| sharpe          | 100%  | 100%  | 100%  |
+| mdd             | 99.9% | 99.9% | 99.4% |
+| win_rate        | 0%    | 0.1%  | 0%    |
+| win_positions   | 0%    | 0.1%  | 0%    |
+| total_positions | 0%    | 0.1%  | 0%    |
+| copier_count    | 100%  | 100%  | 100%  |
+| aum             | 100%  | 100%  | 100%  |
+| volume          | 0%    | 0.1%  | 0%    |
+
+**Extras keys** (fill % per timeframe)
+
+| extras key     | 7d  | 30d  | 90d |
+| -------------- | --- | ---- | --- |
+| annualized_roi | 0%  | 0.1% | 0%  |
+| calmar         | 0%  | 0.1% | 0%  |
+| copier_pnl     | 0%  | 0.1% | 0%  |
+| down_risk      | 0%  | 0.1% | 0%  |
+| sortino        | 0%  | 0.1% | 0%  |
+| volatility     | 0%  | 0.1% | 0%  |
 
 ## blofin_spot
 
-Timeframes: 7, 30, 90 · rows: 71 / 90 / 96
+Timeframes: 7, 30, 90 · rows: 74 / 93 / 99
 
 **Typed columns** (fill % per timeframe)
 
@@ -418,9 +444,16 @@ Timeframes: 7, 30, 90 · rows: 71 / 90 / 96
 | copier_count | 100% | 100% | 100% |
 | aum          | 100% | 100% | 100% |
 
+**Extras keys** (fill % per timeframe)
+
+| extras key | 7d  | 30d   | 90d   |
+| ---------- | --- | ----- | ----- |
+| sortino    | 0%  | 63.4% | 65.7% |
+| volatility | 0%  | 9.7%  | 11.1% |
+
 ## btcc_futures
 
-Timeframes: 7, 30, 90 · rows: 443 / 1833 / 443
+Timeframes: 7, 30, 90 · rows: 449 / 1835 / 449
 
 **Typed columns** (fill % per timeframe)
 
@@ -428,76 +461,78 @@ Timeframes: 7, 30, 90 · rows: 443 / 1833 / 443
 | -------------------- | ----- | ----- | ----- |
 | roi                  | 100%  | 100%  | 100%  |
 | pnl                  | 100%  | 100%  | 100%  |
-| mdd                  | 93.7% | 94.2% | 91.4% |
-| win_rate             | 58.5% | 99.9% | 74%   |
-| win_positions        | 100%  | 24.1% | 100%  |
-| total_positions      | 100%  | 24.1% | 100%  |
-| copier_count         | 99.3% | 23.9% | 99.3% |
-| aum                  | 100%  | 98.8% | 100%  |
-| profit_share_rate    | 99.3% | 23.9% | 99.3% |
-| holding_duration_avg | 100%  | 24.1% | 100%  |
+| mdd                  | 93.8% | 94.6% | 91.5% |
+| win_rate             | 59.2% | 99.9% | 74.4% |
+| win_positions        | 100%  | 24.4% | 100%  |
+| total_positions      | 100%  | 24.4% | 100%  |
+| copier_count         | 99.3% | 24.3% | 99.3% |
+| aum                  | 100%  | 99.1% | 100%  |
+| profit_share_rate    | 99.3% | 24.3% | 99.3% |
+| holding_duration_avg | 100%  | 24.4% | 100%  |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key              | 7d    | 30d   | 90d   |
 | ----------------------- | ----- | ----- | ----- |
-| bio                     | 94.4% | 22.7% | 94.4% |
-| copier_limit            | 99.3% | 23.9% | 99.3% |
-| cumulative_net_profit   | 100%  | 24.1% | 100%  |
-| profit_loss_ratio_pct   | 100%  | 24.1% | 100%  |
-| register_days           | 99.3% | 23.9% | 99.3% |
-| supported_symbols_count | 99.3% | 23.9% | 99.3% |
-| total_copiers_history   | 99.3% | 23.9% | 99.3% |
-| total_roi               | 84.2% | 20.4% | 84.4% |
-| total_win_amount        | 100%  | 24.1% | 100%  |
-| trader_level            | 99.3% | 23.9% | 99.3% |
+| bio                     | 94.4% | 23.1% | 94.4% |
+| copier_limit            | 99.3% | 24.3% | 99.3% |
+| cumulative_net_profit   | 100%  | 24.4% | 100%  |
+| profit_loss_ratio_pct   | 100%  | 24.4% | 100%  |
+| register_days           | 99.3% | 24.3% | 99.3% |
+| supported_symbols_count | 99.3% | 24.3% | 99.3% |
+| total_copiers_history   | 99.3% | 24.3% | 99.3% |
+| total_roi               | 84.6% | 20.7% | 84.6% |
+| total_win_amount        | 100%  | 24.4% | 100%  |
+| trader_level            | 99.3% | 24.3% | 99.3% |
 
 ## bybit_copytrade
 
-Timeframes: 7, 30, 90 · rows: 9511 / 9511 / 9472
+Timeframes: 7, 30, 90 · rows: 9563 / 9563 / 9525
 
 **Typed columns** (fill % per timeframe)
 
 | column               | 7d    | 30d   | 90d   |
 | -------------------- | ----- | ----- | ----- |
 | roi                  | 100%  | 100%  | 100%  |
-| pnl                  | 9.1%  | 9.1%  | 9.2%  |
-| sharpe               | 9.1%  | 9.1%  | 9.2%  |
-| mdd                  | 89.1% | 89.1% | 89.5% |
+| pnl                  | 9.2%  | 9.2%  | 9.3%  |
+| sharpe               | 36.9% | 51.6% | 79.4% |
+| mdd                  | 89.2% | 89.2% | 89.6% |
 | win_rate             | 100%  | 100%  | 100%  |
-| win_positions        | 9.1%  | 9.1%  | 9.2%  |
-| total_positions      | 9.1%  | 9.1%  | 9.2%  |
-| copier_pnl           | 9.1%  | 9.1%  | 9.2%  |
-| copier_count         | 9.1%  | 9.1%  | 9.2%  |
-| aum                  | 9.1%  | 9.1%  | 9.2%  |
-| profit_share_rate    | 9.1%  | 9.1%  | 9.2%  |
-| holding_duration_avg | 9.1%  | 9.1%  | 9.2%  |
+| win_positions        | 9.2%  | 9.2%  | 9.3%  |
+| total_positions      | 9.2%  | 9.2%  | 9.3%  |
+| copier_pnl           | 9.2%  | 9.2%  | 9.3%  |
+| copier_count         | 87.9% | 87.9% | 88.3% |
+| aum                  | 9.2%  | 9.2%  | 9.3%  |
+| profit_share_rate    | 9.2%  | 9.2%  | 9.3%  |
+| holding_duration_avg | 9.2%  | 9.2%  | 9.3%  |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key           | 7d   | 30d  | 90d  |
-| -------------------- | ---- | ---- | ---- |
-| avg_pnl_per_trade    | 9.1% | 9.1% | 9.2% |
-| bio                  | 4.5% | 4.5% | 4.5% |
-| cum_follower_count   | 9.1% | 9.1% | 9.2% |
-| last_traded_at       | 9.1% | 9.1% | 9.2% |
-| leader_user_id       | 9.1% | 9.1% | 9.2% |
-| lifetime_trades      | 4.8% | 4.8% | 4.9% |
-| loss_trades          | 8.5% | 8.5% | 8.6% |
-| max_follower_count   | 9.1% | 9.1% | 9.2% |
-| profit_to_loss_ratio | 9.1% | 9.1% | 9.2% |
-| roe_volatility       | 9.1% | 9.1% | 9.2% |
-| sortino              | 9.1% | 9.1% | 9.2% |
-| stability_score      | 9.1% | 9.1% | 9.2% |
-| total_pnl            | 4.8% | 4.8% | 4.9% |
-| total_roi            | 4.8% | 4.8% | 4.9% |
-| trading_days         | 9.1% | 9.1% | 9.2% |
-| wallet_balance       | 8.5% | 8.5% | 8.6% |
-| weekly_trades        | 9.1% | 9.1% | 9.2% |
+| extras key           | 7d    | 30d   | 90d   |
+| -------------------- | ----- | ----- | ----- |
+| avg_pnl_per_trade    | 9.2%  | 9.2%  | 9.3%  |
+| bio                  | 4.5%  | 4.5%  | 4.6%  |
+| copier_total_profit  | 83.6% | 83.6% | 83.9% |
+| cum_follower_count   | 9.2%  | 9.2%  | 9.3%  |
+| last_traded_at       | 9.2%  | 9.2%  | 9.3%  |
+| leader_user_id       | 9.2%  | 9.2%  | 9.3%  |
+| lifetime_trades      | 5.4%  | 5.4%  | 5.5%  |
+| loss_trades          | 8.6%  | 8.6%  | 8.7%  |
+| max_copier_slots     | 83.6% | 83.6% | 83.9% |
+| max_follower_count   | 9.2%  | 9.2%  | 9.3%  |
+| profit_to_loss_ratio | 25.5% | 46.4% | 77.8% |
+| roe_volatility       | 9.2%  | 9.2%  | 9.3%  |
+| sortino              | 9.2%  | 9.2%  | 9.3%  |
+| stability_score      | 9.2%  | 9.2%  | 9.3%  |
+| total_pnl            | 5.4%  | 5.4%  | 5.5%  |
+| total_roi            | 5.4%  | 5.4%  | 5.5%  |
+| trading_days         | 9.2%  | 9.2%  | 9.3%  |
+| wallet_balance       | 8.6%  | 8.6%  | 8.7%  |
+| weekly_trades        | 9.2%  | 9.2%  | 9.3%  |
 
 ## bybit_mt5
 
-Timeframes: 7, 30, 90 · rows: 30158 / 30161 / 30163
+Timeframes: 7, 30, 90 · rows: 30201 / 30205 / 30208
 
 **Typed columns** (fill % per timeframe)
 
@@ -508,33 +543,33 @@ Timeframes: 7, 30, 90 · rows: 30158 / 30161 / 30163
 | sharpe               | 100% | 100% | 100% |
 | mdd                  | 100% | 100% | 100% |
 | win_rate             | 100% | 100% | 100% |
-| win_positions        | 3.7% | 3.7% | 3.7% |
-| total_positions      | 3.7% | 3.7% | 3.7% |
-| copier_pnl           | 3.7% | 3.7% | 3.7% |
-| copier_count         | 3.7% | 3.7% | 3.7% |
-| aum                  | 3.7% | 3.7% | 3.7% |
-| profit_share_rate    | 3.7% | 3.7% | 3.7% |
-| holding_duration_avg | 3.7% | 3.7% | 3.7% |
+| win_positions        | 3.8% | 3.8% | 3.8% |
+| total_positions      | 3.8% | 3.8% | 3.8% |
+| copier_pnl           | 3.8% | 3.8% | 3.8% |
+| copier_count         | 3.8% | 3.8% | 3.8% |
+| aum                  | 3.8% | 3.8% | 3.8% |
+| profit_share_rate    | 3.8% | 3.8% | 3.8% |
+| holding_duration_avg | 3.8% | 3.8% | 3.8% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key           | 7d   | 30d  | 90d  |
 | -------------------- | ---- | ---- | ---- |
-| avg_pnl_per_trade    | 3.7% | 3.7% | 3.7% |
-| copier_count_max     | 3.5% | 3.5% | 3.5% |
-| loss_trades          | 3.5% | 3.5% | 3.5% |
-| margin_level         | 3.5% | 3.5% | 3.5% |
-| profit_to_loss_ratio | 3.7% | 3.7% | 3.7% |
-| provider_user_id     | 3.7% | 3.7% | 3.7% |
-| roe_volatility       | 3.7% | 3.7% | 3.7% |
-| sortino              | 3.7% | 3.7% | 3.7% |
-| total_assets         | 3.7% | 3.7% | 3.7% |
-| trading_days         | 3.7% | 3.7% | 3.7% |
-| weekly_trades        | 3.7% | 3.7% | 3.7% |
+| avg_pnl_per_trade    | 3.8% | 3.8% | 3.8% |
+| copier_count_max     | 3.7% | 3.7% | 3.7% |
+| loss_trades          | 3.7% | 3.7% | 3.7% |
+| margin_level         | 3.7% | 3.7% | 3.7% |
+| profit_to_loss_ratio | 3.8% | 3.8% | 3.8% |
+| provider_user_id     | 3.8% | 3.8% | 3.8% |
+| roe_volatility       | 3.8% | 3.8% | 3.8% |
+| sortino              | 3.8% | 3.8% | 3.8% |
+| total_assets         | 3.8% | 3.8% | 3.8% |
+| trading_days         | 3.8% | 3.8% | 3.8% |
+| weekly_trades        | 3.8% | 3.8% | 3.8% |
 
 ## gate_cfd
 
-Timeframes: 7, 30, 90 · rows: 3356 / 3352 / 3345
+Timeframes: 7, 30, 90 · rows: 3481 / 3489 / 3451
 
 **Typed columns** (fill % per timeframe)
 
@@ -542,32 +577,32 @@ Timeframes: 7, 30, 90 · rows: 3356 / 3352 / 3345
 | ----------------- | ----- | ----- | ----- |
 | roi               | 100%  | 100%  | 100%  |
 | pnl               | 100%  | 100%  | 100%  |
-| sharpe            | 39.5% | 39.6% | 39.7% |
-| mdd               | 41.2% | 41.3% | 41.3% |
+| sharpe            | 0.7%  | 0.7%  | 0.6%  |
+| mdd               | 43.8% | 44.3% | 43.5% |
 | win_rate          | 100%  | 100%  | 100%  |
-| win_positions     | 39.5% | 39.6% | 39.7% |
-| total_positions   | 39.5% | 39.6% | 39.7% |
-| copier_pnl        | 39.5% | 39.6% | 39.7% |
-| copier_count      | 39.5% | 39.6% | 39.7% |
-| aum               | 41.2% | 41.3% | 41.3% |
-| profit_share_rate | 39.5% | 39.6% | 39.7% |
+| win_positions     | 39.2% | 39.2% | 39.6% |
+| total_positions   | 39.2% | 39.2% | 39.6% |
+| copier_pnl        | 39.2% | 39.2% | 39.6% |
+| copier_count      | 39.2% | 39.2% | 39.6% |
+| aum               | 43.8% | 44.3% | 43.5% |
+| profit_share_rate | 39.2% | 39.2% | 39.6% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key           | 7d    | 30d   | 90d   |
 | -------------------- | ----- | ----- | ----- |
-| last_trade_at        | 31.5% | 31.5% | 31.6% |
-| leading_days         | 39.5% | 39.6% | 39.7% |
-| net_asset_value      | 39.5% | 39.6% | 39.7% |
-| pl_ratio             | 19.7% | 25.5% | 28.1% |
-| settled_share_profit | 39.5% | 39.6% | 39.7% |
-| trade_frequency      | 11%   | 11%   | 11.1% |
-| trading_frequency    | 39.5% | 39.6% | 39.7% |
-| unrealized_pnl       | 11%   | 11%   | 11.1% |
+| last_trade_at        | 31.1% | 31%   | 31.3% |
+| leading_days         | 39.2% | 39.2% | 39.6% |
+| net_asset_value      | 39.2% | 39.2% | 39.6% |
+| pl_ratio             | 19.5% | 25.2% | 27.9% |
+| settled_share_profit | 39.2% | 39.2% | 39.6% |
+| trade_frequency      | 12.5% | 12.4% | 12.6% |
+| trading_frequency    | 39.2% | 39.2% | 39.6% |
+| unrealized_pnl       | 12.5% | 12.4% | 12.6% |
 
 ## gate_futures
 
-Timeframes: 7, 30, 90 · rows: 3431 / 2566 / 2404
+Timeframes: 7, 30, 90 · rows: 3513 / 2628 / 2457
 
 **Typed columns** (fill % per timeframe)
 
@@ -575,97 +610,99 @@ Timeframes: 7, 30, 90 · rows: 3431 / 2566 / 2404
 | ----------------- | ----- | ----- | ----- |
 | roi               | 100%  | 100%  | 100%  |
 | pnl               | 100%  | 100%  | 100%  |
-| sharpe            | 46.6% | 62.4% | 66.6% |
-| mdd               | 61.7% | 72.6% | 76.3% |
-| win_rate          | 96.9% | 97.7% | 99%   |
-| win_positions     | 46.6% | 62.4% | 66.6% |
-| total_positions   | 46.6% | 62.4% | 66.6% |
-| copier_pnl        | 46.6% | 62.4% | 66.6% |
-| copier_count      | 46.6% | 62.4% | 66.6% |
-| aum               | 61.9% | 74.7% | 78.3% |
-| volume            | 46.6% | 62.4% | 66.6% |
-| profit_share_rate | 46.6% | 62.4% | 66.6% |
+| sharpe            | 1.7%  | 2.2%  | 2.4%  |
+| mdd               | 73.6% | 75.2% | 78.6% |
+| win_rate          | 98.1% | 98.1% | 99.2% |
+| win_positions     | 46.2% | 61.7% | 66%   |
+| total_positions   | 46.2% | 61.7% | 66%   |
+| copier_pnl        | 46.2% | 61.7% | 66%   |
+| copier_count      | 46.2% | 61.7% | 66%   |
+| aum               | 73.8% | 77.3% | 80.5% |
+| volume            | 46.2% | 61.7% | 66%   |
+| profit_share_rate | 46.2% | 61.7% | 66%   |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key           | 7d    | 30d   | 90d   |
 | -------------------- | ----- | ----- | ----- |
-| average_loss         | 46.6% | 62.4% | 66.6% |
-| average_profit       | 46.6% | 62.4% | 66.6% |
-| copier_count_current | 8.3%  | 11.1% | 11.9% |
-| copier_count_total   | 46.6% | 62.4% | 66.6% |
-| copier_growth        | 8.3%  | 11.1% | 11.9% |
-| last_liquidation_at  | 22.5% | 30.1% | 32.2% |
-| last_trade_at        | 46.6% | 62.4% | 66.6% |
-| lead_size            | 46.6% | 62.4% | 66.6% |
-| leading_days         | 46.6% | 62.4% | 66.6% |
-| pl_ratio             | 46.6% | 62.4% | 66.6% |
-| roi_net_value        | 46.6% | 62.4% | 66.6% |
-| trade_frequency      | 8.3%  | 11.1% | 11.9% |
-| trading_frequency    | 46.6% | 62.4% | 66.6% |
+| average_loss         | 46.2% | 61.7% | 66%   |
+| average_profit       | 46.2% | 61.7% | 66%   |
+| copier_count_current | 10.3% | 13.8% | 14.8% |
+| copier_count_total   | 46.2% | 61.7% | 66%   |
+| copier_growth        | 10.3% | 13.8% | 14.8% |
+| last_liquidation_at  | 22.3% | 29.8% | 31.9% |
+| last_trade_at        | 46.2% | 61.7% | 66%   |
+| lead_size            | 46.2% | 61.7% | 66%   |
+| leading_days         | 46.2% | 61.7% | 66%   |
+| pl_ratio             | 46.2% | 61.7% | 66%   |
+| roi_net_value        | 46.2% | 61.7% | 66%   |
+| trade_frequency      | 10.3% | 13.8% | 14.8% |
+| trading_frequency    | 46.2% | 61.7% | 66%   |
 
 ## gmx
 
-Timeframes: 7, 30, 90 · rows: 163 / 161 / 163
+Timeframes: 7, 30, 90 · rows: 168 / 164 / 166
 
 **Typed columns** (fill % per timeframe)
 
 | column          | 7d    | 30d   | 90d   |
 | --------------- | ----- | ----- | ----- |
-| roi             | 85.9% | 91.3% | 100%  |
+| roi             | 84.5% | 91.5% | 100%  |
 | pnl             | 100%  | 100%  | 100%  |
-| sharpe          | 56.4% | 61.5% | 63.8% |
-| mdd             | 57.1% | 61.5% | 65%   |
-| win_rate        | 51.5% | 68.9% | 87.1% |
-| win_positions   | 83.4% | 90.1% | 97.5% |
-| total_positions | 83.4% | 90.1% | 97.5% |
-| aum             | 83.4% | 90.7% | 97.5% |
-| volume          | 83.4% | 90.1% | 97.5% |
+| sharpe          | 59.5% | 68.3% | 71.7% |
+| mdd             | 60.7% | 68.3% | 71.7% |
+| win_rate        | 48.2% | 69.5% | 87.3% |
+| win_positions   | 81%   | 90.2% | 97.6% |
+| total_positions | 81%   | 90.2% | 97.6% |
+| aum             | 82.7% | 90.9% | 97.6% |
+| volume          | 81%   | 90.2% | 97.6% |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key       | 7d    | 30d   | 90d   |
-| ---------------- | ----- | ----- | ----- |
-| aum_basis        | 97.5% | 98.8% | 97.5% |
-| closed_count     | 83.4% | 90.1% | 97.5% |
-| pnl_basis        | 97.5% | 98.8% | 97.5% |
-| realized_pnl_usd | 83.4% | 90.1% | 97.5% |
-| risk_derivation  | 57.1% | 61.5% | 65%   |
-| risk_samples     | 57.1% | 61.5% | 65%   |
-| sortino          | 57.1% | 61.5% | 63.8% |
-| window_from      | 97.5% | 98.8% | 97.5% |
+| extras key           | 7d    | 30d   | 90d   |
+| -------------------- | ----- | ----- | ----- |
+| aum_basis            | 96.4% | 98.8% | 97.6% |
+| closed_count         | 81%   | 90.2% | 97.6% |
+| pnl_basis            | 96.4% | 98.8% | 97.6% |
+| realized_pnl_usd     | 81%   | 90.2% | 97.6% |
+| risk_derivation      | 60.7% | 68.3% | 71.7% |
+| risk_derived_samples | 10.7% | 4.9%  | 1.8%  |
+| risk_samples         | 60.7% | 68.3% | 71.7% |
+| risk_self_derived    | 10.7% | 4.9%  | 1.8%  |
+| sortino              | 71.4% | 73.2% | 69.9% |
+| window_from          | 96.4% | 98.8% | 97.6% |
 
 ## gtrade
 
-Timeframes: 7, 30, 90 · rows: 138 / 117 / 116
+Timeframes: 7, 30, 90 · rows: 142 / 125 / 124
 
 **Typed columns** (fill % per timeframe)
 
-| column          | 7d    | 30d   | 90d  |
-| --------------- | ----- | ----- | ---- |
-| pnl             | 80.4% | 91.5% | 100% |
-| sharpe          | 0.7%  | 13.7% | 25%  |
-| win_rate        | 80.4% | 91.5% | 100% |
-| win_positions   | 62.3% | 90.6% | 100% |
-| total_positions | 62.3% | 90.6% | 100% |
+| column          | 7d    | 30d   | 90d   |
+| --------------- | ----- | ----- | ----- |
+| pnl             | 81%   | 92%   | 100%  |
+| sharpe          | 2.8%  | 18.4% | 30.6% |
+| win_rate        | 81%   | 92%   | 100%  |
+| win_positions   | 67.6% | 91.2% | 100%  |
+| total_positions | 67.6% | 91.2% | 100%  |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key        | 7d    | 30d   | 90d  |
-| ----------------- | ----- | ----- | ---- |
-| lifetime_trades   | 84.1% | 99.1% | 100% |
-| lifetime_volume   | 84.1% | 99.1% | 100% |
-| lifetime_win_rate | 84.1% | 99.1% | 100% |
-| pnl_basis         | 84.1% | 99.1% | 100% |
-| risk_derivation   | 0.7%  | 13.7% | 25%  |
-| risk_samples      | 0.7%  | 13.7% | 25%  |
-| sortino           | 0.7%  | 13.7% | 25%  |
-| thirty_day_volume | 84.1% | 99.1% | 100% |
-| trades_truncated  | 84.1% | 99.1% | 100% |
+| extras key        | 7d    | 30d   | 90d   |
+| ----------------- | ----- | ----- | ----- |
+| lifetime_trades   | 87.3% | 99.2% | 100%  |
+| lifetime_volume   | 87.3% | 99.2% | 100%  |
+| lifetime_win_rate | 87.3% | 99.2% | 100%  |
+| pnl_basis         | 87.3% | 99.2% | 100%  |
+| risk_derivation   | 2.8%  | 18.4% | 30.6% |
+| risk_samples      | 2.8%  | 18.4% | 30.6% |
+| sortino           | 2.8%  | 18.4% | 30.6% |
+| thirty_day_volume | 87.3% | 99.2% | 100%  |
+| trades_truncated  | 87.3% | 99.2% | 100%  |
 
 ## htx_futures
 
-Timeframes: 7, 30, 90 · rows: 3 / 3 / 625
+Timeframes: 7, 30, 90 · rows: 4 / 4 / 628
 
 **Typed columns** (fill % per timeframe)
 
@@ -673,130 +710,139 @@ Timeframes: 7, 30, 90 · rows: 3 / 3 / 625
 | -------------------- | ---- | ---- | ----- |
 | roi                  | 100% | 100% | 100%  |
 | pnl                  | 100% | 100% | 100%  |
-| mdd                  | 100% | 100% | 65.1% |
+| mdd                  | 100% | 100% | 65.3% |
 | win_rate             | 100% | 100% | 100%  |
-| win_positions        | 100% | 100% | 65.1% |
-| total_positions      | 100% | 100% | 65.1% |
-| copier_pnl           | 100% | 100% | 65.1% |
-| copier_count         | 100% | 100% | 65.1% |
+| win_positions        | 100% | 100% | 65.8% |
+| total_positions      | 100% | 100% | 65.8% |
+| copier_pnl           | 100% | 100% | 65.8% |
+| copier_count         | 100% | 100% | 65.8% |
 | aum                  | 100% | 100% | 96.2% |
-| profit_share_rate    | 100% | 100% | 65.1% |
-| holding_duration_avg | 100% | 100% | 65.1% |
+| profit_share_rate    | 100% | 100% | 65.8% |
+| holding_duration_avg | 100% | 100% | 65.8% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key               | 7d   | 30d  | 90d   |
 | ------------------------ | ---- | ---- | ----- |
-| avg_loss                 | 100% | 100% | 65.1% |
-| avg_profit               | 100% | 100% | 65.1% |
-| copier_count_history     | 100% | 100% | 65.1% |
-| introduction             | 100% | 100% | 44%   |
-| last_trade_time          | 100% | 100% | 65.1% |
-| lead_since               | 100% | 100% | 65.1% |
-| max_copier_slots         | 100% | 100% | 65.1% |
-| profit_loss_ratio        | 100% | 100% | 65.1% |
-| stats_scope              | 100% | 100% | 65.1% |
-| trade_frequency_per_week | 100% | 100% | 65.1% |
+| avg_loss                 | 100% | 100% | 65.8% |
+| avg_profit               | 100% | 100% | 65.8% |
+| copier_count_history     | 100% | 100% | 65.8% |
+| introduction             | 100% | 100% | 44.4% |
+| last_trade_time          | 100% | 100% | 65.8% |
+| lead_since               | 100% | 100% | 65.8% |
+| max_copier_slots         | 100% | 100% | 65.8% |
+| profit_loss_ratio        | 100% | 100% | 65.8% |
+| stats_scope              | 100% | 100% | 65.8% |
+| trade_frequency_per_week | 100% | 100% | 65.8% |
 
 ## htx_spot
 
-Timeframes: 90 · rows: 624
+Timeframes: 90 · rows: 626
 
 **Typed columns** (fill % per timeframe)
 
-| column               | 90d   |
-| -------------------- | ----- |
-| roi                  | 100%  |
-| pnl                  | 100%  |
-| mdd                  | 100%  |
-| win_rate             | 100%  |
-| win_positions        | 61.7% |
-| total_positions      | 61.7% |
-| copier_pnl           | 61.7% |
-| copier_count         | 61.7% |
-| aum                  | 100%  |
-| profit_share_rate    | 61.7% |
-| holding_duration_avg | 61.7% |
+| column               | 90d  |
+| -------------------- | ---- |
+| roi                  | 100% |
+| pnl                  | 100% |
+| mdd                  | 100% |
+| win_rate             | 100% |
+| win_positions        | 62%  |
+| total_positions      | 62%  |
+| copier_pnl           | 62%  |
+| copier_count         | 62%  |
+| aum                  | 100% |
+| profit_share_rate    | 62%  |
+| holding_duration_avg | 62%  |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key               | 90d   |
 | ------------------------ | ----- |
-| avg_loss                 | 61.7% |
-| avg_profit               | 61.7% |
-| copier_count_history     | 61.7% |
-| introduction             | 24.8% |
+| avg_loss                 | 62%   |
+| avg_profit               | 62%   |
+| copier_count_history     | 62%   |
+| introduction             | 25.1% |
 | last_trade_time          | 3.2%  |
-| lead_since               | 61.7% |
-| max_copier_slots         | 61.7% |
-| profit_loss_ratio        | 61.7% |
-| stats_scope              | 61.7% |
-| trade_frequency_per_week | 61.7% |
+| lead_since               | 62%   |
+| max_copier_slots         | 62%   |
+| profit_loss_ratio        | 62%   |
+| stats_scope              | 62%   |
+| trade_frequency_per_week | 62%   |
 
 ## hyperliquid
 
-Timeframes: 7, 30, 90 · rows: 26247 / 19996 / 1784
+Timeframes: 7, 30, 90 · rows: 27690 / 20919 / 1820
 
 **Typed columns** (fill % per timeframe)
 
-| column | 7d    | 30d   | 90d   |
-| ------ | ----- | ----- | ----- |
-| roi    | 100%  | 99.7% | 77.7% |
-| pnl    | 100%  | 100%  | 100%  |
-| sharpe | 3.6%  | 4.9%  | 54.5% |
-| mdd    | 3.7%  | 4.9%  | 54.7% |
-| aum    | 45.2% | 60.1% | 100%  |
-| volume | 6.8%  | 8.9%  | 0%    |
+| column               | 7d    | 30d   | 90d   |
+| -------------------- | ----- | ----- | ----- |
+| roi                  | 100%  | 99.5% | 77.7% |
+| pnl                  | 100%  | 100%  | 100%  |
+| sharpe               | 4.1%  | 5.5%  | 62.9% |
+| mdd                  | 4.1%  | 5.5%  | 63%   |
+| win_rate             | 0.1%  | 0.6%  | 20.4% |
+| win_positions        | 0.1%  | 0.6%  | 20.4% |
+| total_positions      | 0.1%  | 0.6%  | 20.4% |
+| aum                  | 64.8% | 63.9% | 100%  |
+| volume               | 6.6%  | 8.7%  | 0%    |
+| holding_duration_avg | 0.1%  | 0.6%  | 20.4% |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key      | 7d   | 30d  | 90d   |
-| --------------- | ---- | ---- | ----- |
-| derivation      | 0%   | 0%   | 100%  |
-| risk_derivation | 3.7% | 4.9% | 54.7% |
-| risk_samples    | 3.7% | 4.9% | 54.7% |
-| roi_basis       | 6.8% | 8.9% | 100%  |
-| sortino         | 3.7% | 4.9% | 54.5% |
+| extras key           | 7d   | 30d  | 90d   |
+| -------------------- | ---- | ---- | ----- |
+| derivation           | 0%   | 0%   | 100%  |
+| fills_derivation     | 0.1% | 0.6% | 20.4% |
+| pnl_ratio            | 0%   | 0.3% | 11.5% |
+| risk_derivation      | 4.1% | 5.5% | 63%   |
+| risk_derived_samples | 0%   | 0%   | 0.1%  |
+| risk_samples         | 4.1% | 5.5% | 63%   |
+| risk_self_derived    | 0%   | 0%   | 0.1%  |
+| roi_basis            | 6.6% | 8.7% | 100%  |
+| sortino              | 4.1% | 5.5% | 62.9% |
+| trades_per_week      | 0.1% | 0.6% | 20.4% |
 
 ## kucoin_futures
 
-Timeframes: 30, 90 · rows: 1537 / 1
+Timeframes: 7, 30, 90 · rows: 3 / 1549 / 4
 
 **Typed columns** (fill % per timeframe)
 
-| column            | 30d   | 90d  |
-| ----------------- | ----- | ---- |
-| roi               | 100%  | 100% |
-| pnl               | 100%  | 100% |
-| copier_pnl        | 48.2% | 100% |
-| copier_count      | 72.9% | 100% |
-| aum               | 76.4% | 100% |
-| profit_share_rate | 48.2% | 100% |
+| column            | 7d   | 30d   | 90d  |
+| ----------------- | ---- | ----- | ---- |
+| roi               | 100% | 100%  | 100% |
+| pnl               | 100% | 100%  | 100% |
+| copier_pnl        | 100% | 51.1% | 100% |
+| copier_count      | 100% | 73.5% | 100% |
+| aum               | 100% | 76.9% | 100% |
+| profit_share_rate | 100% | 51.1% | 100% |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key          | 30d   | 90d  |
-| ------------------- | ----- | ---- |
-| copier_total_profit | 54%   | 0%   |
-| exchange_uid        | 48.2% | 100% |
-| follower_count      | 48.2% | 100% |
-| introduction        | 46.9% | 100% |
-| lead_days           | 48.2% | 100% |
-| lead_principal      | 72.9% | 100% |
-| leading_days        | 54%   | 0%   |
-| max_copier_slots    | 72.9% | 100% |
-| min_copy_amount     | 54%   | 0%   |
-| total_pnl           | 54%   | 0%   |
-| total_return_rate   | 48.2% | 100% |
-| total_roi           | 54%   | 0%   |
-| trade_frequency     | 20%   | 0%   |
-| tradepilot          | 0.3%  | 0%   |
-| trading_frequency   | 20%   | 0%   |
-| venue               | 48.2% | 100% |
+| extras key          | 7d   | 30d   | 90d  |
+| ------------------- | ---- | ----- | ---- |
+| copier_total_profit | 0%   | 54.6% | 0%   |
+| exchange_uid        | 100% | 51.1% | 100% |
+| follower_count      | 100% | 51.1% | 100% |
+| introduction        | 100% | 49.7% | 100% |
+| lead_days           | 100% | 51.1% | 100% |
+| lead_principal      | 100% | 73.5% | 100% |
+| leading_days        | 0%   | 54.6% | 0%   |
+| max_copier_slots    | 100% | 73.5% | 100% |
+| min_copy_amount     | 0%   | 54.6% | 0%   |
+| total_pnl           | 0%   | 54.6% | 0%   |
+| total_return_rate   | 100% | 51.1% | 100% |
+| total_roi           | 0%   | 54.6% | 0%   |
+| trade_frequency     | 100% | 24.5% | 75%  |
+| tradepilot          | 0%   | 0.3%  | 0%   |
+| trading_frequency   | 100% | 24.5% | 75%  |
+| venue               | 100% | 51.1% | 100% |
 
 ## lbank_futures
 
-Timeframes: 7, 30 · rows: 319 / 316
+Timeframes: 7, 30 · rows: 332 / 332
 
 **Typed columns** (fill % per timeframe)
 
@@ -804,95 +850,72 @@ Timeframes: 7, 30 · rows: 319 / 316
 | ----------------- | ----- | ----- |
 | roi               | 100%  | 100%  |
 | pnl               | 100%  | 100%  |
-| mdd               | 90%   | 89.9% |
+| mdd               | 91%   | 91%   |
 | win_rate          | 100%  | 100%  |
-| total_positions   | 83.1% | 83.9% |
-| copier_pnl        | 83.1% | 83.9% |
-| copier_count      | 83.1% | 83.9% |
-| aum               | 90%   | 89.9% |
-| profit_share_rate | 22.9% | 23.1% |
+| total_positions   | 88.3% | 88.3% |
+| copier_pnl        | 88.3% | 88.3% |
+| copier_count      | 88.3% | 88.3% |
+| aum               | 91%   | 91%   |
+| profit_share_rate | 58.4% | 58.4% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key              | 7d    | 30d   |
 | ----------------------- | ----- | ----- |
-| closed_positions        | 83.1% | 83.9% |
-| copier_count_history    | 10.7% | 10.8% |
-| current_followers       | 83.1% | 83.9% |
-| introduction            | 29.5% | 29.7% |
-| leading_days            | 10.7% | 10.8% |
-| lifetime_trades         | 22.9% | 23.1% |
-| max_copier_slots        | 83.1% | 83.9% |
-| open_positions          | 83.1% | 83.9% |
-| profitable_copier_count | 83.1% | 83.9% |
-| trader_level            | 83.1% | 83.9% |
+| closed_positions        | 88.3% | 88.3% |
+| copier_count_history    | 57.2% | 57.2% |
+| current_followers       | 88.3% | 88.3% |
+| introduction            | 30.7% | 30.7% |
+| leading_days            | 57.2% | 57.2% |
+| lifetime_trades         | 58.4% | 58.4% |
+| max_copier_slots        | 88.3% | 88.3% |
+| open_positions          | 88.3% | 88.3% |
+| profitable_copier_count | 88.3% | 88.3% |
+| trader_level            | 88.3% | 88.3% |
 
 ## mexc_futures
 
-Timeframes: 7, 30, 90 · rows: 15134 / 1234 / 1234
+Timeframes: 7, 30, 90 · rows: 15551 / 1306 / 1306
 
 **Typed columns** (fill % per timeframe)
 
-| column               | 7d   | 30d   | 90d   |
-| -------------------- | ---- | ----- | ----- |
-| roi                  | 100% | 100%  | 100%  |
-| pnl                  | 100% | 100%  | 100%  |
-| mdd                  | 63%  | 99.9% | 99.9% |
-| win_rate             | 100% | 100%  | 100%  |
-| win_positions        | 8.2% | 100%  | 100%  |
-| total_positions      | 8.2% | 100%  | 100%  |
-| copier_pnl           | 8.2% | 100%  | 100%  |
-| copier_count         | 8.2% | 100%  | 100%  |
-| aum                  | 63%  | 100%  | 100%  |
-| profit_share_rate    | 8.2% | 100%  | 100%  |
-| holding_duration_avg | 7.4% | 99.7% | 99.8% |
+| column               | 7d    | 30d   | 90d   |
+| -------------------- | ----- | ----- | ----- |
+| roi                  | 100%  | 100%  | 100%  |
+| pnl                  | 100%  | 100%  | 100%  |
+| mdd                  | 69.2% | 99.9% | 99.9% |
+| win_rate             | 100%  | 100%  | 100%  |
+| win_positions        | 8.4%  | 100%  | 100%  |
+| total_positions      | 8.4%  | 100%  | 100%  |
+| copier_pnl           | 8.4%  | 100%  | 100%  |
+| copier_count         | 8.4%  | 100%  | 100%  |
+| aum                  | 69.2% | 100%  | 100%  |
+| profit_share_rate    | 8.4%  | 100%  | 100%  |
+| holding_duration_avg | 7.6%  | 99.7% | 99.8% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key               | 7d   | 30d   | 90d   |
 | ------------------------ | ---- | ----- | ----- |
-| ability_rating           | 8.2% | 100%  | 100%  |
-| avg_order_amount         | 8.2% | 100%  | 100%  |
-| copier_count_history     | 8.2% | 100%  | 100%  |
-| interested_count         | 8.2% | 100%  | 100%  |
-| last_trade_time          | 8.2% | 100%  | 100%  |
-| loss_trades              | 3.6% | 43.7% | 43.7% |
-| max_hold_time_hours      | 7.4% | 99.7% | 99.8% |
-| profit_and_loss_ratio    | 7.3% | 98.5% | 99.3% |
-| settled_days             | 8.2% | 100%  | 100%  |
-| total_equity             | 7.9% | 96.6% | 96.6% |
-| total_pnl                | 8.2% | 100%  | 100%  |
-| total_roi                | 8.2% | 100%  | 100%  |
-| total_win_rate           | 8.2% | 100%  | 100%  |
-| trade_frequency_per_week | 8.2% | 100%  | 100%  |
+| ability_rating           | 8.4% | 100%  | 100%  |
+| avg_order_amount         | 8.4% | 100%  | 100%  |
+| copier_count_history     | 8.4% | 100%  | 100%  |
+| interested_count         | 8.4% | 100%  | 100%  |
+| last_trade_time          | 8.4% | 100%  | 100%  |
+| loss_trades              | 4.2% | 50.3% | 50.3% |
+| max_hold_time_hours      | 7.6% | 99.7% | 99.8% |
+| profit_and_loss_ratio    | 7.4% | 98%   | 99.3% |
+| settled_days             | 8.4% | 100%  | 100%  |
+| total_equity             | 8.1% | 96.7% | 96.7% |
+| total_pnl                | 8.4% | 100%  | 100%  |
+| total_roi                | 8.4% | 100%  | 100%  |
+| total_win_rate           | 8.4% | 100%  | 100%  |
+| trade_frequency_per_week | 8.4% | 100%  | 100%  |
 | trader_type              | 0%   | 0.1%  | 0.1%  |
 
 ## okx_futures
 
-Timeframes: 7, 30, 90 · rows: 348 / 348 / 364
-
-**Typed columns** (fill % per timeframe)
-
-| column     | 7d    | 30d   | 90d   |
-| ---------- | ----- | ----- | ----- |
-| roi        | 99.7% | 99.7% | 100%  |
-| pnl        | 99.7% | 99.7% | 100%  |
-| win_rate   | 100%  | 100%  | 100%  |
-| copier_pnl | 100%  | 100%  | 95.6% |
-| aum        | 0%    | 0%    | 71.7% |
-
-**Extras keys** (fill % per timeframe)
-
-| extras key          | 7d   | 30d  | 90d   |
-| ------------------- | ---- | ---- | ----- |
-| avg_subpos_notional | 100% | 100% | 95.6% |
-| invest_amt          | 100% | 100% | 95.6% |
-| loss_days           | 100% | 100% | 95.6% |
-| profit_days         | 100% | 100% | 95.6% |
-
-## okx_spot
-
-Timeframes: 7, 30, 90 · rows: 244 / 244 / 249
+Timeframes: 7, 30, 90 · rows: 350 / 350 / 369
 
 **Typed columns** (fill % per timeframe)
 
@@ -901,21 +924,44 @@ Timeframes: 7, 30, 90 · rows: 244 / 244 / 249
 | roi        | 100% | 100% | 100%  |
 | pnl        | 100% | 100% | 100%  |
 | win_rate   | 100% | 100% | 100%  |
-| copier_pnl | 100% | 100% | 98%   |
-| aum        | 0%   | 0%   | 76.7% |
+| copier_pnl | 100% | 100% | 94.9% |
+| aum        | 0%   | 0%   | 75.3% |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key          | 7d   | 30d  | 90d |
-| ------------------- | ---- | ---- | --- |
-| avg_subpos_notional | 100% | 100% | 98% |
-| invest_amt          | 100% | 100% | 98% |
-| loss_days           | 100% | 100% | 98% |
-| profit_days         | 100% | 100% | 98% |
+| extras key          | 7d   | 30d  | 90d   |
+| ------------------- | ---- | ---- | ----- |
+| avg_subpos_notional | 100% | 100% | 94.9% |
+| invest_amt          | 100% | 100% | 94.9% |
+| loss_days           | 100% | 100% | 94.9% |
+| profit_days         | 100% | 100% | 94.9% |
+
+## okx_spot
+
+Timeframes: 7, 30, 90 · rows: 245 / 245 / 252
+
+**Typed columns** (fill % per timeframe)
+
+| column     | 7d   | 30d  | 90d   |
+| ---------- | ---- | ---- | ----- |
+| roi        | 100% | 100% | 100%  |
+| pnl        | 100% | 100% | 100%  |
+| win_rate   | 100% | 100% | 100%  |
+| copier_pnl | 100% | 100% | 97.2% |
+| aum        | 0%   | 0%   | 78.2% |
+
+**Extras keys** (fill % per timeframe)
+
+| extras key          | 7d   | 30d  | 90d   |
+| ------------------- | ---- | ---- | ----- |
+| avg_subpos_notional | 100% | 100% | 97.2% |
+| invest_amt          | 100% | 100% | 97.2% |
+| loss_days           | 100% | 100% | 97.2% |
+| profit_days         | 100% | 100% | 97.2% |
 
 ## okx_web3_solana
 
-Timeframes: 7, 30, 90 · rows: 18884 / 20503 / 21589
+Timeframes: 7, 30, 90 · rows: 20176 / 21794 / 23558
 
 **Typed columns** (fill % per timeframe)
 
@@ -924,27 +970,38 @@ Timeframes: 7, 30, 90 · rows: 18884 / 20503 / 21589
 | roi      | 100% | 100% | 100% |
 | pnl      | 100% | 100% | 100% |
 | win_rate | 100% | 100% | 100% |
-| volume   | 8.5% | 7.8% | 7.4% |
+| volume   | 8.2% | 7.6% | 7.1% |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key            | 7d   | 30d  | 90d  |
-| --------------------- | ---- | ---- | ---- |
-| avg_cost_buy          | 8.5% | 7.8% | 7.4% |
-| favorite_mcap_type    | 8.5% | 7.8% | 7.4% |
-| native_balance_amount | 8.5% | 7.8% | 7.4% |
-| native_balance_usd    | 8.5% | 7.8% | 7.4% |
-| top_tokens_total_pnl  | 8.5% | 7.8% | 7.4% |
-| txs_buy               | 8.5% | 7.8% | 7.4% |
-| txs_sell              | 8.5% | 7.8% | 7.4% |
-| unrealized_pnl        | 8.5% | 7.8% | 7.4% |
-| unrealized_pnl_roi    | 8.5% | 7.8% | 7.4% |
-| volume_buy            | 8.5% | 7.8% | 7.4% |
-| volume_sell           | 8.5% | 7.8% | 7.4% |
+| extras key             | 7d   | 30d  | 90d  |
+| ---------------------- | ---- | ---- | ---- |
+| avg_cost_buy           | 8.2% | 7.6% | 7.1% |
+| favorite_mcap_type     | 8.2% | 7.6% | 7.1% |
+| native_balance_amount  | 8.2% | 7.6% | 7.1% |
+| native_balance_usd     | 8.2% | 7.6% | 7.1% |
+| onchain_buy_volume     | 0%   | 0%   | 6.4% |
+| onchain_derivation     | 0%   | 0%   | 6.4% |
+| onchain_enriched_at    | 0%   | 0%   | 6.4% |
+| onchain_realized_pnl   | 0%   | 0%   | 6.4% |
+| onchain_sell_volume    | 0%   | 0%   | 6.4% |
+| onchain_tokens_traded  | 0%   | 0%   | 6.4% |
+| onchain_total_pnl      | 0%   | 0%   | 6.4% |
+| onchain_txs_buy        | 0%   | 0%   | 6.4% |
+| onchain_txs_sell       | 0%   | 0%   | 6.4% |
+| onchain_unrealized_pnl | 0%   | 0%   | 6.4% |
+| onchain_win_rate       | 0%   | 0%   | 0.2% |
+| top_tokens_total_pnl   | 8.2% | 7.6% | 7.1% |
+| txs_buy                | 8.2% | 7.6% | 7.1% |
+| txs_sell               | 8.2% | 7.6% | 7.1% |
+| unrealized_pnl         | 8.2% | 7.6% | 7.1% |
+| unrealized_pnl_roi     | 8.2% | 7.6% | 7.1% |
+| volume_buy             | 8.2% | 7.6% | 7.1% |
+| volume_sell            | 8.2% | 7.6% | 7.1% |
 
 ## phemex_futures
 
-Timeframes: 30, 90 · rows: 463 / 462
+Timeframes: 30, 90 · rows: 466 / 466
 
 **Typed columns** (fill % per timeframe)
 
@@ -952,38 +1009,38 @@ Timeframes: 30, 90 · rows: 463 / 462
 | ----------------- | ----- | ----- |
 | roi               | 100%  | 100%  |
 | pnl               | 100%  | 100%  |
-| mdd               | 92%   | 92.2% |
+| mdd               | 92.5% | 92.5% |
 | win_rate          | 100%  | 100%  |
-| win_positions     | 89.4% | 89.6% |
-| total_positions   | 89.4% | 89.6% |
-| copier_pnl        | 89.4% | 89.6% |
-| copier_count      | 91.6% | 91.8% |
-| aum               | 92%   | 92.2% |
-| volume            | 89.4% | 89.6% |
-| profit_share_rate | 89.4% | 89.6% |
+| win_positions     | 90.1% | 90.1% |
+| total_positions   | 90.1% | 90.1% |
+| copier_pnl        | 90.1% | 90.1% |
+| copier_count      | 92.1% | 92.1% |
+| aum               | 92.5% | 92.5% |
+| volume            | 90.1% | 90.1% |
+| profit_share_rate | 90.1% | 90.1% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key                  | 30d   | 90d   |
 | --------------------------- | ----- | ----- |
 | ai_trader                   | 3%    | 3%    |
-| copier_total_realized_pnl   | 89.4% | 89.6% |
-| follower_count              | 89.4% | 89.6% |
-| lifetime_trades             | 66.7% | 66.9% |
-| lifetime_win_rate           | 66.7% | 66.9% |
-| max_copier_slots            | 89.4% | 89.6% |
-| min_copy_amount             | 74.9% | 75.1% |
-| position_hold_time_total_ns | 89.4% | 89.6% |
-| profit_share_rate           | 73.4% | 73.6% |
-| star_trader                 | 89.4% | 89.6% |
-| total_balance               | 91.6% | 91.8% |
-| total_pnl                   | 89.4% | 89.6% |
-| total_roi                   | 89.4% | 89.6% |
-| total_trade_volume          | 89.4% | 89.6% |
+| copier_total_realized_pnl   | 90.1% | 90.1% |
+| follower_count              | 90.1% | 90.1% |
+| lifetime_trades             | 68.9% | 68.9% |
+| lifetime_win_rate           | 68.9% | 68.9% |
+| max_copier_slots            | 90.1% | 90.1% |
+| min_copy_amount             | 77.5% | 77.5% |
+| position_hold_time_total_ns | 90.1% | 90.1% |
+| profit_share_rate           | 76%   | 76%   |
+| star_trader                 | 90.1% | 90.1% |
+| total_balance               | 92.1% | 92.1% |
+| total_pnl                   | 90.1% | 90.1% |
+| total_roi                   | 90.1% | 90.1% |
+| total_trade_volume          | 90.1% | 90.1% |
 
 ## toobit_futures
 
-Timeframes: 7, 30, 90 · rows: 1609 / 1609 / 1609
+Timeframes: 7, 30, 90 · rows: 1611 / 1611 / 1611
 
 **Typed columns** (fill % per timeframe)
 
@@ -991,34 +1048,34 @@ Timeframes: 7, 30, 90 · rows: 1609 / 1609 / 1609
 | ----------------- | ----- | ----- | ----- |
 | roi               | 100%  | 100%  | 100%  |
 | pnl               | 100%  | 100%  | 100%  |
-| sharpe            | 98.2% | 99.2% | 87.1% |
+| sharpe            | 100%  | 100%  | 100%  |
 | mdd               | 40.6% | 40.6% | 40.6% |
 | win_rate          | 100%  | 100%  | 100%  |
-| copier_count      | 99.7% | 99.6% | 98.5% |
+| copier_count      | 99.6% | 99.5% | 99.8% |
 | aum               | 100%  | 100%  | 100%  |
-| profit_share_rate | 36%   | 36%   | 36%   |
+| profit_share_rate | 35.9% | 35.9% | 35.9% |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key                       | 7d    | 30d   | 90d   |
 | -------------------------------- | ----- | ----- | ----- |
 | bio                              | 21.4% | 21.4% | 21.4% |
-| copier_count_history             | 96.5% | 98.6% | 81.7% |
+| copier_count_history             | 84.2% | 86.3% | 88.1% |
 | copier_limit                     | 40.6% | 40.6% | 40.6% |
-| copier_total_profit              | 96.5% | 98.6% | 81.7% |
+| copier_total_profit              | 84.2% | 86.3% | 88.1% |
 | is_full                          | 40.6% | 40.6% | 40.6% |
 | last_week_win_rate               | 40.6% | 40.6% | 40.6% |
 | lead_days                        | 40.6% | 40.6% | 40.6% |
 | leaderMaximumDrawdownProportion  | 40.6% | 40.6% | 40.6% |
 | leaderProfitOrderRatioProportion | 40.6% | 40.6% | 40.6% |
 | leaderProfitRatioProportion      | 40.6% | 40.6% | 40.6% |
-| max_copier_slots                 | 96.5% | 98.6% | 81.7% |
-| profit_share_rate                | 96.5% | 98.6% | 81.7% |
+| max_copier_slots                 | 84.2% | 86.3% | 88.1% |
+| profit_share_rate                | 84.2% | 86.3% | 88.1% |
 | start_lead_time                  | 40.6% | 40.6% | 40.6% |
 | total_copiers_history            | 40.6% | 40.6% | 40.6% |
-| total_pnl                        | 24.1% | 24.1% | 24.1% |
-| total_roi                        | 24.1% | 24.1% | 24.1% |
-| trade_count_lifetime             | 99.7% | 99.6% | 98.5% |
+| total_pnl                        | 26.3% | 26.4% | 26.4% |
+| total_roi                        | 26.3% | 26.4% | 26.4% |
+| trade_count_lifetime             | 99.6% | 99.5% | 99.8% |
 
 ## xt_futures
 
@@ -1030,52 +1087,54 @@ Timeframes: 7, 30, 90 · rows: 1893 / 1893 / 1893
 | -------------------- | ----- | ----- | ----- |
 | roi                  | 100%  | 100%  | 100%  |
 | pnl                  | 100%  | 100%  | 100%  |
-| mdd                  | 99.3% | 99.3% | 99.3% |
+| mdd                  | 99.3% | 99.3% | 99.2% |
 | win_rate             | 100%  | 100%  | 100%  |
-| win_positions        | 19.3% | 19.3% | 19.4% |
-| total_positions      | 19.3% | 19.3% | 19.4% |
-| copier_pnl           | 19.3% | 19.3% | 19.4% |
+| win_positions        | 20.5% | 20.6% | 20.6% |
+| total_positions      | 20.5% | 20.6% | 20.6% |
+| copier_pnl           | 20.5% | 20.6% | 20.6% |
 | copier_count         | 99.4% | 99.4% | 99.4% |
 | aum                  | 99.3% | 99.3% | 99.3% |
-| holding_duration_avg | 2.6%  | 5.1%  | 6.6%  |
+| holding_duration_avg | 3.5%  | 5.9%  | 7.6%  |
 
 **Extras keys** (fill % per timeframe)
 
 | extras key           | 7d    | 30d   | 90d   |
 | -------------------- | ----- | ----- | ----- |
-| avg_loss             | 19.3% | 19.3% | 19.4% |
-| avg_profit           | 19.3% | 19.3% | 19.4% |
-| copier_count_history | 19.7% | 19.7% | 19.7% |
-| copier_growth        | 99.3% | 99.3% | 99.3% |
-| copier_total_profit  | 99.3% | 99.3% | 99.3% |
-| follower_margin      | 99.3% | 99.3% | 99.3% |
-| intro                | 6.1%  | 6.1%  | 6.1%  |
-| leading_days         | 24.8% | 24.8% | 24.8% |
-| level_name           | 24.8% | 24.8% | 24.8% |
-| loss_trades          | 19.3% | 19.3% | 19.4% |
-| max_copier_slots     | 19.7% | 19.7% | 19.7% |
-| platform_profit_rate | 24.8% | 24.8% | 24.8% |
-| total_pnl            | 19.3% | 19.3% | 19.4% |
-| trade_frequency      | 19.3% | 19.3% | 19.4% |
+| avg_loss             | 20.5% | 20.6% | 20.6% |
+| avg_profit           | 20.5% | 20.6% | 20.6% |
+| copier_count_history | 20.9% | 20.9% | 20.9% |
+| copier_growth        | 98.6% | 98.6% | 98.6% |
+| copier_total_profit  | 98.6% | 98.6% | 98.6% |
+| follower_margin      | 98.6% | 98.6% | 98.6% |
+| intro                | 6.2%  | 6.2%  | 6.2%  |
+| leading_days         | 25.1% | 25.1% | 25.1% |
+| level_name           | 25.1% | 25.1% | 25.1% |
+| loss_trades          | 20.5% | 20.6% | 20.6% |
+| max_copier_slots     | 20.9% | 20.9% | 20.9% |
+| platform_profit_rate | 25.1% | 25.1% | 25.1% |
+| sortino              | 0%    | 79.1% | 74.6% |
+| total_pnl            | 20.5% | 20.6% | 20.6% |
+| trade_frequency      | 20.5% | 20.6% | 20.6% |
 | trading_days         | 99.3% | 99.3% | 99.3% |
 
 ## xt_spot
 
-Timeframes: 7, 30, 90 · rows: 55 / 17 / 30
+Timeframes: 7, 30, 90 · rows: 57 / 22 / 33
 
 **Typed columns** (fill % per timeframe)
 
-| column       | 7d    | 30d   | 90d  |
-| ------------ | ----- | ----- | ---- |
-| roi          | 100%  | 100%  | 100% |
-| pnl          | 100%  | 100%  | 100% |
-| mdd          | 18.2% | 41.2% | 60%  |
-| win_rate     | 100%  | 94.1% | 100% |
-| copier_count | 14.5% | 0%    | 0%   |
+| column       | 7d    | 30d   | 90d   |
+| ------------ | ----- | ----- | ----- |
+| roi          | 100%  | 100%  | 100%  |
+| pnl          | 100%  | 100%  | 100%  |
+| mdd          | 68.4% | 72.7% | 75.8% |
+| win_rate     | 100%  | 95.5% | 100%  |
+| copier_count | 68.4% | 72.7% | 72.7% |
 
 **Extras keys** (fill % per timeframe)
 
-| extras key      | 7d    | 30d | 90d |
-| --------------- | ----- | --- | --- |
-| follower_margin | 14.5% | 0%  | 0%  |
-| trading_days    | 14.5% | 0%  | 0%  |
+| extras key      | 7d    | 30d   | 90d   |
+| --------------- | ----- | ----- | ----- |
+| follower_margin | 68.4% | 72.7% | 72.7% |
+| sortino         | 0%    | 9.1%  | 0%    |
+| trading_days    | 68.4% | 72.7% | 72.7% |
