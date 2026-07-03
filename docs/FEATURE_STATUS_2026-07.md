@@ -31,9 +31,23 @@ admin/anomalies、admin/reports、collections、compute-leaderboard/cache、expi
 export/rankings、groups membership/approve、health/detailed、platforms/health、portfolio/positions、
 traders percentile/positions、users activities、trader-queries。
 
-已修范式：auto-post(leaderboard_ranks display_name→handle/roi)、moderation(posts.user_id→author_id)、
-messages(conversations 去 updated_at)。**其余逐条改真列名即可，qa:insert-drift 读咨询已追踪。**
-写漂移已清零（硬门绿）。设 `STRICT_READS=1` 可把读也升级为硬门（建议修完 19 处后开）。
+**已修 14/19（有明确正解的全修）** —— 都是"读了不存在的列→400"的 live bug，几处高影响：
+account 订阅永远 tier:free、群封禁检查永远失效、静音永不过期、活动页整个 500、CSV 导出 400、
+版主/异常/举报读真列名。修法：改真列名 / PostgREST 别名 `key:real_col`(保持返回 key 下游零改动) /
+去掉无等价的死列。
+
+**剩 5/19 —— 需领域/产品上下文，不猜(猜错=错数据比 400 更糟)：**
+
+- `competitions` + `competition_entries`（2）：预上线，产品拍板（上→对齐 schema，不上→删）。
+- `traders/[handle]/percentile` 读 `return_score/drawdown_score/stability_score`：leaderboard_ranks
+  只有 `profitability_score/risk_control_score/execution_score`——候选映射需领域确认
+  （profitability==return? drawdown==risk_control?），确认后 alias 即可。
+- `traders/[handle]/positions`（live，useSWR 在调）读 trader_portfolio 的 `mark_price/leverage/
+margin_type` 等实时持仓字段——疑**查错表**（应 trader_positions_live/positions_current），需确认数据流。
+- `collections/[id]` 读 collection_items 的 `trader_id/source/source_trader_id`——表是多态
+  `item_id/item_type`，需按 item_type='trader' 重构派生。
+
+写漂移已清零（硬门绿）。`STRICT_READS=1` 可把读升级为硬门——**建议这 5 处收口后再开**。
 
 ## 结论
 
