@@ -148,3 +148,15 @@ jobs:
           # promote API 直接选"上一个 READY"即可，无需额外 git tag
           # （曾尝试推 last-known-good tag，被仓库 PR-only ruleset 拒绝——
           # 且与 Vercel 历史冗余，已移除）。
+
+      # deploy/smoke 步骤本身失败(如 VERCEL_TOKEN 失效)此前静默——补告警。
+      # 2026-07-03 血泪：CLI 登录 token 过期 → deploy 步骤 fail → 生产停在旧部署
+      # 且无告警。job 级 failure() 兜底，任何非 CI-red 的失败也发声。
+      - name: Alert on deploy/smoke step failure
+        if: failure() && steps.gate.outputs.pass == 'true'
+        run: |
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
+              -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
+              -d "text=🚨 Deploy Gate 部署步骤失败（非 CI-red）%0ACommit: ${HEAD_SHA:0:8}%0A生产停在旧部署，未更新。常见因：VERCEL_TOKEN 失效（CLI token 会过期，应换 scoped token）。查 workflow 日志。" || true
+          fi
