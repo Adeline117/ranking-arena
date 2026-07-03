@@ -33,7 +33,13 @@
 import { chromium } from 'playwright'
 import fs from 'node:fs'
 import { execSync } from 'node:child_process'
+import { fileURLToPath } from 'node:url'
 import { readEnv, qaAuthStatus } from './qa-auth.mjs'
+
+// axe-core is already present (transitive dep) — inject its bundle and run ONLY
+// the color-contrast rule. No new devDep = no package.json/lock churn in the
+// shared worktree. Absolute path so cwd surprises (cron) don't break the inject.
+const AXE_PATH = fileURLToPath(new URL('../../node_modules/axe-core/axe.min.js', import.meta.url))
 
 const BASE = process.env.BASE_URL || 'https://www.arenafi.org'
 const AUTH = process.argv.includes('--auth')
@@ -377,6 +383,31 @@ async function pageQualityCheck(page, keys) {
   }
 }
 
+// WCAG color-contrast violations via axe-core's engine (the battle-tested
+// relative-luminance impl — beats a hand-rolled formula on gradients, alpha,
+// and background resolution). Runs ONLY the color-contrast rule, once per route.
+async function contrastViolations(page) {
+  try {
+    await page.addScriptTag({ path: AXE_PATH })
+    return await page.evaluate(async () => {
+      if (!window.axe) return []
+      const res = await window.axe.run(document, {
+        runOnly: { type: 'rule', values: ['color-contrast'] },
+        resultTypes: ['violations'],
+      })
+      const nodes = (res.violations[0] && res.violations[0].nodes) || []
+      return nodes.slice(0, 15).map((n) => ({
+        target: (n.target || []).join(' ').slice(0, 90),
+        summary: ((n.any && n.any[0] && n.any[0].message) || n.failureSummary || '')
+          .replace(/\s+/g, ' ')
+          .slice(0, 140),
+      }))
+    })
+  } catch {
+    return []
+  }
+}
+
 async function hydrate(page, route) {
   const resp = await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded', timeout: 30000 })
   await page.waitForTimeout(4000) // hydration + first data
@@ -456,6 +487,22 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
   if (quality.health.errorBoundary) qErrors.push('pagehealth: error-boundary rendered')
   if (quality.health.blank) qErrors.push('pagehealth: page body effectively blank')
   for (const lk of quality.leaks) qErrors.push(`i18n-leak: ${lk}`)
+  // WCAG color-contrast (once per route, non-gating first-run observe).
+  const contrast = await contrastViolations(page)
+  if (contrast.length) {
+    counters.contrast += contrast.length
+    ledger.push({
+      route,
+      idx: -1,
+      ts: new Date().toISOString(),
+      status: `a11y:contrast:${contrast.length}`,
+      contrast: contrast.slice(0, 15),
+      errors: [],
+    })
+    console.log(
+      `  ${route} — a11y contrast: ${contrast.length} node(s) below WCAG threshold (e.g. ${contrast[0].target})`
+    )
+  }
   if (qErrors.length) {
     counters.quality += quality.leaks.length + (quality.health.errorBoundary ? 1 : 0)
     ledger.push({
@@ -779,6 +826,7 @@ async function main() {
     failed: 0,
     dead: 0,
     quality: 0,
+    contrast: 0,
     withErrors: 0,
     tainted: 0,
     redirected: 0,
@@ -949,6 +997,7 @@ async function main() {
   console.log(`  click failures    : ${counters.failed}`)
   console.log(`  dead (no-effect)  : ${counters.dead} (clicked, but no DOM/URL/network change)`)
   console.log(`  quality (i18n/err): ${counters.quality} (i18n-leak + error-boundary findings)`)
+  console.log(`  a11y contrast     : ${counters.contrast} (nodes below WCAG contrast, non-gating)`)
   console.log(`  elements w/ errors: ${counters.withErrors}`)
   console.log(`  redirects deduped : ${counters.redirected} (auth-gate → already-swept page)`)
   console.log(
