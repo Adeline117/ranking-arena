@@ -101,6 +101,10 @@ export function parseBinanceLeaderboardPage(
       // (was raw-only, so AUM came only from the deep-profile tier). MDD/sharpe on
       // the board are 0/null sentinels (real values are profile-only), so not lifted.
       headlineAum: num(item.aum),
+      // copierPnl is a REAL value on every board row (verified — fixture 2972.33),
+      // was captured only for deep-crawled profiles (~17% fill). Lift it so all
+      // binance traders get copier PnL (audit 2026-07-03).
+      headlineCopierPnl: num(item.copierPnl),
       // Board card extras (sharpRatio, mdd, sparkline chartItems,
       // badge, aiSummary...) ride along verbatim in raw.
       raw: item,

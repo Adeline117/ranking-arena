@@ -125,6 +125,12 @@ export interface ParsedLeaderboardRow {
   headlineSharpe?: number | null
   headlineAum?: number | null
   headlineCopierCount?: number | null
+  /** Board-level copier PnL — many boards carry a real copier/follower PnL per
+   *  row (binance/bybit/bitget), previously captured only for deep-crawled
+   *  profiles (~17% fill). */
+  headlineCopierPnl?: number | null
+  /** Board-level average holding time in HOURS (phemex/bybit expose it). */
+  headlineHoldingDurationHours?: number | null
   headlineVolume?: number | null
   headlineWinPositions?: number | null
   headlineTotalPositions?: number | null
