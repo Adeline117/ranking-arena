@@ -286,11 +286,17 @@ export default function TraderProfileClient({
       return failureCount < 2
     },
   })
-  // Adopt ONLY a validated account on the exact requested platform.
-  const override =
-    platformMismatch && accountOverride && accountOverride.firstScreen.source === urlPlatform
-      ? accountOverride
-      : null
+  // Adopt ONLY a validated account for the requested platform. The
+  // /first-screen route resolves via arena_resolve_trader, whose WHERE already
+  // constrains the row to the requested source by EITHER its arena slug OR its
+  // legacy platform alias, and 404s otherwise — so a non-null response is
+  // already the validated account for urlPlatform. Do NOT re-compare
+  // firstScreen.source === urlPlatform here: for legacy-alias platforms the
+  // response carries the arena slug (e.g. 'bitunix_futures') while urlPlatform
+  // is the alias the search href uses (e.g. 'bitunix'), and that mismatch was
+  // silently dropping the override so ?platform= disambiguation fell back to
+  // the (possibly wrong) server-resolved account on bitunix/xt/blofin/btcc.
+  const override = platformMismatch && accountOverride ? accountOverride : null
   const servingFirstScreen = override ? override.firstScreen : serverFirstScreen
   const data = useMemo<UnregisteredTraderData>(
     () => (override ? firstScreenToTraderData(override.firstScreen, urlHandle) : serverData),
