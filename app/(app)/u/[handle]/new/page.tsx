@@ -68,6 +68,7 @@ export default function NewPostPage() {
   const [pollType, setPollType] = useState<'single' | 'multiple'>('single')
   const [draggedImageIndex, setDraggedImageIndex] = useState<number | null>(null)
   const [titleTouched, setTitleTouched] = useState(false)
+  const titleHadInputRef = useRef(false)
   const [visibility, setVisibility] = useState<PostVisibility>('public')
   const [isSensitive, setIsSensitive] = useState(false)
   const [contentWarning, setContentWarning] = useState('')
@@ -641,14 +642,23 @@ export default function NewPostPage() {
               type="text"
               placeholder={t('enterTitle')}
               value={title}
-              onChange={(e) => setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))}
+              onChange={(e) => {
+                titleHadInputRef.current = true
+                setTitle(e.target.value.slice(0, TITLE_MAX_LENGTH))
+              }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey && title.trim()) {
                   e.preventDefault()
                   textareaRef.current?.focus()
                 }
               }}
-              onBlur={() => setTitleTouched(true)}
+              onBlur={() => {
+                // Only surface the empty-title error once the user has actually
+                // typed into the field. autoFocus means the very first click
+                // elsewhere (e.g. dismissing the cookie banner) blurs an
+                // untouched field — don't flash an error the user never caused.
+                if (titleHadInputRef.current) setTitleTouched(true)
+              }}
               maxLength={TITLE_MAX_LENGTH}
               autoFocus
               style={{
