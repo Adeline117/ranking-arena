@@ -4,7 +4,12 @@
 
 **Quick fix** (small bug, one file): Just read this file (CLAUDE.md)
 **Feature work**: Also read `PROGRESS.md` + `TASKS.md`
-**Architecture change**: Also read `DECISIONS.md`
+**Architecture change**: Also read `docs/DECISIONS.md`（ADR：为什么这么做）+ `docs/ARCHITECTURE.md`（数据流/拓扑图）
+
+> 运维知识索引（降巴士系数，2026-07）：本文件是铁律**摘要 + 操作性 guardrail**；
+> 每条铁律的**为什么**（背景/事故/后果）见 `docs/DECISIONS.md`；系统数据流/基础设施
+> 拓扑/部署门禁流的图见 `docs/ARCHITECTURE.md`；事故复盘 `docs/postmortems/`；
+> 发布流程 `docs/RELEASE.md`；SLO `docs/SLO.md`；SOC2 控制 `docs/SOC2_CONTROL_MAPPING.md`。
 
 ## Project Overview
 
