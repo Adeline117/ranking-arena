@@ -55,6 +55,28 @@ if (!['en', 'zh', 'ja', 'ko'].includes(LANG)) {
   process.exit(2)
 }
 
+// i18n key-leak detection basis: the set of real translation keys. A visible
+// text node whose whole content EXACTLY equals a multi-segment camelCase key
+// (e.g. `flashNews`, `newsBreaking`) is the key rendered instead of its
+// translation — a hard i18n bug. Restricting to multi-segment camelCase keys
+// (has an internal capital) is what keeps this precise: single-word keys
+// (`home`, `search`) could legitimately appear lowercase, camelCase keys never.
+function loadI18nKeys() {
+  try {
+    const src = fs.readFileSync('lib/i18n/en.ts', 'utf8')
+    const keys = new Set()
+    const re = /^\s*([a-zA-Z0-9_]+):\s*['"`]/gm
+    let m
+    while ((m = re.exec(src))) {
+      if (/[a-z][a-z0-9]*[A-Z]/.test(m[1])) keys.add(m[1])
+    }
+    return keys
+  } catch {
+    return new Set()
+  }
+}
+const I18N_KEYS = loadI18nKeys()
+
 // Interactive-element selector — the universe we must cover on each route.
 const INTERACTIVE_SELECTOR = [
   'a[href]',
@@ -313,6 +335,48 @@ function hasEffect(before, after, reqDelta) {
   return false
 }
 
+// ---------- page-level quality checks (run once per route) ----------
+// error-boundary / blank / 404 body-text health (ported from button-sweep) +
+// i18n key-leak scan (text node exactly matching a known camelCase key) +
+// hard placeholder leaks ([object Object] / undefined / {{…}} / t('…')).
+async function pageQualityCheck(page, keys) {
+  try {
+    return await page.evaluate((keyList) => {
+      const keySet = new Set(keyList)
+      const body = document.body ? document.body.innerText : ''
+      const health = {
+        errorBoundary: /Something went wrong|出错了|页面加载失败/.test(body),
+        blank: body.replace(/\s/g, '').length < 50,
+        notFound:
+          /This page could not be found|ページが見つかりません|페이지를 찾을 수 없/.test(body) &&
+          body.length < 600,
+      }
+      const leaks = new Set()
+      const root = document.body || document.documentElement
+      const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+      let node
+      let scanned = 0
+      while ((node = walker.nextNode()) && scanned < 5000) {
+        scanned++
+        const t = (node.nodeValue || '').trim()
+        if (!t || t.length > 60) continue
+        const pe = node.parentElement
+        if (!pe) continue
+        const tag = pe.tagName
+        if (tag === 'SCRIPT' || tag === 'STYLE' || tag === 'CODE' || tag === 'PRE') continue
+        if (t === '[object Object]' || t === 'undefined' || t === 'NaN' || /\{\{.+\}\}/.test(t)) {
+          leaks.add(t.slice(0, 40))
+        } else if (keySet.has(t)) {
+          leaks.add(t.slice(0, 40))
+        }
+      }
+      return { health, leaks: Array.from(leaks).slice(0, 20) }
+    }, Array.from(keys))
+  } catch {
+    return { health: { errorBoundary: false, blank: false, notFound: false }, leaks: [] }
+  }
+}
+
 async function hydrate(page, route) {
   const resp = await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded', timeout: 30000 })
   await page.waitForTimeout(4000) // hydration + first data
@@ -386,6 +450,32 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
   if (redirected) {
     console.log(`  ${route} — redirected→${finalPath} (first landing, enumerating destination)`)
   }
+  // Page-level quality scan (once per route): body health + i18n key leaks.
+  const quality = await pageQualityCheck(page, I18N_KEYS)
+  const qErrors = []
+  if (quality.health.errorBoundary) qErrors.push('pagehealth: error-boundary rendered')
+  if (quality.health.blank) qErrors.push('pagehealth: page body effectively blank')
+  for (const lk of quality.leaks) qErrors.push(`i18n-leak: ${lk}`)
+  if (qErrors.length) {
+    counters.quality += quality.leaks.length + (quality.health.errorBoundary ? 1 : 0)
+    ledger.push({
+      route,
+      idx: -1,
+      ts: new Date().toISOString(),
+      status: quality.health.errorBoundary
+        ? 'fail:page-error-boundary'
+        : quality.leaks.length
+          ? `i18n-leak:${quality.leaks.length}`
+          : 'pagehealth:blank',
+      leaks: quality.leaks,
+      health: quality.health,
+      errors: quality.health.errorBoundary ? ['pageerror: error-boundary rendered'] : [],
+    })
+    console.log(
+      `  ${route} — quality: ${qErrors.slice(0, 4).join(' | ')}${qErrors.length > 4 ? ` (+${qErrors.length - 4})` : ''}`
+    )
+  }
+
   let descs = await injectIndices(page)
   const total = descs.length
   const cap = Math.min(total, MAX_PER_ROUTE)
@@ -688,6 +778,7 @@ async function main() {
     skipped: 0,
     failed: 0,
     dead: 0,
+    quality: 0,
     withErrors: 0,
     tainted: 0,
     redirected: 0,
@@ -857,6 +948,7 @@ async function main() {
   console.log(`  skipped (hid/dis) : ${counters.skipped}`)
   console.log(`  click failures    : ${counters.failed}`)
   console.log(`  dead (no-effect)  : ${counters.dead} (clicked, but no DOM/URL/network change)`)
+  console.log(`  quality (i18n/err): ${counters.quality} (i18n-leak + error-boundary findings)`)
   console.log(`  elements w/ errors: ${counters.withErrors}`)
   console.log(`  redirects deduped : ${counters.redirected} (auth-gate → already-swept page)`)
   console.log(
