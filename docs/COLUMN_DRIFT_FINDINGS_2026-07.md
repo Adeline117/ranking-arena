@@ -1,3 +1,20 @@
+# 列级写漂移发现 — ✅ 全部已修（2026-07-03）
+
+> **状态：30 处漂移全部修复，`npm run qa:insert-drift` 现 exit 0、`qa:schema` 绿。**
+> 修法：支付簇加列（user_profiles.stripe_customer_id、subscriptions.plan/cancel_at_period_end/
+> canceled_at，RPC 冒烟测试证明修前必 500 现✅）；功能簇加列（oauth code_verifier/gifts.to_user_id/
+> nft/attestation 4 列）；代码修（content_reports reviewer_id→resolved_by、评论软删→硬删、
+> auto-post 去 display_name、trader_sources 改真列名）。4 个 migration 已 apply 生产。
+> 详见 git log 的 fix(payment)/fix(schema)/fix(admin)/fix(moderation)/fix(trader) 系列 commit。
+>
+> ⚠️ 附带发现（读路径漂移，本 scanner 未覆盖，待办）：auto-post-market-summary 的
+> `leaderboard_ranks.select('display_name, roi_pct')` 读了不存在的列（表有 handle/roi），
+> 会 400——scanner 只查写路径，读路径 select 漂移需另做。
+
+---
+
+（以下为原始台账，保留供追溯）
+
 # 列级写漂移发现 — 待修复台账（2026-07-03）
 
 > 由 `npm run qa:insert-drift`（`scripts/qa/insert-column-drift-check.mjs`）扫出：
