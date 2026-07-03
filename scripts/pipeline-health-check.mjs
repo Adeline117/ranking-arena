@@ -82,6 +82,14 @@ function checkFetcherErrorHandling() {
   console.log('\n=== 1. Fetcher 错误处理检查 ===\n')
 
   const fetcherDir = join(ROOT_DIR, 'lib/cron/fetchers')
+  // 2026-07-03: legacy lib/cron/fetchers was removed — ingest adapters
+  // (lib/ingest/adapters/) with built-in retry/circuit-breaker replaced it.
+  // Without this guard the whole health check crashed at section 1 (ENOENT),
+  // never reaching the freshness sections that still matter.
+  if (!existsSync(fetcherDir)) {
+    console.log('⏭️  lib/cron/fetchers 已删除(由 lib/ingest/adapters 取代)— 跳过本节')
+    return { passCount: 0, warnCount: 0, failCount: 0 }
+  }
   // Skip non-fetcher utility files (DB ops, math calculations, type definitions, config helpers)
   // Skip utility files: DB ops, math, types, configs, enrichment sub-modules (called by enrichment-runner.ts with withRetry)
   // Skip ALL enrichment-*.ts sub-modules — they are called by enrichment-runner.ts with withRetry/circuit breaker
@@ -248,11 +256,18 @@ async function checkDataFreshness() {
         skippedCount = 0
 
       for (const row of rpcData) {
-        if (FRESHNESS_SKIP_PLATFORMS.has(row.platform)) {
+        // 2026-07-03: the rebuilt RPC (arena schema) returns {source, latest};
+        // the old shape was {platform, latest_snapshot, trader_count}. Accept
+        // both — reading only the old keys crashed this whole section on
+        // `undefined.padEnd`.
+        const platform = row.platform ?? row.source
+        const latest = row.latest_snapshot ?? row.latest
+        if (!platform || !latest) continue
+        if (FRESHNESS_SKIP_PLATFORMS.has(platform)) {
           skippedCount++
           continue
         }
-        const ageHours = (now - new Date(row.latest_snapshot).getTime()) / (1000 * 60 * 60)
+        const ageHours = (now - new Date(latest).getTime()) / (1000 * 60 * 60)
         let status = 'FRESH'
         let icon = '🟢'
 
@@ -261,7 +276,7 @@ async function checkDataFreshness() {
           icon = '🔴'
           criticalCount++
           results.dataFreshness.push({
-            platform: row.platform,
+            platform,
             status,
             ageHours: Math.round(ageHours),
           })
@@ -270,7 +285,7 @@ async function checkDataFreshness() {
           icon = '🟡'
           staleCount++
           results.dataFreshness.push({
-            platform: row.platform,
+            platform,
             status,
             ageHours: Math.round(ageHours),
           })
@@ -279,7 +294,8 @@ async function checkDataFreshness() {
         }
 
         console.log(
-          `${icon} ${row.platform.padEnd(20)} ${Math.round(ageHours)}h ago  (${row.trader_count} traders)`
+          `${icon} ${platform.padEnd(20)} ${Math.round(ageHours)}h ago` +
+            (row.trader_count != null ? `  (${row.trader_count} traders)` : '')
         )
       }
 
