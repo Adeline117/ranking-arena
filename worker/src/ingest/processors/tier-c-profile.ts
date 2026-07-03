@@ -134,6 +134,17 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
     }
     const traderId = await resolveTraderId(src, exchangeTraderId)
 
+    // Some adapters route record fetches by traders.meta (e.g. bingx detail SPA
+    // needs bingx_api_identity to build the signed detail URL) — load it so the
+    // harvest can navigate; omitting it degrades to an empty surface.
+    const { rows: metaRows } = await getIngestPool().query<{
+      meta: Record<string, unknown>
+    }>(`SELECT t.meta FROM arena.traders t WHERE t.source_id = $1 AND t.exchange_trader_id = $2`, [
+      src.id,
+      exchangeTraderId,
+    ])
+    const traderMeta = metaRows[0]?.meta ?? null
+
     let rows: Record<string, unknown>[] = []
     let rawPayload: unknown = null
 
