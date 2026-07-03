@@ -6054,6 +6054,10 @@ const ko = {
   // Pro 기능 한정 기간 무료 프로모션 배너
   proPromoBanner: '🎉 Pro 기능을 기간 한정 무료로 — 모든 유료 기능을 업그레이드 없이 이용하세요.',
   proPromoBannerDismiss: '닫기',
+  // 사이트 전체 비공개 베타 배너 (서버 렌더링, BetaBanner에서 페인트 전 현지화)
+  betaBannerFull:
+    'Arena는 비공개 베타 중입니다 — 데이터를 업데이트하고 있으며 일부 기능은 개발 중입니다.',
+  betaBannerShort: '비공개 베타 — 데이터 업데이트 중, 기능 개발 중입니다.',
   tokenRankingsSortLabel: '정렬 기준',
   tokenRankingsSortTraders: '트레이더 수',
   tokenRankingsSortTrades: '거래 수',

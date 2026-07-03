@@ -6038,6 +6038,9 @@ const zh = {
   // Pro 限时免费促销横幅
   proPromoBanner: '🎉 Pro 功能限时免费 —— 所有付费功能现在全部免费使用，无需升级。',
   proPromoBannerDismiss: '关闭',
+  // 全站封闭测试横幅（服务端渲染，BetaBanner 在绘制前本地化）
+  betaBannerFull: 'Arena 正处于封闭测试阶段 —— 数据正在更新，部分功能仍在开发中。',
+  betaBannerShort: '封闭测试 —— 数据更新中，功能开发中。',
   tokenRankingsSortLabel: '排序方式',
   tokenRankingsSortTraders: '交易员数',
   tokenRankingsSortTrades: '交易数',
