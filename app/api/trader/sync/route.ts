@@ -307,16 +307,17 @@ async function storeSyncedData(
   // Identity is still upserted to trader_sources below.
   void arenaScore
 
-  // Update trader_sources
+  // Update trader_sources (identity table). Real columns: handle/avatar_url/
+  // last_refreshed_at. 旧代码写 nickname/description/verified/last_updated 四个不存在
+  // 的列→整个 upsert PGRST204 500，身份从不刷新。改用真列名；description/verified 无归属
+  // （bio 在 trader_profiles_v2；verified_by_user 是"用户认领"语义，不可混用）故去掉。
   await supabase.from('trader_sources').upsert(
     {
       source: authorization.platform,
       source_trader_id: authorization.trader_id,
-      nickname: traderData.nickname,
+      handle: traderData.nickname,
       avatar_url: traderData.avatar,
-      description: traderData.description,
-      verified: traderData.verified,
-      last_updated: new Date().toISOString(),
+      last_refreshed_at: new Date().toISOString(),
     },
     {
       onConflict: 'source,source_trader_id',
