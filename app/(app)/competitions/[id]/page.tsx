@@ -8,6 +8,7 @@ import EmptyState from '@/app/components/ui/EmptyState'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { getCsrfHeaders } from '@/lib/api/client'
 import Metric from '@/app/components/ui/Metric'
 import CompetitionCountdown from '../CompetitionCountdown'
@@ -790,12 +791,17 @@ export default function CompetitionDetailPage() {
                 </Button>
               </Box>
               {!hasJoined &&
-                (competition.status === 'upcoming' || competition.status === 'active') &&
-                isLoggedIn && (
+                (competition.status === 'upcoming' || competition.status === 'active') && (
                   <Button
                     variant="primary"
                     size="sm"
-                    onClick={() => setShowJoinForm(!showJoinForm)}
+                    onClick={() => {
+                      if (!isLoggedIn) {
+                        useLoginModal.getState().openLoginModal(t('pleaseLogin'))
+                        return
+                      }
+                      setShowJoinForm(!showJoinForm)
+                    }}
                   >
                     {t('compJoinBtn')}
                   </Button>
