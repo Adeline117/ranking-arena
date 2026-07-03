@@ -394,7 +394,7 @@ const en = {
   noCurrentPositions: 'No current positions available',
   noCurrentPositionsDesc: 'Trader may not have any open positions',
   noPositionHistory: 'No position history available',
-  noPositionHistoryDesc: 'Position history will be available after next data sync',
+  noPositionHistoryDesc: 'No closed positions recorded for this trader yet',
   tradingPair: 'Trading Pair',
   // Pro membership features
   pro: 'Pro',

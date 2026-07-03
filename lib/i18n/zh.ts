@@ -386,7 +386,7 @@ const zh = {
   noCurrentPositions: '当前持仓数据暂不可用',
   noCurrentPositionsDesc: '交易员目前可能没有公开持仓',
   noPositionHistory: '历史仓位数据暂不可用',
-  noPositionHistoryDesc: '仓位历史数据将在下次数据同步后显示',
+  noPositionHistoryDesc: '该交易员暂无已平仓记录',
   tradingPair: '交易对',
   // Pro 会员功能
   pro: 'Pro',
