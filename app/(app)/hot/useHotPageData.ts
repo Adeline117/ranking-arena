@@ -10,6 +10,7 @@ import { localizedLabel } from '@/lib/utils/format'
 import { normalizePostTitle } from '@/lib/utils/post-display'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 import type { Post, Comment } from './types'
 
@@ -591,7 +592,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const submitComment = useCallback(
     async (postId: string) => {
       if (!accessToken) {
-        showToast(t('pleaseLoginFirst'), 'warning')
+        useLoginModal.getState().openLoginModal()
         return
       }
       if (!newComment.trim()) return
@@ -659,7 +660,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const toggleReaction = useCallback(
     async (postId: string, reactionType: 'up' | 'down') => {
       if (!accessToken) {
-        showToast(t('pleaseLoginFirst'), 'warning')
+        useLoginModal.getState().openLoginModal()
         return
       }
 
