@@ -92,9 +92,14 @@ export function parseOkxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
       // Board carries aum (absolute USD) — was raw-only. (OKX CEX is geo-blocked
       // → no MDD on board; forward fix, effective once a VPS region reaches it.)
       headlineAum: num(item.aum),
+      // copyTraderNum (copier count) is a REAL value on the board row — was
+      // raw-only, so copier_count showed 0% while copier_pnl (profile) had 95%
+      // (audit 2026-07-03). Lift it so all okx traders get the copier count.
+      headlineCopierCount:
+        num(item.copyTraderNum) === null ? null : Math.round(num(item.copyTraderNum)!),
       traderMeta: null,
-      // copyTraderNum / leadDays / pnlRatios sparkline / traderInsts
-      // — board-card extras kept verbatim (spec §3 raw JSONB note).
+      // leadDays / pnlRatios sparkline / traderInsts — board-card extras kept
+      // verbatim in raw (spec §3 raw JSONB note).
       raw: item,
     })
   }

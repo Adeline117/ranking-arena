@@ -220,14 +220,16 @@ export async function publishLeaderboardSnapshot(
       // this never clobbers profile sources, but backfills profile-less ones.
       await client.query(
         `INSERT INTO arena.trader_stats
-           (trader_id, timeframe, as_of, currency, roi, pnl, win_rate, mdd, sharpe, aum, copier_count, volume,
-            win_positions, total_positions, extras)
-         SELECT t.id, $1, $2, $3, r.roi, r.pnl, r.win_rate, r.mdd, r.sharpe, r.aum, r.copier_count, r.volume,
-                r.win_positions, r.total_positions, COALESCE(r.extras, '{}'::jsonb)
+           (trader_id, timeframe, as_of, currency, roi, pnl, win_rate, mdd, sharpe, aum, copier_count, copier_pnl, volume,
+            win_positions, total_positions, holding_duration_avg, extras)
+         SELECT t.id, $1, $2, $3, r.roi, r.pnl, r.win_rate, r.mdd, r.sharpe, r.aum, r.copier_count, r.copier_pnl, r.volume,
+                r.win_positions, r.total_positions,
+                CASE WHEN r.holding_hours IS NOT NULL THEN make_interval(secs => r.holding_hours * 3600) ELSE NULL END,
+                COALESCE(r.extras, '{}'::jsonb)
            FROM jsonb_to_recordset($4::jsonb) AS r(
              exchange_trader_id text, roi numeric, pnl numeric, win_rate numeric,
-             mdd numeric, sharpe numeric, aum numeric, copier_count integer, volume numeric,
-             win_positions integer, total_positions integer, extras jsonb)
+             mdd numeric, sharpe numeric, aum numeric, copier_count integer, copier_pnl numeric, volume numeric,
+             win_positions integer, total_positions integer, holding_hours numeric, extras jsonb)
            JOIN arena.traders t
              ON t.source_id = $5 AND t.exchange_trader_id = r.exchange_trader_id
          ON CONFLICT (trader_id, timeframe) DO UPDATE SET
@@ -240,9 +242,11 @@ export async function publishLeaderboardSnapshot(
            sharpe          = COALESCE(EXCLUDED.sharpe, arena.trader_stats.sharpe),
            aum             = COALESCE(EXCLUDED.aum, arena.trader_stats.aum),
            copier_count    = COALESCE(EXCLUDED.copier_count, arena.trader_stats.copier_count),
+           copier_pnl      = COALESCE(EXCLUDED.copier_pnl, arena.trader_stats.copier_pnl),
            volume          = COALESCE(EXCLUDED.volume, arena.trader_stats.volume),
            win_positions   = COALESCE(EXCLUDED.win_positions, arena.trader_stats.win_positions),
            total_positions = COALESCE(EXCLUDED.total_positions, arena.trader_stats.total_positions),
+           holding_duration_avg = COALESCE(EXCLUDED.holding_duration_avg, arena.trader_stats.holding_duration_avg),
            -- Board extras merge INTO existing (profile extras preserved, board
            -- keys win); empty board extras = no-op so profile sources untouched.
            extras          = CASE WHEN EXCLUDED.extras = '{}'::jsonb THEN arena.trader_stats.extras
@@ -261,9 +265,11 @@ export async function publishLeaderboardSnapshot(
               sharpe: r.headlineSharpe ?? null,
               aum: r.headlineAum ?? null,
               copier_count: r.headlineCopierCount ?? null,
+              copier_pnl: r.headlineCopierPnl ?? null,
               volume: r.headlineVolume ?? null,
               win_positions: r.headlineWinPositions ?? null,
               total_positions: r.headlineTotalPositions ?? null,
+              holding_hours: r.headlineHoldingDurationHours ?? null,
               extras: r.headlineExtras ?? null,
             }))
           ),

@@ -177,6 +177,10 @@ export function parseBingxLeaderboardPage(payload: unknown, ctx: ParseCtx): Pars
       headlineSharpe: num(rankStat[`sharpe${tf}d`]),
       headlineAum: parseDisplayPct(rankStat.equity),
       headlineCopierCount: int(parseDisplayPct(rankStat.strFollowerNum)),
+      // followerEarning = copier PnL, on every board row — was only in
+      // extras.copier_earnings, so the typed copier_pnl column read 0% (audit
+      // 2026-07-03). Lift to the typed column too so it surfaces uniformly.
+      headlineCopierPnl: parseDisplayPct(rankStat.followerEarning),
       headlineWinPositions: int(rankStat.profitablePositionCount),
       headlineTotalPositions: int(rankStat.totalPositionCount),
       // Rich rankStat superset → trader_stats.extras (surfaced by the metric
