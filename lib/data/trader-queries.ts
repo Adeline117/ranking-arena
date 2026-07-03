@@ -362,7 +362,7 @@ export async function getTraderPortfolio(handle: string): Promise<DataResult<Por
       .select('symbol, direction, weight_pct:invested_pct, entry_price') // trader_portfolio 无 pnl_pct(仅绝对 pnl)
       .eq('source', source.source)
       .eq('source_trader_id', source.source_trader_id)
-      .order('updated_at', { ascending: false })
+      .order('captured_at', { ascending: false }) // trader_portfolio 无 updated_at 列(用 captured_at)
       .limit(100)
 
     if (!data) return success([])
