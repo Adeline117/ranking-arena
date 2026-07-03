@@ -23,15 +23,19 @@ export async function GET(_request: NextRequest, { params }: { params: Promise<{
     const [compResult, entriesResult] = await Promise.all([
       supabase
         .from('competitions')
+        // 读旧命名对不上表——建赛 insert(competitions/route.ts:118)证实真列是 title/start_at/
+        // end_at/prize_pool_cents。别名保持前端 key，选真列；season_id 表无(去掉)。
         .select(
-          'id, name, description, season_id, start_date, end_date, status, rules, prizes, created_at, updated_at'
+          'id, name:title, description, start_date:start_at, end_date:end_at, status, rules, prizes:prize_pool_cents, created_at, updated_at'
         )
         .eq('id', id)
         .single(),
       supabase
         .from('competition_entries')
+        // 报名 insert(join/route.ts:97)证实真列 platform/current_value;roi/pnl/updated_at 表无
+        // (只有 baseline_value/current_value,roi/pnl 应由前端从这俩派生)——去掉。
         .select(
-          'id, competition_id, user_id, trader_id, source, rank, prev_rank, score, roi, pnl, joined_at, updated_at'
+          'id, competition_id, user_id, trader_id, source:platform, rank, prev_rank, score:current_value, joined_at'
         )
         .eq('competition_id', id)
         .order('rank', { ascending: true, nullsFirst: false }),
