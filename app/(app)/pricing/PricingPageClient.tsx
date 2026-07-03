@@ -31,6 +31,22 @@ const CheckIcon = ({ size = 16, color }: { size?: number; color?: string }) => (
   </svg>
 )
 
+const ChevronDownIcon = ({ size = 16 }: { size?: number }) => (
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    style={{ flexShrink: 0 }}
+  >
+    <path d="M6 9L12 15L18 9" />
+  </svg>
+)
+
 const LockIcon = ({ size = 14 }: { size?: number }) => (
   <svg
     width={size}
@@ -109,6 +125,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
     sessionStorage.setItem('pricing-billing', b)
     setBillingRaw(b)
   }
+  const [openFaqs, setOpenFaqs] = useState<Set<number>>(new Set())
 
   useEffect(() => {
     trackEvent('view_pricing')
@@ -1181,28 +1198,53 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           {getPricingFaqData(t).map((faq, i) => (
             <details
               key={i}
+              onToggle={(e) =>
+                setOpenFaqs((prev) => {
+                  const next = new Set(prev)
+                  if (e.currentTarget.open) next.add(i)
+                  else next.delete(i)
+                  return next
+                })
+              }
               style={{
                 marginBottom: tokens.spacing[3],
-                padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
                 background: tokens.colors.bg.secondary,
                 borderRadius: tokens.radius.lg,
                 border: `1px solid ${tokens.colors.border.primary}`,
-                cursor: 'pointer',
               }}
             >
               <summary
                 style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: tokens.spacing[3],
+                  padding: `${tokens.spacing[4]} ${tokens.spacing[5]}`,
                   fontWeight: 600,
                   fontSize: 15,
                   color: tokens.colors.text.primary,
                   listStyle: 'none',
+                  cursor: 'pointer',
                 }}
               >
-                {faq.q}
+                <span>{faq.q}</span>
+                <span
+                  aria-hidden="true"
+                  style={{
+                    flexShrink: 0,
+                    display: 'inline-flex',
+                    color: tokens.colors.text.secondary,
+                    transition: 'transform 0.2s ease',
+                    transform: openFaqs.has(i) ? 'rotate(180deg)' : 'rotate(0deg)',
+                  }}
+                >
+                  <ChevronDownIcon size={16} />
+                </span>
               </summary>
               <p
                 style={{
-                  marginTop: tokens.spacing[3],
+                  margin: 0,
+                  padding: `0 ${tokens.spacing[5]} ${tokens.spacing[4]}`,
                   fontSize: 14,
                   color: tokens.colors.text.secondary,
                   lineHeight: 1.6,
