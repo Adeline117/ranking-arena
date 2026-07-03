@@ -3292,6 +3292,7 @@ const ko = {
   updated: '업데이트',
   download: '다운로드',
   alpha: '알파',
+  clickToSort: '클릭하여 정렬',
   edited: '편집됨',
   manageLinkedAccounts: '연결된 계정 관리 →',
   defaultFolderName: '기본 폴더',

@@ -871,7 +871,7 @@ function RankingTableInner(props: {
               as="button"
               onClick={() => handleSort('score')}
               role="columnheader"
-              aria-label={`${t('score')} — click to sort`}
+              aria-label={`${t('score')} — ${t('clickToSort')}`}
               aria-sort={
                 sortColumn === 'score' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               }
@@ -910,7 +910,7 @@ function RankingTableInner(props: {
               onClick={() => handleSort('roi')}
               title={t('roiTooltip').replace('{range}', timeRange)}
               role="columnheader"
-              aria-label={`${t('roi')} (${timeRange}) — click to sort`}
+              aria-label={`${t('roi')} (${timeRange}) — ${t('clickToSort')}`}
               aria-sort={
                 sortColumn === 'roi' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               }
@@ -924,7 +924,7 @@ function RankingTableInner(props: {
               onClick={() => handleSort('pnl')}
               title={t('pnlTooltip')}
               role="columnheader"
-              aria-label={`${t('pnl')} — click to sort`}
+              aria-label={`${t('pnl')} — ${t('clickToSort')}`}
               aria-sort={
                 sortColumn === 'pnl' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               }
@@ -938,7 +938,7 @@ function RankingTableInner(props: {
               onClick={() => handleSort('winrate')}
               title={t('winRateTooltip')}
               role="columnheader"
-              aria-label={`${t('winRateShort')} — click to sort`}
+              aria-label={`${t('winRateShort')} — ${t('clickToSort')}`}
               aria-sort={
                 sortColumn === 'winrate' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               }
@@ -960,7 +960,7 @@ function RankingTableInner(props: {
               onClick={() => handleSort('mdd')}
               title={t('mddTooltip')}
               role="columnheader"
-              aria-label={`${t('maxDrawdownShort')} — click to sort`}
+              aria-label={`${t('maxDrawdownShort')} — ${t('clickToSort')}`}
               aria-sort={
                 sortColumn === 'mdd' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
               }
@@ -1004,7 +1004,7 @@ function RankingTableInner(props: {
                 onClick={() => handleSort('sortino')}
                 title={t('sortinoTooltip')}
                 role="columnheader"
-                aria-label={`${t('sortinoRatio')} — click to sort`}
+                aria-label={`${t('sortinoRatio')} — ${t('clickToSort')}`}
                 aria-sort={
                   sortColumn === 'sortino'
                     ? sortDir === 'asc'
@@ -1032,7 +1032,7 @@ function RankingTableInner(props: {
                 onClick={() => handleSort('alpha')}
                 title={t('alphaTooltip')}
                 role="columnheader"
-                aria-label="Alpha — click to sort"
+                aria-label={`${t('alpha')} — ${t('clickToSort')}`}
                 aria-sort={
                   sortColumn === 'alpha' ? (sortDir === 'asc' ? 'ascending' : 'descending') : 'none'
                 }

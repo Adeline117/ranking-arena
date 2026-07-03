@@ -3404,6 +3404,7 @@ const en = {
   updated: 'Updated',
   download: 'Download',
   alpha: 'Alpha',
+  clickToSort: 'click to sort',
   edited: 'edited',
   manageLinkedAccounts: 'Manage linked accounts →',
   defaultFolderName: 'Default Folder',

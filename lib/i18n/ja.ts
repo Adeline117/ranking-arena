@@ -3135,6 +3135,7 @@ const ja = {
   updated: '更新',
   download: 'ダウンロード',
   alpha: 'アルファ',
+  clickToSort: 'クリックでソート',
   edited: '編集済み',
   manageLinkedAccounts: '連携アカウントを管理 →',
   defaultFolderName: 'デフォルトフォルダ',
