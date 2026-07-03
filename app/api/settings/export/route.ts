@@ -116,7 +116,7 @@ export async function POST(request: NextRequest) {
       supabase
         .from('posts')
         .select('*')
-        .eq('user_id', user.id)
+        .eq('author_id', user.id) // posts 用 author_id(无 user_id 列)——旧 eq('user_id') 导出永远空
         .order('created_at', { ascending: false })
         .limit(EXPORT_ROW_LIMIT),
       supabase

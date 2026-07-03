@@ -65,10 +65,7 @@ export const POST = withAuth(
       .eq('competition_id', competitionId)
 
     if (count != null && count >= competition.max_participants) {
-      return NextResponse.json(
-        { success: false, error: 'Competition is full' },
-        { status: 400 }
-      )
+      return NextResponse.json({ success: false, error: 'Competition is full' }, { status: 400 })
     }
 
     // Get baseline value from leaderboard_ranks
@@ -78,7 +75,7 @@ export const POST = withAuth(
       .select('roi, pnl, sharpe_ratio, max_drawdown')
       .eq('source', platform)
       .eq('source_trader_id', trader_id)
-      .order('updated_at', { ascending: false })
+      .order('computed_at', { ascending: false })
       .limit(1)
       .maybeSingle()
 
@@ -116,7 +113,10 @@ export const POST = withAuth(
         )
       }
       log.error('Failed to join competition', { error: insertError.message })
-      return NextResponse.json({ success: false, error: 'Failed to join competition' }, { status: 500 })
+      return NextResponse.json(
+        { success: false, error: 'Failed to join competition' },
+        { status: 500 }
+      )
     }
 
     return NextResponse.json({ success: true, data: entry })

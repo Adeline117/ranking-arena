@@ -20,12 +20,11 @@ export const GET = withCron('weekly-report', async (_request: NextRequest) => {
   const jobStats = await PipelineLogger.getJobStats()
   const totalRuns = jobStats.reduce((sum, j) => sum + j.total_runs, 0)
   const totalErrors = jobStats.reduce((sum, j) => sum + j.error_count, 0)
-  const avgSuccessRate = jobStats.length > 0
-    ? jobStats.reduce((sum, j) => sum + j.success_rate, 0) / jobStats.length
-    : 0
+  const avgSuccessRate =
+    jobStats.length > 0 ? jobStats.reduce((sum, j) => sum + j.success_rate, 0) / jobStats.length : 0
 
   const topFailing = jobStats
-    .filter(j => j.error_count > 0)
+    .filter((j) => j.error_count > 0)
     .sort((a, b) => b.error_count - a.error_count)
     .slice(0, 5)
 
@@ -42,17 +41,17 @@ export const GET = withCron('weekly-report', async (_request: NextRequest) => {
 
   // 4. 最近失败
   const recentFailures = await PipelineLogger.getRecentFailures(10, 7 * 24 * 60)
-  const uniqueFailedJobs = new Set(recentFailures.map(f => f.job_name))
+  const uniqueFailedJobs = new Set(recentFailures.map((f) => f.job_name))
 
   // 5. 数据新鲜度 — 过期数据源
   const { data: staleSources } = await supabase
     .from('trader_sources')
     .select('source')
-    .lt('updated_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
+    .lt('last_refreshed_at', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString())
     .limit(100)
 
   const staleSourceCounts: Record<string, number> = {}
-  staleSources?.forEach(s => {
+  staleSources?.forEach((s) => {
     staleSourceCounts[s.source] = (staleSourceCounts[s.source] || 0) + 1
   })
   const staleExchanges = Object.entries(staleSourceCounts)
@@ -66,13 +65,20 @@ export const GET = withCron('weekly-report', async (_request: NextRequest) => {
     .gte('created_at', weekAgo)
 
   // 构建报告
-  const failingJobLines = topFailing.length > 0
-    ? topFailing.map(j => `  - ${j.job_name}: ${j.error_count} 错误 (成功率 ${(j.success_rate * 100).toFixed(0)}%)`).join('\n')
-    : '  无'
+  const failingJobLines =
+    topFailing.length > 0
+      ? topFailing
+          .map(
+            (j) =>
+              `  - ${j.job_name}: ${j.error_count} 错误 (成功率 ${(j.success_rate * 100).toFixed(0)}%)`
+          )
+          .join('\n')
+      : '  无'
 
-  const staleLines = staleExchanges.length > 0
-    ? staleExchanges.map(([src, cnt]) => `  - ${src}: ${cnt} 个过期交易员`).join('\n')
-    : '  全部正常'
+  const staleLines =
+    staleExchanges.length > 0
+      ? staleExchanges.map(([src, cnt]) => `  - ${src}: ${cnt} 个过期交易员`).join('\n')
+      : '  全部正常'
 
   const message = [
     `Pipeline 运行: ${totalRuns} | 错误: ${totalErrors} | 平均成功率: ${(avgSuccessRate * 100).toFixed(1)}%`,
@@ -96,11 +102,11 @@ export const GET = withCron('weekly-report', async (_request: NextRequest) => {
     message,
     level,
     details: {
-      '总运行数': totalRuns,
-      '错误数': totalErrors,
-      '成功率': `${(avgSuccessRate * 100).toFixed(1)}%`,
-      '新增交易员': newTraders ?? 0,
-      '新增用户': newUsers ?? 0,
+      总运行数: totalRuns,
+      错误数: totalErrors,
+      成功率: `${(avgSuccessRate * 100).toFixed(1)}%`,
+      新增交易员: newTraders ?? 0,
+      新增用户: newUsers ?? 0,
     },
   })
 

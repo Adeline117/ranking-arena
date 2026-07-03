@@ -248,7 +248,7 @@ export async function GET(request: NextRequest) {
           const { count, error: syncErr } = await supabase
             .from('authorization_sync_logs')
             .delete({ count: 'exact' })
-            .lt('created_at', authSyncCutoff)
+            .lt('synced_at', authSyncCutoff)
             .limit(DELETE_BATCH_SIZE)
           if (syncErr) {
             if (!syncErr.message?.includes('does not exist')) {
