@@ -3654,6 +3654,11 @@ const zh = {
   alreadyProMember: '您已经是 Pro 会员！',
   thisUsuallyTakesSeconds: '通常只需几秒钟...',
   perMonthBilledYearly: '月（按年计费）',
+  pricingPlanFree: '免费',
+  perMonthShort: '月',
+  perYearShort: '年',
+  pricingSpotsTaken: '{taken} / {total} 名额已占',
+  pricingSpotsRemaining: '剩余 {count}',
   paymentSystemComingSoon: '支付系统暂未开放，敬请期待',
   operationFailedTryAgain: '操作失败，请稍后再试',
 

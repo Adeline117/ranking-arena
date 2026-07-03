@@ -3739,6 +3739,11 @@ const en = {
   alreadyProMember: 'You already have an active Pro subscription!',
   thisUsuallyTakesSeconds: 'This usually takes a few seconds...',
   perMonthBilledYearly: 'mo (billed yearly)',
+  pricingPlanFree: 'Free',
+  perMonthShort: 'mo',
+  perYearShort: 'year',
+  pricingSpotsTaken: '{taken} / {total} spots taken',
+  pricingSpotsRemaining: '{count} remaining',
   paymentSystemComingSoon: 'Payment system coming soon',
   operationFailedTryAgain: 'Failed, please try again',
 

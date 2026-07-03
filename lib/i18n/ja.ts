@@ -5142,6 +5142,11 @@ const ja = {
   alreadyProMember: '既にアクティブなProサブスクリプションをお持ちです！',
   thisUsuallyTakesSeconds: '通常数秒で完了します...',
   perMonthBilledYearly: '月（年払い）',
+  pricingPlanFree: '無料',
+  perMonthShort: '月',
+  perYearShort: '年',
+  pricingSpotsTaken: '{taken} / {total} 枠が埋まりました',
+  pricingSpotsRemaining: '残り {count}',
   avgLeverageTooltip:
     '現在のオープンポジション全体の平均レバレッジ。レバレッジが高いほどリスクが高くなります。',
   longShort: 'ロング/ショート',
