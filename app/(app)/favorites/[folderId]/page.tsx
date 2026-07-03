@@ -382,6 +382,10 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
     )
   }
 
+  // Default folder is created DB-side with a Chinese name ('默认收藏夹'); localize it
+  // to match the list view (FavoritesPageClient) so EN/ja/ko don't leak raw Chinese.
+  const displayName = folder.is_default ? t('defaultFolderName') : folder.name
+
   return (
     <Box
       style={{
@@ -395,7 +399,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
         style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6], paddingBottom: 100 }}
       >
         <Breadcrumb
-          items={[{ label: t('favorites'), href: '/favorites' }, { label: folder.name }]}
+          items={[{ label: t('favorites'), href: '/favorites' }, { label: displayName }]}
         />
         {/* 返回链接 */}
         <Link
@@ -433,7 +437,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
               width: 64,
               height: 64,
               borderRadius: tokens.radius.lg,
-              backgroundColor: folder.avatar_url ? undefined : getDefaultAvatar(folder.name),
+              backgroundColor: folder.avatar_url ? undefined : getDefaultAvatar(displayName),
               backgroundImage: folder.avatar_url ? `url(${folder.avatar_url})` : undefined,
               backgroundSize: 'cover',
               backgroundPosition: 'center',
@@ -445,7 +449,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           >
             {!folder.avatar_url && (
               <Text size="2xl" weight="bold" style={{ color: tokens.colors.white }}>
-                {folder.name.charAt(0).toUpperCase()}
+                {displayName.charAt(0).toUpperCase()}
               </Text>
             )}
           </Box>
@@ -521,7 +525,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
                   }}
                 >
                   <Text size="xl" weight="bold">
-                    {folder.name}
+                    {displayName}
                   </Text>
                   {folder.is_default && (
                     <span
