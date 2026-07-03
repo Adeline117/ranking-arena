@@ -251,9 +251,13 @@ export function parsePhemexProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     if (trade?.totalTradeWinRate !== undefined) {
       extras.lifetime_win_rate = pct(trade.totalTradeWinRate)
     }
-    // SUM of position hold time over the window (ns) — raw, not averaged.
+    // avgPositionHoldTimeNs is the AVERAGE hold time PER position (ns) — verified
+    // 2026-07-03 against stored data: ns/1e9/3600 gives sane per-position holds
+    // (5.5h over 166 positions), whereas treating it as a SUM (÷ tradeCount) gave
+    // an implausible ~2 min. (The old "SUM, raw" comment was a wrong assumption.)
     const holdNs = num(trade?.[`avgPositionHoldTimeNs${tf}d`])
     if (holdNs !== null) extras.position_hold_time_total_ns = holdNs
+    const holdHours = holdNs !== null ? holdNs / 1e9 / 3600 : null
 
     const prefRows = metric?.[`${tf}d`]
     stats.push({
@@ -271,7 +275,7 @@ export function parsePhemexProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       aum: num(account?.aum),
       volume: num(trade?.[`cptTradeVolume${tf}d`]),
       profitShareRate: pct(copy?.profitShareRateRr),
-      holdingDurationAvgHours: null, // see extras.position_hold_time_total_ns
+      holdingDurationAvgHours: holdHours, // avgPositionHoldTimeNs → hours (verified avg)
       tradingPreferences: Array.isArray(prefRows) ? { symbols: prefRows } : null,
       extras,
     })

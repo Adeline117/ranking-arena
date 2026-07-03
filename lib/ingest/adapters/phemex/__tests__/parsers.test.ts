@@ -110,7 +110,8 @@ describe('parsePhemexProfile', () => {
       aum: 209.825497,
       volume: 258262.133785, // cptTradeVolume30d
       profitShareRate: 10, // profitShareRateRr "0.1"
-      holdingDurationAvgHours: null, // ns SUM kept raw in extras
+      // avgPositionHoldTimeNs30d 2994139773479394 ns → 831.71h avg/position
+      holdingDurationAvgHours: 831.705492633165, // 2994139773479394 / 1e9 / 3600
       sharpe: null,
     })
     expect(s.tradingPreferences).toMatchObject({
