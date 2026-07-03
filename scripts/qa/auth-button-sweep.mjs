@@ -9,6 +9,7 @@
  */
 import { chromium } from 'playwright'
 import fs from 'node:fs'
+import { readEnv, loginQa, ACCOUNT_B, QA_HANDLE } from './qa-auth.mjs'
 
 const BASE = process.env.BASE_URL || 'https://www.arenafi.org'
 const session = JSON.parse(fs.readFileSync('/tmp/qa-session.json', 'utf8'))
@@ -218,9 +219,12 @@ async function main() {
         : `WARN 评论 ${comment.status}: ${JSON.stringify(comment.body)?.slice(0, 120)}`
     )
     if (commentId) {
-      const delC = await apiCall(`/api/comments/${commentId}`, {
+      // 评论删除在 /api/posts/[id]/comments DELETE，body { comment_id }
+      // （旧代码打 /api/comments/{id} 是不存在的路由 → 一直 404 静默漏清理）
+      const delC = await apiCall(`/api/posts/${postId}/comments`, {
         method: 'DELETE',
         headers: apiHeaders,
+        body: JSON.stringify({ comment_id: commentId }),
       })
       note(`删评论 ${delC.status}（清理）`)
     }
@@ -346,6 +350,117 @@ async function main() {
   await renderCheck('/claim', 'claim 入口')
   await renderCheck('/trader/authorize', '交易员认证')
   await renderCheck('/settings/linked-accounts', '关联账号')
+
+  // ---------- Step 11: 用户对用户写路径 + 通知落 B 收件箱（两 QA 账号，B-2）----------
+  // A 关注/评论 B → 通知落**受控 QA-B 收件箱**（不惊扰真实用户）→ 验证 → 全清理。
+  // 触发通知的写只打 QA-B 自己的行；B 的帖 visibility='followers' 不进公开流。
+  newBucket('11-user-to-user-notify')
+  let bToken = null
+  let bId = null
+  try {
+    const supaUrl = readEnv('NEXT_PUBLIC_SUPABASE_URL')
+    const anon = readEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY')
+    const srk = readEnv('SUPABASE_SERVICE_ROLE_KEY')
+    const bSess = await loginQa({ supaUrl, anon, srk, account: ACCOUNT_B, log: () => {} })
+    bToken = bSess?.access_token || null
+    bId = bSess?.user?.id || null
+    note(bToken ? `OK 登录 QA-B (${bSess.user?.email})` : 'FAIL QA-B 登录未拿到 token')
+  } catch (e) {
+    note(`SKIP QA-B 登录失败: ${String(e.message).slice(0, 120)}`)
+  }
+  if (bToken && bId) {
+    const bHeaders = {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${bToken}`,
+      'x-csrf-token': CSRF, // csrf-token cookie 非用户绑定，A/B 共用同一 double-submit 值
+    }
+    // 1) B 发帖（followers 可见，不进公开 feed）
+    const bPost = await apiCall('/api/posts', {
+      method: 'POST',
+      headers: bHeaders,
+      body: JSON.stringify({
+        title: '[automated-qa] B post for notify test — will be deleted',
+        content: '[automated-qa] user-to-user notify test. Safe to ignore.',
+        visibility: 'followers',
+      }),
+    })
+    const bPostId = bPost.body?.data?.post?.id || bPost.body?.data?.id || null
+    note(bPostId ? `OK QA-B 发帖 ${bPost.status} id=${bPostId}` : `FAIL QA-B 发帖 ${bPost.status}`)
+
+    // 2) A 关注 B（user_follows + new_follower 通知给 B）
+    const follow = await apiCall('/api/users/follow', {
+      method: 'POST',
+      headers: apiHeaders,
+      body: JSON.stringify({ followingId: bId, action: 'follow' }),
+    })
+    note(follow.body?.following ? `OK A 关注 B ${follow.status}` : `WARN A 关注 B ${follow.status}`)
+
+    // 3) A 评论 B 的帖（comment 通知给 B）
+    let cId = null
+    if (bPostId) {
+      const cmt = await apiCall(`/api/posts/${bPostId}/comments`, {
+        method: 'POST',
+        headers: apiHeaders,
+        body: JSON.stringify({ content: '[automated-qa] A comments on B post' }),
+      })
+      cId = cmt.body?.data?.comment?.id || cmt.body?.data?.id || null
+      note(cId ? `OK A 评论 B 的帖 ${cmt.status}` : `WARN A 评论 ${cmt.status}`)
+    }
+
+    // 4) 验证通知落 B 收件箱（读 B 的 notifications，找 A 触发的新条目）
+    await page.waitForTimeout(2500) // 通知 fire-and-forget，给它落库时间
+    const nres = await apiCall('/api/notifications?limit=20', { method: 'GET', headers: bHeaders })
+    const notifs = nres.body?.data?.notifications || nres.body?.notifications || []
+    const mine = notifs.filter(
+      (n) =>
+        ['new_follower', 'follow', 'comment', 'post_comment'].includes(n.type) &&
+        (n.actor?.handle === QA_HANDLE || n.actor_id || n.message)
+    )
+    note(
+      mine.length
+        ? `OK 通知落 B 收件箱: ${mine.map((n) => n.type).join(',')}（写路径验证）`
+        : `WARN 未在 B 收件箱找到 A 触发的通知（notifs=${notifs.length}）`
+    )
+
+    // 5) 全清理：A 取关 → 删评论 → B 删帖 → 删 B 收件箱新通知 → 回查
+    await apiCall('/api/users/follow', {
+      method: 'POST',
+      headers: apiHeaders,
+      body: JSON.stringify({ followingId: bId, action: 'unfollow' }),
+    })
+    if (cId && bPostId)
+      await apiCall(`/api/posts/${bPostId}/comments`, {
+        method: 'DELETE',
+        headers: apiHeaders,
+        body: JSON.stringify({ comment_id: cId }),
+      })
+    if (bPostId) {
+      const del = await apiCall(`/api/posts/${bPostId}`, { method: 'DELETE', headers: bHeaders })
+      const gone = await apiCall(`/api/posts/${bPostId}`, { method: 'GET', headers: bHeaders })
+      note(
+        del.status < 300 && gone.status === 404
+          ? 'OK 清理: B 帖已删（回查 404）'
+          : `FAIL 清理: B 帖删 ${del.status}/回查 ${gone.status}（可能残留!）`
+      )
+    }
+    // /api/notifications DELETE 只收单个 notification_id — 逐条删
+    const nids = mine.map((n) => n.id).filter(Boolean)
+    let nDeleted = 0
+    for (const nid of nids) {
+      const dn = await apiCall('/api/notifications', {
+        method: 'DELETE',
+        headers: bHeaders,
+        body: JSON.stringify({ notification_id: nid }),
+      })
+      if (dn.status < 300) nDeleted++
+    }
+    if (nids.length)
+      note(
+        nDeleted === nids.length
+          ? `OK 清理: 删 B 收件箱 ${nDeleted}/${nids.length} 条通知`
+          : `WARN 清理: 只删了 ${nDeleted}/${nids.length} 条通知`
+      )
+  }
 
   await browser.close()
 
