@@ -124,6 +124,15 @@ jobs:
       - name: Schema contract check (代码 DB 依赖 vs 生产 schema)
         run: npm run qa:schema
 
+      # 列级写+读漂移门(2026-07)。qa:schema 只验表/RPC 存在，本检查验
+      # .insert/.update/.upsert 写的列 + .select 读的列在生产真实存在——代码写/读
+      # 不存在的列 = 每次 PGRST 500/400 静默崩(groups.slug、整个 Stripe webhook 同步
+      # 都是这么崩的，被 PRO_FREE_PROMO 掩盖)。需 DATABASE_URL secret;未设则跳过(不阻断)。
+      - name: Column-drift check (写/读列 vs 生产 schema)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: npm run qa:insert-drift
+
       # API 鉴权覆盖兜底(默认拒绝)：无根级 middleware，313+ route 靠自觉调 auth
       # wrapper——本检查强制每个 route 要么有 auth 原语要么在显式公开白名单，
       # 堵住"忘加鉴权=fail-open"（ENTERPRISE_GAP_ANALYSIS_2026-07 差距 #3）。
