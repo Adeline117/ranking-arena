@@ -7,10 +7,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyAdmin } from '@/lib/admin/auth'
 
 // 批准小组申请
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = socialFeatureGuard()
   if (guard) return guard
 
@@ -34,7 +31,7 @@ export async function POST(
     // 获取申请信息
     const { data: application, error: fetchError } = await supabase
       .from('group_applications')
-      .select('id, status, user_id, group_name')
+      .select('id, status, user_id:applicant_id, group_name:name')
       .eq('id', id)
       .single()
 
@@ -43,7 +40,10 @@ export async function POST(
     }
 
     if (application.status !== 'pending') {
-      return NextResponse.json({ error: 'This application has already been processed' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'This application has already been processed' },
+        { status: 400 }
+      )
     }
 
     // 更新申请状态为 approved
@@ -53,7 +53,7 @@ export async function POST(
       .update({
         status: 'approved',
         reviewed_at: new Date().toISOString(),
-        reviewed_by: user.id
+        reviewed_by: user.id,
       })
       .eq('id', id)
 
@@ -64,12 +64,10 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: 'Group application approved'
+      message: 'Group application approved',
     })
-
   } catch (error: unknown) {
     logger.error('Error approving application:', error)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
-

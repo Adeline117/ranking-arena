@@ -33,7 +33,7 @@ async function computePlatformHealth(supabase: SupabaseClient) {
   const [healthResult, pipelineLogsResult] = await Promise.all([
     supabase
       .from('platform_health')
-      .select('platform, status, last_success_at, error_count, avg_response_ms')
+      .select('platform, status, last_success_at, error_count:consecutive_failures')
       .order('platform'),
     supabase
       .from('pipeline_logs')
@@ -63,7 +63,7 @@ async function computePlatformHealth(supabase: SupabaseClient) {
   if (latestByPlatform.size === 0) {
     const { data: lbFreshness } = await supabase
       .from('leaderboard_ranks')
-      .select('platform, updated_at')
+      .select('platform:source, updated_at:computed_at')
       .eq('season_id', '90D')
       .order('updated_at', { ascending: false })
       .limit(100)
