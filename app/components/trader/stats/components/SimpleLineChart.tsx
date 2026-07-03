@@ -138,9 +138,12 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
     setTooltipPos(null)
   }, [handleDragEnd])
 
-  // Wheel to zoom
+  // Wheel to zoom — attached as a NATIVE non-passive listener (see effect below)
+  // so e.preventDefault() actually suppresses page scroll. React's synthetic
+  // onWheel is registered passively at the root, which both logs a console
+  // warning and ignores preventDefault (page scrolls while the chart zooms).
   const handleWheel = useCallback(
-    (e: React.WheelEvent) => {
+    (e: WheelEvent) => {
       if (Math.abs(e.deltaY) < 5) return
       e.preventDefault()
       if (e.deltaY < 0) {
@@ -157,6 +160,15 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
     },
     [data.length]
   )
+
+  // Attach the wheel handler natively with { passive: false } on the chart
+  // container so preventDefault() is honored.
+  useEffect(() => {
+    const el = chartRef.current
+    if (!el) return
+    el.addEventListener('wheel', handleWheel, { passive: false })
+    return () => el.removeEventListener('wheel', handleWheel)
+  }, [handleWheel])
 
   // Global mouse up to end drag
   useEffect(() => {
@@ -363,7 +375,6 @@ export function SimpleLineChart({ data, dataKey, period }: SimpleLineChartProps)
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
-        onWheel={handleWheel}
       >
         <svg
           role="img"
