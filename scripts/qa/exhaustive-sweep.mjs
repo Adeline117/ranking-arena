@@ -47,6 +47,13 @@ const flagValue = (name) => {
 const ROUTES_ARG = flagValue('--routes')
 const MAX_PER_ROUTE = Number(flagValue('--max-per-route') || 300)
 const LEDGER_PATH = process.env.QA_LEDGER || 'scripts/qa/.exhaustive-ledger.jsonl'
+// --lang=<en|zh|ja|ko>: preset the UI locale (browser locale + language
+// localStorage/cookie) so a sweep can run any of the 4 shipped languages.
+const LANG = flagValue('--lang') || 'en'
+if (!['en', 'zh', 'ja', 'ko'].includes(LANG)) {
+  console.error(`✗ --lang must be en|zh|ja|ko (got "${LANG}")`)
+  process.exit(2)
+}
 
 // Interactive-element selector — the universe we must cover on each route.
 const INTERACTIVE_SELECTOR = [
@@ -273,6 +280,39 @@ function summarizeClickError(e) {
   return (cause ? `${first} — ${cause}` : first).slice(0, 300)
 }
 
+// ---------- dead-button detection ----------
+// Lightweight page-state snapshot taken immediately before and after a click.
+// If NOTHING observable changed (URL, visible text length, open overlays, DOM
+// node count) AND the click fired no network request, the control is a dead
+// button: clickable but does nothing. Such elements were previously recorded
+// ok:clicked, indistinguishable from a working button — the blind spot that let
+// "clicked but nothing happens" bugs survive earlier sweeps.
+async function snapshotEffect(page) {
+  try {
+    return await page.evaluate(() => ({
+      url: location.href,
+      textLen: document.body ? document.body.innerText.length : 0,
+      overlays: document.querySelectorAll('[role="dialog"],[aria-modal="true"],[data-state="open"]')
+        .length,
+      nodes: document.querySelectorAll('*').length,
+    }))
+  } catch {
+    // Snapshot taken mid-navigation throws; null → treat as "changed" so a
+    // navigating click is never mislabelled dead.
+    return null
+  }
+}
+
+function hasEffect(before, after, reqDelta) {
+  if (!before || !after) return true // couldn't measure → never flag as dead
+  if (reqDelta > 0) return true // click fired a request → had an effect
+  if (before.url !== after.url) return true
+  if (Math.abs(before.textLen - after.textLen) > 2) return true // >2 tolerates ticking timestamps/counters
+  if (before.overlays !== after.overlays) return true
+  if (Math.abs(before.nodes - after.nodes) > 2) return true
+  return false
+}
+
 async function hydrate(page, route) {
   const resp = await page.goto(`${BASE}${route}`, { waitUntil: 'domcontentloaded', timeout: 30000 })
   await page.waitForTimeout(4000) // hydration + first data
@@ -420,7 +460,7 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
     }
 
     // Reset error buckets for this single interaction.
-    const bucket = { pageErrors: [], consoleErrors: [], httpErrors: [] }
+    const bucket = { pageErrors: [], consoleErrors: [], httpErrors: [], reqCount: 0 }
     counters._bucket = bucket
 
     const el = page.locator(`[data-qa-idx="${i}"]`).first()
@@ -438,9 +478,23 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
         await el.press('Escape').catch(() => {})
         record.status = 'ok:filled'
       } else {
+        const before = await snapshotEffect(page)
+        const reqBefore = bucket.reqCount
         await el.click({ timeout: 2500 })
-        await page.waitForTimeout(500)
-        record.status = 'ok:clicked'
+        // Give async handlers time to fire a request or mutate the DOM before
+        // judging effect: settle on networkidle, then a short floor for pure
+        // client-side state changes that never touch the network.
+        await page.waitForLoadState('networkidle', { timeout: 1500 }).catch(() => {})
+        await page.waitForTimeout(400)
+        const after = await snapshotEffect(page)
+        const effective = hasEffect(before, after, bucket.reqCount - reqBefore)
+        record.status = effective ? 'ok:clicked' : 'dead:no-effect'
+        if (!effective) {
+          counters.dead++
+          // Keep the raw before/after so a human can tell a true dead button
+          // from a legit no-op (e.g. re-clicking an already-active tab).
+          record.effect = { before, after, reqDelta: bucket.reqCount - reqBefore }
+        }
       }
       counters.clicked++
     } catch (e) {
@@ -542,10 +596,29 @@ function rebootstrap() {
   execSync('node scripts/qa/bootstrap-qa-session.mjs', { stdio: 'inherit', timeout: 120_000 })
 }
 
+// Preset the shipped UI language on a context: browser locale is set at
+// newContext time; here we also seed the app's own language localStorage key +
+// cookie (mirrors button-sweep) so client i18n picks it up on first paint.
+// Returns the context so it can wrap a newContext(...) call inline.
+async function applyLang(ctx) {
+  if (LANG !== 'en') {
+    await ctx.addInitScript((lang) => {
+      try {
+        localStorage.setItem('language', lang)
+      } catch {}
+      try {
+        document.cookie = `language=${lang}; path=/`
+      } catch {}
+    }, LANG)
+  }
+  return ctx
+}
+
 async function buildAuthContext(browser) {
   const session = JSON.parse(fs.readFileSync(SESSION_PATH, 'utf8'))
   const ctx = await browser.newContext({
     viewport: { width: 1280, height: 900 },
+    locale: LANG,
     userAgent:
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 ArenaQA',
   })
@@ -591,13 +664,16 @@ async function main() {
   const anonKey = AUTH ? readEnv('NEXT_PUBLIC_SUPABASE_ANON_KEY') : null
 
   const buildContext = async () =>
-    AUTH
-      ? await buildAuthContext(browser)
-      : await browser.newContext({
-          viewport: { width: 1280, height: 900 },
-          userAgent:
-            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 ArenaQA',
-        })
+    applyLang(
+      AUTH
+        ? await buildAuthContext(browser)
+        : await browser.newContext({
+            viewport: { width: 1280, height: 900 },
+            locale: LANG,
+            userAgent:
+              'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 ArenaQA',
+          })
+    )
   let ctx = await buildContext()
 
   // Auto-cancel every confirm/beforeunload dialog — the destructive backstop.
@@ -611,6 +687,7 @@ async function main() {
     denied: 0,
     skipped: 0,
     failed: 0,
+    dead: 0,
     withErrors: 0,
     tainted: 0,
     redirected: 0,
@@ -624,6 +701,11 @@ async function main() {
   // reports errors. Returns a fresh page with listeners wired.
   const newTrackedPage = async () => {
     const p = await ctx.newPage()
+    // Count every request fired during the current interaction — a click that
+    // fires none AND changes no DOM/URL is a dead button (see snapshotEffect).
+    p.on('request', () => {
+      if (counters._bucket) counters._bucket.reqCount++
+    })
     p.on('pageerror', (e) => counters._bucket?.pageErrors.push(e.message.slice(0, 200)))
     p.on('console', (m) => {
       if (m.type() === 'error') counters._bucket?.consoleErrors.push(m.text().slice(0, 200))
@@ -774,6 +856,7 @@ async function main() {
   console.log(`  denied (safety)   : ${counters.denied}`)
   console.log(`  skipped (hid/dis) : ${counters.skipped}`)
   console.log(`  click failures    : ${counters.failed}`)
+  console.log(`  dead (no-effect)  : ${counters.dead} (clicked, but no DOM/URL/network change)`)
   console.log(`  elements w/ errors: ${counters.withErrors}`)
   console.log(`  redirects deduped : ${counters.redirected} (auth-gate → already-swept page)`)
   console.log(
