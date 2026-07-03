@@ -134,7 +134,7 @@ const TradeRow = memo(function TradeRow({
           fontSize: 10,
         }}
       >
-        {isBuy ? 'BUY' : 'SELL'}
+        {isBuy ? t('tradeBuy') : t('tradeSell')}
       </span>
 
       {/* 价格 */}
