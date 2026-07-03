@@ -29,7 +29,9 @@ export async function GET(
 
     const { data: activities, error } = await supabase
       .from('user_activities')
-      .select('id, user_id, type, title, description, metadata, link, created_at')
+      // user_activities 真列: activity_type/target_id/target_type/metadata(无 title/description/
+      // link 列)——旧 select 400→整个活动页 500。type 别名到 activity_type,展示数据在 metadata。
+      .select('id, user_id, type:activity_type, target_id, target_type, metadata, created_at')
       .eq('user_id', profile.id)
       .order('created_at', { ascending: false })
       .range(offset, offset + limit - 1)
@@ -38,7 +40,10 @@ export async function GET(
       return NextResponse.json({ error: 'Failed to fetch activities' }, { status: 500 })
     }
 
-    return NextResponse.json({ activities: activities || [], hasMore: (activities?.length || 0) === limit })
+    return NextResponse.json({
+      activities: activities || [],
+      hasMore: (activities?.length || 0) === limit,
+    })
   } catch (error) {
     logger.error('GET failed', { error: error instanceof Error ? error.message : String(error) })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })

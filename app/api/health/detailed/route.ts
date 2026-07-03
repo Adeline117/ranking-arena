@@ -126,7 +126,7 @@ async function checkDatabaseAndCron(): Promise<{
     try {
       const { data: cronLogs } = await supabase
         .from('cron_logs')
-        .select('name, ran_at, result')
+        .select('name, ran_at') // cron_logs 无 result 列(旧 select 400)；下方 JSON.parse 已有 '[]' 兜底
         .order('ran_at', { ascending: false })
         .limit(20)
 

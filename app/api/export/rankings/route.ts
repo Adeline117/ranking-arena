@@ -42,7 +42,9 @@ export async function GET(request: NextRequest) {
 
     let query = supabase
       .from('leaderboard_ranks')
-      .select('rank, trader_id, handle, source, arena_score, roi, pnl, win_rate, max_drawdown, followers, trades_count')
+      .select(
+        'rank, trader_id:source_trader_id, handle, source, arena_score, roi, pnl, win_rate, max_drawdown, followers, trades_count'
+      )
       .or('is_outlier.is.null,is_outlier.eq.false')
       .order('rank', { ascending: true })
       .limit(limit)
@@ -60,31 +62,43 @@ export async function GET(request: NextRequest) {
 
     const rows = data || []
 
-  if (format === 'json') {
-    return new Response(JSON.stringify(rows, null, 2), {
+    if (format === 'json') {
+      return new Response(JSON.stringify(rows, null, 2), {
+        headers: {
+          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Disposition': `attachment; filename="rankings-${exchange || 'all'}.json"`,
+          'Cache-Control': 'no-store',
+        },
+      })
+    }
+
+    // CSV
+    const headers = [
+      'rank',
+      'trader_id',
+      'handle',
+      'source',
+      'arena_score',
+      'roi',
+      'pnl',
+      'win_rate',
+      'max_drawdown',
+      'followers',
+      'trades_count',
+    ]
+    const csvHeader = headers.join(',')
+    const csvRows = rows.map((row) =>
+      headers.map((h) => escapeCsv((row as Record<string, unknown>)[h])).join(',')
+    )
+    const csv = [csvHeader, ...csvRows].join('\n')
+
+    return new Response('\uFEFF' + csv, {
       headers: {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Content-Disposition': `attachment; filename="rankings-${exchange || 'all'}.json"`,
+        'Content-Type': 'text/csv; charset=utf-8',
+        'Content-Disposition': `attachment; filename="rankings-${exchange || 'all'}.csv"`,
         'Cache-Control': 'no-store',
       },
     })
-  }
-
-  // CSV
-  const headers = ['rank', 'trader_id', 'handle', 'source', 'arena_score', 'roi', 'pnl', 'win_rate', 'max_drawdown', 'followers', 'trades_count']
-  const csvHeader = headers.join(',')
-  const csvRows = rows.map(row =>
-    headers.map(h => escapeCsv((row as Record<string, unknown>)[h])).join(',')
-  )
-  const csv = [csvHeader, ...csvRows].join('\n')
-
-  return new Response('\uFEFF' + csv, {
-    headers: {
-      'Content-Type': 'text/csv; charset=utf-8',
-      'Content-Disposition': `attachment; filename="rankings-${exchange || 'all'}.csv"`,
-      'Cache-Control': 'no-store',
-    },
-  })
   } catch (error) {
     logger.error('[export/rankings] Error:', error)
     return NextResponse.json({ error: 'Export failed' }, { status: 500 })
