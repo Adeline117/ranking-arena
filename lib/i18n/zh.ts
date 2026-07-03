@@ -3321,6 +3321,7 @@ const zh = {
   updated: '更新',
   download: '下载',
   alpha: 'Alpha',
+  clickToSort: '点击排序',
   edited: '已编辑',
   manageLinkedAccounts: '管理关联账户 →',
   defaultFolderName: '默认收藏夹',
