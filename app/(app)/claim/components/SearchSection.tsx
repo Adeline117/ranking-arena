@@ -22,8 +22,26 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
     try {
       const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=10`)
       if (res.ok) {
-        const data = await res.json()
-        setResults(data.traders || data.results || [])
+        const raw = await res.json()
+        // /api/search returns { success, data: { results: { traders: UnifiedSearchResult[] } } }.
+        // Map UnifiedSearchResult ({ id: 'platform:key', title: '@handle', avatar, meta })
+        // onto the SearchResult shape the claim flow consumes.
+        const items: Array<{
+          id?: string
+          title?: string
+          avatar?: string | null
+          meta?: { platform?: string; arena_score?: number; roi?: number }
+        }> = raw.data?.results?.traders || []
+        setResults(
+          items.map((item) => ({
+            handle: item.title?.replace(/^@/, '') || item.id?.split(':')[1] || '',
+            source: item.meta?.platform || item.id?.split(':')[0] || '',
+            source_trader_id: item.id?.split(':')[1] || '',
+            avatar_url: item.avatar || undefined,
+            arena_score: item.meta?.arena_score,
+            roi: item.meta?.roi,
+          }))
+        )
       }
     } catch {
       // Search failed silently
