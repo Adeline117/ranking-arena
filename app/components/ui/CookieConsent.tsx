@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const LS_KEY = 'cookie_consent'
 
@@ -13,6 +14,7 @@ const NAV_HIDDEN_PATHS = ['/login', '/onboarding', '/reset-password', '/auth/cal
 export default function CookieConsent() {
   const [visible, setVisible] = useState(false)
   const pathname = usePathname()
+  const { t } = useLanguage()
 
   const isNavHidden = NAV_HIDDEN_PATHS.some((p) => pathname === p || pathname.startsWith(p + '/'))
 
@@ -21,8 +23,8 @@ export default function CookieConsent() {
       const consent = localStorage.getItem(LS_KEY)
       if (consent !== 'accepted' && consent !== 'rejected') {
         // Delay showing banner — don't fight with LCP on first paint
-        const t = setTimeout(() => setVisible(true), 2000)
-        return () => clearTimeout(t)
+        const timer = setTimeout(() => setVisible(true), 2000)
+        return () => clearTimeout(timer)
       }
     } catch {
       // localStorage unavailable
@@ -90,12 +92,12 @@ export default function CookieConsent() {
             whiteSpace: 'nowrap',
           }}
         >
-          We use cookies.{' '}
+          {t('cookieBannerShort')}{' '}
           <Link
             href="/legal/privacy"
             style={{ color: tokens.colors.accent.brand, textDecoration: 'underline' }}
           >
-            Privacy
+            {t('cookieBannerPrivacy')}
           </Link>
         </p>
         <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
@@ -113,7 +115,7 @@ export default function CookieConsent() {
               cursor: 'pointer',
             }}
           >
-            Reject
+            {t('cookieBannerReject')}
           </button>
           <button
             onClick={handleAccept}
@@ -129,7 +131,7 @@ export default function CookieConsent() {
               cursor: 'pointer',
             }}
           >
-            OK
+            {t('cookieBannerAccept')}
           </button>
         </div>
       </div>

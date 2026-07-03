@@ -1227,6 +1227,10 @@ const ja = {
   cookieMarketing: 'マーケティングCookie',
   cookieMarketingDesc:
     '関連する広告やコンテンツの表示に使用されます。無効にすると広告の関連性が低下する場合があります。',
+  cookieBannerShort: 'Cookieを使用しています。',
+  cookieBannerPrivacy: 'プライバシー',
+  cookieBannerReject: '拒否',
+  cookieBannerAccept: 'OK',
   acceptAll: 'すべて受け入れる',
   necessaryOnly: '必要なもののみ',
   customizeSettings: 'カスタマイズ',

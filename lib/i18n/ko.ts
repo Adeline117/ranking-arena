@@ -1283,6 +1283,10 @@ const ko = {
   cookieMarketing: '마케팅 쿠키',
   cookieMarketingDesc:
     '관련성 있는 광고 및 콘텐츠를 표시하는 데 사용됩니다. 비활성화하면 광고의 관련성이 떨어질 수 있습니다.',
+  cookieBannerShort: '쿠키를 사용합니다.',
+  cookieBannerPrivacy: '개인정보',
+  cookieBannerReject: '거부',
+  cookieBannerAccept: '확인',
   acceptAll: '모두 수락',
   necessaryOnly: '필수 쿠키만',
   customizeSettings: '맞춤 설정',

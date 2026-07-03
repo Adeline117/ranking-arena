@@ -1348,6 +1348,10 @@ const en = {
   cookieMarketing: 'Marketing Cookies',
   cookieMarketingDesc:
     'Used to show relevant ads and content. Disabling means ads may be less relevant.',
+  cookieBannerShort: 'We use cookies.',
+  cookieBannerPrivacy: 'Privacy',
+  cookieBannerReject: 'Reject',
+  cookieBannerAccept: 'OK',
   acceptAll: 'Accept All',
   necessaryOnly: 'Necessary Only',
   customizeSettings: 'Customize',
