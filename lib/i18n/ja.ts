@@ -2820,7 +2820,7 @@ const ja = {
   faqNoResults: '一致する質問が見つかりません。別のキーワードをお試しください。',
 
   heroHeadline: '世界最高の暗号トレーダーを追跡',
-  heroSubtitle: '{exchanges}以上の取引所でリアルタイムランキング。Arena Scoreで評価',
+  heroSubtitle: '{exchanges}以上の取引所でリアルタイムランキング、Arena Scoreで評価',
   heroCTABrowse: 'ランキングを見る',
   heroCTASignUp: '無料登録',
   heroStatTraders: 'トレーダー',
