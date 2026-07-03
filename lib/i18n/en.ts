@@ -5230,6 +5230,7 @@ const en = {
   compColCurrent: 'Current',
   compColDelta: 'Change',
   compLoginRequired: 'Please log in to create a competition',
+  compLoginToCreate: 'Log in to create',
   compFieldTitle: 'Title',
   compFieldTitlePlaceholder: 'e.g. Weekly ROI Challenge',
   compFieldDescription: 'Description',

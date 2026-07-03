@@ -5116,6 +5116,7 @@ const zh = {
   compColCurrent: '当前值',
   compColDelta: '变化',
   compLoginRequired: '请登录后创建竞赛',
+  compLoginToCreate: '登录以创建',
   compFieldTitle: '标题',
   compFieldTitlePlaceholder: '例如：每周 ROI 挑战赛',
   compFieldDescription: '描述',
