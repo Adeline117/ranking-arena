@@ -48,16 +48,23 @@ export const metadata: Metadata = {
 // ISR: Revalidate every 5 minutes (300s)
 export const revalidate = 300
 
-// Site-level JSON-LD structured data
-const organizationJsonLd = {
-  '@context': 'https://schema.org',
-  '@type': 'Organization',
-  name: 'Arena',
-  url: BASE_URL,
-  logo: `${BASE_URL}/logo-symbol.png`,
-  sameAs: ['https://twitter.com/arenafi'],
-  description:
-    'Arena aggregates trader rankings from 45+ exchanges. Follow top traders, share insights, and level up your trading.',
+// Site-level JSON-LD structured data. Exchange count is interpolated from the
+// live hero stat — a hardcoded "45+" contradicted the real 18 shown in the hero
+// (audit 2026-07-03). Falls back to a neutral phrasing when the stat is absent.
+function buildOrganizationJsonLd(exchangeCount?: number | null) {
+  const exchanges =
+    typeof exchangeCount === 'number' && exchangeCount > 0
+      ? `${exchangeCount}+ exchanges`
+      : 'exchanges'
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'Organization',
+    name: 'Arena',
+    url: BASE_URL,
+    logo: `${BASE_URL}/logo-symbol.png`,
+    sameAs: ['https://twitter.com/arenafi'],
+    description: `Arena aggregates trader rankings from ${exchanges}. Follow top traders, share insights, and level up your trading.`,
+  }
 }
 
 const PER_PAGE = 50
@@ -94,7 +101,7 @@ export default async function Page() {
           nav. SkipLink uses useLanguage()'s hydration-safe fallback, so it works
           without Providers (homepage deliberately omits them for LCP). */}
       <SkipLink targetId="main-content" />
-      <JsonLd data={organizationJsonLd} />
+      <JsonLd data={buildOrganizationJsonLd(heroStats?.exchangeCount)} />
 
       {/* SSR TopNav — stays visible permanently (see HomePage.tsx). Outside
           <main> so the skip link actually skips it in the tab order. */}

@@ -31,6 +31,10 @@ export interface InitialTrader {
   /** Our own Supabase-Storage mirror (no proxy, no 429). Preferred over avatar_url. */
   avatar_url_mirror?: string | null
   arena_score: number
+  /** Sharpe ratio — populated from leaderboard_ranks.sharpe_ratio (DEX/computed
+   *  sources); null for CEX that don't supply it. Was dropped by this type so the
+   *  SSR card always rendered "—" (audit 2026-07-03). */
+  sharpe: number | null
   score_confidence: ScoreConfidence
 }
 
@@ -67,6 +71,7 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader {
     avatar_url: t.avatarUrl,
     avatar_url_mirror: null, // enriched post-fetch via attachAvatarMirrors
     arena_score: t.arenaScore ?? 0,
+    sharpe: t.sharpeRatio ?? null,
     score_confidence: 'full', // leaderboard_ranks only includes confident scores
   }
 }
