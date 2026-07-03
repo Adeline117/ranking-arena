@@ -231,9 +231,12 @@ const okxAdapter: SourceAdapter = {
     src: SourceRow,
     exchangeTraderId: string
   ): Promise<RawBundle> {
+    // NOTE: public-current-subpositions rejects a `limit` param with HTTP 400
+    // (verified 2026-07-03 — the &limit=500 here silently 0'd every okx open
+    // position). It returns the full current set unpaginated; no limit needed.
     const url =
       `${base(src)}/public-current-subpositions?instType=${instType(src)}` +
-      `&uniqueCode=${exchangeTraderId}&limit=500`
+      `&uniqueCode=${exchangeTraderId}`
     const data = await fetchData(session, url)
     const fetchedAt = new Date().toISOString()
     return { pages: [{ pageIndex: 1, payload: { data }, url, fetchedAt }], fetchedAt }
