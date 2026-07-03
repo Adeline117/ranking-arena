@@ -88,7 +88,7 @@ export const GET = withCron('enrichment-completeness', async (_request, { supaba
   const { data: pipelineLogs } = await supabase
     .from('pipeline_logs')
     .select('job_name, status')
-    .gte('created_at', cutoff24h)
+    .gte('started_at', cutoff24h)
     .like('job_name', 'enrich-%')
 
   const enrichLogs = pipelineLogs || []

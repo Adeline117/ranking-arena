@@ -65,7 +65,7 @@ async function computePlatformHealth(supabase: SupabaseClient) {
       .from('leaderboard_ranks')
       .select('platform:source, updated_at:computed_at')
       .eq('season_id', '90D')
-      .order('updated_at', { ascending: false })
+      .order('computed_at', { ascending: false })
       .limit(100)
 
     for (const row of lbFreshness || []) {
