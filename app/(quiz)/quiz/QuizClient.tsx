@@ -4,7 +4,15 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useStat
 import { useRouter } from 'next/navigation'
 // Box replaced with plain div — avoids pulling design-tokens into quiz bundle
 import { useQuizStore } from '@/lib/stores/quizStore'
-import { type Language, translations, loadTranslations, onTranslationsReady } from './i18n'
+import {
+  type Language,
+  translations,
+  loadTranslations,
+  onTranslationsReady,
+  getInitialQuizLanguage,
+  nextQuizLanguage,
+  QUIZ_LANG_LABELS,
+} from './i18n'
 import { PERSONALITY_TYPES, QUIZ_QUESTIONS } from './components/quiz-data'
 import { calculateResult } from './components/scoring'
 import { getCsrfHeaders } from '@/lib/api/csrf'
@@ -20,7 +28,8 @@ type Step = 'start' | 'questions' | 'calculating'
 
 export default function QuizClient() {
   const router = useRouter()
-  // Quiz always starts in English, independent of global language
+  // Starts in English for stable SSR/first paint, then adopts the visitor's
+  // site-wide language on mount (see the site-language effect below).
   const [quizLang, setQuizLang] = useState<Language>('en')
   // Bump to force re-render when async English translations finish loading
   const [, setTxnBump] = useState(0)
@@ -64,6 +73,12 @@ export default function QuizClient() {
 
   useEffect(() => {
     setMounted(true)
+    // Adopt the visitor's site-wide language (zh has a dedicated dictionary;
+    // ja/ko render the English fallback) instead of forcing English.
+    const siteLang = getInitialQuizLanguage()
+    if (siteLang !== 'en') {
+      loadTranslations(siteLang).then(() => setQuizLang(siteLang))
+    }
     // Only reset if quiz was previously completed (has result); preserve in-progress answers
     if (useQuizStore.getState().result) reset()
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -168,12 +183,8 @@ export default function QuizClient() {
   }, [])
 
   const handleToggleLanguage = useCallback(() => {
-    const newLang = quizLang === 'en' ? 'zh' : 'en'
-    if (newLang !== 'en') {
-      loadTranslations(newLang).then(() => setQuizLang(newLang))
-    } else {
-      setQuizLang(newLang)
-    }
+    const newLang = nextQuizLanguage(quizLang)
+    loadTranslations(newLang).then(() => setQuizLang(newLang))
   }, [quizLang])
 
   // Before hydration: show the start page content (not a spinner)
@@ -217,13 +228,9 @@ export default function QuizClient() {
         fontWeight: 600,
         cursor: 'pointer',
       }}
-      aria-label={
-        quizLang === 'en'
-          ? 'Switch to Chinese / \u5207\u6362\u5230\u4E2D\u6587'
-          : 'Switch to English / \u5207\u6362\u5230\u82F1\u6587'
-      }
+      aria-label={`Switch language (${QUIZ_LANG_LABELS[nextQuizLanguage(quizLang)]})`}
     >
-      {quizLang === 'en' ? '\u4E2D\u6587' : 'EN'}
+      {QUIZ_LANG_LABELS[nextQuizLanguage(quizLang)]}
     </button>
   )
 

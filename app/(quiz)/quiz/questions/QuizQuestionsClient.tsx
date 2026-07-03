@@ -4,7 +4,15 @@ import React, { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useStat
 import { useRouter } from 'next/navigation'
 // Box replaced with plain div — avoids pulling design-tokens into quiz bundle
 import { useQuizStore } from '@/lib/stores/quizStore'
-import { type Language, translations, loadTranslations, onTranslationsReady } from '../i18n'
+import {
+  type Language,
+  translations,
+  loadTranslations,
+  onTranslationsReady,
+  getInitialQuizLanguage,
+  nextQuizLanguage,
+  QUIZ_LANG_LABELS,
+} from '../i18n'
 import { PERSONALITY_TYPES, QUIZ_QUESTIONS } from '../components/quiz-data'
 import { calculateResult } from '../components/scoring'
 import { getCsrfHeaders } from '@/lib/api/csrf'
@@ -49,6 +57,12 @@ export default function QuizQuestionsClient() {
   useEffect(() => {
     setMounted(true)
     setIsMobile(window.innerWidth < 640)
+    // Adopt the visitor's site-wide language (zh has a dedicated dictionary;
+    // ja/ko render the English fallback) instead of forcing English.
+    const siteLang = getInitialQuizLanguage()
+    if (siteLang !== 'en') {
+      loadTranslations(siteLang).then(() => setQuizLang(siteLang))
+    }
   }, [])
 
   useEffect(() => {
@@ -177,12 +191,8 @@ export default function QuizQuestionsClient() {
   }, [])
 
   const handleToggleLanguage = useCallback(() => {
-    const newLang = quizLang === 'en' ? 'zh' : 'en'
-    if (newLang !== 'en') {
-      loadTranslations(newLang).then(() => setQuizLang(newLang))
-    } else {
-      setQuizLang(newLang)
-    }
+    const newLang = nextQuizLanguage(quizLang)
+    loadTranslations(newLang).then(() => setQuizLang(newLang))
   }, [quizLang])
 
   // Loading state
@@ -229,9 +239,9 @@ export default function QuizQuestionsClient() {
         fontWeight: 600,
         cursor: 'pointer',
       }}
-      aria-label={quizLang === 'en' ? 'Switch to Chinese' : 'Switch to English'}
+      aria-label={`Switch language (${QUIZ_LANG_LABELS[nextQuizLanguage(quizLang)]})`}
     >
-      {quizLang === 'en' ? '\u4E2D\u6587' : 'EN'}
+      {QUIZ_LANG_LABELS[nextQuizLanguage(quizLang)]}
     </button>
   )
 

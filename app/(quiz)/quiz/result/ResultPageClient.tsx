@@ -2,7 +2,15 @@
 
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
-import { type Language, translations, loadTranslations, onTranslationsReady } from '../i18n'
+import {
+  type Language,
+  translations,
+  loadTranslations,
+  onTranslationsReady,
+  getInitialQuizLanguage,
+  nextQuizLanguage,
+  QUIZ_LANG_LABELS,
+} from '../i18n'
 import { BASE_URL } from '@/lib/constants/urls'
 import { PERSONALITY_TYPE_MAP, PERSONALITY_TYPES } from '../components/quiz-data'
 import type { PersonalityTypeId, RecommendedTrader } from '../components/types'
@@ -39,6 +47,12 @@ export default function ResultPageClient({
 
   useEffect(() => {
     setMounted(true)
+    // Adopt the visitor's site-wide language (zh has a dedicated dictionary;
+    // ja/ko render the English fallback) instead of forcing English.
+    const siteLang = getInitialQuizLanguage()
+    if (siteLang !== 'en') {
+      loadTranslations(siteLang).then(() => setLanguage(siteLang))
+    }
     const unsub = onTranslationsReady(() => setTxnReady(true))
     if (t('quizTitle') !== 'quizTitle') setTxnReady(true)
     // Fallback: if translations fail to load within 3s, render anyway with raw keys
@@ -59,8 +73,8 @@ export default function ResultPageClient({
   const resultUrl = `${BASE_URL}/quiz/result?type=${typeId}&match=${matchPercent}`
 
   const handleToggleLanguage = async () => {
-    const newLang = language === 'en' ? 'zh' : 'en'
-    if (newLang !== 'en') await loadTranslations(newLang)
+    const newLang = nextQuizLanguage(language)
+    await loadTranslations(newLang)
     setLanguage(newLang)
   }
 
@@ -137,9 +151,9 @@ export default function ResultPageClient({
               fontWeight: 600,
               cursor: 'pointer',
             }}
-            aria-label={language === 'en' ? 'Switch to Chinese' : 'Switch to English'}
+            aria-label={`Switch language (${QUIZ_LANG_LABELS[nextQuizLanguage(language)]})`}
           >
-            {language === 'en' ? '\u4E2D\u6587' : 'EN'}
+            {QUIZ_LANG_LABELS[nextQuizLanguage(language)]}
           </button>
         </div>
 
