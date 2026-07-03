@@ -126,12 +126,12 @@ describe('parseLbankProfile', () => {
 })
 
 describe('parseLbankPositions', () => {
-  it('parses current lead positions (side null — enum unverified)', () => {
+  it('parses current lead positions (side from posiDirection: 0=LONG, verified)', () => {
     const positions = parseLbankPositions(fixture('positions.json'), ctx)
     expect(positions.length).toBeGreaterThanOrEqual(1)
     expect(positions[0]).toMatchObject({
       symbol: 'SPXUSDT',
-      side: null,
+      side: 'LONG', // posiDirection 0 (verified via P&L math)
       leverage: 1,
       size: 7685.96, // position
       markPrice: null,
@@ -148,7 +148,7 @@ describe('parseLbankHistory', () => {
     expect(rows[0]).toMatchObject({
       kind: 'position_history',
       symbol: 'SPXUSDT',
-      side: null,
+      side: 'LONG', // posiDirection 0 (verified via P&L math)
       leverage: 1,
       size: 6830.52,
       entryPrice: 0.332,

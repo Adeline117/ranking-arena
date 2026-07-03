@@ -29,8 +29,10 @@
  *   stat/v1/position/history?…&startTime&endTime (SECONDS)  closed positions
  *   stat/v1/followers?current&size&traderId  copy traders (PII)
  *
- * posiDirection semantics are UNVERIFIED (CTP-style enum) → side stays null
- * with the raw field preserved; never guess (spec §5 accuracy-first).
+ * posiDirection VERIFIED 2026-07-03 against real closed-position P&L (open vs
+ * close price sign): 0 = LONG, 1 = SHORT (`direction` is the inverse). See
+ * lbankSide(). Previously left null, which crashed positions_current (NOT NULL
+ * side) → lbank had 0 open positions served.
  */
 
 import { createHash } from 'crypto'
@@ -73,6 +75,23 @@ function isoSec(secEpoch: unknown): string | null {
 
 function data(payload: unknown): unknown {
   return (payload as Dict)?.data
+}
+
+/**
+ * lbank direction (CTP-style). VERIFIED 2026-07-03 against real closed-position
+ * P&L (open vs close price sign): posiDirection 0 = LONG, 1 = SHORT
+ * (`direction` is the inverse: 1 = LONG, 0 = SHORT). Not a guess — derived from
+ * closeProfit math on production position_history. Fixes the null-side rows that
+ * crashed positions_current (NOT NULL) and enriches history side.
+ */
+function lbankSide(item: Dict): string | null {
+  const pd = item.posiDirection
+  if (pd === '0' || pd === 0) return 'LONG'
+  if (pd === '1' || pd === 1) return 'SHORT'
+  const d = item.direction
+  if (d === '1' || d === 1) return 'LONG'
+  if (d === '0' || d === 0) return 'SHORT'
+  return null
 }
 
 function pagedRecords(payload: unknown): { records: Dict[]; total: number | null } {
@@ -242,7 +261,7 @@ export function parseLbankPositions(raw: unknown, _ctx: ParseCtx): ParsedPositio
     if (!item.instrumentID) continue
     out.push({
       symbol: String(item.instrumentID),
-      side: null, // posiDirection semantics unverified — never guess
+      side: lbankSide(item), // posiDirection 0=LONG/1=SHORT (verified via P&L math)
       leverage: num(item.leverage),
       size: num(item.position),
       entryPrice: num(item.costPrice) ?? num(item.openPrice),
@@ -275,7 +294,7 @@ export function parseLbankPositionHistory(raw: unknown, _ctx: ParseCtx): ParsedH
       openedAt: isoSec(item.insertTime),
       closedAt: isoSec(item.closeTime),
       symbol: String(item.instrumentID),
-      side: null, // direction/posiDirection enums unverified
+      side: lbankSide(item), // posiDirection 0=LONG/1=SHORT (verified via P&L math)
       leverage: num(item.leverage),
       size: num(item.volume),
       entryPrice: num(item.positionOpenPrice) ?? num(item.openPrice),
