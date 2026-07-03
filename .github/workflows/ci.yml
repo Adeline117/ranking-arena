@@ -146,6 +146,14 @@ jobs:
       - name: Supabase typed-client bypass ratchet
         run: npm run qa:cast-ratchet
 
+      # 类型漂移门(header 一直声称有此 job 却从未接进 CI —— 2026-07 补齐)。
+      # 从生产重生成 database.types.ts + diff 已提交版本，有 diff = schema 变了没同步
+      # 类型 → tsc 对着陈旧类型校验会放过漂移。需 SUPABASE_ACCESS_TOKEN secret;未设则跳过。
+      - name: Types drift check (生产 schema vs 已提交类型)
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+        run: npm run gen:types:check
+
       - name: Migration lint — block dangerous DDL
         run: |
           CHANGED=$(git diff --name-only origin/main -- 'supabase/migrations/' 2>/dev/null || true)
