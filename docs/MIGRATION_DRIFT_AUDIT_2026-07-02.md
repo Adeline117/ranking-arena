@@ -1,7 +1,12 @@
-# 迁移漂移审计与对账方案（2026-07-02）
+# 迁移漂移审计与对账（2026-07-02）✅ 已完成
 
-> 差距报告 #5 的专项。**只读审计已完成**；对账（写生产 ledger）需你显式确认后执行。
+> 差距报告 #5 的专项。审计 + 对账**均已执行完成**。
 > 生产项目 = `iknktzifjdyujdccyhsv`（us-west-2）。
+>
+> **结果**：ledger 186→504（补记 317 + 并发 1）；全量验证 377 个仓库版本
+> **全部在 ledger**（`repo_versions_missing_from_ledger=0`），`supabase db push`
+> 已变 no-op，SEV1 footgun 消除。全程零 DDL，生产 schema 未被触碰，qa:schema 保持绿。
+> 可逆凭据：`DELETE ... WHERE created_by='ledger-reconcile-20260702'`。
 
 ## 一、结论先行（好消息）
 
