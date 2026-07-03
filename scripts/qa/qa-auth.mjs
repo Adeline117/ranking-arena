@@ -24,8 +24,30 @@ import path from 'node:path'
 
 export const QA_EMAIL = 'qa.button.test@arenafi.org'
 export const QA_USER_ID = '1c533890-01e8-4c34-a895-657f389ab4b2'
+export const QA_HANDLE = 'qa_button_test'
+// Second QA account (2026-07-02) — for user-to-user write flows (A follows/
+// comments-on B so a notification lands in a controlled QA inbox, never a real
+// user). is_pro=false so it can also exercise the ProGate LOCKED branch.
+export const QA_EMAIL_B = 'qa.button.test.b@arenafi.org'
+export const QA_USER_ID_B = '09755b88-e0ea-4d47-be3a-1fffb6646649'
+export const QA_HANDLE_B = 'qa_button_test_b'
 
-const PW_STATE_FILE = path.join(os.homedir(), '.arena-qa-password.json')
+// Account descriptor — password env + persisted-password file are per-account.
+export const ACCOUNT_A = {
+  email: QA_EMAIL,
+  userId: QA_USER_ID,
+  handle: QA_HANDLE,
+  pwEnv: 'QA_TEST_PASSWORD',
+  pwFile: path.join(os.homedir(), '.arena-qa-password.json'),
+}
+export const ACCOUNT_B = {
+  email: QA_EMAIL_B,
+  userId: QA_USER_ID_B,
+  handle: QA_HANDLE_B,
+  pwEnv: 'QA_TEST_PASSWORD_B',
+  pwFile: path.join(os.homedir(), '.arena-qa-password-b.json'),
+}
+
 const LOCK_DIR = '/tmp/arena-qa-auth.lock.d'
 const LOCK_DEADLINE_MS = 60_000
 const FETCH_TIMEOUT_MS = 30_000
@@ -93,28 +115,28 @@ export async function withQaAuthLock(fn) {
   }
 }
 
-function persistedPassword() {
+function persistedPassword(account) {
   try {
-    return JSON.parse(fs.readFileSync(PW_STATE_FILE, 'utf8')).password || null
+    return JSON.parse(fs.readFileSync(account.pwFile, 'utf8')).password || null
   } catch {
     return null
   }
 }
 
-function persistPassword(pw) {
+function persistPassword(account, pw) {
   fs.writeFileSync(
-    PW_STATE_FILE,
+    account.pwFile,
     JSON.stringify({ password: pw, updated_at: new Date().toISOString() }, null, 2),
     { mode: 0o600 }
   )
 }
 
-async function tryLogin(supaUrl, anon, pw) {
+async function tryLogin(supaUrl, anon, pw, email) {
   if (!pw) return null
   const res = await tfetch(`${supaUrl}/auth/v1/token?grant_type=password`, {
     method: 'POST',
     headers: { apikey: anon, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ email: QA_EMAIL, password: pw }),
+    body: JSON.stringify({ email, password: pw }),
   })
   const body = await res.json().catch(() => null)
   return body?.access_token ? body : null
@@ -136,13 +158,19 @@ export async function qaAuthStatus(supaUrl, anon, accessToken) {
  * 拿一个 QA session（GoTrue token response 全量对象）。
  * 正常路径纯 password-grant；密码全部失效才在互斥锁内 admin 重置（并持久化新密码）。
  */
-export async function loginQa({ supaUrl, anon, srk, log = (m) => console.log(m) }) {
+export async function loginQa({
+  supaUrl,
+  anon,
+  srk,
+  log = (m) => console.log(m),
+  account = ACCOUNT_A,
+}) {
   const attemptAll = async () => {
     const seen = new Set()
-    for (const pw of [readEnv('QA_TEST_PASSWORD', { optional: true }), persistedPassword()]) {
+    for (const pw of [readEnv(account.pwEnv, { optional: true }), persistedPassword(account)]) {
       if (!pw || seen.has(pw)) continue
       seen.add(pw)
-      const s = await tryLogin(supaUrl, anon, pw)
+      const s = await tryLogin(supaUrl, anon, pw, account.email)
       if (s) return s
     }
     return null
@@ -156,18 +184,20 @@ export async function loginQa({ supaUrl, anon, srk, log = (m) => console.log(m) 
     const retry = await attemptAll()
     if (retry) return retry
 
-    const envPw = readEnv('QA_TEST_PASSWORD', { optional: true })
+    const envPw = readEnv(account.pwEnv, { optional: true })
     const pw = envPw || crypto.randomBytes(18).toString('base64')
-    log('⚠ qa-auth: 持久化密码登录失败 — admin 重置 QA 密码（该账号全部既存 session 将被吊销）')
-    const resetRes = await tfetch(`${supaUrl}/auth/v1/admin/users/${QA_USER_ID}`, {
+    log(
+      `⚠ qa-auth: 持久化密码登录失败 — admin 重置 QA 密码 [${account.email}]（该账号全部既存 session 将被吊销）`
+    )
+    const resetRes = await tfetch(`${supaUrl}/auth/v1/admin/users/${account.userId}`, {
       method: 'PUT',
       headers: { apikey: srk, Authorization: `Bearer ${srk}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pw }),
     })
     if (!resetRes.ok)
       throw new Error(`QA 密码重置失败 ${resetRes.status}: ${await resetRes.text()}`)
-    persistPassword(pw)
-    const s = await tryLogin(supaUrl, anon, pw)
+    persistPassword(account, pw)
+    const s = await tryLogin(supaUrl, anon, pw, account.email)
     if (!s) throw new Error('QA 登录失败（密码重置后 password grant 仍失败）')
     return s
   })
