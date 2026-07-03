@@ -1,0 +1,148 @@
+# OpenClaw 诊断哨兵 — Mac Mini 冗余（企业级差距 Phase 2 / #2 单点消除）
+#
+# 把只读诊断类 openclaw 脚本加成 GH Actions schedule，与 Mac Mini 的 OpenClaw
+# cron 错峰冗余：Mac Mini down 时监控/告警继续（同 health-monitor.yml 的 M-17）。
+# 全部用现有 GH secrets，零新凭据。抓取类脚本(住宅 IP 反封锁)不在此——必须留本地。
+#
+# 每个 job continue-on-error 独立、各自 Telegram 告警；手动 workflow_dispatch 跑全部。
+# 脚本内 dotenv 读 ../../.env 在 CI 无该文件时静默 no-op，改用下方 env: 注入。
+
+name: OpenClaw Sentinels
+
+on:
+  schedule:
+    - cron: '10,40 * * * *' # pipeline-health（错峰 health-monitor 的 15,45 / OpenClaw 的 0,30）
+    - cron: '5 */6 * * *' # scraper-health 每 6h
+    - cron: '0 9 * * 1' # weekly-metrics 周一 09:00 UTC
+    - cron: '30 6 * * *' # schema-canary 每日 06:30 UTC（错峰 Mac Mini 本地 07:30）
+    - cron: '0 8 * * *' # daily-pipeline-report 每日 08:00 UTC
+    - cron: '20 7 * * *' # ux-patrol 每日 07:20 UTC
+  workflow_dispatch: {}
+
+concurrency:
+  group: openclaw-sentinels-${{ github.event.schedule || 'manual' }}
+  cancel-in-progress: false
+
+env:
+  ARENA_URL: https://www.arenafi.org
+
+jobs:
+  pipeline-health:
+    # 30min 错峰 或 手动
+    if: github.event.schedule == '10,40 * * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - name: pipeline-health-monitor
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+        run: node scripts/openclaw/pipeline-health-monitor.mjs
+
+  scraper-health:
+    if: github.event.schedule == '5 */6 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - name: check-scraper-health
+        continue-on-error: true
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+        run: node scripts/openclaw/check-scraper-health.mjs
+
+  weekly-metrics:
+    if: github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - name: weekly-metrics
+        continue-on-error: true
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+        run: node scripts/openclaw/weekly-metrics.mjs
+
+  schema-canary:
+    if: github.event.schedule == '30 6 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - name: schema-canary-sentinel（契约 + 写路径金丝雀，自清理）
+        continue-on-error: true
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: node scripts/openclaw/schema-canary-sentinel.mjs
+
+  daily-pipeline-report:
+    if: github.event.schedule == '0 8 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - name: daily-pipeline-report
+        continue-on-error: true
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+        run: node scripts/openclaw/daily-pipeline-report.mjs
+
+  ux-patrol:
+    if: github.event.schedule == '20 7 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - name: ux-patrol
+        continue-on-error: true
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+        run: node scripts/openclaw/ux-patrol.mjs
