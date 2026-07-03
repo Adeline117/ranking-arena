@@ -19,7 +19,7 @@ export async function warmupLeaderboardCache(
   // Pre-populate the exact cache keys that /api/traders uses
   // Key pattern: leaderboard:{season}:{exchange}:{sort}:{order}:{cursor}:{limit}
   const defaultLimit = 50
-  const warmupTargets = SEASONS.map(season => ({
+  const warmupTargets = SEASONS.map((season) => ({
     season,
     key: `leaderboard:${season}:all:arena_score:desc:start:${defaultLimit}`,
   }))
@@ -28,7 +28,9 @@ export async function warmupLeaderboardCache(
     warmupTargets.map(async ({ season, key }) => {
       const { data, error } = await supabase
         .from('leaderboard_ranks')
-        .select('source, source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, handle, avatar_url, followers, trades_count, sharpe_ratio, trader_type, market_type, season_id')
+        .select(
+          'source, source_trader_id, rank, arena_score, roi, pnl, win_rate, max_drawdown, handle, avatar_url, followers, trades_count, sharpe_ratio, trader_type, season_id'
+        ) // leaderboard_ranks 无 market_type 列
         .eq('season_id', season)
         .not('arena_score', 'is', null)
         .gt('arena_score', 0)
