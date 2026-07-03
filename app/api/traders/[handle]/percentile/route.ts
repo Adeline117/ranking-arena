@@ -21,11 +21,11 @@ import _logger from '@/lib/logger'
 export const runtime = 'nodejs'
 
 interface PercentileData {
-  overall: number      // 总分百分位
-  return: number       // 收益分百分位
-  drawdown: number     // 回撤分百分位
-  stability: number    // 稳定分百分位
-  totalInCategory: number  // 同类交易员总数
+  overall: number // 总分百分位
+  return: number // 收益分百分位
+  drawdown: number // 回撤分百分位
+  stability: number // 稳定分百分位
+  totalInCategory: number // 同类交易员总数
 }
 
 /**
@@ -36,7 +36,7 @@ async function calculatePercentileSQL(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   column: string,
   myScore: number | null,
-  categoryFilter: string,
+  categoryFilter: string
 ): Promise<number> {
   if (myScore == null) return 50
 
@@ -107,7 +107,11 @@ export async function GET(
     // Get trader scores from leaderboard_ranks
     const { data: traderScores, error: traderError } = await supabase
       .from('leaderboard_ranks')
-      .select('arena_score, return_score, drawdown_score, stability_score')
+      // 三支柱模型 profitability/risk_control/execution = 旧命名 return/drawdown/stability
+      // (storage.ts:173 confirmed profitability_score←return_score)。别名保持返回 key。
+      .select(
+        'arena_score, return_score:profitability_score, drawdown_score:risk_control_score, stability_score:execution_score'
+      )
       .eq('source', resolved.platform)
       .eq('source_trader_id', resolved.traderKey)
       .eq('season_id', '90D')
@@ -145,16 +149,32 @@ export async function GET(
           drawdown: 50,
           stability: 50,
           totalInCategory: 0,
-        }
+        },
       })
     }
 
     // Calculate all percentiles in parallel using COUNT queries (not fetching all rows)
     const [overall, returnPct, drawdown, stability] = await Promise.all([
       calculatePercentileSQL(supabase, 'arena_score', traderScores.arena_score, categoryFilter),
-      calculatePercentileSQL(supabase, 'return_score', traderScores.return_score, categoryFilter),
-      calculatePercentileSQL(supabase, 'drawdown_score', traderScores.drawdown_score, categoryFilter),
-      calculatePercentileSQL(supabase, 'stability_score', traderScores.stability_score, categoryFilter),
+      // 列名传真实列(profitability/risk_control/execution)；值经上面别名取到
+      calculatePercentileSQL(
+        supabase,
+        'profitability_score',
+        traderScores.return_score,
+        categoryFilter
+      ),
+      calculatePercentileSQL(
+        supabase,
+        'risk_control_score',
+        traderScores.drawdown_score,
+        categoryFilter
+      ),
+      calculatePercentileSQL(
+        supabase,
+        'execution_score',
+        traderScores.stability_score,
+        categoryFilter
+      ),
     ])
 
     const percentile: PercentileData = {
