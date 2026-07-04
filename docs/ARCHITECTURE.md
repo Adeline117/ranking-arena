@@ -146,3 +146,18 @@ graph TD
 | 缓存预设           | `lib/hooks/cache-presets.ts`                                                            |
 | Auth 原语          | `lib/api/with-cron.ts`/`with-admin-auth.ts`/`auth.ts`/`lib/auth/`                       |
 | 数据获取           | Server `lib/data/*`；Client `lib/hooks/use*`（React Query）；Cache `lib/cache/redis.ts` |
+
+## 七、安全横切基建
+
+除全表 RLS（Supabase policies）外，安全原语分布如下（`middleware.ts` 级 CSP/CORS
+在 `middleware.ts` 之外由 Next 配置 + 各 API wrapper 承担）：
+
+| 措施         | 实现                | 位置                          |
+| ------------ | ------------------- | ----------------------------- |
+| XSS 消毒     | DOMPurify           | `lib/utils/sanitize.ts`       |
+| 限流         | Upstash Ratelimit   | `lib/utils/rate-limit.ts`     |
+| API key 加密 | AES-256-GCM（静态） | `lib/exchange/encryption.ts`  |
+| 行级安全     | RLS                 | Supabase policies（全表启用） |
+
+API 鉴权默认拒绝兜底见 DECISIONS ADR-012；`qa:api-auth` CI 门禁强制每 route 有
+auth 原语或登记公开白名单。

@@ -8,13 +8,13 @@
 
 ## Core
 
-| Document                                                       | Description                                          |
-| -------------------------------------------------------------- | ---------------------------------------------------- |
-| [../CLAUDE.md](../CLAUDE.md)                                   | Project constitution and dev guidelines (start here) |
-| [architecture/ARCHITECTURE.md](./architecture/ARCHITECTURE.md) | System architecture diagrams and data flow           |
-| [../CONTRIBUTING.md](../CONTRIBUTING.md)                       | Code style, commit format, PR process                |
-| [GIT_WORKFLOW.md](./GIT_WORKFLOW.md)                           | Branch strategy and team collaboration workflow      |
-| [../DECISIONS.md](../DECISIONS.md)                             | Architecture Decision Records (ADRs)                 |
+| Document                                 | Description                                          |
+| ---------------------------------------- | ---------------------------------------------------- |
+| [../CLAUDE.md](../CLAUDE.md)             | Project constitution and dev guidelines (start here) |
+| [ARCHITECTURE.md](./ARCHITECTURE.md)     | System architecture diagrams and data flow           |
+| [../CONTRIBUTING.md](../CONTRIBUTING.md) | Code style, commit format, PR process                |
+| [GIT_WORKFLOW.md](./GIT_WORKFLOW.md)     | Branch strategy and team collaboration workflow      |
+| [DECISIONS.md](./DECISIONS.md)           | Architecture Decision Records (ADRs)                 |
 
 ## API & Data
 

@@ -1,3 +1,5 @@
+> **ARCHIVED LEGACY DOC** (moved here 2026-07-03 during docs consolidation). Describes the pre-2026-06 `lib/connectors` + `trader_snapshots_v2` pipeline, superseded by the arena ingest worker. Current architecture: `docs/ARCHITECTURE.md`. Kept for historical reference only — do NOT treat as current.
+
 # Arena Data Architecture (March 2026)
 
 > ⚠️ **LEGACY (pre-2026-06).** This document describes the original `lib/connectors`

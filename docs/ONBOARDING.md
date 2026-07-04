@@ -124,7 +124,7 @@ Read in this order, don't skip:
 
 | File                                                       | When to read                                                       |
 | ---------------------------------------------------------- | ------------------------------------------------------------------ |
-| [DECISIONS.md](../DECISIONS.md)                            | When you wonder "why was it built this way?"                       |
+| [DECISIONS.md](./DECISIONS.md)                             | When you wonder "why was it built this way?"                       |
 | [RUNBOOK.md](./RUNBOOK.md)                                 | Before touching anything in production (has real IPs and commands) |
 | [SCRAPER.md](./SCRAPER.md)                                 | Before touching the data pipeline or exchange connectors           |
 | [API_BEST_PRACTICES.md](./API_BEST_PRACTICES.md)           | Before writing a new API route                                     |
