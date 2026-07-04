@@ -1,5 +1,11 @@
 # 漂移暴露的功能状态 — cut / finish / fix 台账（2026-07-03）
 
+> **RESOLVED 2026-07-03：competitions 产品已拍板 → 彻底删除**（commit `3ad6ac934`）。
+> 用户确认它是 AI 随手生成的空壳，产品方向是后续的「对战」放置游戏（独立 schema）。
+> 已删：页面/API/cron 代码、i18n 四语言、feature flag、sitemap、QA sweep 路由、
+> `competitions`+`competition_entries` 两表（迁移 `20260703032237`，0 行无数据丢失）。
+> 下文 competitions 相关分析保留作历史记录。其余功能状态仍有效。
+
 > 长期最优 #3「砍掉或补完半死功能」的核查结论。列漂移扫描(qa:insert-drift)把一批
 > code↔schema 大分叉的功能顶了出来。核查可达性后发现：**没有真正"废弃可删"的功能**——
 > 它们是 live / 预上线 / 计划中三态。**因此不做单方面删除（删预上线/计划功能是产品决策，
