@@ -638,7 +638,11 @@ export function useRankingFilters({
     if (!activePreset || activePreset === 'all') return exchangeFiltered
     const presetConfig = PRESETS.find((p) => p.id === activePreset)
     if (!presetConfig) return exchangeFiltered
-    const raw = exchangeFiltered.filter((trader) => presetConfig.filter({ source: trader.source }))
+    // 传完整 trader(2026-07-03 修复):此前只传 { source },low_risk/high_pnl/
+    // consistent/top_scorers 四个 metric 预设拿到 undefined 全部 false →
+    // 空结果回退放行全部 + 下方 effect 自动清除预设 = 4/8 预设彻底失效。
+    // Trader 与 FilterableTrader 字段同名(pnl/win_rate/max_drawdown/arena_score/source)。
+    const raw = exchangeFiltered.filter((trader) => presetConfig.filter(trader))
     return raw.length === 0 && exchangeFiltered.length > 0 ? exchangeFiltered : raw
   }, [activePreset, exchangeFiltered])
 
@@ -648,9 +652,7 @@ export function useRankingFilters({
     if (activePreset && activePreset !== 'all' && exchangeFiltered.length > 0) {
       const presetConfig = PRESETS.find((p) => p.id === activePreset)
       if (presetConfig) {
-        const hasMatch = exchangeFiltered.some((trader) =>
-          presetConfig.filter({ source: trader.source })
-        )
+        const hasMatch = exchangeFiltered.some((trader) => presetConfig.filter(trader))
         if (!hasMatch) {
           setActivePreset(null)
           try {
