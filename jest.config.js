@@ -35,12 +35,12 @@ const customJestConfig = {
     global: {
       // Ratchet: set just below current levels so coverage can only go UP.
       // Raise these after each coverage improvement. Never lower them.
-      // Current (2026-07-03 batch 19): statements 23.3%, branches 21.59%, lines 23.49%, functions 18.33%
-      // (+capabilities/circuit-breaker/pending-referral batches; 4 real bugs found+fixed this session)
-      branches: 21.5,
-      functions: 18.3,
-      lines: 23.4,
-      statements: 23.2,
+      // Current (2026-07-03 batch 20+API): statements 23.97%, branches 22.08%, lines 24.2%, functions 18.84%
+      // (+staging count-check/trader-schema/portfolio-builder + lib/api admin-gate/csrf/pagination/etag)
+      branches: 22,
+      functions: 18.8,
+      lines: 24.1,
+      statements: 23.9,
     },
   },
 }
