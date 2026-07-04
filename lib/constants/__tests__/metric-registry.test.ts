@@ -2,7 +2,16 @@ import {
   promoteExtrasMetrics,
   displayableMetrics,
   EXTRAS_PROMOTABLE_KEYS,
+  METRIC_REGISTRY,
 } from '../metric-registry'
+import {
+  EXPECTED_METRICS,
+  EXPECTED_METRICS_BY_SOURCE,
+} from '@/lib/ingest/adapters/expected-metrics'
+import en from '@/lib/i18n/en'
+import zh from '@/lib/i18n/zh'
+import ja from '@/lib/i18n/ja'
+import ko from '@/lib/i18n/ko'
 
 describe('promoteExtrasMetrics', () => {
   it('borrows registry metrics from extras aliases when the column is NULL', () => {
@@ -60,5 +69,36 @@ describe('promoteExtrasMetrics', () => {
     const stats = Object.fromEntries(EXTRAS_PROMOTABLE_KEYS.map((k) => [k, 1]))
     const defs = displayableMetrics(EXTRAS_PROMOTABLE_KEYS, stats)
     expect(defs.map((d) => d.key).sort()).toEqual([...EXTRAS_PROMOTABLE_KEYS].sort())
+  })
+})
+
+describe('registry completeness (P2a of the data-completeness system)', () => {
+  it('every adapter-declared metric has a registry entry — captured must be displayable', () => {
+    // A metric an adapter promises to capture (expected-metrics contract) but
+    // the registry never lists can be ingested perfectly and still NEVER
+    // render — the frontend only draws registry entries. New metric = one
+    // registry entry, enforced here.
+    const registryKeys = new Set(METRIC_REGISTRY.map((d) => d.key))
+    const declared = new Set(
+      [...Object.values(EXPECTED_METRICS), ...Object.values(EXPECTED_METRICS_BY_SOURCE)].flat()
+    )
+    const unrenderable = [...declared].filter((m) => !registryKeys.has(m))
+    expect(unrenderable).toEqual([])
+  })
+
+  it('every registry i18nKey exists in all four locales (en/zh/ja/ko)', () => {
+    const locales: Array<[string, Record<string, unknown>]> = [
+      ['en', en as Record<string, unknown>],
+      ['zh', zh as Record<string, unknown>],
+      ['ja', ja as Record<string, unknown>],
+      ['ko', ko as Record<string, unknown>],
+    ]
+    const missing: string[] = []
+    for (const def of METRIC_REGISTRY) {
+      for (const [name, dict] of locales) {
+        if (!(def.i18nKey in dict)) missing.push(`${def.key}: ${def.i18nKey} missing in ${name}`)
+      }
+    }
+    expect(missing).toEqual([])
   })
 })
