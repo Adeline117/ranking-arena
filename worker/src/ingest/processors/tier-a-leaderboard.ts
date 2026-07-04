@@ -20,6 +20,7 @@ import type {
 } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
+import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { validateLeaderboardRows } from '@/lib/ingest/staging/validate'
 import { publishBoardSeries, publishLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
 import type { TierJobData } from '../queues'
@@ -61,6 +62,13 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
         payload: pages,
         meta: { pageCount: pages.length },
       })
+
+      // Upstream field radar (P1): sample the first page's shape while it's
+      // still in memory (RAW blobs aren't SQL-queryable). Fire-and-forget —
+      // observation must never break the crawl.
+      if (pages.length > 0) {
+        recordFieldInventory(src.id, 'tier_a', pages[0].payload).catch(() => {})
+      }
 
       const ctx: ParseCtx = {
         sourceSlug: src.slug,
