@@ -35,13 +35,13 @@ const customJestConfig = {
     global: {
       // Ratchet: set just below current levels so coverage can only go UP.
       // Raise these after each coverage improvement. Never lower them.
-      // Current (2026-07-03 冲30% Wave 1): statements 25.69%, branches 24.02%, lines 25.87%, functions 20.89%
-      // (validation/normalizer/6 stores/trader-utils/contract-detector/health-monitor/arbitrage/bridge;
-      //  Wave 1 顺带修复 arbitrage getRate 方向 bug——本会话第 5 个真 bug)
-      branches: 23.9,
-      functions: 20.8,
-      lines: 25.8,
-      statements: 25.6,
+      // Current (2026-07-03 冲30% Wave 2): statements 26.28%, branches 24.57%, lines 26.48%, functions 21.39%
+      // (+posts-weighted/data-source-priority/hot-score/personal/hashtags/trader-utils;
+      //  Wave 2 修复两个真 bug:posts-weighted 幻影 .join() 必 500、hashtags CJK 标签静默丢失)
+      branches: 24.5,
+      functions: 21.3,
+      lines: 26.4,
+      statements: 26.2,
     },
   },
 }
