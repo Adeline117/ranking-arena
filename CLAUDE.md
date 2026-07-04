@@ -3,7 +3,7 @@
 ## Session Start Checklist
 
 **Quick fix** (small bug, one file): Just read this file (CLAUDE.md)
-**Feature work**: Also read `PROGRESS.md` + `TASKS.md`
+**Feature work**: Also read `docs/PROGRESS.md` + `docs/TASKS.md`
 **Architecture change**: Also read `docs/DECISIONS.md`（ADR：为什么这么做）+ `docs/ARCHITECTURE.md`（数据流/拓扑图）
 
 > 运维知识索引（降巴士系数，2026-07）：本文件是铁律**摘要 + 操作性 guardrail**；
@@ -424,7 +424,7 @@ See `.claude/ARENA_SKILL_SYSTEM.md` for full list of agents, skills, and slash c
 | CEO               | `/plan-ceo-review` | Challenge premises, 10-star vision, scope decision             |
 | Eng Manager       | `/plan-eng-review` | Architecture, code quality, tests, performance (gates `/ship`) |
 | Designer (audit)  | `/design-audit`    | 80-item visual audit, 10 categories, A-F grades                |
-| Designer (system) | `/design-system`   | Full design system proposal + DESIGN.md                        |
+| Designer (system) | `/design-system`   | Full design system proposal + docs/DESIGN.md                   |
 | Release Manager   | `/ship`            | Merge base → test → version bump → CHANGELOG → PR              |
 | QA Lead (fix)     | `/qa`              | Test + auto-fix + atomic commits + health score                |
 | QA Lead (report)  | `/qa-report`       | Same testing, report only, no code changes                     |
@@ -470,7 +470,7 @@ Key commands: `/fix-pipeline`, `/debug-cron`, `/deploy-staging`, `/implement-spe
 
 1. **No one-shot features** - Break into subtasks, commit after each
 2. **E2E verification required** - After each feature, verify it works end-to-end
-3. **Sprint scope only** - Focus on current sprint tasks (see TASKS.md)
+3. **Sprint scope only** - Focus on current sprint tasks (see docs/TASKS.md)
 4. **Test before done** - Run `npm run type-check && npm run test` before claiming complete
 
 ### Post-Push Verification (MANDATORY — 铁律)
@@ -492,10 +492,10 @@ scripts/post-deploy-check.sh
 
 ### Failure Prevention
 
-- If context getting full, summarize progress to PROGRESS.md, then `/clear`
+- If context getting full, summarize progress to docs/PROGRESS.md, then `/clear`
 - Each feature on separate git branch: `git checkout -b feature/xxx`
 - If stuck > 3 attempts, ask user for clarification
-- Update PROGRESS.md after completing any significant work
+- Update docs/PROGRESS.md after completing any significant work
 
 ### Verification Loop
 
@@ -609,7 +609,7 @@ try {
 | **CEO product review** | `/plan-ceo-review`                                |
 | **Eng manager review** | `/plan-eng-review` (gates `/ship`)                |
 | **Design audit**       | `/design-audit` (report-only, 80 checks)          |
-| **Design system**      | `/design-system` (creates DESIGN.md)              |
+| **Design system**      | `/design-system` (creates docs/DESIGN.md)         |
 | **Ship release**       | `/ship` (test → version bump → CHANGELOG → PR)    |
 | **QA test + fix**      | `/qa` (quick/standard/exhaustive)                 |
 | **QA report only**     | `/qa-report` (no code changes)                    |

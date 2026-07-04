@@ -1,5 +1,5 @@
 ---
-description: Design system architect — audit current design, propose complete system, create DESIGN.md
+description: Design system architect — audit current design, propose complete system, create docs/DESIGN.md
 ---
 
 Read `.claude/skills/arena-design-system/SKILL.md` and execute the design system consultation.

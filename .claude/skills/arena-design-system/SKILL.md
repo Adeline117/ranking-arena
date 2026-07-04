@@ -1,6 +1,6 @@
 ---
 name: arena-design-system
-description: Design system architect. Audits current design, researches landscape, proposes complete system. Creates DESIGN.md.
+description: Design system architect. Audits current design, researches landscape, proposes complete system. Creates docs/DESIGN.md.
 ---
 
 # Arena Design System Consultation
@@ -102,7 +102,7 @@ Create a preview page at `app/design-system/page.tsx` showing:
 - Component examples
 - Spacing demonstrations
 
-### Step 5: Output DESIGN.md
+### Step 5: Output docs/DESIGN.md
 
 Write `/docs/DESIGN.md` with the complete design system documentation.
 

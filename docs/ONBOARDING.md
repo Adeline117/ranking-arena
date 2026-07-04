@@ -117,8 +117,8 @@ Read in this order, don't skip:
 | 1     | [CLAUDE.md](../CLAUDE.md)             | 30 min | **The most important file.** Architecture, directory layout, database schema, coding conventions, mandatory patterns, key commands — everything is here |
 | 2     | [CONTRIBUTING.md](../CONTRIBUTING.md) | 5 min  | Code style, commit message format, PR process                                                                                                           |
 | 3     | [GIT_WORKFLOW.md](./GIT_WORKFLOW.md)  | 5 min  | Branch strategy, how we collaborate as a team                                                                                                           |
-| 4     | [PROGRESS.md](../PROGRESS.md)         | 10 min | What happened recently, current state of things                                                                                                         |
-| 5     | [TASKS.md](../TASKS.md)               | 10 min | Task backlog and priorities — what to work on next                                                                                                      |
+| 4     | [PROGRESS.md](./PROGRESS.md)          | 10 min | What happened recently, current state of things                                                                                                         |
+| 5     | [TASKS.md](./TASKS.md)                | 10 min | Task backlog and priorities — what to work on next                                                                                                      |
 
 ### First Week — Read When Relevant
 
@@ -252,7 +252,7 @@ gh pr create --title "fix: describe what you changed" --body "## Summary\n- ..."
 # 7. After merge, wait for Vercel deploy (5-8 min), then check live site
 ```
 
-Look in [TASKS.md](../TASKS.md) for a P2/P3 task, or ask Adeline which one is good for getting started.
+Look in [TASKS.md](./TASKS.md) for a P2/P3 task, or ask Adeline which one is good for getting started.
 
 For the full git workflow details, see [GIT_WORKFLOW.md](./GIT_WORKFLOW.md).
 

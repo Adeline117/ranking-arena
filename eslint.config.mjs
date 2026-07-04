@@ -22,19 +22,19 @@ const baseRestrictedSyntax = [
   {
     selector: "Property[key.name='fontSize'][value.type='Literal'][value.raw=/^[0-9]/]",
     message:
-      'Hardcoded fontSize. Use tokens.typography.fontSize.* (xs=12, sm=13, base=14, md=16, lg=18, xl=20, 2xl=24, hero=28). See DESIGN.md.',
+      'Hardcoded fontSize. Use tokens.typography.fontSize.* (xs=12, sm=13, base=14, md=16, lg=18, xl=20, 2xl=24, hero=28). See docs/DESIGN.md.',
   },
   // Prevent hardcoded borderRadius (use tokens.radius.*)
   {
     selector: "Property[key.name='borderRadius'][value.type='Literal'][value.raw=/^[0-9]/]",
     message:
-      'Hardcoded borderRadius. Use tokens.radius.* (sm=6, md=10, lg=14, xl=18, full=9999). See DESIGN.md.',
+      'Hardcoded borderRadius. Use tokens.radius.* (sm=6, md=10, lg=14, xl=18, full=9999). See docs/DESIGN.md.',
   },
   // Prevent hardcoded fontWeight (use tokens.typography.fontWeight.*)
   {
     selector: "Property[key.name='fontWeight'][value.type='Literal'][value.raw=/^[0-9]/]",
     message:
-      'Hardcoded fontWeight. Use tokens.typography.fontWeight.* (normal=400, medium=500, semibold=600, bold=700, black=900). See DESIGN.md.',
+      'Hardcoded fontWeight. Use tokens.typography.fontWeight.* (normal=400, medium=500, semibold=600, bold=700, black=900). See docs/DESIGN.md.',
   },
 ]
 
@@ -47,12 +47,12 @@ const appRestrictedSyntax = [
   {
     selector: "Property[value.type='Literal'][value.value=/#[0-9a-fA-F]{3,8}\\b/]",
     message:
-      'Raw hex color. Use tokens.colors.* or a --color-* CSS variable so theming stays intact. See DESIGN.md.',
+      'Raw hex color. Use tokens.colors.* or a --color-* CSS variable so theming stays intact. See docs/DESIGN.md.',
   },
   {
     selector: 'TemplateElement[value.raw=/#[0-9a-fA-F]{3,8}\\b/]',
     message:
-      'Raw hex color in template string. Use tokens.colors.* or var(--color-*). See DESIGN.md.',
+      'Raw hex color in template string. Use tokens.colors.* or var(--color-*). See docs/DESIGN.md.',
   },
   {
     selector:
@@ -70,12 +70,12 @@ const appWarnOnlySyntax = [
   {
     selector: "Property[value.type='Literal'][value.value=/rgba?\\(\\s*[0-9]/]",
     message:
-      'Raw rgb()/rgba() color. Use a --color-* CSS variable or color-mix(in srgb, var(--x) n%, transparent). See DESIGN.md.',
+      'Raw rgb()/rgba() color. Use a --color-* CSS variable or color-mix(in srgb, var(--x) n%, transparent). See docs/DESIGN.md.',
   },
   {
     selector: 'TemplateElement[value.raw=/rgba?\\(\\s*[0-9]/]',
     message:
-      'Raw rgb()/rgba() in template string. Use var(--color-*) or color-mix(). See DESIGN.md.',
+      'Raw rgb()/rgba() in template string. Use var(--color-*) or color-mix(). See docs/DESIGN.md.',
   },
   {
     selector:

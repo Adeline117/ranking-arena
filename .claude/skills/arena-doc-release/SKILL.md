@@ -1,6 +1,6 @@
 ---
 name: arena-doc-release
-description: Post-ship documentation update. Reads all docs, cross-references diff, updates README/CLAUDE.md/CHANGELOG/PROGRESS.md to match what shipped.
+description: Post-ship documentation update. Reads all docs, cross-references diff, updates README/CLAUDE.md/CHANGELOG/docs/PROGRESS.md to match what shipped.
 ---
 
 # Arena Document Release
@@ -38,8 +38,8 @@ Categorize changes:
 Read these files and note any discrepancies:
 - `README.md`
 - `CLAUDE.md`
-- `PROGRESS.md`
-- `TASKS.md`
+- `docs/PROGRESS.md`
+- `docs/TASKS.md`
 - `CHANGELOG.md`
 - `docs/DESIGN.md` (if exists)
 - `docs/ARCHITECTURE.md` (if exists)
@@ -57,12 +57,12 @@ Read these files and note any discrepancies:
 - Update "Known Issues" if issues resolved or new ones found
 - Update "Quick Reference" table
 
-#### PROGRESS.md Updates
+#### docs/PROGRESS.md Updates
 - Move completed items to "Recently Completed"
 - Update "Current Sprint Focus"
 - Archive items older than 2 weeks
 
-#### TASKS.md Updates
+#### docs/TASKS.md Updates
 - Mark completed tasks as done
 - Remove tasks that are no longer relevant
 - Add new tasks discovered during the ship
@@ -97,7 +97,7 @@ Check if any changes affect the memory system:
 ### Step 6: Commit
 
 ```bash
-git add CLAUDE.md PROGRESS.md TASKS.md CHANGELOG.md README.md docs/
+git add CLAUDE.md docs/PROGRESS.md docs/TASKS.md CHANGELOG.md README.md docs/
 git commit -m "docs: post-ship documentation sync
 
 Updated docs to reflect recent changes:
@@ -113,8 +113,8 @@ Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>"
 
 ## Documents Updated
 - [x] CLAUDE.md: [what changed]
-- [x] PROGRESS.md: [what changed]
-- [ ] TASKS.md: no changes needed
+- [x] docs/PROGRESS.md: [what changed]
+- [ ] docs/TASKS.md: no changes needed
 - [x] CHANGELOG.md: [version]
 
 ## TODOs Cleaned
