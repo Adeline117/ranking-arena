@@ -8,7 +8,10 @@
  */
 
 import { getActiveSources, getServingSourceNames } from '@/lib/ingest/sources'
-import { EXPECTED_METRICS } from '@/lib/ingest/adapters/expected-metrics'
+import {
+  EXPECTED_METRICS,
+  EXPECTED_METRICS_BY_SOURCE,
+} from '@/lib/ingest/adapters/expected-metrics'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getConnection } from '../connection'
 import {
@@ -288,7 +291,7 @@ async function syncExpectedMetrics(
 ): Promise<void> {
   for (const src of sources) {
     try {
-      const declared = EXPECTED_METRICS[src.adapter_slug]
+      const declared = EXPECTED_METRICS_BY_SOURCE[src.slug] ?? EXPECTED_METRICS[src.adapter_slug]
       if (!declared || declared.length === 0) continue
       const current = src.meta?.expected_metrics
       if (JSON.stringify(current) === JSON.stringify(declared)) continue
