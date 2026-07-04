@@ -32,7 +32,7 @@ Full documentation and API keys: [arenafi.org/api-docs](https://www.arenafi.org/
 
 Arena aggregates, normalizes, and ranks 34,000+ crypto traders across 35+ centralized and decentralized exchanges. Every trader receives an Arena Score, a composite metric combining ROI and absolute PnL on a 0-100 scale, allowing apples-to-apples comparison regardless of the originating platform. The system ingests data continuously through 53 scheduled cron jobs via 42 exchange connectors, enriches trader profiles with equity curves, position history, and advanced statistics, and serves the results through a Next.js 16 frontend with ISR and edge caching.
 
-Beyond rankings, Arena provides a 60,000+ item educational library (books, research papers, whitepapers), real-time market data via TradingView WebSocket, community features (groups, posts, comments, reputation-gated access), trading competitions, on-chain attestation via EAS, and a Pro membership tier. The platform supports 4 languages (English, Chinese, Japanese, Korean) and runs on both web and native mobile (iOS/Android via Capacitor).
+Beyond rankings, Arena provides a 60,000+ item educational library (books, research papers, whitepapers), real-time market data via TradingView WebSocket, community features (groups, posts, comments, reputation-gated access), on-chain attestation via EAS, and a Pro membership tier. The platform supports 4 languages (English, Chinese, Japanese, Korean) and runs on both web and native mobile (iOS/Android via Capacitor).
 
 ## Features
 
@@ -103,7 +103,6 @@ Each trader profile includes:
 - User level progression (food chain theme): Krill, Sardine, Dolphin, Shark, Orca
 - Following system with activity feeds
 - Ranking change notifications and trader alerts
-- Trading competitions
 
 ### Library
 
@@ -257,7 +256,6 @@ The data pipeline consists of 53 Vercel cron jobs organized into several categor
 | `daily-digest`             | Daily 00:02 UTC   | Generate daily digest                |
 | `weekly-report`            | Mondays 08:00 UTC | Generate weekly pipeline report      |
 | `generate-profiles`        | Every 6 hours     | Auto-generate trader profile content |
-| `update-competitions`      | Every 30 minutes  | Update competition standings         |
 
 ### Monitoring and Maintenance
 
@@ -292,7 +290,6 @@ app/                          # Next.js App Router
   library/                    # Educational resource library with EPUB reader
   market/                     # Market overview, flash news
   portfolio/                  # Portfolio analytics dashboard
-  competitions/               # Trading competitions
   settings/                   # User settings
   components/                 # Shared UI components
 
