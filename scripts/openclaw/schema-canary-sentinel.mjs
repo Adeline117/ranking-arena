@@ -106,6 +106,46 @@ try {
   failures.push(`渲染覆盖契约失败:\n${(e.stdout || '') + (e.stderr || '')}`.slice(0, 800))
 }
 
+// ---------- 1d. 上游新字段雷达(信息级,不判红) ----------
+// ingest 采样收集的 raw payload 字段清单里,过去 24h 首次出现的 field_path
+// = 交易所悄悄新增的字段 → Telegram 摘要提示评估是否采集(P1)。
+// 纯信息:不进 failures;查询失败也只打日志。
+try {
+  const { default: pg } = await import('pg')
+  const dbUrl = readEnv('DATABASE_URL', { optional: true })
+  if (dbUrl) {
+    const pool = new pg.Pool({ connectionString: dbUrl, max: 1 })
+    try {
+      const { rows } = await pool.query(
+        `select s.slug, i.job_type, i.field_path
+           from arena.upstream_field_inventory i
+           join arena.sources s on s.id = i.source_id
+          where i.first_seen >= now() - interval '1 day'
+            -- 建库首日全量 first_seen 会爆炸:清单本身 3 天内的源全跳过
+            and exists (
+              select 1 from arena.upstream_field_inventory b
+               where b.source_id = i.source_id and b.first_seen < now() - interval '3 days')
+          order by s.slug, i.field_path limit 60`
+      )
+      if (rows.length > 0) {
+        const lines = rows.map((r) => `  ${r.slug}/${r.job_type}: ${r.field_path}`)
+        await sendTelegram(
+          `📡 上游新字段雷达: ${rows.length} 个新 field_path(评估是否采集,结论记 UNREACHABLE_FIELDS_LEDGER)\n` +
+            lines.slice(0, 30).join('\n') +
+            (rows.length > 30 ? `\n  … +${rows.length - 30}` : '')
+        )
+        console.log(`📡 新字段 ${rows.length} 个,已发 Telegram 摘要`)
+      } else {
+        console.log('📡 上游新字段雷达: 无新字段')
+      }
+    } finally {
+      await pool.end()
+    }
+  }
+} catch (e) {
+  console.error('upstream-field radar failed (not a violation):', e.message)
+}
+
 // ---------- 2. 写路径金丝雀 ----------
 async function writeCanary() {
   const SUPA_URL = readEnv('NEXT_PUBLIC_SUPABASE_URL')

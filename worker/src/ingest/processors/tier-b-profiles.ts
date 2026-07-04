@@ -15,6 +15,7 @@ import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
 import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
+import { recordFieldInventory } from '@/lib/ingest/field-inventory'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
 
 interface TopTrader {
@@ -243,6 +244,12 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
             timeframe,
             payload: bundle.pages,
           })
+
+          // Upstream field radar (P1): 1-in-50 traders sample the profile
+          // payload shape. Fire-and-forget — never breaks the crawl.
+          if (attempted % 50 === 1 && bundle.pages.length > 0) {
+            recordFieldInventory(src.id, 'tier_b', bundle.pages[0].payload).catch(() => {})
+          }
 
           const ctx: ParseCtx = {
             sourceSlug: src.slug,
