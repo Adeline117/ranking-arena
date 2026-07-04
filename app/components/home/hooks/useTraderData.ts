@@ -289,7 +289,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         if (exchange) {
           url += `&exchange=${encodeURIComponent(exchange)}`
         }
-        if (sortBy !== 'arena_score') {
+        // 非默认排序才带参(2026-07-03 修复:此前条件只看 sortBy,score 列的 asc
+        // 方向被静默丢弃,服务端按默认 desc 返回;API 本就支持 sortBy=arena_score&order=asc)
+        if (sortBy !== 'arena_score' || sortDir !== 'desc') {
           url += `&sortBy=${sortBy}&order=${sortDir}`
         }
 
