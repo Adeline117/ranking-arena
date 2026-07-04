@@ -35,13 +35,15 @@ const customJestConfig = {
     global: {
       // Ratchet: set just below current levels so coverage can only go UP.
       // Raise these after each coverage improvement. Never lower them.
-      // Current (2026-07-03 冲30% Wave 2): statements 26.28%, branches 24.57%, lines 26.48%, functions 21.39%
-      // (+posts-weighted/data-source-priority/hot-score/personal/hashtags/trader-utils;
-      //  Wave 2 修复两个真 bug:posts-weighted 幻影 .join() 必 500、hashtags CJK 标签静默丢失)
-      branches: 24.5,
-      functions: 21.3,
-      lines: 26.4,
-      statements: 26.2,
+      // Current (2026-07-03 冲30% 战役终态): statements 27.49%, branches 25.55%, lines 27.73%, functions 22.3%
+      // 战役从 23.97 起步,3 波 21 个测试文件,顺带挖出并修复 5 个真 bug:
+      // arbitrage getRate 方向互斥、posts-weighted 幻影 .join() 必 500、hashtags CJK
+      // 标签静默丢失、4/8 筛选预设失效(只传 source)、score 列 asc 被静默丢弃。
+      // 剩余未测质量主要是浏览器/native hooks(低 ROI)与组件渲染(刻意不做)。
+      branches: 25.5,
+      functions: 22.2,
+      lines: 27.6,
+      statements: 27.4,
     },
   },
 }
