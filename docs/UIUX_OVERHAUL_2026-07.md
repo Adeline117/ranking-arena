@@ -65,6 +65,18 @@
 - 当前持仓免费可见
 - 安全项全纳入
 - hero「18 交易所」与文案「45+ exchanges」并存是刻意的,不当 bug 修
+- **榜单哲学(2026-07-04 owner 拍板)**:排名只看窗口 ROI/PnL,零交易 holder
+  合法上榜不降权不设门槛;WIN 列 `trades_count===0` → Holder 徽章(已上线)
+
+## 关联工程项(对应单元实施时必须纳入提案)
+
+- **U1/U2 — tri-state 指标显示语义进 registry**(数据全面性计划 P2b):
+  MetricDef 加可选 `zeroLabel?: i18nKey`,渲染约定 = 显式 0+zeroLabel→语义
+  标签(Holder 是首例)/ null→破折号+平台注记 / 能力外→N/A note。实现在
+  `MetricGrid.tsx` 通用渲染,替代散落 if。
+- **U2 — Overview 双轨归一**(P2c,M2):`MetricBadgesGrid.tsx`(14 固定
+  prop 的 pre-registry 旧物)迁 `metric-registry`,消灭「同一指标两条读
+  路径」(bybit sortino 断链温床)。
 
 ## 进度记录
 

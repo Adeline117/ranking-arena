@@ -594,30 +594,31 @@ try {
 
 ## Quick Reference
 
-| Action                 | Command/Location                                  |
-| ---------------------- | ------------------------------------------------- |
-| Add migration          | `scripts/new-migration.sh <description>`          |
-| Add API route          | `app/api/{name}/route.ts`                         |
-| Add connector          | `lib/connectors/{exchange}.ts`                    |
-| Add cron job           | `vercel.json` crons array                         |
-| Check logs             | `vercel logs` or Sentry dashboard                 |
-| Fix pipeline           | `/fix-pipeline`                                   |
-| Deploy preview         | `/deploy-staging`                                 |
-| Implement feature      | `/implement-spec specs/xxx.md`                    |
-| Weekly self-check      | `/weekly-self-check`                              |
-| Health dashboard       | `/admin/monitoring`                               |
-| **CEO product review** | `/plan-ceo-review`                                |
-| **Eng manager review** | `/plan-eng-review` (gates `/ship`)                |
-| **Design audit**       | `/design-audit` (report-only, 80 checks)          |
-| **Design system**      | `/design-system` (creates docs/DESIGN.md)         |
-| **Ship release**       | `/ship` (test → version bump → CHANGELOG → PR)    |
-| **QA test + fix**      | `/qa` (quick/standard/exhaustive)                 |
-| **QA report only**     | `/qa-report` (no code changes)                    |
-| **Design QA + fix**    | `/qa-design` (fix visual issues)                  |
-| **Retrospective**      | `/retro` (weekly engineering retro)               |
-| **Post-ship docs**     | `/doc-release` (sync all docs after ship)         |
-| **Headless browser**   | `/browse` (screenshots, interactions, responsive) |
-| **Auth for browser**   | `/setup-browser-cookies` (import real cookies)    |
+| Action                 | Command/Location                                     |
+| ---------------------- | ---------------------------------------------------- |
+| Add migration          | `scripts/new-migration.sh <description>`             |
+| Add API route          | `app/api/{name}/route.ts`                            |
+| Add connector          | `lib/connectors/{exchange}.ts`                       |
+| **Add ingest source**  | `docs/ADAPTER_ONBOARDING.md`(checklist,含指标声明门) |
+| Add cron job           | `vercel.json` crons array                            |
+| Check logs             | `vercel logs` or Sentry dashboard                    |
+| Fix pipeline           | `/fix-pipeline`                                      |
+| Deploy preview         | `/deploy-staging`                                    |
+| Implement feature      | `/implement-spec specs/xxx.md`                       |
+| Weekly self-check      | `/weekly-self-check`                                 |
+| Health dashboard       | `/admin/monitoring`                                  |
+| **CEO product review** | `/plan-ceo-review`                                   |
+| **Eng manager review** | `/plan-eng-review` (gates `/ship`)                   |
+| **Design audit**       | `/design-audit` (report-only, 80 checks)             |
+| **Design system**      | `/design-system` (creates docs/DESIGN.md)            |
+| **Ship release**       | `/ship` (test → version bump → CHANGELOG → PR)       |
+| **QA test + fix**      | `/qa` (quick/standard/exhaustive)                    |
+| **QA report only**     | `/qa-report` (no code changes)                       |
+| **Design QA + fix**    | `/qa-design` (fix visual issues)                     |
+| **Retrospective**      | `/retro` (weekly engineering retro)                  |
+| **Post-ship docs**     | `/doc-release` (sync all docs after ship)            |
+| **Headless browser**   | `/browse` (screenshots, interactions, responsive)    |
+| **Auth for browser**   | `/setup-browser-cookies` (import real cookies)       |
 
 ## Emergency Rollback
 
