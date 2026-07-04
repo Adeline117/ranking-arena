@@ -76,6 +76,22 @@ try {
   failures.push(`Schema 契约失败:\n${(e.stdout || '') + (e.stderr || '')}`.slice(0, 800))
 }
 
+// ---------- 1b. 填充率契约(该有 vs 真有) ----------
+// 能力矩阵声明提供的指标必须在 trader_stats 有实际数据(0 填充 = parser 漏
+// 提取/能力谎报/管道断裂 — gate sharpe/okx copier_count 一类断链的自动化捕捉)。
+// 脚本自身对 DATABASE_URL 缺失 fail-open,对基建错误不红,只有真断链才 exit 1。
+try {
+  const out = execSync('node scripts/qa/fill-rate-check.mjs', {
+    encoding: 'utf8',
+    timeout: 120_000,
+    // 本地 crontab 跑时 process.env 无 DATABASE_URL — readEnv 会兜到 .env.local
+    env: { ...process.env, DATABASE_URL: readEnv('DATABASE_URL', { optional: true }) ?? '' },
+  })
+  console.log(out.trim())
+} catch (e) {
+  failures.push(`填充率契约失败:\n${(e.stdout || '') + (e.stderr || '')}`.slice(0, 800))
+}
+
 // ---------- 2. 写路径金丝雀 ----------
 async function writeCanary() {
   const SUPA_URL = readEnv('NEXT_PUBLIC_SUPABASE_URL')
