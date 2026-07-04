@@ -8,7 +8,9 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 
-const HASHTAG_REGEX = /#(\w{1,30})/g
+// Unicode-aware: \w 是 ASCII-only,会把 #比特币 这类 CJK 标签静默丢掉
+// (2026-07-03 修复,与 lib/utils/content.ts 的 linkify regex 保持同步)。
+const HASHTAG_REGEX = /#([\p{L}\p{N}_]{1,30})/gu
 
 /**
  * Extract hashtag strings from text content.
