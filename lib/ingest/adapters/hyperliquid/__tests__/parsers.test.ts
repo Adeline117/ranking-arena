@@ -177,6 +177,28 @@ describe('parseHyperliquidProfile', () => {
     expect(st.extras.pnl_ratio).toBeCloseTo(2, 2)
   })
 
+  it('fills present-but-EMPTY = confirmed holder → explicit 0 positions, not null', () => {
+    // 2026-07-04 homepage-dash root fix: rank-1 was a $48M spot holder — the
+    // fills fetch SUCCEEDED with [] (zero trades in 90d), but the parser
+    // treated [] like a failed fetch and null-collapsed, so the product
+    // couldn't tell "Holder" (legit zero) from "unknown" (fetch failed).
+    const profile = parseHyperliquidProfile({ ...bundle, fills: [], timeframe: 30 }, ctx)
+    const st = profile.stats[0]
+    expect(st.totalPositions).toBe(0) // confirmed zero-activity window
+    expect(st.winPositions).toBe(0)
+    expect(st.winRate).toBeNull() // 0/0 is undefined — never fabricate
+    expect(st.holdingDurationAvgHours).toBeNull()
+    expect(st.extras.fills_derivation).toBe('fills-replay') // derivation DID run
+  })
+
+  it('fills fetch FAILED (undefined) → positions stay null (unknown ≠ zero)', () => {
+    const profile = parseHyperliquidProfile({ ...bundle, timeframe: 30 }, ctx)
+    const st = profile.stats[0]
+    expect(st.totalPositions).toBeNull()
+    expect(st.winPositions).toBeNull()
+    expect(st.extras.fills_derivation).toBeUndefined()
+  })
+
   it('position_history: round-trips from fills (M3-3a)', () => {
     const T = Date.parse('2026-06-01T00:00:00Z')
     const fills = [
