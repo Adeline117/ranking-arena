@@ -25,13 +25,22 @@ const EXEMPT = new Map([
   // ['example_source:volume', '2026-07-03 核实:上游 2026-06 起停供 volume 字段'],
 ])
 
+// "该有"真源优先级(P0 2026-07-04):adapter 代码声明的 expected_metrics
+// (reconcile 每小时同步进 sources.meta)> mv cap.metrics 兜底。
+// mv 的 metrics 是从 trader_stats count>0 反推的 —— 度量"真有"而非"该有",
+// 用它当契约是循环论证(parser 漏提取 → count=0 → 不声明 → 永不违规,
+// gate-sharpe 类 bug 隐形)。声明未铺满前,未声明的源回落 mv(弱保护)。
 const SQL = `
 with caps as (
-  select c.slug, m.metric
-  from arena.mv_source_capabilities c
-  cross join lateral jsonb_array_elements_text(c.cap->'metrics') m(metric)
-  join arena.sources s on s.slug = c.slug and s.status = 'active'
-  where coalesce(c.cap->>'servingMode','serving') = 'serving'
+  select s.slug, m.metric,
+         (s.meta ? 'expected_metrics') as declared
+  from arena.sources s
+  join arena.mv_source_capabilities c on c.slug = s.slug
+  cross join lateral jsonb_array_elements_text(
+    coalesce(s.meta->'expected_metrics', c.cap->'metrics')
+  ) m(metric)
+  where s.status = 'active'
+    and coalesce(c.cap->>'servingMode','serving') = 'serving'
 ),
 fill as (
   select s.slug,
