@@ -34,6 +34,22 @@ const STATIC_SCHEDULERS = [
   { id: 'maint:onchain-enrich', name: INGEST_JOB.ONCHAIN_ENRICH, everyMs: 12 * 3600_000 },
 ] as const
 
+/**
+ * Tier priority by scheduler-key prefix — MUST mirror the opts.priority each
+ * registration below passes. The revive path derives priority from here
+ * (take-7): stored templates can't be trusted (pre-take-6 rebuilds stripped
+ * them, and upsertJobScheduler with unchanged `every` never refreshes a
+ * template), and a missing priority puts iterations in the prio-0 `wait` lane
+ * — ahead of EVERYTHING, inverting the whole tier design.
+ */
+const PRIORITY_BY_PREFIX: Record<string, number> = {
+  tiera: 1,
+  derive: 2,
+  tierd: 3,
+  tierb: 6,
+  tierbs: 9,
+}
+
 export async function reconcileSchedulers(): Promise<void> {
   const sources = await getActiveSources()
   // scheduler key → the queue NAME it must live on. A Set isn't enough: a
@@ -178,12 +194,25 @@ export async function reconcileSchedulers(): Promise<void> {
       // take-6 (2026-07-03): preserve the template OPTS on rebuild. The old
       // rebuild passed only {name, data}, silently dropping opts.priority —
       // every revived scheduler's future iterations ran at default priority.
+      //
+      // take-7 (2026-07-03, hours later): "preserve template opts" is NOT
+      // enough. Schedulers that a pre-take-6 rebuild already stripped carry no
+      // priority in their stored template, and upsertJobScheduler with an
+      // UNCHANGED `every` never refreshes the template — so the regular
+      // reconcile pass passing {priority: 9} can't heal them. Their iterations
+      // spawn with priority 0 → the `wait` lane → picked BEFORE every
+      // prioritized job: prio-9 series batches were observed running while 89
+      // prio-1 tier-A boards starved (worse inversion than the original bug).
+      // Fix: priority is DERIVED from the scheduler key's tier prefix (the
+      // same values registration uses) — never trusted from the stored
+      // template. Template opts win only if the prefix is unknown.
       const tmplOpts = (scheduler.template?.opts ?? {}) as { priority?: number }
+      const tierPriority = PRIORITY_BY_PREFIX[key.split(':')[0]] ?? tmplOpts.priority ?? 1
       await q.removeJobScheduler(key)
       await q.upsertJobScheduler(
         key,
         { every },
-        { name: scheduler.name, data: tmplData, opts: tmplOpts }
+        { name: scheduler.name, data: tmplData, opts: { ...tmplOpts, priority: tierPriority } }
       )
       // CRITICAL (2026-06-13 take-4): upsertJobScheduler's first iteration only
       // fires after a full `every` interval — for a 5h-cadence Tier-A that means
@@ -215,7 +244,7 @@ export async function reconcileSchedulers(): Promise<void> {
       // on completion via removeOnComplete, so the next genuine revive re-kicks).
       try {
         await q.add(scheduler.name, tmplData, {
-          priority: tmplOpts.priority ?? 1,
+          priority: tierPriority,
           jobId: `revive-kick-${key.replace(/:/g, '-')}`,
           removeOnComplete: true,
           removeOnFail: { age: 3600 },

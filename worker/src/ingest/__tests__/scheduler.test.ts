@@ -174,6 +174,43 @@ describe('reconcileSchedulers cleanup/revival', () => {
     expect(rebuild?.[2]?.opts).toEqual({ priority: 9 })
   })
 
+  it('take-7: priority derives from key prefix even when the stored template lost it', async () => {
+    // Pre-take-6 rebuilds stripped opts from templates, and upsert with an
+    // unchanged `every` never refreshes them — so trusting the template left
+    // those schedulers spawning prio-0 iterations into the `wait` lane, ahead
+    // of every prioritized job (prio-9 series batches ran while 89 prio-1
+    // tier-A boards starved).
+    const staleNext = Date.now() - 3 * HOUR
+    const base = (await (getActiveSources as jest.Mock)())[0]
+    ;(getActiveSources as jest.Mock).mockResolvedValue([
+      { ...base, meta: { series_backfill_topn: 100000 } },
+    ])
+    mockQueue.getJobSchedulers.mockResolvedValue([
+      {
+        key: 'tierbs:srcx',
+        name: 'tierb:series',
+        next: staleNext,
+        every: HOUR,
+        // stripped template: attempts/backoff survive, priority is GONE
+        template: { data: { sourceSlug: 'srcx' }, opts: { attempts: 3 } },
+      },
+    ])
+    mockQueue.getJob.mockResolvedValue({
+      id: `repeat:tierbs:srcx:${staleNext}`,
+      getState: async () => 'waiting',
+    })
+    await reconcileSchedulers()
+    const kick = mockQueue.add.mock.calls.find((c) =>
+      c[2]?.jobId?.startsWith('revive-kick-tierbs-srcx')
+    )
+    expect(kick?.[2]?.priority).toBe(9) // from PRIORITY_BY_PREFIX, not template
+    // the REBUILD upsert is the last one for this key (registration upserts first)
+    const rebuild = mockQueue.upsertJobScheduler.mock.calls
+      .filter((c) => c[0] === 'tierbs:srcx')
+      .at(-1)
+    expect(rebuild?.[2]?.opts).toEqual({ attempts: 3, priority: 9 }) // healed, other opts kept
+  })
+
   it('never interrupts an active long crawl even if the scheduler is >2x overdue', async () => {
     const staleNext = Date.now() - 3 * HOUR
     mockQueue.getJobSchedulers.mockResolvedValue([scheduler('tiera:srcx', staleNext)])
