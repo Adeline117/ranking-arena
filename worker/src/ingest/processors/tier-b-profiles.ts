@@ -15,7 +15,7 @@ import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
 import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
-import type { TierJobData } from '../queues'
+import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
 
 interface TopTrader {
   id: number
@@ -31,8 +31,19 @@ interface TopTrader {
  * equality: pg timestamptz carries microseconds while values round-tripped
  * through JS Date are millisecond-truncated, so a ts-equality join silently
  * matches zero rows (the 2026-06-11 "no passed snapshots yet" bug).
+ *
+ * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
+ * deep-profiled since `stalerThan` are returned. The marker is a dedicated
+ * arena.ingest_cursors row (kind 'tierb_profiled') written after each
+ * successful trader — trader_stats.as_of is NOT usable here because the
+ * tier-A board upsert refreshes it every 2-5h, which would make everyone
+ * look "fresh" and starve the deep crawl entirely.
  */
-async function getTopTraders(sourceId: number, topN: number): Promise<TopTrader[]> {
+async function getTopTraders(
+  sourceId: number,
+  topN: number,
+  stalerThan: Date
+): Promise<TopTrader[]> {
   const { rows } = await getIngestPool().query<TopTrader>(
     `WITH latest AS (
        SELECT DISTINCT ON (timeframe) id AS snapshot_id
@@ -45,12 +56,36 @@ async function getTopTraders(sourceId: number, topN: number): Promise<TopTrader[
        FROM latest l
        JOIN arena.leaderboard_entries e ON e.snapshot_id = l.snapshot_id
        JOIN arena.traders t ON t.id = e.trader_id
+       LEFT JOIN arena.ingest_cursors pc
+              ON pc.trader_id = t.id AND pc.kind = '${PROFILED_CURSOR_KIND}'
       WHERE e.rank <= $2
+        AND (pc.updated_at IS NULL OR pc.updated_at < $3)
       GROUP BY t.id, t.exchange_trader_id, t.meta`,
-    [sourceId, topN]
+    [sourceId, topN, stalerThan.toISOString()]
   )
   return rows
 }
+
+/** Marker kind in arena.ingest_cursors recording each successful deep profile. */
+const PROFILED_CURSOR_KIND = 'tierb_profiled'
+
+async function markProfiled(traderId: number): Promise<void> {
+  await getIngestPool().query(
+    `INSERT INTO arena.ingest_cursors (trader_id, kind, cursor_value, updated_at)
+     VALUES ($1, $2, $3, now())
+     ON CONFLICT (trader_id, kind)
+     DO UPDATE SET cursor_value = EXCLUDED.cursor_value, updated_at = now()`,
+    [traderId, PROFILED_CURSOR_KIND, new Date().toISOString()]
+  )
+}
+
+/**
+ * Max continuation hops per chain: bounds a pathological slow-failing source
+ * (nothing gets marked profiled → every continuation re-attempts the same
+ * traders) to ~depth × deadline of wasted crawl per cadence instead of a
+ * self-requeue loop that never ends.
+ */
+const MAX_CONT_DEPTH = 50
 
 /** Fisher–Yates — never crawl ranks 1→N in perfect order (spec §4). */
 function shuffle<T>(arr: T[]): T[] {
@@ -68,6 +103,9 @@ export interface TierBResult {
   historyRowsWritten: number
   rejects: number
   errors: number
+  crossCheckFails: number
+  /** Traders still stale when the deadline hit (0 = pass completed). */
+  remaining: number
 }
 
 /** History kinds this source can serve, per adapter capabilities. */
@@ -141,6 +179,8 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
     historyRowsWritten: 0,
     rejects: 0,
     errors: 0,
+    crossCheckFails: 0,
+    remaining: 0,
   }
   const src = await getSourceBySlug(job.data.sourceSlug)
   if (src.status !== 'active') return empty
@@ -148,9 +188,24 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
   const adapter = getAdapter(src.adapter_slug)
   if (!adapter.capabilities.profile) return empty
 
-  const topTraders = shuffle(await getTopTraders(src.id, src.deep_profile_topn))
+  // Deadline chunking (2026-07-03 slot-monopoly root fix): a full top-300
+  // deep-profile pass ran 3-4h per source and, phase-locked across sources,
+  // monopolized every bulk slot for hours (tier-A boards 17-32h stale).
+  // BullMQ priority can't preempt an in-flight job, so the job itself must
+  // yield: crawl only stale traders, stop at the wall-clock deadline, and
+  // re-enqueue a CONTINUATION at the same priority. Higher-priority work
+  // interleaves between chunks; the pass still completes because the
+  // staleness marker (ingest_cursors) makes every chunk resume where the
+  // previous one left off. Freshness window = half the tier-B cadence, so a
+  // scheduler iteration overlapping a continuation chain just no-ops.
+  const deadlineMs = Math.max(60_000, Number(src.meta.tier_b_deadline_ms ?? 600_000))
+  const refreshMs = Math.max(3_600_000, (src.cadence_tier_b_seconds * 1000) / 2)
+  const stalerThan = new Date(Date.now() - refreshMs)
+  const contDepth = Number(job.data.contDepth ?? 0)
+
+  const topTraders = shuffle(await getTopTraders(src.id, src.deep_profile_topn, stalerThan))
   if (topTraders.length === 0) {
-    console.log(`[tier-b] ${src.slug}: no passed snapshots yet — nothing to crawl`)
+    console.log(`[tier-b] ${src.slug}: all top-${src.deep_profile_topn} fresh — nothing to crawl`)
     return empty
   }
 
@@ -158,10 +213,16 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
   // profile stats (spec §1.1-C), so Tier-B must crawl their TFs too.
   const timeframes = profileTimeframes(src)
   const session = await openSession(src)
+  const startedAt = Date.now()
+  let attempted = 0
   const result: TierBResult = { ...empty }
 
   try {
     for (const trader of topTraders) {
+      // Yield the slot once the budget is spent (always ≥1 trader of progress
+      // so a chain can never spin without advancing).
+      if (attempted > 0 && Date.now() - startedAt > deadlineMs) break
+      attempted += 1
       let traderOk = false
       for (const timeframe of timeframes) {
         try {
@@ -231,6 +292,7 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
       }
       if (traderOk) {
         result.tradersCrawled += 1
+        await markProfiled(trader.id)
         // Histories ride the same session right after the profile (spec
         // §2.3): incremental, cursor-overlap stop, idempotent upserts.
         try {
@@ -261,10 +323,43 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
     await session.close()
   }
 
+  result.remaining = topTraders.length - attempted
+  if (result.remaining > 0) {
+    if (contDepth < MAX_CONT_DEPTH) {
+      // Same priority as the scheduler registration (6) — a continuation must
+      // never jump the tier order (that inversion was the 2026-07-03 wedge).
+      // Stable jobId dedups: at most one pending continuation per source.
+      try {
+        await getRegionQueue(src.fetch_region).add(
+          INGEST_JOB.TIER_B,
+          { sourceSlug: src.slug, contDepth: contDepth + 1 } satisfies TierJobData,
+          {
+            priority: 6,
+            jobId: `tierb-cont-${src.slug}`,
+            delay: 5_000,
+            removeOnComplete: true,
+            removeOnFail: { age: 3600 },
+          }
+        )
+      } catch (err) {
+        console.warn(
+          `[tier-b] ${src.slug} continuation enqueue failed (next cadence covers it):`,
+          err instanceof Error ? err.message : err
+        )
+      }
+    } else {
+      console.warn(
+        `[tier-b] ${src.slug}: continuation depth ${contDepth} hit cap ${MAX_CONT_DEPTH} ` +
+          `with ${result.remaining} still stale — stopping chain (next cadence retries)`
+      )
+    }
+  }
+
   console.log(
-    `[tier-b] ${src.slug}: ${result.tradersCrawled}/${topTraders.length} traders, ` +
+    `[tier-b] ${src.slug}: ${result.tradersCrawled}/${attempted} attempted ok ` +
+      `(${result.remaining} stale remaining${result.remaining > 0 ? `, continuation depth ${contDepth + 1}` : ''}), ` +
       `${result.surfacesFetched} surfaces, ${result.historyRowsWritten} history rows, ` +
-      `${result.rejects} rejects, ${result.errors} errors`
+      `${result.rejects} rejects, ${result.crossCheckFails} xcheck-fails, ${result.errors} errors`
   )
   return result
 }

@@ -194,6 +194,13 @@ export const INGEST_JOB = {
 
 export interface TierJobData {
   sourceSlug: string
+  /**
+   * Tier-B deadline continuations only: how many continuation hops this
+   * chain has taken. Scheduler-fired iterations omit it (chain restarts at
+   * 0); processTierB stops re-enqueuing past a bound so a slow-failing
+   * source can't self-requeue forever.
+   */
+  contDepth?: number
 }
 
 export interface TierCJobData {
