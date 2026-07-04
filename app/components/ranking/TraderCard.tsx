@@ -409,7 +409,17 @@ export const TraderCard = memo(
             />
             <MetricStat
               label={t('winRatePercent')}
-              value={trader.win_rate != null ? `${Number(trader.win_rate).toFixed(1)}%` : undefined}
+              value={
+                trader.win_rate != null ? (
+                  `${Number(trader.win_rate).toFixed(1)}%`
+                ) : // Confirmed zero-trade wallet: win% undefined by design —
+                // labeled "Holder", not an empty stat.
+                trader.trades_count === 0 ? (
+                  <span title={t('holderTooltip')} style={{ cursor: 'help' }}>
+                    {t('holderBadge')}
+                  </span>
+                ) : undefined
+              }
               color={
                 trader.win_rate != null && trader.win_rate > 50
                   ? tokens.colors.accent.success
@@ -417,8 +427,10 @@ export const TraderCard = memo(
               }
               nullTooltip={
                 trader.win_rate == null
-                  ? getPlatformNote(trader.source || source || '') ||
-                    `Not available for ${EXCHANGE_NAMES[trader.source || source || ''] || (trader.source || source || '').replace('_', ' ')}`
+                  ? trader.trades_count === 0
+                    ? t('holderTooltip')
+                    : getPlatformNote(trader.source || source || '') ||
+                      `Not available for ${EXCHANGE_NAMES[trader.source || source || ''] || (trader.source || source || '').replace('_', ' ')}`
                   : undefined
               }
             />

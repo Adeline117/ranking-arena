@@ -2166,6 +2166,8 @@ const en = {
   comingSoon: 'Coming soon',
   drawdownNotAvailable: 'Drawdown data not available from this exchange',
   winRateNotAvailable: 'Win rate not available from this exchange',
+  holderBadge: 'Holder',
+  holderTooltip: 'No closed trades in this window — gains come from held positions',
   positionStatsNotAvailable: 'Position stats not available from this exchange',
   updatedAt: 'Updated',
   noDataForPeriod: 'No data for this period',

@@ -12,6 +12,7 @@ import { getScoreColorInfo } from '@/lib/utils/score-colors'
 import { tokens } from '@/lib/design-tokens'
 import Metric from '@/app/components/ui/Metric'
 import ScoreMiniBar from '@/app/components/ranking/ScoreMiniBar'
+import { getServerTranslation } from '@/lib/i18n/server'
 
 /** Same tiers + CSS vars as the hydrated TraderCard (getScoreStyle in
  *  TraderDisplay wraps the same util) — the SSR shell previously used stale
@@ -38,6 +39,7 @@ interface Props {
 }
 
 export default async function SSRRankingTable({ traders, startRank = 0 }: Props) {
+  const { t } = await getServerTranslation()
   if (!traders.length) {
     return (
       <div
@@ -72,7 +74,14 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
             : trader.source_type === 'futures'
               ? 'Futures'
               : 'Spot'
-        const winRate = trader.win_rate != null ? `${Number(trader.win_rate).toFixed(1)}%` : '—'
+        // Confirmed zero-trade wallet (trades_count === 0) reads "Holder", not a
+        // dash — must match the hydrated TraderCard or the label flashes away.
+        const winRate =
+          trader.win_rate != null
+            ? `${Number(trader.win_rate).toFixed(1)}%`
+            : trader.trades_count === 0
+              ? t('holderBadge')
+              : '—'
         const sharpe = trader.sharpe != null ? Number(trader.sharpe).toFixed(2) : '—'
         const mdd =
           trader.max_drawdown != null

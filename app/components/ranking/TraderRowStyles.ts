@@ -60,6 +60,17 @@ export const NA_DASH_STYLE: React.CSSProperties = {
   color: TRADER_TEXT_TERTIARY,
   opacity: 0.4,
 }
+/** Confirmed zero-trade wallet (trades_count === 0): gains come from held
+ *  positions, so win% is undefined BY DESIGN — a labeled chip, not a dash. */
+export const HOLDER_CHIP_STYLE: React.CSSProperties = {
+  fontSize: tokens.typography.fontSize.xs,
+  color: TRADER_TEXT_TERTIARY,
+  border: '1px solid var(--color-border-primary)',
+  borderRadius: tokens.radius.full,
+  padding: '1px 8px',
+  cursor: 'help',
+  whiteSpace: 'nowrap',
+}
 export const ROW_BASE_STYLE: React.CSSProperties = {
   display: 'grid',
   alignItems: 'center',

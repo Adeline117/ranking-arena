@@ -13,6 +13,7 @@ import type { Trader } from './RankingTable'
 import {
   NA_STYLE,
   NA_DASH_STYLE,
+  HOLDER_CHIP_STYLE,
   ROI_CELL_STYLE,
   PNL_CELL_STYLE,
   RIGHT_CELL_STYLE,
@@ -151,6 +152,13 @@ export const TraderMetricCells = memo(function TraderMetricCells({
             {trader.metrics_estimated ? '~' : ''}
             {Number(trader.win_rate).toFixed(1)}%
           </Text>
+        ) : trader.trades_count === 0 ? (
+          // Confirmed zero-trade wallet (explicit 0, NOT null/unknown): win% is
+          // undefined by design — gains come from held positions. Labeled chip
+          // instead of a dash so the row reads intentional, not broken.
+          <span title={i18nT('holderTooltip')} style={HOLDER_CHIP_STYLE}>
+            {i18nT('holderBadge')}
+          </span>
         ) : (
           <NaIndicator source={trader.source || source} metricType="winRate" />
         )}

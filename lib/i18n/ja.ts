@@ -1986,6 +1986,8 @@ const ja = {
   comingSoon: '近日公開',
   drawdownNotAvailable: 'この取引所ではドローダウンデータがありません',
   winRateNotAvailable: 'この取引所では勝率データがありません',
+  holderBadge: 'ホルダー',
+  holderTooltip: 'この期間に決済取引なし — 利益は保有ポジションによるものです',
   positionStatsNotAvailable: 'この取引所ではポジション統計がありません',
   updatedAt: '更新日時',
   noDataForPeriod: 'この期間のデータがありません',
