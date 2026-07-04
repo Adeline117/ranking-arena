@@ -92,6 +92,20 @@ try {
   failures.push(`填充率契约失败:\n${(e.stdout || '') + (e.stderr || '')}`.slice(0, 800))
 }
 
+// ---------- 1c. 渲染覆盖契约(库里有 vs 页面拿得到) ----------
+// 黄金交易员的 DB 非空指标必须出现在生产 /core API 响应里(serving/映射层
+// 丢数据 = bybit sortino 断链一类)。基建失败(网络/5xx)脚本内部自行降级。
+try {
+  const out = execSync('node scripts/qa/render-coverage-check.mjs', {
+    encoding: 'utf8',
+    timeout: 300_000,
+    env: { ...process.env, DATABASE_URL: readEnv('DATABASE_URL', { optional: true }) ?? '' },
+  })
+  console.log(out.trim())
+} catch (e) {
+  failures.push(`渲染覆盖契约失败:\n${(e.stdout || '') + (e.stderr || '')}`.slice(0, 800))
+}
+
 // ---------- 2. 写路径金丝雀 ----------
 async function writeCanary() {
   const SUPA_URL = readEnv('NEXT_PUBLIC_SUPABASE_URL')
