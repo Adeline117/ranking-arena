@@ -29,21 +29,25 @@
 
 ## 单元清单(按核心路径优先级排序)
 
-| #   | 单元              | 覆盖路径                                                         | 状态      |
-| --- | ----------------- | ---------------------------------------------------------------- | --------- |
-| U1  | **首页/排行**     | 落地→hero→排行表(排序/筛选/预设/周期切换/分类 tab/分页)→点进详情 | 🔜 下一个 |
-| U2  | **交易员详情**    | 三页(Overview/Stats/Portfolio)+周期切换+关注/对比/分享+图表      | 待排      |
-| U3  | **搜索**          | ⌘K 唤起→输入(中英)→结果→空态→点进                                | 待排      |
-| U4  | **登录/注册**     | /login→OAuth/邮箱→首次进站引导→多账号切换                        | 待排      |
-| U5  | **Pro/定价/支付** | ProGate 触点→/pricing→checkout→成功/失败回跳(promo 关闭前打磨)   | 待排      |
-| U6  | **对比**          | 加入对比→浮条→/compare 页                                        | 待排      |
-| U7  | **Market**        | 概览/事件/K线                                                    | 待排      |
-| U8  | **Hot/社区 feed** | 列表→帖子详情→发帖(标签/贴纸/投票)→评论/reaction                 | 待排      |
-| U9  | **Groups**        | 列表→详情→加入→组内发帖→管理                                     | 待排      |
-| U10 | **Inbox**         | 通知/私信/presence/未读徽章                                      | 待排      |
-| U11 | **个人中心**      | u/[handle]→settings→watchlist→portfolio sync→linked accounts     | 待排      |
-| U12 | **次级页**        | Library/quiz/wrapped/法务页                                      | 待排      |
-| U13 | **横切兜底**      | 亮色主题 + ja/ko 全站 sweep(前面各单元遗漏的)                    | 最后      |
+> **覆盖保证**:2026-07-03 用 `find app -name page.tsx` 枚举出全部 **81 个路由**,
+> 逐一挂到单元下(下表 route 列)。新增路由必须同步挂进某单元,否则不算覆盖。
+
+| #   | 单元              | 明确路由清单                                                                                                                                                                                                                                                                                  | 状态      |
+| --- | ----------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| U1  | **首页/排行家族** | `/` + `/rankings/bots` `/rankings/exchanges` `/rankings/tokens` `/rankings/tokens/[token]` `/rankings/weekly`(排序/筛选/预设/周期/分类 tab/分页)                                                                                                                                              | 🔜 下一个 |
+| U2  | **实体详情家族**  | `/trader/[handle]`(三页+周期+关注/对比/分享) `/bot/[id]` `/exchange/[slug]` `/share/rank/[trader_key]` `/s/[token]` `/trader/authorize`                                                                                                                                                       | 待排      |
+| U3  | **搜索**          | `/search` + ⌘K 全局搜索(中英输入/结果/空态)                                                                                                                                                                                                                                                   | 待排      |
+| U4  | **登录/注册**     | `/login` `/logout` `/auth/callback` `/reset-password` `/onboarding` + 多账号切换                                                                                                                                                                                                              | 待排      |
+| U5  | **变现路径**      | ProGate 触点 → `/pricing` `/pricing/success` `/tip/success` `/referral` `/claim`(promo 关闭前打磨)                                                                                                                                                                                            | 待排      |
+| U6  | **对比**          | 对比浮条 → `/compare`                                                                                                                                                                                                                                                                         | 待排      |
+| U7  | **Market 家族**   | `/market` `/market/funding-rates` `/market/open-interest` `/flash-news`                                                                                                                                                                                                                       | 待排      |
+| U8  | **内容 feed**     | `/hot` `/feed` `/feed/[id]` `/post/[id]` `/post/[id]/edit` `/my-posts` `/hashtag/[tag]`(发帖/标签/贴纸/投票/评论/reaction)                                                                                                                                                                    | 待排      |
+| U9  | **Groups/频道**   | `/groups` `/groups/[id]` `/groups/[id]/manage` `/groups/[id]/new` `/groups/apply` `/channels/[channelId]`                                                                                                                                                                                     | 待排      |
+| U10 | **Inbox/消息**    | `/inbox` `/notifications` `/messages` `/messages/[conversationId]` + presence/未读徽章                                                                                                                                                                                                        | 待排      |
+| U11 | **个人中心家族**  | `/u/[handle]` `/u/[handle]/new` `/user-center` `/settings` `/settings/linked-accounts` `/watchlist` `/favorites` `/favorites/[folderId]` `/following` `/portfolio` `/exchange/auth` `/exchange/auth/api-key` `/exchange/auth/callback`(注意:watchlist 与 favorites 并存,走查时评估是否该合并) | 待排      |
+| U12 | **次级/静态页**   | `/learn` `/learn/[slug]` `/quiz` `/quiz/questions` `/quiz/result` `/wrapped/[handle]` `/about` `/help` `/methodology` `/api-docs` `/status` `/offline` `/privacy` `/terms` `/disclaimer` `/dmca` `/design-system`                                                                             | 待排      |
+| U13 | **Admin 后台**    | `/admin` `/admin/data-health` `/admin/monitoring` `/admin/monitoring/pipeline` `/admin/pro-metrics` `/admin/reports`(owner 专用,标准可放宽,排最后)                                                                                                                                            | 待排      |
+| U14 | **横切兜底**      | 亮色主题 + ja/ko 全站 sweep(前面各单元遗漏的)                                                                                                                                                                                                                                                 | 最后      |
 
 > 顺序依据 CLAUDE.md Product Priority:核心路径(首页→排行→详情→搜索→
 > 登录→Pro)优先于次级(Market/社交/Library)。owner 可随时调序/插队。
