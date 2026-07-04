@@ -4,6 +4,16 @@
 > 每条决策的**为什么**不再只存在于一人脑中。每条 = 背景（什么事故/需求催生）/
 > 决策 / 后果。新决策追加到末尾，不改历史条目（改则新增一条 supersede）。
 > 2026-07-02 首版（Phase 2 知识文档化）。
+>
+> **本文是全项目 ADR 的唯一权威位置**（2026-07-03 合并了原根目录 `DECISIONS.md`）。
+> 分两组：
+> **Part A — 工程纪律 ADR（ADR-001..012，铁律抽取，Phase 2 2026-07，本文原生，中文）**；
+> **Part B — 基础技术选型 ADR（ADR-013..022，2024 立项，源自旧根目录 `DECISIONS.md`，英文，Context→Decision→Consequences）**。
+> 交叉引用注意：`docs/ARCHITECTURE.md` 指向的 "ADR-004/ADR-011" 均指 Part A 编号。
+
+---
+
+## Part A — 工程纪律 ADR（铁律抽取）
 
 ---
 
@@ -105,6 +115,282 @@
   迁移 ledger 补记 317 版本使 `db push` no-op（选记账对账而非激进 squash——
   不为减文件数赌未经 shadow-DB 验证的 baseline）。
 - **后果**：漏加鉴权被 CI 拦；未来 squash 清理留给有 shadow-DB 的窗口。
+
+---
+
+## Part B — Foundational technology-choice ADRs
+
+> Original formal ADR records (2024 project inception), migrated from the former
+> root `DECISIONS.md`. Renumbered ADR-013..022 to avoid collision with Part A;
+> format: Context → Decision → Consequences.
+
+---
+
+## ADR-013: Supabase as Primary Database
+
+**Date:** 2024-01
+**Status:** Accepted
+
+### Context
+
+Need managed PostgreSQL with auth, realtime, and RLS for a social trading platform.
+
+### Decision
+
+Use Supabase (PostgreSQL + Auth + Realtime + Storage).
+
+### Consequences
+
+- ✅ Built-in auth with social providers
+- ✅ Row-level security for multi-tenant data
+- ✅ Realtime subscriptions for live updates
+- ⚠️ Vendor lock-in for auth layer
+- ⚠️ Must manage RLS policies carefully
+
+---
+
+## ADR-014: Composite Key for Trader Identity
+
+**Date:** 2024-01
+**Status:** Accepted
+
+### Context
+
+Traders exist on multiple platforms with different IDs.
+
+### Decision
+
+Use `(source, source_trader_id)` as composite unique key in `trader_sources`.
+
+### Consequences
+
+- ✅ Same trader on different platforms tracked separately
+- ✅ Easy to query by platform
+- ⚠️ Cross-platform trader deduplication requires separate logic
+
+---
+
+## ADR-015: Vercel Cron for Data Pipeline
+
+**Date:** 2024-02
+**Status:** Accepted
+
+### Context
+
+Need scheduled jobs to fetch and process trader data from 27+ exchanges.
+
+### Decision
+
+Use Vercel Cron (serverless) with batch groups (a-f) for rate limit management.
+
+### Consequences
+
+- ✅ Zero infrastructure management
+- ✅ Auto-scaling for burst loads
+- ⚠️ 10-second timeout for hobby, 60s for pro
+- ⚠️ Must batch large operations
+
+---
+
+## ADR-016: Cloudflare Worker for Geo-Blocked APIs
+
+**Date:** 2024-02
+**Status:** Accepted
+
+### Context
+
+Binance/OKX APIs geo-blocked in some regions. Vercel (hnd1) sometimes blocked.
+
+### Decision
+
+Deploy Cloudflare Worker as proxy fallback. Connector auto-switches on failure.
+
+### Consequences
+
+- ✅ Reliable data fetching regardless of region
+- ✅ Transparent fallback in connector layer
+- ⚠️ Additional latency (~50-100ms)
+- ⚠️ Must maintain CF worker code
+
+---
+
+## ADR-017: Arena Score Formula
+
+**Date:** 2024-01
+**Status:** Accepted (updated 2026-05)
+
+### Context
+
+Need unified ranking across platforms with different metrics.
+
+### Decision
+
+Use tanh-based scoring with two components:
+
+```
+ReturnScore = 60 * tanh(coeff * ROI)^exponent   (0-60 points)
+PnlScore    = 40 * tanh(coeff * ln(1 + PnL/base)) (0-40 points)
+Arena Score = (ReturnScore + PnlScore) * confidenceMultiplier * trustWeight
+```
+
+Coefficients vary by period (7D/30D/90D). See `lib/utils/arena-score.ts`.
+Overall composite: `90D * 0.70 + 30D * 0.25 + 7D * 0.05`.
+
+### Consequences
+
+- ✅ tanh compresses extreme outliers (no single trader dominates)
+- ✅ Period-specific coefficients account for short-term volatility
+- ✅ Confidence multiplier penalizes platforms with incomplete data (e.g. GMX)
+- ⚠️ Requires periodic coefficient tuning as trader population changes
+
+---
+
+## ADR-018: Server Components by Default
+
+**Date:** 2024-02
+**Status:** Accepted
+
+### Context
+
+Next.js 16 App Router supports RSC. Need to decide default rendering strategy.
+
+### Decision
+
+Server Components default. Use `'use client'` only for interactive components.
+
+### Consequences
+
+- ✅ Smaller client bundle
+- ✅ Direct database access in components
+- ⚠️ Must be careful with client state
+- ⚠️ Hydration errors if not careful
+
+---
+
+## ADR-019: Upstash Redis for Caching
+
+**Date:** 2024-01
+**Status:** Accepted
+
+### Context
+
+Need caching layer for frequently accessed data (rankings, market data).
+
+### Decision
+
+Use Upstash Redis (serverless, HTTP-based).
+
+### Consequences
+
+- ✅ Works in Edge runtime
+- ✅ Pay-per-request pricing
+- ⚠️ Slightly higher latency than TCP Redis
+- ⚠️ Must handle cache invalidation carefully
+
+---
+
+## ADR-020: i18n with Simple Object Maps
+
+**Date:** 2024-01
+**Status:** Accepted
+
+### Context
+
+Need Chinese (primary) and English support.
+
+### Decision
+
+Simple `lib/i18n.ts` with language object maps. No heavy i18n library.
+
+### Consequences
+
+- ✅ Zero runtime overhead
+- ✅ Type-safe translations
+- ⚠️ Manual key management
+- ⚠️ No pluralization rules (not needed for zh/en)
+
+---
+
+## ADR-021: Stripe for Payments
+
+**Date:** 2024-02
+**Status:** Accepted
+
+### Context
+
+Need subscription management for Pro membership.
+
+### Decision
+
+Stripe Checkout + Webhooks for subscription lifecycle.
+
+### Consequences
+
+- ✅ Industry-standard security
+- ✅ Handles tax/invoicing
+- ⚠️ Processing fees
+- ⚠️ Must sync webhook events to DB
+
+---
+
+## ADR-022: VPS for Long-Running Scrapes
+
+**Date:** 2024-03
+**Status:** Accepted
+
+### Context
+
+Some exchange scraping requires browser automation (Puppeteer) exceeding serverless limits.
+
+### Decision
+
+Deploy cron scripts to US-based VPS for geo-unblocked, long-running tasks.
+
+### Consequences
+
+- ✅ No timeout limits
+- ✅ US IP for geo-blocked APIs
+- ⚠️ Manual deployment/monitoring
+- ⚠️ Additional infrastructure cost
+
+---
+
+## Pending Decisions
+
+### Should we add WebSocket for real-time rankings?
+
+**Context:** Users want live updates without refresh.
+**Options:**
+
+1. Supabase Realtime subscriptions
+2. Custom WebSocket server
+3. Polling with SWR/React Query
+
+**Status:** Under consideration
+
+---
+
+## Decision Template
+
+```markdown
+## ADR-XXX: [Title]
+
+**Date:** YYYY-MM
+**Status:** Proposed | Accepted | Deprecated | Superseded
+
+### Context
+
+[Why is this decision needed?]
+
+### Decision
+
+[What was decided?]
+
+### Consequences
+
+- ✅ Positive outcome
+- ⚠️ Trade-off or risk
+```
 
 ---
 
