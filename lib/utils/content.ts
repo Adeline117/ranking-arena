@@ -32,7 +32,9 @@ interface ContentPart {
 export function parseVideoUrl(url: string): VideoEmbed | null {
   // YouTube 链接
   // 格式: https://www.youtube.com/watch?v=VIDEO_ID 或 https://youtu.be/VIDEO_ID
-  const youtubeMatch = url.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/)
+  const youtubeMatch = url.match(
+    /(?:youtube\.com\/watch\?v=|youtu\.be\/|youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/
+  )
   if (youtubeMatch) {
     return {
       type: 'youtube',
@@ -43,7 +45,9 @@ export function parseVideoUrl(url: string): VideoEmbed | null {
 
   // Bilibili 链接
   // 格式: https://www.bilibili.com/video/BV1xxxxx 或 https://b23.tv/xxx
-  const bilibiliMatch = url.match(/bilibili\.com\/video\/(BV[a-zA-Z0-9]+)|bilibili\.com\/video\/av(\d+)|b23\.tv\/([a-zA-Z0-9]+)/)
+  const bilibiliMatch = url.match(
+    /bilibili\.com\/video\/(BV[a-zA-Z0-9]+)|bilibili\.com\/video\/av(\d+)|b23\.tv\/([a-zA-Z0-9]+)/
+  )
   if (bilibiliMatch) {
     const bvid = bilibiliMatch[1]
     const aid = bilibiliMatch[2]
@@ -87,12 +91,12 @@ export function parseVideoUrl(url: string): VideoEmbed | null {
  */
 export function parseContent(text: string): ContentPart[] {
   if (!text) return []
-  
+
   const imageRegex = /!\[([^\]]*)\]\(([^)]+)\)/g
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
-  
+
   const parts: ContentPart[] = []
-  
+
   // 先找出所有图片
   const imageMatches: { start: number; end: number; alt: string; url: string }[] = []
   let match
@@ -104,7 +108,7 @@ export function parseContent(text: string): ContentPart[] {
       url: match[2],
     })
   }
-  
+
   // 处理文本中的链接（包括视频链接）
   function processTextWithLinks(str: string): void {
     const linkParts = str.split(urlRegex)
@@ -123,7 +127,7 @@ export function parseContent(text: string): ContentPart[] {
       }
     })
   }
-  
+
   // 构建内容片段
   let currentIndex = 0
   for (const img of imageMatches) {
@@ -135,17 +139,17 @@ export function parseContent(text: string): ContentPart[] {
     parts.push({ type: 'image', content: img.alt, url: img.url })
     currentIndex = img.end
   }
-  
+
   // 最后一个图片后的文本
   if (currentIndex < text.length) {
     processTextWithLinks(text.slice(currentIndex))
   }
-  
+
   // 如果没有图片，直接处理链接
   if (imageMatches.length === 0 && parts.length === 0) {
     processTextWithLinks(text)
   }
-  
+
   return parts
 }
 
@@ -159,134 +163,156 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
   return parts.map((part, index) => {
     if (part.type === 'image') {
       // 使用带错误处理的图片容器
-      return createElement('span', {
-        key: index,
-        className: 'content-image-wrapper',
-        style: {
-          display: 'inline-block',
-          verticalAlign: 'middle',
-          margin: '4px 6px',
-          position: 'relative',
+      return createElement(
+        'span',
+        {
+          key: index,
+          className: 'content-image-wrapper',
+          style: {
+            display: 'inline-block',
+            verticalAlign: 'middle',
+            margin: '4px 6px',
+            position: 'relative',
+          },
         },
-      }, createElement('img', {
-        src: part.url,
-        alt: part.content || 'image',
-        loading: 'lazy',
-        decoding: 'async',
-        onClick: (e: React.MouseEvent) => {
-          e.stopPropagation()
-          window.open(part.url, '_blank')
-        },
-        onError: (e: React.SyntheticEvent<HTMLImageElement>) => {
-          const img = e.currentTarget
-          const wrapper = img.parentElement
-          if (wrapper) {
-            // Replace with error placeholder using safe DOM API (no innerHTML)
-            while (wrapper.firstChild) wrapper.removeChild(wrapper.firstChild)
-            const errorDiv = document.createElement('div')
-            Object.assign(errorDiv.style, {
-              display: 'flex', flexDirection: 'column', alignItems: 'center',
-              justifyContent: 'center', background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
-              borderRadius: '8px', padding: '16px', minHeight: '80px',
-              minWidth: '120px', border: '1px dashed #444',
-            })
-            const label = document.createElement('span')
-            Object.assign(label.style, { fontSize: '11px', color: '#888' })
-            label.textContent = '图片加载失败'
-            errorDiv.appendChild(label)
-            wrapper.appendChild(errorDiv)
-          }
-        },
-        style: {
-          maxWidth: '100%',
-          maxHeight: 300,
-          borderRadius: 8,
-          cursor: 'pointer',
-          display: 'block',
-        },
-      }))
+        createElement('img', {
+          src: part.url,
+          alt: part.content || 'image',
+          loading: 'lazy',
+          decoding: 'async',
+          onClick: (e: React.MouseEvent) => {
+            e.stopPropagation()
+            window.open(part.url, '_blank')
+          },
+          onError: (e: React.SyntheticEvent<HTMLImageElement>) => {
+            const img = e.currentTarget
+            const wrapper = img.parentElement
+            if (wrapper) {
+              // Replace with error placeholder using safe DOM API (no innerHTML)
+              while (wrapper.firstChild) wrapper.removeChild(wrapper.firstChild)
+              const errorDiv = document.createElement('div')
+              Object.assign(errorDiv.style, {
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+                borderRadius: '8px',
+                padding: '16px',
+                minHeight: '80px',
+                minWidth: '120px',
+                border: '1px dashed #444',
+              })
+              const label = document.createElement('span')
+              Object.assign(label.style, { fontSize: '11px', color: '#888' })
+              label.textContent = '图片加载失败'
+              errorDiv.appendChild(label)
+              wrapper.appendChild(errorDiv)
+            }
+          },
+          style: {
+            maxWidth: '100%',
+            maxHeight: 300,
+            borderRadius: 8,
+            cursor: 'pointer',
+            display: 'block',
+          },
+        })
+      )
     }
 
     // 渲染视频播放器
     if (part.type === 'video' && part.video) {
       // 直接视频URL使用 video 标签
       if (part.video.type === 'direct') {
-        return createElement('div', {
+        return createElement(
+          'div',
+          {
+            key: index,
+            onClick: (e: React.MouseEvent) => e.stopPropagation(),
+            style: {
+              position: 'relative' as const,
+              width: '100%',
+              maxWidth: 640,
+              marginTop: 8,
+              marginBottom: 8,
+              borderRadius: 8,
+              overflow: 'hidden',
+              background: 'var(--color-text-primary)',
+            },
+          },
+          createElement('video', {
+            src: part.video.embedUrl,
+            controls: true,
+            preload: 'metadata',
+            style: {
+              width: '100%',
+              maxHeight: 360,
+              display: 'block',
+            },
+            onError: () => {
+              logger.error('Video failed to load:', part.video?.originalUrl)
+            },
+          })
+        )
+      }
+
+      // YouTube/Bilibili 使用 iframe 嵌入
+      return createElement(
+        'div',
+        {
           key: index,
           onClick: (e: React.MouseEvent) => e.stopPropagation(),
           style: {
             position: 'relative' as const,
             width: '100%',
-            maxWidth: 640,
+            paddingBottom: '56.25%', // 16:9 比例
             marginTop: 8,
             marginBottom: 8,
             borderRadius: 8,
             overflow: 'hidden',
             background: 'var(--color-text-primary)',
           },
-        }, createElement('video', {
+        },
+        createElement('iframe', {
           src: part.video.embedUrl,
-          controls: true,
-          preload: 'metadata',
           style: {
+            position: 'absolute' as const,
+            top: 0,
+            left: 0,
             width: '100%',
-            maxHeight: 360,
-            display: 'block',
+            height: '100%',
+            border: 'none',
           },
+          allowFullScreen: true,
+          allow:
+            'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
+          title: part.video.type === 'youtube' ? 'YouTube 视频' : 'Bilibili 视频',
           onError: () => {
+            // 视频加载失败时的处理
             logger.error('Video failed to load:', part.video?.originalUrl)
           },
-        }))
-      }
-
-      // YouTube/Bilibili 使用 iframe 嵌入
-      return createElement('div', {
-        key: index,
-        onClick: (e: React.MouseEvent) => e.stopPropagation(),
-        style: {
-          position: 'relative' as const,
-          width: '100%',
-          paddingBottom: '56.25%', // 16:9 比例
-          marginTop: 8,
-          marginBottom: 8,
-          borderRadius: 8,
-          overflow: 'hidden',
-          background: 'var(--color-text-primary)',
-        },
-      }, createElement('iframe', {
-        src: part.video.embedUrl,
-        style: {
-          position: 'absolute' as const,
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          border: 'none',
-        },
-        allowFullScreen: true,
-        allow: 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture',
-        title: part.video.type === 'youtube' ? 'YouTube 视频' : 'Bilibili 视频',
-        onError: () => {
-          // 视频加载失败时的处理
-          logger.error('Video failed to load:', part.video?.originalUrl)
-        },
-      }))
+        })
+      )
     }
 
-
     if (part.type === 'link') {
-      return createElement('a', {
-        key: index,
-        href: part.url,
-        target: '_blank',
-        rel: 'noopener noreferrer',
-        onClick: (e: React.MouseEvent) => e.stopPropagation(),
-        style: {
-          color: ARENA_PURPLE,
-          textDecoration: 'underline',
-          wordBreak: 'break-all' as const,
+      return createElement(
+        'a',
+        {
+          key: index,
+          href: part.url,
+          target: '_blank',
+          rel: 'noopener noreferrer',
+          onClick: (e: React.MouseEvent) => e.stopPropagation(),
+          style: {
+            color: ARENA_PURPLE,
+            textDecoration: 'underline',
+            wordBreak: 'break-all' as const,
+          },
         },
-      }, part.content)
+        part.content
+      )
     }
 
     return createElement('span', { key: index }, part.content)
@@ -298,7 +324,9 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
  * Returns an array of ReactNodes with hashtag links.
  */
 function renderTextWithHashtags(text: string, keyPrefix: string): ReactNode[] {
-  const hashtagRegex = /#(\w{1,30})/g
+  // Unicode-aware(与 lib/data/hashtags.ts 提取 regex 同步):\w 是 ASCII-only,
+  // 会让 #比特币 等 CJK 标签不被 linkify(2026-07-03 修复)。
+  const hashtagRegex = /#([\p{L}\p{N}_]{1,30})/gu
   if (!hashtagRegex.test(text)) {
     return renderTextWithStickers(text, keyPrefix)
   }
@@ -309,19 +337,27 @@ function renderTextWithHashtags(text: string, keyPrefix: string): ReactNode[] {
   hashtagRegex.lastIndex = 0
   while ((match = hashtagRegex.exec(text)) !== null) {
     if (match.index > lastIdx) {
-      nodes.push(...renderTextWithStickers(text.slice(lastIdx, match.index), `${keyPrefix}-ht${lastIdx}`))
+      nodes.push(
+        ...renderTextWithStickers(text.slice(lastIdx, match.index), `${keyPrefix}-ht${lastIdx}`)
+      )
     }
     const tag = match[1]
-    nodes.push(createElement('a', {
-      key: `${keyPrefix}-ht${match.index}`,
-      href: `/hashtag/${tag.toLowerCase()}`,
-      onClick: (e: React.MouseEvent) => e.stopPropagation(),
-      style: {
-        color: ARENA_PURPLE,
-        textDecoration: 'none',
-        fontWeight: 600,
-      },
-    }, `#${tag}`))
+    nodes.push(
+      createElement(
+        'a',
+        {
+          key: `${keyPrefix}-ht${match.index}`,
+          href: `/hashtag/${tag.toLowerCase()}`,
+          onClick: (e: React.MouseEvent) => e.stopPropagation(),
+          style: {
+            color: ARENA_PURPLE,
+            textDecoration: 'none',
+            fontWeight: 600,
+          },
+        },
+        `#${tag}`
+      )
+    )
     lastIdx = match.index + match[0].length
   }
   if (lastIdx < text.length) {
@@ -344,7 +380,13 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
 
   while ((match = pattern.exec(text)) !== null) {
     if (match.index > lastIdx) {
-      nodes.push(createElement('span', { key: `${keyPrefix}-md${lastIdx}` }, text.slice(lastIdx, match.index)))
+      nodes.push(
+        createElement(
+          'span',
+          { key: `${keyPrefix}-md${lastIdx}` },
+          text.slice(lastIdx, match.index)
+        )
+      )
     }
 
     if (match[1]) {
@@ -355,22 +397,34 @@ function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
       nodes.push(createElement('em', { key: `${keyPrefix}-i${match.index}` }, match[4]))
     } else if (match[5]) {
       // `code`
-      nodes.push(createElement('code', {
-        key: `${keyPrefix}-c${match.index}`,
-        style: {
-          background: 'var(--color-bg-tertiary)',
-          padding: '1px 4px',
-          borderRadius: 4,
-          fontSize: '0.9em',
-          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-        },
-      }, match[6]))
+      nodes.push(
+        createElement(
+          'code',
+          {
+            key: `${keyPrefix}-c${match.index}`,
+            style: {
+              background: 'var(--color-bg-tertiary)',
+              padding: '1px 4px',
+              borderRadius: 4,
+              fontSize: '0.9em',
+              fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+            },
+          },
+          match[6]
+        )
+      )
     } else if (match[7]) {
       // ~~strikethrough~~
-      nodes.push(createElement('del', {
-        key: `${keyPrefix}-s${match.index}`,
-        style: { opacity: 0.6 },
-      }, match[8]))
+      nodes.push(
+        createElement(
+          'del',
+          {
+            key: `${keyPrefix}-s${match.index}`,
+            style: { opacity: 0.6 },
+          },
+          match[8]
+        )
+      )
     }
 
     lastIdx = match.index + match[0].length
@@ -402,11 +456,17 @@ function renderTextWithMentions(text: string, keyPrefix: string): ReactNode[] {
       // Apply inline markdown to text between mentions
       nodes.push(...renderInlineMarkdown(text.slice(lastIdx, m.index), `${keyPrefix}-mt${lastIdx}`))
     }
-    nodes.push(createElement('a', {
-      key: `${keyPrefix}-m${m.index}`,
-      href: `/u/${encodeURIComponent(m[1])}`,
-      style: { color: 'var(--color-brand)', fontWeight: 600, textDecoration: 'none' },
-    }, `@${m[1]}`))
+    nodes.push(
+      createElement(
+        'a',
+        {
+          key: `${keyPrefix}-m${m.index}`,
+          href: `/u/${encodeURIComponent(m[1])}`,
+          style: { color: 'var(--color-brand)', fontWeight: 600, textDecoration: 'none' },
+        },
+        `@${m[1]}`
+      )
+    )
     lastIdx = m.index + m[0].length
   }
   if (lastIdx < text.length) {
@@ -432,19 +492,23 @@ function renderTextWithStickers(text: string, keyPrefix: string): ReactNode[] {
   STICKER_PATTERN.lastIndex = 0
   while ((match = STICKER_PATTERN.exec(text)) !== null) {
     if (match.index > lastIdx) {
-      nodes.push(...renderTextWithMentions(text.slice(lastIdx, match.index), `${keyPrefix}-t${lastIdx}`))
+      nodes.push(
+        ...renderTextWithMentions(text.slice(lastIdx, match.index), `${keyPrefix}-t${lastIdx}`)
+      )
     }
     const sticker = getStickerById(match[1])
     if (sticker) {
-      nodes.push(createElement('img', {
-        key: `${keyPrefix}-s${match.index}`,
-        src: sticker.path,
-        alt: sticker.name_en,
-        width: 32,
-        height: 32,
-        loading: 'lazy',
-        style: { display: 'inline-block', verticalAlign: 'middle', objectFit: 'contain' },
-      }))
+      nodes.push(
+        createElement('img', {
+          key: `${keyPrefix}-s${match.index}`,
+          src: sticker.path,
+          alt: sticker.name_en,
+          width: 32,
+          height: 32,
+          loading: 'lazy',
+          style: { display: 'inline-block', verticalAlign: 'middle', objectFit: 'contain' },
+        })
+      )
     } else {
       nodes.push(createElement('span', { key: `${keyPrefix}-u${match.index}` }, match[0]))
     }
@@ -469,15 +533,17 @@ export function renderContentWithLinks(text: string): ReactNode[] | null {
     const id = extractStickerId(text)
     const sticker = id ? getStickerById(id) : null
     if (sticker) {
-      return [createElement('img', {
-        key: 'sticker',
-        src: sticker.path,
-        alt: sticker.name_en,
-        width: 128,
-        height: 128,
-        loading: 'lazy',
-        style: { display: 'block', objectFit: 'contain' },
-      })]
+      return [
+        createElement('img', {
+          key: 'sticker',
+          src: sticker.path,
+          alt: sticker.name_en,
+          width: 128,
+          height: 128,
+          loading: 'lazy',
+          style: { display: 'block', objectFit: 'contain' },
+        }),
+      ]
     }
   }
 
@@ -505,21 +571,27 @@ export function renderContentWithLinks(text: string): ReactNode[] | null {
 
   for (const seg of segments) {
     if (seg.type === 'codeblock') {
-      result.push(createElement('pre', {
-        key: `cb-${keyIdx++}`,
-        style: {
-          background: 'var(--color-overlay-medium)',
-          border: '1px solid var(--glass-border-light)',
-          borderRadius: 8,
-          padding: '12px 16px',
-          margin: '8px 0',
-          overflow: 'auto',
-          fontSize: 13,
-          lineHeight: 1.5,
-          fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-          color: 'var(--color-border-primary)',
-        },
-      }, createElement('code', null, seg.content)))
+      result.push(
+        createElement(
+          'pre',
+          {
+            key: `cb-${keyIdx++}`,
+            style: {
+              background: 'var(--color-overlay-medium)',
+              border: '1px solid var(--glass-border-light)',
+              borderRadius: 8,
+              padding: '12px 16px',
+              margin: '8px 0',
+              overflow: 'auto',
+              fontSize: 13,
+              lineHeight: 1.5,
+              fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+              color: 'var(--color-border-primary)',
+            },
+          },
+          createElement('code', null, seg.content)
+        )
+      )
       continue
     }
 
@@ -530,7 +602,10 @@ export function renderContentWithLinks(text: string): ReactNode[] | null {
     let inlineMatch: RegExpExecArray | null
     while ((inlineMatch = inlineCodeRegex.exec(seg.content)) !== null) {
       if (inlineMatch.index > inlineLastIdx) {
-        inlineParts.push({ type: 'text', content: seg.content.slice(inlineLastIdx, inlineMatch.index) })
+        inlineParts.push({
+          type: 'text',
+          content: seg.content.slice(inlineLastIdx, inlineMatch.index),
+        })
       }
       inlineParts.push({ type: 'inlinecode', content: inlineMatch[1] })
       inlineLastIdx = inlineMatch.index + inlineMatch[0].length
@@ -544,17 +619,23 @@ export function renderContentWithLinks(text: string): ReactNode[] | null {
 
     for (const ip of inlineParts) {
       if (ip.type === 'inlinecode') {
-        result.push(createElement('code', {
-          key: `ic-${keyIdx++}`,
-          style: {
-            background: 'var(--color-accent-primary-15)',
-            border: '1px solid var(--color-accent-primary-20)',
-            borderRadius: 4,
-            padding: '2px 6px',
-            fontSize: '0.9em',
-            fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-          },
-        }, ip.content))
+        result.push(
+          createElement(
+            'code',
+            {
+              key: `ic-${keyIdx++}`,
+              style: {
+                background: 'var(--color-accent-primary-15)',
+                border: '1px solid var(--color-accent-primary-20)',
+                borderRadius: 4,
+                padding: '2px 6px',
+                fontSize: '0.9em',
+                fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+              },
+            },
+            ip.content
+          )
+        )
         continue
       }
 
@@ -563,13 +644,15 @@ export function renderContentWithLinks(text: string): ReactNode[] | null {
         if (part.type === 'text') {
           result.push(...renderTextWithHashtags(part.content, `p${keyIdx++}`))
         } else {
-          result.push(...renderContentParts([part]).map((node, i) => {
-            // Re-key to avoid collisions
-            if (node && typeof node === 'object' && 'key' in node) {
-              return { ...node as object, key: `rk-${keyIdx++}-${i}` } as ReactNode
-            }
-            return node
-          }))
+          result.push(
+            ...renderContentParts([part]).map((node, i) => {
+              // Re-key to avoid collisions
+              if (node && typeof node === 'object' && 'key' in node) {
+                return { ...(node as object), key: `rk-${keyIdx++}-${i}` } as ReactNode
+              }
+              return node
+            })
+          )
         }
       }
     }
@@ -596,18 +679,18 @@ export function truncateText(text: string, maxLength: number): string {
  */
 export function detectLanguage(text: string): 'zh' | 'en' | 'other' {
   if (!text) return 'other'
-  
+
   // 检测中文字符
   const chineseChars = text.match(/[\u4e00-\u9fa5]/g)?.length || 0
   // 检测英文字符
   const englishChars = text.match(/[a-zA-Z]/g)?.length || 0
-  
+
   const total = chineseChars + englishChars
   if (total === 0) return 'other'
-  
+
   if (chineseChars / total > 0.3) return 'zh'
   if (englishChars / total > 0.5) return 'en'
-  
+
   return 'other'
 }
 
@@ -619,10 +702,10 @@ export function detectLanguage(text: string): 'zh' | 'en' | 'other' {
  */
 export function generateSummary(text: string, maxLength: number = 200): string {
   if (!text) return ''
-  
+
   // 移除 Markdown 图片语法
   const cleanText = text.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, '')
-  
+
   // 移除多余空白
   const normalized = cleanText.replace(/\s+/g, ' ').trim()
 
@@ -639,4 +722,3 @@ export function isChineseText(text: string): boolean {
   const chineseRatio = chineseMatches ? chineseMatches.length / text.length : 0
   return chineseRatio > 0.1
 }
-
