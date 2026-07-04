@@ -219,15 +219,23 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
 
   // M3-3a fills replay: round-trip reconstruction over the TF window gives the
   // CEX-equivalent winRate / positions / holding-time / 盈亏比 that HL never
-  // hands over ("needs fills replay — spike §8.3", now in). NULL-collapses when
-  // the fills fetch failed or the window has no completed trips.
-  const fillsArr = Array.isArray(payload.fills) ? (payload.fills as HlFill[]) : []
-  const fstats =
-    fillsArr.length > 0 ? fillStats(fillsArr, Date.parse(ctx.scrapedAt) - tf * DAY_MS, tf) : null
+  // hands over ("needs fills replay — spike §8.3", now in).
+  //
+  // Present-but-empty ≠ failed (2026-07-04 homepage-dash root fix): a fills
+  // fetch that SUCCEEDED with zero fills is a confirmed zero-activity window
+  // (rank-1 was a $48M spot holder — 0 trades in 90d) and must write explicit
+  // totalPositions/winPositions = 0 so the product can tell "Holder" apart
+  // from "unknown". Only a FAILED fetch (payload.fills undefined/null)
+  // NULL-collapses. winRate stays null at 0 trips (0/0 is undefined).
+  const fillsPresent = Array.isArray(payload.fills)
+  const fillsArr = fillsPresent ? (payload.fills as HlFill[]) : []
+  const fstats = fillsPresent
+    ? fillStats(fillsArr, Date.parse(ctx.scrapedAt) - tf * DAY_MS, tf)
+    : null
   const hasTrips = fstats !== null && fstats.totalPositions > 0
   const fillsExtras: Record<string, unknown> = {}
+  if (fillsPresent) fillsExtras.fills_derivation = 'fills-replay'
   if (hasTrips) {
-    fillsExtras.fills_derivation = 'fills-replay'
     if (fstats.pnlRatio !== null) fillsExtras.pnl_ratio = fstats.pnlRatio
     if (fstats.tripsPerWeek !== null) fillsExtras.trades_per_week = fstats.tripsPerWeek
   }
@@ -269,8 +277,10 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
         mdd: risk.mdd,
         // M3-3a fills replay (overrides EMPTY_STATS nulls when trips exist)
         winRate: hasTrips ? fstats.winRate : null,
-        winPositions: hasTrips ? fstats.winPositions : null,
-        totalPositions: hasTrips ? fstats.totalPositions : null,
+        // explicit 0s on a confirmed zero-activity window (fills present,
+        // no trips) — null only when the fills fetch failed.
+        winPositions: fstats ? fstats.winPositions : null,
+        totalPositions: fstats ? fstats.totalPositions : null,
         holdingDurationAvgHours: hasTrips ? fstats.avgHoldingHours : null,
       })
       push(seriesFrom(tf, 'pnl', pnlPts))
@@ -318,8 +328,10 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
         mdd: risk.mdd,
         // M3-3a fills replay (overrides EMPTY_STATS nulls when trips exist)
         winRate: hasTrips ? fstats.winRate : null,
-        winPositions: hasTrips ? fstats.winPositions : null,
-        totalPositions: hasTrips ? fstats.totalPositions : null,
+        // explicit 0s on a confirmed zero-activity window (fills present,
+        // no trips) — null only when the fills fetch failed.
+        winPositions: fstats ? fstats.winPositions : null,
+        totalPositions: fstats ? fstats.totalPositions : null,
         holdingDurationAvgHours: hasTrips ? fstats.avgHoldingHours : null,
       })
       const inWindow = pnlPts.filter((p) => p.ts >= windowStart)
