@@ -19,6 +19,7 @@
  */
 
 import pg from 'pg'
+import { TREND_METRICS as TREND_METRIC_LIST } from './metric-columns.mjs'
 
 /** slug:metric → 理由。只豁免核实过的,别用来消音。 */
 const EXEMPT = new Map([
@@ -76,7 +77,7 @@ from caps c join fill f on f.slug = c.slug
  * profile-refill 指标(mdd/win_positions/copier_pnl 等),合法稀疏但稳定
  * 的指标(如 bybit_copytrade 的 pnl)不在盯范围。
  */
-const TREND_METRICS = new Set(['mdd', 'win_positions', 'copier_pnl', 'sharpe', 'copier_count'])
+const TREND_METRICS = new Set(TREND_METRIC_LIST) // 单一来源 metric-columns.mjs(P4)
 const TREND_PLATEAU_OK = 0.9 // 填充 ≥90% 视为已完成,平坦不再告警
 
 async function snapshotAndTrend(pool, rows) {

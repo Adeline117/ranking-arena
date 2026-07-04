@@ -16,27 +16,14 @@
  */
 
 import pg from 'pg'
+import { TYPED_METRICS } from './metric-columns.mjs'
 
 const BASE = process.env.ARENA_BASE_URL || 'https://www.arenafi.org'
 const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 ArenaQA-render-coverage'
 
-/** typed 指标列(与 arena.trader_stats 列名、core API data.stats 键名 1:1)。 */
-const METRICS = [
-  'roi',
-  'pnl',
-  'sharpe',
-  'mdd',
-  'win_rate',
-  'win_positions',
-  'total_positions',
-  'copier_pnl',
-  'copier_count',
-  'aum',
-  'volume',
-  'profit_share_rate',
-  'holding_duration_avg',
-]
+/** typed 指标列 — 单一来源 metric-columns.mjs(P4)。 */
+const METRICS = TYPED_METRICS
 
 /** `slug:metric` → 理由。只豁免核实过的。 */
 const EXEMPT = new Map([])
