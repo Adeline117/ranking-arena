@@ -14,6 +14,7 @@
 
 import type {
   BoardSeriesBlock,
+  ExpectedMetrics,
   HistoryKind,
   ParseCtx,
   ParsedHistoryRow,
@@ -33,6 +34,11 @@ export interface SourceAdapter {
   /** Matches arena.sources.adapter_slug. */
   readonly slug: string
   readonly capabilities: SurfaceCapabilities
+  /** Declarative "should-have" metric contract (see ExpectedMetrics in
+   *  types.ts): metrics the exchange provides and our parsers must emit.
+   *  Locked by the expected-metrics-parity test + the fill-rate sentinel.
+   *  Optional during rollout — the parity test flags undeclared adapters. */
+  readonly expectedMetrics?: ExpectedMetrics
 
   /** Tier A: stream leaderboard pages for one timeframe. */
   listLeaderboard(

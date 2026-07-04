@@ -8,6 +8,8 @@
  */
 
 import { getActiveSources, getServingSourceNames } from '@/lib/ingest/sources'
+import { getAdapter } from '@/lib/ingest/core/adapter'
+import { getIngestPool } from '@/lib/ingest/db'
 import { getConnection } from '../connection'
 import {
   fastLaneEnabled,
@@ -269,6 +271,42 @@ export async function reconcileSchedulers(): Promise<void> {
   )
 
   await reconcileServingSources()
+  await syncExpectedMetrics(sources)
+}
+
+/**
+ * Sync each adapter's code-declared expectedMetrics into
+ * arena.sources.meta.expected_metrics (P0 of the data-completeness system,
+ * 2026-07-04). The fill-rate sentinel reads it as the "should-have" truth —
+ * mv_source_capabilities can't serve that role (its metric list is derived
+ * from trader_stats counts: measures "have", never "should have").
+ * Skips sources whose adapter doesn't declare yet; failures never abort the
+ * reconcile (best-effort sync, next hourly run retries).
+ */
+async function syncExpectedMetrics(
+  sources: Awaited<ReturnType<typeof getActiveSources>>
+): Promise<void> {
+  for (const src of sources) {
+    try {
+      const adapter = getAdapter(src.adapter_slug)
+      const declared = adapter.expectedMetrics
+      if (!declared || declared.length === 0) continue
+      const current = src.meta?.expected_metrics
+      if (JSON.stringify(current) === JSON.stringify(declared)) continue
+      await getIngestPool().query(
+        `UPDATE arena.sources
+            SET meta = meta || jsonb_build_object('expected_metrics', $2::jsonb)
+          WHERE slug = $1`,
+        [src.slug, JSON.stringify(declared)]
+      )
+      console.log(`[ingest-scheduler] synced expected_metrics for ${src.slug} (${declared.length})`)
+    } catch (err) {
+      console.warn(
+        `[ingest-scheduler] expected_metrics sync failed for ${src.slug}:`,
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
 }
 
 /**

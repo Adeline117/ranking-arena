@@ -287,6 +287,39 @@ export interface SurfaceCapabilities {
   copiers: boolean
 }
 
+/** Typed arena.trader_stats metric keys an adapter can emit (board headline
+ *  and/or profile stats). snake_case = the DB column names. */
+export type ExpectedMetric =
+  | 'roi'
+  | 'pnl'
+  | 'sharpe'
+  | 'mdd'
+  | 'win_rate'
+  | 'win_positions'
+  | 'total_positions'
+  | 'copier_pnl'
+  | 'copier_count'
+  | 'aum'
+  | 'volume'
+  | 'profit_share_rate'
+  | 'holding_duration_avg'
+
+/**
+ * Declarative "should-have" metric contract (2026-07-04, P0 of the data-
+ * completeness system). The exchange PROVIDES these metrics (per the
+ * screenshot-calibrated 交易所细节.docx audit) and the adapter's parsers are
+ * expected to emit them. This is deliberately INDEPENDENT of ingested data —
+ * arena.mv_source_capabilities derives its metric list from trader_stats
+ * counts, which measures "have", never "should have", so a parser that
+ * silently drops a field (the 2026-07-03 gate-sharpe class) looks fine to it.
+ * Enforced two ways:
+ *   1. expected-metrics-parity test: every declared metric must be emitted
+ *      non-null by the adapter's parsers over its own RAW fixtures (CI gate).
+ *   2. fill-rate sentinel: declared metrics must have non-zero fill in prod
+ *      (arena.sources.meta.expected_metrics, synced by the worker reconcile).
+ */
+export type ExpectedMetrics = readonly ExpectedMetric[]
+
 // ── Helpers ──
 
 /** Map a source TF label to canonical via the per-source map (spec §12.4).
