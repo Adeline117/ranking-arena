@@ -27,6 +27,45 @@
 
 import type { ExpectedMetrics } from '../core/types'
 
+/**
+ * Per-SOURCE overrides for multi-source adapters whose variants provide
+ * different metric sets (first carpet-audit findings, 2026-07-04):
+ * the adapter-level declaration is the futures/main variant; spot/cfd
+ * variants that lack profile trade-counts etc. override here.
+ * Sync precedence: BY_SOURCE[slug] > EXPECTED_METRICS[adapter_slug].
+ */
+export const EXPECTED_METRICS_BY_SOURCE: Record<string, ExpectedMetrics> = {
+  // spot profile provides no trade counts (prod 0/8103 both)
+  binance_spot: [
+    'roi',
+    'pnl',
+    'sharpe',
+    'mdd',
+    'win_rate',
+    'copier_pnl',
+    'copier_count',
+    'aum',
+    'profit_share_rate',
+  ],
+  // cfd variant has no volume surface (prod 0/10523)
+  gate_cfd: [
+    'roi',
+    'pnl',
+    'sharpe',
+    'mdd',
+    'win_rate',
+    'win_positions',
+    'total_positions',
+    'copier_pnl',
+    'copier_count',
+    'aum',
+    'profit_share_rate',
+  ],
+  // spot board-only in practice: no profile crawl upstream → profile-only
+  // metrics (win/total positions, copier_pnl, aum, holding) never fill
+  xt_spot: ['roi', 'pnl', 'mdd', 'win_rate', 'copier_count'],
+}
+
 export const EXPECTED_METRICS: Record<string, ExpectedMetrics> = {
   binance: [
     'roi',
