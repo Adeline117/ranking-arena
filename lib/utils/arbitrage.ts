@@ -216,18 +216,21 @@ function getRate(
   from: string,
   to: string
 ): { from: string; to: string; rate: number; symbol: string } | null {
-  // 尝试 FROM/TO 对
+  // FROM/TO 直接对存在(报价货币=to):卖出 from 成交在 bid → rate = bid
   const direct = `${from}/${to}`
   const t1 = tickers[direct]
-  if (t1?.ask && t1.ask > 0) {
-    return { from, to, rate: 1 / t1.ask, symbol: direct }
+  if (t1?.bid && t1.bid > 0) {
+    return { from, to, rate: t1.bid, symbol: direct }
   }
 
-  // 尝试 TO/FROM 对 (反向)
+  // TO/FROM 反向对(报价货币=from):买入 to 成交在 ask → rate = 1/ask
+  // 修复(2026-07-03):此前两分支 bid/ask 写反(直接对用 1/ask、反向对用 bid),
+  // 同一转换请求会因挂牌方向得出互为倒数的汇率——检测到的循环方向与展示的
+  // path/steps 标签相反。现在统一为可执行语义:卖在 bid、买在 ask。
   const inverse = `${to}/${from}`
   const t2 = tickers[inverse]
-  if (t2?.bid && t2.bid > 0) {
-    return { from, to, rate: t2.bid, symbol: inverse }
+  if (t2?.ask && t2.ask > 0) {
+    return { from, to, rate: 1 / t2.ask, symbol: inverse }
   }
 
   return null
