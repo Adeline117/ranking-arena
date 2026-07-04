@@ -65,6 +65,6 @@ For anything that:
 
 Do NOT fix. Document in the report under "Needs Confirmation".
 
-## 7. Update PROGRESS.md
+## 7. Update docs/PROGRESS.md
 
 Add a note about this self-check run.

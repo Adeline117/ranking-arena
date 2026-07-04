@@ -98,4 +98,4 @@ curl http://localhost:3000/api/cron/fetch-traders/exchange_name?periods=7D
 - [ ] Maps to standard `TraderSnapshot` schema
 - [ ] Added to batch group
 - [ ] Tested locally
-- [ ] Documented in PROGRESS.md
+- [ ] Documented in docs/PROGRESS.md

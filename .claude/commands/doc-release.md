@@ -1,5 +1,5 @@
 ---
-description: Post-ship doc sync — update README, CLAUDE.md, CHANGELOG, PROGRESS.md to match what shipped
+description: Post-ship doc sync — update README, CLAUDE.md, CHANGELOG, docs/PROGRESS.md to match what shipped
 ---
 
 Read `.claude/skills/arena-doc-release/SKILL.md` and execute the documentation release process.

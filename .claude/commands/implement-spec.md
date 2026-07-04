@@ -15,7 +15,7 @@ Follow this process:
    b. Run `npm test`
    c. Run `npm run build`
    d. If all pass, push the branch
-6. Update PROGRESS.md with what was completed.
+6. Update docs/PROGRESS.md with what was completed.
 
 Rules:
 - Do NOT ask questions. Make reasonable decisions based on existing patterns in the codebase.

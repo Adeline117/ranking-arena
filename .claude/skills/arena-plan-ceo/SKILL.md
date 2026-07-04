@@ -16,7 +16,7 @@ Think like the best product founders: Bezos (customer obsession, working backwar
 ## Review Process
 
 ### Step 1: Understand the Proposal
-- Read all relevant files (spec, TASKS.md, PROGRESS.md)
+- Read all relevant files (spec, docs/TASKS.md, docs/PROGRESS.md)
 - Identify: What problem does this solve? For whom? Why now?
 
 ### Step 2: Challenge Premises
