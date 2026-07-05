@@ -32,6 +32,22 @@ const ROSTER_KEY = 'arena:worker:roster'
 const STALE_MS = 5 * 60_000 // heartbeat older than this → node is down
 const DECOMMISSION_MS = 24 * 3600_000 // older than this → assume retired, prune
 
+/**
+ * Regions that MUST have a fresh consumer for crawling to function — the
+ * true invariant (2026-07-05 postmortem). Per-node down alerts alone failed
+ * us twice in one incident:
+ *   1. A zombie identity ("vultr", a long-dead host-level process on the SG
+ *      box) kept the DOWN alert firing for days → alert fatigue → when the
+ *      real SG container crash-looped for 27h, its alert looked like the
+ *      same background noise.
+ *   2. After DECOMMISSION_MS the dead node is pruned and the alert stops
+ *      FOREVER — a permanently-dead region goes permanently silent.
+ * Region coverage is roster-independent: it pages as long as the region has
+ * no healthy consumer, no matter which node identities come and go.
+ * vps_jp intentionally absent (aspirational region, no sources pinned yet).
+ */
+const REQUIRED_REGIONS = ['local', 'vps_sg']
+
 interface HeartbeatPayload {
   ts: number
   regions?: string[]
@@ -70,6 +86,7 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
 
   const down: Array<{ node: string; age_min: number; regions: string[] }> = []
   const healthy: string[] = []
+  const healthyRegions = new Set<string>()
   const pruned: string[] = []
   const liveShas: Array<{ node: string; sha: string }> = []
 
@@ -89,8 +106,32 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
       down.push({ node, age_min: Math.round(age / 60_000), regions: beat.regions ?? [] })
     } else {
       healthy.push(node)
+      for (const r of beat.regions ?? []) healthyRegions.add(r)
       if (beat.sha && beat.sha !== 'unknown') liveShas.push({ node, sha: beat.sha })
     }
+  }
+
+  // Region-coverage invariant — pages regardless of roster state (see
+  // REQUIRED_REGIONS). Fires every run while uncovered (15min cooldown),
+  // unlike the per-node alert which dies with the pruned identity.
+  const uncovered = REQUIRED_REGIONS.filter((r) => !healthyRegions.has(r))
+  if (uncovered.length > 0) {
+    await sendRateLimitedAlert(
+      {
+        title: `Ingest REGION uncovered: ${uncovered.join(', ')}`,
+        message:
+          `No healthy worker is consuming region(s) ${uncovered.join(', ')} — ` +
+          `ALL crawling for their sources is stalled (node crashed, crash-looping, ` +
+          `or pruned after 24h down).\n` +
+          `Healthy nodes: ${healthy.join(', ') || 'none'}\n` +
+          `Check: docker ps + docker logs on the region's box; ` +
+          `worker/deploy-ingest-sg.sh for vps_sg; pm2 for local.`,
+        level: 'critical',
+        details: { uncovered, healthy, healthyRegions: [...healthyRegions] },
+      },
+      'worker-heartbeat:region-uncovered',
+      15 * 60_000
+    ).catch((err) => logger.warn('[worker-heartbeat-check] region alert failed:', err))
   }
 
   if (down.length > 0) {
@@ -151,6 +192,7 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
     nodes: entries.length,
     healthy,
     down,
+    uncovered: uncovered.length > 0 ? uncovered : undefined,
     pruned: pruned.length > 0 ? pruned : undefined,
   }
 })
