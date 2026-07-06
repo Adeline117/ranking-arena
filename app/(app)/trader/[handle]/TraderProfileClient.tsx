@@ -430,6 +430,22 @@ export default function TraderProfileClient({
   const bundledClaimData = traderData?.claim_status
   const bundledRankHistory = traderData?.rank_history
 
+  // U3-1c: A 404 from the supplementary /api/traders fetch must NOT blank an
+  // already-SSR-rendered page. Reaching this client means the server DID resolve
+  // the trader (else generateMetadata would have 404'd before streaming) and
+  // shipped identity/scores in `serverData`. The supplementary fetch only ADDS
+  // claim/aggregate/rank_history — a 404 means those extras are unavailable, not
+  // that the trader is missing. Warn once so the degradation stays observable.
+  useEffect(() => {
+    const status = (traderError as (Error & { status?: number }) | null)?.status
+    if (traderError && status === 404 && (serverData?.source_trader_id || serverData?.handle)) {
+      console.warn(
+        '[trader] supplementary /api/traders 404 — keeping SSR-rendered data (claim/aggregate/rank_history unavailable)',
+        { handle: serverData?.handle, source: serverData?.source }
+      )
+    }
+  }, [traderError, serverData?.source_trader_id, serverData?.handle, serverData?.source])
+
   // Now safe to call useLinkedAccounts — bundled aggregate is passed directly,
   // no ref gymnastics. On first render (before SWR resolves), undefined → hook
   // fires its own fetch. After SWR resolves, bundled data suppresses duplicate fetch.
@@ -571,8 +587,18 @@ export default function TraderProfileClient({
 
   // Not found state: API returned 404 (trader definitively does not exist).
   // Distinct from transient errors — only shows when the server confirms the trader is missing.
+  // U3-1c: NEVER show a full-page 404 when the server already resolved this trader
+  // and shipped identity in `serverData`. A supplementary /api/traders 404 in that
+  // case means only the claim/aggregate/rank_history extras are unavailable — the
+  // page must degrade to the SSR-rendered content, not dead-end (this was 92% of
+  // search clicks). The genuine "trader does not exist" case is 404'd server-side
+  // in generateMetadata, before this client ever renders.
+  const hasServerIdentity = !!(serverData?.source_trader_id || serverData?.handle)
   const isNotFound =
-    traderError && !traderData && (traderError as Error & { status?: number }).status === 404
+    traderError &&
+    !traderData &&
+    !hasServerIdentity &&
+    (traderError as Error & { status?: number }).status === 404
   if (isNotFound) {
     return (
       <Box
@@ -657,13 +683,17 @@ export default function TraderProfileClient({
     )
   }
 
-  // Error state: only when SWR errored AND no cached data available
-  if (traderError && !traderData) {
+  // Error state: only when SWR errored AND no cached data available AND the server
+  // gave us no identity to fall back on. U3-1c: with server identity present we
+  // degrade to the SSR-rendered content (stale banner below) instead of blanking.
+  if (traderError && !traderData && !hasServerIdentity) {
     return <TraderProfileError t={t} errorMessage={traderError?.message} />
   }
 
-  // #24: Stale data banner — show when SWR errored but cached/stale data is still available
-  const showStaleBanner = !!traderError && !!traderData
+  // #24: Stale data banner — show when SWR errored but cached/stale (or SSR) data
+  // is still available. Also covers the U3-1c degrade path (traderData null but
+  // serverData identity present).
+  const showStaleBanner = !!traderError && (!!traderData || hasServerIdentity)
 
   return (
     <Box

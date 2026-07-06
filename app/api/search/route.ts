@@ -635,7 +635,10 @@ export const GET = withPublic(
         type: 'trader' as const,
         title: `@${t.handle || t.traderKey}`,
         subtitle,
-        href: `/trader/${encodeURIComponent(t.handle || t.traderKey)}?platform=${t.platform}`,
+        // Route by real traderKey (source_trader_id), NOT handle. 92% of handles
+        // fail /api/traders/<handle> resolution → 404; resolveTrader accepts either
+        // handle OR source_trader_id, and the id is always resolvable. (U3-1b)
+        href: `/trader/${encodeURIComponent(t.traderKey || t.handle || '')}?platform=${t.platform}`,
         avatar: t.avatarUrl || null,
         meta: {
           ...(isBot ? { is_bot: true } : {}),
