@@ -4845,6 +4845,8 @@ const zh = {
   claimApiKeyVerifyDesc:
     '输入你的交易所 API Key 和 Secret 来验证你拥有此交易员账户。我们仅使用只读权限。',
   claimApiKeyMismatch: 'API Key 不属于此交易员账户。',
+  claimWalletToVerifyLabel: '待验证钱包：',
+  claimExchangeErrorPrefix: '交易所返回：',
   claimApiKeySuccess: 'API Key 验证成功！',
   claimVerifyMethodApi: 'API Key',
   claimVerifyMethodWallet: '钱包签名',

@@ -212,7 +212,7 @@ export function DexVerifyForm({
         <Text
           style={{ fontSize: tokens.typography.fontSize.sm, color: tokens.colors.text.tertiary }}
         >
-          Wallet to verify:
+          {t('claimWalletToVerifyLabel')}
         </Text>
         <Text
           style={{

@@ -4950,6 +4950,8 @@ const en = {
   claimApiKeyVerifyDesc:
     'Enter your exchange API Key and Secret to verify you own this trader account. We only use read-only permissions.',
   claimApiKeyMismatch: 'The API key does not belong to this trader account.',
+  claimWalletToVerifyLabel: 'Wallet to verify:',
+  claimExchangeErrorPrefix: 'Exchange returned:',
   claimApiKeySuccess: 'API key verification successful!',
   claimVerifyMethodApi: 'API Key',
   claimVerifyMethodWallet: 'Wallet Signature',

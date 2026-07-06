@@ -4813,6 +4813,8 @@ const ko = {
   claimApiKeyVerifyDesc:
     '거래소 API 키와 시크릿을 입력하여 이 트레이더 계정의 소유자임을 확인하세요. 읽기 전용 권한만 사용합니다.',
   claimApiKeyMismatch: '이 API 키는 이 트레이더 계정에 속하지 않습니다.',
+  claimWalletToVerifyLabel: '검증할 지갑:',
+  claimExchangeErrorPrefix: '거래소 응답:',
   claimApiKeySuccess: 'API 키 인증 성공!',
 
   // Claim - Methods
