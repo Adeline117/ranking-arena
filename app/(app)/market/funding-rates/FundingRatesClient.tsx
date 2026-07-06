@@ -256,6 +256,10 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
             <table
               style={{
                 width: '100%',
+                // minWidth 让表在窄视口真正溢出,外层 overflowX:auto 才能横滚。
+                // 无它时 width:100% 使 wrapper 感知不到溢出,移动端末列(资金费率时间)
+                // 被裁且不可横滚 → 内容不可达。
+                minWidth: 560,
                 borderCollapse: 'collapse',
                 fontSize: tokens.typography.fontSize.base,
               }}
