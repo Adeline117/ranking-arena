@@ -17,6 +17,12 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import { BASE_URL } from '@/lib/constants/urls'
 import { createLogger } from '@/lib/utils/logger'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { isEmailLike } from '@/lib/utils/content'
+
+// Anonymity guard: masked-email handles must never leak into the shared page,
+// its <title>, or OG metadata (the list view already anonymizes them). Mirrors
+// ActivityFeedItem's logic so a shared /feed/[id] link behaves the same as the row.
+const ANON_NAME = 'Anonymous trader'
 
 const logger = createLogger('feed-detail')
 
@@ -67,8 +73,13 @@ export async function generateMetadata({ params }: PageProps): Promise<Metadata>
     return { title: 'Activity Not Found' }
   }
 
-  const title = `${activity.handle ?? 'Trader'} Activity`
-  const description = activity.activity_text
+  const rawName = activity.handle ?? activity.source_trader_id
+  const anon = isEmailLike(rawName)
+  const displayName = anon ? ANON_NAME : (activity.handle ?? 'Trader')
+  const title = `${displayName} Activity`
+  const description = anon
+    ? activity.activity_text.split(rawName).join(ANON_NAME)
+    : activity.activity_text
 
   return {
     title,
@@ -116,7 +127,15 @@ export default async function ActivitySharePage({ params }: PageProps) {
     minute: '2-digit',
   })
 
-  const traderHref = activity.handle ? `/trader/${encodeURIComponent(activity.handle)}` : null
+  // Anonymity guard (see ANON_NAME above): never render/link an email-shaped handle.
+  const rawName = activity.handle ?? activity.source_trader_id
+  const anon = isEmailLike(rawName)
+  const displayName = anon ? ANON_NAME : rawName
+  const displayText = anon
+    ? activity.activity_text.split(rawName).join(ANON_NAME)
+    : activity.activity_text
+  const traderHref =
+    activity.handle && !anon ? `/trader/${encodeURIComponent(activity.handle)}` : null
 
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
@@ -192,7 +211,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
             {activity.avatar_url ? (
               <Image
                 src={avatarSrc(activity.avatar_url)}
-                alt={activity.handle ?? 'Trader'}
+                alt={displayName}
                 width={48}
                 height={48}
                 style={{
@@ -219,7 +238,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
                   fontFamily: tokens.typography.fontFamily.sans.join(', '),
                 }}
               >
-                {(activity.handle ?? '?')[0]?.toUpperCase()}
+                {(displayName ?? '?')[0]?.toUpperCase()}
               </div>
             )}
             <div>
@@ -234,7 +253,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
                     fontFamily: tokens.typography.fontFamily.sans.join(', '),
                   }}
                 >
-                  {activity.handle}
+                  {displayName}
                 </Link>
               ) : (
                 <span
@@ -245,7 +264,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
                     fontFamily: tokens.typography.fontFamily.sans.join(', '),
                   }}
                 >
-                  {activity.handle ?? activity.source_trader_id}
+                  {displayName}
                 </span>
               )}
               <div
@@ -274,7 +293,7 @@ export default async function ActivitySharePage({ params }: PageProps) {
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
             }}
           >
-            {activity.activity_text}
+            {displayText}
           </p>
 
           {/* Metric highlight */}
