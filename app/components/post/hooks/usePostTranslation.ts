@@ -228,9 +228,15 @@ export function usePostTranslation({
             string,
             { translatedText: string; cached: boolean }
           >
+          // Map each item id -> the source text we sent, so we can drop identity
+          // "translations" (translatedText === source). Same-language posts otherwise
+          // rendered a translation row that duplicated the original verbatim (U8-10).
+          const sourceById = new Map(items.map((it) => [it.id, it.text]))
           setTranslatedListPosts((prev) => {
             const updated = { ...prev }
             for (const [id, result] of Object.entries(results)) {
+              const source = sourceById.get(id)
+              if (source && result.translatedText.trim() === source.trim()) continue
               const [postId, type] = id.split('_')
               if (!updated[postId]) updated[postId] = {}
               if (type === 'title') updated[postId].title = result.translatedText
