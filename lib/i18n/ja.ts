@@ -1582,6 +1582,10 @@ const ja = {
   missingAuthParams: '必要な認証パラメータがありません',
   authFailedPrefix: '認証に失敗しました：{error}',
   bindFailed: '連携に失敗しました',
+  invalidApiKeyCredentials:
+    'API Key または Secret が無効です。キーが正しいか、読み取り専用権限が有効か、IP ホワイトリスト制限がないかをご確認ください。',
+  bindServerErrorRetry:
+    '連携サービスが一時的に利用できません。しばらくしてから再度お試しください。',
   loadAuthPageFailed: '認証ページの読み込みに失敗しました',
   loadFailedRetryShort: '読み込みに失敗しました。再試行してください',
   bindExchangeAccountTitle: '{exchange}アカウントを連携',

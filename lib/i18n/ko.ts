@@ -1666,6 +1666,9 @@ const ko = {
   missingAuthParams: '필수 인증 매개변수가 누락되었습니다',
   authFailedPrefix: '인증 실패: {error}',
   bindFailed: '연동에 실패했습니다',
+  invalidApiKeyCredentials:
+    'API Key 또는 Secret이 유효하지 않습니다. 키가 올바른지, 읽기 전용 권한이 활성화되어 있는지, IP 화이트리스트 제한이 없는지 확인해 주세요.',
+  bindServerErrorRetry: '연동 서비스를 일시적으로 사용할 수 없습니다. 잠시 후 다시 시도해 주세요.',
   loadAuthPageFailed: '인증 페이지를 불러오지 못했습니다',
   loadFailedRetryShort: '불러오기 실패, 다시 시도해 주세요',
   bindExchangeAccountTitle: '{exchange} 계정 연동',
