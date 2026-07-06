@@ -4,14 +4,17 @@ import { useEffect, useRef } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { tokens } from '@/lib/design-tokens'
 import { useInboxStore } from '@/lib/stores/inboxStore'
-import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useLanguage, LanguageProvider } from '@/app/components/Providers/LanguageProvider'
+import { ToastProvider } from '@/app/components/ui/Toast'
 import NotificationsList from './NotificationsList'
 import ConversationsList from './ConversationsList'
 
-// Self-contained QueryClient (2026-07-04 修 U10-1):首页 TopNav 刻意在 Providers
-// (含 QueryClientProvider)外渲染以保 LCP;点铃铛打开本面板时 NotificationsList/
-// ConversationsList 的 useInfiniteQuery 找不到 QueryClient 直接 throw → 首页点铃铛
-// 整页崩溃。给面板自带一个 client,任何页面(有无祖先 provider)都自足不崩。
+// Self-contained providers (2026-07-04 修 U10-1,二次修):首页 TopNav 刻意在
+// Providers 外渲染保 LCP;点铃铛打开本面板时其子组件(NotificationsList/
+// ConversationsList)依赖 QueryClient + ToastProvider(useToast) + LanguageProvider
+// 三个 context,首页全不在作用域 → 整页崩溃「出错了」。首轮只补了 QueryClient,
+// 真点验证发现真正抛的是 `useToast must be used within a ToastProvider`。现把面板
+// 包进全部三个自足 provider(都只需 children、自初始化,嵌套无害),任何页面都不崩。
 let inboxQueryClient: QueryClient | null = null
 function getInboxQueryClient(): QueryClient {
   if (!inboxQueryClient) {
@@ -145,7 +148,11 @@ function InboxPanelInner(): React.ReactElement | null {
 export default function InboxPanel(): React.ReactElement | null {
   return (
     <QueryClientProvider client={getInboxQueryClient()}>
-      <InboxPanelInner />
+      <LanguageProvider>
+        <ToastProvider>
+          <InboxPanelInner />
+        </ToastProvider>
+      </LanguageProvider>
     </QueryClientProvider>
   )
 }
