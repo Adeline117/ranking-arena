@@ -130,6 +130,7 @@ const zhCore = {
   heroStatTraders: '交易员',
   heroStatUpdated: '更新频率',
   heroProBadge: '升级 Pro — 解锁全部交易员和高级筛选',
+  heroProBadgePromo: 'Pro 功能限免中 · 全部已解锁',
   heroSubtitle: '跨 {exchanges} 家交易所实时排名，以 Arena Score 评分',
   home: '首页',
   hot: '热榜',

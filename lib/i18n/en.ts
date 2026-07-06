@@ -3088,6 +3088,7 @@ const en = {
   heroStatUpdated: 'Update Freq',
   heroExploreRankings: 'Explore Rankings',
   heroProBadge: 'Go Pro — Unlock All Traders & Advanced Filters',
+  heroProBadgePromo: 'Pro features are free for now — everything unlocked',
 
   // Rankings search
   rankingsSearchPlaceholder: 'Search traders by name...',
@@ -5337,6 +5338,7 @@ const en = {
   rankingControlsNext: 'Next',
   rankingControlsLoading: 'Loading\u2026',
   rankingControlsShowingTop: 'Showing top {count} traders. Unlock all 8,000+ with Pro',
+  rankingControlsShowingTopPromo: 'Showing top {count} traders — all unlocked (free for now)',
   rankingControlsUpgrade: 'Upgrade \u2192',
 
   // Onboarding

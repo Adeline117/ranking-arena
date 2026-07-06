@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
+import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 
 const DISMISS_KEY = 'founding-banner-dismissed'
 
@@ -24,6 +25,9 @@ export default function FoundingMemberBanner() {
     }
   }, [])
 
+  // 2026-07-04 #6:promo 全免费期间隐藏"$49.99 终身·前 200 名"——一边喊全免费
+  // 一边卖终身付费自相矛盾、伤信任。promo 结束(PRO_FREE_PROMO=false)自动恢复。
+  if (BETA_PRO_FEATURES_FREE) return null
   if (dismissed) return null
 
   const text = t('foundingMemberBannerText')

@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { t } from '@/lib/i18n'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
 
 const NumberTicker = lazy(() => import('../ui/NumberTicker'))
 
@@ -257,7 +258,9 @@ export default function HomeHero({
           >
             <path d="M12 2L15.09 8.26L22 9.27L17 14.14L18.18 21.02L12 17.77L5.82 21.02L7 14.14L2 9.27L8.91 8.26L12 2Z" />
           </svg>
-          <span className="shiny-text">{t('heroProBadge' as Parameters<typeof t>[0])}</span>
+          <span className="shiny-text">
+            {t((PRO_FREE_PROMO ? 'heroProBadgePromo' : 'heroProBadge') as Parameters<typeof t>[0])}
+          </span>
         </Link>
       </div>
     </section>

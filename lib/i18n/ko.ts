@@ -2977,6 +2977,7 @@ const ko = {
   heroStatUpdated: '업데이트 주기',
   heroExploreRankings: '랭킹 탐색',
   heroProBadge: 'Pro로 업그레이드 — 모든 트레이더와 고급 필터 잠금 해제',
+  heroProBadgePromo: '지금 Pro 기능 무료 · 전체 잠금 해제',
 
   // Rankings search
   rankingsSearchPlaceholder: '이름으로 트레이더 검색...',
@@ -5185,6 +5186,7 @@ const ko = {
   rankingControlsLoading: '로딩 중\u2026',
   rankingControlsShowingTop:
     '상위 {count}명의 트레이더를 표시 중. Pro로 8,000+명 전체를 확인하세요',
+  rankingControlsShowingTopPromo: '한정 무료 · 상위 {count}명 전체 잠금 해제됨',
   rankingControlsUpgrade: '업그레이드 \u2192',
 
   // SSR ranking table empty state

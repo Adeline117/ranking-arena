@@ -2839,6 +2839,7 @@ const ja = {
   heroStatUpdated: '更新頻度',
   heroExploreRankings: 'ランキングを見る',
   heroProBadge: 'Proにアップグレード — 全トレーダーと高度なフィルターを解放',
+  heroProBadgePromo: 'Pro機能は今だけ無料 · すべて解放中',
 
   rankingsSearchPlaceholder: '名前でトレーダーを検索...',
 
@@ -4945,6 +4946,7 @@ const ja = {
   rankingControlsNext: '次へ',
   rankingControlsLoading: '読み込み中\u2026',
   rankingControlsShowingTop: '上位 {count} 名のトレーダーを表示中。Proで8,000+人全員を表示',
+  rankingControlsShowingTopPromo: '限定無料中 · 上位 {count} 名すべて解放済み',
   rankingControlsUpgrade: 'アップグレード \u2192',
 
   // SSR ranking table empty state

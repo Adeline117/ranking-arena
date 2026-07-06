@@ -3004,6 +3004,7 @@ const zh = {
   heroStatUpdated: '更新频率',
   heroExploreRankings: '浏览排行榜',
   heroProBadge: '升级 Pro — 解锁全部交易员和高级筛选',
+  heroProBadgePromo: 'Pro 功能限免中 · 全部已解锁',
 
   // Rankings search
   rankingsSearchPlaceholder: '按名称搜索交易员...',
@@ -5220,6 +5221,7 @@ const zh = {
   rankingControlsNext: '下一页',
   rankingControlsLoading: '加载中\u2026',
   rankingControlsShowingTop: '显示前 {count} 名交易员。升级 Pro 解锁全部 8,000+',
+  rankingControlsShowingTopPromo: '限免中 · 已解锁全部 {count} 名交易员',
   rankingControlsUpgrade: '升级 \u2192',
 
   // Onboarding
