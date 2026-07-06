@@ -60,7 +60,6 @@ interface SearchResultGroupProps {
   offset: number
   onResultClick: (resultId?: string, resultType?: string) => void
   onResultMouseEnter: (href: string) => void
-  onSetSelectedIndex: (index: number) => void
 }
 
 export function SearchResultGroup({
@@ -71,7 +70,6 @@ export function SearchResultGroup({
   offset,
   onResultClick,
   onResultMouseEnter,
-  onSetSelectedIndex,
 }: SearchResultGroupProps) {
   if (items.length === 0) return null
   const config = CATEGORY_CONFIG[category]
@@ -144,7 +142,10 @@ export function SearchResultGroup({
                 transition: 'background 0.1s',
               }}
               onMouseEnter={(e) => {
-                onSetSelectedIndex(globalIndex)
+                // U3-3: hover shows a visual highlight but must NOT drive the
+                // arrow-key selection state — otherwise Enter would navigate to a
+                // merely-hovered row instead of going to /search. Keyboard selection
+                // (aria-selected / Enter target) is owned solely by ArrowUp/Down.
                 e.currentTarget.style.background = tokens.colors.bg.tertiary
               }}
               onMouseLeave={(e) => {
