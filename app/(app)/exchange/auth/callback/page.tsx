@@ -120,7 +120,7 @@ function ExchangeAuthCallbackContent() {
               weight="bold"
               style={{ marginBottom: tokens.spacing[4], color: tokens.colors.accent.success }}
             >
-              [OK] {t('authorizationSuccess')}
+              {t('authorizationSuccess')}
             </Text>
             <Text size="sm" color="secondary">
               {message}
@@ -135,7 +135,7 @@ function ExchangeAuthCallbackContent() {
               weight="bold"
               style={{ marginBottom: tokens.spacing[4], color: tokens.colors.accent.error }}
             >
-              [FAIL] {t('authorizationFailed')}
+              {t('authorizationFailed')}
             </Text>
             <Text size="sm" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
               {message}
