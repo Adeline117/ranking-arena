@@ -108,7 +108,10 @@ export default function CommentsModal({
         if (n === 0) return 0
         const z = 1.96
         const p = ups / n
-        return (p + z * z / (2 * n) - z * Math.sqrt((p * (1 - p) + z * z / (4 * n)) / n)) / (1 + z * z / n)
+        return (
+          (p + (z * z) / (2 * n) - z * Math.sqrt((p * (1 - p) + (z * z) / (4 * n)) / n)) /
+          (1 + (z * z) / n)
+        )
       }
       sorted.sort((a, b) => {
         const sa = wilson(a.like_count || 0, a.dislike_count || 0)
@@ -123,9 +126,18 @@ export default function CommentsModal({
   const commentsEndRef = useRef<HTMLDivElement>(null)
   const prevCommentCount = useRef(comments.length)
 
-  // UF13: Auto-scroll to new comment after submission
+  // UF13: Auto-scroll to new comment after submission.
+  // Only scroll when the growth is the viewer's OWN freshly-submitted comment
+  // (optimistic id starts with "temp_"). The initial async comment load also grows
+  // the array 0 -> N, and scrolling on that was landing first-time visitors past the
+  // post title/body straight into the comment list (U8-4).
   useEffect(() => {
-    if (comments.length > prevCommentCount.current && commentsEndRef.current) {
+    const last = comments[comments.length - 1]
+    if (
+      comments.length > prevCommentCount.current &&
+      last?.id?.startsWith('temp_') &&
+      commentsEndRef.current
+    ) {
       commentsEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
     prevCommentCount.current = comments.length
@@ -146,11 +158,7 @@ export default function CommentsModal({
 
       {/* Sort toggle */}
       {comments.length > 1 && (
-        <CommentSortToggle
-          commentSort={commentSort}
-          onSortChange={handleSortChange}
-          t={t}
-        />
+        <CommentSortToggle commentSort={commentSort} onSortChange={handleSortChange} t={t} />
       )}
 
       {/* Comments list */}
@@ -161,7 +169,7 @@ export default function CommentsModal({
           <EmptyComments t={t} />
         ) : (
           <div>
-            {sortedComments.map(comment => (
+            {sortedComments.map((comment) => (
               <CommentThread
                 key={comment.id}
                 comment={comment}
