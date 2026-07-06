@@ -28,6 +28,12 @@ const HomePage = dynamic(() => import('./HomePage'), {
 // where these live), so we lazy-load them here when Phase 2 activates.
 const WelcomeBanner = dynamic(() => import('./WelcomeBanner'), { ssr: false })
 
+// 对比浮条(2026-07-04 #5):首页走 root layout 无 Providers,CompareFloatingBar
+// 只挂在 (app)/layout,导致首页勾选交易员后浮条不出现、对比功能被隐藏。在 Phase 2
+// 激活后(已进 Providers,含 LanguageProvider)挂载它,不进 LCP/SSR 路径。
+// 数据来自 zustand comparisonStore(无需 provider),仅依赖 useLanguage。
+const CompareFloatingBar = dynamic(() => import('../trader/CompareFloatingBar'), { ssr: false })
+
 const WebVitals = dynamic(
   () => import('../Providers/WebVitals').then((m) => ({ default: m.WebVitals })),
   { ssr: false }
@@ -82,6 +88,7 @@ export default function HomePageLoader(props: HomePageLoaderProps) {
     <Providers>
       <WelcomeBanner />
       <HomePage {...props} />
+      <CompareFloatingBar />
       <WebVitals />
       <SpeedInsights />
     </Providers>
