@@ -338,6 +338,9 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
             <table
               style={{
                 width: '100%',
+                // 同 funding-rates:width:100% 表让 wrapper 感知不到溢出,移动端末列被裁
+                // 且不可横滚。minWidth 使表真正溢出,外层 overflowX:auto 才能横滚。
+                minWidth: 560,
                 borderCollapse: 'collapse',
                 fontSize: tokens.typography.fontSize.base,
               }}
