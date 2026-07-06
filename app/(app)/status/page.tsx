@@ -208,7 +208,15 @@ export default function StatusPage() {
     }
   }, [health, platforms, t, language])
 
-  const overallLevel: Level = health ? levelFor(health.status) : 'degraded'
+  // 2026-07-04 修 U12:此前总状态只看 health.status,忽略被监控平台的陈旧/退化,
+  // 导致顶部绿勾「所有系统正常」与下方 57.1%/4-of-7 组件退化自相矛盾(数据可信度打脸)。
+  // 改为取 health.status 与组件实况的较差者:任一组件退化(有 incident 或可用率<100%)
+  // 则总状态至少 degraded。
+  const baseLevel: Level = health ? levelFor(health.status) : 'degraded'
+  const componentsDegraded =
+    incidents.length > 0 || (availabilityPct != null && availabilityPct < 100)
+  const overallLevel: Level =
+    baseLevel === 'down' ? 'down' : componentsDegraded ? 'degraded' : baseLevel
 
   const cardStyle: React.CSSProperties = {
     background: tokens.colors.bg.secondary,
