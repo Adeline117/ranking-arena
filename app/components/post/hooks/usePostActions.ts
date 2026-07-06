@@ -102,6 +102,13 @@ export function usePostActions({
   const bookmarkLockRef = useRef<Set<string>>(new Set())
   const postsRef = useRef(posts)
   postsRef.current = posts
+  // Always read the FRESHEST openPost. The toggleReaction callback is memoized on
+  // openPost?.id, so a plain closure over `openPost` freezes its counts at whichever
+  // render created the callback. On the single-post detail page `setPosts` and
+  // `setOpenPost` alias the same state, so a stale-count literal in setOpenPost was
+  // clobbering the correct functional setPosts update → a single like showed +2 (U8-3).
+  const openPostRef = useRef(openPost)
+  openPostRef.current = openPost
 
   // Edit state
   const [editingPost, setEditingPost] = useState<Post | null>(null)
@@ -180,13 +187,16 @@ export function usePostActions({
             : p
         )
       )
-      if (openPost?.id === postId)
-        setOpenPost({
-          ...openPost,
-          like_count: openPost.like_count + likeDelta,
-          dislike_count: openPost.dislike_count + dislikeDelta,
-          user_reaction: newReaction,
-        } as Post)
+      {
+        const op = openPostRef.current
+        if (op?.id === postId)
+          setOpenPost({
+            ...op,
+            like_count: op.like_count + likeDelta,
+            dislike_count: op.dislike_count + dislikeDelta,
+            user_reaction: newReaction,
+          } as Post)
+      }
       haptic('light')
 
       try {
@@ -214,7 +224,10 @@ export function usePostActions({
             dislike_count: result.dislike_count,
             reaction: result.reaction,
           })
-          if (openPost?.id === postId) setOpenPost({ ...openPost, ...serverUpdate } as Post)
+          {
+            const op = openPostRef.current
+            if (op?.id === postId) setOpenPost({ ...op, ...serverUpdate } as Post)
+          }
           // Analytics: only count a NEW reaction, not an un-react (result.reaction null)
           if (result.reaction) {
             trackEvent('post_reaction', { post_id: postId, reaction: result.reaction })
@@ -233,14 +246,16 @@ export function usePostActions({
                 : p
             )
           )
-          if (openPost?.id === postId) {
-            const op = openPost
-            setOpenPost({
-              ...op,
-              like_count: op.like_count - likeDelta,
-              dislike_count: op.dislike_count - dislikeDelta,
-              user_reaction: currentReaction,
-            } as Post)
+          {
+            const op = openPostRef.current
+            if (op?.id === postId) {
+              setOpenPost({
+                ...op,
+                like_count: op.like_count - likeDelta,
+                dislike_count: op.dislike_count - dislikeDelta,
+                user_reaction: currentReaction,
+              } as Post)
+            }
           }
           showToast(json.error || json.message || t('operationFailed'), 'error')
         }
@@ -258,14 +273,16 @@ export function usePostActions({
               : p
           )
         )
-        if (openPost?.id === postId) {
-          const op = openPost
-          setOpenPost({
-            ...op,
-            like_count: op.like_count - likeDelta,
-            dislike_count: op.dislike_count - dislikeDelta,
-            user_reaction: currentReaction,
-          } as Post)
+        {
+          const op = openPostRef.current
+          if (op?.id === postId) {
+            setOpenPost({
+              ...op,
+              like_count: op.like_count - likeDelta,
+              dislike_count: op.dislike_count - dislikeDelta,
+              user_reaction: currentReaction,
+            } as Post)
+          }
         }
         logger.error('[PostFeed] toggleReaction error:', err)
         showToast(getNetworkErrorMessage(err, t), 'error')
