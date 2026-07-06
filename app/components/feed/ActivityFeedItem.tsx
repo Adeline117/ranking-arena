@@ -17,6 +17,7 @@ import { ACTIVITY_META } from '@/lib/types/activities'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import ActivityIcon from './ActivityIcon'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { isEmailLike } from '@/lib/utils/content'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
@@ -305,12 +306,6 @@ export default function ActivityFeedItem({
 
 function escapeRegExp(str: string) {
   return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-}
-
-/** True for (masked) email-shaped strings like "lo***@gmail.com" — requires a
- *  local part, an @, and a dotted domain, so it won't match "@twitterhandle". */
-function isEmailLike(value: string | null | undefined): boolean {
-  return !!value && /\S+@\S+\.\S+/.test(value)
 }
 
 function formatMetric(value: number, label: string): string {

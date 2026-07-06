@@ -713,6 +713,18 @@ export function generateSummary(text: string, maxLength: number = 200): string {
 }
 
 /**
+ * True for (masked) email-shaped strings like "lo***@gmail.com" — requires a
+ * local part, an @, and a dotted domain, so it won't match "@twitterhandle".
+ *
+ * Shared anonymity guard for trader activity handles: the activity feed is
+ * public/anonymous, so an email-shaped handle must never be surfaced as a display
+ * name (leaks the address + would produce a broken /trader/<email> link).
+ */
+export function isEmailLike(value: string | null | undefined): boolean {
+  return !!value && /\S+@\S+\.\S+/.test(value)
+}
+
+/**
  * 检测文本是否是中文
  */
 export function isChineseText(text: string): boolean {
