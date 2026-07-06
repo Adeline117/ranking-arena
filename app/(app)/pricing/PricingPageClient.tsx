@@ -1198,14 +1198,18 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           {getPricingFaqData(t).map((faq, i) => (
             <details
               key={i}
-              onToggle={(e) =>
+              onToggle={(e) => {
+                // Capture `open` synchronously — React nulls out the synthetic
+                // event's currentTarget before the setState updater runs, so
+                // reading e.currentTarget inside the updater throws (crashes page).
+                const isOpen = e.currentTarget.open
                 setOpenFaqs((prev) => {
                   const next = new Set(prev)
-                  if (e.currentTarget.open) next.add(i)
+                  if (isOpen) next.add(i)
                   else next.delete(i)
                   return next
                 })
-              }
+              }}
               style={{
                 marginBottom: tokens.spacing[3],
                 background: tokens.colors.bg.secondary,
