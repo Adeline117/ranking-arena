@@ -1,6 +1,6 @@
 'use client'
 
-import { memo } from 'react'
+import { memo, useMemo } from 'react'
 import Link from 'next/link'
 import { X, BarChart3, ChevronUp, ChevronDown } from 'lucide-react'
 import { tokens } from '@/lib/design-tokens'
@@ -15,24 +15,30 @@ import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
  */
 function CompareFloatingBar() {
   const { t } = useLanguage()
-  const { selectedTraders, isBarExpanded, removeTrader, clearAll, toggleBar, getCompareUrl } =
-    useComparisonStore(
-      useShallow((s) => ({
-        selectedTraders: s.selectedTraders,
-        isBarExpanded: s.isBarExpanded,
-        removeTrader: s.removeTrader,
-        clearAll: s.clearAll,
-        toggleBar: s.toggleBar,
-        getCompareUrl: s.getCompareUrl,
-      }))
-    )
+  const { selectedTraders, isBarExpanded, removeTrader, clearAll, toggleBar } = useComparisonStore(
+    useShallow((s) => ({
+      selectedTraders: s.selectedTraders,
+      isBarExpanded: s.isBarExpanded,
+      removeTrader: s.removeTrader,
+      clearAll: s.clearAll,
+      toggleBar: s.toggleBar,
+    }))
+  )
+
+  // Derive the URL directly from the SUBSCRIBED selectedTraders — NOT from a
+  // getCompareUrl() snapshot. The snapshot froze the <Link> href at the value
+  // present when the anchor first mounted (adding/removing traders updated the
+  // list + count but left href pointing at the stale selection). Keying the
+  // Link on the derived URL forces a fresh href attribute on every change.
+  const compareUrl = useMemo(
+    () => `/compare?ids=${encodeURIComponent(selectedTraders.map((t) => t.id).join(','))}`,
+    [selectedTraders]
+  )
 
   // Don't render if no traders selected
   if (selectedTraders.length === 0) {
     return null
   }
-
-  const compareUrl = getCompareUrl()
 
   return (
     <div
@@ -224,6 +230,7 @@ function CompareFloatingBar() {
             </button>
 
             <Link
+              key={compareUrl}
               href={compareUrl}
               className="btn-press"
               style={{
