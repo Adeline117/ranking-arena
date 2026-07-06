@@ -10,6 +10,7 @@ import { useRouter } from 'next/navigation'
 import { useTransition, useState, useEffect, useRef, useCallback } from 'react'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
+import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 
 const RANGES = ['90D', '30D', '7D'] as const
 
@@ -245,8 +246,31 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
         </div>
       )}
 
+      {/* promo 期(#6):诚实信息条,不推付费——全站限免,"全部已解锁"而非"升级解锁" */}
+      {totalCount > 0 && BETA_PRO_FEATURES_FREE && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            width: '100%',
+            padding: '8px 14px',
+            // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
+            borderRadius: 8,
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: tokens.typography.fontWeight.medium,
+            color: 'var(--color-text-secondary)',
+            opacity: 0.7,
+          }}
+        >
+          {t('rankingControlsShowingTopPromo').replace(
+            '{count}',
+            totalCount.toLocaleString('en-US')
+          )}
+        </div>
+      )}
+
       {/* Free-tier limit banner — always visible so users know scope upfront */}
-      {totalCount > 0 && (
+      {totalCount > 0 && !BETA_PRO_FEATURES_FREE && (
         <a
           href="/pricing"
           style={{

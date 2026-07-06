@@ -287,6 +287,7 @@ const enCore = {
   heroStatExchanges: 'Exchanges',
   heroStatUpdated: 'Update Freq',
   heroProBadge: 'Go Pro — Unlock All Traders & Advanced Filters',
+  heroProBadgePromo: 'Pro features are free for now — everything unlocked',
 
   // ── Footer ──────────────────────────────────────────────────────────
   footerProduct: 'Product',
@@ -380,6 +381,7 @@ const enCore = {
   rankingControlsNext: 'Next',
   rankingControlsLoading: 'Loading…',
   rankingControlsShowingTop: 'Showing top {count} traders. Unlock all 8,000+ with Pro',
+  rankingControlsShowingTopPromo: 'Showing top {count} traders — all unlocked (free for now)',
   rankingControlsUpgrade: 'Upgrade →',
 } as const
 
