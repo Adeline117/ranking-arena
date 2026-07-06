@@ -57,11 +57,14 @@ export const PostListItem = memo(
         tabIndex={0}
         aria-label={p.title || t('openPost')}
         onClick={(e: React.MouseEvent) => {
-          // Don't hijack clicks on interactive elements
-          if (
-            (e.target as HTMLElement).closest('a, button, [role="button"], input, textarea, select')
+          // Don't hijack clicks on interactive CHILDREN. NOTE: this container itself
+          // has role="button", and .closest() includes the element itself — so we must
+          // exclude currentTarget, otherwise EVERY body click matches the container's
+          // own role="button" and the guard swallows it (card became unclickable — U9-2).
+          const interactive = (e.target as HTMLElement).closest(
+            'a, button, [role="button"], input, textarea, select'
           )
-            return
+          if (interactive && interactive !== e.currentTarget) return
           onOpenPost(p)
         }}
         onKeyDown={(e: React.KeyboardEvent) => {
