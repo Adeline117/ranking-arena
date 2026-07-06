@@ -25,7 +25,22 @@ function TipSuccessContent() {
   const [countdown, setCountdown] = useState(AUTO_REDIRECT_SECONDS)
   const [dismissed, setDismissed] = useState(false)
   const [details, setDetails] = useState<TipDetails | null>(null)
+  // True only once a real tip row is confirmed in the DB via session_id.
+  // Gates the "receipt emailed" reassurance so we never claim a receipt was
+  // sent for a tip we can't confirm actually happened.
+  const [verified, setVerified] = useState(false)
   const sessionId = searchParams.get('session_id')
+
+  // A credential = a Stripe session_id OR the forward-compat query params the
+  // real tip flow appends. Bare access (nothing) must NOT fabricate success.
+  const hasCredential = !!(
+    sessionId ||
+    searchParams.get('amount') ||
+    searchParams.get('amount_cents') ||
+    searchParams.get('to') ||
+    searchParams.get('handle') ||
+    searchParams.get('post_id')
+  )
 
   // 优先读取 query 参数（前向兼容），否则按 session_id 查询打赏记录
   useEffect(() => {
@@ -70,6 +85,7 @@ function TipSuccessContent() {
         }
 
         if (cancelled) return
+        setVerified(true)
         setDetails({
           amountCents: tip.amount_cents,
           handle,
@@ -123,6 +139,33 @@ function TipSuccessContent() {
       // Intentionally swallowed: user cancelled share sheet or clipboard denied — no action needed.
     }
   }, [handle, postId, t, showToast])
+
+  // Bare access with no credential — show a neutral "no tip found" state
+  // instead of fabricating "Tip Successful! / receipt emailed".
+  if (!hasCredential) {
+    return (
+      <div
+        className="min-h-screen flex items-center justify-center px-4"
+        style={{ background: 'var(--color-bg-primary)' }}
+      >
+        <div className="text-center max-w-md">
+          <h1 className="text-2xl font-bold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+            {t('tipNoRecordTitle')}
+          </h1>
+          <p style={{ color: 'var(--color-text-secondary)', marginBottom: 24 }}>
+            {t('tipNoRecordDesc')}
+          </p>
+          <Link
+            href="/"
+            className="block w-full rounded-lg py-3 text-sm font-medium transition-colors"
+            style={{ background: 'var(--color-accent-primary)', color: 'var(--foreground)' }}
+          >
+            {t('backToHome')}
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -228,10 +271,12 @@ function TipSuccessContent() {
           ) : null}
         </div>
 
-        {/* 收据安心提示（替代裸 session id） */}
-        <p className="mt-6 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
-          {t('receiptEmailed')}
-        </p>
+        {/* 收据安心提示 — 仅在 DB 确认打赏记录后显示,不对无法确认的打赏谎报收据 */}
+        {verified ? (
+          <p className="mt-6 text-xs" style={{ color: 'var(--color-text-tertiary)' }}>
+            {t('receiptEmailed')}
+          </p>
+        ) : null}
       </div>
     </div>
   )
