@@ -5977,6 +5977,8 @@ const zh = {
   marketDataPending: '数据将在下一个定时任务周期后显示。',
   openInterestDesc:
     '各交易所永续合约未平仓总量。未平仓量随价格上涨而上升表明趋势强劲；未平仓量随价格下跌而上升则可能预示逼空。',
+  dataAsOf: '数据截至 {time}',
+  staleRowsHidden: '已隐藏 {n} 条超过 24 小时未更新的陈旧数据',
   noOpenInterestData: '暂无未平仓量数据',
   colOpenInterestUsd: '未平仓量（USD）',
   colUpdated: '更新时间',

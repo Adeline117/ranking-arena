@@ -5993,6 +5993,8 @@ const ko = {
   marketDataPending: '데이터는 다음 cron 주기 후에 표시됩니다.',
   openInterestDesc:
     '거래소 전반의 무기한 선물 미결제약정 총액. 가격 상승과 함께 OI가 증가하면 강한 추세를, 가격 하락과 함께 OI가 증가하면 스퀴즈 가능성을 시사합니다.',
+  dataAsOf: '데이터 기준 시각: {time}',
+  staleRowsHidden: '24시간 이상 갱신되지 않은 오래된 데이터 {n}건 숨김',
   noOpenInterestData: '아직 미결제약정 데이터가 없습니다',
   colOpenInterestUsd: '미결제약정 (USD)',
   colUpdated: '업데이트',

@@ -66,14 +66,32 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [filterPlatform, setFilterPlatform] = useState<string>('all')
 
+  // 陈旧数据过滤(显示层):摄取 cron 自 2/14 起只抓 BTC/ETH/SOL 等少数 symbol,
+  // 其余行停在数月前。这些陈旧值若并排展示且计入聚合卡/占比条,会严重误导。
+  // 以数据集中最新时间戳为基准(而非 now,因整批可能整体滞后),丢弃比它旧超过
+  // 24h 的行 —— 表格与聚合卡都只算新鲜行。摄取端恢复全 symbol 抓取属数据侧(SKIP)。
+  const STALE_MS = 24 * 60 * 60 * 1000
+  const freshestTs = useMemo(
+    () => rows.reduce((mx, r) => Math.max(mx, new Date(r.timestamp).getTime() || 0), 0),
+    [rows]
+  )
+  const freshRows = useMemo(() => {
+    if (!freshestTs) return rows
+    return rows.filter((r) => {
+      const ts = new Date(r.timestamp).getTime()
+      return Number.isFinite(ts) && freshestTs - ts <= STALE_MS
+    })
+  }, [rows, freshestTs, STALE_MS])
+  const staleCount = rows.length - freshRows.length
+
   const platforms = useMemo(() => {
-    const set = new Set(rows.map((r) => r.platform))
+    const set = new Set(freshRows.map((r) => r.platform))
     return Array.from(set).sort()
-  }, [rows])
+  }, [freshRows])
 
   const sorted = useMemo(() => {
     const filtered =
-      filterPlatform === 'all' ? rows : rows.filter((r) => r.platform === filterPlatform)
+      filterPlatform === 'all' ? freshRows : freshRows.filter((r) => r.platform === filterPlatform)
     return [...filtered].sort((a, b) => {
       let cmp = 0
       switch (sortField) {
@@ -92,23 +110,23 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
       }
       return sortDir === 'desc' ? -cmp : cmp
     })
-  }, [rows, sortField, sortDir, filterPlatform])
+  }, [freshRows, sortField, sortDir, filterPlatform])
 
   // Aggregate by symbol across exchanges
   const aggregated = useMemo(() => {
     const map = new Map<string, number>()
-    for (const row of rows) {
+    for (const row of freshRows) {
       const sym = normalizeSymbol(row.symbol)
       map.set(sym, (map.get(sym) || 0) + row.open_interest_usd)
     }
     return Array.from(map.entries()).sort((a, b) => b[1] - a[1])
-  }, [rows])
+  }, [freshRows])
 
   // Grand total across the loaded set drives the share-of-total bars (no extra
   // data needed — pure derivation, so BTC's dominance is immediately visible).
   const grandTotal = useMemo(
-    () => rows.reduce((sum, r) => sum + (r.open_interest_usd || 0), 0),
-    [rows]
+    () => freshRows.reduce((sum, r) => sum + (r.open_interest_usd || 0), 0),
+    [freshRows]
   )
 
   const handleSort = (field: SortField) => {
@@ -174,6 +192,21 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
           >
             {t('openInterestDesc')}
           </p>
+          {freshestTs > 0 && (
+            <p
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: tokens.colors.text.tertiary,
+                marginTop: 6,
+              }}
+            >
+              {t('dataAsOf').replace(
+                '{time}',
+                formatTime(new Date(freshestTs).toISOString(), locale)
+              )}
+              {staleCount > 0 && ` · ${t('staleRowsHidden').replace('{n}', String(staleCount))}`}
+            </p>
+          )}
         </div>
 
         {/* Aggregate summary cards */}
@@ -331,7 +364,7 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
         </div>
 
         {/* Table */}
-        {rows.length === 0 ? (
+        {sorted.length === 0 ? (
           <EmptyState title={t('noOpenInterestData')} description={t('marketDataPending')} />
         ) : (
           <div style={{ overflowX: 'auto' }}>
