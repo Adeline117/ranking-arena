@@ -298,18 +298,29 @@ function ApiKeyAuthContent() {
         }),
       })
 
-      const result = await response.json()
+      const result = await response.json().catch(() => null)
 
       if (!response.ok) {
-        setError(result.error || t('bindFailed'))
+        // 就地渲染字段级错误 + 保留用户输入,绝不 throw 到 error boundary。
+        // 区分「你的 key 有问题(改 key)」vs「服务端临时错误(可重试)」两类文案。
+        // result.error 强制转字符串,防后端返回对象时 <Text>{error}</Text> 渲染崩溃触发整页错误边界。
+        const rawMsg = typeof result?.error === 'string' ? result.error.trim() : ''
+        if (response.status >= 500) {
+          setError(t('bindServerErrorRetry'))
+        } else if (rawMsg && rawMsg !== 'Invalid input') {
+          // 交易所/后端返回的具体原因(密钥无效/缺只读权限/IP 白名单)
+          setError(rawMsg)
+        } else {
+          setError(t('invalidApiKeyCredentials'))
+        }
         return
       }
 
       showToast(t('bindSuccess'), 'success')
       router.push('/settings')
-    } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : t('bindFailed')
-      setError(errorMessage)
+    } catch {
+      // 网络/解析异常 = 服务端临时问题,可重试(输入保留)
+      setError(t('bindServerErrorRetry'))
     } finally {
       setLoading(false)
     }

@@ -1744,6 +1744,9 @@ const zh = {
   missingAuthParams: '缺少必要的授权参数',
   authFailedPrefix: '授权失败: {error}',
   bindFailed: '绑定失败',
+  invalidApiKeyCredentials:
+    'API Key 或 Secret 无效。请确认密钥填写正确、已开启「只读」权限，且未设置 IP 白名单限制。',
+  bindServerErrorRetry: '绑定服务暂时不可用，请稍后重试。',
   loadAuthPageFailed: '加载授权页面失败',
   loadFailedRetryShort: '加载失败，请重试',
   bindExchangeAccountTitle: '绑定 {exchange} 账号',

@@ -1741,6 +1741,9 @@ const en = {
   missingAuthParams: 'Missing required authorization parameters',
   authFailedPrefix: 'Authorization failed: {error}',
   bindFailed: 'Binding failed',
+  invalidApiKeyCredentials:
+    'Invalid API Key or Secret. Please confirm the keys are correct, have read-only permission enabled, and are not restricted by an IP whitelist.',
+  bindServerErrorRetry: 'The binding service is temporarily unavailable. Please try again later.',
   loadAuthPageFailed: 'Failed to load authorization page',
   loadFailedRetryShort: 'Failed to load, please retry',
   bindExchangeAccountTitle: 'Bind {exchange} Account',
