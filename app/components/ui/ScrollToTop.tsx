@@ -40,7 +40,9 @@ export default memo(function ScrollToTop() {
       style={{
         position: 'fixed',
         bottom: hasFab
-          ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 80px)'
+          ? // Clear the 56px FAB (bottom+20) plus its drop shadow with a real gap,
+            // so scroll-to-top no longer visually overlaps the FAB (U9-5).
+            'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 96px)'
           : 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 16px)',
         right: 16,
         zIndex: tokens.zIndex.sticky + 1,
