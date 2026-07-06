@@ -71,7 +71,10 @@ export default function ShareOnXButton({
 
     const lines: string[] = []
     if (rank) {
-      lines.push(`Ranked ${rank} on Arena${platLabel ? ` (${platLabel})` : ''}`)
+      // `rank` is the exchange-internal leaderboard position (matches the profile
+      // header's "Ranked N on <exchange>"). Attribute it to the exchange rather
+      // than "Arena" so shared text stays consistent with the header.
+      lines.push(platLabel ? `Ranked ${rank} on ${platLabel}` : `Ranked ${rank} on Arena`)
     } else {
       lines.push(`${name} on Arena${platLabel ? ` | ${platLabel}` : ''}`)
     }
