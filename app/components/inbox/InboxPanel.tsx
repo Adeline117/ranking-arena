@@ -1,13 +1,28 @@
 'use client'
 
 import { useEffect, useRef } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { tokens } from '@/lib/design-tokens'
 import { useInboxStore } from '@/lib/stores/inboxStore'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import NotificationsList from './NotificationsList'
 import ConversationsList from './ConversationsList'
 
-export default function InboxPanel(): React.ReactElement | null {
+// Self-contained QueryClient (2026-07-04 修 U10-1):首页 TopNav 刻意在 Providers
+// (含 QueryClientProvider)外渲染以保 LCP;点铃铛打开本面板时 NotificationsList/
+// ConversationsList 的 useInfiniteQuery 找不到 QueryClient 直接 throw → 首页点铃铛
+// 整页崩溃。给面板自带一个 client,任何页面(有无祖先 provider)都自足不崩。
+let inboxQueryClient: QueryClient | null = null
+function getInboxQueryClient(): QueryClient {
+  if (!inboxQueryClient) {
+    inboxQueryClient = new QueryClient({
+      defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false, retry: 1 } },
+    })
+  }
+  return inboxQueryClient
+}
+
+function InboxPanelInner(): React.ReactElement | null {
   const panelOpen = useInboxStore((s) => s.panelOpen)
   const closePanel = useInboxStore((s) => s.closePanel)
   const panelRef = useRef<HTMLDivElement>(null)
@@ -73,10 +88,17 @@ export default function InboxPanel(): React.ReactElement | null {
           zIndex: 1,
         }}
       >
-        <span style={{ fontWeight: 800, fontSize: tokens.typography.fontSize.lg, color: tokens.colors.text.primary }}>
+        <span
+          style={{
+            fontWeight: 800,
+            fontSize: tokens.typography.fontSize.lg,
+            color: tokens.colors.text.primary,
+          }}
+        >
           {t('inbox')}
         </span>
-        <button aria-label="Close"
+        <button
+          aria-label="Close"
           onClick={closePanel}
           className="hover-bg-secondary"
           style={{
@@ -117,5 +139,13 @@ export default function InboxPanel(): React.ReactElement | null {
         }
       `}</style>
     </div>
+  )
+}
+
+export default function InboxPanel(): React.ReactElement | null {
+  return (
+    <QueryClientProvider client={getInboxQueryClient()}>
+      <InboxPanelInner />
+    </QueryClientProvider>
   )
 }
