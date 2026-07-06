@@ -1,9 +1,11 @@
 'use client'
 'use no memo'
 
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { ThumbsUpIcon, ThumbsDownIcon } from '../../ui/icons'
 import { Action } from './Action'
+import ReportModal from '@/app/components/ui/ReportModal'
 
 interface PostDetailActionsProps {
   postId: string
@@ -42,6 +44,8 @@ export function PostDetailActions({
   showToast,
   t,
 }: PostDetailActionsProps) {
+  const [showReportModal, setShowReportModal] = useState(false)
+  const isOwnPost = !!currentUserId && authorId === currentUserId
   return (
     <div
       style={{
@@ -240,6 +244,51 @@ export function PostDetailActions({
         count={0}
         showCount={false}
       />
+      {/* Report — trust & safety entry (was missing site-wide, U8-5). Hidden on own post. */}
+      {!isOwnPost && (
+        <Action
+          icon={
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z" />
+              <line x1="4" y1="22" x2="4" y2="15" />
+            </svg>
+          }
+          text={t('report')}
+          onClick={(e) => {
+            if (e) {
+              e.preventDefault()
+              e.stopPropagation()
+            }
+            if (!accessToken) {
+              showToast(t('pleaseLogin'), 'warning')
+              return
+            }
+            setShowReportModal(true)
+          }}
+          active={false}
+          count={0}
+          showCount={false}
+        />
+      )}
+      {accessToken && (
+        <ReportModal
+          isOpen={showReportModal}
+          onClose={() => setShowReportModal(false)}
+          contentType="post"
+          contentId={postId}
+          accessToken={accessToken}
+          targetName={postTitle}
+        />
+      )}
     </div>
   )
 }
