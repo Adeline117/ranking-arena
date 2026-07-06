@@ -744,30 +744,42 @@ export default function FlashNewsPageClient() {
                 </Box>
               )}
 
-              {/* Infinite scroll sentinel */}
-              <div ref={sentinelRef} style={{ height: 1 }} />
-              {loadingMore && (
-                <Box
-                  role="status"
-                  style={{ display: 'flex', justifyContent: 'center', padding: tokens.spacing[4] }}
-                >
-                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+              {/* Infinite scroll sentinel — 仅当有筛选后结果时挂载。否则(搜索无结果/
+                  突发-only 空)sentinel 会继续翻页拉取被客户端过滤掉的数据,空态
+                  「未找到匹配内容」下方还转「加载中…」spinner,自相矛盾。 */}
+              {filtered.length > 0 && (
+                <>
+                  <div ref={sentinelRef} style={{ height: 1 }} />
+                  {loadingMore && (
                     <Box
-                      aria-hidden="true"
+                      role="status"
                       style={{
-                        width: 16,
-                        height: 16,
-                        borderRadius: '50%',
-                        border: `2px solid var(--color-accent-primary)`,
-                        borderTopColor: 'transparent',
-                        animation: 'spin 0.6s linear infinite',
+                        display: 'flex',
+                        justifyContent: 'center',
+                        padding: tokens.spacing[4],
                       }}
-                    />
-                    <Text size="sm" color="tertiary">
-                      {t('loading')}
-                    </Text>
-                  </Box>
-                </Box>
+                    >
+                      <Box
+                        style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}
+                      >
+                        <Box
+                          aria-hidden="true"
+                          style={{
+                            width: 16,
+                            height: 16,
+                            borderRadius: '50%',
+                            border: `2px solid var(--color-accent-primary)`,
+                            borderTopColor: 'transparent',
+                            animation: 'spin 0.6s linear infinite',
+                          }}
+                        />
+                        <Text size="sm" color="tertiary">
+                          {t('loading')}
+                        </Text>
+                      </Box>
+                    </Box>
+                  )}
+                </>
               )}
               {!hasMore && news.length > 0 && (
                 <Box
