@@ -2703,6 +2703,11 @@ const en = {
   paymentSuccessActivating:
     'Your payment was successful. Membership activation is in progress. This usually takes a few seconds, please retry.',
   contactSupportIfFails: 'If it still fails after retrying, please contact support@arenafi.org',
+  paymentStatusUnconfirmed: "We couldn't confirm your payment",
+  paymentStatusUnconfirmedDesc:
+    "We couldn't confirm your subscription status. If you were charged, your membership usually activates within a few minutes.",
+  tipNoRecordTitle: 'No tip found',
+  tipNoRecordDesc: "We couldn't find a tip associated with this page.",
   retrying: 'Retrying...',
   retryActivation: 'Retry Activation',
 
