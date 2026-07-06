@@ -227,10 +227,13 @@ function CompareContent() {
         return
       }
 
-      const data = await res.json()
-      setTraders(data.traders || [])
+      // /api/compare 用 success() 包装 → { success, data: { traders }, meta }。
+      // 此前读 data.traders(undefined)导致对比页对所有人 100% 空渲染(2026-07-04 修)。
+      const json = await res.json()
+      const list = (json.data?.traders ?? json.traders ?? []) as TraderCompareData[]
+      setTraders(list)
       setError(null)
-      if ((data.traders || []).length >= 2) {
+      if (list.length >= 2) {
         tryUnlock('first_comparison')
       }
     } catch (err) {
