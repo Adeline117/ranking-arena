@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -71,7 +71,6 @@ interface MappedSearchResults {
 
 function SearchContent() {
   const searchParams = useSearchParams()
-  const router = useRouter()
   const { t } = useLanguage()
   const { email } = useAuthSession()
   const query = searchParams.get('q') || ''
@@ -117,16 +116,27 @@ function SearchContent() {
       params.delete('q')
     }
     const qs = params.toString()
-    router.replace(qs ? `/search?${qs}` : '/search')
-  }, [debouncedInputValue, inputValue, query, searchParams, router])
+    // U3-2 ROOT-CAUSE FIX (round 2): after the Wave-3 SSR conversion (commit
+    // 0b8870b73) /search became a STATIC server shell + client leaf. On a static
+    // route, PROGRAMMATIC `router.replace()` for a search-param-only change is a
+    // silent no-op (the client router dedupes it) — so typing never rewrote the
+    // URL and results (keyed off `query`) never refreshed. The homepage solved the
+    // identical problem with native History (useRankingFilters.ts:362). Mirror it:
+    // `window.history.replaceState` reliably updates the bar and useSearchParams
+    // (Next 15.1+/16) reacts to it. Results no longer depend on this line at all —
+    // they follow `debouncedInputValue` directly (see below) — this is purely for
+    // shareable/bookmarkable/reloadable URLs.
+    window.history.replaceState(null, '', qs ? `/search?${qs}` : '/search')
+  }, [debouncedInputValue, inputValue, query, searchParams])
 
-  // `query` and `platformFilter` both come from the URL (searchParams). `query`
-  // only updates via the already-debounced router.replace above (line ~88), and
-  // `platformFilter` only changes on a platform-pill click (navigation). A second
-  // 300ms debounce here just stacked on top — adding ~300ms of dead latency to
-  // every keystroke and ~300ms lag to platform clicks for no throttling benefit.
-  // Use the URL values directly; the input→URL debounce already prevents storms.
-  const debouncedQuery = query.trim()
+  // Results follow the SETTLED TYPED value, not the URL `query`. This decouples
+  // the result set from same-route client navigation (which is unreliable on this
+  // static shell — see the History fix above). `inputValue` is seeded from the URL
+  // `query` on mount (useState(query)) and resynced on external URL changes
+  // (trending-pill / tab / platform Link clicks → setInputValue(query) effect
+  // above), so hard-nav landings, shared links, and Link clicks all still drive
+  // results — while typing works even when router same-route nav is a no-op.
+  const debouncedQuery = debouncedInputValue
   const debouncedPlatform = platformFilter
 
   // SWR key: null when no query (disables fetching)
@@ -690,8 +700,15 @@ function SearchContent() {
           {inputValue && (
             <button
               onClick={() => {
+                // Clearing the input empties results (they follow the typed
+                // value) and strips ?q from the URL. Native History for the same
+                // static-shell reason as the debounce effect; preserve any
+                // non-q params (lang/tab/platform).
                 setInputValue('')
-                router.replace('/search')
+                const params = new URLSearchParams(searchParams.toString())
+                params.delete('q')
+                const qs = params.toString()
+                window.history.replaceState(null, '', qs ? `/search?${qs}` : '/search')
               }}
               style={{
                 position: 'absolute',
