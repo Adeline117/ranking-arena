@@ -1966,6 +1966,13 @@ const ja = {
   globalErrorRetrying: '再試行中...',
   globalErrorReload: '再読み込み',
 
+  // Wrapped ランクカード — 空の状態（このハンドルのランキングデータがまだない）
+  wrappedEmptyTitle: 'ランクカードはまだありません',
+  wrappedEmptyDesc:
+    'このアカウントのランキングスナップショットはまだありません。トレーダーに十分な追跡パフォーマンスデータが蓄積されると、ランクカードが表示されます。しばらくしてからもう一度ご確認ください。',
+  wrappedEmptyHome: 'ホームに戻る',
+  wrappedEmptyRankings: 'ランキングを見る',
+
   notFoundTitle: 'ページが見つかりません',
   notFoundDesc: '暗号資産のすべてのランキング — このページは移動または削除された可能性があります',
   notFoundViewHot: '人気リストを見る',
