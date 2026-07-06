@@ -267,7 +267,7 @@ function VolumeBar({ value, max }: { value: number; max: number }) {
   )
 }
 
-function useTimeSince(timestamp: number | null): string {
+function useTimeSince(timestamp: number | null, t: (key: string) => string): string {
   const [now, setNow] = useState(Date.now())
   useEffect(() => {
     if (!timestamp) return
@@ -279,18 +279,21 @@ function useTimeSince(timestamp: number | null): string {
   }, [timestamp])
   if (!timestamp) return ''
   const seconds = Math.max(0, Math.floor((now - timestamp) / 1000))
-  if (seconds < 60) return `${seconds}s ago`
-  return `${Math.floor(seconds / 60)}m ago`
+  // i18n:zh 界面曾拼英文 "0s ago" 在 zh label 后。用本地化模板 {n}s/m ago。
+  if (seconds < 60) return t('timeSecondsAgo').replace('{n}', String(seconds))
+  return t('timeMinutesAgo').replace('{n}', String(Math.floor(seconds / 60)))
 }
 
 const UpdatedAgoLabel = memo(function UpdatedAgoLabel({
   timestamp,
   label,
+  t,
 }: {
   timestamp: number | null
   label: string
+  t: (key: string) => string
 }) {
-  const ago = useTimeSince(timestamp)
+  const ago = useTimeSince(timestamp, t)
   if (!ago) return null
   return (
     <div
@@ -402,7 +405,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
 
   return (
     <div>
-      <UpdatedAgoLabel timestamp={lastFetchedAt} label={t('lastUpdated')} />
+      <UpdatedAgoLabel timestamp={lastFetchedAt} label={t('lastUpdated')} t={t} />
       <div
         className="core-cards-grid"
         style={{
