@@ -6,7 +6,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { getPasswordStrength } from '../login/components/loginHelpers'
+import { getPasswordStrength, validateEmail } from '../login/components/loginHelpers'
 
 // Password floor: minimum 8 chars AND strength at least "fair" (level >= 2),
 // matching the login/register flow. The strength meter is the real gate.
@@ -263,26 +263,53 @@ function ResetPasswordContent() {
       return
     }
 
+    // Client-side format gate (matches /login). A malformed address like
+    // `bad@@x` makes Supabase return HTTP 400 — that is NOT an enumeration
+    // scenario, so we must catch it here and NOT fake a "sent" success state.
+    // (U4-3: users who mistyped their email were shown a green "we've sent a
+    // link" + 60s countdown and waited forever for a mail that never went out.)
+    const emailCheck = validateEmail(email)
+    if (!emailCheck.valid) {
+      setError(t(emailCheck.messageKey || 'loginInvalidEmail'))
+      return
+    }
+
     setError(null)
     setSuccess(null)
     setLoading(true)
 
     try {
       // Account-enumeration safety: never reveal whether an email is registered.
-      // Show the same neutral "if an account exists, we've sent a link" state on
-      // both success and error, matching the login flow. The raw resetError
-      // message is intentionally not surfaced.
-      await supabase.auth.resetPasswordForEmail(email, {
+      // A valid-format-but-unknown email intentionally shows the neutral "if an
+      // account exists, we've sent a link" state (no error surfaced). But a
+      // genuine 400 (bad request / invalid email) is a real failure, not an
+      // enumeration signal — surface it so the user knows the mail was NOT sent.
+      const { error: resetError } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: `${window.location.origin}/reset-password`,
       })
 
+      if (resetError) {
+        const status = (resetError as { status?: number }).status
+        // 400/422 = the request itself was rejected (e.g. invalid email format).
+        // Anything else (429 rate-limit, 5xx, etc.) we also surface rather than
+        // silently claim success. We do NOT map "user not found" here because
+        // Supabase returns success (no error) for unknown-but-valid emails.
+        if (status === 400 || status === 422) {
+          setError(t('resetPasswordInvalidEmail'))
+        } else {
+          console.error('[reset-password] resetPasswordForEmail failed:', resetError)
+          setError(resetError.message || t('loginResetFailed'))
+        }
+        return
+      }
+
       setSuccess(t('resetPasswordEmailSent'))
       setCountdown(60)
-    } catch {
-      // Swallow network/transport errors into the neutral state too — surfacing
-      // them would still leak signal. (Logged-out, no PII to log here.)
-      setSuccess(t('resetPasswordEmailSent'))
-      setCountdown(60)
+    } catch (err) {
+      // Network/transport failure — the mail definitely did not go out, so show
+      // a real error instead of a fake success (which stranded users on U4-3).
+      console.error('[reset-password] resetPasswordForEmail threw:', err)
+      setError(t('loginResetFailed'))
     } finally {
       setLoading(false)
     }

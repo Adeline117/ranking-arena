@@ -2040,6 +2040,7 @@ const en = {
   resetPasswordBackToLogin: 'Back to Login',
   resetPasswordEmailSent: "If an account exists for that email, we've sent a reset link.",
   resetPasswordEmailRequired: 'Please enter your email',
+  resetPasswordInvalidEmail: "That email address doesn't look valid — please check and try again.",
   resetPasswordPasswordRequired: 'Please enter new password',
   resetPasswordPasswordMinLength: 'Password must be at least 8 characters',
   resetPasswordPasswordTooWeak: 'Password is too weak. Use a mix of letters, numbers, and symbols.',
