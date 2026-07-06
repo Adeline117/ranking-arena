@@ -5,12 +5,12 @@ import { usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
+// 2026-07-04 下线 bots/exchanges/weekly 三个子导航(U1/#3):数据陈旧/整页空
+// (bots 自曝 143 天未刷、exchanges/weekly 全空),挂着自曝烂尾比没有更伤信任。
+// 页面 page.tsx 保留(直链仍可达),仅从子导航移除;摄取管线恢复后再挂回。
 const TAB_KEYS = [
   { href: '/', key: 'rankingsSubNavTraders' as const },
   { href: '/rankings/tokens', key: 'rankingsSubNavTokens' as const },
-  { href: '/rankings/bots', key: 'rankingsSubNavBots' as const },
-  { href: '/rankings/exchanges', key: 'rankingsSubNavExchanges' as const },
-  { href: '/rankings/weekly', key: 'rankingsSubNavWeekly' as const },
 ]
 
 export default function RankingsSubNav() {
