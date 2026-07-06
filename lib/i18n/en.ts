@@ -5895,6 +5895,7 @@ const en = {
   sortinoNotAvailable: 'Sortino ratio not available',
   channelNotFoundTitle: 'Channel Not Found',
   channelNotFoundDesc: 'The channel you are looking for does not exist.',
+  channelNotMember: 'You are not a member of this channel',
   chartUnavailable: 'Chart data unavailable',
   confirmLink: 'Link Account',
   confirmLinkDesc: 'Confirm linking this trader account to your profile.',
