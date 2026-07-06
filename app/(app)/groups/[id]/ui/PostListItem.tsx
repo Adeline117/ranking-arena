@@ -7,6 +7,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import { ThumbsUpIcon, CommentIcon } from '@/app/components/ui/icons'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { getAvatarGradient } from '@/lib/utils/avatar'
+import { isSvgAvatarSource } from '@/lib/utils/avatar-proxy'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { resolveUserDisplayName } from '@/lib/utils/user-display'
@@ -186,6 +187,14 @@ export default function PostListItem(props: PostListItemProps) {
                       alt={post.author_handle || 'User avatar'}
                       fill
                       sizes="28px"
+                      // data: URIs and SVG sources (dicebear etc.) must bypass
+                      // /_next/image — the optimizer 400s on SVG
+                      // (dangerouslyAllowSVG: false), which rendered author
+                      // avatars as broken images in the list view (U9-4).
+                      unoptimized={
+                        post.author_avatar_url.startsWith('data:') ||
+                        isSvgAvatarSource(post.author_avatar_url)
+                      }
                       style={{ objectFit: 'cover' }}
                     />
                   ) : (
