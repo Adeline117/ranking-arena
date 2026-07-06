@@ -7,6 +7,7 @@ import { BASE_URL } from '@/lib/constants/urls'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import PageHeader from '@/app/components/ui/PageHeader'
 import { formatDisplayName } from '@/app/components/ranking/utils'
+import { getServerTranslation } from '@/lib/i18n/server'
 import {
   generateExchangeCollectionPageSchema,
   generateBreadcrumbSchema,
@@ -225,12 +226,17 @@ export default async function ExchangeLandingPage({
     { name: `${data.displayName} Rankings`, url: `${BASE_URL}/exchange/${slug}` },
   ])
 
+  // Localized page chrome (labels/headings/body). Metadata above stays English
+  // for stable SEO/OG; visible page content follows the visitor's language.
+  const { t } = await getServerTranslation()
+  const traderCountStr = data.traderCount.toLocaleString()
+
   const sourceTypeLabel =
     data.sourceType === 'futures'
-      ? 'Futures'
+      ? t('exchangePageTypeFutures')
       : data.sourceType === 'spot'
-        ? 'Spot'
-        : 'DeFi / On-Chain'
+        ? t('exchangePageTypeSpot')
+        : t('exchangePageTypeDefi')
 
   return (
     <>
@@ -239,8 +245,11 @@ export default async function ExchangeLandingPage({
       <div style={{ maxWidth: 960, margin: '0 auto', padding: '32px 16px' }}>
         {/* Header */}
         <PageHeader
-          title={`${data.displayName} Top Traders & Rankings`}
-          subtitle={`${data.traderCount.toLocaleString()} ranked traders on ${data.displayName} (${sourceTypeLabel}). Updated every 30 minutes.`}
+          title={t('exchangePageTitle').replace('{name}', data.displayName)}
+          subtitle={t('exchangePageSubtitle')
+            .replace('{count}', traderCountStr)
+            .replace(/\{name\}/g, data.displayName)
+            .replace('{type}', sourceTypeLabel)}
         />
 
         {/* Top traders table */}
@@ -254,7 +263,7 @@ export default async function ExchangeLandingPage({
                 color: 'var(--text-primary, #fff)',
               }}
             >
-              Top 10 Traders by Arena Score
+              {t('exchangePageTop10')}
             </h2>
             <div style={{ overflowX: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 14 }}>
@@ -270,7 +279,7 @@ export default async function ExchangeLandingPage({
                         letterSpacing: '0.5px',
                       }}
                     >
-                      RANK
+                      {t('exchangePageColRank')}
                     </th>
                     <th
                       style={{
@@ -282,7 +291,7 @@ export default async function ExchangeLandingPage({
                         letterSpacing: '0.5px',
                       }}
                     >
-                      TRADER
+                      {t('exchangePageColTrader')}
                     </th>
                     <th
                       style={{
@@ -294,7 +303,7 @@ export default async function ExchangeLandingPage({
                         letterSpacing: '0.5px',
                       }}
                     >
-                      ARENA SCORE
+                      {t('exchangePageColScore')}
                     </th>
                     <th
                       style={{
@@ -306,7 +315,7 @@ export default async function ExchangeLandingPage({
                         letterSpacing: '0.5px',
                       }}
                     >
-                      ROI (90D)
+                      {t('exchangePageColRoi')}
                     </th>
                     <th
                       style={{
@@ -318,7 +327,7 @@ export default async function ExchangeLandingPage({
                         letterSpacing: '0.5px',
                       }}
                     >
-                      PNL
+                      {t('exchangePageColPnl')}
                     </th>
                   </tr>
                 </thead>
@@ -420,7 +429,7 @@ export default async function ExchangeLandingPage({
               textDecoration: 'none',
             }}
           >
-            View Full {data.displayName} Rankings
+            {t('exchangePageCta').replace('{name}', data.displayName)}
           </a>
         </div>
 
@@ -440,7 +449,7 @@ export default async function ExchangeLandingPage({
               color: 'var(--text-primary, #fff)',
             }}
           >
-            About {data.displayName} Trader Rankings
+            {t('exchangePageAboutTitle').replace('{name}', data.displayName)}
           </h2>
           <p
             style={{
@@ -450,11 +459,10 @@ export default async function ExchangeLandingPage({
               margin: 0,
             }}
           >
-            Arena tracks {data.traderCount.toLocaleString()} active traders on {data.displayName},
-            ranking them by Arena Score — a composite metric combining ROI, PnL, risk management,
-            and consistency across 7-day, 30-day, and 90-day periods. {data.displayName} is a{' '}
-            {sourceTypeLabel.toLowerCase()} trading platform. All performance data is refreshed
-            every 30 minutes from live exchange APIs.
+            {t('exchangePageAboutBody')
+              .replace('{count}', traderCountStr)
+              .replace(/\{name\}/g, data.displayName)
+              .replace('{type}', sourceTypeLabel)}
           </p>
         </div>
       </div>
