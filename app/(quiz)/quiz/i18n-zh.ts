@@ -31,6 +31,7 @@ const quizZh: Record<string, string> = {
   quizStrengths: '优势',
   quizWeaknesses: '弱点',
   quizRecommendTitle: 'Arena 上和你最像的交易员',
+  quizRoiExtreme: '极端值',
   quizShareTitle: '分享你的结果',
   quizShareText: '我是{type}，和{master}匹配度{match}%！你是哪位传奇大师？来测：{url}',
   quizCopyLink: '复制链接',
