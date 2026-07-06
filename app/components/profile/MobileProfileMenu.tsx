@@ -19,9 +19,10 @@ interface UserInfo {
 
 const ALL_MENU_ITEMS = [
   {
-    href: '/watchlist',
+    // 2026-07-04 #4:指向统一"我的收藏"hub(含交易员+帖子两 tab),替代分散的 /watchlist 入口
+    href: '/saved',
     iconPath: 'M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z',
-    labelKey: 'myWatchlist',
+    labelKey: 'savedHubTitle',
   },
   {
     href: '/compare',

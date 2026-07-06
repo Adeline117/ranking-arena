@@ -6,14 +6,10 @@
  * the client leaf behind Suspense. No data fetching moved to the server yet.
  */
 
-import { Suspense } from 'react'
-import { FavoritesPageSkeleton } from '@/app/components/ui/PageSkeleton'
-import FavoritesPageClient from './FavoritesPageClient'
+// 2026-07-04 #4:收敛到统一"我的收藏"hub。/favorites 列表重定向到 hub 的帖子 tab
+// (FavoritesPageClient 在 hub 里复用);/favorites/[folderId] 深链保留不变。
+import { redirect } from 'next/navigation'
 
 export default function FavoritesPage() {
-  return (
-    <Suspense fallback={<FavoritesPageSkeleton />}>
-      <FavoritesPageClient />
-    </Suspense>
-  )
+  redirect('/saved?tab=posts')
 }
