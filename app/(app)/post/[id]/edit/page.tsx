@@ -317,8 +317,12 @@ export default function EditPostPage() {
       try {
         const { data: post, error } = await supabase
           .from('posts')
+          // 2026-07-04 修 U8-1:此前 select 含 10 个生产不存在的列(image_url/
+          // image_urls/link_url/link_title/link_description/link_image/poll_options/
+          // poll_votes/poll_end_at/tags)→ PGRST 42703 → 编辑页对所有人 100% 打不开。
+          // 只 select 生产实存的列(REST 探针核实);poll 用真实的 poll_bull/bear/wait/enabled。
           .select(
-            'id, title, content, author_handle, author_id, image_url, images, image_urls, link_url, link_title, link_description, link_image, poll_options, poll_votes, poll_end_at, group_id, tags, visibility, created_at, updated_at'
+            'id, title, content, author_handle, author_id, images, poll_enabled, poll_id, poll_bull, poll_bear, poll_wait, group_id, visibility, created_at, updated_at'
           )
           .eq('id', postId)
           .single()
@@ -340,8 +344,8 @@ export default function EditPostPage() {
         setOriginalPost(post)
         setTitle(post.title || '')
         setContent(post.content || '')
-        // 兼容 images 和 image_urls 两种字段名
-        const imageUrls = post.images || post.image_urls || []
+        // 生产只有 images 列(image_urls 不存在,已从 select 移除)
+        const imageUrls = post.images || []
         setImages(imageUrls.map((url: string) => ({ url, fileName: url.split('/').pop() || '' })))
       } catch (error) {
         logger.error('Error loading post:', error)
