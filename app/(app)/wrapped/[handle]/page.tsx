@@ -7,10 +7,10 @@
  */
 
 import type { Metadata } from 'next'
-import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { resolveTrader } from '@/lib/data/unified'
 import WrappedCardClient from './WrappedCardClient'
+import WrappedEmptyState from './WrappedEmptyState'
 import { BASE_URL } from '@/lib/constants/urls'
 
 export const revalidate = 300
@@ -248,10 +248,12 @@ export default async function WrappedPage({ params, searchParams }: Props) {
 
   const result = await fetchWrappedData(decoded, platform, windowParam)
   if (!result.ok) {
-    // Only a genuinely unknown handle is a 404. Transient timeouts / DB
-    // errors surface the segment's error.tsx (retryable) instead of
-    // mislabeling an existing trader's card as not found.
-    if (result.reason === 'not_found') notFound()
+    // A missing snapshot is NOT a site-level 404 — the account may be valid
+    // (e.g. a logged-in user viewing their own handle) but simply has no
+    // ranking data yet. Render a dedicated "no rank card yet" empty state
+    // instead of the generic 404 dead-end. Transient timeouts / DB errors
+    // still surface the segment's error.tsx (retryable).
+    if (result.reason === 'not_found') return <WrappedEmptyState handle={decoded} />
     throw new Error(`wrapped card temporarily unavailable (${result.reason}) for handle=${decoded}`)
   }
   const data = result.data

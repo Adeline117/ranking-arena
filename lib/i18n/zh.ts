@@ -2151,6 +2151,13 @@ const zh = {
   globalErrorRetrying: '重试中...',
   globalErrorReload: '重新加载',
 
+  // Wrapped 排名卡 — 空态（该 handle 暂无榜单数据）
+  wrappedEmptyTitle: '暂无年度总结数据',
+  wrappedEmptyDesc:
+    '我们还没有这个账号的排名快照。当交易员积累足够的可追踪业绩数据后，排名卡就会生成——稍后再来看看。',
+  wrappedEmptyHome: '返回首页',
+  wrappedEmptyRankings: '浏览排行榜',
+
   // 404 页面
   notFoundTitle: '页面不存在',
   notFoundDesc: '加密万物排行榜 — 这个页面可能已被移动或删除',

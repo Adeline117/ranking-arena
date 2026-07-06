@@ -2060,6 +2060,13 @@ const ko = {
   globalErrorRetrying: '재시도 중...',
   globalErrorReload: '새로고침',
 
+  // Wrapped 랭크 카드 — 빈 상태 (이 핸들의 랭킹 데이터가 아직 없음)
+  wrappedEmptyTitle: '아직 랭크 카드가 없습니다',
+  wrappedEmptyDesc:
+    '이 계정의 랭킹 스냅샷이 아직 없습니다. 트레이더가 충분한 추적 성과 데이터를 쌓으면 랭크 카드가 표시됩니다. 잠시 후 다시 확인해 주세요.',
+  wrappedEmptyHome: '홈으로 돌아가기',
+  wrappedEmptyRankings: '랭킹 보기',
+
   // Not Found
   notFoundTitle: '페이지를 찾을 수 없습니다',
   notFoundDesc: '암호화폐의 모든 순위 — 이 페이지가 이동되었거나 삭제되었을 수 있습니다',

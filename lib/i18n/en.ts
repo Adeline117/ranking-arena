@@ -2142,6 +2142,13 @@ const en = {
   globalErrorRetrying: 'Retrying...',
   globalErrorReload: 'Reload',
 
+  // Wrapped rank card — empty state (no leaderboard data for this handle yet)
+  wrappedEmptyTitle: 'No Rank Card Yet',
+  wrappedEmptyDesc:
+    "We don't have a ranking snapshot for this account yet. Rank cards appear once the trader has enough tracked performance data — check back soon.",
+  wrappedEmptyHome: 'Back to Home',
+  wrappedEmptyRankings: 'Browse Rankings',
+
   // Not Found
   notFoundTitle: 'Page Not Found',
   notFoundDesc: 'All rankings in crypto — This page may have been moved or deleted',
