@@ -631,6 +631,16 @@ const en = {
   notifIconComment: 'C',
   notifIconMention: '@',
   notifIconDefault: 'N',
+  // Render-layer localized notification templates ({handle} = actor). Overrides
+  // the English strings stored in DB so zh/ja/ko users don't see mixed-language cards.
+  notifText_new_follower_title: 'New Follower',
+  notifText_new_follower_msg: '{handle} started following you',
+  notifText_new_follower_msg_generic: 'Someone started following your trader profile',
+  notifText_like: '{handle} liked your post',
+  notifText_comment: '{handle} commented on your post',
+  notifText_post_reply: '{handle} replied to your comment',
+  notifText_mention: '{handle} mentioned you in a post',
+  noNotificationsForFilter: 'No notifications in this category',
   followingAction: 'Following',
   unfollowingAction: 'Unfollowing',
   operationFailed: 'Operation failed, please try again',
