@@ -1866,6 +1866,8 @@ const ja = {
   resetPasswordEmailSent:
     'そのメールアドレスのアカウントが存在する場合、リセットリンクを送信しました。',
   resetPasswordEmailRequired: 'メールアドレスを入力してください',
+  resetPasswordInvalidEmail:
+    'メールアドレスの形式が正しくないようです。確認して再度お試しください。',
   resetPasswordPasswordRequired: '新しいパスワードを入力してください',
   resetPasswordPasswordMinLength: 'パスワードは8文字以上である必要があります',
   resetPasswordPasswordTooWeak: 'パスワードが弱すぎます。英字・数字・記号を組み合わせてください。',

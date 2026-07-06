@@ -1960,6 +1960,7 @@ const ko = {
   resetPasswordBackToLogin: '로그인으로 돌아가기',
   resetPasswordEmailSent: '해당 이메일로 등록된 계정이 있다면 재설정 링크를 보냈습니다.',
   resetPasswordEmailRequired: '이메일을 입력해 주세요',
+  resetPasswordInvalidEmail: '이메일 형식이 올바르지 않습니다. 확인 후 다시 시도해 주세요.',
   resetPasswordPasswordRequired: '새 비밀번호를 입력해 주세요',
   resetPasswordPasswordMinLength: '비밀번호는 최소 8자 이상이어야 합니다',
   resetPasswordPasswordTooWeak: '비밀번호가 너무 약합니다. 영문, 숫자, 기호를 조합해 주세요.',

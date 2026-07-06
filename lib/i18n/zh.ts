@@ -2005,6 +2005,7 @@ const zh = {
   resetPasswordBackToLogin: '返回登录',
   resetPasswordEmailSent: '如果该邮箱已注册，我们已发送重置链接。',
   resetPasswordEmailRequired: '请输入邮箱',
+  resetPasswordInvalidEmail: '邮箱格式无效，请检查后重试。',
   resetPasswordPasswordRequired: '请输入新密码',
   resetPasswordPasswordMinLength: '密码至少8位',
   resetPasswordPasswordTooWeak: '密码强度太弱，请混合使用字母、数字和符号。',
