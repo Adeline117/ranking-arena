@@ -118,7 +118,11 @@ export default function ShareRankCardButtons({
 
     const lines: string[] = []
     if (rank && rank > 0) {
-      lines.push(`Ranked #${rank} on Arena${platLabel ? ` (${platLabel})` : ''}`)
+      // `rank` here is the exchange-internal leaderboard position (same value the
+      // profile header labels "Ranked N on <exchange>"). Attribute it to the
+      // exchange, not "Arena", so the share text doesn't contradict the header
+      // by re-badging an exchange rank as an Arena rank.
+      lines.push(platLabel ? `Ranked #${rank} on ${platLabel}` : `Ranked #${rank} on Arena`)
     } else {
       lines.push(`${name} on Arena${platLabel ? ` | ${platLabel}` : ''}`)
     }
