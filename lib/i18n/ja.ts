@@ -2490,6 +2490,11 @@ const ja = {
   paymentSuccessActivating:
     'お支払いが完了しました。メンバーシップのアクティベーションが進行中です。通常数秒で完了します。再試行してください。',
   contactSupportIfFails: '再試行しても失敗する場合は、support@arenafi.orgまでお問い合わせください',
+  paymentStatusUnconfirmed: 'お支払いを確認できませんでした',
+  paymentStatusUnconfirmedDesc:
+    'サブスクリプションの状態を確認できませんでした。ご請求が発生している場合、メンバーシップは通常数分以内に有効になります。',
+  tipNoRecordTitle: 'チップが見つかりません',
+  tipNoRecordDesc: 'このページに関連するチップが見つかりませんでした。',
   retrying: '再試行中...',
   retryActivation: 'アクティベーションを再試行',
 

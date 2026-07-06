@@ -1,7 +1,7 @@
 'use client'
 
 import { Suspense, useEffect, useState, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
+import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
@@ -73,6 +73,7 @@ export default function PaymentSuccessPage() {
 
 function PaymentSuccessContent() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const { language: _language, t } = useLanguage()
   const { showToast } = useToast()
   const { refresh: refreshPremium } = usePremium()
@@ -179,9 +180,11 @@ function PaymentSuccessContent() {
     const sessionId = searchParams.get('session_id')
     if (hasVerified) return
 
-    // No session_id means we can't verify — show error immediately
+    // No session_id means the user reached this page without completing a real
+    // Stripe checkout (bare access). Do NOT claim success — send them back to
+    // pricing rather than showing a "payment succeeded" state.
     if (!sessionId) {
-      setVerificationStatus('error')
+      router.replace('/pricing')
       return
     }
 
@@ -279,6 +282,7 @@ function PaymentSuccessContent() {
     t,
     checkSubscriptionDirect,
     getValidAccessToken,
+    router,
   ])
 
   // 手动重试 - 先刷新 session，再触发重新验证
@@ -532,11 +536,11 @@ function PaymentSuccessContent() {
             </Box>
 
             <Text as="h1" size="2xl" weight="black" style={{ marginBottom: tokens.spacing[3] }}>
-              {t('activationInProgress')}
+              {t('paymentStatusUnconfirmed')}
             </Text>
 
             <Text size="md" color="secondary" style={{ marginBottom: tokens.spacing[4] }}>
-              {t('paymentSuccessActivating')}
+              {t('paymentStatusUnconfirmedDesc')}
             </Text>
 
             <Text size="sm" color="tertiary" style={{ marginBottom: tokens.spacing[6] }}>

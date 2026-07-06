@@ -2628,6 +2628,11 @@ const zh = {
   activationInProgress: '激活处理中',
   paymentSuccessActivating: '您的付款已成功，会员正在激活中。这通常需要几秒钟，请稍后重试。',
   contactSupportIfFails: '如多次重试后仍未激活，请联系 support@arenafi.org',
+  paymentStatusUnconfirmed: '无法确认支付状态',
+  paymentStatusUnconfirmedDesc:
+    '我们暂时无法确认你的订阅状态。如果你已完成扣款，会员通常会在几分钟内自动激活。',
+  tipNoRecordTitle: '未找到打赏记录',
+  tipNoRecordDesc: '我们找不到与此页面关联的打赏记录。',
   retrying: '重试中...',
   retryActivation: '重新激活',
 

@@ -2604,6 +2604,11 @@ const ko = {
   paymentSuccessActivating:
     '결제가 완료되었습니다. 멤버십 활성화가 진행 중입니다. 보통 몇 초 정도 소요되며, 다시 시도해 주세요.',
   contactSupportIfFails: '재시도 후에도 실패하면 support@arenafi.org로 문의해 주세요',
+  paymentStatusUnconfirmed: '결제를 확인할 수 없습니다',
+  paymentStatusUnconfirmedDesc:
+    '구독 상태를 확인할 수 없습니다. 결제가 완료되었다면 멤버십은 보통 몇 분 이내에 활성화됩니다.',
+  tipNoRecordTitle: '후원 내역을 찾을 수 없습니다',
+  tipNoRecordDesc: '이 페이지와 연결된 후원 내역을 찾을 수 없습니다.',
   retrying: '재시도 중...',
   retryActivation: '활성화 재시도',
 
