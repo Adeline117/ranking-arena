@@ -103,6 +103,9 @@ export const TraderRow = memo(
 
     // Compare checkbox state
     const isSelected = useComparisonStore(useCallback((s) => s.isSelected(trader.id), [trader.id]))
+    // 桌面对比可发现性(2026-07-04 #5):桌面行此前只有移动 swipe 才能加对比,
+    // 桌面用户发现不了。canAddMore 用于满 10 个时禁用未选中项。
+    const canAddMore = useComparisonStore(useCallback((s) => s.canAddMore(), []))
 
     // Memoize trading style classification
     const tradingStyleInfo = useMemo(() => {
@@ -202,6 +205,37 @@ export const TraderRow = memo(
                 ...heroStyle,
               }}
             >
+              {/* 桌面对比勾选(#5):绝对定位于左侧 gutter,不占 grid 列;悬停或选中时
+                  可见(CSS .ranking-row:hover .compare-checkbox-cell)。移动端用卡片自带勾选。 */}
+              <span
+                className="compare-checkbox-cell row-compare-check"
+                onClick={handleCompareToggle}
+                aria-hidden={!isSelected}
+                style={{
+                  position: 'absolute',
+                  left: 2,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 22,
+                  height: 22,
+                  opacity: isSelected ? 1 : 0,
+                  transition: 'opacity 0.15s ease',
+                  zIndex: 2,
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  disabled={!isSelected && !canAddMore}
+                  readOnly
+                  aria-label={t('compare')}
+                  style={{ cursor: 'pointer', width: 15, height: 15 }}
+                />
+              </span>
+
               {/* Rank */}
               <RankDisplay
                 rank={rank}
