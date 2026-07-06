@@ -58,7 +58,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const router = useRouter()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
-  const { accessToken, email } = useAuthSession()
+  const { accessToken, email, authChecked } = useAuthSession()
 
   const [folder, setFolder] = useState<BookmarkFolder | null>(null)
   const [posts, setPosts] = useState<BookmarkedPost[]>([])
@@ -92,6 +92,16 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
       return
     }
 
+    // 硬加载/刷新时,useAuthSession 初始 accessToken=null、authChecked=false。
+    // 若此刻就发请求,会以未鉴权身份打 /api/bookmark-folders/[id],owner 访问
+    // 自己的私密夹被误判无权(403)。更糟:该未鉴权失败响应可能晚于随后的鉴权
+    // 重试返回,覆盖已成功的 state → 用户在硬加载/分享链接/刷新时稳定看到
+    // 「无权访问」。对策:等 authChecked 后再取数(此时 token 已就绪),并加
+    // cancelled 守卫,忽略被后续 effect 取代的陈旧响应。
+    if (!authChecked) return
+
+    let cancelled = false
+
     const loadFolder = async () => {
       setLoading(true)
       setError(null)
@@ -104,6 +114,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
         const response = await fetch(`/api/bookmark-folders/${folderId}`, { headers })
         const data = await response.json()
+        if (cancelled) return
 
         if (!response.ok) {
           // data.error 可能是字符串或对象 {code, message}
@@ -127,15 +138,20 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
           setEditIsPublic(data.data.folder.is_public)
         }
       } catch (err) {
+        if (cancelled) return
         logger.error('Error loading folder:', err)
         setError(t('networkError'))
       } finally {
-        setLoading(false)
+        if (!cancelled) setLoading(false)
       }
     }
 
     loadFolder()
-  }, [folderId, accessToken, t])
+
+    return () => {
+      cancelled = true
+    }
+  }, [folderId, accessToken, authChecked, t])
 
   const handleSave = async () => {
     if (!accessToken || !folder) return
