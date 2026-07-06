@@ -137,7 +137,15 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       })
       const data = await res.json()
       if (!res.ok) {
-        showToast(data.error || t('loadFailed2'), 'error')
+        // Localize instead of surfacing the raw API string (was leaking English
+        // "Not a member" onto a zh page). 403 = not a member, 404 = gone.
+        const msg =
+          res.status === 403
+            ? t('channelNotMember')
+            : res.status === 404
+              ? t('channelNotFoundDesc')
+              : t('loadFailed2')
+        showToast(msg, 'error')
         router.push('/inbox')
         return
       }
@@ -156,6 +164,15 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
   useEffect(() => {
     loadChannel()
   }, [loadChannel])
+
+  // Anonymous users have no accessToken, so loadChannel early-returns and `loading`
+  // would stay true forever (permanent "加载中..." death page). Once auth has been
+  // checked and there is still no session, send them to login with a return URL.
+  useEffect(() => {
+    if (authChecked && !accessToken) {
+      router.push(`/login?returnUrl=/channels/${channelId || ''}`)
+    }
+  }, [authChecked, accessToken, channelId, router])
 
   // Mark channel read on open / refocus / new message so group unread state
   // advances (channel_message_reads.last_read_at). Table exists since 00065.

@@ -5758,6 +5758,7 @@ const zh = {
   sortinoNotAvailable: 'Sortino 比率不可用',
   channelNotFoundTitle: '频道未找到',
   channelNotFoundDesc: '您查找的频道不存在。',
+  channelNotMember: '您不是该频道的成员',
   chartUnavailable: '图表数据不可用',
   confirmLink: '关联账户',
   confirmLinkDesc: '确认将此交易员账户关联到您的个人资料。',

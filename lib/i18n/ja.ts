@@ -5010,6 +5010,7 @@ const ja = {
   sortinoNotAvailable: 'Sortinoレシオは利用できません',
   channelNotFoundTitle: 'チャンネルが見つかりません',
   channelNotFoundDesc: 'お探しのチャンネルは存在しません。',
+  channelNotMember: 'あなたはこのチャンネルのメンバーではありません',
   chartUnavailable: 'チャートデータが利用できません',
   confirmLink: 'アカウントをリンク',
   confirmLinkDesc: 'このトレーダーアカウントをプロフィールにリンクしますか？',

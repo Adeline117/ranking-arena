@@ -5250,6 +5250,7 @@ const ko = {
   sortinoNotAvailable: 'Sortino 비율을 사용할 수 없습니다',
   channelNotFoundTitle: '채널을 찾을 수 없습니다',
   channelNotFoundDesc: '찾으시는 채널이 존재하지 않습니다.',
+  channelNotMember: '이 채널의 멤버가 아닙니다',
   chartUnavailable: '차트 데이터를 사용할 수 없습니다',
   confirmLink: '계정 연결',
   confirmLinkDesc: '이 트레이더 계정을 프로필에 연결하시겠습니까?',
