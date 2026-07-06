@@ -257,7 +257,6 @@ export default function SearchDropdown({
                 offset={getCategoryOffset('traders')}
                 onResultClick={handleResultClick}
                 onResultMouseEnter={handleResultMouseEnter}
-                onSetSelectedIndex={setSelectedIndex}
               />
               {features.social && (
                 <SearchResultGroup
@@ -268,7 +267,6 @@ export default function SearchDropdown({
                   offset={getCategoryOffset('posts')}
                   onResultClick={handleResultClick}
                   onResultMouseEnter={handleResultMouseEnter}
-                  onSetSelectedIndex={setSelectedIndex}
                 />
               )}
 
@@ -281,7 +279,6 @@ export default function SearchDropdown({
                   offset={getCategoryOffset('users')}
                   onResultClick={handleResultClick}
                   onResultMouseEnter={handleResultMouseEnter}
-                  onSetSelectedIndex={setSelectedIndex}
                 />
               )}
               {features.social && (
@@ -293,7 +290,6 @@ export default function SearchDropdown({
                   offset={getCategoryOffset('groups')}
                   onResultClick={handleResultClick}
                   onResultMouseEnter={handleResultMouseEnter}
-                  onSetSelectedIndex={setSelectedIndex}
                 />
               )}
               {searchData.suggestions && searchData.suggestions.length > 0 && (

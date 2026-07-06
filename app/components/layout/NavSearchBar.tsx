@@ -88,12 +88,15 @@ export default function NavSearchBar({
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter') {
-              // If the search dropdown has a highlighted item, let the dropdown's
-              // document-level keydown handler navigate to that item instead.
-              const dropdownEl = searchRef.current?.querySelector('#search-dropdown-listbox')
-              const hasSelection = dropdownEl?.querySelector('[aria-selected="true"]')
-              if (hasSelection) {
-                // Don't navigate to /search?q=X — let the dropdown handle Enter
+              // U3-3: unify Enter — only defer to the dropdown when the user made an
+              // EXPLICIT arrow-key selection. `activeOptionId` is the single source
+              // of truth (SearchDropdown reports it solely from selectedIndex>=0,
+              // which is now driven only by ArrowUp/Down — mouse hover no longer sets
+              // it). Reading this state instead of querying the DOM for
+              // aria-selected removes the prior DOM-vs-state race where a hovered
+              // row sent Enter to a (404-prone) trader instead of /search.
+              if (activeOptionId) {
+                // Let the dropdown's keydown handler navigate to the selected item.
                 return
               }
               e.preventDefault()
