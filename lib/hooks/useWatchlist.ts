@@ -5,6 +5,7 @@ import { useCallback, useMemo } from 'react'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useAchievements } from '@/lib/hooks/useAchievements'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
+import { getCsrfHeaders } from '@/lib/api/csrf'
 
 interface WatchlistItem {
   source: string
@@ -70,15 +71,20 @@ export function useWatchlist() {
         const headers = await getAuthHeadersAsync()
         const res = await fetch(WATCHLIST_API, {
           method: 'POST',
-          headers: { ...headers, 'Content-Type': 'application/json' },
+          // POST goes through withAuth CSRF validation — without x-csrf-token the
+          // write returned 403 for every real user while the UI still showed a
+          // success toast. Include CSRF headers like every other write path.
+          headers: { ...headers, ...getCsrfHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ source, source_trader_id: sourceTraderID, handle }),
         })
         if (!res.ok) throw new Error(`watchlist add: ${res.status}`)
         queryClient.invalidateQueries({ queryKey: WATCHLIST_QUERY_KEY })
         tryUnlock('first_watchlist')
-      } catch {
-        // Rollback on failure
+      } catch (err) {
+        // Rollback optimistic update, then rethrow so the caller shows a real
+        // error toast instead of a fabricated "added to watchlist" success.
         queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, previousData)
+        throw err
       }
     },
     [isLoggedIn, watchlist, queryClient, getAuthHeadersAsync, tryUnlock]
@@ -97,14 +103,16 @@ export function useWatchlist() {
         const headers = await getAuthHeadersAsync()
         const res = await fetch(WATCHLIST_API, {
           method: 'DELETE',
-          headers: { ...headers, 'Content-Type': 'application/json' },
+          headers: { ...headers, ...getCsrfHeaders(), 'Content-Type': 'application/json' },
           body: JSON.stringify({ source, source_trader_id: sourceTraderID }),
         })
         if (!res.ok) throw new Error(`watchlist remove: ${res.status}`)
         queryClient.invalidateQueries({ queryKey: WATCHLIST_QUERY_KEY })
-      } catch {
-        // Rollback on failure
+      } catch (err) {
+        // Rollback optimistic update, then rethrow so the caller surfaces the
+        // real failure instead of a fabricated success toast.
         queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, previousData)
+        throw err
       }
     },
     [isLoggedIn, watchlist, queryClient, getAuthHeadersAsync]
