@@ -69,7 +69,15 @@ export function CexVerifyForm({
         const verifyData = await verifyRes.json()
 
         if (!verifyRes.ok || !verifyData.verified) {
-          showToast(verifyData.message || t('claimApiKeyMismatch'), 'error')
+          // The exchange's raw (English) error is passed through — prefix it with
+          // a localized "Exchange returned:" so a zh/ja/ko user knows the message
+          // is upstream, not a mistranslation. Fall back to our own mismatch copy.
+          showToast(
+            verifyData.message
+              ? `${t('claimExchangeErrorPrefix')} ${verifyData.message}`
+              : t('claimApiKeyMismatch'),
+            'error'
+          )
           return
         }
 
@@ -155,13 +163,13 @@ export function CexVerifyForm({
             fontSize: tokens.typography.fontSize.sm,
           }}
         >
-          API Key
+          {t('apiKey')}
         </label>
         <input
           type="text"
           value={apiKey}
           onChange={(e) => setApiKey(e.target.value)}
-          placeholder="Enter your API Key"
+          placeholder={t('enterApiKeyPlaceholder')}
           style={{
             width: '100%',
             padding: tokens.spacing[3],
@@ -182,12 +190,12 @@ export function CexVerifyForm({
             fontSize: tokens.typography.fontSize.sm,
           }}
         >
-          API Secret
+          {t('apiSecret')}
         </label>
         <PasswordInput
           value={apiSecret}
           onChange={(e) => setApiSecret(e.target.value)}
-          placeholder="Enter your API Secret"
+          placeholder={t('enterApiSecretPlaceholder')}
           style={{
             width: '100%',
             padding: tokens.spacing[3],
@@ -209,12 +217,12 @@ export function CexVerifyForm({
               fontSize: tokens.typography.fontSize.sm,
             }}
           >
-            Passphrase
+            {t('passphraseLabel')}
           </label>
           <PasswordInput
             value={passphrase}
             onChange={(e) => setPassphrase(e.target.value)}
-            placeholder="Enter your Passphrase"
+            placeholder={t('enterPassphrasePlaceholder')}
             style={{
               width: '100%',
               padding: tokens.spacing[3],

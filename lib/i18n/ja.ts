@@ -4563,6 +4563,8 @@ const ja = {
   claimApiKeyVerifyDesc:
     '取引所のAPIキーとシークレットを入力して、このトレーダーアカウントの所有者であることを確認してください。読み取り専用権限のみ使用します。',
   claimApiKeyMismatch: 'このAPIキーはこのトレーダーアカウントに属していません。',
+  claimWalletToVerifyLabel: '検証するウォレット：',
+  claimExchangeErrorPrefix: '取引所からの応答：',
   claimApiKeySuccess: 'APIキー認証に成功しました！',
 
   // Claim - Methods
