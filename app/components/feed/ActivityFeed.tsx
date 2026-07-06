@@ -17,7 +17,8 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import { ACTIVITY_META } from '@/lib/types/activities'
-import ActivityFeedItem from './ActivityFeedItem'
+import ActivityFeedItem, { activityTypeLabel } from './ActivityFeedItem'
+import { formatTimeAgo } from '@/lib/utils/date'
 
 // ---------------------------------------------------------------------------
 // Filter options
@@ -70,7 +71,7 @@ export default function ActivityFeed({
   fixedHandle,
   title,
 }: ActivityFeedProps) {
-  const { t } = useLanguage()
+  const { t, language } = useLanguage()
   const localTitle = title || t('activityFeedTitle')
 
   const platformOptions = useMemo(
@@ -89,8 +90,8 @@ export default function ActivityFeed({
   const typeOptions = useMemo(
     () => [
       { label: t('activityFilterAll'), value: null as ActivityType | null },
-      ...Object.entries(ACTIVITY_META).map(([key, meta]) => ({
-        label: meta.label,
+      ...Object.keys(ACTIVITY_META).map((key) => ({
+        label: activityTypeLabel(key as ActivityType, t),
         value: key as ActivityType,
       })),
     ],
@@ -167,6 +168,12 @@ export default function ActivityFeed({
     ? activities.filter((a) => a.activity_type === typeFilter)
     : activities
 
+  // Honest freshness: only show the pulsing "Live" badge when the newest event is
+  // actually recent (< 1h). Otherwise show "Updated <time ago>" so a stalled
+  // generation pipeline (feed was months behind) no longer claims to be live (U8-7).
+  const newestAt = activities[0]?.occurred_at
+  const isLive = newestAt ? Date.now() - new Date(newestAt).getTime() < 60 * 60 * 1000 : false
+
   return (
     <div
       style={{
@@ -201,7 +208,7 @@ export default function ActivityFeed({
           >
             {localTitle}
           </h1>
-          {activities.length > 0 && (
+          {visibleActivities.length > 0 && (
             <span
               style={{
                 fontSize: tokens.typography.fontSize.xs,
@@ -213,22 +220,22 @@ export default function ActivityFeed({
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
               }}
             >
-              {activities.length}
+              {visibleActivities.length}
             </span>
           )}
         </div>
 
-        {/* Live indicator */}
+        {/* Freshness indicator — pulsing "Live" only when data is actually recent */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           <span
             style={{
               width: 7,
               height: 7,
               borderRadius: '50%',
-              background: 'var(--color-accent-success)',
-              boxShadow: '0 0 6px var(--color-accent-success)',
+              background: isLive ? 'var(--color-accent-success)' : tokens.colors.text.tertiary,
+              boxShadow: isLive ? '0 0 6px var(--color-accent-success)' : 'none',
               display: 'inline-block',
-              animation: 'pulse 2s infinite',
+              animation: isLive ? 'pulse 2s infinite' : 'none',
             }}
           />
           <span
@@ -238,7 +245,11 @@ export default function ActivityFeed({
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
             }}
           >
-            Live
+            {isLive
+              ? t('activityFeedLive')
+              : newestAt
+                ? `${t('activityFeedUpdatedPrefix')} ${formatTimeAgo(newestAt, language)}`
+                : t('activityFeedLive')}
           </span>
         </div>
       </div>
