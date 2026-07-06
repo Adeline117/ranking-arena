@@ -389,7 +389,10 @@ function ResetPasswordContent() {
         style={{
           maxWidth: 440,
           width: '100%',
-          background: 'var(--color-backdrop-heavy)',
+          // 2026-07-04 修 U4/U14:此前用 --color-backdrop-heavy(黑色遮罩 rgba(0,0,0,.8))
+          // 当卡面 → 亮色主题下深底埋深字,标题几乎不可见。改用主题感知的玻璃卡面
+          // token(与 login/onboarding 一致:亮色近白、暗色半透白)。
+          background: 'var(--glass-bg-heavy)',
           border: '1px solid var(--color-accent-primary-15)',
           borderRadius: tokens.radius['3xl'],
           padding: '40px 36px',

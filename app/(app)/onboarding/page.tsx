@@ -337,7 +337,9 @@ export default function OnboardingPage() {
   const isDark = theme === 'dark'
   const obTheme: OnboardingTheme = {
     isDark,
-    cardBg: isDark ? 'var(--color-backdrop-heavy)' : 'var(--glass-bg-heavy)',
+    // 2026-07-04 修 U4:暗色分支曾用 --color-backdrop-heavy(黑遮罩)当卡面;
+    // 统一用主题感知的 --glass-bg-heavy(暗色=半透白玻璃,亮色=近白),两色都可读。
+    cardBg: 'var(--glass-bg-heavy)',
     cardBorder: isDark ? 'var(--color-accent-primary-15)' : 'var(--color-accent-primary-20)',
     textPrimary: 'var(--color-text-primary)',
     textSecondary: 'var(--color-text-secondary)',
