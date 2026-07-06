@@ -6116,6 +6116,8 @@ const en = {
   marketDataPending: 'Data will appear after the next cron cycle.',
   openInterestDesc:
     'Total outstanding perpetual futures positions across exchanges. Rising OI with price increases signals strong trend; rising OI with falling price signals potential squeeze.',
+  dataAsOf: 'Data as of {time}',
+  staleRowsHidden: '{n} stale rows (not updated in 24h+) hidden',
   noOpenInterestData: 'No open interest data yet',
   colOpenInterestUsd: 'Open Interest (USD)',
   colUpdated: 'Updated',

@@ -5763,6 +5763,8 @@ const ja = {
   marketDataPending: 'データは次の cron サイクル後に表示されます。',
   openInterestDesc:
     '各取引所の無期限先物の建玉総額。価格上昇を伴う OI 増加は強いトレンドを、価格下落を伴う OI 増加はスクイーズの可能性を示します。',
+  dataAsOf: 'データ基準時刻: {time}',
+  staleRowsHidden: '24時間以上更新のない古いデータ {n} 件を非表示にしました',
   noOpenInterestData: 'オープンインタレストのデータはまだありません',
   colOpenInterestUsd: 'オープンインタレスト（USD）',
   colUpdated: '更新',
