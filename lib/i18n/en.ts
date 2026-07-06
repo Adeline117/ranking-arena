@@ -2150,6 +2150,23 @@ const en = {
   wrappedEmptyHome: 'Back to Home',
   wrappedEmptyRankings: 'Browse Rankings',
 
+  // Exchange landing page (/exchange/[slug])
+  exchangePageTitle: '{name} Top Traders & Rankings',
+  exchangePageSubtitle: '{count} ranked traders on {name} ({type}). Updated every 30 minutes.',
+  exchangePageTop10: 'Top 10 Traders by Arena Score',
+  exchangePageColRank: 'RANK',
+  exchangePageColTrader: 'TRADER',
+  exchangePageColScore: 'ARENA SCORE',
+  exchangePageColRoi: 'ROI (90D)',
+  exchangePageColPnl: 'PNL',
+  exchangePageCta: 'View Full {name} Rankings',
+  exchangePageAboutTitle: 'About {name} Trader Rankings',
+  exchangePageAboutBody:
+    'Arena tracks {count} active traders on {name}, ranking them by Arena Score — a composite metric combining ROI, PnL, risk management, and consistency across 7-day, 30-day, and 90-day periods. {name} is a {type} trading platform. All performance data is refreshed every 30 minutes from live exchange APIs.',
+  exchangePageTypeFutures: 'Futures',
+  exchangePageTypeSpot: 'Spot',
+  exchangePageTypeDefi: 'DeFi / On-Chain',
+
   // Not Found
   notFoundTitle: 'Page Not Found',
   notFoundDesc: 'All rankings in crypto — This page may have been moved or deleted',

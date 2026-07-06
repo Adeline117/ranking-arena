@@ -1975,6 +1975,23 @@ const ja = {
   wrappedEmptyHome: 'ホームに戻る',
   wrappedEmptyRankings: 'ランキングを見る',
 
+  // 取引所ランディングページ (/exchange/[slug])
+  exchangePageTitle: '{name} トップトレーダーとランキング',
+  exchangePageSubtitle: '{name}（{type}）のランク付けされたトレーダー {count} 名。30分ごとに更新。',
+  exchangePageTop10: 'Arenaスコア別トップ10トレーダー',
+  exchangePageColRank: 'ランク',
+  exchangePageColTrader: 'トレーダー',
+  exchangePageColScore: 'ARENAスコア',
+  exchangePageColRoi: 'ROI（90日）',
+  exchangePageColPnl: '損益',
+  exchangePageCta: '{name} の完全なランキングを見る',
+  exchangePageAboutTitle: '{name} トレーダーランキングについて',
+  exchangePageAboutBody:
+    'Arenaは{name}上の{count}名のアクティブなトレーダーを追跡し、ROI・損益・リスク管理・7日/30日/90日の一貫性を組み合わせた総合指標であるArenaスコアでランク付けしています。{name}は{type}取引プラットフォームです。すべてのパフォーマンスデータは取引所のライブAPIから30分ごとに更新されます。',
+  exchangePageTypeFutures: '先物',
+  exchangePageTypeSpot: '現物',
+  exchangePageTypeDefi: 'DeFi / オンチェーン',
+
   notFoundTitle: 'ページが見つかりません',
   notFoundDesc: '暗号資産のすべてのランキング — このページは移動または削除された可能性があります',
   notFoundViewHot: '人気リストを見る',
