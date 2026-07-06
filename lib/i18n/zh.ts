@@ -4591,6 +4591,14 @@ const zh = {
   activityFeedEmpty: '暂无动态事件，请在下次数据同步后再来查看。',
   activityFeedLoading: '加载中...',
   activityFeedLoadMore: '加载更多',
+  activityFeedLive: '实时',
+  activityFeedUpdatedPrefix: '更新于',
+  activityTypeRankUp: '排名上升',
+  activityTypeTop10: '进入前十',
+  activityTypeRoi: 'ROI',
+  activityTypeScore: '竞技分',
+  activityTypeWinStreak: '连胜',
+  activityTypeLargeProfit: '大额盈利',
 
   // Market section error boundaries
   marketSectionError: '加载此部分失败',

@@ -26,6 +26,22 @@ import { useToast } from '@/app/components/ui/Toast'
 // Helpers
 // ---------------------------------------------------------------------------
 
+// i18n labels for the activity type badge/filter. ACTIVITY_META.label is English-only
+// (it's a plain type constant), so map the type key to a translated string here.
+const ACTIVITY_TYPE_I18N: Record<ActivityType, string> = {
+  rank_up: 'activityTypeRankUp',
+  entered_top10: 'activityTypeTop10',
+  roi_milestone: 'activityTypeRoi',
+  score_high: 'activityTypeScore',
+  win_streak: 'activityTypeWinStreak',
+  large_profit: 'activityTypeLargeProfit',
+}
+
+export function activityTypeLabel(type: ActivityType, t: (k: string) => string): string {
+  const key = ACTIVITY_TYPE_I18N[type]
+  return (key && t(key)) || ACTIVITY_META[type]?.label || type
+}
+
 function formatSourceLabel(source: string): string {
   // Convert "binance_futures" -> "Binance" etc.
   return source
@@ -234,7 +250,7 @@ export default function ActivityFeedItem({
               fontFamily: tokens.typography.fontFamily.sans.join(', '),
             }}
           >
-            {meta.label}
+            {activityTypeLabel(activity.activity_type as ActivityType, t)}
           </span>
 
           {/* Metric value */}

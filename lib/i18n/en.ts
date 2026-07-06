@@ -4694,6 +4694,14 @@ const en = {
   activityFeedEmpty: 'No activity events yet. Check back after the next data sync.',
   activityFeedLoading: 'Loading...',
   activityFeedLoadMore: 'Load More',
+  activityFeedLive: 'Live',
+  activityFeedUpdatedPrefix: 'Updated',
+  activityTypeRankUp: 'Rank Up',
+  activityTypeTop10: 'Top 10',
+  activityTypeRoi: 'ROI',
+  activityTypeScore: 'Arena Score',
+  activityTypeWinStreak: 'Win Streak',
+  activityTypeLargeProfit: 'Large Profit',
 
   // Market section error boundaries
   marketSectionError: 'Failed to load this section',
