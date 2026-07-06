@@ -374,6 +374,10 @@ export default function LiveTradesFeed() {
         onMouseLeave={handleMouseLeave}
         style={{
           flex: 1,
+          // 上限高度:父级 grid 行无高度约束时,flex:1 无法封顶,150 笔实时交易
+          // 会把整行撑到 ~4000px(恐惧贪婪/套利卡随之悬空留白)。加 maxHeight 让
+          // 列表自身滚动,恢复 MarketPageClient 的紧凑布局意图。
+          maxHeight: 480,
           overflowY: 'auto',
           overflowX: 'hidden',
         }}
