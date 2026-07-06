@@ -85,9 +85,15 @@ export async function GET(request: NextRequest) {
       // (indexed published_at DESC).
       let query = supabase
         .from('flash_news')
-        .select('id, title, title_zh, title_en, source, category, importance, published_at, tags', {
-          count: 'exact',
-        })
+        .select(
+          // source_url/content/content_zh/content_en 必须下发:NewsCard 靠 source_url
+          // 渲染来源外链(缺则全站 0 外跳),content* 供 getNewsContent + 翻译管线
+          // (缺则 content 恒 undefined,translateNewsContent 永不触发)。列已 REST 探针核实存在。
+          'id, title, title_zh, title_en, content, content_zh, content_en, source, source_url, category, importance, published_at, tags',
+          {
+            count: 'exact',
+          }
+        )
         .order('published_at', { ascending: false })
         .range(offset, offset + limit - 1)
 
