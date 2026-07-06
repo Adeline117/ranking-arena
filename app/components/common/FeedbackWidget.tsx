@@ -1,9 +1,11 @@
 'use client'
 
 import { useState, useRef } from 'react'
+import { usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import { features } from '@/lib/features'
 
 export default function FeedbackWidget() {
   const [open, setOpen] = useState(false)
@@ -12,6 +14,17 @@ export default function FeedbackWidget() {
   const fileRef = useRef<HTMLInputElement>(null)
   const { t } = useLanguage()
   const { showToast } = useToast()
+  const pathname = usePathname()
+
+  // Pages where the create-post FAB + ScrollToTop stack in the same bottom-right
+  // corner. Without offsetting, this feedback button sits directly under the FAB
+  // (both anchored ~16-20px from the bottom) and gets covered (U9-5). Same
+  // fabPages detection as ScrollToTop. Stack this ABOVE the reserved ScrollToTop
+  // slot so all three widgets are legible regardless of scroll state.
+  const fabPages = features.social ? ['/', '/groups'] : ['/']
+  const hasFab = fabPages.some(
+    (p) => pathname === p || (features.social && pathname.startsWith('/groups/'))
+  )
 
   const handleSubmit = async () => {
     if (!message.trim() || submitting) return
@@ -63,7 +76,9 @@ export default function FeedbackWidget() {
         aria-expanded={open}
         style={{
           position: 'fixed',
-          bottom: 'calc(var(--mobile-nav-height, 60px) + 16px)',
+          bottom: hasFab
+            ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 152px)'
+            : 'calc(var(--mobile-nav-height, 60px) + 16px)',
           right: 16,
           width: 44,
           height: 44,
@@ -97,7 +112,9 @@ export default function FeedbackWidget() {
         <div
           style={{
             position: 'fixed',
-            bottom: 'calc(var(--mobile-nav-height, 60px) + 72px)',
+            bottom: hasFab
+              ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 208px)'
+              : 'calc(var(--mobile-nav-height, 60px) + 72px)',
             right: 16,
             width: 'min(320px, calc(100vw - 32px))',
             background: 'var(--color-bg-secondary)',
