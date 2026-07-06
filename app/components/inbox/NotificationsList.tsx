@@ -18,6 +18,49 @@ import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 type Notification = NotificationWithActor
 
+// U10-2: chip filter → actual stored notification type(s). Producers emit
+// `new_follower` (not `follow`) and `post_reply` (not `comment`), so the naive
+// `n.type === chip` match left the Follows/Comments chips permanently empty.
+const FILTER_TYPE_MAP: Record<string, string[]> = {
+  follow: ['follow', 'new_follower'],
+  like: ['like'],
+  comment: ['comment', 'post_reply'],
+  mention: ['mention'],
+}
+
+// U10-4: notification title/message are stored as English in the DB. Localize at
+// render time by type so zh/ja/ko users don't see mixed-language cards. The
+// message body for like/comment/reply/mention is user content (post title /
+// comment text) — leave it untouched; only the generated sentences are localized.
+function localizeNotifTitle(notif: Notification, t: (key: string) => string): string {
+  const handle = notif.actor_handle || ''
+  switch (notif.type) {
+    case 'new_follower':
+    case 'follow':
+      return t('notifText_new_follower_title')
+    case 'like':
+      return handle ? t('notifText_like').replace('{handle}', handle) : notif.title
+    case 'comment':
+      return handle ? t('notifText_comment').replace('{handle}', handle) : notif.title
+    case 'post_reply':
+      return handle ? t('notifText_post_reply').replace('{handle}', handle) : notif.title
+    case 'mention':
+      return handle ? t('notifText_mention').replace('{handle}', handle) : notif.title
+    default:
+      return notif.title // trader_alert / system etc — dynamic content, keep stored
+  }
+}
+
+function localizeNotifMessage(notif: Notification, t: (key: string) => string): string {
+  if (notif.type === 'new_follower' || notif.type === 'follow') {
+    const handle = notif.actor_handle
+    return handle
+      ? t('notifText_new_follower_msg').replace('{handle}', handle)
+      : t('notifText_new_follower_msg_generic')
+  }
+  return notif.message // user content — keep as-is
+}
+
 export default function NotificationsList() {
   const [typeFilter, setTypeFilter] = useState<'all' | 'follow' | 'like' | 'comment' | 'mention'>(
     'all'
@@ -78,6 +121,17 @@ export default function NotificationsList() {
     setNotifications(fetchedNotifications)
   }, [fetchedNotifications])
   const hasMore = hasNextPage ?? false
+
+  // U10-2/U10-3: filter by the chip using the type map, and drive the empty
+  // state off the *filtered* result so an empty category shows a message
+  // instead of a blank pane.
+  const filtered = useMemo(
+    () =>
+      notifications.filter(
+        (n) => typeFilter === 'all' || (FILTER_TYPE_MAP[typeFilter]?.includes(n.type) ?? false)
+      ),
+    [notifications, typeFilter]
+  )
 
   // Sync unread count from first page
   useEffect(() => {
@@ -178,10 +232,12 @@ export default function NotificationsList() {
   function getIcon(type: string): string {
     switch (type) {
       case 'follow':
+      case 'new_follower':
         return t('notifIconFollow')
       case 'like':
         return t('notifIconLike')
       case 'comment':
+      case 'post_reply':
         return t('notifIconComment')
       case 'mention':
         return t('notifIconMention')
@@ -359,7 +415,7 @@ export default function NotificationsList() {
                 </div>
               ))}
             </div>
-          ) : notifications.length === 0 ? (
+          ) : filtered.length === 0 ? (
             <div style={{ padding: '24px 12px', textAlign: 'center' }}>
               <Image
                 src="/stickers/gn.webp"
@@ -370,115 +426,113 @@ export default function NotificationsList() {
                 style={{ margin: '0 auto 8px', display: 'block', opacity: 0.7 }}
               />
               <p style={{ fontSize: 13, color: tokens.colors.text.tertiary }}>
-                {t('noNotifications')}
+                {typeFilter === 'all' ? t('noNotifications') : t('noNotificationsForFilter')}
               </p>
             </div>
           ) : (
-            notifications
-              .filter((n) => typeFilter === 'all' || n.type === typeFilter)
-              .map((notif) => {
-                const content = (
+            filtered.map((notif) => {
+              const content = (
+                <div
+                  key={notif.id}
+                  onClick={() => {
+                    if (!notif.read) markAsRead(notif.id)
+                  }}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'flex-start',
+                    gap: tokens.spacing[3],
+                    padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                    background: notif.read ? 'transparent' : 'var(--color-notification-unread)',
+                    transition: 'background 0.15s',
+                    cursor: notif.link ? 'pointer' : 'default',
+                  }}
+                >
                   <div
-                    key={notif.id}
-                    onClick={() => {
-                      if (!notif.read) markAsRead(notif.id)
-                    }}
                     style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      background: tokens.colors.bg.secondary,
                       display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: tokens.spacing[3],
-                      padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-                      background: notif.read ? 'transparent' : 'var(--color-notification-unread)',
-                      transition: 'background 0.15s',
-                      cursor: notif.link ? 'pointer' : 'default',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 14,
+                      flexShrink: 0,
+                      overflow: 'hidden',
                     }}
                   >
-                    <div
-                      style={{
-                        width: 32,
-                        height: 32,
-                        borderRadius: '50%',
-                        background: tokens.colors.bg.secondary,
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: 14,
-                        flexShrink: 0,
-                        overflow: 'hidden',
-                      }}
-                    >
-                      {notif.actor_avatar_url ? (
-                        <Image
-                          src={avatarSrc(notif.actor_avatar_url)}
-                          alt={`${notif.actor_handle || 'User'} avatar`}
-                          width={32}
-                          height={32}
-                          sizes="32px"
-                          loading="lazy"
-                          unoptimized
-                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                          onError={(e) => {
-                            ;(e.currentTarget as HTMLImageElement).style.display = 'none'
-                          }}
-                        />
-                      ) : (
-                        getIcon(notif.type)
-                      )}
-                    </div>
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <div
-                        style={{
-                          fontSize: 13,
-                          fontWeight: 700,
-                          color: tokens.colors.text.primary,
-                          marginBottom: 2,
-                        }}
-                      >
-                        {notif.title}
-                      </div>
-                      <div
-                        style={{
-                          fontSize: 12,
-                          color: tokens.colors.text.secondary,
-                          marginBottom: 2,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {notif.message}
-                      </div>
-                      <div style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
-                        {formatTimeAgo(notif.created_at, language)}
-                      </div>
-                    </div>
-                    {!notif.read && (
-                      <div
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: '50%',
-                          background: tokens.colors.accent.primary,
-                          flexShrink: 0,
-                          marginTop: 6,
+                    {notif.actor_avatar_url ? (
+                      <Image
+                        src={avatarSrc(notif.actor_avatar_url)}
+                        alt={`${notif.actor_handle || 'User'} avatar`}
+                        width={32}
+                        height={32}
+                        sizes="32px"
+                        loading="lazy"
+                        unoptimized
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        onError={(e) => {
+                          ;(e.currentTarget as HTMLImageElement).style.display = 'none'
                         }}
                       />
+                    ) : (
+                      getIcon(notif.type)
                     )}
                   </div>
-                )
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: 13,
+                        fontWeight: 700,
+                        color: tokens.colors.text.primary,
+                        marginBottom: 2,
+                      }}
+                    >
+                      {localizeNotifTitle(notif, t)}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 12,
+                        color: tokens.colors.text.secondary,
+                        marginBottom: 2,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {localizeNotifMessage(notif, t)}
+                    </div>
+                    <div style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
+                      {formatTimeAgo(notif.created_at, language)}
+                    </div>
+                  </div>
+                  {!notif.read && (
+                    <div
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: '50%',
+                        background: tokens.colors.accent.primary,
+                        flexShrink: 0,
+                        marginTop: 6,
+                      }}
+                    />
+                  )}
+                </div>
+              )
 
-                return notif.link ? (
-                  <Link
-                    key={notif.id}
-                    href={notif.link}
-                    style={{ textDecoration: 'none', color: 'inherit' }}
-                  >
-                    {content}
-                  </Link>
-                ) : (
-                  <div key={notif.id}>{content}</div>
-                )
-              })
+              return notif.link ? (
+                <Link
+                  key={notif.id}
+                  href={notif.link}
+                  style={{ textDecoration: 'none', color: 'inherit' }}
+                >
+                  {content}
+                </Link>
+              ) : (
+                <div key={notif.id}>{content}</div>
+              )
+            })
           )}
           {!loading && hasMore && notifications.length > 0 && (
             <div
