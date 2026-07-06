@@ -19,6 +19,15 @@ function formatTraderName(name: string): string {
   return name
 }
 
+// The ingest pipeline clamps ROI to ±10000 (lib/ingest/staging/validate.ts).
+// A value that hits that ceiling is a sentinel, NOT a real +10000.0% return —
+// showing it verbatim (as several Hyperliquid rows did) reads as fake precision.
+// Anything at/above the clamp is rendered as an "Extreme" tag instead.
+const ROI_CLAMP_CEILING = 10000
+function isRoiClamped(roi: number): boolean {
+  return Math.abs(roi) >= ROI_CLAMP_CEILING
+}
+
 export default function RecommendedTraders({ type, traders, tr }: RecommendedTradersProps) {
   return (
     <div className="quiz-section-card">
@@ -176,15 +185,23 @@ export default function RecommendedTraders({ type, traders, tr }: RecommendedTra
                       style={{
                         fontSize: 14,
                         fontWeight: 700,
-                        color:
-                          trader.roi_90d >= 0
+                        color: isRoiClamped(trader.roi_90d)
+                          ? 'var(--color-text-tertiary)'
+                          : trader.roi_90d >= 0
                             ? 'var(--color-accent-success)'
                             : 'var(--color-accent-error)',
                         fontVariantNumeric: 'tabular-nums',
                       }}
+                      title={isRoiClamped(trader.roi_90d) ? `${trader.roi_90d}%` : undefined}
                     >
-                      {trader.roi_90d >= 0 ? '+' : ''}
-                      {trader.roi_90d.toFixed(1)}%
+                      {isRoiClamped(trader.roi_90d) ? (
+                        tr('quizRoiExtreme')
+                      ) : (
+                        <>
+                          {trader.roi_90d >= 0 ? '+' : ''}
+                          {trader.roi_90d.toFixed(1)}%
+                        </>
+                      )}
                     </div>
                     <div
                       style={{

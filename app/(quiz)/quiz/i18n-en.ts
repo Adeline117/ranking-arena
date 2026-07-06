@@ -31,6 +31,7 @@ const quizEn: Record<string, string> = {
   quizStrengths: 'Strengths',
   quizWeaknesses: 'Weaknesses',
   quizRecommendTitle: 'Arena Traders Like You',
+  quizRoiExtreme: 'Extreme',
   quizShareTitle: 'Share Your Result',
   quizShareText:
     'I got {type}, matched {match}% with {master}. Which legendary trader are you? Take the quiz: {url}',
