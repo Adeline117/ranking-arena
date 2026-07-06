@@ -93,9 +93,22 @@ function SearchContent() {
     setInputValue(query)
   }, [query])
 
-  // Update URL when input changes (debounced)
+  // Update URL when input changes (debounced).
+  // U3-2 ROOT-CAUSE FIX: the effect previously listed ONLY [debouncedInputValue]
+  // (eslint-disabled), so it ran against a STALE `query`/`searchParams` closure.
+  // When landing with ?q= already set (hard nav, or the nav dropdown's "see all
+  // results"), typing a new word or hitting the ⊗ clear button fought the URL:
+  //   • a stale debounced value re-added ?q=old right after `router.replace('/search')`
+  //     ("clear was swallowed"),
+  //   • and a stale searchParams dropped tab/platform on a stray replace.
+  // Fixes: (1) full deps so the closure is always current; (2) act ONLY once the
+  // debounce has SETTLED to the live input (`debouncedInputValue === inputValue.trim()`)
+  // — this stops a not-yet-settled old value from racing a manual navigation and
+  // re-adding ?q= after a clear. Building params from the CURRENT searchParams
+  // preserves tab/platform.
   const debouncedInputValue = useDebounce(inputValue.trim(), 300)
   useEffect(() => {
+    if (debouncedInputValue !== inputValue.trim()) return // debounce not settled yet
     if (debouncedInputValue === query) return
     const params = new URLSearchParams(searchParams.toString())
     if (debouncedInputValue) {
@@ -103,8 +116,9 @@ function SearchContent() {
     } else {
       params.delete('q')
     }
-    router.replace(`/search?${params.toString()}`)
-  }, [debouncedInputValue]) // eslint-disable-line react-hooks/exhaustive-deps
+    const qs = params.toString()
+    router.replace(qs ? `/search?${qs}` : '/search')
+  }, [debouncedInputValue, inputValue, query, searchParams, router])
 
   // `query` and `platformFilter` both come from the URL (searchParams). `query`
   // only updates via the already-debounced router.replace above (line ~88), and
