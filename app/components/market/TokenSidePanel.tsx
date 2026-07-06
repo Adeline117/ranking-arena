@@ -254,6 +254,12 @@ export default function TokenSidePanel({
 
   const md = coinDetail?.market_data
 
+  // 统一 24h 涨跌数据源:头部与「价格变化」区都取 coin detail 的
+  // price_change_percentage_24h(同一 API),避免头部(市场表 token.change24h)与
+  // 价格变化区(md)两个源同屏矛盾(如 +2.13% vs +3.13%)。detail 未加载时回退
+  // token.change24h,加载后两处收敛到同值。
+  const headerChange24h = md?.price_change_percentage_24h ?? token?.change24h ?? 0
+
   return (
     <>
       {token && (
@@ -413,13 +419,13 @@ export default function TokenSidePanel({
                     fontSize: tokens.typography.fontSize.base,
                     fontWeight: tokens.typography.fontWeight.semibold,
                     color:
-                      token.change24h >= 0
+                      headerChange24h >= 0
                         ? tokens.colors.accent.success
                         : tokens.colors.accent.error,
                   }}
                 >
-                  {token.change24h >= 0 ? '+' : ''}
-                  {token.change24h.toFixed(2)}% (24h)
+                  {headerChange24h >= 0 ? '+' : ''}
+                  {headerChange24h.toFixed(2)}% (24h)
                 </span>
               </div>
 
