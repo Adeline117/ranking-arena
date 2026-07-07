@@ -34,6 +34,13 @@ interface UseConversationMessagesOptions {
   accessToken: string | null
 }
 
+// Realtime starts in a 'disconnected' state and briefly reports it before the
+// initial subscribe completes. Suppress the alarming "connection lost" banner
+// during this first-connect window so opening a conversation doesn't flash a
+// false disconnect (U11-10). Only surface a real disconnect once we've
+// connected at least once, or after this grace period elapses without connecting.
+const FIRST_CONNECT_GRACE_MS = 5000
+
 export function useConversationMessages({
   conversationId,
   userId,
@@ -50,6 +57,12 @@ export function useConversationMessages({
   const [connectionStatus, setConnectionStatus] = useState<
     'connected' | 'disconnected' | 'reconnecting'
   >('connected')
+  // First-connect grace tracking (see FIRST_CONNECT_GRACE_MS).
+  const hasConnectedRef = useRef(false)
+  const graceExpiredRef = useRef(false)
+  // True while we should hold the optimistic "connected" state: never connected
+  // yet AND still inside the grace window.
+  const inFirstConnectGrace = () => !hasConnectedRef.current && !graceExpiredRef.current
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const isLoadingOlderRef = useRef(false)
   const prevMessageCountRef = useRef(0)
@@ -202,9 +215,17 @@ export function useConversationMessages({
       }
     },
     onStatusChange: (status) => {
-      if (status === 'connected') setConnectionStatus('connected')
-      else if (status === 'disconnected' || status === 'error') setConnectionStatus('disconnected')
-      else if (status === 'reconnecting') setConnectionStatus('reconnecting')
+      if (status === 'connected') {
+        hasConnectedRef.current = true
+        setConnectionStatus('connected')
+      } else if (status === 'disconnected' || status === 'error') {
+        // Hold optimistic "connected" while inside the first-connect grace window.
+        if (inFirstConnectGrace()) return
+        setConnectionStatus('disconnected')
+      } else if (status === 'reconnecting') {
+        if (inFirstConnectGrace()) return
+        setConnectionStatus('reconnecting')
+      }
     },
   })
 
@@ -226,6 +247,22 @@ export function useConversationMessages({
       }
     },
   })
+
+  // First-connect grace: reset per conversation, then after the grace window
+  // stop suppressing disconnect state. If we never connected, surface the real
+  // disconnect banner (covers a silent connect failure that emits no further
+  // status change). onStatusChange handles the normal case earlier.
+  useEffect(() => {
+    hasConnectedRef.current = false
+    graceExpiredRef.current = false
+    const id = setTimeout(() => {
+      graceExpiredRef.current = true
+      if (!hasConnectedRef.current && mountedRef.current) {
+        setConnectionStatus('disconnected')
+      }
+    }, FIRST_CONNECT_GRACE_MS)
+    return () => clearTimeout(id)
+  }, [conversationId])
 
   // Realtime: emoji reactions (INSERT). RLS limits delivery to the 2 participants,
   // so we only need to match the affected message to one already in view.
