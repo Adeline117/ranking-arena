@@ -124,8 +124,8 @@ export class ScheduleManager {
       .select(
         `
         id,
-        platform,
-        trader_key,
+        platform:source,
+        trader_key:source_trader_id,
         handle,
         last_seen_at,
         activity_tier,
@@ -144,7 +144,7 @@ export class ScheduleManager {
       .eq('trader_snapshots_v2.window', '7D')
 
     if (platforms && platforms.length > 0) {
-      query = query.in('platform', platforms)
+      query = query.in('source', platforms)
     }
 
     const { data, error } = await query
@@ -214,8 +214,8 @@ export class ScheduleManager {
               refresh_priority: schedule.priority,
               tier_updated_at: new Date().toISOString(),
             })
-            .eq('platform', schedule.platform)
-            .eq('trader_key', schedule.traderId)
+            .eq('source', schedule.platform)
+            .eq('source_trader_id', schedule.traderId)
 
           if (error) {
             logger.error('Failed to update schedule', {
@@ -245,13 +245,7 @@ export class ScheduleManager {
    * @deprecated Uses trader_sources for scheduling-specific columns. Not migratable to unified (read-only).
    */
   async getTradersToRefresh(options: GetTradersOptions = {}): Promise<TraderWithSchedule[]> {
-    const {
-      platform,
-      limit = 500,
-      priorityOrder = true,
-      includeOverdue = true,
-      tiers,
-    } = options
+    const { platform, limit = 500, priorityOrder = true, includeOverdue = true, tiers } = options
 
     try {
       let query = this.supabase
@@ -259,8 +253,8 @@ export class ScheduleManager {
         .select(
           `
           id,
-          platform,
-          trader_key,
+          platform:source,
+          trader_key:source_trader_id,
           handle,
           activity_tier,
           next_refresh_at,
@@ -272,7 +266,7 @@ export class ScheduleManager {
 
       // Filter by platform
       if (platform) {
-        query = query.eq('platform', platform)
+        query = query.eq('source', platform)
       }
 
       // Filter by tiers
@@ -412,8 +406,8 @@ export class ScheduleManager {
         .select(
           `
           id,
-          platform,
-          trader_key,
+          platform:source,
+          trader_key:source_trader_id,
           handle,
           activity_tier,
           next_refresh_at,
@@ -426,7 +420,7 @@ export class ScheduleManager {
         .not('next_refresh_at', 'is', null)
 
       if (platform) {
-        query = query.eq('platform', platform)
+        query = query.eq('source', platform)
       }
 
       const { data, error } = await query.order('next_refresh_at', { ascending: true })
