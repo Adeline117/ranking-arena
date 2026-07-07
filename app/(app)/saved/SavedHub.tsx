@@ -78,8 +78,9 @@ export default function SavedHub() {
         })}
       </nav>
 
-      {/* 内容 — 复用现成 client,数据层零改动 */}
-      {tab === 'posts' ? <FavoritesPageClient /> : <WatchlistClient />}
+      {/* 内容 — 复用现成 client,数据层零改动。embedded 抑制各自的整页 chrome
+          (100vh 包裹 / PageHeader / Breadcrumb / FAB),只渲染内容,避免堆叠标题。 */}
+      {tab === 'posts' ? <FavoritesPageClient embedded /> : <WatchlistClient embedded />}
     </div>
   )
 }

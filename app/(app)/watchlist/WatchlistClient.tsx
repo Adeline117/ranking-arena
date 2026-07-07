@@ -65,7 +65,7 @@ function traderHref(item: WatchlistItem): string {
   return `/trader/${encodeURIComponent(item.handle || item.source_trader_id)}?platform=${item.source}`
 }
 
-export default function WatchlistClient() {
+export default function WatchlistClient({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useLanguage()
   const router = useRouter()
   const [, setEmail] = useState<string | null>(null)
@@ -289,14 +289,28 @@ export default function WatchlistClient() {
 
   return (
     <div
-      style={{
-        minHeight: '100vh',
-        background: 'var(--color-bg-primary)',
-        color: 'var(--color-text-primary)',
-      }}
+      style={
+        embedded
+          ? { color: 'var(--color-text-primary)' }
+          : {
+              minHeight: '100vh',
+              background: 'var(--color-bg-primary)',
+              color: 'var(--color-text-primary)',
+            }
+      }
     >
-      <div style={{ maxWidth: 1000, margin: '0 auto', padding: '24px 16px 60px' }}>
-        <PageHeader title={t('watchlistTitle')} subtitle={t('watchlistSubtitle')} compact />
+      <div
+        style={
+          embedded
+            ? { maxWidth: 1000, margin: '0 auto', paddingBottom: 60 }
+            : { maxWidth: 1000, margin: '0 auto', padding: '24px 16px 60px' }
+        }
+      >
+        {/* Embedded in /saved hub: the hub renders the h1 + tab bar, so suppress
+            this page's own PageHeader to avoid stacked duplicate headers. */}
+        {!embedded && (
+          <PageHeader title={t('watchlistTitle')} subtitle={t('watchlistSubtitle')} compact />
+        )}
         {isAuthenticated === false && (
           <EmptyState
             variant="card"
@@ -317,7 +331,7 @@ export default function WatchlistClient() {
             description={t('watchlistSignInDesc')}
             action={
               <Link
-                href="/login"
+                href={embedded ? '/login?redirect=/saved' : '/login'}
                 style={{
                   display: 'inline-block',
                   padding: '10px 24px',
@@ -692,7 +706,9 @@ export default function WatchlistClient() {
           </>
         )}
       </div>
-      <FloatingActionButton />
+      {/* FAB is a page-level widget; when embedded the hub page owns layout —
+          suppress to avoid a duplicate/overlapping FAB. */}
+      {!embedded && <FloatingActionButton />}
     </div>
   )
 }
