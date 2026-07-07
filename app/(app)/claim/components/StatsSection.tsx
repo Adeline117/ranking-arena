@@ -25,7 +25,10 @@ export function StatsSection() {
             color: tokens.colors.accent.primary,
           }}
         >
-          8K+
+          {/* U2-10: harmonized to match the "8,000+" figure in claimPageSubtitle
+              (was "8K+", a third distinct format on the same page). Kept as the
+              existing stable value — not a newly-invented serving count. */}
+          8,000+
         </Text>
         <Text
           style={{ color: tokens.colors.text.secondary, fontSize: tokens.typography.fontSize.sm }}
