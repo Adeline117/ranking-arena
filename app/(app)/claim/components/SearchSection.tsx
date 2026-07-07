@@ -130,7 +130,7 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
                   }}
                 >
                   {r.source}
-                  {r.arena_score ? ` | Score: ${r.arena_score.toFixed(1)}` : ''}
+                  {r.arena_score ? ` | ${t('scoreLabel')}: ${r.arena_score.toFixed(1)}` : ''}
                 </Text>
               </Box>
             </button>

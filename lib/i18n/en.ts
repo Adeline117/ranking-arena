@@ -6553,6 +6553,11 @@ const en = {
   colPlan: 'Plan',
   colSignedUp: 'Signed up',
   dataHealthSubtitle: 'Last checked: {time} · {platforms} active platforms · {traders} traders',
+
+  // U2-8: daily-returns distribution chart axis/marker labels
+  u2detail_chartMean: 'Mean',
+  u2detail_chartMedian: 'Median',
+  u2detail_chartDays: 'Days',
 } as const
 
 export default en

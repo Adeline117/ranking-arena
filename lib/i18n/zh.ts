@@ -6393,6 +6393,11 @@ const zh = {
   colPlan: '方案',
   colSignedUp: '注册时间',
   dataHealthSubtitle: '最后检查：{time} · 共 {platforms} 个活跃平台 · {traders} 名交易员',
+
+  // U2-8: 日收益分布图坐标/标线标注
+  u2detail_chartMean: '均值',
+  u2detail_chartMedian: '中位数',
+  u2detail_chartDays: '天数',
 } as const
 
 export default zh
