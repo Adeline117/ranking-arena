@@ -35,10 +35,18 @@ test.describe('Auth Pages - Login', () => {
     const loginBtn = page.locator('button.login-button').first()
     await expect(loginBtn).toBeVisible()
 
-    // Social buttons: Google, X, Discord
+    // Social buttons: Google + Discord always render. X (Twitter) is gated behind
+    // NEXT_PUBLIC_ENABLE_X_LOGIN (the Twitter provider is not configured in
+    // Supabase, so the button is intentionally hidden — see SocialLogin.tsx:194).
+    // Only assert X when the flag is on; otherwise assert it is absent.
     await expect(page.locator('button:has-text("Google")')).toBeVisible({ timeout: 15_000 })
-    await expect(page.locator('button:has-text("X")')).toBeVisible()
     await expect(page.locator('button:has-text("Discord")')).toBeVisible()
+    const xBtn = page.locator('button').filter({ hasText: /^X$/ })
+    if (process.env.NEXT_PUBLIC_ENABLE_X_LOGIN === 'true') {
+      await expect(xBtn.first()).toBeVisible()
+    } else {
+      await expect(xBtn).toHaveCount(0)
+    }
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/01-login-form.png`, fullPage: true })
   })
@@ -148,7 +156,9 @@ test.describe('Auth Pages - Login', () => {
     await page.waitForTimeout(300)
 
     // Click "Or login with verification code" link
-    const codeLoginBtn = page.locator('button.link-hover').filter({ hasText: /verification code|验证码登录/ })
+    const codeLoginBtn = page
+      .locator('button.link-hover')
+      .filter({ hasText: /verification code|验证码登录/ })
     await expect(codeLoginBtn).toBeVisible({ timeout: 10_000 })
     await codeLoginBtn.click()
     await page.waitForTimeout(500)
@@ -231,13 +241,19 @@ test.describe('Auth Pages - Login', () => {
     const googleBtn = page.locator('button:has-text("Google")')
     await expect(googleBtn).toBeVisible({ timeout: 15_000 })
 
-    // X (Twitter) button - use a more specific locator
-    const xBtn = page.locator('button').filter({ hasText: /^X$/ })
-    await expect(xBtn.first()).toBeVisible()
-
     // Discord button
     const discordBtn = page.locator('button:has-text("Discord")')
     await expect(discordBtn).toBeVisible()
+
+    // X (Twitter) button is gated behind NEXT_PUBLIC_ENABLE_X_LOGIN (provider not
+    // configured in Supabase — SocialLogin.tsx:194). Assert presence only when the
+    // flag is on; otherwise assert it is hidden so the test tracks the real UI.
+    const xBtn = page.locator('button').filter({ hasText: /^X$/ })
+    if (process.env.NEXT_PUBLIC_ENABLE_X_LOGIN === 'true') {
+      await expect(xBtn.first()).toBeVisible()
+    } else {
+      await expect(xBtn).toHaveCount(0)
+    }
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/09-social-buttons.png`, fullPage: true })
   })
@@ -252,11 +268,14 @@ test.describe('Auth Pages - Login', () => {
 
     // Error message should be visible - the error div has specific styles
     // and contains text about auth failure
-    const errorDiv = page.locator('div').filter({
-      has: page.locator('svg'),
-    }).filter({
-      hasText: /failed|失败|重试|try again/i,
-    })
+    const errorDiv = page
+      .locator('div')
+      .filter({
+        has: page.locator('svg'),
+      })
+      .filter({
+        hasText: /failed|失败|重试|try again/i,
+      })
     await expect(errorDiv.first()).toBeVisible({ timeout: 15_000 })
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/10-auth-error-message.png`, fullPage: true })
@@ -321,7 +340,8 @@ test.describe('Auth Pages - Login', () => {
           text.includes('WebSocket') ||
           text.includes('chunk') ||
           text.includes('__webpack')
-        ) return
+        )
+          return
         consoleErrors.push(text)
       }
     })
