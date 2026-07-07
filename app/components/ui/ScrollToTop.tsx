@@ -11,12 +11,15 @@ export default memo(function ScrollToTop() {
   const { t } = useLanguage()
   const pathname = usePathname()
 
-  // Pages where FAB is shown — keep scroll-to-top from overlapping
-  // When social is off, FAB only shows on '/' (groups pages are 404)
-  const fabPages = features.social ? ['/', '/groups'] : ['/']
-  const hasFab = fabPages.some(
-    (p) => pathname === p || (features.social && pathname.startsWith('/groups/'))
-  )
+  // Pages that render the FloatingActionButton — keep scroll-to-top from
+  // overlapping it (it must sit ABOVE the FAB). The old whitelist was just
+  // ['/','/groups'] and missed every real FAB route (/hot, /market/*,
+  // /watchlist, /saved, /referral) → scroll-to-top landed on top of the FAB
+  // on mobile. Match the actual FAB-rendering routes here.
+  const FAB_PREFIXES = ['/hot', '/market', '/watchlist', '/saved', '/referral']
+  const hasFab =
+    FAB_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/')) ||
+    (features.social && (pathname === '/groups' || pathname.startsWith('/groups/')))
 
   useEffect(() => {
     const handleScroll = () => {
