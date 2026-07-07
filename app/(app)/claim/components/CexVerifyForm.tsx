@@ -251,7 +251,7 @@ export function CexVerifyForm({
             lineHeight: 1.5,
           }}
         >
-          {t('claimPageFaqSafeAnswer')}
+          {t('claimFormSafeNote')}
         </Text>
       </Box>
 
@@ -271,7 +271,7 @@ export function CexVerifyForm({
           opacity: loading ? 0.6 : 1,
         }}
       >
-        {loading ? t('verifying') : t('claimVerifyMethodApi')}
+        {loading ? t('verifying') : t('claimVerifyAndClaim')}
       </button>
     </Box>
   )

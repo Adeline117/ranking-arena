@@ -4851,6 +4851,9 @@ const zh = {
   claimVerifyMethodApi: 'API Key',
   claimVerifyMethodWallet: '钱包签名',
   claimVerifiedAutoApproved: '你的认领已验证并自动通过！',
+  claimVerifyAndClaim: '验证并认领',
+  claimFormSafeNote:
+    '我们只需要只读 API Key（无交易或提款权限）。密钥使用 AES-256-GCM 加密存储，且永不记录日志。',
   claimSupportedExchanges: '支持的交易所',
   claimDexPlatforms: 'DEX 平台（钱包签名验证）',
   claimCexPlatforms: 'CEX 平台（API Key 验证）',

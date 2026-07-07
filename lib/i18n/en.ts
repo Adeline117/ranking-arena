@@ -4956,6 +4956,9 @@ const en = {
   claimVerifyMethodApi: 'API Key',
   claimVerifyMethodWallet: 'Wallet Signature',
   claimVerifiedAutoApproved: 'Your claim has been verified and auto-approved!',
+  claimVerifyAndClaim: 'Verify & Claim',
+  claimFormSafeNote:
+    'We only require read-only API keys (no trading or withdrawal permissions). Keys are encrypted with AES-256-GCM and never logged.',
   claimSupportedExchanges: 'Supported Exchanges',
   claimDexPlatforms: 'DEX Platforms (Wallet Verification)',
   claimCexPlatforms: 'CEX Platforms (API Key Verification)',
