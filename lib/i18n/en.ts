@@ -2504,7 +2504,7 @@ const en = {
 
   // Terms of service page
   termsTitle: 'Terms of Service',
-  termsLastUpdated: 'Last updated: February 2026',
+  termsLastUpdated: 'Last updated: February 1, 2026',
   termsAcceptTitle: '1. Acceptance of Terms',
   termsAcceptP1:
     'Welcome to Arena ("the platform" or "we"). By accessing or using our services, you agree to be bound by these Terms of Service ("Terms"). If you do not agree to any part of these terms, please do not use our services.',
