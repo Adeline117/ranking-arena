@@ -164,8 +164,14 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
   // wedge). Bounding the job to a deadline makes it ALWAYS yield its slot
   // quickly; the cursor advances by the traders actually attempted, so the next
   // iteration resumes seamlessly. This caps slot-hold structurally regardless
-  // of batch/board size. Tunable via meta; default 180s.
-  const deadlineMs = Math.max(30_000, Number(src.meta.series_backfill_deadline_ms ?? 180_000))
+  // of batch/board size. Tunable via meta; default 120s.
+  //
+  // Deadline MUST stay < the BullMQ lockDuration (180s, ingest-worker.ts): if it
+  // equals the lock, a slow trader can push the run past the lock before the
+  // deadline fires between-traders, the stalled-checker kills the job, and the
+  // post-loop cursor write never runs (root cause of the 2026-07-07 cursor bug,
+  // now also defended by the per-trader write below). Keep this headroom.
+  const deadlineMs = Math.max(30_000, Number(src.meta.series_backfill_deadline_ms ?? 120_000))
   const total = await bandSize(src.id, src.deep_profile_topn, backfillTopN)
   if (total === 0) return empty
 
@@ -248,6 +254,19 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
         }
       }
       if (traderOk) result.tradersCrawled += 1
+
+      // Incremental cursor persistence (ROOT FIX 2026-07-07): write progress
+      // after EACH trader, not just once at loop end. The old design wrote the
+      // cursor only post-loop (below); any job death BEFORE that point (BullMQ
+      // stall-kill, OOM, worker restart) left the cursor unwritten, so the next
+      // run's readCursor returned 0 and re-crawled the band HEAD forever — the
+      // long tail was never reached (bitget_spot: 3559 crawls / only 32 distinct
+      // traders over 7 days; ingest_cursors had ZERO series_backfill rows). A
+      // per-trader upsert is cheap (batch≈30) and makes progress survive any
+      // kill. Idempotent upserts keep re-attempts safe. See
+      // docs/SERIES_BACKFILL_CURSOR_FIX_PLAN.md.
+      const soFar = offset + attempted
+      await writeCursor(src.id, soFar >= total ? 0 : soFar)
     }
   } finally {
     await session.close()
@@ -256,6 +275,8 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
   // Advance the cursor by traders ACTUALLY attempted this run (may be < batch
   // when the wall-clock budget cut the run short) — a crashed run re-attempts
   // the same slice (idempotent upserts make that safe). Wrap at band end.
+  // (Redundant with the per-trader write above on a clean run; retained as the
+  // final authority and to cover the attempted===0 / empty-batch case.)
   const nextOffset = offset + attempted >= total ? 0 : offset + attempted
   result.cursorTo = nextOffset
   await writeCursor(src.id, nextOffset)
