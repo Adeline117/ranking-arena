@@ -24,6 +24,22 @@ type Group = {
   recommendation_reason?: string | null
 }
 
+// Map the server-emitted recommendation reason token (recommend_groups_for_user
+// RPC + 'popular' padding) to a localized label. Falls back to the raw string for
+// any unknown token so a new reason still shows something (U9-6: zh 态英文 "popular").
+function reasonLabel(reason: string, t: (k: string) => string): string {
+  switch (reason) {
+    case 'popular':
+      return t('u9grp_reasonPopular')
+    case 'followed_users_joined':
+      return t('u9grp_reasonFollowedJoined')
+    case 'members_overlap':
+      return t('u9grp_reasonMembersOverlap')
+    default:
+      return reason
+  }
+}
+
 function GroupAvatar({
   name,
   avatarUrl,
@@ -243,7 +259,7 @@ export default function RecommendedGroups() {
                           fontStyle: 'italic',
                         }}
                       >
-                        {g.recommendation_reason}
+                        {reasonLabel(g.recommendation_reason, t)}
                       </span>
                     )}
                   </div>
