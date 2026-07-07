@@ -477,8 +477,9 @@ export async function getTraderDetailsFromSnapshots(
       },
       trading: {
         totalTrades12M: snapshot?.trades_count ?? 0,
-        avgProfit: 0,
-        avgLoss: 0,
+        // U2-5: null (not 0) → UI dashes when avg win/loss is unavailable.
+        avgProfit: null,
+        avgLoss: null,
         profitableTradesPct: normalizeWinRate(snapshot?.win_rate ?? null) ?? 0,
       },
       frequentlyTraded: [],
@@ -781,8 +782,9 @@ function buildTraderResponse(p: {
       },
       trading: {
         totalTrades12M: p.snapshot?.trades_count ?? 0,
-        avgProfit: p.statsDetail90d?.avg_profit ?? 0,
-        avgLoss: p.statsDetail90d?.avg_loss ?? 0,
+        // U2-5: null (not 0) → UI dashes when avg win/loss is unavailable.
+        avgProfit: p.statsDetail90d?.avg_profit ?? null,
+        avgLoss: p.statsDetail90d?.avg_loss ?? null,
         profitableTradesPct: normalizeWinRate(p.snapshot?.win_rate ?? null) ?? 0,
         winningPositions: p.statsDetail90d?.winning_positions ?? undefined,
         totalPositions:

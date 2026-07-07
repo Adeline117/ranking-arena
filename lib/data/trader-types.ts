@@ -6,13 +6,22 @@
  */
 
 // 支持的交易所数据源
-export const TRADER_SOURCES = ['binance', 'bybit', 'bitget', 'okx', 'kucoin', 'gate', 'mexc', 'coinex'] as const
+export const TRADER_SOURCES = [
+  'binance',
+  'bybit',
+  'bitget',
+  'okx',
+  'kucoin',
+  'gate',
+  'mexc',
+  'coinex',
+] as const
 export const TRADER_SOURCES_WITH_WEB3 = ['binance_web3', ...TRADER_SOURCES] as const
 
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
-export type TraderSource = typeof TRADER_SOURCES[number]
+export type TraderSource = (typeof TRADER_SOURCES)[number]
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
-export type TraderSourceWithWeb3 = typeof TRADER_SOURCES_WITH_WEB3[number]
+export type TraderSourceWithWeb3 = (typeof TRADER_SOURCES_WITH_WEB3)[number]
 
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderSourceRecord {
@@ -86,8 +95,10 @@ export interface TraderStats {
   }
   trading?: {
     totalTrades12M: number
-    avgProfit: number
-    avgLoss: number
+    // U2-5: nullable so the UI can show "—" instead of a misleading "0.00%"
+    // when the source never provided avg win/loss (missing ≠ literal zero).
+    avgProfit: number | null
+    avgLoss: number | null
     profitableTradesPct: number
   }
   frequentlyTraded?: Array<{
