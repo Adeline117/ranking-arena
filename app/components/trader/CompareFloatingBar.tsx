@@ -181,6 +181,8 @@ function CompareFloatingBar() {
                     e.stopPropagation()
                     removeTrader(trader.id)
                   }}
+                  aria-label={`${t('removeFromCompare')}: ${trader.handle}`}
+                  title={`${t('removeFromCompare')}: ${trader.handle}`}
                   className="btn-press"
                   style={{
                     width: 36,
