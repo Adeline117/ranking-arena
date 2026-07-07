@@ -383,6 +383,14 @@ const enCore = {
   rankingControlsShowingTop: 'Showing top {count} traders. Unlock all with Pro',
   rankingControlsShowingTopPromo: 'Showing top {count} traders — all unlocked (free for now)',
   rankingControlsUpgrade: 'Upgrade →',
+  // /saved hub + watchlist/favorites titles — first-paint-visible headings, so
+  // they belong in core to avoid a raw-key flash (worse on ja/ko which seed
+  // from en-core until the full dict loads).
+  savedHubTitle: 'Saved',
+  savedTabTraders: 'Traders',
+  savedTabPosts: 'Posts',
+  watchlistTitle: 'Watchlist',
+  myFavorites: 'My Favorites',
 } as const
 
 export default enCore

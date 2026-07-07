@@ -38,7 +38,7 @@ interface SubscribedFolder {
   subscribed_at: string
 }
 
-export default function FavoritesPageClient() {
+export default function FavoritesPageClient({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useLanguage()
   const { showToast } = useToast()
   const { accessToken, authChecked, email } = useAuthSession()
@@ -196,20 +196,29 @@ export default function FavoritesPageClient() {
     return colors[index]
   }
 
+  // Embedded in /saved hub: the hub owns the page wrapper (min-height/bg) and
+  // renders the h1 + tab bar, so suppress this page's own full-page chrome
+  // (100vh wrapper, Breadcrumb, top-level PageHeader/title) to avoid stacked
+  // duplicate headers + a wrong "Home › Favorites" breadcrumb.
+  const outerStyle: React.CSSProperties = embedded
+    ? { color: tokens.colors.text.primary }
+    : {
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }
+  const loginHref = embedded ? '/login?redirect=/saved?tab=posts' : '/login?redirect=/favorites'
+
   // 等待认证检查完成后再判断是否需要登录
   if (!authChecked || (authChecked && !accessToken && loading)) {
     return (
-      <Box
-        style={{
-          minHeight: '100vh',
-          background: tokens.colors.bg.primary,
-          color: tokens.colors.text.primary,
-        }}
-      >
+      <Box style={outerStyle}>
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            {t('myFavorites')}
-          </Text>
+          {!embedded && (
+            <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+              {t('myFavorites')}
+            </Text>
+          )}
           <ListSkeleton count={5} gap={12} />
         </Box>
       </Box>
@@ -218,23 +227,19 @@ export default function FavoritesPageClient() {
 
   if (authChecked && !accessToken) {
     return (
-      <Box
-        style={{
-          minHeight: '100vh',
-          background: tokens.colors.bg.primary,
-          color: tokens.colors.text.primary,
-        }}
-      >
+      <Box style={outerStyle}>
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
-            {t('myFavorites')}
-          </Text>
+          {!embedded && (
+            <Text size="2xl" weight="black" style={{ marginBottom: tokens.spacing[4] }}>
+              {t('myFavorites')}
+            </Text>
+          )}
           <EmptyState
             title={t('pleaseLoginFirst')}
             description={t('loginToViewFavorites')}
             action={
               <Link
-                href="/login?redirect=/favorites"
+                href={loginHref}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
@@ -259,30 +264,29 @@ export default function FavoritesPageClient() {
   }
 
   return (
-    <Box
-      style={{
-        minHeight: '100vh',
-        background: tokens.colors.bg.primary,
-        color: tokens.colors.text.primary,
-      }}
-    >
+    <Box style={outerStyle}>
       <Box
         className="has-mobile-nav"
         style={{
           maxWidth: 900,
           margin: '0 auto',
-          padding: tokens.spacing[6],
+          padding: embedded ? 0 : tokens.spacing[6],
           paddingBottom: 100,
           animation: 'fadeIn 0.3s ease-out',
         }}
       >
-        <Breadcrumb items={[{ label: t('favorites') }]} />
-        {/* 页面头部 */}
-        <PageHeader
-          title={t('myFavorites')}
-          compact
-          actions={
-            activeTab === 'my' ? (
+        {!embedded && <Breadcrumb items={[{ label: t('favorites') }]} />}
+        {/* 页面头部 — embedded 时由 /saved hub 提供标题,故只保留 "+ 新建收藏夹"
+            操作按钮(仍需可用),抑制重复的 "My Favorites" 标题避免堆叠。 */}
+        {embedded ? (
+          activeTab === 'my' && (
+            <Box
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-end',
+                marginBottom: tokens.spacing[3],
+              }}
+            >
               <Button
                 variant="primary"
                 size="sm"
@@ -290,9 +294,25 @@ export default function FavoritesPageClient() {
               >
                 + {t('newFolder')}
               </Button>
-            ) : undefined
-          }
-        />
+            </Box>
+          )
+        ) : (
+          <PageHeader
+            title={t('myFavorites')}
+            compact
+            actions={
+              activeTab === 'my' ? (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setShowCreateForm(!showCreateForm)}
+                >
+                  + {t('newFolder')}
+                </Button>
+              ) : undefined
+            }
+          />
+        )}
 
         {/* 标签切换 */}
         <Box

@@ -310,6 +310,12 @@ const zhCore = {
   winRate: '胜率',
   winRateTooltip: '胜率：盈利交易占比。\n越高代表盈利越稳定。',
   yesterday: '昨天',
+  // /saved hub + 自选/收藏标题 — 首屏可见标题,放入 core 避免原始 key 闪烁。
+  savedHubTitle: '我的收藏',
+  savedTabTraders: '关注的交易员',
+  savedTabPosts: '帖子收藏夹',
+  watchlistTitle: '自选列表',
+  myFavorites: '我的收藏',
 } as const
 
 export default zhCore
