@@ -61,12 +61,22 @@ export async function GET(request: NextRequest, context: { params: Promise<{ han
           subscriptionData,
           similarTradersData,
         ] = await Promise.all([
-          // 绩效数据
-          getTraderPerformance(handle, '90D').catch(() => null),
+          // 绩效数据 — log before degrading to null so a systemic failure
+          // (e.g. schema drift in getTraderStats) is observable, not invisible.
+          getTraderPerformance(handle, '90D').catch((e) => {
+            logger.error('[users/full] getTraderPerformance failed', { handle, error: String(e) })
+            return null
+          }),
           // 统计数据
-          getTraderStats(handle).catch(() => null),
+          getTraderStats(handle).catch((e) => {
+            logger.error('[users/full] getTraderStats failed', { handle, error: String(e) })
+            return null
+          }),
           // 持仓数据
-          getTraderPortfolio(handle).catch(() => null),
+          getTraderPortfolio(handle).catch((e) => {
+            logger.error('[users/full] getTraderPortfolio failed', { handle, error: String(e) })
+            return null
+          }),
           // 订阅状态 + 粉丝/关注缓存计数（如果是用户）
           // follower_count / following_count are cached columns kept in sync by
           // updateFollowCounts() on every follow/unfollow, so we read them

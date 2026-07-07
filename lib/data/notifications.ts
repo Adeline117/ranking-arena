@@ -167,7 +167,15 @@ export async function getUnreadNotificationCount(
     .eq('user_id', userId)
     .eq('read', false)
 
-  if (error) return 0
+  if (error) {
+    // A failed count must not read as a confident "0 unread" — the badge would
+    // hide real notifications with no signal. Log so the failure is observable.
+    logger.error('[notifications] getUnreadNotificationCount failed', {
+      userId,
+      error: error.message,
+    })
+    return 0
+  }
   return count || 0
 }
 

@@ -86,12 +86,19 @@ export async function POST(request: NextRequest) {
       plan: plan,
     })
 
-    // 更新用户的 Stripe 客户 ID
-    await getSupabaseAdmin().from('user_profiles').upsert({
+    // 更新用户的 Stripe 客户 ID。校验写入:若失败,customer↔user 链未落地,
+    // 后续 webhook 若 mis-key 会 orphan 订阅。log 便于观测(不阻断结账,可由 webhook 补)。
+    const { error: customerLinkError } = await getSupabaseAdmin().from('user_profiles').upsert({
       id: user.id,
       stripe_customer_id: customerId,
       updated_at: new Date().toISOString(),
     })
+    if (customerLinkError) {
+      logger.warn('Failed to persist stripe_customer_id link', {
+        userId: user.id,
+        error: customerLinkError.message,
+      })
+    }
 
     // 获取价格 ID
     const priceId = STRIPE_PRICE_IDS[plan as 'monthly' | 'yearly' | 'lifetime']

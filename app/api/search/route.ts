@@ -433,13 +433,23 @@ export const GET = withPublic(
 
     // Parallel queries
     const safeQuery = async <T>(
-      promise: PromiseLike<{ data: T[] | null; error: unknown }>
+      promise: PromiseLike<{ data: T[] | null; error: unknown }>,
+      label = 'query'
     ): Promise<T[]> => {
       try {
         const { data, error } = await promise
-        if (error) return []
+        if (error) {
+          // Don't fold a column/table error (42703 / PGRST205 — e.g. the known
+          // display_name drift) into a silent empty result set; log so drift
+          // surfaces instead of looking like "no results".
+          logger.warn(`Search ${label} failed`, {
+            error: error instanceof Error ? error.message : String(error),
+          })
+          return []
+        }
         return data ?? []
-      } catch {
+      } catch (e) {
+        logger.warn(`Search ${label} threw`, { error: e instanceof Error ? e.message : String(e) })
         return []
       }
     }

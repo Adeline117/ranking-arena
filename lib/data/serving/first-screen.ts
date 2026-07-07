@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { logRpcError } from './log-rpc-error'
 import { money } from '@/lib/utils/money'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import { projectBoardExtras } from './board-extras'
@@ -43,6 +44,7 @@ export async function getFirstScreen(
     p_source: source,
     p_trader: exchangeTraderId,
   })
+  logRpcError('arena_first_screen', error)
   if (error || !data) return null
   const d = data as Record<string, unknown>
   if (typeof d.source !== 'string' || typeof d.exchangeTraderId !== 'string') return null

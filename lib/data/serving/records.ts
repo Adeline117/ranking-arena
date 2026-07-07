@@ -9,6 +9,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { money } from '@/lib/utils/money'
+import { logRpcError } from './log-rpc-error'
 import type { CopierAggregate, RecordKind, RecordsPage, ServingCurrency } from './types'
 
 const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
@@ -52,6 +53,7 @@ export async function getRecordsPage(
     p_cursor: cursor,
     p_limit: limit,
   })
+  logRpcError('arena_records_page', error)
   if (error || !data) return null
   const d = data as Record<string, unknown>
   const rows = Array.isArray(d.rows) ? (d.rows as Record<string, unknown>[]) : []
@@ -75,6 +77,7 @@ export async function getCopierAggregate(
     p_source: source,
     p_trader: exchangeTraderId,
   })
+  logRpcError('arena_copier_aggregate', error)
   if (error || !data) return null
   const d = data as Record<string, unknown>
 

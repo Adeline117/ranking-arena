@@ -799,7 +799,7 @@ async function searchTradersInner(
   const scoreMap = new Map<string, Record<string, unknown>>()
   if (!usedFuzzy) {
     const traderIds = filteredSources.map((t) => t.source_trader_id)
-    const { data: scoreRows } = await supabase
+    const { data: scoreRows, error: scoreError } = await supabase
       .from('leaderboard_ranks')
       .select(
         `${LR.source}, ${LR.source_trader_id}, ${LR.arena_score}, ${LR.roi}, ${LR.pnl}, ${LR.rank}, ${LR.season_id}, trader_type`
@@ -808,6 +808,14 @@ async function searchTradersInner(
       .eq(LR.season_id, '90D')
       .not(LR.arena_score, 'is', null)
       .order(LR.arena_score, { ascending: false })
+    if (scoreError) {
+      // A swallowed error here leaves scoreMap empty → the downstream hasScore
+      // gate filters out ALL results, surfacing as a misleading "no results".
+      logger.warn('[searchTradersInner] score lookup failed', {
+        query: sanitizedQuery,
+        error: scoreError.message,
+      })
+    }
 
     for (const row of scoreRows || []) {
       const key = `${row.source}:${row.source_trader_id}`
@@ -999,7 +1007,15 @@ export async function resolveTrader(
 
     // Multiple traders may share the same handle (e.g., 鎏渊).
     // Pick the one with the highest arena_score in leaderboard to avoid resolving to a no-data entry.
-    const { data: rawCandidates } = await query.limit(10)
+    const { data: rawCandidates, error: candidatesError } = await query.limit(10)
+    if (candidatesError) {
+      // Never collapse a query error into "not found" — that 404s a valid
+      // trader with no signal (the exact latent bug resolve.ts already fixed).
+      logger.error('[resolveTrader] trader_sources candidate query failed', {
+        handle: decodedHandle,
+        error: candidatesError.message,
+      })
+    }
     // Never resolve to a RETIRED source. One exchange_trader_id can collide
     // across sources (e.g. okx_web3 RETIRED + okx_futures live); this query has
     // NO deterministic ORDER BY, so without filtering it would non-
@@ -1067,6 +1083,14 @@ export async function resolveTrader(
       lbQuery.limit(1).maybeSingle(),
       profileQuery.limit(1).maybeSingle(),
     ])
+
+    if (lbResult.error || profileResult.error) {
+      logger.error('[resolveTrader] fallback lookup failed', {
+        handle: decodedHandle,
+        lbError: lbResult.error?.message,
+        profileError: profileResult.error?.message,
+      })
+    }
 
     if (lbResult.data) {
       return {
