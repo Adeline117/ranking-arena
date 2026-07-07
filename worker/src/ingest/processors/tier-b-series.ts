@@ -255,15 +255,17 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
       }
       if (traderOk) result.tradersCrawled += 1
 
-      // Incremental cursor persistence (ROOT FIX 2026-07-07): write progress
-      // after EACH trader, not just once at loop end. The old design wrote the
-      // cursor only post-loop (below); any job death BEFORE that point (BullMQ
-      // stall-kill, OOM, worker restart) left the cursor unwritten, so the next
-      // run's readCursor returned 0 and re-crawled the band HEAD forever — the
-      // long tail was never reached (bitget_spot: 3559 crawls / only 32 distinct
-      // traders over 7 days; ingest_cursors had ZERO series_backfill rows). A
-      // per-trader upsert is cheap (batch≈30) and makes progress survive any
-      // kill. Idempotent upserts keep re-attempts safe. See
+      // Incremental cursor persistence (defense-in-depth, 2026-07-07): write
+      // progress after EACH trader, not just once post-loop. NOTE: the actual
+      // ROOT CAUSE of the "cursor never persisted → band head re-crawled forever
+      // → long tail never reached" bug (bitget_spot: 3559 crawls / 32 distinct
+      // traders; ingest_cursors had ZERO series_backfill rows) was a FK
+      // violation — writeCursor's negative sentinel trader_id=-sourceId broke
+      // ingest_cursors_trader_id_fkey → traders(id), fixed by migration
+      // 20260707003925. This per-trader write is the belt-and-suspenders half:
+      // the worker restarts often (↺100/3d), so persisting progress per trader
+      // (not per batch) keeps a mid-run kill from losing the sweep position.
+      // Cheap (batch≈30), idempotent upserts. See
       // docs/SERIES_BACKFILL_CURSOR_FIX_PLAN.md.
       const soFar = offset + attempted
       await writeCursor(src.id, soFar >= total ? 0 : soFar)
