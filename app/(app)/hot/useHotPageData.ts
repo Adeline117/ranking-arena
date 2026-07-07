@@ -210,7 +210,14 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           }))
         )
       } catch (error) {
-        logger.error('Groups load error:', error)
+        // Ignore navigation-interrupted fetches (route change aborts the in-flight
+        // request → AbortError or "TypeError: Failed to fetch"). These are not real
+        // errors and were spamming the console during normal navigation.
+        const msg = error instanceof Error ? error.message : ''
+        const interrupted =
+          (error instanceof DOMException && error.name === 'AbortError') ||
+          /Failed to fetch|aborted/i.test(msg)
+        if (!interrupted) logger.error('Groups load error:', error)
         setGroups([])
       } finally {
         setLoadingGroups(false)

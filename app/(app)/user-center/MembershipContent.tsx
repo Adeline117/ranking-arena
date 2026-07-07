@@ -86,8 +86,15 @@ export default function MembershipContent() {
         usage: usageData,
       })
     } catch (err) {
-      // Silently ignore abort errors (component unmounted)
-      if (err instanceof DOMException && err.name === 'AbortError') return
+      // Silently ignore navigation-interrupted fetches (component unmounted or route
+      // change): AbortError OR the "TypeError: Failed to fetch" a torn-down fetch
+      // throws. Neither is a real membership-fetch failure.
+      const msg = err instanceof Error ? err.message : ''
+      if (
+        (err instanceof DOMException && err.name === 'AbortError') ||
+        /Failed to fetch/i.test(msg)
+      )
+        return
       logger.error('Failed to fetch membership info:', err)
     } finally {
       if (!signal?.aborted) setLoading(false)
