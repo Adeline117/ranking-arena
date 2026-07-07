@@ -216,6 +216,10 @@ interface TraderProfileClientProps {
   dataMode?: 'legacy' | 'serving'
   servingFirstScreen?: import('@/lib/data/serving/types').TraderFirstScreen | null
   servingCapability?: import('@/lib/data/serving/types').SourceCapability | null
+  /** U2-12: similar traders computed server-side for serving sources (the
+   *  serving /core data path carries none, so OverviewTab hid the module).
+   *  Same shape as the legacy bridge output; fed into effSimilar below. */
+  serverSimilarTraders?: TraderPageData['similarTraders']
 }
 
 export default function TraderProfileClient({
@@ -225,6 +229,7 @@ export default function TraderProfileClient({
   dataMode = 'legacy',
   servingFirstScreen: serverFirstScreen,
   servingCapability: serverCapability,
+  serverSimilarTraders,
 }: TraderProfileClientProps) {
   // ROOT-CAUSE FIX (2026-06-11): key serving mode off dataMode ALONE, not the
   // presence of servingFirstScreen. A serving source must never fall back to the
@@ -566,6 +571,14 @@ export default function TraderProfileClient({
   const effPositionHistory = useThreeTab ? servingTab.traderPositionHistory : traderPositionHistory
   const effEquityCurve = useThreeTab ? servingTab.traderEquityCurve : traderEquityCurve
   const effAssetBreakdown = useThreeTab ? servingTab.traderAssetBreakdown : traderAssetBreakdown
+  // U2-12: serving sources have no similarTraders in traderData (the /core path
+  // omits them) → OverviewTab's `traderSimilar.length > 0` guard hid the module.
+  // Under three-tab (serving default) use the server-computed list; legacy keeps
+  // its React-Query-derived traderSimilar untouched.
+  const effSimilar = useMemo(
+    () => (useThreeTab ? (serverSimilarTraders ?? []) : traderSimilar),
+    [useThreeTab, serverSimilarTraders, traderSimilar]
+  )
 
   // Loading state: only when SWR is loading AND no server fallback
   const isInitialLoading = traderLoading && !serverTraderData
@@ -945,7 +958,7 @@ export default function TraderProfileClient({
                         | import('@/app/(app)/u/[handle]/components/types').EquityCurveData
                         | undefined
                     }
-                    traderSimilar={traderSimilar}
+                    traderSimilar={effSimilar}
                     positionSummary={
                       traderData?.positionSummary as
                         | {
