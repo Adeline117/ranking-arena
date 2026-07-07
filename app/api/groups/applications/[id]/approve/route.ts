@@ -5,6 +5,7 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyAdmin } from '@/lib/admin/auth'
+import { notifyNewGroup } from '@/lib/notifications/activity-alerts'
 
 // 批准小组申请
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,10 +29,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     }
     const user = { id: admin.id }
 
-    // 获取申请信息
+    // 获取申请信息（含建群所需的全部字段）
     const { data: application, error: fetchError } = await supabase
       .from('group_applications')
-      .select('id, status, user_id:applicant_id, group_name:name')
+      .select(
+        'id, status, applicant_id, name, name_en, description, description_en, avatar_url, role_names, rules_json, rules, is_premium_only'
+      )
       .eq('id', id)
       .single()
 
@@ -46,12 +49,55 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       )
     }
 
-    // 更新申请状态为 approved
-    // 触发器会自动创建小组并添加组长
+    // 事务性：先建群 + 加组长成员成功，才把申请翻 approved。
+    // 若建群失败则直接回错误、不标 approved，避免留下 approved 但无群的半吊子。
+    const groupName = (application.name ?? '').trim()
+    const slug =
+      groupName
+        .toLowerCase()
+        .replace(/[^a-z0-9一-龥]+/g, '-')
+        .replace(/^-|-$/g, '') || `group-${Date.now()}`
+
+    const { data: newGroup, error: groupError } = await supabase
+      .from('groups')
+      .insert({
+        name: groupName,
+        name_en: application.name_en ?? null,
+        description: application.description ?? null,
+        description_en: application.description_en ?? null,
+        avatar_url: application.avatar_url ?? null,
+        slug,
+        created_by: application.applicant_id,
+        role_names: application.role_names ?? null,
+        rules_json: application.rules_json ?? null,
+        rules: application.rules ?? null,
+        is_premium_only: application.is_premium_only ?? false,
+      })
+      .select('id')
+      .single()
+
+    if (groupError || !newGroup) {
+      logger.error('Error creating group on approval:', groupError)
+      return NextResponse.json({ error: 'Failed to create group' }, { status: 500 })
+    }
+
+    // 加申请人为组长（owner）。失败仅记录，不阻断——群已建成。
+    const { error: memberError } = await supabase.from('group_members').insert({
+      group_id: newGroup.id,
+      user_id: application.applicant_id,
+      role: 'owner',
+    })
+
+    if (memberError) {
+      logger.error('Error adding group owner on approval:', memberError)
+    }
+
+    // 群建成后，才把申请翻 approved 并记录 group_id + 审核人/时间
     const { error: updateError } = await supabase
       .from('group_applications')
       .update({
         status: 'approved',
+        group_id: newGroup.id,
         reviewed_at: new Date().toISOString(),
         reviewed_by: user.id,
       })
@@ -62,9 +108,13 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'Approval failed' }, { status: 500 })
     }
 
+    // 实时通知 (fire-and-forget)
+    notifyNewGroup(null, groupName)
+
     return NextResponse.json({
       success: true,
       message: 'Group application approved',
+      group: newGroup,
     })
   } catch (error: unknown) {
     logger.error('Error approving application:', error)
