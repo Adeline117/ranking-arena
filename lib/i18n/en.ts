@@ -2261,6 +2261,7 @@ const en = {
   videoOptional: 'Video (optional, max 1, under 100MB)',
   deleteVideo: 'Delete video',
   addVideo: 'Add video',
+  u11prof_videoLabel: 'Video',
   videoFormatSupport: 'Supports MP4, WebM, MOV, AVI, MKV, max 100MB',
   moveUp: 'Move up',
   moveDown: 'Move down',
