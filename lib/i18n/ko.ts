@@ -3480,8 +3480,6 @@ const ko = {
   u9grp_searchPlaceholder: 'Search groups',
   u9grp_noSearchResults: 'No matching groups',
   u9grp_joinToPost: 'Join the group to start posting',
-  u9grp_owner: 'Owner',
-  u9grp_admin: 'Admin',
   sidebarMyGroups: '내 그룹',
   sidebarNoGroupsJoined: '아직 가입한 그룹이 없습니다',
   sidebarLoginToView: '로그인하여 보기',
