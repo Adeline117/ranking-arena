@@ -6,10 +6,7 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyAdmin } from '@/lib/admin/auth'
 
 // 拒绝小组申请
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
-) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const guard = socialFeatureGuard()
   if (guard) return guard
 
@@ -46,18 +43,20 @@ export async function POST(
     }
 
     if (application.status !== 'pending') {
-      return NextResponse.json({ error: 'This application has already been processed' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'This application has already been processed' },
+        { status: 400 }
+      )
     }
 
-    // 更新申请状态为 rejected
-    // 触发器会自动发送通知
+    // 更新申请状态为 rejected（不建群）
     const { error: updateError } = await supabase
       .from('group_applications')
       .update({
         status: 'rejected',
         reject_reason: reason || null,
         reviewed_at: new Date().toISOString(),
-        reviewed_by: user.id
+        reviewed_by: user.id,
       })
       .eq('id', id)
 
@@ -68,12 +67,10 @@ export async function POST(
 
     return NextResponse.json({
       success: true,
-      message: 'Group application rejected'
+      message: 'Group application rejected',
     })
-
   } catch (error: unknown) {
     logger.error('Error rejecting application:', error)
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
-

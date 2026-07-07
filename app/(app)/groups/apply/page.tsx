@@ -399,7 +399,7 @@ export default function ApplyGroupPage() {
         }}
       >
         <Box as="main" style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[6] }}>
-          <Card title={t('groupApplyCreated')}>
+          <Card title={t('groupApplySubmittedTitle')}>
             <Box style={{ textAlign: 'center', padding: tokens.spacing[8] }}>
               <Box
                 style={{
@@ -428,10 +428,10 @@ export default function ApplyGroupPage() {
                 </svg>
               </Box>
               <Text size="lg" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
-                {t('groupCreatedSuccess')}
+                {t('groupApplySubmittedTitle')}
               </Text>
               <Text color="tertiary" style={{ marginBottom: tokens.spacing[6] }}>
-                {t('groupCreatedDesc')}
+                {t('groupApplyPendingDesc')}
               </Text>
               <Box style={{ display: 'flex', gap: tokens.spacing[3], justifyContent: 'center' }}>
                 <Button variant="secondary" onClick={() => setSuccess(false)}>
@@ -482,21 +482,45 @@ export default function ApplyGroupPage() {
                   key={app.id}
                   style={{
                     display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
+                    flexDirection: 'column',
+                    gap: tokens.spacing[2],
                     padding: tokens.spacing[3],
                     background: tokens.colors.bg.secondary,
                     borderRadius: tokens.radius.lg,
                     border: '1px solid ' + tokens.colors.border.primary,
                   }}
                 >
-                  <Box>
-                    <Text weight="bold">{app.name}</Text>
-                    <Text size="xs" color="tertiary">
-                      {new Date(app.created_at).toLocaleString(getLocaleFromLanguage(language))}
-                    </Text>
+                  <Box
+                    style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Box>
+                      <Text weight="bold">{app.name}</Text>
+                      <Text size="xs" color="tertiary">
+                        {new Date(app.created_at).toLocaleString(getLocaleFromLanguage(language))}
+                      </Text>
+                    </Box>
+                    {getStatusBadge(app.status)}
                   </Box>
-                  {getStatusBadge(app.status)}
+
+                  {/* approved → 前往小组链接（U9-10 死信息修复） */}
+                  {app.status === 'approved' && app.group_id && (
+                    <Link href={`/groups/${app.group_id}`} style={{ textDecoration: 'none' }}>
+                      <Button variant="secondary" size="sm">
+                        {t('groupApplyGoToGroup')} →
+                      </Button>
+                    </Link>
+                  )}
+
+                  {/* rejected → 显示拒绝原因 */}
+                  {app.status === 'rejected' && app.reject_reason && (
+                    <Text size="xs" style={{ color: tokens.colors.accent.error }}>
+                      {t('groupApplyRejectReasonLabel').replace('{reason}', app.reject_reason)}
+                    </Text>
+                  )}
                 </Box>
               ))}
             </Box>
