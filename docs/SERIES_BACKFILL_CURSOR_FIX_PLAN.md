@@ -169,6 +169,24 @@ GROUP BY s.slug ORDER BY 2;
 - **残余空缺 = 真上游稀疏**（币安 detail 对 ~56% 交易员就是不返回 sharpRatio）→ 按
   2026-07-02 死命令 honest-NULL，不自派生。修复目标是「抓满源头给的」，不是「填满」。
 
+## 遗留项处置(2026-07-07 收尾)
+
+1. **SG dep 漂移** → 走 CI 单通道 un-drift:`gh workflow run "Deploy Ingest Worker
+(SG)" -f mode=full`(注意本机 `GITHUB_TOKEN` env 失效,需 `GITHUB_TOKEN= gh …`
+   走 keyring)。build-deps 构建 Linux-x64 node_modules;deploy-sg 需仓库配 SG SSH
+   secrets 才真部署,否则 skip(此时可 CI 出 artifact → `deploy-ingest-sg.sh
+--from-artifact=PATH`)。cursor 修复已经单文件热修在 SG 生效,un-drift 属 hygiene。
+2. **local worker ↺100 = 非活跃问题**:exit 130=SIGINT(手动 restart)、mem 64MB
+   (非 OOM)、重启前已稳定 3 天;100 是**生命周期累计**(含历史已修的 EDBHANDLEREXITED
+   等),非重启循环。无需处置,持续观察即可。
+3. **Phase 3 hyperliquid** → **已启用 series_backfill**(config:`meta.series_backfill_topn
+=100000, batch=30`,jsonb merge 保留 expected_metrics)。HL sharpe 本就自派生
+   (`risk_derivation=daily-approx`, risk_samples 43-46),~1150 深抓交易员已有;缺口纯
+   是**序列深度**——HL 原不在回填带(topn=NULL)。cursor 修复后启用回填,ranks 501+ 会
+   逐步深抓 equity series + fills → tf30/tf90 self-derive Sharpe/Sortino/mdd + win_rate
+   (fills-replay)覆盖上升。**tf7 保持低是真统计下限**(7 日线 < MIN_RATIO_POINTS+1=8,
+   即便算出也是噪声),honest。gtrade(18%)同理可按需启用。
+
 ## 关联
 
 - 显示层/评分依赖：`risk_control_score`/`execution_score` 用 mdd/sharpe，长尾修复后
