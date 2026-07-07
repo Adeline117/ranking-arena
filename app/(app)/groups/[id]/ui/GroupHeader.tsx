@@ -6,6 +6,7 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import GroupMemberPrefsControls from './GroupMemberPrefsControls'
 
 type Group = {
   id: string
@@ -25,6 +26,7 @@ interface GroupHeaderProps {
   groupId: string
   language: string
   userId: string | null
+  accessToken?: string | null
   isMember: boolean
   userRole: 'owner' | 'admin' | 'member' | null
   joining: boolean
@@ -41,6 +43,7 @@ export default function GroupHeader({
   groupId,
   language,
   userId,
+  accessToken,
   isMember,
   userRole,
   joining,
@@ -387,6 +390,8 @@ export default function GroupHeader({
             {userId ? (
               isMember ? (
                 <>
+                  {/* Member self-controlled prefs: mute admin broadcasts + pin (U9-12) */}
+                  <GroupMemberPrefsControls groupId={groupId} accessToken={accessToken ?? null} />
                   {!isDissolved && (
                     <Link href={`/groups/${groupId}/new`} style={{ textDecoration: 'none' }}>
                       <Button variant="primary" size="sm">

@@ -72,12 +72,15 @@ export const POST = withAuth(
       // 发送给指定成员
       memberIds = target_user_ids.filter((id) => id !== user.id)
     } else {
-      // 发送给所有成员（排除操作者自己）
+      // 发送给所有成员（排除操作者自己 + 自行静音了本群广播的成员）。
+      // self_notify_muted 是成员自控偏好（默认 false = 仍接收管理员广播），
+      // 见 app/api/groups/[id]/prefs。.or 兼容历史 null 行（列现为 NOT NULL default false）。
       const { data: allMembers } = await supabase
         .from('group_members')
         .select('user_id')
         .eq('group_id', groupId)
         .neq('user_id', user.id)
+        .or('self_notify_muted.is.null,self_notify_muted.eq.false')
 
       memberIds = (allMembers || []).map((m: { user_id: string }) => m.user_id)
     }
