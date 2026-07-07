@@ -202,7 +202,7 @@ export function DailyReturnsChart({ data }: DailyReturnsChartProps) {
           strokeDasharray="4,3"
         />
         <text x={meanX + 3} y={PADDING.top + 10} fill="#f59e0b" fontSize={8} fontWeight={600}>
-          Mean {mean.toFixed(1)}%
+          {t('u2detail_chartMean')} {mean.toFixed(1)}%
         </text>
 
         {/* Median line */}
@@ -216,7 +216,7 @@ export function DailyReturnsChart({ data }: DailyReturnsChartProps) {
           strokeDasharray="4,3"
         />
         <text x={medianX + 3} y={PADDING.top + 20} fill="#8b5cf6" fontSize={8} fontWeight={600}>
-          Median {median.toFixed(1)}%
+          {t('u2detail_chartMedian')} {median.toFixed(1)}%
         </text>
 
         {/* Y-axis label */}
@@ -228,7 +228,7 @@ export function DailyReturnsChart({ data }: DailyReturnsChartProps) {
           fontSize={8}
           transform={`rotate(-90, 6, ${PADDING.top + INNER_HEIGHT / 2})`}
         >
-          Days
+          {t('u2detail_chartDays')}
         </text>
 
         {/* Hover tooltip */}

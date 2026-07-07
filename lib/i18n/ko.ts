@@ -6426,6 +6426,11 @@ const ko = {
   colPlan: '플랜',
   colSignedUp: '가입일',
   dataHealthSubtitle: '마지막 확인: {time} · 활성 플랫폼 {platforms}개 · 트레이더 {traders}명',
+
+  // U2-8: 일간 수익률 분포 차트 축/마커 라벨
+  u2detail_chartMean: '평균',
+  u2detail_chartMedian: '중앙값',
+  u2detail_chartDays: '일수',
 } as const
 
 export default ko
