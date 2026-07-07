@@ -127,6 +127,45 @@ export function useServingTabData(
     }
     const best = entries?.find((e) => e.timeframe === 90) ?? entries?.[0]
     const copierExtra = best?.extras?.copier_count ?? best?.extras?.copiers
+
+    const traderPerformance = servingStatsToPerformance({
+      tf7: m7?.stats ?? null,
+      tf30: m30?.stats ?? null,
+      tf90: m90?.stats ?? null,
+      // sortino/calmar live in extras (not typed columns) — the Overview
+      // MetricBadgesGrid dashed them without this (audit 2026-07-03).
+      extras7: m7?.extras ?? null,
+      extras30: m30?.extras ?? null,
+      extras90: m90?.extras ?? null,
+    })
+    const traderEquityCurve = servingSeriesToEquityCurve({
+      tf7: m7?.series ?? null,
+      tf30: m30?.series ?? null,
+      tf90: m90?.series ?? null,
+    })
+
+    // U2-2: tiny-principal web3/onchain traders can report a headline ROI that
+    // hits the ingest clamp (±10000%), which then contradicts the same-screen
+    // equity curve (head shows >10000% while the curve ends at e.g. +62%). When a
+    // headline roi sits at the clamp sentinel, prefer the curve's TERMINAL roi
+    // (the exact series the chart draws) so the two agree. Serving
+    // leaderboard_ranks carries no web3 roi at the clamp, so rankings + share
+    // cards are unaffected — this only reconciles the detail head card.
+    const ROI_CLAMP = 10000
+    const reconcileClampedRoi = (
+      roi: number | undefined,
+      period: '7D' | '30D' | '90D'
+    ): number | undefined => {
+      if (typeof roi !== 'number' || Math.abs(roi) < ROI_CLAMP) return roi
+      const pts = traderEquityCurve[period]
+      const last = pts && pts.length ? pts[pts.length - 1] : null
+      const terminal = last && typeof last.roi === 'number' ? last.roi : null
+      return terminal != null && Math.abs(terminal) < ROI_CLAMP ? terminal : roi
+    }
+    traderPerformance.roi_7d = reconcileClampedRoi(traderPerformance.roi_7d, '7D')
+    traderPerformance.roi_30d = reconcileClampedRoi(traderPerformance.roi_30d, '30D')
+    traderPerformance.roi_90d = reconcileClampedRoi(traderPerformance.roi_90d, '90D')
+
     return {
       traderProfile: servingToTraderProfile({
         exchangeTraderId,
@@ -135,21 +174,8 @@ export function useServingTabData(
         source,
         copierCount: typeof copierExtra === 'number' ? copierExtra : null,
       }),
-      traderPerformance: servingStatsToPerformance({
-        tf7: m7?.stats ?? null,
-        tf30: m30?.stats ?? null,
-        tf90: m90?.stats ?? null,
-        // sortino/calmar live in extras (not typed columns) — the Overview
-        // MetricBadgesGrid dashed them without this (audit 2026-07-03).
-        extras7: m7?.extras ?? null,
-        extras30: m30?.extras ?? null,
-        extras90: m90?.extras ?? null,
-      }),
-      traderEquityCurve: servingSeriesToEquityCurve({
-        tf7: m7?.series ?? null,
-        tf30: m30?.series ?? null,
-        tf90: m90?.series ?? null,
-      }),
+      traderPerformance,
+      traderEquityCurve,
       traderAssetBreakdown: servingToAssetBreakdown({
         tf7: m7?.extras ?? null,
         tf30: m30?.extras ?? null,
