@@ -506,6 +506,10 @@ const ja = {
   followBack: 'フォローバック',
   messages: 'メッセージ',
   inbox: 'メッセージ',
+  // TODO i18n ja/ko — English fallback pending translation
+  u10inbox_pageTitle: 'Inbox',
+  u10inbox_dmEmptyCta: 'Open a trader profile and tap Message to start a chat',
+  u10inbox_conversationGone: 'This conversation no longer exists',
   tabNotifications: '通知',
   tabMessages: 'メッセージ',
   markAllAsRead: 'すべて既読にする',
