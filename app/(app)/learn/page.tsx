@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
-import { ARTICLES } from './articles'
+import { ARTICLES, pickLocalized } from './articles'
 import PageHeader from '@/app/components/ui/PageHeader'
 import { getServerTranslation } from '@/lib/i18n/server'
 import LearnFilter from './LearnFilter'
@@ -45,7 +45,7 @@ function readingMinutes(content: string): number {
 }
 
 export default async function LearnPage() {
-  const { t } = await getServerTranslation()
+  const { t, lang } = await getServerTranslation()
 
   // Topics that actually appear in the current article set (preserves order).
   const presentTopics = TOPIC_ORDER.filter((topic) =>
@@ -55,8 +55,8 @@ export default async function LearnPage() {
   // Metadata only — article content stays server-side (not shipped to client).
   const cards = ARTICLES.map((article) => ({
     slug: article.slug,
-    title: article.title,
-    excerpt: article.excerpt,
+    title: pickLocalized(article.title, lang),
+    excerpt: pickLocalized(article.excerpt, lang),
     topic: TOPIC_BY_SLUG[article.slug] || '',
     mins: readingMinutes(article.content),
   }))

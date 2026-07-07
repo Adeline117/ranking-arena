@@ -5,14 +5,10 @@
  * into every page that imports it. Quiz only needs ~360 quiz-specific keys
  * (~20KB). This module provides the same t() API with 90% less bundle size.
  *
- * Language parity: the site ships en/zh/ja/ko. The quiz has a full English
- * dictionary (bundled) + a lazy-loaded Chinese dictionary. ja/ko render the
- * English dictionary as a fallback (the same C5 English-fallback convention
- * lib/i18n uses for not-yet-translated pages) but are first-class members of
- * the union so the quiz can (a) open in the visitor's site-wide language and
- * (b) expose all four languages in its in-quiz switcher, matching the global
- * LanguageToggle. When dedicated i18n-ja.ts / i18n-ko.ts dictionaries are
- * authored later, wire them into loadTranslations() the same way as zh.
+ * Language parity: the site ships en/zh/ja/ko. The quiz bundles the full English
+ * dictionary and lazy-loads dedicated zh / ja / ko dictionaries on demand (each
+ * a ~20KB chunk fetched only when that language is selected). Any key missing
+ * from a dictionary falls back to English per-key at the t() call site.
  */
 
 import quizEn from './i18n-en'
@@ -33,11 +29,15 @@ export const QUIZ_LANG_LABELS: Record<Language, string> = {
 const translations: Record<Language, Record<string, string>> = {
   en: quizEn,
   zh: {}, // lazy-loaded on demand
-  ja: {}, // English fallback (no dedicated dictionary yet — C5 convention)
-  ko: {}, // English fallback (no dedicated dictionary yet — C5 convention)
+  ja: {}, // lazy-loaded on demand
+  ko: {}, // lazy-loaded on demand
 }
 
-let zhLoaded = false
+const loaded: Record<Exclude<Language, 'en'>, boolean> = {
+  zh: false,
+  ja: false,
+  ko: false,
+}
 const listeners = new Set<() => void>()
 
 export function onTranslationsReady(cb: () => void) {
@@ -48,13 +48,17 @@ export function onTranslationsReady(cb: () => void) {
 }
 
 export async function loadTranslations(lang: Language): Promise<void> {
-  // en is bundled; ja/ko fall back to en (no dedicated dictionary yet).
-  if (lang === 'zh' && !zhLoaded) {
-    const { default: quizZh } = await import('./i18n-zh')
-    translations.zh = quizZh
-    zhLoaded = true
-    listeners.forEach((cb) => cb())
-  }
+  // en is bundled; zh/ja/ko are lazy-loaded once each.
+  if (lang === 'en' || loaded[lang]) return
+  const dict =
+    lang === 'zh'
+      ? (await import('./i18n-zh')).default
+      : lang === 'ja'
+        ? (await import('./i18n-ja')).default
+        : (await import('./i18n-ko')).default
+  translations[lang] = dict
+  loaded[lang] = true
+  listeners.forEach((cb) => cb())
 }
 
 /**
