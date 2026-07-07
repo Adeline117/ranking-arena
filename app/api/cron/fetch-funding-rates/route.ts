@@ -35,6 +35,40 @@ interface FundingRateData {
 }
 
 // ============================================
+// Symbol universe
+// ============================================
+
+// Mainstream coin universe, aligned with fetch-open-interest. Kept to ~20 majors so
+// symbols×exchanges stays within maxDuration=300. Absent symbols yield HTTP 400 →
+// logged warn → [] (no crash).
+const MAINSTREAM_COINS = [
+  'BTC',
+  'ETH',
+  'SOL',
+  'BNB',
+  'XRP',
+  'ADA',
+  'DOGE',
+  'LINK',
+  'DOT',
+  'AVAX',
+  'ARB',
+  'OP',
+  'LTC',
+  'TRX',
+  'NEAR',
+  'APT',
+  'SUI',
+  'TON',
+  'UNI',
+  'ATOM',
+] as const
+
+// binance / bybit / bitget use BASEUSDT; okx uses BASE-USDT-SWAP
+const USDT_SYMBOLS = MAINSTREAM_COINS.map((c) => `${c}USDT`)
+const OKX_SWAP_SYMBOLS = MAINSTREAM_COINS.map((c) => `${c}-USDT-SWAP`)
+
+// ============================================
 // Exchange Configurations
 // ============================================
 
@@ -42,7 +76,7 @@ const EXCHANGES: ExchangeConfig[] = [
   {
     name: 'binance',
     url: 'https://fapi.binance.com/fapi/v1/fundingRate',
-    symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT', 'BNBUSDT', 'XRPUSDT'],
+    symbols: USDT_SYMBOLS,
     responseMapper: (data: Record<string, unknown>, symbol: string) => {
       // Binance returns array of historical rates, take the most recent
       if (!Array.isArray(data) || data.length === 0) return []
@@ -60,7 +94,7 @@ const EXCHANGES: ExchangeConfig[] = [
   {
     name: 'bybit',
     url: 'https://api.bybit.com/v5/market/funding/history',
-    symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+    symbols: USDT_SYMBOLS,
     responseMapper: (data: Record<string, unknown>, _symbol: string) => {
       const result = data.result as { list?: Array<Record<string, string>> } | undefined
       if (!result?.list || result.list.length === 0) return []
@@ -78,7 +112,7 @@ const EXCHANGES: ExchangeConfig[] = [
   {
     name: 'okx',
     url: 'https://www.okx.com/api/v5/public/funding-rate',
-    symbols: ['BTC-USDT-SWAP', 'ETH-USDT-SWAP', 'SOL-USDT-SWAP'],
+    symbols: OKX_SWAP_SYMBOLS,
     responseMapper: (data: Record<string, unknown>, _symbol: string) => {
       const items = data.data as Array<Record<string, string>> | undefined
       if (!items || items.length === 0) return []
@@ -96,16 +130,26 @@ const EXCHANGES: ExchangeConfig[] = [
   {
     name: 'bitget',
     url: 'https://api.bitget.com/api/v2/mix/market/current-fund-rate',
-    symbols: ['BTCUSDT', 'ETHUSDT', 'SOLUSDT'],
+    symbols: USDT_SYMBOLS,
     responseMapper: (data: Record<string, unknown>, symbol: string) => {
-      const d = data.data as Record<string, string> | undefined
+      // Bitget v2 current-fund-rate returns `data` as an ARRAY: [{ symbol,
+      // fundingRate, fundingRateInterval, nextUpdate, ... }]. The old code read it
+      // as an object (`d.fundingRate`) and referenced a non-existent `d.fundingTime`
+      // → always undefined → returned [] → bitget had 0 rows in the table (silent).
+      // There is no "current funding time" field; `nextUpdate` is the next settlement
+      // timestamp this rate applies to → use it as funding_time (settlement moment).
+      const d = (data.data as Array<Record<string, string>> | undefined)?.[0]
       if (!d || !d.fundingRate) return []
+      const settlement = d.nextUpdate ? parseInt(d.nextUpdate) : NaN
       return [
         {
           platform: 'bitget',
           symbol: d.symbol || symbol,
           funding_rate: parseFloat(d.fundingRate),
-          funding_time: new Date(parseInt(d.fundingTime)).toISOString(),
+          funding_time: (Number.isNaN(settlement)
+            ? new Date()
+            : new Date(settlement)
+          ).toISOString(),
         },
       ]
     },
