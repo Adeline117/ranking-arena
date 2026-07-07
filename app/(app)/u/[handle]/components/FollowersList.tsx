@@ -8,7 +8,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getAvatarGradient, getAvatarInitial } from '@/lib/utils/avatar'
-import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { avatarSrc, isSvgAvatarSource } from '@/lib/utils/avatar-proxy'
 
 export default function FollowersList({ profileId }: { profileId: string }) {
   const { t } = useLanguage()
@@ -113,6 +113,8 @@ export default function FollowersList({ profileId }: { profileId: string }) {
                     alt={f.handle}
                     width={40}
                     height={40}
+                    // dicebear/SVG avatars 400 through /_next/image (dangerouslyAllowSVG:false)
+                    unoptimized={isSvgAvatarSource(f.avatar_url)}
                     style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                   />
                 ) : (
