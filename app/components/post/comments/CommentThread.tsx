@@ -9,6 +9,20 @@ import { renderWithStickers, hasStickers } from '../../ui/StickerRenderer'
 import { commentStyles, REPLIES_PREVIEW_COUNT, type Comment } from './comment-types'
 import { ProBadge, CommentAvatar } from './CommentAvatar'
 
+// An "edited" badge should only appear on genuine edits. A bare
+// `updated_at !== created_at` check is too strict: bulk data operations (e.g.
+// backfills that touch updated_at) leave every row with a sub-second timestamp
+// skew and light up the badge on comments no user ever edited. Require a real
+// gap (>60s) before treating a comment as edited. (U8-8)
+const EDIT_THRESHOLD_MS = 60_000
+function isEdited(createdAt: string, updatedAt?: string | null): boolean {
+  if (!updatedAt) return false
+  const created = Date.parse(createdAt)
+  const updated = Date.parse(updatedAt)
+  if (Number.isNaN(created) || Number.isNaN(updated)) return false
+  return updated - created > EDIT_THRESHOLD_MS
+}
+
 export interface CommentThreadProps {
   comment: Comment
   isReply?: boolean
@@ -136,7 +150,7 @@ export function CommentThread({
             {showProBadge && <ProBadge />}
             <span style={{ fontSize: 11, color: tokens.colors.text.tertiary }}>
               {formatTimeAgo(comment.created_at, language as Locale)}
-              {comment.updated_at && comment.updated_at !== comment.created_at && (
+              {comment.updated_at && isEdited(comment.created_at, comment.updated_at) && (
                 <span
                   title={new Date(comment.updated_at).toLocaleString()}
                   style={{ marginLeft: 4, fontStyle: 'italic' }}
