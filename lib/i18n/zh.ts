@@ -1464,6 +1464,7 @@ const zh = {
   notInvestmentAdvice: '数据仅供参考，不构成投资建议。请自行研究。',
   liveData: '实时',
   autoRefresh: '每 30 秒自动刷新',
+  u7mkt_delayed: '数据延迟',
 
   // ExchangeFilter
   lessExchanges: '收起',

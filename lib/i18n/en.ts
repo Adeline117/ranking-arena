@@ -1491,6 +1491,7 @@ const en = {
   notInvestmentAdvice: 'Data is for reference only. Not financial advice. DYOR.',
   liveData: 'Live',
   autoRefresh: 'Auto-refresh every 30s',
+  u7mkt_delayed: 'Delayed',
 
   // ExchangeFilter
   lessExchanges: 'Less',

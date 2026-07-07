@@ -107,8 +107,12 @@ function compactUsd(n: number): string {
   return `$${Math.round(n).toLocaleString('en-US')}`
 }
 
-/** Ticking "Xs / Xm / Xh" since an ISO timestamp; pauses when tab is hidden. */
-function useUpdatedAgo(iso?: string): string {
+/**
+ * Ticking "Xs / Xm / Xh" since an ISO timestamp; pauses when tab is hidden.
+ * Returns the label plus raw age in seconds (-1 if timestamp unusable) so
+ * callers can flag stale/delayed data.
+ */
+function useUpdatedAgo(iso?: string): { label: string; ageSec: number } {
   const [now, setNow] = useState(() => Date.now())
   useEffect(() => {
     const id = setInterval(() => {
@@ -117,13 +121,12 @@ function useUpdatedAgo(iso?: string): string {
     }, 10_000)
     return () => clearInterval(id)
   }, [])
-  if (!iso) return ''
+  if (!iso) return { label: '', ageSec: -1 }
   const ts = new Date(iso).getTime()
-  if (!Number.isFinite(ts)) return ''
+  if (!Number.isFinite(ts)) return { label: '', ageSec: -1 }
   const s = Math.max(0, Math.floor((now - ts) / 1000))
-  if (s < 60) return `${s}s`
-  if (s < 3600) return `${Math.floor(s / 60)}m`
-  return `${Math.floor(s / 3600)}h`
+  const label = s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m` : `${Math.floor(s / 3600)}h`
+  return { label, ageSec: s }
 }
 
 function GlobalMarketBar() {
@@ -140,7 +143,11 @@ function GlobalMarketBar() {
     staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
   })
-  const ago = useUpdatedAgo(data?.updatedAt)
+  const { label: ago, ageSec } = useUpdatedAgo(data?.updatedAt)
+  // Data older than 10min is no longer "live" — the upstream refresh window has
+  // a gap. Drop the green pulse to a static gray dot + a "delayed" hint so the
+  // "live" affordance isn't misleading.
+  const isStale = ageSec > 600
 
   const stats: { label: string; value: number; display: string }[] = []
   if (data) {
@@ -224,13 +231,14 @@ function GlobalMarketBar() {
               width: 6,
               height: 6,
               borderRadius: '50%',
-              background: tokens.colors.accent.success,
+              background: isStale ? tokens.colors.text.tertiary : tokens.colors.accent.success,
               display: 'inline-block',
-              animation: 'pulse 2s infinite',
+              animation: isStale ? undefined : 'pulse 2s infinite',
             }}
           />
           <span suppressHydrationWarning>
             {ago ? `${t('updatedAgo')}${ago}` : `${t('liveData')} · ${t('autoRefresh')}`}
+            {isStale ? ` · ${t('u7mkt_delayed')}` : ''}
           </span>
         </div>
       </div>

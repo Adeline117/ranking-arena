@@ -4933,6 +4933,7 @@ const ja = {
 
   // Missing translations added 2026-04-03
   autoRefresh: '30秒ごとに自動更新',
+  u7mkt_delayed: '遅延',
   liveData: 'ライブ',
   topPercent: '上位 {pct}%',
   topPercentOn: '{platform} 上位 {pct}%',
