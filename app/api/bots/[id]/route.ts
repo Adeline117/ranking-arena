@@ -11,6 +11,24 @@ import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('bots-api')
 
+// Score floor for wiped-out bots (U2-4). The stored `arena_score` formula has
+// no lower bound for catastrophic losses, so bots with roi < -100% (principal
+// fully wiped and then some) still surface with scores up to 100 — a "legendary"
+// badge on a bot that lost 3x its capital. We clamp at the serving boundary
+// (no data write): once principal is gone the score is capped low and decays
+// further as losses deepen, so a wiped-out bot can never rank as elite.
+const WIPEOUT_SCORE_CAP = 10
+function clampBotArenaScore(
+  rawScore: number | null | undefined,
+  roi: number | null | undefined
+): number | null | undefined {
+  if (rawScore == null || roi == null || roi > -100) return rawScore
+  // roi <= -100: cap at WIPEOUT_SCORE_CAP at exactly -100, sliding to 0 by -200.
+  const excessLoss = Math.min(-100 - roi, 100) // 0..100 over roi ∈ [-200, -100]
+  const capped = Math.round(WIPEOUT_SCORE_CAP * (1 - excessLoss / 100))
+  return Math.max(0, Math.min(rawScore, capped))
+}
+
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
   if (rateLimitResponse) return rateLimitResponse
@@ -46,10 +64,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       .eq('bot_id', bot.id)
       .order('season_id')
 
+    // Apply the wiped-out score floor at serve time (no data mutation).
+    const clampedSnapshots = (snapshots || []).map((s) => ({
+      ...s,
+      arena_score: clampBotArenaScore(s.arena_score as number | null, s.roi as number | null),
+    }))
+
     return NextResponse.json(
       {
         bot,
-        snapshots: snapshots || [],
+        snapshots: clampedSnapshots,
         equity_curve: [],
       },
       {
