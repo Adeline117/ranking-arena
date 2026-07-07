@@ -45,7 +45,10 @@ function CompareFloatingBar() {
       className="compare-floating-bar"
       style={{
         position: 'fixed',
-        bottom: 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 16px)',
+        // Clear the 56px FloatingActionButton (bottom+20) so the compare bar
+        // stacks ABOVE it instead of covering it — /watchlist & /saved render
+        // both bottom-right on mobile (U9 overlap fix). +88px = 56 FAB + gap.
+        bottom: 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 88px)',
         right: 16,
         zIndex: tokens.zIndex.overlay,
         background: tokens.glass.bg.heavy,
