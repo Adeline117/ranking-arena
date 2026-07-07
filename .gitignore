@@ -177,3 +177,10 @@ e2e/*debug*
 # trigger.dev (tracked — Phase 1 canary)
 # trigger.config.ts
 # lib/jobs/trigger.ts
+
+# Throwaway QA/verification scratch scripts (root) — never commit
+/verify-*.mjs
+/watch-*.mjs
+/vg.mjs
+/t[0-9]*.mjs
+scratchpad/
