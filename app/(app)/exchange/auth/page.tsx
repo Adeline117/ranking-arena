@@ -16,7 +16,7 @@ const EXCHANGES = [
   { id: 'bitget', name: 'Bitget', oauthSupported: false },
   { id: 'mexc', name: 'MEXC', oauthSupported: false },
   { id: 'htx', name: 'HTX', oauthSupported: false },
-  { id: 'weex', name: 'Weex', oauthSupported: false },
+  { id: 'weex', name: 'WEEX', oauthSupported: false },
   { id: 'coinex', name: 'CoinEx', oauthSupported: false },
 ] as const
 

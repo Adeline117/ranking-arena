@@ -14,10 +14,8 @@ interface ReferralData {
   referral_link: string
 }
 
-const REFERRAL_REWARD = `${REFERRAL_ADVOCATE_PRO_DAYS} days Pro free`
-
 export default function ReferralCard() {
-  const { language } = useLanguage()
+  const { language, t } = useLanguage()
   const { userId, getAuthHeadersAsync } = useAuthSession()
   const [data, setData] = useState<ReferralData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -126,9 +124,9 @@ export default function ReferralCard() {
           marginBottom: tokens.spacing[4],
         }}
       >
-        {language === 'zh'
-          ? `邀请 ${REFERRAL_REWARD_THRESHOLD} 位好友注册，获得 ${REFERRAL_REWARD}`
-          : `Refer ${REFERRAL_REWARD_THRESHOLD} friends → ${REFERRAL_REWARD}`}
+        {t('referralRewardBannerTitle')
+          .replace('{count}', String(REFERRAL_REWARD_THRESHOLD))
+          .replace('{days}', String(REFERRAL_ADVOCATE_PRO_DAYS))}
       </p>
 
       {/* Referral link */}

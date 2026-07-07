@@ -1103,7 +1103,7 @@ const zh = {
   claimWalletTimeout: '钱包连接超时，请重试。',
   // 交易员账号（关联）
   myTraderAccounts: '我的交易员账号',
-  myTraderAccountsDesc: '管理您在排行榜上认领的交易员身份',
+  myTraderAccountsDesc: '认领并管理你在排行榜上的公开交易员身份（不同于"绑定交易所同步实盘组合"）',
   linkedAccounts: '关联账号',
   linkedAccountsSection: '关联账号',
   linkNewAccount: '关联新账号',
@@ -1464,6 +1464,7 @@ const zh = {
   notInvestmentAdvice: '数据仅供参考，不构成投资建议。请自行研究。',
   liveData: '实时',
   autoRefresh: '每 30 秒自动刷新',
+  u7mkt_delayed: '数据延迟',
 
   // ExchangeFilter
   lessExchanges: '收起',
@@ -2055,6 +2056,7 @@ const zh = {
   videoOptional: '视频（可选，最多1个，100MB以内）',
   deleteVideo: '删除视频',
   addVideo: '添加视频',
+  u11prof_videoLabel: '视频',
   videoFormatSupport: '支持 MP4、WebM、MOV、AVI、MKV 格式，最大 100MB',
   moveUp: '上移',
   moveDown: '下移',
@@ -3065,7 +3067,8 @@ const zh = {
 
   // Exchange binding banner
   bindExchangeBannerTitle: '绑定你的交易所账号',
-  bindExchangeBannerDesc: '绑定后可自动同步交易数据，参与排行榜，展示真实业绩',
+  bindExchangeBannerDesc:
+    '通过只读 API 同步你的实盘持仓与业绩到个人组合页（不同于"认领排行榜交易员身份"）',
   goToBind: '去绑定',
 
   // Search dropdown

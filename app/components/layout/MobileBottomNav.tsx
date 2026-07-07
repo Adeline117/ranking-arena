@@ -315,7 +315,13 @@ const NAV_BASE_STYLE: React.CSSProperties = {
   right: 0,
   height: 60,
   background: tokens.glass.bg.primary,
-  // backdrop-filter moved to CSS class .glass so responsive.css mobile override works
+  // Blur is applied inline: the referenced `.glass` class was never defined, so
+  // without this the near-solid bg still let sharp ticker/price text bleed
+  // through between icons on scroll (U7-13). The reduced-transparency media
+  // query in globals.css targets `[style*='backdrop-filter']` and swaps this for
+  // a fully opaque bg on low-end devices, so perf/degradation still hold.
+  backdropFilter: 'blur(16px)',
+  WebkitBackdropFilter: 'blur(16px)',
   borderTop: `1px solid var(--color-border-primary)`,
   display: 'flex',
   alignItems: 'center',

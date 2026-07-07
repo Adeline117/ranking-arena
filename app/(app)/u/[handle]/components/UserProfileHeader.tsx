@@ -15,7 +15,7 @@ import ProBadge, { ProBadgeOverlay } from '@/app/components/ui/ProBadge'
 import LevelBadge from '@/app/components/user/LevelBadge'
 
 import { features } from '@/lib/features'
-import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { avatarSrc, isSvgAvatarSource } from '@/lib/utils/avatar-proxy'
 import type { ServerProfile } from './types'
 
 const UserFollowButton = dynamic(() => import('@/app/components/ui/UserFollowButton'), {
@@ -189,6 +189,8 @@ export default function UserProfileHeader({
                 alt={profile.handle}
                 width={72}
                 height={72}
+                // dicebear/SVG avatars 400 through /_next/image (dangerouslyAllowSVG:false)
+                unoptimized={isSvgAvatarSource(profile.avatar_url)}
                 style={{
                   width: '100%',
                   height: '100%',

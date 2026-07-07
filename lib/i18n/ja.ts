@@ -1011,7 +1011,8 @@ const ja = {
   loadLinkedTradersFailed: 'リンクされたアカウントの読み込みに失敗しました',
   claimWalletTimeout: 'ウォレット接続がタイムアウトしました。もう一度お試しください。',
   myTraderAccounts: 'マイトレーダーアカウント',
-  myTraderAccountsDesc: 'リーダーボードで申請したトレーダーIDの管理',
+  myTraderAccountsDesc:
+    'リーダーボード上の公開トレーダーIDを申請・管理します（取引所を連携してポートフォリオを同期する機能とは別です）',
   linkedAccounts: 'リンク済みアカウント',
   linkedAccountsSection: 'リンク済みアカウント',
   linkNewAccount: '新しいアカウントをリンク',
@@ -2080,6 +2081,7 @@ const ja = {
   videoOptional: '動画（任意、1つまで、100MB以下）',
   deleteVideo: '動画を削除',
   addVideo: '動画を追加',
+  u11prof_videoLabel: '動画',
   videoFormatSupport: 'MP4, WebM, MOV, AVI, MKV対応、最大100MB',
   moveUp: '上に移動',
   moveDown: '下に移動',
@@ -2898,7 +2900,8 @@ const ja = {
   loginToFollow: 'ログインしてトレーダーをフォローし、パフォーマンスをトラッキング',
 
   bindExchangeBannerTitle: '取引所アカウントを接続',
-  bindExchangeBannerDesc: '取引データを自動同期し、ランキングに参加して実績を公開',
+  bindExchangeBannerDesc:
+    '読み取り専用APIで実際のポジションと実績をポートフォリオに同期します（リーダーボードのトレーダーID申請とは別です）',
   goToBind: '接続',
 
   searchDropdownResults: '検索結果',
@@ -4933,6 +4936,7 @@ const ja = {
 
   // Missing translations added 2026-04-03
   autoRefresh: '30秒ごとに自動更新',
+  u7mkt_delayed: '遅延',
   liveData: 'ライブ',
   topPercent: '上位 {pct}%',
   topPercentOn: '{platform} 上位 {pct}%',

@@ -23,7 +23,7 @@ const EXCHANGES = [
   { id: 'bitget', name: 'Bitget' },
   { id: 'mexc', name: 'MEXC' },
   { id: 'htx', name: 'HTX' },
-  { id: 'weex', name: 'Weex' },
+  { id: 'weex', name: 'WEEX' },
   { id: 'coinex', name: 'CoinEx' },
 ] as const
 
