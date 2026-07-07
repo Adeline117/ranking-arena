@@ -100,7 +100,19 @@ jobs:
           mkdir -p ~/.ssh
           printf '%s\n' "${{ secrets.INGEST_SG_SSH_KEY }}" > ~/.ssh/id_sg
           chmod 600 ~/.ssh/id_sg
-          host='${{ secrets.INGEST_SG_HOST }}'; ssh-keyscan -H "${host#*@}" >> ~/.ssh/known_hosts 2>/dev/null || true
+          host='${{ secrets.INGEST_SG_HOST }}'
+          hostname="${host#*@}"; user="${host%@*}"
+          ssh-keyscan -H "$hostname" >> ~/.ssh/known_hosts 2>/dev/null || true
+          # deploy-ingest-sg.sh uses plain `ssh`/`rsync`/`scp` (not GIT_SSH_COMMAND,
+          # which only affects git) — so map the host to id_sg via ssh_config, else
+          # they fall back to default key names and fail publickey auth (exit 255).
+          {
+            echo "Host $hostname"
+            echo "  User $user"
+            echo "  IdentityFile ~/.ssh/id_sg"
+            echo "  IdentitiesOnly yes"
+          } >> ~/.ssh/config
+          chmod 600 ~/.ssh/config
       # Ships the prebuilt deps (full mode) + code, then restarts with auto-rollback.
       # Reuses the hardened worker/deploy-ingest-sg.sh deploy logic via --from-artifact
       # (extracts the tgz into node_modules atomically — NEVER npm-installs on SG).
