@@ -4965,7 +4965,7 @@ const en = {
 
   // Claim Landing Page
   claimPageTitle: 'Claim Your Trader Profile on Arena',
-  claimPageSubtitle: "You're ranked among 8,000+ traders. Take control of your profile.",
+  claimPageSubtitle: 'Join 8,000+ traders on Arena. Claim and take control of your profile.',
   claimPageBenefitVerified: 'Get a verified badge on your profile',
   claimPageBenefitEdit: 'Edit your bio, avatar, and social links',
   claimPageBenefitStandout: 'Stand out on the leaderboard',
@@ -6559,6 +6559,11 @@ const en = {
   colPlan: 'Plan',
   colSignedUp: 'Signed up',
   dataHealthSubtitle: 'Last checked: {time} · {platforms} active platforms · {traders} traders',
+
+  // U2-8: daily-returns distribution chart axis/marker labels
+  u2detail_chartMean: 'Mean',
+  u2detail_chartMedian: 'Median',
+  u2detail_chartDays: 'Days',
 } as const
 
 export default en

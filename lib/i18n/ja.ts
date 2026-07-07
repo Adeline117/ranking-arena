@@ -4580,8 +4580,7 @@ const ja = {
 
   // Claim page
   claimPageTitle: 'Arenaでトレーダープロフィールを申請',
-  claimPageSubtitle:
-    '8,000人以上のトレーダーの中にランクインしています。プロフィールを管理しましょう。',
+  claimPageSubtitle: 'Arena の 8,000+ トレーダーに加わり、プロフィールを認証して管理しましょう。',
   claimPageBenefitVerified: 'プロフィールに認証バッジを取得',
   claimPageBenefitEdit: '自己紹介、アバター、ソーシャルリンクを編集',
   claimPageBenefitStandout: 'ランキングで目立つ',
@@ -6209,6 +6208,11 @@ const ja = {
   colSignedUp: '登録日時',
   dataHealthSubtitle:
     '最終チェック：{time} · 稼働中プラットフォーム {platforms} 件 · トレーダー {traders} 名',
+
+  // U2-8: 日次リターン分布チャートの軸/マーカーラベル
+  u2detail_chartMean: '平均',
+  u2detail_chartMedian: '中央値',
+  u2detail_chartDays: '日数',
 } as const
 
 export default ja
