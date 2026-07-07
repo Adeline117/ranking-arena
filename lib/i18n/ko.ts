@@ -6123,6 +6123,7 @@ const ko = {
   stayOnPage: '이 페이지에 머무르기',
   pricingYearlySaveAmount: '연 ${amount} 절약',
   pricingLifetimeAnchor: '라이프타임은 약 {months}개월이면 본전 (${price}/년 대비)',
+  pricingLifetimeAnchorMonthly: '라이프타임은 약 {months}개월이면 본전 (${price}/월 대비)',
   botArenaScore: 'Arena 점수',
   botGrade_legendary: '전설',
   botGrade_great: '우수',

@@ -6250,6 +6250,7 @@ const en = {
   stayOnPage: 'Stay on this page',
   pricingYearlySaveAmount: 'Save ${amount}/yr',
   pricingLifetimeAnchor: 'Lifetime pays for itself in ~{months} months vs ${price}/yr',
+  pricingLifetimeAnchorMonthly: 'Lifetime pays for itself in ~{months} months vs ${price}/mo',
   botArenaScore: 'Arena Score',
   botGrade_legendary: 'Legendary',
   botGrade_great: 'Great',

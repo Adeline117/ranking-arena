@@ -6106,6 +6106,7 @@ const zh = {
   stayOnPage: '留在本页',
   pricingYearlySaveAmount: '每年省 ${amount}',
   pricingLifetimeAnchor: '终身版约 {months} 个月即回本（相比 ${price}/年）',
+  pricingLifetimeAnchorMonthly: '终身版约 {months} 个月即回本（相比 ${price}/月）',
   botArenaScore: 'Arena 评分',
   botGrade_legendary: '传奇',
   botGrade_great: '优秀',

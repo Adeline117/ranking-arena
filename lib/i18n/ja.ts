@@ -5895,6 +5895,7 @@ const ja = {
   stayOnPage: 'このページに留まる',
   pricingYearlySaveAmount: '年間 ${amount} お得',
   pricingLifetimeAnchor: 'ライフタイムは約{months}ヶ月で元が取れます（${price}/年と比較）',
+  pricingLifetimeAnchorMonthly: 'ライフタイムは約{months}ヶ月で元が取れます（${price}/月と比較）',
   botArenaScore: 'Arena スコア',
   botGrade_legendary: 'レジェンド',
   botGrade_great: '優秀',
