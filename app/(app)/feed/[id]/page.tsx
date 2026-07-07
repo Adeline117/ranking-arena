@@ -134,8 +134,10 @@ export default async function ActivitySharePage({ params }: PageProps) {
   const displayText = anon
     ? activity.activity_text.split(rawName).join(ANON_NAME)
     : activity.activity_text
-  const traderHref =
-    activity.handle && !anon ? `/trader/${encodeURIComponent(activity.handle)}` : null
+  // Link via source_trader_id (stable exact-match key) not the display handle,
+  // which is often truncated and only fuzzy-resolves to a Partial page (U8-13).
+  const traderKey = activity.source_trader_id || activity.handle
+  const traderHref = traderKey && !anon ? `/trader/${encodeURIComponent(traderKey)}` : null
 
   return (
     <div style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
