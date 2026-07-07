@@ -1909,7 +1909,7 @@ const ko = {
   loginCreateAccount: '계정 만들기',
   loginSubtitle: 'Arena는 암호화폐의 모든 것을 순위화합니다',
   loginValueProp1: '160,000명 이상의 등록 트레이더를 실시간 추적',
-  loginValueProp2: '20개 이상 거래소의 ROI 비교',
+  loginValueProp2: '45개 이상 거래소의 ROI 비교',
   loginValueProp3: '트레이딩 커뮤니티 참여',
   loginConnectWallet: '지갑 연결',
   loginWalletSignIn: '지갑으로 로그인',
