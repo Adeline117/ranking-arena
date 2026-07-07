@@ -25,6 +25,7 @@ type Group = {
   avatar_url?: string | null
   member_count?: number | null
   description?: string | null
+  pinned?: boolean
 }
 
 type SubTabKey = 'following' | 'recommended'
@@ -52,10 +53,11 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
 
     const loadMyGroups = async () => {
       try {
-        // Single joined query instead of 2 sequential queries (#36)
+        // Single joined query instead of 2 sequential queries (#36).
+        // pinned = member-controlled self-pin (U9-12) → sort pinned groups first.
         const { data: memberships } = await supabase
           .from('group_members')
-          .select('group_id, groups:group_id(id, name, name_en, avatar_url, member_count)')
+          .select('group_id, pinned, groups:group_id(id, name, name_en, avatar_url, member_count)')
           .eq('user_id', userId)
 
         if (!memberships || memberships.length === 0) {
@@ -65,8 +67,13 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
         }
 
         const groupsData = memberships
-          .map((m: Record<string, unknown>) => m.groups as Group | null)
+          .map((m: Record<string, unknown>) => {
+            const g = m.groups as Group | null
+            return g ? { ...g, pinned: !!m.pinned } : null
+          })
           .filter((g): g is Group => g != null)
+          // pinned first, then keep insertion order (recency of membership)
+          .sort((a, b) => Number(b.pinned) - Number(a.pinned))
         setMyGroups(groupsData)
       } catch (err) {
         logger.error('Failed to load groups:', err)
@@ -179,7 +186,52 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
 
         {subTab === 'following' &&
           (myGroups.length > 0 ? (
-            <PostFeed layout="masonry" groupIds={myGroupIds} />
+            <>
+              {/* My-groups rail — pinned groups first, marked with 📌 (U9-12) */}
+              <Box
+                style={{
+                  display: 'flex',
+                  flexWrap: 'wrap',
+                  gap: tokens.spacing[2],
+                  marginBottom: tokens.spacing[4],
+                }}
+              >
+                {myGroups.map((g) => (
+                  <Link
+                    key={g.id}
+                    href={`/groups/${g.id}`}
+                    prefetch={false}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      padding: `${tokens.spacing[1.5]} ${tokens.spacing[3]}`,
+                      borderRadius: tokens.radius.full,
+                      background: g.pinned
+                        ? 'var(--color-accent-primary-10)'
+                        : tokens.colors.bg.secondary,
+                      border: `1px solid ${g.pinned ? tokens.colors.accent.primary : tokens.colors.border.primary}`,
+                      color: tokens.colors.text.primary,
+                      fontSize: tokens.typography.fontSize.sm,
+                      fontWeight: tokens.typography.fontWeight.medium,
+                      textDecoration: 'none',
+                      transition: `border-color ${tokens.transition.fast}`,
+                    }}
+                  >
+                    {g.pinned && (
+                      <span
+                        aria-label={t('groupPrefs_pinnedBadge')}
+                        title={t('groupPrefs_pinnedBadge')}
+                      >
+                        📌
+                      </span>
+                    )}
+                    {localizedLabel(g.name, g.name_en, language)}
+                  </Link>
+                ))}
+              </Box>
+              <PostFeed layout="masonry" groupIds={myGroupIds} />
+            </>
           ) : (
             <Box
               style={{
