@@ -12,20 +12,14 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { EXCHANGE_BIND_LIST } from '@/app/(app)/exchange/auth/api-key/exchange-configs'
 
 interface ExchangeConnectionProps {
   userId: string
 }
 
-const EXCHANGES = [
-  { id: 'binance', name: 'Binance' },
-  { id: 'bybit', name: 'Bybit' },
-  { id: 'bitget', name: 'Bitget' },
-  { id: 'mexc', name: 'MEXC' },
-  { id: 'htx', name: 'HTX' },
-  { id: 'weex', name: 'WEEX' },
-  { id: 'coinex', name: 'CoinEx' },
-] as const
+// Single source of truth: exchange list + display names live in exchange-configs.
+const EXCHANGES = EXCHANGE_BIND_LIST
 
 export default function ExchangeConnectionManager({ userId }: ExchangeConnectionProps) {
   const { t } = useLanguage()
