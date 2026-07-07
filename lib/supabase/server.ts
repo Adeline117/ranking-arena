@@ -112,7 +112,10 @@ export async function getUserFromToken(token: string): Promise<User | null> {
 
   try {
     const supabase = getSupabaseAdmin()
-    const { data: { user }, error } = await supabase.auth.getUser(token)
+    const {
+      data: { user },
+      error,
+    } = await supabase.auth.getUser(token)
 
     if (error || !user) {
       return null
@@ -183,12 +186,12 @@ export async function getAuthUser(request: NextRequest): Promise<User | null> {
  */
 export async function requireAuth(request: NextRequest): Promise<User> {
   const user = await getAuthUser(request)
-  
+
   if (!user) {
     const error = Object.assign(new Error('未授权'), { statusCode: 401 })
     throw error
   }
-  
+
   return user
 }
 
@@ -205,16 +208,16 @@ export async function getUserHandle(userId: string, fallbackEmail?: string): Pro
       .select('handle')
       .eq('id', userId)
       .maybeSingle()
-    
+
     if (profile?.handle) {
       return profile.handle
     }
-    
+
     // 使用邮箱前缀作为备用
     if (fallbackEmail) {
       return fallbackEmail.split('@')[0]
     }
-    
+
     return userId.slice(0, 8)
   } catch (error) {
     logger.error('[supabase/server] getUserHandle 错误:', error)
@@ -231,10 +234,10 @@ export async function getUserProfile(userId: string) {
     const supabase = getSupabaseAdmin()
     const { data, error } = await supabase
       .from('user_profiles')
-      .select('id, handle, display_name, avatar_url, bio, is_pro, exp, level, badge, locale, banned_at, deleted_at, created_at, updated_at')
+      .select('id, handle, avatar_url, bio, is_pro, banned_at, deleted_at, created_at, updated_at')
       .eq('id', userId)
       .maybeSingle()
-    
+
     if (error) throw error
     return data
   } catch (error) {
@@ -245,5 +248,3 @@ export async function getUserProfile(userId: string) {
 
 // 导出类型
 export type { SupabaseClient, User }
-
-
