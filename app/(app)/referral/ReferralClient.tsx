@@ -13,6 +13,7 @@ import {
   REFERRAL_ADVOCATE_PRO_DAYS,
   REFERRED_FRIEND_TRIAL_DAYS,
 } from '@/lib/constants/referral'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
 
 interface ReferralData {
   referral_code: string
@@ -203,6 +204,22 @@ export default function ReferralClient() {
           >
             {rewardSubtitle}
           </p>
+
+          {/* During the site-wide Pro free promo, Pro-day rewards have no
+              immediate value — explain that they bank and apply once the promo
+              ends so the referral incentive isn't perceived as dead. */}
+          {PRO_FREE_PROMO && (
+            <p
+              style={{
+                fontSize: tokens.typography.fontSize.xs,
+                color: tokens.colors.text.tertiary,
+                margin: `0 0 ${tokens.spacing[4]}`,
+                lineHeight: 1.5,
+              }}
+            >
+              {t('referralPromoNote')}
+            </p>
+          )}
 
           {/* How it works */}
           <div
