@@ -3311,8 +3311,6 @@ const ja = {
   u9grp_searchPlaceholder: 'Search groups',
   u9grp_noSearchResults: 'No matching groups',
   u9grp_joinToPost: 'Join the group to start posting',
-  u9grp_owner: 'Owner',
-  u9grp_admin: 'Admin',
   sidebarMyGroups: 'マイグループ',
   sidebarNoGroupsJoined: 'まだグループに参加していません',
   sidebarLoginToView: 'ログインして表示',

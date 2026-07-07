@@ -3507,8 +3507,6 @@ const zh = {
   u9grp_searchPlaceholder: '搜索小组',
   u9grp_noSearchResults: '没有匹配的小组',
   u9grp_joinToPost: '加入小组后即可发帖',
-  u9grp_owner: '群主',
-  u9grp_admin: '管理员',
   sidebarMyGroups: '我的小组',
   sidebarNoGroupsJoined: '还没有加入小组',
   sidebarLoginToView: '登录后查看',
