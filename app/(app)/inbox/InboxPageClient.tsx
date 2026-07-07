@@ -2,13 +2,12 @@
 
 import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import NotificationsList from '@/app/components/inbox/NotificationsList'
 import ConversationsList from '@/app/components/inbox/ConversationsList'
-import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useRequireAuth } from '@/lib/hooks/useRequireAuth'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 type TabKey = 'notifications' | 'messages'
@@ -16,16 +15,11 @@ type TabKey = 'notifications' | 'messages'
 export default function InboxPageClient() {
   if (!features.social) redirect('/')
 
-  const router = useRouter()
-  const { email, authChecked, accessToken } = useAuthSession()
+  // U10-7: unify the login-wall param on the shared useRequireAuth (returnUrl=)
+  // instead of a hand-written /login?redirect= — the rest of the app uses returnUrl.
+  useRequireAuth()
   const { t } = useLanguage()
   const [activeTab, setActiveTab] = useState<TabKey>('notifications')
-
-  useEffect(() => {
-    if (authChecked && !accessToken) {
-      router.push('/login?redirect=/inbox')
-    }
-  }, [authChecked, accessToken, router])
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'notifications', label: t('tabNotifications') },
@@ -55,7 +49,7 @@ export default function InboxPageClient() {
           }}
         >
           <h1 style={{ fontSize: tokens.typography.fontSize['2xl'], fontWeight: 900, margin: 0 }}>
-            {t('inbox')}
+            {t('u10inbox_pageTitle')}
           </h1>
         </div>
 
@@ -98,7 +92,7 @@ export default function InboxPageClient() {
         </div>
 
         {/* Tab content */}
-        {activeTab === 'notifications' && <NotificationsList />}
+        {activeTab === 'notifications' && <NotificationsList variant="page" />}
         {activeTab === 'messages' && <ConversationsList />}
       </div>
     </div>

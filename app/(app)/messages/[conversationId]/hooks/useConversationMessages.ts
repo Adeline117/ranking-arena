@@ -122,10 +122,17 @@ export function useConversationMessages({
           router.push('/login?redirect=/inbox')
           return
         }
-        const data = await res.json()
+        const data = await res.json().catch(() => ({}))
         if (!res.ok) {
-          showToast(data.error || t('loadMessagesFailed'), 'error')
-          router.push('/messages')
+          // 404/403 = the conversation doesn't exist or isn't ours (bad/stale link):
+          // show a specific "gone" message instead of a generic failure, then send
+          // the user back to their inbox rather than silently bouncing (U10-9).
+          const isGone = res.status === 404 || res.status === 403
+          showToast(
+            isGone ? t('u10inbox_conversationGone') : data.error || t('loadMessagesFailed'),
+            'error'
+          )
+          router.push('/inbox')
           return
         }
         if (data.messages) {

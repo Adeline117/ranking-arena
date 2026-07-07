@@ -126,7 +126,10 @@ function RoleBadge({ role }: RoleBadgeProps): React.ReactElement {
       ? `linear-gradient(135deg, ${tokens.colors.accent.brand}, var(--color-brand-deep))`
       : tokens.colors.bg.tertiary || tokens.colors.bg.secondary
 
-  const label = isOwner ? t('owner') : isAdmin ? t('admin') : t('groupMember')
+  // Unified group-role terminology (U9-8): use groupOwner (群主) everywhere in the
+  // group UI — the generic `owner` key resolves to 组长 in zh, which clashed with the
+  // header's 群主 label (two terms for the same role). admin stays the second tier.
+  const label = isOwner ? t('groupOwner') : isAdmin ? t('admin') : t('groupMember')
 
   return (
     <span
@@ -176,7 +179,7 @@ export function GroupInfoModal({
         <ModalHeader title={t('groupInfo')} onClose={onClose} />
 
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-          <InfoRow label={t('owner')}>
+          <InfoRow label={t('groupOwner')}>
             <Text size="md">
               {group.owner_handle ? (
                 <Link
