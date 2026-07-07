@@ -4594,7 +4594,7 @@ const ja = {
 
   // Claim page
   claimPageTitle: 'Arenaでトレーダープロフィールを申請',
-  claimPageSubtitle: 'Arena の 8,000+ トレーダーに加わり、プロフィールを認証して管理しましょう。',
+  claimPageSubtitle: 'Arena に参加し、トレーダープロフィールを認証して管理しましょう。',
   claimPageBenefitVerified: 'プロフィールに認証バッジを取得',
   claimPageBenefitEdit: '自己紹介、アバター、ソーシャルリンクを編集',
   claimPageBenefitStandout: 'ランキングで目立つ',
@@ -5001,7 +5001,7 @@ const ja = {
   rankingControlsPrev: '前へ',
   rankingControlsNext: '次へ',
   rankingControlsLoading: '読み込み中\u2026',
-  rankingControlsShowingTop: '上位 {count} 名のトレーダーを表示中。Proで8,000+人全員を表示',
+  rankingControlsShowingTop: '上位 {count} 名のトレーダーを表示中。Proで全員を表示',
   rankingControlsShowingTopPromo: '限定無料中 · 上位 {count} 名すべて解放済み',
   rankingControlsUpgrade: 'アップグレード \u2192',
 

@@ -125,9 +125,6 @@ export async function GET() {
             gap: 8,
           }}
         >
-          <span style={{ color: '#D4AF37', fontWeight: 700 }}>8,000+</span>
-          <span>Traders</span>
-          <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 4px' }}>·</span>
           <span style={{ color: '#D4AF37', fontWeight: 700 }}>32+</span>
           <span>Exchanges</span>
           <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 4px' }}>·</span>

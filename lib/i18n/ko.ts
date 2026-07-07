@@ -4844,7 +4844,7 @@ const ko = {
 
   // Claim page
   claimPageTitle: 'Arena에서 트레이더 프로필 신청',
-  claimPageSubtitle: 'Arena의 8,000+ 트레이더에 합류하여 프로필을 인증하고 관리하세요.',
+  claimPageSubtitle: 'Arena에 참여하여 트레이더 프로필을 인증하고 관리하세요.',
   claimPageBenefitVerified: '프로필에 인증 배지 획득',
   claimPageBenefitEdit: '소개, 아바타, 소셜 링크 편집',
   claimPageBenefitStandout: '리더보드에서 눈에 띄기',
@@ -5240,8 +5240,7 @@ const ko = {
   rankingControlsPrev: '이전',
   rankingControlsNext: '다음',
   rankingControlsLoading: '로딩 중\u2026',
-  rankingControlsShowingTop:
-    '상위 {count}명의 트레이더를 표시 중. Pro로 8,000+명 전체를 확인하세요',
+  rankingControlsShowingTop: '상위 {count}명의 트레이더를 표시 중. Pro로 전체를 확인하세요',
   rankingControlsShowingTopPromo: '한정 무료 · 상위 {count}명 전체 잠금 해제됨',
   rankingControlsUpgrade: '업그레이드 \u2192',
 

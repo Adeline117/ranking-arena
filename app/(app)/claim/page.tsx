@@ -24,7 +24,6 @@ import { SearchResult, LinkedTrader, isDex } from './components/types'
 import { HeroSection } from './components/HeroSection'
 import { BenefitsSection } from './components/BenefitsSection'
 import { SearchSection } from './components/SearchSection'
-import { StatsSection } from './components/StatsSection'
 import { FaqSection } from './components/FaqSection'
 import { CexVerifyForm } from './components/CexVerifyForm'
 import { DexVerifyForm } from './components/DexVerifyForm'
@@ -174,7 +173,6 @@ export default function ClaimPage() {
             {linkedTraders.length === 0 && (
               <>
                 <BenefitsSection />
-                <StatsSection />
               </>
             )}
             <FaqSection />

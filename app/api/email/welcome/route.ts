@@ -95,7 +95,7 @@ function buildWelcomeEmail(): string {
 
       <div style="border-top: 1px solid #2a2a3e; padding-top: 16px; text-align: center;">
         <p style="margin: 0; font-size: 12px; color: #64748b;">
-          Arena &mdash; Ranking 8,000+ traders across 45+ exchanges<br/>
+          Arena &mdash; Ranking traders across 45+ exchanges<br/>
           <a href="${BASE_URL}/settings" style="color: #6366f1;">Manage email preferences</a>
         </p>
       </div>

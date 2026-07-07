@@ -15,7 +15,7 @@ interface Step {
 const STEPS: Step[] = [
   {
     title: 'Welcome to Arena',
-    description: 'Browse rankings of 8,000+ traders across 45 exchanges',
+    description: 'Browse trader rankings across 45+ exchanges',
     cta: 'Explore Rankings →',
   },
   {
