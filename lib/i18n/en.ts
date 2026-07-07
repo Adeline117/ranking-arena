@@ -1119,7 +1119,8 @@ const en = {
   claimWalletTimeout: 'Wallet connection timed out. Please try again.',
   // Trader accounts (linked)
   myTraderAccounts: 'My Trader Accounts',
-  myTraderAccountsDesc: 'Manage your claimed trader identities on the leaderboard',
+  myTraderAccountsDesc:
+    'Claim and manage your public trader identities on the leaderboard (different from connecting an exchange to sync your portfolio)',
   linkedAccounts: 'Linked Accounts',
   linkedAccountsSection: 'Linked Accounts',
   linkNewAccount: 'Link New Account',
@@ -3154,7 +3155,7 @@ const en = {
   // Exchange binding banner
   bindExchangeBannerTitle: 'Connect your exchange account',
   bindExchangeBannerDesc:
-    'Sync your trading data automatically, join rankings, and showcase real performance',
+    'Sync your live positions and performance to your portfolio via read-only API (different from claiming a trader identity on the leaderboard)',
   goToBind: 'Connect',
 
   // Search dropdown
