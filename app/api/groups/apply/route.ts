@@ -1,7 +1,6 @@
 import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { logger } from '@/lib/logger'
-import { notifyNewGroup } from '@/lib/notifications/activity-alerts'
 import { socialFeatureGuard } from '@/lib/features'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
 
@@ -111,7 +110,8 @@ export const POST = withAuth(
         }
       : defaultRoleNames
 
-    // 创建申请 (auto-approved)
+    // 创建 pending 申请 —— 真审核流：仅提交申请，不建群。
+    // 建群 + 加组长成员的逻辑已搬到 approve/route.ts，由管理员批准时才执行。
     const { data: application, error: insertError } = await supabase
       .from('group_applications')
       .insert({
@@ -125,7 +125,7 @@ export const POST = withAuth(
         rules_json: rules_json || null,
         rules: rules?.trim() || null,
         is_premium_only: is_premium_only || false,
-        status: 'approved',
+        status: 'pending',
       })
       .select()
       .single()
@@ -135,55 +135,10 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Failed to submit application' }, { status: 500 })
     }
 
-    // Auto-create the group immediately
-    const slug =
-      name
-        .trim()
-        .toLowerCase()
-        .replace(/[^a-z0-9\u4e00-\u9fa5]+/g, '-')
-        .replace(/^-|-$/g, '') || `group-${Date.now()}`
-    const { data: newGroup, error: groupError } = await supabase
-      .from('groups')
-      .insert({
-        name: name.trim(),
-        name_en: name_en?.trim() || null,
-        description: description?.trim() || null,
-        description_en: description_en?.trim() || null,
-        avatar_url: avatar_url || null,
-        slug,
-        created_by: user.id,
-        role_names: finalRoleNames,
-        rules_json: rules_json || null,
-        rules: rules?.trim() || null,
-        is_premium_only: is_premium_only || false,
-      })
-      .select('id')
-      .single()
-
-    if (groupError) {
-      logger.dbError('create-group', groupError, { userId: user.id, groupName: name })
-      return NextResponse.json({ error: 'Failed to create group' }, { status: 500 })
-    }
-
-    // Add creator as owner member
-    const { error: memberError } = await supabase.from('group_members').insert({
-      group_id: newGroup.id,
-      user_id: user.id,
-      role: 'owner',
-    })
-
-    if (memberError) {
-      logger.dbError('add-group-owner', memberError, { groupId: newGroup.id, userId: user.id })
-    }
-
-    // 实时通知 (fire-and-forget)
-    notifyNewGroup(user.email ?? null, name.trim())
-
     return NextResponse.json({
       success: true,
-      message: 'Group created successfully!',
+      message: 'Application submitted, awaiting admin review',
       application,
-      group: newGroup,
     })
   },
   { name: 'groups-apply-post', rateLimit: 'write' }
@@ -195,11 +150,11 @@ export const GET = withAuth(
     const guard = socialFeatureGuard()
     if (guard) return guard
 
-    // 获取用户的所有申请
+    // 获取用户的所有申请（含 group_id：批准后前往小组的链接）
     const { data: applications, error } = await supabase
       .from('group_applications')
       .select(
-        'id, applicant_id, name, name_en, description, description_en, avatar_url, role_names, rules_json, rules, is_premium_only, status, reject_reason, reviewed_at, reviewed_by, created_at'
+        'id, applicant_id, name, name_en, description, description_en, avatar_url, role_names, rules_json, rules, is_premium_only, status, reject_reason, group_id, reviewed_at, reviewed_by, created_at'
       )
       .eq('applicant_id', user.id)
       .order('created_at', { ascending: false })
