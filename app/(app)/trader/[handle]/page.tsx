@@ -13,6 +13,7 @@ import { isRetiredSource } from '@/lib/constants/retired-sources'
 import { getDataMode } from '@/lib/constants/serving-cutover'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
 import { getFirstScreen } from '@/lib/data/serving/first-screen'
+import { fetchSimilarTraders } from '@/lib/data/trader/similar'
 import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import type { TraderFirstScreen } from '@/lib/data/serving/types'
@@ -613,6 +614,33 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
     }
 
+    // U2-12: similar-traders module regression. The serving three-tab data path
+    // (useServingTabData → /core) never carried similarTraders, so OverviewTab's
+    // `traderSimilar.length > 0` guard permanently hid the module for serving
+    // sources (the default). Legacy path fed it via bridge.ts; serving didn't.
+    // Fix: compute it once here server-side (fetchSimilarTraders is Redis-cached,
+    // 15min warm) using the 90d board score/roi, map to the OverviewTab shape
+    // (same shape as bridge.ts:203), and thread it down as serverSimilarTraders.
+    const similarScoreExtra = best?.extras.arena_score
+    const similarArenaScore = typeof similarScoreExtra === 'number' ? similarScoreExtra : null
+    const serverSimilarTraders = (
+      await fetchSimilarTraders(
+        getReadReplica(),
+        servingResolved.source,
+        servingResolved.exchangeTraderId,
+        similarArenaScore,
+        servingTraderData.roi ?? null
+      ).catch(() => [])
+    ).map((st) => ({
+      handle: st.handle || st.traderKey,
+      id: st.traderKey,
+      followers: st.followers ?? 0,
+      avatar_url: st.avatarUrl ?? undefined,
+      source: st.platform,
+      roi_90d: st.roi ?? undefined,
+      arena_score: st.arenaScore ?? undefined,
+    }))
+
     const servingJsonLd = generateTraderProfilePageSchema({
       handle: servingTraderData.handle,
       id: servingResolved.exchangeTraderId,
@@ -646,6 +674,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
             dataMode="serving"
             servingFirstScreen={firstScreen}
             servingCapability={capabilities[servingResolved.source] ?? null}
+            serverSimilarTraders={serverSimilarTraders}
           />
         </ErrorBoundary>
       </>
