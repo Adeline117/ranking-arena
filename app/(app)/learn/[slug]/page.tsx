@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
 import { notFound } from 'next/navigation'
-import { ARTICLES, getArticleBySlug } from '../articles'
+import { ARTICLES, getArticleBySlug, pickLocalized } from '../articles'
 import { getServerTranslation } from '@/lib/i18n/server'
 
 export const revalidate = 3600
@@ -18,12 +18,13 @@ export async function generateMetadata({
   const { slug } = await params
   const article = getArticleBySlug(slug)
   if (!article) return { title: 'Not Found' }
+  const { lang } = await getServerTranslation()
   return {
     // `absolute` opts out of the root layout template ('%s | Arena'); this page
     // uses its own 'Arena Learn' branding suffix and must not have ' | Arena'
     // appended on top of it.
-    title: { absolute: `${article.title} | Arena Learn` },
-    description: article.excerpt,
+    title: { absolute: `${pickLocalized(article.title, lang)} | Arena Learn` },
+    description: pickLocalized(article.excerpt, lang),
   }
 }
 
@@ -183,7 +184,7 @@ export default async function LearnArticlePage({ params }: { params: Promise<{ s
     notFound()
   }
 
-  const { t } = await getServerTranslation()
+  const { t, lang } = await getServerTranslation()
 
   // Dynamic import: keeps the sanitize-html parser off this page's cold-start
   // path so a sanitizer load failure can never turn the notFound() above into a 500.
@@ -343,7 +344,7 @@ export default async function LearnArticlePage({ params }: { params: Promise<{ s
                   color: 'var(--color-text-primary, #fff)',
                 }}
               >
-                {prev.title}
+                {pickLocalized(prev.title, lang)}
               </div>
             </Link>
           )}
@@ -377,7 +378,7 @@ export default async function LearnArticlePage({ params }: { params: Promise<{ s
                   color: 'var(--color-text-primary, #fff)',
                 }}
               >
-                {next.title}
+                {pickLocalized(next.title, lang)}
               </div>
             </Link>
           )}
