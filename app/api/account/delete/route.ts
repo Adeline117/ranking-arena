@@ -58,8 +58,11 @@ export const POST = withAuth(
     const now = new Date()
     const scheduledDeletion = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) // 30 days
 
-    // Soft delete: set deleted_at, save originals
-    await supabase
+    // Soft delete: set deleted_at, save originals.
+    // CRITICAL: this write MUST be error-checked. If it silently fails, deleted_at
+    // never gets set → the 30-day hard-delete cron never fires → the account
+    // survives while the user was told it's scheduled for deletion (GDPR exposure).
+    const { error: softDeleteError } = await supabase
       .from('user_profiles')
       .update({
         deleted_at: now.toISOString(),
@@ -69,6 +72,17 @@ export const POST = withAuth(
         original_email: user.email || null,
       })
       .eq('id', user.id)
+
+    if (softDeleteError) {
+      logger.error('Account soft-delete write failed — aborting deletion', {
+        userId: user.id,
+        error: softDeleteError.message,
+      })
+      return NextResponse.json(
+        { error: 'Failed to schedule account deletion. Please try again.' },
+        { status: 500 }
+      )
+    }
 
     // Update author_handle on posts to indicate deleted user
     await supabase.from('posts').update({ author_handle: null }).eq('author_id', user.id)

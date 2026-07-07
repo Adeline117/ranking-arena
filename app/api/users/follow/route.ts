@@ -38,16 +38,53 @@ async function updateFollowCounts(
       .eq('follower_id', followerId),
   ])
 
-  await Promise.all([
-    supabase
-      .from('user_profiles')
-      .update({ follower_count: followerCountRes.count ?? 0 })
-      .eq('id', followingId),
-    supabase
-      .from('user_profiles')
-      .update({ following_count: followingCountRes.count ?? 0 })
-      .eq('id', followerId),
-  ])
+  // Guard against a transient count-read failure silently resetting the cached
+  // count to 0. On error, `count` is null; `?? 0` would then OVERWRITE a real
+  // follower_count with 0. Skip the update for whichever count failed to read,
+  // and log so the failure is observable (fireAndForget only sees rejections,
+  // never a resolved `{ error }`).
+  const updates: Promise<unknown>[] = []
+  if (followerCountRes.error) {
+    logger.warn('[User Follow API] follower_count read failed, skipping update', {
+      followingId,
+      error: followerCountRes.error.message,
+    })
+  } else {
+    updates.push(
+      (async () => {
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({ follower_count: followerCountRes.count ?? 0 })
+          .eq('id', followingId)
+        if (error)
+          logger.warn('[User Follow API] follower_count update failed', {
+            followingId,
+            error: error.message,
+          })
+      })()
+    )
+  }
+  if (followingCountRes.error) {
+    logger.warn('[User Follow API] following_count read failed, skipping update', {
+      followerId,
+      error: followingCountRes.error.message,
+    })
+  } else {
+    updates.push(
+      (async () => {
+        const { error } = await supabase
+          .from('user_profiles')
+          .update({ following_count: followingCountRes.count ?? 0 })
+          .eq('id', followerId)
+        if (error)
+          logger.warn('[User Follow API] following_count update failed', {
+            followerId,
+            error: error.message,
+          })
+      })()
+    )
+  }
+  await Promise.all(updates)
 }
 
 /**

@@ -9,6 +9,7 @@ import { success } from '@/lib/api'
 import { withPublic, withAuth } from '@/lib/api/middleware'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { socialFeatureGuard } from '@/lib/features'
+import logger from '@/lib/logger'
 
 // Allowed emoji set (crypto-relevant, keep it focused)
 const ALLOWED_EMOJIS = new Set([
@@ -64,14 +65,22 @@ export const POST = withAuth(
 
     if (existing) {
       // Remove (toggle off)
-      await sb.from('post_emoji_reactions').delete().eq('id', existing.id)
+      const { error } = await sb.from('post_emoji_reactions').delete().eq('id', existing.id)
+      if (error) {
+        logger.error('[emoji-react] toggle-off delete failed', { postId, error: error.message })
+        return NextResponse.json({ error: 'Failed to remove reaction' }, { status: 500 })
+      }
     } else {
       // Add
-      await sb.from('post_emoji_reactions').insert({
+      const { error } = await sb.from('post_emoji_reactions').insert({
         post_id: postId,
         user_id: user.id,
         emoji,
       })
+      if (error) {
+        logger.error('[emoji-react] add insert failed', { postId, error: error.message })
+        return NextResponse.json({ error: 'Failed to add reaction' }, { status: 500 })
+      }
     }
 
     // Get updated aggregated counts
