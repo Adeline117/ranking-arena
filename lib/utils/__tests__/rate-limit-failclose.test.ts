@@ -45,13 +45,14 @@ async function loadRateLimitWithUpstash(opts: {
 
     jest.doMock('@upstash/ratelimit', () => {
       const Ratelimit = jest.fn(() => ({
-        limit: jest.fn(async () =>
-          opts.limitResult ?? {
-            success: true,
-            limit: 10,
-            remaining: 9,
-            reset: Date.now() + 60_000,
-          }
+        limit: jest.fn(
+          async () =>
+            opts.limitResult ?? {
+              success: true,
+              limit: 10,
+              remaining: 9,
+              reset: Date.now() + 60_000,
+            }
         ),
       })) as unknown as jest.Mock & { slidingWindow: jest.Mock }
       Ratelimit.slidingWindow = jest.fn(() => 'sliding-window-marker')
@@ -145,6 +146,46 @@ describe('checkRateLimitFull with Redis errors at runtime', () => {
     else delete process.env.UPSTASH_REDIS_REST_URL
     if (originalToken !== undefined) process.env.UPSTASH_REDIS_REST_TOKEN = originalToken
     else delete process.env.UPSTASH_REDIS_REST_TOKEN
+  })
+
+  it('failClose: true → returns 503 when Redis is configured but construction fails (connectionFailed path)', async () => {
+    // Env vars ARE set (runtime describe block) but the Redis constructor throws
+    // → getUpstashRedis latches connectionFailed and returns null → the
+    // !redisClient fallback branch. For a fail-close preset with Redis
+    // *configured but down*, this must 503 rather than silently degrade to
+    // weak per-instance memory limiting (the 万级/airdrop hazard).
+    const { checkRateLimitFull } = await loadRateLimitWithUpstash({ redisThrows: true })
+    const req = makeRequest()
+
+    const result = await checkRateLimitFull(req, {
+      requests: 5,
+      window: 60,
+      prefix: 'failclose-redis-down',
+      failClose: true,
+    })
+
+    expect(result.response).not.toBeNull()
+    expect(result.response!.status).toBe(503)
+    expect(result.meta).toBeNull()
+    const body = await result.response!.json()
+    expect(body).toMatchObject({ success: false, code: 'SERVICE_UNAVAILABLE' })
+  })
+
+  it('failClose: false → still uses memory fallback when Redis construction fails', async () => {
+    // Same Redis-down condition but a fail-open preset → memory fallback allows
+    // the (first) request; we must NOT 503 public reads on a Redis blip.
+    const { checkRateLimitFull } = await loadRateLimitWithUpstash({ redisThrows: true })
+    const req = makeRequest()
+
+    const result = await checkRateLimitFull(req, {
+      requests: 100,
+      window: 60,
+      prefix: 'failopen-redis-down',
+      // failClose omitted → default false
+    })
+
+    expect(result.response).toBeNull()
+    expect(result.meta).not.toBeNull()
   })
 
   it('failClose: true → returns 503 when ratelimiter.limit throws', async () => {

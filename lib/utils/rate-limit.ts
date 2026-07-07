@@ -212,6 +212,37 @@ export async function checkRateLimitFull(
 
     // Redis 不可用时，使用内存限流作为后备（不再完全跳过）
     if (!redisClient) {
+      // fail-close 预设(login/payment/sensitive)绝不能降级到"每实例"内存限流:
+      // Vercel 横向扩 N 实例 → 有效上限变成 N×配置,万级+空投刷号时形同虚设。
+      // 但要区分两种 redisClient=null:
+      //  (a) env 已配但运行时连接失败(connectionFailed 锁存)= 生产真故障 → failClose 直接 503;
+      //  (b) env 根本未配 = dev/preview(Redis 从来就没有)→ 仍走内存兜底,别把本地 login 打死。
+      // 只有 (a) 才 503,故用 env 是否存在来判定(镜像下方 catch 的 failClose 分支)。
+      const redisConfigured = !!(
+        process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+      )
+      if (finalConfig.failClose && redisConfigured) {
+        rateLimitLogger.error(
+          '[RATE-LIMIT] Redis unavailable and preset is fail-close — returning 503 instead of weak per-instance memory limiting'
+        )
+        return {
+          response: new NextResponse(
+            JSON.stringify({
+              success: false,
+              error: '服务暂时不可用，请稍后再试',
+              code: 'SERVICE_UNAVAILABLE',
+            }),
+            {
+              status: 503,
+              headers: {
+                'Content-Type': 'application/json',
+                'Retry-After': '30',
+              },
+            }
+          ),
+          meta: null,
+        }
+      }
       if (process.env.NODE_ENV === 'production') {
         rateLimitLogger.warn(
           '[RATE-LIMIT] Falling back to in-memory rate limiting — not suitable for horizontal scaling'
