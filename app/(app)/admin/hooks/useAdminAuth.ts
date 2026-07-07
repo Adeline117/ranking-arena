@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
+import { getGlobalToast } from '@/lib/hooks/useApiMutation'
+import { t } from '@/lib/i18n'
 
 // Admin check is done via database role in user_profiles.role
 // This prevents exposing admin emails in the client bundle
@@ -24,9 +26,10 @@ export function useAdminAuth() {
 
   async function checkAuth() {
     try {
-       
-      const { data: { session } } = await supabase.auth.getSession()
-      
+      const {
+        data: { session },
+      } = await supabase.auth.getSession()
+
       if (!session?.user) {
         router.push(`/login?returnUrl=${encodeURIComponent(pathname)}`)
         return
@@ -44,11 +47,13 @@ export function useAdminAuth() {
         .maybeSingle()
 
       if (profile?.role !== 'admin') {
-        // Not an admin, redirect to home
+        // Not an admin: tell them why before redirecting (was a silent bounce
+        // to the homepage — confusing for internal staff who mis-click).
+        getGlobalToast()?.(t('u13admin_accessRequired'), 'error')
         router.push('/')
         return
       }
-      
+
       setIsAdmin(true)
       setAuthChecking(false)
     } catch (error) {

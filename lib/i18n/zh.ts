@@ -6413,6 +6413,7 @@ const zh = {
   u2detail_chartMean: '均值',
   u2detail_chartMedian: '中位数',
   u2detail_chartDays: '天数',
+  u13admin_accessRequired: '需要管理员权限',
 } as const
 
 export default zh
