@@ -41,6 +41,7 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
   const [_loadingGroups, setLoadingGroups] = useState(true)
   const [_groupsError, setGroupsError] = useState(false)
   const [subTab, setSubTab] = useState<SubTabKey>('recommended')
+  const [groupQuery, setGroupQuery] = useState('')
 
   // Load user's joined groups
   useEffect(() => {
@@ -251,99 +252,142 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
                 >
                   {t('groupsPopularTitle')}
                 </Text>
-                <Box
+                {/* Group-name search — the top navbar search only covers traders,
+                    so groups had no discovery control (U9-7). Filters the loaded list. */}
+                <input
+                  type="text"
+                  value={groupQuery}
+                  onChange={(e) => setGroupQuery(e.target.value)}
+                  placeholder={t('u9grp_searchPlaceholder')}
+                  aria-label={t('u9grp_searchPlaceholder')}
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
-                    gap: tokens.spacing[3],
+                    width: '100%',
+                    marginBottom: tokens.spacing[3],
+                    padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.bg.secondary,
+                    color: tokens.colors.text.primary,
+                    fontSize: tokens.typography.fontSize.sm,
+                    outline: 'none',
                   }}
-                >
-                  {(initialGroups as Group[]).map((g) => {
-                    const displayName = localizedLabel(g.name, g.name_en, language)
+                />
+                {(() => {
+                  const q = groupQuery.trim().toLowerCase()
+                  const filteredGroups = q
+                    ? (initialGroups as Group[]).filter((g) =>
+                        [g.name, g.name_en]
+                          .filter(Boolean)
+                          .some((n) => (n as string).toLowerCase().includes(q))
+                      )
+                    : (initialGroups as Group[])
+                  if (filteredGroups.length === 0) {
                     return (
-                      <Link
-                        key={g.id}
-                        href={`/groups/${g.id}`}
-                        prefetch={false}
-                        className="card-hover"
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: tokens.spacing[3],
-                          padding: tokens.spacing[4],
-                          background: tokens.colors.bg.secondary,
-                          borderRadius: tokens.radius.lg,
-                          border: `1px solid ${tokens.colors.border.primary}`,
-                          textDecoration: 'none',
-                          transition: `border-color ${tokens.transition.fast}`,
-                        }}
-                        onMouseEnter={(e) =>
-                          (e.currentTarget.style.borderColor = tokens.colors.accent.primary)
-                        }
-                        onMouseLeave={(e) =>
-                          (e.currentTarget.style.borderColor = tokens.colors.border.primary)
-                        }
+                      <Text
+                        size="sm"
+                        color="tertiary"
+                        style={{ padding: `${tokens.spacing[3]} 0` }}
                       >
-                        {g.avatar_url ? (
-                          <Image
-                            src={avatarSrc(g.avatar_url)}
-                            alt={displayName}
-                            width={40}
-                            height={40}
-                            unoptimized
+                        {t('u9grp_noSearchResults')}
+                      </Text>
+                    )
+                  }
+                  return (
+                    <Box
+                      style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))',
+                        gap: tokens.spacing[3],
+                      }}
+                    >
+                      {filteredGroups.map((g) => {
+                        const displayName = localizedLabel(g.name, g.name_en, language)
+                        return (
+                          <Link
+                            key={g.id}
+                            href={`/groups/${g.id}`}
+                            prefetch={false}
+                            className="card-hover"
                             style={{
-                              borderRadius: tokens.radius.full,
-                              objectFit: 'cover',
-                              minWidth: 40,
-                            }}
-                          />
-                        ) : (
-                          <div
-                            style={{
-                              width: 40,
-                              height: 40,
-                              minWidth: 40,
-                              borderRadius: tokens.radius.full,
-                              background:
-                                'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-border))',
                               display: 'flex',
                               alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: 16,
-                              fontWeight: tokens.typography.fontWeight.semibold,
-                              color: tokens.colors.text.primary,
+                              gap: tokens.spacing[3],
+                              padding: tokens.spacing[4],
+                              background: tokens.colors.bg.secondary,
+                              borderRadius: tokens.radius.lg,
+                              border: `1px solid ${tokens.colors.border.primary}`,
+                              textDecoration: 'none',
+                              transition: `border-color ${tokens.transition.fast}`,
                             }}
+                            onMouseEnter={(e) =>
+                              (e.currentTarget.style.borderColor = tokens.colors.accent.primary)
+                            }
+                            onMouseLeave={(e) =>
+                              (e.currentTarget.style.borderColor = tokens.colors.border.primary)
+                            }
                           >
-                            {(displayName || '?').charAt(0).toUpperCase()}
-                          </div>
-                        )}
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <div
-                            style={{
-                              fontSize: tokens.typography.fontSize.sm,
-                              fontWeight: tokens.typography.fontWeight.medium,
-                              color: tokens.colors.text.primary,
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {displayName}
-                          </div>
-                          <div
-                            style={{
-                              fontSize: tokens.typography.fontSize.xs,
-                              color: tokens.colors.text.tertiary,
-                              marginTop: 1,
-                            }}
-                          >
-                            {(g.member_count || 0).toLocaleString('en-US')} {t('members')}
-                          </div>
-                        </div>
-                      </Link>
-                    )
-                  })}
-                </Box>
+                            {g.avatar_url ? (
+                              <Image
+                                src={avatarSrc(g.avatar_url)}
+                                alt={displayName}
+                                width={40}
+                                height={40}
+                                unoptimized
+                                style={{
+                                  borderRadius: tokens.radius.full,
+                                  objectFit: 'cover',
+                                  minWidth: 40,
+                                }}
+                              />
+                            ) : (
+                              <div
+                                style={{
+                                  width: 40,
+                                  height: 40,
+                                  minWidth: 40,
+                                  borderRadius: tokens.radius.full,
+                                  background:
+                                    'linear-gradient(135deg, var(--color-accent-primary-30), var(--color-pro-gold-border))',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  fontSize: 16,
+                                  fontWeight: tokens.typography.fontWeight.semibold,
+                                  color: tokens.colors.text.primary,
+                                }}
+                              >
+                                {(displayName || '?').charAt(0).toUpperCase()}
+                              </div>
+                            )}
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div
+                                style={{
+                                  fontSize: tokens.typography.fontSize.sm,
+                                  fontWeight: tokens.typography.fontWeight.medium,
+                                  color: tokens.colors.text.primary,
+                                  overflow: 'hidden',
+                                  textOverflow: 'ellipsis',
+                                  whiteSpace: 'nowrap',
+                                }}
+                              >
+                                {displayName}
+                              </div>
+                              <div
+                                style={{
+                                  fontSize: tokens.typography.fontSize.xs,
+                                  color: tokens.colors.text.tertiary,
+                                  marginTop: 1,
+                                }}
+                              >
+                                {(g.member_count || 0).toLocaleString('en-US')} {t('members')}
+                              </div>
+                            </div>
+                          </Link>
+                        )
+                      })}
+                    </Box>
+                  )
+                })()}
                 {!userId && (
                   <Box style={{ textAlign: 'center', marginTop: tokens.spacing[4] }}>
                     <Text size="xs" color="tertiary">
