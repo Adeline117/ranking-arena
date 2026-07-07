@@ -19,9 +19,13 @@ interface FlashNews {
   title: string
   title_zh?: string
   title_en?: string
+  title_ja?: string
+  title_ko?: string
   content?: string
   content_zh?: string
   content_en?: string
+  content_ja?: string
+  content_ko?: string
   source: string
   source_url?: string
   category:
@@ -283,15 +287,17 @@ export default function FlashNewsPageClient() {
     async (items: FlashNews[]) => {
       // /api/translate requires auth (Bearer header) — skip silently for anonymous visitors
       if (!isLoggedIn || !accessToken) return
-      const targetLang = language as 'zh' | 'en'
+      const targetLang = language as 'zh' | 'en' | 'ja' | 'ko'
       const needsTranslation = items
         .filter((item) => {
           if (!item.content) return false
           if (translatedContent[item.id]) return false
           if (translatingIds.has(item.id)) return false
-          // If we have a pre-translated version, no need
+          // If we have a pre-translated version for this language, no need
           if (targetLang === 'zh' && item.content_zh) return false
           if (targetLang === 'en' && item.content_en) return false
+          if (targetLang === 'ja' && item.content_ja) return false
+          if (targetLang === 'ko' && item.content_ko) return false
           return true
         })
         .slice(0, 5) // batch max 5
@@ -357,14 +363,20 @@ export default function FlashNewsPageClient() {
   }, [language])
 
   const getNewsTitle = (item: FlashNews) => {
-    if (language === 'zh') return item.title_zh || item.title
+    // Read the current UI language's pre-translated title; fall back to the
+    // English title, then the raw original. (U7-5 added ja/ko.)
+    if (language === 'zh') return item.title_zh || item.title_en || item.title
+    if (language === 'ja') return item.title_ja || item.title_en || item.title
+    if (language === 'ko') return item.title_ko || item.title_en || item.title
     return item.title_en || item.title
   }
 
   const getNewsContent = (item: FlashNews) => {
     if (!item.content) return null
-    // Use pre-translated fields first
+    // Use pre-translated fields first, per current UI language (U7-5 added ja/ko).
     if (language === 'zh' && item.content_zh) return item.content_zh
+    if (language === 'ja' && item.content_ja) return item.content_ja
+    if (language === 'ko' && item.content_ko) return item.content_ko
     if (language === 'en' && item.content_en) return item.content_en
     // Then use API-translated content
     if (translatedContent[item.id]) return translatedContent[item.id]
@@ -410,9 +422,13 @@ export default function FlashNewsPageClient() {
         n.title,
         n.title_zh,
         n.title_en,
+        n.title_ja,
+        n.title_ko,
         n.content,
         n.content_zh,
         n.content_en,
+        n.content_ja,
+        n.content_ko,
         ...(n.tags || []),
       ]
         .filter(Boolean)

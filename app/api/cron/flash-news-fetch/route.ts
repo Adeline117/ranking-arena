@@ -7,9 +7,15 @@ import { NextRequest } from 'next/server'
 import logger from '@/lib/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { withCron } from '@/lib/api/with-cron'
+import { classifyCategory, isNonCrypto, type CanonicalCategory } from '@/lib/flash-news/classify'
+import { translateText, type TranslateTarget } from '@/lib/services/translate-server'
 
 export const dynamic = 'force-dynamic'
-export const maxDuration = 30
+// Bumped 30→60 for the ingest-time title pre-translation (U7-5): each new item
+// fans out 3 free gtx calls (zh/ja/ko). Translation is best-effort + bounded
+// (small batches, per-call timeout) so it never actually approaches this, but
+// the extra headroom guarantees a slow gtx run can't truncate the insert.
+export const maxDuration = 60
 
 interface RSSItem {
   title: string
@@ -26,274 +32,10 @@ interface FeedConfig {
   category: CanonicalCategory
 }
 
-// ────────────────────────────────────────────────────────────────────────────
-// Content-based category classifier (U7-3)
-// Root cause: category was 100% hardcoded per RSS source, so every item from a
-// given feed got the same category regardless of what the article was about
-// (CryptoBriefing → everything "defi", generic feeds dumped funerals / 世界杯 /
-// 台海 into "defi"). The classifier below routes on title+content keywords and
-// OVERRIDES the source's hardcoded category. Output is restricted to the 5
-// canonical categories the UI knows (see FlashNewsPageClient CATEGORY_DISPLAY_MAP):
-// btc_eth | altcoin | defi | macro | exchange. We never emit a value the display
-// map doesn't recognize (no 'nft').
-// ────────────────────────────────────────────────────────────────────────────
-
-type CanonicalCategory = 'btc_eth' | 'altcoin' | 'defi' | 'macro' | 'exchange'
-
-// Keyword tables. Matched case-insensitively as substrings against `title + content`.
-// zh keywords included because generic feeds surface Chinese-language items.
-const CATEGORY_KEYWORDS: Record<CanonicalCategory, string[]> = {
-  // Exchange-specific: named CEX/DEX + exchange actions (listing / reserves / delisting)
-  exchange: [
-    'binance',
-    'okx',
-    'coinbase',
-    'bybit',
-    'kraken',
-    'kucoin',
-    'bitget',
-    'mexc',
-    'gate.io',
-    'gate io',
-    'htx',
-    'huobi',
-    'upbit',
-    'bitfinex',
-    'crypto.com',
-    'bitstamp',
-    'bithumb',
-    'gemini exchange',
-    'listing',
-    'will list',
-    'lists ',
-    'delisting',
-    'delist',
-    'proof of reserve',
-    'proof-of-reserve',
-    'reserves',
-    '上币',
-    '上线交易',
-    '下架',
-    '储备证明',
-    '交易所',
-  ],
-  // Macro / regulation
-  macro: [
-    'fed',
-    'federal reserve',
-    'interest rate',
-    'rate cut',
-    'rate hike',
-    'inflation',
-    'cpi',
-    'gdp',
-    'recession',
-    'regulation',
-    'regulatory',
-    'regulator',
-    ' sec ',
-    'sec ',
-    'cftc',
-    'lawsuit',
-    'sues',
-    'court',
-    'congress',
-    'senate',
-    'treasury',
-    'tariff',
-    'policy',
-    'central bank',
-    'macro',
-    '监管',
-    '宏观',
-    '美联储',
-    '利率',
-    '通胀',
-    '政策',
-    '法案',
-  ],
-  // DeFi
-  defi: [
-    'defi',
-    'tvl',
-    'lending',
-    'dex ',
-    'aave',
-    'uniswap',
-    'yield',
-    'liquidity pool',
-    'staking',
-    'restaking',
-    'eigenlayer',
-    'curve finance',
-    'compound',
-    'makerdao',
-    'lido',
-    'pendle',
-    'protocol',
-    'stablecoin',
-    'usdt',
-    'usdc',
-    'dai',
-    '去中心化金融',
-    '质押',
-    '流动性',
-  ],
-  // BTC / ETH majors
-  btc_eth: [
-    'bitcoin',
-    'btc',
-    'ethereum',
-    ' eth',
-    'eth ',
-    'ether',
-    'satoshi',
-    'halving',
-    'vitalik',
-    'spot etf',
-    'etf',
-    '比特币',
-    '以太坊',
-  ],
-  // Named altcoins / memecoins
-  altcoin: [
-    'solana',
-    ' sol ',
-    'cardano',
-    'ada ',
-    'ripple',
-    'xrp',
-    'dogecoin',
-    'doge',
-    'shiba',
-    'avalanche',
-    'avax',
-    'polkadot',
-    'polygon',
-    'matic',
-    'chainlink',
-    'link ',
-    'litecoin',
-    'tron',
-    'ton ',
-    'sui ',
-    'aptos',
-    'memecoin',
-    'meme coin',
-    'altcoin',
-    'bnb',
-    'pepe',
-    'bonk',
-    '山寨',
-  ],
-}
-
-// Tie-break priority (most specific / salient first).
-const CATEGORY_PRIORITY: CanonicalCategory[] = ['exchange', 'macro', 'defi', 'altcoin', 'btc_eth']
-
-// Broad crypto vocabulary — presence of ANY term marks the item as crypto-related.
-const CRYPTO_TERMS = [
-  'crypto',
-  'bitcoin',
-  'btc',
-  'ethereum',
-  'eth',
-  'blockchain',
-  'token',
-  'coin',
-  'defi',
-  'nft',
-  'web3',
-  'stablecoin',
-  'altcoin',
-  'wallet',
-  'exchange',
-  'mining',
-  'miner',
-  'satoshi',
-  'onchain',
-  'on-chain',
-  'ledger',
-  'dao',
-  'airdrop',
-  'staking',
-  ...Object.values(CATEGORY_KEYWORDS).flat(),
-  '加密',
-  '币',
-  '区块链',
-  '链上',
-  '钱包',
-]
-
-// Obvious off-topic markers from generic/aggregator feeds.
-const NON_CRYPTO_MARKERS = [
-  'funeral',
-  'obituary',
-  'world cup',
-  'football',
-  'soccer',
-  'nba',
-  'super bowl',
-  'oscar',
-  'grammy',
-  'celebrity',
-  'royal family',
-  'election',
-  'weather forecast',
-  'hurricane',
-  'earthquake',
-  'wildfire',
-  'recipe',
-  'movie review',
-  'box office',
-  '葬礼',
-  '世界杯',
-  '台海',
-  '选举',
-  '足球',
-  '奥斯卡',
-]
-
-function countMatches(haystack: string, keywords: string[]): number {
-  let n = 0
-  for (const kw of keywords) {
-    if (haystack.includes(kw)) n++
-  }
-  return n
-}
-
-/** True if the item looks non-crypto and should be dropped (conservative). */
-function isNonCrypto(title: string, content: string | null): boolean {
-  const hay = `${title} ${content || ''}`.toLowerCase()
-  const hasCrypto = CRYPTO_TERMS.some((t) => hay.includes(t))
-  if (hasCrypto) return false
-  // No crypto term AND hits an obvious off-topic marker → drop.
-  return NON_CRYPTO_MARKERS.some((m) => hay.includes(m))
-}
-
-/**
- * Classify by title+content keywords. Returns a canonical category, or the
- * source's hardcoded fallback if nothing matches. Highest keyword-hit count
- * wins; ties broken by CATEGORY_PRIORITY.
- */
-function classifyCategory(
-  title: string,
-  content: string | null,
-  fallback: CanonicalCategory
-): CanonicalCategory {
-  const hay = `${title} ${content || ''}`.toLowerCase()
-  let best: CanonicalCategory | null = null
-  let bestScore = 0
-  for (const cat of CATEGORY_PRIORITY) {
-    const score = countMatches(hay, CATEGORY_KEYWORDS[cat])
-    // strict > keeps priority order on ties (first in CATEGORY_PRIORITY wins)
-    if (score > bestScore) {
-      bestScore = score
-      best = cat
-    }
-  }
-  return bestScore > 0 && best ? best : fallback
-}
+// Content-based category classifier (U7-3) + non-crypto filter now live in
+// lib/flash-news/classify.ts so the cron + backfill script share one source of
+// truth. classifyCategory OVERRIDES the source's hardcoded category; output is
+// restricted to the 5 canonical categories the UI knows.
 
 const RSS_FEEDS: FeedConfig[] = [
   {
@@ -377,6 +119,47 @@ async function fetchRSSFeed(feed: FeedConfig): Promise<
   }
 }
 
+// Ingest-time multilingual titles (U7-5). Titles arrive in English, so we set
+// title_en = original and pre-translate into zh/ja/ko via the free gtx endpoint.
+// Best-effort: a failed/timed-out translation leaves that column null and the
+// frontend falls back to title_en. gtx has rate limits, so we translate in small
+// concurrent batches with a short delay between batches.
+const TITLE_TRANSLATE_TARGETS: TranslateTarget[] = ['zh', 'ja', 'ko']
+
+type TranslatedTitles = {
+  title_en: string
+  title_zh: string | null
+  title_ja: string | null
+  title_ko: string | null
+}
+
+async function withTranslatedTitles<T extends { title: string }>(
+  items: T[]
+): Promise<(T & TranslatedTitles)[]> {
+  const CONCURRENCY = 3
+  const enriched: (T & TranslatedTitles)[] = []
+  for (let i = 0; i < items.length; i += CONCURRENCY) {
+    const batch = items.slice(i, i + CONCURRENCY)
+    const results = await Promise.all(
+      batch.map(async (item) => {
+        const [zh, ja, ko] = await Promise.all(
+          TITLE_TRANSLATE_TARGETS.map((tl) => translateText(item.title, tl, 'en', 4000))
+        )
+        return {
+          ...item,
+          title_en: item.title, // English original
+          title_zh: zh,
+          title_ja: ja,
+          title_ko: ko,
+        }
+      })
+    )
+    enriched.push(...results)
+    if (i + CONCURRENCY < items.length) await new Promise((r) => setTimeout(r, 150))
+  }
+  return enriched
+}
+
 const handler = withCron('flash-news-fetch', async (_req: NextRequest) => {
   const supabase = getSupabaseAdmin()
 
@@ -413,10 +196,14 @@ const handler = withCron('flash-news-fetch', async (_req: NextRequest) => {
     return { count: 0, message: 'All items already exist' }
   }
 
+  // Pre-translate titles (en → zh/ja/ko) before insert. Best-effort — never
+  // blocks the insert; a failed translation just leaves that column null.
+  const itemsToInsert = await withTranslatedTitles(newItems)
+
   // Upsert new items
   const { data: inserted, error: insertError } = await supabase
     .from('flash_news')
-    .upsert(newItems, { onConflict: 'title', ignoreDuplicates: true })
+    .upsert(itemsToInsert, { onConflict: 'title', ignoreDuplicates: true })
     .select('id')
 
   if (insertError) {
