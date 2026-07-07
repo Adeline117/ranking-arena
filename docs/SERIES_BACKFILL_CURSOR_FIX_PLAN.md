@@ -1,8 +1,9 @@
-# Series-Backfill 游标不持久化 — 根因诊断 + 修复方案（待批，未动代码）
+# Series-Backfill 游标不持久化 — 根因诊断 + 修复（✅ 已修复并验证 2026-07-07）
 
-> 状态：**方案文档，尚未改代码**（owner 决定：先出方案）。诊断日期 2026-07-07，
-> 生产实测（prod `iknktzifjdyujdccyhsv`）。此 bug 是全站 CEX 长尾风险指标缺口
-> （sharpe/mdd/pnl）的**单一根因**。
+> 状态：**已修复并端到端验证**。真根因=FK 违规(见下),已 migration 去 FK +
+> tier-b-series F1/F2 + 双节点部署 + HL 启用回填;实测游标首次落库(bitget_spot=8)。
+> 诊断/修复日期 2026-07-07,生产实测(prod `iknktzifjdyujdccyhsv`)。此 bug 曾是全站
+> CEX 长尾风险指标缺口(sharpe/mdd/pnl)的**单一根因**。(初版本文为待批方案,已执行。)
 
 ## TL;DR
 
