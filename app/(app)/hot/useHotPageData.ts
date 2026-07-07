@@ -117,8 +117,16 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           const createdAt = new Date(post.created_at as string)
           const diffMs = Date.now() - createdAt.getTime()
           const timeStr = formatTimeAgo(post.created_at as string, language)
-          const groupName = (post.group_name as string) || t('generalDiscussion')
-          const groupNameEn = (post.group_name_en as string) || t('generalDiscussionEn')
+          // Default ("General") category has no real group row. Feed the
+          // UI-localized default into BOTH slots so localizedLabel() renders a
+          // localized badge for ja/ko instead of the English "General"
+          // (localizedLabel prefers the en slot for any non-zh language, and
+          // there is no ja/ko group data — but the default IS localizable via t()).
+          const rawGroupName = post.group_name as string | undefined
+          const groupName = rawGroupName || t('generalDiscussion')
+          const groupNameEn = rawGroupName
+            ? (post.group_name_en as string) || t('generalDiscussionEn')
+            : t('generalDiscussion')
 
           const hotScore =
             (post.hot_score as number) ||
