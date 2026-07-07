@@ -2504,7 +2504,7 @@ const en = {
     'We may update this privacy policy from time to time. For significant changes, we will notify you via email or platform notification. Continued use of the platform constitutes acceptance of the updated policy.',
   privacyContactTitle: '12. Contact Us',
   privacyContactP1:
-    'If you have any questions about this privacy policy or need to exercise your rights, please contact us via direct message:',
+    'If you have any questions about this privacy policy or need to exercise your rights, please contact us by email:',
   privacyContactLabel: 'Contact support for privacy-related issues:',
   privacySendMessageToSupport: 'Send Message to Support',
 
@@ -3687,7 +3687,7 @@ const en = {
   dmcaContactTitle: '4. Contact',
   dmcaContactDesc: 'For copyright-related matters, please contact:',
   dmcaContactEmail:
-    'Please send a direct message to @Arena on the platform with "Copyright Notice" or "DMCA Notice" in the message. We will process valid notices as soon as possible (typically within 5 business days).',
+    'Please email ywen8@uw.edu with "Copyright Notice" or "DMCA Notice" in the subject. We will process valid notices as soon as possible (typically within 5 business days).',
 
   // Market panel
   fundamentalData: 'Fundamentals',

@@ -2442,7 +2442,7 @@ const zh = {
   privacyChangesP1:
     '我们可能会不时更新本隐私政策。重大变更时，我们会通过电子邮件或平台通知告知您。继续使用本平台即表示您接受更新后的政策。',
   privacyContactTitle: '12. 联系我们',
-  privacyContactP1: '如果您对本隐私政策有任何疑问或需要行使您的权利，请通过站内私信联系我们：',
+  privacyContactP1: '如果您对本隐私政策有任何疑问或需要行使您的权利，请通过邮件联系我们：',
   privacyContactLabel: '联系客服处理隐私相关问题：',
   privacySendMessageToSupport: '发送私信给客服',
 
@@ -3602,7 +3602,7 @@ const zh = {
   dmcaContactTitle: '4. 联系方式 (Contact)',
   dmcaContactDesc: '版权相关事宜请联系：',
   dmcaContactEmail:
-    '请通过站内私信联系管理员 @Arena，在消息中注明"版权通知"或"DMCA Notice"。我们将在收到有效通知后尽快处理（通常在5个工作日内）。',
+    '请发送邮件至 ywen8@uw.edu，在主题中注明"版权通知"或"DMCA Notice"。我们将在收到有效通知后尽快处理（通常在5个工作日内）。',
 
   // 市场面板
   fundamentalData: '基本面数据',
