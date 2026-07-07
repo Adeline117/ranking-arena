@@ -367,6 +367,64 @@ function renderTextWithHashtags(text: string, keyPrefix: string): ReactNode[] {
 }
 
 /**
+ * Linkify #hashtags (CJK-aware) and @mentions in a plain-text string.
+ * Standalone helper for renderers that don't run the full renderContentWithLinks
+ * pipeline (e.g. the post composer preview) but still need tags/mentions to become
+ * clickable — mirrors the routes used by the feed body renderer:
+ *   #tag  -> /hashtag/<lowercased tag>
+ *   @user -> /u/<handle>
+ * Hashtag regex kept in sync with renderTextWithHashtags + lib/data/hashtags.ts
+ * (Unicode \p{L}\p{N} so #比特币 linkifies; @mentions are ASCII handles).
+ */
+export function linkifyTagsAndMentions(text: string, keyPrefix = 'lm'): ReactNode[] {
+  if (!text) return []
+  const combined = /#([\p{L}\p{N}_]{1,30})|@(\w+)/gu
+  const nodes: ReactNode[] = []
+  let lastIdx = 0
+  let match: RegExpExecArray | null
+  combined.lastIndex = 0
+  while ((match = combined.exec(text)) !== null) {
+    if (match.index > lastIdx) {
+      nodes.push(text.slice(lastIdx, match.index))
+    }
+    const tag = match[1]
+    const mention = match[2]
+    if (tag) {
+      nodes.push(
+        createElement(
+          'a',
+          {
+            key: `${keyPrefix}-ht${match.index}`,
+            href: `/hashtag/${tag.toLowerCase()}`,
+            onClick: (e: React.MouseEvent) => e.stopPropagation(),
+            style: { color: ARENA_PURPLE, textDecoration: 'none', fontWeight: 600 },
+          },
+          `#${tag}`
+        )
+      )
+    } else if (mention) {
+      nodes.push(
+        createElement(
+          'a',
+          {
+            key: `${keyPrefix}-mt${match.index}`,
+            href: `/u/${encodeURIComponent(mention)}`,
+            onClick: (e: React.MouseEvent) => e.stopPropagation(),
+            style: { color: 'var(--color-brand)', textDecoration: 'none', fontWeight: 600 },
+          },
+          `@${mention}`
+        )
+      )
+    }
+    lastIdx = match.index + match[0].length
+  }
+  if (lastIdx < text.length) {
+    nodes.push(text.slice(lastIdx))
+  }
+  return nodes.length > 0 ? nodes : [text]
+}
+
+/**
  * Lightweight inline Markdown renderer (no external library).
  * Supports: **bold**, *italic*, `code`, ~~strikethrough~~
  * Pattern from Discourse/Mastodon — inline formatting only, not block-level.
