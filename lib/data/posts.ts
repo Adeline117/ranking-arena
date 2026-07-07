@@ -16,6 +16,31 @@ async function invalidatePostListCache(): Promise<void> {
   await delByPattern(CachePattern.allPosts()).catch(() => {})
 }
 
+// --- Hot ranking with recency decay (U8-8) -------------------------------
+// The `hot_score` column is a frozen engagement number: once a post stops
+// gathering reactions its score never changes, so ordering the "hot" feed by
+// the raw column pins stale seed posts to the top forever. We instead pull a
+// recency-ordered candidate pool and re-rank it in JS with a Reddit-style hot
+// score: a log-scaled engagement term plus a linear time term. The time term
+// dominates so fresh posts surface, while `hot_score` still breaks ties and
+// lifts genuinely trending content. Additive (not multiplicative) form avoids
+// float underflow-to-zero for old posts, keeping the order total & stable.
+const HOT_POOL_SIZE = 300
+// Seconds of freshness worth one decade (10x) of engagement. One full unit of
+// log10(hot_score) ≈ 1 day of recency, so a hot_score-10 post ranks like a
+// day-newer hot_score-1 post.
+const HOT_DECAY_SECONDS = 86_400
+// Fixed reference epoch so the time term stays a small, well-conditioned float
+// (ordering is translation-invariant, so the exact value is irrelevant).
+const HOT_EPOCH_SECONDS = Date.UTC(2026, 0, 1) / 1000
+
+function hotRankScore(hotScore: number | null | undefined, createdAt: string | null): number {
+  const engagement = Math.log10(Math.max(hotScore ?? 0, 1)) // 0 for score<=1
+  const createdMs = createdAt ? Date.parse(createdAt) : NaN
+  const seconds = Number.isNaN(createdMs) ? 0 : createdMs / 1000 - HOT_EPOCH_SECONDS
+  return engagement + seconds / HOT_DECAY_SECONDS
+}
+
 /**
  * Simple language detection heuristic.
  * If content contains CJK characters, classify as 'zh'; otherwise 'en'.
@@ -263,11 +288,17 @@ export async function getPosts(
     language: langFilter,
   } = options
 
-  let query = supabase
-    .from('posts')
-    .select(POST_SELECT_FIELDS)
-    .range(offset, offset + limit - 1)
-    .order(sort_by, { ascending: sort_order === 'asc' })
+  // Hot feed gets a recency-ordered candidate pool + JS decay re-rank (see
+  // hotRankScore). Other sorts keep the direct column order + DB pagination.
+  const isHotSort = sort_by === 'hot_score'
+  let query = supabase.from('posts').select(POST_SELECT_FIELDS)
+  if (isHotSort) {
+    query = query.order('created_at', { ascending: false }).range(0, HOT_POOL_SIZE - 1)
+  } else {
+    query = query
+      .range(offset, offset + limit - 1)
+      .order(sort_by, { ascending: sort_order === 'asc' })
+  }
 
   if (group_id) {
     query = query.eq('group_id', group_id)
@@ -326,9 +357,22 @@ export async function getPosts(
       : query.eq('author_handle', author_handle)
   }
 
-  const { data, error } = await query
+  const { data: rawData, error } = await query
   if (error) throw error
-  if (!data || data.length === 0) return []
+  if (!rawData || rawData.length === 0) return []
+
+  // Hot feed: re-rank the candidate pool by decayed hot score, then slice the
+  // requested page. Pool is fetched from offset 0, so JS pagination is stable
+  // up to HOT_POOL_SIZE (hot feeds are consumed shallow-first + cached).
+  let data = rawData
+  if (isHotSort) {
+    const ranked = [...rawData].sort(
+      (a, b) => hotRankScore(b.hot_score, b.created_at) - hotRankScore(a.hot_score, a.created_at)
+    )
+    if (sort_order === 'asc') ranked.reverse()
+    data = ranked.slice(offset, offset + limit)
+    if (data.length === 0) return []
+  }
 
   const authorIds = [...new Set(data.map((p) => p.author_id).filter(Boolean))]
   const originalPostIds = [
