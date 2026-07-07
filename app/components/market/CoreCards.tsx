@@ -8,6 +8,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import Link from 'next/link'
 import { apiFetch } from '@/lib/utils/api-fetch'
+import { formatTokenPrice } from '@/lib/utils/format'
 import type { SpotCoin } from '@/lib/hooks/useMarketSpot'
 
 interface CoinRow {
@@ -15,6 +16,9 @@ interface CoinRow {
   price: string
   changePct: string
   direction: 'up' | 'down'
+  // Optional coingecko icon URL (from spot data). Preferred over CryptoIcon's
+  // CoinCap CDN fallback, which browsers block via ORB (repeated console errors).
+  image?: string
 }
 
 interface ExchangeInfo {
@@ -133,14 +137,19 @@ function CoinItem({
   changePct,
   isGainer,
   index,
+  image,
 }: {
   symbol: string
   price: string
   changePct: string
   isGainer: boolean
   index: number
+  image?: string
 }) {
   const sym = symbol.replace('-USD', '').replace('USDT', '')
+  // Prefer the coingecko icon URL (from spot data) — CryptoIcon's CoinCap CDN
+  // fallback is ORB-blocked by browsers and spams the console on failure.
+  const [imageFailed, setImageFailed] = useState(false)
   const color = isGainer ? tokens.colors.accent.success : tokens.colors.accent.error
   const bgGradient = isGainer
     ? 'linear-gradient(90deg, var(--color-accent-success-05) 0%, transparent 100%)'
@@ -148,9 +157,7 @@ function CoinItem({
   const formattedPrice = (() => {
     const num = parseFloat(price.replace(/[$,]/g, ''))
     if (isNaN(num)) return price
-    if (num >= 1000) return `$${num.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-    if (num >= 1) return `$${num.toFixed(2)}`
-    return `$${num.toFixed(4)}`
+    return formatTokenPrice(num)
   })()
   return (
     <div
@@ -184,7 +191,19 @@ function CoinItem({
         >
           {index + 1}
         </span>
-        <CryptoIcon symbol={sym} size={20} />
+        {image && !imageFailed ? (
+          <img
+            src={image}
+            alt={sym}
+            width={20}
+            height={20}
+            loading="lazy"
+            onError={() => setImageFailed(true)}
+            style={{ borderRadius: '50%', flexShrink: 0 }}
+          />
+        ) : (
+          <CryptoIcon symbol={sym} size={20} />
+        )}
         <span
           style={{
             fontWeight: tokens.typography.fontWeight.semibold,
@@ -316,9 +335,12 @@ function spotRowsToCoins(spots: SpotCoin[]): CoinRow[] {
     .filter((s) => s.change24h != null && s.price != null)
     .map((s) => ({
       symbol: `${s.symbol.toUpperCase()}-USD`,
-      price: s.price?.toLocaleString('en-US', { maximumFractionDigits: 2 }) ?? '0',
+      // Keep full precision here; CoinItem formats via formatTokenPrice so
+      // sub-cent coins (PEPE/SHIB) don't collapse to "0" before display.
+      price: s.price != null ? String(s.price) : '0',
       changePct: `${s.change24h >= 0 ? '+' : ''}${s.change24h.toFixed(2)}%`,
       direction: s.change24h >= 0 ? ('up' as const) : ('down' as const),
+      image: s.image || undefined,
     }))
 }
 
@@ -443,6 +465,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
                   changePct={row.changePct}
                   isGainer={true}
                   index={i}
+                  image={row.image}
                 />
               ))}
             </div>
@@ -476,6 +499,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
                   changePct={row.changePct}
                   isGainer={false}
                   index={i}
+                  image={row.image}
                 />
               ))}
             </div>

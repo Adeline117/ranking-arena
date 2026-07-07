@@ -1057,7 +1057,8 @@ const ko = {
   claimWalletTimeout: '지갑 연결 시간이 초과되었습니다. 다시 시도해 주세요.',
   // Trader accounts (linked)
   myTraderAccounts: '내 트레이더 계정',
-  myTraderAccountsDesc: '순위에서 인증한 트레이더 ID를 관리하세요',
+  myTraderAccountsDesc:
+    '순위표의 공개 트레이더 신원을 인증하고 관리합니다 (거래소를 연결해 포트폴리오를 동기화하는 기능과 다릅니다)',
   linkedAccounts: '연결된 계정',
   linkedAccountsSection: '연결된 계정',
   linkNewAccount: '새 계정 연결',
@@ -2176,6 +2177,7 @@ const ko = {
   videoOptional: '동영상 (선택사항, 최대 1개, 100MB 이하)',
   deleteVideo: '동영상 삭제',
   addVideo: '동영상 추가',
+  u11prof_videoLabel: '동영상',
   videoFormatSupport: 'MP4, WebM, MOV, AVI, MKV 지원, 최대 100MB',
   moveUp: '위로 이동',
   moveDown: '아래로 이동',
@@ -3039,7 +3041,8 @@ const ko = {
 
   // Exchange binding banner
   bindExchangeBannerTitle: '거래소 계정 연결',
-  bindExchangeBannerDesc: '거래 데이터를 자동 동기화하고, 순위에 참여하며, 실제 성과를 보여주세요',
+  bindExchangeBannerDesc:
+    '읽기 전용 API로 실제 포지션과 성과를 포트폴리오에 동기화합니다 (순위표 트레이더 신원 인증과 다릅니다)',
   goToBind: '연결하기',
 
   // Search dropdown
@@ -5176,6 +5179,7 @@ const ko = {
 
   // Missing translations added 2026-04-03
   autoRefresh: '30초마다 자동 새로고침',
+  u7mkt_delayed: '지연',
   liveData: '실시간',
   topPercent: '상위 {pct}%',
   topPercentOn: '{platform} 상위 {pct}%',
