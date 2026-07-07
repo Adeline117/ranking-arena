@@ -172,11 +172,15 @@ GROUP BY s.slug ORDER BY 2;
 
 ## 遗留项处置(2026-07-07 收尾)
 
-1. **SG dep 漂移** → 走 CI 单通道 un-drift:`gh workflow run "Deploy Ingest Worker
-(SG)" -f mode=full`(注意本机 `GITHUB_TOKEN` env 失效,需 `GITHUB_TOKEN= gh …`
-   走 keyring)。build-deps 构建 Linux-x64 node_modules;deploy-sg 需仓库配 SG SSH
-   secrets 才真部署,否则 skip(此时可 CI 出 artifact → `deploy-ingest-sg.sh
---from-artifact=PATH`)。cursor 修复已经单文件热修在 SG 生效,un-drift 属 hygiene。
+1. **SG dep 漂移** → ✅ **已 un-drift**(2026-07-07,SG DEPLOYED_SHA 现=main HEAD)。
+   判断:SG sha(39c5f447)→ HEAD 的 dep 变更**全是 bump(无新 worker 模块;ws 是 viem
+   传递依赖已在)**→ SG 现有 node_modules 可跑当前代码(单文件热修已证)。故走**零磁盘
+   风险的全量 code rsync**(lib/worker/tsconfig,排除 node_modules),不动 node_modules
+   (SG 磁盘 90% 满,node_modules swap 峰值仅剩 ~0.7G 太险)。tar 备份 code(1.7M)→
+   rsync → 写 DEPLOYED_SHA → pm2 restart + ready 门(失败自动回滚)。SG worker ready。
+   **CI 单通道**(`GITHUB_TOKEN= gh workflow run "Deploy Ingest Worker (SG)"`)build-deps
+   已证跑通;真部署仍需仓库配 `INGEST_SG_SSH_KEY`/`INGEST_SG_HOST` 两 secret 才不 skip
+   —— 配好后**真 dep 变更(非 bump)**时用 CI 走 node_modules artifact 路径。
 2. **local worker ↺100 = 非活跃问题**:exit 130=SIGINT(手动 restart)、mem 64MB
    (非 OOM)、重启前已稳定 3 天;100 是**生命周期累计**(含历史已修的 EDBHANDLEREXITED
    等),非重启循环。无需处置,持续观察即可。
