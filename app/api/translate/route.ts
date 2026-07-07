@@ -12,6 +12,27 @@ import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('translate')
 
+// Supported translation targets. ja/ko were added 2026-07 so that ja/ko readers
+// get posts in their own language instead of English (the pipeline previously
+// hard-capped every non-zh target to English).
+type TargetLang = 'zh' | 'en' | 'ja' | 'ko'
+
+// Google Translate `tl` code per target.
+const GOOGLE_TARGET_CODE: Record<TargetLang, string> = {
+  zh: 'zh-CN',
+  en: 'en',
+  ja: 'ja',
+  ko: 'ko',
+}
+
+// GPT target-language name per target.
+const GPT_TARGET_LANGUAGE: Record<TargetLang, string> = {
+  zh: '简体中文',
+  en: 'English',
+  ja: '日本語',
+  ko: '한국어',
+}
+
 // 计算内容哈希值（用于检测内容变化）
 function hashContent(text: string): string {
   return createHash('sha256').update(text).digest('hex').slice(0, 32)
@@ -20,7 +41,7 @@ function hashContent(text: string): string {
 // 单个翻译请求
 interface SingleTranslateRequest {
   text: string
-  targetLang: 'zh' | 'en'
+  targetLang: TargetLang
   contentType?: 'post_title' | 'post_content' | 'comment'
   contentId?: string
 }
@@ -33,13 +54,15 @@ interface BatchTranslateRequest {
     contentType: 'post_title' | 'post_content' | 'comment'
     contentId: string
   }>
-  targetLang: 'zh' | 'en'
+  targetLang: TargetLang
 }
 
 // Fast translation via Google Translate (free, no API key, ~100ms)
-async function translateWithGoogle(text: string, targetLang: 'zh' | 'en'): Promise<string | null> {
-  const sourceLang = targetLang === 'zh' ? 'en' : 'zh-CN'
-  const target = targetLang === 'zh' ? 'zh-CN' : 'en'
+async function translateWithGoogle(text: string, targetLang: TargetLang): Promise<string | null> {
+  const target = GOOGLE_TARGET_CODE[targetLang] ?? 'en'
+  // zh↔en keep their explicit source hint; ja/ko sources can be either zh or en,
+  // so let Google auto-detect the source language.
+  const sourceLang = targetLang === 'zh' ? 'en' : targetLang === 'en' ? 'zh-CN' : 'auto'
 
   try {
     const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${sourceLang}&tl=${target}&dt=t&q=${encodeURIComponent(text)}`
@@ -64,7 +87,7 @@ async function translateWithGoogle(text: string, targetLang: 'zh' | 'en'): Promi
 }
 
 // Post-process: fix common Google Translate errors for crypto/trading terms
-function fixCryptoTerms(text: string, targetLang: 'zh' | 'en'): string {
+function fixCryptoTerms(text: string, targetLang: TargetLang): string {
   if (targetLang === 'zh') {
     return text
       .replace(/合同/g, '合约')
@@ -95,7 +118,7 @@ function fixCryptoTerms(text: string, targetLang: 'zh' | 'en'): string {
 }
 
 // 调用 OpenAI 翻译 (fallback, slower but higher quality)
-async function translateWithGPT(text: string, targetLang: 'zh' | 'en'): Promise<string | null> {
+async function translateWithGPT(text: string, targetLang: TargetLang): Promise<string | null> {
   const OPENAI_API_KEY = process.env.OPENAI_API_KEY
 
   if (!OPENAI_API_KEY) {
@@ -103,7 +126,7 @@ async function translateWithGPT(text: string, targetLang: 'zh' | 'en'): Promise<
     return null
   }
 
-  const targetLanguage = targetLang === 'zh' ? '简体中文' : 'English'
+  const targetLanguage = GPT_TARGET_LANGUAGE[targetLang] ?? 'English'
 
   try {
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
@@ -154,7 +177,7 @@ Rules:
 }
 
 // Try Google first (fast) + crypto fix, fallback to GPT (quality)
-async function translate(text: string, targetLang: 'zh' | 'en'): Promise<string | null> {
+async function translate(text: string, targetLang: TargetLang): Promise<string | null> {
   const googleResult = await translateWithGoogle(text, targetLang)
   if (googleResult) return fixCryptoTerms(googleResult, targetLang)
   return translateWithGPT(text, targetLang)

@@ -322,7 +322,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
   // Batch translate list posts
   const translateListPosts = useCallback(
-    async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
+    async (postsToTranslate: Post[], targetLang: 'zh' | 'en' | 'ja' | 'ko') => {
       if (translatingList) return
       // /api/translate requires auth (Bearer header) — skip for anonymous visitors
       if (!accessToken) return
@@ -330,6 +330,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       const needsTranslation = postsToTranslate.filter((p) => {
         if (translatedListPosts[p.id]?.title && translatedListPosts[p.id]?.body) return false
         if (!p.title && !p.body) return false
+        // ja/ko targets: sources are a mix of zh and en, translate anything with text.
+        if (targetLang === 'ja' || targetLang === 'ko') return true
         const titleIsChinese = isChineseText(p.title || '')
         const bodyIsChinese = isChineseText(p.body || '')
         return targetLang === 'en'
@@ -426,14 +428,14 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   // Translate list when posts load or language changes (requires auth — translation uses OpenAI credits)
   useEffect(() => {
     if (posts.length > 0 && email) {
-      // Translate pipeline only supports zh/en targets — ja/ko readers get English
-      translateListPosts(posts, language === 'zh' ? 'zh' : 'en')
+      // Translate posts into the active UI language (zh/en/ja/ko).
+      translateListPosts(posts, language)
     }
   }, [posts, language, translateListPosts, email])
 
   // Translate post content (with cache)
   const translateContent = useCallback(
-    async (postId: string, content: string, targetLang: 'zh' | 'en') => {
+    async (postId: string, content: string, targetLang: 'zh' | 'en' | 'ja' | 'ko') => {
       // /api/translate requires auth (Bearer header) — skip silently for anonymous visitors
       if (!email || !accessToken) return
       const cacheKey = `${postId}-content-${targetLang}`
@@ -520,12 +522,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
       if (post.body) {
         const isChinese = isChineseText(post.body)
-        // zh → translate non-Chinese; en/ja/ko → translate Chinese (to English,
-        // since the API only supports en/zh, ja/ko fall back to English).
-        const needsTranslation = language === 'zh' ? !isChinese : isChinese
+        // zh → translate non-Chinese posts; en → translate Chinese posts;
+        // ja/ko → translate anything (sources are a zh/en mix).
+        const needsTranslation =
+          language === 'zh' ? !isChinese : language === 'en' ? isChinese : true
 
         if (needsTranslation) {
-          translateContent(post.id, post.body, (language === 'zh' ? 'zh' : 'en') as 'zh' | 'en')
+          translateContent(post.id, post.body, language)
         }
       }
     },
@@ -580,17 +583,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   useEffect(() => {
     if (openPost && openPost.body) {
       const isChinese = isChineseText(openPost.body)
-      const needsTranslation = language === 'zh' ? !isChinese : isChinese
+      const needsTranslation = language === 'zh' ? !isChinese : language === 'en' ? isChinese : true
 
       setTranslatedContent(null)
       setShowingOriginal(true)
 
       if (needsTranslation) {
-        translateContent(
-          openPost.id,
-          openPost.body,
-          (language === 'zh' ? 'zh' : 'en') as 'zh' | 'en'
-        )
+        translateContent(openPost.id, openPost.body, language)
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-translate when language changes; openPost and translateContent are stable refs
