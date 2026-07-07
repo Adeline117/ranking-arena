@@ -9,16 +9,10 @@ import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { t as staticT } from '@/lib/i18n'
+import { EXCHANGE_BIND_LIST } from './api-key/exchange-configs'
 
-const EXCHANGES = [
-  { id: 'binance', name: 'Binance', oauthSupported: true },
-  { id: 'bybit', name: 'Bybit', oauthSupported: true },
-  { id: 'bitget', name: 'Bitget', oauthSupported: false },
-  { id: 'mexc', name: 'MEXC', oauthSupported: false },
-  { id: 'htx', name: 'HTX', oauthSupported: false },
-  { id: 'weex', name: 'WEEX', oauthSupported: false },
-  { id: 'coinex', name: 'CoinEx', oauthSupported: false },
-] as const
+// Single source of truth: display names + OAuth capability live in exchange-configs.
+const EXCHANGES = EXCHANGE_BIND_LIST
 
 function ExchangeAuthContent() {
   const searchParams = useSearchParams()
