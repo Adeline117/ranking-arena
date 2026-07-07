@@ -1,0 +1,100 @@
+name: Deploy Freshness Sentinel
+
+# WHY (2026-07-07): CI lint went red (a stray `git add -A` committed throwaway
+# verify-*.mjs scripts), and deploy-gate silently WITHHELD 28 production deploys.
+# The only alert channel (Telegram) was 401-broken, so nobody knew for hours —
+# a batch of real bug fixes never went live. This sentinel is the reliable
+# backstop: it compares the LIVE deployed commit (/api/health `commit`) to
+# origin/main and, if the newest commit has been sitting undeployed for >45min,
+# alerts via a de-duplicated GitHub ISSUE (does not depend on Telegram) + fails
+# loudly. Self-heals: closes the issue once prod catches up.
+
+on:
+  schedule:
+    - cron: '25,55 * * * *' # every 30 min, offset from other sentinels
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: deploy-freshness
+  cancel-in-progress: true
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+      STALE_MINUTES: '45' # newest commit undeployed longer than this ⇒ stuck
+      HEALTH_URL: 'https://www.arenafi.org/api/health'
+      ISSUE_TITLE: '🛑 Production deploy is stale'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so we can measure how far prod is behind
+
+      - name: Check production deploy freshness
+        run: |
+          set -uo pipefail
+          HEAD_SHA=$(git rev-parse HEAD)
+          DEPLOYED=$(curl -s --max-time 25 "$HEALTH_URL" \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).commit||"").trim())}catch{process.stdout.write("")}})')
+          echo "HEAD=$HEAD_SHA  deployed=$DEPLOYED"
+
+          close_issue() {
+            NUM=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+            if [ -n "$NUM" ]; then
+              gh issue comment "$NUM" --body "✅ 部署已追上 main（deployed ${DEPLOYED:0:8}）。自动关闭。" 2>/dev/null || true
+              gh issue close "$NUM" 2>/dev/null || true
+            fi
+          }
+
+          # Can't compare (endpoint down / VERCEL_GIT_COMMIT_SHA unset) → warn, don't fail.
+          if [ -z "$DEPLOYED" ] || [ "$DEPLOYED" = "unknown" ]; then
+            echo "::warning::deployed commit unavailable — cannot check freshness"
+            exit 0
+          fi
+          if [ "$DEPLOYED" = "$HEAD_SHA" ]; then
+            echo "✅ prod up to date"; close_issue; exit 0
+          fi
+
+          # Time-based signal: only fire if the NEWEST commit has been undeployed
+          # too long (tolerates the normal ~12min CI+deploy window and rapid pushing,
+          # since deploy-gate always jumps to the newest verified SHA).
+          HEAD_TIME=$(git show -s --format=%ct HEAD)
+          AGE_MIN=$(( ( $(date +%s) - HEAD_TIME ) / 60 ))
+          if git cat-file -e "${DEPLOYED}^{commit}" 2>/dev/null; then
+            BEHIND=$(git rev-list --count "${DEPLOYED}..HEAD" 2>/dev/null || echo "?")
+          else
+            BEHIND="?(deployed commit not in history — force-push?)"
+          fi
+          echo "prod is $BEHIND commits behind; newest commit age=${AGE_MIN}min (threshold ${STALE_MINUTES})"
+
+          if [ "$AGE_MIN" -le "$STALE_MINUTES" ]; then
+            echo "✅ within normal deploy window"; exit 0
+          fi
+
+          MSG="🛑 生产部署滞后:最新 commit ${HEAD_SHA:0:8} 已 ${AGE_MIN} 分钟未上线(线上仍是 ${DEPLOYED:0:8},落后 ${BEHIND} 个 commit)。多半是 CI 门禁红→deploy-gate 扣留。查 Actions 的 CI / Deploy Gate 失败原因,修复后 push 即重新排队。"
+          echo "::error::$MSG"
+
+          # Telegram (best-effort; token may be broken — that's why the issue exists)
+          if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
+            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_ALERT_CHAT_ID:-}" \
+              --data-urlencode "text=${MSG}" >/dev/null 2>&1 || true
+          fi
+
+          # Reliable channel: de-duplicated GitHub issue (visible in repo, no external dep)
+          NUM=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
+          if [ -n "$NUM" ]; then
+            gh issue comment "$NUM" --body "${MSG}"$'\n\n'"$(date -u +%FT%TZ)" 2>/dev/null || true
+          else
+            gh issue create --title "$ISSUE_TITLE" \
+              --body "${MSG}"$'\n\n'"由 deploy-freshness sentinel 自动创建;部署追上后会自动关闭。" 2>/dev/null || true
+          fi
+          exit 1
