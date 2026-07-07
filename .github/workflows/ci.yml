@@ -265,9 +265,14 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: build
-    timeout-minutes: 30
+    # 关键路径只跑 desktop 冒烟（smoke-critical-path + smoke = 7 用例），~3-5min 就
+    # 完成。此前跑全量 46 spec × 4 端设备 × workers=1 × retries=2 → 永远跑不完、必到
+    # 30min job 超时被取消：既不给真实 green/red 信号，又让 CI「完成」晚 30min → 每次
+    # 安静 main 上的部署被 deploy-gate 白等半小时。全量矩阵（含 mobile/tablet）由
+    # e2e-nightly.yml（每日 03:00 UTC）兜底。E2E 仍非门禁（门禁只看
+    # pre-checks/lint-typecheck/unit/build），但现在能快速完成并给出可用信号。
+    timeout-minutes: 12
     # E2E 只保留"最新 commit"一份在跑（成本控制）；被取消不影响部署门禁
-    # （门禁只看 pre-checks/lint-typecheck/unit/build），全量 E2E 有 nightly 兜底
     concurrency:
       group: ci-e2e-${{ github.ref }}
       cancel-in-progress: true
@@ -284,14 +289,14 @@ jobs:
           name: nextjs-build
           path: .next
 
-      # Install ALL browsers needed by the device matrix (desktop=chromium,
-      # iPhone/iPad=webkit). Without webkit, mobile projects silently skip.
-      - run: npx playwright install --with-deps chromium webkit
+      # Desktop smoke only → chromium is enough. Nightly installs webkit for the
+      # full mobile/tablet matrix.
+      - run: npx playwright install --with-deps chromium
 
-      # Run ALL projects — desktop + iPhone SE + iPhone 14 + iPad.
-      # This is the gate that prevents "works on desktop, broken on mobile"
-      # bugs from ever reaching production.
-      - run: npm run test:e2e
+      # Fast desktop smoke of the critical path. Full 4-device matrix runs nightly
+      # (e2e-nightly.yml) so "works on desktop, broken on mobile" is still caught,
+      # just off the deploy critical path.
+      - run: npm run test:e2e:smoke
         env:
           CI: true
 
