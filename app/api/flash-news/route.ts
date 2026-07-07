@@ -28,7 +28,13 @@ interface FlashNews {
   title: string
   title_zh?: string
   title_en?: string
+  title_ja?: string
+  title_ko?: string
   content?: string
+  content_zh?: string
+  content_en?: string
+  content_ja?: string
+  content_ko?: string
   source: string
   source_url?: string
   category?:
@@ -88,8 +94,10 @@ export async function GET(request: NextRequest) {
         .select(
           // source_url/content/content_zh/content_en 必须下发:NewsCard 靠 source_url
           // 渲染来源外链(缺则全站 0 外跳),content* 供 getNewsContent + 翻译管线
-          // (缺则 content 恒 undefined,translateNewsContent 永不触发)。列已 REST 探针核实存在。
-          'id, title, title_zh, title_en, content, content_zh, content_en, source, source_url, category, importance, published_at, tags',
+          // (缺则 content 恒 undefined,translateNewsContent 永不触发)。
+          // title_ja/ko + content_ja/ko (U7-5) 供 ja/ko 读者显示母语标题/正文,
+          // 缺则前端回落 title_en/title。列已 REST 探针核实存在。
+          'id, title, title_zh, title_en, title_ja, title_ko, content, content_zh, content_en, content_ja, content_ko, source, source_url, category, importance, published_at, tags',
           {
             count: 'exact',
           }
