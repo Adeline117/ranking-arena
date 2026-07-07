@@ -1989,7 +1989,7 @@ const en = {
   loginCreateAccount: 'Create Account',
   loginSubtitle: 'Arena ranks everything in crypto',
   loginValueProp1: '160,000+ traders tracked in real-time',
-  loginValueProp2: 'Compare ROI across 20+ exchanges',
+  loginValueProp2: 'Compare ROI across 45+ exchanges',
   loginValueProp3: 'Join trading communities',
   loginConnectWallet: 'Connect Wallet',
   loginWalletSignIn: 'Sign in with Wallet',

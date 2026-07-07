@@ -1814,7 +1814,7 @@ const ja = {
   loginCreateAccount: 'アカウントを作成',
   loginSubtitle: 'Arenaは暗号資産のすべてをランキングします',
   loginValueProp1: '160,000人以上の収録トレーダーをリアルタイムでトラッキング',
-  loginValueProp2: '20以上の取引所のROIを比較',
+  loginValueProp2: '45以上の取引所のROIを比較',
   loginValueProp3: 'トレーディングコミュニティに参加',
   loginConnectWallet: 'ウォレットを接続',
   loginWalletSignIn: 'ウォレットでサインイン',

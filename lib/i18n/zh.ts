@@ -1954,7 +1954,7 @@ const zh = {
   loginCreateAccount: '创建账号',
   loginSubtitle: 'Arena ranks everything in crypto',
   loginValueProp1: '160,000+ 已收录交易员实时追踪',
-  loginValueProp2: '跨 20+ 交易所对比收益与风控',
+  loginValueProp2: '跨 45+ 交易所对比收益与风控',
   loginValueProp3: '加入交易社区，发现投资机会',
   loginConnectWallet: '连接钱包',
   loginWalletSignIn: '使用钱包登录',
