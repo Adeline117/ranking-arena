@@ -18,6 +18,11 @@ export const runtime = 'edge'
 
 const startTime = Date.now()
 const version = process.env.npm_package_version || '0.1.0'
+// Deployed git commit (Vercel sets VERCEL_GIT_COMMIT_SHA at build). Exposed so a
+// scheduled deploy-freshness sentinel can compare it to origin/main HEAD and catch
+// a stuck deploy pipeline — the failure mode where CI-red silently withheld 28
+// production deploys and the only alert (Telegram) was 401-broken, so nobody knew.
+const commit = process.env.VERCEL_GIT_COMMIT_SHA || 'unknown'
 // Deploy timestamp from env (set at build time), fallback to module load time
 const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME
   ? safeParseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, startTime)
@@ -278,6 +283,7 @@ export async function GET() {
       status,
       timestamp: new Date().toISOString(),
       version,
+      commit,
       uptime: uptimeSeconds,
       responseTimeMs: Date.now() - t0,
       checks,
