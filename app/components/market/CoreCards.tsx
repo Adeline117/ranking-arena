@@ -8,6 +8,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import Link from 'next/link'
 import { apiFetch } from '@/lib/utils/api-fetch'
+import { formatTokenPrice } from '@/lib/utils/format'
 import type { SpotCoin } from '@/lib/hooks/useMarketSpot'
 
 interface CoinRow {
@@ -148,9 +149,7 @@ function CoinItem({
   const formattedPrice = (() => {
     const num = parseFloat(price.replace(/[$,]/g, ''))
     if (isNaN(num)) return price
-    if (num >= 1000) return `$${num.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
-    if (num >= 1) return `$${num.toFixed(2)}`
-    return `$${num.toFixed(4)}`
+    return formatTokenPrice(num)
   })()
   return (
     <div
@@ -316,7 +315,9 @@ function spotRowsToCoins(spots: SpotCoin[]): CoinRow[] {
     .filter((s) => s.change24h != null && s.price != null)
     .map((s) => ({
       symbol: `${s.symbol.toUpperCase()}-USD`,
-      price: s.price?.toLocaleString('en-US', { maximumFractionDigits: 2 }) ?? '0',
+      // Keep full precision here; CoinItem formats via formatTokenPrice so
+      // sub-cent coins (PEPE/SHIB) don't collapse to "0" before display.
+      price: s.price != null ? String(s.price) : '0',
       changePct: `${s.change24h >= 0 ? '+' : ''}${s.change24h.toFixed(2)}%`,
       direction: s.change24h >= 0 ? ('up' as const) : ('down' as const),
     }))
