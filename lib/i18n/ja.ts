@@ -5864,6 +5864,9 @@ const ja = {
   referralRewardUnlocked: '特典をゲット！',
   referralFriendTrialNote:
     '特典：友達があなたのリンクから参加すると、{days}日間のProトライアルを獲得できます。',
+  // TODO i18n ja/ko
+  referralPromoNote:
+    'Pro is currently free for everyone during our promo. The Pro days you earn are banked and automatically applied once the promo ends — they never expire.',
   referralPageSubtitle: '友達をArenaに招待して、紹介状況をトラッキングしましょう。',
   referralSignInGateTitle: 'ログインして紹介リンクを取得',
   referralSignInGateDesc: 'アカウントを作成またはログインして、友達の招待を始めましょう。',

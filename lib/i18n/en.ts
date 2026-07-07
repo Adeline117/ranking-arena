@@ -6219,6 +6219,8 @@ const en = {
   referralRewardUnlocked: 'Reward unlocked!',
   referralFriendTrialNote:
     'Bonus: your friends get a {days}-day Pro trial when they join via your link.',
+  referralPromoNote:
+    'Pro is currently free for everyone during our promo. The Pro days you earn are banked and automatically applied once the promo ends — they never expire.',
   referralPageSubtitle: 'Invite friends to Arena and track your referrals.',
   referralSignInGateTitle: 'Sign in to get your referral link',
   referralSignInGateDesc: 'Create an account or log in to start inviting friends.',
