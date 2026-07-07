@@ -339,13 +339,13 @@ export async function checkDataQuality(): Promise<HealthCheck[]> {
       const start = Date.now()
       const { data: latest } = await supabase
         .from('leaderboard_ranks')
-        .select('updated_at')
+        .select('computed_at')
         .eq('season_id', '90D')
-        .order('updated_at', { ascending: false })
+        .order('computed_at', { ascending: false })
         .limit(1)
         .maybeSingle()
 
-      const age = latest ? Date.now() - new Date(latest.updated_at).getTime() : Infinity
+      const age = latest ? Date.now() - new Date(latest.computed_at).getTime() : Infinity
       const ageHours = age / 3600000
 
       return {
