@@ -4962,7 +4962,7 @@ const en = {
 
   // Claim Landing Page
   claimPageTitle: 'Claim Your Trader Profile on Arena',
-  claimPageSubtitle: "You're ranked among 8,000+ traders. Take control of your profile.",
+  claimPageSubtitle: 'Join 8,000+ traders on Arena. Claim and take control of your profile.',
   claimPageBenefitVerified: 'Get a verified badge on your profile',
   claimPageBenefitEdit: 'Edit your bio, avatar, and social links',
   claimPageBenefitStandout: 'Stand out on the leaderboard',

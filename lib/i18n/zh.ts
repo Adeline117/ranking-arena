@@ -4857,7 +4857,7 @@ const zh = {
 
   // Claim Landing Page
   claimPageTitle: '在 Arena 认领你的交易员档案',
-  claimPageSubtitle: '你已跻身 8,000+ 交易员排行榜，掌控你的个人档案。',
+  claimPageSubtitle: '加入 Arena 8,000+ 交易员排行榜，认领并掌控你的个人档案。',
   claimPageBenefitVerified: '获得认证徽章',
   claimPageBenefitEdit: '编辑简介、头像和社交链接',
   claimPageBenefitStandout: '在排行榜上脱颖而出',

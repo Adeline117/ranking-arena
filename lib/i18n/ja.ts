@@ -4577,8 +4577,7 @@ const ja = {
 
   // Claim page
   claimPageTitle: 'Arenaでトレーダープロフィールを申請',
-  claimPageSubtitle:
-    '8,000人以上のトレーダーの中にランクインしています。プロフィールを管理しましょう。',
+  claimPageSubtitle: 'Arena の 8,000+ トレーダーに加わり、プロフィールを認証して管理しましょう。',
   claimPageBenefitVerified: 'プロフィールに認証バッジを取得',
   claimPageBenefitEdit: '自己紹介、アバター、ソーシャルリンクを編集',
   claimPageBenefitStandout: 'ランキングで目立つ',
