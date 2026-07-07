@@ -1954,7 +1954,7 @@ const zh = {
   loginCreateAccount: '创建账号',
   loginSubtitle: 'Arena ranks everything in crypto',
   loginValueProp1: '160,000+ 已收录交易员实时追踪',
-  loginValueProp2: '跨 20+ 交易所对比收益与风控',
+  loginValueProp2: '跨 45+ 交易所对比收益与风控',
   loginValueProp3: '加入交易社区，发现投资机会',
   loginConnectWallet: '连接钱包',
   loginWalletSignIn: '使用钱包登录',
@@ -2362,7 +2362,7 @@ const zh = {
 
   // Privacy policy page
   privacyPolicyTitle: '隐私政策',
-  privacyLastUpdated: '最后更新: 2026 年 1 月 18 日',
+  privacyLastUpdated: '最后更新：2026年1月18日',
   privacyOverviewTitle: '1. 概述',
   privacyOverviewP1:
     'Arena（以下简称"我们"或"本平台"）重视您的隐私。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。',
@@ -2443,7 +2443,7 @@ const zh = {
 
   // Terms of service page
   termsTitle: '服务条款',
-  termsLastUpdated: '最后更新日期：2026年2月',
+  termsLastUpdated: '最后更新：2026年2月1日',
   termsAcceptTitle: '1. 接受条款',
   termsAcceptP1:
     '欢迎使用 Arena（以下简称"本平台"或"我们"）。通过访问或使用我们的服务，您同意受本服务条款（以下简称"条款"）的约束。如果您不同意这些条款的任何部分，请不要使用我们的服务。',
@@ -3564,7 +3564,7 @@ const zh = {
 
   // DMCA
   dmcaTitle: '版权政策 (Copyright / DMCA Policy)',
-  dmcaLastUpdated: '最后更新: 2026年2月8日',
+  dmcaLastUpdated: '最后更新：2026年2月8日',
   dmcaOverviewTitle: '1. 概述',
   dmcaOverviewDesc:
     'Arena尊重知识产权，并期望平台用户同样尊重知识产权。如果你认为本平台上的内容侵犯了你的版权，请按照以下流程提交通知。',
@@ -4851,6 +4851,9 @@ const zh = {
   claimVerifyMethodApi: 'API Key',
   claimVerifyMethodWallet: '钱包签名',
   claimVerifiedAutoApproved: '你的认领已验证并自动通过！',
+  claimVerifyAndClaim: '验证并认领',
+  claimFormSafeNote:
+    '我们只需要只读 API Key（无交易或提款权限）。密钥使用 AES-256-GCM 加密存储，且永不记录日志。',
   claimSupportedExchanges: '支持的交易所',
   claimDexPlatforms: 'DEX 平台（钱包签名验证）',
   claimCexPlatforms: 'CEX 平台（API Key 验证）',
@@ -6072,6 +6075,8 @@ const zh = {
   referralFriendsReferred: '已邀请好友',
   referralRewardUnlocked: '奖励已解锁！',
   referralFriendTrialNote: '额外福利：好友通过你的链接加入即可获得 {days} 天 Pro 试用。',
+  referralPromoNote:
+    '限免期间 Pro 已全员免费，你赚取的 Pro 奖励天数会先记入账户，待限免结束后自动生效并顺延，不会作废。',
   referralPageSubtitle: '邀请好友加入 Arena，追踪你的邀请进度。',
   referralSignInGateTitle: '登录以获取你的邀请链接',
   referralSignInGateDesc: '创建账号或登录，开始邀请好友。',
@@ -6103,6 +6108,7 @@ const zh = {
   stayOnPage: '留在本页',
   pricingYearlySaveAmount: '每年省 ${amount}',
   pricingLifetimeAnchor: '终身版约 {months} 个月即回本（相比 ${price}/年）',
+  pricingLifetimeAnchorMonthly: '终身版约 {months} 个月即回本（相比 ${price}/月）',
   botArenaScore: 'Arena 评分',
   botGrade_legendary: '传奇',
   botGrade_great: '优秀',

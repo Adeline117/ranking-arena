@@ -153,8 +153,10 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
   const yearlySavings = Math.round((1 - PRICING.yearly.price / 12 / PRICING.monthly.price) * 100)
   // Concrete dollar saving on the yearly plan vs paying monthly for 12 months
   const yearlySaveAmount = (PRICING.monthly.price * 12 - PRICING.yearly.price).toFixed(2)
-  // How long Lifetime takes to pay for itself at the yearly Pro rate (anchor cue)
-  const lifetimePaybackMonths = Math.round(PRICING.lifetime.price / (PRICING.yearly.price / 12))
+  // How long Lifetime takes to pay for itself — computed against the currently
+  // selected billing basis so the monthly view doesn't quote the yearly price.
+  const monthlyRate = billing === 'yearly' ? PRICING.yearly.price / 12 : PRICING.monthly.price
+  const lifetimePaybackMonths = Math.round(PRICING.lifetime.price / monthlyRate)
   const {
     checkout: directCheckout,
     isLoading: checkoutLoading,
@@ -472,30 +474,50 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 </li>
               ))}
             </ul>
-            <Link
-              href={ctaHref || '#'}
-              onClick={(e) => {
-                if (email) e.preventDefault()
-                trackEvent('click_upgrade_cta', { plan: 'free', billing })
-              }}
-              style={{
-                display: 'block',
-                padding: '14px 0',
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${tokens.colors.border.primary}`,
-                textAlign: 'center',
-                color: tokens.colors.text.primary,
-                textDecoration: 'none',
-                fontWeight: 600,
-                fontSize: 15,
-                marginTop: tokens.spacing[6],
-                transition: 'all 0.2s',
-              }}
-            >
-              {email
-                ? resolved(t('currentPlan'), 'currentPlan', 'Current Plan')
-                : resolved(t('getStarted'), 'getStarted', 'Get Started')}
-            </Link>
+            {email ? (
+              // Free plan is the logged-in user's current tier — render a
+              // non-interactive disabled label, not a dead <a href="#"> link.
+              <span
+                aria-disabled="true"
+                style={{
+                  display: 'block',
+                  padding: '14px 0',
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  textAlign: 'center',
+                  color: tokens.colors.text.tertiary,
+                  fontWeight: 600,
+                  fontSize: 15,
+                  marginTop: tokens.spacing[6],
+                  cursor: 'default',
+                  opacity: 0.7,
+                }}
+              >
+                {resolved(t('currentPlan'), 'currentPlan', 'Current Plan')}
+              </span>
+            ) : (
+              <Link
+                href="/login"
+                onClick={() => {
+                  trackEvent('click_upgrade_cta', { plan: 'free', billing })
+                }}
+                style={{
+                  display: 'block',
+                  padding: '14px 0',
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                  textAlign: 'center',
+                  color: tokens.colors.text.primary,
+                  textDecoration: 'none',
+                  fontWeight: 600,
+                  fontSize: 15,
+                  marginTop: tokens.spacing[6],
+                  transition: 'all 0.2s',
+                }}
+              >
+                {resolved(t('getStarted'), 'getStarted', 'Get Started')}
+              </Link>
+            )}
           </div>
 
           {/* Pro Plan — elevated with shadow + scale */}
@@ -562,13 +584,18 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 marginBottom: 0,
               }}
             >
-              {resolved(
-                t('pricingLifetimeAnchor'),
-                'pricingLifetimeAnchor',
-                'Lifetime pays for itself in ~{months} months vs ${price}/yr'
-              )
-                .replace('{months}', String(lifetimePaybackMonths))
-                .replace('{price}', String(PRICING.yearly.price))}
+              {(billing === 'yearly'
+                ? resolved(
+                    t('pricingLifetimeAnchor'),
+                    'pricingLifetimeAnchor',
+                    'Lifetime pays for itself in ~{months} months vs ${price}/yr'
+                  ).replace('{price}', String(PRICING.yearly.price))
+                : resolved(
+                    t('pricingLifetimeAnchorMonthly'),
+                    'pricingLifetimeAnchorMonthly',
+                    'Lifetime pays for itself in ~{months} months vs ${price}/mo'
+                  ).replace('{price}', String(PRICING.monthly.price))
+              ).replace('{months}', String(lifetimePaybackMonths))}
             </p>
             {billing === 'yearly' && (
               <p

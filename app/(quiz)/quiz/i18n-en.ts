@@ -10,6 +10,7 @@ const quizEn: Record<string, string> = {
   quizBadge30Q: '15 Questions',
   quizBadge12Types: '12 Personalities',
   quizBadge5Min: '~2 min',
+  quizBadgeMatchLegend: 'Match a Legend',
   quizSeeResults: 'See My Results',
   quizBack: 'Back',
   quizCalculating: 'Analyzing your trading personality...',

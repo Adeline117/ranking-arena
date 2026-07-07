@@ -1909,7 +1909,7 @@ const ko = {
   loginCreateAccount: '계정 만들기',
   loginSubtitle: 'Arena는 암호화폐의 모든 것을 순위화합니다',
   loginValueProp1: '160,000명 이상의 등록 트레이더를 실시간 추적',
-  loginValueProp2: '20개 이상 거래소의 ROI 비교',
+  loginValueProp2: '45개 이상 거래소의 ROI 비교',
   loginValueProp3: '트레이딩 커뮤니티 참여',
   loginConnectWallet: '지갑 연결',
   loginWalletSignIn: '지갑으로 로그인',
@@ -2411,7 +2411,7 @@ const ko = {
 
   // Terms of service page
   termsTitle: '이용약관',
-  termsLastUpdated: '최종 수정일: 2026년 2월',
+  termsLastUpdated: '최종 업데이트: 2026년 2월 1일',
   termsAcceptTitle: '1. 약관 동의',
   termsAcceptP1:
     'Arena("플랫폼" 또는 "당사")에 오신 것을 환영합니다. 서비스에 접속하거나 이용하시면 본 이용약관("약관")에 동의하는 것으로 간주됩니다. 약관의 일부에 동의하지 않으시면 서비스를 이용하지 마세요.',
@@ -3532,7 +3532,7 @@ const ko = {
 
   // DMCA
   dmcaTitle: '저작권 / DMCA 정책',
-  dmcaLastUpdated: '최종 수정일: 2026년 2월 8일',
+  dmcaLastUpdated: '최종 업데이트: 2026년 2월 8일',
   dmcaOverviewTitle: '1. 개요',
   dmcaOverviewDesc:
     'Arena는 지적 재산권을 존중하며 사용자에게도 동일하게 기대합니다. 본 플랫폼의 콘텐츠가 저작권을 침해한다고 생각되시면 아래 절차에 따라 통지를 제출해 주세요.',
@@ -4821,6 +4821,9 @@ const ko = {
   claimVerifyMethodApi: 'API 키',
   claimVerifyMethodWallet: '지갑 서명',
   claimVerifiedAutoApproved: '인증이 확인되어 자동 승인되었습니다!',
+  claimVerifyAndClaim: '인증하고 소유권 주장',
+  claimFormSafeNote:
+    '읽기 전용 API 키(거래 또는 출금 권한 없음)만 필요합니다. 키는 AES-256-GCM으로 암호화되며 로그에 기록되지 않습니다.',
   claimSupportedExchanges: '지원 거래소',
   claimDexPlatforms: 'DEX 플랫폼 (지갑 인증)',
   claimCexPlatforms: 'CEX 플랫폼 (API 키 인증)',
@@ -6089,6 +6092,9 @@ const ko = {
   referralFriendsReferred: '초대한 친구',
   referralRewardUnlocked: '보상 잠금 해제!',
   referralFriendTrialNote: '보너스: 친구가 내 링크로 가입하면 {days}일 Pro 체험을 받습니다.',
+  // TODO i18n ja/ko
+  referralPromoNote:
+    'Pro is currently free for everyone during our promo. The Pro days you earn are banked and automatically applied once the promo ends — they never expire.',
   referralPageSubtitle: '친구를 Arena에 초대하고 추천 현황을 확인하세요.',
   referralSignInGateTitle: '로그인하고 추천 링크 받기',
   referralSignInGateDesc: '계정을 만들거나 로그인하여 친구 초대를 시작하세요.',
@@ -6120,6 +6126,7 @@ const ko = {
   stayOnPage: '이 페이지에 머무르기',
   pricingYearlySaveAmount: '연 ${amount} 절약',
   pricingLifetimeAnchor: '라이프타임은 약 {months}개월이면 본전 (${price}/년 대비)',
+  pricingLifetimeAnchorMonthly: '라이프타임은 약 {months}개월이면 본전 (${price}/월 대비)',
   botArenaScore: 'Arena 점수',
   botGrade_legendary: '전설',
   botGrade_great: '우수',
