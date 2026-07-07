@@ -3602,7 +3602,7 @@ const zh = {
   dmcaContactTitle: '4. 联系方式 (Contact)',
   dmcaContactDesc: '版权相关事宜请联系：',
   dmcaContactEmail:
-    '请发送邮件至 ywen8@uw.edu，在主题中注明"版权通知"或"DMCA Notice"。我们将在收到有效通知后尽快处理（通常在5个工作日内）。',
+    '请发送邮件至 adelinewen1107@outlook.com，在主题中注明"版权通知"或"DMCA Notice"。我们将在收到有效通知后尽快处理（通常在5个工作日内）。',
 
   // 市场面板
   fundamentalData: '基本面数据',

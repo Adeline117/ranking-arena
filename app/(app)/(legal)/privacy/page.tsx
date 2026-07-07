@@ -28,8 +28,8 @@ const KEY_POINT_KEYS = [
   'privacyKeyPoint4',
 ]
 
-const PROFILE_HANDLE = 'ywen8@uw.edu'
-const PROFILE_HREF = 'mailto:ywen8@uw.edu'
+const PROFILE_HANDLE = 'adelinewen1107@outlook.com'
+const PROFILE_HREF = 'mailto:adelinewen1107@outlook.com'
 
 /* ---------- styles ---------- */
 

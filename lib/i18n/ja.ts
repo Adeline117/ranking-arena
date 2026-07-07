@@ -3399,7 +3399,7 @@ const ja = {
   dmcaContactTitle: '4. 連絡先',
   dmcaContactDesc: '著作権関連の事項については、以下までご連絡ください：',
   dmcaContactEmail:
-    'ywen8@uw.edu 宛に、件名に「著作権通知」または「DMCA通知」を記載してメールをお送りください。有効な通知は可能な限り迅速に処理します（通常5営業日以内）。',
+    'adelinewen1107@outlook.com 宛に、件名に「著作権通知」または「DMCA通知」を記載してメールをお送りください。有効な通知は可能な限り迅速に処理します（通常5営業日以内）。',
 
   fundamentalData: 'ファンダメンタルズ',
   historicalExtremes: '過去の極値',
