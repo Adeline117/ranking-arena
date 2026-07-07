@@ -276,7 +276,16 @@ export default function GroupHeader({
                   <Text
                     size="xs"
                     color="tertiary"
-                    style={{ display: 'flex', alignItems: 'center', gap: 4 }}
+                    style={{
+                      // inline-flex + nowrap keeps "群主:" and the @handle on one line in
+                      // the correct order — on 390px the plain flex let the label wrap
+                      // below and reorder after the value (U9-11).
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      whiteSpace: 'nowrap',
+                      flexShrink: 0,
+                    }}
                   >
                     {t('groupOwner')}:
                     <Link

@@ -606,7 +606,7 @@ export default function ConversationsList(): React.ReactElement {
                 margin: '0 auto',
               }}
             >
-              {t('noMessagesHint')}
+              {t('u10inbox_dmEmptyCta')}
             </div>
           </div>
         </div>

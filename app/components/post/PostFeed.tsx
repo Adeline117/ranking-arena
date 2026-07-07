@@ -175,6 +175,12 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
             pageParams: [0],
           }
         : undefined,
+    // initialPosts are prefetched server-side ANONYMOUSLY (no viewer_id), so they
+    // carry no per-user state (user_reaction/user_vote). Marking initialData as
+    // stale (updatedAt 0) makes React Query refetch once auth is initialized —
+    // the client fetch sends the Bearer token so the like button hydrates its
+    // "already liked" highlight (U9-1). initialPosts still render instantly (LCP).
+    initialDataUpdatedAt: 0,
     enabled: authInitialized,
     staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,

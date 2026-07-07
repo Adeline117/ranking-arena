@@ -81,12 +81,14 @@ export default function ActivityFeedItem({
   const rawName = activity.handle ?? activity.source_trader_id
   const displayName = isEmailLike(rawName) ? 'Anonymous trader' : rawName
 
-  // Trader handle link — suppress for email-shaped handles (would be a broken
-  // /trader/<email> link AND would leak the address in the URL).
+  // Trader link — use source_trader_id (the real, stable key) rather than the
+  // display handle. Handles are often truncated for display (e.g. "0x8def...2dae"),
+  // and a truncated handle only fuzzy-resolves to a half-populated (Partial) profile
+  // page; source_trader_id exact-matches in resolveTrader (U8-13). Suppress for
+  // email-shaped ids (broken link + address leak).
+  const traderKey = activity.source_trader_id || activity.handle
   const traderHref =
-    activity.handle && !isEmailLike(activity.handle)
-      ? `/trader/${encodeURIComponent(activity.handle)}`
-      : null
+    traderKey && !isEmailLike(traderKey) ? `/trader/${encodeURIComponent(traderKey)}` : null
 
   // Share link
   const shareHref = `/feed/${activity.id}`

@@ -2,6 +2,7 @@
 
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
+import { linkifyTagsAndMentions } from '@/lib/utils/content'
 import VideoPlayer, { parseVideoUrl } from './VideoPlayer'
 
 /**
@@ -21,7 +22,13 @@ export function renderContentWithControls(
   const urlRegex = /(https?:\/\/[^\s<>"{}|\\^`[\]]+)/g
 
   // Find all images
-  const imageMatches: { start: number; end: number; alt: string; url: string; imageIndex: number }[] = []
+  const imageMatches: {
+    start: number
+    end: number
+    alt: string
+    url: string
+    imageIndex: number
+  }[] = []
   let match
   let imgIdx = 0
   while ((match = imageRegex.exec(text)) !== null) {
@@ -61,7 +68,8 @@ export function renderContentWithControls(
           </a>
         )
       }
-      return part
+      // Plain text between URLs — linkify #hashtags / @mentions (U8-9)
+      return <span key={index}>{linkifyTagsAndMentions(part, `t${index}`)}</span>
     })
   }
 
@@ -122,7 +130,10 @@ export function renderContentWithControls(
       const isFirst = part.imageIndex === 0
       const isLast = part.imageIndex === imageCount - 1
       return (
-        <span key={index} style={{ position: 'relative', display: 'inline-block', margin: '4px 6px' }}>
+        <span
+          key={index}
+          style={{ position: 'relative', display: 'inline-block', margin: '4px 6px' }}
+        >
           <Image
             src={part.url || ''}
             alt={part.content || 'image'}
@@ -143,18 +154,23 @@ export function renderContentWithControls(
             unoptimized
           />
           {/* Image control bar */}
-          <div style={{
-            position: 'absolute',
-            top: 4,
-            right: 4,
-            display: 'flex',
-            gap: 4,
-            background: 'var(--color-backdrop-medium)',
-            borderRadius: 6,
-            padding: '2px 4px',
-          }}>
+          <div
+            style={{
+              position: 'absolute',
+              top: 4,
+              right: 4,
+              display: 'flex',
+              gap: 4,
+              background: 'var(--color-backdrop-medium)',
+              borderRadius: 6,
+              padding: '2px 4px',
+            }}
+          >
             <button
-              onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'up') }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveImage(part.url!, 'up')
+              }}
               disabled={isFirst}
               title={t('moveUp')}
               style={{
@@ -174,7 +190,10 @@ export function renderContentWithControls(
               {'\u2191'}
             </button>
             <button
-              onClick={(e) => { e.stopPropagation(); onMoveImage(part.url!, 'down') }}
+              onClick={(e) => {
+                e.stopPropagation()
+                onMoveImage(part.url!, 'down')
+              }}
               disabled={isLast}
               title={t('moveDown')}
               style={{
@@ -193,8 +212,12 @@ export function renderContentWithControls(
             >
               {'\u2193'}
             </button>
-            <button aria-label="Close"
-              onClick={(e) => { e.stopPropagation(); onRemoveImage(part.url!) }}
+            <button
+              aria-label="Close"
+              onClick={(e) => {
+                e.stopPropagation()
+                onRemoveImage(part.url!)
+              }}
               title={t('remove')}
               style={{
                 width: 24,
@@ -237,6 +260,6 @@ export function renderContentWithControls(
         </a>
       )
     }
-    return <span key={index}>{part.content}</span>
+    return <span key={index}>{linkifyTagsAndMentions(part.content, `t${index}`)}</span>
   })
 }
