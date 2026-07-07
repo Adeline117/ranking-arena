@@ -532,6 +532,10 @@ const ko = {
   followBack: '맞팔하기',
   messages: '메시지',
   inbox: '메시지',
+  // TODO i18n ja/ko — English fallback pending translation
+  u10inbox_pageTitle: 'Inbox',
+  u10inbox_dmEmptyCta: 'Open a trader profile and tap Message to start a chat',
+  u10inbox_conversationGone: 'This conversation no longer exists',
   tabNotifications: '알림',
   tabMessages: '메시지',
   markAllAsRead: '모두 읽음 처리',

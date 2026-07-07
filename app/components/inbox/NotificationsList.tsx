@@ -61,11 +61,20 @@ function localizeNotifMessage(notif: Notification, t: (key: string) => string): 
   return notif.message // user content — keep as-is
 }
 
-export default function NotificationsList() {
+// variant='panel' (default): dropdown/bell panel form — collapsible section header
+// + capped inner scroll. variant='page': dedicated /inbox page — the page already
+// has its own H1 + tab, so the inner collapsible "通知 N" header is redundant and
+// double-names the section (U10-6). Page mode renders the list directly (no chevron,
+// no collapse, no inner scroll cap) and keeps only the mark-all action.
+export default function NotificationsList({
+  variant = 'panel',
+}: { variant?: 'panel' | 'page' } = {}) {
+  const isPanel = variant !== 'page'
   const [typeFilter, setTypeFilter] = useState<'all' | 'follow' | 'like' | 'comment' | 'mention'>(
     'all'
   )
   const [collapsed, setCollapsed] = useState(false)
+  const effectiveCollapsed = isPanel ? collapsed : false
   const PAGE_SIZE = 20
   const { accessToken } = useAuthSession()
   const setUnreadNotifications = useInboxStore((s) => s.setUnreadNotifications)
@@ -248,64 +257,18 @@ export default function NotificationsList() {
 
   return (
     <div style={{ borderBottom: `1px solid ${tokens.colors.border.primary}` }}>
-      {/* Section header */}
-      <div
-        onClick={() => setCollapsed(!collapsed)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-          cursor: 'pointer',
-          userSelect: 'none',
-        }}
-      >
-        <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-          <svg
-            width="12"
-            height="12"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            style={{
-              transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
-              transition: 'transform 0.2s',
-              color: tokens.colors.text.tertiary,
-            }}
-          >
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-          <span
-            style={{
-              fontWeight: 700,
-              fontSize: tokens.typography.fontSize.sm,
-              color: tokens.colors.text.primary,
-            }}
-          >
-            {t('notifications')}
-          </span>
-          {unreadNotifications > 0 && (
-            <span
-              style={{
-                padding: '1px 6px',
-                borderRadius: tokens.radius.md,
-                background: tokens.colors.accent.primary,
-                color: tokens.colors.white,
-                fontSize: 11,
-                fontWeight: 700,
-              }}
-            >
-              {unreadNotifications}
-            </span>
-          )}
-        </div>
-        {unreadNotifications > 0 && (
+      {/* Page variant: no collapsible section header (page already has H1 + tab).
+          Keep only a right-aligned "mark all as read" action. */}
+      {!isPanel && unreadNotifications > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'flex-end',
+            padding: `${tokens.spacing[2]} ${tokens.spacing[4]} 0`,
+          }}
+        >
           <button
-            onClick={(e) => {
-              e.stopPropagation()
-              markAllAsRead()
-            }}
+            onClick={markAllAsRead}
             style={{
               padding: '4px 8px',
               border: 'none',
@@ -318,11 +281,85 @@ export default function NotificationsList() {
           >
             {t('markAllAsRead')}
           </button>
-        )}
-      </div>
+        </div>
+      )}
+      {/* Section header (panel variant only) */}
+      {isPanel && (
+        <div
+          onClick={() => setCollapsed(!collapsed)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            cursor: 'pointer',
+            userSelect: 'none',
+          }}
+        >
+          <div style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              style={{
+                transform: collapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                transition: 'transform 0.2s',
+                color: tokens.colors.text.tertiary,
+              }}
+            >
+              <polyline points="6 9 12 15 18 9" />
+            </svg>
+            <span
+              style={{
+                fontWeight: 700,
+                fontSize: tokens.typography.fontSize.sm,
+                color: tokens.colors.text.primary,
+              }}
+            >
+              {t('notifications')}
+            </span>
+            {unreadNotifications > 0 && (
+              <span
+                style={{
+                  padding: '1px 6px',
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.accent.primary,
+                  color: tokens.colors.white,
+                  fontSize: 11,
+                  fontWeight: 700,
+                }}
+              >
+                {unreadNotifications}
+              </span>
+            )}
+          </div>
+          {unreadNotifications > 0 && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                markAllAsRead()
+              }}
+              style={{
+                padding: '4px 8px',
+                border: 'none',
+                background: 'transparent',
+                color: tokens.colors.accent.primary,
+                fontSize: 12,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              {t('markAllAsRead')}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Filter tabs */}
-      {!collapsed && (
+      {!effectiveCollapsed && (
         <div
           style={{
             display: 'flex',
@@ -355,8 +392,8 @@ export default function NotificationsList() {
       )}
 
       {/* Notifications list */}
-      {!collapsed && (
-        <div style={{ maxHeight: 'min(400px, 60vh)', overflowY: 'auto' }}>
+      {!effectiveCollapsed && (
+        <div style={isPanel ? { maxHeight: 'min(400px, 60vh)', overflowY: 'auto' } : undefined}>
           {loading ? (
             <div
               style={{
