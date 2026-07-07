@@ -69,8 +69,17 @@ export const POST = withAuth(
     let memberIds: string[] = []
 
     if (target_user_ids && target_user_ids.length > 0) {
-      // 发送给指定成员
-      memberIds = target_user_ids.filter((id) => id !== user.id)
+      // 发送给指定成员 —— 必须与本群真实成员求交集,绝不信任客户端传入的 id。
+      // (安全审计 2026-07-07 P2:否则群管理员可借 target_user_ids 向平台上任意用户
+      //  发 DM+通知,绕过对方的 DM 关闭/拉黑/非互关限制。)同样尊重成员自静音。
+      const { data: verifiedMembers } = await supabase
+        .from('group_members')
+        .select('user_id')
+        .eq('group_id', groupId)
+        .neq('user_id', user.id)
+        .in('user_id', target_user_ids)
+        .or('self_notify_muted.is.null,self_notify_muted.eq.false')
+      memberIds = (verifiedMembers || []).map((m: { user_id: string }) => m.user_id)
     } else {
       // 发送给所有成员（排除操作者自己 + 自行静音了本群广播的成员）。
       // self_notify_muted 是成员自控偏好（默认 false = 仍接收管理员广播），
