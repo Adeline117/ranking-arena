@@ -70,7 +70,9 @@ export default function ResultPageClient({
   const secondaryType = PERSONALITY_TYPE_MAP[secondaryId]
   const secondaryLabel = secondaryType ? t(secondaryType.nameKey) : secondaryId
 
-  const resultUrl = `${BASE_URL}/quiz/result?type=${typeId}&match=${matchPercent}`
+  // Include the current language so the shared link's OG crawler card renders
+  // the localized personality name (e.g. 叙事猎人) rather than defaulting to English.
+  const resultUrl = `${BASE_URL}/quiz/result?type=${typeId}&match=${matchPercent}&lang=${language}`
 
   const handleToggleLanguage = async () => {
     const newLang = nextQuizLanguage(language)
@@ -276,7 +278,13 @@ export default function ResultPageClient({
             <div className="quiz-section-accent" style={{ background: pType.gradient }} />
             <h3 className="quiz-section-title">{t('quizShareTitle')}</h3>
           </div>
-          <ShareActions type={pType} matchPercent={matchPercent} resultUrl={resultUrl} tr={t} />
+          <ShareActions
+            type={pType}
+            matchPercent={matchPercent}
+            resultUrl={resultUrl}
+            tr={t}
+            lang={language}
+          />
         </div>
 
         {/* 9. Bottom CTAs — stack vertically so text never wraps */}
