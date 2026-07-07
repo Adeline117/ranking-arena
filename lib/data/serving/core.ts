@@ -6,6 +6,7 @@
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { logRpcError } from './log-rpc-error'
 import type { ServingCurrency, ServingTimeframe, TraderCoreModules } from './types'
 
 const CURRENCIES: ReadonlySet<string> = new Set(['USDT', 'USDx', 'USDC', 'USD'])
@@ -37,6 +38,7 @@ export async function getCoreModules(
     p_trader: exchangeTraderId,
     p_timeframe: tfToInt(timeframe),
   })
+  logRpcError('arena_core_modules', error)
   if (error || !data) return null
   const d = data as Record<string, unknown>
 

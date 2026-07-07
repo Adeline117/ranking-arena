@@ -8,6 +8,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Money, Provenance, ServingCurrency } from './types'
+import { logRpcError } from './log-rpc-error'
 
 export type ExchangeRankingsTimeframe = 7 | 30 | 90
 
@@ -50,6 +51,7 @@ export async function getExchangeRankings(
   const { data, error } = await supabase.rpc('arena_exchange_rankings', {
     p_timeframe: timeframe,
   })
+  logRpcError('arena_exchange_rankings', error)
   if (error || !data || typeof data !== 'object') return null
   const d = data as Record<string, unknown>
 

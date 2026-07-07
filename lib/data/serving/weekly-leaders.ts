@@ -10,6 +10,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
+import { logRpcError } from './log-rpc-error'
 import type { Money, Provenance, ServingCurrency } from './types'
 
 export interface WeeklyLeaderRow {
@@ -126,6 +127,7 @@ export async function getWeeklyLeaders(
   limit = 50
 ): Promise<WeeklyLeaders | null> {
   const { data, error } = await supabase.rpc('arena_weekly_leaders', { p_limit: limit })
+  logRpcError('arena_weekly_leaders', error)
   if (error || !data || typeof data !== 'object') return null
   const d = data as Record<string, unknown>
 

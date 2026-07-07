@@ -61,28 +61,50 @@ export async function POST(request: NextRequest, _context: RouteContext) {
 
       if (existingType === actionType) {
         // Toggle off: remove the reaction - use compound match for safety
-        await supabase.from('comment_likes').delete()
+        const { error: delError } = await supabase
+          .from('comment_likes')
+          .delete()
           .eq('comment_id', commentId)
           .eq('user_id', user.id)
           .eq('reaction_type', actionType)
+        if (delError) {
+          // Swallowed → returns liked:false while the row persists (UI desync).
+          _logger.error('Failed to remove comment reaction:', delError)
+        }
       } else {
         // Switch: change reaction type
-        await supabase.from('comment_likes').update({ reaction_type: actionType })
+        const { error: updError } = await supabase
+          .from('comment_likes')
+          .update({ reaction_type: actionType })
           .eq('comment_id', commentId)
           .eq('user_id', user.id)
-        if (actionType === 'like') { liked = true } else { disliked = true }
+        if (updError) {
+          _logger.error('Failed to switch comment reaction:', updError)
+        }
+        if (actionType === 'like') {
+          liked = true
+        } else {
+          disliked = true
+        }
       }
     } else {
       // New reaction - use upsert to handle concurrent inserts
-      const { error: upsertError } = await supabase.from('comment_likes').upsert({
-        comment_id: commentId,
-        user_id: user.id,
-        reaction_type: actionType,
-      }, { onConflict: 'comment_id,user_id' })
+      const { error: upsertError } = await supabase.from('comment_likes').upsert(
+        {
+          comment_id: commentId,
+          user_id: user.id,
+          reaction_type: actionType,
+        },
+        { onConflict: 'comment_id,user_id' }
+      )
       if (upsertError) {
         _logger.error('Failed to upsert comment like:', upsertError)
       }
-      if (actionType === 'like') { liked = true } else { disliked = true }
+      if (actionType === 'like') {
+        liked = true
+      } else {
+        disliked = true
+      }
     }
 
     // Recount from source of truth to avoid race conditions with stale counts (parallel)
@@ -103,12 +125,20 @@ export async function POST(request: NextRequest, _context: RouteContext) {
     ])
 
     // Update counts atomically from recount
-    await supabase
+    const { error: countUpdError } = await supabase
       .from('comments')
       .update({ like_count: likeCount || 0, dislike_count: dislikeCount || 0 })
       .eq('id', commentId)
+    if (countUpdError) {
+      _logger.error('Failed to update comment like/dislike counts:', countUpdError)
+    }
 
-    return success({ liked, disliked, like_count: likeCount || 0, dislike_count: dislikeCount || 0 })
+    return success({
+      liked,
+      disliked,
+      like_count: likeCount || 0,
+      dislike_count: dislikeCount || 0,
+    })
   } catch (error: unknown) {
     return handleError(error, 'posts/[id]/comments/like POST')
   }
