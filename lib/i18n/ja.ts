@@ -6224,6 +6224,7 @@ const ja = {
   u2detail_chartMean: '平均',
   u2detail_chartMedian: '中央値',
   u2detail_chartDays: '日数',
+  u13admin_accessRequired: '管理者権限が必要です',
 } as const
 
 export default ja
