@@ -275,11 +275,14 @@ function OneClickWalletButtonInner({
             color: tokens.colors.white,
           }
         }
-        // Not connected
+        // Not connected — use a solid gradient fill (not the faint 8% wash that
+        // read as a disabled control) so the wallet path looks clearly clickable
+        // and consistent with the sibling one-click login buttons.
         return {
           ...baseStyles,
-          background: 'var(--color-accent-primary-08)',
-          border: '1px solid var(--color-accent-primary-30)',
+          background:
+            'linear-gradient(135deg, var(--color-accent-primary-20) 0%, var(--color-accent-primary-10) 100%)',
+          border: '1px solid var(--color-accent-primary-40)',
           color: tokens.colors.accent.brandLight,
         }
     }
