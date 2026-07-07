@@ -6449,6 +6449,7 @@ const ko = {
   u2detail_chartMean: '평균',
   u2detail_chartMedian: '중앙값',
   u2detail_chartDays: '일수',
+  u13admin_accessRequired: '관리자 권한이 필요합니다',
 } as const
 
 export default ko

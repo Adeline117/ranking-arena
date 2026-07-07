@@ -162,6 +162,10 @@ interface ActionButtonProps {
   variant: 'accent' | 'ghost'
   icon?: React.ReactNode
   children: React.ReactNode
+  /** Explicit accessible name. Required when children is not plain text (e.g.
+   *  an icon + styled <span>), otherwise Button falls back to the useless
+   *  "Button" default and screen readers / getByRole can't find it. */
+  ariaLabel?: string
 }
 
 export function ActionButton({
@@ -169,6 +173,7 @@ export function ActionButton({
   variant,
   icon,
   children,
+  ariaLabel,
 }: ActionButtonProps): React.ReactElement {
   const isAccent = variant === 'accent'
   const baseBackground = isAccent
@@ -184,6 +189,7 @@ export function ActionButton({
       variant="ghost"
       size="sm"
       onClick={onClick}
+      aria-label={ariaLabel}
       style={{
         color: textColor,
         fontSize: tokens.typography.fontSize.sm,

@@ -6573,6 +6573,7 @@ const en = {
   u2detail_chartMean: 'Mean',
   u2detail_chartMedian: 'Median',
   u2detail_chartDays: 'Days',
+  u13admin_accessRequired: 'Admin access required',
 } as const
 
 export default en

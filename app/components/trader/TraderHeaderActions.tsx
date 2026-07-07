@@ -65,6 +65,7 @@ function CompareToggle({
     <ActionButton
       onClick={handleToggle}
       variant={isSelected ? 'accent' : 'ghost'}
+      ariaLabel={label}
       icon={
         isSelected ? (
           <svg
