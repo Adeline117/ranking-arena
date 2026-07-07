@@ -111,8 +111,18 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       .single()
 
     if (groupError || !newGroup) {
-      logger.error('Error creating group on approval:', groupError)
       await rollbackClaim()
+      // 23505 = unique violation on groups_name_lower_unique (migration
+      // 20260707152533): another group already owns this (case-insensitive) name.
+      // Surface a clean 409 instead of a generic 500 so the admin knows why.
+      if (groupError?.code === '23505') {
+        logger.warn('Group approval blocked — name already taken:', { name: groupName })
+        return NextResponse.json(
+          { error: 'A group with this name already exists', code: 'NAME_TAKEN' },
+          { status: 409 }
+        )
+      }
+      logger.error('Error creating group on approval:', groupError)
       return NextResponse.json({ error: 'Failed to create group' }, { status: 500 })
     }
 
