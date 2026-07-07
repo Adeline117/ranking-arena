@@ -367,7 +367,9 @@ export default function TraderFollowButton({
         borderRadius: tokens.radius.lg,
         border: following ? tokens.glass.border.light : 'none',
         background: following ? tokens.glass.bg.light : tokens.colors.accent.brand,
-        color: tokens.colors.white,
+        // following bg is the theme-aware glass tint (light theme ≈ near-white), so
+        // hard white text went invisible there. Use theme-aware text in that state.
+        color: following ? 'var(--color-text-primary)' : tokens.colors.white,
         fontWeight: 900,
         fontSize: tokens.typography.fontSize.base,
         cursor: isLoading ? 'not-allowed' : 'pointer',

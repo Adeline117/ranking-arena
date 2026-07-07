@@ -293,7 +293,9 @@ export default function UserFollowButton({
         width: fullWidth ? '100%' : 'auto',
         border: following ? `1px solid var(--glass-border-medium)` : 'none',
         background: following ? tokens.glass.bg.light : tokens.colors.accent.brand,
-        color: tokens.colors.white,
+        // following bg is the theme-aware glass tint (light theme ≈ near-white), so
+        // hard white text went invisible there. Use theme-aware text in that state.
+        color: following ? 'var(--color-text-primary)' : tokens.colors.white,
         fontWeight: 700,
         cursor: loading ? 'not-allowed' : 'pointer',
         opacity: loading ? 0.6 : 1,
