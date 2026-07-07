@@ -68,7 +68,6 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
       { url: '/hot', priority: 0.9, freq: 'hourly' },
       { url: '/market', priority: 0.8, freq: 'hourly' },
       { url: '/groups', priority: 0.8, freq: 'daily' },
-      { url: '/rankings/bots', priority: 0.8, freq: 'daily' },
       { url: '/rankings/tokens', priority: 0.8, freq: 'daily' },
       { url: '/pricing', priority: 0.7, freq: 'monthly' },
       { url: '/methodology', priority: 0.7, freq: 'monthly' },
