@@ -16,6 +16,9 @@ interface CoinRow {
   price: string
   changePct: string
   direction: 'up' | 'down'
+  // Optional coingecko icon URL (from spot data). Preferred over CryptoIcon's
+  // CoinCap CDN fallback, which browsers block via ORB (repeated console errors).
+  image?: string
 }
 
 interface ExchangeInfo {
@@ -134,14 +137,19 @@ function CoinItem({
   changePct,
   isGainer,
   index,
+  image,
 }: {
   symbol: string
   price: string
   changePct: string
   isGainer: boolean
   index: number
+  image?: string
 }) {
   const sym = symbol.replace('-USD', '').replace('USDT', '')
+  // Prefer the coingecko icon URL (from spot data) — CryptoIcon's CoinCap CDN
+  // fallback is ORB-blocked by browsers and spams the console on failure.
+  const [imageFailed, setImageFailed] = useState(false)
   const color = isGainer ? tokens.colors.accent.success : tokens.colors.accent.error
   const bgGradient = isGainer
     ? 'linear-gradient(90deg, var(--color-accent-success-05) 0%, transparent 100%)'
@@ -183,7 +191,19 @@ function CoinItem({
         >
           {index + 1}
         </span>
-        <CryptoIcon symbol={sym} size={20} />
+        {image && !imageFailed ? (
+          <img
+            src={image}
+            alt={sym}
+            width={20}
+            height={20}
+            loading="lazy"
+            onError={() => setImageFailed(true)}
+            style={{ borderRadius: '50%', flexShrink: 0 }}
+          />
+        ) : (
+          <CryptoIcon symbol={sym} size={20} />
+        )}
         <span
           style={{
             fontWeight: tokens.typography.fontWeight.semibold,
@@ -320,6 +340,7 @@ function spotRowsToCoins(spots: SpotCoin[]): CoinRow[] {
       price: s.price != null ? String(s.price) : '0',
       changePct: `${s.change24h >= 0 ? '+' : ''}${s.change24h.toFixed(2)}%`,
       direction: s.change24h >= 0 ? ('up' as const) : ('down' as const),
+      image: s.image || undefined,
     }))
 }
 
@@ -444,6 +465,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
                   changePct={row.changePct}
                   isGainer={true}
                   index={i}
+                  image={row.image}
                 />
               ))}
             </div>
@@ -477,6 +499,7 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
                   changePct={row.changePct}
                   isGainer={false}
                   index={i}
+                  image={row.image}
                 />
               ))}
             </div>
