@@ -19,6 +19,12 @@ interface ComparePortfolioSectionProps {
   delay: number
 }
 
+// U2-6 NOTE: this component is currently NOT rendered (removed from StatsPage).
+// The benchmark curve below is FABRICATED (seededRandom), not a real BTC/SPX500
+// price series, and the legend value is hardcoded N/A. Do NOT re-mount this until
+// the compare series is fed by real market data (e.g. /api/market/candles) with
+// dates aligned to the trader's equity curve and rebased to the period start.
+
 export function ComparePortfolioSection({
   traderHandle,
   equityCurve,
