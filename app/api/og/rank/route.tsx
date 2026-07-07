@@ -159,7 +159,7 @@ export async function GET(request: NextRequest) {
   // Hide "/ N+ traders" when total contradicts rank (total < rank) — a
   // "RANKED 1970 / 743+ traders" line is worse than no total at all.
   const totalDisplay: string | null =
-    total > 0 ? (rankValid && total < rank ? null : total.toLocaleString('en-US') + '+') : '8,000+'
+    total > 0 ? (rankValid && total < rank ? null : total.toLocaleString('en-US') + '+') : null
 
   return new ImageResponse(
     <div

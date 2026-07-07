@@ -301,14 +301,6 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
         >
           {[
             {
-              value: '8,000+',
-              label: resolved(
-                t('pricingStatTradersRanked'),
-                'pricingStatTradersRanked',
-                'Traders Ranked'
-              ),
-            },
-            {
               value: '32+',
               label: resolved(
                 t('pricingStatExchangesTracked'),

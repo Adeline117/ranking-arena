@@ -121,7 +121,7 @@ export async function GET(request: NextRequest) {
     tr.source.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase())
   const pc = PLAT_C[tr.source] || C.purpleLight
   const rd = rank > 0 ? (rank <= 9999 ? String(rank) : (rank / 1000).toFixed(0) + 'K') : '--',
-    td = total > 0 ? total.toLocaleString('en-US') + '+' : '8,000+'
+    td: string | null = total > 0 ? total.toLocaleString('en-US') + '+' : null
   const cta = ref ? `arenafi.org/?ref=${ref}` : 'arenafi.org'
 
   return new ImageResponse(
@@ -383,7 +383,7 @@ export async function GET(request: NextRequest) {
               >
                 {rd}
               </span>
-              <span style={{ fontSize: 14, color: C.dim }}>/ {td} traders</span>
+              {td && <span style={{ fontSize: 14, color: C.dim }}>/ {td} traders</span>}
             </div>
             {tp && (
               <div
