@@ -2056,6 +2056,7 @@ const zh = {
   videoOptional: '视频（可选，最多1个，100MB以内）',
   deleteVideo: '删除视频',
   addVideo: '添加视频',
+  u11prof_videoLabel: '视频',
   videoFormatSupport: '支持 MP4、WebM、MOV、AVI、MKV 格式，最大 100MB',
   moveUp: '上移',
   moveDown: '下移',

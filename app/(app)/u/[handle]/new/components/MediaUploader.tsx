@@ -21,8 +21,18 @@ interface ImageUploaderProps {
 }
 
 export function ImageUploader({
-  images, uploading, fileInputRef, onImageUpload, onRemoveImage, onInsertImage,
-  isImageInContent, onDragStart, onDragOver, onDragEnd, draggedImageIndex, t,
+  images,
+  uploading,
+  fileInputRef,
+  onImageUpload,
+  onRemoveImage,
+  onInsertImage,
+  isImageInContent,
+  onDragStart,
+  onDragOver,
+  onDragEnd,
+  draggedImageIndex,
+  t,
 }: ImageUploaderProps) {
   return (
     <Box>
@@ -37,15 +47,28 @@ export function ImageUploader({
           marginBottom: tokens.spacing[3],
           background: 'var(--color-accent-primary-10)',
           borderRadius: tokens.radius.md,
-          border: ('1px dashed ' + tokens.colors.accent.brand),
+          border: '1px dashed ' + tokens.colors.accent.brand,
         }}
       >
         <Text size="xs" color="secondary" style={{ display: 'block', marginBottom: 4 }}>
           <strong>{t('imageInsertGuideTitle')}</strong>
         </Text>
         <Text size="xs" color="tertiary" style={{ display: 'block', lineHeight: 1.6 }}>
-          {t('imageInsertStep1')}<br />
-          {t('imageInsertStep2')} <span style={{ background: tokens.colors.accent.brand, color: tokens.colors.white, padding: '0 4px', borderRadius: 3 }}>{'\u21b5'}</span> {t('imageInsertStep2Suffix')}<br />
+          {t('imageInsertStep1')}
+          <br />
+          {t('imageInsertStep2')}{' '}
+          <span
+            style={{
+              background: tokens.colors.accent.brand,
+              color: tokens.colors.white,
+              padding: '0 4px',
+              borderRadius: 3,
+            }}
+          >
+            {'\u21b5'}
+          </span>{' '}
+          {t('imageInsertStep2Suffix')}
+          <br />
           {t('imageInsertStep3')}
         </Text>
       </Box>
@@ -85,10 +108,10 @@ export function ImageUploader({
                 borderRadius: tokens.radius.md,
                 overflow: 'hidden',
                 border: inContent
-                  ? ('2px solid ' + tokens.colors.accent.brand)
+                  ? '2px solid ' + tokens.colors.accent.brand
                   : draggedImageIndex === index
-                    ? ('2px solid ' + tokens.colors.accent.brand)
-                    : ('1px solid ' + tokens.colors.border.primary),
+                    ? '2px solid ' + tokens.colors.accent.brand
+                    : '1px solid ' + tokens.colors.border.primary,
                 cursor: 'grab',
                 opacity: draggedImageIndex === index ? 0.7 : 1,
                 transition: `all ${tokens.transition.base}`,
@@ -152,7 +175,8 @@ export function ImageUploader({
                 >
                   {'\u21b5'}
                 </button>
-                <button aria-label="Close"
+                <button
+                  aria-label="Close"
                   onClick={() => onRemoveImage(index)}
                   title={t('delete')}
                   style={{
@@ -183,7 +207,7 @@ export function ImageUploader({
               width: 100,
               height: 100,
               borderRadius: tokens.radius.md,
-              border: ('2px dashed ' + tokens.colors.border.primary),
+              border: '2px dashed ' + tokens.colors.border.primary,
               background: tokens.colors.bg.secondary,
               display: 'flex',
               flexDirection: 'column',
@@ -195,11 +219,17 @@ export function ImageUploader({
             }}
           >
             {uploading ? (
-              <Text size="xs" color="secondary">{t('uploadingImage')}</Text>
+              <Text size="xs" color="secondary">
+                {t('uploadingImage')}
+              </Text>
             ) : (
               <>
-                <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>+</Text>
-                <Text size="xs" color="secondary">{t('addImage')}</Text>
+                <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>
+                  +
+                </Text>
+                <Text size="xs" color="secondary">
+                  {t('addImage')}
+                </Text>
               </>
             )}
           </label>
@@ -224,8 +254,13 @@ interface VideoUploaderProps {
 }
 
 export function VideoUploader({
-  videos, videoUploading, videoUploadProgress, videoInputRef,
-  onVideoUpload, onRemoveVideo, t,
+  videos,
+  videoUploading,
+  videoUploadProgress,
+  videoInputRef,
+  onVideoUpload,
+  onRemoveVideo,
+  t,
 }: VideoUploaderProps) {
   return (
     <Box>
@@ -260,14 +295,11 @@ export function VideoUploader({
               height: 120,
               borderRadius: tokens.radius.md,
               overflow: 'hidden',
-              border: ('2px solid ' + tokens.colors.accent.brand),
+              border: '2px solid ' + tokens.colors.accent.brand,
               background: tokens.colors.black,
             }}
           >
-            <video
-              src={video.url}
-              style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-            />
+            <video src={video.url} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             {/* Play icon */}
             <Box
               style={{
@@ -305,7 +337,8 @@ export function VideoUploader({
               {(video.fileSize / 1024 / 1024).toFixed(1)}MB
             </Box>
             {/* Delete button */}
-            <button aria-label="Close"
+            <button
+              aria-label="Close"
               onClick={onRemoveVideo}
               title={t('deleteVideo')}
               style={{
@@ -338,7 +371,7 @@ export function VideoUploader({
               width: 200,
               height: 120,
               borderRadius: tokens.radius.md,
-              border: ('2px dashed ' + tokens.colors.border.primary),
+              border: '2px dashed ' + tokens.colors.border.primary,
               background: tokens.colors.bg.secondary,
               display: 'flex',
               flexDirection: 'column',
@@ -351,7 +384,9 @@ export function VideoUploader({
           >
             {videoUploading ? (
               <Box style={{ textAlign: 'center' }}>
-                <Text size="xs" color="secondary">{t('uploadingImage')} {videoUploadProgress}%</Text>
+                <Text size="xs" color="secondary">
+                  {t('uploadingImage')} {videoUploadProgress}%
+                </Text>
                 {/* Progress bar */}
                 <Box
                   style={{
@@ -375,9 +410,15 @@ export function VideoUploader({
               </Box>
             ) : (
               <>
-                <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>Video</Text>
-                <Text size="xs" color="secondary" style={{ marginTop: 4 }}>{t('addVideo')}</Text>
-                <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>MP4, WebM, MOV</Text>
+                <Text size="2xl" color="secondary" style={{ lineHeight: 1 }}>
+                  {t('u11prof_videoLabel')}
+                </Text>
+                <Text size="xs" color="secondary" style={{ marginTop: 4 }}>
+                  {t('addVideo')}
+                </Text>
+                <Text size="xs" color="tertiary" style={{ marginTop: 2 }}>
+                  MP4, WebM, MOV
+                </Text>
               </>
             )}
           </label>

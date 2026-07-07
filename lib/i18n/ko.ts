@@ -2176,6 +2176,7 @@ const ko = {
   videoOptional: '동영상 (선택사항, 최대 1개, 100MB 이하)',
   deleteVideo: '동영상 삭제',
   addVideo: '동영상 추가',
+  u11prof_videoLabel: '동영상',
   videoFormatSupport: 'MP4, WebM, MOV, AVI, MKV 지원, 최대 100MB',
   moveUp: '위로 이동',
   moveDown: '아래로 이동',

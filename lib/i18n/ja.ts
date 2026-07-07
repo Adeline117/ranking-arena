@@ -2080,6 +2080,7 @@ const ja = {
   videoOptional: '動画（任意、1つまで、100MB以下）',
   deleteVideo: '動画を削除',
   addVideo: '動画を追加',
+  u11prof_videoLabel: '動画',
   videoFormatSupport: 'MP4, WebM, MOV, AVI, MKV対応、最大100MB',
   moveUp: '上に移動',
   moveDown: '下に移動',
