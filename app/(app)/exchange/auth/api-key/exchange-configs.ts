@@ -9,13 +9,25 @@ export const EXCHANGE_CONFIGS = {
         { title: '登录 Binance', desc: '访问 Binance 官网，登录您的账户' },
         { title: '进入 API 管理', desc: '点击右上角头像 → 选择「API 管理」' },
         { title: '创建 API Key', desc: '点击「创建 API」，选择「系统生成」，设置标签名称' },
-        { title: '设置只读权限', desc: '只勾选「启用读取」，不要勾选其他权限，完成后复制 API Key 和 Secret' },
+        {
+          title: '设置只读权限',
+          desc: '只勾选「启用读取」，不要勾选其他权限，完成后复制 API Key 和 Secret',
+        },
       ],
       en: [
         { title: 'Login to Binance', desc: 'Visit Binance website and login to your account' },
-        { title: 'Go to API Management', desc: 'Click avatar on top right → Select "API Management"' },
-        { title: 'Create API Key', desc: 'Click "Create API", select "System Generated", set a label' },
-        { title: 'Set Read-Only Permission', desc: 'Only check "Enable Reading", do not check other permissions. Copy API Key and Secret' },
+        {
+          title: 'Go to API Management',
+          desc: 'Click avatar on top right → Select "API Management"',
+        },
+        {
+          title: 'Create API Key',
+          desc: 'Click "Create API", select "System Generated", set a label',
+        },
+        {
+          title: 'Set Read-Only Permission',
+          desc: 'Only check "Enable Reading", do not check other permissions. Copy API Key and Secret',
+        },
       ],
     },
   },
@@ -28,13 +40,22 @@ export const EXCHANGE_CONFIGS = {
         { title: '登录 Bybit', desc: '访问 Bybit 官网，登录您的账户' },
         { title: '进入 API 管理', desc: '点击右上角头像 → 选择「API」' },
         { title: '创建 API Key', desc: '点击「创建新密钥」，选择「系统生成 API 密钥」' },
-        { title: '设置只读权限', desc: '选择「只读」权限类型，完成安全验证后复制 API Key 和 Secret' },
+        {
+          title: '设置只读权限',
+          desc: '选择「只读」权限类型，完成安全验证后复制 API Key 和 Secret',
+        },
       ],
       en: [
         { title: 'Login to Bybit', desc: 'Visit Bybit website and login to your account' },
         { title: 'Go to API Management', desc: 'Click avatar on top right → Select "API"' },
-        { title: 'Create API Key', desc: 'Click "Create New Key", select "System-generated API Keys"' },
-        { title: 'Set Read-Only Permission', desc: 'Select "Read-Only" permission type. Copy API Key and Secret after verification' },
+        {
+          title: 'Create API Key',
+          desc: 'Click "Create New Key", select "System-generated API Keys"',
+        },
+        {
+          title: 'Set Read-Only Permission',
+          desc: 'Select "Read-Only" permission type. Copy API Key and Secret after verification',
+        },
       ],
     },
   },
@@ -47,13 +68,19 @@ export const EXCHANGE_CONFIGS = {
         { title: '登录 Bitget', desc: '访问 Bitget 官网，登录您的账户' },
         { title: '进入 API 管理', desc: '点击右上角头像 → 「API 管理」' },
         { title: '创建 API Key', desc: '点击「创建 API」，设置备注名和密码短语（Passphrase）' },
-        { title: '设置只读权限', desc: '只勾选「只读」权限，完成验证后复制 API Key、Secret 和 Passphrase' },
+        {
+          title: '设置只读权限',
+          desc: '只勾选「只读」权限，完成验证后复制 API Key、Secret 和 Passphrase',
+        },
       ],
       en: [
         { title: 'Login to Bitget', desc: 'Visit Bitget website and login to your account' },
         { title: 'Go to API Management', desc: 'Click avatar on top right → "API Management"' },
         { title: 'Create API Key', desc: 'Click "Create API", set a remark and Passphrase' },
-        { title: 'Set Read-Only Permission', desc: 'Only check "Read-Only" permission. Copy API Key, Secret and Passphrase after verification' },
+        {
+          title: 'Set Read-Only Permission',
+          desc: 'Only check "Read-Only" permission. Copy API Key, Secret and Passphrase after verification',
+        },
       ],
     },
   },
@@ -72,7 +99,10 @@ export const EXCHANGE_CONFIGS = {
         { title: 'Login to MEXC', desc: 'Visit MEXC website and login to your account' },
         { title: 'Go to API Management', desc: 'Click avatar on top right → "API Management"' },
         { title: 'Create API Key', desc: 'Click "Create API", enter a remark' },
-        { title: 'Set Read-Only Permission', desc: 'Select "Read-Only" permission. Copy API Key and Secret after verification' },
+        {
+          title: 'Set Read-Only Permission',
+          desc: 'Select "Read-Only" permission. Copy API Key and Secret after verification',
+        },
       ],
     },
   },
@@ -91,7 +121,10 @@ export const EXCHANGE_CONFIGS = {
         { title: 'Login to CoinEx', desc: 'Visit CoinEx website and login to your account' },
         { title: 'Go to API Management', desc: 'Click avatar on top right → "API Management"' },
         { title: 'Create API Key', desc: 'Click "Create API Key", enter a remark' },
-        { title: 'Set Read-Only Permission', desc: 'Only check "Query" permission. Copy API Key and Secret after verification' },
+        {
+          title: 'Set Read-Only Permission',
+          desc: 'Only check "Query" permission. Copy API Key and Secret after verification',
+        },
       ],
     },
   },
@@ -104,13 +137,22 @@ export const EXCHANGE_CONFIGS = {
         { title: '登录 HTX', desc: '访问 HTX 官网，登录您的账户' },
         { title: '进入 API 管理', desc: '点击右上角头像 → 「API 管理」' },
         { title: '创建 API Key', desc: '点击「创建 API Key」，输入备注名称' },
-        { title: '设置只读权限', desc: '只勾选「读取」权限，不要开启交易权限，完成验证后复制 API Key 和 Secret' },
+        {
+          title: '设置只读权限',
+          desc: '只勾选「读取」权限，不要开启交易权限，完成验证后复制 API Key 和 Secret',
+        },
       ],
       en: [
         { title: 'Login to HTX', desc: 'Visit HTX website and login to your account' },
-        { title: 'Go to API Management', desc: 'Click avatar on top right, select "API Management"' },
+        {
+          title: 'Go to API Management',
+          desc: 'Click avatar on top right, select "API Management"',
+        },
         { title: 'Create API Key', desc: 'Click "Create API Key", enter a remark' },
-        { title: 'Set Read-Only Permission', desc: 'Only check "Read" permission. Do not enable trading. Copy API Key and Secret after verification' },
+        {
+          title: 'Set Read-Only Permission',
+          desc: 'Only check "Read" permission. Do not enable trading. Copy API Key and Secret after verification',
+        },
       ],
     },
   },
@@ -127,12 +169,49 @@ export const EXCHANGE_CONFIGS = {
       ],
       en: [
         { title: 'Login to WEEX', desc: 'Visit WEEX website and login to your account' },
-        { title: 'Go to API Management', desc: 'Click avatar on top right, select "API Management"' },
+        {
+          title: 'Go to API Management',
+          desc: 'Click avatar on top right, select "API Management"',
+        },
         { title: 'Create API Key', desc: 'Click "Create API", enter a remark' },
-        { title: 'Set Read-Only Permission', desc: 'Only check "Read-Only" permission. Copy API Key and Secret after verification' },
+        {
+          title: 'Set Read-Only Permission',
+          desc: 'Only check "Read-Only" permission. Copy API Key and Secret after verification',
+        },
       ],
     },
   },
 } as const
 
 export type ExchangeId = keyof typeof EXCHANGE_CONFIGS
+
+// ── Single source of truth for the exchange-binding flow ──────────────────────
+// Both /exchange/auth (method chooser) and /exchange/auth/api-key (API-key step)
+// plus the settings ExchangeConnection manager derive their exchange list, display
+// names and OAuth capability from here — never re-declare a local EXCHANGES array.
+// Display names are the canonical brand casing (WEEX, CoinEx, MEXC, HTX).
+
+// Exchanges that support OAuth authorization (vs API-key only).
+export const OAUTH_SUPPORTED_EXCHANGES: ReadonlySet<ExchangeId> = new Set<ExchangeId>([
+  'binance',
+  'bybit',
+])
+
+export function isOAuthSupported(id: ExchangeId): boolean {
+  return OAUTH_SUPPORTED_EXCHANGES.has(id)
+}
+
+export interface ExchangeBindOption {
+  id: ExchangeId
+  name: string
+  oauthSupported: boolean
+}
+
+// Ordered list for rendering exchange pickers / connection managers.
+export const EXCHANGE_BIND_LIST: readonly ExchangeBindOption[] = (
+  Object.keys(EXCHANGE_CONFIGS) as ExchangeId[]
+).map((id) => ({
+  id,
+  name: EXCHANGE_CONFIGS[id].name,
+  oauthSupported: OAUTH_SUPPORTED_EXCHANGES.has(id),
+}))
