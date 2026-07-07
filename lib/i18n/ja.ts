@@ -2021,7 +2021,7 @@ const ja = {
   riskWarningDecision: '\u2022 リスク許容度に基づいて慎重に判断してください',
   riskWarningAcknowledge: 'リスクを理解した上で、取引所でのコピートレードに進むことに同意します',
 
-  sharpe: 'シャープ',
+  sharpe: 'Sharpe',
   maxDrawdownShort: 'MDD',
   winRateShort: '勝率',
   sharpeNotAvailable: 'この取引所ではシャープレシオのデータがありません',
