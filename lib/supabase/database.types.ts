@@ -532,178 +532,6 @@ export type Database = {
         }
         Relationships: []
       }
-      bot_equity_curve: {
-        Row: {
-          bot_id: string | null
-          id: string
-          period: string
-          timestamp: string
-          tvl: number | null
-          value: number
-        }
-        Insert: {
-          bot_id?: string | null
-          id?: string
-          period: string
-          timestamp: string
-          tvl?: number | null
-          value: number
-        }
-        Update: {
-          bot_id?: string | null
-          id?: string
-          period?: string
-          timestamp?: string
-          tvl?: number | null
-          value?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'bot_equity_curve_bot_id_fkey'
-            columns: ['bot_id']
-            isOneToOne: false
-            referencedRelation: 'bot_sources'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      bot_snapshots: {
-        Row: {
-          apy: number | null
-          arena_score: number | null
-          bot_id: string | null
-          captured_at: string | null
-          id: string
-          market_cap: number | null
-          max_drawdown: number | null
-          mindshare_score: number | null
-          revenue: number | null
-          roi: number | null
-          season_id: string
-          sharpe_ratio: number | null
-          telegram_members: number | null
-          token_holders: number | null
-          token_price: number | null
-          total_trades: number | null
-          total_volume: number | null
-          tvl: number | null
-          twitter_followers: number | null
-          unique_users: number | null
-        }
-        Insert: {
-          apy?: number | null
-          arena_score?: number | null
-          bot_id?: string | null
-          captured_at?: string | null
-          id?: string
-          market_cap?: number | null
-          max_drawdown?: number | null
-          mindshare_score?: number | null
-          revenue?: number | null
-          roi?: number | null
-          season_id: string
-          sharpe_ratio?: number | null
-          telegram_members?: number | null
-          token_holders?: number | null
-          token_price?: number | null
-          total_trades?: number | null
-          total_volume?: number | null
-          tvl?: number | null
-          twitter_followers?: number | null
-          unique_users?: number | null
-        }
-        Update: {
-          apy?: number | null
-          arena_score?: number | null
-          bot_id?: string | null
-          captured_at?: string | null
-          id?: string
-          market_cap?: number | null
-          max_drawdown?: number | null
-          mindshare_score?: number | null
-          revenue?: number | null
-          roi?: number | null
-          season_id?: string
-          sharpe_ratio?: number | null
-          telegram_members?: number | null
-          token_holders?: number | null
-          token_price?: number | null
-          total_trades?: number | null
-          total_volume?: number | null
-          tvl?: number | null
-          twitter_followers?: number | null
-          unique_users?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: 'bot_snapshots_bot_id_fkey'
-            columns: ['bot_id']
-            isOneToOne: false
-            referencedRelation: 'bot_sources'
-            referencedColumns: ['id']
-          },
-        ]
-      }
-      bot_sources: {
-        Row: {
-          category: string
-          chain: string | null
-          contract_address: string | null
-          created_at: string | null
-          description: string | null
-          id: string
-          is_active: boolean | null
-          launch_date: string | null
-          logo_url: string | null
-          name: string
-          slug: string
-          telegram_url: string | null
-          token_address: string | null
-          token_symbol: string | null
-          twitter_handle: string | null
-          updated_at: string | null
-          website_url: string | null
-        }
-        Insert: {
-          category: string
-          chain?: string | null
-          contract_address?: string | null
-          created_at?: string | null
-          description?: string | null
-          id?: string
-          is_active?: boolean | null
-          launch_date?: string | null
-          logo_url?: string | null
-          name: string
-          slug: string
-          telegram_url?: string | null
-          token_address?: string | null
-          token_symbol?: string | null
-          twitter_handle?: string | null
-          updated_at?: string | null
-          website_url?: string | null
-        }
-        Update: {
-          category?: string
-          chain?: string | null
-          contract_address?: string | null
-          created_at?: string | null
-          description?: string | null
-          id?: string
-          is_active?: boolean | null
-          launch_date?: string | null
-          logo_url?: string | null
-          name?: string
-          slug?: string
-          telegram_url?: string | null
-          token_address?: string | null
-          token_symbol?: string | null
-          twitter_handle?: string | null
-          updated_at?: string | null
-          website_url?: string | null
-        }
-        Relationships: []
-      }
       bot_subscriptions: {
         Row: {
           chat_id: string
@@ -1433,6 +1261,8 @@ export type Database = {
           category: string | null
           content: string | null
           content_en: string | null
+          content_ja: string | null
+          content_ko: string | null
           content_zh: string | null
           created_at: string | null
           id: string
@@ -1443,12 +1273,16 @@ export type Database = {
           tags: string[] | null
           title: string
           title_en: string | null
+          title_ja: string | null
+          title_ko: string | null
           title_zh: string | null
         }
         Insert: {
           category?: string | null
           content?: string | null
           content_en?: string | null
+          content_ja?: string | null
+          content_ko?: string | null
           content_zh?: string | null
           created_at?: string | null
           id?: string
@@ -1459,12 +1293,16 @@ export type Database = {
           tags?: string[] | null
           title: string
           title_en?: string | null
+          title_ja?: string | null
+          title_ko?: string | null
           title_zh?: string | null
         }
         Update: {
           category?: string | null
           content?: string | null
           content_en?: string | null
+          content_ja?: string | null
+          content_ko?: string | null
           content_zh?: string | null
           created_at?: string | null
           id?: string
@@ -1475,6 +1313,8 @@ export type Database = {
           tags?: string[] | null
           title?: string
           title_en?: string | null
+          title_ja?: string | null
+          title_ko?: string | null
           title_zh?: string | null
         }
         Relationships: []
@@ -1615,6 +1455,7 @@ export type Database = {
           created_at: string | null
           description: string | null
           description_en: string | null
+          group_id: string | null
           id: string
           is_premium_only: boolean | null
           name: string
@@ -1633,6 +1474,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           description_en?: string | null
+          group_id?: string | null
           id?: string
           is_premium_only?: boolean | null
           name: string
@@ -1651,6 +1493,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           description_en?: string | null
+          group_id?: string | null
           id?: string
           is_premium_only?: boolean | null
           name?: string
@@ -1663,7 +1506,22 @@ export type Database = {
           rules_json?: Json | null
           status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'group_applications_group_id_fkey'
+            columns: ['group_id']
+            isOneToOne: false
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
+          },
+          {
+            foreignKeyName: 'group_applications_group_id_fkey'
+            columns: ['group_id']
+            isOneToOne: false
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
+          },
+        ]
       }
       group_audit_log: {
         Row: {
