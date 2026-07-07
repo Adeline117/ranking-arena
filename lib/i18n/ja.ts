@@ -2021,7 +2021,7 @@ const ja = {
   riskWarningDecision: '\u2022 リスク許容度に基づいて慎重に判断してください',
   riskWarningAcknowledge: 'リスクを理解した上で、取引所でのコピートレードに進むことに同意します',
 
-  sharpe: 'シャープ',
+  sharpe: 'Sharpe',
   maxDrawdownShort: 'MDD',
   winRateShort: '勝率',
   sharpeNotAvailable: 'この取引所ではシャープレシオのデータがありません',
@@ -6224,6 +6224,7 @@ const ja = {
   u2detail_chartMean: '平均',
   u2detail_chartMedian: '中央値',
   u2detail_chartDays: '日数',
+  u13admin_accessRequired: '管理者権限が必要です',
 } as const
 
 export default ja
