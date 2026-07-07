@@ -54,15 +54,20 @@ test.describe('Critical Path Smoke Tests', () => {
     const rankingSection = page.locator('.home-ranking-section')
     await rankingSection.waitFor({ state: 'visible', timeout: 30_000 })
 
-    // All 3 period buttons should exist
+    // All 3 period buttons should exist. The page renders responsive duplicates
+    // (a mobile set + a desktop set); on desktop the mobile copy is CSS-hidden, so
+    // filter to the VISIBLE one — a naive .first() grabs the hidden duplicate.
     const btn7 = page
       .locator('[data-testid="time-range-7D"], button:has-text("7D"), button:has-text("7天")')
+      .filter({ visible: true })
       .first()
     const btn30 = page
       .locator('[data-testid="time-range-30D"], button:has-text("30D"), button:has-text("30天")')
+      .filter({ visible: true })
       .first()
     const btn90 = page
       .locator('[data-testid="time-range-90D"], button:has-text("90D"), button:has-text("90天")')
+      .filter({ visible: true })
       .first()
 
     await expect(btn7).toBeVisible({ timeout: 10_000 })
@@ -105,9 +110,14 @@ test.describe('Critical Path Smoke Tests', () => {
   test('5. Auth guard — /watchlist redirects unauthenticated users', async ({ page }) => {
     await page.goto('/watchlist', { timeout: 60_000 })
     await page.waitForLoadState('domcontentloaded')
+    // /watchlist server-redirects to /saved?tab=traders (see app/(app)/watchlist/
+    // page.tsx). Wait for the URL to leave /watchlist before asserting — reading it
+    // too early races the redirect/auth-guard settle.
+    await page
+      .waitForURL((u) => !u.pathname.includes('/watchlist'), { timeout: 10_000 })
+      .catch(() => {})
 
-    // Should redirect to homepage or show login prompt — NOT show the watchlist
-    // The exact behavior may be a redirect or a login modal
+    // Should redirect away or show a login prompt — NOT show the watchlist itself.
     const url = page.url()
     const body = await page.locator('body').textContent()
 
