@@ -1989,7 +1989,7 @@ const en = {
   loginCreateAccount: 'Create Account',
   loginSubtitle: 'Arena ranks everything in crypto',
   loginValueProp1: '160,000+ traders tracked in real-time',
-  loginValueProp2: 'Compare ROI across 20+ exchanges',
+  loginValueProp2: 'Compare ROI across 45+ exchanges',
   loginValueProp3: 'Join trading communities',
   loginConnectWallet: 'Connect Wallet',
   loginWalletSignIn: 'Sign in with Wallet',
@@ -2504,7 +2504,7 @@ const en = {
 
   // Terms of service page
   termsTitle: 'Terms of Service',
-  termsLastUpdated: 'Last updated: February 2026',
+  termsLastUpdated: 'Last updated: February 1, 2026',
   termsAcceptTitle: '1. Acceptance of Terms',
   termsAcceptP1:
     'Welcome to Arena ("the platform" or "we"). By accessing or using our services, you agree to be bound by these Terms of Service ("Terms"). If you do not agree to any part of these terms, please do not use our services.',
@@ -4956,6 +4956,9 @@ const en = {
   claimVerifyMethodApi: 'API Key',
   claimVerifyMethodWallet: 'Wallet Signature',
   claimVerifiedAutoApproved: 'Your claim has been verified and auto-approved!',
+  claimVerifyAndClaim: 'Verify & Claim',
+  claimFormSafeNote:
+    'We only require read-only API keys (no trading or withdrawal permissions). Keys are encrypted with AES-256-GCM and never logged.',
   claimSupportedExchanges: 'Supported Exchanges',
   claimDexPlatforms: 'DEX Platforms (Wallet Verification)',
   claimCexPlatforms: 'CEX Platforms (API Key Verification)',
@@ -6216,6 +6219,8 @@ const en = {
   referralRewardUnlocked: 'Reward unlocked!',
   referralFriendTrialNote:
     'Bonus: your friends get a {days}-day Pro trial when they join via your link.',
+  referralPromoNote:
+    'Pro is currently free for everyone during our promo. The Pro days you earn are banked and automatically applied once the promo ends — they never expire.',
   referralPageSubtitle: 'Invite friends to Arena and track your referrals.',
   referralSignInGateTitle: 'Sign in to get your referral link',
   referralSignInGateDesc: 'Create an account or log in to start inviting friends.',
@@ -6247,6 +6252,7 @@ const en = {
   stayOnPage: 'Stay on this page',
   pricingYearlySaveAmount: 'Save ${amount}/yr',
   pricingLifetimeAnchor: 'Lifetime pays for itself in ~{months} months vs ${price}/yr',
+  pricingLifetimeAnchorMonthly: 'Lifetime pays for itself in ~{months} months vs ${price}/mo',
   botArenaScore: 'Arena Score',
   botGrade_legendary: 'Legendary',
   botGrade_great: 'Great',

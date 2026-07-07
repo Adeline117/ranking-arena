@@ -10,6 +10,7 @@ const quizZh: Record<string, string> = {
   quizBadge30Q: '15 个问题',
   quizBadge12Types: '12 种人格',
   quizBadge5Min: '约 2 分钟',
+  quizBadgeMatchLegend: '匹配传奇大师',
   quizSeeResults: '查看我的结果',
   quizBack: '返回',
   quizCalculating: '正在分析你的交易人格...',

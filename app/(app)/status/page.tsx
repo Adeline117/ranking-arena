@@ -33,6 +33,31 @@ function levelFor(raw: string): Level {
   return 'degraded'
 }
 
+// Component/platform names arrive as raw technical keys ("api", "vps",
+// "market-data"). Render them with proper acronym casing (API/VPS, not Api/Vps)
+// and kebab/underscore → spaced Title Case, so the status page reads cleanly
+// regardless of UI language (technical component names stay English by design).
+const COMPONENT_ACRONYMS: Record<string, string> = {
+  api: 'API',
+  vps: 'VPS',
+  db: 'DB',
+  cpu: 'CPU',
+  ssl: 'SSL',
+  dns: 'DNS',
+  url: 'URL',
+  redis: 'Redis',
+}
+function formatComponentName(raw: string): string {
+  return raw
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .map(
+      (w) =>
+        COMPONENT_ACRONYMS[w.toLowerCase()] ?? w.charAt(0).toUpperCase() + w.slice(1).toLowerCase()
+    )
+    .join(' ')
+}
+
 const LEVEL_COLOR: Record<Level, string> = {
   operational: tokens.colors.accent.success,
   degraded: tokens.colors.accent.warning,
@@ -173,7 +198,7 @@ export default function StatusPage() {
         else
           inc.push({
             key: `svc:${name}`,
-            name: name.charAt(0).toUpperCase() + name.slice(1),
+            name: formatComponentName(name),
             level,
             message:
               check.message ||
@@ -190,7 +215,7 @@ export default function StatusPage() {
         else
           inc.push({
             key: `plat:${platform}`,
-            name: platform.charAt(0).toUpperCase() + platform.slice(1),
+            name: formatComponentName(platform),
             level: 'degraded',
             message: t('statusDataAgo').replace('{ago}', formatTimeAgo(ts, language)),
           })
@@ -414,7 +439,7 @@ export default function StatusPage() {
                     <div key={name} style={rowStyle}>
                       <div style={{ display: 'flex', alignItems: 'center' }}>
                         <StatusIcon level={level} t={t} />
-                        <span style={{ textTransform: 'capitalize' as const }}>{name}</span>
+                        <span>{formatComponentName(name)}</span>
                       </div>
                       <span
                         style={{
@@ -461,7 +486,7 @@ export default function StatusPage() {
                       <div key={platform} style={rowStyle}>
                         <div style={{ display: 'flex', alignItems: 'center' }}>
                           <StatusIcon level={level} t={t} />
-                          <span style={{ textTransform: 'capitalize' as const }}>{platform}</span>
+                          <span>{formatComponentName(platform)}</span>
                         </div>
                         <span
                           style={{

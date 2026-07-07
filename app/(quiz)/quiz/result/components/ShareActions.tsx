@@ -9,9 +9,18 @@ interface ShareActionsProps {
   matchPercent: number
   resultUrl: string
   tr: (key: string) => string
+  /** Current quiz language — forwarded to the OG image so the shared card's
+   *  personality name matches the page (e.g. 叙事猎人, not THE NARRATIVE TRADER). */
+  lang: string
 }
 
-export default function ShareActions({ type, matchPercent, resultUrl, tr }: ShareActionsProps) {
+export default function ShareActions({
+  type,
+  matchPercent,
+  resultUrl,
+  tr,
+  lang,
+}: ShareActionsProps) {
   // Local toast — quiz runs outside (app) Providers so useToast() is unavailable
   const [toastMsg, setToastMsg] = useState<string | null>(null)
   const showToast = useCallback((msg: string, _type?: string) => {
@@ -64,7 +73,7 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
   const handleDownload = async () => {
     setDownloading(true)
     try {
-      const ogUrl = `/api/og/quiz?type=${type.id}&match=${matchPercent}`
+      const ogUrl = `/api/og/quiz?type=${type.id}&match=${matchPercent}&lang=${encodeURIComponent(lang)}`
       const res = await fetch(ogUrl)
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
@@ -110,7 +119,7 @@ export default function ShareActions({ type, matchPercent, resultUrl, tr }: Shar
     }
   }
 
-  const ogImageUrl = `/api/og/quiz?type=${type.id}&match=${matchPercent}`
+  const ogImageUrl = `/api/og/quiz?type=${type.id}&match=${matchPercent}&lang=${encodeURIComponent(lang)}`
 
   // --- Hover / active helpers for inline-styled buttons ---
   const addHover = useCallback((e: React.MouseEvent<HTMLButtonElement>) => {
