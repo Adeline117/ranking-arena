@@ -392,6 +392,14 @@ const eslintConfig = defineConfig([
     'docs/**',
     'public/**/*.mjs',
     'worker/**',
+    // Throwaway QA/verification scratch scripts (never shipped; console.log +
+    // empty-catch by nature). A stray `git add -A` once committed root verify-*.mjs
+    // and turned CI lint red, silently withholding 28 deploys — ignore them here
+    // AND gitignore them so it can't recur.
+    'scratchpad/**',
+    'verify-*.mjs',
+    'watch-*.mjs',
+    'k6/**',
     '.archived/**',
     'infra/**',
     // E2E tests (console.log for test output is acceptable)
