@@ -1179,15 +1179,43 @@ function SearchContent() {
               <div style={{ marginTop: 24 }}>
                 <div
                   style={{
-                    fontSize: 11,
-                    fontWeight: 600,
-                    color: tokens.colors.text.secondary,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.06em',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 12,
                     marginBottom: 10,
                   }}
                 >
-                  {t('searchRecentSearches')}
+                  <div
+                    style={{
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: tokens.colors.text.secondary,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                    }}
+                  >
+                    {t('searchRecentSearches')}
+                  </div>
+                  {/* U3-4: no-results empty state was missing the clear-history
+                      entry that both the no-query empty state and the nav dropdown
+                      already expose. Add the same control here for parity. */}
+                  <button
+                    onClick={() => {
+                      clearSearchHistory()
+                      setSearchHistory([])
+                    }}
+                    style={{
+                      fontSize: 11,
+                      color: tokens.colors.text.tertiary,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      padding: '2px 6px',
+                    }}
+                  >
+                    {t('searchClearHistory')}
+                  </button>
                 </div>
                 <div
                   style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}
