@@ -175,7 +175,14 @@ export const CATEGORY_PRIORITY: CanonicalCategory[] = [
 ]
 
 // Broad crypto vocabulary — presence of ANY term marks the item as crypto-related.
-export const CRYPTO_TERMS = [
+// CORE crypto vocabulary = unambiguous crypto signals. Deliberately EXCLUDES the
+// `macro` category keywords (fed / rate / inflation / sec / china / tension /
+// election …): those are legitimate for classifying crypto-adjacent macro news,
+// but on their OWN they also match pure geopolitics/economics ("China expels
+// Japanese ship", "regional tensions") — which generic RSS feeds dump in. Using
+// only the non-macro vocabulary as the crypto-relevance signal drops that junk
+// while keeping anything that actually names a coin/protocol/exchange/etc.
+export const CORE_CRYPTO_TERMS = [
   'crypto',
   'bitcoin',
   'btc',
@@ -196,17 +203,34 @@ export const CRYPTO_TERMS = [
   'satoshi',
   'onchain',
   'on-chain',
-  'ledger',
   'dao',
   'airdrop',
   'staking',
-  ...Object.values(CATEGORY_KEYWORDS).flat(),
+  // crypto-adjacent concepts a bare coin/protocol list misses (prediction
+  // markets are on-chain; CBDCs & tokenized perps are crypto news) — keep them.
+  'polymarket',
+  'kalshi',
+  'prediction market',
+  'perpetual',
+  'cbdc',
+  'digital euro',
+  'digital ruble',
+  'digital yuan',
+  'tokeniz',
+  ...CATEGORY_KEYWORDS.btc_eth,
+  ...CATEGORY_KEYWORDS.altcoin,
+  ...CATEGORY_KEYWORDS.defi,
+  ...CATEGORY_KEYWORDS.exchange,
   '加密',
   '币',
   '区块链',
   '链上',
   '钱包',
 ]
+
+// Kept for any external callers; superset that also treats macro keywords as
+// crypto-relevant (used only where macro-adjacency should count).
+export const CRYPTO_TERMS = [...CORE_CRYPTO_TERMS, ...CATEGORY_KEYWORDS.macro, 'ledger']
 
 // Obvious off-topic markers from generic/aggregator feeds.
 export const NON_CRYPTO_MARKERS = [
@@ -237,10 +261,25 @@ export const NON_CRYPTO_MARKERS = [
   '奥斯卡',
 ]
 
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
 function countMatches(haystack: string, keywords: string[]): number {
   let n = 0
   for (const kw of keywords) {
-    if (haystack.includes(kw)) n++
+    const k = kw.trim()
+    if (!k) continue
+    // ASCII alnum keywords use word-boundary matching so short tokens (eth, btc)
+    // don't fire inside longer words (ethereum, bitcoin) — that substring bug made
+    // any DeFi headline mentioning "Ethereum" score btc_eth=3 (ethereum+eth+ether)
+    // and outrank defi. CJK keywords / multi-word phrases keep substring matching.
+    if (/^[\x00-\x7f]+$/.test(k) && /[a-z0-9]/i.test(k)) {
+      const re = new RegExp(`(^|[^a-z0-9])${escapeRegExp(k.toLowerCase())}([^a-z0-9]|$)`)
+      if (re.test(haystack)) n++
+    } else if (haystack.includes(k)) {
+      n++
+    }
   }
   return n
 }
@@ -248,9 +287,16 @@ function countMatches(haystack: string, keywords: string[]): number {
 /** True if the item looks non-crypto and should be dropped (conservative). */
 export function isNonCrypto(title: string, content: string | null): boolean {
   const hay = `${title} ${content || ''}`.toLowerCase()
-  const hasCrypto = CRYPTO_TERMS.some((t) => hay.includes(t))
+  // Drop only when BOTH: (a) no genuine crypto signal (core vocab excludes bare
+  // macro terms, so geopolitics that only matched fed/rate/china no longer counts
+  // as crypto) AND (b) an explicit off-topic marker fires. The AND keeps this
+  // safe: real crypto news that a keyword list can't enumerate (THORChain, Base,
+  // digital ruble, "perpetuals"…) has no off-topic marker → never dropped. Only
+  // unmistakable junk (funerals / World Cup / entertainment with zero crypto
+  // signal) is removed. Purely-macro items with no marker are kept (belong under
+  // the macro category).
+  const hasCrypto = CORE_CRYPTO_TERMS.some((t) => hay.includes(t))
   if (hasCrypto) return false
-  // No crypto term AND hits an obvious off-topic marker → drop.
   return NON_CRYPTO_MARKERS.some((m) => hay.includes(m))
 }
 
