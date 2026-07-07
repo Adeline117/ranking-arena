@@ -680,6 +680,11 @@ const nextConfig = {
       { source: '/legal/disclaimer', destination: '/disclaimer', permanent: true },
       { source: '/legal/dmca', destination: '/dmca', permanent: true },
       { source: '/community', destination: '/groups', permanent: true },
+      // Bot-ranking feature removed 2026-07-06 (owner call): the /rankings/bots +
+      // /bot/[id] leaderboard was a one-time 2026-02-11 seed with no ingest
+      // pipeline (frozen/garbage performance). Redirect old links/SEO to home.
+      { source: '/rankings/bots', destination: '/', permanent: true },
+      { source: '/bot/:id', destination: '/', permanent: true },
       // /library removed (feature deprecated)
       // Dead pages removed in frontend simplification (2026-03)
       { source: '/pk/:a/:b', destination: '/compare', permanent: true },

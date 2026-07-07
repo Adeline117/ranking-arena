@@ -33,7 +33,6 @@ export default function RankingsSubNav() {
               pathname === '/rankings' ||
               (pathname.startsWith('/rankings/') &&
                 !pathname.startsWith('/rankings/tokens') &&
-                !pathname.startsWith('/rankings/bots') &&
                 !pathname.startsWith('/rankings/exchanges') &&
                 !pathname.startsWith('/rankings/weekly'))
             : pathname.startsWith(tab.href)
