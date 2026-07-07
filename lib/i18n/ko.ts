@@ -5176,6 +5176,7 @@ const ko = {
 
   // Missing translations added 2026-04-03
   autoRefresh: '30초마다 자동 새로고침',
+  u7mkt_delayed: '지연',
   liveData: '실시간',
   topPercent: '상위 {pct}%',
   topPercentOn: '{platform} 상위 {pct}%',
