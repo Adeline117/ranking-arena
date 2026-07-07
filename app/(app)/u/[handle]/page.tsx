@@ -41,7 +41,7 @@ export async function generateMetadata({
     const { data } = await Promise.race([
       supabase
         .from('user_profiles')
-        .select('avatar_url, bio, trader_source, trader_source_id')
+        .select('avatar_url, bio, verified_trader_source, verified_trader_id')
         .eq('handle', decoded)
         .maybeSingle(),
       new Promise<{ data: null }>((resolve) =>
@@ -51,13 +51,13 @@ export async function generateMetadata({
     avatarUrl = data?.avatar_url || null
 
     // If user claimed a trader, fetch their trading stats for meta description
-    if (data?.trader_source && data?.trader_source_id) {
+    if (data?.verified_trader_source && data?.verified_trader_id) {
       const { data: lr } = await Promise.race([
         supabase
           .from('leaderboard_ranks')
           .select('roi, arena_score, source')
-          .eq('source', data.trader_source)
-          .eq('source_trader_id', data.trader_source_id)
+          .eq('source', data.verified_trader_source)
+          .eq('source_trader_id', data.verified_trader_id)
           .eq('season_id', '90D')
           .maybeSingle(),
         new Promise<{ data: null }>((resolve) =>
