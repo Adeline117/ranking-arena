@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import dynamic from 'next/dynamic'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box } from '../../base'
 import ProGate from '../../ui/ProGate'
@@ -10,28 +9,13 @@ import { useLanguage } from '../../Providers/LanguageProvider'
 import { TradingSection } from './components/TradingSection'
 import { EquityCurveSection } from './components/EquityCurveSection'
 import { BreakdownSection } from './components/BreakdownSection'
-// ComparePortfolioSection pulls lightweight-charts (~70KB). Lazy-load it so it
-// only downloads when the Stats tab is opened, and only for traders with
-// enough equity-curve data for the compare view to render.
-const ComparePortfolioSection = dynamic(
-  () =>
-    import('./components/ComparePortfolioSection').then((m) => ({
-      default: m.ComparePortfolioSection,
-    })),
-  {
-    ssr: false,
-    loading: () => (
-      <Box
-        style={{
-          height: 280,
-          borderRadius: tokens.radius.xl,
-          background: tokens.colors.bg.secondary,
-          border: `1px solid ${tokens.colors.border.primary}`,
-        }}
-      />
-    ),
-  }
-)
+// U2-6: "对比分析 / Compare vs BTC" card removed. Its benchmark series was
+// FABRICATED (seeded-random, not a real BTC/SPX500 price series) and the legend
+// value was hardcoded to N/A, so the card only ever compared the trader against
+// noise while claiming to be a BTC benchmark. Until a real market-data series is
+// wired in, we do not ship a fake comparison. The equity curve now spans full
+// width. ComparePortfolioSection is kept in the tree (unrendered) for the future
+// real-data wiring.
 import { SectionErrorBoundary } from '../../utils/ErrorBoundary'
 import { PnlCalendarHeatmap } from '../charts/PnlCalendarHeatmap'
 
@@ -161,20 +145,10 @@ export default function StatsPage({
         </Box>
       )}
 
-      {/* Chart + Compare Two Columns - 没数据时各自隐藏 */}
-      <Box
-        className="stats-two-col"
-        style={{ display: 'grid', gap: tokens.spacing[6], marginTop: tokens.spacing[6] }}
-      >
+      {/* Equity curve (full width). U2-6: fabricated "Compare vs BTC" card removed. */}
+      <Box style={{ marginTop: tokens.spacing[6] }}>
         <SectionErrorBoundary fallbackMessage="">
           <EquityCurveSection equityCurve={equityCurve} traderHandle={traderHandle} delay={0.1} />
-        </SectionErrorBoundary>
-        <SectionErrorBoundary fallbackMessage="">
-          <ComparePortfolioSection
-            traderHandle={traderHandle}
-            equityCurve={equityCurve}
-            delay={0.15}
-          />
         </SectionErrorBoundary>
       </Box>
 
