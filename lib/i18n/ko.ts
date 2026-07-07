@@ -3572,7 +3572,7 @@ const ko = {
   dmcaContactTitle: '4. 연락처',
   dmcaContactDesc: '저작권 관련 사안은 다음으로 연락해 주세요:',
   dmcaContactEmail:
-    'ywen8@uw.edu 로 제목에 "저작권 통지" 또는 "DMCA 통지"를 기재하여 이메일을 보내 주세요. 유효한 통지는 가능한 빨리 처리합니다 (통상 5영업일 이내).',
+    'adelinewen1107@outlook.com 로 제목에 "저작권 통지" 또는 "DMCA 통지"를 기재하여 이메일을 보내 주세요. 유효한 통지는 가능한 빨리 처리합니다 (통상 5영업일 이내).',
 
   // Market panel
   fundamentalData: '펀더멘털',

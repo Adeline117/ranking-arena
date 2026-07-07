@@ -3687,7 +3687,7 @@ const en = {
   dmcaContactTitle: '4. Contact',
   dmcaContactDesc: 'For copyright-related matters, please contact:',
   dmcaContactEmail:
-    'Please email ywen8@uw.edu with "Copyright Notice" or "DMCA Notice" in the subject. We will process valid notices as soon as possible (typically within 5 business days).',
+    'Please email adelinewen1107@outlook.com with "Copyright Notice" or "DMCA Notice" in the subject. We will process valid notices as soon as possible (typically within 5 business days).',
 
   // Market panel
   fundamentalData: 'Fundamentals',
