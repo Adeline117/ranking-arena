@@ -762,6 +762,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
               groupId={groupId}
               language={language}
               userId={userId}
+              accessToken={accessToken}
               isMember={isMember}
               userRole={userRole}
               joining={joining}

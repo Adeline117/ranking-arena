@@ -69,11 +69,11 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
         const groupsData = memberships
           .map((m: Record<string, unknown>) => {
             const g = m.groups as Group | null
-            return g ? { ...g, pinned: !!m.pinned } : null
+            return g ? ({ ...g, pinned: !!m.pinned } as Group) : null
           })
           .filter((g): g is Group => g != null)
           // pinned first, then keep insertion order (recency of membership)
-          .sort((a, b) => Number(b.pinned) - Number(a.pinned))
+          .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned))
         setMyGroups(groupsData)
       } catch (err) {
         logger.error('Failed to load groups:', err)

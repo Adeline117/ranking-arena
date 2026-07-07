@@ -1928,7 +1928,9 @@ export type Database = {
           muted_by: string | null
           muted_until: string | null
           notifications_muted: boolean | null
+          pinned: boolean
           role: Database['public']['Enums']['member_role']
+          self_notify_muted: boolean
           user_id: string
         }
         Insert: {
@@ -1938,7 +1940,9 @@ export type Database = {
           muted_by?: string | null
           muted_until?: string | null
           notifications_muted?: boolean | null
+          pinned?: boolean
           role?: Database['public']['Enums']['member_role']
+          self_notify_muted?: boolean
           user_id?: string
         }
         Update: {
@@ -1948,7 +1952,9 @@ export type Database = {
           muted_by?: string | null
           muted_until?: string | null
           notifications_muted?: boolean | null
+          pinned?: boolean
           role?: Database['public']['Enums']['member_role']
+          self_notify_muted?: boolean
           user_id?: string
         }
         Relationships: [
