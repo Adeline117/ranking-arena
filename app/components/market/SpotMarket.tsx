@@ -8,6 +8,7 @@ import { useRealtimePrices, type PriceFlashInfo } from '@/lib/hooks/useRealtimeP
 import MarketTable, { Column } from './MarketTable'
 import Sparkline from './PriceSparkline'
 import { apiFetch } from '@/lib/utils/api-fetch'
+import { formatTokenPrice } from '@/lib/utils/format'
 import type { SpotCoin as SharedSpotCoin } from '@/lib/hooks/useMarketSpot'
 
 interface SpotCoin {
@@ -40,9 +41,8 @@ function formatNum(n: number | null, decimals = 2): string {
 
 function formatPrice(n: number | null): string {
   if (n == null) return '--'
-  if (n >= 1)
-    return `$${n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
-  return `$${n.toPrecision(4)}`
+  // Shared sub-cent formatter keeps significant digits for PEPE/SHIB-class coins.
+  return formatTokenPrice(n)
 }
 
 function ChangeCell({ value }: { value: number | null }) {

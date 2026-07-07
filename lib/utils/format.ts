@@ -158,6 +158,32 @@ export function formatPnL(pnl: number | null | undefined): string {
 }
 
 /**
+ * Format a USD token price, preserving significant digits for sub-cent coins.
+ *
+ * PEPE/SHIB-class prices (< $0.01) would render as "$0.0000" with a naive
+ * toFixed(4). This keeps ~4 significant digits below $1 so the value is never
+ * lost (e.g. 0.0000072 → "$0.000007200", 0.00012 → "$0.0001200").
+ *
+ * - >= 1000: grouped, 2 decimals
+ * - >= 1:    2 decimals
+ * - < 1:     first significant digit + 3 more (min 4 decimals)
+ */
+export function formatTokenPrice(value: number | string | null | undefined): string {
+  const n = typeof value === 'string' ? parseFloat(value.replace(/[$,]/g, '')) : value
+  if (n == null || !Number.isFinite(n)) return NULL_DISPLAY
+  const abs = Math.abs(n)
+  const sign = n < 0 ? '-' : ''
+  if (abs >= 1000) return `${sign}$${abs.toLocaleString('en-US', { maximumFractionDigits: 2 })}`
+  if (abs >= 1) return `${sign}$${abs.toFixed(2)}`
+  if (abs === 0) return '$0.00'
+  // Below $1: keep ~4 significant digits. Find position of first significant
+  // digit, then show 3 more places past it.
+  const leadingZeros = Math.max(0, -Math.floor(Math.log10(abs)) - 1)
+  const decimals = Math.max(4, leadingZeros + 4)
+  return `${sign}$${abs.toFixed(decimals)}`
+}
+
+/**
  * Format a ratio value (Sharpe, Sortino, Calmar, etc.).
  */
 export function formatRatio(value: number | null | undefined, decimals = 2): string {
