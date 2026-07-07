@@ -2411,7 +2411,7 @@ const ko = {
 
   // Terms of service page
   termsTitle: '이용약관',
-  termsLastUpdated: '최종 수정일: 2026년 2월',
+  termsLastUpdated: '최종 업데이트: 2026년 2월 1일',
   termsAcceptTitle: '1. 약관 동의',
   termsAcceptP1:
     'Arena("플랫폼" 또는 "당사")에 오신 것을 환영합니다. 서비스에 접속하거나 이용하시면 본 이용약관("약관")에 동의하는 것으로 간주됩니다. 약관의 일부에 동의하지 않으시면 서비스를 이용하지 마세요.',
@@ -3532,7 +3532,7 @@ const ko = {
 
   // DMCA
   dmcaTitle: '저작권 / DMCA 정책',
-  dmcaLastUpdated: '최종 수정일: 2026년 2월 8일',
+  dmcaLastUpdated: '최종 업데이트: 2026년 2월 8일',
   dmcaOverviewTitle: '1. 개요',
   dmcaOverviewDesc:
     'Arena는 지적 재산권을 존중하며 사용자에게도 동일하게 기대합니다. 본 플랫폼의 콘텐츠가 저작권을 침해한다고 생각되시면 아래 절차에 따라 통지를 제출해 주세요.',

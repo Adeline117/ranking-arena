@@ -2308,7 +2308,7 @@ const ja = {
   privacySendMessageToSupport: 'サポートにメッセージを送信',
 
   termsTitle: '利用規約',
-  termsLastUpdated: '最終更新日：2026年2月',
+  termsLastUpdated: '最終更新日：2026年2月1日',
   termsAcceptTitle: '1. 利用規約の同意',
   termsAcceptP1:
     'Arena（「本プラットフォーム」または「当社」）へようこそ。当社のサービスにアクセスまたは使用することにより、本利用規約（「規約」）に拘束されることに同意したものとみなされます。これらの規約のいかなる部分にも同意されない場合は、当社のサービスを使用しないでください。',

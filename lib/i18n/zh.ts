@@ -2362,7 +2362,7 @@ const zh = {
 
   // Privacy policy page
   privacyPolicyTitle: '隐私政策',
-  privacyLastUpdated: '最后更新: 2026 年 1 月 18 日',
+  privacyLastUpdated: '最后更新：2026年1月18日',
   privacyOverviewTitle: '1. 概述',
   privacyOverviewP1:
     'Arena（以下简称"我们"或"本平台"）重视您的隐私。本隐私政策说明了我们如何收集、使用、存储和保护您的个人信息。',
@@ -2443,7 +2443,7 @@ const zh = {
 
   // Terms of service page
   termsTitle: '服务条款',
-  termsLastUpdated: '最后更新日期：2026年2月',
+  termsLastUpdated: '最后更新：2026年2月1日',
   termsAcceptTitle: '1. 接受条款',
   termsAcceptP1:
     '欢迎使用 Arena（以下简称"本平台"或"我们"）。通过访问或使用我们的服务，您同意受本服务条款（以下简称"条款"）的约束。如果您不同意这些条款的任何部分，请不要使用我们的服务。',
@@ -3564,7 +3564,7 @@ const zh = {
 
   // DMCA
   dmcaTitle: '版权政策 (Copyright / DMCA Policy)',
-  dmcaLastUpdated: '最后更新: 2026年2月8日',
+  dmcaLastUpdated: '最后更新：2026年2月8日',
   dmcaOverviewTitle: '1. 概述',
   dmcaOverviewDesc:
     'Arena尊重知识产权，并期望平台用户同样尊重知识产权。如果你认为本平台上的内容侵犯了你的版权，请按照以下流程提交通知。',
