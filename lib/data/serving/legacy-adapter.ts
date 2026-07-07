@@ -59,6 +59,13 @@ const num = (v: unknown): number => {
   const n = typeof v === 'string' ? Number(v) : (v as number)
   return Number.isFinite(n) ? n : 0
 }
+/** Like num() but returns null (not 0) for missing/non-finite input, so
+ *  callers can distinguish "genuinely absent" from "measured zero". */
+const numOrNull = (v: unknown): number | null => {
+  if (v == null || v === '') return null
+  const n = typeof v === 'string' ? Number(v) : (v as number)
+  return Number.isFinite(n) ? n : null
+}
 const str = (v: unknown): string => (typeof v === 'string' ? v : v == null ? '' : String(v))
 
 /** 'long'/'short' | 'buy'/'sell' | 'LONG' → 'long' | 'short'. */
@@ -329,11 +336,15 @@ export function servingToAssetBreakdown(byTf: {
 export function servingToStats(stats: Stats | null, extras: Row | null): TraderStats {
   const e = extras ?? {}
   const out: TraderStats = {}
-  const avgProfit = num(e.avg_profit ?? e.avgProfit)
-  const avgLoss = num(e.avg_loss ?? e.avgLoss)
+  // U2-5: keep avg win/loss NULL when the source never provided it. Previously
+  // `num()` collapsed a missing field to 0, which the UI then rendered as a
+  // misleading "0.00% / 0.00%" next to real position PnL. numOrNull → the KPI
+  // dashes ("—") on absent data instead of lying about a zero average.
+  const avgProfit = numOrNull(e.avg_profit ?? e.avgProfit)
+  const avgLoss = numOrNull(e.avg_loss ?? e.avgLoss)
   const winPos = num(stats?.win_positions)
   const totalPos = num(stats?.total_positions)
-  if (avgProfit || avgLoss || totalPos) {
+  if (avgProfit != null || avgLoss != null || totalPos) {
     out.trading = {
       totalTrades12M: totalPos,
       avgProfit,
