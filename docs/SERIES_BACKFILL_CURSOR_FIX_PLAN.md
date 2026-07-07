@@ -178,9 +178,15 @@ GROUP BY s.slug ORDER BY 2;
    风险的全量 code rsync**(lib/worker/tsconfig,排除 node_modules),不动 node_modules
    (SG 磁盘 90% 满,node_modules swap 峰值仅剩 ~0.7G 太险)。tar 备份 code(1.7M)→
    rsync → 写 DEPLOYED_SHA → pm2 restart + ready 门(失败自动回滚)。SG worker ready。
-   **CI 单通道**(`GITHUB_TOKEN= gh workflow run "Deploy Ingest Worker (SG)"`)build-deps
-   已证跑通;真部署仍需仓库配 `INGEST_SG_SSH_KEY`/`INGEST_SG_HOST` 两 secret 才不 skip
-   —— 配好后**真 dep 变更(非 bump)**时用 CI 走 node_modules artifact 路径。
+   **CI 单通道**:两 secret 已配(专用部署密钥,非个人 key)+ 修了 workflow 的
+   publickey bug(Setup SSH 追加 `~/.ssh/config` 绑 id_sg,原来裸 ssh/rsync/scp 不吃
+   `GIT_SSH_COMMAND`→255;这也是该 workflow 从未跑绿的原因)。build-deps ✅、deploy-sg
+   已过 auth+backup。**但仍未跑通**:node_modules artifact 换上去后 worker 起不来
+   → 自动回滚(SG 无损,现仍在旧可用 node_modules)。根因几乎肯定是**原生模块 ABI 不匹配**
+   —— CI runner 的 Node ≠ SG 的 **v22.22.0**。**待办(offline CI 修,勿再拿生产 worker
+   试错)**:build-deps 固定 Node 22.22 + artifact 上线前先 smoke-boot 校验;GH-runner→Vultr
+   直传大 tarball 也慢/易挂,可改从 Mac 下 artifact 本地→SG 部署。**现状:SG 功能已最新**
+   (worker 代码=main 经 rsync、node_modules bump 兼容、cursor 修复在跑),此项纯 hygiene。
 2. **local worker ↺100 = 非活跃问题**:exit 130=SIGINT(手动 restart)、mem 64MB
    (非 OOM)、重启前已稳定 3 天;100 是**生命周期累计**(含历史已修的 EDBHANDLEREXITED
    等),非重启循环。无需处置,持续观察即可。
