@@ -166,7 +166,7 @@ async function getAuthorizedData(
   const { data: snapshot } = await supabase
     .from('leaderboard_ranks')
     .select(
-      'roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, computed_at'
+      'roi, pnl, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, computed_at'
     )
     .eq('source', platform)
     .eq('source_trader_id', traderKey)
@@ -181,8 +181,8 @@ async function getAuthorizedData(
     data: {
       platform,
       traderKey,
-      roi: snapshot.roi_pct,
-      pnl: snapshot.pnl_usd,
+      roi: snapshot.roi,
+      pnl: snapshot.pnl,
       winRate: snapshot.win_rate,
       maxDrawdown: snapshot.max_drawdown,
       tradesCount: snapshot.trades_count,
@@ -207,7 +207,7 @@ async function getPublicApiData(
   const { data, error } = await supabase
     .from('leaderboard_ranks')
     .select(
-      'roi_pct, pnl_usd, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, computed_at'
+      'roi, pnl, win_rate, max_drawdown, trades_count, sharpe_ratio, followers, arena_score, computed_at'
     )
     .eq('source', platform)
     .eq('source_trader_id', traderKey)
@@ -222,8 +222,8 @@ async function getPublicApiData(
     data: {
       platform,
       traderKey,
-      roi: data.roi_pct,
-      pnl: data.pnl_usd,
+      roi: data.roi,
+      pnl: data.pnl,
       winRate: data.win_rate,
       maxDrawdown: data.max_drawdown,
       tradesCount: data.trades_count,

@@ -134,6 +134,18 @@ jobs:
           STRICT_READS: '1' # 读漂移已清零(19/19)——升级为硬门,锁死不回退
         run: npm run qa:insert-drift
 
+      # 读路径列漂移硬门(2026-07,W3)。insert-drift 只把 app/api+lib/data 的
+      # .select 读漂移当 advisory；本检查扫全部 app/+lib/ 的 .from().select(),
+      # 用 PostgREST 探针(REST=前端真实查询面,含 view/别名)核实每个选取的列在
+      # 生产存在。选错列名 = 400/42703 被 safeQuery 静默吞成空数据、用户无报错
+      # (data-source-priority roi_pct、getUserProfile display_name 等即此类)。
+      # 需 NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY;未设则跳过(不阻断)。
+      - name: Read-column-drift check (.select 读列 vs 生产 schema)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run qa:read-drift
+
       # API 鉴权覆盖兜底(默认拒绝)：无根级 middleware，313+ route 靠自觉调 auth
       # wrapper——本检查强制每个 route 要么有 auth 原语要么在显式公开白名单，
       # 堵住"忘加鉴权=fail-open"（ENTERPRISE_GAP_ANALYSIS_2026-07 差距 #3）。

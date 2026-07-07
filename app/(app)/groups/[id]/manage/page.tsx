@@ -234,7 +234,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         const { data: groupData } = await supabase
           .from('groups')
           .select(
-            'id, name, name_en, description, description_en, avatar_url, rules_json, role_names, owner_id, member_count, is_pro, is_premium_only, settings, created_by, created_at'
+            'id, name, name_en, description, description_en, avatar_url, rules_json, role_names, member_count, is_premium_only, created_by, created_at'
           )
           .eq('id', groupId)
           .single()

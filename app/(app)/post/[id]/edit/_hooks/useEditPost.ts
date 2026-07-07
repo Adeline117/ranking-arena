@@ -48,7 +48,7 @@ export function useEditPost() {
       })
       .catch(() => {
         /* Intentionally swallowed: auth check non-critical for edit page init */
-      }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
+      })
   }, [])
 
   // Load post data
@@ -60,7 +60,7 @@ export function useEditPost() {
       try {
         const { data: post, error } = await supabase
           .from('posts')
-          .select('id, author_id, title, content, images, image_urls, created_at, updated_at')
+          .select('id, author_id, title, content, images, created_at, updated_at')
           .eq('id', postId)
           .single()
 
@@ -81,8 +81,7 @@ export function useEditPost() {
         setOriginalPost(post)
         setTitle(post.title || '')
         setContent(post.content || '')
-        // Support both images and image_urls field names
-        const imageUrls = post.images || post.image_urls || []
+        const imageUrls = post.images || []
         setImages(imageUrls.map((url: string) => ({ url, fileName: url.split('/').pop() || '' })))
       } catch (error) {
         logger.error('Error loading post:', error)
