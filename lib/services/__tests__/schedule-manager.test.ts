@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { SupabaseClient } from '@supabase/supabase-js'
 /**
  * Schedule Manager Unit Tests
  */
@@ -9,8 +9,23 @@ import { ActivityTier, ScheduledJob } from '../smart-scheduler'
 // Create a chainable mock
 const createChainableMock = () => {
   const mock: Record<string, jest.Mock> = {}
-  const methods = ['from', 'select', 'insert', 'update', 'delete', 'eq', 'neq', 'in', 'lte', 'lt', 'not', 'order', 'limit', 'single']
-  methods.forEach(method => {
+  const methods = [
+    'from',
+    'select',
+    'insert',
+    'update',
+    'delete',
+    'eq',
+    'neq',
+    'in',
+    'lte',
+    'lt',
+    'not',
+    'order',
+    'limit',
+    'single',
+  ]
+  methods.forEach((method) => {
     mock[method] = jest.fn(() => mock)
   })
   return mock
@@ -63,7 +78,7 @@ describe('ScheduleManager', () => {
 
       await manager.getTradersToRefresh({ platform: 'binance_futures' })
 
-      expect(mockSupabase.eq).toHaveBeenCalledWith('platform', 'binance_futures')
+      expect(mockSupabase.eq).toHaveBeenCalledWith('source', 'binance_futures')
     })
 
     it('should filter by tiers when specified', async () => {
@@ -77,7 +92,7 @@ describe('ScheduleManager', () => {
     it('should throw error when query fails', async () => {
       mockSupabase.limit.mockResolvedValueOnce({
         data: null,
-        error: { message: 'Database error' }
+        error: { message: 'Database error' },
       })
 
       await expect(manager.getTradersToRefresh()).rejects.toEqual({ message: 'Database error' })
@@ -144,7 +159,7 @@ describe('ScheduleManager', () => {
 
       await manager.getOverdueTraders('bybit')
 
-      expect(mockSupabase.eq).toHaveBeenCalledWith('platform', 'bybit')
+      expect(mockSupabase.eq).toHaveBeenCalledWith('source', 'bybit')
     })
   })
 
@@ -154,7 +169,7 @@ describe('ScheduleManager', () => {
 
       mockSupabase.in.mockResolvedValueOnce({
         data: [{ id: traderId, activity_tier: 'hot' }],
-        error: null
+        error: null,
       })
       mockSupabase.eq.mockResolvedValueOnce({ error: null })
 
@@ -197,7 +212,7 @@ describe('ScheduleManager', () => {
         // Return a promise-like object for the final call in the chain
         return {
           eq: jest.fn().mockResolvedValue({ error: null }),
-          ...mockSupabase
+          ...mockSupabase,
         }
       })
 
@@ -220,7 +235,7 @@ describe('ScheduleManager', () => {
       mockSupabase.eq.mockImplementation(() => {
         return {
           eq: jest.fn().mockResolvedValue({ error: { message: 'Update failed' } }),
-          ...mockSupabase
+          ...mockSupabase,
         }
       })
 

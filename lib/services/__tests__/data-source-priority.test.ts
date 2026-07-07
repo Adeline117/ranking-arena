@@ -31,8 +31,8 @@ function queueClient(responses: Array<{ data?: unknown; error?: { message: strin
 }
 
 const SNAPSHOT = {
-  roi_pct: 50,
-  pnl_usd: 1000,
+  roi: 50,
+  pnl: 1000,
   win_rate: 60,
   max_drawdown: 20,
   trades_count: 100,
