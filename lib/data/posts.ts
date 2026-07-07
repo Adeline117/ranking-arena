@@ -750,16 +750,24 @@ export async function togglePostVote(
 
   if (existing) {
     if (existing.choice === choice) {
-      // 取消投票 - use compound match for race safety
-      await supabase.from('post_votes').delete().eq('post_id', postId).eq('user_id', userId)
+      // 取消投票 - use compound match for race safety.
+      // Must check the error: a swallowed failure returns action:'removed' while
+      // the vote persists, desyncing the UI. Throw so the route surfaces it.
+      const { error } = await supabase
+        .from('post_votes')
+        .delete()
+        .eq('post_id', postId)
+        .eq('user_id', userId)
+      if (error) throw error
       return { action: 'removed', vote: null }
     } else {
       // 改变投票
-      await supabase
+      const { error } = await supabase
         .from('post_votes')
         .update({ choice })
         .eq('post_id', postId)
         .eq('user_id', userId)
+      if (error) throw error
       return { action: 'changed', vote: choice }
     }
   } else {
