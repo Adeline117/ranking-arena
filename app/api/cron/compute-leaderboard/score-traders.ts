@@ -35,9 +35,9 @@ export interface ScoredTrader {
   trades_count: number | null
   handle: string | null
   avatar_url: string
-  profitability_score: number
-  risk_control_score: number
-  execution_score: null
+  profitability_score: number // v4: 盈利维度(PnL+ROI 百分位),0-100,喂现有拆解 UI
+  risk_control_score: number // v4: 风险维度(回撤+Sharpe 百分位),0-100
+  execution_score: number | null // v4: 一致性百分位,0-100(缺则 null)
   score_completeness: 'full' | 'partial' | 'minimal'
   trading_style: string | null
   avg_holding_hours: number | null
@@ -134,7 +134,7 @@ export async function scoreTraders(
       avatar_url: info.avatar_url || getExchangeLogoUrl(t.source),
       profitability_score: Math.round(scoreResult.returnScore * 100) / 100,
       risk_control_score: Math.round(scoreResult.pnlScore * 100) / 100,
-      execution_score: null as null,
+      execution_score: null as number | null,
       score_completeness: (t.max_drawdown != null && t.win_rate != null
         ? 'full'
         : t.max_drawdown != null || t.win_rate != null
@@ -200,6 +200,19 @@ export async function scoreTraders(
     t.arena_score = r ? r.totalScore : 0
     t.arena_score_v4 = t.arena_score
     t.score_factors = r ? r.factors : null
+    // Repopulate the 3 existing breakdown sub-scores from v4 factors so the
+    // radar/bars UI stays v4-consistent (0-100), no frontend plumbing change:
+    //   盈利能力 = earnings(PnL 0.30 + ROI 0.20), 风控 = avg(回撤,Sharpe 百分位),
+    //   执行力 = 一致性百分位.
+    const f = r?.factors
+    if (f) {
+      t.profitability_score = Math.round((100 * (0.3 * f.pnl + 0.2 * f.roi)) / 0.5)
+      const riskDims = [f.drawdown, f.sharpe].filter((v): v is number => v != null)
+      t.risk_control_score = riskDims.length
+        ? Math.round((100 * riskDims.reduce((a, b) => a + b, 0)) / riskDims.length)
+        : 0
+      t.execution_score = f.consistency != null ? Math.round(100 * f.consistency) : null
+    }
   })
 
   logger.info(`[${season}] Arena Score v4 is now the flagship (${scoredFiltered.length} traders)`)
