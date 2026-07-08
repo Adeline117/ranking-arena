@@ -47,7 +47,12 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          # MUST match the SG box's Node MAJOR (v22.22.0) — native N-API addons
+          # baked here carry a NODE_MODULE_VERSION; a mismatch (was '20') makes the
+          # shipped node_modules fail to load on SG and the worker won't boot
+          # (2026-07-07: artifact swap → worker dead → auto-rollback). Keep in lockstep
+          # with SG's node (ssh root@SG 'node -v').
+          node-version: '22'
           cache: 'npm'
       # Full install (NOT --omit=dev): the worker runs via tsx and imports
       # devDeps (tsx/dotenv/playwright) at runtime.
@@ -59,15 +64,29 @@ jobs:
       # install (the .js-drop hazard) here in CI instead of as a crash-loop on SG.
       # Covers the previously-dropped packages (luxon/abitype/bullmq/viem/esbuild)
       # + the worker's runtime-critical deps (tsx/dotenv/playwright).
-      - name: Verify dep tree resolves (guard against incomplete install)
+      - name: Verify deps RESOLVE + LOAD (catch ABI/incomplete-install in CI, not on SG)
         run: |
+          set -e
+          # 1) require.resolve = files present (cheap incomplete-install gate — the
+          #    .js-drop hazard). Does NOT load native bindings.
           for m in bullmq ioredis viem abitype luxon @supabase/supabase-js pg ccxt \
                    playwright tsx dotenv esbuild; do
             node -e "require.resolve('$m')" || { echo "::error::dep tree incomplete — '$m' missing/unresolved; refusing to ship a broken artifact"; exit 1; }
           done
-          # tsx must be able to parse the worker entry (the actual runtime path).
-          node -e "require.resolve('tsx')" && npx tsx --eval "import('./worker/src/ingest-worker.ts').catch(e=>{if(/connect|redis|ECONNREFUSED|env|DATABASE/i.test(String(e))){process.exit(0)} console.error(e);process.exit(1)})" || echo "(entry import smoke: non-fatal env/connection error tolerated)"
-          echo "✓ dep tree resolves"
+          # 2) Actually IMPORT each module under tsx (handles ESM+CJS) — this
+          #    instantiates native N-API addons, so a NODE_MODULE_VERSION / ABI
+          #    mismatch vs SG's Node throws HERE in CI instead of dead-worker +
+          #    auto-rollback on SG (2026-07-07 lesson). Plain import() has no
+          #    connection side-effects (Redis/pg connect only on `new`), so it
+          #    can't hang. Node major is pinned to SG's above.
+          npx tsx --eval "
+            const mods = ['bullmq','ioredis','pg','ccxt','viem','abitype','luxon','@supabase/supabase-js','dotenv','esbuild','playwright'];
+            for (const m of mods) {
+              try { await import(m); }
+              catch (e) { console.error('::error::LOAD FAILED for '+m+' (ABI/native mismatch?): '+String(e && (e.stack||e.message||e))); process.exit(1); }
+            }
+            console.log('✓ all worker deps import + native bindings load (ABI matches SG Node)');
+          "
       - name: Package the platform-matched node_modules
         run: tar -czf arena-ingest-deps.tgz node_modules
       - uses: actions/upload-artifact@v4
