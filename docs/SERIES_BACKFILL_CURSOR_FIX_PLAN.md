@@ -184,14 +184,12 @@ GROUP BY s.slug ORDER BY 2;
 --from-artifact`(Mac→SG 稳定链路)。过程中修了 3 个真 bug(见下)。
    **CI 单通道**:两 secret 已配(专用部署密钥,非个人 key)+ 修了 workflow 的
    publickey bug(Setup SSH 追加 `~/.ssh/config` 绑 id_sg,原来裸 ssh/rsync/scp 不吃
-   `GIT_SSH_COMMAND`→255;这也是该 workflow 从未跑绿的原因)。build-deps ✅、deploy-sg
-   已过 auth+backup。**但仍未跑通**:node_modules artifact 换上去后 worker 起不来
-   → 自动回滚(SG 无损,现仍在旧可用 node_modules)。根因几乎肯定是**原生模块 ABI 不匹配**
-   —— CI runner 的 Node ≠ SG 的 **v22.22.0**。**已修的 3 个 bug(都 commit 了)**:(a) build-deps Node 20→22 匹配 SG(原生
-   ABI);(b) 加载烟测改真 import(原 require.resolve 只查文件不加载原生绑定,放行了坏树;
-   用 async IIFE 避开 tsx --eval 的 top-level-await 限制);(c) deploy 脚本 ready-check
+   `GIT_SSH_COMMAND`→255;这也是该 workflow 从未跑绿的原因)。**调通过程共修 4 个真 bug**
+   (逐个暴露,均 commit):(a) 上述 publickey/ssh_config;(b) build-deps Node 20→22 匹配 SG(原生
+   ABI 不匹配 → artifact 换上去 worker 起不来、自动回滚);(c) 加载烟测改真 import(原 require.resolve 只查文件不加载原生绑定,放行了坏树;
+   用 async IIFE 避开 tsx --eval 的 top-level-await 限制);(d) deploy 脚本 ready-check
    加宽日志窗口 50→400 + 延长 30→90s(worker 话痨,ready 行几秒滚出小窗口 → 明明 ready
-   也误判失败并误回滚);(d) runner→Vultr 长操作 SSH idle-drop(255)—— 远端 cp -a 备份
+   也误判失败并误回滚);(e) runner→Vultr 长操作 SSH idle-drop(255)—— 远端 cp -a 备份
    跑数分钟期间通道空闲被 NAT/防火墙断连,加 ServerAliveInterval keepalive 保活。
    **✅ CI 单通道现已全自动跑绿**:run 28912639368 build-deps ✓ + deploy-sg ✓(15m44s,
    慢但稳,keepalive 扛住长备份+传输)→ SG ready、DEPLOYED_SHA=main、游标推进。以后 dep
