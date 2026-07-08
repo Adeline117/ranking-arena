@@ -225,6 +225,22 @@ GROUP BY s.slug ORDER BY 2;
 - 滞后性:band 数千行,tierbs 有界低优先级,按天扫完;Phase 4.1 回填趋势哨兵每日跟踪,
   铺满后设 `STRICT_LOW_FILL=1` 转硬门防回退。**验收判定:✅ 通过(根因修复已产出预期结果)**。
 
+## 覆盖速度调优(2026-07-08，config-only，prod arena.sources.meta)
+
+修复后实测吞吐:每轮 ~10 交易员(120s deadline 在 batch 30 前触发,每交易员
+~15 请求×3TF)、tierbs 最低优先级 ~1.5 轮/时 → 巨板全量要 1–2 周,几乎全耗在
+没价值的深尾。两个 config-only 调整(零 wedge 风险,不碰有界+低优先级的安全属性):
+
+- **cadence 1800s→600s**(`series_backfill_cadence_seconds`):更频繁跑、填空闲槽,
+  ~2–3× 吞吐;仍有界+priority 9,填不满就等,不抢核心 Tier-A/D。
+- **series_backfill_topn 100000→3000**:band 从「整板」缩到「top-3000 有价值尾部」。
+  巨板(binance 9436/HL~10k/bitget_spot 5212)砍掉 rank 3000+ 的僵尾(几乎无人看);
+  小源 band 本就<3000 无影响。按 rank 升序扫,高价值段(301–1500)最先covered。
+- **预期**:全站有价值覆盖 **~4–6 天**(长杆=binance/HL 在慢的 SG,~2700 band);
+  高价值段(rank≤1500)~2–3 天;之后 wrap 转维护性刷新。深尾(rank>3000)按需再放开。
+- 观测:游标推进见 `arena.ingest_cursors` kind=series_backfill;填充率爬升见 Phase 4.1
+  回填趋势哨兵(每日)。全部 23 个 backfill 源统一 cadence=600 / topn=3000。
+
 ## 关联
 
 - 显示层/评分依赖：`risk_control_score`/`execution_score` 用 mdd/sharpe，长尾修复后
