@@ -1,42 +1,39 @@
-import { computeArenaScoreV4, ARENA_V4_CONFIG, type TraderScoreInputV4 } from '../arena-score'
+import {
+  computeArenaScoresV4,
+  percentRanks,
+  ARENA_V4_CONFIG,
+  type TraderScoreInputV4,
+} from '../arena-score'
 
-// Baseline: a strong all-around CEX trader (all metrics present).
-const strong: TraderScoreInputV4 = {
-  roi: 428,
-  pnl: 12_090_000,
-  maxDrawdown: 22,
-  winRate: 62,
-  sharpeRatio: 6.6,
-  profitFactor: 3,
-  tradesCount: 500,
-}
+// A cohort with distinct archetypes + filler, so percentiles are meaningful.
+// Index map is asserted below by construction order.
+const STRONG = 0 // big PnL, strong ROI, low MDD, high Sharpe, big sample
+const WHALE = 1 // huge PnL, low ROI%, clean risk
+const TOY = 2 // tiny PnL, absurd ROI%, no risk data, 3 trades (the exploit)
+const BLOWN = 3 // decent PnL but 90% drawdown, 0 trades
+const SMALL_PRO = 4 // small PnL but elite Sharpe/MDD, many trades
 
-describe('computeArenaScoreV4 — invariants', () => {
-  it('score ∈ [0,100], quality ∈ [0,1], confidence ∈ [0.35,1]', () => {
-    const r = computeArenaScoreV4(strong, '90D')
-    expect(r.totalScore).toBeGreaterThanOrEqual(0)
-    expect(r.totalScore).toBeLessThanOrEqual(100)
-    expect(r.quality).toBeGreaterThanOrEqual(0)
-    expect(r.quality).toBeLessThanOrEqual(1)
-    expect(r.confidence).toBeGreaterThanOrEqual(ARENA_V4_CONFIG.CONF_FLOOR)
-    expect(r.confidence).toBeLessThanOrEqual(1)
-  })
-
-  it('a strong all-around trader scores high (>75)', () => {
-    expect(computeArenaScoreV4(strong, '90D').totalScore).toBeGreaterThan(75)
-  })
-
-  it('ROI + PnL contribute 60% of weight when all factors present', () => {
-    const W = ARENA_V4_CONFIG.W
-    expect(W.roi + W.pnl).toBeCloseTo(0.6, 6)
-    expect(W.roi + W.pnl + W.dd + W.sharpe + W.con).toBeCloseTo(1.0, 6)
-  })
-})
-
-describe('anti-gaming: low-principal high-ROI toy wallet', () => {
-  it('a $200-PnL / 10000%-ROI wallet with no risk data scores LOW (< 40)', () => {
-    // The classic exploit: tiny account, absurd ROI%, no track record.
-    const toy: TraderScoreInputV4 = {
+function cohort(): TraderScoreInputV4[] {
+  const base: TraderScoreInputV4[] = [
+    {
+      roi: 428,
+      pnl: 12_000_000,
+      maxDrawdown: 22,
+      winRate: 62,
+      sharpeRatio: 6.6,
+      profitFactor: 3,
+      tradesCount: 500,
+    }, // STRONG
+    {
+      roi: 63,
+      pnl: 24_000_000,
+      maxDrawdown: 20,
+      winRate: 55,
+      sharpeRatio: 6.9,
+      profitFactor: 2,
+      tradesCount: 640,
+    }, // WHALE
+    {
       roi: 10000,
       pnl: 200,
       maxDrawdown: null,
@@ -44,84 +41,93 @@ describe('anti-gaming: low-principal high-ROI toy wallet', () => {
       sharpeRatio: null,
       profitFactor: null,
       tradesCount: 3,
+    }, // TOY
+    {
+      roi: 800,
+      pnl: 1_400_000,
+      maxDrawdown: 90,
+      winRate: null,
+      sharpeRatio: null,
+      profitFactor: null,
+      tradesCount: 0,
+    }, // BLOWN
+    {
+      roi: 180,
+      pnl: 50_000,
+      maxDrawdown: 3,
+      winRate: 65,
+      sharpeRatio: 9.0,
+      profitFactor: 4,
+      tradesCount: 300,
+    }, // SMALL_PRO
+  ]
+  // filler to populate the distribution (median-ish traders)
+  for (let i = 0; i < 15; i++) {
+    base.push({
+      roi: 20 + i * 10,
+      pnl: 1000 + i * 5000,
+      maxDrawdown: 25 + i,
+      winRate: 45 + i,
+      sharpeRatio: 0.5 + i * 0.2,
+      profitFactor: 1 + i * 0.1,
+      tradesCount: 40 + i * 20,
+    })
+  }
+  return base
+}
+
+describe('computeArenaScoresV4 — batch invariants', () => {
+  const r = computeArenaScoresV4(cohort(), '90D')
+  it('returns one result per input, all scores in [0,100]', () => {
+    expect(r).toHaveLength(20)
+    for (const x of r) {
+      expect(x.totalScore).toBeGreaterThanOrEqual(0)
+      expect(x.totalScore).toBeLessThanOrEqual(100)
     }
-    const r = computeArenaScoreV4(toy, '90D')
-    // PnL floor (f_pnl≈0) + low confidence (3 trades, no risk metrics) crush it.
-    expect(r.totalScore).toBeLessThan(40)
-    expect(r.factors.pnl).toBeLessThan(0.1)
   })
-
-  it('ROI is compressed: 300% and 10000% give nearly-equal ROI factor', () => {
-    const at300 = computeArenaScoreV4({ ...strong, roi: 300 }, '90D').factors.roi
-    const at10000 = computeArenaScoreV4({ ...strong, roi: 10000 }, '90D').factors.roi
-    // tanh compression → both high, close to each other (kills ROI domination).
-    // 300% → 0.76, 10000% → 1.0: a ~0.24 gap on a 0.30-weight factor = ~0.07 score.
-    expect(at10000 - at300).toBeLessThan(0.25)
-    expect(at300).toBeGreaterThan(0.7)
+  it('empty cohort → empty array', () => {
+    expect(computeArenaScoresV4([], '90D')).toEqual([])
+  })
+  it('ROI + PnL weight = 0.70 (owner-locked)', () => {
+    const W = ARENA_V4_CONFIG.W
+    expect(W.pnl + W.roi).toBeCloseTo(0.7, 6)
+    expect(W.pnl + W.roi + W.dd + W.sharpe + W.con).toBeCloseTo(1.0, 6)
   })
 })
 
-describe('drawdown is penalized (V3 ignored it entirely)', () => {
-  it('a −90% MDD wallet scores well below the same trader at −15% MDD', () => {
-    const clean = computeArenaScoreV4({ ...strong, maxDrawdown: 15 }, '90D').totalScore
-    const blown = computeArenaScoreV4({ ...strong, maxDrawdown: 90 }, '90D').totalScore
-    expect(clean).toBeGreaterThan(blown)
-    expect(clean - blown).toBeGreaterThan(3) // meaningful gap
+describe('ranking behavior on real archetypes', () => {
+  const r = computeArenaScoresV4(cohort(), '90D')
+  it('big earners (STRONG/WHALE) far outrank the toy-wallet exploit', () => {
+    expect(r[STRONG].totalScore).toBeGreaterThan(r[TOY].totalScore + 30)
+    expect(r[WHALE].totalScore).toBeGreaterThan(r[TOY].totalScore + 30)
   })
-
-  it('drawdown factor: 10% → ~1.0, 70%+ → ~0', () => {
-    const good = computeArenaScoreV4({ ...strong, maxDrawdown: 10 }, '90D').factors.drawdown
-    const terrible = computeArenaScoreV4({ ...strong, maxDrawdown: 80 }, '90D').factors.drawdown
-    expect(good).toBeGreaterThan(0.95)
-    expect(terrible).toBe(0)
+  it('the -90% drawdown / 0-trade wallet ranks below the strong trader', () => {
+    expect(r[STRONG].totalScore).toBeGreaterThan(r[BLOWN].totalScore)
   })
-})
-
-describe('statistical honesty (confidence layer)', () => {
-  it('a tiny sample (5 trades) scores below a large sample (500), all else equal', () => {
-    const many = computeArenaScoreV4({ ...strong, tradesCount: 500 }, '90D').totalScore
-    const few = computeArenaScoreV4({ ...strong, tradesCount: 5 }, '90D').totalScore
-    expect(many).toBeGreaterThan(few)
+  it('STRONG (clean risk) beats WHALE (bigger PnL but lower ROI% + weaker risk)', () => {
+    // earnings matter (both high) but skill 30% tips it to the cleaner trader
+    expect(r[STRONG].totalScore).toBeGreaterThanOrEqual(r[WHALE].totalScore)
   })
-
-  it('missing risk metrics lowers confidence vs a fully-populated trader', () => {
-    const full = computeArenaScoreV4(strong, '90D').confidence
-    const sparse = computeArenaScoreV4(
-      { ...strong, maxDrawdown: null, sharpeRatio: null, profitFactor: null },
-      '90D'
-    ).confidence
-    expect(full).toBeGreaterThan(sparse)
+  it('SMALL_PRO (elite risk, tiny PnL) still scores respectably (not buried)', () => {
+    // it should beat the toy wallet and the blown-up wallet on skill+confidence
+    expect(r[SMALL_PRO].totalScore).toBeGreaterThan(r[TOY].totalScore)
+    expect(r[SMALL_PRO].totalScore).toBeGreaterThan(r[BLOWN].totalScore)
   })
-
-  it('0 max-drawdown / 0 win-rate treated as MISSING, not as perfect (no fake reward)', () => {
-    // Exchange reports 0 when it has no data — must NOT count as a flawless 0% drawdown.
-    const zeroMdd = computeArenaScoreV4({ ...strong, maxDrawdown: 0 }, '90D')
-    expect(zeroMdd.factors.drawdown).toBeNull()
+  it('factors exposed for the score breakdown (percentile dims + pnl magnitude)', () => {
+    const f = r[STRONG].factors
+    expect(f.pnl).toBeGreaterThan(0.8) // $12M → near top of the log-magnitude range
+    expect(f.drawdown).not.toBeNull()
+    expect(f.sharpe).not.toBeNull()
   })
 })
 
-describe('big earner surfaces (V3 buried low-ROI whales)', () => {
-  it('an $8M-PnL / 83%-ROI clean trader still scores well (>65)', () => {
-    // V3 scored this ~54 because ROI% was "only" 83%. Absolute earnings + clean
-    // risk should keep it high under v4.
-    const whale: TraderScoreInputV4 = {
-      roi: 83,
-      pnl: 8_260_000,
-      maxDrawdown: 13,
-      winRate: 55,
-      sharpeRatio: 8.7,
-      profitFactor: 2.5,
-      tradesCount: 500,
-    }
-    expect(computeArenaScoreV4(whale, '90D').totalScore).toBeGreaterThan(65)
+describe('percentRanks helper', () => {
+  it('min→0, max→1, nulls preserved', () => {
+    expect(percentRanks([10, 20, 30])).toEqual([0, 0.5, 1])
+    expect(percentRanks([5, null, 15])).toEqual([0, null, 1])
   })
-})
-
-describe('period-aware ROI compression', () => {
-  it('same ROI yields a higher factor on shorter timeframes (smaller divisor)', () => {
-    const roi = 90
-    const f7 = computeArenaScoreV4({ ...strong, roi }, '7D').factors.roi
-    const f90 = computeArenaScoreV4({ ...strong, roi }, '90D').factors.roi
-    expect(f7).toBeGreaterThan(f90) // 90% ROI is exceptional in 7d, ordinary in 90d
+  it('all-null → all-null; single value → 1', () => {
+    expect(percentRanks([null, null])).toEqual([null, null])
+    expect(percentRanks([42])).toEqual([1])
   })
 })
