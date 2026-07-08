@@ -666,3 +666,134 @@ export function calculateArenaScoreV3Legacy(
     scoreConfidence,
   }
 }
+
+// ============================================================================
+// Arena Score v4 — 单一分数,盈利优先 + 风险调整 + 统计诚实
+// ============================================================================
+// 设计依据(2026-07-07):
+//  - owner 决策:一个分数衡量交易员;"奖励盈利",ROI+PnL 权重 ≥ 60%。
+//  - 行业接地(Bybit Top Balanced / Binance / eToro):风险调整(Sharpe)+ 回撤 +
+//    准入门槛思想(此处软化为 Confidence 层,不硬删交易员)。
+//  - 量化标准:Sharpe/Sortino/Calmar/MaxDD/胜率+盈利因子。
+//  - 标定:所有曲线拟合 9,761 个交易员 90D 真实分布(p50/p90/p99),非拍脑袋常数。
+//
+// Score = 100 × Quality × Confidence
+//  Quality  = 5 维归一化加权(只在可得维度间归一):ROI .30 + PnL .30 + 回撤 .18
+//             + Sharpe .12 + 一致性 .10  (ROI+PnL = 0.60,满足 owner 指令)
+//  Confidence ∈ [0.35,1] = 样本量 × 数据完整度 → 巨亏/小样本/玩具号结构性封顶。
+//
+// 抗操纵(不靠风险权重,靠这三样):
+//  1. ROI 用 tanh 压缩 → 300% 与 10000% 几乎并列,低本金刷不上去。
+//  2. PnL 用对数量级 + 归一 → 真金白银才算数($200 号 f_pnl≈0)。
+//  3. Confidence → 3 笔交易 / 缺风险数据的号封顶,进不了顶部。
+
+export interface TraderScoreInputV4 {
+  roi: number // ROI %（如 25 = 25%）
+  pnl: number | null // 已实现 PnL（USD）
+  maxDrawdown: number | null // 最大回撤 %（如 22 = 22%），0/null 视为缺失
+  winRate: number | null // 胜率 %，0/null 视为缺失
+  sharpeRatio: number | null
+  profitFactor: number | null
+  tradesCount: number | null // 样本量(置信度)
+  source?: string
+}
+
+export interface ArenaScoreV4Result {
+  totalScore: number // 0-100
+  quality: number // 0-1
+  confidence: number // 0.35-1
+  // 各维度归一化贡献(详情页"分数构成"拆解用;null = 该维度缺失,未参与)
+  factors: {
+    roi: number
+    pnl: number
+    drawdown: number | null
+    sharpe: number | null
+    consistency: number | null
+  }
+}
+
+export const ARENA_V4_CONFIG = {
+  // 权重:ROI + PnL = 0.60(owner 指令),风险/一致性 = 0.40
+  W: { roi: 0.3, pnl: 0.3, dd: 0.18, sharpe: 0.12, con: 0.1 },
+  // ROI tanh 压缩除数(越长的窗口 ROI 越大 → 除数越大);拟合各 tf ROI 量级
+  ROI_DIV: { '7D': 90, '30D': 180, '90D': 300 } as Record<Period, number>,
+  // PnL 对数量级归一:$1K → 0,$10M → 1(拟合 pnl p10≈$27 / p50≈$1.7K / p99≈$9.2M)
+  PNL_LO: 1_000,
+  PNL_HI: 10_000_000,
+  // 回撤韧性:|MDD| 10% → 1.0,70% → 0(拟合 mdd p50≈21% / p90≈69% / p99≈96%)
+  MDD_FLOOR: 10,
+  MDD_CEIL: 70,
+  // Sharpe 归一:sharpe/6 → p90≈5.8 映射到 ~1（sharpe 分布未被钳,最可用）
+  SHARPE_REF: 6,
+  // 胜率归一:40% → 0,90% → 1（拟合 win p50≈61 / p90≈91）
+  WIN_LO: 40,
+  WIN_HI: 90,
+  PF_REF: 5, // 盈利因子:5 → 1.0（p75 已钳到 10,取半量程）
+  SAMPLE_K: 50, // 样本量置信:trades/(trades+50) → 50 笔=0.5,250=0.83
+  CONF_FLOOR: 0.35, // 置信度下限——真实交易员永不归零
+} as const
+
+/** 计算 Arena Score v4（单时间段）。纯函数,便于影子计算 + 单测。 */
+export function computeArenaScoreV4(input: TraderScoreInputV4, period: Period): ArenaScoreV4Result {
+  const V = ARENA_V4_CONFIG
+  const roi = Number(input.roi)
+  const pnl = input.pnl == null ? null : Number(input.pnl)
+  // 0 与 null 一律视为"缺失"——交易所无数据时常报 0,不能当真实零回撤/零胜率(否则奖励缺数据)
+  const mdd =
+    input.maxDrawdown != null && input.maxDrawdown !== 0 ? Math.abs(input.maxDrawdown) : null
+  const win = input.winRate != null && input.winRate !== 0 ? input.winRate : null
+  const sharpe = input.sharpeRatio ?? null
+  const pf = input.profitFactor ?? null
+  const trades = input.tradesCount ?? null
+
+  // ── 5 个归一化因子 ∈ [0,1](缺失 → null,不参与 quality) ─────────────────
+  const fRoi = Math.tanh(roi / (V.ROI_DIV[period] ?? 300))
+  const fPnl =
+    pnl == null || pnl <= 0
+      ? 0
+      : clip((Math.log(pnl) - Math.log(V.PNL_LO)) / (Math.log(V.PNL_HI) - Math.log(V.PNL_LO)), 0, 1)
+  const fDd = mdd == null ? null : 1 - clip((mdd - V.MDD_FLOOR) / (V.MDD_CEIL - V.MDD_FLOOR), 0, 1)
+  const fSh = sharpe == null ? null : clip(sharpe / V.SHARPE_REF, 0, 1)
+  const fCon =
+    win == null
+      ? null
+      : 0.6 * clip((win - V.WIN_LO) / (V.WIN_HI - V.WIN_LO), 0, 1) +
+        0.4 * clip((pf ?? 0) / V.PF_REF, 0, 1)
+
+  // ── Quality:在可得维度间加权归一（缺失维度权重再分配）────────────────
+  let num = V.W.roi * fRoi + V.W.pnl * fPnl
+  let den = V.W.roi + V.W.pnl
+  if (fDd != null) {
+    num += V.W.dd * fDd
+    den += V.W.dd
+  }
+  if (fSh != null) {
+    num += V.W.sharpe * fSh
+    den += V.W.sharpe
+  }
+  if (fCon != null) {
+    num += V.W.con * fCon
+    den += V.W.con
+  }
+  const quality = den > 0 ? clip(num / den, 0, 1) : 0
+
+  // ── Confidence:样本量 × 数据完整度（软准入门槛）──────────────────────
+  const cN = trades == null ? 0.3 : trades / (trades + V.SAMPLE_K)
+  const present = [sharpe, mdd, win, pf].filter((v) => v != null).length
+  const cC = Math.max(present / 4, 0.25) // 下限 0.25,避免完全缺风险数据者归零
+  const confidence = V.CONF_FLOOR + (1 - V.CONF_FLOOR) * Math.cbrt(Math.max(0.01, cN * cC))
+
+  const totalScore = clip(100 * quality * confidence, 0, 100)
+  return {
+    totalScore: round2(totalScore),
+    quality: round2(quality),
+    confidence: round2(confidence),
+    factors: {
+      roi: round2(fRoi),
+      pnl: round2(fPnl),
+      drawdown: fDd == null ? null : round2(fDd),
+      sharpe: fSh == null ? null : round2(fSh),
+      consistency: fCon == null ? null : round2(fCon),
+    },
+  }
+}
