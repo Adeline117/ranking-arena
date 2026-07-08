@@ -41,7 +41,13 @@ import { startFailoverManager } from './ingest/failover'
 // serialize one session each, and remote-region (vps_jp) sources use a remote
 // WS so the Mac launches no local Chromium for them — so peak local browser
 // count stays well under 5. pm2 max_memory_restart raised to 1536M to match.
-const INGEST_CONCURRENCY = 5
+//
+// Now env-tunable per node (2026-07-08): after the SG box was resized 1→4 vCPU /
+// 2→8GB, concurrency 5 badly under-utilized it (load 0.54, 6GB free) because
+// browser-source crawls are per-fetch-latency-bound, not CPU-bound — parallelism,
+// not more cores per job, is the lever. SG sets INGEST_CONCURRENCY=12 in its env;
+// local (Mac) keeps the default 5 unless overridden.
+const INGEST_CONCURRENCY = Number(process.env.INGEST_CONCURRENCY) || 5
 
 // Fast-lane pool (2026-06-13 slot-starvation root fix): light Tier-A
 // leaderboard crawls (board ≤ FAST_TIER_A_MAX_COUNT) run here, fully isolated
