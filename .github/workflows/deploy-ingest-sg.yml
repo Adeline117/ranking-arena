@@ -79,13 +79,16 @@ jobs:
           #    auto-rollback on SG (2026-07-07 lesson). Plain import() has no
           #    connection side-effects (Redis/pg connect only on `new`), so it
           #    can't hang. Node major is pinned to SG's above.
+          # async IIFE — tsx --eval transforms to CJS which rejects top-level await.
           npx tsx --eval "
-            const mods = ['bullmq','ioredis','pg','ccxt','viem','abitype','luxon','@supabase/supabase-js','dotenv','esbuild','playwright'];
-            for (const m of mods) {
-              try { await import(m); }
-              catch (e) { console.error('::error::LOAD FAILED for '+m+' (ABI/native mismatch?): '+String(e && (e.stack||e.message||e))); process.exit(1); }
-            }
-            console.log('✓ all worker deps import + native bindings load (ABI matches SG Node)');
+            (async () => {
+              const mods = ['bullmq','ioredis','pg','ccxt','viem','abitype','luxon','@supabase/supabase-js','dotenv','esbuild','playwright'];
+              for (const m of mods) {
+                try { await import(m); }
+                catch (e) { console.error('::error::LOAD FAILED for '+m+' (ABI/native mismatch?): '+String(e && (e.stack||e.message||e))); process.exit(1); }
+              }
+              console.log('✓ all worker deps import + native bindings load (ABI matches SG Node)');
+            })();
           "
       - name: Package the platform-matched node_modules
         run: tar -czf arena-ingest-deps.tgz node_modules
