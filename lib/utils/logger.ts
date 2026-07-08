@@ -141,10 +141,34 @@ class Logger {
   }
 
   /**
+   * Mirror every server-side log call into logs/local-ux-audit.jsonl during local dev.
+   * Dynamic require (not static import) so this never enters client bundles —
+   * same pattern as correlationId() above.
+   */
+  private mirrorLocal(level: LogLevel, message: string, data: unknown[]): void {
+    if (!isServer || isProduction) return
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const mod = require('@/lib/utils/' + 'local-ux-audit-log')
+      mod.logLocalUxLoggerMirror({
+        level,
+        message,
+        logger: this.name,
+        correlationId: correlationId(),
+        data: data.length > 0 ? data : undefined,
+      })
+    } catch {
+      /* local UX audit logging is best-effort only, never break the real logger */
+    }
+  }
+
+  /**
    * 输出日志
    */
   private output(level: LogLevel, message: string, ...data: unknown[]): void {
     if (!this.shouldLog(level)) return
+
+    this.mirrorLocal(level, message, data)
 
     // Production server-side: structured JSON for log aggregation (Vercel Logs, Datadog, etc.)
     if (isServer && isProduction) {
