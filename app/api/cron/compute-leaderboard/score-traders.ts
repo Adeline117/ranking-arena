@@ -3,7 +3,7 @@
  * Extracted from computeSeason to reduce route.ts by ~140 lines.
  */
 
-import { calculateArenaScore, type Period } from '@/lib/utils/arena-score'
+import { calculateArenaScore, computeArenaScoreV4, type Period } from '@/lib/utils/arena-score'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import { detectTraderType } from './helpers'
@@ -18,6 +18,7 @@ export interface ScoredTrader {
   source: string
   source_trader_id: string
   arena_score: number | null
+  arena_score_v4: number | null // shadow: v4 score, parallel-computed, not served
   roi: number
   pnl: number | null
   win_rate: number | null
@@ -99,6 +100,23 @@ export async function scoreTraders(
       ) / 100
     const finalScore = rawFinalScore > 0 ? rawFinalScore : null
 
+    // ── Arena Score v4 (SHADOW — parallel-computed, written but not served) ──
+    // v4's Quality×Confidence already bakes in sample-size + data-completeness,
+    // so we take its totalScore directly (no v3 external penalties applied).
+    const v4 = computeArenaScoreV4(
+      {
+        roi: t.roi ?? 0,
+        pnl: t.pnl ?? null,
+        maxDrawdown: t.max_drawdown,
+        winRate: normalizedWinRate,
+        sharpeRatio: t.sharpe_ratio,
+        profitFactor: t.profit_factor ?? null,
+        tradesCount: t.trades_count,
+      },
+      season
+    )
+    const finalScoreV4 = v4.totalScore > 0 ? v4.totalScore : null
+
     // Handle/avatar resolution
     const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || {
       handle: null,
@@ -112,6 +130,7 @@ export async function scoreTraders(
       source: t.source,
       source_trader_id: t.source_trader_id,
       arena_score: finalScore,
+      arena_score_v4: finalScoreV4,
       roi: t.roi ?? 0,
       pnl: t.pnl,
       win_rate: normalizedWinRate,
