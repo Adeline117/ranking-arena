@@ -297,9 +297,23 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
       const pnlAnchor = lerpAt(pnlPts, windowStart)
       const eqAnchor = lerpAt(eqPts, windowStart)
       const pnl = pnlNow !== null && pnlAnchor !== null ? pnlNow - pnlAnchor : null
+      // 90d ROI basis (2026-07-07 data-quality fix): prefer CURRENT equity minus
+      // window PnL (aum − pnl = start-of-window equity) over the fragile lerped
+      // eqAnchor. For accounts younger than 90d, lerpAt clamps to the FIRST
+      // accountValue point — often a tiny initial deposit — so pnl/eqAnchor
+      // exploded to the 10000% clamp for ~every whale (leaderboard showed
+      // ">10K%" while the detail page showed the real ~66%). The aum basis is
+      // robust to that anchor and matches the profile detail page, unifying the
+      // two surfaces. eqAnchor stays as a fallback when aum is unavailable.
+      const startEquity =
+        aum !== null && pnl !== null && aum - pnl > 0
+          ? aum - pnl
+          : eqAnchor !== null && eqAnchor > 0
+            ? eqAnchor
+            : null
       const roi =
-        pnl !== null && eqAnchor !== null && eqAnchor > 0
-          ? clampRoiPct((pnl / eqAnchor) * 100)
+        pnl !== null && startEquity !== null && startEquity > 0
+          ? clampRoiPct((pnl / startEquity) * 100)
           : null
       // Tier-0 risk on the in-window equity slice (allTime equity ≥ windowStart).
       const eqInWindow = eqPts.filter((p) => p.ts >= windowStart)
