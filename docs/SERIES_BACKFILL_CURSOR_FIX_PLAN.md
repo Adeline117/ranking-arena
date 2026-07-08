@@ -191,9 +191,11 @@ GROUP BY s.slug ORDER BY 2;
    ABI);(b) 加载烟测改真 import(原 require.resolve 只查文件不加载原生绑定,放行了坏树;
    用 async IIFE 避开 tsx --eval 的 top-level-await 限制);(c) deploy 脚本 ready-check
    加宽日志窗口 50→400 + 延长 30→90s(worker 话痨,ready 行几秒滚出小窗口 → 明明 ready
-   也误判失败并误回滚)。**仅剩 nicety**:CI deploy-sg 的 GH-runner→Vultr 直连大传输仍会
-   drop(255),已用 Mac-mediated 交付绕过;要全自动可把 deploy-sg 改成 Mac-runner 或加
-   传输重试。功能与 hygiene 均已完成。
+   也误判失败并误回滚);(d) runner→Vultr 长操作 SSH idle-drop(255)—— 远端 cp -a 备份
+   跑数分钟期间通道空闲被 NAT/防火墙断连,加 ServerAliveInterval keepalive 保活。
+   **✅ CI 单通道现已全自动跑绿**:run 28912639368 build-deps ✓ + deploy-sg ✓(15m44s,
+   慢但稳,keepalive 扛住长备份+传输)→ SG ready、DEPLOYED_SHA=main、游标推进。以后 dep
+   变更点一下 workflow(或开 package-lock push 触发)即全自动部署,零手动。
 2. **local worker ↺100 = 非活跃问题**:exit 130=SIGINT(手动 restart)、mem 64MB
    (非 OOM)、重启前已稳定 3 天;100 是**生命周期累计**(含历史已修的 EDBHANDLEREXITED
    等),非重启循环。无需处置,持续观察即可。
@@ -204,6 +206,26 @@ GROUP BY s.slug ORDER BY 2;
    逐步深抓 equity series + fills → tf30/tf90 self-derive Sharpe/Sortino/mdd + win_rate
    (fills-replay)覆盖上升。**tf7 保持低是真统计下限**(7 日线 < MIN_RATIO_POINTS+1=8,
    即便算出也是噪声),honest。gtrade(18%)同理可按需启用。
+
+## 结果验收(2026-07-08，修复上线 ~2h 后实测)
+
+**「扫到哪、填到哪」——被 tier_b_series 抓过的交易员 vs 全板填充率(tf30)：**
+
+| 源             | 本会话已抓 | 已抓交易员                    | 全板               |
+| -------------- | ---------- | ----------------------------- | ------------------ |
+| bitget_spot    | 59         | pnl **95%** · mdd **90%**     | pnl 18% · mdd 17%  |
+| hyperliquid    | 163        | mdd **99%** · sharpe **100%** | mdd 6% · sharpe 6% |
+| bitget_futures | 50         | mdd **94%**                   | mdd 36%            |
+| xt_futures     | 41         | mdd **100%**                  | mdd 99%            |
+
+- **引擎修好**:每个被抓到的交易员,源头提供的指标(pnl/mdd)立刻填到 90–100%;修复前引擎
+  0 覆盖(原地打转)。**重抓比 111×(打转)→ 3×(=3 timeframe,正常线性前进)**。
+- **HL 自派生在跑**:被抓的 HL sharpe 6%→**100%**、mdd 6%→99%(equity 序列派生)。
+- **全板均值已上移**:bitget_spot pnl 全板 ~7%→**18%**(2h 内仅扫了 band 的 ~13%)。
+- 19 源游标全推进(修复前 0 行):bybit_mt5→1323、blofin→756、bitget_spot→659、HL→522…
+- 诚实标注:bitget/xt 的 sharpe 仍 0 = **正确**(上游不提供 + CEX 自派生已按 2026-07-02 关)。
+- 滞后性:band 数千行,tierbs 有界低优先级,按天扫完;Phase 4.1 回填趋势哨兵每日跟踪,
+  铺满后设 `STRICT_LOW_FILL=1` 转硬门防回退。**验收判定:✅ 通过(根因修复已产出预期结果)**。
 
 ## 关联
 
