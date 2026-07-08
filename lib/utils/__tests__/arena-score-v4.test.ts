@@ -88,9 +88,10 @@ describe('computeArenaScoresV4 — batch invariants', () => {
   it('empty cohort → empty array', () => {
     expect(computeArenaScoresV4([], '90D')).toEqual([])
   })
-  it('ROI + PnL weight = 0.70 (owner-locked)', () => {
+  it('earnings (ROI+PnL) = 0.50, skill (dd+sharpe+con) = 0.50 (owner-locked, backtest-calibrated)', () => {
     const W = ARENA_V4_CONFIG.W
-    expect(W.pnl + W.roi).toBeCloseTo(0.7, 6)
+    expect(W.pnl + W.roi).toBeCloseTo(0.5, 6)
+    expect(W.dd + W.sharpe + W.con).toBeCloseTo(0.5, 6)
     expect(W.pnl + W.roi + W.dd + W.sharpe + W.con).toBeCloseTo(1.0, 6)
   })
 })
