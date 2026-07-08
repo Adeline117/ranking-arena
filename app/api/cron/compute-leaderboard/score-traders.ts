@@ -3,7 +3,12 @@
  * Extracted from computeSeason to reduce route.ts by ~140 lines.
  */
 
-import { calculateArenaScore, computeArenaScoresV4, type Period } from '@/lib/utils/arena-score'
+import {
+  calculateArenaScore,
+  computeArenaScoresV4,
+  type Period,
+  type ArenaScoreV4Result,
+} from '@/lib/utils/arena-score'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import { detectTraderType } from './helpers'
@@ -17,8 +22,10 @@ const logger = createLogger('compute-leaderboard')
 export interface ScoredTrader {
   source: string
   source_trader_id: string
-  arena_score: number | null
-  arena_score_v4: number | null // shadow: v4 score, parallel-computed, not served
+  arena_score: number | null // NOW the v4 score (served + ranked); filled by the batch pass
+  arena_score_v3: number | null // rollback: pre-v4 (ROI+PnL) score; also the serving-population gate
+  arena_score_v4: number | null // = arena_score (labeled shadow, kept for continuity)
+  score_factors: ArenaScoreV4Result['factors'] | null // v4 breakdown for the score UI
   roi: number
   pnl: number | null
   win_rate: number | null
@@ -112,8 +119,10 @@ export async function scoreTraders(
     return {
       source: t.source,
       source_trader_id: t.source_trader_id,
-      arena_score: finalScore,
-      arena_score_v4: null as number | null, // SHADOW — filled by the batch pass below
+      arena_score: null as number | null, // v4 — filled by the batch pass below (SERVED + RANKED)
+      arena_score_v3: finalScore, // rollback + serving-population gate (real ROI/PnL present)
+      arena_score_v4: null as number | null, // = arena_score, filled below
+      score_factors: null as ArenaScoreV4Result['factors'] | null,
       roi: t.roi ?? 0,
       pnl: t.pnl,
       win_rate: normalizedWinRate,
@@ -151,28 +160,7 @@ export async function scoreTraders(
     }
   })
 
-  // ── Arena Score v4 (SHADOW — parallel-computed, written but not served) ──
-  // v4 is BATCH: several dimensions are percentile-ranked within this season's
-  // whole cohort, so it must see all traders at once (not per-trader). The
-  // display score is "you beat X% of traders". Written to arena_score_v4 only.
-  const v4Results = computeArenaScoresV4(
-    scored.map((t) => ({
-      roi: t.roi,
-      pnl: t.pnl,
-      maxDrawdown: t.max_drawdown,
-      winRate: t.win_rate,
-      sharpeRatio: t.sharpe_ratio,
-      profitFactor: t.profit_factor,
-      tradesCount: t.trades_count,
-    })),
-    season
-  )
-  scored.forEach((t, i) => {
-    const s = v4Results[i]?.totalScore
-    t.arena_score_v4 = s != null && s > 0 ? s : null
-  })
-
-  // Mark outliers
+  // Mark outliers (uses roi/pnl, independent of the score)
   const outlierCount = markOutliers(scored)
   if (outlierCount > 0) {
     logger.info(
@@ -186,8 +174,34 @@ export async function scoreTraders(
     `[${season}] Arena followers: ${applied} traders have followers (${uniqueIds} unique trader_ids queried)`
   )
 
-  // Filter out null scores (ROI≈0 + PnL≈0)
-  const scoredFiltered = scored.filter((t) => t.arena_score != null)
+  // Served population = traders with a real (v3) score — the SAME quality gate as
+  // pre-cutover (real ROI/PnL present). Only the score/rank VALUE changes to v4.
+  const scoredFiltered = scored.filter((t) => t.arena_score_v3 != null)
 
+  // ── Arena Score v4 — NOW THE FLAGSHIP ──
+  // Batch percentile over the SERVED cohort (percentiles are relative to what
+  // users actually see). Writes arena_score (served + ranked by the rerank RPC /
+  // in-memory sort), arena_score_v4 (= arena_score, labeled), and score_factors
+  // (UI breakdown). arena_score_v3 (set above) is the rollback value.
+  const v4Results = computeArenaScoresV4(
+    scoredFiltered.map((t) => ({
+      roi: t.roi,
+      pnl: t.pnl,
+      maxDrawdown: t.max_drawdown,
+      winRate: t.win_rate,
+      sharpeRatio: t.sharpe_ratio,
+      profitFactor: t.profit_factor,
+      tradesCount: t.trades_count,
+    })),
+    season
+  )
+  scoredFiltered.forEach((t, i) => {
+    const r = v4Results[i]
+    t.arena_score = r ? r.totalScore : 0
+    t.arena_score_v4 = t.arena_score
+    t.score_factors = r ? r.factors : null
+  })
+
+  logger.info(`[${season}] Arena Score v4 is now the flagship (${scoredFiltered.length} traders)`)
   return { scored, scoredFiltered }
 }
