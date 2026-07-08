@@ -125,6 +125,18 @@ export default function WatchlistClient({ embedded = false }: { embedded?: boole
       const json = await res.json()
       setWatchlist(json.watchlist || [])
     } catch (err) {
+      // Logged out: supabase.auth.getUser() THROWS AuthSessionMissingError
+      // (it does not resolve to {user:null}). That's not a failure — render the
+      // sign-in gate instead of logging an error + leaving the tab blank (the
+      // login-gate and error branches are both gated on isAuthenticated, so a
+      // null state renders nothing). Fixes /saved?tab=traders + /watchlist when
+      // signed out.
+      const msg = err instanceof Error ? err.message : ''
+      if (/Auth session missing/i.test(msg)) {
+        setIsAuthenticated(false)
+        setLoading(false)
+        return
+      }
       console.error('[watchlist] fetch failed:', err)
       setError(err instanceof Error ? err.message : 'Failed to load watchlist')
     } finally {
