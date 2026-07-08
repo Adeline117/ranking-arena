@@ -178,15 +178,22 @@ GROUP BY s.slug ORDER BY 2;
    风险的全量 code rsync**(lib/worker/tsconfig,排除 node_modules),不动 node_modules
    (SG 磁盘 90% 满,node_modules swap 峰值仅剩 ~0.7G 太险)。tar 备份 code(1.7M)→
    rsync → 写 DEPLOYED_SHA → pm2 restart + ready 门(失败自动回滚)。SG worker ready。
+   **✅ 已彻底 un-drift(2026-07-08)**:SG 现跑**全新 Node-22 node_modules(匹配 main
+   lock)+ 当前代码**,DEPLOYED_SHA=c3ef97e2c,worker ready,binance 游标在 SG 上推进
+   (offset 53→54→55)。路径=CI build-deps 出 artifact → Mac 下载 → `deploy-ingest-sg.sh
+--from-artifact`(Mac→SG 稳定链路)。过程中修了 3 个真 bug(见下)。
    **CI 单通道**:两 secret 已配(专用部署密钥,非个人 key)+ 修了 workflow 的
    publickey bug(Setup SSH 追加 `~/.ssh/config` 绑 id_sg,原来裸 ssh/rsync/scp 不吃
    `GIT_SSH_COMMAND`→255;这也是该 workflow 从未跑绿的原因)。build-deps ✅、deploy-sg
    已过 auth+backup。**但仍未跑通**:node_modules artifact 换上去后 worker 起不来
    → 自动回滚(SG 无损,现仍在旧可用 node_modules)。根因几乎肯定是**原生模块 ABI 不匹配**
-   —— CI runner 的 Node ≠ SG 的 **v22.22.0**。**待办(offline CI 修,勿再拿生产 worker
-   试错)**:build-deps 固定 Node 22.22 + artifact 上线前先 smoke-boot 校验;GH-runner→Vultr
-   直传大 tarball 也慢/易挂,可改从 Mac 下 artifact 本地→SG 部署。**现状:SG 功能已最新**
-   (worker 代码=main 经 rsync、node_modules bump 兼容、cursor 修复在跑),此项纯 hygiene。
+   —— CI runner 的 Node ≠ SG 的 **v22.22.0**。**已修的 3 个 bug(都 commit 了)**:(a) build-deps Node 20→22 匹配 SG(原生
+   ABI);(b) 加载烟测改真 import(原 require.resolve 只查文件不加载原生绑定,放行了坏树;
+   用 async IIFE 避开 tsx --eval 的 top-level-await 限制);(c) deploy 脚本 ready-check
+   加宽日志窗口 50→400 + 延长 30→90s(worker 话痨,ready 行几秒滚出小窗口 → 明明 ready
+   也误判失败并误回滚)。**仅剩 nicety**:CI deploy-sg 的 GH-runner→Vultr 直连大传输仍会
+   drop(255),已用 Mac-mediated 交付绕过;要全自动可把 deploy-sg 改成 Mac-runner 或加
+   传输重试。功能与 hygiene 均已完成。
 2. **local worker ↺100 = 非活跃问题**:exit 130=SIGINT(手动 restart)、mem 64MB
    (非 OOM)、重启前已稳定 3 天;100 是**生命周期累计**(含历史已修的 EDBHANDLEREXITED
    等),非重启循环。无需处置,持续观察即可。
