@@ -713,87 +713,152 @@ export interface ArenaScoreV4Result {
 }
 
 export const ARENA_V4_CONFIG = {
-  // 权重:ROI + PnL = 0.60(owner 指令),风险/一致性 = 0.40
-  W: { roi: 0.3, pnl: 0.3, dd: 0.18, sharpe: 0.12, con: 0.1 },
-  // ROI tanh 压缩除数(越长的窗口 ROI 越大 → 除数越大);拟合各 tf ROI 量级
-  ROI_DIV: { '7D': 90, '30D': 180, '90D': 300 } as Record<Period, number>,
-  // PnL 对数量级归一:$1K → 0,$10M → 1(拟合 pnl p10≈$27 / p50≈$1.7K / p99≈$9.2M)
+  // 权重(owner 2026-07-08 锁定):赚钱额 PnL 0.40 + 回报率 ROI 0.30 = 0.70(盈利为主),
+  // 实力/风险(回撤 0.12 + Sharpe 0.10 + 一致性 0.08)= 0.30。
+  W: { pnl: 0.4, roi: 0.3, dd: 0.12, sharpe: 0.1, con: 0.08 },
+  // PnL 用对数量级(唯一保留"赚钱多"量级差的维度):$1K→0,$10M→1。
+  // 其余维度(ROI/回撤/Sharpe/一致性)用【队内百分位】——自校准,不拍常数。
   PNL_LO: 1_000,
   PNL_HI: 10_000_000,
-  // 回撤韧性:|MDD| 10% → 1.0,70% → 0(拟合 mdd p50≈21% / p90≈69% / p99≈96%)
-  MDD_FLOOR: 10,
-  MDD_CEIL: 70,
-  // Sharpe 归一:sharpe/6 → p90≈5.8 映射到 ~1（sharpe 分布未被钳,最可用）
-  SHARPE_REF: 6,
-  // 胜率归一:40% → 0,90% → 1（拟合 win p50≈61 / p90≈91）
-  WIN_LO: 40,
-  WIN_HI: 90,
-  PF_REF: 5, // 盈利因子:5 → 1.0（p75 已钳到 10,取半量程）
   SAMPLE_K: 50, // 样本量置信:trades/(trades+50) → 50 笔=0.5,250=0.83
   CONF_FLOOR: 0.35, // 置信度下限——真实交易员永不归零
+  // 显示分 = composite 队内百分位 × DISPLAY_PCT + composite 相对值 × (1−);
+  // 混一点相对值,让顶端精英不至于全挤 100(纯百分位在极顶端会饱和)。
+  DISPLAY_PCT: 0.7,
 } as const
 
-/** 计算 Arena Score v4（单时间段）。纯函数,便于影子计算 + 单测。 */
-export function computeArenaScoreV4(input: TraderScoreInputV4, period: Period): ArenaScoreV4Result {
+/**
+ * 队内百分位(percent_rank):每个非空值 → (严格小于它的个数)/(非空总数−1) ∈ [0,1]。
+ * min→0,max→1。空值返回 null(不参与)。O(n log n)。
+ */
+export function percentRanks(values: Array<number | null>): Array<number | null> {
+  const present = values.filter((v): v is number => v != null)
+  const n = present.length
+  if (n === 0) return values.map(() => null)
+  if (n === 1) return values.map((v) => (v == null ? null : 1))
+  const sorted = present.slice().sort((a, b) => a - b)
+  const countLess = (x: number): number => {
+    let lo = 0
+    let hi = sorted.length
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1
+      if (sorted[mid] < x) lo = mid + 1
+      else hi = mid
+    }
+    return lo
+  }
+  return values.map((v) => (v == null ? null : countLess(v) / (n - 1)))
+}
+
+/**
+ * 批量计算 Arena Score v4。百分位需要看【整个队列】,故批量而非逐个。
+ * 每个时间段(7D/30D/90D)各自作为一个队列传入(compute-leaderboard 已按 season 分组)。
+ * 返回与输入等长、同序的结果数组。设计见 [[arena-score-v4]]:
+ *   composite = [ PnL(对数量级) + ROI/回撤/Sharpe/一致性(队内百分位) 加权 ] × 置信度
+ *   显示分   = composite 的队内百分位("你超过了 X% 的交易员")+ 少量相对值展开顶端
+ */
+export function computeArenaScoresV4(
+  inputs: TraderScoreInputV4[],
+  _period?: Period
+): ArenaScoreV4Result[] {
   const V = ARENA_V4_CONFIG
-  const roi = Number(input.roi)
-  const pnl = input.pnl == null ? null : Number(input.pnl)
-  // 0 与 null 一律视为"缺失"——交易所无数据时常报 0,不能当真实零回撤/零胜率(否则奖励缺数据)
-  const mdd =
-    input.maxDrawdown != null && input.maxDrawdown !== 0 ? Math.abs(input.maxDrawdown) : null
-  const win = input.winRate != null && input.winRate !== 0 ? input.winRate : null
-  const sharpe = input.sharpeRatio ?? null
-  const pf = input.profitFactor ?? null
-  const trades = input.tradesCount ?? null
+  const n = inputs.length
+  if (n === 0) return []
 
-  // ── 5 个归一化因子 ∈ [0,1](缺失 → null,不参与 quality) ─────────────────
-  const fRoi = Math.tanh(roi / (V.ROI_DIV[period] ?? 300))
-  const fPnl =
-    pnl == null || pnl <= 0
-      ? 0
-      : clip((Math.log(pnl) - Math.log(V.PNL_LO)) / (Math.log(V.PNL_HI) - Math.log(V.PNL_LO)), 0, 1)
-  const fDd = mdd == null ? null : 1 - clip((mdd - V.MDD_FLOOR) / (V.MDD_CEIL - V.MDD_FLOOR), 0, 1)
-  const fSh = sharpe == null ? null : clip(sharpe / V.SHARPE_REF, 0, 1)
-  const fCon =
-    win == null
-      ? null
-      : 0.6 * clip((win - V.WIN_LO) / (V.WIN_HI - V.WIN_LO), 0, 1) +
-        0.4 * clip((pf ?? 0) / V.PF_REF, 0, 1)
+  // 抽取各维度(0/null 一律视为"缺失"——交易所无数据时常报 0)
+  const roiArr = inputs.map((t) => (t.roi != null ? Number(t.roi) : null))
+  const mddArr = inputs.map((t) =>
+    t.maxDrawdown != null && t.maxDrawdown !== 0 ? Math.abs(t.maxDrawdown) : null
+  )
+  const shArr = inputs.map((t) => t.sharpeRatio ?? null)
+  const winArr = inputs.map((t) => (t.winRate != null && t.winRate !== 0 ? t.winRate : null))
+  const pfArr = inputs.map((t) => t.profitFactor ?? null)
 
-  // ── Quality:在可得维度间加权归一（缺失维度权重再分配）────────────────
-  let num = V.W.roi * fRoi + V.W.pnl * fPnl
-  let den = V.W.roi + V.W.pnl
-  if (fDd != null) {
-    num += V.W.dd * fDd
-    den += V.W.dd
-  }
-  if (fSh != null) {
-    num += V.W.sharpe * fSh
-    den += V.W.sharpe
-  }
-  if (fCon != null) {
-    num += V.W.con * fCon
-    den += V.W.con
-  }
-  const quality = den > 0 ? clip(num / den, 0, 1) : 0
+  // 队内百分位(回撤:越小越好 → 对 −|MDD| 排名)
+  const pRoi = percentRanks(roiArr)
+  const pDd = percentRanks(mddArr.map((m) => (m == null ? null : -m)))
+  const pSh = percentRanks(shArr)
+  const pWin = percentRanks(winArr)
+  const pPf = percentRanks(pfArr)
 
-  // ── Confidence:样本量 × 数据完整度（软准入门槛）──────────────────────
-  const cN = trades == null ? 0.3 : trades / (trades + V.SAMPLE_K)
-  const present = [sharpe, mdd, win, pf].filter((v) => v != null).length
-  const cC = Math.max(present / 4, 0.25) // 下限 0.25,避免完全缺风险数据者归零
-  const confidence = V.CONF_FLOOR + (1 - V.CONF_FLOOR) * Math.cbrt(Math.max(0.01, cN * cC))
+  // composite = quality × confidence(先算,再对 composite 求队内百分位作显示分)
+  const composite = new Array<number>(n)
+  const meta = inputs.map((t, i) => {
+    const pnl = t.pnl == null ? null : Number(t.pnl)
+    const fPnl =
+      pnl == null || pnl <= 0
+        ? 0
+        : clip(
+            (Math.log(pnl) - Math.log(V.PNL_LO)) / (Math.log(V.PNL_HI) - Math.log(V.PNL_LO)),
+            0,
+            1
+          )
+    // 一致性 = 胜率百分位(0.6) + 盈利因子百分位(0.4),按可得项归一
+    let fCon: number | null = null
+    if (pWin[i] != null || pPf[i] != null) {
+      let cn = 0
+      let cd = 0
+      if (pWin[i] != null) {
+        cn += 0.6 * pWin[i]!
+        cd += 0.6
+      }
+      if (pPf[i] != null) {
+        cn += 0.4 * pPf[i]!
+        cd += 0.4
+      }
+      fCon = cd > 0 ? cn / cd : null
+    }
 
-  const totalScore = clip(100 * quality * confidence, 0, 100)
-  return {
-    totalScore: round2(totalScore),
-    quality: round2(quality),
-    confidence: round2(confidence),
-    factors: {
-      roi: round2(fRoi),
-      pnl: round2(fPnl),
-      drawdown: fDd == null ? null : round2(fDd),
-      sharpe: fSh == null ? null : round2(fSh),
-      consistency: fCon == null ? null : round2(fCon),
-    },
-  }
+    // Quality:PnL(量级) + 其余百分位,按可得维度加权归一
+    let num = V.W.pnl * fPnl
+    let den = V.W.pnl
+    if (pRoi[i] != null) {
+      num += V.W.roi * pRoi[i]!
+      den += V.W.roi
+    }
+    if (pDd[i] != null) {
+      num += V.W.dd * pDd[i]!
+      den += V.W.dd
+    }
+    if (pSh[i] != null) {
+      num += V.W.sharpe * pSh[i]!
+      den += V.W.sharpe
+    }
+    if (fCon != null) {
+      num += V.W.con * fCon
+      den += V.W.con
+    }
+    const quality = den > 0 ? clip(num / den, 0, 1) : 0
+
+    // Confidence:样本量 × 数据完整度(软准入门槛)
+    const trades = t.tradesCount ?? null
+    const cN = trades == null ? 0.3 : trades / (trades + V.SAMPLE_K)
+    const presentCnt = [shArr[i], mddArr[i], winArr[i], pfArr[i]].filter((v) => v != null).length
+    const cC = Math.max(presentCnt / 4, 0.25)
+    const confidence = V.CONF_FLOOR + (1 - V.CONF_FLOOR) * Math.cbrt(Math.max(0.01, cN * cC))
+
+    composite[i] = quality * confidence
+    return { fPnl, fCon, quality, confidence }
+  })
+
+  // 显示分 = 队内百分位("超过 X% 的人") + 少量 composite 相对值展开顶端
+  const pComp = percentRanks(composite.map((c) => c))
+  const maxComp = Math.max(...composite, 1e-9)
+
+  return inputs.map((_, i) => {
+    const pct = pComp[i] ?? 0
+    const display = 100 * (V.DISPLAY_PCT * pct + (1 - V.DISPLAY_PCT) * (composite[i] / maxComp))
+    return {
+      totalScore: round2(clip(display, 0, 100)),
+      quality: round2(meta[i].quality),
+      confidence: round2(meta[i].confidence),
+      factors: {
+        roi: pRoi[i] == null ? 0 : round2(pRoi[i]!),
+        pnl: round2(meta[i].fPnl),
+        drawdown: pDd[i] == null ? null : round2(pDd[i]!),
+        sharpe: pSh[i] == null ? null : round2(pSh[i]!),
+        consistency: meta[i].fCon == null ? null : round2(meta[i].fCon!),
+      },
+    }
+  })
 }

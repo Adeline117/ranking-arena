@@ -3,7 +3,7 @@
  * Extracted from computeSeason to reduce route.ts by ~140 lines.
  */
 
-import { calculateArenaScore, computeArenaScoreV4, type Period } from '@/lib/utils/arena-score'
+import { calculateArenaScore, computeArenaScoresV4, type Period } from '@/lib/utils/arena-score'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import { detectTraderType } from './helpers'
@@ -100,23 +100,6 @@ export async function scoreTraders(
       ) / 100
     const finalScore = rawFinalScore > 0 ? rawFinalScore : null
 
-    // ── Arena Score v4 (SHADOW — parallel-computed, written but not served) ──
-    // v4's Quality×Confidence already bakes in sample-size + data-completeness,
-    // so we take its totalScore directly (no v3 external penalties applied).
-    const v4 = computeArenaScoreV4(
-      {
-        roi: t.roi ?? 0,
-        pnl: t.pnl ?? null,
-        maxDrawdown: t.max_drawdown,
-        winRate: normalizedWinRate,
-        sharpeRatio: t.sharpe_ratio,
-        profitFactor: t.profit_factor ?? null,
-        tradesCount: t.trades_count,
-      },
-      season
-    )
-    const finalScoreV4 = v4.totalScore > 0 ? v4.totalScore : null
-
     // Handle/avatar resolution
     const info = handleMap.get(`${t.source}:${t.source_trader_id}`) || {
       handle: null,
@@ -130,7 +113,7 @@ export async function scoreTraders(
       source: t.source,
       source_trader_id: t.source_trader_id,
       arena_score: finalScore,
-      arena_score_v4: finalScoreV4,
+      arena_score_v4: null as number | null, // SHADOW — filled by the batch pass below
       roi: t.roi ?? 0,
       pnl: t.pnl,
       win_rate: normalizedWinRate,
@@ -166,6 +149,27 @@ export async function scoreTraders(
       ),
       metrics_estimated: t.metrics_estimated || false,
     }
+  })
+
+  // ── Arena Score v4 (SHADOW — parallel-computed, written but not served) ──
+  // v4 is BATCH: several dimensions are percentile-ranked within this season's
+  // whole cohort, so it must see all traders at once (not per-trader). The
+  // display score is "you beat X% of traders". Written to arena_score_v4 only.
+  const v4Results = computeArenaScoresV4(
+    scored.map((t) => ({
+      roi: t.roi,
+      pnl: t.pnl,
+      maxDrawdown: t.max_drawdown,
+      winRate: t.win_rate,
+      sharpeRatio: t.sharpe_ratio,
+      profitFactor: t.profit_factor,
+      tradesCount: t.trades_count,
+    })),
+    season
+  )
+  scored.forEach((t, i) => {
+    const s = v4Results[i]?.totalScore
+    t.arena_score_v4 = s != null && s > 0 ? s : null
   })
 
   // Mark outliers
