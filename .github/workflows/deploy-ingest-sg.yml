@@ -128,11 +128,20 @@ jobs:
           # deploy-ingest-sg.sh uses plain `ssh`/`rsync`/`scp` (not GIT_SSH_COMMAND,
           # which only affects git) — so map the host to id_sg via ssh_config, else
           # they fall back to default key names and fail publickey auth (exit 255).
+          # Keepalives are ESSENTIAL here: the deploy runs a multi-minute remote
+          # `cp -a` backup during which the SSH channel is idle with no data — a
+          # NAT/firewall idle-timeout then drops it → exit 255 mid-deploy (observed
+          # 2026-07-08). ServerAlive* pings keep the channel warm through long
+          # remote ops; ConnectTimeout fails fast on a genuinely dead host.
           {
             echo "Host $hostname"
             echo "  User $user"
             echo "  IdentityFile ~/.ssh/id_sg"
             echo "  IdentitiesOnly yes"
+            echo "  ServerAliveInterval 20"
+            echo "  ServerAliveCountMax 15"
+            echo "  TCPKeepAlive yes"
+            echo "  ConnectTimeout 20"
           } >> ~/.ssh/config
           chmod 600 ~/.ssh/config
       # Ships the prebuilt deps (full mode) + code, then restarts with auto-rollback.
