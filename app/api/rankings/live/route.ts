@@ -55,7 +55,12 @@ export async function GET(request: NextRequest) {
     const cached = await tieredGet<Record<string, unknown>>(cacheKey, 'hot')
     if (cached.data) {
       const response = NextResponse.json(cached.data)
-      response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+      // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
+      // the Vercel CDN instead of every client invoking the function. The data is
+      // already Redis-cached ~30s, so a 15s edge TTL + SWR keeps staleness bounded
+      // (~15-45s) — acceptable for a "live" board and a huge $0 load reducer.
+      // Keyed by full URL (period/limit/offset), no auth personalization.
+      response.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
       response.headers.set('X-Cache', 'HIT')
       response.headers.set('X-Cache-Layer', cached.layer || 'unknown')
       return response
@@ -156,7 +161,12 @@ export async function GET(request: NextRequest) {
         )
 
         const response = NextResponse.json(responseBody)
-        response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+        // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
+        // the Vercel CDN instead of every client invoking the function. The data is
+        // already Redis-cached ~30s, so a 15s edge TTL + SWR keeps staleness bounded
+        // (~15-45s) — acceptable for a "live" board and a huge $0 load reducer.
+        // Keyed by full URL (period/limit/offset), no auth personalization.
+        response.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
         response.headers.set('X-Cache', 'MISS')
         return response
       }
@@ -228,7 +238,12 @@ export async function GET(request: NextRequest) {
     })
 
     const response = NextResponse.json(responseBody)
-    response.headers.set('Cache-Control', 'no-cache, no-store, must-revalidate')
+    // Edge-cache the live ranking briefly so a 万级 airdrop spike is absorbed by
+    // the Vercel CDN instead of every client invoking the function. The data is
+    // already Redis-cached ~30s, so a 15s edge TTL + SWR keeps staleness bounded
+    // (~15-45s) — acceptable for a "live" board and a huge $0 load reducer.
+    // Keyed by full URL (period/limit/offset), no auth personalization.
+    response.headers.set('Cache-Control', 'public, s-maxage=15, stale-while-revalidate=30')
     response.headers.set('X-Cache', 'MISS')
     return response
   } catch (error) {
