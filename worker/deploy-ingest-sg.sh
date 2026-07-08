@@ -141,14 +141,19 @@ fi
 echo "5/5 restarting $PM2_APP"
 ssh_sg "pm2 restart $PM2_APP --update-env || pm2 start $REMOTE_DIR/worker/ecosystem.sg.config.cjs --only $PM2_APP" || true
 
-echo "--- waiting for ready (up to 30s) ---"
-if ssh_sg "for i in \$(seq 1 30); do pm2 logs $PM2_APP --lines 50 --nostream 2>/dev/null | grep -q 'ingest-worker. ready' && { echo READY; exit 0; }; sleep 1; done; exit 1"; then
+# Ready-check: this box is slow + the worker is chatty, so the boot "ready" line
+# scrolls out of a small --lines window within seconds. Use a WIDE window (400)
+# + a LONGER wait (90s), else a worker that IS ready is falsely declared failed
+# and needlessly rolled back (2026-07-08: rollback itself "failed" this way while
+# actually healthy). 90s < BullMQ stall window so no interaction with locks.
+echo "--- waiting for ready (up to 90s) ---"
+if ssh_sg "for i in \$(seq 1 90); do pm2 logs $PM2_APP --lines 400 --nostream 2>/dev/null | grep -q 'ingest-worker. ready' && { echo READY; exit 0; }; sleep 1; done; exit 1"; then
   echo "✓ deploy OK — $PM2_APP ready on ${SHA:0:9}"
   echo "  (manual rollback if needed: ssh $VPS_HOST 'rm -rf $REMOTE_DIR && mv $REMOTE_DIR.bak-$TS $REMOTE_DIR && pm2 restart $PM2_APP')"
 else
   echo "✗ $PM2_APP did NOT report ready — AUTO-ROLLING BACK to $REMOTE_DIR.bak-$TS (code+node_modules pair)…" >&2
   ssh_sg "pm2 stop $PM2_APP || true; rm -rf $REMOTE_DIR && mv $REMOTE_DIR.bak-$TS $REMOTE_DIR && pm2 restart $PM2_APP --update-env"
-  if ssh_sg "for i in \$(seq 1 30); do pm2 logs $PM2_APP --lines 50 --nostream 2>/dev/null | grep -q 'ingest-worker. ready' && exit 0; sleep 1; done; exit 1"; then
+  if ssh_sg "for i in \$(seq 1 90); do pm2 logs $PM2_APP --lines 400 --nostream 2>/dev/null | grep -q 'ingest-worker. ready' && exit 0; sleep 1; done; exit 1"; then
     echo "✓ rolled back — $PM2_APP is ready on the previous version. Investigate 'pm2 logs $PM2_APP' before retrying." >&2
   else
     echo "✗✗ ROLLBACK ALSO FAILED — SG ingestion is DOWN. Manual intervention required: 'ssh $VPS_HOST pm2 logs $PM2_APP'." >&2
