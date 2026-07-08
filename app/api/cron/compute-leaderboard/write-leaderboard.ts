@@ -76,6 +76,7 @@ export async function upsertLeaderboard(params: {
         rank_change: rankChange,
         is_new: prevRank == null,
         arena_score: t.arena_score,
+        arena_score_v4: t.arena_score_v4, // shadow: parallel-computed, not served
         roi: t.roi,
         pnl: t.pnl,
         win_rate: t.win_rate,
