@@ -6,6 +6,11 @@
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     await import('./sentry.server.config')
+
+    if (process.env.NODE_ENV !== 'production') {
+      const { logLocalUxSessionStart } = await import('./lib/utils/local-ux-audit-log')
+      logLocalUxSessionStart()
+    }
   }
 
   if (process.env.NEXT_RUNTIME === 'edge') {
@@ -29,12 +34,28 @@ export const onRequestError = async (
     renderType: 'dynamic' | 'dynamic-resume'
   }
 ) => {
-  // 不上报已知的非关键错误
   const msg = err.message || ''
+
+  if (process.env.NODE_ENV !== 'production') {
+    try {
+      const { logLocalUxRequestError } = await import('./lib/utils/local-ux-audit-log')
+      logLocalUxRequestError({
+        path: request.path,
+        method: request.method,
+        message: msg,
+        routePath: context.routePath,
+        routeType: context.routeType,
+      })
+    } catch {
+      /* local UX audit logging is best-effort only */
+    }
+  }
+
+  // 不上报已知的非关键错误
   if (/ECONNRESET|ENOTFOUND|ETIMEDOUT|AbortError|JWTExpired|JWT expired/.test(msg)) {
     return
   }
-  
+
   // 动态导入 Sentry 以避免边缘运行时问题
   const Sentry = await import('@sentry/nextjs')
   

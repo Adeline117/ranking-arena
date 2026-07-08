@@ -8,6 +8,7 @@ import { createServerClient as _createServerClient } from '@supabase/ssr'
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { generateRequestId } from '@/lib/utils/logger'
+import { logLocalUxRequest, logLocalUxResponse } from '@/lib/utils/local-ux-audit-log'
 
 // Page routes requiring Supabase auth redirect
 const _AUTH_PROTECTED_PAGES = ['/settings', '/favorites', '/user-center', '/inbox', '/my-posts']
@@ -407,19 +408,48 @@ export async function proxy(request: NextRequest) {
     return NextResponse.next()
   }
 
+  // 生成请求 ID 用于追踪
+  const requestId = generateRequestId()
+  const startTime = Date.now()
+  const hasSession = hasSessionCookie(request)
+
+  logLocalUxRequest({
+    method,
+    path: pathname,
+    requestId,
+    hasSession,
+    query: request.nextUrl.search || undefined,
+  })
+
+  // Logs a short-circuited response (redirect / block / rate-limit) that proxy
+  // returns without forwarding to the route handler. Pass-through `NextResponse.next()`
+  // is intentionally NOT logged here — the real status is only known downstream, where
+  // lib/api/middleware.ts logs the true response for API routes.
+  const logShortCircuit = (response: NextResponse, note?: string): NextResponse => {
+    logLocalUxResponse({
+      method,
+      path: pathname,
+      status: response.status,
+      requestId,
+      durationMs: Date.now() - startTime,
+      note,
+    })
+    return response
+  }
+
   // Bot protection: block empty User-Agent on API routes
   if (pathname.startsWith('/api/')) {
     const ua = request.headers.get('user-agent') || ''
     if (!ua) {
-      return new NextResponse(JSON.stringify({ error: 'Forbidden' }), {
-        status: 403,
-        headers: { 'Content-Type': 'application/json' },
-      })
+      return logShortCircuit(
+        new NextResponse(JSON.stringify({ error: 'Forbidden' }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+        'empty user-agent blocked'
+      )
     }
   }
-
-  // 生成请求 ID 用于追踪
-  const requestId = generateRequestId()
 
   // Redirect deleted scope-audit routes → /
   // 2026-04-09: /frame and /kol deleted (per docs/reviews/scope-audit-2026-04-09.md).
@@ -435,17 +465,14 @@ export async function proxy(request: NextRequest) {
     const url = request.nextUrl.clone()
     url.pathname = '/'
     url.search = ''
-    return NextResponse.redirect(url, 308)
+    return logShortCircuit(NextResponse.redirect(url, 308), 'deleted scope-audit route')
   }
 
   // Redirect logged-in users away from /login
-  if (pathname === '/login') {
-    const hasSession = hasSessionCookie(request)
-    if (hasSession) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/'
-      return NextResponse.redirect(url)
-    }
+  if (pathname === '/login' && hasSession) {
+    const url = request.nextUrl.clone()
+    url.pathname = '/'
+    return logShortCircuit(NextResponse.redirect(url), 'logged-in user redirected off /login')
   }
 
   // 处理 CORS 预检请求
@@ -454,7 +481,7 @@ export async function proxy(request: NextRequest) {
     addCorsHeaders(request, response)
     addSecurityHeaders(response)
     response.headers.set('X-Request-ID', requestId)
-    return response
+    return logShortCircuit(response, 'CORS preflight')
   }
 
   // API 路由分层限流检查
@@ -481,7 +508,7 @@ export async function proxy(request: NextRequest) {
             rateLimitResponse.headers.set('X-RateLimit-Reset', reset.toString())
             rateLimitResponse.headers.set('X-Request-ID', requestId)
             addCorsHeaders(request, rateLimitResponse)
-            return rateLimitResponse
+            return logShortCircuit(rateLimitResponse, `rate limit tier=${tier}`)
           }
         } catch {
           // Intentionally swallowed: rate limit check failure uses fail-open policy to avoid blocking legitimate requests
@@ -510,7 +537,7 @@ export async function proxy(request: NextRequest) {
       addCorsHeaders(request, response)
       addSecurityHeaders(response)
       response.headers.set('X-Request-ID', requestId)
-      return response
+      return logShortCircuit(response, 'unauthenticated access to protected route')
     }
   }
 
@@ -530,7 +557,7 @@ export async function proxy(request: NextRequest) {
       addCorsHeaders(request, response)
       addSecurityHeaders(response)
       response.headers.set('X-Request-ID', requestId)
-      return response
+      return logShortCircuit(response, 'CSRF validation failed')
     }
   }
 

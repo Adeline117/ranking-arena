@@ -24,6 +24,7 @@ import {
 } from './versioning'
 import { getOrCreateCorrelationId, runWithCorrelationId } from './correlation'
 import * as Sentry from '@sentry/nextjs'
+import { logLocalUxApi } from '@/lib/utils/local-ux-audit-log'
 
 const logger = createLogger('api-middleware')
 
@@ -295,6 +296,16 @@ export function withApiMiddleware<T>(
           })
         }
 
+        logLocalUxApi({
+          name,
+          method: request.method,
+          path: request.nextUrl.pathname,
+          status: response.status,
+          durationMs: duration,
+          correlationId,
+          userId: user?.id,
+        })
+
         return withCid(response)
       } catch (error: unknown) {
         const statusCode =
@@ -313,6 +324,16 @@ export function withApiMiddleware<T>(
         } else {
           logger.warn(`${name} client error: ${internalMessage}`, { duration, correlationId })
         }
+
+        logLocalUxApi({
+          name,
+          method: request.method,
+          path: request.nextUrl.pathname,
+          status: statusCode,
+          durationMs: duration,
+          correlationId,
+          error: internalMessage,
+        })
 
         // Sanitize error messages — createErrorResponse applies safe message filtering
         const errorResponse = createErrorResponse(internalMessage, statusCode)
