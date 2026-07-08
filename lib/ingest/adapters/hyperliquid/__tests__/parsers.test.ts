@@ -121,6 +121,40 @@ describe('parseHyperliquidProfile', () => {
     expect(pnlSeries?.points[pnlSeries.points.length - 1].value).toBeCloseTo(1147414.886682, 3)
   })
 
+  it('90d ROI: young whale uses aum basis, NOT the tiny-eqAnchor explosion (2026-07-07 fix)', () => {
+    // Account younger than 90d: allTime history starts at a tiny initial deposit,
+    // so lerpAt(t−90d) clamps to that first point → eqAnchor ≈ $100. The old code
+    // did pnl/eqAnchor = $20M/$100 → 10000% clamp (the ">10K%" leaderboard bug).
+    // The fix uses aum − pnl (= $27M start equity) → a sane ~74%.
+    const T = 1781214420993
+    const DAY = 86400000
+    const synthetic = {
+      timeframe: 90,
+      clearinghouse: { marginSummary: { accountValue: '47000000' } }, // aum $47M
+      portfolio: [
+        [
+          'allTime',
+          {
+            pnlHistory: [
+              [T - 10 * DAY, '0'],
+              [T, '20000000'],
+            ],
+            accountValueHistory: [
+              [T - 10 * DAY, '100'], // tiny initial deposit → eqAnchor trap
+              [T, '47000000'],
+            ],
+            vlm: '0',
+          },
+        ],
+      ],
+    }
+    const st = parseHyperliquidProfile(synthetic, ctx).stats[0]
+    expect(st.pnl).toBeCloseTo(20000000, 0)
+    // aum − pnl = 27M → 20M/27M×100 = 74.07%, NOT the 10000% clamp
+    expect(st.roi).toBeCloseTo(74.074, 1)
+    expect(st.roi).toBeLessThan(200) // the whole point: no ">10K%" garbage
+  })
+
   it('fills replay fills winRate/positions/holding + pnl_ratio (M3-3a)', () => {
     // Two synthetic round-trips inside the 30d window: BTC win (4h), ETH loss (2h).
     const T = Date.parse(ctx.scrapedAt) - 3 * 86_400_000
