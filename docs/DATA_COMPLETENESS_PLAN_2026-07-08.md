@@ -7,6 +7,27 @@
 > 依据：`ARENA_REBUILD_SPEC.md`（docx 整理）+ `EXCHANGE_FIELD_COVERAGE.md`（现状填充）+
 > `UNREACHABLE_FIELDS_LEDGER.md`（活体验证的真墙）+ `P1_CAPTURE_GAPS.md`（做法）。
 
+## ★ 再纠正（2026-07-08 用 FRESH 台账重估）
+
+初版 C 类是基于**过期的 `EXCHANGE_FIELD_COVERAGE.md`**（cursor 修复前生成）——大量「0%/低」
+是**幻影缺口**。重新生成台账后实测：cursor 修复正把它们**逐个填满**，几乎无需新 parser：
+
+- **blofin** win_rate/positions/volume：0% → **98%**（铁证：从来不是缺口，是 cursor bug）
+- xt win_positions 20%→**72%**、gate_futures win_pos/vol 46%→**55–72%**、bybit_copytrade
+  sharpe 37%→**43–80%**、hyperliquid sharpe tf90 63%→**91.7%**、toobit sharpe→**91%**…
+
+**真正剩余的（fresh 台账）极小**：
+
+1. **binance_futures** sharpe 2.2% / mdd 14–16% —— SG 浏览器延迟吞吐瓶颈（低价值 tail，见 C4）。
+2. **hyperliquid win_rate tf7/tf30**（0.4%/2%；tf90 已 37%）+ **volume tf90 0%** —— fills 捕获
+   在短 tf 不足（tf90 已工作）；小缺口。
+3. §2 超集里 parser **真没映射**的字段（需逐源核实哪些是「映射了没抓到=A类自动填」vs
+   「parser 没映射=真要补」）——blofin 证明多数是前者。
+
+**结论**：C 类主体（C0/C1/C3）大幅收缩——**cursor 修复就是补全引擎，正在自动补**。
+剩下真要动手的只有：HL win_rate 短 tf（小）、binance 吞吐（低价值）、+ 逐源确认极少数
+parser 真未映射字段。下面原 C 类保留作「逐源核实清单」，但预期绝大多数已在自动填。
+
 ## 原则（防止再犯判据错误）
 
 1. **默认「可抓」**。一个字段只有在 `UNREACHABLE_FIELDS_LEDGER.md` 有**活体证据**
