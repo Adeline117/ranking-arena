@@ -150,3 +150,24 @@ win 84→100%。下轮 compute 传导 serving。**v4 分数曾因此系统性压
 **bitget_cfd(P2)**:板正常(~200-234 行×3tf 全过检)、深抓有跑(647 人,win 100%),
 但 **profile pnl/mdd 仅 10%** → parser/端点部分残缺,需 live probe。
 **phemex/lbank/blofin「抓取挂了」为虚惊**:slug 是 \*\_futures,快照全新鲜。
+
+---
+
+## ★★★ P2 整改执行(2026-07-09,「全部去做」)
+
+**1. score_inputs 视图修复已传导 serving(验证闭环)**:触发 compute-leaderboard 三 tf 后实测——
+
+- bybit PnL:0% → **82-83%**(30D/90D 从全空到填满)| blofin win:4-6% → **77-85%**
+- bybit v4 分数分布恢复健康:90D top 95、**p50 61.7**、295 人 >60(此前被 f_pnl=0 系统性压低)。
+
+**2. okx/bitmart 派生板覆盖(已修,运行时 meta 覆盖)**:okx 7/30、bitmart 90D 是 Tier-B profile
+派生板(derive-boards processor)。默认 `DEFAULT_MAX_STAT_AGE_HOURS`(18h)太严 → 仅 19-25 人
+新鲜过检。实测这些源 profile 抓取 168h 内覆盖 89-355 人。**修 = arena.sources.meta 加
+`derived_stats_max_age_hours: 168`**(okx_futures/okx_spot/bitmart_futures)。`lib/ingest/sources.ts`
+是只读模块不回种 meta → 覆盖持久。下一 derive-boards 周期(worker)自动生效,无需部署。
+
+**3. bitget_cfd profile pnl/mdd 10%(worker-side TODO,已定位边界)**:板 headline_pnl 结构性
+为空(0%,mt5 CFD 板只给 roi/win/roi),深抓 profile(`trace/mt5/public/traderView` +
+`traderDetailPageV2`)pnl 仅 10%。冷 curl 探针全部 WAF 拦(`00005 Token does not exist` /
+board 空 rows —— 需 warmed Playwright session cookies)→ **必须在 worker/SG 带会话 live-probe
+真实响应 shape 再定 parser**(符合 P1_CAPTURE_GAPS「修前先核实」死命令)。非本地可完成。
