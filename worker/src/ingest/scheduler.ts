@@ -191,9 +191,27 @@ export async function reconcileSchedulers(): Promise<void> {
         // both frozen). So: if BADLY overdue (>2× cadence) AND the iteration is
         // NOT currently running, rebuild to break the deadlock — but never
         // interrupt an active long crawl (25-90min Tier-A).
+        //
+        // take-7b (2026-07-09): floor the stuck threshold at 45 min. `2×every`
+        // alone scales DOWN with cadence: when series-backfill cadence went
+        // 1800s→600s the trigger silently tightened 60min→20min, and a prio-9
+        // iteration queued >20min is NORMAL under load — every hourly reconcile
+        // (×2 nodes) then "revived" ~20 healthy schedulers ("revived 20 stuck"
+        // hourly in SG logs).
         const state = await iterationJob.getState().catch(() => 'unknown')
-        if (overdueMs < 2 * every || state === 'active') continue
+        if (overdueMs < Math.max(2 * every, 45 * 60_000) || state === 'active') continue
         reason = `iteration stuck in ${state}`
+      }
+      // take-7b: remove the superseded iteration BEFORE rebuilding. The rebuild
+      // (removeJobScheduler + upsertJobScheduler) detaches the old iteration
+      // job but leaves it IN the queue — each revive wave stacked one more
+      // orphan per source (295 prio-9 zombies by 07-09, oldest 9h; the clog
+      // lengthened queue latency, which made more schedulers look stuck, which
+      // revived more: the same feedback shape as take-6's kick wedge). Never
+      // remove an ACTIVE job (guarded above); remove() on a just-started one
+      // throws and is caught — the orphan then drains normally.
+      if (iterationJob) {
+        await iterationJob.remove().catch(() => {})
       }
       const tmplData = scheduler.template?.data ?? {}
       // take-6 (2026-07-03): preserve the template OPTS on rebuild. The old
