@@ -2306,6 +2306,8 @@ export type Database = {
       leaderboard_ranks: {
         Row: {
           arena_score: number | null
+          arena_score_v3: number | null
+          arena_score_v4: number | null
           avatar_url: string | null
           avg_holding_hours: number | null
           calmar_ratio: number | null
@@ -2327,6 +2329,7 @@ export type Database = {
           risk_control_score: number | null
           roi: number | null
           score_completeness: string | null
+          score_factors: Json | null
           season_id: string
           sharpe_ratio: number | null
           sortino_ratio: number | null
@@ -2341,6 +2344,8 @@ export type Database = {
         }
         Insert: {
           arena_score?: number | null
+          arena_score_v3?: number | null
+          arena_score_v4?: number | null
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
@@ -2362,6 +2367,7 @@ export type Database = {
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
+          score_factors?: Json | null
           season_id: string
           sharpe_ratio?: number | null
           sortino_ratio?: number | null
@@ -2376,6 +2382,8 @@ export type Database = {
         }
         Update: {
           arena_score?: number | null
+          arena_score_v3?: number | null
+          arena_score_v4?: number | null
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
@@ -2397,6 +2405,7 @@ export type Database = {
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
+          score_factors?: Json | null
           season_id?: string
           sharpe_ratio?: number | null
           sortino_ratio?: number | null
@@ -2644,6 +2653,8 @@ export type Database = {
       lr_30d: {
         Row: {
           arena_score: number | null
+          arena_score_v3: number | null
+          arena_score_v4: number | null
           avatar_url: string | null
           avg_holding_hours: number | null
           calmar_ratio: number | null
@@ -2665,6 +2676,7 @@ export type Database = {
           risk_control_score: number | null
           roi: number | null
           score_completeness: string | null
+          score_factors: Json | null
           season_id: string
           sharpe_ratio: number | null
           sortino_ratio: number | null
@@ -2679,6 +2691,8 @@ export type Database = {
         }
         Insert: {
           arena_score?: number | null
+          arena_score_v3?: number | null
+          arena_score_v4?: number | null
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
@@ -2700,6 +2714,7 @@ export type Database = {
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
+          score_factors?: Json | null
           season_id: string
           sharpe_ratio?: number | null
           sortino_ratio?: number | null
@@ -2714,6 +2729,8 @@ export type Database = {
         }
         Update: {
           arena_score?: number | null
+          arena_score_v3?: number | null
+          arena_score_v4?: number | null
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
@@ -2735,6 +2752,7 @@ export type Database = {
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
+          score_factors?: Json | null
           season_id?: string
           sharpe_ratio?: number | null
           sortino_ratio?: number | null
@@ -2752,6 +2770,8 @@ export type Database = {
       lr_7d: {
         Row: {
           arena_score: number | null
+          arena_score_v3: number | null
+          arena_score_v4: number | null
           avatar_url: string | null
           avg_holding_hours: number | null
           calmar_ratio: number | null
@@ -2773,6 +2793,7 @@ export type Database = {
           risk_control_score: number | null
           roi: number | null
           score_completeness: string | null
+          score_factors: Json | null
           season_id: string
           sharpe_ratio: number | null
           sortino_ratio: number | null
@@ -2787,6 +2808,8 @@ export type Database = {
         }
         Insert: {
           arena_score?: number | null
+          arena_score_v3?: number | null
+          arena_score_v4?: number | null
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
@@ -2808,6 +2831,7 @@ export type Database = {
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
+          score_factors?: Json | null
           season_id: string
           sharpe_ratio?: number | null
           sortino_ratio?: number | null
@@ -2822,6 +2846,8 @@ export type Database = {
         }
         Update: {
           arena_score?: number | null
+          arena_score_v3?: number | null
+          arena_score_v4?: number | null
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
@@ -2843,6 +2869,7 @@ export type Database = {
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
+          score_factors?: Json | null
           season_id?: string
           sharpe_ratio?: number | null
           sortino_ratio?: number | null
@@ -2860,6 +2887,8 @@ export type Database = {
       lr_90d: {
         Row: {
           arena_score: number | null
+          arena_score_v3: number | null
+          arena_score_v4: number | null
           avatar_url: string | null
           avg_holding_hours: number | null
           calmar_ratio: number | null
@@ -2881,6 +2910,7 @@ export type Database = {
           risk_control_score: number | null
           roi: number | null
           score_completeness: string | null
+          score_factors: Json | null
           season_id: string
           sharpe_ratio: number | null
           sortino_ratio: number | null
@@ -2895,6 +2925,8 @@ export type Database = {
         }
         Insert: {
           arena_score?: number | null
+          arena_score_v3?: number | null
+          arena_score_v4?: number | null
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
@@ -2916,6 +2948,7 @@ export type Database = {
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
+          score_factors?: Json | null
           season_id: string
           sharpe_ratio?: number | null
           sortino_ratio?: number | null
@@ -2930,6 +2963,8 @@ export type Database = {
         }
         Update: {
           arena_score?: number | null
+          arena_score_v3?: number | null
+          arena_score_v4?: number | null
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
@@ -2951,6 +2986,7 @@ export type Database = {
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
+          score_factors?: Json | null
           season_id?: string
           sharpe_ratio?: number | null
           sortino_ratio?: number | null
@@ -2968,6 +3004,8 @@ export type Database = {
       lr_default: {
         Row: {
           arena_score: number | null
+          arena_score_v3: number | null
+          arena_score_v4: number | null
           avatar_url: string | null
           avg_holding_hours: number | null
           calmar_ratio: number | null
@@ -2989,6 +3027,7 @@ export type Database = {
           risk_control_score: number | null
           roi: number | null
           score_completeness: string | null
+          score_factors: Json | null
           season_id: string
           sharpe_ratio: number | null
           sortino_ratio: number | null
@@ -3003,6 +3042,8 @@ export type Database = {
         }
         Insert: {
           arena_score?: number | null
+          arena_score_v3?: number | null
+          arena_score_v4?: number | null
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
@@ -3024,6 +3065,7 @@ export type Database = {
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
+          score_factors?: Json | null
           season_id: string
           sharpe_ratio?: number | null
           sortino_ratio?: number | null
@@ -3038,6 +3080,8 @@ export type Database = {
         }
         Update: {
           arena_score?: number | null
+          arena_score_v3?: number | null
+          arena_score_v4?: number | null
           avatar_url?: string | null
           avg_holding_hours?: number | null
           calmar_ratio?: number | null
@@ -3059,6 +3103,7 @@ export type Database = {
           risk_control_score?: number | null
           roi?: number | null
           score_completeness?: string | null
+          score_factors?: Json | null
           season_id?: string
           sharpe_ratio?: number | null
           sortino_ratio?: number | null
@@ -7989,6 +8034,8 @@ export type Database = {
         }
         Returns: {
           arena_score: number | null
+          arena_score_v3: number | null
+          arena_score_v4: number | null
           avatar_url: string | null
           avg_holding_hours: number | null
           calmar_ratio: number | null
@@ -8010,6 +8057,7 @@ export type Database = {
           risk_control_score: number | null
           roi: number | null
           score_completeness: string | null
+          score_factors: Json | null
           season_id: string
           sharpe_ratio: number | null
           sortino_ratio: number | null
