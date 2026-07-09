@@ -108,20 +108,57 @@ describe('reconcileSchedulers cleanup/revival', () => {
     mockQueue.getJob.mockResolvedValue({
       id: `repeat:tiera:srcx:${staleNext}`,
       getState: async () => 'waiting',
+      remove: jest.fn().mockResolvedValue(undefined),
     })
     await reconcileSchedulers()
     expect(mockQueue.removeJobScheduler).not.toHaveBeenCalled()
   })
 
+  it('take-7b: short-cadence queued chain is NOT revived before the 45min floor', async () => {
+    // 2×every alone scales down with cadence: series backfill at 600s made the
+    // trigger 20min — normal prio-9 queue latency under load. Hourly reconciles
+    // (×2 nodes) then "revived" ~20 healthy schedulers per pass, each rebuild
+    // orphaning its queued iteration → the 295-zombie clog (2026-07-09).
+    const TEN_MIN = 600_000
+    const staleNext = Date.now() - 25 * 60_000 // 25min overdue: >2×every(20min), <45min floor
+    mockQueue.getJobSchedulers.mockResolvedValue([
+      {
+        key: 'tierbs:srcx',
+        name: 'tierb:series',
+        next: staleNext,
+        every: TEN_MIN,
+        template: { data: { sourceSlug: 'srcx' }, opts: { priority: 9 } },
+      },
+    ])
+    const base = (await (getActiveSources as jest.Mock)())[0]
+    ;(getActiveSources as jest.Mock).mockResolvedValue([
+      { ...base, meta: { series_backfill_topn: 100000 } },
+    ])
+    const queuedJob = {
+      id: `repeat:tierbs:srcx:${staleNext}`,
+      getState: async () => 'prioritized',
+      remove: jest.fn().mockResolvedValue(undefined),
+    }
+    mockQueue.getJob.mockResolvedValue(queuedJob)
+    await reconcileSchedulers()
+    expect(mockQueue.removeJobScheduler).not.toHaveBeenCalled()
+    expect(queuedJob.remove).not.toHaveBeenCalled()
+  })
+
   it('revives a deadlocked chain: iteration stuck in waiting AND >2x cadence overdue', async () => {
     const staleNext = Date.now() - 3 * HOUR // 3h overdue, cadence 1h → >2x
     mockQueue.getJobSchedulers.mockResolvedValue([scheduler('tiera:srcx', staleNext)])
-    mockQueue.getJob.mockResolvedValue({
+    const stuckJob = {
       id: `repeat:tiera:srcx:${staleNext}`,
-      getState: async () => 'waiting', // exists but never running (starved)
-    })
+      getState: async () => 'waiting',
+      remove: jest.fn().mockResolvedValue(undefined), // exists but never running (starved)
+    }
+    mockQueue.getJob.mockResolvedValue(stuckJob)
     await reconcileSchedulers()
     expect(mockQueue.removeJobScheduler).toHaveBeenCalledWith('tiera:srcx')
+    // take-7b: the superseded iteration is REMOVED on rebuild — leaving it
+    // queued stacked one orphan per revive wave (295 prio-9 zombies, 2026-07-09).
+    expect(stuckJob.remove).toHaveBeenCalled()
     const upsertKeys = mockQueue.upsertJobScheduler.mock.calls.map((c) => c[0])
     expect(upsertKeys.filter((k) => k === 'tiera:srcx').length).toBeGreaterThanOrEqual(2)
     // Immediate priority-1 kick so the revived source crawls NOW, not after a
@@ -161,6 +198,7 @@ describe('reconcileSchedulers cleanup/revival', () => {
     mockQueue.getJob.mockResolvedValue({
       id: `repeat:tierbs:srcx:${staleNext}`,
       getState: async () => 'waiting',
+      remove: jest.fn().mockResolvedValue(undefined),
     })
     await reconcileSchedulers()
     const kick = mockQueue.add.mock.calls.find((c) =>
@@ -198,6 +236,7 @@ describe('reconcileSchedulers cleanup/revival', () => {
     mockQueue.getJob.mockResolvedValue({
       id: `repeat:tierbs:srcx:${staleNext}`,
       getState: async () => 'waiting',
+      remove: jest.fn().mockResolvedValue(undefined),
     })
     await reconcileSchedulers()
     const kick = mockQueue.add.mock.calls.find((c) =>
