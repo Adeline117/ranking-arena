@@ -7695,6 +7695,14 @@ export type Database = {
         Args: { p_handle: string; p_source?: string }
         Returns: Json
       }
+      arena_roi_sparklines: {
+        Args: { p_pairs: Json; p_points?: number; p_timeframe?: number }
+        Returns: {
+          pts: number[]
+          source: string
+          trader_key: string
+        }[]
+      }
       arena_score: {
         Args: {
           max_drawdown: number
