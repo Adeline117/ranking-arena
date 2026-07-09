@@ -4849,6 +4849,69 @@ export type Database = {
         }
         Relationships: []
       }
+      score_backtest_runs: {
+        Row: {
+          horizon_days: number
+          id: number
+          n: number
+          quintiles: Json
+          rank_corr: number | null
+          run_at: string
+          season: string
+          snapshot_date: string
+          top_minus_bottom: number | null
+        }
+        Insert: {
+          horizon_days: number
+          id?: never
+          n: number
+          quintiles: Json
+          rank_corr?: number | null
+          run_at?: string
+          season: string
+          snapshot_date: string
+          top_minus_bottom?: number | null
+        }
+        Update: {
+          horizon_days?: number
+          id?: never
+          n?: number
+          quintiles?: Json
+          rank_corr?: number | null
+          run_at?: string
+          season?: string
+          snapshot_date?: string
+          top_minus_bottom?: number | null
+        }
+        Relationships: []
+      }
+      score_backtest_snapshots: {
+        Row: {
+          arena_score: number
+          equity: number
+          run_date: string
+          season: string
+          source: string
+          source_trader_id: string
+        }
+        Insert: {
+          arena_score: number
+          equity: number
+          run_date: string
+          season: string
+          source: string
+          source_trader_id: string
+        }
+        Update: {
+          arena_score?: number
+          equity?: number
+          run_date?: string
+          season?: string
+          source?: string
+          source_trader_id?: string
+        }
+        Relationships: []
+      }
       scrape_telemetry: {
         Row: {
           created_at: string
@@ -7976,6 +8039,10 @@ export type Database = {
         Args: { p_months_ahead?: number }
         Returns: string[]
       }
+      evaluate_score_backtest: {
+        Args: { p_horizon_days?: number }
+        Returns: Json
+      }
       exec_sql: { Args: { sql: string }; Returns: undefined }
       expire_group_subscriptions: { Args: never; Returns: number }
       fill_null_pnl_from_siblings: { Args: never; Returns: number }
@@ -8702,6 +8769,7 @@ export type Database = {
           trader_type: string
         }[]
       }
+      snapshot_score_backtest: { Args: never; Returns: number }
       text_to_bytea: { Args: { data: string }; Returns: string }
       toggle_post_reaction: {
         Args: { p_post_id: string; p_reaction_type?: string; p_user_id: string }
