@@ -127,3 +127,26 @@ top-3000 有价值部分覆盖，深尾故意跳。要提高调 `series_backfill
 
 **核心纠正**：上游限制极少（只有 B 表那 5 项）；**绝大多数「缺」是我们 parser/抓取没做全**，
 按 §2 超集逐源 live-probe 补抓即可补全。这与 `ARENA_REBUILD_SPEC.md` §5 路线图 P1「抓全字段」一致。
+
+---
+
+## ★★ 逐源三时间段实测追加(2026-07-09,活数据 + 逐层根因)
+
+**头号发现(已修,migration 20260709135100)**:`arena.score_inputs` 视图 pnl/win/roi 只取
+板面 headline、不回填已 JOIN 的 trader_stats → **ROI-only 板整源 PnL=0**(bybit 三 tf 全 0%、
+bitget_cfd/bitget_spot 同)+ **blofin win 4%**(主层明明 98%,C3 结论修正:从来不是抓取缺口,
+是 serving 视图 bug)。COALESCE 后视图实测:bybit pnl 0→24%、blofin win 4→100%、bitget_cfd
+win 84→100%。下轮 compute 传导 serving。**v4 分数曾因此系统性压低 bybit 全源。**
+
+**时间段缺席定性(adapter 代码即活体证据,全部为 B 类真墙)**:
+
+- kucoin:板 30d 锚定无 TF 参数(timeframes_native={30});另 KuCoin 无 MDD、板无胜率
+- htx:板 90d-only | lbank:板仅 7/30(无 90) | phemex:无 7d 板(30/90 共用一端点)
+- bitget*bots*\*:仅 30d 板
+- **okx 7/30 是 DERIVED 板**(native 只有 90):近 3 天 7D 过检 3/13、30D 2/13、行数仅 23-25
+  → **派生覆盖问题,真缺口(P2)** 非上游墙
+- **bitmart 90D 同为派生**(板只有 24H/7D/1M):90D 仅 17 行、过检 5/12 → 同类 P2
+
+**bitget_cfd(P2)**:板正常(~200-234 行×3tf 全过检)、深抓有跑(647 人,win 100%),
+但 **profile pnl/mdd 仅 10%** → parser/端点部分残缺,需 live probe。
+**phemex/lbank/blofin「抓取挂了」为虚惊**:slug 是 \*\_futures,快照全新鲜。
