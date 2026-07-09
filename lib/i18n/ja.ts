@@ -1328,13 +1328,14 @@ const ja = {
   rankingRules: 'ランキングルール',
   arenaScoreRankingRules: 'Arena Scoreランキングルール',
   rankingRule1: 'Arena Score（0-100）でランク付け',
-  rankingRule2: 'スコア：リターン（0-70）+ PnL（0-15）+ ドローダウン（0-8）+ 安定性（0-7）',
+  rankingRule2:
+    '② スコア構成：収益（PnL 30% + ROI 20%）+ ドローダウン 20% + シャープ 20% + 一貫性 10%，× データ信頼度',
   rankingRule3: 'スコアが同じ場合、ドローダウンが低い方が上位',
   rankingRuleROINote:
     '※ ROIの計算方法は取引所によって異なります。取引所間の比較には注意してください。',
   detailButton: '詳細',
   arenaScoreTooltip:
-    'Arena Score：総合評価（0-100）\nリターン70% + PnL15% + ドローダウン8% + 安定性7%\n?をクリックで詳細ルール',
+    'Arena Score（0-100）≈ 上回ったトレーダーの割合\n収益（PnL+ROI）50% + DD20% + シャープ20% + 一貫性10%，× データ信頼度\n?をクリックで詳細ルール',
   roiTooltip: 'ROI：投資収益率（{range}）',
   winRateTooltip: 'Win%：勝率',
   mddTooltip: 'MDD：最大ドローダウン',
@@ -2039,7 +2040,7 @@ const ja = {
     'チャートを表示するのに十分なデータポイントがありません。意味のあるトレンドを表示するにはもっとデータが必要です。',
   scoreGuide: 'スコアガイド',
   scoreGuideDetail:
-    'リターン（0-70）：ROIに基づく | PnL（0-15）：絶対利益に基づく | ドローダウン（0-8）：低いほど高い | 安定性（0-7）：勝率に基づく',
+    '収益（PnL 30% + ROI 20%）：実際の利益規模+圧縮後リターン | ドローダウン（20%）：小さいほど高い | シャープ（20%）：リスク調整後リターン | 一貫性（10%）：勝率+プロフィットファクター | リスク次元は全トレーダー中の百分位，× サンプル量信頼度',
   confidenceMinimal: '不完全なデータ — ドローダウンと勝率はデフォルト値',
   confidencePartial: '部分的なデータ — 一部の指標にデフォルト値を使用',
   weexDataNote: 'Weexデータ注記',
@@ -3999,7 +4000,7 @@ const ja = {
   scoreRoiScore: 'ROIスコア',
   scorePnlScore: 'PnLスコア',
   scoreTotal: '合計',
-  scoreBasisRoiPnl: 'ROIとPnLデータに基づくスコア',
+  scoreBasisRoiPnl: 'スコアは収益（PnL+ROI）・ドローダウン・シャープ・一貫性に基づく',
   confidenceMinimalReason: '限定的なデータに基づくスコア：勝率とドローダウンのデータなし',
   confidencePartialReason: 'スコア調整済み：この取引所では一部の指標が利用できません',
 

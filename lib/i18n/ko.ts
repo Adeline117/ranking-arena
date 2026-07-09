@@ -1392,12 +1392,13 @@ const ko = {
   rankingRules: '순위 규칙',
   arenaScoreRankingRules: 'Arena Score 순위 규칙',
   rankingRule1: 'Arena Score (0-100) 기준 순위',
-  rankingRule2: '점수: 수익률 (0-70) + PnL (0-15) + 낙폭 (0-8) + 안정성 (0-7)',
+  rankingRule2:
+    '② 점수 구성: 수익(PnL 30% + ROI 20%) + 낙폭 20% + 샤프 20% + 일관성 10%, × 데이터 신뢰도',
   rankingRule3: '점수가 동일하면 낙폭이 낮을수록 높은 순위',
   rankingRuleROINote: '* ROI 계산 방식은 거래소마다 다릅니다. 거래소 간 비교 시 주의하세요.',
   detailButton: '상세',
   arenaScoreTooltip:
-    'Arena Score: 종합 평가 (0-100)\n수익률 70% + PnL 15% + 낙폭 8% + 안정성 7%\n?를 클릭하면 상세 규칙을 볼 수 있습니다',
+    'Arena Score (0-100) ≈ 상위 몇 %인지\n수익(PnL+ROI) 50% + 낙폭 20% + 샤프 20% + 일관성 10%, × 데이터 신뢰도\n?를 클릭하면 상세 규칙을 볼 수 있습니다',
   roiTooltip: 'ROI: 투자 수익률 ({range})',
   winRateTooltip: '승률: 승리 비율',
   mddTooltip: 'MDD: 최대 낙폭',
@@ -2134,7 +2135,7 @@ const ko = {
     '차트를 표시할 데이터가 부족합니다. 의미 있는 추세를 보여주려면 더 많은 데이터가 필요합니다.',
   scoreGuide: '점수 가이드',
   scoreGuideDetail:
-    '수익률 (0-70): ROI 기준 | PnL (0-15): 절대 수익 기준 | 낙폭 (0-8): 낮을수록 높음 | 안정성 (0-7): 승률 기준',
+    '수익(PnL 30% + ROI 20%): 실제 수익 규모+압축 수익률 | 낙폭(20%): 낮을수록 높음 | 샤프(20%): 위험 조정 수익 | 일관성(10%): 승률+수익 요인 | 위험 차원은 전체 트레이더 중 백분위, × 표본 신뢰도',
   confidenceMinimal: '불완전한 데이터 — 낙폭과 승률은 기본값입니다',
   confidencePartial: '부분적 데이터 — 일부 지표에 기본값이 사용되었습니다',
   weexDataNote: 'Weex 데이터 참고',
@@ -4203,7 +4204,7 @@ const ko = {
   scoreRoiScore: 'ROI 점수',
   scorePnlScore: 'PnL 점수',
   scoreTotal: '합계',
-  scoreBasisRoiPnl: 'ROI 및 PnL 데이터 기반 점수',
+  scoreBasisRoiPnl: '수익(PnL+ROI)·낙폭·샤프·일관성 기반 점수',
   confidenceMinimalReason: '제한된 데이터 기반 점수: 승률 및 낙폭 데이터 없음',
   confidencePartialReason: '점수 조정됨: 이 거래소에서 일부 지표를 제공하지 않음',
 

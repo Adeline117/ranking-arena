@@ -1434,12 +1434,13 @@ const zh = {
   rankingRules: '排名规则',
   arenaScoreRankingRules: 'Arena Score 排名规则',
   rankingRule1: '① 按 Arena Score 从高到低排序（0-100 分）',
-  rankingRule2: '② 分数构成：收益分 (0-70) + 盈亏分 (0-15) + 回撤分 (0-8) + 稳定分 (0-7)',
+  rankingRule2:
+    '② 分数构成：盈利(PnL 30% + ROI 20%) + 回撤 20% + 夏普 20% + 一致性 10%，× 数据可信度 —— 分数≈超过多少%的交易员',
   rankingRule3: '③ Score 相同时，回撤更小的靠前',
   rankingRuleROINote: '* ROI 计算方式因交易所而异，跨所对比时请注意差异',
   detailButton: '详细',
   arenaScoreTooltip:
-    'Arena Score: 综合评分 (0-100)\n收益70% + 盈亏15% + 回撤8% + 稳定7%\n点击表头 ? 查看详细规则',
+    'Arena Score (0-100) ≈ 你超过了多少%的交易员\n盈利(PnL+ROI)50% + 回撤20% + 夏普20% + 一致性10%，× 数据可信度\n点击表头 ? 查看详细规则',
   roiTooltip: 'ROI: 投资回报率 ({range})',
   winRateTooltip: '胜率：盈利交易占比。\n越高代表盈利越稳定。',
   mddTooltip: '最大回撤：从峰值到谷底的最大跌幅。\n越低风控越好。\n-10%优秀，-50%高风险。',
@@ -2224,7 +2225,7 @@ const zh = {
   insufficientDataForChart: '数据点不足，无法绘制图表。需要更多数据才能有效展示趋势。',
   scoreGuide: '评分说明',
   scoreGuideDetail:
-    '收益分 (0-70)：基于 ROI 强度计算 | 盈亏分 (0-15)：基于绝对盈利 | 回撤分 (0-8)：回撤越小分数越高 | 稳定分 (0-7)：基于胜率计算',
+    '盈利(PnL 30% + ROI 20%)：真实赚钱量级+压缩后回报率 | 回撤(20%)：越小分位越高 | 夏普(20%)：风险调整回报 | 一致性(10%)：胜率+盈利因子 | 风险维度均为全体交易员中的百分位，× 样本量可信度',
   confidenceMinimal: '数据不完整，回撤与胜率使用默认值',
   confidencePartial: '部分数据缺失，使用了默认中位值',
   weexDataNote: 'Weex 数据说明',
@@ -4256,7 +4257,7 @@ const zh = {
   scoreRoiScore: 'ROI 分',
   scorePnlScore: 'PnL 分',
   scoreTotal: '总分',
-  scoreBasisRoiPnl: '基于 ROI 和 PnL 数据的评分',
+  scoreBasisRoiPnl: '基于盈利(PnL+ROI)、回撤、夏普与一致性的评分',
   confidenceMinimalReason: '基于有限数据的评分：胜率和回撤数据不可用',
   confidencePartialReason: '评分已调整：该交易所部分指标不可用',
 
