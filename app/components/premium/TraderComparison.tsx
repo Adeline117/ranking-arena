@@ -49,6 +49,10 @@ interface TraderCompareData {
   return_score?: number
   drawdown_score?: number
   stability_score?: number
+  // v4 serving sub-scores (0-100 dimension percentiles)
+  profitability_score?: number
+  risk_control_score?: number
+  execution_score?: number
   is_bot?: boolean
   avatar_url?: string
   followers?: number
@@ -199,21 +203,24 @@ export default function TraderComparison({
       format: (v: number) => v?.toString() || '—',
       higherBetter: true,
     },
+    // v4 (2026-07): compare on the flagship's real sub-scores (0-100 dimension
+    // percentiles: 盈利=PnL+ROI / 风控=回撤+Sharpe / 一致性=胜率+盈利因子)。
+    // The old return/drawdown/stability_score trio was live-computed V3.
     {
-      key: 'return_score',
-      label: t('compareReturnScore'),
+      key: 'profitability_score',
+      label: t('scoreProfit'),
       format: (v: number) => formatRatio(v, 1),
       higherBetter: true,
     },
     {
-      key: 'drawdown_score',
-      label: t('compareDrawdownScore'),
+      key: 'risk_control_score',
+      label: t('scoreRisk'),
       format: (v: number) => formatRatio(v, 1),
       higherBetter: true,
     },
     {
-      key: 'stability_score',
-      label: t('compareStabilityScore'),
+      key: 'execution_score',
+      label: t('scoreExecution'),
       format: (v: number) => formatRatio(v, 1),
       higherBetter: true,
     },
@@ -227,17 +234,18 @@ export default function TraderComparison({
 
   // Grouped-bar dimensions (0-100 normalized scores), one group per metric dimension
   const dimensionData = [
+    // v4: 三维 = 盈利/风控/一致性(0-100 百分位),替换 V3 的 return/drawdown/stability
     {
-      label: t('compareReturnScore'),
-      values: traders.map((tr) => Math.min(tr.return_score ?? 0, 100)),
+      label: t('scoreProfit'),
+      values: traders.map((tr) => Math.min(tr.profitability_score ?? 0, 100)),
     },
     {
-      label: t('compareDrawdownScore'),
-      values: traders.map((tr) => Math.min(tr.drawdown_score ?? 0, 100)),
+      label: t('scoreRisk'),
+      values: traders.map((tr) => Math.min(tr.risk_control_score ?? 0, 100)),
     },
     {
-      label: t('compareStabilityScore'),
-      values: traders.map((tr) => Math.min(tr.stability_score ?? 0, 100)),
+      label: t('scoreExecution'),
+      values: traders.map((tr) => Math.min(tr.execution_score ?? 0, 100)),
     },
     { label: t('compareWinRate'), values: traders.map((tr) => Math.min(tr.win_rate ?? 0, 100)) },
     {
