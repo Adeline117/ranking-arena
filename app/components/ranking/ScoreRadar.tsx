@@ -5,10 +5,10 @@ import { getScoreColor } from '@/lib/utils/score-colors'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 interface ScoreRadarProps {
-  profitability: number | null // 0-60 (returnScore)
-  riskControl: number | null // 0-40 (pnlScore)
-  /** @deprecated V3 removed the execution axis (always null/0). Accepted for
-   *  backwards-compat with call sites but no longer rendered. */
+  profitability: number | null // 0-100 (v4: 盈利维度 = PnL+ROI 百分位)
+  riskControl: number | null // 0-100 (v4: 风控维度 = 回撤+Sharpe 百分位)
+  /** @deprecated V3 removed the execution axis; v4 exposes consistency via the
+   *  breakdown bars instead. Accepted for backwards-compat, not rendered. */
   execution?: number | null
   arenaScore: number // 0-100, for color
   size?: number
@@ -16,8 +16,8 @@ interface ScoreRadarProps {
 
 /**
  * 雷达图 - SVG自绘
- * 两个轴：收益能力 (0-60)、风险控制 (0-40)。
- * 执行质量 (Exec) 轴在 V3 已废弃（恒为 0/null），已从图与标签中移除。
+ * 两个轴：盈利能力、风险控制 —— v4 起均为 0-100 维度百分位
+ * (旧 60/40 标尺是 V3 的 ReturnScore/PnlScore,已随 v4 切换废弃)。
  */
 export const ScoreRadar = memo(function ScoreRadar({
   profitability,
@@ -30,13 +30,13 @@ export const ScoreRadar = memo(function ScoreRadar({
   const cy = size / 2
   const r = size * 0.38 // max radius
 
-  // Normalize to 0-1 against the REAL axis maxima (60 / 40); guard null/NaN.
+  // Normalize to 0-1: both axes are 0-100 v4 dimension percentiles; guard null/NaN.
   const pFinite = profitability != null && Number.isFinite(profitability)
   const rFinite = riskControl != null && Number.isFinite(riskControl)
   const pVal = pFinite ? (profitability as number) : 0
   const rVal = rFinite ? (riskControl as number) : 0
-  const pNorm = Math.min(Math.max(pVal / 60, 0), 1)
-  const rNorm = Math.min(Math.max(rVal / 40, 0), 1)
+  const pNorm = Math.min(Math.max(pVal / 100, 0), 1)
+  const rNorm = Math.min(Math.max(rVal / 100, 0), 1)
 
   // Two axes: profit (upper-left) and risk (upper-right), symmetric about the
   // vertical so the filled shape reads as a balanced "peak".
@@ -89,13 +89,13 @@ export const ScoreRadar = memo(function ScoreRadar({
     },
   ]
 
-  // Honest accessible summary: real denominators (60 / 40), null-guarded, no
-  // deprecated Exec axis.
+  // Honest accessible summary: both axes 0-100 (v4 percentiles), null-guarded,
+  // no deprecated Exec axis.
   const ariaProfit = pFinite ? Math.round(pVal) : '—'
   const ariaRisk = rFinite ? Math.round(rVal) : '—'
   const ariaLabel =
-    `Score radar: ${t('scoreRadarProfit')} ${ariaProfit}/60, ` +
-    `${t('scoreRadarRisk')} ${ariaRisk}/40`
+    `Score radar: ${t('scoreRadarProfit')} ${ariaProfit}/100, ` +
+    `${t('scoreRadarRisk')} ${ariaRisk}/100`
 
   return (
     <svg

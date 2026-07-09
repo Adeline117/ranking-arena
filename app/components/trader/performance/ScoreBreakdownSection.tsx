@@ -267,17 +267,19 @@ export function ScoreBreakdownSection({
             gap: tokens.spacing[3],
           }}
         >
+          {/* v4 (2026-07): 优先用 serving 的 v4 维度分(0-100 百分位:盈利=PnL+ROI,
+              风控=回撤+Sharpe),legacy period 子分仅作陈旧缓存回退。旧 60/40 标尺已废。 */}
           <ScoreBar
-            label={t('returnScore')}
-            score={periodReturnScore ?? null}
-            maxScore={60}
+            label={t('scoreProfit')}
+            score={performance.profitability_score ?? periodReturnScore ?? null}
+            maxScore={100}
             isVisible={isVisible}
             delay={500}
           />
           <ScoreBar
-            label={t('pnlScore')}
-            score={periodPnlScore ?? null}
-            maxScore={40}
+            label={t('scoreRisk')}
+            score={performance.risk_control_score ?? periodPnlScore ?? null}
+            maxScore={100}
             isVisible={isVisible}
             delay={550}
           />

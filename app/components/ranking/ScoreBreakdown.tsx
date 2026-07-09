@@ -143,18 +143,29 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
         >
           {t('scoreBreakdownTitle')}
         </Text>
+        {/* v4 (2026-07): sub-scores are 0-100 dimension percentiles —
+            盈利(PnL+ROI) / 风控(回撤+Sharpe) / 一致性(胜率+盈利因子)。
+            旧 60/40 标尺是 V3 的 ReturnScore/PnlScore,已废。 */}
         <ScoreBar
           label={t('scoreProfit')}
           score={profitability_score}
-          maxScore={60}
+          maxScore={100}
           color="var(--color-score-profitability)"
         />
         <ScoreBar
           label={t('scoreRisk')}
           score={risk_control_score}
-          maxScore={40}
+          maxScore={100}
           color="var(--color-score-risk)"
         />
+        {execution_score != null && (
+          <ScoreBar
+            label={t('scoreExecution')}
+            score={execution_score}
+            maxScore={100}
+            color="var(--color-score-execution)"
+          />
+        )}
 
         {/* 置信度标签 */}
         <Box style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>

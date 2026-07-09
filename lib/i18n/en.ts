@@ -1458,13 +1458,14 @@ const en = {
   rankingRules: 'Ranking Rules',
   arenaScoreRankingRules: 'Arena Score Ranking Rules',
   rankingRule1: 'Ranked by Arena Score (0-100)',
-  rankingRule2: 'Score: Return (0-70) + PnL (0-15) + Drawdown (0-8) + Stability (0-7)',
+  rankingRule2:
+    '② Score ≈ % of traders you beat: Profit (PnL 30% + ROI 20%) + Drawdown 20% + Sharpe 20% + Consistency 10%, × data confidence',
   rankingRule3: 'Lower drawdown ranks higher when Score ties',
   rankingRuleROINote:
     '* ROI calculation varies by exchange. Use caution when comparing across exchanges.',
   detailButton: 'Details',
   arenaScoreTooltip:
-    'Arena Score: Overall rating (0-100)\nReturn 70% + PnL 15% + Drawdown 8% + Stability 7%\nClick ? for detailed rules',
+    'Arena Score (0-100) ≈ % of traders you beat\nProfit (PnL+ROI) 50% + Drawdown 20% + Sharpe 20% + Consistency 10%, × data confidence\nClick ? for detailed rules',
   roiTooltip: 'ROI: Return on Investment ({range})',
   winRateTooltip: 'Win Rate: Percentage of profitable trades.\nHigher = more consistent profits.',
   mddTooltip:
@@ -2219,7 +2220,7 @@ const en = {
     'Not enough data points to display a chart. More data is needed to show a meaningful trend.',
   scoreGuide: 'Score Guide',
   scoreGuideDetail:
-    'Return (0-70): Based on ROI | PnL (0-15): Based on absolute profit | Drawdown (0-8): Lower = higher | Stability (0-7): Based on win rate',
+    'Profit (PnL 30% + ROI 20%): real earnings magnitude + compressed return | Drawdown (20%): smaller = higher | Sharpe (20%): risk-adjusted return | Consistency (10%): win rate + profit factor | Risk dimensions are percentiles vs all traders, × sample-size confidence',
   confidenceMinimal: 'Incomplete data \u2014 drawdown & win rate are defaults',
   confidencePartial: 'Partial data \u2014 defaults used for some metrics',
   weexDataNote: 'Weex Data Note',
@@ -4351,7 +4352,7 @@ const en = {
   scoreRoiScore: 'ROI Score',
   scorePnlScore: 'PnL Score',
   scoreTotal: 'Total',
-  scoreBasisRoiPnl: 'Score based on ROI and PnL data',
+  scoreBasisRoiPnl: 'Score based on profit (PnL + ROI), drawdown, Sharpe and consistency',
   confidenceMinimalReason: 'Score based on limited data: win rate and drawdown not available',
   confidencePartialReason: 'Score adjusted: some metrics not available from this exchange',
 
