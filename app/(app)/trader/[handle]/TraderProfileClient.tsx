@@ -17,6 +17,7 @@ import { fetcher } from '@/lib/hooks/fetchers'
 import type { TraderFirstScreen, TraderFirstScreenResponse } from '@/lib/data/serving/types'
 import type { ApiSuccessResponse } from '@/lib/types/index'
 import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
+import { HOLDER_CHIP_STYLE } from '@/app/components/ranking/TraderRowStyles'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -1006,6 +1007,20 @@ export default function TraderProfileClient({
                       {useThreeTab && <HoldingDistribution extras={servingTab.metaExtras} />}
                       {/* M2-2d: asset-preference weights (top traded instruments). */}
                       {useThreeTab && <AssetPreference extras={servingTab.metaExtras} />}
+                      {/* Holder tag: win% NULL-collapses in the grid for a
+                          confirmed zero-close-trade wallet (win_rate null +
+                          total_positions 0), so the grid gives no signal there.
+                          Surface the same "Holder" chip as the rankings so the
+                          detail page reads intentional, not "missing win%". */}
+                      {useThreeTab &&
+                        servingTab.gridStats.win_rate == null &&
+                        servingTab.gridStats.total_positions === 0 && (
+                          <div style={{ margin: `${tokens.spacing[2]} 0` }}>
+                            <span title={t('holderTooltip')} style={HOLDER_CHIP_STYLE}>
+                              {t('holderBadge')}
+                            </span>
+                          </div>
+                        )}
                       {/* M1/M2: registry superset metric grid (sharpe/sortino/mdd/
                           risk ratios — incl. DEX Tier-0 derived). Was escape-hatch
                           only; NULL-collapses per source capability. */}

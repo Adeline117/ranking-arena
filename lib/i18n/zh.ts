@@ -2215,7 +2215,7 @@ const zh = {
   comingSoon: '即将推出',
   drawdownNotAvailable: '该交易所未提供回撤数据',
   winRateNotAvailable: '该交易所未提供胜率数据',
-  holderBadge: '持有型',
+  holderBadge: '持有中',
   holderTooltip: '窗口内零平仓,收益来自持仓',
   positionStatsNotAvailable: '该交易所未提供持仓统计',
   updatedAt: '更新于',
