@@ -76,9 +76,11 @@ export default function FeedbackWidget() {
         aria-expanded={open}
         style={{
           position: 'fixed',
+          // +var(--transient-bottom-bar): lift clear of the cookie / guest-signup
+          // bar when one is showing, instead of hiding behind it (z300 > this z100).
           bottom: hasFab
-            ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 152px)'
-            : 'calc(var(--mobile-nav-height, 60px) + 16px)',
+            ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 152px + var(--transient-bottom-bar, 0px))'
+            : 'calc(var(--mobile-nav-height, 60px) + 16px + var(--transient-bottom-bar, 0px))',
           right: 16,
           width: 44,
           height: 44,
@@ -113,8 +115,8 @@ export default function FeedbackWidget() {
           style={{
             position: 'fixed',
             bottom: hasFab
-              ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 208px)'
-              : 'calc(var(--mobile-nav-height, 60px) + 72px)',
+              ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 208px + var(--transient-bottom-bar, 0px))'
+              : 'calc(var(--mobile-nav-height, 60px) + 72px + var(--transient-bottom-bar, 0px))',
             right: 16,
             width: 'min(320px, calc(100vw - 32px))',
             background: 'var(--color-bg-secondary)',

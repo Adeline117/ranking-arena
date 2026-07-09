@@ -49,6 +49,20 @@ export default function CookieConsent() {
     setVisible(false)
   }
 
+  // Publish this bar's height so bottom-right widgets (Feedback FAB, ScrollToTop)
+  // can lift clear of it instead of hiding behind it (z300 bar covered z100 FAB).
+  useEffect(() => {
+    const root = document.documentElement
+    if (visible && !isNavHidden) {
+      root.style.setProperty('--transient-bottom-bar', '44px')
+    } else {
+      root.style.removeProperty('--transient-bottom-bar')
+    }
+    return () => {
+      root.style.removeProperty('--transient-bottom-bar')
+    }
+  }, [visible, isNavHidden])
+
   if (!visible) return null
 
   // Mobile: ultra-slim single-line bar (36px vs ~95px before)
@@ -62,10 +76,11 @@ export default function CookieConsent() {
         right: 0,
         zIndex: tokens.zIndex.overlay,
         padding: '4px 12px',
-        background: tokens.glass.bg.heavy,
-        backdropFilter: tokens.glass.blur.lg,
-        WebkitBackdropFilter: tokens.glass.blur.lg,
+        // Solid (not glass) — dark-mode --glass-bg-heavy is only 18% opaque, so
+        // page content bled through the bar and read as broken UI on mobile.
+        background: 'var(--color-bg-secondary)',
         borderTop: `1px solid ${tokens.colors.border.primary}`,
+        boxShadow: '0 -4px 16px var(--color-overlay-light)',
         animation: 'fadeIn 0.3s ease-out',
       }}
     >

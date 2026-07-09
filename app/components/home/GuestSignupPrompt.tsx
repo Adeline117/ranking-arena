@@ -93,6 +93,20 @@ export default function GuestSignupPrompt() {
     return () => window.removeEventListener('keydown', handler)
   }, [show, handleDismiss])
 
+  // Publish this bar's height so bottom-right widgets lift clear of it (mirrors
+  // CookieConsent; mutually exclusive with it, so no conflict on the shared var).
+  useEffect(() => {
+    const root = document.documentElement
+    if (show && !session && !loading) {
+      root.style.setProperty('--transient-bottom-bar', '68px')
+    } else {
+      root.style.removeProperty('--transient-bottom-bar')
+    }
+    return () => {
+      root.style.removeProperty('--transient-bottom-bar')
+    }
+  }, [show, session, loading])
+
   if (!show || session || loading) return null
 
   return (

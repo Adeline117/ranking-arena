@@ -42,11 +42,12 @@ export default memo(function ScrollToTop() {
       className="scroll-to-top-btn"
       style={{
         position: 'fixed',
+        // +var(--transient-bottom-bar): lift clear of the cookie / guest-signup bar.
         bottom: hasFab
           ? // Clear the 56px FAB (bottom+20) plus its drop shadow with a real gap,
             // so scroll-to-top no longer visually overlaps the FAB (U9-5).
-            'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 96px)'
-          : 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 16px)',
+            'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 96px + var(--transient-bottom-bar, 0px))'
+          : 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 16px + var(--transient-bottom-bar, 0px))',
         right: 16,
         zIndex: tokens.zIndex.sticky + 1,
         width: 44,
