@@ -154,6 +154,10 @@
     {
       "path": "/api/cron/expire-mutes",
       "schedule": "15 */6 * * *"
+    },
+    {
+      "path": "/api/cron/sync-ranking-store",
+      "schedule": "12,27,42,57 * * * *"
     }
   ],
   "headers": [
