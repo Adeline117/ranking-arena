@@ -181,7 +181,11 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
   const traders = await getBandTraders(src.id, src.deep_profile_topn, backfillTopN, offset, batch)
 
   const timeframes = profileTimeframes(src)
-  const session = await openSession(src)
+  // Own profile dir: a concurrent long tier-A crawl on the same slug holds
+  // profiles/<slug>'s Chrome ProcessSingleton for hours — bybit_mt5 backfill
+  // died 100% ("Failed to create a ProcessSingleton", 90 errors/run) whenever
+  // its giant board crawl was running (2026-07-09).
+  const session = await openSession(src, { profileSuffix: 'series' })
   const startedAt = Date.now()
   let attempted = 0
   const result: TierBSeriesResult = {
