@@ -30,6 +30,10 @@ interface TraderCompareData {
   return_score?: number
   drawdown_score?: number
   stability_score?: number
+  // v4 serving sub-scores (0-100 dimension percentiles) — the flagship breakdown
+  profitability_score?: number
+  risk_control_score?: number
+  execution_score?: number
   avatar_url?: string
   followers?: number
   equity_curve?: Array<{ date: string; roi: number }>
@@ -126,6 +130,10 @@ export const GET = withAuth(
               return_score: perf?.return_score as number | undefined,
               drawdown_score: perf?.drawdown_score as number | undefined,
               stability_score: perf?.stability_score as number | undefined,
+              // v4 serving sub-scores (0-100 percentiles) for the compare dimensions
+              profitability_score: (perf?.profitability_score as number | null) ?? undefined,
+              risk_control_score: (perf?.risk_control_score as number | null) ?? undefined,
+              execution_score: (perf?.execution_score as number | null) ?? undefined,
               avatar_url: (profile?.avatar_url as string) || undefined,
               followers: (profile?.followers as number) || 0,
               ...(includeEquity ? { equity_curve: equityCurve } : {}),

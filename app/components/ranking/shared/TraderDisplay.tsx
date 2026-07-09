@@ -527,10 +527,15 @@ export const ArenaScoreCircle = memo(
 
     if (score == null) return null
 
-    // Score breakdown calculated from raw roi% and pnl USD
-    const roiScore = roi != null ? Math.min(60, Math.max(0, Math.round((roi / 500) * 60))) : null
-    const pnlScore = pnl != null ? Math.min(40, Math.max(0, Math.round((pnl / 100000) * 40))) : null
-    const hasBreakdown = roiScore !== null || pnlScore !== null
+    // v4 (2026-07): show HONEST raw inputs (ROI% / PnL $) in the tooltip. The old
+    // roi/500×60 and pnl/100k×40 pseudo-scores were arbitrary V3-era client-side
+    // approximations that never matched the real formula — retired with v4.
+    const roiText = roi != null ? `${roi > 0 ? '+' : ''}${roi.toFixed(1)}%` : null
+    const pnlText =
+      pnl != null
+        ? `${pnl < 0 ? '-' : ''}$${Math.abs(Math.round(pnl)).toLocaleString('en-US')}`
+        : null
+    const hasBreakdown = roiText !== null || pnlText !== null
 
     const tooltipContent = show ? (
       <div
@@ -567,7 +572,7 @@ export const ArenaScoreCircle = memo(
           Arena Score
         </div>
         <div>
-          {t('scoreRoiScore')}:{' '}
+          {t('roi')}:{' '}
           <span
             style={{
               fontWeight: 700,
@@ -575,12 +580,11 @@ export const ArenaScoreCircle = memo(
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            {roiScore ?? '—'}
+            {roiText ?? '—'}
           </span>
-          <span style={{ color: tokens.colors.text.tertiary }}> / 60</span>
         </div>
         <div>
-          {t('scorePnlScore')}:{' '}
+          {t('pnl')}:{' '}
           <span
             style={{
               fontWeight: 700,
@@ -588,9 +592,8 @@ export const ArenaScoreCircle = memo(
               fontVariantNumeric: 'tabular-nums',
             }}
           >
-            {pnlScore ?? '—'}
+            {pnlText ?? '—'}
           </span>
-          <span style={{ color: tokens.colors.text.tertiary }}> / 40</span>
         </div>
         <div
           style={{
