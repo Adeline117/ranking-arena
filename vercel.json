@@ -158,6 +158,10 @@
     {
       "path": "/api/cron/sync-ranking-store",
       "schedule": "12,27,42,57 * * * *"
+    },
+    {
+      "path": "/api/cron/score-backtest",
+      "schedule": "37 3 * * 1"
     }
   ],
   "headers": [
