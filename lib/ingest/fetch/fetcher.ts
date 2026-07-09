@@ -160,7 +160,8 @@ class PlaywrightFetchSession implements FetchSession {
 
   constructor(
     readonly sourceSlug: string,
-    private readonly src: SourceRow
+    private readonly src: SourceRow,
+    private readonly profileSuffix?: string
   ) {
     this.gate = new PacedGate({ budgetMs: src.rate_budget_ms })
     this.circuit = getCircuit(src.slug)
@@ -174,7 +175,10 @@ class PlaywrightFetchSession implements FetchSession {
     // Keep the literal 'local' check first so TS narrows the else branch
     // for remoteWsEndpoint().
     if (this.src.fetch_region === 'local' || isLocalRegion(this.src.fetch_region)) {
-      const userDataDir = path.join(process.cwd(), '.arena-ingest', 'profiles', this.src.slug)
+      const profileName = this.profileSuffix
+        ? `${this.src.slug}-${this.profileSuffix}`
+        : this.src.slug
+      const userDataDir = path.join(process.cwd(), '.arena-ingest', 'profiles', profileName)
       // Some Akamai-fronted sources (Bybit: net::ERR_HTTP2_PROTOCOL_ERROR)
       // TLS-fingerprint-block the bundled Chromium even on page loads, but
       // accept an installed branded browser headless. Per-source opt-in via
@@ -413,6 +417,21 @@ class PlaywrightFetchSession implements FetchSession {
   }
 }
 
-export async function openSession(src: SourceRow): Promise<FetchSession> {
-  return new PlaywrightFetchSession(src.slug, src)
+export async function openSession(
+  src: SourceRow,
+  opts?: {
+    /**
+     * Suffix for the local persistent-profile dir (`profiles/<slug>-<suffix>`).
+     * Chrome's ProcessSingleton allows ONE live Chrome per profile dir — a
+     * long tier-A crawl (bybit_mt5 ≈29k traders, hours) holds `profiles/<slug>`
+     * for its whole run, and every concurrent tierbs launch on the same slug
+     * died with "Failed to create a ProcessSingleton" (90 errors/run, 0 series
+     * — 2026-07-09). A suffixed dir gives the concurrent tier its own Chrome +
+     * cookie jar (warms once, persists). Remote-WS regions are unaffected
+     * (fresh newContext per session, no profile dir).
+     */
+    profileSuffix?: string
+  }
+): Promise<FetchSession> {
+  return new PlaywrightFetchSession(src.slug, src, opts?.profileSuffix)
 }
