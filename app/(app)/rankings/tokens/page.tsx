@@ -3,12 +3,12 @@ import { unstable_cache } from 'next/cache'
 import TokensIndexClient from './TokensIndexClient'
 import { BASE_URL } from '@/lib/constants/urls'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { extractBaseToken, isValidTokenSymbol } from '@/lib/utils/token-symbol'
+import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
 
 export const revalidate = 3600 // ISR: 1 hour (matches API cache)
 
-// SSR timeout: getPopularTokens scans up to 50k rows and can be very slow
-// during cron contention. First request (cache miss) is vulnerable.
+// SSR timeout guard: getPopularTokens now reads the pre-aggregated MV via RPC
+// (fast), but keep a bound so a cold cache-miss never hangs the page render.
 const SSR_TIMEOUT_MS = 4000
 
 export const metadata: Metadata = {
@@ -49,56 +49,31 @@ const getPopularTokens = unstable_cache(
   async (): Promise<PopularToken[]> => {
     try {
       const supabase = getSupabaseAdmin()
-      const cutoff = new Date()
-      cutoff.setDate(cutoff.getDate() - 90)
-
-      const { data, error } = await supabase
-        .from('trader_position_history')
-        .select('symbol, source, source_trader_id, pnl_usd')
-        .gte('close_time', cutoff.toISOString())
-        .not('pnl_usd', 'is', null)
-        .limit(50000)
-
+      // SQL aggregate via the same RPC as /api/rankings/by-token — replaces the
+      // cold-path 50k-row trader_position_history scan into JS (was guarded only
+      // by a 4s SSR timeout). The MV now filters junk symbols at source
+      // (migration 20260709232817 — mirrors isValidTokenSymbol), so the RPC's
+      // top-50 is already clean; the filter below is belt-and-suspenders.
+      const { data, error } = await supabase.rpc('get_popular_tokens', {
+        lookback_days: 90,
+        max_tokens: 50,
+      })
       if (error || !data || data.length === 0) return []
-
-      const tokenMap = new Map<
-        string,
-        {
-          tradeCount: number
-          traders: Set<string>
-          totalPnl: number
-        }
-      >()
-
-      for (const row of data as Array<{
-        symbol: string
-        source: string
-        source_trader_id: string
-        pnl_usd: number | null
-      }>) {
-        const baseToken = extractBaseToken(row.symbol)
-        // U1-5: only aggregate plausible crypto tickers — drop junk like
-        // HL-107 / XYZ:TSLA / pure-numeric ids that used to top the board.
-        if (!isValidTokenSymbol(baseToken)) continue
-
-        if (!tokenMap.has(baseToken)) {
-          tokenMap.set(baseToken, { tradeCount: 0, traders: new Set(), totalPnl: 0 })
-        }
-        const acc = tokenMap.get(baseToken)!
-        acc.tradeCount++
-        acc.traders.add(`${row.source}:${row.source_trader_id}`)
-        acc.totalPnl += Number(row.pnl_usd) || 0
-      }
-
-      return [...tokenMap.entries()]
-        .map(([token, acc]) => ({
-          token,
-          trade_count: acc.tradeCount,
-          trader_count: acc.traders.size,
-          total_pnl: Math.round(acc.totalPnl * 100) / 100,
+      return (
+        data as Array<{
+          token: string
+          trade_count: number
+          trader_count: number
+          total_pnl: number
+        }>
+      )
+        .filter((row) => isValidTokenSymbol(String(row.token ?? '').toUpperCase()))
+        .map((row) => ({
+          token: row.token,
+          trade_count: Number(row.trade_count),
+          trader_count: Number(row.trader_count),
+          total_pnl: Number(row.total_pnl),
         }))
-        .sort((a, b) => b.trade_count - a.trade_count)
-        .slice(0, 50)
     } catch {
       return []
     }

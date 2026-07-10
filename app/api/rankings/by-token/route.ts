@@ -63,9 +63,9 @@ async function handlePopularTokens(): Promise<NextResponse> {
 
         try {
           // Use SQL aggregate via RPC — avoids fetching 50K rows into JS memory.
-          // Over-fetch (60) so the U1-5 junk filter below still leaves a full 50.
+          // MV now filters junk at source (migration 20260709232817); 50 rows are clean.
           const { data, error } = await supabase
-            .rpc('get_popular_tokens', { lookback_days: 90, max_tokens: 60 })
+            .rpc('get_popular_tokens', { lookback_days: 90, max_tokens: 50 })
             .abortSignal(controller.signal)
 
           if (error) throw new Error(error.message)
