@@ -2,7 +2,7 @@ import { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
-  title: 'Pro 会员',
+  title: 'Arena Pro',
   description:
     'Upgrade to Arena Pro for advanced trader alerts, unlimited comparison tools, enhanced filters, and 1-year historical performance data. Flexible plans starting from $4.99/month. Limited Founding Member Lifetime access available at $49.99.',
   alternates: {
@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     'Arena pricing',
   ],
   openGraph: {
-    title: 'Pro 会员',
+    title: 'Arena Pro',
     description:
       'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $4.99/month.',
     url: `${BASE_URL}/pricing`,
@@ -27,8 +27,9 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'Pro 会员',
-    description: 'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $4.99/month.',
+    title: 'Arena Pro',
+    description:
+      'Upgrade to Arena Pro — trader alerts, advanced analytics, unlimited comparisons. Starting at $4.99/month.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },
