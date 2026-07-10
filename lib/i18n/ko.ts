@@ -6126,6 +6126,8 @@ const ko = {
   referralStep3: '친구 {count}명이 가입하면 Pro {days}일이 잠금 해제됩니다',
   referralFriendsReferred: '초대한 친구',
   referralRewardUnlocked: '보상 잠금 해제!',
+  referralInviteFriends: '친구 초대',
+  referralReferredCount: '{count}명 초대',
   referralFriendTrialNote: '보너스: 친구가 내 링크로 가입하면 {days}일 Pro 체험을 받습니다.',
   // TODO i18n ja/ko
   referralPromoNote:

@@ -6107,6 +6107,8 @@ const zh = {
   referralStep3: '当 {count} 位好友注册后，即可解锁 {days} 天 Pro',
   referralFriendsReferred: '已邀请好友',
   referralRewardUnlocked: '奖励已解锁！',
+  referralInviteFriends: '邀请好友',
+  referralReferredCount: '已邀请 {count} 人',
   referralFriendTrialNote: '额外福利：好友通过你的链接加入即可获得 {days} 天 Pro 试用。',
   referralPromoNote:
     '限免期间 Pro 已全员免费，你赚取的 Pro 奖励天数会先记入账户，待限免结束后自动生效并顺延，不会作废。',

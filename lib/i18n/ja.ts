@@ -5897,6 +5897,8 @@ const ja = {
   referralStep3: '友達が{count}人登録すると、Proが{days}日間解除されます',
   referralFriendsReferred: '招待した友達',
   referralRewardUnlocked: '特典をゲット！',
+  referralInviteFriends: '友達を招待',
+  referralReferredCount: '{count}人を招待',
   referralFriendTrialNote:
     '特典：友達があなたのリンクから参加すると、{days}日間のProトライアルを獲得できます。',
   // TODO i18n ja/ko

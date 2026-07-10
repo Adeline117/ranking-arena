@@ -6250,6 +6250,8 @@ const en = {
   referralStep3: 'When {count} friends sign up, you unlock {days} days of Pro',
   referralFriendsReferred: 'Friends Referred',
   referralRewardUnlocked: 'Reward unlocked!',
+  referralInviteFriends: 'Invite Friends',
+  referralReferredCount: '{count} referred',
   referralFriendTrialNote:
     'Bonus: your friends get a {days}-day Pro trial when they join via your link.',
   referralPromoNote:
