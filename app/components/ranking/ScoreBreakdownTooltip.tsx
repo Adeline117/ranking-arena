@@ -7,7 +7,15 @@ import type { Trader } from './RankingTable'
 /**
  * 置信度标签配置
  */
-const CONFIDENCE_LABELS: Record<string, { i18nKey: 'scoreConfidencePartial' | 'scoreConfidenceMinimal'; color: string; icon: string; penalty: string }> = {
+const CONFIDENCE_LABELS: Record<
+  string,
+  {
+    i18nKey: 'scoreConfidencePartial' | 'scoreConfidenceMinimal'
+    color: string
+    icon: string
+    penalty: string
+  }
+> = {
   partial: {
     i18nKey: 'scoreConfidencePartial',
     color: tokens.colors.accent.warning,
@@ -41,8 +49,10 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
     if (!show) return
     const handleClickOutside = (e: MouseEvent) => {
       if (
-        ref.current && !ref.current.contains(e.target as Node) &&
-        tooltipRef.current && !tooltipRef.current.contains(e.target as Node)
+        ref.current &&
+        !ref.current.contains(e.target as Node) &&
+        tooltipRef.current &&
+        !tooltipRef.current.contains(e.target as Node)
       ) {
         setShow(false)
       }
@@ -84,20 +94,34 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
     setPositioned(true)
   }, [show])
 
-  if (trader.return_score == null && trader.pnl_score == null && trader.drawdown_score == null && trader.stability_score == null) {
+  // v4: gate on the flagship sub-scores (profitability/risk/execution). Fall back
+  // to arena_score so the breakdown still shows when only the composite is present.
+  if (
+    trader.profitability_score == null &&
+    trader.risk_control_score == null &&
+    trader.execution_score == null &&
+    trader.arena_score == null
+  ) {
     return null
   }
 
+  // Raw metric formatters for the dimension inputs shown under the sub-scores.
+  const fmtPct = (v: number | null | undefined) =>
+    v == null ? '—' : `${v > 0 ? '+' : ''}${v.toFixed(1)}%`
+  const fmtUsd = (v: number | null | undefined) =>
+    v == null ? '—' : `${v < 0 ? '-' : ''}$${Math.abs(Math.round(v)).toLocaleString('en-US')}`
+  const fmtNum = (v: number | null | undefined) => (v == null ? '—' : v.toFixed(2))
+
   // Derive confidence from data if API didn't provide it
   // Use == null instead of falsy check: win_rate=0 and max_drawdown=0 are valid values
-  const confidence = trader.score_confidence ?? (
-    (trader.win_rate == null) && (trader.max_drawdown == null) ? 'minimal' :
-    (trader.win_rate == null) || (trader.max_drawdown == null) ? 'partial' :
-    'full'
-  )
-  const confidenceInfo = confidence !== 'full'
-    ? CONFIDENCE_LABELS[confidence]
-    : null
+  const confidence =
+    trader.score_confidence ??
+    (trader.win_rate == null && trader.max_drawdown == null
+      ? 'minimal'
+      : trader.win_rate == null || trader.max_drawdown == null
+        ? 'partial'
+        : 'full')
+  const confidenceInfo = confidence !== 'full' ? CONFIDENCE_LABELS[confidence] : null
 
   // Tooltip content rendered via portal to escape overflow:hidden + backdropFilter
   // containers (e.g. ranking table glass card) that break position:fixed
@@ -122,18 +146,48 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
         pointerEvents: 'none',
       }}
     >
+      {/* v4 (2026-07): flagship dimensions are 盈利 / 风控 / 一致性 (each 0-100
+          percentile), NOT the retired V3 ReturnScore/PnlScore/70-15-8-7 scale. */}
       <div style={{ fontWeight: 700, marginBottom: 2, color: tokens.colors.text.primary }}>
         {t('scoreBreakdownLabel')}
       </div>
-      <div>{t('scoreReturn')}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.return_score?.toFixed(1) ?? '—'}</span>/70</div>
-      <div>{t('scorePnlLabel')}: <span style={{ color: tokens.colors.accent.success, fontWeight: 700 }}>{trader.pnl_score?.toFixed(1) ?? '—'}</span>/15</div>
       <div>
-        {t('scoreDrawdown')}: <span style={{ color: tokens.colors.accent.warning, fontWeight: 700 }}>{trader.drawdown_score?.toFixed(1) ?? '—'}</span>/8
-        {!trader.max_drawdown && <span style={{ opacity: 0.6, fontSize: tokens.typography.fontSize.xs }}> *</span>}
+        {t('scoreProfit')}:{' '}
+        <span style={{ color: 'var(--color-score-profitability)', fontWeight: 700 }}>
+          {trader.profitability_score?.toFixed(0) ?? '—'}
+        </span>
+        /100
       </div>
       <div>
-        {t('scoreStability')}: <span style={{ color: tokens.colors.accent.primary, fontWeight: 700 }}>{trader.stability_score?.toFixed(1) ?? '—'}</span>/7
-        {!trader.win_rate && <span style={{ opacity: 0.6, fontSize: tokens.typography.fontSize.xs }}> *</span>}
+        {t('scoreRisk')}:{' '}
+        <span style={{ color: 'var(--color-score-risk)', fontWeight: 700 }}>
+          {trader.risk_control_score?.toFixed(0) ?? '—'}
+        </span>
+        /100
+      </div>
+      <div>
+        {t('scoreExecution')}:{' '}
+        <span style={{ color: 'var(--color-score-execution)', fontWeight: 700 }}>
+          {trader.execution_score?.toFixed(0) ?? '—'}
+        </span>
+        /100
+      </div>
+      {/* The real dimension inputs behind the sub-scores */}
+      <div
+        style={{
+          marginTop: 4,
+          paddingTop: 4,
+          borderTop: `1px solid ${tokens.colors.border.primary}`,
+          color: tokens.colors.text.tertiary,
+          fontSize: tokens.typography.fontSize.xs,
+          whiteSpace: 'normal',
+          maxWidth: 240,
+          lineHeight: 1.7,
+        }}
+      >
+        {t('roi')} {fmtPct(trader.roi)} · {t('pnl')} {fmtUsd(trader.pnl)} · {t('scoreDrawdown')}{' '}
+        {fmtPct(trader.max_drawdown != null ? -Math.abs(trader.max_drawdown) : null)} · Sharpe{' '}
+        {fmtNum(trader.sharpe_ratio)} · {t('winRate')} {fmtPct(trader.win_rate)}
       </div>
       {confidenceInfo && (
         <div
@@ -149,12 +203,21 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
         >
           {t(confidenceInfo.i18nKey)}
           {/* Show which fields are missing */}
-          <div style={{ marginTop: 2, opacity: 0.8, fontSize: tokens.typography.fontSize.xs, color: tokens.colors.text.tertiary }}>
+          <div
+            style={{
+              marginTop: 2,
+              opacity: 0.8,
+              fontSize: tokens.typography.fontSize.xs,
+              color: tokens.colors.text.tertiary,
+            }}
+          >
             {t('scoreConfidenceMissing')}
             {[
               trader.win_rate == null && t('scoreConfidenceWinRate'),
               trader.max_drawdown == null && t('scoreConfidenceDrawdown'),
-            ].filter(Boolean).join(', ')}
+            ]
+              .filter(Boolean)
+              .join(', ')}
           </div>
         </div>
       )}
@@ -168,12 +231,34 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
       role="button"
       tabIndex={0}
       aria-label={t('scoreBreakdownLabel')}
-      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setShow(s => !s) }}
-      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShow(s => !s) } }}
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        setShow((s) => !s)
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          setShow((s) => !s)
+        }
+      }}
       onMouseEnter={() => setShow(true)}
       onMouseLeave={() => setShow(false)}
     >
-      <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true" style={{ opacity: confidenceInfo ? 0.8 : 0.5, cursor: 'pointer', color: confidenceInfo ? confidenceInfo.color : 'currentColor' }}>
+      <svg
+        width={12}
+        height={12}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        aria-hidden="true"
+        style={{
+          opacity: confidenceInfo ? 0.8 : 0.5,
+          cursor: 'pointer',
+          color: confidenceInfo ? confidenceInfo.color : 'currentColor',
+        }}
+      >
         <circle cx="12" cy="12" r="10" />
         <path d="M12 16v-4M12 8h.01" strokeLinecap="round" />
       </svg>
