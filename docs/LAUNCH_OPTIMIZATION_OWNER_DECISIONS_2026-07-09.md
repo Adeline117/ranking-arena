@@ -13,6 +13,22 @@
 | **[承载] Upstash 放大**                        | 每 `/api/*` 现 2 次 Upstash 调用(我加的 IP floor + 分层限流);Upstash 自身饱和时**全部限流 fail-open** → 空投峰值最可能先崩的就是 Upstash,一崩全放行灌 DB                    | Upstash 提额 **或** 把 IP floor 挪到 Cloudflare 边缘(anti-hammer 底线不该依赖会饱和的东西)        |
 | **[承载] 读副本休眠**                          | `SUPABASE_READ_REPLICA_URL` 在 `.env.production`/`.vercel.production`/`.example`/`.local` **全未设** → `getReadReplica()` 永远回主库,~11 个"已卸载"热读路由全打主库、零卸载 | 开 Supabase 读副本($)+ 设 env。代码路由已就位,配好即生效                                          |
 
+## ★ 评分跨板公平性 —— 缺 execution 支柱的板可只凭 2 支柱冲到 ~99(需你拍方法学)
+
+**实测生产(2026-07-10)**:served `arena_score` 已 = v4(29030/31952 行,UI 解释与值一致 ✓,
+非新不一致)。但 **execution_score(一致性支柱)在无 trades_count 的板恒 null** —— 跨 15+ 源:
+`okx_web3_solana` 6154 行中 1927 null(max 99.8)、`hyperliquid` 1416 null(max 100)、`bybit_mt5`
+588、`gate_cfd` 553…。v4 里一致性权重仅 10%,缺失时**不惩罚**,故链上/无成交板交易员可只凭
+盈利+风控两支柱冲到 ~99,而全数据 CEX 交易员按三支柱评。**这是跨板可比性/信任问题**(空投级
+到访会拿链上 100 分号和 CEX 90 分号直接比)。
+
+- **显示层已优雅**:三支柱条 null 时**隐藏**该条(ScoreBreakdown.tsx:161),非显 0/坏条;雷达图
+  该轴回落 0(极轻微)。所以不是"看着像 bug",是**方法学是否公平**的实质问题。
+- **需你拍**:缺 execution 时(a)维持现状(不惩罚,earnings-heavy 本就你定的方向)、(b)按缺失
+  支柱降权/标注"数据有限"、(c)对无成交板用替代一致性代理(如链上持仓周期方差)。**改评分=重排
+  全站,最高风险,不自主动。** 另:8 个板(bots/mt5/cfd/web3)走独立 compute 路径,arena_score_v4
+  影子列未写(纯内部审计列,无 UI 读,无用户影响),可顺带在切换时对齐。
+
 ## ★ 加密模块统一(per-user 密钥)—— 需你批一次凭据重加密迁移
 
 本轮已修**正确性**根因(verify-ownership 格式错配 + sync 密码列错位,见下"已完成"),
