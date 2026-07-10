@@ -166,14 +166,6 @@
     {
       "path": "/api/cron/compute-leaderboard-watchdog",
       "schedule": "21,51 * * * *"
-    },
-    {
-      "path": "/api/cron/auto-post-market-summary",
-      "schedule": "5 10 * * *"
-    },
-    {
-      "path": "/api/cron/auto-post-weekly-recap",
-      "schedule": "10 9 * * 1"
     }
   ],
   "headers": [
