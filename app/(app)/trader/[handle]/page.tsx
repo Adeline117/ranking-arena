@@ -251,6 +251,26 @@ const cachedCapabilities = async () => {
   }
 }
 
+// Per-timeframe Arena Score sub-scores + trading style for the serving path.
+// The serving three-tab data (arena_core_modules) carries raw stats only —
+// ScoreBreakdownSection and the header style tag were EMPTY in serving mode
+// (2026-07-09 audit) even though leaderboard_ranks has all these columns.
+const cachedServingScores = unstable_cache(
+  async (platform: string, traderKey: string) => {
+    const { data } = await getReadReplica()
+      .from('leaderboard_ranks')
+      .select(
+        'season_id, arena_score, arena_score_v3, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, style_confidence, avg_holding_hours'
+      )
+      .eq(LR.source, platform)
+      .eq(LR.source_trader_id, traderKey)
+      .in(LR.season_id, ['7D', '30D', '90D'])
+    return data ?? []
+  },
+  ['trader-serving-scores'],
+  { revalidate: 300, tags: ['trader-profile'] }
+)
+
 // Cached leaderboard query for OG metadata.
 // Avoids a duplicate DB query between generateMetadata and the page render.
 const cachedLeaderboardMeta = unstable_cache(
@@ -621,6 +641,12 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // Fix: compute it once here server-side (fetchSimilarTraders is Redis-cached,
     // 15min warm) using the 90d board score/roi, map to the OverviewTab shape
     // (same shape as bridge.ts:203), and thread it down as serverSimilarTraders.
+    // Per-TF sub-scores + style for ScoreBreakdown/header (best-effort, 2s cap).
+    const servingScores = await Promise.race([
+      cachedServingScores(servingResolved.source, servingResolved.exchangeTraderId).catch(() => []),
+      new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 2_000)),
+    ])
+
     const similarScoreExtra = best?.extras.arena_score
     const similarArenaScore = typeof similarScoreExtra === 'number' ? similarScoreExtra : null
     const serverSimilarTraders = (
@@ -675,6 +701,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
             servingFirstScreen={firstScreen}
             servingCapability={capabilities[servingResolved.source] ?? null}
             serverSimilarTraders={serverSimilarTraders}
+            servingScores={servingScores}
           />
         </ErrorBoundary>
       </>
