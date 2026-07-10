@@ -3,14 +3,35 @@ import Link from 'next/link'
 import { ARTICLES, pickLocalized } from './articles'
 import PageHeader from '@/app/components/ui/PageHeader'
 import { getServerTranslation } from '@/lib/i18n/server'
+import { BASE_URL } from '@/lib/constants/urls'
 import LearnFilter from './LearnFilter'
 
 export const revalidate = 3600
 
+const LEARN_DESCRIPTION =
+  'Learn how Arena scores traders, how rankings work, and how to read risk metrics like drawdown, Sharpe ratio, and win rate.'
+const LEARN_OG_IMAGE = `${BASE_URL}/api/og?title=${encodeURIComponent('Learn')}&subtitle=${encodeURIComponent('Arena Learn')}`
+
 export const metadata: Metadata = {
   title: 'Learn',
-  description:
-    'Learn how Arena scores traders, how rankings work, and how to read risk metrics like drawdown, Sharpe ratio, and win rate.',
+  description: LEARN_DESCRIPTION,
+  alternates: { canonical: `${BASE_URL}/learn` },
+  openGraph: {
+    title: 'Learn | Arena',
+    description: LEARN_DESCRIPTION,
+    url: `${BASE_URL}/learn`,
+    siteName: 'Arena',
+    type: 'website',
+    images: [{ url: LEARN_OG_IMAGE, width: 1200, height: 630, alt: 'Arena Learn' }],
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Learn | Arena',
+    description: LEARN_DESCRIPTION,
+    images: [LEARN_OG_IMAGE],
+    creator: '@arenafi',
+    site: '@arenafi',
+  },
 }
 
 // Lightweight topic taxonomy for client-side filtering chips.
