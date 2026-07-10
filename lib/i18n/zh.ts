@@ -516,6 +516,7 @@ const zh = {
   pricingTitle: '升级 Pro 会员',
   pricingSubtitle: '解锁全部高级功能',
   pricingTrialBadge: 'Pro 月付和年付享 7 天免费试用，随时取消',
+  pricingPromoNote: '限时活动:Pro 功能当前全员免费。现在订阅可锁定此价格,并支持 Arena 的发展。',
   pricingFoundingBanner: '创始会员优惠：终身 Pro 仅 ${price}（仅限 {spots} 个名额）',
   pricingTrustSecureCheckout: 'Stripe 安全结账',
   pricingTrustMoneyBack: '7 天退款保证',

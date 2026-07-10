@@ -524,6 +524,8 @@ const en = {
   pricingTitle: 'Upgrade to Pro',
   pricingSubtitle: 'Unlock all premium features',
   pricingTrialBadge: '7-day free trial on Pro monthly & yearly. Cancel anytime.',
+  pricingPromoNote:
+    'All Pro features are currently free for everyone. Subscribing now locks in this price and supports Arena.',
   pricingFoundingBanner: 'Founding Member Offer: Lifetime Pro for ${price} ({spots} spots only)',
   pricingTrustSecureCheckout: 'Secure checkout by Stripe',
   pricingTrustMoneyBack: '7-day money-back guarantee',

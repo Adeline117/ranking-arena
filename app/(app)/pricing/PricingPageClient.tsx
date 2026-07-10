@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
 import Link from 'next/link'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { tokens, alpha } from '@/lib/design-tokens'
@@ -254,6 +255,33 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           )}
         </div>
 
+        {/* 促销期提示(2026-07-10 owner 拍板):顶栏喊「Pro 全免费」而本页推
+            付费,同屏矛盾——促销开着时明说「现在免费,买=锁定价格支持我们」。
+            PRO_FREE_PROMO=false 自动消失。 */}
+        {PRO_FREE_PROMO && (
+          <div
+            style={{
+              maxWidth: 560,
+              margin: '0 auto',
+              marginBottom: tokens.spacing[4],
+              padding: '10px 16px',
+              borderRadius: 12,
+              background: 'var(--color-accent-success-12)',
+              border: '1px solid var(--color-accent-success-20)',
+              color: 'var(--color-accent-success)',
+              fontSize: 13,
+              fontWeight: 600,
+              textAlign: 'center',
+            }}
+          >
+            {resolved(
+              t('pricingPromoNote'),
+              'pricingPromoNote',
+              'All Pro features are currently free for everyone. Subscribing now locks in this price and supports Arena.'
+            )}
+          </div>
+        )}
+
         {/* Founding member urgency banner */}
         <div
           style={{
@@ -301,7 +329,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
         >
           {[
             {
-              value: '32+',
+              value: '45+',
               label: resolved(
                 t('pricingStatExchangesTracked'),
                 'pricingStatExchangesTracked',
