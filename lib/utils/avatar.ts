@@ -587,6 +587,9 @@ const LOGO_SLUG_ALIAS: Record<string, string> = {
   binance_web3: 'binance',
   okx_web3: 'okx',
   bitget_bots: 'bitget',
+  // serving 名 'gateio' 无下划线,prefix 派生出不存在的 gateio.png(首页
+  // 404,UI 走查 2026-07-10);磁盘文件是 gate.png。
+  gateio: 'gate',
 }
 
 export function getExchangeLogoUrl(source: string): string {
