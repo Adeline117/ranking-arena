@@ -15,6 +15,7 @@ import SystemMetrics from './components/SystemMetrics'
 import MetricsTrends from './components/MetricsTrends'
 import EnrichmentCompleteness from './components/EnrichmentCompleteness'
 import ArenaPipelinePanel from './components/ArenaPipelinePanel'
+import BackfillPanel from './components/BackfillPanel'
 
 interface SchedulerData {
   enabled: boolean
@@ -246,6 +247,9 @@ export default function MonitoringPage() {
 
             {/* Arena Ingest Pipeline (new pipeline, per-source gate health) */}
             <ArenaPipelinePanel accessToken={accessToken!} />
+
+            {/* Series-backfill 进度(游标/带宽 + 最低覆盖率指标, 2026-07-09) */}
+            <BackfillPanel accessToken={accessToken!} />
 
             {/* Scheduler Metrics */}
             <SchedulerMetrics data={data.scheduler} />
