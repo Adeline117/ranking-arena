@@ -643,7 +643,13 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // (same shape as bridge.ts:203), and thread it down as serverSimilarTraders.
     // Per-TF sub-scores + style for ScoreBreakdown/header (best-effort, 2s cap).
     const servingScores = await Promise.race([
-      cachedServingScores(servingResolved.source, servingResolved.exchangeTraderId).catch(() => []),
+      cachedServingScores(servingResolved.source, servingResolved.exchangeTraderId).catch((e) => {
+        logger.warn('[trader/page] cachedServingScores failed', {
+          source: servingResolved.source,
+          error: String(e),
+        })
+        return []
+      }),
       new Promise<never[]>((resolve) => setTimeout(() => resolve([]), 2_000)),
     ])
 
@@ -656,7 +662,13 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
         servingResolved.exchangeTraderId,
         similarArenaScore,
         servingTraderData.roi ?? null
-      ).catch(() => [])
+      ).catch((e) => {
+        logger.warn('[trader/page] fetchSimilarTraders failed', {
+          source: servingResolved.source,
+          error: String(e),
+        })
+        return []
+      })
     ).map((st) => ({
       handle: st.handle || st.traderKey,
       id: st.traderKey,
