@@ -61,7 +61,10 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
   const leaders = raw.filter((l) => {
     const roi = Number(l.roi)
     const pnlV = Number(l.pnl?.value)
-    return Number.isFinite(roi) && Math.abs(roi) < 9999 && Number.isFinite(pnlV) && pnlV >= 500
+    if (!Number.isFinite(roi) || !Number.isFinite(pnlV)) return false
+    // roi==pnl 完全相等 = validate-before-write 的 roi_equals_pnl 已知垃圾模式
+    if (Math.abs(roi - pnlV) < 0.01) return false
+    return Math.abs(roi) < 9999 && pnlV >= 500
   })
   if (leaders.length < 3) {
     return { count: 0, skipped: true, reason: `only ${leaders.length} credible leaders` }
@@ -70,14 +73,20 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
   const lines = leaders
     .slice(0, 5)
     .map((l, i) => {
-      const name = l.nickname || l.traderKey?.slice(0, 10) || 'Trader'
+      // 匿名钱包用「交易所 #名次」代替千篇一律的 'Trader';此时不再重复
+      // 括号里的交易所名
+      const exchange = l.exchangeName ?? l.source ?? '—'
+      const named = l.nickname || l.traderKey?.slice(0, 10)
+      const display = named
+        ? `**${named}** (${exchange})`
+        : `**${exchange}${l.sourceRank != null ? ` #${l.sourceRank}` : ''}**`
       const medal = ['🥇', '🥈', '🥉', '4.', '5.'][i]
       const pnlV = l.pnl?.value
       const pnlStr =
         pnlV != null && Number.isFinite(Number(pnlV))
           ? ` · PnL $${Math.round(Number(pnlV)).toLocaleString('en-US')}`
           : ''
-      return `${medal} **${name}** (${l.exchangeName ?? l.source ?? '—'}) — ROI ${fmtRoi(l.roi)}${pnlStr}`
+      return `${medal} ${display} — ROI ${fmtRoi(l.roi)}${pnlStr}`
     })
     .join('\n')
 
