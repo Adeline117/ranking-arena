@@ -15,7 +15,7 @@ interface ReferralData {
 }
 
 export default function ReferralCard() {
-  const { language, t } = useLanguage()
+  const { t } = useLanguage()
   const { userId, getAuthHeadersAsync } = useAuthSession()
   const [data, setData] = useState<ReferralData | null>(null)
   const [loading, setLoading] = useState(true)
@@ -109,13 +109,7 @@ export default function ReferralCard() {
           marginBottom: tokens.spacing[1],
         }}
       >
-        {language === 'zh'
-          ? '邀请好友'
-          : language === 'ja'
-            ? '友達を招待'
-            : language === 'ko'
-              ? '친구 초대'
-              : 'Invite Friends'}
+        {t('referralInviteFriends')}
       </h3>
       <p
         style={{
@@ -169,13 +163,7 @@ export default function ReferralCard() {
                 transition: `all ${tokens.transition.base}`,
               }}
             >
-              {copied
-                ? language === 'zh'
-                  ? '已复制'
-                  : 'Copied!'
-                : language === 'zh'
-                  ? '复制'
-                  : 'Copy'}
+              {copied ? t('copiedToClipboard') : t('copy')}
             </button>
           </div>
         </div>
@@ -196,13 +184,7 @@ export default function ReferralCard() {
             opacity: generating ? 0.7 : 1,
           }}
         >
-          {generating
-            ? language === 'zh'
-              ? '生成中...'
-              : 'Generating...'
-            : language === 'zh'
-              ? '生成邀请链接'
-              : 'Generate Referral Link'}
+          {generating ? t('referralGenerating') : t('referralGenerate')}
         </button>
       )}
 
@@ -222,9 +204,7 @@ export default function ReferralCard() {
                 color: tokens.colors.text.secondary,
               }}
             >
-              {language === 'zh'
-                ? `已邀请 ${data.referral_count} 人`
-                : `${data.referral_count} referred`}
+              {t('referralReferredCount').replace('{count}', String(data.referral_count))}
             </span>
             <span
               style={{
@@ -236,9 +216,7 @@ export default function ReferralCard() {
               }}
             >
               {rewardEarned
-                ? language === 'zh'
-                  ? '奖励已解锁!'
-                  : 'Reward unlocked!'
+                ? t('referralRewardUnlocked')
                 : `${data.referral_count}/${REFERRAL_REWARD_THRESHOLD}`}
             </span>
           </div>
