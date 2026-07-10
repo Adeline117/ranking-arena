@@ -52,7 +52,9 @@ async function main() {
          JOIN arena.traders t ON t.id = ts.trader_id
          JOIN arena.sources s ON s.id = t.source_id
          LEFT JOIN public.leaderboard_ranks lr
-                ON lr.source = s.slug AND lr.source_trader_id = t.exchange_trader_id
+                -- serving 的 BSC slug 是 legacy 名 binance_web3(≠ arena slug)
+                ON (lr.source = s.slug OR lr.source = s.meta->>'legacy_platform')
+               AND lr.source_trader_id = t.exchange_trader_id
                AND lr.season_id = '90D'
         WHERE s.slug = $1 AND ts.timeframe = 90 AND ts.pnl IS NOT NULL
           AND (NOT ts.extras ? 'onchain_enriched_at'

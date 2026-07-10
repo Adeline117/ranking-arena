@@ -16,6 +16,7 @@ import MetricsTrends from './components/MetricsTrends'
 import EnrichmentCompleteness from './components/EnrichmentCompleteness'
 import ArenaPipelinePanel from './components/ArenaPipelinePanel'
 import BackfillPanel from './components/BackfillPanel'
+import TrustScorecardPanel from './components/TrustScorecardPanel'
 
 interface SchedulerData {
   enabled: boolean
@@ -250,6 +251,7 @@ export default function MonitoringPage() {
 
             {/* Series-backfill 进度(游标/带宽 + 最低覆盖率指标, 2026-07-09) */}
             <BackfillPanel accessToken={accessToken!} />
+            <TrustScorecardPanel accessToken={accessToken!} />
 
             {/* Scheduler Metrics */}
             <SchedulerMetrics data={data.scheduler} />
