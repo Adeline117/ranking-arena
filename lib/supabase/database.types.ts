@@ -7722,6 +7722,7 @@ export type Database = {
           source: string
         }[]
       }
+      arena_backfill_panel: { Args: never; Returns: Json }
       arena_bot_header: {
         Args: { p_source: string; p_trader_key: string }
         Returns: Json
