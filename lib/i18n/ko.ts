@@ -5428,6 +5428,7 @@ const ko = {
   perYearShort: '년',
   pricingSpotsTaken: '{taken} / {total} 자리 마감',
   pricingSpotsRemaining: '{count}자리 남음',
+  pricingSpotsLimited: '창립 멤버 자리 한정 · 총 {total}석',
   avgLeverageTooltip:
     '현재 오픈 포지션의 평균 레버리지입니다. 레버리지가 높을수록 리스크가 큽니다.',
   longShort: '롱/숏',

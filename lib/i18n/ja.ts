@@ -5190,6 +5190,7 @@ const ja = {
   perYearShort: '年',
   pricingSpotsTaken: '{taken} / {total} 枠が埋まりました',
   pricingSpotsRemaining: '残り {count}',
+  pricingSpotsLimited: '創設メンバー枠は数量限定 · 全 {total} 枠',
   avgLeverageTooltip:
     '現在のオープンポジション全体の平均レバレッジ。レバレッジが高いほどリスクが高くなります。',
   longShort: 'ロング/ショート',
