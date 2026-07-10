@@ -13,7 +13,7 @@
  *           NEVER 5xx (spec §2.4 graceful degradation).
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, after } from 'next/server'
 import { z } from 'zod'
 import { withPublic } from '@/lib/api/middleware'
 import { ApiError } from '@/lib/api/errors'
@@ -78,8 +78,12 @@ export async function GET(
       }
 
       // Stale hit — render immediately, refresh in the background (§2.4).
+      // after() guarantees the enqueue runs after the response flushes:
+      // a bare `void requestTierC(...)` could be dropped when Vercel freezes
+      // the lambda before the BullMQ enqueue flushes → the background chart/
+      // stats refresh silently never fires (the ~99%-empty-chart bug).
       if (warm) {
-        void requestTierC(tierCReq, { fireAndForget: true })
+        after(() => requestTierC(tierCReq, { fireAndForget: true }))
         return apiSuccess<TraderCoreResponse>({ ...warm, cacheState: 'pending' }, 200, {
           'Cache-Control': 'no-store',
         })
