@@ -303,6 +303,23 @@ async function fetchFromLeaderboard(
   // Fail-open + cached (getOrSetWithLock ttl 300) → one indexed RPC per cache fill.
   dedupedTraders = await attachAvatarMirrors(supabase, dedupedTraders)
 
+  // Verified (claimed) badge (P3-P3, 2026-07-09): verified_traders is tiny
+  // (manual owner review), so one full fetch per request marks the page's
+  // rows. Fail-open — a query error just means no badges this response.
+  try {
+    const { data: verifiedRows } = await supabase
+      .from('verified_traders')
+      .select('trader_id, source')
+    if (verifiedRows?.length) {
+      const verifiedKeys = new Set(verifiedRows.map((v) => `${v.source}|${v.trader_id}`))
+      dedupedTraders = dedupedTraders.map((t) =>
+        verifiedKeys.has(`${t.source}|${t.id}`) ? { ...t, is_verified: true } : t
+      )
+    }
+  } catch {
+    /* fail-open: badge is cosmetic */
+  }
+
   // Next cursor
   const lastTrader = dedupedTraders[dedupedTraders.length - 1]
   const nextCursor = lastTrader ? lastTrader.rank : null
