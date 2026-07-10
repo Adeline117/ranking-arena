@@ -52,6 +52,12 @@ jest.mock('../queues', () => ({
   fastLaneEnabled: () => true,
 }))
 
+// first-party scheduler pass queries trader_authorizations via the ingest
+// pool — mock it so tests never open a real DB connection (it HANGS jest).
+jest.mock('@/lib/ingest/db', () => ({
+  getIngestPool: () => ({ query: jest.fn().mockResolvedValue({ rows: [] }) }),
+}))
+
 jest.mock('@/lib/ingest/sources', () => ({
   getActiveSources: jest.fn().mockResolvedValue([
     {

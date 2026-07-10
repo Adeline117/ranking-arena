@@ -51,6 +51,7 @@ const PRIORITY_BY_PREFIX: Record<string, number> = {
   tiera: 1,
   derive: 2,
   tierd: 3,
+  fp: 4, // first-party sync (claimed traders — user-facing freshness)
   tierb: 6,
   tierbs: 9,
 }
@@ -140,6 +141,35 @@ export async function reconcileSchedulers(): Promise<void> {
   for (const s of STATIC_SCHEDULERS) {
     wanted.set(s.id, regionQueueName('local'))
     await localQueue.upsertJobScheduler(s.id, { every: s.everyMs }, { name: s.name, data: {} })
+  }
+
+  // First-party sync schedulers (认领交易员 P1, 2026-07-09): one per ACTIVE
+  // trader_authorizations row, every 15 min, on the local bulk queue —
+  // geo-blocked exchanges go through the HTTP proxy (node-agnostic). Revoked/
+  // error rows fall out of `wanted` and the cleanup pass below removes their
+  // schedulers. Fail-soft: a query error here must not abort the reconcile.
+  try {
+    const { rows: fpAuths } = await (await import('@/lib/ingest/db'))
+      .getIngestPool()
+      .query<{ id: string }>(`SELECT id FROM public.trader_authorizations WHERE status = 'active'`)
+    for (const a of fpAuths) {
+      const key = `fp:${a.id}`
+      wanted.set(key, regionQueueName('local'))
+      await localQueue.upsertJobScheduler(
+        key,
+        { every: 15 * 60_000 },
+        {
+          name: INGEST_JOB.FIRST_PARTY,
+          data: { authorizationId: a.id },
+          opts: { priority: 4 },
+        }
+      )
+    }
+  } catch (err) {
+    console.warn(
+      '[ingest-scheduler] first-party scheduler pass failed (non-fatal):',
+      err instanceof Error ? err.message : err
+    )
   }
 
   // Remove stale schedulers + REVIVE stuck ones across every region queue.

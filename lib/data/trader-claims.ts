@@ -412,6 +412,20 @@ export async function activateClaim(supabase: SupabaseClient, claim: TraderClaim
     }
   }
 
+  // arena claimed 标（P1 第一方管道）：打上后 worker 的 15min reconcile 会为
+  // active authorization 建 fp: 调度器,首个 first-party sync 随之启动;
+  // score_inputs view 的第一方分支在数据新鲜后自动接管排名输入。
+  // 交易员不存在则 RPC 内部 upsert（多账号小号可能从未上榜）。
+  const { error: claimedError } = await supabase.rpc('arena_set_trader_claimed', {
+    p_platform: source,
+    p_trader_key: trader_id,
+    p_user_id: user_id,
+    p_claimed: true,
+  })
+  if (claimedError) {
+    logger.error('[trader-claims] activateClaim: arena_set_trader_claimed 失败', claimedError)
+  }
+
   // 站内通知申请人（fire-and-forget）
   sendNotification(
     supabase,
