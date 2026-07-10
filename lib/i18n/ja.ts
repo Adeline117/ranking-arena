@@ -5170,6 +5170,8 @@ const ja = {
   gateBenefitGroupSignals: 'リアルタイムの売買シグナル',
   gateBenefitGroupPriority: '定員グループへの優先参加',
   pricingTrialBadge: 'Pro 月額・年額プランは7日間無料トライアル。いつでもキャンセル可能。',
+  pricingPromoNote:
+    '現在、Pro 機能はどなたでも無料でご利用いただけます。今ご購読いただくとこの価格が固定され、Arena の運営を支援できます。',
   pricingFoundingBanner: '創設メンバー特典：ライフタイム Pro が ${price}（{spots} 名様限定）',
   pricingTrustSecureCheckout: 'Stripe による安全な決済',
   pricingTrustMoneyBack: '7日間返金保証',

@@ -5409,6 +5409,8 @@ const ko = {
   gateBenefitGroupSignals: '실시간 매매 시그널',
   gateBenefitGroupPriority: '정원 마감 그룹 우선 입장',
   pricingTrialBadge: 'Pro 월간 및 연간 플랜은 7일 무료 체험. 언제든지 해지 가능.',
+  pricingPromoNote:
+    '현재 모든 Pro 기능이 무료로 제공됩니다. 지금 구독하면 이 가격이 고정되며 Arena를 후원하실 수 있습니다.',
   pricingFoundingBanner: '창립 멤버 혜택: 라이프타임 Pro ${price} ({spots}자리 한정)',
   pricingTrustSecureCheckout: 'Stripe 안전 결제',
   pricingTrustMoneyBack: '7일 환불 보장',
