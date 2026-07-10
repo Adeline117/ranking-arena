@@ -56,10 +56,15 @@ export async function extractAndSyncHashtags(
     // If upsert returned nothing (all existing), fetch them
     let hashtagRows = upsertedTags || []
     if (hashtagRows.length < tags.length) {
-      const { data: existingTags } = await supabase
+      const { data: existingTags, error: existingTagsError } = await supabase
         .from('hashtags')
         .select('id, tag')
         .in('tag', tags)
+      if (existingTagsError)
+        logger.warn(
+          '[extractAndSyncHashtags] hashtags query error (drift?):',
+          existingTagsError.message
+        )
       hashtagRows = existingTags || []
     }
 
@@ -91,10 +96,15 @@ export async function extractAndSyncHashtags(
     })
     if (countError) {
       // Fallback: single IN-based read + single batch upsert
-      const { data: counts } = await supabase
+      const { data: counts, error: countsError } = await supabase
         .from('post_hashtags')
         .select('hashtag_id')
         .in('hashtag_id', hashtagIds)
+      if (countsError)
+        logger.warn(
+          '[extractAndSyncHashtags] post_hashtags count query error (drift?):',
+          countsError.message
+        )
 
       const countMap = new Map<string, number>()
       for (const row of counts || []) {
@@ -146,21 +156,29 @@ export async function getPostsByHashtag(
   const { limit = 20, offset = 0, sort_by = 'created_at' } = options
 
   // First find the hashtag
-  const { data: hashtag } = await supabase
+  const { data: hashtag, error: hashtagError } = await supabase
     .from('hashtags')
     .select('id')
     .eq('tag', tag.toLowerCase())
     .maybeSingle()
+  if (hashtagError)
+    logger.warn('[getPostsByHashtag] hashtags query error (drift?):', hashtagError.message)
 
   if (!hashtag) return { posts: [], total: 0 }
 
   // Get post IDs from join table
   // KEEP 'exact' — powers pagination for the /tag/:name posts listing.
   // Scoped to a single hashtag via (hashtag_id) index → cheap.
-  const { data: joinRows, count } = await supabase
+  const {
+    data: joinRows,
+    count,
+    error: joinRowsError,
+  } = await supabase
     .from('post_hashtags')
     .select('post_id', { count: 'exact' })
     .eq('hashtag_id', hashtag.id)
+  if (joinRowsError)
+    logger.warn('[getPostsByHashtag] post_hashtags query error (drift?):', joinRowsError.message)
 
   if (!joinRows || joinRows.length === 0) return { posts: [], total: 0 }
 
@@ -186,9 +204,11 @@ export async function getPostsByHashtag(
 
   const rows = (posts || []) as Record<string, unknown>[]
   const authorIds = [...new Set(rows.map((p) => p.author_id as string).filter(Boolean))]
-  const { data: profiles } = authorIds.length
+  const { data: profiles, error: profilesError } = authorIds.length
     ? await supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
-    : { data: null }
+    : { data: null, error: null }
+  if (profilesError)
+    logger.warn('[getPostsByHashtag] user_profiles query error (drift?):', profilesError.message)
   const profileById = new Map(
     (profiles || []).map((p: Record<string, unknown>) => [p.id as string, p])
   )

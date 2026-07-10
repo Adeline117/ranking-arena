@@ -19,7 +19,7 @@ export interface LinkedTraderAccount {
   platform: string
   traderKey: string
   handle: string | null
-  label: string | null     // custom user label (e.g. "Main Account")
+  label: string | null // custom user label (e.g. "Main Account")
   isPrimary: boolean
   linkedAt: string
 
@@ -141,12 +141,17 @@ export async function getLinkedTraders(
   const snapshotMap = new Map<string, Record<string, unknown>>()
   await Promise.all(
     [...byPlatform.entries()].map(async ([platform, traderKeys]) => {
-      const { data: snapshots } = await supabase
+      const { data: snapshots, error: snapshotsError } = await supabase
         .from('leaderboard_ranks')
         .select('source, source_trader_id, roi, pnl, arena_score, win_rate, max_drawdown, rank')
         .eq('source', platform)
         .in('source_trader_id', traderKeys)
         .eq('season_id', '90D')
+      if (snapshotsError)
+        logger.warn(
+          '[getLinkedTraders] leaderboard_ranks query error (drift?):',
+          snapshotsError.message
+        )
 
       if (snapshots) {
         for (const s of snapshots) {
@@ -224,9 +229,8 @@ export async function getAggregatedStats(
     }
   }
 
-  const weightedScore = weightedScoreDenominator > 0
-    ? weightedScoreNumerator / weightedScoreDenominator
-    : 0
+  const weightedScore =
+    weightedScoreDenominator > 0 ? weightedScoreNumerator / weightedScoreDenominator : 0
 
   const result: AggregatedStats = {
     combinedPnl,
@@ -253,24 +257,27 @@ export async function findUserByTrader(
 ): Promise<string | null> {
   // Try user_linked_traders first
   // Columns: source (not platform), trader_id (not trader_key)
-  const { data: ult } = await supabase
+  const { data: ult, error: ultError } = await supabase
     .from('user_linked_traders')
     .select('user_id')
     .eq('source', platform)
     .eq('trader_id', traderKey)
     .limit(1)
     .maybeSingle()
+  if (ultError)
+    logger.warn('[findUserByTrader] user_linked_traders query error (drift?):', ultError.message)
 
   if (ult?.user_id) return String(ult.user_id)
 
   // Fallback to trader_links
-  const { data: tl } = await supabase
+  const { data: tl, error: tlError } = await supabase
     .from('trader_links')
     .select('user_id')
     .eq('source', platform)
     .eq('trader_id', traderKey)
     .limit(1)
     .maybeSingle()
+  if (tlError) logger.warn('[findUserByTrader] trader_links query error (drift?):', tlError.message)
 
   if (tl?.user_id) return String(tl.user_id)
 

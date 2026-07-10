@@ -53,7 +53,7 @@ export async function getTraderByHandle(handle: string): Promise<DataResult<Trad
             const profileHandle = source.handle || source.source_trader_id
             const decodedHandle = decodeURIComponent(handle)
 
-            const { data } = await supabase
+            const { data, error } = await supabase
               .from('user_profiles')
               .select('id, bio, avatar_url, cover_url')
               .or(
@@ -61,6 +61,11 @@ export async function getTraderByHandle(handle: string): Promise<DataResult<Trad
               )
               .limit(1)
               .maybeSingle()
+            if (error)
+              createLogger('trader-data').warn(
+                '[getTraderByHandle] user_profiles query error (drift?):',
+                error.message
+              )
 
             return data
           })(),
@@ -110,12 +115,17 @@ export async function getTraderPerformance(
 
         // Migrated off retiring trader_latest → leaderboard_ranks (per-season,
         // source/season_id; roi/pnl aliased from roi_pct/pnl_usd).
-        const { data: allSnapshots } = await supabase
+        const { data: allSnapshots, error: allSnapshotsError } = await supabase
           .from('leaderboard_ranks')
           .select('season_id, roi, pnl, win_rate, max_drawdown')
           .eq('source', source.source)
           .eq('source_trader_id', source.source_trader_id)
           .in('season_id', ['7D', '30D', '90D'])
+        if (allSnapshotsError)
+          createLogger('trader-data').warn(
+            '[getTraderPerformance] leaderboard_ranks query error (drift?):',
+            allSnapshotsError.message
+          )
 
         // Map by season (leaderboard_ranks has 1 row per season)
         const byWindow = new Map<
@@ -211,7 +221,7 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
           profitable_pct: number | null
         }> = []
         {
-          const { data: ftRows } = await supabase
+          const { data: ftRows, error: ftRowsError } = await supabase
             .from('trader_frequently_traded')
             .select(
               'symbol, weight_pct, trade_count, avg_profit, avg_loss, profitable_pct, captured_at'
@@ -220,6 +230,11 @@ export async function getTraderStats(handle: string): Promise<DataResult<TraderS
             .eq('source_trader_id', source.source_trader_id)
             .order('captured_at', { ascending: false })
             .limit(60)
+          if (ftRowsError)
+            createLogger('trader-data').warn(
+              '[getTraderStats] trader_frequently_traded query error (drift?):',
+              ftRowsError.message
+            )
           if (ftRows && ftRows.length > 0) {
             const latestCapture = ftRows[0].captured_at
             frequentlyTradedData = ftRows
@@ -310,13 +325,18 @@ export async function getTraderFrequentlyTraded(handle: string): Promise<
     // Latest captured batch. Decoupled from retiring trader_latest — fetch recent
     // rows and keep the most recent captured_at group (was joined on
     // trader_latest.updated_at == captured_at).
-    const { data: ftRows } = await supabase
+    const { data: ftRows, error: ftRowsError } = await supabase
       .from('trader_frequently_traded')
       .select('symbol, weight_pct, trade_count, avg_profit, avg_loss, profitable_pct, captured_at')
       .eq('source', source.source)
       .eq('source_trader_id', source.source_trader_id)
       .order('captured_at', { ascending: false })
       .limit(60)
+    if (ftRowsError)
+      createLogger('trader-data').warn(
+        '[getTraderFrequentlyTraded] trader_frequently_traded query error (drift?):',
+        ftRowsError.message
+      )
 
     if (!ftRows || ftRows.length === 0) return success([])
 
@@ -357,13 +377,18 @@ export async function getTraderPortfolio(handle: string): Promise<DataResult<Por
     const source = await findTraderAcrossSources(handle)
     if (!source) return success([])
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('trader_portfolio')
       .select('symbol, direction, weight_pct:invested_pct, entry_price') // trader_portfolio 无 pnl_pct(仅绝对 pnl)
       .eq('source', source.source)
       .eq('source_trader_id', source.source_trader_id)
       .order('captured_at', { ascending: false }) // trader_portfolio 无 updated_at 列(用 captured_at)
       .limit(100)
+    if (error)
+      createLogger('trader-data').warn(
+        '[getTraderPortfolio] trader_portfolio query error (drift?):',
+        error.message
+      )
 
     if (!data) return success([])
 
@@ -403,7 +428,7 @@ export async function getTraderPositionHistory(
     const source = await findTraderAcrossSources(handle, { includeWeb3: false })
     if (!source) return success([])
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('trader_position_history')
       .select('symbol, direction, entry_price, exit_price, pnl_pct, open_time, close_time')
       .eq('source', source.source)
@@ -411,6 +436,11 @@ export async function getTraderPositionHistory(
       .gte('open_time', new Date(Date.now() - 90 * 86400000).toISOString())
       .order('open_time', { ascending: false })
       .limit(50)
+    if (error)
+      createLogger('trader-data').warn(
+        '[getTraderPositionHistory] trader_position_history query error (drift?):',
+        error.message
+      )
 
     if (!data) return success([])
 
@@ -474,7 +504,7 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
       .then(async (userProfileResult) => {
         const userProfile = userProfileResult.data
         if (!userProfile?.id) return [] as unknown[]
-        const { data } = await supabase
+        const { data, error } = await supabase
           .from('reposts')
           .select(
             `
@@ -496,6 +526,11 @@ export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
           .eq('user_id', userProfile.id)
           .order('created_at', { ascending: false })
           .limit(20)
+        if (error)
+          createLogger('trader-data').warn(
+            '[getTraderFeed] reposts query error (drift?):',
+            error.message
+          )
         return (data || []) as unknown[]
       })
 
@@ -563,7 +598,7 @@ export async function getSimilarTraders(
     if (!source) return []
 
     // Get current trader's ROI from leaderboard_ranks
-    const { data: currentLR } = await supabase
+    const { data: currentLR, error: currentLRError } = await supabase
       .from('leaderboard_ranks')
       .select('roi, source_trader_id')
       .eq('source', source.source)
@@ -571,6 +606,11 @@ export async function getSimilarTraders(
       .eq('season_id', '90D')
       .limit(1)
       .maybeSingle()
+    if (currentLRError)
+      createLogger('trader-data').warn(
+        '[getSimilarTraders] leaderboard_ranks query error (drift?):',
+        currentLRError.message
+      )
 
     if (!currentLR) return []
 
@@ -592,7 +632,7 @@ export async function getSimilarTraders(
       .limit(50)
 
     if (!similarRows || similarRows.length === 0) {
-      const { data: fallback } = await supabase
+      const { data: fallback, error: fallbackError } = await supabase
         .from('leaderboard_ranks')
         .select('source_trader_id, roi, handle, avatar_url')
         .eq('source', source.source)
@@ -601,6 +641,11 @@ export async function getSimilarTraders(
         .or('is_outlier.is.null,is_outlier.eq.false')
         .order('roi', { ascending: false })
         .limit(limit)
+      if (fallbackError)
+        createLogger('trader-data').warn(
+          '[getSimilarTraders] leaderboard_ranks fallback query error (drift?):',
+          fallbackError.message
+        )
 
       similarRows = fallback
     }
