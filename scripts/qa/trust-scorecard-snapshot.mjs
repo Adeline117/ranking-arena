@@ -50,11 +50,33 @@ SELECT count(*)::int                                          AS serving_total,
        count(*) FILTER (WHERE is_top500 AND has_series)::int  AS top500_with_series
   FROM joined`
 
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN
+const TELEGRAM_CHAT_ID = process.env.TELEGRAM_ALERT_CHAT_ID
+
+async function sendTelegram(text) {
+  if (!TELEGRAM_BOT_TOKEN || !TELEGRAM_CHAT_ID) {
+    console.log('[telegram skipped]', text)
+    return
+  }
+  await fetch(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ chat_id: TELEGRAM_CHAT_ID, text }),
+  }).catch((e) => console.error('telegram send failed:', e.message))
+}
+
 async function main() {
   const t0 = Date.now()
   const { rows } = await pool.query(COVERAGE_SQL)
   const payload = rows[0]
   const secs = ((Date.now() - t0) / 1000).toFixed(1)
+  // 回归断言:对比昨快照,覆盖净倒退即 Telegram 告警(轮换侵蚀/管道停摆
+  // 不再等人看面板)。首日无基线自然跳过。
+  const { rows: prevRows } = await pool.query(
+    `SELECT payload FROM arena.trust_scorecard_daily
+      WHERE taken_on < current_date ORDER BY taken_on DESC LIMIT 1`
+  )
+  const prev = prevRows[0]?.payload
   await pool.query(
     `INSERT INTO arena.trust_scorecard_daily (taken_on, payload)
      VALUES (current_date, $1::jsonb)
@@ -66,6 +88,19 @@ async function main() {
   console.log(
     `[trust-scorecard] ${new Date().toISOString()} coverage=${pct}% (${payload.with_series}/${payload.serving_total}) top500=${pct500}% (${payload.top500_with_series}/${payload.top500_total}) in ${secs}s`
   )
+  if (prev) {
+    const dAll = payload.with_series - prev.with_series
+    const d500 = payload.top500_with_series - prev.top500_with_series
+    console.log(
+      `[trust-scorecard] day-delta all=${dAll >= 0 ? '+' : ''}${dAll} top500=${d500 >= 0 ? '+' : ''}${d500}`
+    )
+    if (dAll < 0 || d500 < -3) {
+      await sendTelegram(
+        `⚠️ 可信度记分卡回归: 序列覆盖日增 all=${dAll} top500=${d500} ` +
+          `(现 ${pct}%/${pct500}%)。查 series-backfill 游标与板面轮换。`
+      )
+    }
+  }
   await pool.end()
 }
 
