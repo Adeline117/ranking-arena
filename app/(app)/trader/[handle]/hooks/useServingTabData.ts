@@ -61,6 +61,10 @@ export interface ServingTabInput {
   nickname: string | null
   avatarSrc: string | null
   entries?: TraderFirstScreen['entries']
+  /** Per-TF sub-scores + trading style from leaderboard_ranks (server-fetched,
+   *  2026-07-09): the /core path carries raw stats only, so ScoreBreakdownSection
+   *  and the header style tag rendered empty in serving mode. */
+  scores?: import('../TraderProfileClient').ServingScoreRow[]
 }
 
 export function useServingTabData(
@@ -95,7 +99,7 @@ export function useServingTabData(
   const posRows = positions.rows
   const histRows = posHistory.rows
 
-  const { nickname, avatarSrc, entries } = input
+  const { nickname, avatarSrc, entries, scores } = input
 
   return useMemo(() => {
     // M2-2e: extras fallback-merge across TFs. 90d wins; keys captured only on
@@ -138,6 +142,30 @@ export function useServingTabData(
       extras30: m30?.extras ?? null,
       extras90: m90?.extras ?? null,
     })
+    // Arena Score breakdown + trading style (2026-07-09): thread the
+    // leaderboard_ranks per-season sub-scores into the legacy performance
+    // shape ScoreBreakdownSection/TraderHeader read. Mapping mirrors
+    // lib/data/trader/mappers.ts (returnScore=profitability_score,
+    // pnlScore=risk_control_score; drawdown/stability have no V3 columns).
+    for (const row of scores ?? []) {
+      const sfx = row.season_id === '7D' ? '_7d' : row.season_id === '30D' ? '_30d' : ''
+      const p = traderPerformance as Record<string, unknown>
+      if (row.arena_score != null) p[`arena_score${sfx || '_90d'}`] = Number(row.arena_score)
+      if (row.arena_score_v3 != null)
+        p[`arena_score_v3${sfx || '_90d'}`] = Number(row.arena_score_v3)
+      if (row.profitability_score != null) p[`return_score${sfx}`] = Number(row.profitability_score)
+      if (row.risk_control_score != null) p[`pnl_score${sfx}`] = Number(row.risk_control_score)
+      if (row.season_id === '90D') {
+        if (row.arena_score != null) p.arena_score = Number(row.arena_score)
+        if (row.profitability_score != null) p.profitability_score = Number(row.profitability_score)
+        if (row.risk_control_score != null) p.risk_control_score = Number(row.risk_control_score)
+        if (row.execution_score != null) p.execution_score = Number(row.execution_score)
+        if (row.trading_style != null) p.trading_style = row.trading_style
+        if (row.style_confidence != null) p.style_confidence = Number(row.style_confidence)
+        if (row.avg_holding_hours != null) p.avg_holding_hours = Number(row.avg_holding_hours)
+        if (row.score_completeness != null) p.score_confidence = row.score_completeness
+      }
+    }
     const traderEquityCurve = servingSeriesToEquityCurve({
       tf7: m7?.series ?? null,
       tf30: m30?.series ?? null,
@@ -201,6 +229,7 @@ export function useServingTabData(
     nickname,
     avatarSrc,
     entries,
+    scores,
     m7,
     m30,
     m90,

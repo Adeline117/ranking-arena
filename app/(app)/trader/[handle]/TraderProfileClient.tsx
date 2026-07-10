@@ -221,6 +221,23 @@ interface TraderProfileClientProps {
    *  serving /core data path carries none, so OverviewTab hid the module).
    *  Same shape as the legacy bridge output; fed into effSimilar below. */
   serverSimilarTraders?: TraderPageData['similarTraders']
+  /** Per-TF Arena Score sub-scores + trading style from leaderboard_ranks
+   *  (2026-07-09): the serving /core path carries raw stats only, so
+   *  ScoreBreakdownSection and the header style tag were empty in serving mode. */
+  servingScores?: ServingScoreRow[]
+}
+
+export interface ServingScoreRow {
+  season_id: string
+  arena_score: number | null
+  arena_score_v3: number | null
+  profitability_score: number | null
+  risk_control_score: number | null
+  execution_score: number | null
+  score_completeness: string | number | null
+  trading_style: string | null
+  style_confidence: number | null
+  avg_holding_hours: number | null
 }
 
 export default function TraderProfileClient({
@@ -231,6 +248,7 @@ export default function TraderProfileClient({
   servingFirstScreen: serverFirstScreen,
   servingCapability: serverCapability,
   serverSimilarTraders,
+  servingScores,
 }: TraderProfileClientProps) {
   // ROOT-CAUSE FIX (2026-06-11): key serving mode off dataMode ALONE, not the
   // presence of servingFirstScreen. A serving source must never fall back to the
@@ -550,6 +568,7 @@ export default function TraderProfileClient({
       nickname: servingFirstScreen?.nickname ?? data.handle ?? null,
       avatarSrc: servingFirstScreen?.avatarSrc ?? null,
       entries: servingFirstScreen?.entries,
+      scores: servingScores,
     },
     servingCapability ?? null,
     useThreeTab
