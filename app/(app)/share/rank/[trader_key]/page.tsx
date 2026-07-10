@@ -28,7 +28,7 @@ const SSR_TIMEOUT_MS = 3000
 
 interface Props {
   params: Promise<{ trader_key: string }>
-  searchParams: Promise<{ platform?: string; window?: string }>
+  searchParams: Promise<{ platform?: string; window?: string; ref?: string }>
 }
 
 async function resolveTraderForWrapped(
@@ -175,7 +175,7 @@ export const dynamic = 'force-dynamic'
 
 export default async function ShareRankPage({ params, searchParams }: Props) {
   const { trader_key } = await params
-  const { platform, window: windowParam = '7d' } = await searchParams
+  const { platform, window: windowParam = '7d', ref } = await searchParams
   const decoded = decodeURIComponent(trader_key)
 
   const { handle, data } = await resolveTraderForWrapped(decoded, platform, windowParam)
@@ -185,6 +185,10 @@ export default async function ShareRankPage({ params, searchParams }: Props) {
     const redirectParams = new URLSearchParams()
     if (platform) redirectParams.set('platform', platform)
     if (windowParam !== '7d') redirectParams.set('window', windowParam)
+    // Preserve the sharer's referral code through the redirect so the root
+    // layout's pre-hydration `?ref` capture runs on the /wrapped page and the
+    // referral attribution survives the brag → click → landing loop.
+    if (ref && /^[A-Za-z0-9_-]{2,64}$/.test(ref)) redirectParams.set('ref', ref)
     const qs = redirectParams.toString()
     redirect(`/wrapped/${encodeURIComponent(handle)}${qs ? '?' + qs : ''}`)
   }
