@@ -3,6 +3,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 
 export interface Comment {
   id: string
@@ -204,13 +205,15 @@ export async function getPostComments(
   if (comments.length === 0) return []
 
   const commentIds = comments.map((c) => c.id)
-  const { data: replies } = await supabase
+  const { data: replies, error: repliesError } = await supabase
     .from('comments')
     .select(
       'id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at'
     )
     .in('parent_id', commentIds)
     .order('created_at', { ascending: true })
+  if (repliesError)
+    logger.warn('[getPostComments] comment replies query error (drift?):', repliesError.message)
 
   const allComments = [...comments, ...(replies || [])]
   const userIds = [...new Set(allComments.map((c) => c.user_id))]
@@ -284,11 +287,13 @@ export async function getCommentById(
 
   if (error || !data) return null
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
     .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
     .eq('id', data.user_id)
     .maybeSingle()
+  if (profileError)
+    logger.warn('[getCommentById] user_profiles query error (drift?):', profileError.message)
 
   const profileMap = profile ? buildProfileMap([profile]) : new Map()
   return toComment(data, profileMap.get(data.user_id))
@@ -319,11 +324,13 @@ export async function createComment(
 
   if (error) throw error
 
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
     .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
     .eq('id', userId)
     .maybeSingle()
+  if (profileError)
+    logger.warn('[createComment] user_profiles query error (drift?):', profileError.message)
 
   const profileMap = profile ? buildProfileMap([profile]) : new Map()
   return toComment(data, profileMap.get(userId))

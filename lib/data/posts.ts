@@ -323,10 +323,12 @@ export async function getPosts(
 
   // Block filtering: exclude posts from users the viewer has blocked (and vice versa)
   if (viewer_id) {
-    const { data: blocks } = await supabase
+    const { data: blocks, error: blocksError } = await supabase
       .from('blocked_users')
       .select('blocker_id, blocked_id')
       .or(`blocker_id.eq.${viewer_id},blocked_id.eq.${viewer_id}`)
+    if (blocksError)
+      logger.warn('[getPosts] blocked_users query error (drift?):', blocksError.message)
     if (blocks && blocks.length > 0) {
       const blockedIds = new Set<string>()
       for (const b of blocks) {
@@ -346,11 +348,16 @@ export async function getPosts(
   }
 
   if (author_handle) {
-    const { data: authorProfile } = await supabase
+    const { data: authorProfile, error: authorProfileError } = await supabase
       .from('user_profiles')
       .select('id')
       .eq('handle', author_handle)
       .maybeSingle()
+    if (authorProfileError)
+      logger.warn(
+        '[getPosts] user_profiles handle lookup error (drift?):',
+        authorProfileError.message
+      )
 
     query = authorProfile?.id
       ? query.eq('author_id', authorProfile.id)
@@ -434,11 +441,13 @@ export async function getPosts(
 
     let followedSet = new Set<string>()
     if (followersPostAuthors.length > 0) {
-      const { data: follows } = await supabase
+      const { data: follows, error: followsError } = await supabase
         .from('user_follows')
         .select('following_id')
         .eq('follower_id', viewer_id)
         .in('following_id', followersPostAuthors)
+      if (followsError)
+        logger.warn('[getPosts] user_follows query error (drift?):', followsError.message)
 
       if (follows) {
         followedSet = new Set(follows.map((f: { following_id: string }) => f.following_id))
@@ -509,11 +518,16 @@ export async function getPostById(
     let opProfile = authorProfileMap.get(op.author_id)
 
     if (!opProfile && op.author_id) {
-      const { data: opProfileData } = await supabase
+      const { data: opProfileData, error: opProfileError } = await supabase
         .from('user_profiles')
         .select('id, handle, avatar_url, subscription_tier, show_pro_badge')
         .eq('id', op.author_id)
         .maybeSingle()
+      if (opProfileError)
+        logger.warn(
+          '[getPostById] user_profiles op-author query error (drift?):',
+          opProfileError.message
+        )
 
       if (opProfileData) {
         opProfile = {
@@ -741,12 +755,14 @@ export async function togglePostVote(
   choice: 'bull' | 'bear' | 'wait'
 ): Promise<{ action: 'added' | 'removed' | 'changed'; vote: 'bull' | 'bear' | 'wait' | null }> {
   // 检查是否已有投票
-  const { data: existing } = await supabase
+  const { data: existing, error: existingError } = await supabase
     .from('post_votes')
     .select('id, choice')
     .eq('post_id', postId)
     .eq('user_id', userId)
     .maybeSingle()
+  if (existingError)
+    logger.warn('[togglePostVote] post_votes lookup error (drift?):', existingError.message)
 
   if (existing) {
     if (existing.choice === choice) {

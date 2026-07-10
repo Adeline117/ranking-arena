@@ -347,10 +347,15 @@ export async function activateClaim(supabase: SupabaseClient, claim: TraderClaim
   }
 
   // user_linked_traders（多账号 junction；首个认领为 primary）
-  const { data: existingLinks } = await supabase
+  const { data: existingLinks, error: existingLinksError } = await supabase
     .from('user_linked_traders')
     .select('id')
     .eq('user_id', user_id)
+  if (existingLinksError)
+    logger.warn(
+      '[activateClaim] user_linked_traders query error (drift?):',
+      existingLinksError.message
+    )
   const isFirstClaim = !existingLinks || existingLinks.length === 0
   const { error: linkError } = await supabase.from('user_linked_traders').upsert(
     {
@@ -381,20 +386,30 @@ export async function activateClaim(supabase: SupabaseClient, claim: TraderClaim
 
   // trader_authorizations（api_key 认领：把加密凭证从 exchange connection 接管）
   if (verification_method === 'api_key') {
-    const { data: existingAuth } = await supabase
+    const { data: existingAuth, error: existingAuthError } = await supabase
       .from('trader_authorizations')
       .select('id')
       .eq('user_id', user_id)
       .eq('platform', source)
       .eq('trader_id', trader_id)
       .maybeSingle()
+    if (existingAuthError)
+      logger.warn(
+        '[activateClaim] trader_authorizations query error (drift?):',
+        existingAuthError.message
+      )
     if (!existingAuth) {
-      const { data: conn } = await supabase
+      const { data: conn, error: connError } = await supabase
         .from('user_exchange_connections')
         .select('api_key_encrypted, api_secret_encrypted, passphrase_encrypted')
         .eq('user_id', user_id)
         .eq('is_active', true)
         .maybeSingle()
+      if (connError)
+        logger.warn(
+          '[activateClaim] user_exchange_connections query error (drift?):',
+          connError.message
+        )
       if (conn?.api_key_encrypted) {
         await supabase.from('trader_authorizations').insert({
           user_id,
