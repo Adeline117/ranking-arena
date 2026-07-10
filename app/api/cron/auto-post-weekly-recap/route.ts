@@ -52,10 +52,20 @@ const handler = withCron('auto-post-weekly-recap', async (_request: NextRequest)
     .maybeSingle()
   if (existing) return { count: 0, skipped: true, reason: 'already posted this week' }
 
-  const { data, error } = await supabase.rpc('arena_weekly_leaders', { p_limit: 5 })
+  const { data, error } = await supabase.rpc('arena_weekly_leaders', { p_limit: 30 })
   if (error) throw new Error(`arena_weekly_leaders failed: ${error.message}`)
-  const leaders = ((data as { rows?: unknown[] })?.rows ?? []) as WeeklyLeader[]
-  if (!leaders.length) return { count: 0, skipped: true, reason: 'no leaders returned' }
+  const raw = ((data as { rows?: unknown[] })?.rows ?? []) as WeeklyLeader[]
+  // 可信度过滤(首次真点 2026-07-10 打脸:榜首 4 个 +10000.0% = ROI clamp
+  // 哨兵饱和值,还有 PnL $11 的灰尘账户)。周报是信任面,发 clamp 垃圾适得其反:
+  // 剔除 |roi|≥9999(饱和) 与 PnL<$500,取剩余前 5;不足 3 个宁可跳过不发。
+  const leaders = raw.filter((l) => {
+    const roi = Number(l.roi)
+    const pnlV = Number(l.pnl?.value)
+    return Number.isFinite(roi) && Math.abs(roi) < 9999 && Number.isFinite(pnlV) && pnlV >= 500
+  })
+  if (leaders.length < 3) {
+    return { count: 0, skipped: true, reason: `only ${leaders.length} credible leaders` }
+  }
 
   const lines = leaders
     .slice(0, 5)
