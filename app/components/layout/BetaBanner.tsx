@@ -21,6 +21,7 @@ import en from '@/lib/i18n/en'
 import ja from '@/lib/i18n/ja'
 import ko from '@/lib/i18n/ko'
 import zh from '@/lib/i18n/zh'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
 
 const LANGS = [
   { code: 'en', dict: en },
@@ -33,6 +34,12 @@ export default function BetaBanner() {
   // Shown by default on all pages (rendered in root layout); set
   // NEXT_PUBLIC_HIDE_BETA_BANNER=true to turn it off without a code change
   if (process.env.NEXT_PUBLIC_HIDE_BETA_BANNER === 'true') return null
+
+  // Single-banner coordination: while the Pro-free promo is running, the
+  // ProPromoBanner owns the top slot (more useful, time-bound message). We hide
+  // the closed-beta notice until the promo banner is dismissed, so the two never
+  // double-stack and push the ranking data below the fold on mobile.
+  const promoActive = PRO_FREE_PROMO ? 'true' : 'false'
 
   return (
     <>
@@ -91,11 +98,14 @@ export default function BetaBanner() {
           ✕
         </button>
       </div>
-      {/* Inline script: pick the localized variant, hide if dismissed <30d ago,
-          attach click handler. Runs synchronously before paint to avoid flash. */}
+      {/* Inline script: pick the localized variant, ALWAYS wire the dismiss
+          button (so the beta banner works even when revealed later by the Pro
+          promo banner's dismissal), then decide visibility — hidden while the
+          Pro promo owns the slot, hidden if beta itself was dismissed <30d ago.
+          Runs synchronously before paint to avoid flash. */}
       <script
         dangerouslySetInnerHTML={{
-          __html: `(function(){var k='beta-banner-dismissed-at',b=document.getElementById('beta-banner');if(!b)return;try{var lang=localStorage.getItem('language');if(lang!=='ja'&&lang!=='ko'&&lang!=='zh')lang='en';var ws=b.querySelectorAll('.beta-lang');for(var i=0;i<ws.length;i++){ws[i].style.display=ws[i].getAttribute('data-beta-lang')===lang?'':'none'}}catch(e){}try{var d=localStorage.getItem(k);if(d&&Date.now()-Number(d)<2592e6){b.style.display='none';return}}catch(e){}var btn=document.getElementById('beta-banner-dismiss');if(btn)btn.onclick=function(){try{localStorage.setItem(k,String(Date.now()))}catch(e){}b.style.display='none'}})()`,
+          __html: `(function(){var k='beta-banner-dismissed-at',b=document.getElementById('beta-banner');if(!b)return;try{var lang=localStorage.getItem('language');if(lang!=='ja'&&lang!=='ko'&&lang!=='zh')lang='en';var ws=b.querySelectorAll('.beta-lang');for(var i=0;i<ws.length;i++){ws[i].style.display=ws[i].getAttribute('data-beta-lang')===lang?'':'none'}}catch(e){}var btn=document.getElementById('beta-banner-dismiss');if(btn)btn.onclick=function(){try{localStorage.setItem(k,String(Date.now()))}catch(e){}b.style.display='none'};if(${promoActive}){var pd='0';try{pd=localStorage.getItem('pro-free-promo-dismissed')}catch(e){}if(pd!=='1'){b.style.display='none';return}}try{var d=localStorage.getItem(k);if(d&&Date.now()-Number(d)<2592e6){b.style.display='none'}}catch(e){}})()`,
         }}
       />
     </>

@@ -68,6 +68,21 @@ export default function ProPromoBanner() {
       // ignore — at worst the banner shows again next load
     }
     setVisible(false)
+    // Single-banner rule: now that the promo banner is gone, reveal the
+    // closed-beta notice in its place — unless the user already dismissed beta
+    // itself (<30d ago). Its dismiss handler is always wired by BetaBanner's
+    // pre-paint script, so the revealed banner is fully functional.
+    try {
+      const beta = document.getElementById('beta-banner')
+      if (beta) {
+        const d = localStorage.getItem('beta-banner-dismissed-at')
+        if (!d || Date.now() - Number(d) >= 2_592_000_000) {
+          beta.style.display = ''
+        }
+      }
+    } catch {
+      // localStorage/DOM unavailable — beta banner will appear on next load
+    }
   }
 
   if (!PRO_FREE_PROMO || !visible) return null
