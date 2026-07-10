@@ -5,7 +5,7 @@
  *
  * 读 /api/admin/monitoring/trust-scorecard(→ arena_trust_scorecard RPC):
  * ① 序列覆盖(夜间快照,含日增趋势) ⑥ 链上净覆盖(实时,轮换侵蚀率)
- * ④ 认领数 ⑤ bot 帖节律。此前这些要人肉盘 4 段 SQL。
+ * ④ 认领数。此前这些要人肉盘 SQL。(bot 帖块随 owner 摘除 bot 发帖而移除)
  */
 
 import { useCallback, useEffect, useState } from 'react'
@@ -35,14 +35,6 @@ interface Scorecard {
 
 function pct(n: number, d: number): string {
   return d > 0 ? `${((n / d) * 100).toFixed(1)}%` : '—'
-}
-
-function agoLabel(iso: string | null): string {
-  if (!iso) return '—'
-  const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60_000)
-  if (mins < 60) return `${mins}m`
-  const h = Math.floor(mins / 60)
-  return h < 48 ? `${h}h` : `${Math.floor(h / 24)}d`
 }
 
 export default function TrustScorecardPanel({ accessToken }: { accessToken: string }) {
@@ -171,11 +163,8 @@ export default function TrustScorecardPanel({ accessToken }: { accessToken: stri
           </div>
         </div>
 
-        <div style={stat}>
-          <span style={statLabel}>社区 bot 帖</span>
-          <span style={statValue}>{card.community.bot_posts_7d}/7d</span>
-          <div style={statSub}>最近 {agoLabel(card.community.last_bot_post_at)} 前</div>
-        </div>
+        {/* bot 发帖已被 owner 摘除(2026-07-10「bot帖子删掉」)——恒为 0 的
+            块是噪音,不渲染;RPC 字段保留无害。 */}
       </div>
     </section>
   )

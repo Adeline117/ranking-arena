@@ -10,10 +10,10 @@
 - **P2 游标再平衡**: 30 源 `series_backfill_newcomers: 3`（纯 meta 配置，治 binance 游标 10h 只 +4）
 - **P3 rank 优先排序**: onchain-enrich JOIN leaderboard_ranks；**捕获真 bug：serving 的 BSC slug 是 legacy 名 `binance_web3`，slug 直连静默失效** → 三处统一经 `meta->>'legacy_platform'` 映射
 - **P4 认领入口验证**: trader 页 "Is this your account? Claim →" 线上实锤（0 真实认领，待 owner 亲测冷启动）
-- **P5 周报复活**: `auto-post-weekly-recap`（周一 09:10 UTC，43 crons）。真点三连修：RPC 形状凭先验全错（真形状 `{rows:[…]}`）→ 首触内容 4 个 +10000% clamp 垃圾 → roi==pnl 已知垃圾模式 + 匿名钱包「交易所 #名次」显示。**Hot bot 帖降权待 owner 确认**
+- **P5 周报**: 真点三连修后 E2E 通过（RPC 形状先验全错→clamp 垃圾过滤→RPC 49s 超时改 lr 直查）。**随后 owner 决策「bot帖子删掉」（2026-07-10）：18 篇 bot 帖全删、两个 auto-post cron 摘除（41 crons），路由保留未排程。bot 发帖方向已死，勿再建议**
 - **P6 可信度记分卡**: admin monitoring 新面板（序列覆盖夜间快照 + 链上净覆盖/认领/bot 帖实时，RPC 2.2s）。**覆盖率真相修正：serving 全集 68.2%（13193/19353，含 legacy 映射源），top500 93.3%**——此前口径漏了 12 个 legacy 名源
 - **快照排程**: GH Actions openclaw-sentinels 每日 06:45 UTC（本地 crontab 被权限分类器拦，改走 git 可审的 workflow 模式）
-- **待 owner**: ① Hot bot 帖降权 ② 亲测认领流（第一个真 verified 徽章 + 与交易所 App 对账）
+- **待 owner**: 亲测认领流（第一个真 verified 徽章 + 与交易所 App 对账）
 
 ---
 
