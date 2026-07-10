@@ -58,15 +58,20 @@ export function useWatchlist() {
   const addToWatchlist = useCallback(
     async (source: string, sourceTraderID: string, handle?: string) => {
       if (!isLoggedIn) return
-      const previousData = watchlist
       const newItem: WatchlistItem = {
         source,
         source_trader_id: sourceTraderID,
         handle: handle || null,
         created_at: new Date().toISOString(),
       }
-      // Optimistic update
-      queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, [...watchlist, newItem])
+      const matches = (w: WatchlistItem) =>
+        w.source === source && w.source_trader_id === sourceTraderID
+      // Optimistic update — delta insert against CURRENT cache state (never a
+      // captured snapshot, which goes stale if the list mutates mid-flight).
+      queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, (prev) => {
+        const cur = prev || []
+        return cur.some(matches) ? cur : [...cur, newItem]
+      })
       try {
         const headers = await getAuthHeadersAsync()
         const res = await fetch(WATCHLIST_API, {
@@ -81,23 +86,29 @@ export function useWatchlist() {
         queryClient.invalidateQueries({ queryKey: WATCHLIST_QUERY_KEY })
         tryUnlock('first_watchlist')
       } catch (err) {
-        // Rollback optimistic update, then rethrow so the caller shows a real
-        // error toast instead of a fabricated "added to watchlist" success.
-        queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, previousData)
+        // Delta reversal: remove exactly the item we optimistically added from
+        // the current state, then rethrow so the caller shows a real error toast
+        // instead of a fabricated "added to watchlist" success.
+        queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, (prev) =>
+          (prev || []).filter((w) => !matches(w))
+        )
         throw err
       }
     },
-    [isLoggedIn, watchlist, queryClient, getAuthHeadersAsync, tryUnlock]
+    [isLoggedIn, queryClient, getAuthHeadersAsync, tryUnlock]
   )
 
   const removeFromWatchlist = useCallback(
     async (source: string, sourceTraderID: string) => {
       if (!isLoggedIn) return
-      const previousData = watchlist
-      // Optimistic update
-      queryClient.setQueryData<WatchlistItem[]>(
-        WATCHLIST_QUERY_KEY,
-        watchlist.filter((w) => !(w.source === source && w.source_trader_id === sourceTraderID))
+      const matches = (w: WatchlistItem) =>
+        w.source === source && w.source_trader_id === sourceTraderID
+      // Capture only the single toggled item (its identity), NOT a full-list
+      // snapshot — so rollback re-adds exactly one item to the current state.
+      const removedItem = watchlist.find(matches)
+      // Optimistic delta remove against CURRENT cache state.
+      queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, (prev) =>
+        (prev || []).filter((w) => !matches(w))
       )
       try {
         const headers = await getAuthHeadersAsync()
@@ -109,9 +120,15 @@ export function useWatchlist() {
         if (!res.ok) throw new Error(`watchlist remove: ${res.status}`)
         queryClient.invalidateQueries({ queryKey: WATCHLIST_QUERY_KEY })
       } catch (err) {
-        // Rollback optimistic update, then rethrow so the caller surfaces the
-        // real failure instead of a fabricated success toast.
-        queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, previousData)
+        // Delta reversal: re-add the single removed item to the current state
+        // (guard against a concurrent re-add), then rethrow so the caller
+        // surfaces the real failure instead of a fabricated success toast.
+        if (removedItem) {
+          queryClient.setQueryData<WatchlistItem[]>(WATCHLIST_QUERY_KEY, (prev) => {
+            const cur = prev || []
+            return cur.some(matches) ? cur : [...cur, removedItem]
+          })
+        }
         throw err
       }
     },
