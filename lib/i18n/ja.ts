@@ -508,8 +508,9 @@ const ja = {
   inbox: 'メッセージ',
   // TODO i18n ja/ko — English fallback pending translation
   u10inbox_pageTitle: 'Inbox',
-  u10inbox_dmEmptyCta: 'Open a trader profile and tap Message to start a chat',
-  u10inbox_conversationGone: 'This conversation no longer exists',
+  u10inbox_dmEmptyCta:
+    'トレーダーのプロフィールを開き、「メッセージ」をタップしてチャットを開始します',
+  u10inbox_conversationGone: 'この会話は存在しないか、削除されました',
   tabNotifications: '通知',
   tabMessages: 'メッセージ',
   markAllAsRead: 'すべて既読にする',
@@ -3319,11 +3320,11 @@ const ja = {
   sidebarNoGroups: 'グループがありません',
   // TODO i18n ja/ko — English fallback pending translation
   u9grp_reasonPopular: 'Popular',
-  u9grp_reasonFollowedJoined: 'People you follow joined',
-  u9grp_reasonMembersOverlap: 'Shared members with your groups',
+  u9grp_reasonFollowedJoined: 'フォロー中のユーザーが参加しています',
+  u9grp_reasonMembersOverlap: 'あなたのグループとメンバーが重複しています',
   u9grp_searchPlaceholder: 'Search groups',
-  u9grp_noSearchResults: 'No matching groups',
-  u9grp_joinToPost: 'Join the group to start posting',
+  u9grp_noSearchResults: '一致するグループがありません',
+  u9grp_joinToPost: 'グループに参加すると投稿できます',
   // メンバー自身が管理するグループ設定 (U9-12)
   groupPrefs_mute: '管理者の一斉通知をミュート',
   groupPrefs_unmute: 'ミュートを解除',
@@ -4297,7 +4298,7 @@ const ja = {
   userActivityTitle: 'アクティビティ',
   userActivityNoActivities: 'アクティビティがまだありません',
   userActivityLoadMore: 'さらに読み込む',
-  userActivityMarked: '',
+  userActivityMarked: 'マークしました ',
   userActivityWantRead: 'を読みたいに追加',
   userActivityStartedReading: 'の読書を開始',
   userActivityFinishedReading: 'を読了',
@@ -5931,7 +5932,7 @@ const ja = {
     '特典：友達があなたのリンクから参加すると、{days}日間のProトライアルを獲得できます。',
   // TODO i18n ja/ko
   referralPromoNote:
-    'Pro is currently free for everyone during our promo. The Pro days you earn are banked and automatically applied once the promo ends — they never expire.',
+    'キャンペーン期間中、Pro は全員無料です。獲得した Pro 特典日数はアカウントに記録され、キャンペーン終了後に自動的に適用されます。有効期限はありません。',
   referralPageSubtitle: '友達をArenaに招待して、紹介状況をトラッキングしましょう。',
   referralSignInGateTitle: 'ログインして紹介リンクを取得',
   referralSignInGateDesc: 'アカウントを作成またはログインして、友達の招待を始めましょう。',
