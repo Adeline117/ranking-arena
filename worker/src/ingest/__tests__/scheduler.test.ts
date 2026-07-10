@@ -15,6 +15,7 @@ const mockQueue = {
   removeJobScheduler: jest.fn().mockResolvedValue(undefined),
   getJobSchedulers: jest.fn().mockResolvedValue([]),
   getJob: jest.fn().mockResolvedValue(null),
+  getJobs: jest.fn().mockResolvedValue([]),
   add: jest.fn().mockResolvedValue(undefined),
 }
 // Fast-lane queue is a SEPARATE BullMQ queue; mock it independently so the
@@ -24,6 +25,7 @@ const mockFastQueue = {
   removeJobScheduler: jest.fn().mockResolvedValue(undefined),
   getJobSchedulers: jest.fn().mockResolvedValue([]),
   getJob: jest.fn().mockResolvedValue(null),
+  getJobs: jest.fn().mockResolvedValue([]),
   add: jest.fn().mockResolvedValue(undefined),
 }
 
