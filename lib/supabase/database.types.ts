@@ -5715,6 +5715,7 @@ export type Database = {
       }
       trader_authorizations: {
         Row: {
+          consecutive_failures: number
           created_at: string | null
           data_source: string
           encrypted_api_key: string
@@ -5723,6 +5724,8 @@ export type Database = {
           expires_at: string | null
           id: string
           label: string | null
+          last_sync_at: string | null
+          last_sync_status: string | null
           last_verified_at: string | null
           notes: string | null
           permissions: Json | null
@@ -5735,6 +5738,7 @@ export type Database = {
           verification_error: string | null
         }
         Insert: {
+          consecutive_failures?: number
           created_at?: string | null
           data_source?: string
           encrypted_api_key: string
@@ -5743,6 +5747,8 @@ export type Database = {
           expires_at?: string | null
           id?: string
           label?: string | null
+          last_sync_at?: string | null
+          last_sync_status?: string | null
           last_verified_at?: string | null
           notes?: string | null
           permissions?: Json | null
@@ -5755,6 +5761,7 @@ export type Database = {
           verification_error?: string | null
         }
         Update: {
+          consecutive_failures?: number
           created_at?: string | null
           data_source?: string
           encrypted_api_key?: string
@@ -5763,6 +5770,8 @@ export type Database = {
           expires_at?: string | null
           id?: string
           label?: string | null
+          last_sync_at?: string | null
+          last_sync_status?: string | null
           last_verified_at?: string | null
           notes?: string | null
           permissions?: Json | null
@@ -6777,6 +6786,7 @@ export type Database = {
           last_verified_at: string | null
           passphrase_encrypted: string | null
           refresh_token_encrypted: string | null
+          scope_permissions: Json | null
           updated_at: string | null
           user_id: string
           verified_uid: string | null
@@ -6797,6 +6807,7 @@ export type Database = {
           last_verified_at?: string | null
           passphrase_encrypted?: string | null
           refresh_token_encrypted?: string | null
+          scope_permissions?: Json | null
           updated_at?: string | null
           user_id: string
           verified_uid?: string | null
@@ -6817,6 +6828,7 @@ export type Database = {
           last_verified_at?: string | null
           passphrase_encrypted?: string | null
           refresh_token_encrypted?: string | null
+          scope_permissions?: Json | null
           updated_at?: string | null
           user_id?: string
           verified_uid?: string | null
@@ -7817,6 +7829,15 @@ export type Database = {
         Returns: Json
       }
       arena_serving_sources: { Args: never; Returns: string[] }
+      arena_set_trader_claimed: {
+        Args: {
+          p_claimed: boolean
+          p_platform: string
+          p_trader_key: string
+          p_user_id: string
+        }
+        Returns: number
+      }
       arena_source_capabilities: { Args: never; Returns: Json }
       arena_weekly_leaders: { Args: { p_limit?: number }; Returns: Json }
       bulk_enrich_sync_v2: { Args: { updates: Json }; Returns: number }
