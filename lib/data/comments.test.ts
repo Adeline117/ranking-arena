@@ -242,7 +242,7 @@ describe('deleteComment', () => {
 describe('getCommentCount', () => {
   test('should return comment count for a post', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.eq.mockResolvedValueOnce({ count: 10, error: null })
+    mockSupabase.is.mockResolvedValueOnce({ count: 10, error: null })
 
     const result = await getCommentCount(mockSupabase as unknown as SupabaseClient, 'post1')
     expect(result).toBe(10)
@@ -250,7 +250,7 @@ describe('getCommentCount', () => {
 
   test('should return 0 when count is null', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.eq.mockResolvedValueOnce({ count: null, error: null })
+    mockSupabase.is.mockResolvedValueOnce({ count: null, error: null })
 
     const result = await getCommentCount(mockSupabase as unknown as SupabaseClient, 'post1')
     expect(result).toBe(0)
@@ -258,7 +258,7 @@ describe('getCommentCount', () => {
 
   test('should return 0 on error', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.eq.mockResolvedValueOnce({ count: null, error: new Error('Error') })
+    mockSupabase.is.mockResolvedValueOnce({ count: null, error: new Error('Error') })
 
     const result = await getCommentCount(mockSupabase as unknown as SupabaseClient, 'post1')
     expect(result).toBe(0)
