@@ -60,6 +60,26 @@ interface HeartbeatPayload {
   pid: number
   node: string
   sha: string
+  /** Root-fs used %, so the Vercel heartbeat-check cron can page before a node
+   *  (esp. the disk-starved SG VPS, ~95%) fills up and crashloops. Optional —
+   *  older workers omit it; the cron treats absent as "unknown, don't page". */
+  disk?: number
+}
+
+/** Root filesystem used %, via `df`. Never throws; undefined on any failure. */
+function diskUsedPct(): number | undefined {
+  try {
+    const out = execSync('df -P /', {
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+      timeout: 3000,
+    })
+    const last = out.trim().split('\n').pop() || ''
+    const m = last.match(/(\d+)%/)
+    return m ? Number(m[1]) : undefined
+  } catch {
+    return undefined
+  }
 }
 
 /**
@@ -71,7 +91,14 @@ export function startHeartbeat(redis: IORedis, regions: string[]): NodeJS.Timeou
   const node = workerNodeId()
   const sha = resolveDeployedSha()
   const beat = async (): Promise<void> => {
-    const payload: HeartbeatPayload = { ts: Date.now(), regions, pid: process.pid, node, sha }
+    const payload: HeartbeatPayload = {
+      ts: Date.now(),
+      regions,
+      pid: process.pid,
+      node,
+      sha,
+      disk: diskUsedPct(),
+    }
     try {
       await redis.hset(WORKER_ROSTER_KEY, node, JSON.stringify(payload))
     } catch (err) {
