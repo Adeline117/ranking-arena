@@ -834,7 +834,9 @@ export function computeArenaScoresV4(
     const quality = den > 0 ? clip(num / den, 0, 1) : 0
 
     // Confidence:样本量 × 数据完整度(软准入门槛)
-    const trades = t.tradesCount ?? null
+    // 0 = "未知交易数"(很多 CEX 源对未知返回 0),不是真的 0 笔——按 null(未知)处理,
+    // 否则 cN=0→置信度触底,结构性压低合法源(对齐 V3 语义)。
+    const trades = t.tradesCount != null && t.tradesCount > 0 ? t.tradesCount : null
     const cN = trades == null ? 0.3 : trades / (trades + V.SAMPLE_K)
     const presentCnt = [shArr[i], mddArr[i], winArr[i], pfArr[i]].filter((v) => v != null).length
     const cC = Math.max(presentCnt / 4, 0.25)

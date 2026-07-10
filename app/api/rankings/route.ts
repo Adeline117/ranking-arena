@@ -317,7 +317,10 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       .from('leaderboard_ranks')
       .select(SELECT_COLS, opts ? { count: opts.count } : undefined)
       .eq('season_id', seasonId)
-      .not('arena_score', 'is', null)
+      // >0 (not just non-null): excluded/zeroed traders are set to arena_score=0
+      // by zeroOutExcluded; live board + Redis sync already use >0, so align the
+      // main board's tail & counts with them (was .not(null) → leaked 0-score rows).
+      .gt('arena_score', 0)
       .or('is_outlier.is.null,is_outlier.eq.false')
       .lte('roi', ROI_ANOMALY_THRESHOLD)
       .gte('roi', -ROI_ANOMALY_THRESHOLD)
