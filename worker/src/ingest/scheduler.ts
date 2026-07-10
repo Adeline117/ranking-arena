@@ -211,7 +211,11 @@ export async function reconcileSchedulers(): Promise<void> {
       // remove an ACTIVE job (guarded above); remove() on a just-started one
       // throws and is caught — the orphan then drains normally.
       if (iterationJob) {
-        await iterationJob.remove().catch(() => {})
+        try {
+          await iterationJob.remove()
+        } catch {
+          /* just-started or already gone — the orphan then drains normally */
+        }
       }
       const tmplData = scheduler.template?.data ?? {}
       // take-6 (2026-07-03): preserve the template OPTS on rebuild. The old
@@ -286,9 +290,47 @@ export async function reconcileSchedulers(): Promise<void> {
     }
   }
 
+  // Orphan-dedup maintenance (2026-07-09, take-7b companion): worker restarts
+  // and historical revive waves can leave multiple pending instances of the
+  // same (name, sourceSlug) job in a queue. take-7b stopped NEW orphans at the
+  // source (rebuild now removes the superseded iteration); this pass drains
+  // whatever legacy/restart debris still accumulates — keep only the NEWEST
+  // per (name, slug). Idempotent-by-design jobs (cursor-driven tierbs, board
+  // crawls) lose nothing. Fail-soft: dedup errors never abort the reconcile.
+  let deduped = 0
+  try {
+    for (const region of INGEST_REGIONS) {
+      const q = getRegionQueue(region)
+      const jobs = await q.getJobs(['prioritized', 'waiting'], 0, 500)
+      const newest = new Map<string, number>()
+      for (const j of jobs) {
+        const k = `${j.name}:${(j.data as { sourceSlug?: string })?.sourceSlug ?? ''}`
+        const t = j.timestamp ?? 0
+        if (!newest.has(k) || t > (newest.get(k) ?? 0)) newest.set(k, t)
+      }
+      for (const j of jobs) {
+        const k = `${j.name}:${(j.data as { sourceSlug?: string })?.sourceSlug ?? ''}`
+        if ((j.timestamp ?? 0) < (newest.get(k) ?? 0)) {
+          try {
+            await j.remove()
+            deduped++
+          } catch {
+            /* active/locked — leave it */
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.warn(
+      '[ingest-scheduler] orphan-dedup pass failed (non-fatal):',
+      err instanceof Error ? err.message : err
+    )
+  }
+
   console.log(
     `[ingest-scheduler] reconciled: ${sources.length} active sources, ` +
-      `${wanted.size} schedulers${revived ? `, revived ${revived} stuck` : ''}`
+      `${wanted.size} schedulers${revived ? `, revived ${revived} stuck` : ''}` +
+      `${deduped ? `, deduped ${deduped} orphans` : ''}`
   )
 
   await reconcileServingSources()
