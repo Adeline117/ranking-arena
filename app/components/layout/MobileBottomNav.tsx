@@ -314,14 +314,11 @@ const NAV_BASE_STYLE: React.CSSProperties = {
   left: 0,
   right: 0,
   height: 60,
-  background: tokens.glass.bg.primary,
-  // Blur is applied inline: the referenced `.glass` class was never defined, so
-  // without this the near-solid bg still let sharp ticker/price text bleed
-  // through between icons on scroll (U7-13). The reduced-transparency media
-  // query in globals.css targets `[style*='backdrop-filter']` and swaps this for
-  // a fully opaque bg on low-end devices, so perf/degradation still hold.
-  backdropFilter: 'blur(16px)',
-  WebkitBackdropFilter: 'blur(16px)',
+  // Fully opaque (was glass.bg.primary = 95% + blur). That last 5% + blur still
+  // ghosted sharp ticker/price text through the nav on scroll — the recurring
+  // U7-13 bleed. A bottom nav gains nothing from translucency, so make it solid;
+  // dropping the blur also removes a per-frame composite (perf win).
+  background: 'var(--color-bg-primary)',
   borderTop: `1px solid var(--color-border-primary)`,
   display: 'flex',
   alignItems: 'center',
