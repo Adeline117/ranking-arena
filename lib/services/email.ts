@@ -50,12 +50,21 @@ export async function sendEmail(options: {
 
   // No provider configured — log content so nothing is silently lost
   logger.warn(`[EMAIL NOT SENT] No provider. To: ${options.to} | Subject: ${options.subject}`)
-  logger.info(`[EMAIL CONTENT] ${options.html.replace(/<[^>]*>/g, ' ').replace(/\\s+/g, ' ').slice(0, 300)}...`)
+  logger.info(
+    `[EMAIL CONTENT] ${options.html
+      .replace(/<[^>]*>/g, ' ')
+      .replace(/\\s+/g, ' ')
+      .slice(0, 300)}...`
+  )
   return false
 }
 
-export function buildTraderAlertEmail(alerts: Array<{ title: string; message: string; link?: string }>): string {
-  const alertRows = alerts.map(a => `
+export function buildTraderAlertEmail(
+  alerts: Array<{ title: string; message: string; link?: string }>
+): string {
+  const alertRows = alerts
+    .map(
+      (a) => `
     <tr>
       <td style="padding: 12px 16px; border-bottom: 1px solid #2a2a3e;">
         <strong style="color: #e2e8f0;">${a.title}</strong>
@@ -63,7 +72,9 @@ export function buildTraderAlertEmail(alerts: Array<{ title: string; message: st
         ${a.link ? `<a href="${BASE_URL}${a.link}" style="color: #6366f1; font-size: 13px;">View details &rarr;</a>` : ''}
       </td>
     </tr>
-  `).join('')
+  `
+    )
+    .join('')
 
   return `
     <div style="max-width: 600px; margin: 0 auto; background: #0f0e1a; color: #e2e8f0; font-family: -apple-system, sans-serif; padding: 24px;">
@@ -84,20 +95,55 @@ export function buildWeeklyDigestEmail(stats: {
   newTraders: number
   totalTracked: number
   weekRange: string
+  /**
+   * Per-user personalization: what the traders THIS user follows did this week.
+   * When present & non-empty, rendered as the lead "Traders You Follow" section
+   * above the global Top Movers. Absent/empty → global-only digest (fallback).
+   */
+  followedActivity?: Array<{ name: string; summary: string; link: string }>
 }): string {
-  const moverRows = stats.topMovers.map(m => `
+  const moverRows = stats.topMovers
+    .map(
+      (m) => `
     <tr>
       <td style="padding: 8px 16px; border-bottom: 1px solid #2a2a3e;">
         <a href="${BASE_URL}${m.link}" style="color: #e2e8f0; text-decoration: none; font-weight: 500;">${m.name}</a>
         <span style="float: right; color: ${m.change.startsWith('+') ? '#22c55e' : '#ef4444'}; font-size: 14px;">${m.change}</span>
       </td>
     </tr>
-  `).join('')
+  `
+    )
+    .join('')
+
+  const followed = stats.followedActivity ?? []
+  const followedRows = followed
+    .map(
+      (f) => `
+    <tr>
+      <td style="padding: 10px 16px; border-bottom: 1px solid #2a2a3e;">
+        <a href="${BASE_URL}${f.link}" style="color: #e2e8f0; text-decoration: none; font-weight: 600;">${f.name}</a>
+        <div style="color: #94a3b8; font-size: 13px; margin-top: 2px;">${f.summary}</div>
+      </td>
+    </tr>
+  `
+    )
+    .join('')
 
   return `
     <div style="max-width: 600px; margin: 0 auto; background: #0f0e1a; color: #e2e8f0; font-family: -apple-system, sans-serif; padding: 24px;">
       <h1 style="font-size: 20px; margin: 0 0 4px;">Arena Weekly Digest</h1>
       <p style="color: #94a3b8; margin: 0 0 24px; font-size: 14px;">${stats.weekRange}</p>
+
+      ${
+        followed.length > 0
+          ? `
+        <h2 style="font-size: 16px; margin: 0 0 12px; color: #e2e8f0;">Traders You Follow</h2>
+        <table style="width: 100%; border-collapse: collapse; background: #1a1a2e; border-radius: 8px; overflow: hidden; margin-bottom: 20px;">
+          ${followedRows}
+        </table>
+      `
+          : ''
+      }
 
       <div style="background: #1a1a2e; border-radius: 8px; padding: 16px; margin-bottom: 16px;">
         <p style="margin: 0; font-size: 14px; color: #94a3b8;">
@@ -106,12 +152,16 @@ export function buildWeeklyDigestEmail(stats: {
         </p>
       </div>
 
-      ${stats.topMovers.length > 0 ? `
+      ${
+        stats.topMovers.length > 0
+          ? `
         <h2 style="font-size: 16px; margin: 0 0 12px; color: #e2e8f0;">Top Movers</h2>
         <table style="width: 100%; border-collapse: collapse; background: #1a1a2e; border-radius: 8px; overflow: hidden;">
           ${moverRows}
         </table>
-      ` : ''}
+      `
+          : ''
+      }
 
       <p style="margin: 24px 0 0; text-align: center;">
         <a href="${BASE_URL}" style="display: inline-block; background: #6366f1; color: #fff; padding: 10px 24px; border-radius: 6px; text-decoration: none; font-size: 14px;">View Full Rankings</a>

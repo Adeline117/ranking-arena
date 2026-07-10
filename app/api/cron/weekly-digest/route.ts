@@ -74,6 +74,97 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   const now = new Date()
   const weekRange = `${weekAgo.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${now.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}`
 
+  // 5b. Per-user personalization — what each subscriber's FOLLOWED traders did
+  // this week. Two batched queries (follows, then activities for the union of
+  // followed traders), grouped in memory. No N+1 per user. Subscribers with no
+  // follows / no followed-trader activity fall back to the global digest below.
+  // Join: trader_follows.trader_id === trader_activities.source_trader_id
+  // (same key broadcast-trader-events uses; trader_follows.source is often null).
+  const subscriberIdList = subscribers.map((s) => s.id)
+  const followsByUser = new Map<string, Set<string>>()
+  const allFollowedTraderIds = new Set<string>()
+  for (let i = 0; i < subscriberIdList.length; i += 500) {
+    const chunk = subscriberIdList.slice(i, i + 500)
+    const { data: follows, error: fErr } = await supabase
+      .from('trader_follows')
+      .select('user_id, trader_id')
+      .in('user_id', chunk)
+    if (fErr) {
+      logger.warn('Failed to fetch follows chunk (skipping personalization for chunk)', {
+        error: fErr.message,
+      })
+      continue
+    }
+    for (const f of follows ?? []) {
+      if (!f.trader_id) continue
+      let set = followsByUser.get(f.user_id)
+      if (!set) {
+        set = new Set<string>()
+        followsByUser.set(f.user_id, set)
+      }
+      set.add(f.trader_id)
+      allFollowedTraderIds.add(f.trader_id)
+    }
+  }
+
+  // One activities query (chunked) for the union of followed traders this week.
+  const activityByTrader = new Map<
+    string,
+    Array<{
+      source_trader_id: string
+      source: string
+      handle: string | null
+      activity_text: string
+      occurred_at: string
+    }>
+  >()
+  const followedIdList = [...allFollowedTraderIds]
+  for (let i = 0; i < followedIdList.length; i += 300) {
+    const chunk = followedIdList.slice(i, i + 300)
+    const { data: acts, error: aErr } = await supabase
+      .from('trader_activities')
+      .select('source_trader_id, source, handle, activity_text, occurred_at')
+      .in('source_trader_id', chunk)
+      .gte('occurred_at', weekAgoIso)
+      .order('occurred_at', { ascending: false })
+    if (aErr) {
+      logger.warn('Failed to fetch activities chunk (skipping personalization for chunk)', {
+        error: aErr.message,
+      })
+      continue
+    }
+    for (const a of acts ?? []) {
+      let arr = activityByTrader.get(a.source_trader_id)
+      if (!arr) {
+        arr = []
+        activityByTrader.set(a.source_trader_id, arr)
+      }
+      arr.push(a)
+    }
+  }
+
+  // Build the personalized "traders you follow" section for one subscriber.
+  const buildFollowedActivity = (userId: string) => {
+    const traderIds = followsByUser.get(userId)
+    if (!traderIds || traderIds.size === 0) return []
+    const entries: Array<{ name: string; summary: string; link: string; occurred_at: string }> = []
+    for (const tid of traderIds) {
+      const acts = activityByTrader.get(tid)
+      if (!acts || acts.length === 0) continue
+      const top = acts[0] // most recent this week (query ordered desc)
+      const name = top.handle || tid
+      const extra = acts.length > 1 ? ` (+${acts.length - 1} more this week)` : ''
+      entries.push({
+        name,
+        summary: `${top.activity_text}${extra}`,
+        link: `/trader/${encodeURIComponent(top.handle || tid)}?platform=${top.source}`,
+        occurred_at: top.occurred_at,
+      })
+    }
+    entries.sort((a, b) => (a.occurred_at < b.occurred_at ? 1 : -1))
+    return entries.slice(0, 8).map(({ name, summary, link }) => ({ name, summary, link }))
+  }
+
   // 6. Batch-fetch emails via paginated listUsers (replaces N+1 getUserById)
   const subscriberIds = new Set(subscribers.map((s) => s.id))
   const emailMap = new Map<string, string>()
@@ -97,6 +188,7 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   // 7. Send emails with bounded concurrency to avoid timeout
   let sentCount = 0
   let failCount = 0
+  let personalizedCount = 0
   const CONCURRENCY = 10
   const sendOne = async (sub: (typeof subscribers)[number]) => {
     try {
@@ -110,12 +202,16 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
       const unsubToken = generateUnsubscribeToken(sub.id, 'digest')
       const unsubLink = `${BASE_URL}/api/email/unsubscribe?token=${unsubToken}`
 
+      const followedActivity = buildFollowedActivity(sub.id)
+      if (followedActivity.length > 0) personalizedCount++
+
       const html =
         buildWeeklyDigestEmail({
           topMovers,
           newTraders: newTraders ?? 0,
           totalTracked: totalTracked ?? 0,
           weekRange,
+          followedActivity,
         }) +
         `
         <div style="max-width: 600px; margin: 0 auto; padding: 0 24px 24px;">
@@ -155,11 +251,13 @@ export const GET = withCron('weekly-digest', async (_request: NextRequest) => {
   logger.info('Weekly digest complete', {
     sent: sentCount,
     failed: failCount,
+    personalized: personalizedCount,
     subscribers: subscribers.length,
   })
   return {
     count: sentCount,
     failed: failCount,
+    personalized: personalizedCount,
     subscribers: subscribers.length,
     topMovers: topMovers.length,
     newTraders: newTraders ?? 0,
