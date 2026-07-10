@@ -41,7 +41,7 @@ export interface TradingViewChartProps {
   topColor?: string
   bottomColor?: string
   showVolume?: boolean
-  locale?: 'zh' | 'en'
+  locale?: 'zh' | 'en' | 'ja' | 'ko'
   chartOptions?: DeepPartial<ChartOptions>
 }
 
@@ -85,6 +85,8 @@ function getChartColors(theme: 'dark' | 'light') {
 const LABELS = {
   zh: { open: '开盘', close: '收盘', high: '最高', low: '最低', volume: '成交量', value: '数值' },
   en: { open: 'Open', close: 'Close', high: 'High', low: 'Low', volume: 'Volume', value: 'Value' },
+  ja: { open: '始値', close: '終値', high: '高値', low: '安値', volume: '出来高', value: '値' },
+  ko: { open: '시가', close: '종가', high: '고가', low: '저가', volume: '거래량', value: '값' },
 } as const
 
 // ============================================
@@ -241,7 +243,7 @@ export default function TradingViewChart({
       // UTCTimestamp (unix seconds) | BusinessDay | string — raw String()
       // on a numeric timestamp renders e.g. "1767398400". Format in UTC to
       // match the chart's own UTC time-axis labels.
-      const intlLocale = locale === 'zh' ? 'zh-CN' : 'en-US'
+      const intlLocale = ({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as const)[locale] || 'en-US'
       const formatTooltipTime = (t: Time): string => {
         if (typeof t === 'number') {
           const date = new Date(t * 1000)
@@ -354,7 +356,13 @@ export default function TradingViewChart({
           borderRadius: 8,
         }}
       >
-        {locale === 'zh' ? '暂无图表数据' : 'No chart data available'}
+        {(
+          {
+            zh: '暂无图表数据',
+            ja: 'チャートデータがありません',
+            ko: '차트 데이터가 없습니다',
+          } as const
+        )[locale as 'zh' | 'ja' | 'ko'] || 'No chart data available'}
       </div>
     )
   }

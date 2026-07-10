@@ -511,7 +511,7 @@ export default function TokenSidePanel({
                       type="candlestick"
                       height={280}
                       theme={chartTheme}
-                      locale={language === 'zh' ? 'zh' : 'en'}
+                      locale={language}
                     />
                   )}
                 </div>

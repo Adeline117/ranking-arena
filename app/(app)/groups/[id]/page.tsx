@@ -14,6 +14,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { localizedLabel } from '@/lib/utils/format'
 import {
   GroupCardSkeleton,
   PostSkeleton,
@@ -1039,7 +1040,7 @@ function RelatedGroupsSidebar({
                     marginBottom: 2,
                   }}
                 >
-                  {language === 'en' && relGroup.name_en ? relGroup.name_en : relGroup.name}
+                  {localizedLabel(relGroup.name, relGroup.name_en, language)}
                 </Text>
                 {relGroup.member_count != null && (
                   <Text size="xs" color="tertiary">
