@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { truncateGraphemes } from '@/lib/utils/truncate'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -51,7 +52,7 @@ export function PostCard({
     ? ''
     : isExpanded || !isLongContent
       ? displayBody
-      : displayBody.slice(0, 100) + '...'
+      : truncateGraphemes(displayBody, 100)
 
   return (
     <Box

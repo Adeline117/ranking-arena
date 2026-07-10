@@ -1,6 +1,7 @@
 'use client'
 
 import Link from 'next/link'
+import { truncateGraphemes } from '@/lib/utils/truncate'
 import Image from 'next/image'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { STALE_SLOW } from '@/lib/hooks/cache-presets'
@@ -220,11 +221,11 @@ export default function HotDiscussions({ limit = 8 }: { limit?: number }) {
     // Show content preview below title; if title exists, show content; otherwise show more of content
     const raw = (post.content || '').replace(/\[sticker:\w+\]/g, '').trim()
     if (post.title) {
-      return raw.length > 100 ? raw.slice(0, 100) + '...' : raw
+      return truncateGraphemes(raw, 100)
     }
     // No title: content already shown as title, show more
     const remaining = raw.slice(60).trim()
-    return remaining.length > 80 ? remaining.slice(0, 80) + '...' : remaining
+    return truncateGraphemes(remaining, 80)
   }
 
   return (

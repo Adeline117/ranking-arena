@@ -93,7 +93,9 @@ export const RecentActivityCard = memo(function RecentActivityCard({
                 {r.side ?? '—'}
               </span>
               <span style={{ flex: 1, color: 'var(--color-text-primary)' }}>{r.symbol ?? '—'}</span>
-              {pnl !== null && Number.isFinite(pnl) && (
+              {/* 开仓单 realized_pnl=0,整列 +$0.00 是纯噪音(走查 2026-07-10)——
+                  只在真有已实现盈亏时显示。 */}
+              {pnl !== null && Number.isFinite(pnl) && pnl !== 0 && (
                 <Metric value={pnl} format="pnl" size="sm" align="right" showArrow />
               )}
               <span

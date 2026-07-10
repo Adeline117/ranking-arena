@@ -1,6 +1,7 @@
 'use client'
 
 import { localizedLabel } from '@/lib/utils/format'
+import { truncateGraphemes } from '@/lib/utils/truncate'
 import React, { memo } from 'react'
 import Link from 'next/link'
 import Image from 'next/image'
@@ -237,7 +238,7 @@ export const PostListItem = memo(
                 WebkitBoxOrient: 'vertical',
               }}
             >
-              {removeImagesFromContent(p.original_post.content).slice(0, 100)}
+              {truncateGraphemes(removeImagesFromContent(p.original_post.content), 100, '')}
             </div>
             {/* Original post image preview */}
             {p.original_post.images && p.original_post.images.length > 0 && (
