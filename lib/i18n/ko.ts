@@ -5957,6 +5957,8 @@ const ko = {
   colExitPrice: '청산가',
   colUnrealizedPnl: '미실현 손익',
   colRealizedPnl: '실현 손익',
+  recentActivityTitle: '최근 거래',
+  recentActivityViewAll: '전체 기록은 통계 → 거래 기록에서',
   colNotional: '명목 가치',
   colMargin: '증거금',
   colMarginMode: '모드',

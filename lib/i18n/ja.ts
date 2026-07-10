@@ -5726,6 +5726,8 @@ const ja = {
   colExitPrice: '決済価格',
   colUnrealizedPnl: '未実現損益',
   colRealizedPnl: '実現損益',
+  recentActivityTitle: '最近の取引',
+  recentActivityViewAll: '全履歴は 統計 → 取引記録 へ',
   colNotional: '想定元本',
   colMargin: '証拠金',
   colMarginMode: 'モード',

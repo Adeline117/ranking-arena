@@ -99,6 +99,10 @@ const SignalChips = dynamic(() => import('@/app/components/trader/serving/Signal
 const AbilityRadar = dynamic(() => import('@/app/components/trader/serving/AbilityRadar'), {
   ssr: false,
 })
+const RecentActivityCard = dynamic(
+  () => import('@/app/components/trader/serving/RecentActivityCard'),
+  { ssr: false }
+)
 const HoldingDistribution = dynamic(
   () => import('@/app/components/trader/serving/HoldingDistribution'),
   { ssr: false }
@@ -967,6 +971,14 @@ export default function TraderProfileClient({
                         />
                       </Box>
                       <AbilityRadar extras={servingTab.metaExtras} />
+                      {/* P2线 2026-07-09: order_records 此前只埋在 Stats 深处 —
+                          Overview 加最近成交预览(共享 React Query 缓存,零重复网络;
+                          能力关/无数据整卡 NULL-collapse)。 */}
+                      <RecentActivityCard
+                        source={data.source}
+                        exchangeTraderId={data.source_trader_id}
+                        enabled={useThreeTab && Boolean(servingCapability?.surfaces?.orders)}
+                      />
                     </Box>
                   )}
                   <OverviewTab
