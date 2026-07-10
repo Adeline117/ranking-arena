@@ -17,6 +17,7 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
+import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
 
 export const runtime = 'nodejs'
 
@@ -25,18 +26,6 @@ const PERIOD_DAYS: Record<string, number> = {
   '7D': 7,
   '30D': 30,
   '90D': 90,
-}
-
-// Normalize a raw symbol to a base token (e.g. BTCUSDT -> BTC, ETH/USD -> ETH)
-function _extractBaseToken(symbol: string): string {
-  const s = symbol.toUpperCase()
-  // Remove common suffixes
-  for (const suffix of ['USDT.P', 'USDT', 'BUSD', 'USD', '-PERP', '-USD']) {
-    if (s.endsWith(suffix)) return s.slice(0, -suffix.length)
-  }
-  // Handle slash notation: BTC/USDT -> BTC
-  if (s.includes('/')) return s.split('/')[0]
-  return s
 }
 
 interface TokenTrader {
@@ -73,27 +62,35 @@ async function handlePopularTokens(): Promise<NextResponse> {
         const timeout = setTimeout(() => controller.abort(), 10_000)
 
         try {
-          // Use SQL aggregate via RPC — avoids fetching 50K rows into JS memory
+          // Use SQL aggregate via RPC — avoids fetching 50K rows into JS memory.
+          // Over-fetch (60) so the U1-5 junk filter below still leaves a full 50.
           const { data, error } = await supabase
-            .rpc('get_popular_tokens', { lookback_days: 90, max_tokens: 50 })
+            .rpc('get_popular_tokens', { lookback_days: 90, max_tokens: 60 })
             .abortSignal(controller.signal)
 
           if (error) throw new Error(error.message)
           if (!data || data.length === 0) return []
 
           return (
-            data as Array<{
-              token: string
-              trade_count: number
-              trader_count: number
-              total_pnl: number
-            }>
-          ).map((row) => ({
-            token: row.token,
-            trade_count: Number(row.trade_count),
-            trader_count: Number(row.trader_count),
-            total_pnl: Number(row.total_pnl),
-          }))
+            (
+              data as Array<{
+                token: string
+                trade_count: number
+                trader_count: number
+                total_pnl: number
+              }>
+            )
+              // U1-5: drop junk symbols (HL-107 / XYZ:TSLA / numeric ids) so the
+              // token board matches the SSR list, then cap at 50.
+              .filter((row) => isValidTokenSymbol(String(row.token ?? '').toUpperCase()))
+              .slice(0, 50)
+              .map((row) => ({
+                token: row.token,
+                trade_count: Number(row.trade_count),
+                trader_count: Number(row.trader_count),
+                total_pnl: Number(row.total_pnl),
+              }))
+          )
         } finally {
           clearTimeout(timeout)
         }
