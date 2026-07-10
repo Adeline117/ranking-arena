@@ -26,7 +26,6 @@ const Web3VerifiedBadge = dynamic(
 )
 const VerifiedBadge = dynamic(() => import('./VerifiedBadge'), { ssr: false })
 const RankTrendSparkline = dynamic(() => import('./RankTrendSparkline'), { ssr: false })
-const RankPercentileBadge = dynamic(() => import('./RankPercentileBadge'), { ssr: false })
 const CrossExchangePercentileBadge = dynamic(() => import('./CrossExchangePercentileBadge'), {
   ssr: false,
 })
@@ -225,9 +224,6 @@ export function TraderHeaderBadges({
           derived from the overall 90D rank / total tracked count (NOT the
           blended display score). The flagship moat framing. */}
       {rank != null && rank > 0 && <CrossExchangePercentileBadge rank={rank} />}
-
-      {/* Rank Percentile Badge — per-platform "Top X% on Binance" */}
-      {rank != null && rank > 0 && source && <RankPercentileBadge rank={rank} platform={source} />}
 
       {/* Trading Style Tag */}
       {tradingStyleCfg && (

@@ -3430,6 +3430,30 @@ const en = {
   baseHeader: 'base ($)',
   thresholdHeader: 'θ (threshold)',
   winRateCapHeader: 'γ (win rate cap)',
+  // Arena Score v4 — scoring explanation (methodology page + ScoreRulesModal).
+  // Single source of truth: learn article 'how-arena-score-works'.
+  scoreV4Formula: 'Arena Score = 100 × Quality × Confidence',
+  scoreV4Intro:
+    'Quality blends five performance dimensions. Confidence scales the score down when there is not enough data to trust it. The result maps to a percentile — roughly the percentage of traders you beat.',
+  scoreV4QualityTitle: 'Quality — Five Dimensions',
+  scoreV4QualityDesc:
+    'Quality is split evenly between earnings (PnL + ROI = 50%) and skill (Drawdown + Sharpe + Consistency = 50%). Only the dimensions a trader has data for are included, then re-normalized.',
+  scoreV4DimHeader: 'Dimension',
+  scoreV4WeightHeader: 'Weight',
+  scoreV4DimPnl: 'PnL — absolute profit, USD (log scale)',
+  scoreV4DimRoi: 'ROI — return on investment',
+  scoreV4DimDrawdown: 'Drawdown — worst peak-to-trough loss',
+  scoreV4DimSharpe: 'Sharpe — risk-adjusted return',
+  scoreV4DimConsistency: 'Consistency — win rate & profit factor',
+  scoreV4ConfidenceTitle: 'Confidence — Statistical Honesty (0.35–1.0)',
+  scoreV4ConfidenceDesc:
+    'Confidence scales with sample size — trades / (trades + 50), so 50 trades ≈ 0.5 — and with how many risk metrics are actually available. A thin track record is structurally capped and never reaches the top.',
+  scoreV4DisplayTitle: 'The Displayed Score',
+  scoreV4DisplayDesc:
+    'The composite (Quality × Confidence) is turned into a percentile: your score is approximately the percentage of traders you beat. It is blended 70/30 with the relative composite so the very best traders do not all pile up against 100.',
+  scoreV4AntiGamingTitle: 'Why It Resists Gaming',
+  scoreV4AntiGaming:
+    'ROI is compressed — a 300% and a 10,000% return land close together\nPnL rewards real money — small accounts score near zero\nConfidence caps thin track records — a handful of trades cannot buy a top rank',
   totalTrades90d: 'Total Trades (90D)',
   avgTradeSize: 'Avg Trade Size',
   profitableTradesLabel: 'Profitable Trades',

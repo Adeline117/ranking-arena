@@ -3164,6 +3164,30 @@ const ja = {
   baseHeader: 'base（$）',
   thresholdHeader: 'θ（閾値）',
   winRateCapHeader: 'γ（勝率キャップ）',
+  // Arena Score v4 —— スコア説明（methodology ページ + ScoreRulesModal）。
+  // 単一の情報源：learn 記事 'how-arena-score-works'。
+  scoreV4Formula: 'Arena スコア = 100 × Quality × Confidence',
+  scoreV4Intro:
+    'Quality は 5 つのパフォーマンス指標を統合します。Confidence は信頼に足るデータが不足しているときにスコアを引き下げます。結果はパーセンタイルに変換され、おおよそあなたが上回ったトレーダーの割合を表します。',
+  scoreV4QualityTitle: 'Quality —— 5 つの指標',
+  scoreV4QualityDesc:
+    'Quality は収益（PnL + ROI = 50%）と実力（ドローダウン + シャープ + 一貫性 = 50%）に均等に分けられます。トレーダーが実際にデータを持つ指標のみが対象となり、その後で再正規化されます。',
+  scoreV4DimHeader: '指標',
+  scoreV4WeightHeader: '重み',
+  scoreV4DimPnl: 'PnL —— USD 建ての絶対利益（対数スケール）',
+  scoreV4DimRoi: 'ROI —— 投資収益率',
+  scoreV4DimDrawdown: 'ドローダウン —— 最大の山から谷への下落',
+  scoreV4DimSharpe: 'シャープ —— リスク調整後リターン',
+  scoreV4DimConsistency: '一貫性 —— 勝率と損益比',
+  scoreV4ConfidenceTitle: 'Confidence —— 統計的な誠実さ（0.35–1.0）',
+  scoreV4ConfidenceDesc:
+    '信頼度はサンプル数——取引数 / (取引数 + 50)、つまり 50 取引で約 0.5——と、リスク指標が実際にどれだけ揃っているかに応じて変化します。実績が薄いトレーダーは構造的に上限が設けられ、上位には到達できません。',
+  scoreV4DisplayTitle: '表示されるスコア',
+  scoreV4DisplayDesc:
+    '複合値（Quality × Confidence）はパーセンタイルに変換されます：あなたのスコアはおおよそ、あなたが上回ったトレーダーの割合です。相対的な複合値と 70/30 でブレンドされ、最上位のトレーダーが全員 100 に張り付かないようにしています。',
+  scoreV4AntiGamingTitle: 'なぜ操作に強いのか',
+  scoreV4AntiGaming:
+    'ROI は圧縮される —— 300% と 10,000% のリターンはほぼ並ぶ\nPnL は本物の資金を評価する —— 小口座はほぼ 0 点\n信頼度が薄い実績に上限をかける —— わずかな取引で上位ランクは買えない',
   totalTrades90d: '総取引数（90日）',
   avgTradeSize: '平均取引サイズ',
   profitableTradesLabel: '利益取引',

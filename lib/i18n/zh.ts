@@ -3344,6 +3344,30 @@ const zh = {
   baseHeader: '基础 ($)',
   thresholdHeader: '阈值',
   winRateCapHeader: '胜率上限',
+  // Arena Score v4 —— 评分说明（methodology 页 + ScoreRulesModal）。
+  // 单一事实来源：learn 文章 'how-arena-score-works'。
+  scoreV4Formula: 'Arena 评分 = 100 × 质量 × 置信度',
+  scoreV4Intro:
+    '质量融合五个表现维度。置信度在数据不足以信任时下调分数。最终结果被映射为一个百分位——大致就是你超过了多少比例的交易员。',
+  scoreV4QualityTitle: '质量 —— 五个维度',
+  scoreV4QualityDesc:
+    '质量在盈利（PnL + ROI = 50%）和实力（回撤 + 夏普 + 一致性 = 50%）之间平均分配。只有交易员实际拥有数据的维度才会被纳入，然后重新归一化。',
+  scoreV4DimHeader: '维度',
+  scoreV4WeightHeader: '权重',
+  scoreV4DimPnl: 'PnL —— 以美元计的绝对盈利（对数量级）',
+  scoreV4DimRoi: 'ROI —— 投资回报率',
+  scoreV4DimDrawdown: '回撤 —— 最大峰谷亏损',
+  scoreV4DimSharpe: '夏普 —— 风险调整后收益',
+  scoreV4DimConsistency: '一致性 —— 胜率与盈利因子',
+  scoreV4ConfidenceTitle: '置信度 —— 统计上的诚实（0.35–1.0）',
+  scoreV4ConfidenceDesc:
+    '置信度随样本量变化——交易数 / (交易数 + 50)，即 50 笔约为 0.5——并取决于实际可得的风险指标有多少。单薄的战绩会被结构性封顶，永远进不了顶部。',
+  scoreV4DisplayTitle: '显示分数',
+  scoreV4DisplayDesc:
+    '综合分（质量 × 置信度）会被转换为百分位：你的分数大致就是你超过的交易员比例。它以 70/30 与相对综合分混合，让最顶尖的交易员不至于全部挤在 100 分。',
+  scoreV4AntiGamingTitle: '为什么它能抗操纵',
+  scoreV4AntiGaming:
+    'ROI 被压缩 —— 300% 与 10000% 的收益几乎并列\nPnL 奖励真金白银 —— 小账户得分接近 0\n置信度封顶单薄的战绩 —— 寥寥几笔交易买不到顶部排名',
   totalTrades90d: '总交易 (90天)',
   avgTradeSize: '平均交易规模',
   profitableTradesLabel: '盈利交易',
