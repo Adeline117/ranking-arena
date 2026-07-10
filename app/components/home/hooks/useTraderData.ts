@@ -339,7 +339,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
         // Fingerprint check: skip dispatch if data is identical to current state.
         // This prevents the full 50-row re-render cascade on auto-refresh when
         // the leaderboard hasn't changed (which is most of the time).
-        const fingerprint = traders.map((t) => `${t.id}:${t.arena_score}:${t.roi}`).join('|')
+        const fingerprint = traders
+          .map((t) => `${t.id}:${t.arena_score}:${t.roi}:${t.is_verified ? 'v' : ''}`)
+          .join('|')
         if (fingerprint === dataFingerprintRef.current) {
           // Data unchanged — skip dispatch to avoid unnecessary re-renders
           dispatch({ type: 'SET_LOADING', loading: false })
