@@ -534,8 +534,8 @@ const ko = {
   inbox: '메시지',
   // TODO i18n ja/ko — English fallback pending translation
   u10inbox_pageTitle: 'Inbox',
-  u10inbox_dmEmptyCta: 'Open a trader profile and tap Message to start a chat',
-  u10inbox_conversationGone: 'This conversation no longer exists',
+  u10inbox_dmEmptyCta: '트레이더 프로필을 열고 「메시지」를 눌러 대화를 시작하세요',
+  u10inbox_conversationGone: '이 대화는 존재하지 않거나 삭제되었습니다',
   tabNotifications: '알림',
   tabMessages: '메시지',
   markAllAsRead: '모두 읽음 처리',
@@ -3488,11 +3488,11 @@ const ko = {
   sidebarNoGroups: '이용 가능한 그룹이 없습니다',
   // TODO i18n ja/ko — English fallback pending translation
   u9grp_reasonPopular: 'Popular',
-  u9grp_reasonFollowedJoined: 'People you follow joined',
-  u9grp_reasonMembersOverlap: 'Shared members with your groups',
+  u9grp_reasonFollowedJoined: '팔로우한 사용자가 가입했습니다',
+  u9grp_reasonMembersOverlap: '내 그룹과 멤버가 겹칩니다',
   u9grp_searchPlaceholder: 'Search groups',
-  u9grp_noSearchResults: 'No matching groups',
-  u9grp_joinToPost: 'Join the group to start posting',
+  u9grp_noSearchResults: '일치하는 그룹이 없습니다',
+  u9grp_joinToPost: '그룹에 가입하면 게시할 수 있습니다',
   // 멤버가 직접 관리하는 그룹 환경설정 (U9-12)
   groupPrefs_mute: '관리자 공지 음소거',
   groupPrefs_unmute: '음소거 해제',
@@ -4592,7 +4592,7 @@ const ko = {
   userActivityTitle: '활동',
   userActivityNoActivities: '아직 활동이 없습니다',
   userActivityLoadMore: '더 보기',
-  userActivityMarked: '',
+  userActivityMarked: '표시함 ',
   userActivityWantRead: '을(를) 읽고 싶은 책으로 표시함',
   userActivityStartedReading: '읽기 시작: ',
   userActivityFinishedReading: '읽기 완료: ',
@@ -6159,7 +6159,7 @@ const ko = {
   referralFriendTrialNote: '보너스: 친구가 내 링크로 가입하면 {days}일 Pro 체험을 받습니다.',
   // TODO i18n ja/ko
   referralPromoNote:
-    'Pro is currently free for everyone during our promo. The Pro days you earn are banked and automatically applied once the promo ends — they never expire.',
+    '프로모션 기간 동안 Pro는 모두에게 무료입니다. 획득한 Pro 보상 일수는 계정에 적립되며 프로모션 종료 후 자동으로 적용됩니다. 만료되지 않습니다.',
   referralPageSubtitle: '친구를 Arena에 초대하고 추천 현황을 확인하세요.',
   referralSignInGateTitle: '로그인하고 추천 링크 받기',
   referralSignInGateDesc: '계정을 만들거나 로그인하여 친구 초대를 시작하세요.',
