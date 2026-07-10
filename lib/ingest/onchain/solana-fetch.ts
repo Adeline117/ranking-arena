@@ -16,6 +16,17 @@ function alchemySolUrl(): string {
   return `https://solana-mainnet.g.alchemy.com/v2/${key}`
 }
 
+/**
+ * Prefer Helius when configured (owner-provided 2026-07-09, Phase B full-scale
+ * quota), fall back to Alchemy. Both speak identical Solana JSON-RPC — only
+ * the URL differs, so provider choice stays a pure env concern.
+ */
+function solDefaultUrl(): string {
+  const helius = process.env.HELIUS_API_KEY
+  if (helius) return `https://mainnet.helius-rpc.com/?api-key=${helius}`
+  return alchemySolUrl()
+}
+
 interface RpcOpts {
   rpcUrl?: string
   timeoutMs?: number
@@ -40,7 +51,7 @@ function isTransient(msg: string): boolean {
 }
 
 async function solRpc<T>(method: string, params: unknown[], opts: RpcOpts = {}): Promise<T> {
-  const url = opts.rpcUrl ?? alchemySolUrl()
+  const url = opts.rpcUrl ?? solDefaultUrl()
   const attempts = 5
   for (let i = 0; i < attempts; i++) {
     const ctrl = new AbortController()

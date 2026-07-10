@@ -183,6 +183,9 @@ export function enrichmentExtras(e: OnchainEnrichment): Record<string, unknown> 
     onchain_sell_volume: e.sellVolumeUsd,
     onchain_tokens_traded: e.tokensTraded,
     onchain_derivation: e.provenance,
+    // Freshness stamp — the runner's sweep selection skips wallets enriched
+    // within its window and refreshes stalest-first (Phase B recurring, 2026-07-09).
+    onchain_enriched_at: new Date().toISOString(),
     // OnchainInsights blocks — only when we actually have tokens (NULL-collapse).
     ...(hasTokens ? { token_distribution: e.tokenDistribution } : {}),
     ...(hasTokens ? { top_earning_tokens: e.topEarningTokens } : {}),
