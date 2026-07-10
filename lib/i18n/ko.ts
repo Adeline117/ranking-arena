@@ -4893,7 +4893,7 @@ const ko = {
     '신청은 Arena의 트레이더 프로필 뒤에 있는 실제 본인임을 확인하는 것입니다. 인증되면 배지가 부여되고, 프로필 편집 및 독점 기능에 접근할 수 있습니다.',
   claimPageFaqHow: '본인 확인은 어떻게 하나요?',
   claimPageFaqHowAnswer:
-    'CEX 트레이더(Binance, Bybit, OKX 등)는 읽기 전용 API 키를 제공합니다. DEX 트레이더(Hyperliquid, GMX 등)는 지갑으로 메시지에 서명합니다. 두 방법 모두 거래 계정의 소유권을 확인합니다.',
+    'CEX 트레이더(Binance, Bybit, OKX 등)는 읽기 전용 API 키를 제공합니다. DEX 트레이더(Hyperliquid, GMX 등)는 지갑으로 메시지에 서명합니다. 두 방법 모두 거래 계정의 소유권을 확인합니다. 인증 후 간단한 수동 검토(보통 24시간 이내)를 거쳐 배지가 활성화됩니다.',
   claimPageFaqExchanges: '어떤 거래소가 지원되나요?',
   claimPageFaqExchangesAnswer:
     'CEX: Binance, Bybit, OKX, Bitget, Gate.io, HTX. DEX: Hyperliquid, GMX, Gains, Aevo, Kwenta, Vertex, dYdX, Jupiter Perps, Drift.',

@@ -4645,7 +4645,7 @@ const ja = {
     '申請とは、Arenaのトレーダープロフィールの本人であることを確認するものです。認証されると、バッジが付与され、プロフィールの編集や限定機能へのアクセスが可能になります。',
   claimPageFaqHow: '本人確認の方法は？',
   claimPageFaqHowAnswer:
-    'CEXトレーダー（Binance、Bybit、OKXなど）は読み取り専用APIキーを提供します。DEXトレーダー（Hyperliquid、GMXなど）はウォレットでメッセージに署名します。どちらの方法でも、取引アカウントの所有権を確認できます。',
+    'CEXトレーダー（Binance、Bybit、OKXなど）は読み取り専用APIキーを提供します。DEXトレーダー（Hyperliquid、GMXなど）はウォレットでメッセージに署名します。どちらの方法でも、取引アカウントの所有権を確認できます。 認証後、簡単な手動レビュー(通常24時間以内)を経てバッジが有効になります。',
   claimPageFaqExchanges: '対応している取引所は？',
   claimPageFaqExchangesAnswer:
     'CEX: Binance、Bybit、OKX、Bitget、Gate.io、HTX。DEX: Hyperliquid、GMX、Gains、Aevo、Kwenta、Vertex、dYdX、Jupiter Perps、Drift。',

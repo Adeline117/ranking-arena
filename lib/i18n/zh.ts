@@ -4921,7 +4921,7 @@ const zh = {
     '认领可以验证你是 Arena 上某个交易员档案的真实持有者。认证后，你将获得徽章、可以编辑档案，并获得专属功能。',
   claimPageFaqHow: '如何验证身份？',
   claimPageFaqHowAnswer:
-    '对于 CEX 交易员（Binance、Bybit、OKX 等），提供只读 API Key。对于 DEX 交易员（Hyperliquid、GMX 等），使用钱包签名消息。两种方式均可确认你拥有该交易账户。',
+    '对于 CEX 交易员（Binance、Bybit、OKX 等），提供只读 API Key。对于 DEX 交易员（Hyperliquid、GMX 等），使用钱包签名消息。两种方式均可确认你拥有该交易账户。 验证通过后,认领会经过快速人工审核(通常 24 小时内),审核通过徽章即生效。',
   claimPageFaqExchanges: '支持哪些交易所？',
   claimPageFaqExchangesAnswer:
     'CEX: Binance, Bybit, OKX, Bitget, Gate.io, HTX。DEX: Hyperliquid, GMX, Gains, Aevo, Kwenta, Vertex, dYdX, Jupiter Perps, Drift。',

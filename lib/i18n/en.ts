@@ -5028,7 +5028,7 @@ const en = {
     'Claiming verifies that you are the real person behind a trader profile on Arena. Once verified, you get a badge, can edit your profile, and access exclusive features.',
   claimPageFaqHow: 'How do I verify my identity?',
   claimPageFaqHowAnswer:
-    'For CEX traders (Binance, Bybit, OKX, etc.), provide a read-only API key. For DEX traders (Hyperliquid, GMX, etc.), sign a message with your wallet. Both methods confirm you own the trading account.',
+    'For CEX traders (Binance, Bybit, OKX, etc.), provide a read-only API key. For DEX traders (Hyperliquid, GMX, etc.), sign a message with your wallet. Both methods confirm you own the trading account. After verification, claims go through a quick manual review (usually within 24h) before your badge activates.',
   claimPageFaqExchanges: 'Which exchanges are supported?',
   claimPageFaqExchangesAnswer:
     'CEX: Binance, Bybit, OKX, Bitget, Gate.io, HTX. DEX: Hyperliquid, GMX, Gains, Aevo, Kwenta, Vertex, dYdX, Jupiter Perps, Drift.',
