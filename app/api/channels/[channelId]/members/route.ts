@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import { filterChannelAddableUsers } from '@/lib/data/channel-permissions'
 
 const logger = createLogger('api:channels:channelId:members')
 
@@ -46,6 +47,21 @@ export async function POST(
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
+    // Privacy gate: drop users who blocked the actor (or the actor blocked) or
+    // who disabled DMs without mutually following — prevents an admin from
+    // force-adding people into a group to bypass DM block/privacy.
+    const { allowed: addableIds } = await filterChannelAddableUsers(
+      supabase,
+      user.id,
+      userIds as string[]
+    )
+    if (addableIds.length === 0) {
+      return NextResponse.json(
+        { error: 'None of the selected users can be added' },
+        { status: 400 }
+      )
+    }
+
     // Check total member count
     // KEEP 'exact' — 50 member cap enforcement. Scoped per-channel via
     // (channel_id) index. Must be accurate to block the 51st add.
@@ -54,11 +70,11 @@ export async function POST(
       .select('id', { count: 'exact', head: true })
       .eq('channel_id', channelId)
 
-    if ((count || 0) + userIds.length > 50) {
+    if ((count || 0) + addableIds.length > 50) {
       return NextResponse.json({ error: 'Group chat max 50 members' }, { status: 400 })
     }
 
-    const newMembers = userIds.map((id: string) => ({
+    const newMembers = addableIds.map((id: string) => ({
       channel_id: channelId,
       user_id: id,
       role: 'member',
@@ -70,9 +86,11 @@ export async function POST(
 
     if (error) return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
 
-    return NextResponse.json({ ok: true, added: userIds.length })
+    return NextResponse.json({ ok: true, added: addableIds.length })
   } catch (error) {
-    logger.error('ADD_MEMBERS failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.error('ADD_MEMBERS failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -103,7 +121,10 @@ export async function DELETE(
         .maybeSingle()
 
       if (mem?.role === 'owner') {
-        return NextResponse.json({ error: 'Owner cannot leave. Please transfer ownership or disband the group first.' }, { status: 400 })
+        return NextResponse.json(
+          { error: 'Owner cannot leave. Please transfer ownership or disband the group first.' },
+          { status: 400 }
+        )
       }
 
       await supabase
@@ -152,7 +173,9 @@ export async function DELETE(
 
     return NextResponse.json({ ok: true, action: 'removed' })
   } catch (error) {
-    logger.error('REMOVE_MEMBER failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.error('REMOVE_MEMBER failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -196,7 +219,9 @@ export async function PATCH(
 
     return NextResponse.json({ ok: true })
   } catch (error) {
-    logger.error('UPDATE_MEMBER_ROLE failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.error('UPDATE_MEMBER_ROLE failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }

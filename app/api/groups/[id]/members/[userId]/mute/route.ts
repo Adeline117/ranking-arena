@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { SupabaseClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
-import { createNotification } from '@/lib/data/notifications'
+import { sendNotification } from '@/lib/data/notifications'
 import logger from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
@@ -153,16 +153,20 @@ export async function POST(
             .eq('id', conversationId)
         }
 
-        // 同时创建系统通知
-        await createNotification(supabase, {
-          user_id: targetUserId,
-          type: 'system',
-          title: 'Group mute notification',
-          message: messageContent,
-          link: `/groups/${groupId}`,
-          actor_id: user.id,
-          reference_id: groupId,
-        })
+        // 同时创建系统通知（sendNotification 强制 fire-and-forget + 1h dedup）
+        sendNotification(
+          supabase,
+          {
+            user_id: targetUserId,
+            type: 'system',
+            title: 'Group mute notification',
+            message: messageContent,
+            link: `/groups/${groupId}`,
+            actor_id: user.id,
+            reference_id: groupId,
+          },
+          'group-mute'
+        )
       } catch (notifyError) {
         // 通知发送失败不影响禁言操作
         logger.error('Failed to send mute notification:', notifyError)

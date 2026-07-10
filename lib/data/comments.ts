@@ -168,6 +168,7 @@ export async function getPostComments(
     )
     .eq('post_id', postId)
     .is('parent_id', null)
+    .is('deleted_at', null) // hide soft-deleted (auto-moderated) comments
 
   if (sort === 'time') {
     query = query.order('created_at', { ascending: false })
@@ -211,6 +212,7 @@ export async function getPostComments(
       'id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at'
     )
     .in('parent_id', commentIds)
+    .is('deleted_at', null) // hide soft-deleted (auto-moderated) replies
     .order('created_at', { ascending: true })
   if (repliesError)
     logger.warn('[getPostComments] comment replies query error (drift?):', repliesError.message)
@@ -283,6 +285,7 @@ export async function getCommentById(
       'id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at'
     )
     .eq('id', commentId)
+    .is('deleted_at', null) // hide soft-deleted (auto-moderated) comments
     .maybeSingle()
 
   if (error || !data) return null
@@ -388,6 +391,7 @@ export async function getCommentCount(supabase: SupabaseClient, postId: string):
     .from('comments')
     .select('id', { count: 'exact', head: true })
     .eq('post_id', postId)
+    .is('deleted_at', null) // exclude soft-deleted (auto-moderated) comments
 
   if (error) return 0
   return count || 0

@@ -9,6 +9,7 @@ import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
+import { updateCount } from '@/lib/services/counters'
 import { z } from 'zod'
 
 const logger = createLogger('track-api')
@@ -44,7 +45,9 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin() as SupabaseClient
 
-    // Insert interaction record
+    // Insert interaction record. A partial UNIQUE index enforces one
+    // 'impression' row per (user, target) — a duplicate returns 23505, which
+    // is our "already counted" signal so the count bump below is skipped.
     const { error: insertError } = await supabase.from('user_interactions').insert({
       user_id: user.id,
       target_type: 'post',
@@ -53,25 +56,16 @@ export async function POST(request: NextRequest) {
       metadata: metadata || null,
     })
 
-    if (insertError) {
+    const isDuplicateImpression = insertError?.code === '23505'
+    if (insertError && !isDuplicateImpression) {
       logger.warn('Failed to insert interaction', { error: insertError.message })
     }
 
-    // Increment impression_count on the post (best-effort, non-critical)
-    // Uses read-then-write pattern — acceptable for approximate impression tracking
-    if (type === 'impression') {
-      const { data: post } = await supabase
-        .from('posts')
-        .select('impression_count')
-        .eq('id', post_id)
-        .single()
-
-      if (post) {
-        await supabase
-          .from('posts')
-          .update({ impression_count: (post.impression_count || 0) + 1 })
-          .eq('id', post_id)
-      }
+    // Bump impression_count ONLY on the first impression from this user for this
+    // post (insert succeeded). Atomic RPC — no read-then-write lost-update race,
+    // and per-(user,post) dedup prevents feed-ranking inflation by bot swarms.
+    if (type === 'impression' && !insertError) {
+      updateCount(supabase, 'increment_impression_count', { post_id }, 'Increment impression count')
     }
 
     return new Response(null, { status: 204 })

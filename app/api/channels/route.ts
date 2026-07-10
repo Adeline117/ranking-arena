@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import { filterChannelAddableUsers } from '@/lib/data/channel-permissions'
 
 const logger = createLogger('api:channels')
 
@@ -26,7 +27,8 @@ export async function GET(request: NextRequest) {
     // Get channels the user is a member of
     const query = supabase
       .from('channel_members')
-      .select(`
+      .select(
+        `
         channel_id,
         role,
         is_muted,
@@ -35,7 +37,8 @@ export async function GET(request: NextRequest) {
           id, name, type, avatar_url, description,
           last_message_at, last_message_preview, created_by
         )
-      `)
+      `
+      )
       .eq('user_id', user.id)
 
     const { data: memberships, error } = await query
@@ -44,8 +47,8 @@ export async function GET(request: NextRequest) {
     }
 
     let channels = (memberships || [])
-      .filter(m => m.chat_channels)
-      .map(m => {
+      .filter((m) => m.chat_channels)
+      .map((m) => {
         const ch = m.chat_channels as unknown as Record<string, unknown>
         return {
           id: ch.id,
@@ -62,19 +65,24 @@ export async function GET(request: NextRequest) {
       })
 
     if (type === 'group') {
-      channels = channels.filter(c => c.type === 'group')
+      channels = channels.filter((c) => c.type === 'group')
     }
 
     // Sort: pinned first, then by last_message_at
     channels.sort((a, b) => {
       if (a.is_pinned && !b.is_pinned) return -1
       if (!a.is_pinned && b.is_pinned) return 1
-      return new Date(b.last_message_at as string).getTime() - new Date(a.last_message_at as string).getTime()
+      return (
+        new Date(b.last_message_at as string).getTime() -
+        new Date(a.last_message_at as string).getTime()
+      )
     })
 
     return NextResponse.json({ channels })
   } catch (error) {
-    logger.error('GET /api/channels failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.error('GET /api/channels failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
@@ -105,6 +113,21 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
+    // Privacy gate: drop members who blocked the creator (or the creator
+    // blocked) or who disabled DMs without mutually following — prevents
+    // force-adding people into a group to bypass DM block/privacy.
+    const { allowed: addableIds } = await filterChannelAddableUsers(
+      supabase,
+      user.id,
+      memberIds as string[]
+    )
+    if (addableIds.length < 1) {
+      return NextResponse.json(
+        { error: 'None of the selected members can be added' },
+        { status: 400 }
+      )
+    }
+
     // Create the channel
     const { data: channel, error: channelError } = await supabase
       .from('chat_channels')
@@ -121,19 +144,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to create group chat' }, { status: 500 })
     }
 
-    // Add the creator as owner
+    // Add the creator as owner + only the privacy-filtered members
     const members = [
       { channel_id: channel.id, user_id: user.id, role: 'owner' },
-      ...memberIds.map((id: string) => ({
+      ...addableIds.map((id: string) => ({
         channel_id: channel.id,
         user_id: id,
         role: 'member',
       })),
     ]
 
-    const { error: memberError } = await supabase
-      .from('channel_members')
-      .insert(members)
+    const { error: memberError } = await supabase.from('channel_members').insert(members)
 
     if (memberError) {
       // Cleanup channel if member insert fails
@@ -143,7 +164,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ channel })
   } catch (error) {
-    logger.error('POST /api/channels failed', { error: error instanceof Error ? error.message : String(error) })
+    logger.error('POST /api/channels failed', {
+      error: error instanceof Error ? error.message : String(error),
+    })
     return NextResponse.json({ error: 'Server error' }, { status: 500 })
   }
 }
