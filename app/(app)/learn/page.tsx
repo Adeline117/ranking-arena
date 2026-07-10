@@ -58,7 +58,7 @@ export default async function LearnPage() {
     title: pickLocalized(article.title, lang),
     excerpt: pickLocalized(article.excerpt, lang),
     topic: TOPIC_BY_SLUG[article.slug] || '',
-    mins: readingMinutes(article.content),
+    mins: readingMinutes(pickLocalized(article.content, lang)),
   }))
 
   return (

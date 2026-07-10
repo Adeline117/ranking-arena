@@ -190,7 +190,7 @@ export default async function LearnArticlePage({ params }: { params: Promise<{ s
   // path so a sanitizer load failure can never turn the notFound() above into a 500.
   const { sanitizeHtml } = await import('@/lib/utils/sanitize')
 
-  const { html, headings } = renderArticle(article.content)
+  const { html, headings } = renderArticle(pickLocalized(article.content, lang))
   const showToc = headings.length >= 3
 
   // Prev / next navigation derived from the canonical ARTICLES order
