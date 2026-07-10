@@ -854,8 +854,13 @@ export default function TraderProfileClient({
           />
         </div>
 
-        {/* Rank sparkline — 7-day rank trajectory */}
-        {rankSparklineData.length >= 2 && (
+        {/* Rank sparkline — 7-day rank trajectory.
+            CLS 修复(Lighthouse 2026-07-10, trader CLS 0.144 元凶):此条此前等
+            客户端 rank-history fetch 到达才渲染,出现瞬间把下方 ExchangeLinksBar/
+            tabs/profile-grid 整体下推 ~34px(两次 grid shift 合计 0.098)。
+            服务端已知 rank(data.rank)时首帧即预留固定高度,数据到了往里填——
+            无 rank 的交易员照旧不渲染,不留空洞。 */}
+        {(rankSparklineData.length >= 2 || data.rank != null) && (
           <Box
             style={{
               display: 'flex',
@@ -863,12 +868,17 @@ export default function TraderProfileClient({
               gap: tokens.spacing[2],
               marginTop: tokens.spacing[2],
               marginBottom: tokens.spacing[1],
+              minHeight: 24,
             }}
           >
-            <Text size="xs" color="tertiary">
-              {t('rankTrend')}
-            </Text>
-            <RankSparkline data={rankSparklineData} width={80} height={24} />
+            {rankSparklineData.length >= 2 && (
+              <>
+                <Text size="xs" color="tertiary">
+                  {t('rankTrend')}
+                </Text>
+                <RankSparkline data={rankSparklineData} width={80} height={24} />
+              </>
+            )}
           </Box>
         )}
 
