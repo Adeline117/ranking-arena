@@ -3,8 +3,9 @@
  * GET /api/traders/claim - Get user's claim status (includes all linked traders)
  * POST /api/traders/claim - Submit claim with verification (supports multi-account)
  *
- * After verification passes (API key UID match or wallet signature),
- * the claim is auto-approved without manual review.
+ * After verification passes (API key UID match or wallet signature), the
+ * claim enters MANUAL owner review ('reviewing'); activation happens on
+ * admin approval via activateClaim() (2026-07-09 owner decision).
  */
 
 import crypto from 'crypto'
@@ -21,8 +22,8 @@ import {
 } from '@/lib/api'
 import { ApiError } from '@/lib/api/errors'
 import { getUserClaim, getUserVerifiedTrader, isTraderClaimed } from '@/lib/data/trader-claims'
-import { revalidatePath } from 'next/cache'
 import { notifyTraderClaim } from '@/lib/notifications/activity-alerts'
+import { sendNotification } from '@/lib/data/notifications'
 import { verifyWalletOwnership } from '@/lib/services/wallet-verification'
 import { logger } from '@/lib/logger'
 
@@ -104,13 +105,6 @@ export async function POST(request: NextRequest) {
       throw ApiError.validation('This trader account has been claimed or is under review')
     }
 
-    // Check how many linked traders the user already has (for is_primary logic)
-    const { data: existingLinks } = await supabase
-      .from('user_linked_traders')
-      .select('id')
-      .eq('user_id', user.id)
-    const isFirstClaim = !existingLinks || existingLinks.length === 0
-
     // For API key verification, validate that verify-ownership was called and UID matches
     if (verification_method === 'api_key') {
       const verifiedUid = body.verification_data?.verified_uid
@@ -171,8 +165,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Verification passed - auto-approve the claim
-    const now = new Date().toISOString()
+    // Verification passed — queue for MANUAL owner review (2026-07-09 owner
+    // decision: "UID 加人工,我来一个个看"). The API-key UID match / wallet
+    // signature above proves account OWNERSHIP; the owner personally confirms
+    // the claim before any badge/authorization side effect fires. The whole
+    // activation chain (verified_traders / user_linked_traders / user_profiles
+    // / trader_authorizations) moved to activateClaim(), called from the admin
+    // approve path (lib/data/trader-claims.ts reviewClaim).
 
     // Hash sensitive UIDs before storing in verification_data
     let sanitizedVerificationData = body.verification_data || {}
@@ -185,7 +184,6 @@ export async function POST(request: NextRequest) {
       sanitizedVerificationData = { uid_hash: uidHash }
     }
 
-    // Create claim record as 'verified' (auto-approved)
     const { data: claim, error: claimError } = await supabase
       .from('trader_claims')
       .insert({
@@ -194,8 +192,7 @@ export async function POST(request: NextRequest) {
         source,
         verification_method,
         verification_data: sanitizedVerificationData,
-        status: 'verified',
-        verified_at: now,
+        status: 'reviewing',
       })
       .select()
       .single()
@@ -207,102 +204,26 @@ export async function POST(request: NextRequest) {
       throw claimError
     }
 
-    // Create verified_traders record
-    const { error: verifiedError } = await supabase.from('verified_traders').insert({
-      user_id: user.id,
-      trader_id,
-      source,
-      verified_at: now,
-      verification_method,
-    })
-
-    if (verifiedError && verifiedError.code !== '23505') {
-      logger.error('[trader-claim] Failed to create verified_traders record', verifiedError)
-    }
-
-    // Create user_linked_traders record
-    const { error: linkError } = await supabase.from('user_linked_traders').upsert(
+    // In-app notification to the claimant (fire-and-forget, deduped).
+    sendNotification(
+      supabase,
       {
         user_id: user.id,
-        trader_id,
-        source,
-        is_primary: isFirstClaim,
-        display_order: isFirstClaim ? 0 : (existingLinks?.length ?? 0),
-        verified_at: now,
-        verification_method,
+        type: 'system',
+        title: 'Claim under review',
+        message: `Your claim for ${trader_id} (${source}) passed verification and is awaiting manual review.`,
+        reference_id: String(claim.id),
       },
-      {
-        onConflict: 'user_id, trader_id, source',
-      }
+      'trader-claim-submit'
     )
-
-    if (linkError) {
-      logger.error('[trader-claim] Failed to create user_linked_traders record', linkError)
-    }
-
-    // Update user_profiles
-    const newCount = (existingLinks?.length ?? 0) + 1
-    await supabase
-      .from('user_profiles')
-      .update({
-        is_verified_trader: true,
-        verified_trader_id: isFirstClaim ? trader_id : undefined,
-        verified_trader_source: isFirstClaim ? source : undefined,
-        linked_trader_count: newCount,
-      })
-      .eq('id', user.id)
-
-    // If there's an existing authorization flow, trigger it too
-    // This merges the "authorize" functionality into claim
-    if (verification_method === 'api_key') {
-      const { data: existingAuth } = await supabase
-        .from('trader_authorizations')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('platform', source)
-        .eq('trader_id', trader_id)
-        .maybeSingle()
-
-      if (!existingAuth) {
-        // Get encrypted credentials from exchange connection
-        const { data: conn } = await supabase
-          .from('user_exchange_connections')
-          .select('api_key_encrypted, api_secret_encrypted, passphrase_encrypted')
-          .eq('user_id', user.id)
-          .eq('is_active', true)
-          .maybeSingle()
-
-        if (conn?.api_key_encrypted) {
-          await supabase.from('trader_authorizations').insert({
-            user_id: user.id,
-            platform: source,
-            trader_id,
-            encrypted_api_key: conn.api_key_encrypted,
-            encrypted_api_secret: conn.api_secret_encrypted,
-            encrypted_passphrase: conn.passphrase_encrypted,
-            permissions: ['read'],
-            status: 'active',
-            last_verified_at: now,
-            sync_frequency: 'realtime',
-          })
-        }
-      }
-    }
-
-    // Notify
+    // Owner alert (Telegram) — the review queue ping.
     notifyTraderClaim(user.email ?? null, trader_id, source)
-
-    // Invalidate ISR cache so trader detail page shows verified badge immediately
-    try {
-      revalidatePath(`/trader/${trader_id}`)
-    } catch {
-      // Non-critical — ISR cache will expire naturally within 5 minutes
-    }
 
     return success({
       claim,
-      message: 'Claim verified and approved! Your profile is now verified.',
-      auto_approved: true,
+      message:
+        'Verification passed! Your claim is under review — you will be notified once approved.',
+      auto_approved: false,
     })
   } catch (error: unknown) {
     return handleError(error, 'trader claim POST')

@@ -4,6 +4,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { sendNotification } from '@/lib/data/notifications'
 
 // ============================================
 // 类型定义
@@ -74,8 +75,10 @@ export interface UpdateVerifiedTraderInput {
 // Field constants
 // ============================================
 
-const CLAIM_FIELDS = 'id, user_id, trader_id, source, verification_method, verification_data, status, reject_reason, reviewed_by, reviewed_at, verified_at, created_at, updated_at'
-const VERIFIED_TRADER_FIELDS = 'id, user_id, trader_id, source, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url, verified_at, verification_method, can_pin_posts, can_reply_reviews, can_receive_messages, created_at, updated_at'
+const CLAIM_FIELDS =
+  'id, user_id, trader_id, source, verification_method, verification_data, status, reject_reason, reviewed_by, reviewed_at, verified_at, created_at, updated_at'
+const VERIFIED_TRADER_FIELDS =
+  'id, user_id, trader_id, source, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url, verified_at, verification_method, can_pin_posts, can_reply_reviews, can_receive_messages, created_at, updated_at'
 
 // ============================================
 // 查询函数
@@ -239,7 +242,9 @@ export async function getPendingClaims(
   const { data, error } = await supabase
     .from('trader_claims')
     .select(CLAIM_FIELDS)
-    .eq('status', 'pending')
+    // 'reviewing' = verification passed, awaiting the owner's manual approval
+    // (the post-2026-07-09 submit path); 'pending' kept for legacy rows.
+    .in('status', ['pending', 'reviewing'])
     .order('created_at', { ascending: true })
     .range(offset, offset + limit - 1)
 
@@ -292,24 +297,133 @@ export async function reviewClaim(
     throw updateError
   }
 
-  // 如果通过，创建认证记录
+  // 如果通过，执行完整激活链（从 claim 路由的旧自动批准块搬迁,2026-07-09）
   if (approved && claim) {
-    const { error: verifyError } = await supabase
-      .from('verified_traders')
-      .insert({
+    await activateClaim(supabase, claim)
+  } else if (!approved && claim) {
+    // 被拒 → 站内通知申请人（fire-and-forget,主流程不受影响）
+    sendNotification(
+      supabase,
+      {
         user_id: claim.user_id,
-        trader_id: claim.trader_id,
-        source: claim.source,
-        verified_at: now,
-        verification_method: claim.verification_method,
-      })
-
-    if (verifyError) {
-      throw verifyError
-    }
+        type: 'system',
+        title: 'Claim rejected',
+        message: `Your claim for ${claim.trader_id} (${claim.source}) was not approved${rejectReason ? `: ${rejectReason}` : '.'}`,
+        reference_id: String(claim.id),
+      },
+      'trader-claim-reject'
+    )
   }
 
   return claim
+}
+
+/**
+ * 激活已批准的认领（2026-07-09 人工审核制）。
+ *
+ * 从 claim 路由的旧自动批准块整体搬迁：verified_traders / user_linked_traders
+ * / user_profiles / trader_authorizations 全部副作用集中于此，只在 owner 在
+ * admin 面板批准后执行。幂等：verified_traders 23505 容忍、linked upsert、
+ * authorization 先查后插——double-approve 不产生重复行。
+ *
+ * P1 接线点（认领交易员大特性）：arena.traders 打 claimed 标 + 首个
+ * first-party sync job 在此追加（arena_set_trader_claimed RPC 落地后）。
+ */
+export async function activateClaim(supabase: SupabaseClient, claim: TraderClaim): Promise<void> {
+  const now = new Date().toISOString()
+  const { user_id, trader_id, source, verification_method } = claim
+
+  // verified_traders（23505 = 已存在，幂等）
+  const { error: verifiedError } = await supabase.from('verified_traders').insert({
+    user_id,
+    trader_id,
+    source,
+    verified_at: now,
+    verification_method,
+  })
+  if (verifiedError && verifiedError.code !== '23505') {
+    logger.error('[trader-claims] activateClaim: verified_traders 写入失败', verifiedError)
+    throw verifiedError
+  }
+
+  // user_linked_traders（多账号 junction；首个认领为 primary）
+  const { data: existingLinks } = await supabase
+    .from('user_linked_traders')
+    .select('id')
+    .eq('user_id', user_id)
+  const isFirstClaim = !existingLinks || existingLinks.length === 0
+  const { error: linkError } = await supabase.from('user_linked_traders').upsert(
+    {
+      user_id,
+      trader_id,
+      source,
+      is_primary: isFirstClaim,
+      display_order: isFirstClaim ? 0 : (existingLinks?.length ?? 0),
+      verified_at: now,
+      verification_method,
+    },
+    { onConflict: 'user_id, trader_id, source' }
+  )
+  if (linkError) {
+    logger.error('[trader-claims] activateClaim: user_linked_traders 写入失败', linkError)
+  }
+
+  // user_profiles 认证态
+  await supabase
+    .from('user_profiles')
+    .update({
+      is_verified_trader: true,
+      verified_trader_id: isFirstClaim ? trader_id : undefined,
+      verified_trader_source: isFirstClaim ? source : undefined,
+      linked_trader_count: (existingLinks?.length ?? 0) + (isFirstClaim ? 1 : 1),
+    })
+    .eq('id', user_id)
+
+  // trader_authorizations（api_key 认领：把加密凭证从 exchange connection 接管）
+  if (verification_method === 'api_key') {
+    const { data: existingAuth } = await supabase
+      .from('trader_authorizations')
+      .select('id')
+      .eq('user_id', user_id)
+      .eq('platform', source)
+      .eq('trader_id', trader_id)
+      .maybeSingle()
+    if (!existingAuth) {
+      const { data: conn } = await supabase
+        .from('user_exchange_connections')
+        .select('api_key_encrypted, api_secret_encrypted, passphrase_encrypted')
+        .eq('user_id', user_id)
+        .eq('is_active', true)
+        .maybeSingle()
+      if (conn?.api_key_encrypted) {
+        await supabase.from('trader_authorizations').insert({
+          user_id,
+          platform: source,
+          trader_id,
+          encrypted_api_key: conn.api_key_encrypted,
+          encrypted_api_secret: conn.api_secret_encrypted,
+          encrypted_passphrase: conn.passphrase_encrypted,
+          permissions: ['read'],
+          status: 'active',
+          last_verified_at: now,
+          sync_frequency: 'realtime',
+        })
+      }
+    }
+  }
+
+  // 站内通知申请人（fire-and-forget）
+  sendNotification(
+    supabase,
+    {
+      user_id,
+      type: 'system',
+      title: 'Claim approved',
+      message: `Your claim for ${trader_id} (${source}) is approved — your profile is now verified.`,
+      reference_id: String(claim.id),
+    },
+    'trader-claim-approve'
+  )
 }
 
 /**
@@ -329,7 +443,8 @@ export async function updateVerifiedTrader(
   if (input.telegram_url !== undefined) updateData.telegram_url = input.telegram_url
   if (input.discord_url !== undefined) updateData.discord_url = input.discord_url
   if (input.website_url !== undefined) updateData.website_url = input.website_url
-  if (input.can_receive_messages !== undefined) updateData.can_receive_messages = input.can_receive_messages
+  if (input.can_receive_messages !== undefined)
+    updateData.can_receive_messages = input.can_receive_messages
 
   const { data, error } = await supabase
     .from('verified_traders')
