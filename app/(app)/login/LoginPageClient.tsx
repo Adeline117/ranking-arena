@@ -572,11 +572,7 @@ export default function LoginPageClient() {
         else if (msg.includes('Too many requests') || msg.includes('rate limit')) {
           const RATE_LIMIT_SECONDS = 30
           setRateLimitCountdown(RATE_LIMIT_SECONDS)
-          setError(
-            lang === 'zh'
-              ? `操作过于频繁，请 ${RATE_LIMIT_SECONDS} 秒后重试`
-              : `Too many attempts. Try again in ${RATE_LIMIT_SECONDS}s.`
-          )
+          setError(t('loginRateLimitRetry').replace('{n}', String(RATE_LIMIT_SECONDS)))
         } else if (msg.toLowerCase().includes('banned')) {
           setError(t('loginAccountPendingDeletion'))
           setShowRecoveryPrompt(true)
@@ -1077,9 +1073,7 @@ export default function LoginPageClient() {
                 <line x1="12" y1="16" x2="12.01" y2="16" />
               </svg>
               {rateLimitCountdown > 0
-                ? lang === 'zh'
-                  ? `操作过于频繁，请 ${rateLimitCountdown} 秒后重试`
-                  : `Too many attempts. Try again in ${rateLimitCountdown}s.`
+                ? t('loginRateLimitRetry').replace('{n}', String(rateLimitCountdown))
                 : error}
             </div>
             {showRecoveryPrompt && (

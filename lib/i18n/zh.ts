@@ -2736,6 +2736,9 @@ const zh = {
   notifGroupedCount: '{n} 条通知',
   loginTooManyAttemptsCode: '尝试次数过多，请重新获取验证码',
   loginIncorrectCredentials: '邮箱或密码不正确，请重试',
+  loginRateLimitRetry: '操作过于频繁，请 {n} 秒后重试',
+  socialLoginOpenInBrowser:
+    '请在系统浏览器(Safari/Chrome)中打开此页面登录{provider}。链接已复制到剪贴板。',
   loginEmailNotVerified: '邮箱尚未验证，请检查收件箱',
   loginAccountPendingDeletion: '此账号已申请注销。如需恢复账号，请点击下方按钮。',
   loginAccountRecovered: '账号已恢复，正在登录...',
