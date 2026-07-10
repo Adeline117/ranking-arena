@@ -15,6 +15,7 @@
 
 import { computeBscWalletOnchain } from './bsc-fetch'
 import { computeSolanaWalletOnchain } from './solana-fetch'
+import { fetchMoralisInternalBnb } from './moralis-bsc-internal'
 import { fetchTokenInfo, unrealizedFromHoldings, type TokenInfo } from './token-prices'
 import type { PerTokenPnl } from './pnl-accounting'
 import type { NormalizedTransfer } from './bsc-swaps'
@@ -124,15 +125,24 @@ export async function enrichWeb3Wallet(
     const { u, info } = await priceAndMeta(r.pnl.perToken)
     return normalize('solana', wallet, lookbackDays, r.pnl, u, info, false)
   }
+  // Native-BNB SELL receipts (item C): caller-supplied (Dune batch) wins;
+  // otherwise auto-fetch per wallet from Moralis (owner key 2026-07-09,
+  // live-verified inbound router→wallet legs). Fail-soft [] → realized-partial.
+  let internalLegs = opts.bscInternalBnb
+  if (internalLegs === undefined && process.env.MORALIS_API_KEY) {
+    const fetched = await fetchMoralisInternalBnb(wallet, { lookbackDays })
+    if (fetched.length > 0) internalLegs = fetched
+  }
   const r = await computeBscWalletOnchain(wallet, {
     lookbackDays,
     maxPages: opts.maxPages,
-    extraTransfers: opts.bscInternalBnb,
+    extraTransfers: internalLegs,
   })
   const { u, info } = await priceAndMeta(r.pnl.perToken)
-  // With Dune internal-BNB legs injected, native-BNB sells ARE captured →
-  // realized complete. Only flag partial when we had NO Dune data to inject.
-  const partial = !opts.bscInternalBnb
+  // With internal-BNB legs injected (Dune batch or Moralis per-wallet),
+  // native-BNB sells ARE captured → realized complete. Only flag partial when
+  // we had NO internal data to inject.
+  const partial = !internalLegs
   return normalize('bsc', wallet, lookbackDays, r.pnl, u, info, partial)
 }
 
