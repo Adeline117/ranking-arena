@@ -20,6 +20,7 @@ export const PLATFORM_LABELS: Record<string, string> = {
   okx: 'OKX',
   okx_spot: 'OKX Spot',
   okx_web3: 'OKX Web3',
+  okx_web3_solana: 'OKX Wallet',
   okx_futures: 'OKX',
   hyperliquid: 'Hyperliquid',
   gmx: 'GMX',
