@@ -51,7 +51,8 @@ async function markSync(
   authId: string,
   ok: boolean,
   detail: string,
-  priorFailures: number
+  priorFailures: number,
+  ctx?: { userId: string; platform: string; traderId: string }
 ): Promise<void> {
   const failures = ok ? 0 : priorFailures + 1
   const status = ok ? 'active' : failures >= 3 ? 'error' : 'active'
@@ -62,6 +63,32 @@ async function markSync(
       WHERE id = $1`,
     [authId, detail.slice(0, 200), failures, status]
   )
+  // 连挂 3 次转 error 的瞬间通知用户换 key(E2E 干跑 2026-07-10 发现的缺口)。
+  // worker=批处理语境,按 CLAUDE.md 通知铁律允许直插;ON CONFLICT 无约束可依,
+  // 用 reference_id 幂等判重(同一授权只发一次,直到恢复 active 再挂才重发)。
+  if (!ok && failures === 3 && ctx) {
+    try {
+      await getIngestPool().query(
+        `INSERT INTO public.notifications (user_id, type, title, message, reference_id)
+         SELECT $1, 'system', 'Exchange connection needs attention',
+                $2, $3
+          WHERE NOT EXISTS (
+            SELECT 1 FROM public.notifications
+             WHERE user_id = $1 AND reference_id = $3
+               AND created_at > now() - interval '7 days')`,
+        [
+          ctx.userId,
+          `Syncing your ${ctx.platform} account (${ctx.traderId.slice(0, 12)}…) failed 3 times — your rankings fall back to exchange board data. Please re-verify or rotate your API key in Settings.`,
+          `fp-error-${authId}`,
+        ]
+      )
+    } catch (err) {
+      console.warn(
+        '[first-party] error-notification insert failed (non-fatal):',
+        err instanceof Error ? err.message : err
+      )
+    }
+  }
 }
 
 export interface FirstPartySyncResult {
@@ -199,7 +226,11 @@ export async function processFirstPartySync(
     return { ok: true, statsWritten: valid.length, seriesPoints, detail: 'ok' }
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    await markSync(auth.id, false, msg, auth.consecutive_failures)
+    await markSync(auth.id, false, msg, auth.consecutive_failures, {
+      userId: auth.user_id,
+      platform: auth.platform,
+      traderId: auth.trader_id,
+    })
     console.warn(`[first-party] ${auth.platform}/${auth.trader_id} failed: ${msg}`)
     return { ok: false, statsWritten: 0, seriesPoints: 0, detail: msg }
   }

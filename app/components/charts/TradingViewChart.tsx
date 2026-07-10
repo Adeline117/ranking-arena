@@ -243,7 +243,8 @@ export default function TradingViewChart({
       // UTCTimestamp (unix seconds) | BusinessDay | string — raw String()
       // on a numeric timestamp renders e.g. "1767398400". Format in UTC to
       // match the chart's own UTC time-axis labels.
-      const intlLocale = ({ zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as const)[locale] || 'en-US'
+      const intlLocale =
+        ({ en: 'en-US', zh: 'zh-CN', ja: 'ja-JP', ko: 'ko-KR' } as const)[locale] || 'en-US'
       const formatTooltipTime = (t: Time): string => {
         if (typeof t === 'number') {
           const date = new Date(t * 1000)
