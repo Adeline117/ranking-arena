@@ -54,7 +54,12 @@ interface HeartbeatPayload {
   pid?: number
   node?: string
   sha?: string
+  disk?: number
 }
+
+// Root-fs used % at/above which we page. SG VPS sits ~95% (52GB/46GB used), a
+// near-term hard failure; 88 gives runway before a crashloop from a full disk.
+const DISK_WARN_PCT = 88
 
 function parseBeat(raw: unknown): HeartbeatPayload | null {
   if (raw == null) return null
@@ -89,6 +94,7 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
   const healthyRegions = new Set<string>()
   const pruned: string[] = []
   const liveShas: Array<{ node: string; sha: string }> = []
+  const highDisk: Array<{ node: string; disk: number }> = []
 
   for (const [node, raw] of entries) {
     const beat = parseBeat(raw)
@@ -108,7 +114,29 @@ export const GET = withCron('worker-heartbeat-check', async (_request: NextReque
       healthy.push(node)
       for (const r of beat.regions ?? []) healthyRegions.add(r)
       if (beat.sha && beat.sha !== 'unknown') liveShas.push({ node, sha: beat.sha })
+      if (typeof beat.disk === 'number' && beat.disk >= DISK_WARN_PCT) {
+        highDisk.push({ node, disk: beat.disk })
+      }
     }
+  }
+
+  // Disk-fill early warning — a full disk on the SG VPS silently crashloops the
+  // container (docker can't write). Older workers omit `disk`; absent = no page.
+  if (highDisk.length > 0) {
+    await sendRateLimitedAlert(
+      {
+        title: `Ingest worker DISK high: ${highDisk.map((d) => `${d.node} ${d.disk}%`).join(', ')}`,
+        message:
+          `Worker node disk ≥ ${DISK_WARN_PCT}% — a full disk crashloops the container.\n` +
+          highDisk.map((d) => `⚠️ ${d.node}: ${d.disk}% used`).join('\n') +
+          `\n\nFree space: on the box \`docker system prune -f\` (keep npm-ci cache) / clear old logs; ` +
+          `SG VPS = root@45.76.152.169 (/opt/arena-ingest).`,
+        level: 'warning',
+        details: { highDisk },
+      },
+      'worker-heartbeat:disk',
+      6 * 3600_000 // 6h cooldown — disk fills slowly
+    ).catch((err) => logger.warn('[worker-heartbeat-check] disk alert failed:', err))
   }
 
   // Region-coverage invariant — pages regardless of roster state (see
