@@ -36,6 +36,7 @@ import { get as cacheGet, set as cacheSet, del as cacheDel } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
 import { sendNotifications } from '@/lib/data/notifications'
 import { extractAndSyncHashtags } from '@/lib/data/hashtags'
+import { logRpcError } from '@/lib/data/serving/log-rpc-error'
 // sanitizeInput / sanitizeText are dynamically imported inside POST only —
 // keeps the sanitize-html parser out of the GET handler's module graph at
 // cold-start (the GET handler doesn't need it).
@@ -142,11 +143,14 @@ export const GET = withPublic(
     // Personalized feed: call RPC and return early
     if (sort_by === 'personalized') {
       if (user) {
-        const { data: feedData } = await supabase.rpc('get_personalized_feed', {
+        const { data: feedData, error: feedError } = await supabase.rpc('get_personalized_feed', {
           p_user_id: user.id,
           p_limit: limit,
           p_offset: offset,
         })
+        // Surface RPC drift: without this an error folds silently into the
+        // hot/recent fallback below, so a broken personalized feed is invisible.
+        if (feedError) logRpcError('get_personalized_feed', feedError)
 
         if (feedData && Array.isArray(feedData) && feedData.length > 0) {
           const postIds = feedData.map((r: { post_id: string }) => r.post_id)
