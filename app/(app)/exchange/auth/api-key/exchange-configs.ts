@@ -29,6 +29,36 @@ export const EXCHANGE_CONFIGS = {
           desc: 'Only check "Enable Reading", do not check other permissions. Copy API Key and Secret',
         },
       ],
+      ja: [
+        {
+          title: 'Binance にログイン',
+          desc: 'Binance 公式サイトにアクセスし、アカウントにログインします',
+        },
+        { title: 'API 管理へ移動', desc: '右上のアイコンをクリック →「API 管理」を選択' },
+        {
+          title: 'API キーを作成',
+          desc: '「API 作成」をクリックし、「システム生成」を選択して、ラベル名を設定します',
+        },
+        {
+          title: '読み取り専用権限を設定',
+          desc: '「読み取りを有効化」のみをチェックし、他の権限はチェックしないでください。完了後、API キーと Secret をコピーします',
+        },
+      ],
+      ko: [
+        {
+          title: 'Binance 로그인',
+          desc: 'Binance 공식 사이트에 접속하여 계정에 로그인합니다',
+        },
+        { title: 'API 관리로 이동', desc: '오른쪽 상단 아이콘 클릭 →「API 관리」 선택' },
+        {
+          title: 'API 키 생성',
+          desc: '「API 생성」을 클릭하고 「시스템 생성」을 선택한 후 라벨 이름을 설정합니다',
+        },
+        {
+          title: '읽기 전용 권한 설정',
+          desc: '「읽기 활성화」만 체크하고 다른 권한은 체크하지 마세요. 완료 후 API 키와 Secret을 복사합니다',
+        },
+      ],
     },
   },
   bybit: {
@@ -57,6 +87,33 @@ export const EXCHANGE_CONFIGS = {
           desc: 'Select "Read-Only" permission type. Copy API Key and Secret after verification',
         },
       ],
+      ja: [
+        {
+          title: 'Bybit にログイン',
+          desc: 'Bybit 公式サイトにアクセスし、アカウントにログインします',
+        },
+        { title: 'API 管理へ移動', desc: '右上のアイコンをクリック →「API」を選択' },
+        {
+          title: 'API キーを作成',
+          desc: '「新規キー作成」をクリックし、「システム生成 API キー」を選択します',
+        },
+        {
+          title: '読み取り専用権限を設定',
+          desc: '「読み取り専用」の権限タイプを選択し、セキュリティ認証の完了後、API キーと Secret をコピーします',
+        },
+      ],
+      ko: [
+        { title: 'Bybit 로그인', desc: 'Bybit 공식 사이트에 접속하여 계정에 로그인합니다' },
+        { title: 'API 관리로 이동', desc: '오른쪽 상단 아이콘 클릭 →「API」 선택' },
+        {
+          title: 'API 키 생성',
+          desc: '「새 키 생성」을 클릭하고 「시스템 생성 API 키」를 선택합니다',
+        },
+        {
+          title: '읽기 전용 권한 설정',
+          desc: '「읽기 전용」 권한 유형을 선택하고 보안 인증을 완료한 후 API 키와 Secret을 복사합니다',
+        },
+      ],
     },
   },
   bitget: {
@@ -82,6 +139,33 @@ export const EXCHANGE_CONFIGS = {
           desc: 'Only check "Read-Only" permission. Copy API Key, Secret and Passphrase after verification',
         },
       ],
+      ja: [
+        {
+          title: 'Bitget にログイン',
+          desc: 'Bitget 公式サイトにアクセスし、アカウントにログインします',
+        },
+        { title: 'API 管理へ移動', desc: '右上のアイコンをクリック →「API 管理」' },
+        {
+          title: 'API キーを作成',
+          desc: '「API 作成」をクリックし、メモ名とパスフレーズ（Passphrase）を設定します',
+        },
+        {
+          title: '読み取り専用権限を設定',
+          desc: '「読み取り専用」権限のみをチェックし、認証の完了後、API キー、Secret、Passphrase をコピーします',
+        },
+      ],
+      ko: [
+        { title: 'Bitget 로그인', desc: 'Bitget 공식 사이트에 접속하여 계정에 로그인합니다' },
+        { title: 'API 관리로 이동', desc: '오른쪽 상단 아이콘 클릭 →「API 관리」' },
+        {
+          title: 'API 키 생성',
+          desc: '「API 생성」을 클릭하고 메모 이름과 패스프레이즈(Passphrase)를 설정합니다',
+        },
+        {
+          title: '읽기 전용 권한 설정',
+          desc: '「읽기 전용」 권한만 체크하고 인증을 완료한 후 API 키, Secret, Passphrase를 복사합니다',
+        },
+      ],
     },
   },
   mexc: {
@@ -104,6 +188,27 @@ export const EXCHANGE_CONFIGS = {
           desc: 'Select "Read-Only" permission. Copy API Key and Secret after verification',
         },
       ],
+      ja: [
+        {
+          title: 'MEXC にログイン',
+          desc: 'MEXC 公式サイトにアクセスし、アカウントにログインします',
+        },
+        { title: 'API 管理へ移動', desc: '右上のアイコンをクリック →「API 管理」' },
+        { title: 'API キーを作成', desc: '「API 作成」をクリックし、メモ名を入力します' },
+        {
+          title: '読み取り専用権限を設定',
+          desc: '「読み取り専用」権限を選択し、セキュリティ認証の完了後、API キーと Secret をコピーします',
+        },
+      ],
+      ko: [
+        { title: 'MEXC 로그인', desc: 'MEXC 공식 사이트에 접속하여 계정에 로그인합니다' },
+        { title: 'API 관리로 이동', desc: '오른쪽 상단 아이콘 클릭 →「API 관리」' },
+        { title: 'API 키 생성', desc: '「API 생성」을 클릭하고 메모 이름을 입력합니다' },
+        {
+          title: '읽기 전용 권한 설정',
+          desc: '「읽기 전용」 권한을 선택하고 보안 인증을 완료한 후 API 키와 Secret을 복사합니다',
+        },
+      ],
     },
   },
   coinex: {
@@ -124,6 +229,27 @@ export const EXCHANGE_CONFIGS = {
         {
           title: 'Set Read-Only Permission',
           desc: 'Only check "Query" permission. Copy API Key and Secret after verification',
+        },
+      ],
+      ja: [
+        {
+          title: 'CoinEx にログイン',
+          desc: 'CoinEx 公式サイトにアクセスし、アカウントにログインします',
+        },
+        { title: 'API 管理へ移動', desc: '右上のアイコンをクリック →「API 管理」' },
+        { title: 'API キーを作成', desc: '「API キー作成」をクリックし、メモを入力します' },
+        {
+          title: '読み取り専用権限を設定',
+          desc: '「照会」権限のみをチェックし、認証の完了後、API キーと Secret をコピーします',
+        },
+      ],
+      ko: [
+        { title: 'CoinEx 로그인', desc: 'CoinEx 공식 사이트에 접속하여 계정에 로그인합니다' },
+        { title: 'API 관리로 이동', desc: '오른쪽 상단 아이콘 클릭 →「API 관리」' },
+        { title: 'API 키 생성', desc: '「API 키 생성」을 클릭하고 메모를 입력합니다' },
+        {
+          title: '읽기 전용 권한 설정',
+          desc: '「조회」 권한만 체크하고 인증을 완료한 후 API 키와 Secret을 복사합니다',
         },
       ],
     },
@@ -154,6 +280,24 @@ export const EXCHANGE_CONFIGS = {
           desc: 'Only check "Read" permission. Do not enable trading. Copy API Key and Secret after verification',
         },
       ],
+      ja: [
+        { title: 'HTX にログイン', desc: 'HTX 公式サイトにアクセスし、アカウントにログインします' },
+        { title: 'API 管理へ移動', desc: '右上のアイコンをクリック →「API 管理」を選択' },
+        { title: 'API キーを作成', desc: '「API キー作成」をクリックし、メモ名を入力します' },
+        {
+          title: '読み取り専用権限を設定',
+          desc: '「読み取り」権限のみをチェックし、取引権限は有効にしないでください。認証の完了後、API キーと Secret をコピーします',
+        },
+      ],
+      ko: [
+        { title: 'HTX 로그인', desc: 'HTX 공식 사이트에 접속하여 계정에 로그인합니다' },
+        { title: 'API 관리로 이동', desc: '오른쪽 상단 아이콘 클릭 →「API 관리」 선택' },
+        { title: 'API 키 생성', desc: '「API 키 생성」을 클릭하고 메모 이름을 입력합니다' },
+        {
+          title: '읽기 전용 권한 설정',
+          desc: '「읽기」 권한만 체크하고 거래 권한은 활성화하지 마세요. 인증을 완료한 후 API 키와 Secret을 복사합니다',
+        },
+      ],
     },
   },
   weex: {
@@ -177,6 +321,27 @@ export const EXCHANGE_CONFIGS = {
         {
           title: 'Set Read-Only Permission',
           desc: 'Only check "Read-Only" permission. Copy API Key and Secret after verification',
+        },
+      ],
+      ja: [
+        {
+          title: 'WEEX にログイン',
+          desc: 'WEEX 公式サイトにアクセスし、アカウントにログインします',
+        },
+        { title: 'API 管理へ移動', desc: '右上のアイコンをクリック →「API 管理」を選択' },
+        { title: 'API キーを作成', desc: '「API 作成」をクリックし、メモ名を入力します' },
+        {
+          title: '読み取り専用権限を設定',
+          desc: '「読み取り専用」権限のみをチェックし、認証の完了後、API キーと Secret をコピーします',
+        },
+      ],
+      ko: [
+        { title: 'WEEX 로그인', desc: 'WEEX 공식 사이트에 접속하여 계정에 로그인합니다' },
+        { title: 'API 관리로 이동', desc: '오른쪽 상단 아이콘 클릭 →「API 관리」 선택' },
+        { title: 'API 키 생성', desc: '「API 생성」을 클릭하고 메모 이름을 입력합니다' },
+        {
+          title: '읽기 전용 권한 설정',
+          desc: '「읽기 전용」 권한만 체크하고 인증을 완료한 후 API 키와 Secret을 복사합니다',
         },
       ],
     },
