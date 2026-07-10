@@ -1958,7 +1958,7 @@ const zh = {
   loginForgotPassword: '忘记密码？',
   loginWelcomeBack: '欢迎回来',
   loginCreateAccount: '创建账号',
-  loginSubtitle: 'Arena ranks everything in crypto',
+  loginSubtitle: 'Arena — 加密世界的全面排行',
   loginValueProp1: '160,000+ 已收录交易员实时追踪',
   loginValueProp2: '跨 45+ 交易所对比收益与风控',
   loginValueProp3: '加入交易社区，发现投资机会',
@@ -2350,7 +2350,7 @@ const zh = {
 
   // Onboarding page
   onboardingTitle: '欢迎来到 Arena',
-  onboardingSubtitle: 'Arena ranks everything in crypto',
+  onboardingSubtitle: 'Arena — 加密世界的全面排行',
   selectLanguage: '选择语言',
   selectTheme: '选择主题',
   continueButton: '继续',
