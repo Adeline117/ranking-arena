@@ -15,6 +15,7 @@ on:
     - cron: '5 */6 * * *' # scraper-health 每 6h
     - cron: '0 9 * * 1' # weekly-metrics 周一 09:00 UTC
     - cron: '30 6 * * *' # schema-canary 每日 06:30 UTC（错峰 Mac Mini 本地 07:30）
+    - cron: '45 6 * * *' # trust-scorecard 每日 06:45 UTC（可信度记分卡快照,重覆盖 SQL ~15s）
     - cron: '0 8 * * *' # daily-pipeline-report 每日 08:00 UTC
     - cron: '20 7 * * *' # ux-patrol 每日 07:20 UTC
     - cron: '40 8 * * *' # backup-freshness 每日 08:40 UTC（R2 备份 >26h 告警）
@@ -116,6 +117,23 @@ jobs:
           # fail-open 跳过,不阻断其余检查。
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: node scripts/openclaw/schema-canary-sentinel.mjs
+
+  trust-scorecard:
+    if: github.event.schedule == '45 6 * * *' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - name: trust-scorecard-snapshot（序列覆盖夜间快照 → arena.trust_scorecard_daily）
+        continue-on-error: true
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: node scripts/qa/trust-scorecard-snapshot.mjs
 
   daily-pipeline-report:
     if: github.event.schedule == '0 8 * * *' || github.event_name == 'workflow_dispatch'
