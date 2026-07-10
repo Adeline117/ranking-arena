@@ -5993,6 +5993,8 @@ const en = {
   dissolveGroupConfirm: 'Are you sure you want to dissolve this group?',
   dissolveGroupDesc: 'This action cannot be undone. All members will be removed.',
   groupDissolved: 'Group dissolved',
+  groupDissolvedBanner:
+    'This group has been dissolved. You can view history but cannot post or interact.',
   linkAdditionalAccount: 'Link Additional Account',
   linkAdditionalAccountDesc: 'Connect another exchange account to your profile.',
   authResendCode: 'Resend Code',

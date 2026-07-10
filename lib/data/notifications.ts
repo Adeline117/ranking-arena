@@ -40,6 +40,13 @@ export type NotificationType =
   | 'copy_trade'
   | 'message'
   | 'trader_alert'
+  // Trader-alert subtypes — distinct stored types so the in-app card can localize
+  // each headline by type (the shared `trader_alert` type couldn't distinguish them).
+  | 'trader_alert_roi'
+  | 'trader_alert_drawdown'
+  | 'trader_alert_score'
+  | 'trader_alert_pnl'
+  | 'trader_alert_rank'
   | 'post_reply'
   | 'new_follower'
   | 'group_update'

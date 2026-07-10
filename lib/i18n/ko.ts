@@ -5338,6 +5338,8 @@ const ko = {
   dissolveGroupConfirm: '이 그룹을 해산하시겠습니까?',
   dissolveGroupDesc: '이 작업은 취소할 수 없습니다. 모든 멤버가 제거됩니다.',
   groupDissolved: '그룹이 해산되었습니다',
+  groupDissolvedBanner:
+    '이 그룹은 해산되었습니다. 기록은 볼 수 있지만 게시하거나 상호작용할 수 없습니다.',
   authResendCode: '코드 재전송',
   calmar: 'Calmar',
   sortino: 'Sortino',

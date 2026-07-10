@@ -280,13 +280,13 @@ export async function GET(req: Request) {
       if (alert.alert_roi_change && prevSnapshot.roi_90d != null && currentData.roi != null) {
         const change = Math.abs(currentData.roi - prevSnapshot.roi_90d)
         if (change >= alert.roi_change_threshold) {
-          const direction = currentData.roi > prevSnapshot.roi_90d ? '上涨' : '下跌'
+          const direction = currentData.roi > prevSnapshot.roi_90d ? 'up' : 'down'
           alertsToSend.push({
             user_id: alert.user_id,
             trader_id: alert.trader_id,
-            type: 'trader_alert',
-            title: 'ROI 变动提醒',
-            message: `Trader ${alert.trader_id} ROI ${direction} ${change.toFixed(2)}%（${prevSnapshot.roi_90d.toFixed(2)}% → ${currentData.roi.toFixed(2)}%）`,
+            type: 'trader_alert_roi',
+            title: 'ROI Alert',
+            message: `Trader ${alert.trader_id} ROI ${direction} ${change.toFixed(2)}% (${prevSnapshot.roi_90d.toFixed(2)}% → ${currentData.roi.toFixed(2)}%)`,
             link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
           })
 
@@ -311,8 +311,8 @@ export async function GET(req: Request) {
           alertsToSend.push({
             user_id: alert.user_id,
             trader_id: alert.trader_id,
-            type: 'trader_alert',
-            title: '回撤预警',
+            type: 'trader_alert_drawdown',
+            title: 'Drawdown Alert',
             message: `Trader ${alert.trader_id} max drawdown reached ${drawdown.toFixed(2)}%`,
             link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
           })
@@ -337,13 +337,13 @@ export async function GET(req: Request) {
       ) {
         const change = Math.abs(currentData.arena_score - prevSnapshot.arena_score)
         if (change >= alert.score_change_threshold) {
-          const direction = currentData.arena_score > prevSnapshot.arena_score ? '上升' : '下降'
+          const direction = currentData.arena_score > prevSnapshot.arena_score ? 'up' : 'down'
           alertsToSend.push({
             user_id: alert.user_id,
             trader_id: alert.trader_id,
-            type: 'trader_alert',
-            title: 'Arena Score 变动',
-            message: `Trader ${alert.trader_id} Arena Score ${direction} ${change.toFixed(1)} pts (${prevSnapshot.arena_score.toFixed(1)} → ${currentData.arena_score.toFixed(1)}）`,
+            type: 'trader_alert_score',
+            title: 'Arena Score Change',
+            message: `Trader ${alert.trader_id} Arena Score ${direction} ${change.toFixed(1)} pts (${prevSnapshot.arena_score.toFixed(1)} → ${currentData.arena_score.toFixed(1)})`,
             link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
           })
 
@@ -364,12 +364,12 @@ export async function GET(req: Request) {
       if (alert.alert_pnl_change && prevSnapshot.pnl_90d != null && currentData.pnl != null) {
         const change = Math.abs(currentData.pnl - prevSnapshot.pnl_90d)
         if (change >= alert.pnl_change_threshold) {
-          const direction = currentData.pnl > prevSnapshot.pnl_90d ? '上涨' : '下跌'
+          const direction = currentData.pnl > prevSnapshot.pnl_90d ? 'up' : 'down'
           alertsToSend.push({
             user_id: alert.user_id,
             trader_id: alert.trader_id,
-            type: 'trader_alert',
-            title: 'PnL 变动提醒',
+            type: 'trader_alert_pnl',
+            title: 'PnL Alert',
             message: `Trader ${alert.trader_id} PnL ${direction} $${change.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
             link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
           })

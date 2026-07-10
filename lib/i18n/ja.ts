@@ -5100,6 +5100,8 @@ const ja = {
   dissolveGroupConfirm: 'このグループを解散してよろしいですか？',
   dissolveGroupDesc: 'この操作は取り消せません。すべてのメンバーが削除されます。',
   groupDissolved: 'グループが解散されました',
+  groupDissolvedBanner:
+    'このグループは解散されました。履歴は閲覧できますが、投稿や交流はできません。',
   authResendCode: 'コードを再送信',
   calmar: 'Calmar',
   sortino: 'Sortino',

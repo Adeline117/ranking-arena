@@ -726,7 +726,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             fontWeight: 600,
           }}
         >
-          This group has been dissolved. You can view history but cannot post or interact.
+          {t('groupDissolvedBanner')}
         </Box>
       )}
       <Box
