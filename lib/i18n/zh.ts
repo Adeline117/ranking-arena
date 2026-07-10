@@ -3040,6 +3040,9 @@ const zh = {
   // Hero section
   heroHeadline: '追踪全球最优秀的加密交易员',
   heroSubtitle: '跨 {exchanges} 家交易所实时排名，以 Arena Score 评分',
+  heroScoreExplainer:
+    'Arena Score 对我们追踪的所有交易所的每一位交易员统一排名——一眼看清你的真实位置。',
+  heroNeutrality: '没有任何交易所能付费买排名——我们对追踪的每一家交易所一视同仁。',
   heroCTABrowse: '查看排行榜',
   heroCTASignUp: '免费注册',
   heroStatTraders: '交易员',
@@ -5244,6 +5247,9 @@ const zh = {
   // Top Percent Badge
   topPercent: '前 {pct}%',
   topPercentOn: '{platform} 前 {pct}%',
+  // 跨交易所百分位 —— 由总排名 / 全站追踪总数推导
+  topPercentOverall: '总榜前 {pct}%',
+  beatsTradersAcrossExchanges: '超越全交易所 {total} 位交易员中的 {pct}%',
 
   // Risk/Reward
   riskReward: '盈亏比',

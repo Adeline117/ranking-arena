@@ -102,6 +102,20 @@ export default function HomeHero({
           >
             {subtitle}
           </p>
+          {/* Score legibility + neutrality — the cross-exchange percentile moat.
+              True and not number-specific (no contested exchange count). */}
+          <p
+            style={{
+              fontSize: '0.875rem',
+              color: 'var(--color-text-tertiary)',
+              lineHeight: 1.55,
+              margin: `${tokens.spacing[3]} 0 0`,
+              maxWidth: 540,
+            }}
+          >
+            {t('heroScoreExplainer' as Parameters<typeof t>[0])}{' '}
+            {t('heroNeutrality' as Parameters<typeof t>[0])}
+          </p>
         </div>
 
         {/* Right: Stats row */}

@@ -61,6 +61,8 @@ const PUBLIC_API_ROUTES = new Set([
   'market/sectors',
   'market/sparklines',
   'market/spot',
+  // 公开聚合统计(交易员数/交易所数,首页 hero + 跨所百分位徽章用;无用户数据,CDN 缓存 1h)
+  'hero-stats',
   // 公开排行/交易员档案（只读）
   'rankings/by-token',
   'rankings/live',

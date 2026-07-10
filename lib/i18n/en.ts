@@ -3127,6 +3127,9 @@ const en = {
   // Hero section
   heroHeadline: "Track the World's Best Crypto Traders",
   heroSubtitle: 'Real-time rankings across {exchanges} exchanges, scored by Arena Score.',
+  heroScoreExplainer:
+    'Arena Score ranks every trader across all tracked exchanges — see exactly where you stand.',
+  heroNeutrality: 'No exchange pays for placement — we rank across every exchange we track.',
   heroCTABrowse: 'Browse Rankings',
   heroCTASignUp: 'Sign Up Free',
   heroStatTraders: 'Traders',
@@ -5370,6 +5373,9 @@ const en = {
   // Rank Percentile Badge
   topPercent: 'Top {pct}%',
   topPercentOn: 'Top {pct}% on {platform}',
+  // Cross-exchange percentile — derived from overall rank / total tracked count
+  topPercentOverall: 'Top {pct}% overall',
+  beatsTradersAcrossExchanges: 'Beats {pct}% of {total} traders ranked across every exchange',
 
   // Risk/Reward Ratio
   riskReward: 'Risk/Reward',

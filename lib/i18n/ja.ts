@@ -2877,6 +2877,10 @@ const ja = {
 
   heroHeadline: '世界最高の暗号トレーダーを追跡',
   heroSubtitle: '{exchanges}以上の取引所でリアルタイムランキング、Arena Scoreで評価',
+  heroScoreExplainer:
+    'Arena Score は追跡中のすべての取引所の全トレーダーを横断でランク付け——あなたの立ち位置がひと目でわかります。',
+  heroNeutrality:
+    'いかなる取引所も掲載順位を購入できません——追跡するすべての取引所を公平にランク付けします。',
   heroCTABrowse: 'ランキングを見る',
   heroCTASignUp: '無料登録',
   heroStatTraders: 'トレーダー',
@@ -4967,6 +4971,9 @@ const ja = {
   liveData: 'ライブ',
   topPercent: '上位 {pct}%',
   topPercentOn: '{platform} 上位 {pct}%',
+  // 取引所横断のパーセンタイル —— 総合順位 / 追跡総数から算出
+  topPercentOverall: '全体で上位 {pct}%',
+  beatsTradersAcrossExchanges: '全取引所の {total} 人のトレーダーのうち {pct}% を上回る',
   riskReward: 'リスク/リワード',
   riskRewardTooltip: '平均利益 / 平均損失の比率。1.5以上が良好。',
   profit: '利益',

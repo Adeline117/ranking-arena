@@ -28,7 +28,7 @@ const fetcher = (url: string) =>
   })
 
 // Badge color tiers — use design tokens for medal colors
-function getBadgeStyle(percentile: number): { bg: string; color: string; border: string } {
+export function getBadgeStyle(percentile: number): { bg: string; color: string; border: string } {
   if (percentile >= 99) {
     // Top 1% — gold
     const gold = tokens.colors.medal.gold
