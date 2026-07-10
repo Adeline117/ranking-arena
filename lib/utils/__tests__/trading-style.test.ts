@@ -86,13 +86,28 @@ describe('TRADING_STYLE_LEGACY_MAP（旧命名兼容）', () => {
     expect(TRADING_STYLE_LEGACY_MAP.scalping).toBe('scalper')
   })
 
-  it('day_trader 映射到 swing', () => {
-    expect(TRADING_STYLE_LEGACY_MAP.day_trader).toBe('swing')
+  it('day_trader 是独立风格,不再压扁成 swing(v4 词汇扩展 2026-07-10)', () => {
+    expect(TRADING_STYLE_LEGACY_MAP.day_trader).toBe('day_trader')
+    expect(getStyleInfo('day_trader').labelEn).toBe('Day Trader')
   })
 
-  it('每个映射目标都是合法风格', () => {
+  it('每个映射目标都有 STYLE_MAP 完整配置(不再产出无色 chip)', () => {
     Object.values(TRADING_STYLE_LEGACY_MAP).forEach((v) => {
-      expect([...VALID_TRADING_STYLES]).toContain(v)
+      const info = getStyleInfo(v)
+      expect(info.labelEn).toBeTruthy()
+      expect(info.color).toBeTruthy()
     })
+  })
+
+  it('v4 新风格(conservative/balanced/aggressive)有完整配置', () => {
+    for (const style of ['conservative', 'balanced', 'aggressive'] as const) {
+      const info = getStyleInfo(style)
+      expect(info.style).toBe(style)
+      expect(info.labelEn).toBeTruthy()
+    }
+  })
+
+  it('词汇表外的值防御性落 unknown', () => {
+    expect(getStyleInfo('martian_hodler').style).toBe('unknown')
   })
 })

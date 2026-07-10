@@ -5182,6 +5182,10 @@ const en = {
   authCodeInvalid: 'Invalid code. Please check and try again.',
 
   tradingStyleScalper: 'Scalper',
+  tradingStyleDayTrader: 'Day Trader',
+  tradingStyleConservative: 'Conservative',
+  tradingStyleBalanced: 'Balanced',
+  tradingStyleAggressive: 'Aggressive',
   tradingStyleScalperDesc: 'High-frequency trading with very short holding periods',
   tradingStyleSwing: 'Swing',
   tradingStyleSwingDesc: 'Medium-term trades, holding 4-48 hours',

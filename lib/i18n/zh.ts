@@ -5109,6 +5109,10 @@ const zh = {
   authCodeInvalid: '验证码无效，请检查后重试。',
 
   tradingStyleScalper: '超短线',
+  tradingStyleDayTrader: '日内',
+  tradingStyleConservative: '稳健',
+  tradingStyleBalanced: '均衡',
+  tradingStyleAggressive: '激进',
   tradingStyleScalperDesc: '高频交易，持仓时间极短',
   tradingStyleSwing: '波段',
   tradingStyleSwingDesc: '中期波段，持仓4-48小时',

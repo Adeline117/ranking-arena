@@ -12,7 +12,19 @@
  * - position: Long-term holding, >2 weeks
  * - unknown: Unable to classify (insufficient data)
  */
-export type TradingStyle = 'scalper' | 'swing' | 'trend' | 'position' | 'unknown'
+// v4 分类器扩展词汇(2026-07-10 UI 走查):day_trader/conservative/balanced/
+// aggressive 是 leaderboard_ranks.trading_style 的真实值(合计 ~8,000 行),
+// 旧 5 款词汇让它们落进 STYLE_MAP 空洞 → 无色 chip + 原始 i18n key 直出。
+export type TradingStyle =
+  | 'scalper'
+  | 'day_trader'
+  | 'swing'
+  | 'trend'
+  | 'position'
+  | 'conservative'
+  | 'balanced'
+  | 'aggressive'
+  | 'unknown'
 
 export const VALID_TRADING_STYLES = ['scalper', 'swing', 'trend', 'position'] as const
 export type FilterableTradingStyle = (typeof VALID_TRADING_STYLES)[number]
@@ -26,7 +38,8 @@ export const TRADING_STYLE_LEGACY_MAP: Record<
   high_frequency: 'scalper',
   hft: 'scalper',
   scalping: 'scalper',
-  day_trader: 'swing',
+  // day_trader 曾被压扁成 swing;v4 起是独立风格,不再折叠。
+  day_trader: 'day_trader',
   swing: 'swing',
   trend: 'trend',
   position: 'position',
@@ -70,6 +83,34 @@ const STYLE_MAP: Record<TradingStyle, Omit<TradingStyleInfo, 'style'>> = {
     bgColor: 'var(--color-accent-primary-12)',
     borderColor: 'var(--color-accent-primary-30)',
   },
+  day_trader: {
+    label: '日内',
+    labelEn: 'Day Trader',
+    color: 'var(--color-accent-warning)',
+    bgColor: 'var(--color-accent-warning-12)',
+    borderColor: 'var(--color-accent-warning-20)',
+  },
+  conservative: {
+    label: '稳健',
+    labelEn: 'Conservative',
+    color: 'var(--color-accent-success)',
+    bgColor: 'var(--color-accent-success-12)',
+    borderColor: 'var(--color-accent-success-20)',
+  },
+  balanced: {
+    label: '均衡',
+    labelEn: 'Balanced',
+    color: 'var(--color-text-secondary)',
+    bgColor: 'var(--color-overlay-subtle)',
+    borderColor: 'var(--color-overlay-medium)',
+  },
+  aggressive: {
+    label: '激进',
+    labelEn: 'Aggressive',
+    color: 'var(--color-accent-error)',
+    bgColor: 'var(--color-accent-error-12)',
+    borderColor: 'var(--color-accent-error-20)',
+  },
   unknown: {
     label: '未知',
     labelEn: 'Unknown',
@@ -108,8 +149,13 @@ export function classifyStyle(metrics: ClassifyMetrics): TradingStyle {
 /**
  * 获取交易风格的完整信息
  */
-export function getStyleInfo(style: TradingStyle): TradingStyleInfo {
-  return { style, ...STYLE_MAP[style] }
+export function getStyleInfo(style: TradingStyle | string): TradingStyleInfo {
+  // 归一 legacy 别名(hft/high_frequency/scalping);词汇表外的值防御性落
+  // unknown —— 绝不再产出无色 chip/裸 key(2026-07-10 走查教训)。
+  const normalized =
+    (TRADING_STYLE_LEGACY_MAP as Record<string, TradingStyle>)[style] ??
+    (style in STYLE_MAP ? (style as TradingStyle) : 'unknown')
+  return { style: normalized, ...STYLE_MAP[normalized] }
 }
 
 /**
