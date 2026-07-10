@@ -3014,6 +3014,10 @@ const ko = {
   // Hero section
   heroHeadline: '세계 최고의 암호화폐 트레이더를 추적하세요',
   heroSubtitle: '{exchanges}개 이상의 거래소에서 실시간 순위, Arena Score로 평가',
+  heroScoreExplainer:
+    'Arena Score는 추적 중인 모든 거래소의 모든 트레이더를 한 줄로 순위화합니다 — 당신의 위치를 정확히 확인하세요.',
+  heroNeutrality:
+    '어떤 거래소도 순위를 돈으로 살 수 없습니다 — 추적하는 모든 거래소를 공정하게 순위화합니다.',
   heroCTABrowse: '순위 둘러보기',
   heroCTASignUp: '무료 가입',
   heroStatTraders: '트레이더',
@@ -5210,6 +5214,9 @@ const ko = {
   liveData: '실시간',
   topPercent: '상위 {pct}%',
   topPercentOn: '{platform} 상위 {pct}%',
+  // 거래소 통합 백분위 —— 종합 순위 / 전체 추적 수에서 도출
+  topPercentOverall: '전체 상위 {pct}%',
+  beatsTradersAcrossExchanges: '모든 거래소에서 순위가 매겨진 {total}명 중 {pct}%를 앞섭니다',
   riskReward: '위험/보상',
   riskRewardTooltip: '평균 수익 / 평균 손실 비율. 1.5 이상이면 양호.',
   profit: '수익',
