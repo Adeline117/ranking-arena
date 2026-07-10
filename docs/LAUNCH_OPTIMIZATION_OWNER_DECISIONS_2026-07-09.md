@@ -30,6 +30,18 @@
 | **Upstash 提额**           | Redis 单点:缓存+限流+锁+心跳全靠它;万级下最可能先抖                                      | 评估 Upstash 付费档提请求上限,给冗余。                                   |
 | **第二 worker / VPS 磁盘** | ingest worker = Mac Mini + SG VPS(95% 磁盘,近满);半手动 failover                         | 近期:VPS 清盘(我可加磁盘哨兵)。结构:第二 box 或云 runner($)。            |
 
+## D2. 新发现:首页 HTML 未被 CDN 缓存(需架构评估,勿盲改)
+
+实测 `/` 返回 `private, no-store`(非 vercel.json 的 `s-maxage=120`)→ **首页 HTML 不进 CDN**,
+每次到访打 origin/serverless。根因:`HomeHeroSSR`/`SSRRankingTable` 走服务端 i18n(`cookies()` 读
+language)→ 整个路由被判定为动态渲染 → Next 强制 no-store,盖掉 vercel.json 头。
+
+- **先核实严重度**:动态渲染 ≠ 一定打 DB——首页数据大概率走 unstable_cache/Redis(revalidate=300),
+  那么动态渲染只是多一次 serverless 调用、不碰 DB,影响小得多。上线前应先量首页在负载下是否真打 DB。
+- **修法是权衡**(勿盲改,我刚因边缘层盲改冻结过管道):①单语英文可缓存 SSR 壳 + 客户端本地化
+  (伤 SSR i18n/SEO,与刚做的 locale 探测冲突)②per-language CDN 变体(复杂)③接受动态首页但确保
+  数据层重缓存(最务实)。**建议先量、再选,别硬切。**
+
 ## D. 需先压测再动(不盲调,plan 已约定)
 
 - **force-dynamic → ISR/CDN 缓存的具体清单**(168/311 路由无 CDN 缓存):需 k6 spike 打 preview 到万级,定位真拐点再逐路由转,避免误缓存个性化路由。
