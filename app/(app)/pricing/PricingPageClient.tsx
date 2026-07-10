@@ -900,6 +900,10 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               const taken = Math.min(lifetimeCount, TOTAL_SPOTS)
               const remaining = TOTAL_SPOTS - taken
               const pct = Math.max(2, (taken / TOTAL_SPOTS) * 100)
+              // Below a small threshold the literal "0 / 200 spots taken" reads as
+              // dead-on-arrival and kills credibility — show scarcity copy instead.
+              const LOW_SPOTS_THRESHOLD = 10
+              const showScarcity = taken < LOW_SPOTS_THRESHOLD
               return (
                 <div style={{ marginTop: tokens.spacing[6] }}>
                   <div
@@ -917,21 +921,29 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                         color: 'var(--color-founding-accent)',
                       }}
                     >
-                      {resolved(
-                        t('pricingSpotsTaken'),
-                        'pricingSpotsTaken',
-                        '{taken} / {total} spots taken'
-                      )
-                        .replace('{taken}', String(taken))
-                        .replace('{total}', String(TOTAL_SPOTS))}
+                      {showScarcity
+                        ? resolved(
+                            t('pricingSpotsLimited'),
+                            'pricingSpotsLimited',
+                            'Limited founding spots · {total} total'
+                          ).replace('{total}', String(TOTAL_SPOTS))
+                        : resolved(
+                            t('pricingSpotsTaken'),
+                            'pricingSpotsTaken',
+                            '{taken} / {total} spots taken'
+                          )
+                            .replace('{taken}', String(taken))
+                            .replace('{total}', String(TOTAL_SPOTS))}
                     </span>
-                    <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
-                      {resolved(
-                        t('pricingSpotsRemaining'),
-                        'pricingSpotsRemaining',
-                        '{count} remaining'
-                      ).replace('{count}', String(remaining))}
-                    </span>
+                    {!showScarcity && (
+                      <span style={{ fontSize: 12, color: tokens.colors.text.tertiary }}>
+                        {resolved(
+                          t('pricingSpotsRemaining'),
+                          'pricingSpotsRemaining',
+                          '{count} remaining'
+                        ).replace('{count}', String(remaining))}
+                      </span>
+                    )}
                   </div>
                   <div
                     style={{

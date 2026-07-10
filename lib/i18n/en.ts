@@ -3823,6 +3823,7 @@ const en = {
   perYearShort: 'year',
   pricingSpotsTaken: '{taken} / {total} spots taken',
   pricingSpotsRemaining: '{count} remaining',
+  pricingSpotsLimited: 'Limited founding spots · {total} total',
   paymentSystemComingSoon: 'Payment system coming soon',
   operationFailedTryAgain: 'Failed, please try again',
 

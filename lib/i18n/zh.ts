@@ -3736,6 +3736,7 @@ const zh = {
   perYearShort: '年',
   pricingSpotsTaken: '{taken} / {total} 名额已占',
   pricingSpotsRemaining: '剩余 {count}',
+  pricingSpotsLimited: '早鸟名额有限 · 限 {total} 名',
   paymentSystemComingSoon: '支付系统暂未开放，敬请期待',
   operationFailedTryAgain: '操作失败，请稍后再试',
 
