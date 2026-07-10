@@ -2,14 +2,14 @@ import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
 
 export const metadata: Metadata = {
-  title: '热门动态',
+  title: 'Hot',
   description:
     'Trending discussions, trade ideas, and market analysis from top crypto traders on Arena.',
   alternates: {
     canonical: `${BASE_URL}/hot`,
   },
   openGraph: {
-    title: '热门动态',
+    title: 'Hot Posts',
     description: 'Trending discussions and trade ideas from top crypto traders.',
     url: `${BASE_URL}/hot`,
     siteName: 'Arena',
@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: 'summary_large_image',
-    title: '热门动态',
+    title: 'Hot Posts',
     description: 'Trending discussions and trade ideas from top crypto traders.',
     images: [`${BASE_URL}/og-image.png`],
   },
