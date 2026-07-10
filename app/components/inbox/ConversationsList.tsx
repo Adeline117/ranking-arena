@@ -253,7 +253,7 @@ export default function ConversationsList(): React.ReactElement {
             setUnreadMessages(calculateTotalUnread(updated))
             return updated
           })
-          showToast(t('conversationDeleted') || 'Conversation cleared', 'success')
+          showToast(t('conversationDeleted'), 'success')
         } else {
           showToast(t('unexpectedError'), 'error')
         }
@@ -698,7 +698,7 @@ export default function ConversationsList(): React.ReactElement {
               <SwipeableConversationRow
                 key={conv.id}
                 onDelete={() => handleDeleteConversation(conv.id)}
-                deleteLabel={t('delete') || 'Delete'}
+                deleteLabel={t('delete')}
               >
                 <Link
                   href={`/messages/${conv.id}`}
