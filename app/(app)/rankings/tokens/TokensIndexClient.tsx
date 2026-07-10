@@ -249,7 +249,7 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
           {filtered.map((tk) => {
             const hasActivity = tk.trade_count > 0 || tk.trader_count > 0
             const ariaLabel = hasActivity
-              ? `${tk.token} — ${tk.trader_count} ${t('tokenRankingsTraders')}, ${tk.trade_count} ${t('tokenRankingsTrades')}, ${t('tokenRankingsTotalPnl')} ${formatPnL(tk.total_pnl)}`
+              ? `${tk.token} — ${tk.trader_count} ${tk.trader_count === 1 ? t('tokenRankingsTradersSingular') : t('tokenRankingsTraders')}, ${tk.trade_count} ${t('tokenRankingsTrades')}, ${t('tokenRankingsTotalPnl')} ${formatPnL(tk.total_pnl)}`
               : `${tk.token} — ${t('tokenRankingsNoActivity')}`
             return (
               <Link
@@ -282,7 +282,7 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
                       </Text>
                       <Text size="xs" style={{ color: tokens.colors.text.tertiary }}>
                         {tk.trader_count > 0
-                          ? `${tk.trader_count} ${t('tokenRankingsTraders')}`
+                          ? `${tk.trader_count} ${tk.trader_count === 1 ? t('tokenRankingsTradersSingular') : t('tokenRankingsTraders')}`
                           : t('tokenRankingsViewRankings')}
                       </Text>
                     </Box>
