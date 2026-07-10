@@ -134,8 +134,24 @@ export const PostListItem = memo(
             <Link
               href={`/groups/${p.group_id}`}
               onClick={(e) => e.stopPropagation()}
+              aria-label={localizedLabel(
+                p.group_name || t('group'),
+                p.group_name_en || p.group_name,
+                language
+              )}
+              // Subtle chip badge (U9-7) — signals which group the post belongs to,
+              // clickable through to the group. Sits in the card header next to the
+              // author. Ellipsis + maxWidth keep long group names from overflowing.
               style={{
-                fontSize: 12,
+                display: 'inline-flex',
+                alignItems: 'center',
+                maxWidth: '60%',
+                padding: `${tokens.spacing[0.5]} ${tokens.spacing[2]}`,
+                borderRadius: tokens.radius.full,
+                background: tokens.colors.bg.tertiary,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                fontSize: tokens.typography.fontSize.xs,
+                fontWeight: tokens.typography.fontWeight.medium,
                 color: ARENA_PURPLE,
                 textDecoration: 'none',
                 cursor: 'pointer',
