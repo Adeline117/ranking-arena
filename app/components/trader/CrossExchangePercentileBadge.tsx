@@ -74,7 +74,9 @@ export default function CrossExchangePercentileBadge({ rank }: CrossExchangePerc
   const percentile = (1 - rank / total) * 100
   if (percentile <= 0) return null
 
-  const beatPct = Math.round(percentile) // percent of traders beaten
+  // Cap at 99: you can never beat 100% of a population that includes yourself
+  // (rank 1 of 9,678 → round(99.99) = 100 → "beats 100%" is a lie).
+  const beatPct = Math.min(99, Math.round(percentile)) // percent of traders beaten
   const topPct = Math.max(1, Math.round((rank / total) * 100)) // "Top X%"
 
   // Only surface as a positive signal (top half). Beyond that it stops being a

@@ -3316,6 +3316,30 @@ const ko = {
   baseHeader: 'base ($)',
   thresholdHeader: 'θ (임계값)',
   winRateCapHeader: 'γ (승률 상한)',
+  // Arena Score v4 —— 점수 설명 (methodology 페이지 + ScoreRulesModal).
+  // 단일 정보 출처: learn 문서 'how-arena-score-works'.
+  scoreV4Formula: 'Arena 점수 = 100 × Quality × Confidence',
+  scoreV4Intro:
+    'Quality는 다섯 가지 성과 차원을 결합합니다. Confidence는 신뢰하기에 데이터가 부족할 때 점수를 낮춥니다. 그 결과는 백분위로 변환되며, 대략 당신이 이긴 트레이더의 비율을 나타냅니다.',
+  scoreV4QualityTitle: 'Quality —— 다섯 가지 차원',
+  scoreV4QualityDesc:
+    'Quality는 수익(PnL + ROI = 50%)과 실력(드로다운 + 샤프 + 일관성 = 50%)으로 균등하게 나뉩니다. 트레이더가 실제로 데이터를 가진 차원만 포함된 뒤 다시 정규화됩니다.',
+  scoreV4DimHeader: '차원',
+  scoreV4WeightHeader: '가중치',
+  scoreV4DimPnl: 'PnL —— USD 기준 절대 수익(로그 규모)',
+  scoreV4DimRoi: 'ROI —— 투자 수익률',
+  scoreV4DimDrawdown: '드로다운 —— 최고점 대비 최대 하락폭',
+  scoreV4DimSharpe: '샤프 —— 리스크 조정 수익',
+  scoreV4DimConsistency: '일관성 —— 승률과 손익비',
+  scoreV4ConfidenceTitle: 'Confidence —— 통계적 정직성 (0.35–1.0)',
+  scoreV4ConfidenceDesc:
+    '신뢰도는 표본 크기 —— 거래 수 / (거래 수 + 50), 즉 50거래에서 약 0.5 —— 와 리스크 지표가 실제로 얼마나 갖춰져 있는지에 따라 변합니다. 실적이 얕은 트레이더는 구조적으로 상한이 걸려 상위에 도달할 수 없습니다.',
+  scoreV4DisplayTitle: '표시되는 점수',
+  scoreV4DisplayDesc:
+    '복합값(Quality × Confidence)은 백분위로 변환됩니다: 당신의 점수는 대략 당신이 이긴 트레이더의 비율입니다. 상대 복합값과 70/30으로 혼합되어 최상위 트레이더가 모두 100에 몰리지 않도록 합니다.',
+  scoreV4AntiGamingTitle: '조작에 강한 이유',
+  scoreV4AntiGaming:
+    'ROI는 압축됩니다 —— 300%와 10,000% 수익이 가깝게 배치됩니다\nPnL은 실제 자금을 보상합니다 —— 소액 계좌는 0점에 가깝습니다\n신뢰도가 얕은 실적에 상한을 둡니다 —— 소수의 거래로 상위 순위를 살 수 없습니다',
   totalTrades90d: '총 거래 수 (90일)',
   avgTradeSize: '평균 거래 크기',
   profitableTradesLabel: '수익 거래',

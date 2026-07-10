@@ -117,14 +117,6 @@ const tocBoxStyle: React.CSSProperties = {
   marginBottom: tokens.spacing[12],
 }
 
-const codeStyle: React.CSSProperties = {
-  background: 'var(--color-bg-tertiary)',
-  padding: '2px 6px',
-  borderRadius: tokens.radius.sm,
-  fontSize: tokens.typography.fontSize.sm,
-  fontFamily: tokens.typography.fontFamily.mono.join(', '),
-}
-
 const anchorClass =
   'rounded-md outline-none transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-accent-primary)]'
 
@@ -267,33 +259,37 @@ export default function MethodologyPageClient() {
           {t('methodologySec3Title')}
         </Text>
         <div style={bodyStyle}>
-          <p>{t('methodologySec3Intro')}</p>
+          <p>{t('scoreV4Intro')}</p>
 
           <div style={formulaBoxStyle}>
             <div>
-              <strong>{t('methodologyFormulaReturnLabel')}</strong>
-            </div>
-            <div>
-              ReturnScore = 60 &times; tanh(coefficient &times; ROI)<sup>exponent</sup>
-            </div>
-            <br />
-            <div>
-              <strong>{t('methodologyFormulaPnlLabel')}</strong>
-            </div>
-            <div>PnlScore = 40 &times; tanh(coefficient &times; ln(1 + PnL / base))</div>
-            <br />
-            <div>
-              <strong>{t('methodologyFormulaFinalLabel')}</strong>
-            </div>
-            <div>
-              ArenaScore = (ReturnScore + PnlScore) &times; confidenceMultiplier &times; trustWeight
+              <strong>{t('scoreV4Formula')}</strong>
             </div>
           </div>
 
           <p style={{ marginTop: tokens.spacing[4] }}>
-            <code style={codeStyle}>tanh</code> {t('methodologySec3Tanh')}
+            <strong>{t('scoreV4QualityTitle')}</strong>
           </p>
-          <p style={{ marginTop: tokens.spacing[3] }}>{t('methodologySec3Confidence')}</p>
+          <p style={{ marginTop: tokens.spacing[2] }}>{t('scoreV4QualityDesc')}</p>
+          {renderList(
+            [
+              `${t('scoreV4DimPnl')} — 0.30`,
+              `${t('scoreV4DimRoi')} — 0.20`,
+              `${t('scoreV4DimDrawdown')} — 0.20`,
+              `${t('scoreV4DimSharpe')} — 0.20`,
+              `${t('scoreV4DimConsistency')} — 0.10`,
+            ].join('\n')
+          )}
+
+          <p style={{ marginTop: tokens.spacing[4] }}>
+            <strong>{t('scoreV4ConfidenceTitle')}</strong>
+          </p>
+          <p style={{ marginTop: tokens.spacing[2] }}>{t('scoreV4ConfidenceDesc')}</p>
+
+          <p style={{ marginTop: tokens.spacing[4] }}>
+            <strong>{t('scoreV4DisplayTitle')}</strong>
+          </p>
+          <p style={{ marginTop: tokens.spacing[2] }}>{t('scoreV4DisplayDesc')}</p>
         </div>
       </section>
 

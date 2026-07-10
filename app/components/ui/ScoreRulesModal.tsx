@@ -133,150 +133,58 @@ export function ScoreRulesModal({ isOpen, onClose }: ScoreRulesModalProps) {
             color: tokens.colors.text.secondary,
           }}
         >
-          {/* Score Composition */}
+          {/* Score Composition — v4: Score = 100 × Quality × Confidence */}
           <Section title={t('scoreComposition')} accent>
-            <FormulaBox>
-              S<sub>total</sub> = S<sub>return</sub> + S<sub>pnl</sub> + S<sub>dd</sub> + S
-              <sub>stab</sub>
-            </FormulaBox>
-            <div style={{ display: 'flex', gap: 12, marginTop: 12, flexWrap: 'wrap' }}>
-              <ScoreBadge
-                label={t('returnScoreLabel')}
-                value="[0, 70]"
-                color={tokens.colors.accent.success}
-              />
-              <ScoreBadge
-                label={t('pnlScoreLabel')}
-                value="[0, 15]"
-                color={tokens.colors.accent.brand}
-              />
-              <ScoreBadge
-                label={t('drawdownLabel')}
-                value="[0, 8]"
-                color={tokens.colors.accent.warning}
-              />
-              <ScoreBadge
-                label={t('stabilityLabel')}
-                value="[0, 7]"
-                color={tokens.colors.accent.primary}
-              />
-              <ScoreBadge
-                label={t('totalLabel')}
-                value="[0, 100]"
-                color={tokens.colors.accent.warning}
-              />
+            <FormulaBox>{t('scoreV4Formula')}</FormulaBox>
+            <div style={{ marginTop: 12, color: tokens.colors.text.tertiary, fontSize: 12 }}>
+              {t('scoreV4Intro')}
             </div>
           </Section>
 
-          {/* Return Score */}
-          <Section title={t('returnScoreTitle')}>
+          {/* Quality — five weighted dimensions */}
+          <Section title={t('scoreV4QualityTitle')}>
             <div style={{ marginBottom: 12, color: tokens.colors.text.tertiary, fontSize: 12 }}>
-              {t('annualizedRoiDesc')}
+              {t('scoreV4QualityDesc')}
             </div>
-            <FormulaBox>
-              <div style={{ marginBottom: 8 }}>
-                I<sub>d</sub> = (365 / d) · ln(1 + ROI<sub>d</sub>)
-              </div>
-              <div>
-                S<sub>return</sub> = 70 · tanh(α · I<sub>d</sub>)<sup>β</sup>
-              </div>
-            </FormulaBox>
-            <div style={{ marginTop: 12 }}>
-              <ParamTable
-                headers={[t('periodHeader'), t('coeffHeader'), t('expHeader')]}
-                rows={[
-                  ['7D', '0.08', '1.8'],
-                  ['30D', '0.15', '1.6'],
-                  ['90D', '0.18', '1.6'],
-                ]}
-              />
-            </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: tokens.colors.text.tertiary }}>
-              {t('periodDaysNote')}
+            <ParamTable
+              headers={[t('scoreV4DimHeader'), t('scoreV4WeightHeader')]}
+              rows={[
+                [t('scoreV4DimPnl'), '0.30'],
+                [t('scoreV4DimRoi'), '0.20'],
+                [t('scoreV4DimDrawdown'), '0.20'],
+                [t('scoreV4DimSharpe'), '0.20'],
+                [t('scoreV4DimConsistency'), '0.10'],
+              ]}
+            />
+          </Section>
+
+          {/* Confidence */}
+          <Section title={t('scoreV4ConfidenceTitle')}>
+            <div style={{ color: tokens.colors.text.tertiary, fontSize: 12 }}>
+              {t('scoreV4ConfidenceDesc')}
             </div>
           </Section>
 
-          {/* PnL Score */}
-          <Section title={t('pnlScoreTitle')}>
-            <div style={{ marginBottom: 12, color: tokens.colors.text.tertiary, fontSize: 12 }}>
-              {t('absoluteProfitDesc')}
-            </div>
-            <FormulaBox>
-              S<sub>pnl</sub> = 15 · tanh(γ · ln(1 + PnL / base))
-            </FormulaBox>
-            <div style={{ marginTop: 12 }}>
-              <ParamTable
-                headers={[t('periodHeader'), t('baseHeader'), 'γ (coeff)']}
-                rows={[
-                  ['7D', '500', '0.40'],
-                  ['30D', '2,000', '0.35'],
-                  ['90D', '5,000', '0.30'],
-                ]}
-              />
+          {/* Displayed score */}
+          <Section title={t('scoreV4DisplayTitle')}>
+            <div style={{ color: tokens.colors.text.tertiary, fontSize: 12 }}>
+              {t('scoreV4DisplayDesc')}
             </div>
           </Section>
 
-          {/* Risk Score */}
-          <Section title={t('riskScoreTitle')}>
-            <div style={{ marginBottom: 16 }}>
-              <Text
-                size="sm"
-                weight="bold"
-                style={{ color: tokens.colors.text.primary, marginBottom: 8, display: 'block' }}
-              >
-                {t('drawdownComponent')}
-              </Text>
-              <FormulaBox small>
-                S<sub>dd</sub> = 8 · max(0, 1 − MDD / θ<sub>d</sub>)
-              </FormulaBox>
-              <div style={{ marginTop: 8 }}>
-                <ParamTable
-                  headers={[t('periodHeader'), t('thresholdHeader')]}
-                  rows={[
-                    ['7D', '15%'],
-                    ['30D', '30%'],
-                    ['90D', '40%'],
-                  ]}
-                  compact
-                />
-              </div>
+          {/* Anti-gaming */}
+          <Section title={t('scoreV4AntiGamingTitle')}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {t('scoreV4AntiGaming')
+                .split('\n')
+                .map((line) => line.trim())
+                .filter(Boolean)
+                .map((line, i) => (
+                  <div key={i} style={{ color: tokens.colors.text.secondary, fontSize: 12 }}>
+                    • {line}
+                  </div>
+                ))}
             </div>
-
-            <div>
-              <Text
-                size="sm"
-                weight="bold"
-                style={{ color: tokens.colors.text.primary, marginBottom: 8, display: 'block' }}
-              >
-                {t('stabilityComponent')}
-              </Text>
-              <FormulaBox small>
-                S<sub>stab</sub> = 7 · clip((WR − 0.45) / (γ<sub>d</sub> − 0.45), 0, 1)
-              </FormulaBox>
-              <div style={{ marginTop: 8 }}>
-                <ParamTable
-                  headers={[t('periodHeader'), t('winRateCapHeader')]}
-                  rows={[
-                    ['7D', '62%'],
-                    ['30D', '68%'],
-                    ['90D', '70%'],
-                  ]}
-                  compact
-                />
-              </div>
-            </div>
-          </Section>
-
-          {/* Ranking Logic */}
-          <Section title={t('rankingLogicTitle')}>
-            <FormulaBox small>
-              <div>
-                {t('primarySortDesc')}
-                <sub>total</sub>
-                {t('primarySortSuffix')}
-              </div>
-              <div style={{ marginTop: 4 }}>{t('secondarySortDesc')}</div>
-            </FormulaBox>
           </Section>
 
           {/* Score Distribution */}
@@ -356,26 +264,6 @@ function FormulaBox({ children, small = false }: { children: React.ReactNode; sm
       }}
     >
       {children}
-    </div>
-  )
-}
-
-function ScoreBadge({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 6,
-        background: alpha(color, 8),
-        border: `1px solid ${alpha(color, 19)}`,
-        borderRadius: tokens.radius.md,
-        padding: '4px 10px',
-        fontSize: 12,
-      }}
-    >
-      <span style={{ color: tokens.colors.text.secondary }}>{label}</span>
-      <span style={{ color, fontWeight: 600, fontFamily: 'monospace' }}>{value}</span>
     </div>
   )
 }

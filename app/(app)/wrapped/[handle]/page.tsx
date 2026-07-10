@@ -130,17 +130,17 @@ async function fetchWrappedData(
       ),
     ])
 
-    // Fetch total traders on this platform for percentile.
-    // Use MAX(rank) over the same filter — NOT a planner-estimated count.
-    // `{ count: 'estimated' }` returned e.g. 743 while ranks went past 1970
-    // (and exact count matched the estimate, so the count itself is not the
-    // real population), producing absurd "RANKED 1970 / 743+ traders" and
-    // "Top 266%" cards. MAX(rank) guarantees total >= rank by construction.
+    // Total population for the percentile. `leaderboard_ranks.rank` is a GLOBAL
+    // cross-exchange rank (ROW_NUMBER OVER ORDER BY arena_score, NO partition by
+    // source), so the denominator must be the GLOBAL population, not this one
+    // platform's — dividing a global rank by a per-platform count fabricated a
+    // wrong "on {platform}" percentile. Use the GLOBAL MAX(rank) in the season:
+    // it equals the total ranked count by construction and guarantees
+    // total >= rank. The card is framed as cross-exchange accordingly.
     const { data: maxRankRow } = await Promise.race([
       supabase
         .from('leaderboard_ranks')
         .select('rank')
-        .eq('source', resolved.platform)
         .eq('season_id', seasonId)
         .order('rank', { ascending: false, nullsFirst: false })
         .limit(1)

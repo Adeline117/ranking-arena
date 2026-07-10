@@ -73,16 +73,21 @@ async function resolveTraderForWrapped(
       ),
     ])
 
-    // Estimated — displayed as "Rank X of ~N" on a shareable rank card;
-    // N is a marketing number, rounded integer percentile is unaffected.
-    const { count } = await Promise.race([
+    // `leaderboard_ranks.rank` is a GLOBAL cross-exchange rank (no partition by
+    // source), so the denominator must be the GLOBAL population — not this one
+    // platform's count. Use the GLOBAL MAX(rank) in the season: it equals the
+    // total ranked count by construction and guarantees total >= rank. The card
+    // is framed as cross-exchange accordingly.
+    const { data: maxRankRow } = await Promise.race([
       supabase
         .from('leaderboard_ranks')
-        .select('*', { count: 'estimated', head: true })
-        .eq('source', resolved.platform)
-        .eq('season_id', seasonId),
-      new Promise<{ count: null }>((resolve) =>
-        setTimeout(() => resolve({ count: null }), SSR_TIMEOUT_MS)
+        .select('rank')
+        .eq('season_id', seasonId)
+        .order('rank', { ascending: false, nullsFirst: false })
+        .limit(1)
+        .maybeSingle(),
+      new Promise<{ data: null }>((resolve) =>
+        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
       ),
     ])
 
@@ -92,7 +97,7 @@ async function resolveTraderForWrapped(
       platform: effectivePlatform,
       platformLabel: platLabel,
       rank: lr?.rank ?? null,
-      total: count ?? null,
+      total: maxRankRow?.rank ?? null,
       roi: lr?.roi ?? null,
       winRate: lr?.win_rate ?? null,
       score: lr?.arena_score ?? null,
@@ -129,8 +134,10 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   const parts = [rankStr, roiStr, topStr].filter(Boolean)
 
   const title = `${name} Rank Card`
+  // `rank`/`Top X%` are GLOBAL cross-exchange positions, so frame them as such —
+  // not "on {platform}" (which falsely implied a per-exchange ranking).
   const description = parts.length
-    ? `${parts.join(' | ')} on ${data?.platformLabel ?? 'Arena'}`
+    ? `${parts.join(' | ')} across all tracked exchanges on Arena`
     : `${name}'s trading performance card on Arena`
 
   const ogParams = new URLSearchParams({
