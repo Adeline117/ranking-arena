@@ -20,6 +20,93 @@ interface AlertPayload {
 
 type AlertChannel = 'telegram' | 'slack' | 'email' | 'webhook'
 
+/**
+ * SEV1 backup channel — GitHub Issue.
+ *
+ * WHY: Telegram is currently the ONLY real primary channel (slack/email are
+ * stubs). The 2026-07-07 outage happened because Telegram was 401-broken and
+ * nobody knew for hours. This is the second INDEPENDENT channel for critical
+ * alerts, mirroring `.github/workflows/deploy-freshness.yml` (which opens a
+ * de-duplicated GitHub issue that does NOT depend on Telegram).
+ *
+ * Fully env-gated: no-op (returns false) unless BOTH a token and a repo are
+ * configured. Never throws — fail-open. No secrets are hardcoded.
+ *   - token: ALERT_GITHUB_TOKEN | GITHUB_TOKEN | GH_TOKEN
+ *   - repo:  ALERT_GITHUB_REPO | GITHUB_REPOSITORY  (format: "owner/repo")
+ */
+async function sendGithubIssueAlert(payload: AlertPayload): Promise<boolean> {
+  const token = process.env.ALERT_GITHUB_TOKEN || process.env.GITHUB_TOKEN || process.env.GH_TOKEN
+  const repo = process.env.ALERT_GITHUB_REPO || process.env.GITHUB_REPOSITORY
+  if (!token || !repo) return false // env-gated no-op when not configured
+
+  try {
+    const title = `🛑 [SEV1] ${payload.title}`
+    const detailLines = payload.details
+      ? Object.entries(payload.details).map(([k, v]) => `- **${k}**: ${String(v)}`)
+      : []
+    const body = [
+      payload.message,
+      '',
+      ...detailLines,
+      '',
+      `_Telegram 主通道发送失败，GitHub issue 兜底（SEV1 备份通道）。_`,
+      new Date().toISOString(),
+    ].join('\n')
+
+    const headers: Record<string, string> = {
+      Authorization: `Bearer ${token}`,
+      Accept: 'application/vnd.github+json',
+      'Content-Type': 'application/json',
+      'User-Agent': 'arena-alert-sentinel',
+    }
+
+    // De-dup: comment on an existing open issue with the same title instead of
+    // spamming new ones (mirrors the deploy-freshness sentinel behaviour).
+    let existingNumber: number | null = null
+    try {
+      const q = `repo:${repo} is:issue is:open in:title "${title}"`
+      const searchRes = await fetch(
+        `https://api.github.com/search/issues?q=${encodeURIComponent(q)}`,
+        { headers, signal: AbortSignal.timeout(5000) }
+      )
+      if (searchRes.ok) {
+        const sj = (await searchRes.json()) as { items?: Array<{ number: number; title: string }> }
+        existingNumber = sj.items?.find((i) => i.title === title)?.number ?? null
+      }
+    } catch {
+      // search failed — fall through to create a fresh issue
+    }
+
+    if (existingNumber) {
+      const commentRes = await fetch(
+        `https://api.github.com/repos/${repo}/issues/${existingNumber}/comments`,
+        {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({ body }),
+          signal: AbortSignal.timeout(5000),
+        }
+      )
+      return commentRes.ok
+    }
+
+    // No labels — a non-existent label makes the create call 422 and drops the alert.
+    const createRes = await fetch(`https://api.github.com/repos/${repo}/issues`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ title, body }),
+      signal: AbortSignal.timeout(5000),
+    })
+    return createRes.ok
+  } catch (err) {
+    logger.error(
+      '[send-alert] GitHub issue backup failed:',
+      err instanceof Error ? err.message : String(err)
+    )
+    return false
+  }
+}
+
 /** Channel registry — add new channels here (Novu-inspired) */
 const CHANNEL_HANDLERS: Record<AlertChannel, (payload: AlertPayload) => Promise<boolean>> = {
   telegram: async (payload) => {
@@ -97,7 +184,21 @@ export async function sendAlert(
   )
 
   const anySent = results.some((r) => r.status === 'fulfilled' && r.value)
-  return { sent: anySent, channels: sentChannels }
+
+  // SEV1 backstop: Telegram is the only real primary channel and it's a SPOF
+  // (a 401-broken token silently swallowed 28 deploys' worth of alerts). For
+  // critical alerts, if the primary (Telegram) did NOT succeed, open a GitHub
+  // issue on a second, independent channel. Fully env-gated + fail-open.
+  if (payload.level === 'critical' && !sentChannels.includes('telegram')) {
+    try {
+      const ghSent = await sendGithubIssueAlert(payload)
+      if (ghSent) sentChannels.push('github')
+    } catch (err) {
+      logger.warn('[Alert] GitHub issue backup channel failed:', err)
+    }
+  }
+
+  return { sent: anySent || sentChannels.includes('github'), channels: sentChannels }
 }
 
 // ============================================
