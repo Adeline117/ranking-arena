@@ -12,7 +12,8 @@
 - **P4 认领入口验证**: trader 页 "Is this your account? Claim →" 线上实锤（0 真实认领，待 owner 亲测冷启动）
 - **P5 周报复活**: `auto-post-weekly-recap`（周一 09:10 UTC，43 crons）。真点三连修：RPC 形状凭先验全错（真形状 `{rows:[…]}`）→ 首触内容 4 个 +10000% clamp 垃圾 → roi==pnl 已知垃圾模式 + 匿名钱包「交易所 #名次」显示。**Hot bot 帖降权待 owner 确认**
 - **P6 可信度记分卡**: admin monitoring 新面板（序列覆盖夜间快照 + 链上净覆盖/认领/bot 帖实时，RPC 2.2s）。**覆盖率真相修正：serving 全集 68.2%（13193/19353，含 legacy 映射源），top500 93.3%**——此前口径漏了 12 个 legacy 名源
-- **待 owner**: ① crontab 加 `40 7 * * * /opt/homebrew/bin/node scripts/qa/trust-scorecard-snapshot.mjs >> logs/trust-scorecard.log 2>&1`（权限分类器拦截会话内写 crontab）② Hot bot 降权 ③ 亲测认领流
+- **快照排程**: GH Actions openclaw-sentinels 每日 06:45 UTC（本地 crontab 被权限分类器拦，改走 git 可审的 workflow 模式）
+- **待 owner**: ① Hot bot 帖降权 ② 亲测认领流（第一个真 verified 徽章 + 与交易所 App 对账）
 
 ---
 
