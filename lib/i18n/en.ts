@@ -6078,6 +6078,8 @@ const en = {
   colExitPrice: 'Exit Price',
   colUnrealizedPnl: 'Unrealized PnL',
   colRealizedPnl: 'Realized PnL',
+  recentActivityTitle: 'Recent Trades',
+  recentActivityViewAll: 'Full history in Stats → Records',
   colNotional: 'Notional',
   colMargin: 'Margin',
   colMarginMode: 'Mode',
