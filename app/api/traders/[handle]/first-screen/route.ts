@@ -28,6 +28,7 @@ import { getSourceCapabilities } from '@/lib/data/serving/capabilities'
 import { getDataMode } from '@/lib/constants/serving-cutover'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import { getReadReplica } from '@/lib/supabase/read-replica'
+import { logger } from '@/lib/logger'
 import type { TraderFirstScreen, TraderFirstScreenResponse } from '@/lib/data/serving/types'
 
 const handleSchema = z.string().min(1).max(255)
@@ -50,7 +51,14 @@ const cachedCapabilities = async () => {
       cachedCapabilitiesISR(),
       new Promise<Record<string, never>>((resolve) => setTimeout(() => resolve({}), 2_000)),
     ])
-  } catch {
+  } catch (err) {
+    // The 2s race resolves {} on cold-miss timeout (expected, no throw); this
+    // catch only fires on a genuine capability-RPC failure — surface it so a
+    // broken capability matrix (drift) doesn't silently gate off record surfaces.
+    logger.warn(
+      '[first-screen] source capabilities fetch failed:',
+      err instanceof Error ? err.message : String(err)
+    )
     return {}
   }
 }

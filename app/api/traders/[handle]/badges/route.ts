@@ -4,6 +4,7 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 import { resolveTrader } from '@/lib/data/unified'
 import { calculateBadges, type EarnedBadge } from '@/lib/badges'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
+import { logger } from '@/lib/logger'
 
 /**
  * GET /api/traders/[handle]/badges
@@ -42,12 +43,19 @@ export async function GET(
   // Fetch trader data from leaderboard_ranks (precomputed, fast)
   const { data: rankData, error } = await supabase
     .from('leaderboard_ranks')
-    .select('source_trader_id, roi, pnl, win_rate, max_drawdown, followers, arena_score, rank, source, computed_at')
+    .select(
+      'source_trader_id, roi, pnl, win_rate, max_drawdown, followers, arena_score, rank, source, computed_at'
+    )
     .eq('source', resolved.platform)
     .eq('source_trader_id', resolved.traderKey)
     .eq('season_id', '90D')
     .maybeSingle()
 
+  // A query error (schema drift, 42703) is NOT the same as "trader has no rank
+  // row" — surface it so a broken badges board doesn't silently blank out.
+  if (error) {
+    logger.warn('[badges] leaderboard_ranks query error (drift?):', error.message)
+  }
   if (error || !rankData) {
     return NextResponse.json({ badges: [] })
   }

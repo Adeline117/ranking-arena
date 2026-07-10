@@ -89,7 +89,11 @@ export async function GET(request: NextRequest, context: { params: Promise<{ han
                 .eq('handle', handle)
                 .maybeSingle()
               return data
-            } catch {
+            } catch (e) {
+              logger.error('[users/full] user_profiles counts query failed', {
+                handle,
+                error: String(e),
+              })
               return null
             }
           })(),
