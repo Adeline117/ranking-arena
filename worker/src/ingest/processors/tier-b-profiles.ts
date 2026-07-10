@@ -60,6 +60,8 @@ async function getTopTraders(
        LEFT JOIN arena.ingest_cursors pc
               ON pc.trader_id = t.id AND pc.kind = '${PROFILED_CURSOR_KIND}'
       WHERE e.rank <= $2
+        -- 认领交易员停抓(P3-P2): 第一方 sync 是他们的权威数据源
+        AND (t.meta->>'claimed') IS DISTINCT FROM 'true'
         AND (pc.updated_at IS NULL OR pc.updated_at < $3)
       GROUP BY t.id, t.exchange_trader_id, t.meta`,
     [sourceId, topN, stalerThan.toISOString()]
