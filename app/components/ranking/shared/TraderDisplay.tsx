@@ -37,6 +37,9 @@ export function areTraderPropsEqual(
     prev.trader.score_confidence === next.trader.score_confidence &&
     prev.trader.rank_change === next.trader.rank_change &&
     prev.trader.is_new === next.trader.is_new &&
+    // 认领徽章(2026-07-09 真点):不比较此字段时,客户端补上 is_verified 的
+    // 新数据被 memo 判「相等」拦下,行永不重渲染 → 徽章永不出现。
+    prev.trader.is_verified === next.trader.is_verified &&
     prev.rank === next.rank &&
     prev.language === next.language &&
     prev.searchQuery === next.searchQuery
