@@ -192,10 +192,25 @@ export default function MembershipContent() {
     marginBottom: tokens.spacing[6],
   }
 
+  // Honest entitlement — a genuinely paid/owned Pro plan, NOT the promo-inflated
+  // `isPro` (which is true for EVERYONE during PRO_FREE_PROMO). During the promo a
+  // never-paid user has `info.subscription === null`, so claiming "Current Plan: Pro"
+  // + rendering the Stripe subscription-management panel (Change Plan / Billing
+  // History / Cancel → /api/stripe/portal → dead-ends to /pricing) is a false claim.
+  // A real entitlement = a live Stripe subscription OR an NFT membership.
+  const hasRealSubscription = !!info?.subscription
+  const hasGenuinePro = hasRealSubscription || !!info?.nft?.hasNft
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-      {/* Current Plan Status */}
-      <CurrentPlanCard isPro={isPro} info={info} language={language} cardStyle={cardStyle} t={t} />
+      {/* Current Plan Status — label reflects a genuine plan, not the promo unlock */}
+      <CurrentPlanCard
+        isPro={hasGenuinePro}
+        info={info}
+        language={language}
+        cardStyle={cardStyle}
+        t={t}
+      />
 
       {/* Upgrade to Pro — only shown for free users */}
       {!isPro && (
@@ -231,8 +246,12 @@ export default function MembershipContent() {
       {/* FAQ (for free users) */}
       {!isPro && <FaqSection cardStyle={cardStyle} t={t} />}
 
-      {/* Subscription Management */}
-      {isPro && (
+      {/* Subscription Management — only for a REAL Stripe subscription. The portal
+          buttons (Change Plan / Billing History / Cancel) all hit /api/stripe/portal,
+          which returns { redirect: '/pricing' } for a user with no stripe_customer_id
+          — a dead-end for promo users. Mirror the Cancel button's existing
+          `info?.subscription` gate. */}
+      {hasRealSubscription && (
         <SubscriptionManagement
           info={info}
           cardStyle={cardStyle}

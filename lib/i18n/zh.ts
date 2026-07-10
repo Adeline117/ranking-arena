@@ -5855,6 +5855,7 @@ const zh = {
   dissolveGroupConfirm: '确定要解散此群组吗？',
   dissolveGroupDesc: '此操作不可撤销。所有成员将被移除。',
   groupDissolved: '群组已解散',
+  groupDissolvedBanner: '该群组已解散。你可以查看历史记录，但无法发帖或互动。',
   authResendCode: '重新发送验证码',
   calmar: 'Calmar',
   sortino: 'Sortino',
