@@ -8,6 +8,7 @@ import { useApiCheckout } from '@/lib/hooks/useApiCheckout'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { authedFetch } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { formatDateLocalized } from '@/lib/utils/format'
 import { SectionCard, getInputStyle } from './shared'
 
 interface ApiKey {
@@ -498,10 +499,10 @@ function KeyRow({
   onRevoke: (id: string) => void
   onCopy: (key: string) => void
 }) {
-  const { t } = useLanguage()
-  const created = new Date(apiKey.created_at).toLocaleDateString()
+  const { t, language } = useLanguage()
+  const created = formatDateLocalized(apiKey.created_at, language)
   const lastUsed = apiKey.last_used_at
-    ? new Date(apiKey.last_used_at).toLocaleDateString()
+    ? formatDateLocalized(apiKey.last_used_at, language)
     : t('apiKeyNever')
 
   return (

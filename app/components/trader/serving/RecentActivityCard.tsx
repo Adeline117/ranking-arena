@@ -12,7 +12,8 @@
 import { memo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
-import { t as i18nT } from '@/lib/i18n'
+import { t as i18nT, getLanguage } from '@/lib/i18n'
+import { formatDateLocalized } from '@/lib/utils/format'
 import { useTraderRecords } from '@/lib/hooks/useTraderRecords'
 import Metric from '@/app/components/ui/Metric'
 
@@ -107,7 +108,7 @@ export const RecentActivityCard = memo(function RecentActivityCard({
                   textAlign: 'right',
                 }}
               >
-                {r.ts ? new Date(r.ts).toLocaleDateString() : ''}
+                {r.ts ? formatDateLocalized(new Date(r.ts), getLanguage()) : ''}
               </span>
             </div>
           )
