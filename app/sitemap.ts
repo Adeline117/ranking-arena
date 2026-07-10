@@ -13,6 +13,10 @@
 import type { MetadataRoute } from 'next'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { BASE_URL } from '@/lib/constants/urls'
+// Single source of truth for /learn slugs — same list drives generateStaticParams
+// on the article route. Importing here prevents this sitemap from drifting from
+// the actual published articles. articles.ts is pure data (no client-only imports).
+import { ARTICLES } from '@/app/(app)/learn/articles'
 
 // ISR: regenerate sitemaps every hour. The first request after revalidation
 // triggers a fresh DB query; subsequent requests serve from cache.
@@ -266,20 +270,10 @@ export default async function sitemap({
       },
       { url: `${BASE_URL}/market`, lastModified: now, changeFrequency: 'hourly', priority: 0.8 },
       { url: `${BASE_URL}/learn`, lastModified: now, changeFrequency: 'weekly', priority: 0.75 },
-      // Learn articles (static content, high SEO value)
-      ...[
-        'how-arena-score-works',
-        'understanding-trader-rankings',
-        'cex-vs-dex',
-        'reading-risk-metrics',
-        'getting-started',
-        'top-traders-by-exchange',
-        'what-is-copy-trading',
-        'trading-styles-explained',
-        'how-to-read-equity-curves',
-        'arena-pro-features',
-      ].map((slug) => ({
-        url: `${BASE_URL}/learn/${slug}`,
+      // Learn articles (static content, high SEO value) — derived from ARTICLES
+      // (the article route's generateStaticParams source) so slugs never drift.
+      ...ARTICLES.map((article) => ({
+        url: `${BASE_URL}/learn/${article.slug}`,
         lastModified: now,
         changeFrequency: 'monthly' as const,
         priority: 0.7,
