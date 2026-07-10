@@ -11,7 +11,8 @@ const SITE_NAME = 'Arena'
 // Chinese-only "加密万物排行榜" caused Google Rich Results to show Chinese text
 // on English search results, hurting CTR. Localized variants are handled via
 // hreflang alternates in app/layout.tsx.
-const SITE_DESCRIPTION = 'Crypto trader rankings across 30+ exchanges — ROI, Arena Score, and PnL leaderboards.'
+const SITE_DESCRIPTION =
+  'Crypto trader rankings across 30+ exchanges — ROI, Arena Score, and PnL leaderboards.'
 
 // ============================================
 // 类型定义
@@ -177,9 +178,7 @@ export function generateOrganizationSchema(): OrganizationSchema {
     url: BASE_URL,
     logo: `${BASE_URL}/logo.png`,
     description: SITE_DESCRIPTION,
-    sameAs: [
-      'https://twitter.com/arenafi',
-    ],
+    sameAs: ['https://twitter.com/arenafi'],
     contactPoint: {
       '@type': 'ContactPoint',
       contactType: 'customer service',
@@ -218,11 +217,11 @@ export function generateTraderPersonSchema(trader: TraderSchemaInput): PersonSch
     identifier: trader.id,
     jobTitle: 'Crypto Trader',
   }
-  
+
   if (trader.avatarUrl) {
     personSchema.image = trader.avatarUrl
   }
-  
+
   // Build rich description with performance data
   const descParts: string[] = []
   if (trader.bio) descParts.push(trader.bio)
@@ -230,18 +229,18 @@ export function generateTraderPersonSchema(trader: TraderSchemaInput): PersonSch
     descParts.push(`90-day ROI: ${trader.roi90d >= 0 ? '+' : ''}${trader.roi90d.toFixed(2)}%`)
   }
   if (trader.winRate != null) descParts.push(`Win rate: ${trader.winRate.toFixed(1)}%`)
-  if (trader.source) descParts.push(`Trading on ${trader.source.charAt(0).toUpperCase() + trader.source.slice(1)}`)
-  personSchema.description = descParts.length > 0
-    ? descParts.join(' · ')
-    : `Crypto trader on ${SITE_NAME}`
-  
+  if (trader.source)
+    descParts.push(`Trading on ${trader.source.charAt(0).toUpperCase() + trader.source.slice(1)}`)
+  personSchema.description =
+    descParts.length > 0 ? descParts.join(' · ') : `Crypto trader on ${SITE_NAME}`
+
   personSchema.url = `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`
-  
+
   // 添加交易所 profile 链接
   if (trader.profileUrl) {
     personSchema.sameAs = [trader.profileUrl]
   }
-  
+
   return personSchema
 }
 
@@ -262,9 +261,10 @@ export function generateTraderProfilePageSchema(
   if (trader.followers != null && trader.followers > 0) {
     descParts.push(`${trader.followers.toLocaleString()} followers`)
   }
-  const description = descParts.length > 0
-    ? descParts.join(' · ')
-    : `View ${trader.handle}'s trading performance and portfolio on ${SITE_NAME}`
+  const description =
+    descParts.length > 0
+      ? descParts.join(' · ')
+      : `View ${trader.handle}'s trading performance and portfolio on ${SITE_NAME}`
 
   return {
     '@context': 'https://schema.org',
@@ -319,26 +319,26 @@ export function generatePostArticleSchema(post: PostSchemaInput): ArticleSchema 
       logo: `${BASE_URL}/logo.png`,
     },
   }
-  
+
   if (post.content) {
     schema.description = post.content.slice(0, 200)
   }
-  
+
   if (post.updatedAt) {
     schema.dateModified = post.updatedAt
   }
-  
+
   if (post.authorAvatarUrl) {
     schema.author.image = post.authorAvatarUrl
   }
-  
+
   if (post.images && post.images.length > 0) {
     schema.image = post.images
   }
-  
+
   // 互动统计
   const interactions: InteractionCounter[] = []
-  
+
   if (post.likeCount !== undefined) {
     interactions.push({
       '@type': 'InteractionCounter',
@@ -346,7 +346,7 @@ export function generatePostArticleSchema(post: PostSchemaInput): ArticleSchema 
       userInteractionCount: post.likeCount,
     })
   }
-  
+
   if (post.viewCount !== undefined) {
     interactions.push({
       '@type': 'InteractionCounter',
@@ -354,16 +354,72 @@ export function generatePostArticleSchema(post: PostSchemaInput): ArticleSchema 
       userInteractionCount: post.viewCount,
     })
   }
-  
+
   if (interactions.length > 0) {
     schema.interactionStatistic = interactions
   }
-  
+
   if (post.commentCount !== undefined) {
     schema.commentCount = post.commentCount
   }
-  
+
   return schema
+}
+
+// ============================================
+// 学习文章 Schema（/learn 长尾落地页）
+// ============================================
+
+export interface LearnArticleSchema {
+  '@context': 'https://schema.org'
+  '@type': 'TechArticle'
+  headline: string
+  description: string
+  url: string
+  mainEntityOfPage: string
+  datePublished: string
+  dateModified: string
+  author: OrganizationReference
+  publisher: OrganizationReference
+  image: string[]
+}
+
+// Evergreen educational content — no per-article dates in the source. A stable
+// published date (in the past) avoids "future dated" penalties and re-crawl churn.
+const LEARN_ARTICLE_DATE = '2026-01-01T00:00:00.000Z'
+
+/**
+ * Generate a TechArticle Schema for a /learn article. Author + publisher are the
+ * Arena Organization (these are first-party editorial explainers, not user posts).
+ */
+export function generateArticleSchema(
+  slug: string,
+  title: string,
+  excerpt: string,
+  url: string
+): LearnArticleSchema {
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'TechArticle',
+    headline: title.slice(0, 110), // Google 限制 110 字符
+    description: excerpt,
+    url,
+    mainEntityOfPage: url,
+    datePublished: LEARN_ARTICLE_DATE,
+    dateModified: LEARN_ARTICLE_DATE,
+    author: {
+      '@type': 'Organization',
+      name: SITE_NAME,
+      url: BASE_URL,
+    },
+    publisher: {
+      '@type': 'Organization',
+      name: SITE_NAME,
+      url: BASE_URL,
+      logo: `${BASE_URL}/logo.png`,
+    },
+    image: [`${BASE_URL}/og-image.png`],
+  }
 }
 
 // ============================================
@@ -418,7 +474,9 @@ export function generateExchangeItemListSchema(input: ExchangeSchemaInput): obje
     name: trader.handle,
     url: `${BASE_URL}/trader/${encodeURIComponent(trader.handle)}`,
     ...(trader.arenaScore != null
-      ? { description: `Arena Score: ${Math.round(trader.arenaScore)}${trader.roi != null ? ` | ROI: ${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(1)}%` : ''}` }
+      ? {
+          description: `Arena Score: ${Math.round(trader.arenaScore)}${trader.roi != null ? ` | ROI: ${trader.roi >= 0 ? '+' : ''}${trader.roi.toFixed(1)}%` : ''}`,
+        }
       : {}),
   }))
 

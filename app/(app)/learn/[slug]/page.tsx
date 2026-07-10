@@ -3,6 +3,9 @@ import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { ARTICLES, getArticleBySlug, pickLocalized } from '../articles'
 import { getServerTranslation } from '@/lib/i18n/server'
+import { BASE_URL } from '@/lib/constants/urls'
+import { JsonLd } from '@/app/components/Providers/JsonLd'
+import { generateArticleSchema } from '@/lib/seo/structured-data'
 
 export const revalidate = 3600
 
@@ -19,12 +22,35 @@ export async function generateMetadata({
   const article = getArticleBySlug(slug)
   if (!article) return { title: 'Not Found' }
   const { lang } = await getServerTranslation()
+  const title = pickLocalized(article.title, lang)
+  const description = pickLocalized(article.excerpt, lang)
+  const canonicalUrl = `${BASE_URL}/learn/${slug}`
+  const ogTitle = `${title} | Arena Learn`
+  // Dynamic per-article card via the generic OG route (title + Arena Learn subtitle).
+  const ogImageUrl = `${BASE_URL}/api/og?title=${encodeURIComponent(title)}&subtitle=${encodeURIComponent('Arena Learn')}`
   return {
     // `absolute` opts out of the root layout template ('%s | Arena'); this page
     // uses its own 'Arena Learn' branding suffix and must not have ' | Arena'
     // appended on top of it.
-    title: { absolute: `${pickLocalized(article.title, lang)} | Arena Learn` },
-    description: pickLocalized(article.excerpt, lang),
+    title: { absolute: ogTitle },
+    description,
+    alternates: { canonical: canonicalUrl },
+    openGraph: {
+      title: ogTitle,
+      description,
+      url: canonicalUrl,
+      siteName: 'Arena',
+      type: 'article',
+      images: [{ url: ogImageUrl, width: 1200, height: 630, alt: title }],
+    },
+    twitter: {
+      card: 'summary_large_image',
+      title: ogTitle,
+      description: description.length > 160 ? description.slice(0, 157) + '...' : description,
+      images: [ogImageUrl],
+      creator: '@arenafi',
+      site: '@arenafi',
+    },
   }
 }
 
@@ -193,6 +219,13 @@ export default async function LearnArticlePage({ params }: { params: Promise<{ s
   const { html, headings } = renderArticle(pickLocalized(article.content, lang))
   const showToc = headings.length >= 3
 
+  const articleJsonLd = generateArticleSchema(
+    slug,
+    pickLocalized(article.title, lang),
+    pickLocalized(article.excerpt, lang),
+    `${BASE_URL}/learn/${slug}`
+  )
+
   // Prev / next navigation derived from the canonical ARTICLES order
   const idx = ARTICLES.findIndex((a) => a.slug === slug)
   const prev = idx > 0 ? ARTICLES[idx - 1] : null
@@ -200,6 +233,7 @@ export default async function LearnArticlePage({ params }: { params: Promise<{ s
 
   return (
     <div style={{ maxWidth: 1040, margin: '0 auto', padding: '40px 20px 80px' }}>
+      <JsonLd data={articleJsonLd} />
       <style
         dangerouslySetInnerHTML={{
           __html: `
