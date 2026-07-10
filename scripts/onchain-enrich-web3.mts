@@ -1,16 +1,23 @@
 /**
- * Web3 wallet on-chain enrichment runner (Phase A — item A).
+ * Web3 wallet on-chain enrichment runner (Phase A item A → Phase B recurring).
  *
- * Selects the top-N web3 wallets (by best rank) per source, recomputes their
- * profile detail 100% from chain data (durable — no exchange/WAF), and writes
- * onchain_* fields into arena.trader_stats.extras (90d row) WITHOUT clobbering
- * board values. $0: shared ALCHEMY_API_KEY + keyless Dexscreener pricing.
+ * Recomputes web3 wallets' profile detail 100% from chain data (durable — no
+ * exchange/WAF) and writes onchain_* fields into arena.trader_stats.extras
+ * (90d row) WITHOUT clobbering board values. Solana via HELIUS_API_KEY
+ * (fallback ALCHEMY_API_KEY), BSC via Alchemy + Dune internal legs, pricing
+ * via keyless Dexscreener.
+ *
+ * Phase B sweep semantics (2026-07-09, owner 批全量): selection prefers
+ * never-enriched wallets, then stalest (extras.onchain_enriched_at), skipping
+ * anything refreshed within 7 days — a nightly cron with a fixed batch walks
+ * the whole population weekly instead of re-hitting the same whales.
  *
  * Usage:
- *   npx tsx --env-file=.env.local scripts/onchain-enrich-web3.mts [topN] [source]
- *   npx tsx --env-file=.env.local scripts/onchain-enrich-web3.mts 3 okx_web3_solana
+ *   npx tsx scripts/onchain-enrich-web3.mts [batch] [source] [concurrency]
+ *   npx tsx scripts/onchain-enrich-web3.mts 900 okx_web3_solana 4
+ *   npx tsx scripts/onchain-enrich-web3.mts 300 binance_web3_bsc 3
  *
- * Cron-wire later; run manually here to prove end-to-end.
+ * Cron: nightly via crontab (see docs/DATA_COMPLETENESS_PLAN_2026-07-08.md).
  */
 import { config } from 'dotenv'
 import { resolve } from 'path'
@@ -18,6 +25,7 @@ config({ path: resolve(process.cwd(), '.env.local') })
 
 const topN = Number(process.argv[2]) || 5
 const onlySource = process.argv[3]
+const concurrency = Math.max(1, Number(process.argv[4]) || 4)
 
 async function main() {
   const { Pool } = await import('pg')
@@ -35,39 +43,58 @@ async function main() {
       console.log(`[skip] ${slug} — not an on-chain source`)
       continue
     }
-    // Top-N wallets by best 90d PnL for this source (trader_stats has no rank col).
+    // Sweep selection (Phase B): never-enriched first, then stalest; skip
+    // fresh (<7d). Within a bucket, richest pnl first (user-visible wallets
+    // win ties). trader_stats has no rank col — pnl is the proxy.
     const { rows } = await pool.query(
       `SELECT t.exchange_trader_id AS wallet, ts.pnl
          FROM arena.trader_stats ts
          JOIN arena.traders t ON t.id = ts.trader_id
          JOIN arena.sources s ON s.id = t.source_id
         WHERE s.slug = $1 AND ts.timeframe = 90 AND ts.pnl IS NOT NULL
-        ORDER BY ts.pnl DESC
+          AND (NOT ts.extras ? 'onchain_enriched_at'
+               OR (ts.extras->>'onchain_enriched_at')::timestamptz < now() - interval '7 days')
+        ORDER BY (ts.extras->>'onchain_enriched_at')::timestamptz ASC NULLS FIRST,
+                 ts.pnl DESC
         LIMIT $2`,
       [slug, topN]
     )
-    console.log(`\n=== ${slug} (${chain}) — top ${rows.length} wallets ===`)
-    for (const { wallet, pnl } of rows) {
-      const rank = `pnl$${Math.round(pnl)}`
-      try {
-        const e = await enrichWeb3Wallet(chain, wallet, { lookbackDays: 90, maxSigs: 400 })
-        const extras = enrichmentExtras(e)
-        const upd = await pool.query(
-          `UPDATE arena.trader_stats ts SET
-             extras = ts.extras || $3::jsonb,
-             win_rate = COALESCE(ts.win_rate, $4)
-           FROM arena.traders t, arena.sources s
-           WHERE ts.trader_id = t.id AND t.source_id = s.id
-             AND s.slug = $1 AND t.exchange_trader_id = $2 AND ts.timeframe = 90`,
-          [slug, wallet, JSON.stringify(extras), e.winRate]
-        )
-        console.log(
-          `  #${rank} ${wallet.slice(0, 10)}… realized=$${e.realizedPnlUsd} unreal=$${e.unrealizedPnlUsd} total=$${e.totalPnlUsd} win=${e.winRate ?? '—'} buys=${e.txsBuy} sells=${e.txsSell} tok=${e.tokensTraded} priced=${e.pricedTokens}/${e.pricedTokens + e.unpricedTokens} (rows=${upd.rowCount})${e.realizedPartial ? ' [realized-partial]' : ''}`
-        )
-      } catch (err) {
-        console.log(`  #${rank} ${wallet.slice(0, 10)}… FAILED: ${err instanceof Error ? err.message : err}`)
+    console.log(`\n=== ${slug} (${chain}) — sweep batch ${rows.length} wallets ×${concurrency} ===`)
+    let ok = 0
+    let failed = 0
+    const queue = [...rows]
+    const runOne = async (): Promise<void> => {
+      for (;;) {
+        const next = queue.shift()
+        if (!next) return
+        const { wallet, pnl } = next
+        const rank = `pnl$${Math.round(pnl)}`
+        try {
+          const e = await enrichWeb3Wallet(chain, wallet, { lookbackDays: 90, maxSigs: 400 })
+          const extras = enrichmentExtras(e)
+          const upd = await pool.query(
+            `UPDATE arena.trader_stats ts SET
+               extras = ts.extras || $3::jsonb,
+               win_rate = COALESCE(ts.win_rate, $4)
+             FROM arena.traders t, arena.sources s
+             WHERE ts.trader_id = t.id AND t.source_id = s.id
+               AND s.slug = $1 AND t.exchange_trader_id = $2 AND ts.timeframe = 90`,
+            [slug, wallet, JSON.stringify(extras), e.winRate]
+          )
+          ok++
+          console.log(
+            `  #${rank} ${wallet.slice(0, 10)}… realized=$${e.realizedPnlUsd} unreal=$${e.unrealizedPnlUsd} total=$${e.totalPnlUsd} win=${e.winRate ?? '—'} buys=${e.txsBuy} sells=${e.txsSell} tok=${e.tokensTraded} priced=${e.pricedTokens}/${e.pricedTokens + e.unpricedTokens} (rows=${upd.rowCount})${e.realizedPartial ? ' [realized-partial]' : ''}`
+          )
+        } catch (err) {
+          failed++
+          console.log(
+            `  #${rank} ${wallet.slice(0, 10)}… FAILED: ${err instanceof Error ? err.message : err}`
+          )
+        }
       }
     }
+    await Promise.all(Array.from({ length: concurrency }, () => runOne()))
+    console.log(`=== ${slug} done: ${ok} ok, ${failed} failed ===`)
   }
   await pool.end()
 }
