@@ -4660,6 +4660,11 @@ const zh = {
   activityFeedLoadMore: '加载更多',
   activityFeedLive: '实时',
   activityFeedUpdatedPrefix: '更新于',
+  activityFeedTabFollowing: '关注',
+  activityFeedTabDiscover: '发现',
+  activityFeedFollowingEmpty:
+    '关注交易员后，这里会显示他们的动态——上榜、ROI 里程碑、大额盈利等尽在其中。',
+  activityFeedFollowingEmptyCta: '发现交易员',
   activityTypeRankUp: '排名上升',
   activityTypeTop10: '进入前十',
   activityTypeRoi: 'ROI',

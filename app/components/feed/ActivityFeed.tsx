@@ -10,11 +10,12 @@
  *   - Real-time feel: newest first
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { STALE_RELAXED } from '@/lib/hooks/cache-presets'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import type { TraderActivity, ActivityType } from '@/lib/types/activities'
 import { ACTIVITY_META } from '@/lib/types/activities'
 import ActivityFeedItem, { activityTypeLabel } from './ActivityFeedItem'
@@ -72,7 +73,41 @@ export default function ActivityFeed({
   title,
 }: ActivityFeedProps) {
   const { t, language } = useLanguage()
+  const { isLoggedIn, authChecked, getAuthHeadersAsync } = useAuthSession()
   const localTitle = title || t('activityFeedTitle')
+
+  // Following / Discover view. Personalized ("Following") is only offered to
+  // logged-in users and only when this is the main feed (no fixed platform/handle
+  // profile mode). Default = Discover (global) so guests + zero-follow users never
+  // hit an empty first paint; the user's last choice is remembered per browser.
+  const showViewTabs = !fixedPlatform && !fixedHandle
+  const [view, setView] = useState<'discover' | 'following'>('discover')
+
+  // Restore the remembered view once auth is known (logged-in only).
+  useEffect(() => {
+    if (!showViewTabs || !authChecked || !isLoggedIn) return
+    try {
+      if (localStorage.getItem('feedView') === 'following') setView('following')
+    } catch {
+      /* localStorage unavailable — keep Discover default */
+    }
+  }, [showViewTabs, authChecked, isLoggedIn])
+
+  // If the user logs out while on Following, drop back to Discover.
+  useEffect(() => {
+    if (authChecked && !isLoggedIn && view === 'following') setView('discover')
+  }, [authChecked, isLoggedIn, view])
+
+  const following = showViewTabs && isLoggedIn && view === 'following'
+
+  const selectView = (next: 'discover' | 'following') => {
+    setView(next)
+    try {
+      localStorage.setItem('feedView', next)
+    } catch {
+      /* ignore */
+    }
+  }
 
   const platformOptions = useMemo(
     () => [
@@ -110,14 +145,17 @@ export default function ActivityFeed({
     isLoading: loading,
     error: queryError,
   } = useInfiniteQuery({
-    queryKey: ['activities', platform, fixedHandle],
+    queryKey: ['activities', platform, fixedHandle, following],
     queryFn: async ({ pageParam }: { pageParam: string | null }) => {
       const params = new URLSearchParams()
       params.set('limit', '50')
       if (platform) params.set('platform', platform)
       if (fixedHandle) params.set('handle', fixedHandle)
       if (pageParam) params.set('cursor', pageParam)
-      const res = await fetch(`/api/feed/activities?${params}`)
+      if (following) params.set('following', '1')
+      // Following mode needs the auth token so the API can resolve the user's follows.
+      const headers = following ? await getAuthHeadersAsync() : undefined
+      const res = await fetch(`/api/feed/activities?${params}`, headers ? { headers } : undefined)
       if (!res.ok) throw new Error('Failed to load activities')
       const json = await res.json()
       return json.data as {
@@ -134,7 +172,7 @@ export default function ActivityFeed({
     // the same unfiltered SSR page into every new key with dataUpdatedAt=now,
     // marking it fresh within staleTime and suppressing the filtered fetch.
     initialData:
-      platform === (fixedPlatform ?? null)
+      !following && platform === (fixedPlatform ?? null)
         ? {
             pages: [
               {
@@ -254,6 +292,31 @@ export default function ActivityFeed({
         </div>
       </div>
 
+      {/* Following / Discover view tabs (logged-in users only) */}
+      {showViewTabs && isLoggedIn && (
+        <div
+          role="tablist"
+          aria-label={t('activityFeedTitle')}
+          style={{
+            display: 'flex',
+            gap: 4,
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+            borderBottom: `1px solid ${alpha(tokens.colors.border.primary, 19)}`,
+          }}
+        >
+          <ViewTab
+            label={t('activityFeedTabFollowing')}
+            active={view === 'following'}
+            onClick={() => selectView('following')}
+          />
+          <ViewTab
+            label={t('activityFeedTabDiscover')}
+            active={view === 'discover'}
+            onClick={() => selectView('discover')}
+          />
+        </div>
+      )}
+
       {/* Platform filter */}
       {!fixedPlatform && (
         <div
@@ -300,17 +363,55 @@ export default function ActivityFeed({
       {/* Activity list */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
         {visibleActivities.length === 0 && !loading ? (
-          <div
-            style={{
-              padding: tokens.spacing[12],
-              textAlign: 'center',
-              color: tokens.colors.text.tertiary,
-              fontSize: tokens.typography.fontSize.sm,
-              fontFamily: tokens.typography.fontFamily.sans.join(', '),
-            }}
-          >
-            {t('activityFeedEmpty')}
-          </div>
+          following ? (
+            // Personalized feed empty: no follows yet, or followed traders were
+            // quiet this window. Nudge toward Discover instead of a dead-end.
+            <div
+              style={{
+                padding: tokens.spacing[12],
+                textAlign: 'center',
+                color: tokens.colors.text.tertiary,
+                fontSize: tokens.typography.fontSize.sm,
+                fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+              }}
+            >
+              <span style={{ maxWidth: 340, lineHeight: 1.5 }}>
+                {t('activityFeedFollowingEmpty')}
+              </span>
+              <button
+                onClick={() => selectView('discover')}
+                style={{
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+                  borderRadius: tokens.radius.lg,
+                  border: 'none',
+                  background: tokens.colors.accent.primary,
+                  color: tokens.colors.white,
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: tokens.typography.fontWeight.medium,
+                  cursor: 'pointer',
+                  fontFamily: tokens.typography.fontFamily.sans.join(', '),
+                }}
+              >
+                {t('activityFeedFollowingEmptyCta')}
+              </button>
+            </div>
+          ) : (
+            <div
+              style={{
+                padding: tokens.spacing[12],
+                textAlign: 'center',
+                color: tokens.colors.text.tertiary,
+                fontSize: tokens.typography.fontSize.sm,
+                fontFamily: tokens.typography.fontFamily.sans.join(', '),
+              }}
+            >
+              {t('activityFeedEmpty')}
+            </div>
+          )
         ) : (
           visibleActivities.map((activity, idx) => (
             <div
@@ -391,6 +492,45 @@ export default function ActivityFeed({
         )}
       </div>
     </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// ViewTab — Following / Discover segmented control
+// ---------------------------------------------------------------------------
+
+interface ViewTabProps {
+  label: string
+  active: boolean
+  onClick: () => void
+}
+
+function ViewTab({ label, active, onClick }: ViewTabProps) {
+  return (
+    <button
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      style={{
+        padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+        borderRadius: tokens.radius.lg,
+        border: active
+          ? '1px solid var(--color-accent-primary)'
+          : `1px solid ${alpha(tokens.colors.border.primary, 25)}`,
+        background: active ? alpha(tokens.colors.accent.primary, 12) : 'transparent',
+        color: active ? 'var(--color-accent-primary)' : tokens.colors.text.secondary,
+        fontSize: tokens.typography.fontSize.sm,
+        fontWeight: active
+          ? tokens.typography.fontWeight.bold
+          : tokens.typography.fontWeight.medium,
+        cursor: 'pointer',
+        whiteSpace: 'nowrap',
+        fontFamily: tokens.typography.fontFamily.sans.join(', '),
+        transition: 'all 0.15s ease',
+      }}
+    >
+      {label}
+    </button>
   )
 }
 

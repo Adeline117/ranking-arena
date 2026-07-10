@@ -4765,6 +4765,11 @@ const en = {
   activityFeedLoadMore: 'Load More',
   activityFeedLive: 'Live',
   activityFeedUpdatedPrefix: 'Updated',
+  activityFeedTabFollowing: 'Following',
+  activityFeedTabDiscover: 'Discover',
+  activityFeedFollowingEmpty:
+    'Follow traders to personalize your feed. When traders you follow climb the ranks, hit ROI milestones, or bank big profits, it shows up here.',
+  activityFeedFollowingEmptyCta: 'Discover traders',
   activityTypeRankUp: 'Rank Up',
   activityTypeTop10: 'Top 10',
   activityTypeRoi: 'ROI',

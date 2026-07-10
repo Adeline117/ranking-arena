@@ -17,6 +17,7 @@ export const dynamic = 'force-dynamic'
 import { NextRequest } from 'next/server'
 import {
   getSupabaseAdmin,
+  getAuthUser,
   success,
   handleError,
   validateNumber,
@@ -36,12 +37,43 @@ export async function GET(request: NextRequest) {
     const platform = searchParams.get('platform') ?? null
     const cursor = searchParams.get('cursor') ?? null
     const handle = searchParams.get('handle') ?? null
+    // `following=1` restricts the feed to the traders the authenticated user
+    // follows (trader_follows.trader_id === trader_activities.source_trader_id,
+    // same join broadcast-trader-events uses). Guests / users with no follows
+    // get an empty result so the client can fall back to Discover.
+    const followingOnly =
+      searchParams.get('following') === '1' || searchParams.get('following') === 'true'
+
+    let followedTraderIds: string[] | null = null
+    if (followingOnly) {
+      const user = await getAuthUser(request)
+      if (!user) {
+        return success({ activities: [], pagination: { limit, hasMore: false, nextCursor: null } })
+      }
+      const { data: follows, error: followErr } = await supabase
+        .from('trader_follows')
+        .select('trader_id')
+        .eq('user_id', user.id)
+      if (followErr) {
+        return handleError(followErr)
+      }
+      followedTraderIds = [...new Set((follows ?? []).map((f) => f.trader_id).filter(Boolean))]
+      if (followedTraderIds.length === 0) {
+        return success({ activities: [], pagination: { limit, hasMore: false, nextCursor: null } })
+      }
+    }
 
     let query = supabase
       .from('trader_activities')
-      .select('id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at')
+      .select(
+        'id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at'
+      )
       .order('occurred_at', { ascending: false })
       .limit(limit + 1) // fetch one extra to determine hasMore
+
+    if (followedTraderIds) {
+      query = query.in('source_trader_id', followedTraderIds)
+    }
 
     if (platform) {
       query = query.eq('source', platform)
@@ -74,9 +106,7 @@ export async function GET(request: NextRequest) {
     const items = data ?? []
     const hasMore = items.length > limit
     const page = hasMore ? items.slice(0, limit) : items
-    const nextCursor = hasMore && page.length > 0
-      ? page[page.length - 1].occurred_at
-      : null
+    const nextCursor = hasMore && page.length > 0 ? page[page.length - 1].occurred_at : null
 
     return success({
       activities: page,

@@ -4315,6 +4315,11 @@ const ja = {
   activityFeedLoadMore: 'もっと見る',
   activityFeedLive: 'ライブ',
   activityFeedUpdatedPrefix: '更新',
+  activityFeedTabFollowing: 'フォロー中',
+  activityFeedTabDiscover: '発見',
+  activityFeedFollowingEmpty:
+    'トレーダーをフォローすると、フィードがパーソナライズされます。フォロー中のトレーダーがランクアップ、ROI マイルストーン達成、大きな利益を出すと、ここに表示されます。',
+  activityFeedFollowingEmptyCta: 'トレーダーを探す',
   activityTypeRankUp: 'ランクアップ',
   activityTypeTop10: 'トップ10',
   activityTypeRoi: 'ROI',

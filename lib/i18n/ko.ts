@@ -4608,6 +4608,11 @@ const ko = {
   activityFeedLoadMore: '더 보기',
   activityFeedLive: '실시간',
   activityFeedUpdatedPrefix: '업데이트',
+  activityFeedTabFollowing: '팔로잉',
+  activityFeedTabDiscover: '탐색',
+  activityFeedFollowingEmpty:
+    '트레이더를 팔로우하면 피드가 개인화됩니다. 팔로우한 트레이더가 순위 상승, ROI 마일스톤 달성, 큰 수익을 내면 여기에 표시됩니다.',
+  activityFeedFollowingEmptyCta: '트레이더 탐색',
   activityTypeRankUp: '랭크 상승',
   activityTypeTop10: '톱10',
   activityTypeRoi: 'ROI',
