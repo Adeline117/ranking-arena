@@ -6,6 +6,7 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { localizedLabel } from '@/lib/utils/format'
 import GroupMemberPrefsControls from './GroupMemberPrefsControls'
 
 type Group = {
@@ -55,7 +56,7 @@ export default function GroupHeader({
   memberPreviews = [],
 }: GroupHeaderProps) {
   const { t } = useLanguage()
-  const displayName = language === 'en' && group.name_en ? group.name_en : group.name
+  const displayName = localizedLabel(group.name, group.name_en, language)
   return (
     <Box
       style={{
@@ -364,8 +365,7 @@ export default function GroupHeader({
 
           {/* Description */}
           {(() => {
-            const desc =
-              language === 'en' && group.description_en ? group.description_en : group.description
+            const desc = localizedLabel(group.description || '', group.description_en, language)
             return desc ? (
               <Text
                 size="sm"

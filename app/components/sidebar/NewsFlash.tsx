@@ -14,6 +14,8 @@ type NewsItem = {
   title: string
   title_zh: string | null
   title_en: string | null
+  title_ja?: string | null
+  title_ko?: string | null
   source: string
   published_at: string
   category?:
@@ -81,7 +83,9 @@ export default function NewsFlash() {
   const loading = isLoading
 
   const getTitle = (item: NewsItem) => {
-    if (language === 'zh') return item.title_zh || item.title
+    if (language === 'zh') return item.title_zh || item.title_en || item.title
+    if (language === 'ja') return item.title_ja || item.title_en || item.title
+    if (language === 'ko') return item.title_ko || item.title_en || item.title
     return item.title_en || item.title
   }
 
