@@ -395,6 +395,78 @@ function hasSessionCookie(request: NextRequest): boolean {
   )
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Coarse global per-IP rate-limit BACKSTOP for /api/* (merged from the former
+// middleware.ts, 2026-07-09 — Next.js 16 允许 middleware/proxy 二选一,两文件
+// 并存会 build 硬报错,曾把部署管道整个打断)。
+//
+// WHY: per-route limits (lib/utils/rate-limit.ts) are opt-in and only ~139/311
+// API routes set one. This is a global anti-hammer FLOOR, deliberately
+// generous (600 req/min/IP) so it never trips a legitimate user.
+// Guarantees: FAIL-OPEN on any Redis absence/error; /api/cron/* excluded
+// (Bearer CRON_SECRET, high volume from Vercel scheduler).
+// ─────────────────────────────────────────────────────────────────────────────
+const IP_FLOOR_LIMIT = 600 // requests
+const IP_FLOOR_WINDOW = '60 s'
+
+let ipFloorRatelimit: Ratelimit | null = null
+let ipFloorInitialized = false
+
+function getIpFloorRatelimit(): Ratelimit | null {
+  if (ipFloorInitialized) return ipFloorRatelimit
+  ipFloorInitialized = true
+  const url = process.env.UPSTASH_REDIS_REST_URL
+  const token = process.env.UPSTASH_REDIS_REST_TOKEN
+  if (!url || !token) return null // fail-open: no Redis configured (dev/preview)
+  try {
+    ipFloorRatelimit = new Ratelimit({
+      redis: new Redis({ url, token }),
+      limiter: Ratelimit.slidingWindow(IP_FLOOR_LIMIT, IP_FLOOR_WINDOW),
+      prefix: 'mw:ipfloor',
+      analytics: false,
+    })
+  } catch {
+    ipFloorRatelimit = null // fail-open
+  }
+  return ipFloorRatelimit
+}
+
+function ipFloorClientIp(req: NextRequest): string {
+  // Trust only Vercel-set edge headers first (client-supplied XFF is stripped
+  // by the edge). Generic XFF as fallback — same trust model as getIdentifier().
+  const forwarded = req.headers.get('x-vercel-forwarded-for') || req.headers.get('x-forwarded-for')
+  return forwarded?.split(',')[0]?.trim() || req.headers.get('x-real-ip') || 'unknown'
+}
+
+async function ipFloorCheck(req: NextRequest, pathname: string): Promise<NextResponse | null> {
+  if (!pathname.startsWith('/api/') || pathname.startsWith('/api/cron/')) return null
+  const rl = getIpFloorRatelimit()
+  if (!rl) return null // fail-open
+  const ip = ipFloorClientIp(req)
+  if (ip === 'unknown') return null // can't attribute → don't block
+  try {
+    const { success, limit, remaining, reset } = await rl.limit(`ip:${ip}`)
+    if (!success) {
+      return new NextResponse(
+        JSON.stringify({ success: false, error: 'Too many requests', code: 'RATE_LIMIT_EXCEEDED' }),
+        {
+          status: 429,
+          headers: {
+            'Content-Type': 'application/json',
+            'X-RateLimit-Limit': String(limit),
+            'X-RateLimit-Remaining': String(remaining),
+            'X-RateLimit-Reset': String(reset),
+            'Retry-After': String(Math.max(1, Math.ceil((reset - Date.now()) / 1000))),
+          },
+        }
+      )
+    }
+  } catch {
+    return null // fail-open: Redis error must never take down the API
+  }
+  return null
+}
+
 /**
  * Next.js 16 Proxy 函数
  */
@@ -406,6 +478,10 @@ export async function proxy(request: NextRequest) {
   if (shouldSkip(pathname)) {
     return NextResponse.next()
   }
+
+  // 全局 per-IP 限流兜底(见上;fail-open)
+  const ipFloorBlocked = await ipFloorCheck(request, pathname)
+  if (ipFloorBlocked) return ipFloorBlocked
 
   // Bot protection: block empty User-Agent on API routes
   if (pathname.startsWith('/api/')) {
