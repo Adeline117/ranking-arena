@@ -18,6 +18,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
 import { trackInteraction } from '@/lib/tracking'
 import { features } from '@/lib/features'
+import { traderCountLabel } from '@/lib/utils/trader-count'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; labelEn: string; color: string }> = {
@@ -561,8 +562,8 @@ export default function FollowingPageClient() {
                   value={`${stats.traderCount + stats.userCount}`}
                   subText={
                     features.social
-                      ? `${stats.traderCount} ${t('traders')} · ${stats.userCount} ${t('users')}`
-                      : `${stats.traderCount} ${t('traders')}`
+                      ? `${stats.traderCount} ${traderCountLabel(stats.traderCount, t)} · ${stats.userCount} ${t('users')}`
+                      : `${stats.traderCount} ${traderCountLabel(stats.traderCount, t)}`
                   }
                 />
                 <StatCard
