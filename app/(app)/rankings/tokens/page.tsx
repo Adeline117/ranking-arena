@@ -3,6 +3,7 @@ import { unstable_cache } from 'next/cache'
 import TokensIndexClient from './TokensIndexClient'
 import { BASE_URL } from '@/lib/constants/urls'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { extractBaseToken, isValidTokenSymbol } from '@/lib/utils/token-symbol'
 
 export const revalidate = 3600 // ISR: 1 hour (matches API cache)
 
@@ -24,7 +25,9 @@ export const metadata: Metadata = {
     url: `${BASE_URL}/rankings/tokens`,
     siteName: 'Arena',
     type: 'website',
-    images: [{ url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Token Rankings' }],
+    images: [
+      { url: `${BASE_URL}/og-image.png`, width: 1200, height: 630, alt: 'Arena Token Rankings' },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
@@ -40,15 +43,6 @@ interface PopularToken {
   trade_count: number
   trader_count: number
   total_pnl: number
-}
-
-function extractBaseToken(symbol: string): string {
-  const s = symbol.toUpperCase()
-  for (const suffix of ['USDT.P', 'USDT', 'BUSD', 'USD', '-PERP', '-USD']) {
-    if (s.endsWith(suffix)) return s.slice(0, -suffix.length)
-  }
-  if (s.includes('/')) return s.split('/')[0]
-  return s
 }
 
 const getPopularTokens = unstable_cache(
@@ -67,15 +61,25 @@ const getPopularTokens = unstable_cache(
 
       if (error || !data || data.length === 0) return []
 
-      const tokenMap = new Map<string, {
-        tradeCount: number
-        traders: Set<string>
-        totalPnl: number
-      }>()
+      const tokenMap = new Map<
+        string,
+        {
+          tradeCount: number
+          traders: Set<string>
+          totalPnl: number
+        }
+      >()
 
-      for (const row of data as Array<{ symbol: string; source: string; source_trader_id: string; pnl_usd: number | null }>) {
+      for (const row of data as Array<{
+        symbol: string
+        source: string
+        source_trader_id: string
+        pnl_usd: number | null
+      }>) {
         const baseToken = extractBaseToken(row.symbol)
-        if (!baseToken || baseToken.length > 10) continue
+        // U1-5: only aggregate plausible crypto tickers — drop junk like
+        // HL-107 / XYZ:TSLA / pure-numeric ids that used to top the board.
+        if (!isValidTokenSymbol(baseToken)) continue
 
         if (!tokenMap.has(baseToken)) {
           tokenMap.set(baseToken, { tradeCount: 0, traders: new Set(), totalPnl: 0 })
