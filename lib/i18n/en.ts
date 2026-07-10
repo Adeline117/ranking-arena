@@ -2815,6 +2815,9 @@ const en = {
   notifGroupedCount: '{n} notifications',
   loginTooManyAttemptsCode: 'Too many attempts, please request a new code',
   loginIncorrectCredentials: 'Incorrect email or password. Please try again.',
+  loginRateLimitRetry: 'Too many attempts. Try again in {n}s.',
+  socialLoginOpenInBrowser:
+    'Please open this page in your system browser (Safari/Chrome) to sign in with {provider}. Link copied to clipboard.',
   loginEmailNotVerified: 'Email not yet verified. Please check your inbox.',
   loginAccountPendingDeletion:
     'This account is pending deletion. To recover your account, click the button below.',

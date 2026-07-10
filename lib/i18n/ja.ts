@@ -2597,6 +2597,9 @@ const ja = {
   loginTooManyAttemptsCode: '試行回数が多すぎます。新しいコードを再取得してください',
   loginIncorrectCredentials:
     'メールアドレスまたはパスワードが正しくありません。もう一度お試しください。',
+  loginRateLimitRetry: '操作が頻繁すぎます。{n} 秒後に再試行してください。',
+  socialLoginOpenInBrowser:
+    'システムブラウザ（Safari/Chrome）でこのページを開き、{provider} でログインしてください。リンクはクリップボードにコピーされました。',
   loginEmailNotVerified: 'メールがまだ確認されていません。受信トレイをご確認ください。',
   loginAccountPendingDeletion:
     'このアカウントは削除保留中です。アカウントを復元するには、下のボタンをクリックしてください。',

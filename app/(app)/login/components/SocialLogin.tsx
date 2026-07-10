@@ -27,7 +27,7 @@ interface SocialLoginProps {
 }
 
 export default function SocialLogin({
-  lang,
+  lang: _lang,
   searchParams,
   isAddAccount,
   onError,
@@ -125,11 +125,7 @@ export default function SocialLogin({
         } catch {
           /* clipboard may not be available */
         }
-        onError(
-          lang === 'zh'
-            ? `请在系统浏览器(Safari/Chrome)中打开此页面登录${providerLabel}。链接已复制到剪贴板。`
-            : `Please open this page in your system browser (Safari/Chrome) to sign in with ${providerLabel}. Link copied to clipboard.`
-        )
+        onError(t('socialLoginOpenInBrowser').replace('{provider}', providerLabel))
         window.open(oauthUrl, '_system')
         return
       }

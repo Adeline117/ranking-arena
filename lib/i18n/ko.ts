@@ -2712,6 +2712,9 @@ const ko = {
   notifGroupedCount: '{n}개의 알림',
   loginTooManyAttemptsCode: '시도 횟수가 너무 많습니다. 새 코드를 다시 요청하세요',
   loginIncorrectCredentials: '이메일 또는 비밀번호가 올바르지 않습니다. 다시 시도해 주세요.',
+  loginRateLimitRetry: '요청이 너무 잦습니다. {n}초 후에 다시 시도해 주세요.',
+  socialLoginOpenInBrowser:
+    '시스템 브라우저(Safari/Chrome)에서 이 페이지를 열어 {provider}(으)로 로그인하세요. 링크가 클립보드에 복사되었습니다.',
   loginEmailNotVerified: '이메일이 아직 인증되지 않았습니다. 받은편지함을 확인해 주세요.',
   loginAccountPendingDeletion:
     '이 계정은 삭제 대기 중입니다. 계정을 복구하려면 아래 버튼을 클릭하세요.',
