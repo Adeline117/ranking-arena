@@ -51,10 +51,16 @@ async function main() {
          FROM arena.trader_stats ts
          JOIN arena.traders t ON t.id = ts.trader_id
          JOIN arena.sources s ON s.id = t.source_id
+         LEFT JOIN public.leaderboard_ranks lr
+                ON lr.source = s.slug AND lr.source_trader_id = t.exchange_trader_id
+               AND lr.season_id = '90D'
         WHERE s.slug = $1 AND ts.timeframe = 90 AND ts.pnl IS NOT NULL
           AND (NOT ts.extras ? 'onchain_enriched_at'
                OR (ts.extras->>'onchain_enriched_at')::timestamptz < now() - interval '7 days')
         ORDER BY (ts.extras->>'onchain_enriched_at')::timestamptz ASC NULLS FIRST,
+                 -- 桶内按 serving 榜名次优先(P3 2026-07-10):此前按 pnl,
+                 -- top500 可见缺口反而排后。LEFT JOIN 无榜者按 pnl 兜底。
+                 lr.rank ASC NULLS LAST,
                  ts.pnl DESC
         LIMIT $2`,
       [slug, topN]
@@ -70,7 +76,7 @@ async function main() {
         const { wallet, pnl } = next
         const rank = `pnl$${Math.round(pnl)}`
         try {
-          const e = await enrichWeb3Wallet(chain, wallet, { lookbackDays: 90, maxSigs: 400 })
+          const e = await enrichWeb3Wallet(chain, wallet, { lookbackDays: 90, maxSigs: 250 })
           const extras = enrichmentExtras(e)
           const upd = await pool.query(
             `UPDATE arena.trader_stats ts SET
