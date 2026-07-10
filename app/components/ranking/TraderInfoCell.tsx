@@ -177,7 +177,12 @@ export const TraderInfoCell = memo(function TraderInfoCell({
               }}
             >
               {i18nT(
-                `tradingStyle${tradingStyleInfo.style.charAt(0).toUpperCase()}${tradingStyleInfo.style.slice(1)}` as TranslationKey
+                // snake_case → PascalCase(day_trader → DayTrader):旧写法只大写
+                // 首字母,产出 tradingStyleDay_trader 这类不存在的 key 直出原文。
+                `tradingStyle${tradingStyleInfo.style
+                  .split('_')
+                  .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                  .join('')}` as TranslationKey
               )}
             </span>
           )}

@@ -5076,6 +5076,10 @@ const ko = {
   authCodeInvalid: '잘못된 코드입니다. 확인 후 다시 시도해 주세요.',
 
   tradingStyleScalper: '스캘퍼',
+  tradingStyleDayTrader: '데이 트레이더',
+  tradingStyleConservative: '안정형',
+  tradingStyleBalanced: '균형형',
+  tradingStyleAggressive: '공격형',
   tradingStyleScalperDesc: '초단기 고빈도 트레이딩',
   tradingStyleSwing: '스윙',
   tradingStyleSwingDesc: '중기 트레이드, 4-48시간 보유',

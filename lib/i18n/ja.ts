@@ -4830,6 +4830,10 @@ const ja = {
   authCodeInvalid: '無効なコードです。確認してもう一度お試しください。',
 
   tradingStyleScalper: 'スキャルピング',
+  tradingStyleDayTrader: 'デイトレ',
+  tradingStyleConservative: '堅実',
+  tradingStyleBalanced: 'バランス',
+  tradingStyleAggressive: 'アグレッシブ',
   tradingStyleScalperDesc: '超短期の高頻度トレード',
   tradingStyleSwing: 'スイング',
   tradingStyleSwingDesc: '中期トレード、4〜48時間保有',
