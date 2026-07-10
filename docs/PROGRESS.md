@@ -2,6 +2,20 @@
 
 > Auto-read by Claude Code at session start. Keep concise — archive completed items weekly.
 
+## 可信度六维提升 P1-P6（2026-07-10，全部落地）
+
+计划: `~/.claude/plans/typed-sleeping-meadow.md`（六维记分卡 + 提升杠杆）
+
+- **P1 链上提速**: solana 夜扫并发 4→8 + maxSigs 250 + serving rank 优先 ORDER BY（治净覆盖倒退 3724→3444）
+- **P2 游标再平衡**: 30 源 `series_backfill_newcomers: 3`（纯 meta 配置，治 binance 游标 10h 只 +4）
+- **P3 rank 优先排序**: onchain-enrich JOIN leaderboard_ranks；**捕获真 bug：serving 的 BSC slug 是 legacy 名 `binance_web3`，slug 直连静默失效** → 三处统一经 `meta->>'legacy_platform'` 映射
+- **P4 认领入口验证**: trader 页 "Is this your account? Claim →" 线上实锤（0 真实认领，待 owner 亲测冷启动）
+- **P5 周报复活**: `auto-post-weekly-recap`（周一 09:10 UTC，43 crons）。真点三连修：RPC 形状凭先验全错（真形状 `{rows:[…]}`）→ 首触内容 4 个 +10000% clamp 垃圾 → roi==pnl 已知垃圾模式 + 匿名钱包「交易所 #名次」显示。**Hot bot 帖降权待 owner 确认**
+- **P6 可信度记分卡**: admin monitoring 新面板（序列覆盖夜间快照 + 链上净覆盖/认领/bot 帖实时，RPC 2.2s）。**覆盖率真相修正：serving 全集 68.2%（13193/19353，含 legacy 映射源），top500 93.3%**——此前口径漏了 12 个 legacy 名源
+- **待 owner**: ① crontab 加 `40 7 * * * /opt/homebrew/bin/node scripts/qa/trust-scorecard-snapshot.mjs >> logs/trust-scorecard.log 2>&1`（权限分类器拦截会话内写 crontab）② Hot bot 降权 ③ 亲测认领流
+
+---
+
 ## UX/UI 根源优化三轮（2026-06-12，44 commits 全上线）
 
 计划: `~/.claude/plans/rippling-exploring-bumblebee.md`。3 探索 + 1 设计 + 5 实施 agent 协作。
