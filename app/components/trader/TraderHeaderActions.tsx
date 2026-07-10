@@ -7,8 +7,7 @@ import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import WatchlistToggleButton from './WatchlistToggleButton'
-import ShareButton from '../common/ShareButton'
-import ShareRankCardButtons from './ShareRankCardButtons'
+import TraderShareActions from './TraderShareActions'
 import { ActionButton } from './TraderHeaderHelpers'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 
@@ -196,31 +195,17 @@ export function TraderHeaderActions({
         />
       )}
 
-      {/* Share rank card buttons (Copy Link + Share on X) */}
-      <ShareRankCardButtons
+      {/* Prominent quiz-grade share: OG rank-card preview + one-tap
+          X / Telegram / WhatsApp / native-share + download card, with the
+          sharer's referral code auto-appended when logged in. Replaces the
+          previous bare copy/X buttons + generic share dropdown. */}
+      <TraderShareActions
         handle={handle}
         displayName={resolvedDisplayName}
         platform={source}
         rank={rank}
         roi={roi90d}
         arenaScore={arenaScore}
-      />
-
-      {/* Share dropdown (Telegram, WhatsApp, etc.) */}
-      <ShareButton
-        data={{
-          type: 'trader',
-          url:
-            typeof window !== 'undefined'
-              ? window.location.href
-              : `https://www.arenafi.org/trader/${encodeURIComponent(handle)}`,
-          traderName: resolvedDisplayName,
-          roi: roi90d,
-          period: '90D',
-        }}
-        size="sm"
-        variant="ghost"
-        showLabel={false}
       />
     </Box>
   )
