@@ -83,6 +83,44 @@ async function getBandTraders(
   return rows
 }
 
+/**
+ * Newcomer fast-path (2026-07-09): band traders with NO series at all — a new
+ * trader entering rank 300-3000 otherwise waits a full sweep cycle (2-4 days
+ * on big boards) for their first chart. Each run front-loads a few of these
+ * ahead of the cursor batch, so newcomers get series the first night. Ordered
+ * by rank (most-visible first). The cursor is NOT advanced for these.
+ */
+async function getNeverCrawledBandTraders(
+  sourceId: number,
+  topN: number,
+  backfillTopN: number,
+  limit: number
+): Promise<BandTrader[]> {
+  const { rows } = await getIngestPool().query<BandTrader>(
+    `WITH latest AS (
+       SELECT DISTINCT ON (timeframe) id AS snapshot_id
+         FROM arena.leaderboard_snapshots
+        WHERE source_id = $1 AND count_check_passed
+        ORDER BY timeframe, scraped_at DESC
+     ),
+     ranked AS (
+       SELECT e.trader_id, min(e.rank) AS rank
+         FROM latest l
+         JOIN arena.leaderboard_entries e ON e.snapshot_id = l.snapshot_id
+        GROUP BY e.trader_id
+     )
+     SELECT t.id, t.exchange_trader_id, t.meta, r.rank
+       FROM ranked r
+       JOIN arena.traders t ON t.id = r.trader_id
+      WHERE r.rank > $2 AND r.rank <= $3
+        AND NOT EXISTS (SELECT 1 FROM arena.trader_series ts WHERE ts.trader_id = t.id)
+      ORDER BY r.rank
+      LIMIT $4`,
+    [sourceId, topN, backfillTopN, limit]
+  )
+  return rows
+}
+
 async function bandSize(sourceId: number, topN: number, backfillTopN: number): Promise<number> {
   const { rows } = await getIngestPool().query<{ n: number }>(
     `WITH latest AS (
@@ -180,6 +218,22 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
 
   const traders = await getBandTraders(src.id, src.deep_profile_topn, backfillTopN, offset, batch)
 
+  // Newcomer fast-path: front-load a few never-crawled band traders (see
+  // getNeverCrawledBandTraders). Deduped against the cursor batch; flagged so
+  // cursor accounting below counts ONLY cursor-batch traders.
+  const newcomerLimit = Math.max(0, Number(src.meta.series_backfill_newcomers ?? 5))
+  const newcomers =
+    newcomerLimit > 0
+      ? await getNeverCrawledBandTraders(src.id, src.deep_profile_topn, backfillTopN, newcomerLimit)
+      : []
+  const cursorIds = new Set(traders.map((t) => t.id))
+  const work: Array<{ trader: BandTrader; fromCursor: boolean }> = [
+    ...newcomers
+      .filter((t) => !cursorIds.has(t.id))
+      .map((trader) => ({ trader, fromCursor: false })),
+    ...traders.map((trader) => ({ trader, fromCursor: true })),
+  ]
+
   const timeframes = profileTimeframes(src)
   // Own profile dir: a concurrent long tier-A crawl on the same slug holds
   // profiles/<slug>'s Chrome ProcessSingleton for hours — bybit_mt5 backfill
@@ -188,6 +242,8 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
   const session = await openSession(src, { profileSuffix: 'series' })
   const startedAt = Date.now()
   let attempted = 0
+  // Cursor advances only for cursor-batch traders — newcomers ride for free.
+  let cursorAttempted = 0
   const result: TierBSeriesResult = {
     ...empty,
     cursorFrom: offset,
@@ -196,17 +252,18 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
   }
 
   try {
-    for (const trader of traders) {
+    for (const { trader, fromCursor } of work) {
       // Yield the slot once the budget is spent (but always make ≥1 trader of
       // progress so the cursor never stalls). The next iteration continues from
       // the advanced cursor.
       if (attempted > 0 && Date.now() - startedAt > deadlineMs) {
         console.log(
-          `[tier-b-series] ${src.slug}: budget ${deadlineMs}ms hit after ${attempted}/${traders.length} traders — yielding slot`
+          `[tier-b-series] ${src.slug}: budget ${deadlineMs}ms hit after ${attempted}/${work.length} traders — yielding slot`
         )
         break
       }
       attempted += 1
+      if (fromCursor) cursorAttempted += 1
       let traderOk = false
       for (const timeframe of timeframes) {
         try {
@@ -271,19 +328,20 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
       // (not per batch) keeps a mid-run kill from losing the sweep position.
       // Cheap (batch≈30), idempotent upserts. See
       // docs/SERIES_BACKFILL_CURSOR_FIX_PLAN.md.
-      const soFar = offset + attempted
+      const soFar = offset + cursorAttempted
       await writeCursor(src.id, soFar >= total ? 0 : soFar)
     }
   } finally {
     await session.close()
   }
 
-  // Advance the cursor by traders ACTUALLY attempted this run (may be < batch
-  // when the wall-clock budget cut the run short) — a crashed run re-attempts
-  // the same slice (idempotent upserts make that safe). Wrap at band end.
+  // Advance the cursor by cursor-batch traders ACTUALLY attempted this run
+  // (may be < batch when the wall-clock budget cut the run short) — a crashed
+  // run re-attempts the same slice (idempotent upserts make that safe). Wrap
+  // at band end. Newcomer fast-path traders never advance the cursor.
   // (Redundant with the per-trader write above on a clean run; retained as the
   // final authority and to cover the attempted===0 / empty-batch case.)
-  const nextOffset = offset + attempted >= total ? 0 : offset + attempted
+  const nextOffset = offset + cursorAttempted >= total ? 0 : offset + cursorAttempted
   result.cursorTo = nextOffset
   await writeCursor(src.id, nextOffset)
 
