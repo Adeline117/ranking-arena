@@ -9,10 +9,35 @@ export const dynamic = 'force-dynamic'
 const VALID_TYPES = ['post', 'comment', 'profile']
 const VALID_REASONS = ['spam', 'scam', 'harassment', 'misinformation', 'nsfw', 'other']
 
-// Auto-hide thresholds: when a piece of content receives this many reports,
-// it is automatically hidden pending moderator review.
-const POST_REPORT_THRESHOLD = 5
-const COMMENT_REPORT_THRESHOLD = 3
+// Auto-hide thresholds, expressed in WEIGHTED report units (not raw counts).
+// Each reporter contributes at most 1.0, and throwaway/low-trust accounts
+// contribute a small fraction (see reporterWeight below). This defeats the
+// bot-swarm attack where 3 fresh accounts could auto-remove any real content:
+// a swarm of brand-new accounts now sums to a tiny weighted score, far below
+// these thresholds, while genuine aged reporters each count ~1.0.
+const POST_REPORT_WEIGHT_THRESHOLD = 5
+const COMMENT_REPORT_WEIGHT_THRESHOLD = 4
+
+/**
+ * Trust weight for a single reporter, in [0, 1].
+ * Younger accounts and negative-reputation accounts are discounted so that a
+ * pile of throwaway bot reports cannot cross the auto-remove threshold.
+ */
+function reporterWeight(
+  profile: { created_at: string | null; reputation_score: number | null } | undefined,
+  now: number
+): number {
+  if (!profile) return 0.25 // unknown/missing profile — low trust
+  let w = 1
+  const ageMs = profile.created_at ? now - new Date(profile.created_at).getTime() : 0
+  const ageDays = ageMs / 86_400_000
+  if (ageDays < 1) w = 0.1
+  else if (ageDays < 7) w = 0.35
+  else if (ageDays < 30) w = 0.7
+  const rep = profile.reputation_score ?? 0
+  if (rep < 0) w *= 0.5 // net-negative reputation → half trust
+  return w
+}
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
@@ -53,50 +78,82 @@ export const POST = withAuth(
       return conflict('You have already reported this content')
     }
 
-    const { error } = await supabase
-      .from('content_reports')
-      .insert({
-        reporter_id: user.id,
-        content_type,
-        content_id,
-        reason,
-        description: description || null,
-      })
+    const { error } = await supabase.from('content_reports').insert({
+      reporter_id: user.id,
+      content_type,
+      content_id,
+      reason,
+      description: description || null,
+    })
 
     if (error) {
       logger.error('insert failed', { error: error.message })
       return serverError('Submission failed')
     }
 
-    // Auto-hide: check total report count and hide if threshold reached
-    // KEEP 'exact' — drives the auto-hide threshold; scoped per content
-    // via (content_type, content_id, status) index. Must be accurate
-    // to fire at POST_REPORT_THRESHOLD and not one report too early/late.
+    // Auto-hide: compute a WEIGHTED report score (per-reporter trust) and only
+    // auto-hide when it crosses the threshold. Comments are SOFT-deleted
+    // (recoverable, audited) — NEVER hard-deleted from user reports.
     try {
-      const { count } = await supabase
+      // Pull the distinct pending reporters for this content, then weight each
+      // by account age + reputation so bot swarms can't cross the threshold.
+      const { data: pendingReports } = await supabase
         .from('content_reports')
-        .select('id', { count: 'exact', head: true })
+        .select('reporter_id')
         .eq('content_type', content_type)
         .eq('content_id', content_id)
         .eq('status', 'pending')
 
-      if (content_type === 'post' && count && count >= POST_REPORT_THRESHOLD) {
+      const reporterIds = [...new Set((pendingReports || []).map((r) => r.reporter_id))]
+
+      let weightedScore = 0
+      if (reporterIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('user_profiles')
+          .select('id, created_at, reputation_score')
+          .in('id', reporterIds)
+
+        const profileMap = new Map(
+          (profiles || []).map((p) => [
+            p.id,
+            { created_at: p.created_at, reputation_score: p.reputation_score },
+          ])
+        )
+        const now = Date.now()
+        for (const id of reporterIds) {
+          weightedScore += reporterWeight(profileMap.get(id), now)
+        }
+      }
+
+      if (content_type === 'post' && weightedScore >= POST_REPORT_WEIGHT_THRESHOLD) {
         await supabase
           .from('posts')
           .update({
             deleted_at: new Date().toISOString(),
             deleted_by: null,
-            delete_reason: `Auto-hidden: ${count} reports received`,
+            delete_reason: `Auto-hidden: weighted report score ${weightedScore.toFixed(1)} (${reporterIds.length} reporters)`,
           })
           .eq('id', content_id)
           .is('deleted_at', null)
-        logger.info(`Auto-hidden post ${content_id} after ${count} reports`)
-      } else if (content_type === 'comment' && count && count >= COMMENT_REPORT_THRESHOLD) {
+        logger.info(
+          `Auto-hidden post ${content_id} (weighted ${weightedScore.toFixed(1)}, ${reporterIds.length} reporters)`
+        )
+      } else if (content_type === 'comment' && weightedScore >= COMMENT_REPORT_WEIGHT_THRESHOLD) {
+        // SOFT delete only — mirror the post path. Never hard delete: the row
+        // stays recoverable and a moderator can restore it if the reports were
+        // abusive. Reads filter deleted_at IS NULL (lib/data/comments.ts).
         await supabase
           .from('comments')
-          .delete()
+          .update({
+            deleted_at: new Date().toISOString(),
+            deleted_by: null,
+            delete_reason: `Auto-hidden: weighted report score ${weightedScore.toFixed(1)} (${reporterIds.length} reporters)`,
+          })
           .eq('id', content_id)
-        logger.info(`Auto-deleted comment ${content_id} after ${count} reports`)
+          .is('deleted_at', null)
+        logger.info(
+          `Auto-hidden comment ${content_id} (weighted ${weightedScore.toFixed(1)}, ${reporterIds.length} reporters)`
+        )
       }
     } catch (autoHideErr) {
       // Non-blocking: report was saved successfully, auto-hide is best-effort

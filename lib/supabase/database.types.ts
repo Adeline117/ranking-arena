@@ -847,6 +847,9 @@ export type Database = {
           author_id: string | null
           content: string
           created_at: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
           dislike_count: number | null
           id: string
           like_count: number | null
@@ -860,6 +863,9 @@ export type Database = {
           author_id?: string | null
           content: string
           created_at?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           dislike_count?: number | null
           id?: string
           like_count?: number | null
@@ -873,6 +879,9 @@ export type Database = {
           author_id?: string | null
           content?: string
           created_at?: string | null
+          delete_reason?: string | null
+          deleted_at?: string | null
+          deleted_by?: string | null
           dislike_count?: number | null
           id?: string
           like_count?: number | null
@@ -8641,6 +8650,10 @@ export type Database = {
       increment_comment_like_count: {
         Args: { p_comment_id: string }
         Returns: number
+      }
+      increment_impression_count: {
+        Args: { post_id: string }
+        Returns: undefined
       }
       increment_like_count: {
         Args: { post_id: string }
