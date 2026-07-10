@@ -7,16 +7,21 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
+// Render per-request so the prod gate below runs at runtime, not at build-time
+// static prerender (where it would be baked wrong / never re-evaluated).
+export const dynamic = 'force-dynamic'
+
 /**
  * Internal design-system sandbox. Hosts visual prototypes for review before
  * porting winning ideas into live components. Not linked from navigation.
  *
  * U12-10: noindex alone left this internal prototype publicly reachable in
- * production (no middleware gate). Hard-404 it in prod so only dev/preview
- * can open it; the page still works locally for design review.
+ * production. Hard-404 it on the PRODUCTION deployment only — gate on
+ * VERCEL_ENV (NODE_ENV is 'production' on preview builds too, so it can't
+ * tell prod from preview). dev + preview still open it for design review.
  */
 export default function DesignSystemPage() {
-  if (process.env.NODE_ENV === 'production') notFound()
+  if (process.env.VERCEL_ENV === 'production') notFound()
 
   return (
     <main style={{ minHeight: '100vh', background: 'var(--color-bg-primary)' }}>
