@@ -108,14 +108,25 @@ export async function GET(request: NextRequest) {
     const page = hasMore ? items.slice(0, limit) : items
     const nextCursor = hasMore && page.length > 0 ? page[page.length - 1].occurred_at : null
 
-    return success({
-      activities: page,
-      pagination: {
-        limit,
-        hasMore,
-        nextCursor,
+    // The `following=1` path is per-user (scoped to the caller's follows) and MUST
+    // NOT be shared-cached. The default (no `following`) path is identical public
+    // data to /api/feed, so it gets the same brief edge cache.
+    const cacheHeaders = followingOnly
+      ? undefined
+      : { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' }
+
+    return success(
+      {
+        activities: page,
+        pagination: {
+          limit,
+          hasMore,
+          nextCursor,
+        },
       },
-    })
+      200,
+      cacheHeaders
+    )
   } catch (err) {
     return handleError(err)
   }
