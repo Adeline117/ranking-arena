@@ -162,6 +162,10 @@
     {
       "path": "/api/cron/score-backtest",
       "schedule": "37 3 * * 1"
+    },
+    {
+      "path": "/api/cron/compute-leaderboard-watchdog",
+      "schedule": "21,51 * * * *"
     }
   ],
   "headers": [
