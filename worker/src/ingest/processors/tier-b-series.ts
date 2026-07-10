@@ -76,6 +76,7 @@ async function getBandTraders(
        FROM ranked r
        JOIN arena.traders t ON t.id = r.trader_id
       WHERE r.rank > $2 AND r.rank <= $3
+        AND (t.meta->>'claimed') IS DISTINCT FROM 'true'
       ORDER BY r.rank
       OFFSET $4 LIMIT $5`,
     [sourceId, topN, backfillTopN, offset, limit]
@@ -113,6 +114,7 @@ async function getNeverCrawledBandTraders(
        FROM ranked r
        JOIN arena.traders t ON t.id = r.trader_id
       WHERE r.rank > $2 AND r.rank <= $3
+        AND (t.meta->>'claimed') IS DISTINCT FROM 'true'
         AND NOT EXISTS (SELECT 1 FROM arena.trader_series ts WHERE ts.trader_id = t.id)
       ORDER BY r.rank
       LIMIT $4`,
@@ -135,7 +137,11 @@ async function bandSize(sourceId: number, topN: number, backfillTopN: number): P
          JOIN arena.leaderboard_entries e ON e.snapshot_id = l.snapshot_id
         GROUP BY e.trader_id
      )
-     SELECT count(*)::int AS n FROM ranked WHERE rank > $2 AND rank <= $3`,
+     SELECT count(*)::int AS n
+       FROM ranked r
+       JOIN arena.traders t ON t.id = r.trader_id
+      WHERE r.rank > $2 AND r.rank <= $3
+        AND (t.meta->>'claimed') IS DISTINCT FROM 'true'`,
     [sourceId, topN, backfillTopN]
   )
   return rows[0]?.n ?? 0

@@ -52,6 +52,13 @@ export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
   )
   const traderMeta = metaRows[0]?.meta ?? null
 
+  // 认领交易员停抓(P3-P2): 第一方 sync 才是权威数据源;按需抓取直接跳过
+  // (/trader/ 页对 claimed 已重定向到 /u/,这里几乎不会被触发,兜底而已)。
+  if (traderMeta && (traderMeta as { claimed?: unknown }).claimed === true) {
+    console.log(`[tier-c] skip claimed trader ${src.slug}/${exchangeTraderId}`)
+    return { surfacesFetched: 0, skipped: 'claimed' }
+  }
+
   const session = await openSession(src)
   try {
     const scrapedAt = new Date().toISOString()

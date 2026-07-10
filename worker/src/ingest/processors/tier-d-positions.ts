@@ -39,7 +39,8 @@ async function getPositionTargets(sourceId: number, topN: number): Promise<Targe
        FROM latest l
        JOIN arena.leaderboard_entries e ON e.snapshot_id = l.snapshot_id
        JOIN arena.traders t ON t.id = e.trader_id
-      WHERE e.rank <= $2`,
+      WHERE e.rank <= $2
+        AND (t.meta->>'claimed') IS DISTINCT FROM 'true'`,
     [sourceId, topN]
   )
   return rows
