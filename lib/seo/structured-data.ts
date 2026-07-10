@@ -463,12 +463,19 @@ export interface ExchangeSchemaInput {
   }>
 }
 
+/** A single ranked trader for ItemList structured data. */
+export interface RankedTraderInput {
+  handle: string
+  arenaScore?: number | null
+  roi?: number | null
+}
+
 /**
- * Generate an ItemList Schema for exchange ranking pages.
- * Google uses ItemList for carousel results in search.
+ * Map ranked traders to schema.org ListItem entries (1-based position, ordered).
+ * Shared by every ItemList generator so the item shape stays consistent.
  */
-export function generateExchangeItemListSchema(input: ExchangeSchemaInput): object {
-  const items = (input.topTraders ?? []).map((trader, index) => ({
+function traderListItems(traders: RankedTraderInput[]) {
+  return traders.map((trader, index) => ({
     '@type': 'ListItem',
     position: index + 1,
     name: trader.handle,
@@ -479,7 +486,37 @@ export function generateExchangeItemListSchema(input: ExchangeSchemaInput): obje
         }
       : {}),
   }))
+}
 
+/**
+ * Generate a generic ItemList Schema for any ranked-trader listing (homepage,
+ * rankings). Google uses ItemList for carousel results in search.
+ */
+export function generateTraderItemListSchema(input: {
+  name: string
+  description?: string
+  url: string
+  traders: RankedTraderInput[]
+  /** Total tracked count (for numberOfItems); defaults to the number of items. */
+  numberOfItems?: number
+}): object {
+  const items = traderListItems(input.traders)
+  return {
+    '@context': 'https://schema.org',
+    '@type': 'ItemList',
+    name: input.name,
+    ...(input.description ? { description: input.description } : {}),
+    numberOfItems: input.numberOfItems ?? items.length,
+    url: input.url,
+    itemListElement: items,
+  }
+}
+
+/**
+ * Generate an ItemList Schema for exchange ranking pages.
+ * Google uses ItemList for carousel results in search.
+ */
+export function generateExchangeItemListSchema(input: ExchangeSchemaInput): object {
   return {
     '@context': 'https://schema.org',
     '@type': 'ItemList',
@@ -487,7 +524,7 @@ export function generateExchangeItemListSchema(input: ExchangeSchemaInput): obje
     description: `Ranked crypto traders on ${input.name} — ${input.traderCount.toLocaleString()} traders tracked by Arena.`,
     numberOfItems: input.traderCount,
     url: `${BASE_URL}/exchange/${input.slug}`,
-    itemListElement: items,
+    itemListElement: traderListItems(input.topTraders ?? []),
   }
 }
 

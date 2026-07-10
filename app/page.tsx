@@ -10,6 +10,7 @@ import { SkipLink } from './components/Providers/Accessibility'
 import { JsonLd } from './components/Providers/JsonLd'
 import { PageErrorBoundary } from './components/utils/ErrorBoundary'
 import { BASE_URL } from '@/lib/constants/urls'
+import { generateTraderItemListSchema } from '@/lib/seo/structured-data'
 import type { Period } from '@/lib/utils/arena-score'
 
 export const metadata: Metadata = {
@@ -95,6 +96,21 @@ export default async function Page() {
     getHeroStats(),
   ])
 
+  // ItemList for the 90D leaderboard — the actual ranking users land on. Built
+  // from the SSR-fetched traders (no extra query); top 20 keeps the payload lean.
+  // /rankings 301-redirects here, so this is the canonical rankings ItemList too.
+  const itemListJsonLd = generateTraderItemListSchema({
+    name: 'Top Crypto Traders — 90-Day Ranking',
+    description: 'Top-ranked crypto traders on Arena by Arena Score over the trailing 90 days.',
+    url: BASE_URL,
+    numberOfItems: totalCount,
+    traders: traders.slice(0, 20).map((t) => ({
+      handle: t.handle,
+      arenaScore: t.arena_score,
+      roi: t.roi,
+    })),
+  })
+
   return (
     <>
       {/* First focusable element on the page — lets keyboard/SR users skip the
@@ -102,6 +118,7 @@ export default async function Page() {
           without Providers (homepage deliberately omits them for LCP). */}
       <SkipLink targetId="main-content" />
       <JsonLd data={buildOrganizationJsonLd(heroStats?.exchangeCount)} />
+      <JsonLd data={itemListJsonLd} />
 
       {/* SSR TopNav — stays visible permanently (see HomePage.tsx). Outside
           <main> so the skip link actually skips it in the tab order. */}
