@@ -9,6 +9,7 @@ import { Metadata } from 'next'
 import { notFound } from 'next/navigation'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { logger } from '@/lib/logger'
 import SnapshotViewerClient from './SnapshotViewerClient'
 
 export const revalidate = 300
@@ -145,7 +146,7 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
     snapshot = snapshotData
 
     // Fetch traders in the snapshot with timeout
-    const { data: tradersData } = await Promise.race([
+    const { data: tradersData, error: tradersError } = await Promise.race([
       supabase
         .from('snapshot_traders')
         .select(
@@ -170,10 +171,16 @@ export default async function SnapshotViewerPage({ params }: PageProps) {
         )
         .eq('snapshot_id', snapshotData.id)
         .order('rank', { ascending: true }),
-      new Promise<{ data: null }>((resolve) =>
-        setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
+      new Promise<{ data: null; error: { message: string } }>((resolve) =>
+        setTimeout(() => resolve({ data: null, error: { message: 'SSR timeout' } }), SSR_TIMEOUT_MS)
       ),
     ])
+    // Surface a real query error (42703 on a stale snapshot_traders schema) — a
+    // silent {data:null} here renders an empty snapshot indistinguishable from a
+    // genuinely-empty one. Timeout is expected noise; a non-timeout error is drift.
+    if (tradersError && tradersError.message !== 'SSR timeout') {
+      logger.warn('[s/token] snapshot_traders query error (drift?):', tradersError.message)
+    }
     traders = tradersData
   } catch {
     notFound()
