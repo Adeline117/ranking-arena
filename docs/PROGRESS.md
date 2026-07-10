@@ -13,6 +13,7 @@
 - **P5 周报**: 真点三连修后 E2E 通过（RPC 形状先验全错→clamp 垃圾过滤→RPC 49s 超时改 lr 直查）。**随后 owner 决策「bot帖子删掉」（2026-07-10）：18 篇 bot 帖全删、两个 auto-post cron 摘除（41 crons），路由保留未排程。bot 发帖方向已死，勿再建议**
 - **P6 可信度记分卡**: admin monitoring 新面板（序列覆盖夜间快照 + 链上净覆盖/认领/bot 帖实时，RPC 2.2s）。**覆盖率真相修正：serving 全集 68.2%（13193/19353，含 legacy 映射源），top500 93.3%**——此前口径漏了 12 个 legacy 名源
 - **快照排程**: GH Actions openclaw-sentinels 每日 06:45 UTC（本地 crontab 被权限分类器拦，改走 git 可审的 workflow 模式）
+- **top500 缺口盘点归零（P3 收尾, 07-10）**: live 30 个无序列全部归因——bingx_futures 21=真墙(parseProfile stub,profile 面需 live-harvest,见 doc-calibration 台账)；binance_web3_bsc 6=真墙(BSC 链上序列自算未实现,enrichment 只写 extras)；okx_web3_solana 1 + binance_futures 2=爬升中(游标 1263/3000、628/3000 + newcomer 快道)。无一失控项
 - **待 owner**: 亲测认领流（第一个真 verified 徽章 + 与交易所 App 对账）
 
 ---
