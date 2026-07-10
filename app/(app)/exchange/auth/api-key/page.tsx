@@ -163,10 +163,8 @@ function ApiKeyAuthContent() {
   }
 
   const config = selectedExchange ? EXCHANGE_CONFIGS[selectedExchange] : null
-  // ja/ko have no step translations — fall back to English, NOT Chinese (was
-  // showing non-zh/en users the Chinese setup instructions).
   const steps = config
-    ? config.steps[language as 'zh' | 'en'] || config.steps.en || config.steps.zh
+    ? config.steps[language as 'zh' | 'en' | 'ja' | 'ko'] || config.steps.en || config.steps.zh
     : []
 
   return (
