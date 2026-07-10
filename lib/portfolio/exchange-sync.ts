@@ -25,7 +25,7 @@ import { createLogger } from '@/lib/utils/logger'
 const logger = createLogger('portfolio-sync')
 
 /** Our stored exchange id → CCXT module id. */
-const CCXT_ID: Record<string, string> = {
+export const CCXT_ID: Record<string, string> = {
   bybit: 'bybit',
   mexc: 'mexc',
   gateio: 'gate',
@@ -67,9 +67,9 @@ const SYNC_SUPPORTED = new Set([
 // 'exchange_error' if CCXT can't complete) — no crash.
 /** Blocked from the serverless region (451). Only syncable when the VPS sync
  * proxy is configured (PORTFOLIO_SYNC_PROXY_URL/_KEY); otherwise refused. */
-const GEO_BLOCKED = new Set(['binance', 'okx'])
+export const GEO_BLOCKED = new Set(['binance', 'okx'])
 /** Require an API passphrase (passed to CCXT as `password`). */
-const PASSPHRASE_REQUIRED = new Set(['bitget', 'kucoin', 'coinex', 'okx', 'blofin'])
+export const PASSPHRASE_REQUIRED = new Set(['bitget', 'kucoin', 'coinex', 'okx', 'blofin'])
 
 /**
  * CCXT fetch adapter that tunnels every request through the SG VPS proxy
@@ -79,7 +79,9 @@ const PASSPHRASE_REQUIRED = new Set(['bitget', 'kucoin', 'coinex', 'okx', 'blofi
  * is X-Proxy-Key-authed. Opt-in: returns null when the proxy env is unset, so
  * geo-blocked exchanges cleanly fall back to `geo_unavailable` (no regression).
  */
-function makeProxyFetch(): ((url: string | URL, init?: RequestInit) => Promise<Response>) | null {
+export function makeProxyFetch():
+  | ((url: string | URL, init?: RequestInit) => Promise<Response>)
+  | null {
   // Reuse the already-provisioned SG VPS proxy (VPS_PROXY_SG / VPS_PROXY_KEY, set
   // in prod for ingest) so binance/okx sync is active without extra config. The
   // PORTFOLIO_SYNC_PROXY_* vars override if you want an independent endpoint/key.

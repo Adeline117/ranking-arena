@@ -190,6 +190,8 @@ export const INGEST_JOB = {
   DAILY_DIGEST: 'maint:daily-digest',
   /** On-chain recompute of top-N web3 wallet profile detail (Phase A). */
   ONCHAIN_ENRICH: 'maint:onchain-enrich',
+  /** First-party sync of a claimed trader's own account (认领 P1). */
+  FIRST_PARTY: 'firstparty:sync',
 } as const
 
 export interface TierJobData {

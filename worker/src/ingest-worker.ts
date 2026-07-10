@@ -74,6 +74,10 @@ async function route(job: Job): Promise<unknown> {
       const { processTierC } = await import('./ingest/processors/tier-c-profile')
       return processTierC(job)
     }
+    case INGEST_JOB.FIRST_PARTY: {
+      const { processFirstPartySync } = await import('./ingest/processors/first-party-sync')
+      return processFirstPartySync(job)
+    }
     case INGEST_JOB.TIER_D: {
       const { processTierD } = await import('./ingest/processors/tier-d-positions')
       return processTierD(job)
