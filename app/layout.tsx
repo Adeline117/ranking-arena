@@ -142,7 +142,7 @@ export default function RootLayout({
         />
         <script
           dangerouslySetInnerHTML={{
-            __html: `try{var l=localStorage.getItem('language');if(l){document.documentElement.lang=l==='en'?'en':l==='ja'?'ja':l==='ko'?'ko':'zh-CN';document.cookie='language='+l+';path=/;max-age=31536000;SameSite=Lax'}}catch(e){}`,
+            __html: `try{var l=localStorage.getItem('language');if(!l){var n=(navigator.language||'').toLowerCase();l=n.indexOf('zh')===0?'zh':n.indexOf('ja')===0?'ja':n.indexOf('ko')===0?'ko':'en';localStorage.setItem('language',l)}document.documentElement.lang=l==='en'?'en':l==='ja'?'ja':l==='ko'?'ko':'zh-CN';document.cookie='language='+l+';path=/;max-age=31536000;SameSite=Lax'}catch(e){}`,
           }}
         />
         <script

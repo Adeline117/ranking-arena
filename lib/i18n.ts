@@ -159,6 +159,20 @@ export function getLanguage(): Language {
       currentLanguage = saved
       return saved
     }
+    // No stored preference (first-time visitor) — derive from navigator.language
+    // so the client matches what the server already rendered from Accept-Language.
+    // Mapping MUST stay in sync with lib/i18n/server.ts detectFromAcceptLanguage
+    // and the pre-hydration inline script in app/layout.tsx → no #418 mismatch.
+    const nav = (navigator.language || '').toLowerCase()
+    const detected: Language = nav.startsWith('zh')
+      ? 'zh'
+      : nav.startsWith('ja')
+        ? 'ja'
+        : nav.startsWith('ko')
+          ? 'ko'
+          : 'en'
+    currentLanguage = detected
+    return detected
   }
   return currentLanguage
 }
