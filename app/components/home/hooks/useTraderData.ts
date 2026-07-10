@@ -326,6 +326,9 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           avg_holding_hours: t.avg_holding_hours != null ? Number(t.avg_holding_hours) : null,
           style_confidence: t.style_confidence ?? null,
           is_bot: t.is_bot ?? false,
+          // 认领徽章(P3-P3):API 已按 verified_traders 标记;此显式挑字段映射器
+          // 曾把它丢掉 → 徽章渲染器有、数据到 API、行上永不显示(2026-07-09 真点揪出)。
+          is_verified: t.is_verified === true,
           trader_type: t.trader_type ?? null,
           sharpe_ratio: t.sharpe_ratio != null ? Number(t.sharpe_ratio) : null,
           sortino_ratio: t.sortino_ratio != null ? Number(t.sortino_ratio) : null,
