@@ -7849,6 +7849,7 @@ export type Database = {
         Returns: number
       }
       arena_source_capabilities: { Args: never; Returns: Json }
+      arena_trust_scorecard: { Args: never; Returns: Json }
       arena_weekly_leaders: { Args: { p_limit?: number }; Returns: Json }
       bulk_enrich_sync_v2: { Args: { updates: Json }; Returns: number }
       bulk_update_snapshot_metrics: { Args: { updates: Json }; Returns: number }
