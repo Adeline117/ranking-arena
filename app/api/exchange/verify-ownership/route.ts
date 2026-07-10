@@ -21,7 +21,11 @@ import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, notFound, serverError } from '@/lib/api/response'
 import { resolveExchangeUid, isCexVerifiable } from '@/lib/validators/exchange-uid-resolver'
-import { encrypt } from '@/lib/crypto/encryption'
+// Must use the SAME module the sync reader (app/api/exchange/sync) decrypts with.
+// lib/crypto/encryption outputs a base64 blob; lib/exchange/encryption outputs
+// iv:tag:ct colon-hex. Writing crypto-format here made sync hit its legacy-base64
+// branch and decrypt every verify-ownership credential to garbage.
+import { encrypt } from '@/lib/exchange/encryption'
 import { createLogger } from '@/lib/utils/logger'
 import { resolveTrader } from '@/lib/data/unified'
 
@@ -55,7 +59,9 @@ export const POST = withAuth(
 
     // Validate this is a CEX platform that supports API key verification
     if (!isCexVerifiable(source)) {
-      return badRequest(`Platform ${source} does not support API key verification. Use wallet signature for DEX platforms.`)
+      return badRequest(
+        `Platform ${source} does not support API key verification. Use wallet signature for DEX platforms.`
+      )
     }
 
     // 2. Look up trader's source_trader_id from Arena DB (unified data layer)
@@ -101,7 +107,8 @@ export const POST = withAuth(
         {
           error: 'Verification failed',
           verified: false,
-          message: 'The API key does not belong to this trader account. Your account UID does not match the trader being claimed.',
+          message:
+            'The API key does not belong to this trader account. Your account UID does not match the trader being claimed.',
         },
         { status: 403 }
       )
@@ -113,25 +120,25 @@ export const POST = withAuth(
     const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
 
     // Upsert exchange connection for this user
-    const { error: upsertError } = await supabase
-      .from('user_exchange_connections')
-      .upsert(
-        {
-          user_id: user.id,
-          exchange: exchange,
-          api_key_encrypted: encryptedApiKey,
-          api_secret_encrypted: encryptedApiSecret,
-          passphrase_encrypted: encryptedPassphrase,
-          is_active: true,
-          verified_uid: resolvedUid,
-          last_verified_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id,exchange' }
-      )
+    const { error: upsertError } = await supabase.from('user_exchange_connections').upsert(
+      {
+        user_id: user.id,
+        exchange: exchange,
+        api_key_encrypted: encryptedApiKey,
+        api_secret_encrypted: encryptedApiSecret,
+        passphrase_encrypted: encryptedPassphrase,
+        is_active: true,
+        verified_uid: resolvedUid,
+        last_verified_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id,exchange' }
+    )
 
     if (upsertError) {
       logger.error('[verify-ownership] Failed to store exchange connection', upsertError)
-      return serverError('Verification succeeded but failed to store credentials. Please try again.')
+      return serverError(
+        'Verification succeeded but failed to store credentials. Please try again.'
+      )
     }
 
     logger.info('[verify-ownership] Verification passed', {

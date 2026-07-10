@@ -49,7 +49,9 @@ export const POST = withAuth(
     // 获取用户连接信息
     const { data: connection, error: connError } = await supabase
       .from('user_exchange_connections')
-      .select('id, api_key_encrypted, api_secret_encrypted, access_token_encrypted')
+      .select(
+        'id, api_key_encrypted, api_secret_encrypted, access_token_encrypted, passphrase_encrypted'
+      )
       .eq('user_id', user.id)
       .eq('exchange', exchange)
       .eq('is_active', true)
@@ -67,8 +69,16 @@ export const POST = withAuth(
     try {
       apiKey = decrypt(connection.api_key_encrypted)
       apiSecret = decrypt(connection.api_secret_encrypted)
-      if (connection.access_token_encrypted && exchange === 'bitget') {
-        passphrase = decrypt(connection.access_token_encrypted)
+      // Passphrase (Bitget/OKX API-key auth) is written to passphrase_encrypted by
+      // connect + verify-ownership. Reading it from access_token_encrypted (an
+      // OAuth-only column, null for API-key exchanges) meant Bitget sync never had
+      // a passphrase and always failed. Prefer the correct column; fall back to the
+      // legacy access_token_encrypted only for any old mis-written rows.
+      const passphraseCipher =
+        connection.passphrase_encrypted ||
+        (exchange === 'bitget' ? connection.access_token_encrypted : null)
+      if (passphraseCipher) {
+        passphrase = decrypt(passphraseCipher)
       }
     } catch (err: unknown) {
       logger.error('Decryption failed', { error: String(err) })
