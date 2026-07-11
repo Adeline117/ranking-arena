@@ -11,10 +11,12 @@ import { logger } from '@/lib/logger'
 import { SSR_QUERY_TIMEOUT_MS, ssrRace } from '@/lib/constants/timeouts'
 
 // 默认值 - 当缓存和数据库都不可用时的回退
-// Must be close to actual 90D ranked count (~17K) to avoid inflated display.
+// MUST be close to the actual 90D ranked count — this value is the DENOMINATOR for
+// CrossExchangePercentileBadge, so an inflated fallback (was 17000; real 90D pop is
+// ~9,600) makes "beats X% of N traders" wrong by ~1.8× if the RPC ever fails.
 const DEFAULT_STATS = {
   exchangeCount: 27,
-  traderCount: 17000,
+  traderCount: 9600,
 }
 
 // v2: bumped 2026-07-02 to evict stale exchangeCount (old get_hero_stats counted
