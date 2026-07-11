@@ -74,3 +74,10 @@ ios/
 e2e/
 playwright-report/
 test-results/
+
+# Ingest worker 浏览器 profiles（7.7GB 本地卷,gitignored;易变 cache 会在上传中消失
+# → `vercel deploy` ENOENT。git-gate 路径从仓库构建不受影响,此项专防本地 CLI 部署）
+.arena-ingest/
+
+# Claude Code 会话/worktree（本地卷,构建无关）
+.claude/
