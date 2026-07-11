@@ -346,6 +346,11 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     }
 
     q = q.order(sortColumn, { ascending, nullsFirst: false })
+    // Deterministic tiebreak: ~1800 rows share an arena_score. Without a secondary
+    // key, offset pagination + parallel chunked fetches can duplicate/drop a tied
+    // row at a page/chunk boundary and ranks jump on refresh (Postgres gives no
+    // stable order among equal keys).
+    q = q.order('source_trader_id', { ascending: true })
     return q
   }
 
