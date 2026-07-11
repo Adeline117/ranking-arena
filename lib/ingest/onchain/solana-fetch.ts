@@ -16,6 +16,25 @@ function alchemySolUrl(): string {
   return `https://solana-mainnet.g.alchemy.com/v2/${key}`
 }
 
+/** Quota-exhausted = provider is dead for the rest of this process — retrying
+ *  the SAME provider is pointless (2026-07-11 事故:Helius 日配额耗尽,夜扫
+ *  877/900 原地失败,Alchemy 备胎全程没被用上)。 */
+export function isQuotaExhausted(msg: string): boolean {
+  const m = msg.toLowerCase()
+  return (
+    m.includes('max usage') ||
+    m.includes('usage limit') ||
+    m.includes('quota') ||
+    m.includes('credits exhausted') ||
+    m.includes('payment required') ||
+    m.includes('402')
+  )
+}
+
+/** Sticky per-process failover: once Helius reports quota exhausted, all
+ *  subsequent calls go to Alchemy (identical JSON-RPC). */
+let heliusExhausted = false
+
 /**
  * Prefer Helius when configured (owner-provided 2026-07-09, Phase B full-scale
  * quota), fall back to Alchemy. Both speak identical Solana JSON-RPC — only
@@ -23,7 +42,7 @@ function alchemySolUrl(): string {
  */
 function solDefaultUrl(): string {
   const helius = process.env.HELIUS_API_KEY
-  if (helius) return `https://mainnet.helius-rpc.com/?api-key=${helius}`
+  if (helius && !heliusExhausted) return `https://mainnet.helius-rpc.com/?api-key=${helius}`
   return alchemySolUrl()
 }
 
@@ -51,9 +70,10 @@ function isTransient(msg: string): boolean {
 }
 
 async function solRpc<T>(method: string, params: unknown[], opts: RpcOpts = {}): Promise<T> {
-  const url = opts.rpcUrl ?? solDefaultUrl()
   const attempts = 5
   for (let i = 0; i < attempts; i++) {
+    // Re-resolve per attempt — a quota failover mid-loop must take effect.
+    const url = opts.rpcUrl ?? solDefaultUrl()
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 20_000)
     try {
@@ -69,6 +89,19 @@ async function solRpc<T>(method: string, params: unknown[], opts: RpcOpts = {}):
       return json.result as T
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
+      // Provider quota dead → sticky-switch to Alchemy and retry immediately
+      // (only when the caller didn't pin rpcUrl and a fallback key exists).
+      if (
+        !opts.rpcUrl &&
+        !heliusExhausted &&
+        isQuotaExhausted(msg) &&
+        process.env.HELIUS_API_KEY &&
+        process.env.ALCHEMY_API_KEY
+      ) {
+        heliusExhausted = true
+        console.warn('[onchain] Helius quota exhausted — sticky failover to Alchemy')
+        if (i < attempts - 1) continue
+      }
       if (i < attempts - 1 && isTransient(msg)) {
         await sleep(400 * 2 ** i) // 400,800,1600,3200ms backoff
         continue
