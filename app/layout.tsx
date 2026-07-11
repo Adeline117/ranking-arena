@@ -6,6 +6,11 @@ import { BASE_URL } from '@/lib/constants/urls'
 import { getCriticalCss, getResourceHints } from '@/lib/performance/critical-css'
 import BetaBanner from './components/layout/BetaBanner'
 import ProPromoBanner from './components/layout/ProPromoBanner'
+// Mounted in the ROOT layout (not just (app)/) so the homepage — the #1 airdrop
+// landing page — is no longer a client-error monitoring blind spot. Safe for LCP:
+// lib/sentry-init defers the Sentry chunk to requestIdleCallback (after `load`),
+// and its module-level `initialized` guard makes the (app)/ double-mount a no-op.
+import SentryInit from './components/Providers/SentryInit'
 
 // Optimized font loading — 3 weights for better typographic hierarchy, 'optional' avoids font-swap LCP delay
 const inter = Inter({
@@ -292,6 +297,7 @@ export default function RootLayout({
             __html: `(function(){var origInsert=Node.prototype.insertBefore;Node.prototype.insertBefore=function(n,r){if(r&&r.parentNode!==this)return n;return origInsert.call(this,n,r)};var origRemove=Node.prototype.removeChild;Node.prototype.removeChild=function(c){if(c.parentNode!==this)return c;return origRemove.call(this,c)}})()`,
           }}
         />
+        <SentryInit />
         <BetaBanner />
         <ProPromoBanner />
         {children}
