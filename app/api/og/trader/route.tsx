@@ -718,8 +718,11 @@ export async function GET(request: NextRequest) {
         }
       )
     } catch {
-      // Even fallback image generation failed — return a plain 500
-      return new Response('Failed to generate image', { status: 500 })
+      // Even the Satori fallback failed (observed for some handles where the
+      // primary render + minimal fallback both throw). A 500 here = a BROKEN
+      // social card on Twitter/Discord (no preview at all). Redirect to the
+      // static site OG image so the share card is always valid, never a 500.
+      return Response.redirect(`${BASE_URL}/og-image.png`, 302)
     }
   }
 }
