@@ -70,6 +70,8 @@ export default function TimeRangeSelector({
     <Box
       ref={containerRef}
       className="time-range-selector"
+      role="group"
+      aria-label="Time range"
       style={{
         display: 'inline-flex',
         gap: tokens.spacing[0],
@@ -94,7 +96,9 @@ export default function TimeRangeSelector({
             border: `1px solid var(--color-accent-primary-40, ${tokens.colors.accent.primary}60)`,
             borderRadius: tokens.radius.md,
             boxShadow: '0 1px 3px var(--color-overlay-subtle)',
-            transition: hasInitialized.current ? 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1)' : 'none',
+            transition: hasInitialized.current
+              ? 'left 0.3s cubic-bezier(0.22, 1, 0.36, 1), width 0.3s cubic-bezier(0.22, 1, 0.36, 1)'
+              : 'none',
             pointerEvents: 'none',
             zIndex: 0,
           }}
@@ -108,14 +112,14 @@ export default function TimeRangeSelector({
             data-range-btn
             onClick={() => !disabled && onChange(range)}
             disabled={disabled}
+            aria-pressed={isActive}
+            aria-label={`Show ${range} rankings`}
             className="touch-target"
             style={{
               padding: `10px ${tokens.spacing[4]}`,
               minHeight: 44,
               background: 'transparent',
-              color: isActive
-                ? tokens.colors.accent.primary
-                : tokens.colors.text.tertiary,
+              color: isActive ? tokens.colors.accent.primary : tokens.colors.text.tertiary,
               border: '1px solid transparent',
               borderRadius: tokens.radius.md,
               fontSize: tokens.typography.fontSize.sm,

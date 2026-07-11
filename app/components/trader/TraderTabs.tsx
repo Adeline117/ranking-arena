@@ -177,6 +177,11 @@ export default function TraderTabs({
                   const direction = e.key === 'ArrowLeft' ? -1 : 1
                   const newIndex = (currentIndex + direction + tabs.length) % tabs.length
                   onTabChange(tabs[newIndex].key)
+                  // Move DOM focus with the selection — roving tabindex flips the
+                  // newly-active tab to tabIndex=0 and the old one to -1, so without
+                  // this the focus is orphaned on a now-untabbable button and the
+                  // screen reader never announces the new tab.
+                  tabRefs.current.get(tabs[newIndex].key)?.focus()
                 }
               }}
               id={`tab-${tab.key}`}
