@@ -13,6 +13,14 @@
 | **[承载] Upstash 放大**                        | 每 `/api/*` 现 2 次 Upstash 调用(我加的 IP floor + 分层限流);Upstash 自身饱和时**全部限流 fail-open** → 空投峰值最可能先崩的就是 Upstash,一崩全放行灌 DB                    | Upstash 提额 **或** 把 IP floor 挪到 Cloudflare 边缘(anti-hammer 底线不该依赖会饱和的东西)        |
 | **[承载] 读副本休眠**                          | `SUPABASE_READ_REPLICA_URL` 在 `.env.production`/`.vercel.production`/`.example`/`.local` **全未设** → `getReadReplica()` 永远回主库,~11 个"已卸载"热读路由全打主库、零卸载 | 开 Supabase 读副本($)+ 设 env。代码路由已就位,配好即生效                                          |
 
+## ★ Upstash 限流 3 跳 —— 有意未动(安全 > 省调用),留给压测+Upstash 提额
+
+launch 审计发现每 /api/\* 请求 3 次 Upstash 限流 round-trip(proxy ipFloor 600/min + proxy 分层
+read 120/min + route-level)。**核实后有意不减层**:每种减法都换来削弱——去掉分层则无 route-level 的
+读路由(如 hero-stats,已 CDN 缓存 1h)从 120→600/min;去掉 ipFloor 则分层 fail-open 时无兜底。空投前
+削弱滥用防线换取有限省调用 = 错误取舍。真正的 Upstash 承载杠杆 = **提额(owner-gated $)**;流式端点
+的最大放大器已修(prices SSE 每实例 memo)。此项按 Phase D"压测再动"原则,待 k6 数据 + Upstash 档位决策。
+
 ## ★ 评分跨板公平性 —— 缺 execution 支柱的板可只凭 2 支柱冲到 ~99(需你拍方法学)
 
 **实测生产(2026-07-10)**:served `arena_score` 已 = v4(29030/31952 行,UI 解释与值一致 ✓,
