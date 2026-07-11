@@ -204,15 +204,19 @@ async function fetchFromLeaderboard(
   } else {
     query = query.order(sortColumn, { ascending, nullsFirst: false })
   }
+  // Deterministic tiebreak: ~1800 of ~9600 rows share an arena_score (ties of 4
+  // near the top). Without a secondary key Postgres does not guarantee stable
+  // order among equal scores, so offset pagination could duplicate/skip a tied
+  // row at a page boundary and ranks would visibly jump on refresh.
+  query = query.order('source_trader_id', { ascending: true })
 
-  // Pagination — fetch 4x rows when diversity filter will trim.
-  // 2x wasn't enough for 7D where gmx dominates 77/100 of top scores,
-  // leaving only 43/50 after diversity cap. 4x covers even the most
-  // extreme platform concentration (gmx was 113/200 but with other
-  // platforms filling in, post-cap result is 76 → slice to 50 = ok).
-  // Query is ~20-30ms regardless, thanks to ORDER BY arena_score fix.
-  const willApplyDiversity = !exchangeFilter && sortBy === 'arena_score' && !cursor && limit <= 100
-  const fetchLimit = willApplyDiversity ? Math.min(limit * 4, 200) : limit
+  // Pagination — one raw page per request, true rank order.
+  // The platform-diversity cap was REMOVED (owner decision 2026-07-11): capping
+  // per-platform is incompatible with offset pagination (it broke the raw↔display
+  // bijection → duplicate/skipped traders on page ≥ 1), and suppressing
+  // legitimately top-ranked traders to balance platforms undercuts Arena's
+  // neutral-ranking pitch. The board now shows true Arena-Score order.
+  const fetchLimit = limit
   if (useLegacyPaging) {
     const startIdx = page * limit
     query = query.range(startIdx, startIdx + fetchLimit - 1)
@@ -286,21 +290,6 @@ async function fetchFromLeaderboard(
     seen.add(key)
     return true
   })
-
-  // Platform diversity: when viewing overall (no exchange filter) with small limits,
-  // cap per-platform to prevent a single platform from monopolizing the first page
-  if (willApplyDiversity) {
-    const MAX_PER_PLATFORM = Math.max(5, Math.ceil(limit * 0.4))
-    const platformCounts = new Map<string, number>()
-    dedupedTraders = dedupedTraders.filter((t: { source: string }) => {
-      const count = platformCounts.get(t.source) || 0
-      if (count >= MAX_PER_PLATFORM) return false
-      platformCounts.set(t.source, count + 1)
-      return true
-    })
-    // Trim back to requested limit (we fetched 2x to compensate for filter losses)
-    dedupedTraders = dedupedTraders.slice(0, limit)
-  }
 
   // Prefer our own CDN avatar mirror over the exchange-CDN proxy (no 429 cold-burst).
   // Fail-open + cached (getOrSetWithLock ttl 300) → one indexed RPC per cache fill.
