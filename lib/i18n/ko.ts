@@ -3021,6 +3021,7 @@ const ko = {
     'Arena Score는 추적 중인 모든 거래소의 모든 트레이더를 한 줄로 순위화합니다 — 당신의 위치를 정확히 확인하세요.',
   heroNeutrality:
     '어떤 거래소도 순위를 돈으로 살 수 없습니다 — 추적하는 모든 거래소를 공정하게 순위화합니다.',
+  heroHowRanked: '랭킹 산정 방식 →',
   heroCTABrowse: '순위 둘러보기',
   heroCTASignUp: '무료 가입',
   heroStatTraders: '트레이더',

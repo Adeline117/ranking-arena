@@ -2885,6 +2885,7 @@ const ja = {
     'Arena Score は追跡中のすべての取引所の全トレーダーを横断でランク付け——あなたの立ち位置がひと目でわかります。',
   heroNeutrality:
     'いかなる取引所も掲載順位を購入できません——追跡するすべての取引所を公平にランク付けします。',
+  heroHowRanked: 'ランキングの仕組み →',
   heroCTABrowse: 'ランキングを見る',
   heroCTASignUp: '無料登録',
   heroStatTraders: 'トレーダー',
