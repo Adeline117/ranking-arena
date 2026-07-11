@@ -181,15 +181,14 @@ async function fetchFromLeaderboard(
   // Filter out outlier traders from rankings display
   query = query.gt('arena_score', 0).or('is_outlier.is.null,is_outlier.eq.false')
 
-  // Cursor-based: filter by rank
-  if (cursor != null) {
-    if (sortBy === 'arena_score' && order === 'desc') {
-      // Default: rank > cursor
-      query = query.gt('rank', cursor)
-    } else {
-      // For other sorts, use rank as cursor
-      query = query.gt('rank', cursor)
-    }
+  // Cursor-based pagination keys on `rank`, which is a total order derived from
+  // arena_score DESC. So `rank > cursor` is a valid continuation ONLY for the
+  // default arena_score-desc sort. For roi/win_rate/etc. `rank` has no relation
+  // to the sort order, so a rank cursor would silently drop an arbitrary set of
+  // rows (page 2 not a continuation of page 1). Apply it only where it's correct;
+  // non-default sorts must use page-based pagination.
+  if (cursor != null && sortBy === 'arena_score' && order === 'desc') {
+    query = query.gt('rank', cursor)
   }
 
   // Sort
