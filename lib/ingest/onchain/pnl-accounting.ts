@@ -49,6 +49,10 @@ export interface PerTokenPnl {
 
 export interface WalletPnl {
   realizedPnlUsd: number
+  /** Per-day realized PnL deltas (UTC date → USD), active days only, sorted.
+   *  Chain-derived pnl_daily 序列的原料(BSC 无交易所序列,链上自算;方向
+   *  已获 owner 批准 = web3 链上自算 Phase B)。 */
+  dailyRealized: Array<{ ts: string; value: number }>
   buyVolumeUsd: number
   sellVolumeUsd: number
   totalVolumeUsd: number
@@ -123,6 +127,7 @@ export function computeWalletPnl(swaps: OnchainSwap[]): WalletPnl {
   const states = new Map<string, TokenState>()
   let txsBuy = 0
   let txsSell = 0
+  const dailyRealized = new Map<string, number>()
 
   for (const s of clean) {
     let st = states.get(s.token)
@@ -149,6 +154,8 @@ export function computeWalletPnl(swaps: OnchainSwap[]): WalletPnl {
       const realizedHere = s.usdValue - costOfSold
       st.realized += realizedHere
       st.cycleRealized += realizedHere
+      const day = s.ts.slice(0, 10)
+      dailyRealized.set(day, (dailyRealized.get(day) ?? 0) + realizedHere)
       st.holding = Math.max(0, st.holding - s.tokenAmount)
       st.costBasis = Math.max(0, st.costBasis - costOfSold)
 
@@ -193,6 +200,9 @@ export function computeWalletPnl(swaps: OnchainSwap[]): WalletPnl {
 
   return {
     realizedPnlUsd: round2(realizedPnlUsd),
+    dailyRealized: [...dailyRealized.entries()]
+      .map(([ts, v]) => ({ ts, value: round2(v) }))
+      .sort((a, b) => (a.ts < b.ts ? -1 : 1)),
     buyVolumeUsd: round2(buyVolumeUsd),
     sellVolumeUsd: round2(sellVolumeUsd),
     totalVolumeUsd: round2(buyVolumeUsd + sellVolumeUsd),

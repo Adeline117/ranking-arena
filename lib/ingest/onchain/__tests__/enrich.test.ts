@@ -1,4 +1,9 @@
-import { chainForSource, enrichmentExtras, type OnchainEnrichment } from '../enrich'
+import {
+  chainForSource,
+  enrichmentExtras,
+  enrichmentSeries,
+  type OnchainEnrichment,
+} from '../enrich'
 
 describe('chainForSource', () => {
   it('maps slugs to chains', () => {
@@ -52,5 +57,66 @@ describe('enrichmentExtras', () => {
   it('flags partial realized for BSC native-BNB sellers', () => {
     const x = enrichmentExtras({ ...base, chain: 'bsc', realizedPartial: true })
     expect(x.onchain_realized_partial).toBe(true)
+  })
+})
+
+describe('enrichmentSeries (BSC chain-derived pnl_daily)', () => {
+  const base = {
+    chain: 'bsc' as const,
+    wallet: '0xabc',
+    lookbackDays: 90,
+    realizedPnlUsd: 15,
+    unrealizedPnlUsd: 0,
+    totalPnlUsd: 15,
+    winRate: null,
+    txsBuy: 1,
+    txsSell: 2,
+    buyVolumeUsd: 100,
+    sellVolumeUsd: 120,
+    tokensTraded: 1,
+    closedPositions: 1,
+    pricedTokens: 0,
+    unpricedTokens: 0,
+    tokenDistribution: {},
+    topEarningTokens: [],
+    provenance: 'onchain-computed' as const,
+    realizedPartial: false,
+  }
+  const nowMs = Date.parse('2026-07-10T12:00:00Z')
+
+  it('zero-fills idle days and slices tf 7/30/90 like okx_web3_solana convention', () => {
+    const blocks = enrichmentSeries(
+      {
+        ...base,
+        dailyRealized: [
+          { ts: '2026-07-02', value: 20 },
+          { ts: '2026-07-06', value: -5 },
+        ],
+      },
+      nowMs
+    )
+    const tf90 = blocks.find((b) => b.timeframe === 90)!
+    expect(tf90.metric).toBe('pnl_daily')
+    // 07-02..07-10 inclusive = 9 days, idle days are honest zeros
+    expect(tf90.points).toHaveLength(9)
+    expect(tf90.points[0]).toEqual({ ts: '2026-07-02', value: 20 })
+    expect(tf90.points[1]).toEqual({ ts: '2026-07-03', value: 0 })
+    expect(tf90.points[4]).toEqual({ ts: '2026-07-06', value: -5 })
+    const tf7 = blocks.find((b) => b.timeframe === 7)!
+    // window (2026-07-03, 2026-07-10] → 07-04..07-10 = 7 pts
+    expect(tf7.points).toHaveLength(7)
+    expect(tf7.points.map((p) => p.ts)).not.toContain('2026-07-02')
+  })
+
+  it('returns [] for solana (exchange provides pnl_daily — never self-derive)', () => {
+    const blocks = enrichmentSeries(
+      { ...base, chain: 'solana', dailyRealized: [{ ts: '2026-07-02', value: 20 }] },
+      nowMs
+    )
+    expect(blocks).toEqual([])
+  })
+
+  it('returns [] when no realized activity', () => {
+    expect(enrichmentSeries({ ...base, dailyRealized: [] }, nowMs)).toEqual([])
   })
 })

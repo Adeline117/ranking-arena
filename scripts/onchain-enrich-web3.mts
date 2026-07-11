@@ -26,10 +26,16 @@ config({ path: resolve(process.cwd(), '.env.local') })
 const topN = Number(process.argv[2]) || 5
 const onlySource = process.argv[3]
 const concurrency = Math.max(1, Number(process.argv[4]) || 4)
+// 定向钱包列表(逗号分隔):绕过 sweep 的 7d 新鲜跳过,精准补指定钱包
+// (例:top500 序列缺口的已富化钱包,sweep 永远不会再选它们)。
+const onlyWallets = (process.argv[5] ?? '')
+  .split(',')
+  .map((w) => w.trim())
+  .filter(Boolean)
 
 async function main() {
   const { Pool } = await import('pg')
-  const { chainForSource, enrichWeb3Wallet, enrichmentExtras } = await import(
+  const { chainForSource, enrichWeb3Wallet, enrichmentExtras, enrichmentSeries } = await import(
     '@/lib/ingest/onchain/enrich'
   )
   const dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL
@@ -46,7 +52,16 @@ async function main() {
     // Sweep selection (Phase B): never-enriched first, then stalest; skip
     // fresh (<7d). Within a bucket, richest pnl first (user-visible wallets
     // win ties). trader_stats has no rank col — pnl is the proxy.
-    const { rows } = await pool.query(
+    const { rows } = onlyWallets.length
+      ? await pool.query(
+          `SELECT t.exchange_trader_id AS wallet, COALESCE(ts.pnl, 0) AS pnl
+             FROM arena.traders t
+             JOIN arena.sources s ON s.id = t.source_id
+             LEFT JOIN arena.trader_stats ts ON ts.trader_id = t.id AND ts.timeframe = 90
+            WHERE s.slug = $1 AND t.exchange_trader_id = ANY($2)`,
+          [slug, onlyWallets]
+        )
+      : await pool.query(
       `SELECT t.exchange_trader_id AS wallet, ts.pnl
          FROM arena.trader_stats ts
          JOIN arena.traders t ON t.id = ts.trader_id
@@ -89,9 +104,35 @@ async function main() {
                AND s.slug = $1 AND t.exchange_trader_id = $2 AND ts.timeframe = 90`,
             [slug, wallet, JSON.stringify(extras), e.winRate]
           )
+          // 链上自算 pnl_daily 序列(BSC-only,见 enrichmentSeries 注释)——
+          // 与 publishBoardSeries 同款 (trader,tf,metric,ts) upsert,后到覆盖。
+          let seriesPts = 0
+          const blocks = enrichmentSeries(e, Date.now())
+          if (blocks.length > 0) {
+            const flat = blocks.flatMap((b) =>
+              b.points.map((pt) => ({
+                timeframe: b.timeframe,
+                metric: b.metric,
+                ts: pt.ts,
+                value: pt.value,
+              }))
+            )
+            seriesPts = flat.length
+            await pool.query(
+              `INSERT INTO arena.trader_series (trader_id, timeframe, metric, ts, value, currency)
+               SELECT t.id, r.timeframe, r.metric, r.ts::timestamptz, r.value, 'USD'
+                 FROM jsonb_to_recordset($3::jsonb) AS r(
+                   timeframe int, metric text, ts text, value numeric),
+                      arena.traders t, arena.sources s
+                WHERE t.source_id = s.id AND s.slug = $1 AND t.exchange_trader_id = $2
+               ON CONFLICT (trader_id, timeframe, metric, ts)
+               DO UPDATE SET value = EXCLUDED.value`,
+              [slug, wallet, JSON.stringify(flat)]
+            )
+          }
           ok++
           console.log(
-            `  #${rank} ${wallet.slice(0, 10)}… realized=$${e.realizedPnlUsd} unreal=$${e.unrealizedPnlUsd} total=$${e.totalPnlUsd} win=${e.winRate ?? '—'} buys=${e.txsBuy} sells=${e.txsSell} tok=${e.tokensTraded} priced=${e.pricedTokens}/${e.pricedTokens + e.unpricedTokens} (rows=${upd.rowCount})${e.realizedPartial ? ' [realized-partial]' : ''}`
+            `  #${rank} ${wallet.slice(0, 10)}… realized=$${e.realizedPnlUsd} unreal=$${e.unrealizedPnlUsd} total=$${e.totalPnlUsd} win=${e.winRate ?? '—'} buys=${e.txsBuy} sells=${e.txsSell} tok=${e.tokensTraded} priced=${e.pricedTokens}/${e.pricedTokens + e.unpricedTokens} series=${seriesPts} (rows=${upd.rowCount})${e.realizedPartial ? ' [realized-partial]' : ''}`
           )
         } catch (err) {
           failed++

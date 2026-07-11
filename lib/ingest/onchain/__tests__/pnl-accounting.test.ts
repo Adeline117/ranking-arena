@@ -115,3 +115,27 @@ describe('computeWalletPnl', () => {
     expect(r.perToken).toHaveLength(0)
   })
 })
+
+describe('dailyRealized (chain-derived pnl_daily raw material)', () => {
+  it('accumulates per-day realized deltas on sells only, sorted by day', () => {
+    const r = computeWalletPnl([
+      { token: 'A', ts: '2026-07-01T10:00:00Z', side: 'buy', tokenAmount: 10, usdValue: 100 },
+      { token: 'A', ts: '2026-07-02T10:00:00Z', side: 'sell', tokenAmount: 5, usdValue: 80 }, // +30
+      { token: 'A', ts: '2026-07-02T12:00:00Z', side: 'sell', tokenAmount: 5, usdValue: 40 }, // -10
+      { token: 'A', ts: '2026-07-05T09:00:00Z', side: 'buy', tokenAmount: 2, usdValue: 20 },
+      { token: 'A', ts: '2026-07-06T09:00:00Z', side: 'sell', tokenAmount: 2, usdValue: 15 }, // -5
+    ])
+    expect(r.dailyRealized).toEqual([
+      { ts: '2026-07-02', value: 20 },
+      { ts: '2026-07-06', value: -5 },
+    ])
+    expect(r.realizedPnlUsd).toBe(15)
+  })
+
+  it('is empty when there are no sells', () => {
+    const r = computeWalletPnl([
+      { token: 'A', ts: '2026-07-01T10:00:00Z', side: 'buy', tokenAmount: 1, usdValue: 10 },
+    ])
+    expect(r.dailyRealized).toEqual([])
+  })
+})
