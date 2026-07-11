@@ -17,7 +17,6 @@ import dynamic from 'next/dynamic'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 const PrivyClientProvider = dynamic(() => import('./PrivyClientProvider'))
 const LoginModal = dynamic(() => import('../auth/LoginModal'), { ssr: false })
-const PostHogProvider = dynamic(() => import('./PostHogProvider'), { ssr: false })
 
 // Web3Provider is NO LONGER loaded at root level.
 // It's lazy-loaded only when wallet features are needed.
@@ -97,24 +96,22 @@ export default function Providers({ children }: { children: ReactNode }) {
 
   return (
     <ErrorBoundary>
-      <PostHogProvider>
-        <QueryClientProvider client={queryClient}>
-          <PrivyClientProvider>
-            <LanguageProvider>
-              <PremiumProviderWithSSRHint>
-                <ToastProvider>
-                  <ErrorInterceptorInitializer>
-                    <DialogProvider>
-                      {children}
-                      <GlobalLoginModal />
-                    </DialogProvider>
-                  </ErrorInterceptorInitializer>
-                </ToastProvider>
-              </PremiumProviderWithSSRHint>
-            </LanguageProvider>
-          </PrivyClientProvider>
-        </QueryClientProvider>
-      </PostHogProvider>
+      <QueryClientProvider client={queryClient}>
+        <PrivyClientProvider>
+          <LanguageProvider>
+            <PremiumProviderWithSSRHint>
+              <ToastProvider>
+                <ErrorInterceptorInitializer>
+                  <DialogProvider>
+                    {children}
+                    <GlobalLoginModal />
+                  </DialogProvider>
+                </ErrorInterceptorInitializer>
+              </ToastProvider>
+            </PremiumProviderWithSSRHint>
+          </LanguageProvider>
+        </PrivyClientProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   )
 }
