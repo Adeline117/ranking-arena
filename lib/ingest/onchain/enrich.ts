@@ -52,6 +52,9 @@ export interface OnchainEnrichment {
   provenance: 'onchain-computed'
   /** True when realized may understate (BSC native-BNB sells not yet captured). */
   realizedPartial: boolean
+  /** Per-day realized PnL deltas (active days only) — raw material for
+   *  enrichmentSeries(). */
+  dailyRealized: Array<{ ts: string; value: number }>
 }
 
 /** Price held tokens + surface symbols for the OnchainInsights token blocks. */
@@ -175,7 +178,44 @@ function normalize(
     topEarningTokens: topEarningTokens(pnl.perToken, info),
     provenance: 'onchain-computed',
     realizedPartial: realizedPartial && pnl.txsSell === 0,
+    dailyRealized: pnl.dailyRealized,
   }
+}
+
+/**
+ * Chain-derived pnl_daily series blocks — SAME shape/convention as the
+ * sibling okx_web3_solana adapter series (metric='pnl_daily', tf 7/30/90,
+ * per-day deltas) so every serving reader renders it unchanged.
+ *
+ * BSC-only by policy: okx_web3_solana gets pnl_daily from the exchange —
+ * 死命令「不自派生交易所提供的字段」;binance_web3 profile 是 202 bot-shield
+ * 真墙,链上自算是获批路径(Phase B)。Idle days between first activity and
+ * today are honest zeros (no realized PnL that day).
+ */
+export function enrichmentSeries(
+  e: OnchainEnrichment,
+  nowMs: number
+): Array<{ timeframe: number; metric: string; points: Array<{ ts: string; value: number }> }> {
+  if (e.chain !== 'bsc' || e.dailyRealized.length === 0) return []
+  const byDay = new Map(e.dailyRealized.map((d) => [d.ts, d.value]))
+  const first = e.dailyRealized[0].ts
+  const today = new Date(nowMs).toISOString().slice(0, 10)
+  const full: Array<{ ts: string; value: number }> = []
+  for (
+    let t = Date.parse(`${first}T00:00:00Z`);
+    t <= Date.parse(`${today}T00:00:00Z`);
+    t += 86_400_000
+  ) {
+    const day = new Date(t).toISOString().slice(0, 10)
+    full.push({ ts: day, value: byDay.get(day) ?? 0 })
+  }
+  return [7, 30, 90]
+    .map((tf) => ({
+      timeframe: tf,
+      metric: 'pnl_daily',
+      points: full.filter((p) => Date.parse(`${p.ts}T00:00:00Z`) > nowMs - tf * 86_400_000),
+    }))
+    .filter((b) => b.points.length >= 2)
 }
 
 /** The trader_stats.extras patch — onchain_* scalars + the OnchainInsights
