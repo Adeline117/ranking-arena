@@ -14,8 +14,15 @@ export const dynamic = 'force-dynamic'
 const UPSTASH_URL = process.env.UPSTASH_REDIS_REST_URL!
 const UPSTASH_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN!
 
-interface PriceData { price: number; changePct24h?: number; change24h?: number; volume?: number; high24h?: number; low24h?: number }
-async function getLatestPrices(): Promise<Record<string, PriceData>> {
+interface PriceData {
+  price: number
+  changePct24h?: number
+  change24h?: number
+  volume?: number
+  high24h?: number
+  low24h?: number
+}
+async function fetchLatestPrices(): Promise<Record<string, PriceData>> {
   const res = await fetch(`${UPSTASH_URL}`, {
     method: 'POST',
     headers: {
@@ -37,10 +44,39 @@ async function getLatestPrices(): Promise<Record<string, PriceData>> {
     try {
       prices[result[i]] = JSON.parse(result[i + 1])
     } catch (err) {
-      logger.debug('Non-critical error parsing price entry:', err instanceof Error ? err.message : String(err))
+      logger.debug(
+        'Non-critical error parsing price entry:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
   }
   return prices
+}
+
+// Per-edge-instance shared memo. Every SSE connection polls every 2s; without
+// this each connection independently HGETALLs Upstash → N connections × instance
+// = ~N/2 Upstash req/s of identical reads, which saturates the Upstash tier (the
+// binding SPOF) under an airdrop spike. Memoizing for ~1.8s collapses all
+// concurrent connections in one edge instance into a single upstream read per
+// cycle, with in-flight dedup so a thundering herd shares one fetch. The 2s
+// live-push cadence to clients is unchanged.
+const PRICE_MEMO_MS = 1800
+let priceMemo: { ts: number; data: Record<string, PriceData> } | null = null
+let priceInflight: Promise<Record<string, PriceData>> | null = null
+
+async function getLatestPrices(): Promise<Record<string, PriceData>> {
+  const now = Date.now()
+  if (priceMemo && now - priceMemo.ts < PRICE_MEMO_MS) return priceMemo.data
+  if (priceInflight) return priceInflight
+  priceInflight = fetchLatestPrices()
+    .then((data) => {
+      priceMemo = { ts: Date.now(), data }
+      return data
+    })
+    .finally(() => {
+      priceInflight = null
+    })
+  return priceInflight
 }
 
 export async function GET(request: NextRequest) {
@@ -56,8 +92,14 @@ export async function GET(request: NextRequest) {
 
   const cleanup = () => {
     closed = true
-    if (intervalId) { clearInterval(intervalId); intervalId = null }
-    if (heartbeatId) { clearInterval(heartbeatId); heartbeatId = null }
+    if (intervalId) {
+      clearInterval(intervalId)
+      intervalId = null
+    }
+    if (heartbeatId) {
+      clearInterval(heartbeatId)
+      heartbeatId = null
+    }
   }
 
   const stream = new ReadableStream({
@@ -71,7 +113,10 @@ export async function GET(request: NextRequest) {
             controller.enqueue(encoder.encode(data))
           }
         } catch (err) {
-          logger.debug('Non-critical error fetching prices:', err instanceof Error ? err.message : String(err))
+          logger.debug(
+            'Non-critical error fetching prices:',
+            err instanceof Error ? err.message : String(err)
+          )
         }
       }
 
@@ -86,7 +131,10 @@ export async function GET(request: NextRequest) {
         try {
           controller.enqueue(encoder.encode(': keepalive\n\n'))
         } catch (err) {
-          logger.debug('Non-critical error sending keepalive:', err instanceof Error ? err.message : String(err))
+          logger.debug(
+            'Non-critical error sending keepalive:',
+            err instanceof Error ? err.message : String(err)
+          )
           cleanup()
         }
       }, 15000)
