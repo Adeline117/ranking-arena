@@ -141,8 +141,10 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
               flexDirection: 'column',
               gap: 8,
               padding: '12px 16px',
-              // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
-              borderRadius: 12,
+              // Match TraderCard's card radius (tokens.radius.lg) — this SSR row is
+              // the pre-hydration twin of TraderCard; a 12-vs-14 mismatch causes a
+              // subtle radius pop on hydration.
+              borderRadius: tokens.radius.lg,
               background: 'var(--color-bg-secondary)',
               border: '1px solid var(--color-border-primary)',
               textDecoration: 'none',
@@ -279,8 +281,8 @@ export default async function SSRRankingTable({ traders, startRank = 0 }: Props)
                     style={{
                       minWidth: 50,
                       height: 28,
-                      // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
-                      borderRadius: 8,
+                      // Match TraderCard's score-badge radius (tokens.radius.md).
+                      borderRadius: tokens.radius.md,
                       background: scoreStyle.bg,
                       border: `1px solid ${scoreStyle.border}`,
                       display: 'flex',
