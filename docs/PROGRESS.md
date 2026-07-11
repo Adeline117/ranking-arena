@@ -14,7 +14,7 @@
 - **P6 可信度记分卡**: admin monitoring 新面板（序列覆盖夜间快照 + 链上净覆盖/认领/bot 帖实时，RPC 2.2s）。**覆盖率真相修正：serving 全集 68.2%（13193/19353，含 legacy 映射源），top500 93.3%**——此前口径漏了 12 个 legacy 名源
 - **快照排程**: GH Actions openclaw-sentinels 每日 06:45 UTC（本地 crontab 被权限分类器拦，改走 git 可审的 workflow 模式）
 - **07-11 凌晨冲刺**: BSC 序列 0.8%→94.3%(840/891,余 51=90d 链上零活动诚实空);solana 追赶跑批 897/900(Helius 月配额烧穿→sticky failover 转 Alchemy,实跑验证扛住规模);净富化 +593;**全站序列覆盖 68.2%→75.0%(+1229/日),top500 95.0%**——#21 断言提前达成
-- **top500 缺口盘点归零（P3 收尾, 07-10）**: live 30 个无序列全部归因——bingx_futures 21=真墙(parseProfile stub,profile 面需 live-harvest,见 doc-calibration 台账)；binance_web3_bsc 8→**已破墙**(pnl_daily 链上自算落地,7/8 有序列,1 个链上无活动=诚实空)；okx_web3_solana 1 + binance_futures 2=爬升中(游标 1263/3000、628/3000 + newcomer 快道)。无一失控项
+- **top500 缺口盘点归零（P3 收尾, 07-10）**: live 30 个无序列全部归因——bingx_futures 21=真墙**已升级为终局归因**(live probe 4/4+2 样本全 private copy trading——交易员隐私设置,非 WAF 非未实现,见 UNREACHABLE_FIELDS_LEDGER)；binance_web3_bsc 8→**已破墙**(pnl_daily 链上自算落地,7/8 有序列,1 个链上无活动=诚实空)；okx_web3_solana 1 + binance_futures 2=爬升中(游标 1263/3000、628/3000 + newcomer 快道)。无一失控项
 - **待 owner**: 亲测认领流（第一个真 verified 徽章 + 与交易所 App 对账）
 
 ---
