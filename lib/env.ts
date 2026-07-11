@@ -62,6 +62,23 @@ if (!criticalResult.success) {
   }
 }
 
+// Upstash is load-bearing in PRODUCTION (cache + rate-limit + distributed locks +
+// worker heartbeat). It's `.optional()` above so dev/preview can boot without it,
+// but a missing token in prod silently degrades rate-limiting to per-instance
+// memory — trivially bypassed by an airdrop bot swarm (N lambdas × the limit) —
+// and disables caching → primary-DB overload. Fail-fast rather than run degraded.
+if (process.env.NODE_ENV === 'production' && typeof window === 'undefined') {
+  const missingUpstash = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'].filter(
+    (k) => !process.env[k]
+  )
+  if (missingUpstash.length > 0) {
+    logger.error(`[env] Missing production-critical Upstash env: ${missingUpstash.join(', ')}`)
+    throw new Error(
+      `Missing production-critical env (rate-limit + cache depend on it): ${missingUpstash.join(', ')}`
+    )
+  }
+}
+
 // ─── Helper ───────────────────────────────────────────────────────────────────
 
 function getEnv(key: string, required: true): string
