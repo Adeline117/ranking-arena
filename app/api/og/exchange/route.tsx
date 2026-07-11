@@ -523,6 +523,9 @@ export async function GET(request: NextRequest) {
     )
   } catch (e) {
     logger.error('[OG Exchange] Error:', e)
-    return new Response('Failed to generate image', { status: 500 })
+    // Never 500 an OG endpoint — a broken social preview (no card on Twitter/
+    // Discord) is worse than a generic one. Redirect to the static site image
+    // (same pattern as og/trader / og/rank fallbacks).
+    return new Response(null, { status: 302, headers: { Location: `${BASE_URL}/og-image.png` } })
   }
 }
