@@ -111,7 +111,7 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
               True and not number-specific (no contested exchange count). */}
           <p
             style={{
-              fontSize: '0.875rem',
+              fontSize: tokens.typography.fontSize.base,
               color: 'var(--color-text-tertiary)',
               lineHeight: 1.55,
               margin: `${tokens.spacing[3]} 0 0`,
@@ -200,7 +200,7 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
             alignItems: 'center',
             gap: 6,
             padding: '8px 20px',
-            fontSize: '0.8125rem',
+            fontSize: tokens.typography.fontSize.sm,
             fontWeight: tokens.typography.fontWeight.semibold,
             color: 'var(--color-on-accent)',
             background:
@@ -222,7 +222,7 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
             alignItems: 'center',
             gap: 6,
             padding: '4px 12px',
-            fontSize: '0.75rem',
+            fontSize: tokens.typography.fontSize.xs,
             color: 'var(--color-pro-gradient-start)',
             background: 'var(--color-pro-glow, rgba(167,139,250,0.1))',
             border: '1px solid var(--color-pro-border, rgba(167,139,250,0.25))',
