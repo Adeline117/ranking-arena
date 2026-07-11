@@ -17,8 +17,7 @@ import type { TraderRow } from './trader-row'
 
 const logger = createLogger('compute-leaderboard')
 
-const periodDaysFor = (season: Period): number =>
-  season === '7D' ? 7 : season === '30D' ? 30 : 90
+const periodDaysFor = (season: Period): number => (season === '7D' ? 7 : season === '30D' ? 30 : 90)
 
 /**
  * Phase 4b3: Last resort — compute calmar ratio from ROI + |MDD| for any
@@ -28,19 +27,15 @@ const periodDaysFor = (season: Period): number =>
  *
  * Calmar = annualized_ROI / |MDD|, clamped to ±10.
  */
-export function computeLastResortCalmar(
-  traderMap: Map<string, TraderRow>,
-  season: Period,
-): number {
+export function computeLastResortCalmar(traderMap: Map<string, TraderRow>, season: Period): number {
   let calmarOnly = 0
   const periodDays = periodDaysFor(season)
   for (const snap of traderMap.values()) {
     if (snap.calmar_ratio != null) continue
     if (snap.roi == null || snap.max_drawdown == null || snap.max_drawdown <= 0) continue
     const annRoi = snap.roi * (365 / periodDays)
-    snap.calmar_ratio = Math.round(
-      Math.max(-10, Math.min(10, annRoi / Math.abs(snap.max_drawdown))) * 10000,
-    ) / 10000
+    snap.calmar_ratio =
+      Math.round(Math.max(-10, Math.min(10, annRoi / Math.abs(snap.max_drawdown))) * 10000) / 10000
     calmarOnly++
   }
   return calmarOnly
@@ -55,37 +50,63 @@ export function computeLastResortCalmar(
  *
  * Mutates each TraderRow with `trading_style` + `style_confidence` in place.
  */
-export function classifyTradingStyle(
-  traderMap: Map<string, TraderRow>,
-  season: Period,
-): void {
+export function classifyTradingStyle(traderMap: Map<string, TraderRow>, season: Period): void {
   const periodDays = periodDaysFor(season)
   for (const snap of traderMap.values()) {
     if (snap.trading_style != null) continue
     if (snap.avg_holding_hours != null) {
       const h = snap.avg_holding_hours
-      if (h < 1) { snap.trading_style = 'scalper'; snap.style_confidence = 0.8 }
-      else if (h < 24) { snap.trading_style = 'day_trader'; snap.style_confidence = 0.7 }
-      else if (h < 168) { snap.trading_style = 'swing'; snap.style_confidence = 0.6 }
-      else { snap.trading_style = 'position'; snap.style_confidence = 0.5 }
+      if (h < 1) {
+        snap.trading_style = 'scalper'
+        snap.style_confidence = 0.8
+      } else if (h < 24) {
+        snap.trading_style = 'day_trader'
+        snap.style_confidence = 0.7
+      } else if (h < 168) {
+        snap.trading_style = 'swing'
+        snap.style_confidence = 0.6
+      } else {
+        snap.trading_style = 'position'
+        snap.style_confidence = 0.5
+      }
     } else if (snap.trades_count != null && snap.trades_count > 0 && snap.roi != null) {
       // Heuristic: high trade count relative to period → likely scalper/day trader
       const tradesPerDay = snap.trades_count / periodDays
-      if (tradesPerDay > 10) { snap.trading_style = 'scalper'; snap.style_confidence = 0.4 }
-      else if (tradesPerDay > 2) { snap.trading_style = 'day_trader'; snap.style_confidence = 0.3 }
-      else if (tradesPerDay > 0.3) { snap.trading_style = 'swing'; snap.style_confidence = 0.3 }
-      else { snap.trading_style = 'position'; snap.style_confidence = 0.3 }
+      if (tradesPerDay > 10) {
+        snap.trading_style = 'scalper'
+        snap.style_confidence = 0.4
+      } else if (tradesPerDay > 2) {
+        snap.trading_style = 'day_trader'
+        snap.style_confidence = 0.3
+      } else if (tradesPerDay > 0.3) {
+        snap.trading_style = 'swing'
+        snap.style_confidence = 0.3
+      } else {
+        snap.trading_style = 'position'
+        snap.style_confidence = 0.3
+      }
     } else if (snap.roi != null && snap.max_drawdown != null && snap.win_rate != null) {
       // Last resort: classify by risk profile (ROI magnitude + MDD + WR pattern)
       // This enables trading_style for ALL traders that have the basic 3 metrics
       const absRoi = Math.abs(snap.roi)
       const mdd = snap.max_drawdown
       const wr = snap.win_rate
-      if (absRoi > 500 && mdd > 30) { snap.trading_style = 'aggressive'; snap.style_confidence = 0.25 }
-      else if (wr > 65 && mdd < 15) { snap.trading_style = 'conservative'; snap.style_confidence = 0.25 }
-      else if (absRoi > 100 && mdd > 15 && mdd < 50) { snap.trading_style = 'swing'; snap.style_confidence = 0.2 }
-      else if (absRoi < 50 && mdd < 20) { snap.trading_style = 'conservative'; snap.style_confidence = 0.2 }
-      else { snap.trading_style = 'balanced'; snap.style_confidence = 0.15 }
+      if (absRoi > 500 && mdd > 30) {
+        snap.trading_style = 'aggressive'
+        snap.style_confidence = 0.25
+      } else if (wr > 65 && mdd < 15) {
+        snap.trading_style = 'conservative'
+        snap.style_confidence = 0.25
+      } else if (absRoi > 100 && mdd > 15 && mdd < 50) {
+        snap.trading_style = 'swing'
+        snap.style_confidence = 0.2
+      } else if (absRoi < 50 && mdd < 20) {
+        snap.trading_style = 'conservative'
+        snap.style_confidence = 0.2
+      } else {
+        snap.trading_style = 'balanced'
+        snap.style_confidence = 0.15
+      }
     }
   }
 }
@@ -109,7 +130,7 @@ export interface ScoredRowForOutlier {
  * `is_outlier` column. Returns the flagged count for logging.
  *
  * Heuristics:
- *   • |ROI| > 10,000%                            → corruption (matches ROI_CAP)
+ *   • |ROI| >= 10,000%                           → corruption (clamp ceiling = ROI_CAP)
  *   • |PnL| > $100M from non-whale source        → bad equity proxy
  *   • PnL/ROI sign mismatch (>$500 vs >50% ROI)  → field-mapping bug
  *   • |ROI| > 500% with PnL == 0 or null         → equity-proxy mismatch
@@ -118,10 +139,15 @@ export function markOutliers<T extends ScoredRowForOutlier>(scored: T[]): number
   let outlierCount = 0
   for (const t of scored) {
     let isOutlier = false
-    // |ROI| > 10,000% is almost certainly data corruption (aligned with ROI_CAP)
-    if (Math.abs(t.roi) > 10000) isOutlier = true
+    // |ROI| >= 10,000% is almost certainly data corruption. MUST be `>=`, not `>`:
+    // ingest CLAMPS roi to exactly ±10000 (the ROI_CAP ceiling, lib/ingest/staging/
+    // validate.ts clampRoi), so a corrupt whale lands at exactly 10000 — a strict `>`
+    // let every clamped row through un-flagged onto the public board (0-trade, no-name,
+    // 10000% "traders" reaching the 90D flagship). Clamp ceiling reached = true ROI unknown.
+    if (Math.abs(t.roi) >= 10000) isOutlier = true
     // PnL > $100M from non-whale sources
-    if (t.pnl != null && Math.abs(t.pnl) > 100_000_000 && !['hyperliquid'].includes(t.source)) isOutlier = true
+    if (t.pnl != null && Math.abs(t.pnl) > 100_000_000 && !['hyperliquid'].includes(t.source))
+      isOutlier = true
     // ROI and PnL sign mismatch — positive ROI with significant negative PnL or vice versa
     // Lowered from 1000/1000 threshold: audit found ROI=6086% with PnL=-$8K passing through
     if (t.pnl != null && t.pnl > 500 && t.roi < -50) isOutlier = true
@@ -159,24 +185,25 @@ export interface ScoredRowForArenaFollowers {
 export async function applyArenaFollowers<T extends ScoredRowForArenaFollowers>(
   supabase: ReturnType<typeof getSupabaseAdmin>,
   scored: T[],
-  season: Period,
+  season: Period
 ): Promise<{ applied: number; uniqueIds: number }> {
-  const allTraderIds = [...new Set(scored.map(t => t.source_trader_id))]
+  const allTraderIds = [...new Set(scored.map((t) => t.source_trader_id))]
   const arenaFollowerMap = new Map<string, number>()
 
   // Query trader_follows in chunks of 500
   for (let i = 0; i < allTraderIds.length; i += 500) {
     const chunk = allTraderIds.slice(i, i + 500)
     try {
-      const { data, error } = await supabase
-        .rpc('count_trader_followers', { trader_ids: chunk })
+      const { data, error } = await supabase.rpc('count_trader_followers', { trader_ids: chunk })
       if (!error && data) {
         for (const row of data as { trader_id: string; cnt: number }[]) {
           arenaFollowerMap.set(row.trader_id, (arenaFollowerMap.get(row.trader_id) || 0) + row.cnt)
         }
       }
     } catch (e) {
-      logger.warn(`[${season}] arena follower batch query failed, using fallback: ${e instanceof Error ? e.message : String(e)}`)
+      logger.warn(
+        `[${season}] arena follower batch query failed, using fallback: ${e instanceof Error ? e.message : String(e)}`
+      )
       // Fallback: individual count query
       const { data: fallbackData } = await supabase
         .from('trader_follows')
