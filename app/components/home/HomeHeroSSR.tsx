@@ -31,7 +31,11 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
   // coverage; the trader total lives in the leaderboard itself.
   const stats = [
     { value: exchangeCountStr, label: t('heroStatExchanges') },
-    { value: '30 min', label: t('heroStatUpdated') },
+    // Real cadence: the leaderboard recomputes every 2h (worker scheduler
+    // SCORE_INTERVALS_MS). "30 min" overstated it (that's only the warm-cache
+    // cron, which re-warms Redis but doesn't make data fresher) — a freshness
+    // claim a savvy crypto user can disprove costs more trust than an honest one.
+    { value: '2h', label: t('heroStatUpdated') },
   ]
 
   return (

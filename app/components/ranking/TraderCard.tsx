@@ -21,6 +21,7 @@ import {
   areTraderPropsEqual,
   getScoreStyle,
 } from './shared/TraderDisplay'
+import { BOT_BADGE_STYLE, BOT_EMOJI_STYLE } from './TraderRowStyles'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
@@ -263,46 +264,26 @@ export const TraderCard = memo(
                     {sourceInfo.type}
                   </Text>
                 </Box>
-                {/* Confirmed Bot Badge */}
+                {/* Confirmed Bot Badge — canonical themed style (was hardcoded
+                    #a78bfa, an off-brand violet that didn't shift in light theme) */}
                 {(trader.source === 'web3_bot' || trader.trader_type === 'bot') && (
-                  <span
-                    style={{
-                      padding: '1px 5px',
-                      borderRadius: tokens.radius.md,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: '#a78bfa',
-                      background: 'rgba(167, 139, 250, 0.12)',
-                      border: '1px solid rgba(167, 139, 250, 0.25)',
-                      lineHeight: 1.4,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 2,
-                    }}
-                  >
-                    <span style={{ fontSize: 9 }}>{'⚡'}</span>
+                  <span role="img" aria-label="Bot" style={BOT_BADGE_STYLE}>
+                    <span aria-hidden="true" style={BOT_EMOJI_STYLE}>
+                      {'⚡'}
+                    </span>
                     Bot
                   </span>
                 )}
                 {/* Suspected Bot Badge */}
                 {trader.trader_type === 'suspected_bot' && trader.source !== 'web3_bot' && (
                   <span
-                    style={{
-                      padding: '1px 5px',
-                      borderRadius: tokens.radius.md,
-                      fontSize: 11,
-                      fontWeight: 600,
-                      color: '#a78bfa',
-                      background: 'rgba(167, 139, 250, 0.08)',
-                      border: '1px solid rgba(167, 139, 250, 0.15)',
-                      lineHeight: 1.4,
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 2,
-                      opacity: 0.7,
-                    }}
+                    role="img"
+                    aria-label="Suspected bot"
+                    style={{ ...BOT_BADGE_STYLE, opacity: 0.7 }}
                   >
-                    <span style={{ fontSize: 9 }}>{'⚡'}</span>
+                    <span aria-hidden="true" style={BOT_EMOJI_STYLE}>
+                      {'⚡'}
+                    </span>
                     Bot?
                   </span>
                 )}
