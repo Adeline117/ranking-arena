@@ -59,8 +59,13 @@ export default function AdvancedMetricsCard({
     return () => observer.disconnect()
   }, [])
 
+  // Overflow/sentinel guard (matches MetricBadgesGrid's ±100 threshold). The
+  // pipeline still holds legacy clamp values in leaderboard_ranks — sortino ±9999
+  // (212 rows, incl. top-ranked traders), calmar up to 161 — which are NOT real
+  // risk ratios. Without this, "9999.00" rendered as a green "spectacular" metric.
   const formatRatio = (value: number | null, decimals = 2): string => {
-    if (value === null || value === undefined) return '—'
+    if (value === null || value === undefined || !Number.isFinite(value)) return '—'
+    if (Math.abs(value) >= 100) return '—'
     return value.toFixed(decimals)
   }
 
@@ -76,7 +81,10 @@ export default function AdvancedMetricsCard({
     value: number | null,
     thresholds: { good: number; excellent: number }
   ): string => {
-    if (value === null) return tokens.colors.text.tertiary
+    // Neutral color for null / sentinel-overflow values (see formatRatio) so a
+    // 9999 clamp value never gets painted green as if it were excellent.
+    if (value === null || !Number.isFinite(value) || Math.abs(value) >= 100)
+      return tokens.colors.text.tertiary
     if (value >= thresholds.excellent) return tokens.colors.accent.success
     if (value >= thresholds.good) return tokens.colors.accent.warning
     if (value < 0) return tokens.colors.accent.error
@@ -212,11 +220,17 @@ export default function AdvancedMetricsCard({
           }
         />
 
-        {/* Profit Factor */}
+        {/* Profit Factor — treat <=0 as unknown ('—'), not "0.00". A real profit
+            factor of 0 means zero gross profit, yet 438 prod rows have PF=0 WITH
+            positive Sharpe (mathematically impossible) → 0 is a pipeline null-
+            substitute, and "0.00" wrongly implies the trader never won a trade. */}
         <MetricCard
           label={t('profitFactor')}
-          value={formatRatio(metrics.profit_factor)}
-          color={getRatioColor(metrics.profit_factor, { good: 1.5, excellent: 2 })}
+          value={formatRatio((metrics.profit_factor ?? 0) > 0 ? metrics.profit_factor : null)}
+          color={getRatioColor((metrics.profit_factor ?? 0) > 0 ? metrics.profit_factor : null, {
+            good: 1.5,
+            excellent: 2,
+          })}
           tooltip={t('profitFactorTooltip')}
           icon={
             <svg
