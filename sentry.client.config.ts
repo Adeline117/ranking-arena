@@ -5,9 +5,9 @@
  * bundle. A synchronous `import * as Sentry` here would add ~200KB+ to the
  * critical path and block FCP/LCP.
  *
- * All client-side Sentry initialization is handled in instrumentation-client.ts
- * via requestIdleCallback / dynamic import, keeping Sentry entirely off the
- * critical rendering path.
+ * All client-side Sentry initialization is handled in lib/sentry-init.ts
+ * (triggered by app/components/Providers/SentryInit.tsx) via requestIdleCallback
+ * / dynamic import, keeping Sentry entirely off the critical rendering path.
  *
  * DO NOT add Sentry.init() here -- it will create a duplicate init and undo
  * the deferred loading strategy.
