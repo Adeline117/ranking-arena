@@ -49,12 +49,16 @@ export interface TraderHeaderBadgesProps {
   t: (key: string) => string
 }
 
-const TRADING_STYLE_CONFIG: Record<string, { label: string; icon: string; color: string }> = {
-  day_trader: { label: 'Day Trader', icon: '⚡', color: '#60a5fa' },
-  swing_trader: { label: 'Swing Trader', icon: '📈', color: '#34d399' },
-  scalper: { label: 'Scalper', icon: '⏱', color: '#f472b6' },
-  position_trader: { label: 'Position Trader', icon: '🏔', color: '#a78bfa' },
-  high_frequency: { label: 'High Frequency', icon: '🔥', color: '#fb923c' },
+// Text-only category chips (no emoji-as-icon — that reads as templated/unfinished
+// on the trader-detail header, the first thing a visitor evaluating a trader sees;
+// the label already names the style). Colors are mid-saturation and legible in
+// both themes; they intentionally sit outside the token scale as category hues.
+const TRADING_STYLE_CONFIG: Record<string, { label: string; color: string }> = {
+  day_trader: { label: 'Day Trader', color: '#60a5fa' },
+  swing_trader: { label: 'Swing Trader', color: '#34d399' },
+  scalper: { label: 'Scalper', color: '#f472b6' },
+  position_trader: { label: 'Position Trader', color: '#a78bfa' },
+  high_frequency: { label: 'High Frequency', color: '#fb923c' },
 }
 
 export function TraderHeaderBadges({
@@ -236,7 +240,6 @@ export function TraderHeaderBadges({
           }}
           title={tradingStyleCfg.label}
         >
-          <span style={{ fontSize: 10, marginRight: 2 }}>{tradingStyleCfg.icon}</span>
           <Text
             size="xs"
             weight="bold"
