@@ -19,7 +19,7 @@ function isStale(dateStr: string | null | undefined): boolean {
   if (!dateStr) return false
   try {
     const diffMs = Date.now() - new Date(dateStr).getTime()
-    return diffMs > 2 * 60 * 60 * 1000 // > 2 hours (matches compute-leaderboard hourly cron)
+    return diffMs > 2 * 60 * 60 * 1000 // > 2 hours (matches compute-leaderboard 2h cadence)
   } catch {
     return false
   }
