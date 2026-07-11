@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCsrfHeaders } from '@/lib/api/csrf'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
@@ -11,9 +11,14 @@ export function useApiCheckout() {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Synchronous re-entrancy guard (isLoading state is async — a rapid double
+  // click could create two Stripe sessions before the button disables).
+  const inFlightRef = useRef(false)
 
   const checkout = useCallback(
     async (plan: ApiPlan) => {
+      if (inFlightRef.current) return
+      inFlightRef.current = true
       setIsLoading(true)
       setError(null)
 
@@ -58,6 +63,7 @@ export function useApiCheckout() {
         setError('Network error. Please try again.')
       } finally {
         setIsLoading(false)
+        inFlightRef.current = false
       }
     },
     [router]

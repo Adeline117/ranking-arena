@@ -135,7 +135,12 @@ export default function SearchDropdown({
     if (!containerRef.current) return
     const items = containerRef.current.querySelectorAll<HTMLElement>('a[href]')
     const item = items[index]
-    if (item) item.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    if (!item) return
+    // Respect prefers-reduced-motion (every other animated surface does).
+    const reduce =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+    item.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' })
   }
 
   const handleResultClick = (resultId?: string, resultType?: string) => {
