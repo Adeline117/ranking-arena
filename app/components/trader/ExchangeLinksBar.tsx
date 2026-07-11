@@ -201,7 +201,21 @@ export default function ExchangeLinksBar({
                 }}
                 title={`Invite code: ${referral.code}`}
               >
-                <span style={{ fontSize: 11 }}>🎁</span>
+                <svg
+                  width="11"
+                  height="11"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  style={{ flexShrink: 0 }}
+                  aria-hidden="true"
+                >
+                  <rect x="3" y="8" width="18" height="4" rx="1" />
+                  <path d="M12 8v13M20 12v7a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-7M7.5 8a2.5 2.5 0 0 1 0-5C11 3 12 8 12 8s1-5 4.5-5a2.5 2.5 0 0 1 0 5" />
+                </svg>
                 {referral.code}
               </a>
             )}
