@@ -9,8 +9,11 @@
  *   category: 'futures' | 'spot' | 'onchain' (optional)
  *   platform: Platform string (optional, overrides category)
  *   limit: number (default 100, max 500)
- *   offset: number (default 0) — legacy, prefer cursor
- *   cursor: string (optional, format: "score:id" for keyset pagination)
+ *   offset: number (default 0) — the supported pagination mechanism
+ *   cursor: RESERVED / not implemented. Keyset pagination was documented but never
+ *     wired (the fallback ignores it → passing cursor alone silently re-returns
+ *     page 0). Use offset. Do not advertise cursor to API consumers until keyset
+ *     is actually implemented over (arena_score, source_trader_id).
  *   sort_by: 'arena_score' | 'roi' | 'pnl' | 'drawdown' | 'copiers' | 'win_rate' | 'sharpe_ratio' | 'trades_count'
  *   sort_dir: 'asc' | 'desc'
  *   min_pnl: number (optional)
