@@ -99,7 +99,9 @@ export function formatTimeAgo(dateString: string | Date, locale: Locale = 'zh'):
   if (diffMinutes < 60) return t.minutesAgo(diffMinutes)
   if (diffHours < 24) return t.hoursAgo(diffHours)
   if (diffDays < 7) return t.daysAgo(diffDays)
-  if (diffWeeks < 4) return t.weeksAgo(diffWeeks)
+  // Use days (not diffWeeks<4) as the cutoff: at 28–29 days diffWeeks=4 skips this
+  // branch but diffMonths=floor(28/30)=0 → "0 months ago". Stay in weeks until 30d.
+  if (diffDays < 30) return t.weeksAgo(diffWeeks)
   if (diffMonths < 12) return t.monthsAgo(diffMonths)
   return t.yearsAgo(diffYears)
 }
