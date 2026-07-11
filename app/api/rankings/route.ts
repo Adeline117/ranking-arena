@@ -360,7 +360,12 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     // Single request — NO count (exact count takes 25s+ on 314k rows with OR filters)
     // Total count is read from leaderboard_count_cache (maintained by cron)
     // in parallel with the main query to avoid sequential round-trips.
-    const cacheCountKey = platformFilter || '_all'
+    // MUST match the serving query's `.gt('arena_score', 0)` filter → read the
+    // `_gt0` count variant, not the plain key. The plain `_all` counts ALL rows
+    // incl. arena_score<=0, so it UNDER-counts the served set (90D: 8811 vs the
+    // real 9587) → the "N traders" figure was low AND `hasMore` truncated the
+    // board ~776 rows early, hiding the lowest-ranked traders from themselves.
+    const cacheCountKey = `${platformFilter || '_all'}_gt0`
     const [result, countResult] = await Promise.all([
       buildBaseQuery().range(offset, offset + safeLimit - 1),
       supabase

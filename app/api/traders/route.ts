@@ -229,7 +229,10 @@ async function fetchFromLeaderboard(
 
   // Read totalCount from pre-computed cache (instant) instead of count: 'exact' (47s)
   // Always read count — needed for pagination UI and API consumers
-  const countSource = exchangeFilter || '_all'
+  // Read the `_gt0` count variant to match the serving query's `arena_score>0`
+  // filter. The plain key counts arena_score<=0 rows too → under-counts the
+  // served set and makes `hasMore` truncate the board early (see rankings/route).
+  const countSource = `${exchangeFilter || '_all'}_gt0`
   const { data: cacheRow } = await supabase
     .from('leaderboard_count_cache')
     .select('total_count')
