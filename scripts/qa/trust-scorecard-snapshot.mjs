@@ -66,6 +66,20 @@ async function sendTelegram(text) {
 }
 
 async function main() {
+  // --daily-guard(CI 用):今天已有 <20h 内写入的快照即秒退——挂在每 30min
+  // 的 pipeline-health job 上实现「每日至多一次」,不再赌 GH 单一 schedule
+  // 时刻(2026-07-11 实证:新加的 '45 6' schedule 事件整天没触发,job 恒 skipped)。
+  if (process.argv.includes('--daily-guard')) {
+    const { rows: guard } = await pool.query(
+      `SELECT 1 FROM arena.trust_scorecard_daily
+        WHERE taken_on = current_date AND created_at > now() - interval '20 hours'`
+    )
+    if (guard.length > 0) {
+      console.log('[trust-scorecard] today already snapshotted — guard exit')
+      await pool.end()
+      return
+    }
+  }
   const t0 = Date.now()
   const { rows } = await pool.query(COVERAGE_SQL)
   const payload = rows[0]
