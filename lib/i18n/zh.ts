@@ -3047,6 +3047,7 @@ const zh = {
   heroScoreExplainer:
     'Arena Score 对我们追踪的所有交易所的每一位交易员统一排名——一眼看清你的真实位置。',
   heroNeutrality: '没有任何交易所能付费买排名——我们对追踪的每一家交易所一视同仁。',
+  heroHowRanked: '排名是怎么算的 →',
   heroCTABrowse: '查看排行榜',
   heroCTASignUp: '免费注册',
   heroStatTraders: '交易员',

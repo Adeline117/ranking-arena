@@ -221,6 +221,23 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
           </div>
         </div>
       )}
+      {/* Link the full methodology from where users actually inspect a score. */}
+      <a
+        href="/methodology"
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          display: 'block',
+          marginTop: 6,
+          paddingTop: 6,
+          borderTop: `1px solid ${tokens.colors.border.primary}`,
+          fontSize: tokens.typography.fontSize.xs,
+          fontWeight: tokens.typography.fontWeight.semibold,
+          color: 'var(--color-accent-primary)',
+          textDecoration: 'none',
+        }}
+      >
+        {t('heroHowRanked')}
+      </a>
     </div>
   ) : null
 

@@ -116,6 +116,23 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
           >
             {t('heroScoreExplainer')} {t('heroNeutrality')}
           </p>
+          {/* Trust affordance: put "how is this ranked / where's the data from"
+              next to the hero, not buried in the footer — a first-time airdrop
+              visitor judges credibility in seconds and should be able to inspect
+              the methodology in one click. */}
+          <Link
+            href="/methodology"
+            style={{
+              display: 'inline-block',
+              marginTop: tokens.spacing[3],
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.semibold,
+              color: 'var(--color-accent-primary)',
+              textDecoration: 'none',
+            }}
+          >
+            {t('heroHowRanked')}
+          </Link>
         </div>
 
         {/* Right: Stats row */}

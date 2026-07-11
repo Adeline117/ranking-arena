@@ -3135,6 +3135,7 @@ const en = {
   heroScoreExplainer:
     'Arena Score ranks every trader across all tracked exchanges — see exactly where you stand.',
   heroNeutrality: 'No exchange pays for placement — we rank across every exchange we track.',
+  heroHowRanked: 'How ranking works →',
   heroCTABrowse: 'Browse Rankings',
   heroCTASignUp: 'Sign Up Free',
   heroStatTraders: 'Traders',
