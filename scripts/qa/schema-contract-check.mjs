@@ -75,14 +75,25 @@ const codeTables = [...new Set(extractFromCode("\\.from\\('[a-z0-9_]+'"))].filte
 const URL_ = readEnv('NEXT_PUBLIC_SUPABASE_URL')
 const KEY = readEnv('SUPABASE_SERVICE_ROLE_KEY')
 
-const res = await fetch(`${URL_}/rest/v1/rpc/qa_schema_inventory`, {
-  method: 'POST',
-  headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
-  body: '{}',
-})
+// 2026-07-12:对瞬时错误(503/504/502/429 = pooler 拥堵,多会话+cron 高负载下常见)
+// 重试。此前单次 503 就硬挂 CI 契约门 → 阻断全员部署(实测今日两次)。真契约漂移
+// (4xx 非 429)不重试,立即失败。
+const TRANSIENT = new Set([429, 502, 503, 504])
+let res
+for (let attempt = 1; attempt <= 4; attempt++) {
+  res = await fetch(`${URL_}/rest/v1/rpc/qa_schema_inventory`, {
+    method: 'POST',
+    headers: { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' },
+    body: '{}',
+  })
+  if (res.ok || !TRANSIENT.has(res.status)) break
+  console.error(`⏳ qa_schema_inventory ${res.status}(瞬时),第 ${attempt}/4 次重试…`)
+  await new Promise((r) => setTimeout(r, 2000 * attempt)) // 2s,4s,6s 退避
+}
 if (!res.ok) {
   console.error(`❌ qa_schema_inventory 调用失败 (${res.status}) — 该 RPC 本身是契约的一部分`)
   console.error('   迁移: supabase/migrations/20260612142910_qa_schema_inventory_rpc.sql')
+  console.error('   (已重试瞬时错误 4 次仍失败;若持续 503 = pooler 饱和或 RPC 真缺失)')
   process.exit(1)
 }
 const inv = await res.json()
