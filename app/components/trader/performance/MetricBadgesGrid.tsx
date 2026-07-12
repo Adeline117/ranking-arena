@@ -4,6 +4,8 @@ import { tokens } from '@/lib/design-tokens'
 import { Box } from '../../base'
 import { useLanguage } from '../../Providers/LanguageProvider'
 import { MetricBadge } from './MetricBadge'
+import AntiGamingBadge from '@/app/components/ranking/AntiGamingBadge'
+import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
 
 export interface MetricBadgesGridProps {
   sharpeRatio: number | undefined
@@ -90,6 +92,13 @@ export function MetricBadgesGrid({
         value={winRate != null ? `${winRate.toFixed(1)}%` : '—'}
         highlight={winRate != null && winRate > 60}
         tooltip={winRate == null ? t('winRateNotAvailable') : t('winRateTooltip')}
+      />
+      {/* Trust-facing anti-gaming ⚠️ — statistically implausible win rate flagged
+          right beside the number it's about (default three-tab Overview path). */}
+      <AntiGamingBadge
+        flags={computeAntiGamingFlags({ winRate, tradesCount: totalPositions })}
+        winRate={winRate}
+        tradesCount={totalPositions}
       />
       <MetricBadge
         label={t('winningPositions')}
