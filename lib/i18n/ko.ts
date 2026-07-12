@@ -5338,6 +5338,8 @@ const ko = {
   // Missing keys — I3 audit fix
   addToWatchlist: '관심목록에 추가',
   removeFromWatchlist: '관심목록에서 제거',
+  setAlert: '알림',
+  alertsActive: '알림 설정됨',
   addedToWatchlist: '관심목록에 추가됨',
   removedFromWatchlist: '관심목록에서 제거됨',
   watchlistError: '관심목록 업데이트 실패',

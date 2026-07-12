@@ -7,6 +7,7 @@ import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import TraderFollowButton from '../ui/TraderFollowButton'
 import UserFollowButton from '../ui/UserFollowButton'
 import WatchlistToggleButton from './WatchlistToggleButton'
+import AlertBellButton from './AlertBellButton'
 import TraderShareActions from './TraderShareActions'
 import { ActionButton } from './TraderHeaderHelpers'
 import { formatDisplayName } from '@/app/components/ranking/utils'
@@ -183,6 +184,12 @@ export function TraderHeaderActions({
       {/* Watchlist star */}
       {source && (
         <WatchlistToggleButton source={source} sourceTraderID={traderId} handle={handle} />
+      )}
+
+      {/* Alert bell — notify me when this trader's rank/ROI/score moves (A4).
+          Explicit opt-in; opens the existing AlertConfig in a modal. */}
+      {!isOwnProfile && source && (
+        <AlertBellButton traderId={traderId} traderHandle={handle || traderId} source={source} />
       )}
 
       {/* Compare toggle (P0-4) */}

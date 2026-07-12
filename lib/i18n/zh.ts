@@ -5855,6 +5855,8 @@ const zh = {
   // Missing keys — I3 audit fix
   addToWatchlist: '添加到关注列表',
   removeFromWatchlist: '从关注列表移除',
+  setAlert: '告警',
+  alertsActive: '告警已开',
   addedToWatchlist: '已添加到关注列表',
   removedFromWatchlist: '已从关注列表移除',
   watchlistError: '关注列表更新失败',

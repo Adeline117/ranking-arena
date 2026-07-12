@@ -5994,6 +5994,8 @@ const en = {
   // Missing keys — I3 audit fix
   addToWatchlist: 'Add to Watchlist',
   removeFromWatchlist: 'Remove from Watchlist',
+  setAlert: 'Alert',
+  alertsActive: 'Alerts on',
   addedToWatchlist: 'Added to Watchlist',
   removedFromWatchlist: 'Removed from Watchlist',
   watchlistError: 'Watchlist update failed',
