@@ -18,22 +18,24 @@
 | .env.example 补 8 个活跃变量（治环境奇偶漂移）                                                                                        | 9e36baaa9 |
 | R2 恢复脚本 + RUNBOOK 章节（治"只备不演练"，--list 已实测）                                                                           | e97b3ff68 |
 | GO_LIVE 补切 live 前清理 test 订阅步骤                                                                                                | 2600a3558 |
+| OG webp 头像 → 只嵌 PNG/JPEG（edge 后残留 500 真因，Satori 不解 webp）                                                                | 4a1fd1747 |
+| recommendations content/groups 未登录 fallback 加缓存                                                                                 | 5d76efb21 |
+| sitemap trader lastmod 用真实 computed_at（治 Google 忽略 lastmod）                                                                   | d8921cbf9 |
+| apple-touch-icon.png 根路径别名（iOS 裸探测 404）                                                                                     | 07347ecb5 |
 
 ## 👤 P0 — 绑 Stripe 切 live，只有 owner 能拍
 
 **生产库 2 条 test-mode 活跃订阅**（`sub_1StiFLCL…` user ebe2c2fb / `sub_1SujcrCL…` user ae6b996d，均 active/pro/plan=null，带 test `cus_`，到 2027）。切 live 当天连环爆：白嫖 Pro / 想付费被 409 挡 / 换 webhook secret 后取消事件签名失败到不了 / portal 用 test cus 500。**处置见 docs/STRIPE_GO_LIVE.md 新增「切 live 前清理 test 数据」步骤。**
 
-## 🔧 P1 — 我可修
+## 🔧 P1 — 剩余(需 owner 或专项,非批量安全项)
 
-| 项                                                      | 证据                                                    | 状态                                                                                                            |
-| ------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| 首页 ISR 失效（每 PV SSR+MISS，宣传第一落点零边缘缓存） | curl `private,no-store`+MISS；prerender-manifest 无 `/` | ⏸ 明显嫌疑全排除，根因需 build-time 静态化报告定位；本机=生产worker，全量build有OOM饿死ingest风险，留CI/preview |
-| recommendations content/groups 未登录裸打 DB            | 无缓存/无 s-maxage                                      | 🔧 加缓存头                                                                                                     |
-| Sentry sourcemap 未上传（首周排障只能猜 digest）        | next.config 注释说 CI 传，实际无                        | 🔧 补 CI job                                                                                                    |
-| market SSE 每观众占 58s nodejs 函数                     | ws/market/route.ts nodejs+58s 重连                      | 🔧 峰值降级轮询（较大改动，评估）                                                                               |
-| help/about/pricing 首屏渲染裸 i18n key                  | 不在 en-core 的 key SSR 显示键名                        | 🔧 收进 en-core                                                                                                 |
-| SEO 重复 URL（trader 两个自 canonical）                 | sitemap slug ≠ 内链全址                                 | 🔧                                                                                                              |
-| sitemap lastmod=请求时刻（Google 判不可信忽略）         | 1458 条同毫秒时间戳                                     | 🔧                                                                                                              |
+| 项                                                      | 为何没批量硬修（需 owner 或专项）                                                                                                                                                                        |
+| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 首页 ISR 失效（每 PV SSR+MISS，宣传第一落点零边缘缓存） | 明显嫌疑全排除（服务端 searchParams/cookies/headers/no-store/Redis 均已 isrSafe）；根因需 `next build` 静态化报告定位，而本机=生产 worker，全量 build 有 OOM 饿死 ingest 风险 → 留 CI/preview build 二分 |
+| Sentry sourcemap 未上传                                 | 正解在 Vercel 侧（SENTRY_AUTH_TOKEN 进 Vercel env + 构建期上传）；CI 单独构建的 hash 与 Vercel 部署对不上，错配比没有更糟 = owner 配 env                                                                 |
+| help/about/pricing 首屏裸 i18n key                      | 这些 key 塞进**每页都加载**的 en-core 会拖累首页 LCP（en-core 有意精简 ~250 key）；真解=这些低流量页服务端翻译，是产品/性能权衡，不该批量塞 core                                                         |
+| SEO 重复 URL（trader 两个自 canonical）                 | trader 页 canonical 只回显请求路径；选定唯一 canonical 涉及 handle/id 解析 + claimed 交易员 /u/ 重定向的微妙交互，仓促改反而制造更多 dup = 需定策略                                                      |
+| market SSE 每观众占 58s nodejs 函数                     | 峰值降级为轮询 Redis 快照是较大架构改动，需专项设计（非批量安全项）                                                                                                                                      |
 
 ## 👤 需 owner 决定/去 Dashboard
 
@@ -46,9 +48,9 @@
 
 ## 🔧 P2 — 非阻塞（有证据在案）
 
-- 安全：quiz_results 匿名可插入+伪造 user_id / 64 个 anon 可执行 SDF（含写型）/ trader_authorizations FOR ALL / CSP strict-dynamic 无 nonce / http 扩展在 public
-- 运营：告警无 P0/FYI 分层+GH 侧去重失效（故障每 30min 轰炸）/ env 奇偶漂移（链上keys/Meili/read-replica/Stripe price 不在 .env.example）/ 容量红线零监控 / Meilisearch 永久关证书校验
-- 产品：feed 首条是「repost test」QA 垃圾帖 / 8 种子小组无头像 / api-docs 硬编码英文 / 触觉反馈开关死代码 / apple-touch-icon 根路径 404
+- 安全：~~quiz_results 匿名可插入~~(已修 efa1171a7) / 64 个 anon 可执行 SDF（含写型，需逐个核实纯触发器 vs 前端直调）/ trader_authorizations FOR ALL / CSP strict-dynamic 无 nonce / http 扩展在 public
+- 运营：告警无 P0/FYI 分层+GH 侧去重失效（故障每 30min 轰炸）/ ~~env 奇偶漂移~~(已修 9e36baaa9)/ 容量红线零监控 / Meilisearch 永久关证书校验
+- 产品：feed 首条是「repost test」QA 垃圾帖 / 8 种子小组无头像 / api-docs 硬编码英文 / 触觉反馈开关死代码
 - 支付：payment_failed 零宽限期零通知 / 7天 trial 可无限重薅 / webhook 不处理 dispute / webhook 未知 price 默认授 Pro monthly
 
 ## 误报/已通过（核实后剔除）
