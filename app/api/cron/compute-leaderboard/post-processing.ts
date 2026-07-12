@@ -25,11 +25,15 @@ type SupabaseAdmin = SupabaseClient
 // trader_snapshots_v2 (retiring). Uncalled since the route stopped invoking it;
 // leaderboard_ranks is the canonical sub-score store.
 
-/** Warm the SSR homepage cache (home-initial-traders:90D). */
+/** Warm the SSR homepage cache (home-initial-traders v3, 90D page 0). */
 export async function warmupSsrHomepageCache(): Promise<void> {
-  const { fetchLeaderboardFromDB } = await import('@/lib/getInitialTraders')
-  await fetchLeaderboardFromDB('90D', 50)
-  logger.info('[warmup] Refreshed home-initial-traders:90D SSR cache')
+  // refreshHomeInitialTradersCache actually WRITES the cache keys. The old
+  // code called fetchLeaderboardFromDB and dropped the result — cache.set
+  // only lived inside getInitialTraders, so this "warm" never warmed anything
+  // (a no-op DB query and a log line that lied).
+  const { refreshHomeInitialTradersCache } = await import('@/lib/getInitialTraders')
+  const rows = await refreshHomeInitialTradersCache('90D', 50)
+  logger.info(`[warmup] Refreshed home-initial-traders v3 SSR cache (${rows} rows)`)
 }
 
 /** Sync Redis sorted sets for near-real-time rankings across all seasons. */

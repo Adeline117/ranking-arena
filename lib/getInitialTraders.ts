@@ -100,6 +100,40 @@ export interface InitialTradersResult {
   categoryCounts: CategoryCounts
 }
 
+/**
+ * Single source of truth for the SSR homepage cache keys — shared by the
+ * reader (getInitialTraders) and the warm-cache writers so they can never
+ * drift onto different keys again.
+ * v3 (2026-07-12): shape gained rank_change/is_new — bumped so 2h-TTL v2
+ * entries (without the new fields) don't serve arrow-less rows for hours.
+ */
+export function homeInitialTradersCacheKeys(timeRange: Period, page: number) {
+  return {
+    cacheKey: `home-initial-traders-v3:${timeRange}:p${page}`,
+    fallbackKey: `home-initial-traders-fallback-v3:${timeRange}:p${page}`,
+  }
+}
+
+/**
+ * Force-refresh the SSR homepage cache (warm-cache cron + compute-leaderboard
+ * post-processing). Both callers previously ran fetchLeaderboardFromDB and
+ * DROPPED the result — cache.set only lived inside getInitialTraders, so the
+ * "warm" was a no-op DB query and the log line lied. Returns rows cached.
+ */
+export async function refreshHomeInitialTradersCache(
+  timeRange: Period = '90D',
+  limit = 50
+): Promise<number> {
+  const result = await fetchLeaderboardFromDB(timeRange, limit, 0)
+  if (result.traders.length === 0) return 0
+  const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, 0)
+  await Promise.all([
+    cache.set(cacheKey, result, { ttl: 7200 }),
+    cache.set(fallbackKey, result, { ttl: 14400 }),
+  ])
+  return result.traders.length
+}
+
 export async function getInitialTraders(
   timeRange: Period = '90D',
   limit: number = 20,
@@ -119,10 +153,7 @@ export async function getInitialTraders(
   // Two-tier cache strategy:
   //   1. Primary cache (2h TTL) — normal serving
   //   2. Fallback cache (4h TTL) — safety net when DB is down/slow
-  // v3 (2026-07-12): shape gained rank_change/is_new — bump so 2h-TTL cached
-  // v2 entries (without the new fields) don't serve arrow-less rows for hours.
-  const cacheKey = `home-initial-traders-v3:${timeRange}:p${page}`
-  const fallbackKey = `home-initial-traders-fallback-v3:${timeRange}:p${page}`
+  const { cacheKey, fallbackKey } = homeInitialTradersCacheKeys(timeRange, page)
   let cached: InitialTradersResult | null = null
   let fallbackCached: InitialTradersResult | null = null
   try {
