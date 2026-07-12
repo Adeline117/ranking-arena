@@ -13,7 +13,7 @@
  */
 
 import { NextRequest } from 'next/server'
-import { fetchLeaderboardFromDB } from '@/lib/getInitialTraders'
+import { refreshHomeInitialTradersCache } from '@/lib/getInitialTraders'
 import { createLogger } from '@/lib/utils/logger'
 import { withCron } from '@/lib/api/with-cron'
 
@@ -23,14 +23,18 @@ export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 export const GET = withCron('warm-cache', async (request: NextRequest) => {
-  // Warm the SSR homepage cache — 10s timeout to prevent hang during DB spikes
-  let traders: Awaited<ReturnType<typeof fetchLeaderboardFromDB>>['traders'] = []
+  // Warm the SSR homepage cache — 10s timeout to prevent hang during DB spikes.
+  // refreshHomeInitialTradersCache actually WRITES the Redis keys; the old
+  // fetchLeaderboardFromDB call dropped its result (cache.set only lived in
+  // getInitialTraders), so this cron never warmed the SSR cache at all.
+  let tradersCached = 0
   try {
-    const result = await Promise.race([
-      fetchLeaderboardFromDB('90D', 50),
-      new Promise<never>((_, reject) => setTimeout(() => reject(new Error('warm-cache DB timeout')), 10000)),
+    tradersCached = await Promise.race([
+      refreshHomeInitialTradersCache('90D', 50),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error('warm-cache DB timeout')), 10000)
+      ),
     ])
-    traders = result.traders
   } catch (err) {
     logger.warn(`[warm-cache] DB fetch failed: ${err instanceof Error ? err.message : err}`)
   }
@@ -41,15 +45,17 @@ export const GET = withCron('warm-cache', async (request: NextRequest) => {
     fetch(`${baseUrl}/api/traders?timeRange=90D&limit=50`, { cache: 'no-store' }),
     fetch(`${baseUrl}/api/rankings/platform-stats`, { cache: 'no-store' }),
   ])
-  const warmedApis = warmResults.filter(r => r.status === 'fulfilled' && r.value.ok).length
-  const failedApis = warmResults.filter(r => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok)).length
+  const warmedApis = warmResults.filter((r) => r.status === 'fulfilled' && r.value.ok).length
+  const failedApis = warmResults.filter(
+    (r) => r.status === 'rejected' || (r.status === 'fulfilled' && !r.value.ok)
+  ).length
   if (failedApis > 0) {
     logger.warn(`[warm-cache] ${failedApis} API warmup(s) returned non-200 or failed`)
   }
 
   return {
-    count: traders.length,
-    traders_cached: traders.length,
+    count: tradersCached,
+    traders_cached: tradersCached,
     apis_warmed: warmedApis,
   }
 })
