@@ -533,6 +533,7 @@ const ja = {
   deleteAccountWarning:
     '注意：削除後、投稿やコメントは「削除済みユーザー」と表示され、フォロワーはあなたのアクティビティを見られなくなります。',
   enterPasswordToConfirm: 'パスワードを入力して確認',
+  typeDeleteToConfirm: '確認するには DELETE と入力',
   enterCurrentPassword: '現在のパスワードを入力',
   deleteReasonOptional: '退会理由（任意）',
   tellUsWhy: '理由を教えてください...',
@@ -4709,6 +4710,8 @@ const ja = {
 
   // Sharing
   copyShareLink: 'リンクをコピー',
+  embedBadge: '埋め込み',
+  embedCopied: '埋め込みコードをコピーしました — サイトやプロフィールに貼り付けてください',
   shareOnX: 'X でシェア',
 
   // Pricing Pro features
