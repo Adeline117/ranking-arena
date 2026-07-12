@@ -4,12 +4,20 @@
 
 ## ✅ 已修并推送（本轮）
 
-| 项                                                           | commit    |
-| ------------------------------------------------------------ | --------- |
-| lifetime 退款白嫖双洞（不降级 + verify-session 重放）        | 4bdf4425a |
-| subscription-expiry plan=NULL 洞（过期订阅永不降级）         | 261713af3 |
-| /api/subscription pro-无订阅行 null 解引用 500               | 261713af3 |
-| /api/og/trader checkRateLimit 出界恒 500（三层兜底失效真因） | 261713af3 |
+| 项                                                                                                                                    | commit    |
+| ------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| lifetime 退款白嫖双洞（不降级 + verify-session 重放）                                                                                 | 4bdf4425a |
+| subscription-expiry plan=NULL 洞（过期订阅永不降级）                                                                                  | 261713af3 |
+| /api/subscription pro-无订阅行 null 解引用 500                                                                                        | 261713af3 |
+| **/api/og/trader 恒 500 → edge runtime 根治**（真因=next/og@16 nodejs pipe bug；~1412 分享卡；REST+edge base64 重写，生产同源验证中） | 6222c9e29 |
+| /api/v3 platforms 全表拉 34k → warm 缓存                                                                                              | efa1171a7 |
+| /sitemap.xml 404 → rewrite                                                                                                            | efa1171a7 |
+| quiz_results 匿名可伪造 user_id 插入 → DROP 纵容策略                                                                                  | efa1171a7 |
+| 4 个 error.tsx（saved 越组丢导航壳 + 3 叶子）                                                                                         | cd2bcbd95 |
+| OTP 主注册补发欢迎邮件                                                                                                                | c542044f3 |
+| .env.example 补 8 个活跃变量（治环境奇偶漂移）                                                                                        | 9e36baaa9 |
+| R2 恢复脚本 + RUNBOOK 章节（治"只备不演练"，--list 已实测）                                                                           | e97b3ff68 |
+| GO_LIVE 补切 live 前清理 test 订阅步骤                                                                                                | 2600a3558 |
 
 ## 👤 P0 — 绑 Stripe 切 live，只有 owner 能拍
 
@@ -20,17 +28,12 @@
 | 项                                                      | 证据                                                    | 状态                                                                                                            |
 | ------------------------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
 | 首页 ISR 失效（每 PV SSR+MISS，宣传第一落点零边缘缓存） | curl `private,no-store`+MISS；prerender-manifest 无 `/` | ⏸ 明显嫌疑全排除，根因需 build-time 静态化报告定位；本机=生产worker，全量build有OOM饿死ingest风险，留CI/preview |
-| /api/og/trader 500                                      | 已修 checkRateLimit 出界，需部署后 curl 复验            | 🔧 待部署验证                                                                                                   |
-| /api/v3 platforms 全表拉 34k 行数数                     | route.ts:307 `.select('source')` 无 limit               | 🔧 套 tieredGetOrSet 5min                                                                                       |
 | recommendations content/groups 未登录裸打 DB            | 无缓存/无 s-maxage                                      | 🔧 加缓存头                                                                                                     |
 | Sentry sourcemap 未上传（首周排障只能猜 digest）        | next.config 注释说 CI 传，实际无                        | 🔧 补 CI job                                                                                                    |
 | market SSE 每观众占 58s nodejs 函数                     | ws/market/route.ts nodejs+58s 重连                      | 🔧 峰值降级轮询（较大改动，评估）                                                                               |
-| OTP 主注册收不到欢迎邮件                                | 只 OAuth callback 触发                                  | 🔧                                                                                                              |
 | help/about/pricing 首屏渲染裸 i18n key                  | 不在 en-core 的 key SSR 显示键名                        | 🔧 收进 en-core                                                                                                 |
 | SEO 重复 URL（trader 两个自 canonical）                 | sitemap slug ≠ 内链全址                                 | 🔧                                                                                                              |
-| /sitemap.xml 404（真身在 /api/sitemap-xml）             | Bing 默认探测失败                                       | 🔧 加 rewrite                                                                                                   |
 | sitemap lastmod=请求时刻（Google 判不可信忽略）         | 1458 条同毫秒时间戳                                     | 🔧                                                                                                              |
-| 6 个路由缺 error.tsx（saved 越组丢导航壳）              | —                                                       | 🔧                                                                                                              |
 
 ## 👤 需 owner 决定/去 Dashboard
 
