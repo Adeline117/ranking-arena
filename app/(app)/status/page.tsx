@@ -1,5 +1,12 @@
 'use client'
 
+// 2026-07-12 治 SSR 裸 key:模块顶层同步注册全量 en 字典(路由级代码分割 →
+// 只进本路由 chunk,不碰首页 LCP)。SSR 与客户端首绘同模块图 → t() 两端可解
+// 全量 key,零键名泄漏、零水合错配,页面保持静态预渲染。
+import enFull from '@/lib/i18n/en'
+import { registerFullDict } from '@/lib/i18n'
+registerFullDict('en', enFull as unknown as Record<string, string>)
+
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Text, Button } from '@/app/components/base'
