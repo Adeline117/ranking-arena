@@ -13,7 +13,11 @@ import {
   handleTrialWillEnd,
 } from './handlers/subscription'
 import { handlePaymentSucceeded, handlePaymentFailed } from './handlers/invoice'
-import { handleChargeRefunded, handleRefundUpdated } from './handlers/refund'
+import {
+  handleChargeRefunded,
+  handleRefundUpdated,
+  handleChargeDisputeCreated,
+} from './handlers/refund'
 import { getOrCreateCorrelationId, runWithCorrelationId } from '@/lib/api/correlation'
 import { env } from '@/lib/env'
 
@@ -131,6 +135,10 @@ export async function POST(request: NextRequest) {
 
         case 'customer.subscription.trial_will_end':
           await handleTrialWillEnd(event.data.object as Stripe.Subscription)
+          break
+
+        case 'charge.dispute.created':
+          await handleChargeDisputeCreated(event.data.object as Stripe.Dispute)
           break
 
         default:

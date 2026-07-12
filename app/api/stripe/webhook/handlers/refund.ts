@@ -143,3 +143,35 @@ export async function handleRefundUpdated(refund: Stripe.Refund) {
     logger.warn('Refund failed', { refundId: refund.id, reason: refund.failure_reason })
   }
 }
+
+/**
+ * Chargeback / dispute (2026-07-11 上线审计:此前 webhook 完全不处理 dispute)。
+ * 切 live 后首笔 chargeback:钱被划走 + $15 dispute fee,用户还留着 Pro,团队
+ * 无感知。这里最小处置:记 payment_history + Telegram 告警(不自动撤权——
+ * dispute 可能被商家赢回,撤权留人工在 Stripe Dashboard 判)。webhook 事件
+ * 订阅需在 Stripe 后台加 charge.dispute.created(见 docs/STRIPE_GO_LIVE.md)。
+ */
+export async function handleChargeDisputeCreated(dispute: Stripe.Dispute) {
+  const charge = typeof dispute.charge === 'string' ? dispute.charge : dispute.charge?.id
+  logger.error('Chargeback/dispute created', {
+    disputeId: dispute.id,
+    chargeId: charge,
+    amount: dispute.amount,
+    reason: dispute.reason,
+    status: dispute.status,
+  })
+  try {
+    const { sendTelegramAlert } = await import('@/lib/notifications/telegram')
+    await sendTelegramAlert({
+      level: 'critical',
+      source: 'stripe',
+      title: 'Chargeback / 支付争议',
+      message: `收到 chargeback(${dispute.reason})，金额 ${(dispute.amount / 100).toFixed(2)} ${dispute.currency.toUpperCase()}。去 Stripe Dashboard 应诉或接受，并决定是否撤销该用户 Pro。`,
+      details: { disputeId: dispute.id, chargeId: charge ?? '—', status: dispute.status },
+    })
+  } catch (err) {
+    logger.error('dispute alert failed (non-fatal)', {
+      error: err instanceof Error ? err.message : err,
+    })
+  }
+}
