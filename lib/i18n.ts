@@ -85,6 +85,28 @@ if (Object.keys(translationCache.en).length === 0) {
 
 // ── Full dictionary loading ───────────────────────────────────────────
 
+/**
+ * 同步注册全量字典(2026-07-12,治信息页 SSR 裸 key)。
+ *
+ * 机制:help/pricing 等页的客户端叶子在**模块顶层**静态 import 全量 en 字典并调
+ * 本函数 —— 路由级代码分割保证该字典只进各自路由 chunk(不碰首页 LCP);SSR 与
+ * 客户端首绘执行同一模块图 → 两端 t() 同步可解全量 key → 零裸 key、零水合错配、
+ * 页面保持静态预渲染。非 en 语言仍异步加载(首绘短暂英文,好于键名)。
+ */
+export function registerFullDict(lang: Language, dict: Record<string, string>): void {
+  if (loadedLangs.has(lang)) return
+  Object.assign(translationCache[lang], dict)
+  loadedLangs.add(lang)
+  if (lang === 'en') {
+    for (const fallbackLang of ['ja', 'ko'] as const) {
+      if (!loadedLangs.has(fallbackLang) && !hasCoreLangs.has(fallbackLang)) {
+        Object.assign(translationCache[fallbackLang], dict)
+      }
+    }
+  }
+  notifyListeners()
+}
+
 // In-flight promises to avoid duplicate loads
 const loadingPromises: Partial<Record<Language, Promise<void>>> = {}
 
