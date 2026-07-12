@@ -558,6 +558,7 @@ const ko = {
   deleteAccountWarning:
     '참고: 삭제 후 게시글과 댓글은 "삭제된 사용자"로 표시되며, 팔로워는 더 이상 활동을 볼 수 없습니다.',
   enterPasswordToConfirm: '비밀번호를 입력하여 확인하세요',
+  typeDeleteToConfirm: '확인하려면 DELETE 입력',
   enterCurrentPassword: '현재 비밀번호 입력',
   deleteReasonOptional: '탈퇴 사유 (선택사항)',
   tellUsWhy: '이유를 알려주세요...',
@@ -4957,6 +4958,8 @@ const ko = {
 
   // Sharing
   copyShareLink: '링크 복사',
+  embedBadge: '임베드',
+  embedCopied: '임베드 코드가 복사되었습니다 — 사이트나 프로필에 붙여넣으세요',
   shareOnX: 'X에 공유',
 
   // Pricing Pro features

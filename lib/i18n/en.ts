@@ -618,6 +618,7 @@ const en = {
   deleteAccountWarning:
     'Note: After deletion, your posts and comments will display as "Deleted User", and followers will no longer see your activity.',
   enterPasswordToConfirm: 'Enter password to confirm',
+  typeDeleteToConfirm: 'Type DELETE to confirm',
   enterCurrentPassword: 'Enter current password',
   deleteReasonOptional: 'Reason for leaving (optional)',
   tellUsWhy: 'Tell us why...',
@@ -5092,6 +5093,8 @@ const en = {
 
   // Share / Referral
   copyShareLink: 'Copy Link',
+  embedBadge: 'Embed',
+  embedCopied: 'Embed code copied — paste it on your site or profile',
   shareOnX: 'Share on X',
   printOrPdf: 'Print / PDF',
   // Trader profile viral share block (TraderShareActions)

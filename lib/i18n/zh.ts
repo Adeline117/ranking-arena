@@ -608,6 +608,7 @@ const zh = {
   deleteAccountWarning:
     '注意：注销后你的帖子和评论将显示为"已注销用户"，关注者将无法看到你的动态。',
   enterPasswordToConfirm: '输入密码确认',
+  typeDeleteToConfirm: '键入 DELETE 以确认',
   enterCurrentPassword: '请输入当前密码',
   deleteReasonOptional: '注销原因（可选）',
   tellUsWhy: '告诉我们为什么...',
@@ -4984,6 +4985,8 @@ const zh = {
 
   // Share / Referral
   copyShareLink: '复制链接',
+  embedBadge: '嵌入',
+  embedCopied: '嵌入代码已复制 — 粘贴到你的网站或主页',
   shareOnX: '分享到 X',
   printOrPdf: '打印 / 导出 PDF',
   // 交易员主页病毒式分享区块 (TraderShareActions)

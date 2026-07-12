@@ -85,6 +85,7 @@ export default function ShareRankCardButtons({
   referralCode,
 }: ShareRankCardButtonsProps) {
   const [copied, setCopied] = useState(false)
+  const [embedCopied, setEmbedCopied] = useState(false)
   const { t } = useLanguage()
   const { showToast } = useToast()
 
@@ -110,6 +111,28 @@ export default function ShareRankCardButtons({
       showToast(t('copyFailed'), 'error')
     }
   }, [buildShareUrl, showToast, t])
+
+  const copyEmbed = useCallback(async () => {
+    try {
+      const base =
+        typeof window !== 'undefined' ? window.location.origin : 'https://www.arenafi.org'
+      const h = encodeURIComponent(handle)
+      const profileParams = new URLSearchParams()
+      if (platform) profileParams.set('platform', platform)
+      const profileUrl = `${base}/trader/${h}${profileParams.toString() ? `?${profileParams}` : ''}`
+      const badgeUrl = `${base}/api/badge/trader/${h}.svg`
+      const alt = (displayName || handle).replace(/"/g, '')
+      // Anchor-wrapped <img> so every embed is a backlink to the trader's Arena
+      // profile (SEO + growth loop).
+      const snippet = `<a href="${profileUrl}"><img src="${badgeUrl}" alt="${alt} on Arena" width="268" height="64" /></a>`
+      await navigator.clipboard.writeText(snippet)
+      setEmbedCopied(true)
+      showToast(t('embedCopied'), 'success')
+      setTimeout(() => setEmbedCopied(false), 2500)
+    } catch {
+      showToast(t('copyFailed'), 'error')
+    }
+  }, [handle, platform, displayName, showToast, t])
 
   const shareOnX = useCallback(() => {
     const url = buildShareUrl()
@@ -179,6 +202,38 @@ export default function ShareRankCardButtons({
       <button onClick={shareOnX} title={t('shareOnX')} style={btnBase}>
         <XIcon />
         <span className="hide-below-sm">{t('shareOnX')}</span>
+      </button>
+
+      <button
+        onClick={copyEmbed}
+        title={t('embedBadge')}
+        className="print-hide"
+        style={{
+          ...btnBase,
+          color: embedCopied ? tokens.colors.accent.success : tokens.colors.text.secondary,
+          borderColor: embedCopied
+            ? `${alpha(tokens.colors.accent.success, 25)}`
+            : tokens.colors.border.primary,
+        }}
+      >
+        {embedCopied ? (
+          <CheckIconSmall />
+        ) : (
+          <svg
+            width="14"
+            height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polyline points="16 18 22 12 16 6" />
+            <polyline points="8 6 2 12 8 18" />
+          </svg>
+        )}
+        <span className="hide-below-sm">{embedCopied ? t('copied') : t('embedBadge')}</span>
       </button>
 
       <button
