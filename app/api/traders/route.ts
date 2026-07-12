@@ -21,6 +21,7 @@ import { safeParseInt } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
+import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 
@@ -245,6 +246,10 @@ async function fetchFromLeaderboard(
     .maybeSingle()
   const totalCount = cacheRow?.total_count ?? 0
 
+  // Verified-data set (A1): traders with an active read-only API-key
+  // authorization → ✓ Verified badge (vs scraped "Tracked"). Cached, O(1) lookup.
+  const verifiedKeys = await getVerifiedTraderKeys(supabase)
+
   // Map to trader response format (compatible with existing frontend)
   const traders = (data || []).map((row: Record<string, unknown>) => ({
     id: row.source_trader_id as string,
@@ -287,6 +292,11 @@ async function fetchFromLeaderboard(
       winRate: row.win_rate != null ? Number(row.win_rate) : null,
       tradesCount: row.trades_count != null ? Number(row.trades_count) : null,
     }),
+    // A1: data-authenticity — true when this trader connected a read-only API
+    // key (active authorization) → their numbers are API-verified, not scraped.
+    is_verified_data: verifiedKeys.has(
+      verifiedTraderKey(row.source as string, row.source_trader_id as string)
+    ),
   }))
 
   // Deduplicate 0x addresses (case-insensitive) — VPS imports may write checksum-case

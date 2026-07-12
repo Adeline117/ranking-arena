@@ -108,4 +108,7 @@ export interface Trader {
   /** Trust-facing anti-gaming flag codes (statistical-anomaly ⚠️ badges).
    *  See lib/scoring/anti-gaming.ts. Empty/undefined = nothing flagged. */
   anti_gaming_flags?: string[]
+  /** A1 data-authenticity: trades confirmed via a connected read-only API key
+   *  (vs scraped "Tracked"). Drives the ✓ Verified badge. */
+  is_verified_data?: boolean
 }
