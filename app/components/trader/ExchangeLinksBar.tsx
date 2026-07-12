@@ -6,22 +6,8 @@ import { Box, Text } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCopyTradeUrl, getDexUrl } from '@/lib/utils/copy-trade'
+import { getAffiliateReferral } from '@/lib/config/affiliate'
 import { sendTrackingEvent } from '@/lib/tracking'
-
-/** Referral config per exchange */
-const REFERRAL_LINKS: Record<string, { url: string; code: string; color: string }> = {
-  binance: {
-    url: 'https://www.binance.com/en/register?ref=ARENA',
-    code: 'ARENA',
-    color: '#F0B90B',
-  },
-}
-
-function getReferralKey(source: string): string | null {
-  const s = source.toLowerCase()
-  if (s.startsWith('binance')) return 'binance'
-  return null
-}
 
 export interface ExchangeLink {
   platform: string
@@ -66,8 +52,7 @@ export default function ExchangeLinksBar({
 
       const name = EXCHANGE_NAMES[acc.platform.toLowerCase()] || acc.platform
       const isCopyTrade = !!copyUrl
-      const referralKey = getReferralKey(acc.platform)
-      const referral = referralKey ? REFERRAL_LINKS[referralKey] : null
+      const referral = getAffiliateReferral(acc.platform)
 
       // Highlight when this account is the active tab
       const isActive =
@@ -184,6 +169,15 @@ export default function ExchangeLinksBar({
                 href={referral.url}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => {
+                  // Affiliate referral click — the revenue event. Fire-and-forget,
+                  // no-ops for anonymous visitors (sendTrackingEvent attaches auth).
+                  sendTrackingEvent('/api/interactions', {
+                    type: 'affiliate_referral_click',
+                    platform: acc.platform,
+                    traderKey: acc.traderKey,
+                  })
+                }}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',

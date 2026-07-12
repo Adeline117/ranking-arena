@@ -17,9 +17,11 @@ const SingleEventSchema = z.object({
 const InteractionSchema = z.union([
   // Legacy format (existing consumers)
   SingleEventSchema,
-  // Exchange link click format (ExchangeLinksBar)
+  // Exchange link + affiliate referral click format (ExchangeLinksBar).
+  // affiliate_referral_click is the A3 revenue event; both land in the same
+  // branch and are distinguished by metadata.type.
   z.object({
-    type: z.literal('exchange_link_click'),
+    type: z.enum(['exchange_link_click', 'affiliate_referral_click']),
     platform: z.string().min(1).max(50),
     traderKey: z.string().min(1).max(255),
   }),
