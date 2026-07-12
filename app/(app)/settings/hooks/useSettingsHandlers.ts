@@ -7,6 +7,7 @@ import { uiLogger } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { validateHandle } from '../validation'
+import { isHapticsEnabled } from '@/lib/utils/haptics'
 
 interface UseSettingsHandlersProps {
   showToast: (msg: string, type?: 'success' | 'error' | 'warning' | 'info') => void
@@ -72,7 +73,8 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   const [notifyMention, setNotifyMention] = useState(true)
   const [notifyMessage, setNotifyMessage] = useState(true)
   const [notifyTraderEvents, setNotifyTraderEvents] = useState(true)
-  const [hapticEnabled, setHapticEnabled] = useState(true)
+  // 初值从持久化偏好读(2026-07-11);SSR 返回 true,客户端首渲染再校正
+  const [hapticEnabled, setHapticEnabled] = useState(() => isHapticsEnabled())
 
   // Privacy settings
   const [showFollowers, setShowFollowers] = useState(true)
