@@ -69,8 +69,10 @@ export const GET = withAuth(
     // Max-Age=30 days. This is a HINT — the full subscription loads in background.
     const tierCookie = `arena_tier=${tier}; Path=/; SameSite=Lax; Max-Age=${30 * 86400}`
 
-    // 免费用户默认值
-    if (!subscription && tier === 'free') {
+    // 免费用户默认值。2026-07-11:早退条件从 (!sub && tier==='free') 收紧为
+    // !sub —— profile 回退判出 pro 但无订阅行的用户(NFT/admin 授予/清理残留)
+    // 此前穿透到 `const sub = subscription!` null 解引用 500。
+    if (!subscription) {
       const defaultSubscription: UserSubscription = {
         userId: user.id,
         tier: 'free',

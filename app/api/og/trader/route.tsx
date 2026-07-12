@@ -193,10 +193,14 @@ async function fetchTrader(handle: string) {
 }
 
 export async function GET(request: NextRequest) {
-  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.public)
-  if (rateLimitResp) return rateLimitResp
-
   try {
+    // 2026-07-11:checkRateLimit 曾在 try 外 —— checkRateLimitFull 内部
+    // Upstash 抛错时整个 handler 未捕获 → 500(text/html Next 错误页),
+    // 让三层 ImageResponse 兜底形同虚设(?handle=test 线上恒 500 的真因)。
+    // 纳入 try 后任何限流层异常都落到底部 302 静态图兜底,永不 500。
+    const rateLimitResp = await checkRateLimit(request, RateLimitPresets.public)
+    if (rateLimitResp) return rateLimitResp
+
     const { searchParams } = new URL(request.url)
     const handle = searchParams.get('handle')?.slice(0, 200) || ''
 
