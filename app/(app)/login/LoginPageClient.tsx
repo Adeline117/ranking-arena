@@ -529,6 +529,24 @@ export default function LoginPageClient() {
           if (updateError) logger.error('Error updating handle:', updateError)
         }
         await createUserProfile(user.id, email, handle)
+        // 欢迎邮件(2026-07-11 上线审计):OTP 主注册路径不经 auth/callback,
+        // 此前 /api/email/welcome 从不触发 → 精心写的首触邮件白做。这里是
+        // 无歧义的新用户点,fire-and-forget 补发(端点自身按 created_at<2min
+        // replay 窗口兜底;OAuth 走 callback、OTP 走这里,路径不相交不重复)。
+        supabase.auth.getSession().then(({ data: { session } }) => {
+          if (session?.access_token) {
+            fetch('/api/email/welcome', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${session.access_token}`,
+              },
+              // eslint-disable-next-line no-restricted-syntax
+            }).catch(() => {
+              /* intentional: fire-and-forget */
+            })
+          }
+        })
         // Brand-new email signup → route through the full /onboarding activation
         // flow (onboarding_completed is still false). The original destination is
         // preserved as returnUrl so onboarding (or Skip) lands them back there.
