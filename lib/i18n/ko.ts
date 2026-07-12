@@ -4776,6 +4776,9 @@ const ko = {
 
   // DeSoc - Bot/Human labels
   botLabel: '봇',
+  antiGamingWinRateLabel: '승률 의심',
+  antiGamingWinRateTip:
+    '비정상적으로 높은 승률({trades}건 중 {winRate}%) — 방향성 매매에서 통계적으로 성립하기 어려우며 워시/자전거래의 전형적 신호입니다. 신중히 해석하세요.',
   humanLabel: '사람',
   allTraderTypes: '전체',
   traderTypeFilter: '트레이더 유형',

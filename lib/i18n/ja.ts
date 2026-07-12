@@ -4472,6 +4472,9 @@ const ja = {
   bookshelfViewAllLink: 'すべて表示',
 
   botLabel: 'ボット',
+  antiGamingWinRateLabel: '勝率に疑問',
+  antiGamingWinRateTip:
+    '異常に高い勝率（{trades}件中{winRate}%）——方向性トレードでは統計的に成立しにくく、ウォッシュ／自己約定の典型的な兆候です。慎重にご判断ください。',
   humanLabel: '人間',
   allTraderTypes: 'すべて',
   traderTypeFilter: 'トレーダータイプ',

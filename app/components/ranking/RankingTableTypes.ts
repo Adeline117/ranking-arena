@@ -105,4 +105,7 @@ export interface Trader {
   is_verified?: boolean
   /** Whether win_rate/max_drawdown were estimated from ROI (not from exchange data) */
   metrics_estimated?: boolean
+  /** Trust-facing anti-gaming flag codes (statistical-anomaly ⚠️ badges).
+   *  See lib/scoring/anti-gaming.ts. Empty/undefined = nothing flagged. */
+  anti_gaming_flags?: string[]
 }

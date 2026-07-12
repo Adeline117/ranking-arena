@@ -22,6 +22,7 @@ import {
   getScoreStyle,
 } from './shared/TraderDisplay'
 import { BOT_BADGE_STYLE, BOT_EMOJI_STYLE } from './TraderRowStyles'
+import AntiGamingBadge from './AntiGamingBadge'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
@@ -287,6 +288,11 @@ export const TraderCard = memo(
                     Bot?
                   </span>
                 )}
+                <AntiGamingBadge
+                  flags={trader.anti_gaming_flags}
+                  winRate={trader.win_rate}
+                  tradesCount={trader.trades_count}
+                />
                 {trader.also_on && trader.also_on.length > 0 && (
                   <Text
                     size="xs"

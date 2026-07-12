@@ -29,6 +29,7 @@ export const traderOutputSchema = z.object({
   sharpe_ratio: z.number().nullable(),
   is_bot: z.boolean(),
   trader_type: z.string().nullable(),
+  anti_gaming_flags: z.array(z.string()).optional(),
 })
 
 export const tradersResponseSchema = z.object({
@@ -49,7 +50,10 @@ export const tradersResponseSchema = z.object({
  * Validate the traders API response shape in development mode.
  * No-op in production (zero overhead).
  */
-export function validateTradersResponse(data: unknown, logger: { warn: (msg: string, ...args: unknown[]) => void }): void {
+export function validateTradersResponse(
+  data: unknown,
+  logger: { warn: (msg: string, ...args: unknown[]) => void }
+): void {
   if (process.env.NODE_ENV !== 'development') return
 
   const parseResult = tradersResponseSchema.safeParse(data)

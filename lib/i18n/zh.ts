@@ -4839,6 +4839,9 @@ const zh = {
 
   // DeSoc - Bot/Human labels
   botLabel: '机器人',
+  antiGamingWinRateLabel: '胜率存疑',
+  antiGamingWinRateTip:
+    '异常高胜率（{trades} 笔中 {winRate}%）——对方向性交易而言统计上难以成立，常见于刷量/自成交。请谨慎解读。',
   humanLabel: '真人',
   allTraderTypes: '全部',
   traderTypeFilter: '交易员类型',

@@ -4945,6 +4945,9 @@ const en = {
 
   // DeSoc - Bot/Human labels
   botLabel: 'Bot',
+  antiGamingWinRateLabel: 'Win rate',
+  antiGamingWinRateTip:
+    'Unusually high win rate ({winRate}% over {trades} trades) — statistically implausible for directional trading and a common wash-/self-trade signal. Interpret with caution.',
   humanLabel: 'Human',
   allTraderTypes: 'All',
   traderTypeFilter: 'Trader Type',
