@@ -103,7 +103,7 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
     .from('subscriptions')
     .select('user_id, stripe_subscription_id, plan')
     .eq('status', 'active')
-    .neq('plan', 'lifetime') // Never expire lifetime plans
+    .or('plan.is.null,plan.neq.lifetime') // Never expire lifetime; NULL plan must still expire (三值逻辑洞 2026-07-11)
     .lt('current_period_end', now.toISOString())
 
   if (expiredSubscriptions && expiredSubscriptions.length > 0) {
