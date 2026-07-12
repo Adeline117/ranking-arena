@@ -5,7 +5,7 @@ import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { SectionCard, ToggleSwitch, RadioOption } from './shared'
-import { isHapticSupported, haptic } from '@/lib/utils/haptics'
+import { isHapticSupported, haptic, setHapticsEnabled } from '@/lib/utils/haptics'
 import { PushNotificationToggle } from '@/app/components/notifications/PushNotificationToggle'
 import { logger } from '@/lib/logger'
 
@@ -188,6 +188,7 @@ export const NotificationsSection = React.memo(function NotificationsSection(
               checked={props.hapticEnabled}
               onChange={(v) => {
                 props.setHapticEnabled(v)
+                setHapticsEnabled(v) // 持久化到 localStorage + 更新模块 flag(2026-07-11)
                 if (v) haptic('success')
               }}
             />
