@@ -475,13 +475,28 @@ export async function generateMetadata({
   if (resolvedData?.platform) ogParams.set('source', resolvedData.platform)
   const ogImageUrl = `${BASE}/api/og/trader?${ogParams.toString()}`
 
+  // Single canonical per trader (2026-07-11 SEO 审计:此前 canonical=原始请求段,
+  // 同一交易员经 /trader/{id} vs /trader/{handle} 各自 self-canonical → 重复内容)。
+  // 规则复刻页面自身的重定向(page.tsx:743):ASCII handle → /trader/{handle}?platform=
+  // (与重定向落点一致);非 ASCII(Vercel 对多字节路径 500,页面不重定向)或未解析 →
+  // 用 id 形式 /trader/{traderKey}?platform=(id 恒 ASCII 安全、恒 200)。**必须带
+  // ?platform=**:同 handle/id 跨 okx_futures/okx_spot 等多账号,裸形式会合并不同交易员。
+  const canonicalPath = resolvedData
+    ? `/trader/${encodeURIComponent(
+        /^[a-zA-Z0-9_.-]+$/.test(resolvedData.handle || '')
+          ? resolvedData.handle!
+          : resolvedData.traderKey
+      )}?platform=${encodeURIComponent(resolvedData.platform)}`
+    : `/trader/${encodeURIComponent(decoded)}`
+  const canonicalUrl = `${BASE}${canonicalPath}`
+
   return {
     title,
     description,
     openGraph: {
       title: ogTitle,
       description,
-      url: `${BASE}/trader/${encodeURIComponent(decoded)}`,
+      url: canonicalUrl,
       siteName: 'Arena',
       type: 'profile',
       images: [
@@ -496,7 +511,7 @@ export async function generateMetadata({
       creator: '@arenafi',
       site: '@arenafi',
     },
-    alternates: { canonical: `${BASE}/trader/${encodeURIComponent(decoded)}` },
+    alternates: { canonical: canonicalUrl },
   }
 }
 

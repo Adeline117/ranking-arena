@@ -162,21 +162,30 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
   const offset = (shardId - 1) * TRADERS_PER_SHARD
   const { data } = await supabase
     .from('leaderboard_ranks')
-    .select('handle, source_trader_id, computed_at')
+    .select('handle, source_trader_id, source, computed_at')
     .eq('season_id', '90D')
     .not('handle', 'is', null)
     .range(offset, offset + TRADERS_PER_SHARD - 1)
 
   const seen = new Set<string>()
   const entries = (data || [])
-    .map((t) => ({ h: t.handle || t.source_trader_id, computed_at: t.computed_at }))
-    .filter((r): r is { h: string; computed_at: string | null } => {
+    .map((t) => ({
+      h: t.handle || t.source_trader_id,
+      source: t.source as string | null,
+      computed_at: t.computed_at,
+    }))
+    .filter((r): r is { h: string; source: string | null; computed_at: string | null } => {
       if (!r.h || seen.has(r.h)) return false
       seen.add(r.h)
       return true
     })
     .map((r) => ({
-      loc: `${BASE_URL}/trader/${encodeURIComponent(r.h)}`,
+      // 与 trader 页 canonical 对齐(2026-07-11 SEO 审计):带 ?platform= 消除
+      // handle-vs-id 双 URL + 跨源同名歧义。ASCII handle 用 handle 段,否则不确定
+      // 就用它本身(sitemap 只是发现入口,canonical 才是权威,Google 会向其收敛)。
+      loc: r.source
+        ? `${BASE_URL}/trader/${encodeURIComponent(r.h)}?platform=${encodeURIComponent(r.source)}`
+        : `${BASE_URL}/trader/${encodeURIComponent(r.h)}`,
       // 用真实 computed_at 作 lastmod;此前全用请求时刻 now → Google 判 lastmod
       // 不可信直接整体忽略该字段(2026-07-11 SEO 审计)。缺失时才回退 now。
       lastmod: r.computed_at ? new Date(r.computed_at).toISOString() : now,
