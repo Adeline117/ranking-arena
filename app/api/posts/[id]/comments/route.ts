@@ -124,15 +124,27 @@ export const POST = withAuth(
     const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 2000 })
     const parent_id = parsed.data.parent_id ?? undefined
 
-    // Check if user is muted in group
+    // Check if user is muted OR banned in the group (the POST handler used the
+    // service-role client, so RLS won't stop a banned user — enforce here).
     if (post?.group_id) {
-      const { data: membership } = await supabase
-        .from('group_members')
-        .select('muted_until')
-        .eq('group_id', post.group_id)
-        .eq('user_id', user.id)
-        .maybeSingle()
+      const [{ data: membership }, { data: ban }] = await Promise.all([
+        supabase
+          .from('group_members')
+          .select('muted_until')
+          .eq('group_id', post.group_id)
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('group_bans')
+          .select('user_id') // composite PK — select user_id, not id
+          .eq('group_id', post.group_id)
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      ])
 
+      if (ban) {
+        throw ApiError.forbidden('You are banned from this group')
+      }
       if (membership?.muted_until && new Date(membership.muted_until) > new Date()) {
         throw ApiError.forbidden('You have been muted')
       }

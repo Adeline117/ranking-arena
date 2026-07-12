@@ -59,6 +59,12 @@ const DEFAULT_ALERT: AlertData = {
   enabled: true,
 }
 
+// Gate for the price-above/below alert rows: they persist to the DB but the
+// check-trader-alerts cron has no price feed and never evaluates them, so the
+// toggles are a paid feature that silently does nothing. Keep the UI code, hide
+// it until the backend price-evaluation path exists.
+const PRICE_ALERTS_ENABLED = false
+
 // ── Component ──────────────────────────────────────────────────────────────
 
 export default function AlertConfig({
@@ -304,30 +310,39 @@ export default function AlertConfig({
         onThresholdChange={(v) => setAlert((prev) => ({ ...prev, rank_change_threshold: v }))}
         unit={t('alertRankUnit')}
       />
-      <AlertPriceRow
-        label={t('alertPriceAboveLabel')}
-        desc={t('alertPriceAboveDesc')}
-        checked={alert.alert_price_above}
-        onToggle={() =>
-          setAlert((prev) => ({ ...prev, alert_price_above: !prev.alert_price_above }))
-        }
-        value={alert.price_above_value}
-        onValueChange={(v) => setAlert((prev) => ({ ...prev, price_above_value: v }))}
-        symbol={alert.price_symbol}
-        onSymbolChange={(v) => setAlert((prev) => ({ ...prev, price_symbol: v }))}
-      />
-      <AlertPriceRow
-        label={t('alertPriceBelowLabel')}
-        desc={t('alertPriceBelowDesc')}
-        checked={alert.alert_price_below}
-        onToggle={() =>
-          setAlert((prev) => ({ ...prev, alert_price_below: !prev.alert_price_below }))
-        }
-        value={alert.price_below_value}
-        onValueChange={(v) => setAlert((prev) => ({ ...prev, price_below_value: v }))}
-        symbol={alert.price_symbol}
-        onSymbolChange={(v) => setAlert((prev) => ({ ...prev, price_symbol: v }))}
-      />
+      {/* Price alerts (above/below) are UI-complete but have NO backend:
+          check-trader-alerts fetches no price feed and never evaluates
+          alert_price_above/below. Hidden until that path exists, so a paying
+          Pro user doesn't toggle an alert that silently never fires. Flip
+          PRICE_ALERTS_ENABLED to true once the cron gains a price source. */}
+      {PRICE_ALERTS_ENABLED && (
+        <>
+          <AlertPriceRow
+            label={t('alertPriceAboveLabel')}
+            desc={t('alertPriceAboveDesc')}
+            checked={alert.alert_price_above}
+            onToggle={() =>
+              setAlert((prev) => ({ ...prev, alert_price_above: !prev.alert_price_above }))
+            }
+            value={alert.price_above_value}
+            onValueChange={(v) => setAlert((prev) => ({ ...prev, price_above_value: v }))}
+            symbol={alert.price_symbol}
+            onSymbolChange={(v) => setAlert((prev) => ({ ...prev, price_symbol: v }))}
+          />
+          <AlertPriceRow
+            label={t('alertPriceBelowLabel')}
+            desc={t('alertPriceBelowDesc')}
+            checked={alert.alert_price_below}
+            onToggle={() =>
+              setAlert((prev) => ({ ...prev, alert_price_below: !prev.alert_price_below }))
+            }
+            value={alert.price_below_value}
+            onValueChange={(v) => setAlert((prev) => ({ ...prev, price_below_value: v }))}
+            symbol={alert.price_symbol}
+            onSymbolChange={(v) => setAlert((prev) => ({ ...prev, price_symbol: v }))}
+          />
+        </>
+      )}
 
       {/* One-time toggle */}
       <Box
