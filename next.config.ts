@@ -533,6 +533,13 @@ const nextConfig = {
         source: '/api/v1/:path*',
         destination: '/api/:path*',
       },
+      // /sitemap.xml 真身在 /api/sitemap-xml(绕 Next 预渲染,见该路由注释)。
+      // robots.txt 已指向 /api/sitemap-xml,但 Bing/工具默认探测 /sitemap.xml
+      // → 此前 404(2026-07-11 SEO 审计)。rewrite 让根路径也命中,两全。
+      {
+        source: '/sitemap.xml',
+        destination: '/api/sitemap-xml',
+      },
     ]
   },
 

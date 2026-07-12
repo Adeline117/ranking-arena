@@ -24,6 +24,7 @@ import {
 } from '@/lib/constants/exchanges'
 import type { TradingPeriod } from '@/lib/data/unified'
 import { checkRateLimitFull } from '@/lib/utils/rate-limit'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { apiSuccess, apiError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -301,15 +302,20 @@ async function handleSearch(params: URLSearchParams) {
 async function handlePlatforms() {
   const activeSources = ALL_SOURCES.filter((s) => !DEAD_BLOCKED_PLATFORMS.includes(s))
 
-  const supabase = getSupabaseAdmin() as SupabaseClient
-
-  // Get trader counts and last updated per platform
-  const { data: counts } = await supabase.from('leaderboard_ranks').select('source')
-
-  const countMap: Record<string, number> = {}
-  for (const row of counts ?? []) {
-    countMap[row.source] = (countMap[row.source] || 0) + 1
-  }
+  // 2026-07-11 承载:此前每请求 `.select('source')` 全表拉 ~34k 行进内存数数
+  // (公开 API,100x 峰值下每 PV 多 MB PostgREST 传输)。语义不变,套 warm 档
+  // 分层缓存(Redis 15min/内存 2min)→ 全表扫描峰值大幅收敛;Redis 故障回退直算。
+  const countMap = await tieredGetOrSet<Record<string, number>>(
+    'v3:platform-counts',
+    async () => {
+      const supabase = getSupabaseAdmin() as SupabaseClient
+      const { data: counts } = await supabase.from('leaderboard_ranks').select('source')
+      const m: Record<string, number> = {}
+      for (const row of counts ?? []) m[row.source] = (m[row.source] || 0) + 1
+      return m
+    },
+    'warm'
+  )
 
   const platforms = activeSources
     .map((source) => {
