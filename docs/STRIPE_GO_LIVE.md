@@ -47,7 +47,7 @@ DELETE FROM public.subscriptions
    - (若启用 elite / api 档,同样建 live price。)
 2. **拿 live 密钥**:`sk_live_...`(Secret key)、`pk_live_...`(Publishable)。
 3. **建 live webhook**:Stripe → Developers → Webhooks → 新端点指向
-   `https://www.arenafi.org/api/stripe/webhook`,订阅 `checkout.session.completed`、
+   `https://www.arenafi.org/api/stripe/webhook`,订阅 `checkout.session.completed`、`charge.dispute.created`、
    `customer.subscription.*`、`invoice.*`、`charge.refunded` 等;记下 `whsec_...`(live)。
 4. **设 Vercel 生产环境变量**(Project Settings → Environment Variables → Production):
    | 变量 | 值 | 作用 |
