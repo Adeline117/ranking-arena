@@ -50,6 +50,29 @@ function detectFromAcceptLanguage(header: string | null): Language | null {
   return null
 }
 
+/**
+ * Static-safe 翻译(2026-07-12,首页 ISR 根因修复):不碰 cookies()/headers(),
+ * 纯查表 —— 可用于 ISR/静态预渲染路由的服务端组件。
+ *
+ * 背景:getServerTranslation() 的 cookies() 调用把整个 `/` 路由判为动态
+ * (build 实测 `Route / couldn't be rendered statically because it used cookies()`),
+ * revalidate=300 被整体忽略 → 宣传第一落点零边缘缓存。首页 SSR 壳
+ * (HomeHeroSSR/SSRRankingTable)改用本函数固定英文 —— 与 page.tsx 既有决策
+ * 一致("SSR 恒渲染默认视图保 edge 缓存,客户端水合后切换"):静态壳出英文,
+ * 客户端 Phase 2(useLanguage)水合后换语言。
+ */
+export function getStaticTranslation(lang: Language = 'en'): {
+  t: (key: string) => string
+  lang: Language
+} {
+  const dict = dictionaries[lang]
+  const fallback = dictionaries.en
+  return {
+    t: (key: string) => dict[key] || fallback[key] || key,
+    lang,
+  }
+}
+
 export async function getServerTranslation(): Promise<{
   t: (key: string) => string
   lang: Language

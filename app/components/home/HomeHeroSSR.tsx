@@ -13,7 +13,7 @@
 
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
-import { getServerTranslation } from '@/lib/i18n/server'
+import { getStaticTranslation } from '@/lib/i18n/server'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
 
 interface HomeHeroSSRProps {
@@ -21,7 +21,10 @@ interface HomeHeroSSRProps {
 }
 
 export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRProps) {
-  const { t } = await getServerTranslation()
+  // 2026-07-12 ISR 根因修复:getServerTranslation 的 cookies() 把 `/` 判为动态
+  // (revalidate=300 失效,宣传第一落点零边缘缓存)。静态壳固定英文,客户端
+  // Phase 2 水合后换语言 —— 与本页"SSR 恒默认视图"决策一致。
+  const { t } = getStaticTranslation()
   const exchangeCountStr = `${exchangeCount}+`
 
   const headline = t('heroHeadline')
