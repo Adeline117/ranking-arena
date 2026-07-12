@@ -9,14 +9,7 @@ export { useAuthSession, authFetch } from './useAuthSession'
 export type { AuthState, AuthError, AuthSessionReturn } from './useAuthSession'
 
 // Token Refresh Coordinator (for components doing raw fetch with auth)
-export {
-  tokenRefreshCoordinator,
-  fetchWithTokenRefresh,
-} from '@/lib/auth/token-refresh'
-
-// Post Interactions (Unified across all entry points)
-export { usePostComments, usePostReaction } from './usePostInteraction'
-export type { Comment, CommentSubmitState } from './usePostInteraction'
+export { tokenRefreshCoordinator, fetchWithTokenRefresh } from '@/lib/auth/token-refresh'
 
 export { useSubmit, useDebounceClick } from './useSubmit'
 export { useCsrf, getCsrfToken, createCsrfHeaders } from './useCsrf'
@@ -64,18 +57,10 @@ export {
 } from './useSWR'
 
 // 帖子相关
-export {
-  usePosts,
-  usePostsInfinite,
-  usePostDetail,
-} from './useSWR'
+export { usePosts, usePostsInfinite, usePostDetail } from './useSWR'
 
 // 其他数据
-export {
-  useMarketData,
-  useUserProfile,
-  useNotifications,
-} from './useSWR'
+export { useMarketData, useUserProfile, useNotifications } from './useSWR'
 
 // 缓存工具
 export {
