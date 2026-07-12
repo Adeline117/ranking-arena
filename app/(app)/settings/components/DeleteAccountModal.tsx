@@ -17,6 +17,9 @@ export function DeleteAccountModal({
   error,
   deleting,
   onDelete,
+  hasPassword = true,
+  confirmText = '',
+  setConfirmText,
 }: {
   isOpen: boolean
   onClose: () => void
@@ -27,8 +30,14 @@ export function DeleteAccountModal({
   error: string | null
   deleting: boolean
   onDelete: () => void
+  // 2026-07-11:OAuth/钱包用户无密码,改键入 DELETE 确认。
+  hasPassword?: boolean
+  confirmText?: string
+  setConfirmText?: (v: string) => void
 }): React.ReactElement | null {
   const { t } = useLanguage()
+  // 提交可用条件:有密码→填了密码;无密码→键入 DELETE。
+  const canSubmit = hasPassword ? !!password : confirmText.trim().toUpperCase() === 'DELETE'
 
   return (
     <ModalOverlay
@@ -88,25 +97,45 @@ export function DeleteAccountModal({
         <Box style={{ marginBottom: tokens.spacing[3] }}>
           <label htmlFor="delete-account-password">
             <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
-              {t('enterPasswordToConfirm')}
+              {hasPassword ? t('enterPasswordToConfirm') : t('typeDeleteToConfirm')}
             </Text>
           </label>
-          <PasswordInput
-            id="delete-account-password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder={t('enterCurrentPassword')}
-            autoComplete="current-password"
-            style={{
-              width: '100%',
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
-              border: `1px solid ${tokens.colors.border.primary}`,
-              background: tokens.colors.bg.secondary,
-              color: tokens.colors.text.primary,
-              fontSize: tokens.typography.fontSize.sm,
-            }}
-          />
+          {hasPassword ? (
+            <PasswordInput
+              id="delete-account-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder={t('enterCurrentPassword')}
+              autoComplete="current-password"
+              style={{
+                width: '100%',
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                background: tokens.colors.bg.secondary,
+                color: tokens.colors.text.primary,
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            />
+          ) : (
+            <input
+              id="delete-account-confirm"
+              type="text"
+              value={confirmText}
+              onChange={(e) => setConfirmText?.(e.target.value)}
+              placeholder="DELETE"
+              autoComplete="off"
+              style={{
+                width: '100%',
+                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                borderRadius: tokens.radius.md,
+                border: `1px solid ${tokens.colors.border.primary}`,
+                background: tokens.colors.bg.secondary,
+                color: tokens.colors.text.primary,
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            />
+          )}
         </Box>
         <Box style={{ marginBottom: tokens.spacing[4] }}>
           <label htmlFor="delete-account-reason">
@@ -166,10 +195,10 @@ export function DeleteAccountModal({
             variant="primary"
             size="sm"
             onClick={onDelete}
-            disabled={!password || deleting}
+            disabled={!canSubmit || deleting}
             style={{
               background: tokens.colors.accent.error,
-              opacity: !password || deleting ? 0.5 : 1,
+              opacity: !canSubmit || deleting ? 0.5 : 1,
             }}
           >
             {deleting ? t('processing') : t('confirmDeleteAccount')}

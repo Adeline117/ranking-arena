@@ -563,6 +563,9 @@ function SettingsContent() {
             error={h.deleteError}
             deleting={h.deletingAccount}
             onDelete={h.handleDeleteAccount}
+            hasPassword={h.deleteHasPassword}
+            confirmText={h.deleteConfirm}
+            setConfirmText={h.setDeleteConfirm}
           />
 
           {/* Floating Save Bar */}
