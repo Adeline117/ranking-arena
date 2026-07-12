@@ -82,6 +82,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // 2026-07-11 修:paid 不代表没退款——重放已退款的 session 可重授 Pro
+    // (退款白嫖第二入口)。mode=payment 时核对 charge 退款态;查不到时
+    // 保守放行(避免 Stripe 瞬断拒真付费),webhook 侧仍是权威降级路径。
+    if (session.mode === 'payment' && session.payment_intent) {
+      try {
+        const pi = await stripe.paymentIntents.retrieve(
+          typeof session.payment_intent === 'string'
+            ? session.payment_intent
+            : session.payment_intent.id,
+          { expand: ['latest_charge'] }
+        )
+        const latestCharge = pi.latest_charge as import('stripe').Stripe.Charge | null
+        if (latestCharge && (latestCharge.refunded || (latestCharge.amount_refunded ?? 0) > 0)) {
+          logger.warn('verify-session replay on refunded charge — denied', {
+            sessionId,
+            chargeId: latestCharge.id,
+          })
+          return NextResponse.json({ error: 'Payment was refunded' }, { status: 400 })
+        }
+      } catch (refundCheckErr) {
+        logger.error('verify-session refund check failed (fail-open)', {
+          sessionId,
+          error: refundCheckErr instanceof Error ? refundCheckErr.message : refundCheckErr,
+        })
+      }
+    }
+
     const userId = session.metadata?.supabase_user_id || session.metadata?.userId
     const customerId = session.customer as string
     const plan = session.metadata?.plan
