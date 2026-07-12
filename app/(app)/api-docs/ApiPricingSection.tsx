@@ -1,7 +1,14 @@
 'use client'
 
+// 2026-07-12 i18n:同 help/pricing 的 registerFullDict 模式(SSR 裸 key 防护),
+// PLANS 移入组件用 t() 构造。档名 Free/Starter/Pro 按产品惯例保留英文。
+import enFull from '@/lib/i18n/en'
+import { registerFullDict } from '@/lib/i18n'
+registerFullDict('en', enFull as unknown as Record<string, string>)
+
 import { tokens } from '@/lib/design-tokens'
 import { useApiCheckout } from '@/lib/hooks/useApiCheckout'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
 const card = {
   padding: tokens.spacing[5],
@@ -10,61 +17,57 @@ const card = {
   border: '1px solid var(--color-border-primary)',
 } as const
 
-const PLANS = [
-  {
-    name: 'Free',
-    price: '$0',
-    period: '',
-    description: 'Explore the API with no commitment.',
-    limits: '100 requests/day',
-    features: [
-      'Rankings endpoint',
-      'Trader detail endpoint',
-      'Search endpoint',
-      'IP-based rate limiting',
-    ],
-    cta: 'Start Free',
-    plan: null as null | 'starter' | 'pro',
-    highlighted: false,
-  },
-  {
-    name: 'Starter',
-    price: '$49',
-    period: '/mo',
-    description: 'For indie builders and small teams.',
-    limits: '10,000 requests/day',
-    features: [
-      'Everything in Free',
-      'API key authentication',
-      'Usage dashboard',
-      'Platforms metadata endpoint',
-      'Email support',
-    ],
-    cta: 'Get Started',
-    plan: 'starter' as null | 'starter' | 'pro',
-    highlighted: true,
-  },
-  {
-    name: 'Pro',
-    price: '$199',
-    period: '/mo',
-    description: 'For trading platforms and hedge funds.',
-    limits: 'Unlimited requests',
-    features: [
-      'Everything in Starter',
-      'Historical time series',
-      'Bulk export endpoint',
-      'Webhook notifications',
-      'Priority support + SLA',
-    ],
-    cta: 'Get Pro',
-    plan: 'pro' as null | 'starter' | 'pro',
-    highlighted: false,
-  },
-]
-
 export function ApiPricingSection() {
   const { checkout, isLoading, error } = useApiCheckout()
+  const { t } = useLanguage()
+
+  const PLANS = [
+    {
+      name: 'Free',
+      price: '$0',
+      period: '',
+      description: t('apiPlanFreeDesc'),
+      limits: t('apiPlanFreeLimits'),
+      features: [t('apiPlanFreeF1'), t('apiPlanFreeF2'), t('apiPlanFreeF3'), t('apiPlanFreeF4')],
+      cta: t('apiPlanFreeCta'),
+      plan: null as null | 'starter' | 'pro',
+      highlighted: false,
+    },
+    {
+      name: 'Starter',
+      price: '$49',
+      period: '/mo',
+      description: t('apiPlanStarterDesc'),
+      limits: t('apiPlanStarterLimits'),
+      features: [
+        t('apiPlanStarterF1'),
+        t('apiPlanStarterF2'),
+        t('apiPlanStarterF3'),
+        t('apiPlanStarterF4'),
+        t('apiPlanStarterF5'),
+      ],
+      cta: t('apiPlanStarterCta'),
+      plan: 'starter' as null | 'starter' | 'pro',
+      highlighted: true,
+    },
+    {
+      name: 'Pro',
+      price: '$199',
+      period: '/mo',
+      description: t('apiPlanProDesc'),
+      limits: t('apiPlanProLimits'),
+      features: [
+        t('apiPlanProF1'),
+        t('apiPlanProF2'),
+        t('apiPlanProF3'),
+        t('apiPlanProF4'),
+        t('apiPlanProF5'),
+      ],
+      cta: t('apiPlanProCta'),
+      plan: 'pro' as null | 'starter' | 'pro',
+      highlighted: false,
+    },
+  ]
 
   return (
     <section style={{ marginBottom: tokens.spacing[10] }}>
@@ -76,7 +79,7 @@ export function ApiPricingSection() {
           textAlign: 'center',
         }}
       >
-        Pricing
+        {t('apiPricingTitle')}
       </h2>
       <div
         style={{
@@ -193,7 +196,7 @@ export function ApiPricingSection() {
                   opacity: isLoading ? 0.7 : 1,
                 }}
               >
-                {isLoading ? 'Loading...' : plan.cta}
+                {isLoading ? t('loading') : plan.cta}
               </button>
             ) : (
               <a
