@@ -234,6 +234,12 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
           <ProvenanceFooter
             provenance={core.modules.provenance}
             exchangeName={capability?.exchangeName}
+            // Myfxbook-style data-authenticity tier. Prod currently has 0
+            // API-verified traders (verified_traders/trader_authorizations both
+            // empty), so every serving profile is honestly 'tracked' (scraped
+            // from the exchange leaderboard). A1 phase-2 threads the authorized
+            // flag through the serving data → flip verified rows to 'verified'.
+            verificationTier="tracked"
           />
         </Box>
       ) : core.isDegraded ? (

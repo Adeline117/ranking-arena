@@ -5939,6 +5939,12 @@ const ko = {
 
   // ── ARENA_DATA_SPEC v1.2 서빙 레이어（spec §2.4/§6）──
   provenanceSource: '데이터 출처',
+  provenanceTracked: '추적 데이터',
+  provenanceTrackedTip:
+    '지표는 거래소 공개 리더보드에서 수집한 것으로, API를 통한 독립 검증을 거치지 않았습니다. 읽기 전용 API 키를 연결하면 ✓ 인증됨 배지를 받을 수 있습니다.',
+  provenanceVerified: '인증됨',
+  provenanceVerifiedTip:
+    '읽기 전용 API로 체결 확인 — 수치는 거래소 계정에서 직접 가져온 것으로 스크래핑이 아닙니다.',
   provenanceAsOf: '업데이트',
   derivedBoardBadge: '파생 데이터',
   derivedBoardTooltip: '프로필 데이터에서 파생 — 최근 랭크된 트레이더로 범위가 제한됩니다.',

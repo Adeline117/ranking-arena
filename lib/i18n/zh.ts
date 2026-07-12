@@ -5918,6 +5918,11 @@ const zh = {
 
   // ── ARENA_DATA_SPEC v1.2 serving 层（spec §2.4/§6）──
   provenanceSource: '数据来源',
+  provenanceTracked: '爬取数据',
+  provenanceTrackedTip:
+    '指标抓取自交易所公开榜单，未经 API 独立验证。连接只读 API key 可获得 ✓ 已验证 徽章。',
+  provenanceVerified: '已验证',
+  provenanceVerifiedTip: '通过只读 API 确认成交——数据直接取自交易所账户，非爬取。',
   provenanceAsOf: '更新于',
   derivedBoardBadge: '派生数据',
   derivedBoardTooltip: '由交易员个人数据派生 — 覆盖范围仅限近期上榜交易员。',

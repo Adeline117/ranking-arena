@@ -5708,6 +5708,12 @@ const ja = {
 
   // ── ARENA_DATA_SPEC v1.2 サービング層（spec §2.4/§6）──
   provenanceSource: 'データ提供元',
+  provenanceTracked: '追跡データ',
+  provenanceTrackedTip:
+    '指標は取引所の公開ランキングから取得したもので、API による独立した検証はされていません。読み取り専用 API キーを接続すると ✓ 認証済み バッジを獲得できます。',
+  provenanceVerified: '認証済み',
+  provenanceVerifiedTip:
+    '読み取り専用 API で約定を確認——数値は取引所口座から直接取得したもので、スクレイピングではありません。',
   provenanceAsOf: '更新',
   derivedBoardBadge: '派生データ',
   derivedBoardTooltip:
