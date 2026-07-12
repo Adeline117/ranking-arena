@@ -23,6 +23,7 @@ import {
 } from './shared/TraderDisplay'
 import { BOT_BADGE_STYLE, BOT_EMOJI_STYLE } from './TraderRowStyles'
 import AntiGamingBadge from './AntiGamingBadge'
+import VerifiedDataBadge from './VerifiedDataBadge'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
@@ -288,6 +289,7 @@ export const TraderCard = memo(
                     Bot?
                   </span>
                 )}
+                <VerifiedDataBadge verified={trader.is_verified_data} />
                 <AntiGamingBadge
                   flags={trader.anti_gaming_flags}
                   winRate={trader.win_rate}

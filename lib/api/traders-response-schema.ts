@@ -30,6 +30,7 @@ export const traderOutputSchema = z.object({
   is_bot: z.boolean(),
   trader_type: z.string().nullable(),
   anti_gaming_flags: z.array(z.string()).optional(),
+  is_verified_data: z.boolean().optional(),
 })
 
 export const tradersResponseSchema = z.object({

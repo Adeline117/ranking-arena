@@ -13,6 +13,7 @@ import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { getStyleInfo } from '@/lib/utils/trading-style'
 import AntiGamingBadge from './AntiGamingBadge'
+import VerifiedDataBadge from './VerifiedDataBadge'
 import {
   TRADER_INFO_STYLE,
   NAME_COLUMN_STYLE,
@@ -165,6 +166,7 @@ export const TraderInfoCell = memo(function TraderInfoCell({
               Bot?
             </span>
           )}
+          <VerifiedDataBadge verified={trader.is_verified_data} compact />
           <AntiGamingBadge
             flags={trader.anti_gaming_flags}
             winRate={trader.win_rate}
