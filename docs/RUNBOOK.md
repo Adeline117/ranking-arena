@@ -199,6 +199,46 @@ Source: `lib/utils/arena-score.ts`
 
 ---
 
+## Restore from R2 backup (灾难恢复)
+
+> 2026-07-11:此前只备不演练、且无 restore 脚本/runbook(SLO.md 自承"每季度
+> 演练一次")。备份侧已静默坏过两次(PM-20260702/20260703),恢复侧从未验证。
+> 现有脚本 `scripts/maintenance/restore-from-r2.mjs`。
+
+**备份是什么**:`backup-to-r2.mjs` 每日 dump `-n arena -n public`(PLAIN SQL,
+`--no-owner --no-privileges`)→ gzip → R2 `db-backups/YYYY/MM/arena-backup-<date>-schemas.sql.gz`
+(实测 ~4.8GB/份,保留 12 份)。**不含 `auth`/`storage` schema** —— 用户账号
+靠 Supabase 托管 PITR(付费档),不在 R2 dump 里。
+
+**列出可用备份**(只读,验证凭据):
+
+```bash
+node scripts/maintenance/restore-from-r2.mjs --list
+```
+
+**恢复到 scratch 库演练**(季度演练 = 测真实 RTO):
+
+```bash
+# 1. 建一个空 Postgres(本地 docker 或新 Supabase 项目),拿其连接串
+export RESTORE_TARGET_URL='postgres://…/scratch'
+# 2. 恢复最新(或 --key 指定某份)
+node scripts/maintenance/restore-from-r2.mjs
+#    脚本 gunzip|psql(ON_ERROR_STOP)+ 恢复后打印四张主表行数
+# 3. 记录耗时 = 真实 RTO,写回 SLO.md
+```
+
+**真灾难时(Supabase 项目本身出事)**:
+
+1. 先看 Supabase PITR 是否可用(付费档,恢复 auth+全库,首选,`--nuclear` 见下)。
+2. PITR 也没了 → 建**新** Supabase 项目 → `supabase db push`(先跑迁移,拿到
+   RLS 策略+grants,因为 dump 是 `--no-privileges` 不含它们)→ 再
+   `RESTORE_TARGET_URL=<新项目> restore-from-r2.mjs` 灌 arena+public 数据。
+3. auth 用户:无 R2 副本 → 只能靠 PITR;若彻底丢,用户需重新注册(已知缺口,
+   见 LAUNCH_AUDIT_2026-07-11 运营 #2,建议 BACKUP_SCHEMAS 加 auth)。
+
+**脚本安全**:`RESTORE_TARGET_URL == DATABASE_URL`(生产)时硬拒绝,除非
+`--force-prod`(几乎永远不该用)。
+
 ## Deployment Rollback
 
 ### 部署管线（2026-07-02 起：CI 门禁部署）
