@@ -722,7 +722,15 @@ export async function GET(request: NextRequest) {
       // primary render + minimal fallback both throw). A 500 here = a BROKEN
       // social card on Twitter/Discord (no preview at all). Redirect to the
       // static site OG image so the share card is always valid, never a 500.
-      return Response.redirect(`${BASE_URL}/og-image.png`, 302)
+      // MUST use `new Response`, not `Response.redirect`: the latter VALIDATES
+      // the URL/status and can itself THROW — and here it's the innermost handler,
+      // so its throw propagates to a 500 (the exact bug that kept ?handle=test at
+      // 500 even after this fallback shipped). `new Response` with a Location
+      // header never throws.
+      return new Response(null, {
+        status: 302,
+        headers: { Location: `${BASE_URL}/og-image.png` },
+      })
     }
   }
 }
