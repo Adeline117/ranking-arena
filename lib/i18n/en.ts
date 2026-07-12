@@ -2076,7 +2076,7 @@ const en = {
     'We support Visa and Mastercard credit/debit cards, as well as Apple Pay and Google Pay. Payments are securely processed by Stripe.',
   helpRefundQ: 'Can I get a refund after subscribing?',
   helpRefundA:
-    "According to our refund policy, you can request a full refund within 7 days if you haven't used any Pro features. Please contact support.",
+    "You can cancel your subscription anytime — Pro access continues until the end of your billing period. Refunds are handled on a case-by-case basis; contact us and we'll review your request.",
   helpCancelSubQ: 'How do I cancel my subscription?',
   helpCancelSubA:
     'Go to "Settings" > "Billing" and click "Manage Subscription" to cancel in the Stripe customer portal. After cancellation, you can continue using until the end of the current billing period.',
@@ -2727,7 +2727,7 @@ const en = {
     'We support Visa, Mastercard, Apple Pay, and Google Pay. Payments are securely processed by Stripe.',
   faqRefundQ: 'Is there a refund policy?',
   faqRefundA:
-    'Within 7 days of your first subscription, you can request a full refund if not satisfied. Contact support@arenafi.org.',
+    "You can cancel anytime and keep Pro until the billing period ends. Refunds are reviewed case-by-case — reach out and we'll help.",
   faqSwitchPlanQ: 'Can I switch from yearly to monthly?',
   faqSwitchPlanA:
     'After your current subscription expires, you can choose a different billing cycle to renew.',
@@ -2751,7 +2751,8 @@ const en = {
   activationInProgress: 'Activation In Progress',
   paymentSuccessActivating:
     'Your payment was successful. Membership activation is in progress. This usually takes a few seconds, please retry.',
-  contactSupportIfFails: 'If it still fails after retrying, please contact support@arenafi.org',
+  contactSupportIfFails:
+    'If it still fails after retrying, please contact adelinewen1107@outlook.com',
   paymentStatusUnconfirmed: "We couldn't confirm your payment",
   paymentStatusUnconfirmedDesc:
     "We couldn't confirm your subscription status. If you were charged, your membership usually activates within a few minutes.",
@@ -4373,7 +4374,7 @@ const en = {
   footerSlogan: 'All rankings in crypto',
   footerDisclaimerText:
     'Risk Disclaimer: Cryptocurrency trading involves substantial risk of loss. Past performance does not guarantee future results. Arena provides data and rankings for informational purposes only — not financial advice. Always do your own research.',
-  footerLegalEntity: 'Arena Team · Contact: support@arenafi.org',
+  footerLegalEntity: 'Arena Team · Contact: adelinewen1107@outlook.com',
 
   // Score breakdown
   scoreNoDetails: 'No score details available',
@@ -5156,7 +5157,8 @@ const en = {
   pricingFaqCancelA:
     'Yes! Monthly subscribers can cancel anytime. You keep access until the end of your billing period.',
   pricingFaqRefundQ: 'What about refunds for yearly plans?',
-  pricingFaqRefundA: 'Yearly subscribers can get a full refund within the first 7 days.',
+  pricingFaqRefundA:
+    'Cancel anytime; access runs until the period ends. Refunds are handled on a case-by-case basis.',
   pricingFaqLifetimeQ: 'What does Lifetime mean?',
   pricingFaqLifetimeA:
     'Pay once, access all Pro features forever. Includes all future features and price increases.',
@@ -6478,7 +6480,7 @@ const en = {
   privacySec2Title: '2. Information We Collect',
   privacySec2ProvidedLabel: 'Information you provide:',
   privacySec2ProvidedList:
-    'Email address when you create an account\nWallet addresses when you connect via Web3 login (Privy)\nProfile information you choose to add (display name, avatar)\nContent you post (comments, group posts)',
+    'Email address when you create an account\nWallet addresses when you connect via Web3 login (Privy)\nProfile information you choose to add (display name, avatar)\nContent you post (comments, group posts)\nExchange API keys you connect for portfolio sync or trader claiming (read-only; encrypted with AES-256-GCM at rest and never written to logs)',
   privacySec2AutoLabel: 'Information collected automatically:',
   privacySec2AutoList:
     'Usage analytics (page views, feature interactions) via Vercel Analytics\nDevice and browser information (user agent, screen resolution)\nIP address (used for security and anti-abuse, not stored long-term)',
@@ -6488,9 +6490,12 @@ const en = {
   privacySec4Title: '4. Third-Party Services',
   privacySec4Intro: 'We use the following third-party services to operate Arena:',
   privacySec4List:
-    'Supabase — Database and authentication\nVercel — Hosting and analytics\nStripe — Payment processing for Pro subscriptions\nPrivy — Web3 wallet authentication\nUpstash — Redis caching layer',
+    'Supabase — Database and authentication\nVercel — Hosting and analytics\nStripe — Payment processing for Pro subscriptions\nPrivy — Web3 wallet authentication\nUpstash — Redis caching layer\nSentry — Error monitoring and diagnostics (may receive request context; IP/PII scrubbed before send)',
   privacySec4Outro:
     'Each of these providers has their own privacy policy and data handling practices. We only share the minimum data necessary for each service to function.',
+  privacyPublicDataTitle: 'Public Trader Data',
+  privacyPublicDataBody:
+    'Arena aggregates publicly available performance data for tens of thousands of traders from exchange leaderboards and public on-chain activity, including display names, avatars and trading metrics. These traders are not necessarily Arena users. We process this public data under a legitimate-interest basis to operate the ranking service.\n\nIf you are a listed trader, you can claim your profile to control how it is displayed, or contact us at adelinewen1107@outlook.com to request removal (delisting).',
   privacySec5Title: '5. Cookies',
   privacySec5Body:
     'Arena uses essential cookies only for authentication and session management. We use Vercel Analytics for usage tracking, which does not use third-party cookies. We do not serve targeted advertising or use tracking cookies.',

@@ -1901,7 +1901,7 @@ const ja = {
     'Visa、Mastercardのクレジット/デビットカード、およびApple Pay、Google Payに対応しています。決済はStripeにより安全に処理されます。',
   helpRefundQ: '登録後に返金は可能ですか？',
   helpRefundA:
-    '返金ポリシーに基づき、Pro機能を使用していない場合、7日以内に全額返金をリクエストできます。サポートにお問い合わせください。',
+    'サブスクリプションはいつでも解約でき、Pro機能は請求期間の終了まで利用できます。返金は個別に審査します——お問い合わせください。',
   helpCancelSubQ: 'サブスクリプションをキャンセルするには？',
   helpCancelSubA:
     '「設定」>「請求」から「サブスクリプションを管理」をクリックして、Stripeカスタマーポータルでキャンセルできます。キャンセル後も、現在の請求期間の終了まで利用を続けられます。',
@@ -2515,7 +2515,7 @@ const ja = {
     'Visa、Mastercard、Apple Pay、Google Payに対応しています。決済はStripeにより安全に処理されます。',
   faqRefundQ: '返金ポリシーはありますか？',
   faqRefundA:
-    '初回登録から7日以内で、ご満足いただけない場合は全額返金をリクエストできます。support@arenafi.orgまでお問い合わせください。',
+    'いつでも解約でき、Proは請求期間終了まで有効です。返金は個別審査となります——お気軽にお問い合わせください。',
   faqSwitchPlanQ: '年額から月額に変更できますか？',
   faqSwitchPlanA: '現在のサブスクリプションが終了した後、異なる請求サイクルで更新できます。',
   faq: 'よくある質問',
@@ -2537,7 +2537,8 @@ const ja = {
   activationInProgress: 'アクティベーション中',
   paymentSuccessActivating:
     'お支払いが完了しました。メンバーシップのアクティベーションが進行中です。通常数秒で完了します。再試行してください。',
-  contactSupportIfFails: '再試行しても失敗する場合は、support@arenafi.orgまでお問い合わせください',
+  contactSupportIfFails:
+    '再試行しても失敗する場合は、adelinewen1107@outlook.comまでお問い合わせください',
   paymentStatusUnconfirmed: 'お支払いを確認できませんでした',
   paymentStatusUnconfirmedDesc:
     'サブスクリプションの状態を確認できませんでした。ご請求が発生している場合、メンバーシップは通常数分以内に有効になります。',
@@ -4021,7 +4022,7 @@ const ja = {
   footerSlogan: '暗号資産のすべてのランキング',
   footerDisclaimerText:
     '提供されるデータは情報提供のみを目的としており、投資助言を構成しません。暗号資産取引には重大なリスクが伴います。',
-  footerLegalEntity: 'Arena Team · お問い合わせ: support@arenafi.org',
+  footerLegalEntity: 'Arena Team · お問い合わせ: adelinewen1107@outlook.com',
 
   scoreNoDetails: 'スコアの詳細がありません',
   scoreBreakdownTitle: 'スコア内訳',
@@ -4764,7 +4765,7 @@ const ja = {
   pricingFaqCancelA:
     'はい！月額プランはいつでもキャンセルできます。請求期間の終了までアクセスが維持されます。',
   pricingFaqRefundQ: '年額プランの返金はありますか？',
-  pricingFaqRefundA: '年額プランは最初の7日間以内に全額返金可能です。',
+  pricingFaqRefundA: 'いつでも解約可能、アクセスは期間終了まで継続。返金は個別に審査します。',
   pricingFaqLifetimeQ: '生涯とはどういう意味ですか？',
   pricingFaqLifetimeA:
     '一回のお支払いで、すべての Pro 機能に永久にアクセスできます。将来の機能や価格上昇もすべて含まれます。',
@@ -6129,7 +6130,7 @@ const ja = {
   privacySec2Title: '2. 収集する情報',
   privacySec2ProvidedLabel: 'お客様が提供する情報:',
   privacySec2ProvidedList:
-    'アカウント作成時のメールアドレス\nWeb3 ログイン（Privy）で接続する際のウォレットアドレス\nお客様が追加するプロフィール情報（表示名、アバター）\nお客様が投稿するコンテンツ（コメント、グループ投稿）',
+    'アカウント作成時のメールアドレス\nWeb3 ログイン（Privy）で接続する際のウォレットアドレス\nお客様が追加するプロフィール情報（表示名、アバター）\nお客様が投稿するコンテンツ（コメント、グループ投稿）\nポートフォリオ同期やトレーダー認証のために接続する取引所 API キー（読み取り専用、AES-256-GCM で保存時に暗号化、ログには一切記録しません）',
   privacySec2AutoLabel: '自動的に収集される情報:',
   privacySec2AutoList:
     '利用分析データ（ページビュー、機能の操作）を Vercel Analytics 経由で収集\nデバイスおよびブラウザ情報（ユーザーエージェント、画面解像度）\nIP アドレス（セキュリティおよび不正利用防止に使用、長期保存はしません）',
@@ -6139,9 +6140,12 @@ const ja = {
   privacySec4Title: '4. 第三者サービス',
   privacySec4Intro: '当社は Arena を運営するために以下の第三者サービスを利用しています:',
   privacySec4List:
-    'Supabase — データベースおよび認証\nVercel — ホスティングおよび分析\nStripe — Pro サブスクリプションの決済処理\nPrivy — Web3 ウォレット認証\nUpstash — Redis キャッシュ層',
+    'Supabase — データベースおよび認証\nVercel — ホスティングおよび分析\nStripe — Pro サブスクリプションの決済処理\nPrivy — Web3 ウォレット認証\nUpstash — Redis キャッシュ層\nSentry — エラー監視と診断（リクエストコンテキストを受信する場合あり、送信前に IP/個人情報を除去）',
   privacySec4Outro:
     'これらの各プロバイダーには独自のプライバシーポリシーおよびデータ取扱方針があります。当社は各サービスの機能に必要な最小限のデータのみを共有します。',
+  privacyPublicDataTitle: '公開トレーダーデータ',
+  privacyPublicDataBody:
+    'Arena は取引所ランキングと公開オンチェーン活動から数万人のトレーダーの公開パフォーマンスデータ（表示名、アバター、取引指標を含む）を集約します。これらのトレーダーは必ずしも Arena ユーザーではありません。ランキングサービス運営のため正当な利益に基づき処理します。\n\n掲載されているトレーダーの方は、プロフィールを認証して表示を管理するか、adelinewen1107@outlook.com まで削除（掲載停止）をご依頼ください。',
   privacySec5Title: '5. Cookie',
   privacySec5Body:
     'Arena は認証およびセッション管理のために必要不可欠な Cookie のみを使用します。利用状況の計測には Vercel Analytics を使用しており、第三者 Cookie は使用しません。当社はターゲティング広告の配信やトラッキング Cookie の使用を行いません。',

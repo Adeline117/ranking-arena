@@ -310,7 +310,7 @@ const enCore = {
   footerSlogan: 'All rankings in crypto',
   footerDisclaimerText:
     'Data provided is for informational purposes only and does not constitute investment advice. Cryptocurrency trading involves significant risk.',
-  footerLegalEntity: 'Arena Team · Contact: support@arenafi.org',
+  footerLegalEntity: 'Arena Team · Contact: adelinewen1107@outlook.com',
 
   // ── Founding member banner ──────────────────────────────────────────
   foundingMemberBannerText: 'Founding Member — Lifetime access at $49.99',

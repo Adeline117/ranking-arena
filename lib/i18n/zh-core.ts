@@ -101,7 +101,7 @@ const zhCore = {
   footerHelp: '帮助中心',
   footerHot: '热门',
   footerLegal: '法律',
-  footerLegalEntity: 'Arena Team · 联系邮箱: support@arenafi.org',
+  footerLegalEntity: 'Arena Team · 联系邮箱: adelinewen1107@outlook.com',
   footerLibrary: '知识库',
   footerMarket: '市场',
   footerPricing: '定价',
