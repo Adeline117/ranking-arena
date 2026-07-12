@@ -598,7 +598,7 @@ export default function WrappedCardClient({ data, ogImageUrl }: Props) {
             margin: 0,
           }}
         >
-          The card above matches what appears when shared on X
+          Preview of your shareable rank card
         </p>
       </div>
 

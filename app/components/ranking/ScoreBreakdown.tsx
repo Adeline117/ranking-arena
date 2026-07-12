@@ -119,8 +119,14 @@ export const ScoreBreakdown = memo(function ScoreBreakdown(props: ScoreBreakdown
       : t('scoreNoDetails') ||
         'Score breakdown not yet computed. Data will populate as trading history accumulates.'
 
-  const completenessLabel = getCompletenessLabel(score_completeness)
-  const completenessColor = getCompletenessColor(score_completeness)
+  // Honesty guard: the pipeline can mark score_completeness='full' while a whole
+  // pillar (execution) is null (590 CEX rows). A green "full" chip sitting next to
+  // a hidden execution bar misrepresents the confidence — downgrade the displayed
+  // label/color to 'partial' when a pillar is actually absent.
+  const effectiveCompleteness =
+    score_completeness === 'full' && execution_score == null ? 'partial' : score_completeness
+  const completenessLabel = getCompletenessLabel(effectiveCompleteness)
+  const completenessColor = getCompletenessColor(effectiveCompleteness)
 
   return (
     <Box
