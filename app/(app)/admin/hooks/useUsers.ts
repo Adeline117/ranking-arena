@@ -103,7 +103,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         })
         const data = await res.json()
 
-        if (data.ok) {
+        if (data.success) {
           // Update local state
           setUsers((prev) =>
             prev.map((u) =>
@@ -123,7 +123,6 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
       } finally {
         setActionLoading((prev) => ({ ...prev, [userId]: false }))
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setUsers/setActionLoading use updater form
     },
     [accessToken, showToast]
   )
@@ -144,7 +143,7 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
         })
         const data = await res.json()
 
-        if (data.ok) {
+        if (data.success) {
           // Update local state
           setUsers((prev) =>
             prev.map((u) =>
@@ -162,7 +161,6 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
       } finally {
         setActionLoading((prev) => ({ ...prev, [userId]: false }))
       }
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setUsers/setActionLoading use updater form
     },
     [accessToken, showToast]
   )
