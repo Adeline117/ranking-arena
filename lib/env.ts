@@ -67,7 +67,15 @@ if (!criticalResult.success) {
 // but a missing token in prod silently degrades rate-limiting to per-instance
 // memory — trivially bypassed by an airdrop bot swarm (N lambdas × the limit) —
 // and disables caching → primary-DB overload. Fail-fast rather than run degraded.
-if (process.env.NODE_ENV === 'production' && typeof window === 'undefined') {
+// 2026-07-12:build 期跳过(NEXT_PHASE='phase-production-build')。这些是 *运行时*
+// 密钥,编译不需要;CI/Vercel 的 build 步骤不注入它们,硬 throw 会挂构建(实测
+// CI Build job 因此 fail,阻断全员部署)。运行时(serverless 冷启动)NODE_ENV=
+// production 但 NEXT_PHASE 非 build → 断言照常 fail-fast,原意保留。
+if (
+  process.env.NODE_ENV === 'production' &&
+  typeof window === 'undefined' &&
+  process.env.NEXT_PHASE !== 'phase-production-build'
+) {
   const missingUpstash = ['UPSTASH_REDIS_REST_URL', 'UPSTASH_REDIS_REST_TOKEN'].filter(
     (k) => !process.env[k]
   )
