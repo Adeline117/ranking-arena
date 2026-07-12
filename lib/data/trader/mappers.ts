@@ -155,6 +155,8 @@ export function mapLeaderboardRow(row: Record<string, unknown>): UnifiedTrader {
 
     // Rankings
     rank: row.rank != null ? Number(row.rank) : null,
+    rankChange: row.rank_change != null ? Number(row.rank_change) : null,
+    isNew: row.is_new === true,
     period: normalizePeriod((row.period || row.season_id) as string),
 
     // Advanced metrics
