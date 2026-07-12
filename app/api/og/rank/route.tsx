@@ -395,81 +395,87 @@ export async function GET(request: NextRequest) {
               </span>
             </div>
 
-            {/* PnL */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                flex: 1,
-                padding: '20px 24px',
-                borderRadius: 16,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                gap: 8,
-              }}
-            >
-              <span
+            {/* PnL — only render when passed. No caller supplied pnl, so this tile
+                was ALWAYS a dead "PNL --"; conditional render + flex lets the
+                remaining tiles fill instead of showing a blank. */}
+            {pnlValid && (
+              <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: C.dimmer,
-                  letterSpacing: '2px',
                   display: 'flex',
+                  flexDirection: 'column',
+                  flex: 1,
+                  padding: '20px 24px',
+                  borderRadius: 16,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  gap: 8,
                 }}
               >
-                PNL
-              </span>
-              <span
-                style={{
-                  fontSize: 36,
-                  fontWeight: 900,
-                  color: pnlValid ? (pnl >= 0 ? C.success : C.error) : C.offWhite,
-                  letterSpacing: '-1px',
-                  lineHeight: 1,
-                  display: 'flex',
-                }}
-              >
-                {pnlValid ? formatPnl(pnl) : '--'}
-              </span>
-            </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.dimmer,
+                    letterSpacing: '2px',
+                    display: 'flex',
+                  }}
+                >
+                  PNL
+                </span>
+                <span
+                  style={{
+                    fontSize: 36,
+                    fontWeight: 900,
+                    color: pnl >= 0 ? C.success : C.error,
+                    letterSpacing: '-1px',
+                    lineHeight: 1,
+                    display: 'flex',
+                  }}
+                >
+                  {formatPnl(pnl)}
+                </span>
+              </div>
+            )}
 
-            {/* Win Rate */}
-            <div
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                flex: 0.8,
-                padding: '20px 24px',
-                borderRadius: 16,
-                background: 'rgba(255,255,255,0.04)',
-                border: '1px solid rgba(255,255,255,0.08)',
-                gap: 8,
-              }}
-            >
-              <span
+            {/* Win Rate — only when passed (trader-detail shares omit it → blank). */}
+            {winRateValid && (
+              <div
                 style={{
-                  fontSize: 11,
-                  fontWeight: 700,
-                  color: C.dimmer,
-                  letterSpacing: '2px',
                   display: 'flex',
+                  flexDirection: 'column',
+                  flex: 0.8,
+                  padding: '20px 24px',
+                  borderRadius: 16,
+                  background: 'rgba(255,255,255,0.04)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  gap: 8,
                 }}
               >
-                WIN RATE
-              </span>
-              <span
-                style={{
-                  fontSize: 36,
-                  fontWeight: 900,
-                  color: C.offWhite,
-                  letterSpacing: '-1px',
-                  lineHeight: 1,
-                  display: 'flex',
-                }}
-              >
-                {winRateValid ? winRate.toFixed(0) + '%' : '--'}
-              </span>
-            </div>
+                <span
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: C.dimmer,
+                    letterSpacing: '2px',
+                    display: 'flex',
+                  }}
+                >
+                  WIN RATE
+                </span>
+                <span
+                  style={{
+                    fontSize: 36,
+                    fontWeight: 900,
+                    color: C.offWhite,
+                    letterSpacing: '-1px',
+                    lineHeight: 1,
+                    display: 'flex',
+                  }}
+                >
+                  {winRate.toFixed(0) + '%'}
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Bottom row: Rank + CTA */}
