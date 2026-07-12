@@ -162,7 +162,7 @@ export async function getLeaderboard(
     .from('leaderboard_ranks')
     .select(
       `${LR.source_trader_id}, ${LR.handle}, ${LR.source}, source_type, ${LR.roi}, ${LR.pnl}, win_rate, max_drawdown,
-       trades_count, followers, copiers, ${LR.arena_score}, ${LR.avatar_url}, ${LR.rank}, computed_at,
+       trades_count, followers, copiers, ${LR.arena_score}, ${LR.avatar_url}, ${LR.rank}, rank_change, is_new, computed_at,
        profitability_score, risk_control_score, execution_score, score_completeness,
        trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio,
        trader_type, is_outlier, ${LR.season_id}`
