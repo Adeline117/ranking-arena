@@ -5100,6 +5100,8 @@ const ja = {
   // Missing keys — I3 audit fix
   addToWatchlist: 'ウォッチリストに追加',
   removeFromWatchlist: 'ウォッチリストから削除',
+  setAlert: 'アラート',
+  alertsActive: 'アラート設定済み',
   addedToWatchlist: 'ウォッチリストに追加しました',
   removedFromWatchlist: 'ウォッチリストから削除しました',
   watchlistError: 'ウォッチリストの更新に失敗しました',
