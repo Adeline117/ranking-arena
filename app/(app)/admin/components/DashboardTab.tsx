@@ -28,8 +28,10 @@ function exportStatsAsCSV(stats: AdminStats) {
     ['Scraper', 'Critical', stats.scraperHealth.critical],
     ['Traders', 'Total', stats.traders.total],
     ['Traders', 'Snapshots (24h)', stats.traders.snapshots24h],
-    ['Library', 'Total Items', stats.library.total],
-    ['Library', 'With PDF', stats.library.withPdf],
+    // stats.library is optional — /api/admin/stats doesn't return it, so guard
+    // against TypeError on Export CSV (the type declares it but the route omits it).
+    ['Library', 'Total Items', stats.library?.total ?? 0],
+    ['Library', 'With PDF', stats.library?.withPdf ?? 0],
     ...Object.entries(stats.traders.byPlatform).map(([platform, count]) => [
       'Traders',
       `Platform: ${platform}`,

@@ -43,121 +43,129 @@ export function useUsers(accessToken: string | null, showToast?: ToastFn) {
   const [error, setError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({})
 
-  const loadUsers = useCallback(async (
-    page: number = 1,
-    search: string = '',
-    filter: 'all' | 'banned' | 'active' = 'all'
-  ) => {
-    if (!accessToken) {
-      setError(t('adminNotLoggedIn'))
-      return
-    }
-    
-    setLoading(true)
-    setError(null)
-    
-    try {
-      const params = new URLSearchParams({
-        page: String(page),
-        limit: '20',
-        filter,
-      })
-      if (search) params.set('search', search)
-      
-      const res = await fetch(`/api/admin/users?${params}`, {
-        headers: { Authorization: `Bearer ${accessToken}` }
-      })
-      const data = await res.json()
-      
-      if (data.ok) {
-        setUsers(data.users || [])
-        setPagination(data.pagination)
-      } else {
-        setError(data.error || t('adminLoadFailed'))
+  const loadUsers = useCallback(
+    async (page: number = 1, search: string = '', filter: 'all' | 'banned' | 'active' = 'all') => {
+      if (!accessToken) {
+        setError(t('adminNotLoggedIn'))
+        return
+      }
+
+      setLoading(true)
+      setError(null)
+
+      try {
+        const params = new URLSearchParams({
+          page: String(page),
+          limit: '20',
+          filter,
+        })
+        if (search) params.set('search', search)
+
+        const res = await fetch(`/api/admin/users?${params}`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        })
+        const data = await res.json()
+
+        // Route returns successWithPagination() → { success, data:[…], meta:{pagination} }
+        if (data.success) {
+          setUsers(data.data || [])
+          if (data.meta?.pagination) setPagination(data.meta.pagination)
+        } else {
+          setError(data.error || t('adminLoadFailed'))
+          setUsers([])
+        }
+      } catch (err) {
+        logger.error('Error loading users:', err)
+        setError(t('adminNetworkErrorRetry'))
         setUsers([])
+      } finally {
+        setLoading(false)
       }
-    } catch (err) {
-      logger.error('Error loading users:', err)
-      setError(t('adminNetworkErrorRetry'))
-      setUsers([])
-    } finally {
-      setLoading(false)
-    }
-  }, [accessToken, t])
+    },
+    [accessToken, t]
+  )
 
-  const banUser = useCallback(async (userId: string, reason?: string) => {
-    if (!accessToken) return false
-    
-    setActionLoading(prev => ({ ...prev, [userId]: true }))
-    
-    try {
-      const res = await fetch(`/api/admin/users/${userId}/ban`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-        body: JSON.stringify({ reason }),
-      })
-      const data = await res.json()
-      
-      if (data.ok) {
-        // Update local state
-        setUsers(prev => prev.map(u =>
-          u.id === userId
-            ? { ...u, banned_at: new Date().toISOString(), banned_reason: reason || null }
-            : u
-        ))
-        return true
-      } else {
-        showToast?.(data.error || t('adminOperationFailed'), 'error')
-        return false
-      }
-    } catch (_err) {
-      showToast?.(t('adminNetworkError'), 'error')
-      return false
-    } finally {
-      setActionLoading(prev => ({ ...prev, [userId]: false }))
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setUsers/setActionLoading use updater form
-  }, [accessToken, showToast])
+  const banUser = useCallback(
+    async (userId: string, reason?: string) => {
+      if (!accessToken) return false
 
-  const unbanUser = useCallback(async (userId: string) => {
-    if (!accessToken) return false
-    
-    setActionLoading(prev => ({ ...prev, [userId]: true }))
-    
-    try {
-      const res = await fetch(`/api/admin/users/${userId}/unban`, {
-        method: 'POST',
-        headers: { 
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders()
-        },
-      })
-      const data = await res.json()
-      
-      if (data.ok) {
-        // Update local state
-        setUsers(prev => prev.map(u =>
-          u.id === userId
-            ? { ...u, banned_at: null, banned_reason: null, banned_by: null }
-            : u
-        ))
-        return true
-      } else {
-        showToast?.(data.error || t('adminOperationFailed'), 'error')
+      setActionLoading((prev) => ({ ...prev, [userId]: true }))
+
+      try {
+        const res = await fetch(`/api/admin/users/${userId}/ban`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ reason }),
+        })
+        const data = await res.json()
+
+        if (data.ok) {
+          // Update local state
+          setUsers((prev) =>
+            prev.map((u) =>
+              u.id === userId
+                ? { ...u, banned_at: new Date().toISOString(), banned_reason: reason || null }
+                : u
+            )
+          )
+          return true
+        } else {
+          showToast?.(data.error || t('adminOperationFailed'), 'error')
+          return false
+        }
+      } catch (_err) {
+        showToast?.(t('adminNetworkError'), 'error')
         return false
+      } finally {
+        setActionLoading((prev) => ({ ...prev, [userId]: false }))
       }
-    } catch (_err) {
-      showToast?.(t('adminNetworkError'), 'error')
-      return false
-    } finally {
-      setActionLoading(prev => ({ ...prev, [userId]: false }))
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setUsers/setActionLoading use updater form
-  }, [accessToken, showToast])
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setUsers/setActionLoading use updater form
+    },
+    [accessToken, showToast]
+  )
+
+  const unbanUser = useCallback(
+    async (userId: string) => {
+      if (!accessToken) return false
+
+      setActionLoading((prev) => ({ ...prev, [userId]: true }))
+
+      try {
+        const res = await fetch(`/api/admin/users/${userId}/unban`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
+        })
+        const data = await res.json()
+
+        if (data.ok) {
+          // Update local state
+          setUsers((prev) =>
+            prev.map((u) =>
+              u.id === userId ? { ...u, banned_at: null, banned_reason: null, banned_by: null } : u
+            )
+          )
+          return true
+        } else {
+          showToast?.(data.error || t('adminOperationFailed'), 'error')
+          return false
+        }
+      } catch (_err) {
+        showToast?.(t('adminNetworkError'), 'error')
+        return false
+      } finally {
+        setActionLoading((prev) => ({ ...prev, [userId]: false }))
+      }
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; setUsers/setActionLoading use updater form
+    },
+    [accessToken, showToast]
+  )
 
   return {
     users,
