@@ -51,6 +51,15 @@ async function fetchRank(handle: string) {
   if (!source) return null
   const srcName = source.source as string
   const srcTraderId = source.source_trader_id as string
+  // A1 data-authenticity: an ACTIVE trader_authorizations row = read-only API
+  // key connected → numbers are API-verified, not scraped. Mirrors
+  // lib/data/verified-traders.ts. Fail-open (null → Tracked).
+  const authRow = await restSelect(
+    'trader_authorizations',
+    `select=trader_id&status=eq.active&platform=eq.${enc(srcName)}&trader_id=eq.${enc(srcTraderId)}`
+  )
+  const verified = authRow != null
+
   for (const season of ['90D', '30D', '7D']) {
     const data = await restSelect(
       'leaderboard_ranks',
@@ -61,10 +70,11 @@ async function fetchRank(handle: string) {
         handle: (data.handle as string) || (source.handle as string) || decoded,
         rank: Number(data.rank),
         score: data.arena_score != null ? Number(data.arena_score) : null,
+        verified,
       }
     }
   }
-  return { handle: (source.handle as string) || decoded, rank: null, score: null }
+  return { handle: (source.handle as string) || decoded, rank: null, score: null, verified }
 }
 
 /** XML-escape for safe SVG text interpolation. */
@@ -81,8 +91,13 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 1) + '…' : s
 }
 
-function buildSvg(opts: { name: string; rank: number | null; score: number | null }): string {
-  const { name, rank, score } = opts
+function buildSvg(opts: {
+  name: string
+  rank: number | null
+  score: number | null
+  verified?: boolean
+}): string {
+  const { name, rank, score, verified } = opts
   const W = 268
   const H = 64
   const displayName = esc(truncate(name, 18))
@@ -91,7 +106,16 @@ function buildSvg(opts: { name: string; rank: number | null; score: number | nul
   // Dark, brand-consistent (matches OG card palette). System font stack so no
   // external font fetch (CSP-safe, instant render).
   const FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${displayName} — Arena rank ${rankText}">
+  // ✓ VERIFIED pill (A1) — only when the trader connected a read-only API key.
+  // No negative "Tracked" label: an unverified badge simply omits it, so a
+  // trader embedding this never advertises a downgrade — only an upgrade.
+  const verifiedMark = verified
+    ? `<g transform="translate(76,17)">
+    <path d="M0 4.5 L3 8 L9 0" fill="none" stroke="#2FE57D" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+    <text x="14" y="8" font-family="${FONT}" font-size="9" font-weight="800" letter-spacing="1" fill="#2FE57D">VERIFIED</text>
+  </g>`
+    : ''
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" role="img" aria-label="${displayName} — Arena rank ${rankText}${verified ? ' (Verified)' : ''}">
   <defs>
     <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0" stop-color="#14131A"/>
@@ -100,6 +124,7 @@ function buildSvg(opts: { name: string; rank: number | null; score: number | nul
   </defs>
   <rect x="0.5" y="0.5" width="${W - 1}" height="${H - 1}" rx="10" fill="url(#bg)" stroke="rgba(139,92,246,0.35)"/>
   <text x="16" y="26" font-family="${FONT}" font-size="13" font-weight="800" letter-spacing="1.5" fill="#A78BFA">ARENA</text>
+  ${verifiedMark}
   <text x="16" y="46" font-family="${FONT}" font-size="12" font-weight="500" fill="#9A9A9A">${displayName}</text>
   <line x1="150" y1="14" x2="150" y2="50" stroke="rgba(255,255,255,0.12)"/>
   <text x="166" y="24" font-family="${FONT}" font-size="9" font-weight="700" letter-spacing="1" fill="rgba(255,255,255,0.45)">RANK</text>
@@ -120,16 +145,18 @@ export async function GET(
   let name = 'Trader'
   let rank: number | null = null
   let score: number | null = null
+  let verified = false
   if (SUPABASE_URL && SUPABASE_KEY) {
     const data = await fetchRank(handle)
     if (data) {
       name = data.handle
       rank = data.rank
       score = data.score
+      verified = !!data.verified
     }
   }
 
-  const svg = buildSvg({ name, rank, score })
+  const svg = buildSvg({ name, rank, score, verified })
   return new Response(svg, {
     status: 200,
     headers: {
