@@ -18,6 +18,11 @@ import {
   checkRateLimit,
   RateLimitPresets,
 } from '@/lib/api'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+
+// 未登录 fallback 对全体匿名用户一致(hot posts),此前每请求裸打 DB(2026-07-11
+// 承载审计)。CDN s-maxage 头 + Redis 缓存双层收敛峰值。
+const ANON_CACHE_HEADER = { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300' }
 
 /**
  * Merge author profiles into post rows. posts.author_id has no FK in prod, so
@@ -55,21 +60,27 @@ export async function GET(request: NextRequest) {
     const user = await getAuthUser(request)
 
     if (!user) {
-      // Unauthenticated: return hot posts as fallback
-      const { data: fallbackData } = await supabase
-        .from('posts')
-        .select('id, title, content, created_at, hot_score, like_count, comment_count, author_id')
-        .order('hot_score', { ascending: false })
-        .limit(limit)
-
-      return success({
-        recommendations: await attachAuthors(
-          supabase,
-          (fallbackData as Record<string, unknown>[]) || []
-        ),
-        type: contentType,
-        personalized: false,
-      })
+      // Unauthenticated: hot posts fallback — 同一结果全体匿名共享,Redis 缓存
+      // 2min + CDN s-maxage,峰值不再每请求打 DB。
+      const recommendations = await tieredGetOrSet(
+        `rec:content:anon:${contentType}:${limit}`,
+        async () => {
+          const { data: fallbackData } = await supabase
+            .from('posts')
+            .select(
+              'id, title, content, created_at, hot_score, like_count, comment_count, author_id'
+            )
+            .order('hot_score', { ascending: false })
+            .limit(limit)
+          return attachAuthors(supabase, (fallbackData as Record<string, unknown>[]) || [])
+        },
+        'hot'
+      )
+      return success(
+        { recommendations, type: contentType, personalized: false },
+        200,
+        ANON_CACHE_HEADER
+      )
     }
 
     const { data: rpcData, error: rpcError } = await supabase.rpc(
