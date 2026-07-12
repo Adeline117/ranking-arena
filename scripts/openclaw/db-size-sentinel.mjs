@@ -46,28 +46,11 @@ async function sendTelegram(text) {
 }
 
 async function main() {
-  // 日内幂等:今天已报过则秒退(挂高频 job 但每日至多一条告警)。用 advisory-free
-  // 轻标记表;若无表则跳过 guard(首次)。这里简单用一张 kv 表 openclaw_sentinel_runs。
-  if (DAILY_GUARD) {
-    try {
-      await pool.query(
-        `CREATE TABLE IF NOT EXISTS public.openclaw_sentinel_runs (
-           sentinel text NOT NULL, ran_on date NOT NULL, ran_at timestamptz DEFAULT now(),
-           PRIMARY KEY (sentinel, ran_on))`
-      )
-      const ins = await pool.query(
-        `INSERT INTO public.openclaw_sentinel_runs (sentinel, ran_on)
-         VALUES ('db-size', current_date) ON CONFLICT DO NOTHING RETURNING 1`
-      )
-      if (ins.rowCount === 0) {
-        console.log('[db-size] already ran today — guard exit')
-        await pool.end()
-        return
-      }
-    } catch (e) {
-      console.warn('[db-size] guard table failed (continuing):', e.message)
-    }
-  }
+  // 2026-07-12:去掉 DB 侧 daily-guard 表(此前 CREATE TABLE openclaw_sentinel_runs
+  // 是运行时临时建表,既违反"schema 只走迁移"铁律又造成 types 漂移致 CI 挂)。
+  // 现每 30min 直接评估:读操作极廉价,且只在**超阈**时告警(阈下静默,阈上是真
+  // 容量危机、每 30min 提醒可接受)。DAILY_GUARD 标志保留兼容 workflow 调用,now no-op。
+  void DAILY_GUARD
 
   const { rows } = await pool.query(`SELECT pg_database_size(current_database()) AS bytes`)
   const bytes = Number(rows[0].bytes)
