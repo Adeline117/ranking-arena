@@ -36,6 +36,8 @@ import ModuleDegraded from './ModuleDegraded'
 import ServingRecordsSection from './ServingRecordsSection'
 import BotHeaderCard from './BotHeaderCard'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
+import AntiGamingBadge from '@/app/components/ranking/AntiGamingBadge'
+import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
 import type {
   ServingTimeframe,
   SourceCapability,
@@ -140,6 +142,23 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
     return allZero && core_keys.some((k) => gridStats[k] !== undefined)
   }, [core.modules, gridStats])
 
+  // Trust-facing anti-gaming ⚠️ flags for the CURRENTLY-VIEWED period — same
+  // pure heuristic + badge as the ranking cards, kept consistent everywhere.
+  // Per-period (reflects the timeframe on screen), which is more precise than
+  // the single serving-row flag shown on the list.
+  const antiGamingWinRate = useMemo(() => {
+    const v = gridStats.win_rate
+    return v == null || !Number.isFinite(Number(v)) ? null : Number(v)
+  }, [gridStats])
+  const antiGamingTrades = useMemo(() => {
+    const v = gridStats.total_positions
+    return v == null || !Number.isFinite(Number(v)) ? null : Number(v)
+  }, [gridStats])
+  const antiGamingFlags = useMemo(
+    () => computeAntiGamingFlags({ winRate: antiGamingWinRate, tradesCount: antiGamingTrades }),
+    [antiGamingWinRate, antiGamingTrades]
+  )
+
   // Record sub-tabs now live in the shared <ServingRecordsSection>.
   const availability = capability
     ? {
@@ -179,6 +198,15 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
             <Text size="xs" color="tertiary" style={{ opacity: 0.7 }}>
               {t('moduleDataPending')}
             </Text>
+          )}
+          {antiGamingFlags.length > 0 && (
+            <Box style={{ display: 'flex', flexWrap: 'wrap', gap: tokens.spacing[2] }}>
+              <AntiGamingBadge
+                flags={antiGamingFlags}
+                winRate={antiGamingWinRate}
+                tradesCount={antiGamingTrades}
+              />
+            </Box>
           )}
           <SignalChips source={source} extras={core.modules.extras} />
           <TraderMetaStrip extras={core.modules.extras} currency={core.modules.currency} />
