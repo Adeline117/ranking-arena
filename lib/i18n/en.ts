@@ -6060,6 +6060,12 @@ const en = {
   // ── ARENA_DATA_SPEC v1.2 serving layer (spec §2.4/§6) ──
   provenanceSource: 'Source',
   provenanceAsOf: 'as of',
+  provenanceTracked: 'Tracked',
+  provenanceTrackedTip:
+    'Metrics are scraped from the exchange’s public leaderboard and have NOT been independently verified via API access. Connect a read-only API key to earn a ✓ Verified badge.',
+  provenanceVerified: 'Verified',
+  provenanceVerifiedTip:
+    'Trades confirmed via read-only API access — these numbers are pulled directly from the exchange account, not scraped.',
   derivedBoardBadge: 'Derived',
   derivedBoardTooltip: 'Derived from profile data — coverage limited to recently ranked traders.',
   tfNotProvided: 'Not provided by this exchange',
