@@ -6,6 +6,9 @@
  * GET /api/v3?endpoint=trader&platform=binance_futures&trader_key=xxx
  * GET /api/v3?endpoint=search&q=xxx
  *
+ * Append &format=csv to any list endpoint (rankings/search/platforms/history/
+ * bulk) for a downloadable CSV export instead of JSON.
+ *
  * Rate limits:
  * - No API key: 100 requests/day per IP
  * - Valid API key: unlimited
@@ -200,6 +203,33 @@ const v3MainSchema = z.object({
 function shortenAddr(addr: string, chars = 4): string {
   if (!addr || addr.length < 2 * chars + 2) return addr
   return `${addr.slice(0, chars + 2)}...${addr.slice(-chars)}`
+}
+
+/**
+ * Flatten an array of homogeneous objects to RFC-4180 CSV. Union of keys
+ * (first-row order, extras appended); nested objects/arrays → JSON; null → ''.
+ * Used by the `?format=csv` export for data-seeker consumers.
+ */
+function toCsv(rows: Record<string, unknown>[]): string {
+  if (rows.length === 0) return ''
+  const keys: string[] = []
+  const seen = new Set<string>()
+  for (const row of rows) {
+    for (const k of Object.keys(row)) {
+      if (!seen.has(k)) {
+        seen.add(k)
+        keys.push(k)
+      }
+    }
+  }
+  const escape = (v: unknown): string => {
+    if (v == null) return ''
+    const s = typeof v === 'object' ? JSON.stringify(v) : String(v)
+    return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s
+  }
+  const header = keys.join(',')
+  const body = rows.map((row) => keys.map((k) => escape(row[k])).join(',')).join('\n')
+  return `${header}\n${body}`
 }
 
 function cleanTraderForApi(
@@ -496,6 +526,22 @@ export async function GET(request: NextRequest) {
 
     if (result.error) {
       return errorResponse(result.error, result.status || 400)
+    }
+
+    // CSV export for tabular consumers (?format=csv). Only array payloads —
+    // single-object endpoints (trader) fall through to JSON.
+    if (params.get('format') === 'csv' && Array.isArray(result.data)) {
+      const csv = toCsv(result.data as Record<string, unknown>[])
+      return new NextResponse(csv, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="arena-${endpoint}.csv"`,
+          'Cache-Control':
+            CACHE_POLICY[endpoint] || 'public, s-maxage=60, stale-while-revalidate=120',
+          'Access-Control-Allow-Origin': '*',
+        },
+      })
     }
 
     return jsonResponse(result.data, {
