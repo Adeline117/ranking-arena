@@ -31,6 +31,7 @@ import { Box, Text } from '@/app/components/base'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import TraderHeader from '@/app/components/trader/TraderHeader'
 import TraderTabs from '@/app/components/trader/TraderTabs'
+import DataProvenanceBadge from '@/app/components/trader/DataProvenanceBadge'
 import { type ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
 // MarketCorrelationCard removed -- beta_btc/beta_eth/alpha never computed by pipeline (P0-5)
 import { RankingSkeleton } from '@/app/components/ui/Skeleton'
@@ -960,6 +961,15 @@ export default function TraderProfileClient({
                   style={{ minHeight: 200 }}
                   className="tab-pane-enter"
                 >
+                  {/* A1 data-authenticity provenance (Myfxbook model) — the
+                      honest default on the trader page users actually land on
+                      (ServingProfilePanel's footer version is bypassed when
+                      useThreeTab is on). Prod has 0 API-verified traders, so
+                      verified is hardcoded false = "Tracked" (accurate today);
+                      thread a real per-trader verified flag here to flip it. */}
+                  <Box style={{ marginBottom: tokens.spacing[3] }}>
+                    <DataProvenanceBadge verified={false} />
+                  </Box>
                   {/* §2.3 lead-meta strip — serving only; NULL-collapses to
                       null when no meta fields resolve (legacy renders nothing). */}
                   {useThreeTab && (
