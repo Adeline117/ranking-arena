@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import { stripe } from '@/lib/stripe'
 import { getSupabase, logger } from './shared'
+import { sendNotification } from '@/lib/data/notifications'
 
 export async function handlePaymentSucceeded(invoice: Stripe.Invoice) {
   const subscriptionData = invoice.parent?.subscription_details?.subscription
@@ -99,6 +100,11 @@ export async function handlePaymentFailed(invoice: Stripe.Invoice) {
     try {
       const subscription = await stripe.subscriptions.retrieve(subscriptionId)
       if (subscription.status === 'past_due') {
+        // 2026-07-11:只标 past_due,不再立即降级。此前首次扣款失败即
+        // profile→free,而 Stripe smart-retries 常在几天内恢复(handlePaymentSucceeded
+        // 会复权),期间用户无解释失去 Pro、也不知该换卡。真正的降级由
+        // handleSubscriptionCanceled 在 Stripe 耗尽重试真取消时执行。这里给宽限期 +
+        // 通知用户更新支付方式。
         await getSupabase()
           .from('subscriptions')
           .update({
@@ -107,15 +113,25 @@ export async function handlePaymentFailed(invoice: Stripe.Invoice) {
           })
           .eq('stripe_subscription_id', subscriptionId)
 
-        // Downgrade user profile to prevent Pro access during payment failure
-        await getSupabase()
-          .from('user_profiles')
-          .update({ subscription_tier: 'free', updated_at: new Date().toISOString() })
-          .eq('stripe_customer_id', customerId)
+        const willRetry = !!invoice.next_payment_attempt
+        sendNotification(
+          getSupabase(),
+          {
+            user_id: profile.id,
+            type: 'subscription_expiring',
+            title: willRetry ? 'Payment failed — please update your card' : 'Pro payment failed',
+            message: willRetry
+              ? 'We could not charge your card. We will retry automatically over the next few days — update your payment method in Settings to keep your Pro access.'
+              : 'Your Pro payment failed and retries are exhausted. Update your payment method in Settings to restore Pro.',
+            reference_id: `payment_failed_${invoice.id}`,
+          },
+          'stripe-payment-failed'
+        )
 
-        logger.info(`Downgraded user to free tier due to past_due status`, {
+        logger.info(`Marked past_due (grace, no downgrade) + notified user`, {
           customerId,
           subscriptionId,
+          willRetry,
         })
       }
     } catch (err: unknown) {
