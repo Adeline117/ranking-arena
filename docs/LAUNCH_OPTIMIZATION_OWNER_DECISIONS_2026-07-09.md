@@ -62,6 +62,22 @@ read 120/min + route-level)。**核实后有意不减层**:每种减法都换来
 | **[P3] 被封禁用户仍可评论**                             | `comments/route.ts:128` 查 mute 未查 group_bans                                                                                                                                                                                                                                                      | 加 group_bans 查                                                                                                                     |
 | **[P3] 死码 hooks 响应形状错 + 禁用回滚模式**           | `lib/hooks/usePostInteraction.ts`(index.ts 导出)无消费者,解析 data.comments(真形状 data.data.comments)+ snapshot 回滚                                                                                                                                                                                | 删除防误用                                                                                                                           |
 
+## ★ settings/admin 深审新增(2026-07-11)—— 已修核心 + 待你定方向
+
+**已修上线**:改密码后真实登出其他设备(原写死表 `login_sessions`,真实 refresh token 不失效 →
+改 `supabase.auth.signOut({scope:'others'})`);admin stats/users/reports 三大 tab 读对响应形状
+(原读 `data.ok` 恒"加载失败");DashboardTab CSV 导出崩溃 guard。
+
+**待你拍(功能未接线,方向 = 实现 vs 隐藏假 UI):**
+
+- **2FA / 备份码"假安全"(P1)**:`verifyTotpCode` 仅 enrollment 调、**无任何登录路径验证**;
+  `verifyBackupCode` 零调用;SecuritySection 显绿色"已启用"实际零保护(生产 0 用户,未上线)。
+  → 要么接入登录流(中大工程)/迁 Supabase 原生 MFA,要么**隐藏 UI 别显假"已启用"**(假安全比没有更糟)。
+- **会话列表/"登出其他设备" UI 假的(P1)**:`login_sessions` 从不 INSERT、无 middleware 读 `revoked`;
+  列表恒空。→ 实现真会话追踪 或 隐藏列表(改密登出已用 Supabase 全局登出兜住最关键场景)。
+- **passwordless 用户无法禁用 2FA(P2)**:disable 走 `signInWithPassword`,无密码用户锁死 → 接受 TOTP/备份码替代。
+- **2 监控面板 401(P2)**:MetricsTrends/EnrichmentCompleteness 发用户 JWT 但路由只认 CRON_SECRET → 改 `verifyAdminAuth`;运维面板,改 auth 宜谨慎。
+
 ## A. 变现(卡真实收入,最高优先)
 
 | 项                          | 现状                                      | 需要你                                                                                                                                           |

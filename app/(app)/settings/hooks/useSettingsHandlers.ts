@@ -658,22 +658,13 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         showToast(error.message, 'error')
         return
       }
-      // After password change, revoke all other sessions to kick out other devices
+      // After a password change, terminate OTHER devices FOR REAL. The old call
+      // hit /api/settings/sessions (the login_sessions table), which nothing
+      // enforces — so other devices' Supabase refresh tokens stayed valid and the
+      // "kick out other devices" was a no-op. `signOut({ scope: 'others' })`
+      // invalidates every session except the current one at the Supabase auth layer.
       try {
-        const {
-          data: { session: currentSession },
-        } = await supabase.auth.getSession()
-        if (currentSession?.access_token) {
-          await fetch('/api/settings/sessions', {
-            method: 'DELETE',
-            headers: {
-              'Content-Type': 'application/json',
-              Authorization: `Bearer ${currentSession.access_token}`,
-              ...getCsrfHeaders(),
-            },
-            body: JSON.stringify({ all: true }),
-          })
-        }
+        await supabase.auth.signOut({ scope: 'others' })
       } catch (revokeErr) {
         // Non-critical: password was changed even if session revocation fails
         uiLogger.warn('[ChangePassword] Failed to revoke other sessions:', revokeErr)

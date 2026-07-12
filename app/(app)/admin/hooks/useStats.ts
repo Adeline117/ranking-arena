@@ -50,18 +50,19 @@ export function useStats(accessToken: string | null) {
 
   const loadStats = useCallback(async () => {
     if (!accessToken) return
-    
+
     setLoading(true)
     setError(null)
-    
+
     try {
       const res = await fetch('/api/admin/stats', {
-        headers: { Authorization: `Bearer ${accessToken}` }
+        headers: { Authorization: `Bearer ${accessToken}` },
       })
       const data = await res.json()
-      
-      if (data.ok) {
-        setStats(data.stats)
+
+      // Route returns the standard success() envelope { success, data:{ stats } }
+      if (data.success) {
+        setStats(data.data?.stats)
       } else {
         setError(data.error || 'Failed to load stats')
       }
