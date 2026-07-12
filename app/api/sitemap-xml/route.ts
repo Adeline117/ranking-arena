@@ -169,11 +169,17 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
 
   const seen = new Set<string>()
   const entries = (data || [])
-    .map((t) => t.handle || t.source_trader_id)
-    .filter((h): h is string => !!h && !seen.has(h) && (seen.add(h), true))
-    .map((h) => ({
-      loc: `${BASE_URL}/trader/${encodeURIComponent(h)}`,
-      lastmod: now,
+    .map((t) => ({ h: t.handle || t.source_trader_id, computed_at: t.computed_at }))
+    .filter((r): r is { h: string; computed_at: string | null } => {
+      if (!r.h || seen.has(r.h)) return false
+      seen.add(r.h)
+      return true
+    })
+    .map((r) => ({
+      loc: `${BASE_URL}/trader/${encodeURIComponent(r.h)}`,
+      // 用真实 computed_at 作 lastmod;此前全用请求时刻 now → Google 判 lastmod
+      // 不可信直接整体忽略该字段(2026-07-11 SEO 审计)。缺失时才回退 now。
+      lastmod: r.computed_at ? new Date(r.computed_at).toISOString() : now,
       changefreq: 'daily',
       priority: 0.8,
     }))
