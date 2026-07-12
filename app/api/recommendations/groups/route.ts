@@ -18,6 +18,10 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { socialFeatureGuard } from '@/lib/features'
+import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+
+// 未登录 fallback 对全体匿名一致(popular groups),此前每请求裸打 DB。
+const ANON_CACHE_HEADER = { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
 
 export async function GET(request: NextRequest) {
   const guard = socialFeatureGuard()
@@ -37,10 +41,10 @@ export async function GET(request: NextRequest) {
     let groups: Record<string, unknown>[] = []
 
     if (user) {
-      const { data: rpcData, error: rpcError } = await supabase.rpc(
-        'recommend_groups_for_user',
-        { p_user_id: user.id, p_limit: limit }
-      )
+      const { data: rpcData, error: rpcError } = await supabase.rpc('recommend_groups_for_user', {
+        p_user_id: user.id,
+        p_limit: limit,
+      })
 
       if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
         // RPC returns group_id + reason/score; fetch full group data
@@ -52,11 +56,13 @@ export async function GET(request: NextRequest) {
 
         const groupMap = new Map((fullGroups || []).map((g: Record<string, unknown>) => [g.id, g]))
 
-        groups = rpcData.map((r: Record<string, unknown>) => ({
-          ...(groupMap.get(r.group_id as string) || {}),
-          recommendation_reason: r.reason || null,
-          recommendation_score: r.score || null,
-        })).filter((g: Record<string, unknown>) => g.id)
+        groups = rpcData
+          .map((r: Record<string, unknown>) => ({
+            ...(groupMap.get(r.group_id as string) || {}),
+            recommendation_reason: r.reason || null,
+            recommendation_score: r.score || null,
+          }))
+          .filter((g: Record<string, unknown>) => g.id)
       }
 
       // If fewer than 3 personalized results, pad with popular groups
@@ -78,14 +84,20 @@ export async function GET(request: NextRequest) {
         }
       }
     } else {
-      // Unauthenticated fallback
-      const { data: fallbackData } = await supabase
-        .from('groups')
-        .select('id, name, name_en, description, description_en, avatar_url, member_count')
-        .order('member_count', { ascending: false })
-        .limit(limit)
-
-      groups = (fallbackData as Record<string, unknown>[]) || []
+      // Unauthenticated fallback — popular groups, 全体匿名共享,Redis 缓存 5min。
+      groups = await tieredGetOrSet(
+        `rec:groups:anon:${limit}`,
+        async () => {
+          const { data: fallbackData } = await supabase
+            .from('groups')
+            .select('id, name, name_en, description, description_en, avatar_url, member_count')
+            .order('member_count', { ascending: false })
+            .limit(limit)
+          return (fallbackData as Record<string, unknown>[]) || []
+        },
+        'cold'
+      )
+      return success({ groups, personalized: false }, 200, ANON_CACHE_HEADER)
     }
 
     return success({ groups, personalized: !!user })
