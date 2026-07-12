@@ -22,20 +22,32 @@
 | recommendations content/groups 未登录 fallback 加缓存                                                                                 | 5d76efb21 |
 | sitemap trader lastmod 用真实 computed_at（治 Google 忽略 lastmod）                                                                   | d8921cbf9 |
 | apple-touch-icon.png 根路径别名（iOS 裸探测 404）                                                                                     | 07347ecb5 |
+| 首页 ISR getHeroStats build-guard（待 build 复验）                                                                                    | 36dfe8135 |
+| payment_failed 宽限+通知（不首次失败即降级）                                                                                          | de618fa36 |
+| webhook 未知 price 白名单（不默认授 Pro）                                                                                             | be5120ef7 |
+| 7天 trial 防重薅（Stripe 历史检查）                                                                                                   | a6539c2c4 |
+| 6 个写型 SDF 收回 anon/PUBLIC EXECUTE                                                                                                 | 51e7988a0 |
+| DB 容量哨兵（54.7GB 实测，阈值告警）                                                                                                  | 796ab8562 |
+| 告警 P0/FYI 分层 + health-monitor GH 2h 去重                                                                                          | 0877f55b6 |
+| haptics 触觉开关真接线（localStorage）                                                                                                | 541a4dc49 |
+| repost test QA 垃圾帖删除                                                                                                             | (DB)      |
+| trader 单一 canonical + sitemap platform 对齐                                                                                         | e9472c5fe |
+| OAuth/钱包用户可自助删号（DELETE 确认）                                                                                               | 9cfbed47c |
+| 退款政策统一 case-by-case + 邮箱统一 outlook + 隐私补 3 段披露                                                                        | e15e4e073 |
 
 ## 👤 P0 — 绑 Stripe 切 live，只有 owner 能拍
 
 **生产库 2 条 test-mode 活跃订阅**（`sub_1StiFLCL…` user ebe2c2fb / `sub_1SujcrCL…` user ae6b996d，均 active/pro/plan=null，带 test `cus_`，到 2027）。切 live 当天连环爆：白嫖 Pro / 想付费被 409 挡 / 换 webhook secret 后取消事件签名失败到不了 / portal 用 test cus 500。**处置见 docs/STRIPE_GO_LIVE.md 新增「切 live 前清理 test 数据」步骤。**
 
-## 🔧 P1 — 剩余(需 owner 或专项,非批量安全项)
+## 🔧 P1 — 剩余(计划 A+B+C 后仍开放的)
 
-| 项                                                      | 为何没批量硬修（需 owner 或专项）                                                                                                                                                                        |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 首页 ISR 失效（每 PV SSR+MISS，宣传第一落点零边缘缓存） | 明显嫌疑全排除（服务端 searchParams/cookies/headers/no-store/Redis 均已 isrSafe）；根因需 `next build` 静态化报告定位，而本机=生产 worker，全量 build 有 OOM 饿死 ingest 风险 → 留 CI/preview build 二分 |
-| Sentry sourcemap 未上传                                 | 正解在 Vercel 侧（SENTRY_AUTH_TOKEN 进 Vercel env + 构建期上传）；CI 单独构建的 hash 与 Vercel 部署对不上，错配比没有更糟 = owner 配 env                                                                 |
-| help/about/pricing 首屏裸 i18n key                      | 这些 key 塞进**每页都加载**的 en-core 会拖累首页 LCP（en-core 有意精简 ~250 key）；真解=这些低流量页服务端翻译，是产品/性能权衡，不该批量塞 core                                                         |
-| SEO 重复 URL（trader 两个自 canonical）                 | trader 页 canonical 只回显请求路径；选定唯一 canonical 涉及 handle/id 解析 + claimed 交易员 /u/ 重定向的微妙交互，仓促改反而制造更多 dup = 需定策略                                                      |
-| market SSE 每观众占 58s nodejs 函数                     | 峰值降级为轮询 Redis 快照是较大架构改动，需专项设计（非批量安全项）                                                                                                                                      |
+| 项                                  | 状态 / 为何                                                                                                                                                                                                                                                                     |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 首页 ISR 失效                       | **已提交修复**(getHeroStats build-guard, 36dfe8135)——真因由 .next 产物证实(getHeroStats 缺 build 短路,getInitialTraders 有)。生产仍 no-store/MISS:仅在下次生产 **build** 后生效,待 CI 重建确认;本机=生产 worker,全量 build 有 OOM 风险不本地跑。**待部署后 curl 复验 s-maxage** |
+| help/about/pricing 首屏裸 i18n key  | **正解=LanguageProvider SSR-seeding / 服务端翻译传 props**。全局快捷改(i18n.ts 服务端加载全字典)会重新引入水合错配(React #418,en-core 拆分正是为避开它)——不鲁莽改。信息页低流量,留焦点跟进                                                                                      |
+| api-docs 硬编码英文                 | page.tsx(server+getServerTranslation)chrome 可安全译;ApiPricingSection(client)同 i18n 水合问题。英文 dev 文档是行业惯例,最低价值项,随 B12 中枢改造一起做                                                                                                                        |
+| Sentry sourcemap 未上传             | 正解在 Vercel 侧(SENTRY_AUTH_TOKEN 进 Vercel env + 构建期上传);CI 单独构建 hash 与部署对不上,错配比没有更糟 = owner 配 env                                                                                                                                                      |
+| market SSE 每观众占 58s nodejs 函数 | 峰值降级为轮询 Redis 快照是较大架构改动,需专项设计                                                                                                                                                                                                                              |
 
 ## 👤 需 owner 决定/去 Dashboard
 
