@@ -1,5 +1,6 @@
 'use client'
 
+import Link from 'next/link'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
@@ -16,11 +17,23 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
  *
  * Theme-aware (success vs tertiary tokens shift with light/dark).
  */
-export default function DataProvenanceBadge({ verified }: { verified?: boolean }) {
+export default function DataProvenanceBadge({
+  verified,
+  claimHref,
+}: {
+  verified?: boolean
+  /**
+   * Claim/verify flow URL (e.g. `/claim?trader=…&source=…&step=verify`). When
+   * provided and the trader is NOT verified, the Tracked chip becomes a link —
+   * the honest label doubles as the upgrade path (A1 adoption pull: prod has 0
+   * verified traders because nothing pulls them into the flow).
+   */
+  claimHref?: string
+}) {
   const { t } = useLanguage()
   const isVerified = !!verified
 
-  return (
+  const chip = (
     <span
       role="img"
       aria-label={isVerified ? t('provenanceVerified') : t('provenanceTracked')}
@@ -77,6 +90,31 @@ export default function DataProvenanceBadge({ verified }: { verified?: boolean }
         </svg>
       )}
       {isVerified ? t('provenanceVerified') : t('provenanceTracked')}
+      {!isVerified && claimHref && (
+        <svg
+          width="9"
+          height="9"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.5"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <polyline points="9 18 15 12 9 6" />
+        </svg>
+      )}
     </span>
   )
+
+  // Unverified + claim URL → the chip is the upgrade path.
+  if (!isVerified && claimHref) {
+    return (
+      <Link href={claimHref} style={{ textDecoration: 'none', display: 'inline-flex' }}>
+        {chip}
+      </Link>
+    )
+  }
+  return chip
 }

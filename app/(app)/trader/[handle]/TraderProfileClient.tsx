@@ -968,7 +968,12 @@ export default function TraderProfileClient({
                       verified is hardcoded false = "Tracked" (accurate today);
                       thread a real per-trader verified flag here to flip it. */}
                   <Box style={{ marginBottom: tokens.spacing[3] }}>
-                    <DataProvenanceBadge verified={false} />
+                    <DataProvenanceBadge
+                      verified={false}
+                      // Tracked chip doubles as the verify-upgrade entry (A1
+                      // adoption pull) — same URL shape as ClaimTraderButton.
+                      claimHref={`/claim?trader=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}&handle=${encodeURIComponent(data.handle || data.source_trader_id)}&step=verify`}
+                    />
                   </Box>
                   {/* §2.3 lead-meta strip — serving only; NULL-collapses to
                       null when no meta fields resolve (legacy renders nothing). */}
