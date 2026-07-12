@@ -137,6 +137,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   const [deletePassword, setDeletePassword] = useState('')
   const [deleteReason, setDeleteReason] = useState('')
   const [deletingAccount, setDeletingAccount] = useState(false)
+  // 2026-07-11:OAuth/钱包用户无密码,删号改键入 DELETE 确认(server 同逻辑)。
+  const [deleteConfirm, setDeleteConfirm] = useState('')
+  const [deleteHasPassword, setDeleteHasPassword] = useState(true) // 默认 true(email/password)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
   // Handle uniqueness check
@@ -1133,8 +1136,25 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     }
   }
 
+  // 打开删号弹窗时探测账号是否有密码凭据(OAuth/钱包用户无 → 走 DELETE 确认)。
+  useEffect(() => {
+    if (!showDeleteAccountModal) return
+    let cancelled = false
+    supabase.auth.getUser().then(({ data }) => {
+      if (cancelled || !data.user) return
+      const providers = (data.user.identities ?? []).map((i) => i.provider)
+      const isWalletEmail = (data.user.email ?? '').endsWith('@wallet.arena')
+      setDeleteHasPassword(!isWalletEmail && providers.includes('email'))
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [showDeleteAccountModal])
+
   const handleDeleteAccount = async () => {
-    if (!deletePassword) return
+    // 有密码用户需填密码;无密码(OAuth/钱包)需键入 DELETE。
+    if (deleteHasPassword ? !deletePassword : deleteConfirm.trim().toUpperCase() !== 'DELETE')
+      return
     setDeletingAccount(true)
     setDeleteError(null)
     try {
@@ -1152,7 +1172,11 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
           Authorization: `Bearer ${session.access_token}`,
           ...getCsrfHeaders(),
         },
-        body: JSON.stringify({ password: deletePassword, reason: deleteReason }),
+        body: JSON.stringify(
+          deleteHasPassword
+            ? { password: deletePassword, reason: deleteReason }
+            : { confirm: deleteConfirm, reason: deleteReason }
+        ),
       })
       const data = await res.json()
       if (!res.ok) {
@@ -1313,6 +1337,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     setDeletePassword,
     deleteReason,
     setDeleteReason,
+    deleteConfirm,
+    setDeleteConfirm,
+    deleteHasPassword,
     deletingAccount,
     deleteError,
 

@@ -31,21 +31,42 @@ export const POST = withAuth(
       return badRequest('Invalid JSON body')
     }
 
-    const { password, reason } = body
-
-    if (!password) {
-      return badRequest('Password required')
+    const { password, reason, confirm } = body as {
+      password?: string
+      reason?: string
+      confirm?: string
     }
 
-    // Verify password by attempting sign-in
-    const anonClient = createClient(env.NEXT_PUBLIC_SUPABASE_URL, env.NEXT_PUBLIC_SUPABASE_ANON_KEY)
-    const { error: signInError } = await anonClient.auth.signInWithPassword({
-      email: user.email!,
-      password,
-    })
+    // 2026-07-11:OAuth(Google 等)/ 钱包(Privy,email 形如 <addr>@wallet.arena)用户
+    // 没有密码凭据,signInWithPassword 永远失败 → 此前删号死路,违反 ToS "随时可删"。
+    // 判定 password-less:provider≠email 或 @wallet.arena 邮箱。这类用户的 withAuth
+    // session bearer 已是完整 re-auth,无需密码 step-up;改用 typed-confirmation("DELETE")
+    // 保留误删摩擦。email/password 用户仍走密码验证。
+    const providers = (user.identities ?? []).map((i) => i.provider)
+    const isWalletEmail = (user.email ?? '').endsWith('@wallet.arena')
+    const hasPassword = !isWalletEmail && providers.includes('email')
 
-    if (signInError) {
-      return forbidden('Invalid password')
+    if (hasPassword) {
+      if (!password) {
+        return badRequest('Password required')
+      }
+      // Verify password by attempting sign-in
+      const anonClient = createClient(
+        env.NEXT_PUBLIC_SUPABASE_URL,
+        env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+      )
+      const { error: signInError } = await anonClient.auth.signInWithPassword({
+        email: user.email!,
+        password,
+      })
+      if (signInError) {
+        return forbidden('Invalid password')
+      }
+    } else {
+      // password-less(OAuth/wallet):要求键入 "DELETE" 确认(前端已同 session 鉴权)
+      if ((confirm ?? '').trim().toUpperCase() !== 'DELETE') {
+        return badRequest('Type DELETE to confirm account deletion')
+      }
     }
 
     // Get current profile info for recovery
