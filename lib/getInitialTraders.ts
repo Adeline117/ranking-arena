@@ -39,6 +39,10 @@ export interface InitialTrader {
    *  ("Holder" — win% undefined by design); null = unknown/not captured. */
   trades_count: number | null
   score_confidence: ScoreConfidence
+  /** Rank movement vs previous compute run (+ = climbed) — drives ↑/↓ arrows. */
+  rank_change?: number | null
+  /** First appearance on the board this run (NEW badge). */
+  is_new?: boolean
 }
 
 /**
@@ -77,6 +81,8 @@ function mapUnifiedToInitial(t: UnifiedTrader): InitialTrader {
     sharpe: t.sharpeRatio ?? null,
     trades_count: t.tradesCount ?? null,
     score_confidence: 'full', // leaderboard_ranks only includes confident scores
+    rank_change: t.rankChange ?? null,
+    is_new: t.isNew === true,
   }
 }
 
@@ -113,8 +119,10 @@ export async function getInitialTraders(
   // Two-tier cache strategy:
   //   1. Primary cache (2h TTL) — normal serving
   //   2. Fallback cache (4h TTL) — safety net when DB is down/slow
-  const cacheKey = `home-initial-traders-v2:${timeRange}:p${page}`
-  const fallbackKey = `home-initial-traders-fallback:${timeRange}:p${page}`
+  // v3 (2026-07-12): shape gained rank_change/is_new — bump so 2h-TTL cached
+  // v2 entries (without the new fields) don't serve arrow-less rows for hours.
+  const cacheKey = `home-initial-traders-v3:${timeRange}:p${page}`
+  const fallbackKey = `home-initial-traders-fallback-v3:${timeRange}:p${page}`
   let cached: InitialTradersResult | null = null
   let fallbackCached: InitialTradersResult | null = null
   try {
@@ -387,7 +395,7 @@ async function fetchPaginatedFromDB(
   // SELECT * forces heap fetch for the ~10 columns we don't actually read
   // (raw_data, metrics_estimated, internal flags, etc.) adding 30-80ms.
   const SSR_COLS =
-    'source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, avatar_url, rank, computed_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier, season_id'
+    'source_trader_id, handle, source, source_type, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, arena_score, avatar_url, rank, rank_change, is_new, computed_at, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier, season_id'
   const { data, error } = await supabase
     .from('leaderboard_ranks')
     .select(SSR_COLS)

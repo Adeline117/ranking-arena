@@ -18,18 +18,18 @@ export type TradingPeriod = '7D' | '30D' | '90D'
 // The ONE trader type for all frontend use
 export interface UnifiedTrader {
   // Identity
-  platform: string          // canonical: 'binance_futures', 'hyperliquid', etc.
-  traderKey: string         // canonical: the trader's unique ID on the platform
-  handle: string | null     // human-readable name
+  platform: string // canonical: 'binance_futures', 'hyperliquid', etc.
+  traderKey: string // canonical: the trader's unique ID on the platform
+  handle: string | null // human-readable name
   avatarUrl: string | null
   profileUrl: string | null
   marketType: string | null // 'futures' | 'spot' | 'web3'
   sourceType: string | null // 'futures' | 'spot' | 'web3' (from EXCHANGE_CONFIG)
 
   // Performance (always percentage/USD, never ratios)
-  roi: number | null        // ROI in percentage (e.g. 120.5 = 120.5%)
-  pnl: number | null        // PnL in USD
-  winRate: number | null    // Win rate 0-100
+  roi: number | null // ROI in percentage (e.g. 120.5 = 120.5%)
+  pnl: number | null // PnL in USD
+  winRate: number | null // Win rate 0-100
   maxDrawdown: number | null
   tradesCount: number | null
   followers: number | null
@@ -48,7 +48,11 @@ export interface UnifiedTrader {
 
   // Rankings
   rank: number | null
-  period: TradingPeriod     // which period this data represents
+  /** Rank movement vs the previous compute run (+ = climbed). Drives the ↑/↓ arrows. */
+  rankChange?: number | null
+  /** First appearance on the board this run (NEW badge). */
+  isNew?: boolean
+  period: TradingPeriod // which period this data represents
 
   // Advanced metrics
   sharpeRatio: number | null

@@ -53,6 +53,12 @@ export default function HomePageClient({
         arena_score: t.arena_score,
         score_confidence: t.score_confidence,
         rank: idx + 1,
+        // Rank-movement signals — the SSR shape carries them but this
+        // allowlist copy silently dropped them, so first-paint rows never
+        // showed the ↑/↓ arrows that hydrated /api/traders rows now get.
+        rank_change: t.rank_change ?? null,
+        is_new: t.is_new === true,
+        trades_count: t.trades_count,
       })),
     [initialTraders]
   )
