@@ -200,9 +200,28 @@ export async function POST(request: NextRequest) {
         checkoutOptions.promotionCode = promotionCode
       }
 
-      // Add 7-day free trial if requested (only for new subscribers, not lifetime)
+      // Add 7-day free trial if requested (only for new subscribers, not lifetime).
+      // 2026-07-11:trial 由客户端 body 传,此前无"已试用过"校验 → 取消后重订可
+      // 无限薅 7 天。这里查该 customer 的 Stripe 订阅历史,任一曾有 trial 即拒发。
       if (trial) {
-        checkoutOptions.trialDays = 7
+        let alreadyTrialed = false
+        try {
+          const history = await getStripe().subscriptions.list({
+            customer: customerId,
+            status: 'all',
+            limit: 100,
+          })
+          alreadyTrialed = history.data.some((s) => s.trial_start != null || s.trial_end != null)
+        } catch (err) {
+          // Stripe 查询失败 → 保守不给 trial(宁可少给也不重复白送)
+          logger.warn('trial-history check failed; denying trial', {
+            error: err instanceof Error ? err.message : err,
+          })
+          alreadyTrialed = true
+        }
+        if (!alreadyTrialed) {
+          checkoutOptions.trialDays = 7
+        }
       }
 
       checkoutSession = await createCheckoutSession(checkoutOptions)
