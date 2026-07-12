@@ -31,6 +31,8 @@ export const traderOutputSchema = z.object({
   trader_type: z.string().nullable(),
   anti_gaming_flags: z.array(z.string()).optional(),
   is_verified_data: z.boolean().optional(),
+  rank_change: z.number().nullable().optional(),
+  is_new: z.boolean().optional(),
 })
 
 export const tradersResponseSchema = z.object({
