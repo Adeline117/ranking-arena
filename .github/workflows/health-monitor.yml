@@ -35,12 +35,31 @@ jobs:
             echo "message=$STATUS: $ISSUES" >> $GITHUB_OUTPUT
           fi
 
-      - name: Send Telegram alert on failure
+      # 2026-07-11:去重标记跨 ephemeral runner 持久化(此前 inline 告警零去重,
+      # 每 30min 不健康即轰炸 → 告警疲劳)。actions/cache 存 last-alert 时间戳。
+      - name: Restore alert-dedup marker
+        if: steps.health.outputs.status != 'healthy'
+        uses: actions/cache@v4
+        with:
+          path: .hm-alert-marker
+          key: hm-alert-marker-${{ github.run_id }}
+          restore-keys: hm-alert-marker-
+
+      - name: Send Telegram alert on failure (2h dedup)
         if: steps.health.outputs.status != 'healthy'
         run: |
+          # 2h 去重:上次告警距今 <2h 则跳过(健康恢复后 marker 自然过期,新事故立即报)
+          NOW=$(date -u +%s)
+          LAST=0
+          [ -f .hm-alert-marker ] && LAST=$(cat .hm-alert-marker 2>/dev/null || echo 0)
+          if [ $((NOW - LAST)) -lt 7200 ]; then
+            echo "Deduped: last alert $((NOW - LAST))s ago (<2h), skipping"
+            exit 0
+          fi
           MESSAGE="🚨 [GH Actions] Arena Health: ${{ steps.health.outputs.status }}%0A${{ steps.health.outputs.message }}%0ATime: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
           curl -sf "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
+            -d "chat_id=${{ secrets.TELEGRAM_CRITICAL_CHAT_ID || secrets.TELEGRAM_ALERT_CHAT_ID }}" \
             -d "text=$MESSAGE" \
             -d "parse_mode=HTML" \
             --max-time 10 || true
+          echo "$NOW" > .hm-alert-marker
