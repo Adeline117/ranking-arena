@@ -148,26 +148,34 @@ export const POST = withAuth(
         return NextResponse.json({ error: 'Owner cannot leave the group' }, { status: 403 })
       }
 
-      const { error: deleteErr } = await sb
+      const { data: deleted, error: deleteErr } = await sb
         .from('group_members')
         .delete()
         .eq('group_id', groupId)
         .eq('user_id', user.id)
+        .select('user_id')
 
       if (deleteErr) {
         logger.error('Leave group error:', deleteErr)
         return NextResponse.json({ error: 'Failed to leave' }, { status: 500 })
       }
 
-      // Decrement count (fire-and-forget)
-      updateCount(
-        sb,
-        'increment_member_count',
-        { p_group_id: groupId, p_delta: -1 },
-        'Decrement member count'
-      )
+      // Only decrement when a membership row was ACTUALLY removed. Without this,
+      // a non-member (or a repeated leave call) drives member_count down — a
+      // public metric feeding the Hot "groups" tab — while real members remain.
+      if (deleted && deleted.length > 0) {
+        updateCount(
+          sb,
+          'increment_member_count',
+          { p_group_id: groupId, p_delta: -1 },
+          'Decrement member count'
+        )
+      }
 
-      return NextResponse.json({ success: true, action: 'left' })
+      return NextResponse.json({
+        success: true,
+        action: deleted && deleted.length > 0 ? 'left' : 'not_member',
+      })
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 })

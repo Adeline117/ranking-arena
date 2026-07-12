@@ -22,7 +22,7 @@ import {
   ErrorCode,
 } from '@/lib/api'
 import { withPublic, withAuth } from '@/lib/api/middleware'
-import { badRequest } from '@/lib/api/response'
+import { badRequest, forbidden, notFound } from '@/lib/api/response'
 import { socialFeatureGuard } from '@/lib/features'
 import { getPosts, createPost, getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
 import { getWeightedPosts } from '@/lib/data/posts-weighted'
@@ -389,6 +389,36 @@ export const POST = withAuth(
         }))
         .catch(() => ({ score: 0, verified: false })),
     ])
+
+    // Group posting gate — this handler uses the service-role client, which
+    // BYPASSES the `posts_insert_member` RLS policy, so the group rules must be
+    // enforced here in code. Without it, any authed user can inject posts into
+    // private/premium/dissolved groups and banned/muted users keep posting.
+    if (group_id) {
+      const [groupRes, memberRes, banRes] = await Promise.all([
+        supabase.from('groups').select('dissolved_at').eq('id', group_id).maybeSingle(),
+        supabase
+          .from('group_members')
+          .select('muted_until')
+          .eq('group_id', group_id)
+          .eq('user_id', user.id)
+          .maybeSingle(),
+        supabase
+          .from('group_bans')
+          .select('user_id') // composite PK — select user_id, not id
+          .eq('group_id', group_id)
+          .eq('user_id', user.id)
+          .maybeSingle(),
+      ])
+      if (!groupRes.data) return notFound('Group not found')
+      if (groupRes.data.dissolved_at)
+        return badRequest('This group has been dissolved — no new posts')
+      if (banRes.data) return forbidden('You are banned from this group')
+      if (!memberRes.data) return forbidden('You must be a member to post in this group')
+      const mutedUntil = memberRes.data.muted_until as string | null
+      if (mutedUntil && new Date(mutedUntil) > new Date())
+        return forbidden('You are muted in this group')
+    }
 
     const post = await createPost(supabase, user.id, userHandle, {
       title,
