@@ -9,12 +9,32 @@
 
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
-import logger from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
-import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
-export const runtime = 'nodejs' // requires Node.js for getSupabaseAdmin()
+// 2026-07-11:改回 edge runtime。此前 runtime='nodejs'(为 getSupabaseAdmin)触发
+// next/og@16 在 nodejs runtime 的 pipe-time "u2 is not iterable" bug —— 惰性渲染
+// 在 handler return 之后抛,try/catch 和 302 兜底全够不着,~1412 个 trader 分享卡
+// 全部 500(隔离验证:唯一 nodejs 的 OG 路由 500,edge 的 rank/homepage/compare 全
+// 200)。edge 无 pg,故 DB 查询改 Supabase REST fetch、Buffer→edge base64。
+export const runtime = 'edge'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || ''
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+
+/** Edge-safe Supabase REST GET → first row or null. */
+async function restSelect(table: string, query: string): Promise<Record<string, unknown> | null> {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}&limit=1`, {
+      headers: { apikey: SUPABASE_KEY, Authorization: `Bearer ${SUPABASE_KEY}` },
+      signal: AbortSignal.timeout(4000),
+    })
+    if (!res.ok) return null
+    const rows = (await res.json()) as Record<string, unknown>[]
+    return rows[0] ?? null
+  } catch {
+    return null
+  }
+}
 
 const C = {
   bgTop: '#0A0A0F',
@@ -111,73 +131,32 @@ function formatRoi(roi: number): string {
 }
 
 async function fetchTrader(handle: string) {
-  const supabase = getSupabaseAdmin()
+  // Edge REST equivalents of the prior Supabase-js lookups. `ilike` → `ilike.*`,
+  // exact → `eq.`. PostgREST URL-encodes values in the query string.
+  const enc = encodeURIComponent
+  const decoded = decodeURIComponent(handle)
+  const cols = 'handle,avatar_url,source,source_trader_id'
 
-  let source: {
-    handle: string | null
-    display_name?: string | null
-    avatar_url: string | null
-    source: string
-    source_trader_id: string
-  } | null = null
-
-  const { data: byHandle } = await supabase
-    .from('trader_sources')
-    .select('handle, avatar_url, source, source_trader_id')
-    .ilike('handle', handle)
-    .limit(1)
-    .maybeSingle()
-
-  if (byHandle) {
-    source = byHandle
-  } else {
-    const { data: byId } = await supabase
-      .from('trader_sources')
-      .select('handle, avatar_url, source, source_trader_id')
-      .eq('source_trader_id', decodeURIComponent(handle))
-      .limit(1)
-      .maybeSingle()
-
-    if (byId) {
-      source = byId
-    } else {
-      const { data: byLr } = await supabase
-        .from('leaderboard_ranks')
-        .select('handle, avatar_url, source, source_trader_id')
-        .eq('source_trader_id', decodeURIComponent(handle))
-        .eq('season_id', '90D')
-        .limit(1)
-        .maybeSingle()
-
-      if (byLr) {
-        source = byLr
-      }
-    }
-  }
+  const source =
+    (await restSelect('trader_sources', `select=${cols}&handle=ilike.${enc(handle)}`)) ??
+    (await restSelect('trader_sources', `select=${cols}&source_trader_id=eq.${enc(decoded)}`)) ??
+    (await restSelect(
+      'leaderboard_ranks',
+      `select=${cols}&source_trader_id=eq.${enc(decoded)}&season_id=eq.90D`
+    ))
 
   if (!source) return null
+  const srcName = source.source as string
+  const srcTraderId = source.source_trader_id as string
 
   // Cascade through season_ids: 90D → 30D → 7D
-  let rankData: {
-    roi: number | null
-    pnl: number | null
-    win_rate: number | null
-    max_drawdown: number | null
-    arena_score: number | null
-    rank: number | null
-    season_id?: string
-  } | null = null
+  let rankData: Record<string, unknown> | null = null
   let usedSeason = '90D'
-
-  for (const season of ['90D', '30D', '7D'] as const) {
-    const { data } = await supabase
-      .from('leaderboard_ranks')
-      .select('roi, pnl, win_rate, max_drawdown, arena_score, rank')
-      .eq('source', source.source)
-      .eq('source_trader_id', source.source_trader_id)
-      .eq('season_id', season)
-      .maybeSingle()
-
+  for (const season of ['90D', '30D', '7D']) {
+    const data = await restSelect(
+      'leaderboard_ranks',
+      `select=roi,pnl,win_rate,max_drawdown,arena_score,rank&source=eq.${enc(srcName)}&source_trader_id=eq.${enc(srcTraderId)}&season_id=eq.${season}`
+    )
     if (data) {
       rankData = data
       usedSeason = season
@@ -189,18 +168,12 @@ async function fetchTrader(handle: string) {
   // dropped from prod (phase1_drop_dead_tables). leaderboard_ranks cascade
   // above is the only data source; missing traders render the no-stats card.
 
-  return { ...source, platform: source.source, season: usedSeason, ...(rankData || {}) }
+  return { ...source, platform: srcName, season: usedSeason, ...(rankData || {}) }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    // 2026-07-11:checkRateLimit 曾在 try 外 —— checkRateLimitFull 内部
-    // Upstash 抛错时整个 handler 未捕获 → 500(text/html Next 错误页),
-    // 让三层 ImageResponse 兜底形同虚设(?handle=test 线上恒 500 的真因)。
-    // 纳入 try 后任何限流层异常都落到底部 302 静态图兜底,永不 500。
-    const rateLimitResp = await checkRateLimit(request, RateLimitPresets.public)
-    if (rateLimitResp) return rateLimitResp
-
+    // OG 路由不限流(与工作的 rank/homepage/compare edge OG 一致,CDN s-maxage 缓存)。
     const { searchParams } = new URL(request.url)
     const handle = searchParams.get('handle')?.slice(0, 200) || ''
 
@@ -213,17 +186,19 @@ export async function GET(request: NextRequest) {
     // misleading share links with fake stats for any trader.
     const overrideSource = (searchParams.get('source') || '').slice(0, 50)
 
-    const trader = await fetchTrader(handle)
+    const trader = (await fetchTrader(handle)) as Record<string, unknown> | null
+    const num = (v: unknown): number | null => (typeof v === 'number' ? v : null)
+    const str = (v: unknown): string | null => (typeof v === 'string' ? v : null)
 
-    const displayName = trader?.display_name || trader?.handle || handle
-    const roi = trader?.roi ?? null
-    const score = trader?.arena_score ?? null
-    const rank = trader?.rank ?? null
-    const winRate = trader?.win_rate ?? null
-    const mdd = trader?.max_drawdown ?? null
-    const platform = overrideSource || trader?.platform || ''
-    const avatarUrl = trader?.avatar_url || null
-    const season = trader?.season ?? '90D'
+    const displayName = str(trader?.display_name) || str(trader?.handle) || handle
+    const roi = num(trader?.roi)
+    const score = num(trader?.arena_score)
+    const rank = num(trader?.rank)
+    const winRate = num(trader?.win_rate)
+    const mdd = num(trader?.max_drawdown)
+    const platform = overrideSource || str(trader?.platform) || ''
+    const avatarUrl = str(trader?.avatar_url)
+    const season = str(trader?.season) ?? '90D'
     const seasonLabel = season === 'latest' ? 'Latest' : season
 
     const roiValid = roi != null
@@ -255,9 +230,11 @@ export async function GET(request: NextRequest) {
           if (avatarRes.ok) {
             const ct = avatarRes.headers.get('content-type') || 'image/png'
             if (ct.startsWith('image/')) {
-              const buf = await avatarRes.arrayBuffer()
-              const b64 = Buffer.from(buf).toString('base64')
-              avatarSrc = `data:${ct};base64,${b64}`
+              // edge-safe base64(无 Buffer):Uint8Array → binary string → btoa。
+              const bytes = new Uint8Array(await avatarRes.arrayBuffer())
+              let binary = ''
+              for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+              avatarSrc = `data:${ct};base64,${btoa(binary)}`
             }
           }
         } catch {
@@ -667,7 +644,7 @@ export async function GET(request: NextRequest) {
       }
     )
   } catch (e) {
-    logger.error('[OG Trader] Error:', e)
+    console.error('[OG Trader] Error:', e) // edge runtime — console, not node logger
     // Return a minimal fallback OG image instead of a 500 error.
     // A broken OG image means no social preview on Twitter/Discord — unacceptable.
     const fallbackHandle = (new URL(request.url).searchParams.get('handle') || 'Trader').slice(
