@@ -12,6 +12,7 @@ import { getScoreColor } from '@/lib/utils/score-colors'
 import type { Trader } from './RankingTable'
 import type { SourceInfo } from './utils'
 import { getStyleInfo } from '@/lib/utils/trading-style'
+import AntiGamingBadge from './AntiGamingBadge'
 import {
   TRADER_INFO_STYLE,
   NAME_COLUMN_STYLE,
@@ -164,6 +165,12 @@ export const TraderInfoCell = memo(function TraderInfoCell({
               Bot?
             </span>
           )}
+          <AntiGamingBadge
+            flags={trader.anti_gaming_flags}
+            winRate={trader.win_rate}
+            tradesCount={trader.trades_count}
+            compact
+          />
           {/* Trading Style Chip */}
           {tradingStyleInfo && (
             <span

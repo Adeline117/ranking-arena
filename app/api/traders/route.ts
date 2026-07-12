@@ -20,6 +20,7 @@ import type { Period } from '@/lib/utils/arena-score'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
+import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 
@@ -279,6 +280,13 @@ async function fetchFromLeaderboard(
       row.source === 'web3_bot' || row.trader_type === 'bot' || row.trader_type === 'suspected_bot',
     trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
     is_outlier: row.is_outlier === true,
+    // Trust-facing anti-gaming flags — derived at read time from serving-row
+    // fields (no pipeline/migration change). Empty [] for the ~97% of rows
+    // with plausible metrics.
+    anti_gaming_flags: computeAntiGamingFlags({
+      winRate: row.win_rate != null ? Number(row.win_rate) : null,
+      tradesCount: row.trades_count != null ? Number(row.trades_count) : null,
+    }),
   }))
 
   // Deduplicate 0x addresses (case-insensitive) — VPS imports may write checksum-case
