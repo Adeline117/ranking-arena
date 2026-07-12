@@ -12,7 +12,7 @@ import { getScoreColorInfo } from '@/lib/utils/score-colors'
 import { tokens } from '@/lib/design-tokens'
 import Metric from '@/app/components/ui/Metric'
 import ScoreMiniBar from '@/app/components/ranking/ScoreMiniBar'
-import { getServerTranslation } from '@/lib/i18n/server'
+import { getStaticTranslation } from '@/lib/i18n/server'
 
 /** Same tiers + CSS vars as the hydrated TraderCard (getScoreStyle in
  *  TraderDisplay wraps the same util) — the SSR shell previously used stale
@@ -39,7 +39,10 @@ interface Props {
 }
 
 export default async function SSRRankingTable({ traders, startRank = 0 }: Props) {
-  const { t } = await getServerTranslation()
+  // 2026-07-12 ISR 根因修复:getServerTranslation 的 cookies() 把 `/` 判为动态
+  // (revalidate=300 失效,宣传第一落点零边缘缓存)。静态壳固定英文,客户端
+  // Phase 2 水合后换语言 —— 与本页"SSR 恒默认视图"决策一致。
+  const { t } = getStaticTranslation()
   if (!traders.length) {
     return (
       <div
