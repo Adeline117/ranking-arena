@@ -35,10 +35,10 @@ export interface TelegramAlertOptions {
 
 // Severity-based dedup windows
 const DEDUP_TTL_BY_LEVEL: Record<AlertLevel, number> = {
-  critical: 1 * 60 * 60,   // 1 hour  — don't miss repeated critical errors
-  warning: 6 * 60 * 60,    // 6 hours
-  info: 24 * 60 * 60,      // 24 hours (info is logged only, kept for completeness)
-  report: 0,                // no dedup — always send
+  critical: 1 * 60 * 60, // 1 hour  — don't miss repeated critical errors
+  warning: 6 * 60 * 60, // 6 hours
+  info: 24 * 60 * 60, // 24 hours (info is logged only, kept for completeness)
+  report: 0, // no dedup — always send
 }
 
 const DEDUP_TTL_SECONDS = 24 * 60 * 60 // 24 hours (legacy default)
@@ -47,7 +47,10 @@ const DEDUP_TTL_SECONDS = 24 * 60 * 60 // 24 hours (legacy default)
  * Check if this alert was already sent within the dedup window.
  * Uses Upstash Redis if available, falls back to in-memory Map.
  */
-async function isDeduplicated(key: string, ttlSeconds: number = DEDUP_TTL_SECONDS): Promise<boolean> {
+async function isDeduplicated(
+  key: string,
+  ttlSeconds: number = DEDUP_TTL_SECONDS
+): Promise<boolean> {
   // No dedup if TTL is 0 (e.g., report level)
   if (ttlSeconds <= 0) return false
 
@@ -77,7 +80,10 @@ async function clearDedup(key: string): Promise<void> {
       await redis.del(`alert:dedup:${key}`)
     }
   } catch (err) {
-    logger.error('[telegram] Redis dedup clear failed:', err instanceof Error ? err.message : String(err))
+    logger.error(
+      '[telegram] Redis dedup clear failed:',
+      err instanceof Error ? err.message : String(err)
+    )
   }
   inMemoryMap.delete(key)
 }
@@ -102,10 +108,10 @@ function isRateLimitedInMemory(key: string, ttlMs: number = IN_MEMORY_TTL): bool
 // ============================================
 
 const LEVEL_ICON: Record<AlertLevel, string> = {
-  critical: '\u{1F534}',  // 🔴
-  warning: '\u{1F7E1}',   // 🟡
-  info: '\u{1F7E2}',      // 🟢
-  report: '\u{1F4CA}',    // 📊
+  critical: '\u{1F534}', // 🔴
+  warning: '\u{1F7E1}', // 🟡
+  info: '\u{1F7E2}', // 🟢
+  report: '\u{1F4CA}', // 📊
 }
 
 const LEVEL_LABEL: Record<AlertLevel, string> = {
@@ -139,14 +145,21 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
     try {
       await recordWarningForDigest(opts)
     } catch (err) {
-      logger.error('[telegram] warning digest recording failed:', err instanceof Error ? err.message : String(err))
+      logger.error(
+        '[telegram] warning digest recording failed:',
+        err instanceof Error ? err.message : String(err)
+      )
     }
     return false
   }
 
   // CRITICAL and REPORT: send to Telegram
   const token = process.env.TELEGRAM_BOT_TOKEN
-  const chatId = process.env.TELEGRAM_ALERT_CHAT_ID
+  // P0/FYI 分层(2026-07-11):critical 走独立 chat(可静音例外),其余进 FYI chat。
+  // TELEGRAM_CRITICAL_CHAT_ID 未设则回退到 ALERT_CHAT_ID(零行为变化)。
+  const fyiChatId = process.env.TELEGRAM_ALERT_CHAT_ID
+  const chatId =
+    opts.level === 'critical' ? process.env.TELEGRAM_CRITICAL_CHAT_ID || fyiChatId : fyiChatId
   if (!token || !chatId) {
     logger.warn('[Telegram] 未配置 TELEGRAM_BOT_TOKEN / TELEGRAM_ALERT_CHAT_ID')
     return false
@@ -157,7 +170,10 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
   const dedupTtl = DEDUP_TTL_BY_LEVEL[opts.level]
   if (dedupTtl > 0) {
     // Strip numbers, hashes, timestamps from title to create stable dedup key
-    const normalizedTitle = opts.title.replace(/[\d]+/g, 'N').replace(/[a-f0-9]{8,}/gi, 'HASH').slice(0, 80)
+    const normalizedTitle = opts.title
+      .replace(/[\d]+/g, 'N')
+      .replace(/[a-f0-9]{8,}/gi, 'HASH')
+      .slice(0, 80)
     const dedupKey = `${opts.source}:${normalizedTitle}`
     const deduped = await isDeduplicated(dedupKey, dedupTtl)
     if (deduped) {
@@ -253,26 +269,39 @@ async function recordWarningForDigest(opts: TelegramAlertOptions): Promise<void>
     await redis.zremrangebyscore('alert:warnings:24h', 0, cutoff)
     await redis.zremrangebyrank('alert:warnings:24h', 0, -1001)
   } catch (err) {
-    logger.error('[telegram] Redis warning aggregation failed:', err instanceof Error ? err.message : String(err))
+    logger.error(
+      '[telegram] Redis warning aggregation failed:',
+      err instanceof Error ? err.message : String(err)
+    )
   }
 }
 
 /**
  * Get buffered warnings from Redis for the daily digest.
  */
-async function getBufferedWarnings(): Promise<Array<{ source: string; title: string; message: string; ts: number }>> {
+async function getBufferedWarnings(): Promise<
+  Array<{ source: string; title: string; message: string; ts: number }>
+> {
   try {
     const redis = await getSharedRedis()
     if (!redis) return []
 
     const cutoff = Date.now() - 24 * 60 * 60 * 1000
     const entries = await redis.zrange('alert:warnings:24h', cutoff, Date.now(), { byScore: true })
-    return (entries as string[]).map(e => {
-      try { return JSON.parse(e) }
-      catch (_err) { return null }
-    }).filter(Boolean)
+    return (entries as string[])
+      .map((e) => {
+        try {
+          return JSON.parse(e)
+        } catch (_err) {
+          return null
+        }
+      })
+      .filter(Boolean)
   } catch (err) {
-    logger.error('[telegram] getBufferedWarnings failed:', err instanceof Error ? err.message : String(err))
+    logger.error(
+      '[telegram] getBufferedWarnings failed:',
+      err instanceof Error ? err.message : String(err)
+    )
     return []
   }
 }
@@ -293,11 +322,15 @@ export interface DailyDigestData {
 }
 
 export async function sendDailyDigest(data: DailyDigestData): Promise<boolean> {
-  const statusIcon = data.pipelineSuccessRate >= 95 ? '\u{1F7E2}' :
-                     data.pipelineSuccessRate >= 80 ? '\u{1F7E1}' : '\u{1F534}'
+  const statusIcon =
+    data.pipelineSuccessRate >= 95
+      ? '\u{1F7E2}'
+      : data.pipelineSuccessRate >= 80
+        ? '\u{1F7E1}'
+        : '\u{1F534}'
 
   // Count platforms by status
-  const okCount = data.platformFreshness.filter(p => p.status === 'ok').length
+  const okCount = data.platformFreshness.filter((p) => p.status === 'ok').length
   const totalCount = data.platformFreshness.length
 
   let text = `\u{1F4CA} <b>Arena 每日报告</b>\n`
@@ -312,7 +345,10 @@ export async function sendDailyDigest(data: DailyDigestData): Promise<boolean> {
   if (data.snapshotCount24h != null) {
     text += `新增 Snapshot: ${data.snapshotCount24h.toLocaleString()}`
     if (data.snapshotCountYesterday != null && data.snapshotCountYesterday > 0) {
-      const change = ((data.snapshotCount24h - data.snapshotCountYesterday) / data.snapshotCountYesterday * 100).toFixed(1)
+      const change = (
+        ((data.snapshotCount24h - data.snapshotCountYesterday) / data.snapshotCountYesterday) *
+        100
+      ).toFixed(1)
       text += ` (${Number(change) >= 0 ? '+' : ''}${change}% vs 昨天)`
     }
     text += '\n'
@@ -326,8 +362,8 @@ export async function sendDailyDigest(data: DailyDigestData): Promise<boolean> {
   if (data.activeUsers != null) text += `活跃用户: ${data.activeUsers}\n`
 
   // Problem platforms
-  const criticals = data.platformFreshness.filter(p => p.status === 'critical')
-  const stales = data.platformFreshness.filter(p => p.status === 'stale')
+  const criticals = data.platformFreshness.filter((p) => p.status === 'critical')
+  const stales = data.platformFreshness.filter((p) => p.status === 'stale')
 
   if (criticals.length > 0) {
     text += '\n<b>\u{1F534} CRITICAL 管道:</b>\n'
@@ -356,7 +392,9 @@ export async function sendDailyDigest(data: DailyDigestData): Promise<boolean> {
       bySource.set(w.source, (bySource.get(w.source) || 0) + 1)
     }
     text += `\n<b>过去 24h 的 WARNING (${warnings.length} 条):</b>\n`
-    for (const [source, count] of Array.from(bySource.entries()).sort((a, b) => b[1] - a[1]).slice(0, 10)) {
+    for (const [source, count] of Array.from(bySource.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 10)) {
       text += `  ${source}: ${count} 次\n`
     }
   }
