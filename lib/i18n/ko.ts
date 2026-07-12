@@ -1994,7 +1994,7 @@ const ko = {
     'Visa 및 Mastercard 신용/체크 카드와 Apple Pay 및 Google Pay를 지원합니다. 결제는 Stripe를 통해 안전하게 처리됩니다.',
   helpRefundQ: '구독 후 환불이 가능한가요?',
   helpRefundA:
-    '환불 정책에 따라 Pro 기능을 사용하지 않은 경우 7일 이내에 전액 환불을 요청할 수 있습니다. 고객 지원에 문의해 주세요.',
+    '언제든지 구독을 취소할 수 있으며 Pro 액세스는 청구 기간이 끝날 때까지 유지됩니다. 환불은 개별적으로 검토합니다 — 문의해 주세요.',
   helpCancelSubQ: '구독을 취소하는 방법은?',
   helpCancelSubA:
     '"설정" > "결제"로 이동하여 "구독 관리"를 클릭하면 Stripe 고객 포털에서 취소할 수 있습니다. 취소 후에도 현재 결제 기간이 끝날 때까지 계속 사용할 수 있습니다.',
@@ -2625,7 +2625,7 @@ const ko = {
     'Visa, Mastercard, Apple Pay, Google Pay를 지원합니다. 결제는 Stripe를 통해 안전하게 처리됩니다.',
   faqRefundQ: '환불 정책이 있나요?',
   faqRefundA:
-    '첫 구독 후 7일 이내에 만족하지 않으시면 전액 환불을 요청할 수 있습니다. support@arenafi.org로 문의해 주세요.',
+    '언제든지 취소할 수 있으며 Pro는 청구 기간이 끝날 때까지 유지됩니다. 환불은 개별 검토됩니다 — 문의해 주세요.',
   faqSwitchPlanQ: '연간 요금제에서 월간 요금제로 변경할 수 있나요?',
   faqSwitchPlanA: '현재 구독이 만료된 후 다른 결제 주기를 선택하여 갱신할 수 있습니다.',
   faq: '자주 묻는 질문',
@@ -2648,7 +2648,7 @@ const ko = {
   activationInProgress: '활성화 진행 중',
   paymentSuccessActivating:
     '결제가 완료되었습니다. 멤버십 활성화가 진행 중입니다. 보통 몇 초 정도 소요되며, 다시 시도해 주세요.',
-  contactSupportIfFails: '재시도 후에도 실패하면 support@arenafi.org로 문의해 주세요',
+  contactSupportIfFails: '재시도 후에도 실패하면 adelinewen1107@outlook.com로 문의해 주세요',
   paymentStatusUnconfirmed: '결제를 확인할 수 없습니다',
   paymentStatusUnconfirmedDesc:
     '구독 상태를 확인할 수 없습니다. 결제가 완료되었다면 멤버십은 보통 몇 분 이내에 활성화됩니다.',
@@ -4223,7 +4223,7 @@ const ko = {
   footerSlogan: '암호화폐의 모든 순위',
   footerDisclaimerText:
     '제공되는 데이터는 정보 제공 목적으로만 사용되며 투자 조언을 구성하지 않습니다. 암호화폐 거래에는 상당한 위험이 수반됩니다.',
-  footerLegalEntity: 'Arena Team · 연락처: support@arenafi.org',
+  footerLegalEntity: 'Arena Team · 연락처: adelinewen1107@outlook.com',
 
   // Score breakdown
   scoreNoDetails: '점수 상세 정보가 없습니다',
@@ -5011,7 +5011,8 @@ const ko = {
   pricingFaqCancelA:
     '네! 월간 구독은 언제든 취소할 수 있습니다. 결제 기간이 끝날 때까지 이용할 수 있습니다.',
   pricingFaqRefundQ: '연간 요금제 환불은 어떻게 되나요?',
-  pricingFaqRefundA: '연간 구독은 처음 7일 이내에 전액 환불이 가능합니다.',
+  pricingFaqRefundA:
+    '언제든지 취소 가능하며 액세스는 기간 종료까지 유지됩니다. 환불은 개별적으로 처리됩니다.',
   pricingFaqLifetimeQ: '평생이란 무엇을 의미하나요?',
   pricingFaqLifetimeA:
     '한 번 결제로 모든 Pro 기능에 영구적으로 접근할 수 있습니다. 미래의 기능과 가격 인상도 모두 포함됩니다.',
@@ -6354,7 +6355,7 @@ const ko = {
   privacySec2Title: '2. 수집하는 정보',
   privacySec2ProvidedLabel: '귀하가 제공하는 정보:',
   privacySec2ProvidedList:
-    '계정 생성 시 이메일 주소\nWeb3 로그인(Privy)으로 연결 시 지갑 주소\n귀하가 추가하기로 선택한 프로필 정보(표시 이름, 아바타)\n귀하가 게시하는 콘텐츠(댓글, 그룹 게시물)',
+    '계정 생성 시 이메일 주소\nWeb3 로그인(Privy)으로 연결 시 지갑 주소\n귀하가 추가하기로 선택한 프로필 정보(표시 이름, 아바타)\n귀하가 게시하는 콘텐츠(댓글, 그룹 게시물)\n포트폴리오 동기화 또는 트레이더 클레임을 위해 연결하는 거래소 API 키(읽기 전용, 저장 시 AES-256-GCM으로 암호화, 로그에 기록하지 않음)',
   privacySec2AutoLabel: '자동으로 수집되는 정보:',
   privacySec2AutoList:
     'Vercel Analytics를 통한 사용 분석 데이터(페이지 조회수, 기능 상호작용)\n기기 및 브라우저 정보(사용자 에이전트, 화면 해상도)\nIP 주소(보안 및 남용 방지에 사용하며 장기간 저장하지 않음)',
@@ -6364,9 +6365,12 @@ const ko = {
   privacySec4Title: '4. 제3자 서비스',
   privacySec4Intro: '당사는 Arena를 운영하기 위해 다음 제3자 서비스를 이용합니다:',
   privacySec4List:
-    'Supabase — 데이터베이스 및 인증\nVercel — 호스팅 및 분석\nStripe — Pro 구독 결제 처리\nPrivy — Web3 지갑 인증\nUpstash — Redis 캐싱 계층',
+    'Supabase — 데이터베이스 및 인증\nVercel — 호스팅 및 분석\nStripe — Pro 구독 결제 처리\nPrivy — Web3 지갑 인증\nUpstash — Redis 캐싱 계층\nSentry — 오류 모니터링 및 진단(요청 컨텍스트를 수신할 수 있으며 전송 전 IP/개인정보 제거)',
   privacySec4Outro:
     '각 제공업체는 자체 개인정보 처리방침과 데이터 처리 관행을 가지고 있습니다. 당사는 각 서비스의 작동에 필요한 최소한의 데이터만 공유합니다.',
+  privacyPublicDataTitle: '공개 트레이더 데이터',
+  privacyPublicDataBody:
+    'Arena는 거래소 순위표와 공개 온체인 활동에서 수만 명 트레이더의 공개 실적 데이터(표시 이름, 아바타, 거래 지표 포함)를 집계합니다. 이 트레이더들이 반드시 Arena 사용자는 아닙니다. 순위 서비스 운영을 위해 정당한 이익에 근거하여 처리합니다.\n\n등재된 트레이더인 경우 프로필을 클레임하여 표시 방식을 제어하거나 adelinewen1107@outlook.com로 삭제(등재 해제)를 요청할 수 있습니다.',
   privacySec5Title: '5. 쿠키',
   privacySec5Body:
     'Arena는 인증 및 세션 관리를 위해 필수 쿠키만 사용합니다. 사용 추적에는 Vercel Analytics를 사용하며 이는 제3자 쿠키를 사용하지 않습니다. 당사는 타겟 광고를 제공하거나 추적 쿠키를 사용하지 않습니다.',

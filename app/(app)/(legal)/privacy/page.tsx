@@ -229,6 +229,16 @@ export default function PrivacyPolicyPage() {
         </div>
       </section>
 
+      {/* Public trader data disclosure (2026-07-11 合规审计:此前隐私政策仅面向
+          注册用户,未覆盖 34k 被抓取的第三方交易员数据。GDPR Art.14 式告知 +
+          认领/移除路径。) */}
+      <section style={sectionStyle}>
+        <Text as="h2" id="public-trader-data" size="xl" weight="semibold" style={headingStyle}>
+          {t('privacyPublicDataTitle')}
+        </Text>
+        <div style={bodyStyle}>{renderParagraphs(t('privacyPublicDataBody'))}</div>
+      </section>
+
       <section style={sectionStyle}>
         <Text as="h2" id="cookies" size="xl" weight="semibold" style={headingStyle}>
           {t('privacySec5Title')}

@@ -2087,7 +2087,8 @@ const zh = {
   helpPaymentMethodsA:
     '我们支持 Visa、Mastercard 信用卡/借记卡，以及 Apple Pay 和 Google Pay。付款由 Stripe 安全处理。',
   helpRefundQ: '订阅后可以退款吗？',
-  helpRefundA: '根据我们的退款政策，7天内如未使用任何 Pro 功能可申请全额退款。请联系客服处理。',
+  helpRefundA:
+    '你可随时取消订阅，Pro 权限持续到当前计费周期结束。退款逐案处理——联系我们，我们会审核你的请求。',
   helpCancelSubQ: '如何取消订阅？',
   helpCancelSubA:
     '进入「设置」>「账单」页面，点击「管理订阅」即可在 Stripe 客户门户中取消订阅。取消后可继续使用至当前计费周期结束。',
@@ -2650,7 +2651,7 @@ const zh = {
   faqPaymentQ: '支持哪些支付方式？',
   faqPaymentA: '我们支持 Visa、Mastercard、Apple Pay、Google Pay。付款由 Stripe 安全处理。',
   faqRefundQ: '有退款政策吗？',
-  faqRefundA: '首次订阅后7天内如不满意，可申请全额退款。请联系 support@arenafi.org。',
+  faqRefundA: '你可随时取消，Pro 权限保留到计费周期结束。退款逐案审核——联系我们即可。',
   faqSwitchPlanQ: '年付可以切换为月付吗？',
   faqSwitchPlanA: '当前订阅到期后，您可以选择不同的计费周期续订。',
   faq: '常见问题',
@@ -2672,7 +2673,7 @@ const zh = {
   redirectingCountdown: '{seconds} 秒后自动返回首页...',
   activationInProgress: '激活处理中',
   paymentSuccessActivating: '您的付款已成功，会员正在激活中。这通常需要几秒钟，请稍后重试。',
-  contactSupportIfFails: '如多次重试后仍未激活，请联系 support@arenafi.org',
+  contactSupportIfFails: '如多次重试后仍未激活，请联系 adelinewen1107@outlook.com',
   paymentStatusUnconfirmed: '无法确认支付状态',
   paymentStatusUnconfirmedDesc:
     '我们暂时无法确认你的订阅状态。如果你已完成扣款，会员通常会在几分钟内自动激活。',
@@ -4277,7 +4278,7 @@ const zh = {
   footerSlogan: '加密万物排行榜',
   footerDisclaimerText:
     '风险提示：加密货币交易存在重大亏损风险。过往表现不代表未来收益。Arena 仅提供数据和排名供参考，不构成投资建议。请务必自行研究。',
-  footerLegalEntity: 'Arena Team · 联系邮箱: support@arenafi.org',
+  footerLegalEntity: 'Arena Team · 联系邮箱: adelinewen1107@outlook.com',
 
   // Score breakdown
   scoreNoDetails: '暂无评分详情',
@@ -5045,7 +5046,7 @@ const zh = {
   pricingFaqCancelQ: '可以随时取消吗？',
   pricingFaqCancelA: '当然！月付用户可以随时取消，当期剩余时间仍然有效。',
   pricingFaqRefundQ: '年付如何退款？',
-  pricingFaqRefundA: '年付用户在首7天内可以全额退款。',
+  pricingFaqRefundA: '可随时取消，访问持续到周期结束。退款逐案处理。',
   pricingFaqLifetimeQ: '终身会员是什么意思？',
   pricingFaqLifetimeA: '一次付款，永久享有所有 Pro 功能。即使未来涨价或增加新功能，都自动包含。',
 
@@ -6323,7 +6324,7 @@ const zh = {
   privacySec2Title: '2. 我们收集的信息',
   privacySec2ProvidedLabel: '您主动提供的信息：',
   privacySec2ProvidedList:
-    '创建账户时的电子邮箱地址\n通过 Web3 登录（Privy）连接时的钱包地址\n您选择添加的个人资料（显示名称、头像）\n您发布的内容（评论、群组帖子）',
+    '创建账户时的电子邮箱地址\n通过 Web3 登录（Privy）连接时的钱包地址\n您选择添加的个人资料（显示名称、头像）\n您发布的内容（评论、群组帖子）\n您为组合同步或认领交易员而连接的交易所 API 密钥（只读；静态以 AES-256-GCM 加密，绝不写入日志）',
   privacySec2AutoLabel: '自动收集的信息：',
   privacySec2AutoList:
     '使用分析数据（页面浏览量、功能交互），通过 Vercel Analytics 收集\n设备和浏览器信息（用户代理、屏幕分辨率）\nIP 地址（用于安全和反滥用，不长期存储）',
@@ -6333,9 +6334,12 @@ const zh = {
   privacySec4Title: '4. 第三方服务',
   privacySec4Intro: '我们使用以下第三方服务来运营 Arena：',
   privacySec4List:
-    'Supabase —— 数据库和身份验证\nVercel —— 托管和分析\nStripe —— Pro 订阅付款处理\nPrivy —— Web3 钱包身份验证\nUpstash —— Redis 缓存层',
+    'Supabase —— 数据库和身份验证\nVercel —— 托管和分析\nStripe —— Pro 订阅付款处理\nPrivy —— Web3 钱包身份验证\nUpstash —— Redis 缓存层\nSentry —— 错误监控与诊断（可能接收请求上下文；发送前已脱敏 IP/个人信息）',
   privacySec4Outro:
     '每个服务提供商都有自己的隐私政策和数据处理惯例。我们仅共享每项服务运行所需的最少数据。',
+  privacyPublicDataTitle: '公开交易员数据',
+  privacyPublicDataBody:
+    'Arena 从交易所排行榜和公开链上活动聚合数万名交易员的公开表现数据，包括显示名称、头像和交易指标。这些交易员不一定是 Arena 用户。我们基于正当利益处理这些公开数据以运营排名服务。\n\n如果你是被列出的交易员，可认领你的主页以控制展示方式，或联系 adelinewen1107@outlook.com 请求移除（下架）。',
   privacySec5Title: '5. Cookie 政策',
   privacySec5Body:
     'Arena 仅使用必要的 Cookie 用于身份验证和会话管理。我们使用 Vercel Analytics 进行使用跟踪，不使用第三方 Cookie。我们不提供定向广告，也不使用跟踪 Cookie。',
