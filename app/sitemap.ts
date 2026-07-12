@@ -215,8 +215,14 @@ export default async function sitemap({
 }: {
   id: number
 }): Promise<MetadataRoute.Sitemap> {
-  // Next.js passes route params as strings — coerce to number for comparison
-  const id = Number(rawId)
+  // Next.js 16 (Turbopack) passes `id` as a PROMISE despite the `number` type
+  // (async-params behavior). Without awaiting, Number(Promise)=NaN → no `id ===`
+  // branch matches → EVERY shard returns empty → all trader/post/group URLs
+  // silently vanish from the sitemap (SEO loss). Await if thenable, then coerce.
+  const isThenable =
+    rawId != null && typeof (rawId as unknown as { then?: unknown }).then === 'function'
+  const resolvedId = isThenable ? await (rawId as unknown as Promise<number | string>) : rawId
+  const id = Number(resolvedId)
   const now = new Date().toISOString()
 
   // ── Sitemap 0: static pages + exchange landing pages ─────────────────────
@@ -227,8 +233,6 @@ export default async function sitemap({
   // are all 301 redirects and must NOT appear here.
   // Exchange landing pages at /exchange/{slug} ARE included — they are proper
   // pages with unique content, metadata, and JSON-LD structured data.
-  // eslint-disable-next-line no-console
-  console.log(`[sitemap] id=${id} (type=${typeof id}, raw=${rawId}, rawType=${typeof rawId})`)
 
   if (id === STATIC_SITEMAP_ID) {
     const staticPages: MetadataRoute.Sitemap = [
