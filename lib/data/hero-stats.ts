@@ -43,6 +43,14 @@ export interface HeroStats {
  * 缓存 TTL: 1 小时
  */
 export async function getHeroStats(): Promise<HeroStats> {
+  // 2026-07-11:build 期短路（镜像 getInitialTraders:103）。此前缺此 guard 是
+  // 首页 ISR 失效真因 —— build-time 静态生成时下面的 tieredGet(Upstash REST)+
+  // Supabase RPC 都带 AbortSignal → 不可缓存 fetch → Next 判 `/` 为动态,
+  // revalidate=300 被忽略,每 PV 都 SSR+MISS(宣传第一落点零边缘缓存)。build 时
+  // 返回 defaults 让 `/` 静态预渲染;运行时 ISR 后台再生会跑真实 fetch。
+  if (process.env.NEXT_PHASE === 'phase-production-build') {
+    return { ...DEFAULT_STATS, isDefault: true }
+  }
   try {
     // 1. Try cache (real data only — defaults are never written to CACHE_KEY)
     const { data: cached } = await tieredGet<HeroStats>(CACHE_KEY, 'cold')
