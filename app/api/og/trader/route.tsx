@@ -229,7 +229,11 @@ export async function GET(request: NextRequest) {
           })
           if (avatarRes.ok) {
             const ct = avatarRes.headers.get('content-type') || 'image/png'
-            if (ct.startsWith('image/')) {
+            // 关键(2026-07-11 真因):Satori/next/og 只能解 PNG/JPEG。avatar 代理
+            // 常返回 image/webp(实测 bitunix 头像),嵌 webp data URI → 渲染惰性抛
+            // "not iterable" → 500(try/catch 够不着)。故仅嵌 PNG/JPEG,其余(webp
+            // /gif/svg)跳过走首字母占位 —— 宁可无头像也永不 500。
+            if (ct === 'image/png' || ct === 'image/jpeg' || ct === 'image/jpg') {
               // edge-safe base64(无 Buffer):Uint8Array → binary string → btoa。
               const bytes = new Uint8Array(await avatarRes.arrayBuffer())
               let binary = ''
