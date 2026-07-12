@@ -11,6 +11,15 @@ import { SectionCard, getInputStyle } from './shared'
 import PasswordInput from '@/app/components/ui/PasswordInput'
 import { validateEmail, validatePassword, validatePasswordMatch } from '../validation'
 
+// 假安全隐藏门 —— 这两个界面存在但后端不生效，暴露给用户 = 信任风险：
+//  • 2FA：`verifyTotpCode` 仅注册流(api/settings/2fa/verify)调用，任何登录路径都不校验
+//    TOTP → 启用 2FA 对登录安全零作用。接线到 auth 流之前隐藏，不展示假安全感。
+//  • Sessions：app 代码从不 INSERT `login_sessions`（仅读/删）→ 列表永远空、
+//    "撤销会话"作用于永不存在的行。改为真接线(登录时写 session 行)之前隐藏。
+// 后端代码/路由全部保留，仅隐藏 UI 入口。真接线后把对应开关翻 true 即可。
+const SECURITY_2FA_ENABLED = false
+const SESSION_MANAGEMENT_ENABLED = false
+
 interface SessionInfo {
   id: string
   deviceInfo: { browser?: string; os?: string } | null
@@ -327,300 +336,302 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
         )}
       </Box>
 
-      {/* 2FA Section */}
-      <Box
-        style={{
-          marginTop: tokens.spacing[6],
-          paddingTop: tokens.spacing[6],
-          borderTop: `1px solid ${tokens.colors.border.primary}`,
-        }}
-      >
+      {/* 2FA Section — gated behind SECURITY_2FA_ENABLED (假安全，登录流不校验 TOTP) */}
+      {SECURITY_2FA_ENABLED && (
         <Box
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: tokens.spacing[2],
-            marginBottom: tokens.spacing[3],
+            marginTop: tokens.spacing[6],
+            paddingTop: tokens.spacing[6],
+            borderTop: `1px solid ${tokens.colors.border.primary}`,
           }}
         >
-          <Text size="sm" weight="bold">
-            {t('twoFactorAuthTitle')}
-          </Text>
-          {props.twoFAEnabled && (
-            <span
-              style={{
-                padding: `2px ${tokens.spacing[2]}`,
-                borderRadius: tokens.radius.sm,
-                background: `${alpha(tokens.colors.accent.success, 8)}`,
-                border: `1px solid ${alpha(tokens.colors.accent.success, 19)}`,
-                color: tokens.colors.accent.success,
-                fontSize: tokens.typography.fontSize.xs,
-                fontWeight: Number(tokens.typography.fontWeight.bold),
-              }}
-            >
-              {t('twoFAStatusEnabled')}
-            </span>
-          )}
-        </Box>
-
-        {!props.twoFAEnabled && !props.twoFASetupData && props.backupCodes.length === 0 && (
-          <Box>
-            <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
-              {t('twoFAEnableDesc')}
+          <Box
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: tokens.spacing[2],
+              marginBottom: tokens.spacing[3],
+            }}
+          >
+            <Text size="sm" weight="bold">
+              {t('twoFactorAuthTitle')}
             </Text>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={props.onSetup2FA}
-              disabled={props.twoFALoading}
-            >
-              {props.twoFALoading ? t('loading') : t('enable2FAButton')}
-            </Button>
-          </Box>
-        )}
-
-        {props.twoFASetupData && !props.twoFAEnabled && (
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
-            <Text size="xs" color="secondary" style={{ lineHeight: 1.6 }}>
-              {t('scanQRCodeDesc')}
-            </Text>
-            <Box
-              style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: tokens.spacing[3],
-              }}
-            >
-              <Image
-                src={props.twoFASetupData.qrCodeDataUrl}
-                alt="2FA QR Code"
-                width={180}
-                height={180}
+            {props.twoFAEnabled && (
+              <span
                 style={{
-                  width: 180,
-                  height: 180,
-                  borderRadius: tokens.radius.md,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  background: tokens.colors.white,
-                  padding: tokens.spacing[2],
-                }}
-                unoptimized
-              />
-              <Box
-                style={{
-                  padding: tokens.spacing[3],
-                  borderRadius: tokens.radius.md,
-                  background: tokens.colors.bg.primary,
-                  border: `1px solid ${tokens.colors.border.primary}`,
-                  textAlign: 'center',
-                  width: '100%',
-                  maxWidth: 320,
+                  padding: `2px ${tokens.spacing[2]}`,
+                  borderRadius: tokens.radius.sm,
+                  background: `${alpha(tokens.colors.accent.success, 8)}`,
+                  border: `1px solid ${alpha(tokens.colors.accent.success, 19)}`,
+                  color: tokens.colors.accent.success,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: Number(tokens.typography.fontWeight.bold),
                 }}
               >
-                <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
-                  {t('manualEntryKey')}
-                </Text>
-                <Text
-                  size="sm"
-                  weight="bold"
-                  style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
-                >
-                  {props.twoFASetupData.secret}
-                </Text>
-              </Box>
-            </Box>
+                {t('twoFAStatusEnabled')}
+              </span>
+            )}
+          </Box>
+
+          {!props.twoFAEnabled && !props.twoFASetupData && props.backupCodes.length === 0 && (
             <Box>
-              <Text size="xs" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
-                {t('enter6DigitCodeDesc')}
+              <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[3] }}>
+                {t('twoFAEnableDesc')}
               </Text>
-              <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
-                <input
-                  type="text"
-                  value={props.twoFACode}
-                  onChange={(e) =>
-                    props.setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))
-                  }
-                  placeholder="000000"
-                  maxLength={6}
-                  inputMode="numeric"
-                  autoComplete="one-time-code"
-                  style={{
-                    ...getInputStyle(),
-                    maxWidth: 160,
-                    textAlign: 'center',
-                    fontSize: tokens.typography.fontSize.lg,
-                    fontFamily: 'monospace',
-                    letterSpacing: '4px',
-                  }}
-                />
-                <Button
-                  variant="primary"
-                  size="sm"
-                  onClick={props.onVerify2FA}
-                  disabled={props.twoFALoading || props.twoFACode.length !== 6}
-                >
-                  {props.twoFALoading ? t('verifyingCode') : t('verifyAndEnable')}
-                </Button>
-              </Box>
-            </Box>
-          </Box>
-        )}
-
-        {props.backupCodes.length > 0 && (
-          <Box
-            style={{
-              marginTop: tokens.spacing[4],
-              padding: tokens.spacing[4],
-              borderRadius: tokens.radius.md,
-              background: `${alpha(tokens.colors.accent.warning, 3)}`,
-              border: `1px solid ${alpha(tokens.colors.accent.warning, 19)}`,
-            }}
-          >
-            <Text
-              size="sm"
-              weight="bold"
-              style={{ marginBottom: tokens.spacing[2], color: tokens.colors.accent.warning }}
-            >
-              {t('backupRecoveryCodes')}
-            </Text>
-            <Text
-              size="xs"
-              color="tertiary"
-              style={{ marginBottom: tokens.spacing[3], lineHeight: 1.6 }}
-            >
-              {t('backupCodesNote')}
-            </Text>
-            <Box
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: tokens.spacing[2],
-                padding: tokens.spacing[3],
-                borderRadius: tokens.radius.md,
-                background: tokens.colors.bg.primary,
-                fontFamily: tokens.typography.fontFamily.mono.join(', '),
-                userSelect: 'all',
-              }}
-            >
-              {props.backupCodes.map((code, index) => (
-                <Text
-                  key={index}
-                  size="sm"
-                  style={{
-                    fontFamily: tokens.typography.fontFamily.mono.join(', '),
-                    textAlign: 'center',
-                    letterSpacing: '0.05em',
-                  }}
-                >
-                  {code}
-                </Text>
-              ))}
-            </Box>
-            <button
-              onClick={() => {
-                navigator.clipboard
-                  .writeText(props.backupCodes.join('\n'))
-                  .then(() => showToast(t('copiedToClipboard'), 'success'))
-                  .catch(() => showToast(t('copyFailed'), 'error'))
-              }}
-              style={{
-                marginTop: tokens.spacing[2],
-                padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-                borderRadius: tokens.radius.md,
-                border: `1px solid ${alpha(tokens.colors.accent.warning, 25)}`,
-                background: 'transparent',
-                color: tokens.colors.accent.warning,
-                fontSize: tokens.typography.fontSize.xs,
-                fontWeight: tokens.typography.fontWeight.semibold,
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                gap: tokens.spacing[1],
-              }}
-            >
-              <svg
-                width="12"
-                height="12"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                aria-hidden="true"
-              >
-                <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
-                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
-              </svg>
-              {t('copyBackupCodes')}
-            </button>
-          </Box>
-        )}
-
-        {props.twoFAEnabled && !props.showDisable2FA && (
-          <Box style={{ marginTop: tokens.spacing[3] }}>
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={() => props.setShowDisable2FA(true)}
-              style={{
-                color: tokens.colors.accent.error,
-                borderColor: colorAlpha(tokens.colors.accent.error, 25),
-              }}
-            >
-              {t('disable2FAButton')}
-            </Button>
-          </Box>
-        )}
-
-        {props.showDisable2FA && (
-          <Box
-            style={{
-              marginTop: tokens.spacing[3],
-              padding: tokens.spacing[4],
-              borderRadius: tokens.radius.md,
-              background: tokens.colors.bg.primary,
-              border: `1px solid ${alpha(tokens.colors.accent.error, 19)}`,
-            }}
-          >
-            <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
-              {t('enterPasswordToDisable')}
-            </Text>
-            <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
-              <PasswordInput
-                value={props.disablePassword}
-                onChange={(e) => props.setDisablePassword(e.target.value)}
-                placeholder={t('enterCurrentPasswordPlaceholder')}
-                autoComplete="current-password"
-                style={{ ...getInputStyle(), maxWidth: 240 }}
-              />
               <Button
                 variant="secondary"
                 size="sm"
-                onClick={props.onDisable2FA}
-                disabled={props.twoFALoading || !props.disablePassword}
+                onClick={props.onSetup2FA}
+                disabled={props.twoFALoading}
+              >
+                {props.twoFALoading ? t('loading') : t('enable2FAButton')}
+              </Button>
+            </Box>
+          )}
+
+          {props.twoFASetupData && !props.twoFAEnabled && (
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+              <Text size="xs" color="secondary" style={{ lineHeight: 1.6 }}>
+                {t('scanQRCodeDesc')}
+              </Text>
+              <Box
+                style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  gap: tokens.spacing[3],
+                }}
+              >
+                <Image
+                  src={props.twoFASetupData.qrCodeDataUrl}
+                  alt="2FA QR Code"
+                  width={180}
+                  height={180}
+                  style={{
+                    width: 180,
+                    height: 180,
+                    borderRadius: tokens.radius.md,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    background: tokens.colors.white,
+                    padding: tokens.spacing[2],
+                  }}
+                  unoptimized
+                />
+                <Box
+                  style={{
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.md,
+                    background: tokens.colors.bg.primary,
+                    border: `1px solid ${tokens.colors.border.primary}`,
+                    textAlign: 'center',
+                    width: '100%',
+                    maxWidth: 320,
+                  }}
+                >
+                  <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[1] }}>
+                    {t('manualEntryKey')}
+                  </Text>
+                  <Text
+                    size="sm"
+                    weight="bold"
+                    style={{ fontFamily: 'monospace', wordBreak: 'break-all' }}
+                  >
+                    {props.twoFASetupData.secret}
+                  </Text>
+                </Box>
+              </Box>
+              <Box>
+                <Text size="xs" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
+                  {t('enter6DigitCodeDesc')}
+                </Text>
+                <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
+                  <input
+                    type="text"
+                    value={props.twoFACode}
+                    onChange={(e) =>
+                      props.setTwoFACode(e.target.value.replace(/\D/g, '').slice(0, 6))
+                    }
+                    placeholder="000000"
+                    maxLength={6}
+                    inputMode="numeric"
+                    autoComplete="one-time-code"
+                    style={{
+                      ...getInputStyle(),
+                      maxWidth: 160,
+                      textAlign: 'center',
+                      fontSize: tokens.typography.fontSize.lg,
+                      fontFamily: 'monospace',
+                      letterSpacing: '4px',
+                    }}
+                  />
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={props.onVerify2FA}
+                    disabled={props.twoFALoading || props.twoFACode.length !== 6}
+                  >
+                    {props.twoFALoading ? t('verifyingCode') : t('verifyAndEnable')}
+                  </Button>
+                </Box>
+              </Box>
+            </Box>
+          )}
+
+          {props.backupCodes.length > 0 && (
+            <Box
+              style={{
+                marginTop: tokens.spacing[4],
+                padding: tokens.spacing[4],
+                borderRadius: tokens.radius.md,
+                background: `${alpha(tokens.colors.accent.warning, 3)}`,
+                border: `1px solid ${alpha(tokens.colors.accent.warning, 19)}`,
+              }}
+            >
+              <Text
+                size="sm"
+                weight="bold"
+                style={{ marginBottom: tokens.spacing[2], color: tokens.colors.accent.warning }}
+              >
+                {t('backupRecoveryCodes')}
+              </Text>
+              <Text
+                size="xs"
+                color="tertiary"
+                style={{ marginBottom: tokens.spacing[3], lineHeight: 1.6 }}
+              >
+                {t('backupCodesNote')}
+              </Text>
+              <Box
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(2, 1fr)',
+                  gap: tokens.spacing[2],
+                  padding: tokens.spacing[3],
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.bg.primary,
+                  fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                  userSelect: 'all',
+                }}
+              >
+                {props.backupCodes.map((code, index) => (
+                  <Text
+                    key={index}
+                    size="sm"
+                    style={{
+                      fontFamily: tokens.typography.fontFamily.mono.join(', '),
+                      textAlign: 'center',
+                      letterSpacing: '0.05em',
+                    }}
+                  >
+                    {code}
+                  </Text>
+                ))}
+              </Box>
+              <button
+                onClick={() => {
+                  navigator.clipboard
+                    .writeText(props.backupCodes.join('\n'))
+                    .then(() => showToast(t('copiedToClipboard'), 'success'))
+                    .catch(() => showToast(t('copyFailed'), 'error'))
+                }}
+                style={{
+                  marginTop: tokens.spacing[2],
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+                  borderRadius: tokens.radius.md,
+                  border: `1px solid ${alpha(tokens.colors.accent.warning, 25)}`,
+                  background: 'transparent',
+                  color: tokens.colors.accent.warning,
+                  fontSize: tokens.typography.fontSize.xs,
+                  fontWeight: tokens.typography.fontWeight.semibold,
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: tokens.spacing[1],
+                }}
+              >
+                <svg
+                  width="12"
+                  height="12"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                >
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2" />
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1" />
+                </svg>
+                {t('copyBackupCodes')}
+              </button>
+            </Box>
+          )}
+
+          {props.twoFAEnabled && !props.showDisable2FA && (
+            <Box style={{ marginTop: tokens.spacing[3] }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => props.setShowDisable2FA(true)}
                 style={{
                   color: tokens.colors.accent.error,
                   borderColor: colorAlpha(tokens.colors.accent.error, 25),
                 }}
               >
-                {props.twoFALoading ? t('processingText') : t('confirmDisableButton')}
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  props.setShowDisable2FA(false)
-                  props.setDisablePassword('')
-                }}
-              >
-                {t('cancel')}
+                {t('disable2FAButton')}
               </Button>
             </Box>
-          </Box>
-        )}
-      </Box>
+          )}
+
+          {props.showDisable2FA && (
+            <Box
+              style={{
+                marginTop: tokens.spacing[3],
+                padding: tokens.spacing[4],
+                borderRadius: tokens.radius.md,
+                background: tokens.colors.bg.primary,
+                border: `1px solid ${alpha(tokens.colors.accent.error, 19)}`,
+              }}
+            >
+              <Text size="sm" weight="medium" style={{ marginBottom: tokens.spacing[2] }}>
+                {t('enterPasswordToDisable')}
+              </Text>
+              <Box style={{ display: 'flex', gap: tokens.spacing[3], alignItems: 'center' }}>
+                <PasswordInput
+                  value={props.disablePassword}
+                  onChange={(e) => props.setDisablePassword(e.target.value)}
+                  placeholder={t('enterCurrentPasswordPlaceholder')}
+                  autoComplete="current-password"
+                  style={{ ...getInputStyle(), maxWidth: 240 }}
+                />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={props.onDisable2FA}
+                  disabled={props.twoFALoading || !props.disablePassword}
+                  style={{
+                    color: tokens.colors.accent.error,
+                    borderColor: colorAlpha(tokens.colors.accent.error, 25),
+                  }}
+                >
+                  {props.twoFALoading ? t('processingText') : t('confirmDisableButton')}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    props.setShowDisable2FA(false)
+                    props.setDisablePassword('')
+                  }}
+                >
+                  {t('cancel')}
+                </Button>
+              </Box>
+            </Box>
+          )}
+        </Box>
+      )}
 
       {/* Passkeys Section */}
       <Box
@@ -708,118 +719,120 @@ export const SecuritySection = React.memo(function SecuritySection(props: Securi
         )}
       </Box>
 
-      {/* Active Sessions */}
-      <Box
-        style={{
-          marginTop: tokens.spacing[6],
-          paddingTop: tokens.spacing[6],
-          borderTop: `1px solid ${tokens.colors.border.primary}`,
-        }}
-      >
-        <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
-          {t('activeSessionsTitle')}
-        </Text>
-        <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
-          {t('activeSessionsDesc')}
-        </Text>
-
-        {props.loadingSessions ? (
-          <Text size="sm" color="tertiary">
-            {t('loading')}
+      {/* Active Sessions — gated behind SESSION_MANAGEMENT_ENABLED (login_sessions 从不写入，列表永远空) */}
+      {SESSION_MANAGEMENT_ENABLED && (
+        <Box
+          style={{
+            marginTop: tokens.spacing[6],
+            paddingTop: tokens.spacing[6],
+            borderTop: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
+          <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[3] }}>
+            {t('activeSessionsTitle')}
           </Text>
-        ) : props.sessions.length === 0 ? (
-          <Text size="sm" color="tertiary">
-            {t('noSessionInfo')}
+          <Text size="xs" color="tertiary" style={{ marginBottom: tokens.spacing[4] }}>
+            {t('activeSessionsDesc')}
           </Text>
-        ) : (
-          <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-            {props.sessions.map((session) => (
-              <Box
-                key={session.id}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: tokens.spacing[3],
-                  borderRadius: tokens.radius.md,
-                  background: tokens.colors.bg.primary,
-                  border: `1px solid ${session.isCurrent ? colorAlpha(tokens.colors.accent.success, 25) : tokens.colors.border.primary}`,
-                }}
-              >
-                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
-                  <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
-                    <Text size="sm" weight="medium">
-                      {session.deviceInfo?.browser || t('unknownBrowser')}
-                      {session.deviceInfo?.os ? ` - ${session.deviceInfo.os}` : ''}
-                    </Text>
-                    {session.isCurrent && (
-                      <span
-                        style={{
-                          padding: `1px ${tokens.spacing[2]}`,
-                          borderRadius: tokens.radius.sm,
-                          background: `${alpha(tokens.colors.accent.success, 8)}`,
-                          color: tokens.colors.accent.success,
-                          fontSize: tokens.typography.fontSize.xs,
-                          fontWeight: Number(tokens.typography.fontWeight.bold),
-                        }}
-                      >
-                        {t('currentSessionLabel')}
-                      </span>
-                    )}
-                  </Box>
-                  <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
-                    {session.ipAddress && (
-                      <Text size="xs" color="tertiary">
-                        IP: {session.ipAddress}
-                      </Text>
-                    )}
-                    {session.lastActiveAt && (
-                      <Text size="xs" color="tertiary">
-                        {formatTimeAgo(session.lastActiveAt, language)}
-                      </Text>
-                    )}
-                  </Box>
-                </Box>
-                {!session.isCurrent && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => props.onRevokeSession(session.id)}
-                    style={{
-                      color: tokens.colors.accent.error,
-                      fontSize: tokens.typography.fontSize.xs,
-                    }}
-                  >
-                    {t('revokeSession')}
-                  </Button>
-                )}
-              </Box>
-            ))}
 
-            {props.sessions.filter((s) => !s.isCurrent).length > 0 && (
-              <Box
-                style={{
-                  display: 'flex',
-                  justifyContent: 'flex-end',
-                  marginTop: tokens.spacing[2],
-                }}
-              >
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={props.onRevokeAllSessions}
+          {props.loadingSessions ? (
+            <Text size="sm" color="tertiary">
+              {t('loading')}
+            </Text>
+          ) : props.sessions.length === 0 ? (
+            <Text size="sm" color="tertiary">
+              {t('noSessionInfo')}
+            </Text>
+          ) : (
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+              {props.sessions.map((session) => (
+                <Box
+                  key={session.id}
                   style={{
-                    color: tokens.colors.accent.error,
-                    borderColor: colorAlpha(tokens.colors.accent.error, 25),
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: tokens.spacing[3],
+                    borderRadius: tokens.radius.md,
+                    background: tokens.colors.bg.primary,
+                    border: `1px solid ${session.isCurrent ? colorAlpha(tokens.colors.accent.success, 25) : tokens.colors.border.primary}`,
                   }}
                 >
-                  {t('logoutOtherDevicesButton')}
-                </Button>
-              </Box>
-            )}
-          </Box>
-        )}
-      </Box>
+                  <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+                    <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+                      <Text size="sm" weight="medium">
+                        {session.deviceInfo?.browser || t('unknownBrowser')}
+                        {session.deviceInfo?.os ? ` - ${session.deviceInfo.os}` : ''}
+                      </Text>
+                      {session.isCurrent && (
+                        <span
+                          style={{
+                            padding: `1px ${tokens.spacing[2]}`,
+                            borderRadius: tokens.radius.sm,
+                            background: `${alpha(tokens.colors.accent.success, 8)}`,
+                            color: tokens.colors.accent.success,
+                            fontSize: tokens.typography.fontSize.xs,
+                            fontWeight: Number(tokens.typography.fontWeight.bold),
+                          }}
+                        >
+                          {t('currentSessionLabel')}
+                        </span>
+                      )}
+                    </Box>
+                    <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
+                      {session.ipAddress && (
+                        <Text size="xs" color="tertiary">
+                          IP: {session.ipAddress}
+                        </Text>
+                      )}
+                      {session.lastActiveAt && (
+                        <Text size="xs" color="tertiary">
+                          {formatTimeAgo(session.lastActiveAt, language)}
+                        </Text>
+                      )}
+                    </Box>
+                  </Box>
+                  {!session.isCurrent && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => props.onRevokeSession(session.id)}
+                      style={{
+                        color: tokens.colors.accent.error,
+                        fontSize: tokens.typography.fontSize.xs,
+                      }}
+                    >
+                      {t('revokeSession')}
+                    </Button>
+                  )}
+                </Box>
+              ))}
+
+              {props.sessions.filter((s) => !s.isCurrent).length > 0 && (
+                <Box
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'flex-end',
+                    marginTop: tokens.spacing[2],
+                  }}
+                >
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={props.onRevokeAllSessions}
+                    style={{
+                      color: tokens.colors.accent.error,
+                      borderColor: colorAlpha(tokens.colors.accent.error, 25),
+                    }}
+                  >
+                    {t('logoutOtherDevicesButton')}
+                  </Button>
+                </Box>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
     </SectionCard>
   )
 })
