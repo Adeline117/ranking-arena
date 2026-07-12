@@ -56,7 +56,7 @@ const SOURCES_CACHE_MAX = 50 // prevent unbounded growth
 
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
 const LEADERBOARD_COLUMNS =
-  'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
+  'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, style_confidence, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
 
 export const GET = withPublic(
   async ({ supabase, request }) => {
@@ -266,6 +266,11 @@ async function fetchFromLeaderboard(
     avatar_url: row.avatar_url as string | null,
     arena_score: row.arena_score != null ? Number(row.arena_score) : null,
     rank: Number(row.rank),
+    // Rank-movement signals — RankDisplay's ↑/↓ arrows + NEW badge were wired
+    // in the UI all along but this endpoint never selected the columns, so the
+    // homepage/leaderboard (which fetch /api/traders) never showed them.
+    rank_change: row.rank_change != null ? Number(row.rank_change) : null,
+    is_new: row.is_new === true,
     // Score breakdown
     profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,
     risk_control_score: row.risk_control_score != null ? Number(row.risk_control_score) : null,
