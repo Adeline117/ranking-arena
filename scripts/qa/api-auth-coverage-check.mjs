@@ -97,6 +97,9 @@ const PUBLIC_API_ROUTES = new Set([
   'og/quiz',
   'og/rank',
   'og/trader',
+  // 可嵌入排名徽章 SVG（A5 增长回路）— 设计即公开:交易员把 <img> 嵌到外站,
+  // 仅读公共服务数据(leaderboard_ranks/trader_sources),无任何写/敏感读。
+  'badge/trader/[handle]',
   'share/rank-card',
   'sitemap-xml',
   // 健康/平台状态（监控端点，设计即公开）
