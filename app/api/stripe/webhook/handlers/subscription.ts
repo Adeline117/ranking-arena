@@ -1,5 +1,10 @@
 import Stripe from 'stripe'
-import { SUBSCRIPTION_STATUS_MAP, STRIPE_API_PRICE_IDS, API_TIER_LIMITS } from '@/lib/stripe'
+import {
+  SUBSCRIPTION_STATUS_MAP,
+  STRIPE_API_PRICE_IDS,
+  API_TIER_LIMITS,
+  STRIPE_PRICE_IDS,
+} from '@/lib/stripe'
 import { env } from '@/lib/env'
 import { leaveProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, withRetry, logger } from './shared'
@@ -43,14 +48,39 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
     return
   }
 
-  // Regular Pro membership subscription
-  const lifetimePriceId = process.env.STRIPE_PRO_LIFETIME_PRICE_ID
-  const plan =
-    priceId === env.STRIPE_PRO_YEARLY_PRICE_ID
-      ? 'yearly'
-      : lifetimePriceId && priceId === lifetimePriceId
-        ? 'lifetime'
-        : 'monthly'
+  // Regular Pro membership subscription — 显式白名单匹配,不再"未知 price 默认
+  // monthly"(2026-07-11 审计:此前任何未知/误建/测试 price 都静默授 Pro monthly)。
+  let plan: 'monthly' | 'yearly' | 'lifetime' | null = null
+  if (priceId === STRIPE_PRICE_IDS.yearly || priceId === env.STRIPE_PRO_YEARLY_PRICE_ID) {
+    plan = 'yearly'
+  } else if (STRIPE_PRICE_IDS.lifetime && priceId === STRIPE_PRICE_IDS.lifetime) {
+    plan = 'lifetime'
+  } else if (STRIPE_PRICE_IDS.monthly && priceId === STRIPE_PRICE_IDS.monthly) {
+    plan = 'monthly'
+  }
+
+  if (!plan) {
+    // 未命中任何已知 price → 不授权,critical 告警人工核查(先 observe;确认 env
+    // 无遗漏后可改为硬拒)。防误建/测试 price 静默铸造 Pro。
+    logger.error('Subscription with UNKNOWN price — not granting Pro', {
+      priceId,
+      userId: profile.id,
+      subscriptionId: subscription.id,
+    })
+    try {
+      const { sendTelegramAlert } = await import('@/lib/notifications/telegram')
+      await sendTelegramAlert({
+        level: 'critical',
+        source: 'stripe',
+        title: 'Unknown Stripe price — Pro NOT granted',
+        message: `订阅 price ${priceId} 不在已知白名单(monthly/yearly/lifetime/api)。已跳过授权,请核查是否漏配 env price ID 或误建 product。`,
+        details: { priceId, userId: profile.id, subscriptionId: subscription.id },
+      })
+    } catch {
+      /* alert failure non-fatal */
+    }
+    return
+  }
 
   await updateUserSubscription(profile.id, subscription, plan)
 }
