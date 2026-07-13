@@ -29,6 +29,7 @@ import { getDataMode } from '@/lib/constants/serving-cutover'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { logger } from '@/lib/logger'
+import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import type { TraderFirstScreen, TraderFirstScreenResponse } from '@/lib/data/serving/types'
 
 const handleSchema = z.string().min(1).max(255)
@@ -95,9 +96,10 @@ export async function GET(
       const resolved = await resolveServingTrader(supabase, { handle: decodedHandle, source })
       if (!resolved) throw ApiError.notFound('Trader not found')
 
-      const [firstScreenRaw, capabilities] = await Promise.all([
+      const [firstScreenRaw, capabilities, verifiedKeys] = await Promise.all([
         getFirstScreen(supabase, resolved.source, resolved.exchangeTraderId),
         cachedCapabilities(),
+        getVerifiedTraderKeys(supabase),
       ])
 
       // Same synthesis the page's server component does on a first-screen miss:
@@ -122,6 +124,9 @@ export async function GET(
         apiSuccess<TraderFirstScreenResponse>({
           firstScreen,
           capability: capabilities[resolved.source] ?? null,
+          is_verified_data: verifiedKeys.has(
+            verifiedTraderKey(resolved.source, resolved.exchangeTraderId)
+          ),
         }),
         { maxAge: 60, staleWhileRevalidate: 300 }
       )

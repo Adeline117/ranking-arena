@@ -47,14 +47,11 @@
 | help/pricing/status 首屏裸 i18n key | **✅已根治(f1248ea07)**:registerFullDict 路由 chunk 同步注册全量字典 —— 绕开 en-core 膨胀/dynamic 化/水合错配三个坑;dev 真点三页 SSR 零键名                                                                                                                                                                                                                                                                                                                                                             |
 | api-docs 硬编码英文                 | **✅定价区已四语化(a7d95b48c)**:24 键 ×4 语 + registerFullDict;端点/参数技术文档按行业惯例留英文(有意)                                                                                                                                                                                                                                                                                                                                                                                                  |
 | Sentry sourcemap 未上传             | 正解在 Vercel 侧(SENTRY_AUTH_TOKEN 进 Vercel env + 构建期上传);CI 单独构建 hash 与部署对不上,错配比没有更糟 = owner 配 env                                                                                                                                                                                                                                                                                                                                                                              |
-| market SSE 每观众占 58s nodejs 函数 | 峰值降级为轮询 Redis 快照是较大架构改动,需专项设计                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
+| market SSE 每观众占 58s nodejs 函数 | **已缓解(ae74cca19)**：实时成交卡仅在进入视口附近时才建连、离开即释放；端点补每 IP 10/min 独立建连限流及 abort 清理。仍非全局 fan-out：若市场页成为高流量入口，应另行建设由 worker 写 Redis 快照、客户端轮询的成交数据管道，再退役 Node SSE。 |
 
 ## 👤 需 owner 决定/去 Dashboard
 
 - **Supabase auth 邮件模板**（没配=Supabase 品牌+发件域，第一封邮件不专业）
-- **法务退款政策四处矛盾**（case-by-case vs 7天无条件 vs 仅年付）+ **support@arenafi.org 是否真收件**（法务页已统一 outlook，退款FAQ/页脚仍 support@）
-- **隐私政策漏披露**：交易所 API key 存储 + 34k 被抓取交易员（GDPR Art.14）+ Sentry
-- **OAuth/Web3 用户无法自助删号**（DeleteAccountModal 强制密码，Privy/OAuth 无密码；ToS 承诺"随时可删"）
 - **hreflang 死代码 + 四语同 URL**（搜索引擎只见英文，ja/ko/zh 零自然流量；根治需分语言 URL，产品级决策）
 - **恢复演练从未做**（备份不含 auth schema=恢复出"有帖子没用户"）—— 我可写 restore 脚本+runbook，演练需 owner 在场
 
