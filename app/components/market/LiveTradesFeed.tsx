@@ -216,10 +216,38 @@ function ConnectionDot({ connected, label }: { connected: boolean; label: string
 
 export default function LiveTradesFeed() {
   const { t } = useLanguage()
-  const { trades, connected, error } = useMarketFeed({ maxTrades: 150 })
+  const feedCardRef = useRef<HTMLDivElement>(null)
+  const [nearViewport, setNearViewport] = useState(false)
+  // A live stream keeps a Node function occupied for its full connection
+  // lifetime. This card is below the primary market content, so only connect
+  // while it is actually near the viewport; leaving the area releases the SSE
+  // subscription via useMarketFeed cleanup.
+  const { trades, connected, error } = useMarketFeed({
+    maxTrades: 150,
+    enabled: nearViewport,
+  })
   const containerRef = useRef<HTMLDivElement>(null)
   const [paused, setPaused] = useState(false)
   const [exchangeFilter, setExchangeFilter] = useState<Set<ExchangeId>>(new Set(ALL_EXCHANGES))
+
+  useEffect(() => {
+    const node = feedCardRef.current
+    if (!node) return
+    // Conservative compatibility fallback: preserving the former behaviour
+    // is better than rendering a permanently idle card in an older browser.
+    if (typeof IntersectionObserver === 'undefined') {
+      setNearViewport(true)
+      return
+    }
+    const observer = new IntersectionObserver(
+      ([entry]) => setNearViewport(entry.isIntersecting),
+      // Begin connecting just before the card scrolls into view, without
+      // holding a stream for visitors who never reach this below-fold widget.
+      { rootMargin: '300px 0px' }
+    )
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     if (!paused && containerRef.current) containerRef.current.scrollTop = 0
@@ -244,6 +272,7 @@ export default function LiveTradesFeed() {
 
   return (
     <div
+      ref={feedCardRef}
       style={{
         background: tokens.glass.bg.medium,
         border: tokens.glass.border.light,
