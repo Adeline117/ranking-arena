@@ -404,6 +404,11 @@ export const RateLimitPresets = {
 
   // WebSocket/实时连接 - 宽松限制（新增）
   realtime: { requests: 1000, window: 60, prefix: 'realtime' } as RateLimitConfig,
+  // Long-lived SSE connections are materially more expensive than ordinary
+  // requests. A normal browser reconnects once per minute, so 10/min leaves
+  // room for several tabs while preventing a single IP from pinning hundreds
+  // of Node functions open at once.
+  marketStream: { requests: 10, window: 60, prefix: 'market-stream' } as RateLimitConfig,
 } as const
 
 /**

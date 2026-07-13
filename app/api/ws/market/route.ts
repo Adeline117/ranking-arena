@@ -12,6 +12,7 @@
 import { NextRequest } from 'next/server'
 import { FeedManager } from '@/lib/ws/feed-manager'
 import type { ExchangeId } from '@/lib/ws/exchange-feeds'
+import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -19,16 +20,25 @@ export const dynamic = 'force-dynamic'
 const VALID_EXCHANGES = new Set<ExchangeId>(['binance', 'bybit', 'okx'])
 
 export async function GET(request: NextRequest) {
+  // A stream holds a Node serverless invocation for up to 58s. Keep its
+  // connection budget separate from ordinary realtime JSON reads so one IP
+  // cannot exhaust concurrent functions with many EventSource instances.
+  const rateLimitResp = await checkRateLimit(request, RateLimitPresets.marketStream)
+  if (rateLimitResp) return rateLimitResp
+
   const { searchParams } = new URL(request.url)
 
   const symbolsParam = searchParams.get('symbols') || 'BTC-USDT,ETH-USDT,SOL-USDT'
   const exchangesParam = searchParams.get('exchanges') || 'binance,bybit,okx'
 
-  const symbols = symbolsParam.split(',').map(s => s.trim().toUpperCase()).filter(Boolean)
+  const symbols = symbolsParam
+    .split(',')
+    .map((s) => s.trim().toUpperCase())
+    .filter(Boolean)
   const exchanges = exchangesParam
     .split(',')
-    .map(e => e.trim().toLowerCase() as ExchangeId)
-    .filter(e => VALID_EXCHANGES.has(e))
+    .map((e) => e.trim().toLowerCase() as ExchangeId)
+    .filter((e) => VALID_EXCHANGES.has(e))
 
   const encoder = new TextEncoder()
   let unsubscribe: (() => void) | null = null
@@ -38,6 +48,21 @@ export async function GET(request: NextRequest) {
   // Client (useMarketFeed) auto-reconnects on close.
   let maxAgeTimer: ReturnType<typeof setTimeout> | null = null
   const MAX_CONNECTION_AGE_MS = 58_000
+
+  const cleanup = () => {
+    if (unsubscribe) {
+      unsubscribe()
+      unsubscribe = null
+    }
+    if (keepAliveTimer) {
+      clearInterval(keepAliveTimer)
+      keepAliveTimer = null
+    }
+    if (maxAgeTimer) {
+      clearTimeout(maxAgeTimer)
+      maxAgeTimer = null
+    }
+  }
 
   const stream = new ReadableStream({
     start(controller) {
@@ -83,13 +108,18 @@ export async function GET(request: NextRequest) {
           controller.close()
         } catch {
           // Intentionally swallowed: stream already closed
+        } finally {
+          cleanup()
         }
       }, MAX_CONNECTION_AGE_MS)
+
+      // Some serverless runtimes abort the request without calling the
+      // stream's cancel() hook. Release the exchange subscription and timers
+      // in both paths so disconnected viewers cannot leave work behind.
+      request.signal.addEventListener('abort', cleanup, { once: true })
     },
     cancel() {
-      if (unsubscribe) unsubscribe()
-      if (keepAliveTimer) clearInterval(keepAliveTimer)
-      if (maxAgeTimer) clearTimeout(maxAgeTimer)
+      cleanup()
     },
   })
 
@@ -97,7 +127,7 @@ export async function GET(request: NextRequest) {
     headers: {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
+      Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
     },
   })
