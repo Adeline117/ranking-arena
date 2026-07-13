@@ -159,6 +159,8 @@ export interface UnregisteredTraderData {
   profitability_score?: number | null
   risk_control_score?: number | null
   execution_score?: number | null
+  /** True when this account has an active read-only API authorization. */
+  is_verified_data?: boolean
   is_platform_dead?: boolean
 }
 
@@ -191,7 +193,8 @@ interface ClaimedUserProfile {
  *  header identically to a server-resolved page. */
 function firstScreenToTraderData(
   fs: TraderFirstScreen,
-  fallbackHandle: string
+  fallbackHandle: string,
+  isVerifiedData = false
 ): UnregisteredTraderData {
   const entries = fs.entries ?? []
   const best =
@@ -209,6 +212,7 @@ function firstScreenToTraderData(
     pnl: best?.headlinePnl?.value ?? null,
     win_rate: bestWinRate,
     max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
+    is_verified_data: isVerifiedData,
   }
 }
 
@@ -327,8 +331,14 @@ export default function TraderProfileClient({
   // the (possibly wrong) server-resolved account on bitunix/xt/blofin/btcc.
   const override = platformMismatch && accountOverride ? accountOverride : null
   const servingFirstScreen = override ? override.firstScreen : serverFirstScreen
+  const isVerifiedData = override
+    ? override.is_verified_data
+    : (serverData.is_verified_data ?? false)
   const data = useMemo<UnregisteredTraderData>(
-    () => (override ? firstScreenToTraderData(override.firstScreen, urlHandle) : serverData),
+    () =>
+      override
+        ? firstScreenToTraderData(override.firstScreen, urlHandle, override.is_verified_data)
+        : serverData,
     [override, serverData, urlHandle]
   )
   // ROOT-CAUSE FIX (2026-07-02): the page is ISR-static, and the server's
@@ -961,18 +971,19 @@ export default function TraderProfileClient({
                   style={{ minHeight: 200 }}
                   className="tab-pane-enter"
                 >
-                  {/* A1 data-authenticity provenance (Myfxbook model) — the
-                      honest default on the trader page users actually land on
-                      (ServingProfilePanel's footer version is bypassed when
-                      useThreeTab is on). Prod has 0 API-verified traders, so
-                      verified is hardcoded false = "Tracked" (accurate today);
-                      thread a real per-trader verified flag here to flip it. */}
+                  {/* A1 data-authenticity provenance (Myfxbook model). The
+                      verification value is sourced from the active read-only
+                      API authorization for the account currently on screen. */}
                   <Box style={{ marginBottom: tokens.spacing[3] }}>
                     <DataProvenanceBadge
-                      verified={false}
+                      verified={isVerifiedData}
                       // Tracked chip doubles as the verify-upgrade entry (A1
                       // adoption pull) — same URL shape as ClaimTraderButton.
-                      claimHref={`/claim?trader=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}&handle=${encodeURIComponent(data.handle || data.source_trader_id)}&step=verify`}
+                      claimHref={
+                        isVerifiedData
+                          ? undefined
+                          : `/claim?trader=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}&handle=${encodeURIComponent(data.handle || data.source_trader_id)}&step=verify`
+                      }
                     />
                   </Box>
                   {/* §2.3 lead-meta strip — serving only; NULL-collapses to

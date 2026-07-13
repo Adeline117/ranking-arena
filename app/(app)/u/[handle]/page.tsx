@@ -18,6 +18,7 @@ import { getDataMode } from '@/lib/constants/serving-cutover'
 import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import type { TraderFirstScreen } from '@/lib/data/serving/types'
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
+import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 
 export const revalidate = 60
 
@@ -405,6 +406,7 @@ export default async function UserHomePage({ params }: { params: Promise<{ handl
         entries.find((e) => e.timeframe === 90) ??
         entries.find((e) => e.timeframe === 30) ??
         entries[0]
+      const verifiedKeys = await getVerifiedTraderKeys(getReadReplica())
       const servingTraderData: UnregisteredTraderData = {
         handle: profile.handle,
         avatar_url: profile.avatar_url ?? firstScreen.avatarSrc ?? null,
@@ -417,6 +419,9 @@ export default async function UserHomePage({ params }: { params: Promise<{ handl
           best?.headlineWinRate ??
           (typeof best?.extras.win_rate === 'number' ? (best.extras.win_rate as number) : null),
         max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
+        is_verified_data: verifiedKeys.has(
+          verifiedTraderKey(servingResolved.source, servingResolved.exchangeTraderId)
+        ),
       }
       return (
         <ErrorBoundary pageType="trader-profile">

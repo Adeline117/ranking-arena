@@ -26,6 +26,7 @@ import {
 } from '@/lib/seo/structured-data'
 import { SSR_QUERY_TIMEOUT_MS, SERVING_RESOLVE_TIMEOUT_MS } from '@/lib/constants/timeouts'
 import { logger } from '@/lib/logger'
+import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -630,6 +631,7 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       best?.headlineWinRate ??
       (typeof best?.extras.win_rate === 'number' ? (best.extras.win_rate as number) : null)
 
+    const verifiedKeys = await getVerifiedTraderKeys(getReadReplica())
     const servingTraderData: UnregisteredTraderData = {
       handle: firstScreen.nickname ?? servingResolved.nickname ?? decodedHandle,
       // Spec §1.4 avatar chain: mirror direct → proxied origin → null
@@ -647,6 +649,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
       pnl: best?.headlinePnl?.value ?? null,
       win_rate: bestWinRate,
       max_drawdown: typeof best?.extras.mdd === 'number' ? (best.extras.mdd as number) : null,
+      is_verified_data: verifiedKeys.has(
+        verifiedTraderKey(servingResolved.source, servingResolved.exchangeTraderId)
+      ),
     }
 
     // U2-12: similar-traders module regression. The serving three-tab data path
@@ -785,12 +790,14 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
 
   // Build UnregisteredTraderData for initial render
   const platformDead = isDeadPlatform(resolved.platform)
+  const verifiedKeys = await getVerifiedTraderKeys(getReadReplica())
   const traderData: UnregisteredTraderData = {
     handle: resolved.handle || decodedHandle,
     avatar_url: resolved.avatarUrl,
     source: resolved.platform,
     source_trader_id: resolved.traderKey,
     is_platform_dead: platformDead || undefined,
+    is_verified_data: verifiedKeys.has(verifiedTraderKey(resolved.platform, resolved.traderKey)),
     // Pull basic scores from serverTraderData if available
     ...(serverTraderData?.performance
       ? {

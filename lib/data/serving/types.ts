@@ -59,6 +59,8 @@ export interface TraderFirstScreen {
 export interface TraderFirstScreenResponse {
   firstScreen: TraderFirstScreen
   capability: SourceCapability | null
+  /** Active read-only API authorization: account data is first-party verified. */
+  is_verified_data: boolean
 }
 
 export type CoreCacheState = 'warm' | 'cold-fetched' | 'pending'
