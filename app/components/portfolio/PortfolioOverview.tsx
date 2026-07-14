@@ -42,39 +42,52 @@ export default function PortfolioOverview({
     <div style={styles.container}>
       <div style={styles.grid}>
         <div style={styles.card}>
-          <span style={styles.label}>{t('totalEquity')}</span>
-          <span style={styles.value}>${totalEquity.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+          <span style={styles.label}>{t('portfolioPositionValue')}</span>
+          <span style={styles.value}>
+            $
+            {totalEquity.toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </span>
         </div>
         <div style={styles.card}>
           <span style={styles.label}>{t('unrealizedPnl')}</span>
           <span style={{ ...styles.value, color: pnlColor }}>
-            {pnlSign}${totalPnl.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            {pnlSign}$
+            {totalPnl.toLocaleString('en-US', {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
           </span>
         </div>
         <div style={styles.card}>
           <span style={styles.label}>{t('pnlPercent')}</span>
           <span style={{ ...styles.value, color: pnlColor }}>
-            {pnlSign}{totalPnlPct.toFixed(2)}%
+            {pnlSign}
+            {totalPnlPct.toFixed(2)}%
           </span>
         </div>
       </div>
 
       {snapshots.length > 1 && (
         <div style={styles.chartContainer}>
-          <span style={styles.label}>{t('equityHistory')}</span>
+          <span style={styles.label}>{t('portfolioValueHistory')}</span>
           <div style={styles.miniChart}>
             {(() => {
-              const values = snapshots.map(s => s.total_equity)
+              const values = snapshots.map((s) => s.total_equity)
               const min = Math.min(...values)
               const max = Math.max(...values)
               const range = max - min || 1
               const width = 100 / (values.length - 1)
 
-              const points = values.map((v, i) => {
-                const x = i * width
-                const y = 100 - ((v - min) / range) * 100
-                return `${x},${y}`
-              }).join(' ')
+              const points = values
+                .map((v, i) => {
+                  const x = i * width
+                  const y = 100 - ((v - min) / range) * 100
+                  return `${x},${y}`
+                })
+                .join(' ')
 
               return (
                 <svg viewBox="0 0 100 100" preserveAspectRatio="none" style={styles.svg}>
