@@ -47,6 +47,8 @@ export interface WrappedTraderData {
   platform: string
   platformLabel: string
   rank: number | null
+  /** Movement vs the previous ranking computation (+ = climbed). */
+  rankChange: number | null
   total: number | null
   roi: number | null
   winRate: number | null
@@ -120,7 +122,7 @@ async function fetchWrappedData(
     const { data: lr } = await Promise.race([
       supabase
         .from('leaderboard_ranks')
-        .select('rank, roi, win_rate, arena_score, max_drawdown, season_id')
+        .select('rank, rank_change, roi, win_rate, arena_score, max_drawdown, season_id')
         .eq('source', resolved.platform)
         .eq('source_trader_id', resolved.traderKey)
         .eq('season_id', seasonId)
@@ -159,6 +161,7 @@ async function fetchWrappedData(
         platform: effectivePlatform,
         platformLabel,
         rank: lr?.rank ?? null,
+        rankChange: lr?.rank_change ?? null,
         total,
         roi: lr?.roi ?? null,
         winRate: lr?.win_rate ?? null,
@@ -212,6 +215,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
     window: data?.window ?? windowParam,
   })
   if (rank != null) ogParams.set('rank', String(rank))
+  if (data?.rankChange != null) ogParams.set('rankChange', String(data.rankChange))
   if (data?.total != null) ogParams.set('total', String(data.total))
   if (roi != null) ogParams.set('roi', String(roi))
   if (data?.winRate != null) ogParams.set('winRate', String(data.winRate))
@@ -269,6 +273,7 @@ export default async function WrappedPage({ params, searchParams }: Props) {
     window: data.window,
   })
   if (data.rank != null) ogParams.set('rank', String(data.rank))
+  if (data.rankChange != null) ogParams.set('rankChange', String(data.rankChange))
   if (data.total != null) ogParams.set('total', String(data.total))
   if (data.roi != null) ogParams.set('roi', String(data.roi))
   if (data.winRate != null) ogParams.set('winRate', String(data.winRate))

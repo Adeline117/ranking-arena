@@ -132,6 +132,8 @@ export async function GET(request: NextRequest) {
   try {
     const name = searchParams.get('name') || searchParams.get('handle') || 'Trader'
     const rank = safeParseInt(searchParams.get('rank'), 0)
+    // Positive = climbed (same convention as leaderboard_ranks.rank_change).
+    const rankChange = safeParseInt(searchParams.get('rankChange'), 0)
     const total = safeParseInt(searchParams.get('total'), 0)
     const roi = parseFloat(searchParams.get('roi') || 'NaN')
     const winRate = parseFloat(searchParams.get('winRate') || 'NaN')
@@ -145,6 +147,8 @@ export async function GET(request: NextRequest) {
     const scoreValid = !isNaN(score)
     const pnlValid = !isNaN(pnl)
     const rankValid = rank > 0
+    const rankChangeValid = rankChange !== 0
+    const rankChangeUp = rankChange > 0
     const roiColor = roiValid && roi >= 0 ? C.success : C.error
     const roiStr = roiValid ? formatRoi(roi) : '--'
     const topPct = rankValid && total > 0 ? getTopPercent(rank, total) : ''
@@ -506,6 +510,28 @@ export async function GET(request: NextRequest) {
                   <span style={{ fontSize: 14, color: C.dim }}>/ {totalDisplay} traders</span>
                 )}
               </div>
+              {rankChangeValid && (
+                <div
+                  style={{
+                    display: 'flex',
+                    padding: '4px 12px',
+                    borderRadius: 999,
+                    background: rankChangeUp ? 'rgba(47,229,125,0.12)' : 'rgba(255,85,85,0.12)',
+                    border: `1px solid ${rankChangeUp ? 'rgba(47,229,125,0.35)' : 'rgba(255,85,85,0.35)'}`,
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 800,
+                      color: rankChangeUp ? C.success : C.error,
+                      letterSpacing: '0.3px',
+                    }}
+                  >
+                    {rankChangeUp ? '▲' : '▼'} {Math.abs(rankChange)} places
+                  </span>
+                </div>
+              )}
               {/* Top % badge */}
               {topPct && (
                 <div
