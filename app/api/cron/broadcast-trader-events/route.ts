@@ -82,12 +82,32 @@ export async function GET(request: NextRequest) {
       string,
       { rank: number | null; roi: number | null; pnl: number | null }
     >()
+    const sourcesByTrader = new Map<string, Set<string>>()
     for (const r of lr ?? []) {
       curMap.set(`${r.source_trader_id}|${r.source ?? ''}`, {
         rank: r.rank ?? null,
         roi: r.roi ?? null,
         pnl: r.pnl ?? null,
       })
+      const sources = sourcesByTrader.get(r.source_trader_id)
+      if (sources) sources.add(r.source)
+      else sourcesByTrader.set(r.source_trader_id, new Set([r.source]))
+    }
+
+    // Older follows have no source because the UI did not pass it to /api/follow.
+    // Resolve them only if the current board has exactly one account for that id.
+    // Never guess between exchanges: missing a notification is safer than using
+    // another trader account's performance to generate one.
+    for (const [key, userIds] of [...followersByTrader]) {
+      const [traderId, source] = key.split('|')
+      if (source) continue
+      const candidates = sourcesByTrader.get(traderId)
+      if (!candidates || candidates.size !== 1) continue
+      const resolvedKey = `${traderId}|${[...candidates][0]}`
+      const existing = followersByTrader.get(resolvedKey)
+      if (existing) existing.push(...userIds)
+      else followersByTrader.set(resolvedKey, userIds)
+      followersByTrader.delete(key)
     }
 
     // 3. Yesterday: rank from rank_history, roi/pnl from daily snapshots.

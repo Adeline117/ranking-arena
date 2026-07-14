@@ -19,6 +19,7 @@ import { TraderStatItem } from './TraderStatItem'
 interface TraderAboutCardProps {
   handle: string
   traderId?: string
+  source?: string
   avatarUrl?: string
   bio?: string
   followers?: number
@@ -36,6 +37,7 @@ interface TraderAboutCardProps {
 export default function TraderAboutCard({
   handle,
   traderId,
+  source,
   avatarUrl,
   bio,
   followers = 0,
@@ -201,6 +203,7 @@ export default function TraderAboutCard({
             ) : (
               <TraderFollowButton
                 traderId={traderId}
+                source={source}
                 userId={userId}
                 onFollowChange={(isFollowing) => {
                   setFollowersCount((prev) => (isFollowing ? prev + 1 : prev - 1))

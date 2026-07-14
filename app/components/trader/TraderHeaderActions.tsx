@@ -174,6 +174,7 @@ export function TraderHeaderActions({
         ) : (
           <TraderFollowButton
             traderId={traderId}
+            source={source}
             userId={userId}
             onFollowChange={(isFollowing) => {
               onFollowChange?.(isFollowing ? 1 : -1)

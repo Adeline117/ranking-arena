@@ -19,6 +19,9 @@ const logger = createLogger('follow-api')
 // Zod schema for POST /api/follow
 const FollowActionSchema = z.object({
   traderId: z.string().min(1, 'traderId is required'),
+  // A trader id is only unambiguous within an exchange. Persist this account's
+  // source so broadcast-trader-events can resolve the exact board row.
+  source: z.string().min(1).max(64).optional(),
   action: z.enum(['follow', 'unfollow'], { message: 'action must be follow or unfollow' }),
 })
 
@@ -31,17 +34,19 @@ export const dynamic = 'force-dynamic'
 export const GET = withAuth(
   async ({ user, supabase, request }) => {
     const traderId = request.nextUrl.searchParams.get('traderId')
+    const source = request.nextUrl.searchParams.get('source')
 
     if (!traderId) {
       return badRequest('Missing traderId parameter')
     }
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('trader_follows')
       .select('id')
       .eq('user_id', user.id)
       .eq('trader_id', traderId)
-      .maybeSingle()
+    if (source) query = query.eq('source', source)
+    const { data, error } = await query.maybeSingle()
 
     if (error) {
       // 如果表不存在，返回未关注状态
@@ -78,7 +83,7 @@ export const POST = withAuth(
     if (!parsed.success) {
       throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
     }
-    const { traderId, action } = parsed.data
+    const { traderId, source, action } = parsed.data
 
     if (action === 'follow') {
       // Enforce follow limit per tier (free=10, pro=100)
@@ -109,11 +114,22 @@ export const POST = withAuth(
       // 关注
       const { error } = await supabase
         .from('trader_follows')
-        .insert({ user_id: user.id, trader_id: traderId })
+        .insert({ user_id: user.id, trader_id: traderId, source: source ?? null })
 
       if (error) {
         // 如果是重复关注，忽略错误
         if (error.code === '23505') {
+          // Pre-A4 follows omitted the source. Upgrade the old row whenever
+          // the user follows again from a concrete profile.
+          if (source) {
+            const { error: sourceError } = await supabase
+              .from('trader_follows')
+              .update({ source })
+              .eq('user_id', user.id)
+              .eq('trader_id', traderId)
+              .is('source', null)
+            if (sourceError) logger.warn('Failed to upgrade legacy follow source', sourceError)
+          }
           return { following: true }
         }
         // 如果表不存在
