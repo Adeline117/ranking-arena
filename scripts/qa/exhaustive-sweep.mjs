@@ -632,6 +632,14 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
         const before = await snapshotEffect(page)
         const reqBefore = bucket.reqCount
         await el.click({ timeout: 2500 })
+        // Next client navigation is asynchronous: a button can schedule
+        // router.push() after its own click handler has returned. The former
+        // 400ms settle was short enough for /help's ContactSupportButton to
+        // navigate to /login *between* interactions, making the following
+        // Feedback button look blocked by the login page overlay. Wait for a
+        // short, explicit SPA-navigation window before recording the effect;
+        // the recovery block below then immediately re-hydrates this route.
+        await page.waitForURL((url) => url.href !== beforeUrl, { timeout: 1000 }).catch(() => {})
         // Give async handlers time to fire a request or mutate the DOM before
         // judging effect: settle on networkidle, then a short floor for pure
         // client-side state changes that never touch the network.
