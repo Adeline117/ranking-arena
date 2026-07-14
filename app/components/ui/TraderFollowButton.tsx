@@ -16,6 +16,8 @@ import { trackEvent } from '@/lib/analytics/track'
 
 type TraderFollowButtonProps = {
   traderId: string
+  /** Exchange/source for this account. Needed to deliver account-specific events. */
+  source?: string
   userId: string | null
   initialFollowing?: boolean
   onFollowChange?: (following: boolean) => void
@@ -36,6 +38,7 @@ type _FollowResponse = {
  */
 export default function TraderFollowButton({
   traderId,
+  source,
   userId,
   initialFollowing = false,
   onFollowChange,
@@ -95,7 +98,9 @@ export default function TraderFollowButton({
 
     try {
       const authHeaders = await getAuthHeadersAsync()
-      const response = await fetch(`/api/follow?traderId=${traderId}`, {
+      const query = new URLSearchParams({ traderId })
+      if (source) query.set('source', source)
+      const response = await fetch(`/api/follow?${query.toString()}`, {
         headers: authHeaders,
       })
 
@@ -108,7 +113,7 @@ export default function TraderFollowButton({
     } catch {
       // Intentionally swallowed: follow state refresh failed, UI uses cached/optimistic value
     }
-  }, [userId, traderId, getAuthHeadersAsync, onFollowChange])
+  }, [userId, traderId, source, getAuthHeadersAsync, onFollowChange])
 
   // 执行关注/取消关注操作
   const executeFollow = useCallback(
@@ -124,7 +129,7 @@ export default function TraderFollowButton({
             ...authHeaders,
             ...csrfHeaders,
           },
-          body: JSON.stringify({ traderId, action }),
+          body: JSON.stringify({ traderId, source, action }),
         })
 
         const result = await response.json()
@@ -211,7 +216,7 @@ export default function TraderFollowButton({
         setIsLoading(false)
       }
     },
-    [traderId, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange]
+    [traderId, source, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange]
   )
 
   // UF8: Resume pending follow action after login
@@ -235,7 +240,7 @@ export default function TraderFollowButton({
     } catch {
       /* intentionally empty */
     }
-  }, [userId, traderId]) // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only resume pending follow when userId/traderId change; executeFollow and onFollowChange are stable refs
+  }, [userId, traderId, source]) // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only resume pending follow when account identity changes; executeFollow and onFollowChange are stable refs
 
   useEffect(() => {
     if (!userId) return
@@ -245,7 +250,9 @@ export default function TraderFollowButton({
     ;(async () => {
       try {
         const authHeaders = await getAuthHeadersAsync()
-        const response = await fetch(`/api/follow?traderId=${traderId}`, {
+        const query = new URLSearchParams({ traderId })
+        if (source) query.set('source', source)
+        const response = await fetch(`/api/follow?${query.toString()}`, {
           signal: abortController.signal,
           headers: authHeaders,
         })
@@ -266,7 +273,7 @@ export default function TraderFollowButton({
     return () => {
       abortController.abort()
     }
-  }, [userId, traderId, getAuthHeadersAsync])
+  }, [userId, traderId, source, getAuthHeadersAsync])
 
   const handleToggle = useCallback(() => {
     if (!userId) {
