@@ -14,12 +14,14 @@ import { injectStyles, validateEmail, getPasswordStrength } from './components/l
 import { trackEvent } from '@/lib/analytics/track'
 import { authedFetch } from '@/lib/api/client'
 import { peekPendingReferral } from '@/lib/referral/pending'
-import SocialLogin, { WalletLogin } from './components/SocialLogin'
+import SocialLogin from './components/SocialLogin'
 import RegisterForm from './components/RegisterForm'
 import LoginForm from './components/LoginForm'
+import { formatRankedTraderCount } from '@/lib/config/product-facts'
+import { useProductFacts } from '@/lib/hooks/useProductFacts'
 
 export default function LoginPageClient() {
-  const { language: lang, setLanguage: setLang, t } = useLanguage()
+  const { language: lang, t } = useLanguage()
   const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -57,6 +59,7 @@ export default function LoginPageClient() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const { showToast } = useToast()
+  const productFacts = useProductFacts()
 
   const isAddAccount = searchParams.get('addAccount') === 'true'
 
@@ -715,87 +718,6 @@ export default function LoginPageClient() {
             '0 25px 50px -12px var(--color-overlay-dark), 0 0 80px var(--color-accent-primary-08)',
         }}
       >
-        {/* Logo + Language selector row */}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 28,
-          }}
-        >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <svg width="32" height="16" viewBox="0 0 56 28" fill="none" style={{ flexShrink: 0 }}>
-              <defs>
-                <linearGradient id="loginInfGrad" x1="0%" y1="50%" x2="100%" y2="50%">
-                  <stop offset="0%" stopColor="var(--color-brand-accent)" />
-                  <stop offset="50%" stopColor="var(--color-verified-web3)" />
-                  <stop offset="100%" stopColor="var(--color-chart-violet)" />
-                </linearGradient>
-              </defs>
-              <path
-                d="M28 14 C22 6, 12 4, 8 8 C4 12, 4 16, 8 20 C12 24, 22 22, 28 14 C34 6, 44 4, 48 8 C52 12, 52 16, 48 20 C44 24, 34 22, 28 14"
-                stroke="url(#loginInfGrad)"
-                strokeWidth="5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                fill="none"
-              />
-            </svg>
-            <span
-              style={{
-                fontSize: 24,
-                fontWeight: 700,
-                color: tokens.colors.text.primary,
-                letterSpacing: '-0.3px',
-              }}
-            >
-              <span style={{ color: 'var(--color-verified-web3)', fontWeight: 800 }}>a</span>rena
-            </span>
-          </div>
-
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              className="lang-btn"
-              onClick={() => setLang('zh')}
-              style={{
-                padding: '8px 14px',
-                borderRadius: 10,
-                border:
-                  lang === 'zh'
-                    ? '1px solid var(--color-accent-primary-60)'
-                    : '1px solid var(--glass-border-light)',
-                background: lang === 'zh' ? 'var(--color-accent-primary-15)' : 'transparent',
-                color: lang === 'zh' ? 'var(--color-brand-accent)' : 'var(--color-text-secondary)',
-                cursor: 'pointer',
-                fontWeight: lang === 'zh' ? 700 : 500,
-                fontSize: 13,
-              }}
-            >
-              {t('chinese')}
-            </button>
-            <button
-              className="lang-btn"
-              onClick={() => setLang('en')}
-              style={{
-                padding: '8px 14px',
-                borderRadius: 10,
-                border:
-                  lang === 'en'
-                    ? '1px solid var(--color-accent-primary-60)'
-                    : '1px solid var(--glass-border-light)',
-                background: lang === 'en' ? 'var(--color-accent-primary-15)' : 'transparent',
-                color: lang === 'en' ? 'var(--color-brand-accent)' : 'var(--color-text-secondary)',
-                cursor: 'pointer',
-                fontWeight: lang === 'en' ? 700 : 500,
-                fontSize: 13,
-              }}
-            >
-              EN
-            </button>
-          </div>
-        </div>
-
         {/* Title */}
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
           <h1
@@ -829,7 +751,14 @@ export default function LoginPageClient() {
             border: '1px solid var(--color-accent-primary-15)',
           }}
         >
-          {[t('loginValueProp1'), t('loginValueProp2'), t('loginValueProp3')].map((prop, i) => (
+          {[
+            t('loginValueProp1').replace(
+              '{count}',
+              formatRankedTraderCount(productFacts.rankedTraderCount, lang)
+            ),
+            t('loginValueProp2').replace('{count}', String(productFacts.exchangeCount)),
+            t('loginValueProp3'),
+          ].map((prop, i) => (
             <div
               key={i}
               style={{
@@ -871,16 +800,6 @@ export default function LoginPageClient() {
           }}
           t={t}
         />
-        <div style={{ marginTop: 8 }}>
-          <WalletLogin
-            onSuccess={(result) => {
-              showToast(t('loginWalletSignInSuccess'), 'success')
-              router.push(getRedirectUrl(result.handle))
-            }}
-            t={t}
-          />
-        </div>
-
         {/* Divider — email/password is the secondary path */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '20px 0 16px' }}>
           <div style={{ flex: 1, height: 1, background: 'var(--glass-border-light)' }} />
