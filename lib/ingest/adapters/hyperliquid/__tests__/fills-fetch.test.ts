@@ -27,13 +27,25 @@ describe('fetchHyperliquidFillsWindow', () => {
     ])
     expect(beforeNextPage).toHaveBeenCalledTimes(1)
     expect(beforeNextPage).toHaveBeenCalledWith(HYPERLIQUID_FILLS_PAGE_LIMIT)
+    expect(result.schemaVersion).toBe(2)
+    expect(result.rawPages).toEqual([
+      { requestStartTimeMs: 1_000, requestEndTimeMs: 9_000, response: first },
+      {
+        requestStartTimeMs: 2_999,
+        requestEndTimeMs: 9_000,
+        response: [first.at(-1), fill(3_000, 2_001)],
+      },
+    ])
     expect(result.fills).toHaveLength(2_001)
     expect(result.meta).toMatchObject({
+      requestCount: 2,
       pageCount: 2,
       fillCount: 2_001,
       exhausted: true,
       limitHit: false,
       stalled: false,
+      completeThroughEnd: true,
+      failureReason: null,
       complete: true,
     })
   })
@@ -78,7 +90,13 @@ describe('fetchHyperliquidFillsWindow', () => {
       fill(1_000, i + 1)
     )
     const result = await fetchHyperliquidFillsWindow(async () => repeated, 1_000, 9_000)
-    expect(result.meta).toMatchObject({ exhausted: false, stalled: true, complete: false })
+    expect(result.meta).toMatchObject({
+      exhausted: false,
+      stalled: true,
+      completeThroughEnd: false,
+      failureReason: 'stalled',
+      complete: false,
+    })
   })
 
   it('preserves upstream order for same-millisecond tids', async () => {
@@ -126,6 +144,59 @@ describe('fetchHyperliquidFillsWindow', () => {
         9_000
       )
     ).rejects.toThrow('duplicate tid payload changed')
+  })
+
+  it('retains successful pages and the failed request count on a later network error', async () => {
+    const first = Array.from({ length: HYPERLIQUID_FILLS_PAGE_LIMIT }, (_, i) =>
+      fill(1_000 + i, i + 1)
+    )
+    let request = 0
+    try {
+      await fetchHyperliquidFillsWindow(
+        async () => {
+          request += 1
+          if (request === 1) return first
+          throw new Error('socket closed')
+        },
+        1_000,
+        9_000
+      )
+      throw new Error('expected request failure')
+    } catch (error) {
+      expect(error).toMatchObject({
+        name: 'HyperliquidFillsFetchError',
+        reason: 'request_failed',
+        partial: {
+          schemaVersion: 2,
+          rawPages: [{ requestStartTimeMs: 1_000, requestEndTimeMs: 9_000, response: first }],
+          meta: {
+            requestCount: 2,
+            pageCount: 1,
+            fillCount: HYPERLIQUID_FILLS_PAGE_LIMIT,
+            completeThroughEnd: false,
+            failureReason: 'request_failed',
+            complete: false,
+          },
+        },
+      })
+    }
+  })
+
+  it('marks a local page cap as incomplete without calling the throttle again', async () => {
+    const page = Array.from({ length: HYPERLIQUID_FILLS_PAGE_LIMIT }, (_, i) =>
+      fill(1_000 + i, i + 1)
+    )
+    const beforeNextPage = jest.fn(async () => undefined)
+    const result = await fetchHyperliquidFillsWindow(async () => page, 1_000, 9_000, {
+      maxPages: 1,
+      beforeNextPage,
+    })
+    expect(beforeNextPage).not.toHaveBeenCalled()
+    expect(result.meta).toMatchObject({
+      completeThroughEnd: false,
+      failureReason: 'page_limit',
+      complete: false,
+    })
   })
 
   it('rejects malformed, out-of-order, and out-of-range pages', async () => {
