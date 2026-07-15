@@ -69,4 +69,73 @@ describe('publishBoardSeries transaction boundary', () => {
     expect(query).toHaveBeenCalledTimes(1)
     expect(release).toHaveBeenCalledTimes(1)
   })
+
+  it('rolls back before writing when a replay snapshot is no longer latest', async () => {
+    query.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT DISTINCT ON (timeframe)')) {
+        return { rows: [{ timeframe: 90, id: 778 }], rowCount: 1 }
+      }
+      return { rows: [], rowCount: 0 }
+    })
+
+    await expect(
+      publishBoardSeries(src, series, traderIds, {
+        expectedLatestSnapshots: new Map([
+          [
+            90,
+            {
+              id: 777,
+              rawObjectId: 9001,
+              scrapedAt: '2026-07-15T00:00:00.000Z',
+            },
+          ],
+        ]),
+      })
+    ).rejects.toThrow('stale replay snapshot')
+    expect(
+      query.mock.calls.some(([sql]) => String(sql).includes('INSERT INTO arena.trader_series'))
+    ).toBe(false)
+    expect(query.mock.calls.map(([sql]) => String(sql).trim())).toContain('ROLLBACK')
+    expect(release).toHaveBeenCalledTimes(1)
+  })
+
+  it('writes when the guarded snapshot identity is still exact', async () => {
+    query.mockImplementation(async (sql: string, params?: unknown[]) => {
+      if (sql.includes('SELECT DISTINCT ON (timeframe)')) {
+        return {
+          rows: [
+            {
+              timeframe: 90,
+              id: 777,
+              raw_object_id: 9001,
+              scraped_at: '2026-07-15 00:00:00+00',
+            },
+          ],
+          rowCount: 1,
+        }
+      }
+      return {
+        rows: [],
+        rowCount: sql.includes('INSERT INTO arena.trader_series')
+          ? JSON.parse(String(params?.[0])).length
+          : 0,
+      }
+    })
+
+    await expect(
+      publishBoardSeries(src, series, traderIds, {
+        expectedLatestSnapshots: new Map([
+          [
+            90,
+            {
+              id: 777,
+              rawObjectId: 9001,
+              scrapedAt: '2026-07-15T00:00:00.000Z',
+            },
+          ],
+        ]),
+      })
+    ).resolves.toEqual({ traders: 1, points: 1 })
+    expect(query.mock.calls.map(([sql]) => String(sql).trim())).toContain('COMMIT')
+  })
 })

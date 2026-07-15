@@ -21,11 +21,18 @@ import { getAdapter } from '../lib/ingest/core/adapter'
 import '../lib/ingest/adapters/register'
 import { readRawObject } from '../lib/ingest/raw'
 import { prepareBoardSeriesRows, publishBoardSeries } from '../lib/ingest/serving/publish'
-import type { BoardSeriesBlock, ParseCtx, RankingTimeframe } from '../lib/ingest/core/types'
+import { validateLeaderboardRows } from '../lib/ingest/staging/validate'
+import type {
+  BoardSeriesBlock,
+  ParseCtx,
+  ParsedLeaderboardRow,
+  RankingTimeframe,
+  RawPage,
+} from '../lib/ingest/core/types'
 
 // Explicit operator env still wins, allowing a one-run session-pooler override.
-config({ path: resolve(process.cwd(), 'worker/.env'), quiet: true })
-config({ path: resolve(process.cwd(), '.env.local'), quiet: true })
+config({ path: resolve(process.cwd(), 'worker/.env'), quiet: true, override: false })
+config({ path: resolve(process.cwd(), '.env.local'), quiet: true, override: false })
 
 const SERIES_SLUGS = ['okx', 'toobit', 'xt', 'blofin', 'bitunix', 'binance_web3']
 
@@ -39,37 +46,71 @@ async function sourceSlugsForAdapter(adapterSlug: string): Promise<string[]> {
   return rows.map((r) => r.slug)
 }
 
-/** Latest passed snapshot per TF with its raw_object_id + the trader id map. */
-async function latestPassedSnapshots(
-  sourceId: number
-): Promise<Array<{ timeframe: number; rawObjectId: number; scrapedAt: string }>> {
+interface ReplaySnapshot {
+  id: number
+  timeframe: number
+  rawObjectId: number | null
+  scrapedAt: string
+  actualCount: number
+  rawSourceId: number | null
+  rawJobType: string | null
+  rawTimeframe: number | null
+  rawMeta: Record<string, unknown> | null
+}
+
+/** Latest passed snapshot per TF. Never skip a newer row just because RAW is absent. */
+async function latestPassedSnapshots(sourceId: number): Promise<ReplaySnapshot[]> {
   const { rows } = await getIngestPool().query<{
+    id: number
     timeframe: number
-    raw_object_id: number
+    raw_object_id: number | null
     scraped_at: string
+    actual_count: number
+    raw_source_id: number | null
+    raw_job_type: string | null
+    raw_timeframe: number | null
+    raw_meta: Record<string, unknown> | null
   }>(
-    `SELECT DISTINCT ON (timeframe) timeframe, raw_object_id, scraped_at
-       FROM arena.leaderboard_snapshots
-      WHERE source_id = $1 AND count_check_passed AND raw_object_id IS NOT NULL
-      ORDER BY timeframe, scraped_at DESC`,
+    `SELECT DISTINCT ON (ls.timeframe)
+            ls.id, ls.timeframe, ls.raw_object_id, ls.scraped_at::text,
+            ls.actual_count, ro.source_id AS raw_source_id,
+            ro.job_type AS raw_job_type, ro.timeframe AS raw_timeframe,
+            ro.meta AS raw_meta
+       FROM arena.leaderboard_snapshots ls
+       LEFT JOIN arena.raw_objects ro ON ro.id = ls.raw_object_id
+      WHERE ls.source_id = $1 AND ls.count_check_passed
+      ORDER BY ls.timeframe, ls.scraped_at DESC, ls.id DESC`,
     [sourceId]
   )
   return rows.map((r) => ({
+    id: r.id,
     timeframe: r.timeframe,
     rawObjectId: r.raw_object_id,
     scrapedAt: new Date(r.scraped_at).toISOString(),
+    actualCount: r.actual_count,
+    rawSourceId: r.raw_source_id,
+    rawJobType: r.raw_job_type,
+    rawTimeframe: r.raw_timeframe,
+    rawMeta: r.raw_meta,
   }))
 }
 
-/** exchange_trader_id → arena.traders.id for one source (the whole board). */
-async function traderIdMap(sourceId: number): Promise<Map<string, number>> {
+/** Exact exchange_trader_id → trader id membership for one passed snapshot. */
+async function snapshotTraderIdMap(snapshotId: number): Promise<Map<string, number>> {
   const { rows } = await getIngestPool().query<{ id: number; exchange_trader_id: string }>(
-    `SELECT id, exchange_trader_id FROM arena.traders WHERE source_id = $1`,
-    [sourceId]
+    `SELECT t.id, t.exchange_trader_id
+       FROM arena.leaderboard_entries le
+       JOIN arena.traders t ON t.id = le.trader_id
+      WHERE le.snapshot_id = $1`,
+    [snapshotId]
   )
   const m = new Map<string, number>()
   for (const r of rows) m.set(r.exchange_trader_id, r.id)
   return m
+}
+
+function setMatches(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
+  return left.size === right.size && [...left].every((value) => right.has(value))
 }
 
 async function main() {
@@ -93,9 +134,9 @@ async function main() {
     if (sourceSlugs.length === 0) throw new Error(`${adapterSlug}: no active serving sources`)
     for (const slug of sourceSlugs) {
       const src = await getSourceBySlug(slug)
-      const traderIds = await traderIdMap(src.id)
       const snaps = await latestPassedSnapshots(src.id)
       const nativeTfs = [...new Set(nativeRankingTimeframes(src) as number[])].sort((a, b) => a - b)
+      if (nativeTfs.length === 0) throw new Error(`[${slug}] has no native ranking timeframes`)
       const snapsByTf = new Map(snaps.map((snap) => [snap.timeframe, snap]))
       const missingTfs = nativeTfs.filter((timeframe) => !snapsByTf.has(timeframe))
       if (missingTfs.length > 0) {
@@ -105,8 +146,23 @@ async function main() {
       let totalPts = 0
       let totalTraders = 0
       const allSeries = new Map<string, BoardSeriesBlock[]>()
+      const traderIds = new Map<string, number>()
       for (const timeframe of nativeTfs) {
         const snap = snapsByTf.get(timeframe)!
+        if (
+          snap.rawObjectId === null ||
+          snap.rawSourceId !== src.id ||
+          snap.rawJobType !== 'tier_a' ||
+          snap.rawTimeframe !== timeframe
+        ) {
+          throw new Error(
+            `[${slug}] ${timeframe}d latest passed snapshot ${snap.id} has an invalid RAW pointer`
+          )
+        }
+        const rawPageCount = Number(snap.rawMeta?.pageCount)
+        if (!Number.isInteger(rawPageCount) || rawPageCount <= 0) {
+          throw new Error(`[${slug}] ${timeframe}d raw ${snap.rawObjectId} has no valid pageCount`)
+        }
         const pages = await readRawObject(snap.rawObjectId)
         const ctx: ParseCtx = {
           sourceSlug: src.slug,
@@ -117,28 +173,58 @@ async function main() {
         }
         // RAW for tier_a is an array of pages (RawPage[]); each page.payload
         // is the source's leaderboard JSON the parser consumes.
-        const pageArr = Array.isArray(pages) ? (pages as Array<{ payload?: unknown }>) : []
-        if (pageArr.length === 0) {
-          throw new Error(`[${slug}] ${timeframe}d raw ${snap.rawObjectId} has no pages`)
+        const pageArr = Array.isArray(pages) ? (pages as Partial<RawPage>[]) : []
+        if (pageArr.length !== rawPageCount) {
+          throw new Error(
+            `[${slug}] ${timeframe}d raw page mismatch: meta=${rawPageCount}, payload=${pageArr.length}`
+          )
         }
         const merged = new Map<string, BoardSeriesBlock[]>()
-        for (const page of pageArr) {
-          const payload =
-            page && typeof page === 'object' && 'payload' in page ? page.payload : page
-          const m = adapter.parseLeaderboardSeries(payload, ctx, timeframe as RankingTimeframe)
+        const parsedRows: ParsedLeaderboardRow[] = []
+        const pageSize = src.page_size ?? 100
+        for (const [index, page] of pageArr.entries()) {
+          if (
+            !page ||
+            typeof page !== 'object' ||
+            !Object.prototype.hasOwnProperty.call(page, 'payload') ||
+            page.pageIndex !== index + 1
+          ) {
+            throw new Error(`[${slug}] ${timeframe}d raw page sequence invalid at index ${index}`)
+          }
+          const parsed = adapter.parseLeaderboard(page.payload, ctx)
+          for (const row of parsed.rows) {
+            parsedRows.push({ ...row, rank: (page.pageIndex - 1) * pageSize + row.rank })
+          }
+          const m = adapter.parseLeaderboardSeries(page.payload, ctx, timeframe as RankingTimeframe)
           for (const [id, blocks] of m) {
+            if (blocks.some((block) => block.timeframe !== timeframe)) {
+              throw new Error(`[${slug}] ${timeframe}d parser returned a cross-timeframe block`)
+            }
             const ex = merged.get(id)
             if (ex) ex.push(...blocks)
             else merged.set(id, blocks)
           }
         }
         if (merged.size === 0) throw new Error(`[${slug}] ${timeframe}d parsed zero series`)
-        const mappedTraders = [...merged.keys()].filter((id) => traderIds.has(id)).length
-        if (mappedTraders !== merged.size) {
+        const requiredFields = ((src.meta.required_fields as string[]) ?? []) as Array<
+          keyof ParsedLeaderboardRow
+        >
+        const { valid } = validateLeaderboardRows(parsedRows, requiredFields)
+        const snapshotTraders = await snapshotTraderIdMap(snap.id)
+        if (valid.length !== snap.actualCount || snapshotTraders.size !== snap.actualCount) {
           throw new Error(
-            `[${slug}] ${timeframe}d trader mapping incomplete: parsed=${merged.size}, mapped=${mappedTraders}`
+            `[${slug}] ${timeframe}d snapshot count mismatch: recorded=${snap.actualCount}, reparsed=${valid.length}, entries=${snapshotTraders.size}`
           )
         }
+        const validIds = new Set(valid.map((row) => row.exchangeTraderId))
+        const snapshotIds = new Set(snapshotTraders.keys())
+        const seriesIds = new Set(merged.keys())
+        if (!setMatches(validIds, snapshotIds) || !setMatches(seriesIds, snapshotIds)) {
+          throw new Error(
+            `[${slug}] ${timeframe}d identity mismatch: valid=${validIds.size}, entries=${snapshotIds.size}, series=${seriesIds.size}`
+          )
+        }
+        for (const [id, traderId] of snapshotTraders) traderIds.set(id, traderId)
         const prepared = prepareBoardSeriesRows(merged, traderIds)
         if (prepared.rows.length === 0 || prepared.traders !== merged.size) {
           throw new Error(
@@ -153,7 +239,9 @@ async function main() {
         totalPts += prepared.rows.length
         totalTraders += prepared.traders
         console.log(
-          `[${slug}] ${timeframe}d: ${prepared.rows.length} pts / ${prepared.traders} traders (preflight)`
+          `[${slug}] ${timeframe}d snapshot=${snap.id} raw=${snap.rawObjectId} ` +
+            `scraped=${snap.scrapedAt} pages=${pageArr.length} rows=${snap.actualCount}: ` +
+            `${prepared.rows.length} pts / ${prepared.traders} traders (preflight)`
         )
       }
       const combined = prepareBoardSeriesRows(allSeries, traderIds)
@@ -163,7 +251,21 @@ async function main() {
         )
       }
       if (apply) {
-        const written = await publishBoardSeries(src, allSeries, traderIds)
+        const written = await publishBoardSeries(src, allSeries, traderIds, {
+          expectedLatestSnapshots: new Map(
+            nativeTfs.map((timeframe) => {
+              const snap = snapsByTf.get(timeframe)!
+              return [
+                timeframe,
+                {
+                  id: snap.id,
+                  rawObjectId: snap.rawObjectId!,
+                  scrapedAt: snap.scrapedAt,
+                },
+              ]
+            })
+          ),
+        })
         if (written.points !== combined.rows.length || written.traders !== combined.traders) {
           throw new Error(
             `[${slug}] post-write mismatch: expected=${combined.rows.length}/${combined.traders}, actual=${written.points}/${written.traders}`

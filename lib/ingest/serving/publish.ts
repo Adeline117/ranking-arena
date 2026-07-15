@@ -36,6 +36,12 @@ import {
   type CountVerdict,
 } from '../staging/count-check'
 
+async function lockSourcePublication(client: PoolClient, sourceId: number): Promise<void> {
+  await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+    `arena.publish-board-series:${sourceId}`,
+  ])
+}
+
 export interface PublishSnapshotInput {
   src: SourceRow
   timeframe: 7 | 30 | 90
@@ -153,6 +159,10 @@ export async function publishLeaderboardSnapshot(
   const client = await ingestClientConnect()
   try {
     await client.query('BEGIN')
+    // A snapshot and its board series are separate transactions in Tier A.
+    // Sharing this source lock with replay prevents an older RAW re-parse
+    // from crossing a newer snapshot commit and winning the final write.
+    await lockSourcePublication(client, src.id)
 
     const { rows: snap } = await client.query<{ id: number; scraped_at: string }>(
       `INSERT INTO arena.leaderboard_snapshots
@@ -421,6 +431,14 @@ export interface PreparedBoardSeriesRow {
   value: number
 }
 
+export interface PublishBoardSeriesOptions {
+  /** Replay-only guard: selected latest-passed snapshot identity per timeframe. */
+  expectedLatestSnapshots?: ReadonlyMap<
+    number,
+    { id: number; rawObjectId: number; scrapedAt: string }
+  >
+}
+
 /** Pure publication-boundary preparation, also used by replay dry-runs. */
 export function prepareBoardSeriesRows(
   seriesByTrader: Map<string, BoardSeriesBlock[]>,
@@ -465,7 +483,8 @@ export function prepareBoardSeriesRows(
 export async function publishBoardSeries(
   src: SourceRow,
   seriesByTrader: Map<string, BoardSeriesBlock[]>,
-  traderIds: Map<string, number>
+  traderIds: Map<string, number>,
+  options: PublishBoardSeriesOptions = {}
 ): Promise<{ traders: number; points: number }> {
   const prepared = prepareBoardSeriesRows(seriesByTrader, traderIds)
   const flat = prepared.rows
@@ -481,9 +500,38 @@ export async function publishBoardSeries(
     transactionStarted = true
     // Serialize live Tier-A publication and operator replay for one source.
     // Transaction-scoped lock is safe through PgBouncer transaction mode.
-    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
-      `arena.publish-board-series:${src.id}`,
-    ])
+    await lockSourcePublication(client, src.id)
+    const expectedSnapshots = options.expectedLatestSnapshots
+    if (expectedSnapshots && expectedSnapshots.size > 0) {
+      const timeframes = [...expectedSnapshots.keys()]
+      const { rows } = await client.query<{
+        timeframe: number
+        id: number
+        raw_object_id: number | null
+        scraped_at: string
+      }>(
+        `SELECT DISTINCT ON (timeframe)
+                timeframe, id, raw_object_id, scraped_at::text
+           FROM arena.leaderboard_snapshots
+          WHERE source_id = $1 AND count_check_passed
+            AND timeframe = ANY($2::smallint[])
+          ORDER BY timeframe, scraped_at DESC, id DESC`,
+        [src.id, timeframes]
+      )
+      const current = new Map(rows.map((row) => [row.timeframe, row]))
+      for (const [timeframe, expected] of expectedSnapshots) {
+        const latest = current.get(timeframe)
+        if (
+          latest?.id !== expected.id ||
+          latest.raw_object_id !== expected.rawObjectId ||
+          new Date(latest.scraped_at).toISOString() !== expected.scrapedAt
+        ) {
+          throw new Error(
+            `[board-series] stale replay snapshot for ${src.slug} ${timeframe}d: expected=${expected.id}, latest=${latest?.id ?? 'missing'}`
+          )
+        }
+      }
+    }
     for (let i = 0; i < flat.length; i += CHUNK) {
       const slice = flat.slice(i, i + CHUNK)
       const result = await client.query(

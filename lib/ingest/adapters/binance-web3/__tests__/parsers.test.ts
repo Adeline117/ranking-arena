@@ -140,6 +140,12 @@ describe('parseBinanceWeb3LeaderboardSeries', () => {
 
   it('fails closed on a mismatched embedded timeframe', () => {
     expect(() => parseBinanceWeb3LeaderboardSeries(payload, ctx, 90)).toThrow('timeframe mismatch')
+    expect(() =>
+      parseBinanceWeb3LeaderboardSeries({ ...payload, timeframe: undefined }, ctx, 7)
+    ).toThrow('timeframe mismatch')
+    expect(() =>
+      parseBinanceWeb3LeaderboardSeries({ ...payload, timeframe: 'invalid' }, ctx, 7)
+    ).toThrow('timeframe mismatch')
   })
 
   it('preserves negative/zero days, never fills gaps, and sums to the native headline', () => {
