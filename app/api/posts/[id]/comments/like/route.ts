@@ -170,7 +170,8 @@ async function toggleCommentReactionLegacy(
     if (blocked) return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
 
     if (post.group_id) {
-      const [banResult, membershipResult] = await Promise.all([
+      const [groupResult, banResult, membershipResult] = await Promise.all([
+        supabase.from('groups').select('id, dissolved_at').eq('id', post.group_id).maybeSingle(),
         supabase
           .from('group_bans')
           .select('user_id')
@@ -185,11 +186,19 @@ async function toggleCommentReactionLegacy(
           .maybeSingle(),
       ])
 
+      if (groupResult.error) return databaseFailure('group-read', groupResult.error)
       if (banResult.error) return databaseFailure('group-ban-read', banResult.error)
       if (membershipResult.error) {
         return databaseFailure('group-membership-read', membershipResult.error)
       }
-      if (banResult.data || !membershipResult.data) {
+      // Dissolved groups retain readable history, but cannot receive a new or
+      // switched reaction. Removal stays allowed through the branch above.
+      if (
+        !groupResult.data ||
+        groupResult.data.dissolved_at ||
+        banResult.data ||
+        !membershipResult.data
+      ) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     } else if (post.visibility === 'followers') {

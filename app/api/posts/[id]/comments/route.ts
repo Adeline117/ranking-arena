@@ -7,6 +7,7 @@
  */
 
 import { NextResponse } from 'next/server'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { success, successWithPagination, validateNumber, ApiError, ErrorCode } from '@/lib/api'
 import { withPublic, withAuth } from '@/lib/api/middleware'
@@ -20,18 +21,21 @@ import { sendNotification } from '@/lib/data/notifications'
 import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
-import { fireAndForget } from '@/lib/logger'
+import logger, { fireAndForget } from '@/lib/logger'
 // sanitizeText is dynamically imported inside POST/PUT only — keeps the
 // sanitize-html parser out of the GET handler's module graph at cold-start.
 
 // Zod schema for POST (create comment)
-const CreateCommentSchema = z.object({
-  content: z
-    .string()
-    .min(1, 'Comment content is required')
-    .max(2000, 'Comment must be at most 2000 characters'),
-  parent_id: z.string().uuid().optional().nullable(),
-})
+const CreateCommentSchema = z
+  .object({
+    content: z
+      .string()
+      .trim()
+      .min(1, 'Comment content is required')
+      .max(2000, 'Comment must be at most 2000 characters'),
+    parent_id: z.string().uuid().optional().nullable(),
+  })
+  .strict()
 
 // Zod schema for PUT (edit comment)
 const EditCommentSchema = z.object({
@@ -83,6 +87,105 @@ function rethrowCommentMutation(error: unknown, action: 'updated' | 'deleted'): 
   throw ApiError.internal(`Comment could not be ${action}`)
 }
 
+type LegacyInteractablePost = {
+  author_id: string
+  group_id: string | null
+  visibility: string
+}
+
+async function hasBidirectionalBlock(
+  supabase: SupabaseClient,
+  viewerId: string,
+  authorId: string
+): Promise<boolean> {
+  if (viewerId === authorId) return false
+
+  const { data, error } = await supabase
+    .from('blocked_users')
+    .select('blocker_id')
+    .or(
+      `and(blocker_id.eq.${viewerId},blocked_id.eq.${authorId}),` +
+        `and(blocker_id.eq.${authorId},blocked_id.eq.${viewerId})`
+    )
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    logger.error('[comments POST] Block permission lookup failed', { code: error.code })
+    throw ApiError.internal('Comment permission could not be checked')
+  }
+  return !!data
+}
+
+async function assertLegacyCreateAudience(
+  supabase: SupabaseClient,
+  userId: string,
+  post: LegacyInteractablePost
+): Promise<void> {
+  if (await hasBidirectionalBlock(supabase, userId, post.author_id)) {
+    throw ApiError.forbidden('You cannot interact with this user')
+  }
+
+  if (post.group_id) {
+    const [groupResult, membershipResult, banResult] = await Promise.all([
+      supabase.from('groups').select('id, dissolved_at').eq('id', post.group_id).maybeSingle(),
+      supabase
+        .from('group_members')
+        .select('user_id, muted_until')
+        .eq('group_id', post.group_id)
+        .eq('user_id', userId)
+        .maybeSingle(),
+      supabase
+        .from('group_bans')
+        .select('user_id')
+        .eq('group_id', post.group_id)
+        .eq('user_id', userId)
+        .maybeSingle(),
+    ])
+
+    if (groupResult.error || membershipResult.error || banResult.error) {
+      logger.error('[comments POST] Group permission lookup failed', {
+        groupCode: groupResult.error?.code,
+        membershipCode: membershipResult.error?.code,
+        banCode: banResult.error?.code,
+      })
+      throw ApiError.internal('Comment permission could not be checked')
+    }
+    if (!groupResult.data || groupResult.data.dissolved_at) {
+      throw ApiError.forbidden('This group is read-only')
+    }
+    if (banResult.data) throw ApiError.forbidden('You are banned from this group')
+    if (!membershipResult.data) {
+      throw ApiError.forbidden('You must be a member to interact in this group')
+    }
+    if (
+      membershipResult.data.muted_until &&
+      new Date(membershipResult.data.muted_until) > new Date()
+    ) {
+      throw ApiError.forbidden('You have been muted')
+    }
+    return
+  }
+
+  if (post.visibility === 'followers' && post.author_id !== userId) {
+    const { data, error } = await supabase
+      .from('user_follows')
+      .select('following_id')
+      .eq('follower_id', userId)
+      .eq('following_id', post.author_id)
+      .maybeSingle()
+
+    if (error) {
+      logger.error('[comments POST] Follower permission lookup failed', { code: error.code })
+      throw ApiError.internal('Comment permission could not be checked')
+    }
+    if (!data) throw ApiError.forbidden('Only followers can interact with this post')
+  } else if (post.visibility !== 'public') {
+    // Includes malformed legacy group-only rows without a group resource.
+    throw ApiError.forbidden('This post is not available')
+  }
+}
+
 export const GET = withPublic(
   async ({ supabase, request }) => {
     const guard = socialFeatureGuard()
@@ -129,20 +232,14 @@ export const POST = withAuth(
     const guard = socialFeatureGuard()
     if (guard) return guard
 
-    const id = extractPostId(request.url)
+    const id = requirePostId(request.url)
 
-    // Parse body and check mute status in parallel
-    let body: Record<string, unknown>
+    let body: unknown
     try {
       body = await request.json()
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-
-    const [, { data: post }] = await Promise.all([
-      Promise.resolve(body),
-      supabase.from('posts').select('group_id').eq('id', id).single(),
-    ])
 
     const parsed = CreateCommentSchema.safeParse(body)
     if (!parsed.success) {
@@ -151,32 +248,62 @@ export const POST = withAuth(
     // Sanitize comment content — strip HTML/scripts before DB storage
     const { sanitizeText } = await import('@/lib/utils/sanitize')
     const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 2000 })
+    if (!content.trim()) throw ApiError.validation('Comment content is required')
     const parent_id = parsed.data.parent_id ?? undefined
 
-    // Check if user is muted OR banned in the group (the POST handler used the
-    // service-role client, so RLS won't stop a banned user — enforce here).
-    if (post?.group_id) {
-      const [{ data: membership }, { data: ban }] = await Promise.all([
-        supabase
-          .from('group_members')
-          .select('muted_until')
-          .eq('group_id', post.group_id)
-          .eq('user_id', user.id)
-          .maybeSingle(),
-        supabase
-          .from('group_bans')
-          .select('user_id') // composite PK — select user_id, not id
-          .eq('group_id', post.group_id)
-          .eq('user_id', user.id)
-          .maybeSingle(),
-      ])
+    const [postResult, parentResult] = await Promise.all([
+      supabase
+        .from('posts')
+        .select('id, group_id, author_id, title, visibility, status')
+        .eq('id', id)
+        .is('deleted_at', null)
+        .maybeSingle(),
+      parent_id
+        ? supabase
+            .from('comments')
+            .select('id, post_id, parent_id, user_id')
+            .eq('id', parent_id)
+            .is('deleted_at', null)
+            .maybeSingle()
+        : Promise.resolve({ data: null, error: null }),
+    ])
 
-      if (ban) {
-        throw ApiError.forbidden('You are banned from this group')
-      }
-      if (membership?.muted_until && new Date(membership.muted_until) > new Date()) {
-        throw ApiError.forbidden('You have been muted')
-      }
+    if (postResult.error) {
+      logger.error('[comments POST] Post lookup failed', { code: postResult.error.code })
+      throw ApiError.internal('Comment could not be created')
+    }
+    const post = postResult.data
+    if (!post) throw ApiError.notFound('Post not found')
+    if (post.status !== 'active') {
+      throw new ApiError('Post is not open for comments', {
+        code: ErrorCode.OPERATION_FAILED,
+        statusCode: 409,
+      })
+    }
+
+    if (parentResult.error) {
+      logger.error('[comments POST] Parent lookup failed', { code: parentResult.error.code })
+      throw ApiError.internal('Comment could not be created')
+    }
+    const parentComment = parentResult.data
+    if (parent_id && !parentComment) throw ApiError.notFound('Parent comment not found')
+    if (parentComment && parentComment.post_id !== id) {
+      throw ApiError.notFound('Parent comment not found')
+    }
+    if (parentComment?.parent_id) {
+      throw ApiError.validation('Replies may only target a top-level comment')
+    }
+
+    // This is the compatibility window before the database integrity trigger
+    // is installed. The service-role client bypasses RLS, so every audience
+    // and dissolved-group check must be explicit here.
+    await assertLegacyCreateAudience(supabase, user.id, post)
+    if (
+      parentComment &&
+      parentComment.user_id !== post.author_id &&
+      (await hasBidirectionalBlock(supabase, user.id, parentComment.user_id))
+    ) {
+      throw ApiError.forbidden('You cannot reply to this user')
     }
 
     const comment = await createComment(supabase, user.id, {
@@ -194,17 +321,11 @@ export const POST = withAuth(
         const userHandle = await getUserHandle(user.id, user.email ?? undefined)
 
         // Notify post author
-        const { data: postData } = await supabase
-          .from('posts')
-          .select('author_id, title')
-          .eq('id', id)
-          .single()
-
-        if (postData?.author_id && postData.author_id !== user.id) {
+        if (post.author_id && post.author_id !== user.id) {
           sendNotification(
             supabase,
             {
-              user_id: postData.author_id,
+              user_id: post.author_id,
               type: 'comment',
               title: `${userHandle} commented on your post`,
               message: content.slice(0, 100),
@@ -219,16 +340,10 @@ export const POST = withAuth(
 
         // If this is a reply, also notify the parent comment author
         if (parent_id) {
-          const { data: parentComment } = await supabase
-            .from('comments')
-            .select('user_id')
-            .eq('id', parent_id)
-            .single()
-
           if (
             parentComment?.user_id &&
             parentComment.user_id !== user.id &&
-            parentComment.user_id !== postData?.author_id
+            parentComment.user_id !== post.author_id
           ) {
             sendNotification(
               supabase,

@@ -164,7 +164,8 @@ async function assertLegacyEditAudience(supabase: SupabaseClient, postId: string
   if (blocked) fail(operation, 'block-read', 'forbidden')
 
   if (post.group_id) {
-    const [banResult, membershipResult] = await Promise.all([
+    const [groupResult, banResult, membershipResult] = await Promise.all([
+      supabase.from('groups').select('id, dissolved_at').eq('id', post.group_id).maybeSingle(),
       supabase
         .from('group_bans')
         .select('user_id')
@@ -179,11 +180,17 @@ async function assertLegacyEditAudience(supabase: SupabaseClient, postId: string
         .maybeSingle(),
     ])
 
+    if (groupResult.error) fail(operation, 'group-read', 'database', groupResult.error)
     if (banResult.error) fail(operation, 'group-ban-read', 'database', banResult.error)
     if (membershipResult.error) {
       fail(operation, 'group-membership-read', 'database', membershipResult.error)
     }
-    if (banResult.data || !membershipResult.data) {
+    if (
+      !groupResult.data ||
+      groupResult.data.dissolved_at ||
+      banResult.data ||
+      !membershipResult.data
+    ) {
       fail(operation, 'group-audience', 'forbidden')
     }
     if (

@@ -196,6 +196,7 @@ function request(body: unknown, postId = POST_ID) {
 type FallbackOptions = {
   post?: QueryResult
   blocked?: QueryResult
+  group?: QueryResult
   ban?: QueryResult
   membership?: QueryResult
   follow?: QueryResult
@@ -215,6 +216,7 @@ function arrangeFallback(options: FallbackOptions = {}) {
   const builders = {
     post: queueQuery('posts', postResult),
     blocked: queueQuery('blocked_users', options.blocked ?? { data: null }),
+    group: undefined as QueryBuilder | undefined,
     ban: undefined as QueryBuilder | undefined,
     membership: undefined as QueryBuilder | undefined,
     follow: undefined as QueryBuilder | undefined,
@@ -228,6 +230,10 @@ function arrangeFallback(options: FallbackOptions = {}) {
   }
 
   if (post?.group_id) {
+    builders.group = queueQuery(
+      'groups',
+      options.group ?? { data: { id: post.group_id, dissolved_at: null } }
+    )
     builders.ban = queueQuery('group_bans', options.ban ?? { data: null })
     builders.membership = queueQuery(
       'group_members',
@@ -601,6 +607,9 @@ describe('POST /api/posts/[id]/comments/like', () => {
     mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } })
     const builders = arrangeFallback({
       post: { data: { ...ACTIVE_PUBLIC_POST, group_id: GROUP_ID, visibility: 'group' } },
+      group: {
+        data: { id: GROUP_ID, dissolved_at: '2026-07-15T00:00:00.000Z' },
+      },
       membership: { data: null },
       existing: { data: { id: 'reaction-1', reaction_type: 'like' } },
       likeRecount: { count: 2 },
@@ -611,10 +620,18 @@ describe('POST /api/posts/[id]/comments/like', () => {
     const res = await POST(request({ comment_id: COMMENT_ID, type: 'like' }))
 
     expect(res.status).toBe(200)
+    expect(builders.group?.maybeSingle).not.toHaveBeenCalled()
     expect(builders.membership?.maybeSingle).not.toHaveBeenCalled()
   })
 
   it.each([
+    ['missing group', { group: { data: null } }, 403],
+    [
+      'dissolved group',
+      { group: { data: { id: GROUP_ID, dissolved_at: '2026-07-15T00:00:00.000Z' } } },
+      403,
+    ],
+    ['group lookup error', { group: { error: { code: 'XX100' } } }, 500],
     ['banned member', { ban: { data: { user_id: mockUser.id } } }, 403],
     ['non-member', { membership: { data: null } }, 403],
     ['ban lookup error', { ban: { error: { code: 'XX101' } } }, 500],
