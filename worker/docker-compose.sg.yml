@@ -20,6 +20,8 @@ services:
     environment:
       INGEST_REGIONS: vps_sg
       INGEST_LOCAL_REGION: vps_sg
+      # Stable across container recreates; avoids random-hostname zombie heartbeats.
+      WORKER_NODE_ID: vps-sg-docker
     volumes:
       # Persist anti-bot warm-cookie profiles across restarts/redeploys.
       - /opt/arena-ingest/.arena-ingest:/app/.arena-ingest

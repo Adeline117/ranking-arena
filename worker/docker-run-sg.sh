@@ -13,7 +13,7 @@
 #                        `arena-ingest:local`, then `... deploy-local`. No PAT,
 #                        no registry — the credential-free path.
 #
-# FOUR things this script gets right (each cost a failed verify run to find):
+# FIVE things this script gets right (the first four cost failed verify runs):
 #   1. Env quotes — the box .env has KEY="value"; docker `--env-file` does NOT
 #      strip quotes, so pg sees a quoted connection string and misparses the host.
 #      We pre-strip surrounding double-quotes into a clean env-file.
@@ -23,8 +23,10 @@
 #   3. Profile volume perms — pwuser must OWN the mounted profile dir or Chromium
 #      can't mkdir profiles (EACCES). We chown it to 1000:1000 (root still writes
 #      it on a pm2 rollback, so this is safe both ways).
-#   4. Side-by-side safety — distinct container name; `stop-pm2` is the explicit
-#      cutover step, run only AFTER the container reports ready + ingesting.
+#   4. Side-by-side safety — container deploy refuses while the PM2 worker has a
+#      live pid. `stop-pm2` is the explicit cutover step and must run first.
+#   5. Stable heartbeat identity — Docker hostnames change on every recreate and
+#      leave zombie roster entries. WORKER_NODE_ID stays stable across deploys.
 set -euo pipefail
 
 IMAGE="${INGEST_IMAGE:-ghcr.io/adeline117/ranking-arena/ingest-worker}"
@@ -33,6 +35,33 @@ SRC_ENV="/opt/arena-ingest/worker/.env"          # the box's real env (pm2 uses 
 CLEAN_ENV="/tmp/arena-ingest-clean.env"          # quote-stripped, docker --env-file
 PROFILE_VOL="/opt/arena-ingest/.arena-ingest"    # shared warm-cookie profiles
 PW_UID=1000                                      # pwuser in the Playwright image
+WORKER_NODE_ID="${INGEST_WORKER_NODE_ID:-vps-sg-docker}"
+PM2_APP="arena-ingest-worker-sg"
+
+require_pm2_stopped() {
+  local pid
+  if ! command -v pm2 >/dev/null 2>&1; then
+    echo "[docker-run-sg] ✗ cannot verify PM2 state; refusing Docker cutover" >&2
+    return 1
+  fi
+  if ! pid="$(pm2 pid "${PM2_APP}" 2>/dev/null)"; then
+    echo "[docker-run-sg] ✗ PM2 inspection failed; refusing Docker cutover" >&2
+    return 1
+  fi
+  pid="${pid//[[:space:]]/}"
+  case "${pid}" in
+    ''|0) return 0 ;;
+    *[!0-9]*)
+      echo "[docker-run-sg] ✗ unexpected PM2 pid response; refusing Docker cutover" >&2
+      return 1
+      ;;
+    *)
+      echo "[docker-run-sg] ✗ Docker deploy refused: PM2 ${PM2_APP} is online (pid=${pid})" >&2
+      echo "[docker-run-sg]   Run '$0 stop-pm2' first, then retry the Docker deploy." >&2
+      return 1
+      ;;
+  esac
+}
 
 prep_env() {
   # strip surrounding double-quotes from KEY="value" lines (fix #1)
@@ -42,6 +71,7 @@ prep_env() {
 
 run_container() {
   local tag="$1"
+  require_pm2_stopped
   if [ "${NO_PULL:-0}" != "1" ]; then
     echo "[docker-run-sg] pulling ${IMAGE}:${tag} …"; docker pull "${IMAGE}:${tag}"
   else
@@ -57,6 +87,7 @@ run_container() {
     --env-file "${CLEAN_ENV}" \
     -e INGEST_REGIONS=vps_sg \
     -e INGEST_LOCAL_REGION=vps_sg \
+    -e WORKER_NODE_ID="${WORKER_NODE_ID}" \
     -e DEPLOYED_SHA="${DEPLOYED_SHA:-unknown}" \
     -v "${PROFILE_VOL}:/app/.arena-ingest" \
     --restart unless-stopped \
@@ -97,12 +128,12 @@ case "${1:-}" in
     run_container "$2"; verify_ready ;;
   stop-pm2)
     echo "[docker-run-sg] disabling the OLD pm2 worker (cutover) …"
-    pm2 stop arena-ingest-worker-sg && pm2 save
+    pm2 stop "${PM2_APP}" && pm2 save
     echo "[docker-run-sg] pm2 worker stopped; container ${NAME} is now the sole vps_sg ingester." ;;
   start-pm2)   # rollback helper: bring the pm2 worker back
     echo "[docker-run-sg] restarting the pm2 worker (rollback) …"
     docker rm -f "${NAME}" 2>/dev/null || true
-    pm2 start arena-ingest-worker-sg 2>/dev/null || pm2 restart arena-ingest-worker-sg
+    pm2 start "${PM2_APP}" 2>/dev/null || pm2 restart "${PM2_APP}"
     pm2 save ;;
   *)
     echo "usage: $0 {deploy [tag] | deploy-local [tag] | rollback <tag> | stop-pm2 | start-pm2}" >&2
