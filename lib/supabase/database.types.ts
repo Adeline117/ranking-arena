@@ -398,6 +398,13 @@ export type Database = {
             referencedRelation: 'trader_authorizations'
             referencedColumns: ['id']
           },
+          {
+            foreignKeyName: 'authorization_sync_logs_authorization_id_fkey'
+            columns: ['authorization_id']
+            isOneToOne: false
+            referencedRelation: 'verified_data_authorizations'
+            referencedColumns: ['authorization_id']
+          },
         ]
       }
       avoid_votes: {
@@ -7532,15 +7539,6 @@ export type Database = {
       }
     }
     Views: {
-      verified_data_authorizations: {
-        Row: {
-          authorization_id: string | null
-          last_sync_at: string | null
-          platform: string | null
-          trader_id: string | null
-        }
-        Relationships: []
-      }
       group_subscription_stats: {
         Row: {
           active_subscribers: number | null
@@ -7560,6 +7558,20 @@ export type Database = {
           total_pnl: number | null
           trade_count: number | null
           trader_count: number | null
+        }
+        Relationships: []
+      }
+      mv_token_trader_daily_90d: {
+        Row: {
+          pnl_pct_count: number | null
+          pnl_pct_sum: number | null
+          source: string | null
+          source_trader_id: string | null
+          token: string | null
+          token_pnl: number | null
+          trade_count: number | null
+          trade_date: string | null
+          win_count: number | null
         }
         Relationships: []
       }
@@ -7715,6 +7727,15 @@ export type Database = {
           status?: string | null
           tier?: string | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      verified_data_authorizations: {
+        Row: {
+          authorization_id: string | null
+          last_sync_at: string | null
+          platform: string | null
+          trader_id: string | null
         }
         Relationships: []
       }
@@ -8445,23 +8466,6 @@ export type Database = {
           trader_count: number
         }[]
       }
-      get_token_trader_rankings: {
-        Args: {
-          lookback_days?: number
-          max_traders?: number
-          row_offset?: number
-          token_symbol: string
-        }
-        Returns: {
-          source: string
-          source_trader_id: string
-          token_avg_pnl_pct: number | null
-          token_pnl: number
-          token_trade_count: number
-          token_win_rate: number | null
-          total_count: number
-        }[]
-      }
       get_post_penalty: {
         Args: {
           p_dislike_count: number
@@ -8481,6 +8485,23 @@ export type Database = {
         }[]
       }
       get_time_decay: { Args: { p_hours: number }; Returns: number }
+      get_token_trader_rankings: {
+        Args: {
+          lookback_days?: number
+          max_traders?: number
+          row_offset?: number
+          token_symbol: string
+        }
+        Returns: {
+          source: string
+          source_trader_id: string
+          token_avg_pnl_pct: number
+          token_pnl: number
+          token_trade_count: number
+          token_win_rate: number
+          total_count: number
+        }[]
+      }
       get_top_trust_ratio: {
         Args: { p_season_id?: string; p_top_n?: number }
         Returns: {
