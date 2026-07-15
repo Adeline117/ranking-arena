@@ -22,14 +22,23 @@ import {
   shapeOnchainPnl,
   shapeOnchainQuality,
   type TokenDistBucket,
+  type TokenDistributionUnit,
 } from './onchain-insights'
 
-// PnL% bucket ranges are numeric → locale-neutral labels (no i18n key needed).
-const BUCKET_LABEL: Record<TokenDistBucket['key'], string> = {
-  gt_500: '>+500%',
-  p0_500: '0~+500%',
-  n50_0: '-50%~0',
-  lt_n50: '<-50%',
+// Both range systems are numeric → locale-neutral labels (no i18n key needed).
+const BUCKET_LABEL: Record<TokenDistributionUnit, Record<TokenDistBucket['key'], string>> = {
+  pnl_percent: {
+    gt_500: '>+500%',
+    p0_500: '0~+500%',
+    n50_0: '-50%~0',
+    lt_n50: '<-50%',
+  },
+  realized_pnl_usd: {
+    gt_500: '>+$500',
+    p0_500: '$0~+$500',
+    n50_0: '-$50~$0',
+    lt_n50: '<-$50',
+  },
 }
 
 function Card({ title, children }: { title: string; children: React.ReactNode }) {
@@ -70,7 +79,7 @@ export default function OnchainInsights({ extras, currency }: OnchainInsightsPro
 
   if (!dist && !tokensTop && !calendar && !pnl) return null
 
-  const distTotal = dist ? dist.reduce((s, b) => s + b.count, 0) : 0
+  const distTotal = dist ? dist.buckets.reduce((sum, bucket) => sum + bucket.count, 0) : 0
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
@@ -146,7 +155,7 @@ export default function OnchainInsights({ extras, currency }: OnchainInsightsPro
       {dist && distTotal > 0 && (
         <Card title={t('tokenPnlDistribution')}>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-            {dist.map((b) => {
+            {dist.buckets.map((b) => {
               const pct = distTotal > 0 ? (b.count / distTotal) * 100 : 0
               return (
                 <Box
@@ -154,7 +163,7 @@ export default function OnchainInsights({ extras, currency }: OnchainInsightsPro
                   style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}
                 >
                   <Text size="xs" color="tertiary" style={{ width: 72, flexShrink: 0 }}>
-                    {BUCKET_LABEL[b.key]}
+                    {BUCKET_LABEL[dist.unit][b.key]}
                   </Text>
                   <Box
                     style={{

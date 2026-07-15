@@ -209,8 +209,16 @@ describe('enrichmentExtras', () => {
       'generic_balance_delta_decoder',
     ])
     expect(x.onchain_realized_partial).toBe(false)
-    // OnchainInsights blocks surfaced when tokens exist
-    expect(x.token_distribution).toEqual({ gt_500: 1, p0_500: 2, n50_0: 0, lt_n50: 1 })
+    // Dollar buckets use a dedicated, explicit unit and never overwrite the
+    // exchange-owned percentage distribution.
+    expect(x.onchain_token_distribution_usd).toEqual({
+      gt_500: 1,
+      p0_500: 2,
+      n50_0: 0,
+      lt_n50: 1,
+    })
+    expect(x.onchain_token_distribution_unit).toBe('realized_pnl_usd')
+    expect('token_distribution' in x).toBe(false)
     expect(Array.isArray(x.top_earning_tokens)).toBe(true)
     // never emits board-owned keys
     expect('pnl' in x).toBe(false)
@@ -259,7 +267,8 @@ describe('enrichmentExtras', () => {
 
   it('emits null insight blocks so a shallow JSONB merge clears stale cards', () => {
     const x = enrichmentExtras({ ...base, tokenDistribution: {}, topEarningTokens: [] })
-    expect(x.token_distribution).toBeNull()
+    expect(x.onchain_token_distribution_usd).toBeNull()
+    expect(x.onchain_token_distribution_unit).toBeNull()
     expect(x.top_earning_tokens).toBeNull()
   })
 })

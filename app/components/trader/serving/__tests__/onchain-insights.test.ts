@@ -14,19 +14,61 @@ describe('onchain-insights shapers', () => {
   it('orders token distribution best→worst and tags positivity', () => {
     const out = shapeTokenDistribution({
       token_distribution: { gt_500: 1, p0_500: 9, n50_0: 10, lt_n50: 3 },
+      token_distribution_unit: 'pnl_percent',
     })
-    expect(out).toEqual([
-      { key: 'gt_500', positive: true, count: 1 },
-      { key: 'p0_500', positive: true, count: 9 },
-      { key: 'n50_0', positive: false, count: 10 },
-      { key: 'lt_n50', positive: false, count: 3 },
-    ])
+    expect(out).toEqual({
+      unit: 'pnl_percent',
+      buckets: [
+        { key: 'gt_500', positive: true, count: 1 },
+        { key: 'p0_500', positive: true, count: 9 },
+        { key: 'n50_0', positive: false, count: 10 },
+        { key: 'lt_n50', positive: false, count: 3 },
+      ],
+    })
   })
 
   it('NULL-collapses token distribution when absent or all-zero', () => {
     expect(shapeTokenDistribution({})).toBeNull()
     expect(
       shapeTokenDistribution({ token_distribution: { gt_500: 0, p0_500: 0, n50_0: 0, lt_n50: 0 } })
+    ).toBeNull()
+  })
+
+  it('uses explicit on-chain dollar buckets when no native percentage block exists', () => {
+    expect(
+      shapeTokenDistribution({
+        onchain_token_distribution_unit: 'realized_pnl_usd',
+        onchain_token_distribution_usd: { gt_500: 1, p0_500: 2, n50_0: 3, lt_n50: 4 },
+      })
+    ).toMatchObject({ unit: 'realized_pnl_usd' })
+  })
+
+  it('prefers explicit native percentages when native and estimated blocks coexist', () => {
+    const out = shapeTokenDistribution({
+      token_distribution_unit: 'pnl_percent',
+      token_distribution: { gt_500: 5 },
+      onchain_token_distribution_unit: 'realized_pnl_usd',
+      onchain_token_distribution_usd: { gt_500: 9 },
+    })
+    expect(out?.unit).toBe('pnl_percent')
+    expect(out?.buckets[0]).toMatchObject({ key: 'gt_500', count: 5 })
+  })
+
+  it('supports unambiguous legacy native rows but rejects legacy mixed-unit rows', () => {
+    expect(shapeTokenDistribution({ token_distribution: { p0_500: 2 } })).toMatchObject({
+      unit: 'pnl_percent',
+    })
+    expect(
+      shapeTokenDistribution({
+        token_distribution: { p0_500: 2 },
+        onchain_derivation: 'onchain-computed',
+      })
+    ).toBeNull()
+    expect(
+      shapeTokenDistribution({
+        token_distribution: { p0_500: 2 },
+        token_distribution_unit: 'unknown',
+      })
     ).toBeNull()
   })
 

@@ -359,10 +359,10 @@ export function enrichmentSeries(
     .filter((b) => b.points.length >= 2)
 }
 
-/** The trader_stats.extras patch — onchain_* scalars + the OnchainInsights
- *  token blocks (token_distribution / top_earning_tokens) our compute fills. */
+/** The trader_stats.extras patch — onchain_* scalars + estimated insight blocks. */
 export function enrichmentExtras(e: OnchainEnrichment): Record<string, unknown> {
   const hasTokens = e.topEarningTokens.length > 0
+  const hasDistribution = Object.values(e.tokenDistribution).some((count) => count > 0)
   const quality = {
     schema_version: e.quality.schemaVersion,
     methodology: e.quality.methodology,
@@ -406,8 +406,10 @@ export function enrichmentExtras(e: OnchainEnrichment): Record<string, unknown> 
     // Freshness stamp — the runner's sweep selection skips wallets enriched
     // within its window and refreshes stalest-first (Phase B recurring, 2026-07-09).
     onchain_enriched_at: new Date().toISOString(),
-    // Always emit null when empty so shallow JSONB merge clears stale cards.
-    token_distribution: hasTokens ? e.tokenDistribution : null,
+    // Dollar-PnL buckets must never share the exchange-owned percentage key.
+    // Always emit null when empty so shallow JSONB merge clears stale estimates.
+    onchain_token_distribution_usd: hasDistribution ? e.tokenDistribution : null,
+    onchain_token_distribution_unit: hasDistribution ? 'realized_pnl_usd' : null,
     top_earning_tokens: hasTokens ? e.topEarningTokens : null,
   }
 }

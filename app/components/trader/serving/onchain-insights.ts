@@ -14,6 +14,13 @@ export interface TokenDistBucket {
   positive: boolean
 }
 
+export type TokenDistributionUnit = 'pnl_percent' | 'realized_pnl_usd'
+
+export interface TokenDistribution {
+  unit: TokenDistributionUnit
+  buckets: TokenDistBucket[]
+}
+
 export interface TopToken {
   symbol: string
   address: string
@@ -48,10 +55,10 @@ export function shapeOnchainQuality(extras: Record<string, unknown>): StoredOnch
   return readStoredOnchainQuality(extras)
 }
 
-/** {gt_500,p0_500,n50_0,lt_n50} counts → ordered buckets (best→worst). Null when
- *  the object is missing or every bucket is 0 (nothing to show). */
-export function shapeTokenDistribution(extras: Record<string, unknown>): TokenDistBucket[] | null {
-  const td = extras.token_distribution as Record<string, unknown> | undefined
+function shapeDistributionBuckets(
+  td: unknown,
+  unit: TokenDistributionUnit
+): TokenDistribution | null {
   if (!td || typeof td !== 'object') return null
   const order: Array<{ key: TokenDistBucket['key']; positive: boolean }> = [
     { key: 'gt_500', positive: true },
@@ -60,10 +67,37 @@ export function shapeTokenDistribution(extras: Record<string, unknown>): TokenDi
     { key: 'lt_n50', positive: false },
   ]
   const buckets = order.map(({ key, positive }) => {
-    const n = Number(td[key])
-    return { key, positive, count: Number.isFinite(n) ? n : 0 }
+    const n = Number((td as Record<string, unknown>)[key])
+    return { key, positive, count: Number.isFinite(n) && n >= 0 ? Math.round(n) : 0 }
   })
-  return buckets.some((b) => b.count > 0) ? buckets : null
+  return buckets.some((b) => b.count > 0) ? { unit, buckets } : null
+}
+
+/**
+ * Unit-aware distribution selection. Explicit exchange percentages win over
+ * on-chain dollar estimates. Legacy generic rows are accepted only when no
+ * onchain_* trace exists; mixed rows without a unit fail closed.
+ */
+export function shapeTokenDistribution(extras: Record<string, unknown>): TokenDistribution | null {
+  if (extras.token_distribution_unit === 'pnl_percent') {
+    const native = shapeDistributionBuckets(extras.token_distribution, 'pnl_percent')
+    if (native) return native
+  }
+
+  if (extras.onchain_token_distribution_unit === 'realized_pnl_usd') {
+    const estimated = shapeDistributionBuckets(
+      extras.onchain_token_distribution_usd,
+      'realized_pnl_usd'
+    )
+    if (estimated) return estimated
+  }
+
+  const hasExplicitGenericUnit =
+    extras.token_distribution_unit !== null && extras.token_distribution_unit !== undefined
+  const hasOnchainTrace = Object.keys(extras).some((key) => key.startsWith('onchain_'))
+  return !hasExplicitGenericUnit && !hasOnchainTrace
+    ? shapeDistributionBuckets(extras.token_distribution, 'pnl_percent')
+    : null
 }
 
 /** extras.top_earning_tokens → TopToken[] (already normalized upstream). Null
