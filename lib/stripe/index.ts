@@ -7,7 +7,7 @@ import { PRICING } from '@/app/(app)/user-center/membership-config'
  * Throws a descriptive error if missing.
  */
 function requireEnv(name: string): string {
-  const value = process.env[name]
+  const value = process.env[name]?.trim()
   if (!value) {
     throw new Error(
       `${name} is not configured. ` +
@@ -15,6 +15,10 @@ function requireEnv(name: string): string {
     )
   }
   return value
+}
+
+function optionalEnv(name: string): string {
+  return process.env[name]?.trim() || ''
 }
 
 // Stripe 服务端实例 - 懒加载以避免构建时环境变量未定义的问题
@@ -54,23 +58,23 @@ export const stripe = {
 // Falls back to STRIPE_PRO_PRICE_ID for both if specific monthly/yearly IDs not set
 export const STRIPE_PRICE_IDS = {
   monthly:
-    process.env.STRIPE_PRO_MONTHLY_PRICE_ID ||
-    process.env.STRIPE_PRICE_MONTHLY_ID ||
-    process.env.STRIPE_PRO_PRICE_ID ||
+    optionalEnv('STRIPE_PRO_MONTHLY_PRICE_ID') ||
+    optionalEnv('STRIPE_PRICE_MONTHLY_ID') ||
+    optionalEnv('STRIPE_PRO_PRICE_ID') ||
     '',
   yearly:
-    process.env.STRIPE_PRO_YEARLY_PRICE_ID ||
-    process.env.STRIPE_PRICE_YEARLY_ID ||
-    process.env.STRIPE_ELITE_PRICE_ID ||
-    process.env.STRIPE_PRO_PRICE_ID ||
+    optionalEnv('STRIPE_PRO_YEARLY_PRICE_ID') ||
+    optionalEnv('STRIPE_PRICE_YEARLY_ID') ||
+    optionalEnv('STRIPE_ELITE_PRICE_ID') ||
+    optionalEnv('STRIPE_PRO_PRICE_ID') ||
     '',
-  lifetime: process.env.STRIPE_PRO_LIFETIME_PRICE_ID || '',
+  lifetime: optionalEnv('STRIPE_PRO_LIFETIME_PRICE_ID'),
 }
 
 // B2B API tier price IDs — separate from Pro membership
 export const STRIPE_API_PRICE_IDS = {
-  starter: process.env.STRIPE_API_STARTER_PRICE_ID || '',
-  pro: process.env.STRIPE_API_PRO_PRICE_ID || '',
+  starter: optionalEnv('STRIPE_API_STARTER_PRICE_ID'),
+  pro: optionalEnv('STRIPE_API_PRO_PRICE_ID'),
 }
 
 // API tier → daily request limit mapping
