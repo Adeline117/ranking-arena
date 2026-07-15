@@ -10,6 +10,7 @@
 import { ImageResponse } from 'next/og'
 import { NextRequest } from 'next/server'
 import { safeParseInt } from '@/lib/utils/safe-parse'
+import { verifyOgVerificationProof } from '@/lib/utils/og-verification-proof'
 
 export const runtime = 'edge'
 
@@ -134,9 +135,14 @@ export async function GET(request: NextRequest) {
     const rank = safeParseInt(searchParams.get('rank'), 0)
     // Positive = climbed (same convention as leaderboard_ranks.rank_change).
     const rankChange = safeParseInt(searchParams.get('rankChange'), 0)
-    // Same active read-only authorization truth used by profiles and rankings.
-    // The server page sets this; the image route deliberately does no DB work.
-    const verified = searchParams.get('verified') === '1'
+    // Verified is a trust claim, not a cosmetic URL option. The server page
+    // provides a short-lived proof only after checking an active read-only
+    // authorization; unsigned `verified=1` style parameters never render it.
+    const verified = await verifyOgVerificationProof(
+      searchParams.get('verificationSource') || '',
+      searchParams.get('verificationTrader') || '',
+      searchParams.get('verification')
+    )
     const total = safeParseInt(searchParams.get('total'), 0)
     const roi = parseFloat(searchParams.get('roi') || 'NaN')
     const winRate = parseFloat(searchParams.get('winRate') || 'NaN')
