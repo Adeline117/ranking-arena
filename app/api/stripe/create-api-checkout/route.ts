@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
     const supabaseAdmin = getSupabaseAdmin()
     const { data: profile } = await supabaseAdmin
       .from('user_profiles')
-      .select('api_tier, api_stripe_subscription_id')
+      .select('api_tier, api_stripe_subscription_id, stripe_customer_id')
       .eq('id', user.id)
       .maybeSingle()
 
@@ -90,17 +90,33 @@ export async function POST(request: NextRequest) {
     }
 
     const userEmail = user.email || `${user.id}@user.ranking-arena.com`
-    const customerId = await getOrCreateStripeCustomer(user.id, userEmail, {
-      source: 'ranking-arena-api',
-      plan: `api_${plan}`,
-    })
+    const customerId = await getOrCreateStripeCustomer(
+      user.id,
+      userEmail,
+      {
+        source: 'ranking-arena-api',
+        plan: `api_${plan}`,
+      },
+      profile?.stripe_customer_id
+    )
 
-    // Save Stripe customer ID
-    await supabaseAdmin.from('user_profiles').upsert({
+    // Invoice/subscription webhooks resolve ownership through this link. Do
+    // not expose a payable Checkout Session if the link failed to persist.
+    const { error: customerLinkError } = await supabaseAdmin.from('user_profiles').upsert({
       id: user.id,
       stripe_customer_id: customerId,
       updated_at: new Date().toISOString(),
     })
+    if (customerLinkError) {
+      logger.error('Failed to persist Stripe customer link; API checkout blocked', {
+        userId: user.id,
+        error: customerLinkError.message,
+      })
+      return NextResponse.json(
+        { error: 'Unable to prepare payment account. Please retry.' },
+        { status: 503 }
+      )
+    }
 
     const appOrigin = new URL(env.NEXT_PUBLIC_APP_URL || 'https://www.arenafi.org').origin
     const successUrl = `${appOrigin}/settings?api_upgraded=${plan}`

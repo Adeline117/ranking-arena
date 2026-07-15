@@ -56,6 +56,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized - Please login first' }, { status: 401 })
     }
 
+    if (!['monthly', 'yearly', 'lifetime'].includes(plan)) {
+      return NextResponse.json({ error: 'Invalid plan type' }, { status: 400 })
+    }
+
     // Prevent duplicate subscriptions — check before doing anything else
     const supabaseAdmin = getSupabaseAdmin()
     const { data: existingSub } = await supabaseAdmin
@@ -75,9 +79,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 验证计划类型
-    if (!['monthly', 'yearly', 'lifetime'].includes(plan)) {
-      return NextResponse.json({ error: 'Invalid plan type' }, { status: 400 })
+    const { data: billingProfile, error: billingProfileError } = await supabaseAdmin
+      .from('user_profiles')
+      .select('stripe_customer_id')
+      .eq('id', user.id)
+      .single()
+    if (billingProfileError || !billingProfile) {
+      logger.error('Billing profile lookup failed', {
+        userId: user.id,
+        error: billingProfileError?.message,
+      })
+      return NextResponse.json(
+        { error: 'Unable to prepare payment account. Please retry.' },
+        { status: 503 }
+      )
     }
 
     const typedPlan = plan as 'monthly' | 'yearly' | 'lifetime'
@@ -97,23 +112,32 @@ export async function POST(request: NextRequest) {
 
     // 获取或创建 Stripe 客户
     const userEmail = user.email || `${user.id}@user.ranking-arena.com`
-    const customerId = await getOrCreateStripeCustomer(user.id, userEmail, {
-      source: 'ranking-arena',
-      plan: plan,
-    })
+    const customerId = await getOrCreateStripeCustomer(
+      user.id,
+      userEmail,
+      {
+        source: 'ranking-arena',
+        plan: plan,
+      },
+      billingProfile.stripe_customer_id
+    )
 
-    // 更新用户的 Stripe 客户 ID。校验写入:若失败,customer↔user 链未落地,
-    // 后续 webhook 若 mis-key 会 orphan 订阅。log 便于观测(不阻断结账,可由 webhook 补)。
+    // The customer↔user link is required for every subscription/invoice/refund
+    // webhook. Never create a payable session if this write did not persist.
     const { error: customerLinkError } = await getSupabaseAdmin().from('user_profiles').upsert({
       id: user.id,
       stripe_customer_id: customerId,
       updated_at: new Date().toISOString(),
     })
     if (customerLinkError) {
-      logger.warn('Failed to persist stripe_customer_id link', {
+      logger.error('Failed to persist stripe_customer_id link; checkout blocked', {
         userId: user.id,
         error: customerLinkError.message,
       })
+      return NextResponse.json(
+        { error: 'Unable to prepare payment account. Please retry.' },
+        { status: 503 }
+      )
     }
 
     const meta = {
