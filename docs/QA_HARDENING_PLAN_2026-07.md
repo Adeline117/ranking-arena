@@ -20,6 +20,10 @@
 > Preview 实测通过：将 **Preview-only** `NEXT_PUBLIC_PRO_FREE_PROMO` 精确设为 `false`（此前误写
 > 成字面量 `false\\n`，已纠正），QA-B 免费账号在 `/compare` 看到内联 ProGate，点击
 > “Start 7-Day Free Trial” 实际抵达 `/pricing`。生产 promo 配置未改动。
+> 管理员闭环现已有 `scripts/qa/group-admin-lifecycle.mjs`：它会在**任何写入之前**用
+> `ADMIN_ACCESS_TOKEN` 调实际管理员列表路由，确认 `ADMIN_EMAILS` allowlist 生效；随后才执行
+> QA-A 申请 → 管理员批准 → QA-B 加入/群帖 → QA-A 解散，并精确清理、读回零残留。唯一未完成的
+> 验收是由 allowlisted owner 提供一次新鲜 access token 后运行该 canary，不能以 service-role 假装通过。
 
 ---
 
