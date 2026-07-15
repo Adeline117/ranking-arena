@@ -3,7 +3,7 @@
 import Link from 'next/link'
 import { useQuery } from '@tanstack/react-query'
 import { STALE_RELAXED } from '@/lib/hooks/cache-presets'
-import { tokens, newsCategories, newsImportance, alpha } from '@/lib/design-tokens'
+import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import SidebarCard from './SidebarCard'
 import { formatTimeAgo } from '@/lib/utils/date'
@@ -31,24 +31,28 @@ type NewsItem = {
 }
 
 const IMPORTANCE_CONFIG: Record<string, { color: string; label: string; label_en: string }> = {
-  breaking: { color: newsImportance.breaking.color, label: '突发', label_en: 'Breaking' },
-  important: { color: newsImportance.important.color, label: '重要', label_en: 'Important' },
+  breaking: { color: 'var(--color-accent-error)', label: '突发', label_en: 'Breaking' },
+  important: { color: 'var(--color-score-below)', label: '重要', label_en: 'Important' },
 }
 
 const CATEGORY_CONFIG: Record<string, { color: string; label: string; label_en: string }> = {
-  btc_eth: { color: newsCategories.btcEth.color, label: 'BTC/ETH', label_en: 'BTC/ETH' },
-  altcoin: { color: newsCategories.market.color, label: '山寨币', label_en: 'Altcoins' },
-  defi: { color: newsCategories.defi.color, label: 'DeFi', label_en: 'DeFi' },
-  macro: { color: newsCategories.macro.color, label: '宏观/监管', label_en: 'Macro/Regulation' },
-  exchange: { color: newsCategories.exchange.color, label: '交易所', label_en: 'Exchanges' },
-  // Legacy mappings for old data
-  crypto: { color: newsCategories.btcEth.color, label: 'BTC/ETH', label_en: 'BTC/ETH' },
-  regulation: {
-    color: newsCategories.regulation.color,
+  btc_eth: { color: 'var(--color-score-average)', label: 'BTC/ETH', label_en: 'BTC/ETH' },
+  altcoin: { color: 'var(--color-chart-blue)', label: '山寨币', label_en: 'Altcoins' },
+  defi: { color: 'var(--color-score-great)', label: 'DeFi', label_en: 'DeFi' },
+  macro: {
+    color: 'var(--color-score-profitability)',
     label: '宏观/监管',
     label_en: 'Macro/Regulation',
   },
-  market: { color: newsCategories.market.color, label: '山寨币', label_en: 'Altcoins' },
+  exchange: { color: 'var(--color-score-legendary)', label: '交易所', label_en: 'Exchanges' },
+  // Legacy mappings for old data
+  crypto: { color: 'var(--color-score-average)', label: 'BTC/ETH', label_en: 'BTC/ETH' },
+  regulation: {
+    color: 'var(--color-score-profitability)',
+    label: '宏观/监管',
+    label_en: 'Macro/Regulation',
+  },
+  market: { color: 'var(--color-chart-blue)', label: '山寨币', label_en: 'Altcoins' },
 }
 
 const fetcher = async (url: string) => {
@@ -185,7 +189,7 @@ export default function NewsFlash() {
                       style={{
                         fontSize: tokens.typography.fontSize.xs,
                         fontWeight: tokens.typography.fontWeight.bold,
-                        color: tokens.colors.white,
+                        color: 'var(--color-on-score)',
                         background: impConfig.color,
                         padding: `1px ${tokens.spacing[1.5]}`,
                         borderRadius: tokens.radius.sm,
