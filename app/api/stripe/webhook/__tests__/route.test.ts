@@ -1,213 +1,212 @@
-/**
- * Stripe Webhook Route Tests
- * 测试 Stripe webhook 处理器的请求验证
- *
- * 注意：完整的集成测试（包括幂等性验证）需要 E2E 测试或使用 Stripe CLI：
- * - stripe listen --forward-to localhost:3000/api/stripe/webhook
- * - stripe trigger checkout.session.completed
- *
- * @jest-environment node
- */
+/** @jest-environment node */
 
-// route 读 env.STRIPE_SECRET_KEY / STRIPE_WEBHOOK_SECRET（来自 @/lib/env，import 时
-// zod 固化）。不 mock 它则测试 beforeEach 设的 process.env 进不去 → route 走 503 配置
-// 缺失分支，而非到达签名校验返回 400。用 Proxy 让 env.* 在调用时读 process.env。
 jest.mock('@/lib/env', () => ({
-  env: new Proxy(
-    {},
-    {
-      get(_t, key) {
-        return process.env[String(key)]
-      },
-    }
-  ),
+  env: new Proxy({}, { get: (_target, key) => process.env[String(key)] }),
 }))
 
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: () => ({
-    from: jest.fn().mockReturnValue({
-      select: jest.fn().mockReturnValue({
-        eq: jest.fn().mockReturnValue({
-          single: jest.fn().mockResolvedValue({ data: null, error: null }),
-        }),
-      }),
-      insert: jest.fn().mockResolvedValue({ error: null }),
-    }),
-  }),
-}))
+const mockRpc = jest.fn()
 
-jest.mock('@/lib/stripe', () => ({
-  stripe: {
-    subscriptions: {
-      retrieve: jest.fn(),
-    },
-  },
-  constructWebhookEvent: jest.fn(),
-  SUBSCRIPTION_STATUS_MAP: {
-    active: 'active',
-    canceled: 'canceled',
-    incomplete: 'incomplete',
-    incomplete_expired: 'expired',
-    past_due: 'past_due',
-    paused: 'paused',
-    trialing: 'trialing',
-    unpaid: 'unpaid',
-  },
-}))
-
-jest.mock('@/lib/utils/logger', () => ({
-  createLogger: () => ({
+jest.mock('@/app/api/stripe/webhook/handlers/shared', () => ({
+  getSupabase: () => ({ rpc: mockRpc }),
+  logger: {
     info: jest.fn(),
     warn: jest.fn(),
     error: jest.fn(),
-  }),
+  },
 }))
 
-jest.mock('@/app/api/pro-official-group/route', () => ({
-  joinProOfficialGroup: jest.fn().mockResolvedValue({ success: true }),
-  leaveProOfficialGroup: jest.fn().mockResolvedValue(true),
+const mockHandleCheckoutComplete = jest.fn()
+const mockHandleCheckoutExpired = jest.fn()
+const mockHandleTipPaymentCompleted = jest.fn()
+const mockHandleSubscriptionUpdate = jest.fn()
+const mockHandleSubscriptionCanceled = jest.fn()
+const mockHandleTrialWillEnd = jest.fn()
+const mockHandlePaymentSucceeded = jest.fn()
+const mockHandlePaymentFailed = jest.fn()
+const mockHandleChargeRefunded = jest.fn()
+const mockHandleRefundUpdated = jest.fn()
+const mockHandleChargeDisputeCreated = jest.fn()
+
+jest.mock('@/app/api/stripe/webhook/handlers/checkout', () => ({
+  handleCheckoutComplete: (...args: unknown[]) => mockHandleCheckoutComplete(...args),
+  handleCheckoutExpired: (...args: unknown[]) => mockHandleCheckoutExpired(...args),
+  handleTipPaymentCompleted: (...args: unknown[]) => mockHandleTipPaymentCompleted(...args),
+}))
+jest.mock('@/app/api/stripe/webhook/handlers/subscription', () => ({
+  handleSubscriptionUpdate: (...args: unknown[]) => mockHandleSubscriptionUpdate(...args),
+  handleSubscriptionCanceled: (...args: unknown[]) => mockHandleSubscriptionCanceled(...args),
+  handleTrialWillEnd: (...args: unknown[]) => mockHandleTrialWillEnd(...args),
+}))
+jest.mock('@/app/api/stripe/webhook/handlers/invoice', () => ({
+  handlePaymentSucceeded: (...args: unknown[]) => mockHandlePaymentSucceeded(...args),
+  handlePaymentFailed: (...args: unknown[]) => mockHandlePaymentFailed(...args),
+}))
+jest.mock('@/app/api/stripe/webhook/handlers/refund', () => ({
+  handleChargeRefunded: (...args: unknown[]) => mockHandleChargeRefunded(...args),
+  handleRefundUpdated: (...args: unknown[]) => mockHandleRefundUpdated(...args),
+  handleChargeDisputeCreated: (...args: unknown[]) => mockHandleChargeDisputeCreated(...args),
+}))
+
+jest.mock('@/lib/stripe', () => ({
+  constructWebhookEvent: jest.fn(),
+}))
+
+jest.mock('@/lib/api/correlation', () => ({
+  getOrCreateCorrelationId: () => 'test-correlation-id',
+  runWithCorrelationId: (_id: string, operation: () => unknown) => operation(),
 }))
 
 import { NextRequest } from 'next/server'
-import { POST } from '../route'
 import { constructWebhookEvent } from '@/lib/stripe'
+import { POST } from '../route'
 
-// Helper to create mock NextRequest
-function createMockRequest(body: string, signature: string | null): NextRequest {
+const constructEventMock = constructWebhookEvent as jest.Mock
+
+function createRequest(signature: string | null = 'valid-signature'): NextRequest {
   const headers = new Headers()
-  if (signature) {
-    headers.set('stripe-signature', signature)
-  }
+  if (signature) headers.set('stripe-signature', signature)
   return {
-    text: jest.fn().mockResolvedValue(body),
-    headers: {
-      get: (name: string) => headers.get(name),
-    },
+    text: jest.fn().mockResolvedValue('{}'),
+    headers: { get: (name: string) => headers.get(name) },
   } as unknown as NextRequest
 }
 
-describe('Stripe Webhook Route', () => {
+function event(type = 'checkout.session.completed') {
+  return {
+    id: 'evt_test_retryable',
+    type,
+    data: {
+      object: {
+        id: 'obj_123',
+        customer: 'cus_123',
+        metadata: {},
+      },
+    },
+  }
+}
+
+describe('POST /api/stripe/webhook', () => {
   const originalEnv = process.env
 
   beforeEach(() => {
     jest.clearAllMocks()
-    // Set required environment variables for tests
     process.env = {
       ...originalEnv,
       STRIPE_SECRET_KEY: 'sk_test_xxx',
       STRIPE_WEBHOOK_SECRET: 'whsec_test_xxx',
-      NEXT_PUBLIC_SUPABASE_URL: 'https://test.supabase.co',
-      SUPABASE_SERVICE_ROLE_KEY: 'test_service_key',
     }
+    constructEventMock.mockReturnValue(event())
+    mockRpc.mockImplementation((name: string) => {
+      if (name === 'claim_stripe_event') return Promise.resolve({ data: 'claimed', error: null })
+      if (name === 'finish_stripe_event') return Promise.resolve({ data: true, error: null })
+      throw new Error(`Unexpected RPC ${name}`)
+    })
   })
 
   afterEach(() => {
     process.env = originalEnv
   })
 
-  describe('Request Validation', () => {
-    it('should return 400 when stripe-signature header is missing', async () => {
-      const request = createMockRequest('{}', null)
-      const response = await POST(request)
-      const data = await response.json()
+  it('rejects a missing Stripe signature', async () => {
+    const response = await POST(createRequest(null))
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({ error: 'Missing stripe-signature header' })
+  })
 
-      expect(response.status).toBe(400)
-      expect(data.error).toBe('Missing stripe-signature header')
+  it('verifies the raw request body before claiming an event', async () => {
+    constructEventMock.mockImplementation(() => {
+      throw new Error('Invalid signature')
     })
 
-    it('should return 400 when signature verification fails', async () => {
-      ;(constructWebhookEvent as jest.Mock).mockImplementation(() => {
-        throw new Error('Invalid signature')
-      })
+    const response = await POST(createRequest())
 
-      const request = createMockRequest('{}', 'invalid_sig')
-      const response = await POST(request)
-      const data = await response.json()
+    expect(response.status).toBe(400)
+    expect(constructEventMock).toHaveBeenCalledWith('{}', 'valid-signature')
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
 
-      expect(response.status).toBe(400)
-      expect(data.error).toBe('Invalid signature')
+  it('marks an event processed only after its handler succeeds', async () => {
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(200)
+    expect(mockHandleCheckoutComplete).toHaveBeenCalledTimes(1)
+    expect(mockRpc.mock.calls).toEqual([
+      [
+        'claim_stripe_event',
+        {
+          p_event_id: 'evt_test_retryable',
+          p_event_type: 'checkout.session.completed',
+        },
+      ],
+      [
+        'finish_stripe_event',
+        {
+          p_event_id: 'evt_test_retryable',
+          p_succeeded: true,
+          p_error: null,
+        },
+      ],
+    ])
+  })
+
+  it('skips only events that reached the processed state', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'processed', error: null })
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ received: true, skipped: true })
+    expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
+  })
+
+  it('returns non-2xx for a concurrent processing claim so Stripe retries', async () => {
+    mockRpc.mockResolvedValueOnce({ data: 'busy', error: null })
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(500)
+    expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
+  })
+
+  it('marks a failed handler retryable and succeeds on the next delivery', async () => {
+    mockHandleCheckoutComplete
+      .mockRejectedValueOnce(new Error('temporary database outage'))
+      .mockResolvedValueOnce(undefined)
+
+    const first = await POST(createRequest())
+    const second = await POST(createRequest())
+
+    expect(first.status).toBe(500)
+    expect(second.status).toBe(200)
+    expect(mockHandleCheckoutComplete).toHaveBeenCalledTimes(2)
+    expect(mockRpc).toHaveBeenCalledWith('finish_stripe_event', {
+      p_event_id: 'evt_test_retryable',
+      p_succeeded: false,
+      p_error: 'temporary database outage',
     })
-
-    it('should call constructWebhookEvent with correct parameters', async () => {
-      ;(constructWebhookEvent as jest.Mock).mockReturnValue({
-        id: 'evt_test',
-        type: 'test.event',
-        data: { object: {} },
-      })
-
-      const request = createMockRequest('test_body', 'test_signature')
-      await POST(request)
-
-      expect(constructWebhookEvent).toHaveBeenCalledWith('test_body', 'test_signature')
+    expect(mockRpc).toHaveBeenLastCalledWith('finish_stripe_event', {
+      p_event_id: 'evt_test_retryable',
+      p_succeeded: true,
+      p_error: null,
     })
   })
 
-  describe('Event Type Recognition', () => {
-    const supportedEventTypes = [
-      'checkout.session.completed',
-      'customer.subscription.created',
-      'customer.subscription.updated',
-      'customer.subscription.deleted',
-      'invoice.payment_succeeded',
-      'invoice.payment_failed',
-    ]
+  it.each([
+    ['customer.subscription.updated', mockHandleSubscriptionUpdate],
+    ['customer.subscription.deleted', mockHandleSubscriptionCanceled],
+    ['invoice.payment_succeeded', mockHandlePaymentSucceeded],
+    ['invoice.payment_failed', mockHandlePaymentFailed],
+    ['charge.refunded', mockHandleChargeRefunded],
+    ['charge.refund.updated', mockHandleRefundUpdated],
+    ['charge.dispute.created', mockHandleChargeDisputeCreated],
+    ['checkout.session.expired', mockHandleCheckoutExpired],
+    ['customer.subscription.trial_will_end', mockHandleTrialWillEnd],
+  ])('dispatches %s', async (type, handler) => {
+    constructEventMock.mockReturnValue(event(type))
 
-    supportedEventTypes.forEach((eventType) => {
-      it(`should recognize ${eventType} event`, async () => {
-        ;(constructWebhookEvent as jest.Mock).mockReturnValue({
-          id: `evt_${eventType}`,
-          type: eventType,
-          data: {
-            object: {
-              id: 'obj_123',
-              customer: 'cus_123',
-              metadata: {},
-            },
-          },
-        })
+    const response = await POST(createRequest())
 
-        const request = createMockRequest('{}', 'valid_sig')
-        const response = await POST(request)
-
-        // Should not return 400 (validation errors)
-        expect(response.status).not.toBe(400)
-      })
-    })
+    expect(response.status).toBe(200)
+    expect(handler).toHaveBeenCalledTimes(1)
   })
 })
-
-/**
- * 幂等性测试说明
- *
- * Webhook 幂等性通过以下机制实现：
- * 1. stripe_events 表存储已处理的事件 ID
- * 2. 每次收到 webhook 先查询该事件是否已处理
- * 3. 已处理的事件返回 { received: true, skipped: true }
- *
- * 测试幂等性的方法：
- *
- * 1. E2E 测试 (推荐):
- *    - 使用 Playwright/Cypress 配合真实 Stripe 测试环境
- *    - 多次触发同一事件，验证数据库只记录一次
- *
- * 2. Stripe CLI 手动测试:
- *    ```
- *    # 启动 webhook 转发
- *    stripe listen --forward-to localhost:3000/api/stripe/webhook
- *
- *    # 触发事件（会自动生成唯一 event ID）
- *    stripe trigger checkout.session.completed
- *
- *    # 使用 --replay 重放已有事件测试幂等性
- *    stripe events resend evt_xxx
- *    ```
- *
- * 3. 数据库直接验证:
- *    ```sql
- *    -- 查看已处理事件
- *    SELECT * FROM stripe_events ORDER BY processed_at DESC;
- *
- *    -- 验证无重复
- *    SELECT event_id, COUNT(*) FROM stripe_events GROUP BY event_id HAVING COUNT(*) > 1;
- *    ```
- */
