@@ -23,6 +23,7 @@ const AUTH_PATTERNS = [
   /\bverifyAuth\b/, // lib/api/auth.ts
   /\bwithCron\b/, // lib/api/with-cron.ts — timing-safe cron
   /\bverifyCronSecret\b/,
+  /\bverifyEdgeCronSecret\b/, // lib/auth/edge-cron-auth.ts — Web Crypto for Edge routes
   /\bwithAdminAuth\b/, // lib/api/with-admin-auth.ts
   /\bverifyAdmin\b/,
   /\bverifyServiceAuth\b/, // lib/auth/verify-service-auth.ts
