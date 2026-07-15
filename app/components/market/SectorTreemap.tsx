@@ -125,28 +125,29 @@ function relativeLuminance([r, g, b]: [number, number, number]): number {
 }
 
 // Picks legible tile-label colors from the tile's own background luminance.
-// Low-|change| tiles in LIGHT theme lerp toward a pale slate midpoint
-// (rgb 210,216,224) — white text on those washes out to ~1.7:1. When the
-// background is light we switch to dark glyphs (and drop the white text-shadow
-// that was smearing them). Dark backgrounds keep white text with a dark shadow.
+// Pick black or white at the WCAG crossover instead of guessing from theme.
+// A tile luminance around 0.18 is the boundary where white stops meeting 4.5:1
+// and black starts meeting it. The previous light-theme-only 0.4 threshold left
+// medium green tiles with neither readable white nor sufficiently opaque dark
+// labels.
 function getTileTextTheme(
   changePct: number,
   isLight: boolean
 ): { name: string; pct: string; cat: string; nameShadow: string; softShadow: string } {
-  const lightBg = isLight && relativeLuminance(getChangeRgb(changePct, isLight)) > 0.4
-  if (lightBg) {
+  const useDarkText = relativeLuminance(getChangeRgb(changePct, isLight)) > 0.18
+  if (useDarkText) {
     return {
-      name: 'rgb(20, 25, 35)',
-      pct: 'rgba(20, 25, 35, 0.9)',
-      cat: 'rgba(20, 25, 35, 0.6)',
+      name: tokens.colors.black,
+      pct: tokens.colors.black,
+      cat: tokens.colors.black,
       nameShadow: 'none',
       softShadow: 'none',
     }
   }
   return {
-    name: 'var(--color-on-accent)',
-    pct: 'rgba(255, 255, 255, 0.9)',
-    cat: 'rgba(255, 255, 255, 0.65)',
+    name: tokens.colors.white,
+    pct: tokens.colors.white,
+    cat: tokens.colors.white,
     nameShadow: '0 1px 4px rgba(0,0,0,0.7), 0 0px 1px rgba(0,0,0,0.5)',
     softShadow: '0 1px 3px rgba(0,0,0,0.6)',
   }
