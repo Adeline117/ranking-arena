@@ -19,43 +19,15 @@ import { fetchMoralisInternalBnb } from './moralis-bsc-internal'
 import { fetchTokenInfo, unrealizedFromHoldings, type TokenInfo } from './token-prices'
 import type { PerTokenPnl } from './pnl-accounting'
 import type { NormalizedTransfer } from './bsc-swaps'
+import {
+  ONCHAIN_METHODOLOGY,
+  ONCHAIN_METHODOLOGY_VERSION,
+  isOnchainQualityCanonical,
+  type OnchainQuality,
+  type OnchainQualityReason,
+} from '@/lib/onchain-quality'
 
 export type OnchainChain = 'bsc' | 'solana'
-
-/**
- * Current wallet accounting contract. It is intentionally score-ineligible:
- * the bounded lookback does not replay opening inventory and native quote legs
- * lack execution-time prices. Keep these limitations machine readable until
- * the canonical event/equity ledger replaces this methodology.
- */
-export const ONCHAIN_METHODOLOGY = 'wallet-balance-delta-average-cost' as const
-export const ONCHAIN_METHODOLOGY_VERSION = '1.0.0' as const
-
-export type OnchainQualityReason =
-  | 'opening_inventory_unknown'
-  | 'history_scan_not_proven_complete'
-  | 'historical_native_quote_not_execution_priced'
-  | 'generic_balance_delta_decoder'
-  | 'internal_transfer_coverage_unknown'
-
-export interface OnchainQuality {
-  schemaVersion: 1
-  methodology: typeof ONCHAIN_METHODOLOGY
-  methodologyVersion: typeof ONCHAIN_METHODOLOGY_VERSION
-  completeness: 'partial' | 'complete'
-  priceQuality: 'non_historical_approx' | 'historical_execution'
-  scoreEligible: boolean
-  reasons: OnchainQualityReason[]
-  history: {
-    requestedDays: number
-    scanComplete: boolean | null
-    truncated: boolean | null
-    recordsFetched: number
-    txsFetched: number | null
-    swapsDecoded: number
-  }
-  pricing: { pricedTokens: number; unpricedTokens: number }
-}
 
 /** Map a source slug to its chain, or null if not an on-chain wallet source. */
 export function chainForSource(slug: string): OnchainChain | null {
@@ -253,15 +225,7 @@ function normalize(
 
 /** Only canonical, complete on-chain metrics may populate typed score inputs. */
 export function scoreEligibleWinRate(e: OnchainEnrichment): number | null {
-  const q = e.quality
-  const canonical =
-    q.scoreEligible &&
-    q.completeness === 'complete' &&
-    q.priceQuality === 'historical_execution' &&
-    q.history.scanComplete === true &&
-    q.history.truncated === false &&
-    q.reasons.length === 0
-  return canonical ? e.winRate : null
+  return isOnchainQualityCanonical(e.quality) ? e.winRate : null
 }
 
 /**

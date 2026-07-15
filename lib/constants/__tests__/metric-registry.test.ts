@@ -65,6 +65,56 @@ describe('promoteExtrasMetrics', () => {
     expect(merged.total_roi).toBe(305.5)
   })
 
+  it('does not promote estimated on-chain aliases as standard metrics', () => {
+    const merged = promoteExtrasMetrics(
+      { total_pnl: null, realized_pnl: null, txs_buy: null },
+      {
+        onchain_total_pnl: 1200,
+        onchain_realized_pnl: 900,
+        onchain_txs_buy: 42,
+        onchain_quality: {
+          completeness: 'partial',
+          price_quality: 'non_historical_approx',
+          score_eligible: false,
+          reasons: ['opening_inventory_unknown'],
+          history: { scan_complete: null, truncated: null },
+        },
+      }
+    )
+    expect(merged.total_pnl).toBeNull()
+    expect(merged.realized_pnl).toBeNull()
+    expect(merged.txs_buy).toBeNull()
+  })
+
+  it('keeps native aliases available when on-chain reconstruction is ineligible', () => {
+    const merged = promoteExtrasMetrics(
+      { total_pnl: null },
+      {
+        total_profit_amount: 500,
+        onchain_total_pnl: 1200,
+        onchain_score_eligible: false,
+      }
+    )
+    expect(merged.total_pnl).toBe(500)
+  })
+
+  it('promotes on-chain aliases only after the complete canonical gate passes', () => {
+    const merged = promoteExtrasMetrics(
+      { total_pnl: null },
+      {
+        onchain_total_pnl: 1200,
+        onchain_quality: {
+          completeness: 'complete',
+          price_quality: 'historical_execution',
+          score_eligible: true,
+          reasons: [],
+          history: { scan_complete: true, truncated: false },
+        },
+      }
+    )
+    expect(merged.total_pnl).toBe(1200)
+  })
+
   it('every promotable key resolves to a real registry metric', () => {
     const stats = Object.fromEntries(EXTRAS_PROMOTABLE_KEYS.map((k) => [k, 1]))
     const defs = displayableMetrics(EXTRAS_PROMOTABLE_KEYS, stats)

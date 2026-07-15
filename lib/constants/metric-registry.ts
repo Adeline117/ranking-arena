@@ -9,6 +9,8 @@
  * i18n keys must exist in all 4 locales (en/zh/ja/ko parity rule).
  */
 
+import { isStoredOnchainMetricEligible } from '@/lib/onchain-quality'
+
 export type MetricFormat = 'pct' | 'money' | 'ratio' | 'count' | 'duration'
 export type MetricTier = 'hero' | 'standard' | 'advanced'
 
@@ -265,10 +267,14 @@ export function promoteExtrasMetrics(
   extras: Record<string, unknown>
 ): Record<string, number | string | null> {
   const merged = { ...stats }
+  const onchainEligible = isStoredOnchainMetricEligible(extras)
   for (const [registryKey, aliases] of Object.entries(EXTRAS_METRIC_ALIASES)) {
     const current = merged[registryKey]
     if (current !== undefined && current !== null) continue
     for (const alias of aliases) {
+      // Generic wallet reconstruction remains visible in its dedicated,
+      // disclosed on-chain panel but must not masquerade as a standard metric.
+      if (alias.startsWith('onchain_') && !onchainEligible) continue
       const raw = extras[alias]
       const n = typeof raw === 'string' ? Number(raw) : raw
       if (typeof n === 'number' && Number.isFinite(n)) {
