@@ -17,17 +17,39 @@
 import { NATIVE_BNB, type NormalizedTransfer } from './bsc-swaps'
 
 interface MoralisInternalTx {
-  to?: string
-  value?: string
+  to?: string | null
+  value?: string | null
 }
 interface MoralisNativeTx {
   hash?: string
   block_timestamp?: string
-  internal_transactions?: MoralisInternalTx[]
+  internal_transactions?: MoralisInternalTx[] | null
 }
 interface MoralisTxPage {
   cursor?: string | null
   result?: MoralisNativeTx[]
+}
+
+export type MoralisInternalStopReason =
+  | 'history_exhausted'
+  | 'page_cap'
+  | 'missing_api_key'
+  | 'request_error'
+  | 'invalid_response'
+
+export interface MoralisInternalCoverage {
+  scanComplete: boolean
+  truncated: boolean
+  stopReason: MoralisInternalStopReason
+  pagesFetched: number
+  recordsSeen: number
+  recordsReturned: number
+  errors: string[]
+}
+
+export interface MoralisInternalScan {
+  transfers: NormalizedTransfer[]
+  coverage: MoralisInternalCoverage
 }
 
 const WEI_PER_BNB = 1e18
@@ -62,42 +84,155 @@ export function moralisTxsToInternalLegs(
   return legs
 }
 
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function parsePage(value: unknown): MoralisTxPage | null {
+  if (!value || typeof value !== 'object' || !Array.isArray((value as MoralisTxPage).result)) {
+    return null
+  }
+  const page = value as MoralisTxPage
+  if (page.cursor !== undefined && page.cursor !== null && typeof page.cursor !== 'string') {
+    return null
+  }
+  for (const tx of page.result ?? []) {
+    if (!tx || typeof tx !== 'object') return null
+    if (typeof tx.hash !== 'string' || tx.hash.length === 0) return null
+    if (typeof tx.block_timestamp !== 'string' || Number.isNaN(Date.parse(tx.block_timestamp))) {
+      return null
+    }
+    if (
+      tx.internal_transactions !== undefined &&
+      tx.internal_transactions !== null &&
+      !Array.isArray(tx.internal_transactions)
+    ) {
+      return null
+    }
+    for (const internal of tx.internal_transactions ?? []) {
+      if (!internal || typeof internal !== 'object') return null
+      if (internal.to !== undefined && internal.to !== null && typeof internal.to !== 'string') {
+        return null
+      }
+      if (
+        internal.value !== undefined &&
+        internal.value !== null &&
+        typeof internal.value !== 'string'
+      ) {
+        return null
+      }
+    }
+  }
+  return page
+}
+
 /**
- * Per-wallet fetch, cursor-paginated. Returns [] (never throws) on any
- * upstream failure so the enrichment degrades to realized-partial instead of
- * dying — same fail-soft contract as fetchBscInternalBnb (Dune).
+ * Per-wallet cursor scan with explicit coverage evidence. Only cursor
+ * exhaustion proves the requested Moralis query complete. Page caps, missing
+ * configuration, request failures and malformed payloads retain any valid
+ * partial transfers but fail closed in `coverage`.
  */
-export async function fetchMoralisInternalBnb(
+export async function scanMoralisInternalBnb(
   wallet: string,
   opts: { lookbackDays?: number; timeoutMs?: number; maxPages?: number } = {}
-): Promise<NormalizedTransfer[]> {
+): Promise<MoralisInternalScan> {
+  const maxPages = opts.maxPages ?? 5
+  if (!Number.isSafeInteger(maxPages) || maxPages <= 0) {
+    throw new RangeError('maxPages must be a positive safe integer')
+  }
+
+  const transfers: NormalizedTransfer[] = []
+  let pagesFetched = 0
+  let recordsSeen = 0
+  const finish = (
+    stopReason: MoralisInternalStopReason,
+    errors: string[] = []
+  ): MoralisInternalScan => {
+    const scanComplete = stopReason === 'history_exhausted' && errors.length === 0
+    const truncated = stopReason === 'page_cap' || (!scanComplete && pagesFetched > 0)
+    return {
+      transfers,
+      coverage: {
+        scanComplete,
+        truncated,
+        stopReason,
+        pagesFetched,
+        recordsSeen,
+        recordsReturned: transfers.length,
+        errors,
+      },
+    }
+  }
+
   const key = process.env.MORALIS_API_KEY
-  if (!key) return []
+  if (!key) return finish('missing_api_key', ['MORALIS_API_KEY missing'])
   const fromDate = new Date(Date.now() - (opts.lookbackDays ?? 90) * 86_400_000)
     .toISOString()
     .slice(0, 10)
   const base =
     `https://deep-index.moralis.io/api/v2.2/${wallet}` +
     `?chain=bsc&include=internal_transactions&from_date=${fromDate}&limit=100`
-  const legs: NormalizedTransfer[] = []
   let cursor: string | null = null
-  try {
-    for (let pageN = 0; pageN < (opts.maxPages ?? 5); pageN++) {
-      const url = cursor ? `${base}&cursor=${encodeURIComponent(cursor)}` : base
-      const ctrl = new AbortController()
-      const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 20_000)
-      const res = await fetch(url, {
+  const requestedCursors = new Set<string>()
+
+  for (let pageN = 0; pageN < maxPages; pageN++) {
+    const url = cursor ? `${base}&cursor=${encodeURIComponent(cursor)}` : base
+    if (cursor) requestedCursors.add(cursor)
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 20_000)
+    let res: Response
+    try {
+      res = await fetch(url, {
         headers: { 'X-API-Key': key, accept: 'application/json' },
         signal: ctrl.signal,
-      }).finally(() => clearTimeout(timer))
-      if (!res.ok) return legs
-      const page = (await res.json()) as MoralisTxPage
-      legs.push(...moralisTxsToInternalLegs(wallet, page.result ?? []))
-      cursor = page.cursor ?? null
-      if (!cursor || (page.result?.length ?? 0) === 0) break
+      })
+    } catch (error) {
+      return finish('request_error', [`Moralis request failed: ${errorMessage(error)}`])
+    } finally {
+      clearTimeout(timer)
     }
-    return legs
-  } catch {
-    return legs
+    if (!res.ok) {
+      return finish('request_error', [`Moralis request failed: HTTP ${res.status}`])
+    }
+
+    let payload: unknown
+    try {
+      payload = await res.json()
+    } catch (error) {
+      return finish('invalid_response', [`Moralis response JSON invalid: ${errorMessage(error)}`])
+    }
+    const page = parsePage(payload)
+    if (!page) {
+      return finish('invalid_response', ['Moralis response shape invalid'])
+    }
+
+    const rows = page.result ?? []
+    pagesFetched += 1
+    recordsSeen += rows.length
+    transfers.push(...moralisTxsToInternalLegs(wallet, rows))
+
+    const nextCursor = page.cursor || null
+    if (!nextCursor) return finish('history_exhausted')
+    if (rows.length === 0) {
+      return finish('invalid_response', ['Moralis returned an empty page with a cursor'])
+    }
+    if (requestedCursors.has(nextCursor)) {
+      return finish('invalid_response', ['Moralis cursor repeated'])
+    }
+    cursor = nextCursor
   }
+
+  return finish('page_cap')
+}
+
+/**
+ * Compatibility wrapper for existing enrichment callers. It deliberately
+ * preserves the historical fail-soft array contract; callers making quality
+ * claims must use {@link scanMoralisInternalBnb} and inspect coverage.
+ */
+export async function fetchMoralisInternalBnb(
+  wallet: string,
+  opts: { lookbackDays?: number; timeoutMs?: number; maxPages?: number } = {}
+): Promise<NormalizedTransfer[]> {
+  return (await scanMoralisInternalBnb(wallet, opts)).transfers
 }
