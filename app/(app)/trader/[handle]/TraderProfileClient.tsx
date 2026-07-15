@@ -702,7 +702,7 @@ export default function TraderProfileClient({
                 padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
                 borderRadius: tokens.radius.lg,
                 border: 'none',
-                background: tokens.colors.accent.brand,
+                background: 'var(--color-brand-deep)',
                 color: tokens.colors.white,
                 fontWeight: 700,
                 textDecoration: 'none',
