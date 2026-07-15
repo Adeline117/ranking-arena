@@ -32,6 +32,33 @@ export type Database = {
         }
         Relationships: []
       }
+      account_recovery_tokens: {
+        Row: {
+          created_at: string
+          expires_at: string
+          id: string
+          token_hash: string
+          used_at: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at: string
+          id?: string
+          token_hash: string
+          used_at?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string
+          id?: string
+          token_hash?: string
+          used_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       admin_logs: {
         Row: {
           action: string
@@ -8917,6 +8944,10 @@ export type Database = {
       reset_api_key_daily_counts: { Args: never; Returns: undefined }
       reset_daily_api_calls: { Args: never; Returns: undefined }
       reset_monthly_usage: { Args: never; Returns: undefined }
+      restore_pending_account: {
+        Args: { p_recovery_token_hash?: string; p_user_id: string }
+        Returns: string
+      }
       rollup_api_key_usage: { Args: never; Returns: undefined }
       safe_log1p: { Args: { x: number }; Returns: number }
       scan_data_quality_anomalies: {
@@ -8928,6 +8959,15 @@ export type Database = {
           platform: string
           severity: string
         }[]
+      }
+      schedule_account_deletion: {
+        Args: {
+          p_reason: string
+          p_recovery_token_hash: string
+          p_scheduled_at: string
+          p_user_id: string
+        }
+        Returns: string
       }
       search_did_you_mean: {
         Args: { search_query: string; suggestion_limit?: number }
