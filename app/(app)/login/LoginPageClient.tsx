@@ -398,7 +398,6 @@ export default function LoginPageClient() {
         if (isRegister) {
           setCodeVerified(true)
           await createUserProfile(data.user.id, email)
-          trackEvent('signup')
           showToast(t('loginCodeVerified'), 'success')
         } else {
           trackEvent('login')
@@ -539,6 +538,9 @@ export default function LoginPageClient() {
           if (updateError) logger.error('Error updating handle:', updateError)
         }
         await createUserProfile(user.id, email, handle)
+        // Count signup only after the profile/handle step is complete. OTP
+        // verification alone can still be abandoned before onboarding.
+        trackEvent('signup')
         // 欢迎邮件(2026-07-11 上线审计):OTP 主注册路径不经 auth/callback,
         // 此前 /api/email/welcome 从不触发 → 精心写的首触邮件白做。这里是
         // 无歧义的新用户点,fire-and-forget 补发(端点自身按 created_at<2min
@@ -943,6 +945,7 @@ export default function LoginPageClient() {
           className="login-switch-btn"
           onClick={() => {
             trackEvent(isRegister ? 'login_switch_to_login' : 'login_switch_to_register')
+            if (!isRegister) trackEvent('signup_start')
             setIsRegister(!isRegister)
             resetForm()
           }}
