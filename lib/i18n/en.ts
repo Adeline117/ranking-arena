@@ -3781,6 +3781,7 @@ const en = {
   allTimeHigh: 'All-Time High',
   allTimeLow: 'All-Time Low',
   gainersTop5: 'Top 5 Gainers',
+  marketPriceFeedChecked: 'Price feed checked',
   losersTop5: 'Top 5 Losers',
   fundFlow: 'Fund Flow',
   noGainers: 'All markets down, no gainers',

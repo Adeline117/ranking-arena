@@ -3692,6 +3692,7 @@ const zh = {
   allTimeHigh: '历史最高',
   allTimeLow: '历史最低',
   gainersTop5: '涨幅榜 Top5',
+  marketPriceFeedChecked: '价格源检查于',
   losersTop5: '跌幅榜 Top5',
   fundFlow: '资金流向',
   noGainers: '市场全线下跌，暂无上涨',
