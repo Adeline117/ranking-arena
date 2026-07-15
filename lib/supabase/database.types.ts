@@ -5152,28 +5152,40 @@ export type Database = {
       }
       stripe_events: {
         Row: {
+          attempts: number
           created_at: string
           event_id: string
           event_type: string
           id: string
+          last_error: string | null
           payload: Json | null
-          processed_at: string
+          processed_at: string | null
+          started_at: string | null
+          status: string
         }
         Insert: {
+          attempts?: number
           created_at?: string
           event_id: string
           event_type: string
           id?: string
+          last_error?: string | null
           payload?: Json | null
-          processed_at?: string
+          processed_at?: string | null
+          started_at?: string | null
+          status?: string
         }
         Update: {
+          attempts?: number
           created_at?: string
           event_id?: string
           event_type?: string
           id?: string
+          last_error?: string | null
           payload?: Json | null
-          processed_at?: string
+          processed_at?: string | null
+          started_at?: string | null
+          status?: string
         }
         Relationships: []
       }
@@ -8168,6 +8180,10 @@ export type Database = {
             }
             Returns: number
           }
+      claim_stripe_event: {
+        Args: { p_event_id: string; p_event_type: string; p_stale_after?: string }
+        Returns: string
+      }
       calculate_overall_score: {
         Args: { score_30d: number; score_7d: number; score_90d: number }
         Returns: number
@@ -8340,6 +8356,10 @@ export type Database = {
           p_last_value: number
           p_observed_at?: string
         }
+        Returns: boolean
+      }
+      finish_stripe_event: {
+        Args: { p_error?: string; p_event_id: string; p_succeeded: boolean }
         Returns: boolean
       }
       find_data_gaps: {
