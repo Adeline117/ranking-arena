@@ -6,6 +6,7 @@ import { SkipLink } from '../components/Providers/Accessibility'
 import { PageErrorBoundary } from '../components/utils/ErrorBoundary'
 import { AsyncStylesheets } from '../components/Providers/AsyncStylesheets'
 import TopNav from '../components/layout/TopNav'
+import AppI18nBootstrap from '../components/Providers/AppI18nBootstrap'
 
 // GlobalProgress / MobileBottomNav stay separate — needed sooner after mount
 // for navigation responsiveness.
@@ -47,7 +48,7 @@ export default function AppLayout({
   children: React.ReactNode
 }>) {
   return (
-    <>
+    <AppI18nBootstrap>
       <AsyncStylesheets />
       <Providers>
         <CapacitorProvider>
@@ -73,6 +74,6 @@ export default function AppLayout({
           </Suspense>
         </CapacitorProvider>
       </Providers>
-    </>
+    </AppI18nBootstrap>
   )
 }

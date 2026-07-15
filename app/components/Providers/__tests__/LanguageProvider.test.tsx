@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { LanguageProvider } from '../LanguageProvider'
+import { loadTranslations } from '@/lib/i18n'
 
 jest.mock('@/lib/i18n', () => ({
   getLanguage: () => 'en',
@@ -24,6 +25,7 @@ describe('LanguageProvider', () => {
       )
 
       expect(screen.getByText('Child content')).toBeInTheDocument()
+      expect(loadTranslations).toHaveBeenCalledWith('en')
     } finally {
       if (original) window.requestIdleCallback = original
     }

@@ -661,6 +661,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                       <time
                         dateTime={row.provenance.asOf}
                         title={new Date(row.provenance.asOf).toLocaleString()}
+                        suppressHydrationWarning
                       >
                         {formatTimeAgo(row.provenance.asOf, language)}
                       </time>
