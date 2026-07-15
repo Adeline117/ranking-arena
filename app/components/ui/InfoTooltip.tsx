@@ -9,6 +9,8 @@ interface InfoTooltipProps {
   text: string
   /** Icon size in px (default 12) */
   size?: number
+  /** Keep the hover tooltip visual without nesting a focusable control in a parent button. */
+  passive?: boolean
 }
 
 /**
@@ -16,7 +18,7 @@ interface InfoTooltipProps {
  * Desktop: hover to show. Mobile: tap to toggle.
  * Uses portal to escape overflow:hidden containers.
  */
-export default function InfoTooltip({ text, size = 12 }: InfoTooltipProps) {
+export default function InfoTooltip({ text, size = 12, passive = false }: InfoTooltipProps) {
   const [show, setShow] = useState(false)
   const [pos, setPos] = useState({ top: 0, left: 0 })
   const [ready, setReady] = useState(false)
@@ -67,50 +69,63 @@ export default function InfoTooltip({ text, size = 12 }: InfoTooltipProps) {
   const handleClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     e.preventDefault()
-    setShow(prev => !prev)
+    setShow((prev) => !prev)
   }
 
-  const tooltip = show && typeof document !== 'undefined' ? createPortal(
-    <div
-      ref={tooltipRef}
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-      style={{
-        position: 'fixed',
-        top: pos.top,
-        left: pos.left,
-        visibility: ready ? 'visible' : 'hidden',
-        maxWidth: 260,
-        padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-        background: tokens.colors.bg.primary,
-        border: `1px solid ${tokens.colors.border.primary}`,
-        borderRadius: tokens.radius.md,
-        boxShadow: tokens.shadow.lg,
-        zIndex: tokens.zIndex.tooltip,
-        fontSize: tokens.typography.fontSize.xs,
-        lineHeight: 1.5,
-        color: tokens.colors.text.secondary,
-        pointerEvents: 'auto',
-        whiteSpace: 'pre-line',
-      }}
-    >
-      {text}
-    </div>,
-    document.body
-  ) : null
+  const tooltip =
+    show && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={tooltipRef}
+            onMouseEnter={handleMouseEnter}
+            onMouseLeave={handleMouseLeave}
+            style={{
+              position: 'fixed',
+              top: pos.top,
+              left: pos.left,
+              visibility: ready ? 'visible' : 'hidden',
+              maxWidth: 260,
+              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+              background: tokens.colors.bg.primary,
+              border: `1px solid ${tokens.colors.border.primary}`,
+              borderRadius: tokens.radius.md,
+              boxShadow: tokens.shadow.lg,
+              zIndex: tokens.zIndex.tooltip,
+              fontSize: tokens.typography.fontSize.xs,
+              lineHeight: 1.5,
+              color: tokens.colors.text.secondary,
+              pointerEvents: 'auto',
+              whiteSpace: 'pre-line',
+            }}
+          >
+            {text}
+          </div>,
+          document.body
+        )
+      : null
 
   return (
     <>
       <span
         ref={ref}
-        role="button"
-        tabIndex={0}
-        aria-label={text}
-        aria-expanded={show}
-        onClick={handleClick}
+        role={passive ? undefined : 'button'}
+        tabIndex={passive ? undefined : 0}
+        aria-label={passive ? undefined : text}
+        aria-expanded={passive ? undefined : show}
+        title={passive ? text : undefined}
+        onClick={passive ? undefined : handleClick}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
-        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setShow(v => !v) } }}
+        onKeyDown={
+          passive
+            ? undefined
+            : (e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  setShow((v) => !v)
+                }
+              }
+        }
         style={{
           cursor: 'help',
           opacity: 0.5,

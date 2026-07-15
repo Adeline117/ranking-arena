@@ -991,7 +991,7 @@ function RankingTableInner(props: {
               }}
             >
               {t('winRateShort')}
-              <InfoTooltip text={t('winRateTooltip')} />
+              <InfoTooltip text={t('winRateTooltip')} passive />
               <SortIndicator active={sortColumn === 'winrate'} dir={sortDir} />
             </Box>
             <Box
@@ -1010,7 +1010,7 @@ function RankingTableInner(props: {
               }}
             >
               {t('maxDrawdownShort')}
-              <InfoTooltip text={t('mddTooltip')} />
+              <InfoTooltip text={t('mddTooltip')} passive />
               <SortIndicator active={sortColumn === 'mdd'} dir={sortDir} />
             </Box>
             {visibleColumns.includes('sharpe') && (
@@ -1051,7 +1051,7 @@ function RankingTableInner(props: {
                 }}
               >
                 {t('sortinoRatio')}
-                <InfoTooltip text={t('sortinoTooltip')} />
+                <InfoTooltip text={t('sortinoTooltip')} passive />
                 <SortIndicator active={sortColumn === 'sortino'} dir={sortDir} />
               </Box>
             )}

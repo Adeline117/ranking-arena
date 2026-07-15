@@ -30,18 +30,15 @@ export interface UseTableKeyboardNavOptions {
 export interface UseTableKeyboardNavReturn {
   /** Spread on the scrollable container that wraps all rows */
   containerProps: {
-    role: 'grid'
+    role: 'list'
     tabIndex: 0
     onKeyDown: (e: React.KeyboardEvent) => void
     onBlur: (e: React.FocusEvent) => void
-    'aria-activedescendant': string | undefined
-    'aria-rowcount': number
   }
   /** Call with the row index; spread the result onto each row wrapper element */
   getRowProps: (index: number) => {
     id: string
-    role: 'row'
-    'aria-rowindex': number
+    role: 'listitem'
     'data-kb-focused': boolean
     tabIndex: -1
   }
@@ -146,19 +143,16 @@ export function useTableKeyboardNav({
   }, [])
 
   const containerProps = {
-    role: 'grid' as const,
+    role: 'list' as const,
     tabIndex: 0 as const,
     onKeyDown: handleKeyDown,
     onBlur: handleBlur,
-    'aria-activedescendant': focusedIndex >= 0 ? `ranking-row-${focusedIndex}` : undefined,
-    'aria-rowcount': rowCount,
   }
 
   const getRowProps = useCallback(
     (index: number) => ({
       id: `ranking-row-${index}`,
-      role: 'row' as const,
-      'aria-rowindex': index + 1,
+      role: 'listitem' as const,
       'data-kb-focused': focusedIndex === index,
       tabIndex: -1 as const,
     }),
@@ -169,12 +163,10 @@ export function useTableKeyboardNav({
     containerProps: enabled
       ? containerProps
       : {
-          role: 'grid' as const,
+          role: 'list' as const,
           tabIndex: 0 as const,
           onKeyDown: () => {},
           onBlur: () => {},
-          'aria-activedescendant': undefined,
-          'aria-rowcount': rowCount,
         },
     getRowProps,
     focusedIndex,

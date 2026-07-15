@@ -1628,11 +1628,12 @@ select:focus-visible {
   opacity: 1 !important;
 }
 /* 桌面榜单行:悬停揭示对比勾选(2026-07-04 #5),让桌面用户也能发现对比功能 */
-.ranking-row:hover .row-compare-check {
+.swipe-row-content:hover .row-compare-check,
+.row-compare-check:focus-visible {
   opacity: 0.6 !important;
 }
-.ranking-row:hover .row-compare-check:hover,
-.ranking-row .row-compare-check input:checked {
+.swipe-row-content .row-compare-check:hover,
+.swipe-row-content .row-compare-check[aria-pressed='true'] {
   opacity: 1 !important;
 }
 /* Touch devices: always show compare checkbox (no hover available) */
