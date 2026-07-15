@@ -13,8 +13,8 @@ import type { NormalizedTrade, ExchangeId } from '@/lib/ws/exchange-feeds'
 
 const EXCHANGE_COLORS: Record<ExchangeId, string> = {
   binance: 'var(--color-chart-amber)',
-  bybit: 'var(--color-chart-orange)',
-  okx: 'var(--color-chart-blue)',
+  bybit: 'var(--color-score-below)',
+  okx: 'var(--color-score-profitability)',
 }
 
 const EXCHANGE_BG: Record<ExchangeId, string> = {

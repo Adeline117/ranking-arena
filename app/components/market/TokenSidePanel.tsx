@@ -455,7 +455,7 @@ export default function TokenSidePanel({
                       aria-pressed={selectedPeriod === p.days}
                       style={{
                         background:
-                          selectedPeriod === p.days ? tokens.colors.accent.primary : 'transparent',
+                          selectedPeriod === p.days ? 'var(--color-brand-deep)' : 'transparent',
                         color:
                           selectedPeriod === p.days
                             ? tokens.colors.white
