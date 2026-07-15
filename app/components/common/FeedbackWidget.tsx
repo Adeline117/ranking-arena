@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import { features } from '@/lib/features'
+import { isFloatingActionRoute } from '@/lib/features'
 
 export default function FeedbackWidget() {
   const [open, setOpen] = useState(false)
@@ -21,10 +21,7 @@ export default function FeedbackWidget() {
   // (both anchored ~16-20px from the bottom) and gets covered (U9-5). Same
   // fabPages detection as ScrollToTop. Stack this ABOVE the reserved ScrollToTop
   // slot so all three widgets are legible regardless of scroll state.
-  const fabPages = features.social ? ['/', '/groups'] : ['/']
-  const hasFab = fabPages.some(
-    (p) => pathname === p || (features.social && pathname.startsWith('/groups/'))
-  )
+  const hasFab = isFloatingActionRoute(pathname)
 
   const handleSubmit = async () => {
     if (!message.trim() || submitting) return

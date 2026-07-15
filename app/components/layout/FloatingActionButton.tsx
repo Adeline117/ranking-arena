@@ -5,7 +5,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
-import { features } from '@/lib/features'
+import { isFloatingActionRoute } from '@/lib/features'
 
 export default function FloatingActionButton() {
   const router = useRouter()
@@ -34,11 +34,7 @@ export default function FloatingActionButton() {
   }, [menuOpen])
 
   // Only show on feed and groups pages when social is enabled
-  const showOnPages = features.social ? ['/', '/groups'] : []
-  const shouldShow =
-    isAuthenticated &&
-    features.social &&
-    showOnPages.some((p) => pathname === p || pathname.startsWith('/groups/'))
+  const shouldShow = isAuthenticated && isFloatingActionRoute(pathname)
 
   if (!shouldShow) return null
 

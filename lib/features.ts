@@ -19,6 +19,16 @@ export const features = {
   social: process.env.NEXT_PUBLIC_FEATURE_SOCIAL !== 'false',
 }
 
+/**
+ * Routes where the authenticated social create-post FAB can appear.
+ * Layout widgets use this even before auth is known so they always reserve
+ * the same slot as FloatingActionButton.
+ */
+export function isFloatingActionRoute(pathname: string): boolean {
+  if (!features.social) return false
+  return pathname === '/' || pathname === '/groups' || pathname.startsWith('/groups/')
+}
+
 // Runtime flags with Redis cache (server-side only)
 let runtimeFlagsCache: { flags: Record<string, boolean>; ts: number } | null = null
 const RUNTIME_FLAGS_TTL = 60_000 // 60s
