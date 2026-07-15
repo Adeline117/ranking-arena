@@ -112,6 +112,17 @@ function staleAuthApiResponse<T>(): ApiResponse<T> {
   }
 }
 
+function pendingAuthApiResponse<T>(): ApiResponse<T> {
+  return {
+    success: false,
+    error: {
+      code: 'AUTH_PENDING',
+      message: 'Authentication is still being restored',
+      retryable: true,
+    },
+  }
+}
+
 /**
  * 封装的 API 请求函数
  * 自动添加 CSRF Token 和通用 headers
@@ -132,7 +143,13 @@ export async function apiRequest<T = unknown>(
   // 构建 headers
   const headers = new Headers(customHeaders)
   const requestScope = getViewerScope()
-  const isViewerBoundRequest = requestScope.viewerKey.startsWith('user:')
+  // `credentials: include` means even a nominally public request can be
+  // personalized by an auth cookie. In the browser every resolved viewer
+  // scope (including anon) is therefore identity-bound.
+  const isViewerBoundRequest = typeof window !== 'undefined'
+  if (isViewerBoundRequest && requestScope.viewerKey === 'pending') {
+    return pendingAuthApiResponse<T>()
+  }
 
   // 添加 Content-Type（如果有 body 且未设置）
   if (body && !headers.has('Content-Type')) {
@@ -161,6 +178,9 @@ export async function apiRequest<T = unknown>(
         ? lastResult.error.retryAfter * 1000
         : retryBaseDelayMs * Math.pow(2, attempt - 1)
       await new Promise((r) => setTimeout(r, delay))
+      if (isViewerBoundRequest && !isViewerScopeCurrent(requestScope)) {
+        return staleAuthApiResponse<T>()
+      }
     }
 
     const controller = new AbortController()
