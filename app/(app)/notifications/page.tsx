@@ -12,5 +12,5 @@
 import { redirect } from 'next/navigation'
 
 export default function NotificationsPage() {
-  redirect('/inbox')
+  redirect('/inbox?tab=notifications')
 }

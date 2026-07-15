@@ -16,7 +16,7 @@ BEGIN
   WHERE c.conrelid = 'public.trader_alerts'::regclass
     AND c.contype = 'u'
     AND (
-      SELECT array_agg(a.attname ORDER BY k.ordinality)
+      SELECT array_agg(a.attname::text ORDER BY k.ordinality)
       FROM unnest(c.conkey) WITH ORDINALITY AS k(attnum, ordinality)
       JOIN pg_attribute a
         ON a.attrelid = c.conrelid

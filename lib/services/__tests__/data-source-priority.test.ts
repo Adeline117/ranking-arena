@@ -23,7 +23,7 @@ function queueClient(responses: Array<{ data?: unknown; error?: { message: strin
   }
   const from = jest.fn(() => {
     const obj: Record<string, unknown> = {}
-    for (const m of ['select', 'eq', 'order', 'limit']) obj[m] = () => obj
+    for (const m of ['select', 'eq', 'not', 'gte', 'order', 'limit']) obj[m] = () => obj
     obj.maybeSingle = () => next()
     return obj
   })
@@ -45,7 +45,13 @@ const SNAPSHOT = {
 describe('优先级链', () => {
   it('有 userId + 活跃授权 + 快照 → AUTHORIZED(带 verifiedAt/authorizationId)', async () => {
     const { client } = queueClient([
-      { data: { id: 'auth-1', last_verified_at: '2026-07-01T00:00:00Z', status: 'active' } },
+      { data: { id: 'auth-1' } },
+      {
+        data: {
+          authorization_id: 'auth-1',
+          last_sync_at: '2026-07-01T00:00:00Z',
+        },
+      },
       { data: SNAPSHOT },
     ])
     const r = await getTraderDataWithPriority(client, 'bybit', 'tk1', 'user-1')
@@ -60,7 +66,7 @@ describe('优先级链', () => {
     const { client } = queueClient([
       { data: null }, // auth 无
       { data: SNAPSHOT }, // public
-      { data: { verified_at: '2026-06-01T00:00:00Z' } }, // verified_traders 有
+      { data: { authorization_id: 'auth-2', last_sync_at: '2026-06-01T00:00:00Z' } },
     ])
     const r = await getTraderDataWithPriority(client, 'bybit', 'tk1', 'user-1')
     expect(r.source).toBe(DataSourcePriority.PUBLIC_API)
@@ -100,7 +106,8 @@ describe('优先级链', () => {
 
   it('有授权但无快照数据 → 不冒充 AUTHORIZED,继续走链', async () => {
     const { client } = queueClient([
-      { data: { id: 'auth-1', last_verified_at: null, status: 'active' } },
+      { data: { id: 'auth-1' } },
+      { data: { authorization_id: 'auth-1', last_sync_at: '2026-07-01T00:00:00Z' } },
       { data: null }, // authorized 路径的快照缺
       { data: SNAPSHOT }, // public 有
       { data: null }, // verification
@@ -113,7 +120,7 @@ describe('优先级链', () => {
 describe('isTraderAuthorized', () => {
   it('有活跃授权 → true + id + 时间', async () => {
     const { client } = queueClient([
-      { data: { id: 'a1', last_verified_at: '2026-07-01T00:00:00Z' } },
+      { data: { authorization_id: 'a1', last_sync_at: '2026-07-01T00:00:00Z' } },
     ])
     const r = await isTraderAuthorized(client, 'bybit', 'tk1')
     expect(r).toEqual({

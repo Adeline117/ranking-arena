@@ -28,6 +28,7 @@ const mockFastQueue = {
   getJobs: jest.fn().mockResolvedValue([]),
   add: jest.fn().mockResolvedValue(undefined),
 }
+const mockDbQuery = jest.fn().mockResolvedValue({ rows: [] })
 
 jest.mock('../queues', () => ({
   INGEST_JOB: {
@@ -40,6 +41,7 @@ jest.mock('../queues', () => ({
     FRESHNESS: 'maint:freshness',
     AVATAR_MIRROR: 'maint:avatar-mirror',
     DAILY_DIGEST: 'maint:daily-digest',
+    FIRST_PARTY: 'firstparty:sync',
   },
   INGEST_REGIONS: ['local'],
   getIngestQueue: () => mockQueue,
@@ -55,7 +57,7 @@ jest.mock('../queues', () => ({
 // first-party scheduler pass queries trader_authorizations via the ingest
 // pool — mock it so tests never open a real DB connection (it HANGS jest).
 jest.mock('@/lib/ingest/db', () => ({
-  getIngestPool: () => ({ query: jest.fn().mockResolvedValue({ rows: [] }) }),
+  getIngestPool: () => ({ query: mockDbQuery }),
 }))
 
 jest.mock('@/lib/ingest/sources', () => ({
@@ -88,6 +90,24 @@ describe('reconcileSchedulers cleanup/revival', () => {
     jest.clearAllMocks()
     mockQueue.getJobSchedulers.mockResolvedValue([])
     mockQueue.getJob.mockResolvedValue(null)
+    mockDbQuery.mockReset().mockResolvedValue({ rows: [] })
+  })
+
+  it('schedules only DB-eligible first-party authorizations with the worker job name', async () => {
+    mockDbQuery.mockResolvedValue({ rows: [{ id: 'auth-1' }] })
+    await reconcileSchedulers()
+    expect(mockDbQuery).toHaveBeenCalledWith(
+      expect.stringContaining('read_only_verified_at IS NOT NULL')
+    )
+    expect(mockQueue.upsertJobScheduler).toHaveBeenCalledWith(
+      'fp:auth-1',
+      { every: 15 * 60_000 },
+      {
+        name: 'firstparty:sync',
+        data: { authorizationId: 'auth-1' },
+        opts: { priority: 4 },
+      }
+    )
   })
 
   it('removes schedulers no longer wanted, addressing them by key (not id)', async () => {

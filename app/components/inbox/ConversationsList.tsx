@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
@@ -18,7 +18,6 @@ import dynamic from 'next/dynamic'
 const CreateGroupModal = dynamic(() => import('@/app/components/features/CreateGroupModal'), {
   ssr: false,
 })
-import { logger } from '@/lib/logger'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { Skeleton, SkeletonAvatar } from '@/app/components/ui/Skeleton'
 
@@ -224,16 +223,24 @@ function SwipeableConversationRow({
   )
 }
 
-export default function ConversationsList(): React.ReactElement {
+type ChatFilter = 'all' | 'direct' | 'group'
+
+export default function ConversationsList({
+  initialFilter = 'all',
+}: {
+  initialFilter?: ChatFilter
+} = {}): React.ReactElement {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [groupChannels, setGroupChannels] = useState<GroupChannel[]>([])
   const [error, setError] = useState<string | null>(null)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
-  const [chatFilter, setChatFilter] = useState<'all' | 'direct' | 'group'>('all')
+  const [chatFilter, setChatFilter] = useState<ChatFilter>(initialFilter)
   const setUnreadMessages = useInboxStore((s) => s.setUnreadMessages)
   const { language, t } = useLanguage()
   const { user, accessToken, getAuthHeadersAsync } = useAuthSession()
   const { showToast } = useToast()
+
+  useEffect(() => setChatFilter(initialFilter), [initialFilter])
 
   // Swipe-to-delete: clear conversation history and hide from list
   const handleDeleteConversation = useCallback(

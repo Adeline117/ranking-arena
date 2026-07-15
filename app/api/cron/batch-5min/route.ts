@@ -8,7 +8,9 @@
  * Sub-jobs:
  * - run-worker: Process pending refresh_jobs
  * - refresh-hot-scores: Update post hot_score via RPC
- * - trader-sync: Sync authorized trader data from exchanges
+ *
+ * First-party trader sync is intentionally NOT run here. It belongs to the
+ * BullMQ ingest worker, which owns scheduling, retries, and first-party writes.
  *
  * Schedule: every 5 min (see vercel.json)
  *
@@ -24,7 +26,6 @@ import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import {
   runWorkerInline,
   refreshHotScoresInline,
-  syncTradersInline,
   type InlineJobResult,
 } from '@/lib/cron/inline-jobs'
 import { createLogger } from '@/lib/utils/logger'
@@ -87,7 +88,7 @@ export async function GET(request: NextRequest) {
   // Global safety timeout: 240s (leaves 60s buffer before Vercel's 300s maxDuration kills us)
   // This ensures we ALWAYS send a response and log results, even if sub-jobs are slow.
   const GLOBAL_TIMEOUT_MS = 240_000
-  // Per sub-job timeout: 90s each (3 jobs × 90s = 270s max, but they run in parallel so 90s wall clock)
+  // Per sub-job timeout: 90s each (jobs run in parallel).
   const PER_JOB_TIMEOUT_MS = 90_000
 
   // Run all sub-jobs in parallel with per-job timeouts.
@@ -100,7 +101,6 @@ export async function GET(request: NextRequest) {
         Promise.all([
           withTimeout(runWorkerInline, 'run-worker', PER_JOB_TIMEOUT_MS),
           withTimeout(refreshHotScoresInline, 'refresh-hot-scores', PER_JOB_TIMEOUT_MS),
-          withTimeout(syncTradersInline, 'trader-sync', PER_JOB_TIMEOUT_MS),
         ]),
         new Promise<InlineJobResult[]>((resolve) =>
           setTimeout(() => {
@@ -118,12 +118,6 @@ export async function GET(request: NextRequest) {
               },
               {
                 name: 'refresh-hot-scores',
-                status: 'error',
-                durationMs: GLOBAL_TIMEOUT_MS,
-                error: 'global timeout',
-              },
-              {
-                name: 'trader-sync',
                 status: 'error',
                 durationMs: GLOBAL_TIMEOUT_MS,
                 error: 'global timeout',

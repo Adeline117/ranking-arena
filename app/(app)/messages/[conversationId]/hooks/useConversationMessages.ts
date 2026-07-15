@@ -145,7 +145,7 @@ export function useConversationMessages({
             isGone ? t('u10inbox_conversationGone') : data.error || t('loadMessagesFailed'),
             'error'
           )
-          router.push('/inbox')
+          router.push('/inbox?tab=messages&chat=direct')
           return
         }
         if (data.messages) {

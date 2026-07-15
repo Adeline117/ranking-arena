@@ -1,8 +1,8 @@
 'use client'
 
 import { features } from '@/lib/features'
-import { redirect } from 'next/navigation'
-import { useState } from 'react'
+import { redirect, useSearchParams } from 'next/navigation'
+import { useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import NotificationsList from '@/app/components/inbox/NotificationsList'
@@ -19,7 +19,25 @@ export default function InboxPageClient() {
   // instead of a hand-written /login?redirect= — the rest of the app uses returnUrl.
   useRequireAuth()
   const { t } = useLanguage()
-  const [activeTab, setActiveTab] = useState<TabKey>('notifications')
+  const searchParams = useSearchParams()
+  const requestedTab: TabKey = searchParams.get('tab') === 'messages' ? 'messages' : 'notifications'
+  const requestedChat =
+    searchParams.get('chat') === 'group'
+      ? 'group'
+      : searchParams.get('chat') === 'direct'
+        ? 'direct'
+        : 'all'
+  const [activeTab, setActiveTab] = useState<TabKey>(requestedTab)
+
+  useEffect(() => setActiveTab(requestedTab), [requestedTab])
+
+  function selectTab(tab: TabKey): void {
+    setActiveTab(tab)
+    const params = new URLSearchParams(searchParams.toString())
+    params.set('tab', tab)
+    if (tab !== 'messages') params.delete('chat')
+    globalThis.history.replaceState(null, '', `/inbox?${params.toString()}`)
+  }
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'notifications', label: t('tabNotifications') },
@@ -68,7 +86,7 @@ export default function InboxPageClient() {
             return (
               <button
                 key={tab.key}
-                onClick={() => setActiveTab(tab.key)}
+                onClick={() => selectTab(tab.key)}
                 style={{
                   padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                   background: 'transparent',
@@ -93,7 +111,7 @@ export default function InboxPageClient() {
 
         {/* Tab content */}
         {activeTab === 'notifications' && <NotificationsList variant="page" />}
-        {activeTab === 'messages' && <ConversationsList />}
+        {activeTab === 'messages' && <ConversationsList initialFilter={requestedChat} />}
       </div>
     </div>
   )

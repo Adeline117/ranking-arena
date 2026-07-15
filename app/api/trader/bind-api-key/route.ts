@@ -34,6 +34,7 @@ import {
 } from '@/lib/api'
 import { bindApiKey } from '@/lib/services/api-key-binder'
 import { logger } from '@/lib/logger'
+import { enqueueFirstPartySync } from '@/lib/ingest/first-party/enqueue'
 
 export const dynamic = 'force-dynamic'
 
@@ -78,12 +79,19 @@ export async function POST(request: NextRequest) {
       traderId: result.traderId,
     })
 
+    const initialSyncQueued = result.authorizationId
+      ? await enqueueFirstPartySync(result.authorizationId)
+      : false
+
     return success({
       success: true,
       authorizationId: result.authorizationId,
       traderId: result.traderId,
       nickname: result.nickname,
-      message: 'API key bound successfully. Your verified data will be available shortly.',
+      initialSyncQueued,
+      message: initialSyncQueued
+        ? 'API key bound successfully. Your first-party verification is queued.'
+        : 'API key bound successfully. The background scheduler will verify it shortly.',
     })
   } catch (error: unknown) {
     return handleError(error, 'bind-api-key')

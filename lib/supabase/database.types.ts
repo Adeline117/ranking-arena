@@ -5739,6 +5739,7 @@ export type Database = {
           notes: string | null
           permissions: Json | null
           platform: string
+          read_only_verified_at: string | null
           status: string
           sync_frequency: string | null
           trader_id: string
@@ -5762,6 +5763,7 @@ export type Database = {
           notes?: string | null
           permissions?: Json | null
           platform: string
+          read_only_verified_at?: string | null
           status?: string
           sync_frequency?: string | null
           trader_id: string
@@ -5785,6 +5787,7 @@ export type Database = {
           notes?: string | null
           permissions?: Json | null
           platform?: string
+          read_only_verified_at?: string | null
           status?: string
           sync_frequency?: string | null
           trader_id?: string
@@ -7529,6 +7532,15 @@ export type Database = {
       }
     }
     Views: {
+      verified_data_authorizations: {
+        Row: {
+          authorization_id: string | null
+          last_sync_at: string | null
+          platform: string | null
+          trader_id: string | null
+        }
+        Relationships: []
+      }
       group_subscription_stats: {
         Row: {
           active_subscribers: number | null

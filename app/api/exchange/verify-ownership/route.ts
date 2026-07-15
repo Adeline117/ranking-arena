@@ -57,6 +57,12 @@ export const POST = withAuth(
       return badRequest('Missing required parameters: apiKey, apiSecret')
     }
 
+    const connectionExchange = source.toLowerCase().replace(/_(futures|spot)$/, '')
+    const requestedExchange = exchange.toLowerCase().replace(/^gate$/, 'gateio')
+    if (requestedExchange !== connectionExchange.replace(/^gate$/, 'gateio')) {
+      return badRequest('Exchange does not match the trader source')
+    }
+
     // Validate this is a CEX platform that supports API key verification
     if (!isCexVerifiable(source)) {
       return badRequest(
@@ -86,6 +92,18 @@ export const POST = withAuth(
           error: 'API key validation failed',
           verified: false,
           message: resolveResult.error || 'Could not validate API credentials',
+        },
+        { status: 400 }
+      )
+    }
+
+    if (resolveResult.isReadOnly !== true) {
+      return NextResponse.json(
+        {
+          error: 'Read-only API key required',
+          verified: false,
+          message:
+            'Disable trading, withdrawal, and transfer permissions on this API key before connecting it.',
         },
         { status: 400 }
       )
@@ -123,13 +141,14 @@ export const POST = withAuth(
     const { error: upsertError } = await supabase.from('user_exchange_connections').upsert(
       {
         user_id: user.id,
-        exchange: exchange,
+        exchange: connectionExchange,
         api_key_encrypted: encryptedApiKey,
         api_secret_encrypted: encryptedApiSecret,
         passphrase_encrypted: encryptedPassphrase,
         is_active: true,
         verified_uid: resolvedUid,
         last_verified_at: new Date().toISOString(),
+        scope_permissions: resolveResult.permissions || ['read'],
       },
       { onConflict: 'user_id,exchange' }
     )

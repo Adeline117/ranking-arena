@@ -20,7 +20,59 @@ export interface UidResolveResult {
   success: boolean
   uid?: string
   nickname?: string
+  /** Permission names reported by the exchange, never inferred by Arena. */
+  permissions?: string[]
+  /** True only when the exchange response proves trading and withdrawals are disabled. */
+  isReadOnly?: boolean
   error?: string
+}
+
+function enabledPermissionNames(value: unknown): string[] {
+  if (Array.isArray(value)) return value.map(String)
+  if (!value || typeof value !== 'object') return []
+  return Object.entries(value as Record<string, unknown>).flatMap(([group, permissions]) =>
+    Array.isArray(permissions)
+      ? permissions.map((permission) => `${group}:${String(permission)}`)
+      : []
+  )
+}
+
+async function resolveBinancePermissions(
+  credentials: ExchangeCredentials
+): Promise<Pick<UidResolveResult, 'permissions' | 'isReadOnly'>> {
+  try {
+    const timestamp = Date.now()
+    const queryString = `timestamp=${timestamp}`
+    const signature = createHmac('sha256', credentials.apiSecret).update(queryString).digest('hex')
+    const response = await fetch(
+      `https://api.binance.com/sapi/v1/account/apiRestrictions?${queryString}&signature=${signature}`,
+      {
+        headers: { 'X-MBX-APIKEY': credentials.apiKey },
+        signal: AbortSignal.timeout(10000),
+      }
+    )
+    if (!response.ok) return { permissions: [], isReadOnly: false }
+
+    const data = (await response.json()) as Record<string, unknown>
+    const permissions = Object.entries(data)
+      .filter(([, enabled]) => enabled === true)
+      .map(([name]) => name)
+    const writeFlags = [
+      'enableSpotAndMarginTrading',
+      'enableWithdrawals',
+      'enableInternalTransfer',
+      'enableMargin',
+      'enableFutures',
+      'permitsUniversalTransfer',
+      'enableVanillaOptions',
+    ]
+    return {
+      permissions,
+      isReadOnly: data.enableReading === true && writeFlags.every((flag) => data[flag] !== true),
+    }
+  } catch {
+    return { permissions: [], isReadOnly: false }
+  }
 }
 
 /**
@@ -49,7 +101,8 @@ async function resolveBinanceUid(credentials: ExchangeCredentials): Promise<UidR
       const data = await response.json()
       // Futures account returns uid directly
       if (data.uid) {
-        return { success: true, uid: String(data.uid) }
+        const permissionState = await resolveBinancePermissions(credentials)
+        return { success: true, uid: String(data.uid), ...permissionState }
       }
     }
   } catch (_err) {
@@ -73,7 +126,8 @@ async function resolveBinanceUid(credentials: ExchangeCredentials): Promise<UidR
     if (response.ok) {
       const data = await response.json()
       if (data.uid) {
-        return { success: true, uid: String(data.uid) }
+        const permissionState = await resolveBinancePermissions(credentials)
+        return { success: true, uid: String(data.uid), ...permissionState }
       }
     }
   } catch (_err) {
@@ -97,12 +151,14 @@ async function resolveBinanceUid(credentials: ExchangeCredentials): Promise<UidR
     if (response.ok) {
       const data = await response.json()
       if (data.uid) {
-        return { success: true, uid: String(data.uid) }
+        const permissionState = await resolveBinancePermissions(credentials)
+        return { success: true, uid: String(data.uid), ...permissionState }
       }
       // If no uid, the API key is valid but we can't extract uid
       return {
         success: false,
-        error: 'API key is valid but could not extract account UID. Please enable Futures trading permission on your API key.',
+        error:
+          'API key is valid but could not extract account UID. Please enable Futures trading permission on your API key.',
       }
     }
 
@@ -151,7 +207,14 @@ async function resolveBybitUid(credentials: ExchangeCredentials): Promise<UidRes
       return { success: false, error: 'Could not extract UID from Bybit API response' }
     }
 
-    return { success: true, uid: String(uid), nickname: data.result?.note }
+    const readOnly = data.result?.readOnly
+    return {
+      success: true,
+      uid: String(uid),
+      nickname: data.result?.note,
+      permissions: enabledPermissionNames(data.result?.permissions),
+      isReadOnly: readOnly === 1 || readOnly === '1' || readOnly === true,
+    }
   } catch (error) {
     logger.error('[UidResolver] Bybit resolve failed', {}, error as Error)
     return { success: false, error: 'Failed to connect to Bybit API' }
@@ -199,7 +262,20 @@ async function resolveOkxUid(credentials: ExchangeCredentials): Promise<UidResol
       return { success: false, error: 'Could not extract UID from OKX API response' }
     }
 
-    return { success: true, uid: String(uid), nickname: data.data?.[0]?.label }
+    const permissionText = String(data.data?.[0]?.perm || '')
+    const permissions = permissionText
+      .split(',')
+      .map((permission) => permission.trim())
+      .filter(Boolean)
+    return {
+      success: true,
+      uid: String(uid),
+      nickname: data.data?.[0]?.label,
+      permissions,
+      isReadOnly:
+        permissions.includes('read_only') &&
+        !permissions.some((permission) => /trade|withdraw/i.test(permission)),
+    }
   } catch (error) {
     logger.error('[UidResolver] OKX resolve failed', {}, error as Error)
     return { success: false, error: 'Failed to connect to OKX API' }
@@ -247,7 +323,15 @@ async function resolveBitgetUid(credentials: ExchangeCredentials): Promise<UidRe
       return { success: false, error: 'Could not extract userId from Bitget API response' }
     }
 
-    return { success: true, uid: String(userId) }
+    const permissions = enabledPermissionNames(data.data?.authorities)
+    return {
+      success: true,
+      uid: String(userId),
+      permissions,
+      isReadOnly:
+        permissions.some((permission) => /^read/i.test(permission)) &&
+        !permissions.some((permission) => /trade|withdraw|transfer/i.test(permission)),
+    }
   } catch (error) {
     logger.error('[UidResolver] Bitget resolve failed', {}, error as Error)
     return { success: false, error: 'Failed to connect to Bitget API' }
@@ -372,12 +456,19 @@ export async function resolveExchangeUid(
  * List of CEX platforms that support API key verification.
  */
 export const CEX_VERIFIABLE_PLATFORMS = [
-  'binance', 'binance_futures', 'binance_spot',
-  'bybit', 'bybit_spot',
-  'okx', 'okx_futures',
-  'bitget', 'bitget_futures',
-  'gateio', 'gate',
-  'htx', 'htx_futures',
+  'binance',
+  'binance_futures',
+  'binance_spot',
+  'bybit',
+  'bybit_spot',
+  'okx',
+  'okx_futures',
+  'bitget',
+  'bitget_futures',
+  'gateio',
+  'gate',
+  'htx',
+  'htx_futures',
 ] as const
 
 /**
@@ -397,17 +488,14 @@ export const DEX_WALLET_PLATFORMS = [
 /**
  * Solana-based DEX platforms (use ed25519 signature verification).
  */
-export const SOLANA_DEX_PLATFORMS = [
-  'jupiter_perps',
-  'drift',
-] as const
+export const SOLANA_DEX_PLATFORMS = ['jupiter_perps', 'drift'] as const
 
 /**
  * Check if a platform supports CEX API key verification.
  */
 export function isCexVerifiable(platform: string): boolean {
   const p = platform.toLowerCase()
-  return CEX_VERIFIABLE_PLATFORMS.some(cp => p === cp || p.startsWith(cp.split('_')[0]))
+  return CEX_VERIFIABLE_PLATFORMS.some((cp) => p === cp || p.startsWith(cp.split('_')[0]))
 }
 
 /**
@@ -415,7 +503,7 @@ export function isCexVerifiable(platform: string): boolean {
  */
 export function isDexWalletPlatform(platform: string): boolean {
   const p = platform.toLowerCase()
-  return [...DEX_WALLET_PLATFORMS, ...SOLANA_DEX_PLATFORMS].some(dp => p === dp)
+  return [...DEX_WALLET_PLATFORMS, ...SOLANA_DEX_PLATFORMS].some((dp) => p === dp)
 }
 
 /**
@@ -423,5 +511,5 @@ export function isDexWalletPlatform(platform: string): boolean {
  */
 export function isSolanaPlatform(platform: string): boolean {
   const p = platform.toLowerCase()
-  return SOLANA_DEX_PLATFORMS.some(sp => p === sp)
+  return SOLANA_DEX_PLATFORMS.some((sp) => p === sp)
 }

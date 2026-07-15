@@ -5,7 +5,7 @@
  */
 
 import { logger } from '@/lib/logger'
-import { resolveExchangeUid } from './exchange-uid-resolver'
+import { resolveExchangeUid, type UidResolveResult } from './exchange-uid-resolver'
 
 export interface ApiKeyValidationResult {
   isValid: boolean
@@ -22,6 +22,28 @@ export interface ExchangeCredentials {
   passphrase?: string // For OKX, Bitget
 }
 
+function validatedReadOnlyResult(
+  result: UidResolveResult,
+  fallbackError: string
+): ApiKeyValidationResult {
+  if (!result.success || !result.uid) {
+    return { isValid: false, error: result.error || fallbackError }
+  }
+  if (result.isReadOnly !== true) {
+    return {
+      isValid: false,
+      error:
+        'API key must be read-only. Disable trading, withdrawal, and transfer permissions before connecting it.',
+    }
+  }
+  return {
+    isValid: true,
+    traderId: result.uid,
+    nickname: result.nickname,
+    permissions: result.permissions || ['read'],
+  }
+}
+
 /**
  * Validate Binance API Key - extracts real UID
  */
@@ -31,16 +53,7 @@ export async function validateBinanceApiKey(
   try {
     const uidResult = await resolveExchangeUid('binance', credentials)
 
-    if (!uidResult.success) {
-      return { isValid: false, error: uidResult.error || 'Invalid API key' }
-    }
-
-    return {
-      isValid: true,
-      traderId: uidResult.uid,
-      nickname: uidResult.nickname,
-      permissions: ['read'],
-    }
+    return validatedReadOnlyResult(uidResult, 'Invalid API key')
   } catch (error) {
     logger.error('[Validator] Binance API key validation failed', {}, error as Error)
     return { isValid: false, error: 'Failed to validate API key' }
@@ -56,16 +69,7 @@ export async function validateBybitApiKey(
   try {
     const uidResult = await resolveExchangeUid('bybit', credentials)
 
-    if (!uidResult.success) {
-      return { isValid: false, error: uidResult.error || 'Invalid API key' }
-    }
-
-    return {
-      isValid: true,
-      traderId: uidResult.uid,
-      nickname: uidResult.nickname,
-      permissions: ['read'],
-    }
+    return validatedReadOnlyResult(uidResult, 'Invalid API key')
   } catch (error) {
     logger.error('[Validator] Bybit API key validation failed', {}, error as Error)
     return { isValid: false, error: 'Failed to validate API key' }
@@ -85,16 +89,7 @@ export async function validateOKXApiKey(
 
     const uidResult = await resolveExchangeUid('okx', credentials)
 
-    if (!uidResult.success) {
-      return { isValid: false, error: uidResult.error || 'Invalid API key' }
-    }
-
-    return {
-      isValid: true,
-      traderId: uidResult.uid,
-      nickname: uidResult.nickname,
-      permissions: ['read_balance', 'read_positions'],
-    }
+    return validatedReadOnlyResult(uidResult, 'Invalid API key')
   } catch (error) {
     logger.error('[Validator] OKX API key validation failed', {}, error as Error)
     return { isValid: false, error: 'Failed to validate API key' }
@@ -114,15 +109,7 @@ export async function validateBitgetApiKey(
 
     const uidResult = await resolveExchangeUid('bitget', credentials)
 
-    if (!uidResult.success) {
-      return { isValid: false, error: uidResult.error || 'Invalid API key' }
-    }
-
-    return {
-      isValid: true,
-      traderId: uidResult.uid,
-      permissions: ['read_account'],
-    }
+    return validatedReadOnlyResult(uidResult, 'Invalid API key')
   } catch (error) {
     logger.error('[Validator] Bitget API key validation failed', {}, error as Error)
     return { isValid: false, error: 'Failed to validate API key' }
@@ -138,15 +125,7 @@ export async function validateGateApiKey(
   try {
     const uidResult = await resolveExchangeUid('gateio', credentials)
 
-    if (!uidResult.success) {
-      return { isValid: false, error: uidResult.error || 'Invalid API key' }
-    }
-
-    return {
-      isValid: true,
-      traderId: uidResult.uid,
-      permissions: ['read'],
-    }
+    return validatedReadOnlyResult(uidResult, 'Invalid API key')
   } catch (error) {
     logger.error('[Validator] Gate.io API key validation failed', {}, error as Error)
     return { isValid: false, error: 'Failed to validate API key' }
@@ -162,15 +141,7 @@ export async function validateHtxApiKey(
   try {
     const uidResult = await resolveExchangeUid('htx', credentials)
 
-    if (!uidResult.success) {
-      return { isValid: false, error: uidResult.error || 'Invalid API key' }
-    }
-
-    return {
-      isValid: true,
-      traderId: uidResult.uid,
-      permissions: ['read'],
-    }
+    return validatedReadOnlyResult(uidResult, 'Invalid API key')
   } catch (error) {
     logger.error('[Validator] HTX API key validation failed', {}, error as Error)
     return { isValid: false, error: 'Failed to validate API key' }

@@ -28,7 +28,7 @@ import {
   PASSPHRASE_REQUIRED,
   makeProxyFetch,
 } from '@/lib/portfolio/exchange-sync'
-import { decrypt } from '@/lib/crypto/encryption'
+import { decryptAuthorizationCredential } from '@/lib/exchange/authorization-credentials'
 
 export interface FirstPartyJobData {
   authorizationId: string
@@ -55,13 +55,15 @@ async function markSync(
   ctx?: { userId: string; platform: string; traderId: string }
 ): Promise<void> {
   const failures = ok ? 0 : priorFailures + 1
-  const status = ok ? 'active' : failures >= 3 ? 'error' : 'active'
+  const status = ok ? 'active' : failures >= 3 ? 'suspended' : 'active'
   await getIngestPool().query(
     `UPDATE public.trader_authorizations
         SET last_sync_at = now(), last_sync_status = $2,
-            consecutive_failures = $3, status = $4
+            consecutive_failures = $3, status = $4,
+            last_verified_at = CASE WHEN $2 = 'success' THEN now() ELSE last_verified_at END,
+            verification_error = CASE WHEN $2 = 'success' THEN NULL ELSE $5 END
       WHERE id = $1`,
-    [authId, detail.slice(0, 200), failures, status]
+    [authId, ok ? 'success' : 'error', failures, status, detail.slice(0, 200)]
   )
   // 连挂 3 次转 error 的瞬间通知用户换 key(E2E 干跑 2026-07-10 发现的缺口)。
   // worker=批处理语境,按 CLAUDE.md 通知铁律允许直插;ON CONFLICT 无约束可依,
@@ -152,9 +154,11 @@ export async function processFirstPartySync(
     if (PASSPHRASE_REQUIRED.has(ex) && !auth.encrypted_passphrase) {
       throw new Error('passphrase required')
     }
-    const apiKey = decrypt(auth.encrypted_api_key)
-    const apiSecret = decrypt(auth.encrypted_api_secret)
-    const passphrase = auth.encrypted_passphrase ? decrypt(auth.encrypted_passphrase) : undefined
+    const apiKey = decryptAuthorizationCredential(auth.encrypted_api_key)
+    const apiSecret = decryptAuthorizationCredential(auth.encrypted_api_secret)
+    const passphrase = auth.encrypted_passphrase
+      ? decryptAuthorizationCredential(auth.encrypted_passphrase)
+      : undefined
 
     const mod = await import('ccxt')
     const registry = ((mod as { default?: unknown }).default ?? mod) as Record<
