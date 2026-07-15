@@ -1,17 +1,18 @@
 import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
+import { PRODUCT_FACTS } from '@/lib/config/product-facts'
+
+const coverage = `${PRODUCT_FACTS.fallbackExchangeCount}+ active exchange sources`
 
 export const metadata: Metadata = {
   title: 'About Arena — Crypto Trader Rankings & Community Platform',
-  description:
-    'Arena aggregates trader rankings from 45+ exchanges including Binance, Bitget, and Bybit. Discover top crypto traders, compare performance metrics, and join our trading community.',
+  description: `Arena aggregates trader rankings from ${coverage}. Discover top crypto traders, compare performance metrics, and join our trading community.`,
   alternates: {
     canonical: `${BASE_URL}/about`,
   },
   openGraph: {
     title: 'About Arena — Crypto Trader Rankings Platform',
-    description:
-      'Arena aggregates trader rankings from 45+ exchanges including Binance, Bitget, and Bybit. Discover top crypto traders, compare performance metrics, and join our trading community.',
+    description: `Arena aggregates trader rankings from ${coverage}. Discover top crypto traders, compare performance metrics, and join our trading community.`,
     url: `${BASE_URL}/about`,
     siteName: 'Arena',
     type: 'website',
@@ -27,8 +28,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'About Arena — Crypto Trader Rankings Platform',
-    description:
-      'Arena aggregates trader rankings from 45+ exchanges including Binance, Bitget, and Bybit.',
+    description: `Arena aggregates trader rankings from ${coverage}.`,
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },

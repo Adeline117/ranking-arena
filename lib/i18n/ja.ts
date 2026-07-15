@@ -456,6 +456,12 @@ const ja = {
   subscribed: '登録済み',
   pricingTitle: 'Proにアップグレード',
   pricingSubtitle: 'すべてのプレミアム機能をロック解除',
+  pricingPromoTitle: 'ベータ期間中はProをすべて開放中',
+  pricingPromoSubtitle:
+    'すべてのPro機能を今すぐ利用できます。創業価格を確保したい場合のみご登録ください。',
+  pricingPromoCta: '創業価格を確保する',
+  pricingPromoSignupCta: 'アカウントを作成して価格を確保',
+  pricingPromoFinePrint: 'ベータキャンペーン中のPro利用に購入は必要ありません。',
   monthlyPlan: '月額プラン',
   yearlyPlan: '年額プラン',
   monthlySubscription: '月額サブスクリプション',
@@ -1837,13 +1843,16 @@ const ja = {
   loginWelcomeBack: 'おかえりなさい',
   loginCreateAccount: 'アカウントを作成',
   loginSubtitle: 'Arenaは暗号資産のすべてをランキングします',
-  loginValueProp1: '160,000人以上の収録トレーダーをリアルタイムでトラッキング',
-  loginValueProp2: '45以上の取引所のROIを比較',
+  loginValueProp1: '現在の90日ランキングに{count}人のトレーダー',
+  loginValueProp2: '{count}のアクティブな取引所ソースで実績を比較',
   loginValueProp3: 'トレーディングコミュニティに参加',
+  discoverMore: 'Arenaをもっと見る',
   loginConnectWallet: 'ウォレットを接続',
   loginWalletSignIn: 'ウォレットでサインイン',
   loginWalletConnecting: '接続中...',
   loginWalletSignInSuccess: 'ウォレットでのサインインに成功しました',
+  loginOtherOptions: 'その他のログイン方法',
+  loginHideOtherOptions: 'その他の方法を閉じる',
   loginPleaseEnterEmail: 'メールアドレスを入力してください',
   loginConfigError: '設定エラー：Supabaseの設定を確認してください',
   loginSendFailed: '送信に失敗しました。再試行してください',
@@ -1961,7 +1970,7 @@ const ja = {
   helpGettingStartedTitle: '使い始め',
   helpWhatIsArenaQ: 'Arenaとは？',
   helpWhatIsArenaA:
-    'Arenaは暗号資産トレーダーのランキングとコミュニティプラットフォームです。20以上の取引所で160,000人以上のトレーダーをトラッキングし、ROI、リスク管理、一貫性でランク付けして、トップパフォーマーを発見できます。',
+    'Arenaは暗号資産トレーダーのランキングとコミュニティプラットフォームです。現在、18以上の稼働中の取引所ソースから9,600人以上のトレーダーをランク付けしています。',
   helpHowToStartQ: '始め方は？',
   helpHowToStartA:
     'Google、メール、または暗号資産ウォレットで登録します。登録後、興味を選択してトップトレーダーをフォローすることで体験をパーソナライズできます。その後、ランキングページでトレーダーを探索しましょう。',
@@ -2849,7 +2858,7 @@ const ja = {
   aboutSubtitle: '暗号資産トレーダーのためのオープンランキングプラットフォーム',
   aboutIntroTitle: 'Arenaとは？',
   aboutIntroP1:
-    'Arenaはデータ駆動型の暗号資産トレーダーランキングプラットフォームです。20以上の中央集権型・分散型取引所からオンチェーンおよび取引所データを集約し、160K+のトレーダーを収録して透明で検証可能なパフォーマンスリーダーボードを構築しています。',
+    'Arenaはデータ駆動型の暗号資産トレーダーランキングプラットフォームです。現在、18以上の稼働中のCEX・DEX・オンチェーンソースから9,600人以上のトレーダーをランク付けしています。',
   aboutIntroP2:
     'フォローするトップパフォーマーを探す場合も、取引所間の戦略を比較する場合も、自分のトラックレコードを紹介する場合も、Arenaは必要なツールとデータを提供します。',
   aboutFeaturesTitle: 'コア機能',
@@ -2881,7 +2890,7 @@ const ja = {
   aboutVisionDesc:
     '透明性が信頼を生むと信じています。水増しされたスクリーンショットや偽のPnLが横行する空間で、Arenaはパフォーマンスが自ら語る、中立的でデータに裏付けられたアリーナを提供します。世界中の暗号資産トレーダー評価のスタンダードになることが目標です。',
   aboutStatsTitle: 'Arenaの数字',
-  aboutStatTraders: '160K+',
+  aboutStatTraders: '9.6K+',
   aboutStatTradersLabel: '追跡トレーダー数',
   aboutStatExchanges: '20+',
   aboutStatExchangesLabel: '対応取引所',

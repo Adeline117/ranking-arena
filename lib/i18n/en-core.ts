@@ -383,6 +383,17 @@ const enCore = {
   rankingControlsShowingTop: 'Showing top {count} traders. Unlock all with Pro',
   rankingControlsShowingTopPromo: 'Showing top {count} traders — all unlocked (free for now)',
   rankingControlsUpgrade: 'Upgrade →',
+  // Global app chrome + offline fallback render before route dictionaries load.
+  navTooltipMarket: 'Market overview',
+  navTooltipGroups: 'Join discussion groups',
+  rankingsSubNavAriaLabel: 'Rankings category navigation',
+  rankingsSubNavTraders: 'Traders',
+  rankingsSubNavTokens: 'Tokens',
+  youAreOffline: 'You Are Offline',
+  checkNetworkAndRetryOffline:
+    'Check your network connection and try again. Some cached content may still be available.',
+  retryConnection: 'Retry Connection',
+  arenaTagline: 'Arena - Crypto Trader Leaderboard',
   // /saved hub + watchlist/favorites titles — first-paint-visible headings, so
   // they belong in core to avoid a raw-key flash (worse on ja/ko which seed
   // from en-core until the full dict loads).

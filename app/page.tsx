@@ -143,8 +143,10 @@ export default async function Page() {
           The HomePageClient useLayoutEffect hides this BEFORE first paint
           (when initialTraders is provided, loading starts as false).
           On slow mobile without JS, this stays visible as the primary content. */}
-        <div id="ssr-ranking-table" className="three-col-layout">
-          <div className="three-col-left hide-tablet" aria-hidden="true" />
+        <div
+          id="ssr-ranking-table"
+          className="three-col-layout three-col-no-left three-col-no-right"
+        >
           <div className="three-col-center">
             <div className="ssr-t" style={{ marginTop: 8 }}>
               <RankingControls
@@ -156,7 +158,6 @@ export default async function Page() {
               <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
             </div>
           </div>
-          <div className="three-col-right hide-mobile" aria-hidden="true" />
         </div>
 
         <PageErrorBoundary>

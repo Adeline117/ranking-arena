@@ -9,14 +9,15 @@ import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 import { SSR_QUERY_TIMEOUT_MS, ssrRace } from '@/lib/constants/timeouts'
+import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 
 // 默认值 - 当缓存和数据库都不可用时的回退
 // MUST be close to the actual 90D ranked count — this value is the DENOMINATOR for
 // CrossExchangePercentileBadge, so an inflated fallback (was 17000; real 90D pop is
 // ~9,600) makes "beats X% of N traders" wrong by ~1.8× if the RPC ever fails.
 const DEFAULT_STATS = {
-  exchangeCount: 27,
-  traderCount: 9600,
+  exchangeCount: PRODUCT_FACTS.fallbackExchangeCount,
+  traderCount: PRODUCT_FACTS.fallbackRankedTraderCount,
 }
 
 // v2: bumped 2026-07-02 to evict stale exchangeCount (old get_hero_stats counted

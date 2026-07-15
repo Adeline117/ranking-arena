@@ -310,6 +310,16 @@ const zhCore = {
   winRate: '胜率',
   winRateTooltip: '胜率：盈利交易占比。\n越高代表盈利越稳定。',
   yesterday: '昨天',
+  // 全局导航与离线页必须在首屏同步可用，避免水合时裸 key。
+  navTooltipMarket: '市场数据总览',
+  navTooltipGroups: '加入讨论小组',
+  rankingsSubNavAriaLabel: '排名分类导航',
+  rankingsSubNavTraders: '交易员',
+  rankingsSubNavTokens: '币种',
+  youAreOffline: '您已离线',
+  checkNetworkAndRetryOffline: '请检查您的网络连接后重试。部分已缓存的内容可能仍可访问。',
+  retryConnection: '重试连接',
+  arenaTagline: 'Arena — 加密万物排行榜',
   // /saved hub + 自选/收藏标题 — 首屏可见标题,放入 core 避免原始 key 闪烁。
   savedHubTitle: '我的收藏',
   savedTabTraders: '关注的交易员',

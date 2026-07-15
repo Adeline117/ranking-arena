@@ -15,12 +15,15 @@ import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { getStaticTranslation } from '@/lib/i18n/server'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
+import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 
 interface HomeHeroSSRProps {
   exchangeCount?: number
 }
 
-export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRProps) {
+export default async function HomeHeroSSR({
+  exchangeCount = PRODUCT_FACTS.fallbackExchangeCount,
+}: HomeHeroSSRProps) {
   // 2026-07-12 ISR 根因修复:getServerTranslation 的 cookies() 把 `/` 判为动态
   // (revalidate=300 失效,宣传第一落点零边缘缓存)。静态壳固定英文,客户端
   // Phase 2 水合后换语言 —— 与本页"SSR 恒默认视图"决策一致。
@@ -38,11 +41,15 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
     // SCORE_INTERVALS_MS). "30 min" overstated it (that's only the warm-cache
     // cron, which re-warms Redis but doesn't make data fresher) — a freshness
     // claim a savvy crypto user can disprove costs more trust than an honest one.
-    { value: '2h', label: t('heroStatUpdated') },
+    {
+      value: `${PRODUCT_FACTS.leaderboardRefreshHours}h`,
+      label: t('heroStatUpdated'),
+    },
   ]
 
   return (
     <section
+      className="home-hero home-hero-ssr"
       style={{
         // Tighter vertical padding so the box hugs its content (heading +
         // subtitle + CTA) instead of leaving a large empty band below.
@@ -74,6 +81,7 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
       />
 
       <div
+        className="home-hero-main"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -85,9 +93,10 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
         }}
       >
         {/* Left: Headline + subtitle */}
-        <div style={{ flex: '1 1 400px', minWidth: 0 }}>
+        <div className="home-hero-copy" style={{ flex: '1 1 400px', minWidth: 0 }}>
           {/* LCP element: this headline is the largest above-fold text in the SSR HTML */}
           <h1
+            className="home-hero-title"
             style={{
               fontSize: 'clamp(30px, 4.6vw, 48px)',
               fontWeight: tokens.typography.fontWeight.black,
@@ -100,6 +109,7 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
             {headline}
           </h1>
           <p
+            className="home-hero-subtitle"
             style={{
               fontSize: '1.0625rem',
               color: 'var(--color-text-secondary)',
@@ -113,6 +123,7 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
           {/* Score legibility + neutrality — the cross-exchange percentile moat.
               True and not number-specific (no contested exchange count). */}
           <p
+            className="home-hero-explainer"
             style={{
               fontSize: tokens.typography.fontSize.base,
               color: 'var(--color-text-tertiary)',
@@ -128,6 +139,7 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
               visitor judges credibility in seconds and should be able to inspect
               the methodology in one click. */}
           <Link
+            className="home-hero-methodology"
             href="/methodology"
             style={{
               display: 'inline-block',
@@ -144,6 +156,7 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
 
         {/* Right: Stats row */}
         <div
+          className="home-hero-stats"
           style={{
             display: 'flex',
             gap: 'clamp(16px, 3vw, 32px)',
@@ -185,6 +198,7 @@ export default async function HomeHeroSSR({ exchangeCount = 27 }: HomeHeroSSRPro
 
       {/* CTA row: Get Started + Pro badge */}
       <div
+        className="home-hero-actions"
         style={{
           display: 'flex',
           alignItems: 'center',
