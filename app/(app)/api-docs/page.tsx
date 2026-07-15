@@ -436,6 +436,39 @@ export default async function ApiDocsPage() {
             the resource.
           </p>
         </div>
+
+        <div style={{ ...card, marginTop: tokens.spacing[4] }}>
+          <h3
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: 600,
+              marginBottom: tokens.spacing[2],
+              color: 'var(--color-text-secondary)',
+            }}
+          >
+            CSV export
+          </h3>
+          <p
+            style={{
+              fontSize: tokens.typography.fontSize.sm,
+              color: 'var(--color-text-secondary)',
+              marginBottom: tokens.spacing[3],
+              lineHeight: 1.6,
+            }}
+          >
+            Append <code style={codeBadge}>format=csv</code> to a list endpoint (rankings, search,
+            platforms, history, or bulk) to download RFC-4180 CSV instead of JSON. Single-trader
+            detail remains JSON.
+          </p>
+          <div data-copy-block style={{ position: 'relative' }}>
+            <button type="button" data-copy-btn style={copyBtn}>
+              {t('copy')}
+            </button>
+            <pre style={preBlock}>
+              {`curl "https://www.arenafi.org/api/v3?endpoint=rankings&period=90D&limit=200&format=csv"`}
+            </pre>
+          </div>
+        </div>
       </section>
 
       {/* Endpoints */}
