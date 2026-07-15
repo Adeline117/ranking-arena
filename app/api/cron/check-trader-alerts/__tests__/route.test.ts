@@ -11,14 +11,16 @@
 
 // Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
 jest.mock('@/lib/env', () => ({
-  env: new Proxy({}, {
-    get(_t, key) {
-      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
-      return process.env[String(key)]
-    },
-  }),
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
 }))
-
 
 const mockFrom = jest.fn()
 
@@ -164,7 +166,6 @@ describe('check-trader-alerts cron', () => {
         score_change_threshold: 5,
         alert_rank_change: false,
         rank_change_threshold: 10,
-        alert_new_position: false,
         alert_price_above: false,
         price_above_value: null,
         alert_price_below: false,
@@ -177,12 +178,28 @@ describe('check-trader-alerts cron', () => {
 
     // Route now queries leaderboard_ranks for current data
     const leaderboardData = [
-      { source_trader_id: 'trader1', source: 'binance_futures', roi: 60, pnl: 10000, max_drawdown: -10, win_rate: 0.6, arena_score: 85, season_id: '90D' },
+      {
+        source_trader_id: 'trader1',
+        source: 'binance_futures',
+        roi: 60,
+        pnl: 10000,
+        max_drawdown: -10,
+        win_rate: 0.6,
+        arena_score: 85,
+        season_id: '90D',
+      },
     ]
 
     // Route now queries trader_daily_snapshots for yesterday's data
     const dailySnapshots = [
-      { trader_key: 'trader1', platform: 'binance_futures', roi: 40, pnl: 8000, max_drawdown: -8, date: new Date(Date.now() - 86400000).toISOString().split('T')[0] },
+      {
+        trader_key: 'trader1',
+        platform: 'binance_futures',
+        roi: 40,
+        pnl: 8000,
+        max_drawdown: -8,
+        date: new Date(Date.now() - 86400000).toISOString().split('T')[0],
+      },
     ]
 
     mockFrom.mockImplementation((table: string) => {

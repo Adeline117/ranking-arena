@@ -27,7 +27,6 @@ const TraderAlertSchema = z.object({
   score_change_threshold: z.number().min(0).max(100).optional().default(5),
   alert_rank_change: z.boolean().optional().default(false),
   rank_change_threshold: z.number().min(0).optional().default(5),
-  alert_new_position: z.boolean().optional().default(false),
   alert_price_above: z.boolean().optional().default(false),
   price_above_value: z.number().optional().nullable(),
   alert_price_below: z.boolean().optional().default(false),
@@ -67,7 +66,7 @@ export const GET = withAuth(
     let query = supabase
       .from('trader_alerts')
       .select(
-        'id, trader_id, source, alert_roi_change, roi_change_threshold, alert_drawdown, drawdown_threshold, alert_pnl_change, pnl_change_threshold, alert_score_change, score_change_threshold, alert_rank_change, rank_change_threshold, alert_new_position, alert_price_above, price_above_value, alert_price_below, price_below_value, price_symbol, one_time, enabled, created_at'
+        'id, trader_id, source, alert_roi_change, roi_change_threshold, alert_drawdown, drawdown_threshold, alert_pnl_change, pnl_change_threshold, alert_score_change, score_change_threshold, alert_rank_change, rank_change_threshold, alert_price_above, price_above_value, alert_price_below, price_below_value, price_symbol, one_time, enabled, created_at'
       )
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
@@ -162,7 +161,6 @@ export const POST = withAuth(
       score_change_threshold: config.score_change_threshold,
       alert_rank_change: config.alert_rank_change,
       rank_change_threshold: config.rank_change_threshold,
-      alert_new_position: config.alert_new_position,
       alert_price_above: config.alert_price_above,
       price_above_value: config.price_above_value ?? null,
       alert_price_below: config.alert_price_below,
