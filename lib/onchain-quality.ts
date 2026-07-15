@@ -99,6 +99,8 @@ export function readStoredOnchainQuality(
     }
     parsed.canonical =
       parsed.scoreEligible &&
+      (!Object.prototype.hasOwnProperty.call(extras, 'onchain_score_eligible') ||
+        extras.onchain_score_eligible === true) &&
       parsed.completeness === 'complete' &&
       parsed.priceQuality === 'historical_execution' &&
       parsed.scanComplete === true &&

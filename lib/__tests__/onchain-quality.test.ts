@@ -72,4 +72,19 @@ describe('on-chain quality gate', () => {
     })
     expect(isStoredOnchainMetricEligible(extras)).toBe(true)
   })
+
+  it('fails closed when top-level and nested eligibility conflict', () => {
+    expect(
+      isStoredOnchainMetricEligible({
+        onchain_score_eligible: false,
+        onchain_quality: {
+          completeness: 'complete',
+          price_quality: 'historical_execution',
+          score_eligible: true,
+          reasons: [],
+          history: { scan_complete: true, truncated: false },
+        },
+      })
+    ).toBe(false)
+  })
 })
