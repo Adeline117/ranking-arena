@@ -8,6 +8,7 @@
  */
 
 import { ImageResponse } from 'next/og'
+import { HOMEPAGE_TRUST_COPY } from '@/lib/config/product-facts'
 
 export const runtime = 'edge'
 
@@ -125,10 +126,11 @@ export async function GET() {
             gap: 8,
           }}
         >
-          <span style={{ color: '#D4AF37', fontWeight: 700 }}>32+</span>
-          <span>Exchanges</span>
+          <span style={{ color: '#D4AF37', fontWeight: 700 }}>
+            {HOMEPAGE_TRUST_COPY.ogCoverageLabel}
+          </span>
           <span style={{ color: 'rgba(255,255,255,0.2)', margin: '0 4px' }}>·</span>
-          <span>Real-time Rankings</span>
+          <span>{HOMEPAGE_TRUST_COPY.ogCadenceLabel}</span>
         </div>
 
         {/* Exchange names */}

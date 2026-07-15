@@ -3163,7 +3163,8 @@ const en = {
 
   // Hero section
   heroHeadline: "Track the World's Best Crypto Traders",
-  heroSubtitle: 'Real-time rankings across {exchanges} exchanges, scored by Arena Score.',
+  heroSubtitle:
+    'Rankings across {exchanges} tracked sources, recomputed every 2 hours from the latest available data.',
   heroScoreExplainer:
     'Arena Score ranks every trader across all tracked exchanges — see exactly where you stand.',
   heroNeutrality: 'No exchange pays for placement — we rank across every exchange we track.',

@@ -3045,7 +3045,7 @@ const ko = {
 
   // Hero section
   heroHeadline: '세계 최고의 암호화폐 트레이더를 추적하세요',
-  heroSubtitle: '{exchanges}개 이상의 거래소에서 실시간 순위, Arena Score로 평가',
+  heroSubtitle: '추적 중인 {exchanges}개 소스의 순위를 최신 가용 데이터로 2시간마다 재계산',
   heroScoreExplainer:
     'Arena Score는 추적 중인 모든 거래소의 모든 트레이더를 한 줄로 순위화합니다 — 당신의 위치를 정확히 확인하세요.',
   heroNeutrality:

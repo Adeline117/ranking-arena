@@ -3072,7 +3072,7 @@ const zh = {
 
   // Hero section
   heroHeadline: '追踪全球最优秀的加密交易员',
-  heroSubtitle: '跨 {exchanges} 家交易所实时排名，以 Arena Score 评分',
+  heroSubtitle: '覆盖 {exchanges} 个已追踪来源，每 2 小时使用最新可用数据重新计算排名',
   heroScoreExplainer:
     'Arena Score 对我们追踪的所有交易所的每一位交易员统一排名——一眼看清你的真实位置。',
   heroNeutrality: '没有任何交易所能付费买排名——我们对追踪的每一家交易所一视同仁。',
