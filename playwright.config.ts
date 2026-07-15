@@ -7,6 +7,12 @@ import { defineConfig, devices } from '@playwright/test'
 export default defineConfig({
   testDir: './e2e',
 
+  // Authenticated QA has its own single-account, serial config and global
+  // storageState setup. Running it in this four-device parallel matrix would
+  // multiply shared-account mutations and used to fail when QA secrets were
+  // absent while still making the generic suite look flaky.
+  testIgnore: ['**/authenticated-qa.spec.ts'],
+
   /* Global timeout per test — dev server needs more time for compilation */
   timeout: 120_000,
 

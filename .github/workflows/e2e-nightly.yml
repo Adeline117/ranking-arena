@@ -38,6 +38,8 @@ jobs:
       SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
       SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'ci-build-service-placeholder' }}
       CRON_SECRET: ${{ secrets.CRON_SECRET || 'ci-build-placeholder-cron-secret-0000000000' }}
+      QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
+      QA_TEST_PASSWORD_B: ${{ secrets.QA_TEST_PASSWORD_B }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v6
@@ -53,6 +55,24 @@ jobs:
 
       # device matrix: desktop=chromium, iPhone/iPad=webkit。缺 webkit 移动项目会静默跳过。
       - run: npx playwright install --with-deps chromium webkit
+
+      - name: Require dedicated QA credentials
+        run: |
+          if [ -z "${QA_TEST_PASSWORD:-}" ] || [ -z "${QA_TEST_PASSWORD_B:-}" ]; then
+            echo "::error::QA_TEST_PASSWORD and QA_TEST_PASSWORD_B must be configured"
+            exit 1
+          fi
+
+      - name: Authenticated browser QA (QA-A, no credential reset)
+        run: npm run qa:auth-e2e
+        env:
+          CI: true
+          PLAYWRIGHT_BASE_URL: https://www.arenafi.org
+
+      - name: Controlled write lifecycle (QA-A to QA-B, exact cleanup)
+        run: npm run qa:controlled-write
+        env:
+          BASE_URL: https://www.arenafi.org
 
       # playwright.config webServer 在 CI 下跑 `npm start`（用上面 build 的 .next），
       # 对 localhost:3000 跑全部 project（desktop + iPhone SE + iPhone 14 + iPad）。

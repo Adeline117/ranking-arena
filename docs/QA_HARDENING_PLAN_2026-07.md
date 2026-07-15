@@ -24,6 +24,12 @@
 > `ADMIN_ACCESS_TOKEN` 调实际管理员列表路由，确认 `ADMIN_EMAILS` allowlist 生效；随后才执行
 > QA-A 申请 → 管理员批准 → QA-B 加入/群帖 → QA-A 解散，并精确清理、读回零残留。唯一未完成的
 > 验收是由 allowlisted owner 提供一次新鲜 access token 后运行该 canary，不能以 service-role 假装通过。
+>
+> **2026-07-15 认证流水线固化**：旧 `authenticated-qa.spec.ts` 的 localhost 硬编码、手工 token
+> cookie 和弱断言已移除。Nightly 现在先以 QA-A 当前密码生成仅存于 `/tmp` 的 Playwright
+> `storageState`（明确禁止 CI 自动重置密码），串行执行专用认证项目，再运行 QA-A↔QA-B
+> `controlled-write-sweep.mjs`。普通四设备矩阵明确排除该 spec，避免共享账号并发写。生产实跑结果为
+> 认证浏览器 4/4 通过、受控写入与清理 21 步通过；缺少任一 QA 密码 secret 时 workflow 明确失败。
 
 ---
 
