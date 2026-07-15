@@ -261,5 +261,6 @@ describe('fetchSignatures', () => {
     })
     expect(result.txsFetched).toBe(1)
     expect(result.txsUnresolved).toBe(1)
+    expect(result.txsMissingTimestamp).toBe(0)
   })
 })

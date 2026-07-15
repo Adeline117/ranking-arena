@@ -3,8 +3,46 @@ import {
   enrichmentExtras,
   enrichmentSeries,
   scoreEligibleWinRate,
+  solanaHistoryEvidence,
   type OnchainEnrichment,
 } from '../enrich'
+
+describe('solanaHistoryEvidence', () => {
+  const base = {
+    signatureCoverage: {
+      scanComplete: true,
+      truncated: false,
+      stopReason: 'history_exhausted' as const,
+      pagesFetched: 1,
+      recordsSeen: 2,
+      recordsReturned: 2,
+      recordsMissingTimestamp: 0,
+    },
+    txsUnresolved: 0,
+    txsMissingTimestamp: 0,
+    txsFetched: 2,
+    swaps: 1,
+  }
+
+  it('marks history complete only when cursor and transaction hydration are complete', () => {
+    expect(solanaHistoryEvidence(base)).toEqual({
+      scanComplete: true,
+      truncated: false,
+      recordsFetched: 2,
+      txsFetched: 2,
+      swapsDecoded: 1,
+    })
+  })
+
+  it.each([
+    { txsUnresolved: 1 },
+    { txsMissingTimestamp: 1 },
+    { signatureCoverage: { ...base.signatureCoverage, scanComplete: false } },
+    { signatureCoverage: { ...base.signatureCoverage, truncated: true } },
+  ])('fails closed for incomplete evidence %#', (patch) => {
+    expect(solanaHistoryEvidence({ ...base, ...patch }).scanComplete).toBe(false)
+  })
+})
 
 describe('chainForSource', () => {
   it('maps slugs to chains', () => {

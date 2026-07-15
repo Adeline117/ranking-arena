@@ -14,7 +14,7 @@
  */
 
 import { computeBscWalletOnchain } from './bsc-fetch'
-import { computeSolanaWalletOnchain } from './solana-fetch'
+import { computeSolanaWalletOnchain, type SolWalletResult } from './solana-fetch'
 import { fetchMoralisInternalBnb } from './moralis-bsc-internal'
 import { fetchTokenInfo, unrealizedFromHoldings, type TokenInfo } from './token-prices'
 import type { PerTokenPnl } from './pnl-accounting'
@@ -63,6 +63,29 @@ export interface OnchainEnrichment {
   /** Per-day realized PnL deltas (active days only) — raw material for
    *  enrichmentSeries(). */
   dailyRealized: Array<{ ts: string; value: number }>
+}
+
+/** Fold runtime Solana cursor + hydration evidence into quality schema v1. */
+export function solanaHistoryEvidence(
+  r: Pick<
+    SolWalletResult,
+    'signatureCoverage' | 'txsUnresolved' | 'txsMissingTimestamp' | 'txsFetched' | 'swaps'
+  >
+): Pick<
+  OnchainQuality['history'],
+  'scanComplete' | 'truncated' | 'recordsFetched' | 'txsFetched' | 'swapsDecoded'
+> {
+  return {
+    scanComplete:
+      r.signatureCoverage.scanComplete &&
+      !r.signatureCoverage.truncated &&
+      r.txsUnresolved === 0 &&
+      r.txsMissingTimestamp === 0,
+    truncated: r.signatureCoverage.truncated,
+    recordsFetched: r.signatureCoverage.recordsReturned,
+    txsFetched: r.txsFetched,
+    swapsDecoded: r.swaps,
+  }
 }
 
 /** Price held tokens + surface symbols for the OnchainInsights token blocks. */
@@ -134,11 +157,16 @@ export async function enrichWeb3Wallet(
   if (chain === 'solana') {
     const r = await computeSolanaWalletOnchain(wallet, { lookbackDays, maxSigs: opts.maxSigs })
     const { u, info } = await priceAndMeta(r.pnl.perToken)
-    return normalize('solana', wallet, lookbackDays, r.pnl, u, info, false, {
-      recordsFetched: r.signatures,
-      txsFetched: r.txsFetched,
-      swapsDecoded: r.swaps,
-    })
+    return normalize(
+      'solana',
+      wallet,
+      lookbackDays,
+      r.pnl,
+      u,
+      info,
+      false,
+      solanaHistoryEvidence(r)
+    )
   }
   // Native-BNB SELL receipts (item C): caller-supplied (Dune batch) wins;
   // otherwise auto-fetch per wallet from Moralis (owner key 2026-07-09,
@@ -174,14 +202,14 @@ function normalize(
   u: { unrealizedUsd: number; pricedTokens: number; unpricedTokens: number },
   info: Map<string, TokenInfo>,
   realizedPartial: boolean,
-  historyCounts: Pick<OnchainQuality['history'], 'recordsFetched' | 'txsFetched' | 'swapsDecoded'>
+  historyCounts: Pick<OnchainQuality['history'], 'recordsFetched' | 'txsFetched' | 'swapsDecoded'> &
+    Partial<Pick<OnchainQuality['history'], 'scanComplete' | 'truncated'>>
 ): OnchainEnrichment {
-  const reasons: OnchainQualityReason[] = [
-    'opening_inventory_unknown',
-    'history_scan_not_proven_complete',
-    'historical_native_quote_not_execution_priced',
-    'generic_balance_delta_decoder',
-  ]
+  const reasons: OnchainQualityReason[] = ['opening_inventory_unknown']
+  if (historyCounts.scanComplete !== true || historyCounts.truncated !== false) {
+    reasons.push('history_scan_not_proven_complete')
+  }
+  reasons.push('historical_native_quote_not_execution_priced', 'generic_balance_delta_decoder')
   if (realizedPartial) reasons.push('internal_transfer_coverage_unknown')
   return {
     chain,
@@ -212,9 +240,9 @@ function normalize(
       reasons,
       history: {
         requestedDays: lookbackDays,
-        scanComplete: null,
-        truncated: null,
         ...historyCounts,
+        scanComplete: historyCounts.scanComplete ?? null,
+        truncated: historyCounts.truncated ?? null,
       },
       pricing: { pricedTokens: u.pricedTokens, unpricedTokens: u.unpricedTokens },
     },

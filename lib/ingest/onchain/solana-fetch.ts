@@ -291,6 +291,7 @@ export interface SolWalletResult {
   signatureCoverage: SolanaSignatureCoverage
   /** Requested signatures without a usable transaction/meta/wallet record. */
   txsUnresolved: number
+  txsMissingTimestamp: number
   pnl: WalletPnl
 }
 
@@ -332,6 +333,7 @@ export async function computeSolanaWalletOnchain(
     solUsd,
     signatureCoverage: signatureScan.coverage,
     txsUnresolved: sigs.length - metas.length,
+    txsMissingTimestamp: metas.filter((meta) => meta.blockTime === null).length,
     pnl: computeWalletPnl(swaps),
   }
 }
