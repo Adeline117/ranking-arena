@@ -28,13 +28,6 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     return
   }
 
-  if (session.payment_status !== 'paid') {
-    logger.warn(`Payment not completed for session ${session.id}`, {
-      status: session.payment_status,
-    })
-    return
-  }
-
   // API tier subscription checkout
   if (session.metadata?.type === 'api_tier') {
     const apiPlan = session.metadata.api_plan
@@ -43,14 +36,35 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       return
     }
     const subscriptionId = session.subscription as string
-    if (subscriptionId) {
-      await handleApiTierActivation(userId, apiPlan, subscriptionId)
+    if (!subscriptionId || session.payment_status !== 'paid') {
+      logger.warn('API checkout completed without a paid subscription', {
+        sessionId: session.id,
+        subscriptionId,
+        paymentStatus: session.payment_status,
+      })
+      return
     }
+    const subscription = await stripe.subscriptions.retrieve(subscriptionId)
+    if (subscription.status !== 'active') {
+      logger.warn('API checkout subscription is not active', {
+        subscriptionId,
+        status: subscription.status,
+      })
+      return
+    }
+    await handleApiTierActivation(userId, apiPlan, subscriptionId)
     return
   }
 
   // Lifetime (one-time payment) vs subscription checkout
   if (session.mode === 'payment' && plan === 'lifetime') {
+    if (session.payment_status !== 'paid') {
+      logger.warn('Lifetime checkout completed without payment', {
+        sessionId: session.id,
+        paymentStatus: session.payment_status,
+      })
+      return
+    }
     await handleLifetimePayment(userId, customerId)
     return
   }
@@ -133,24 +147,10 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     )
   } catch (err: unknown) {
     logger.error('Failed to process checkout completion', { error: err })
-    await withRetry(async () => {
-      const { error: profileError } = await getSupabase().from('user_profiles').upsert(
-        {
-          id: userId,
-          subscription_tier: 'pro',
-          stripe_customer_id: customerId,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'id',
-        }
-      )
-
-      if (profileError) {
-        throw new Error(`Failed to update user_profiles: ${profileError.message}`)
-      }
-      logger.info(`Fallback: Updated user_profiles for ${userId}`, { tier: 'pro' })
-    })
+    // Never convert a technical failure into Pro access. Re-throw so the
+    // route marks this event failed and Stripe can retry the authoritative
+    // subscription lookup and atomic DB update.
+    throw err
   }
 }
 
