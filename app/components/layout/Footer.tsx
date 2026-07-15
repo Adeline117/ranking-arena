@@ -241,7 +241,6 @@ export default function Footer() {
           lineHeight: 1.5,
           marginTop: 8,
           marginBottom: 0,
-          opacity: 0.7,
         }}
       >
         {t('footerDisclaimerText')}
