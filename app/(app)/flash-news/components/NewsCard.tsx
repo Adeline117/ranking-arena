@@ -55,6 +55,9 @@ export default function NewsCard({
   const { t } = useLanguage()
   const impConfig = importanceConfig[item.importance]
   const catColor = categoryColors[item.category] || tokens.colors.text.secondary
+  const displayCategory = categoryDisplayMap[item.category] || item.category
+  const catTextColor =
+    displayCategory === 'altcoin' ? 'var(--color-on-enterprise)' : 'var(--color-on-score)'
   const content = getNewsContent(item)
 
   return (
@@ -131,16 +134,14 @@ export default function NewsCard({
               <Box
                 style={{
                   background: catColor,
-                  color: 'var(--color-on-score)',
+                  color: catTextColor,
                   padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                   borderRadius: tokens.radius.sm,
                   fontSize: '12px',
                   fontWeight: '600',
                 }}
               >
-                {t(
-                  `newsFlash_cat_${categoryDisplayMap[item.category] || item.category}` as TranslationKey
-                )}
+                {t(`newsFlash_cat_${displayCategory}` as TranslationKey)}
               </Box>
             </Box>
 

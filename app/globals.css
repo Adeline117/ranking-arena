@@ -394,6 +394,7 @@ html.theme-transition #main-content {
   --color-elite-gradient-end: #ffa500;
   --color-enterprise-gradient-start: #00ced1;
   --color-enterprise-gradient-end: #20b2aa;
+  --color-on-enterprise: #111827;
   --color-blur-overlay: rgba(11, 10, 16, 0.85);
   --color-lock-bg: rgba(20, 18, 28, 0.95);
 }
@@ -646,6 +647,7 @@ html.theme-transition #main-content {
   --color-elite-gradient-end: #cd853f;
   --color-enterprise-gradient-start: #00b4b4;
   --color-enterprise-gradient-end: #008b8b;
+  --color-on-enterprise: #111827;
   --color-blur-overlay: rgba(255, 255, 255, 0.85);
   --color-lock-bg: rgba(248, 248, 250, 0.95);
 }
