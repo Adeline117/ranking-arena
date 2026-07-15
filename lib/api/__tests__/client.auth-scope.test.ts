@@ -95,6 +95,50 @@ describe('authedFetch viewer-bound retry', () => {
     })
   })
 
+  it('apiRequest discards an anonymous cookie response after login begins', async () => {
+    synchronizeViewerScope(true, null)
+    const initial = deferred<Response>()
+    ;(global.fetch as jest.Mock).mockReturnValueOnce(initial.promise)
+
+    const request = apiRequest('/api/personalized-public-feed')
+    beginViewerTransition('user-b')
+    initial.resolve(response(200, { viewer: 'anonymous' }))
+
+    await expect(request).resolves.toMatchObject({
+      success: false,
+      error: { code: 'STALE_AUTH_SCOPE' },
+    })
+  })
+
+  it('apiRequest does not send while initial auth restoration is pending', async () => {
+    const result = await apiRequest('/api/personalized-public-feed')
+
+    expect(result).toMatchObject({ success: false, error: { code: 'AUTH_PENDING' } })
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('apiRequest rechecks viewer scope after retry backoff before sending', async () => {
+    jest.useFakeTimers()
+    try {
+      synchronizeViewerScope(true, 'user-a')
+      ;(global.fetch as jest.Mock).mockResolvedValueOnce(response(503, { error: 'retry' }))
+
+      const request = apiRequest('/api/private', { retries: 1, retryBaseDelayMs: 100 })
+      while ((global.fetch as jest.Mock).mock.calls.length < 1) await Promise.resolve()
+      await Promise.resolve()
+      beginViewerTransition('user-b')
+      await jest.advanceTimersByTimeAsync(100)
+
+      await expect(request).resolves.toMatchObject({
+        success: false,
+        error: { code: 'STALE_AUTH_SCOPE' },
+      })
+      expect(global.fetch).toHaveBeenCalledTimes(1)
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   it('apiRequest checks scope after refresh and does not retry A as B', async () => {
     synchronizeViewerScope(true, 'user-a')
     ;(global.fetch as jest.Mock).mockResolvedValueOnce(response(401, { error: 'expired' }))
