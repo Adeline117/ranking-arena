@@ -3094,6 +3094,9 @@ const ja = {
   onChainVolume: 'オンチェーン出来高',
   swapCount: 'スワップ回数',
   estimatedPnl: '推定PnL',
+  onchainEstimatedData: 'オンチェーン再構築・推定値',
+  onchainEstimatedDataHint:
+    '履歴範囲、約定時点ではない価格、期首保有残高が不明なため、これらの数値は参考値であり Arena Score には使用されません。',
   walletAddress: 'ウォレットアドレス',
   tokenDistribution: 'トークン分布',
   tokenDistributionEmpty: 'トークン保有データなし',

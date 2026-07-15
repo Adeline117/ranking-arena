@@ -1,4 +1,14 @@
-import { shapeTokenDistribution, shapeTopTokens, shapePnlCalendar } from '../onchain-insights'
+import {
+  shapeTokenDistribution,
+  shapeTopTokens,
+  shapePnlCalendar,
+  shapeOnchainPnl,
+  shapeOnchainQuality,
+} from '../onchain-insights'
+import en from '@/lib/i18n/en'
+import zh from '@/lib/i18n/zh'
+import ja from '@/lib/i18n/ja'
+import ko from '@/lib/i18n/ko'
 
 describe('onchain-insights shapers', () => {
   it('orders token distribution best→worst and tags positivity', () => {
@@ -58,5 +68,32 @@ describe('onchain-insights shapers', () => {
   it('NULL-collapses calendar when too short to render', () => {
     expect(shapePnlCalendar({ pnl_calendar: [{ date: '2026-01-01', pnl: 5 }] })).toBeNull()
     expect(shapePnlCalendar({})).toBeNull()
+  })
+
+  it('keeps reconstructed PnL in a dedicated estimate shape', () => {
+    expect(
+      shapeOnchainPnl({
+        onchain_total_pnl: '1200.5',
+        onchain_realized_pnl: 900,
+        onchain_unrealized_pnl: null,
+      })
+    ).toEqual({ total: 1200.5, realized: 900, unrealized: null })
+    expect(shapeOnchainPnl({ onchain_total_pnl: 'not-a-number' })).toBeNull()
+  })
+
+  it('treats legacy rows without quality as estimated and score-ineligible', () => {
+    expect(
+      shapeOnchainQuality({
+        onchain_derivation: 'onchain-computed',
+        onchain_total_pnl: 1200,
+      })
+    ).toMatchObject({ legacy: true, completeness: 'unknown', scoreEligible: false })
+  })
+
+  it('ships the estimate disclosure in every supported locale', () => {
+    for (const locale of [en, zh, ja, ko] as Array<Record<string, unknown>>) {
+      expect(locale.onchainEstimatedData).toEqual(expect.any(String))
+      expect(locale.onchainEstimatedDataHint).toEqual(expect.any(String))
+    }
   })
 })

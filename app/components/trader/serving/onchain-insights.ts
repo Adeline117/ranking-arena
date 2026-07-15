@@ -5,6 +5,8 @@
  * returns null when the source extras don't carry that block.
  */
 
+import { readStoredOnchainQuality, type StoredOnchainQuality } from '@/lib/onchain-quality'
+
 export interface TokenDistBucket {
   /** stable key for i18n labelling in the component */
   key: 'gt_500' | 'p0_500' | 'n50_0' | 'lt_n50'
@@ -18,6 +20,32 @@ export interface TopToken {
   logo: string | null
   profitPct: number | null
   realizedPnl: number | null
+}
+
+export interface OnchainPnlSummary {
+  total: number | null
+  realized: number | null
+  unrealized: number | null
+}
+
+function finiteOrNull(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null
+  const n = typeof value === 'number' ? value : Number(value)
+  return Number.isFinite(n) ? n : null
+}
+
+/** Dedicated, disclosed display path for estimates blocked from MetricGrid. */
+export function shapeOnchainPnl(extras: Record<string, unknown>): OnchainPnlSummary | null {
+  const out = {
+    total: finiteOrNull(extras.onchain_total_pnl),
+    realized: finiteOrNull(extras.onchain_realized_pnl),
+    unrealized: finiteOrNull(extras.onchain_unrealized_pnl),
+  }
+  return Object.values(out).some((value) => value !== null) ? out : null
+}
+
+export function shapeOnchainQuality(extras: Record<string, unknown>): StoredOnchainQuality | null {
+  return readStoredOnchainQuality(extras)
 }
 
 /** {gt_500,p0_500,n50_0,lt_n50} counts → ordered buckets (best→worst). Null when
