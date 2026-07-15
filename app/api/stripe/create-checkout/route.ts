@@ -5,6 +5,7 @@ import {
   getOrCreateStripeCustomer,
   createCheckoutSession,
   getStripe,
+  assertProPriceReady,
 } from '@/lib/stripe'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -79,6 +80,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid plan type' }, { status: 400 })
     }
 
+    const typedPlan = plan as 'monthly' | 'yearly' | 'lifetime'
+    const priceId = STRIPE_PRICE_IDS[typedPlan]
+    try {
+      await assertProPriceReady(typedPlan, priceId)
+    } catch (priceError) {
+      logger.error('Stripe Pro price readiness check failed', {
+        plan: typedPlan,
+        error: priceError instanceof Error ? priceError.message : String(priceError),
+      })
+      return NextResponse.json(
+        { error: 'Payment pricing is not ready. Please contact support.' },
+        { status: 503 }
+      )
+    }
+
     // 获取或创建 Stripe 客户
     const userEmail = user.email || `${user.id}@user.ranking-arena.com`
     const customerId = await getOrCreateStripeCustomer(user.id, userEmail, {
@@ -99,9 +115,6 @@ export async function POST(request: NextRequest) {
         error: customerLinkError.message,
       })
     }
-
-    // 获取价格 ID
-    const priceId = STRIPE_PRICE_IDS[plan as 'monthly' | 'yearly' | 'lifetime']
 
     const meta = {
       supabase_user_id: user.id,
@@ -147,7 +160,7 @@ export async function POST(request: NextRequest) {
       // The RPC atomically acquires an advisory lock and checks the count,
       // so two concurrent requests cannot both see count=199 and both proceed.
 
-      const { data: spotsAvailable, error: spotsError } = await (getSupabaseAdmin() as any).rpc(
+      const { data: spotsAvailable, error: spotsError } = await getSupabaseAdmin().rpc(
         'check_lifetime_spots_available',
         { max_spots: 200 }
       )

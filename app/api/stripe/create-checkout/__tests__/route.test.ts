@@ -98,6 +98,7 @@ jest.mock('@/lib/utils/logger', () => {
 })
 
 const mockGetOrCreateStripeCustomer = jest.fn().mockResolvedValue('cus_test123')
+const mockAssertProPriceReady = jest.fn().mockResolvedValue(undefined)
 const mockCreateCheckoutSession = jest
   .fn()
   .mockResolvedValue({ url: 'https://checkout.stripe.com/session', id: 'cs_test123' })
@@ -118,6 +119,7 @@ jest.mock('@/lib/stripe', () => ({
     lifetime: 'price_lifetime123',
   },
   getOrCreateStripeCustomer: (...args: unknown[]) => mockGetOrCreateStripeCustomer(...args),
+  assertProPriceReady: (...args: unknown[]) => mockAssertProPriceReady(...args),
   createCheckoutSession: (...args: unknown[]) => mockCreateCheckoutSession(...args),
   getStripe: () => mockGetStripe(),
 }))
@@ -179,6 +181,7 @@ describe('POST /api/stripe/create-checkout', () => {
     mockGetUser.mockResolvedValue({ data: { user: validUser }, error: null })
     mockExtractUser.mockResolvedValue({ user: validUser, error: null })
     mockGetOrCreateStripeCustomer.mockResolvedValue('cus_test123')
+    mockAssertProPriceReady.mockResolvedValue(undefined)
     mockCreateCheckoutSession.mockResolvedValue({
       url: 'https://checkout.stripe.com/session',
       id: 'cs_test123',
@@ -274,6 +277,21 @@ describe('POST /api/stripe/create-checkout', () => {
 
     expect(res.status).toBe(400)
     expect(body.error).toMatch(/Invalid plan/)
+  })
+
+  it('fails closed before creating a customer when Stripe pricing drifts from the UI', async () => {
+    mockAssertProPriceReady.mockRejectedValue(new Error('amount mismatch'))
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly' }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
 
   // --- Success Cases ---

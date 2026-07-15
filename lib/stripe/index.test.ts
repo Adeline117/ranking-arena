@@ -17,6 +17,8 @@ import {
   getSubscription,
   getCustomerSubscriptions,
   constructWebhookEvent,
+  assertProPriceReady,
+  assertApiPriceReady,
 } from './index'
 
 // Mock server-only (no-op in test environment)
@@ -34,6 +36,9 @@ jest.mock('stripe', () => {
       retrieve: jest.fn(),
       update: jest.fn(),
       cancel: jest.fn(),
+    },
+    prices: {
+      retrieve: jest.fn(),
     },
     checkout: {
       sessions: {
@@ -143,6 +148,10 @@ describe('stripe proxy', () => {
     expect(stripe.subscriptions).toBeDefined()
   })
 
+  test('should expose prices', () => {
+    expect(stripe.prices).toBeDefined()
+  })
+
   test('should expose checkout', () => {
     expect(stripe.checkout).toBeDefined()
   })
@@ -153,6 +162,64 @@ describe('stripe proxy', () => {
 
   test('should expose webhooks', () => {
     expect(stripe.webhooks).toBeDefined()
+  })
+})
+
+describe('Stripe price readiness', () => {
+  test('accepts a test monthly price that matches the visible B2C contract', async () => {
+    stripe.prices.retrieve = jest.fn().mockResolvedValue({
+      active: true,
+      livemode: false,
+      currency: 'usd',
+      unit_amount: 499,
+      recurring: { interval: 'month' },
+      product: { active: true },
+    })
+
+    await expect(assertProPriceReady('monthly', 'price_monthly')).resolves.toBeUndefined()
+  })
+
+  test('rejects a price amount that differs from the visible product price', async () => {
+    stripe.prices.retrieve = jest.fn().mockResolvedValue({
+      active: true,
+      livemode: false,
+      currency: 'usd',
+      unit_amount: 999,
+      recurring: { interval: 'month' },
+      product: { active: true },
+    })
+
+    await expect(assertProPriceReady('monthly', 'price_monthly')).rejects.toThrow('does not match')
+  })
+
+  test('requires live keys and live prices when the production paywall is enabled', async () => {
+    process.env.VERCEL_ENV = 'production'
+    process.env.NEXT_PUBLIC_PRO_FREE_PROMO = 'false'
+    stripe.prices.retrieve = jest.fn().mockResolvedValue({
+      active: true,
+      livemode: false,
+      currency: 'usd',
+      unit_amount: 499,
+      recurring: { interval: 'month' },
+      product: { active: true },
+    })
+
+    await expect(assertProPriceReady('monthly', 'price_monthly')).rejects.toThrow(
+      'live mode is required'
+    )
+  })
+
+  test('validates the separate API product contract', async () => {
+    stripe.prices.retrieve = jest.fn().mockResolvedValue({
+      active: true,
+      livemode: false,
+      currency: 'usd',
+      unit_amount: 4900,
+      recurring: { interval: 'month' },
+      product: { active: true },
+    })
+
+    await expect(assertApiPriceReady('starter', 'price_api_starter')).resolves.toBeUndefined()
   })
 })
 
