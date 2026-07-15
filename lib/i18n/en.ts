@@ -1172,6 +1172,9 @@ const en = {
   traderAlertsRemoveFailed: 'Could not remove the trader alert. Please try again.',
   traderAlertsLoadFailed: 'Could not load trader alerts. Please try again.',
   traderAlertsProRequired: 'Trader alert management is available with Pro.',
+  alertScoreChangeLabel: 'Arena Score change',
+  alertScoreChangeDesc: "Notify me when this trader's Arena Score moves by this many points.",
+  alertScoreUnit: 'pts',
   // Privacy settings detail
   followListVisibilityNote: 'When disabled, other users cannot view these lists',
   showFollowingListLabel: 'Show my following list',

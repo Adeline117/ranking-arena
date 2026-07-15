@@ -1106,6 +1106,9 @@ const ko = {
   traderAlertsRemoveFailed: '트레이더 알림을 삭제하지 못했습니다. 다시 시도하세요.',
   traderAlertsLoadFailed: '트레이더 알림을 불러오지 못했습니다. 다시 시도하세요.',
   traderAlertsProRequired: '트레이더 알림 관리에는 Pro가 필요합니다.',
+  alertScoreChangeLabel: 'Arena Score 변동',
+  alertScoreChangeDesc: '이 트레이더의 Arena Score가 지정 포인트 이상 변동하면 알립니다.',
+  alertScoreUnit: '점',
   // Privacy settings detail
   followListVisibilityNote: '비활성화하면 다른 사용자가 이 목록을 볼 수 없습니다',
   showFollowingListLabel: '내 팔로잉 목록 표시',
