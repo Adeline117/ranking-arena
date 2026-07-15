@@ -14,6 +14,7 @@ import { dismissOverlays, getVisibleSearchInput } from './helpers'
 
 test.describe('Critical Path Smoke Tests', () => {
   test('1. Homepage loads and shows ranked traders', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
     await page.goto('/', { timeout: 60_000 })
     await page.waitForLoadState('domcontentloaded')
     await dismissOverlays(page)
@@ -23,6 +24,20 @@ test.describe('Critical Path Smoke Tests', () => {
     const traderLinks = page.locator('a[href*="/trader/"]')
     await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 })
     expect(await traderLinks.count()).toBeGreaterThan(0)
+
+    // Product invariant: desktop homepage remains a three-column discovery
+    // surface. A previous "B2C optimization" silently moved both sidebars
+    // below the ranking; functional tests stayed green because traders still
+    // rendered. Protect the actual information architecture as well.
+    const layout = page.locator('#homepage-interactive .three-col-layout').first()
+    await expect(layout).toBeVisible({ timeout: 30_000 })
+    await expect(layout.locator(':scope > .three-col-left')).toBeVisible()
+    await expect(layout.locator(':scope > .three-col-center')).toBeVisible()
+    await expect(layout.locator(':scope > .three-col-right')).toBeVisible()
+    const desktopColumns = await layout.evaluate((element) =>
+      getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/)
+    )
+    expect(desktopColumns).toHaveLength(3)
   })
 
   test('2. Click a trader → detail page loads with stats', async ({ page }) => {
