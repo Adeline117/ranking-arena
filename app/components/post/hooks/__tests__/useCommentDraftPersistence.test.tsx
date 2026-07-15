@@ -1,6 +1,8 @@
 import { act, renderHook } from '@testing-library/react'
 import { useCommentDraftPersistence } from '../useCommentDraftPersistence'
 
+const draftKey = (postId: string, viewerKey = 'anon') => `comment-draft-v2:${viewerKey}:${postId}`
+
 describe('useCommentDraftPersistence', () => {
   beforeEach(() => {
     jest.useFakeTimers()
@@ -19,11 +21,11 @@ describe('useCommentDraftPersistence', () => {
     )
 
     act(() => result.current.setDraft('draft for A'))
-    expect(localStorage.getItem('comment-draft-post-a')).toBeNull()
+    expect(localStorage.getItem(draftKey('post-a'))).toBeNull()
 
     rerender({ postId: 'post-b' })
 
-    expect(localStorage.getItem('comment-draft-post-a')).toBe('draft for A')
+    expect(localStorage.getItem(draftKey('post-a'))).toBe('draft for A')
     expect(result.current.draft).toBe('')
   })
 
@@ -39,8 +41,8 @@ describe('useCommentDraftPersistence', () => {
 
     act(() => jest.advanceTimersByTime(500))
 
-    expect(localStorage.getItem('comment-draft-post-a')).toBe('draft for A')
-    expect(localStorage.getItem('comment-draft-post-b')).toBe('draft for B')
+    expect(localStorage.getItem(draftKey('post-a'))).toBe('draft for A')
+    expect(localStorage.getItem(draftKey('post-b'))).toBe('draft for B')
   })
 
   it('flushes a pending draft on unmount', () => {
@@ -49,7 +51,7 @@ describe('useCommentDraftPersistence', () => {
     act(() => result.current.setDraft('survive close'))
     unmount()
 
-    expect(localStorage.getItem('comment-draft-post-a')).toBe('survive close')
+    expect(localStorage.getItem(draftKey('post-a'))).toBe('survive close')
   })
 
   it('cancels a pending write when a submitted draft is cleared', () => {
@@ -60,7 +62,7 @@ describe('useCommentDraftPersistence', () => {
     act(() => jest.advanceTimersByTime(500))
 
     expect(result.current.draft).toBe('')
-    expect(localStorage.getItem('comment-draft-post-a')).toBeNull()
+    expect(localStorage.getItem(draftKey('post-a'))).toBeNull()
   })
 
   it('can restore a failed submission to its original post without changing the visible post', () => {
@@ -73,6 +75,26 @@ describe('useCommentDraftPersistence', () => {
     act(() => result.current.saveDraft('post-a', 'retry A'))
 
     expect(result.current.draft).toBe('')
-    expect(localStorage.getItem('comment-draft-post-a')).toBe('retry A')
+    expect(localStorage.getItem(draftKey('post-a'))).toBe('retry A')
+  })
+
+  it('isolates the same post draft across anonymous, A, and B viewers', () => {
+    const { result, rerender } = renderHook(
+      ({ viewerKey }: { viewerKey: string }) => useCommentDraftPersistence('post-a', viewerKey),
+      { initialProps: { viewerKey: 'anon' } }
+    )
+
+    act(() => result.current.setDraft('anonymous text'))
+    rerender({ viewerKey: 'user:a' })
+    expect(result.current.draft).toBe('')
+
+    act(() => result.current.setDraft('A text'))
+    rerender({ viewerKey: 'user:b' })
+    expect(result.current.draft).toBe('')
+
+    rerender({ viewerKey: 'user:a' })
+    expect(result.current.draft).toBe('A text')
+    expect(localStorage.getItem(draftKey('post-a', 'anon'))).toBe('anonymous text')
+    expect(localStorage.getItem(draftKey('post-a', 'user:a'))).toBe('A text')
   })
 })

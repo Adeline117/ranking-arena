@@ -1,4 +1,4 @@
-import { authedFetch } from './client'
+import { authedFetch, type AuthedFetchScope } from './client'
 
 type CommentSort = 'best' | 'time'
 
@@ -38,7 +38,7 @@ export type CreatedCommentAcknowledgement = {
 /** Strict resource/content ACK shared by every direct comment-create client. */
 export function isCreatedCommentAcknowledgement(
   value: unknown,
-  expected: { postId: string; content: string; parentId?: string | null }
+  expected: { postId: string; content: string; parentId?: string | null; userId?: string | null }
 ): value is CreatedCommentAcknowledgement {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const comment = value as Partial<CreatedCommentAcknowledgement>
@@ -49,7 +49,8 @@ export function isCreatedCommentAcknowledgement(
     comment.post_id === expected.postId &&
     typeof comment.user_id === 'string' &&
     comment.user_id.length > 0 &&
-    comment.content === expected.content &&
+    (!expected.userId || comment.user_id === expected.userId) &&
+    typeof comment.content === 'string' &&
     (comment.parent_id ?? null) === expectedParentId &&
     Number.isSafeInteger(comment.like_count) &&
     (comment.like_count ?? -1) >= 0 &&
@@ -80,7 +81,12 @@ export function isDefinitiveMutationRejection(result: { ok: boolean; status: num
 export async function fetchPostCommentsPage<T>(
   postId: string,
   accessToken: string | null,
-  options: { limit?: number; offset?: number; sort?: CommentSort } = {}
+  options: {
+    limit?: number
+    offset?: number
+    sort?: CommentSort
+    viewerScope?: AuthedFetchScope
+  } = {}
 ): Promise<PostCommentsPage<T>> {
   const params = new URLSearchParams()
   if (options.limit !== undefined) params.set('limit', String(options.limit))
@@ -88,11 +94,17 @@ export async function fetchPostCommentsPage<T>(
   if (options.sort !== undefined) params.set('sort', options.sort)
 
   const query = params.toString()
-  const { ok, status, data } = await authedFetch<CommentsEnvelope<T>>(
-    `/api/posts/${encodeURIComponent(postId)}/comments${query ? `?${query}` : ''}`,
-    'GET',
-    accessToken
-  )
+  const url = `/api/posts/${encodeURIComponent(postId)}/comments${query ? `?${query}` : ''}`
+  const { ok, status, data } = options.viewerScope
+    ? await authedFetch<CommentsEnvelope<T>>(
+        url,
+        'GET',
+        accessToken,
+        undefined,
+        15_000,
+        options.viewerScope
+      )
+    : await authedFetch<CommentsEnvelope<T>>(url, 'GET', accessToken)
   const comments = data?.data?.comments
   const commentCount = data?.data?.post?.comment_count
 

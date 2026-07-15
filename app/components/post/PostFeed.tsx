@@ -212,6 +212,10 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // Comments hook
   const commentsHook = usePostComments({
     accessToken,
+    currentUserId,
+    authChecked: auth.authChecked,
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
     showToast,
     showDangerConfirm,
     onCommentCountChange: (postId, delta, absoluteCount) => {

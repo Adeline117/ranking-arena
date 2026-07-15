@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, type Dispatch, type SetStateAction } from 'react'
+import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import { authedFetch, getHttpErrorMessage } from '@/lib/api/client'
 import {
   fetchPostCommentsPage,
@@ -88,7 +88,7 @@ function isTimestamp(value: unknown): value is string {
 
 function isEditedCommentResponse(
   value: unknown,
-  expected: { commentId: string; postId: string; userId?: string; content: string }
+  expected: { commentId: string; postId: string; userId?: string | null; content: string }
 ): value is EditedCommentResponse {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const comment = value as Partial<EditedCommentResponse>
@@ -101,7 +101,7 @@ function isEditedCommentResponse(
     typeof comment.user_id === 'string' &&
     comment.user_id.length > 0 &&
     (!expected.userId || comment.user_id === expected.userId) &&
-    comment.content === expected.content &&
+    typeof comment.content === 'string' &&
     (comment.author_handle === null || typeof comment.author_handle === 'string') &&
     (comment.author_id === null || typeof comment.author_id === 'string') &&
     (comment.parent_id === null || typeof comment.parent_id === 'string') &&
@@ -180,10 +180,20 @@ function isDeleteCommentResponse(value: unknown): value is DeleteCommentResponse
 
 interface UsePostCommentsOptions {
   accessToken: string | null
+  currentUserId?: string | null
+  authChecked?: boolean
+  viewerKey?: string
+  sessionGeneration?: number
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
   onCommentCountChange?: (postId: string, delta: number, absoluteCount?: number) => void
   t?: (key: string) => string
+}
+
+type CommentViewerScope = {
+  viewerKey: string
+  sessionGeneration: number
+  userId: string | null
 }
 
 // Convert Comment to CommentData for store compatibility
@@ -208,17 +218,31 @@ function toCommentData(comment: Comment): CommentData {
 
 export function usePostComments({
   accessToken,
+  currentUserId: suppliedCurrentUserId,
+  authChecked = true,
+  viewerKey: suppliedViewerKey,
+  sessionGeneration = 0,
   showToast,
   showDangerConfirm,
   onCommentCountChange,
   t: externalT,
 }: UsePostCommentsOptions) {
+  const currentUserId = suppliedCurrentUserId ?? null
+  const viewerKey =
+    suppliedViewerKey ??
+    (currentUserId ? `user:${currentUserId}` : accessToken ? 'user:legacy' : 'anon')
+  const activeScopeRef = useRef({ viewerKey, sessionGeneration, userId: currentUserId })
+  activeScopeRef.current = { viewerKey, sessionGeneration, userId: currentUserId }
+  const scopeKey = `${viewerKey}\u0000${sessionGeneration}`
+  const previousScopeKeyRef = useRef(scopeKey)
+  const stateRevisionRef = useRef(0)
   const { t: hookT } = useLanguage()
   const t = externalT || hookT
   const [comments, setCommentsState] = useState<Comment[]>([])
   const commentsRef = useRef<Comment[]>(comments)
   commentsRef.current = comments
   const setComments = useCallback<Dispatch<SetStateAction<Comment[]>>>((action) => {
+    stateRevisionRef.current += 1
     setCommentsState((previous) => {
       const next = typeof action === 'function' ? action(previous) : action
       commentsRef.current = next
@@ -231,11 +255,14 @@ export function usePostComments({
     draft: newComment,
     setDraft: setNewComment,
     restoreDraft,
-    saveDraft,
     clearDraft,
-  } = useCommentDraftPersistence()
+  } = useCommentDraftPersistence(undefined, viewerKey)
+  const newCommentRef = useRef(newComment)
+  newCommentRef.current = newComment
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; handle: string } | null>(null)
   const [replyContent, setReplyContent] = useState('')
+  const replyContentRef = useRef(replyContent)
+  replyContentRef.current = replyContent
   const [submittingReply, setSubmittingReply] = useState(false)
   const [commentLikeLoading, setCommentLikeLoading] = useState<Record<string, boolean>>({})
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
@@ -243,36 +270,96 @@ export function usePostComments({
   const [editingComment, setEditingComment] = useState<{ id: string; content: string } | null>(null)
   const [editContent, setEditContent] = useState('')
   const [submittingEdit, setSubmittingEdit] = useState(false)
+  const submittingEditRef = useRef<symbol | null>(null)
 
   // Ref-based guards to prevent double submissions
-  const submittingCommentRef = useRef(false)
-  const submittingReplyRef = useRef(false)
-  const pendingReactionIdsRef = useRef(new Set<string>())
-  const pendingDeleteIdsRef = useRef(new Set<string>())
+  const submittingCommentRef = useRef<symbol | null>(null)
+  const submittingReplyRef = useRef<symbol | null>(null)
+  const pendingReactionIdsRef = useRef(new Map<string, symbol>())
+  const pendingDeleteIdsRef = useRef(new Map<string, symbol>())
   // Resource binding is deliberately separate from draft persistence. It guards
   // every async response from mutating a newly opened post.
   const currentPostIdRef = useRef<string | null>(null)
   const loadRequestGenerationRef = useRef(0)
   const canonicalReadGenerationRef = useRef(new Map<string, number>())
 
+  const scopeIsCurrent = useCallback((scope: CommentViewerScope) => {
+    const current = activeScopeRef.current
+    return (
+      current.viewerKey === scope.viewerKey &&
+      current.sessionGeneration === scope.sessionGeneration &&
+      current.userId === scope.userId
+    )
+  }, [])
+
+  useEffect(() => {
+    if (previousScopeKeyRef.current === scopeKey) return
+    previousScopeKeyRef.current = scopeKey
+    loadRequestGenerationRef.current += 1
+    canonicalReadGenerationRef.current.clear()
+    submittingCommentRef.current = null
+    submittingReplyRef.current = null
+    submittingEditRef.current = null
+    pendingReactionIdsRef.current.clear()
+    pendingDeleteIdsRef.current.clear()
+    setComments([])
+    setLoadingComments(false)
+    setSubmittingComment(false)
+    setSubmittingReply(false)
+    setCommentLikeLoading({})
+    setDeletingCommentId(null)
+    setReplyingTo(null)
+    setReplyContent('')
+    setExpandedReplies({})
+    setEditingComment(null)
+    setEditContent('')
+    setSubmittingEdit(false)
+    if (currentPostIdRef.current) restoreDraft(currentPostIdRef.current)
+  }, [restoreDraft, scopeKey, setComments])
+
   // Auth guard helper — opens the login modal (consistent with usePostActions gates)
   const requireAuth = useCallback((): boolean => {
-    if (!accessToken) {
+    if (!authChecked || !accessToken || (suppliedViewerKey !== undefined && !currentUserId)) {
       useLoginModal.getState().openLoginModal()
       return false
     }
     return true
-  }, [accessToken])
+  }, [accessToken, authChecked, currentUserId, suppliedViewerKey])
 
   const reconcileCanonicalComments = useCallback(
-    async (postId: string, sort: 'best' | 'time' = 'best'): Promise<boolean> => {
-      const generation = (canonicalReadGenerationRef.current.get(postId) || 0) + 1
-      canonicalReadGenerationRef.current.set(postId, generation)
+    async (
+      postId: string,
+      sort: 'best' | 'time' = 'best',
+      capturedScope: CommentViewerScope = activeScopeRef.current,
+      retryAfterNewerState = true
+    ): Promise<boolean> => {
+      if (!scopeIsCurrent(capturedScope)) return false
+      const generationKey = `${capturedScope.viewerKey}\u0000${postId}`
+      const generation = (canonicalReadGenerationRef.current.get(generationKey) || 0) + 1
+      canonicalReadGenerationRef.current.set(generationKey, generation)
+      const requestStartRevision = stateRevisionRef.current
 
       try {
-        const page = await fetchPostCommentsPage<Comment>(postId, accessToken, { sort })
-        if (!page.ok || canonicalReadGenerationRef.current.get(postId) !== generation) {
+        const page = await fetchPostCommentsPage<Comment>(postId, accessToken, {
+          sort,
+          viewerScope: {
+            expectedUserId: capturedScope.userId,
+            expectedSessionGeneration: capturedScope.sessionGeneration,
+          },
+        })
+        if (
+          !page.ok ||
+          !scopeIsCurrent(capturedScope) ||
+          canonicalReadGenerationRef.current.get(generationKey) !== generation
+        ) {
           return false
+        }
+
+        if (stateRevisionRef.current !== requestStartRevision) {
+          return retryAfterNewerState &&
+            (currentPostIdRef.current === null || currentPostIdRef.current === postId)
+            ? reconcileCanonicalComments(postId, sort, capturedScope, false)
+            : false
         }
 
         const store = usePostStore.getState()
@@ -280,7 +367,10 @@ export function usePostComments({
         store.updatePostCommentCount(postId, page.commentCount)
         onCommentCountChange?.(postId, 0, page.commentCount)
 
-        if (currentPostIdRef.current === null || currentPostIdRef.current === postId) {
+        if (
+          scopeIsCurrent(capturedScope) &&
+          (currentPostIdRef.current === null || currentPostIdRef.current === postId)
+        ) {
           setComments(page.comments)
         }
         return true
@@ -288,11 +378,13 @@ export function usePostComments({
         return false
       }
     },
-    [accessToken, onCommentCountChange, setComments]
+    [accessToken, onCommentCountChange, scopeIsCurrent, setComments]
   )
 
   const loadComments = useCallback(
     async (postId: string, sort: 'best' | 'time' = 'best'): Promise<void> => {
+      if (!authChecked) return
+      const capturedScope = activeScopeRef.current
       const requestGeneration = ++loadRequestGenerationRef.current
       if (currentPostIdRef.current !== postId) {
         // Modal/page reuse must not carry interaction state from the previous
@@ -311,14 +403,17 @@ export function usePostComments({
       restoreDraft(postId)
       setLoadingComments(true)
       try {
-        await reconcileCanonicalComments(postId, sort)
+        await reconcileCanonicalComments(postId, sort, capturedScope)
       } finally {
-        if (requestGeneration === loadRequestGenerationRef.current) {
+        if (
+          scopeIsCurrent(capturedScope) &&
+          requestGeneration === loadRequestGenerationRef.current
+        ) {
           setLoadingComments(false)
         }
       }
     },
-    [reconcileCanonicalComments, restoreDraft, setComments]
+    [authChecked, reconcileCanonicalComments, restoreDraft, scopeIsCurrent, setComments]
   )
 
   const submitComment = useCallback(
@@ -326,7 +421,9 @@ export function usePostComments({
       if (!requireAuth() || !newComment.trim()) return
       if (submittingCommentRef.current) return // Prevent double submission
 
-      submittingCommentRef.current = true
+      const operation = Symbol('submit-comment')
+      const capturedScope = activeScopeRef.current
+      submittingCommentRef.current = operation
       setSubmittingComment(true)
 
       // Optimistic: show comment immediately with temp ID
@@ -338,20 +435,20 @@ export function usePostComments({
       }
       setComments((prev) => [...prev, optimisticComment])
       const savedContent = newComment.trim()
-      setNewComment('')
-      clearDraft(postId)
+      const optimisticRevision = stateRevisionRef.current
       onCommentCountChange?.(postId, 1)
 
-      const rollbackSubmission = () => {
-        if (currentPostIdRef.current === null || currentPostIdRef.current === postId) {
+      const rollbackSubmission = async () => {
+        if (!scopeIsCurrent(capturedScope)) return
+        if (
+          stateRevisionRef.current === optimisticRevision &&
+          (currentPostIdRef.current === null || currentPostIdRef.current === postId)
+        ) {
           setComments((prev) => prev.filter((c) => c.id !== tempId))
-          setNewComment(savedContent)
+          onCommentCountChange?.(postId, -1)
         } else {
-          // The user moved to another post. Preserve the failed text under its
-          // original post key without touching the new post's UI or draft.
-          saveDraft(postId, savedContent)
+          await reconcileCanonicalComments(postId, 'best', capturedScope)
         }
-        onCommentCountChange?.(postId, -1)
       }
 
       try {
@@ -359,7 +456,19 @@ export function usePostComments({
           success: boolean
           error?: string
           data?: { comment?: unknown }
-        }>(`/api/posts/${postId}/comments`, 'POST', accessToken, { content: savedContent })
+        }>(
+          `/api/posts/${postId}/comments`,
+          'POST',
+          accessToken,
+          { content: savedContent },
+          15_000,
+          {
+            expectedUserId: capturedScope.userId,
+            expectedSessionGeneration: capturedScope.sessionGeneration,
+          }
+        )
+
+        if (!scopeIsCurrent(capturedScope) || result.stale) return
 
         if (
           result.ok &&
@@ -367,33 +476,52 @@ export function usePostComments({
           isCreatedCommentAcknowledgement(result.data.data?.comment, {
             postId,
             content: savedContent,
+            userId: capturedScope.userId,
           })
         ) {
-          // Replace optimistic comment with server response
           const serverComment = result.data.data.comment
-          if (currentPostIdRef.current === null || currentPostIdRef.current === postId) {
+          if (
+            stateRevisionRef.current === optimisticRevision &&
+            (currentPostIdRef.current === null || currentPostIdRef.current === postId)
+          ) {
             setComments((prev) => prev.map((c) => (c.id === tempId ? serverComment : c)))
+            usePostStore.getState().addComment(postId, toCommentData(serverComment))
+          } else {
+            await reconcileCanonicalComments(postId, 'best', capturedScope)
           }
-          usePostStore.getState().addComment(postId, toCommentData(serverComment))
+
+          // Only a strict actor/resource ACK may clear text. Do not erase text
+          // typed while this request was in flight.
+          if (newCommentRef.current.trim() === savedContent) {
+            setNewComment('')
+            clearDraft(postId)
+          }
           trackEvent('comment_created', { post_id: postId })
         } else if (isDefinitiveMutationRejection(result)) {
-          rollbackSubmission()
-          showToast(
-            getHttpErrorMessage(result.status, result.data?.error || t('commentFailedRetry')),
-            'error'
-          )
-        } else if (!(await reconcileCanonicalComments(postId))) {
+          await rollbackSubmission()
+          if (scopeIsCurrent(capturedScope)) {
+            showToast(
+              getHttpErrorMessage(result.status, result.data?.error || t('commentFailedRetry')),
+              'error'
+            )
+          }
+        } else if (!(await reconcileCanonicalComments(postId, 'best', capturedScope))) {
           // Commit status is unknown. Keep the optimistic/server-event state
-          // when the authoritative read is also unavailable.
-          showToast(t('networkError'), 'error')
+          // and the viewer-scoped draft in every unknown-outcome branch.
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } catch {
-        if (!(await reconcileCanonicalComments(postId))) {
-          showToast(t('networkError'), 'error')
+        if (
+          scopeIsCurrent(capturedScope) &&
+          !(await reconcileCanonicalComments(postId, 'best', capturedScope))
+        ) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } finally {
-        submittingCommentRef.current = false
-        setSubmittingComment(false)
+        if (submittingCommentRef.current === operation) {
+          submittingCommentRef.current = null
+          if (scopeIsCurrent(capturedScope)) setSubmittingComment(false)
+        }
       }
     },
     [
@@ -405,7 +533,7 @@ export function usePostComments({
       t,
       clearDraft,
       reconcileCanonicalComments,
-      saveDraft,
+      scopeIsCurrent,
       setNewComment,
       setComments,
     ]
@@ -418,11 +546,13 @@ export function usePostComments({
       requestedReaction: CommentReaction
     ): Promise<void> => {
       if (!requireAuth() || pendingReactionIdsRef.current.has(commentId)) return
+      const operation = Symbol('comment-reaction')
+      const capturedScope = activeScopeRef.current
 
       const targetComment = findComment(commentsRef.current, commentId)
       if (!targetComment) return
 
-      pendingReactionIdsRef.current.add(commentId)
+      pendingReactionIdsRef.current.set(commentId, operation)
       setCommentLikeLoading((previous) => ({ ...previous, [commentId]: true }))
 
       const previousReaction = getCommentReaction(targetComment)
@@ -444,8 +574,11 @@ export function usePostComments({
           dislike_count: optimisticDislikeCount,
         }))
       )
+      const optimisticRevision = stateRevisionRef.current
 
       const rollback = () => {
+        if (!scopeIsCurrent(capturedScope) || stateRevisionRef.current !== optimisticRevision)
+          return
         if (currentPostIdRef.current !== null && currentPostIdRef.current !== postId) return
         setComments((previous) =>
           updateComment(previous, commentId, (comment) => {
@@ -474,10 +607,22 @@ export function usePostComments({
           success: boolean
           error?: string
           data?: unknown
-        }>(`/api/posts/${postId}/comments/like`, 'POST', accessToken, {
-          comment_id: commentId,
-          type: requestedReaction,
-        })
+        }>(
+          `/api/posts/${postId}/comments/like`,
+          'POST',
+          accessToken,
+          {
+            comment_id: commentId,
+            type: requestedReaction,
+          },
+          15_000,
+          {
+            expectedUserId: capturedScope.userId,
+            expectedSessionGeneration: capturedScope.sessionGeneration,
+          }
+        )
+
+        if (!scopeIsCurrent(capturedScope) || result.stale) return
 
         if (
           result.ok &&
@@ -485,7 +630,10 @@ export function usePostComments({
           isCommentReactionResponse(result.data.data, nextReaction)
         ) {
           const serverReaction = result.data.data
-          if (currentPostIdRef.current === null || currentPostIdRef.current === postId) {
+          if (
+            stateRevisionRef.current === optimisticRevision &&
+            (currentPostIdRef.current === null || currentPostIdRef.current === postId)
+          ) {
             setComments((previous) =>
               updateComment(previous, commentId, (comment) => {
                 // A valid ACK can still be older than a Realtime event or a
@@ -506,28 +654,46 @@ export function usePostComments({
                 }
               })
             )
-          }
+          } else await reconcileCanonicalComments(postId, 'best', capturedScope)
         } else if (isDefinitiveMutationRejection(result)) {
           rollback()
-          showToast(
-            getHttpErrorMessage(result.status, result.data?.error || t('operationFailed')),
-            result.status === 429 ? 'warning' : 'error'
-          )
-        } else if (!(await reconcileCanonicalComments(postId))) {
-          showToast(t('networkError'), 'error')
+          if (scopeIsCurrent(capturedScope)) {
+            showToast(
+              getHttpErrorMessage(result.status, result.data?.error || t('operationFailed')),
+              result.status === 429 ? 'warning' : 'error'
+            )
+          }
+        } else if (!(await reconcileCanonicalComments(postId, 'best', capturedScope))) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } catch {
-        if (!(await reconcileCanonicalComments(postId))) {
-          showToast(t('networkError'), 'error')
+        if (
+          scopeIsCurrent(capturedScope) &&
+          !(await reconcileCanonicalComments(postId, 'best', capturedScope))
+        ) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } finally {
-        pendingReactionIdsRef.current.delete(commentId)
-        if (currentPostIdRef.current === null || currentPostIdRef.current === postId) {
+        if (pendingReactionIdsRef.current.get(commentId) === operation) {
+          pendingReactionIdsRef.current.delete(commentId)
+        }
+        if (
+          scopeIsCurrent(capturedScope) &&
+          (currentPostIdRef.current === null || currentPostIdRef.current === postId)
+        ) {
           setCommentLikeLoading((previous) => ({ ...previous, [commentId]: false }))
         }
       }
     },
-    [accessToken, reconcileCanonicalComments, requireAuth, setComments, showToast, t]
+    [
+      accessToken,
+      reconcileCanonicalComments,
+      requireAuth,
+      scopeIsCurrent,
+      setComments,
+      showToast,
+      t,
+    ]
   )
 
   const toggleCommentLike = useCallback(
@@ -545,7 +711,9 @@ export function usePostComments({
       if (!requireAuth() || !replyContent.trim()) return
       if (submittingReplyRef.current) return // Prevent double submission
 
-      submittingReplyRef.current = true
+      const operation = Symbol('submit-reply')
+      const capturedScope = activeScopeRef.current
+      submittingReplyRef.current = operation
       setSubmittingReply(true)
 
       // Optimistic: show reply immediately
@@ -561,13 +729,16 @@ export function usePostComments({
           c.id === parentId ? { ...c, replies: [...(c.replies || []), optimisticReply] } : c
         )
       )
-      setReplyContent('')
-      setReplyingTo(null)
+      const optimisticRevision = stateRevisionRef.current
       setExpandedReplies((prev) => ({ ...prev, [parentId]: true }))
       onCommentCountChange?.(postId, 1)
 
-      const rollbackReply = () => {
-        if (currentPostIdRef.current === null || currentPostIdRef.current === postId) {
+      const rollbackReply = async () => {
+        if (!scopeIsCurrent(capturedScope)) return
+        if (
+          stateRevisionRef.current === optimisticRevision &&
+          (currentPostIdRef.current === null || currentPostIdRef.current === postId)
+        ) {
           setComments((prev) =>
             prev.map((comment) =>
               comment.id === parentId
@@ -578,9 +749,10 @@ export function usePostComments({
                 : comment
             )
           )
-          setReplyContent(savedContent)
+          onCommentCountChange?.(postId, -1)
+        } else {
+          await reconcileCanonicalComments(postId, 'best', capturedScope)
         }
-        onCommentCountChange?.(postId, -1)
       }
 
       try {
@@ -588,10 +760,22 @@ export function usePostComments({
           success: boolean
           error?: string
           data?: { comment?: unknown }
-        }>(`/api/posts/${postId}/comments`, 'POST', accessToken, {
-          content: savedContent,
-          parent_id: parentId,
-        })
+        }>(
+          `/api/posts/${postId}/comments`,
+          'POST',
+          accessToken,
+          {
+            content: savedContent,
+            parent_id: parentId,
+          },
+          15_000,
+          {
+            expectedUserId: capturedScope.userId,
+            expectedSessionGeneration: capturedScope.sessionGeneration,
+          }
+        )
+
+        if (!scopeIsCurrent(capturedScope) || result.stale) return
 
         if (
           result.ok &&
@@ -600,11 +784,14 @@ export function usePostComments({
             postId,
             content: savedContent,
             parentId,
+            userId: capturedScope.userId,
           })
         ) {
-          // Replace optimistic reply with server response
           const serverReply = result.data.data.comment
-          if (currentPostIdRef.current === null || currentPostIdRef.current === postId) {
+          if (
+            stateRevisionRef.current === optimisticRevision &&
+            (currentPostIdRef.current === null || currentPostIdRef.current === postId)
+          ) {
             setComments((prev) =>
               prev.map((c) =>
                 c.id === parentId
@@ -615,24 +802,36 @@ export function usePostComments({
                   : c
               )
             )
+          } else await reconcileCanonicalComments(postId, 'best', capturedScope)
+
+          if (replyContentRef.current.trim() === savedContent) {
+            setReplyContent('')
+            setReplyingTo(null)
           }
-          showToast(t('replied'), 'success')
+          if (scopeIsCurrent(capturedScope)) showToast(t('replied'), 'success')
         } else if (isDefinitiveMutationRejection(result)) {
-          rollbackReply()
-          showToast(
-            getHttpErrorMessage(result.status, result.data?.error || t('operationFailed')),
-            result.status === 429 ? 'warning' : 'error'
-          )
-        } else if (!(await reconcileCanonicalComments(postId))) {
-          showToast(t('networkError'), 'error')
+          await rollbackReply()
+          if (scopeIsCurrent(capturedScope)) {
+            showToast(
+              getHttpErrorMessage(result.status, result.data?.error || t('operationFailed')),
+              result.status === 429 ? 'warning' : 'error'
+            )
+          }
+        } else if (!(await reconcileCanonicalComments(postId, 'best', capturedScope))) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } catch {
-        if (!(await reconcileCanonicalComments(postId))) {
-          showToast(t('networkError'), 'error')
+        if (
+          scopeIsCurrent(capturedScope) &&
+          !(await reconcileCanonicalComments(postId, 'best', capturedScope))
+        ) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } finally {
-        submittingReplyRef.current = false
-        setSubmittingReply(false)
+        if (submittingReplyRef.current === operation) {
+          submittingReplyRef.current = null
+          if (scopeIsCurrent(capturedScope)) setSubmittingReply(false)
+        }
       }
     },
     [
@@ -641,6 +840,7 @@ export function usePostComments({
       reconcileCanonicalComments,
       replyContent,
       requireAuth,
+      scopeIsCurrent,
       setComments,
       showToast,
       t,
@@ -667,17 +867,33 @@ export function usePostComments({
       if (boundPostId !== null && boundPostId !== postId) return
       const requestGeneration = loadRequestGenerationRef.current
       const expectedContent = editContent.trim()
+      const capturedScope = activeScopeRef.current
+      const requestStartRevision = stateRevisionRef.current
+      const operation = Symbol('edit-comment')
 
+      submittingEditRef.current = operation
       setSubmittingEdit(true)
       try {
         const result = await authedFetch<{
           success: boolean
           error?: string
           data?: { comment?: unknown }
-        }>(`/api/posts/${postId}/comments`, 'PUT', accessToken, {
-          comment_id: editingComment.id,
-          content: expectedContent,
-        })
+        }>(
+          `/api/posts/${postId}/comments`,
+          'PUT',
+          accessToken,
+          {
+            comment_id: editingComment.id,
+            content: expectedContent,
+          },
+          15_000,
+          {
+            expectedUserId: capturedScope.userId,
+            expectedSessionGeneration: capturedScope.sessionGeneration,
+          }
+        )
+
+        if (!scopeIsCurrent(capturedScope) || result.stale) return
 
         if (
           result.ok &&
@@ -685,13 +901,15 @@ export function usePostComments({
           isEditedCommentResponse(result.data.data?.comment, {
             commentId: editingComment.id,
             postId,
-            userId: targetComment.user_id,
+            userId: capturedScope.userId,
             content: expectedContent,
           })
         ) {
           const acknowledgement = result.data.data.comment
           const responseStillTargetsVisibleTree =
             requestGeneration === loadRequestGenerationRef.current &&
+            stateRevisionRef.current === requestStartRevision &&
+            scopeIsCurrent(capturedScope) &&
             currentPostIdRef.current === boundPostId &&
             (currentPostIdRef.current === null || currentPostIdRef.current === postId)
 
@@ -714,26 +932,34 @@ export function usePostComments({
             setComments((prev) => prev.map(updateInList))
             setEditingComment(null)
             setEditContent('')
-            showToast(t('saved'), 'success')
+            if (scopeIsCurrent(capturedScope)) showToast(t('saved'), 'success')
           } else {
             // The ACK is valid but belongs to an older generation/resource.
             // Refresh its keyed cache without touching the newly visible post.
-            await reconcileCanonicalComments(postId)
+            await reconcileCanonicalComments(postId, 'best', capturedScope)
           }
         } else if (isDefinitiveMutationRejection(result)) {
-          showToast(
-            getHttpErrorMessage(result.status, result.data?.error || t('operationFailed')),
-            result.status === 429 ? 'warning' : 'error'
-          )
-        } else if (!(await reconcileCanonicalComments(postId))) {
-          showToast(t('networkError'), 'error')
+          if (scopeIsCurrent(capturedScope)) {
+            showToast(
+              getHttpErrorMessage(result.status, result.data?.error || t('operationFailed')),
+              result.status === 429 ? 'warning' : 'error'
+            )
+          }
+        } else if (!(await reconcileCanonicalComments(postId, 'best', capturedScope))) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } catch {
-        if (!(await reconcileCanonicalComments(postId))) {
-          showToast(t('networkError'), 'error')
+        if (
+          scopeIsCurrent(capturedScope) &&
+          !(await reconcileCanonicalComments(postId, 'best', capturedScope))
+        ) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } finally {
-        setSubmittingEdit(false)
+        if (submittingEditRef.current === operation) {
+          submittingEditRef.current = null
+          if (scopeIsCurrent(capturedScope)) setSubmittingEdit(false)
+        }
       }
     },
     [
@@ -742,6 +968,7 @@ export function usePostComments({
       editContent,
       reconcileCanonicalComments,
       requireAuth,
+      scopeIsCurrent,
       setComments,
       showToast,
       t,
@@ -764,33 +991,53 @@ export function usePostComments({
       // increments the generation while the dialog is open; re-check both the
       // resource binding and the target before issuing the destructive call.
       const requestGeneration = loadRequestGenerationRef.current
-      pendingDeleteIdsRef.current.add(commentId)
+      const capturedScope = activeScopeRef.current
+      const operation = Symbol('delete-comment')
+      pendingDeleteIdsRef.current.set(commentId, operation)
       const confirmed = await showDangerConfirm(
         t('deleteComment'),
         t('confirmDeleteComment')
       ).catch(() => false)
       const stillTargetsCurrentPost =
         requestGeneration === loadRequestGenerationRef.current &&
+        scopeIsCurrent(capturedScope) &&
         currentPostIdRef.current === boundPostId &&
         !!findComment(commentsRef.current, commentId)
 
       if (!confirmed || !stillTargetsCurrentPost) {
-        pendingDeleteIdsRef.current.delete(commentId)
+        if (pendingDeleteIdsRef.current.get(commentId) === operation) {
+          pendingDeleteIdsRef.current.delete(commentId)
+        }
         return
       }
 
+      const requestStartRevision = stateRevisionRef.current
       setDeletingCommentId(commentId)
       try {
         const result = await authedFetch<{
           success: boolean
           error?: string
           data?: DeleteCommentResponse
-        }>(`/api/posts/${postId}/comments`, 'DELETE', accessToken, { comment_id: commentId })
+        }>(
+          `/api/posts/${postId}/comments`,
+          'DELETE',
+          accessToken,
+          { comment_id: commentId },
+          15_000,
+          {
+            expectedUserId: capturedScope.userId,
+            expectedSessionGeneration: capturedScope.sessionGeneration,
+          }
+        )
+
+        if (!scopeIsCurrent(capturedScope) || result.stale) return
 
         if (result.ok && result.data?.success && isDeleteCommentResponse(result.data.data)) {
           const acknowledgement = result.data.data
           const responseStillTargetsVisibleTree =
             requestGeneration === loadRequestGenerationRef.current &&
+            stateRevisionRef.current === requestStartRevision &&
+            scopeIsCurrent(capturedScope) &&
             currentPostIdRef.current === boundPostId &&
             (currentPostIdRef.current === null || currentPostIdRef.current === postId)
 
@@ -807,30 +1054,39 @@ export function usePostComments({
                 .filter((c): c is Comment => c !== null)
             )
           } else {
-            await reconcileCanonicalComments(postId)
+            await reconcileCanonicalComments(postId, 'best', capturedScope)
           }
-          onCommentCountChange?.(
-            postId,
-            -acknowledgement.deleted_count,
-            acknowledgement.comment_count
-          )
-          usePostStore.getState().updatePostCommentCount(postId, acknowledgement.comment_count)
-          showToast(t('deleted'), 'success')
+          if (responseStillTargetsVisibleTree) {
+            onCommentCountChange?.(
+              postId,
+              -acknowledgement.deleted_count,
+              acknowledgement.comment_count
+            )
+            usePostStore.getState().updatePostCommentCount(postId, acknowledgement.comment_count)
+          }
+          if (scopeIsCurrent(capturedScope)) showToast(t('deleted'), 'success')
         } else if (isDefinitiveMutationRejection(result)) {
-          showToast(
-            getHttpErrorMessage(result.status, result.data?.error || t('operationFailed')),
-            result.status === 429 ? 'warning' : 'error'
-          )
-        } else if (!(await reconcileCanonicalComments(postId))) {
-          showToast(t('networkError'), 'error')
+          if (scopeIsCurrent(capturedScope)) {
+            showToast(
+              getHttpErrorMessage(result.status, result.data?.error || t('operationFailed')),
+              result.status === 429 ? 'warning' : 'error'
+            )
+          }
+        } else if (!(await reconcileCanonicalComments(postId, 'best', capturedScope))) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } catch {
-        if (!(await reconcileCanonicalComments(postId))) {
-          showToast(t('networkError'), 'error')
+        if (
+          scopeIsCurrent(capturedScope) &&
+          !(await reconcileCanonicalComments(postId, 'best', capturedScope))
+        ) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } finally {
-        pendingDeleteIdsRef.current.delete(commentId)
-        setDeletingCommentId(null)
+        if (pendingDeleteIdsRef.current.get(commentId) === operation) {
+          pendingDeleteIdsRef.current.delete(commentId)
+        }
+        if (scopeIsCurrent(capturedScope)) setDeletingCommentId(null)
       }
     },
     [
@@ -838,6 +1094,7 @@ export function usePostComments({
       onCommentCountChange,
       reconcileCanonicalComments,
       requireAuth,
+      scopeIsCurrent,
       setComments,
       showDangerConfirm,
       showToast,

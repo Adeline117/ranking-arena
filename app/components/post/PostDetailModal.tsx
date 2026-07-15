@@ -44,7 +44,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
     draft: newComment,
     setDraft: setNewComment,
     clearDraft,
-  } = useCommentDraftPersistence(postId)
+  } = useCommentDraftPersistence(postId, auth.viewerKey)
   const [submittingComment, setSubmittingComment] = useState(false)
   const [reacting, setReacting] = useState(false)
 
