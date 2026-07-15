@@ -259,6 +259,16 @@ export default function AlertConfig({
         </Box>
       </Box>
 
+      <Text
+        style={{
+          marginBottom: 12,
+          fontSize: tokens.typography.fontSize.xs,
+          color: tokens.colors.text.tertiary,
+        }}
+      >
+        {t('alertCheckCadence')}
+      </Text>
+
       {/* Alert rows */}
       <AlertRow
         label={t('alertRoiChangeLabel')}

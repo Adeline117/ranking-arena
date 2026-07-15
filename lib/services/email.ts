@@ -29,17 +29,22 @@ export async function sendEmail(options: {
   to: string
   subject: string
   html: string
+  /** Provider-level retry deduplication; Resend retains keys for 24 hours. */
+  idempotencyKey?: string
 }): Promise<boolean> {
   // Strategy 1: Resend (primary)
   const resend = getResend()
   if (resend) {
     try {
-      await resend.emails.send({
-        from: FROM_EMAIL,
-        to: options.to,
-        subject: options.subject,
-        html: options.html,
-      })
+      await resend.emails.send(
+        {
+          from: FROM_EMAIL,
+          to: options.to,
+          subject: options.subject,
+          html: options.html,
+        },
+        options.idempotencyKey ? { idempotencyKey: options.idempotencyKey } : undefined
+      )
       logger.info('Email sent via Resend', { to: options.to, subject: options.subject })
       return true
     } catch (error) {

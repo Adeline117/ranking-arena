@@ -1736,6 +1736,7 @@ const en = {
 
   // AdvancedAlerts
   alertMonitoring: 'Monitoring: {handle}',
+  alertCheckCadence: 'Checked every 30 minutes for active Pro members.',
   alertRoiChangeLabel: 'ROI Change',
   alertRoiChangeDesc: 'Alert when ROI changes by threshold',
   alertDrawdownLabel: 'Drawdown Alert',
