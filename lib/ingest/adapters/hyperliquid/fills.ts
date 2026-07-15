@@ -26,6 +26,10 @@ export interface HlFill {
   closedPnl?: unknown
   fee?: unknown
   dir?: unknown
+  /** Stable trade id used to dedupe inclusive userFillsByTime page boundaries. */
+  tid?: unknown
+  hash?: unknown
+  oid?: unknown
 }
 
 export interface RoundTrip {
