@@ -9,7 +9,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 // Sub-components
-import { AlertRow, AlertPriceRow } from './AlertRowComponents'
+import { AlertRow } from './AlertRowComponents'
 import { AlertHistory, type HistoryItem } from './AlertHistory'
 
 // ── Types ──────────────────────────────────────────────────────────────────
@@ -32,11 +32,6 @@ interface AlertData {
   score_change_threshold: number
   alert_rank_change: boolean
   rank_change_threshold: number
-  alert_price_above: boolean
-  price_above_value: number | null
-  alert_price_below: boolean
-  price_below_value: number | null
-  price_symbol: string | null
   one_time: boolean
   enabled: boolean
 }
@@ -50,20 +45,9 @@ const DEFAULT_ALERT: AlertData = {
   score_change_threshold: 5,
   alert_rank_change: false,
   rank_change_threshold: 5,
-  alert_price_above: false,
-  price_above_value: null,
-  alert_price_below: false,
-  price_below_value: null,
-  price_symbol: null,
   one_time: false,
   enabled: true,
 }
-
-// Gate for the price-above/below alert rows: they persist to the DB but the
-// check-trader-alerts cron has no price feed and never evaluates them, so the
-// toggles are a paid feature that silently does nothing. Keep the UI code, hide
-// it until the backend price-evaluation path exists.
-const PRICE_ALERTS_ENABLED = false
 
 // ── Component ──────────────────────────────────────────────────────────────
 
@@ -110,11 +94,6 @@ export default function AlertConfig({
           score_change_threshold: existing.score_change_threshold ?? 5,
           alert_rank_change: existing.alert_rank_change ?? false,
           rank_change_threshold: existing.rank_change_threshold ?? 5,
-          alert_price_above: existing.alert_price_above ?? false,
-          price_above_value: existing.price_above_value ?? null,
-          alert_price_below: existing.alert_price_below ?? false,
-          price_below_value: existing.price_below_value ?? null,
-          price_symbol: existing.price_symbol ?? null,
           one_time: existing.one_time ?? false,
           enabled: existing.enabled ?? true,
         })
@@ -217,8 +196,6 @@ export default function AlertConfig({
       drawdown: t('alertDrawdownLabel'),
       score_change: 'Arena Score',
       rank_change: t('alertRankChangeLabel'),
-      price_above: t('alertPriceAboveLabel'),
-      price_below: t('alertPriceBelowLabel'),
     }
     return labels[type] || type
   }
@@ -323,40 +300,6 @@ export default function AlertConfig({
         onThresholdChange={(v) => setAlert((prev) => ({ ...prev, score_change_threshold: v }))}
         unit={t('alertScoreUnit')}
       />
-      {/* Price alerts (above/below) are UI-complete but have NO backend:
-          check-trader-alerts fetches no price feed and never evaluates
-          alert_price_above/below. Hidden until that path exists, so a paying
-          Pro user doesn't toggle an alert that silently never fires. Flip
-          PRICE_ALERTS_ENABLED to true once the cron gains a price source. */}
-      {PRICE_ALERTS_ENABLED && (
-        <>
-          <AlertPriceRow
-            label={t('alertPriceAboveLabel')}
-            desc={t('alertPriceAboveDesc')}
-            checked={alert.alert_price_above}
-            onToggle={() =>
-              setAlert((prev) => ({ ...prev, alert_price_above: !prev.alert_price_above }))
-            }
-            value={alert.price_above_value}
-            onValueChange={(v) => setAlert((prev) => ({ ...prev, price_above_value: v }))}
-            symbol={alert.price_symbol}
-            onSymbolChange={(v) => setAlert((prev) => ({ ...prev, price_symbol: v }))}
-          />
-          <AlertPriceRow
-            label={t('alertPriceBelowLabel')}
-            desc={t('alertPriceBelowDesc')}
-            checked={alert.alert_price_below}
-            onToggle={() =>
-              setAlert((prev) => ({ ...prev, alert_price_below: !prev.alert_price_below }))
-            }
-            value={alert.price_below_value}
-            onValueChange={(v) => setAlert((prev) => ({ ...prev, price_below_value: v }))}
-            symbol={alert.price_symbol}
-            onSymbolChange={(v) => setAlert((prev) => ({ ...prev, price_symbol: v }))}
-          />
-        </>
-      )}
-
       {/* One-time toggle */}
       <Box
         style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, marginBottom: 16 }}

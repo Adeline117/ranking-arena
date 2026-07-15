@@ -55,11 +55,6 @@ interface AlertConfig {
   score_change_threshold: number
   alert_rank_change: boolean
   rank_change_threshold: number
-  alert_price_above: boolean
-  price_above_value: number | null
-  alert_price_below: boolean
-  price_below_value: number | null
-  price_symbol: string | null
   one_time: boolean
 }
 
@@ -95,7 +90,7 @@ export async function GET(req: Request) {
     const { data: alerts, error: alertsError } = await supabase
       .from('trader_alerts')
       .select(
-        'id, user_id, trader_id, source, alert_roi_change, roi_change_threshold, alert_drawdown, drawdown_threshold, alert_pnl_change, pnl_change_threshold, alert_score_change, score_change_threshold, alert_rank_change, rank_change_threshold, alert_price_above, price_above_value, alert_price_below, price_below_value, price_symbol, one_time'
+        'id, user_id, trader_id, source, alert_roi_change, roi_change_threshold, alert_drawdown, drawdown_threshold, alert_pnl_change, pnl_change_threshold, alert_score_change, score_change_threshold, alert_rank_change, rank_change_threshold, one_time'
       )
       .eq('enabled', true)
       .limit(MAX_ALERTS_PER_RUN)
