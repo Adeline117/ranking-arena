@@ -1,10 +1,10 @@
 'use client'
 
-import { useRef, useState, useEffect } from 'react'
-import { createPortal } from 'react-dom'
+import { useRef, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '../../Providers/LanguageProvider'
 import { DynamicStickerPicker } from '../../ui/Dynamic'
+import ModalOverlay from '../../ui/ModalOverlay'
 import type { Sticker } from '@/lib/stickers'
 
 interface RepostModalProps {
@@ -28,49 +28,8 @@ export function RepostModal({
 }: RepostModalProps) {
   const { t: tLocal } = useLanguage()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const previousFocusRef = useRef<HTMLElement | null>(null)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
-
-  useEffect(() => {
-    previousFocusRef.current = document.activeElement as HTMLElement
-
-    const timer = setTimeout(() => {
-      textareaRef.current?.focus()
-    }, 50)
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onCancel()
-        return
-      }
-      if (e.key === 'Tab' && dialogRef.current) {
-        const focusable = dialogRef.current.querySelectorAll<HTMLElement>(
-          'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
-        )
-        if (focusable.length === 0) return
-        const first = focusable[0]
-        const last = focusable[focusable.length - 1]
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault()
-          last.focus()
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault()
-          first.focus()
-        }
-      }
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
-    return () => {
-      clearTimeout(timer)
-      document.removeEventListener('keydown', handleKeyDown)
-      previousFocusRef.current?.focus()
-    }
-  }, [onCancel])
-
-  if (typeof document === 'undefined') return null
 
   const insertText = (text: string) => {
     const textarea = textareaRef.current
@@ -93,36 +52,11 @@ export function RepostModal({
     }
   }
 
-  return createPortal(
-    <div
-      onClick={() => {
-        onCancel()
-      }}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'var(--color-backdrop-medium)',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-        zIndex: tokens.zIndex.modal,
-      }}
-    >
+  return (
+    <ModalOverlay open onClose={onCancel} label={t('repost')} maxWidth={400} portal>
       <div
-        ref={dialogRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={t('repost')}
-        onClick={(e) => e.stopPropagation()}
         style={{
-          width: '100%',
-          maxWidth: 400,
-          background: tokens.colors.bg.secondary,
-          border: `1px solid ${tokens.colors.border.primary}`,
-          borderRadius: tokens.radius.xl,
           padding: 24,
-          boxShadow: '0 25px 50px -12px var(--color-overlay-dark)',
         }}
       >
         <h2
@@ -391,7 +325,6 @@ export function RepostModal({
           </button>
         </div>
       </div>
-    </div>,
-    document.body
+    </ModalOverlay>
   )
 }
