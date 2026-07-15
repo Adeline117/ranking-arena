@@ -9,6 +9,7 @@ interface ReactButtonProps {
   icon: React.ReactNode
   count: number
   showCount?: boolean
+  ariaLabel: string
 }
 
 export function ReactButton({
@@ -16,7 +17,8 @@ export function ReactButton({
   active,
   icon,
   count,
-  showCount = true
+  showCount = true,
+  ariaLabel,
 }: ReactButtonProps) {
   const [isPressed, setIsPressed] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
@@ -40,6 +42,8 @@ export function ReactButton({
 
   return (
     <button
+      aria-label={ariaLabel}
+      aria-pressed={active}
       onClick={handleClick}
       onMouseDown={() => setIsPressed(true)}
       onMouseUp={() => setIsPressed(false)}
