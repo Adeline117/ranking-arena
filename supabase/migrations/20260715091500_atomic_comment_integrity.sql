@@ -1518,47 +1518,17 @@ DROP POLICY IF EXISTS "Users can delete their own comments" ON public.comments;
 DROP POLICY IF EXISTS "Users can insert their own comment likes" ON public.comment_likes;
 DROP POLICY IF EXISTS "Users can delete their own comment likes" ON public.comment_likes;
 
--- The production posts_read_all policy had regressed to status-only and made
--- follower/group posts directly readable through PostgREST. Restore the same
--- active + audience boundary at the post, comment, and reaction layers.
-DROP POLICY IF EXISTS "Posts are viewable by everyone" ON public.posts;
-DROP POLICY IF EXISTS "Posts are viewable based on visibility" ON public.posts;
-DROP POLICY IF EXISTS posts_read_all ON public.posts;
-CREATE POLICY posts_read_all
-  ON public.posts
-  FOR SELECT
-  TO public
-  USING (
-    deleted_at IS NULL
-    AND status <> 'deleted'::public.post_status
-    AND NOT public.has_block_with_current_user(author_id)
-    AND (
-      visibility = 'public'
-      OR author_id = (SELECT auth.uid())
-      OR (
-        visibility = 'followers'
-        AND EXISTS (
-          SELECT 1
-          FROM public.user_follows AS visible_follow
-          WHERE visible_follow.follower_id = (SELECT auth.uid())
-            AND visible_follow.following_id = posts.author_id
-        )
-      )
-      OR (
-        visibility = 'group'
-        AND EXISTS (
-          SELECT 1
-          FROM public.group_members AS visible_member
-          WHERE visible_member.group_id = posts.group_id
-            AND visible_member.user_id = (SELECT auth.uid())
-        )
-      )
-    )
-  );
-
 -- Public readers must never recover content or reaction identities hidden by a
--- comment/post soft delete or by the parent post's audience. Service-role
--- moderation reads bypass RLS.
+-- comment/post soft delete or by the parent post's current RLS policy.
+-- Deliberately do not redefine post audiences in this comment-integrity
+-- expansion: open/apply group semantics belong to the canonical post-privacy
+-- migration. Selecting visible_post below composes with whichever posts SELECT
+-- policy is installed, so that later policy automatically tightens comments
+-- without duplicating follower/group rules here. Service-role moderation reads
+-- bypass RLS.
+-- Rollout gate: while production still has the legacy status-only post policy,
+-- re-check immediately before apply that no posts belong to an apply group, or
+-- deploy the canonical post policy first.
 DROP POLICY IF EXISTS "Comments are viewable by everyone" ON public.comments;
 CREATE POLICY "Comments are viewable by everyone"
   ON public.comments
@@ -1569,33 +1539,10 @@ CREATE POLICY "Comments are viewable by everyone"
     AND NOT public.has_block_with_current_user(user_id)
     AND EXISTS (
       SELECT 1
-      FROM public.posts AS active_post
-      WHERE active_post.id = comments.post_id
-        AND active_post.deleted_at IS NULL
-        AND active_post.status <> 'deleted'::public.post_status
-        AND NOT public.has_block_with_current_user(active_post.author_id)
-        AND (
-          active_post.visibility = 'public'
-          OR active_post.author_id = (SELECT auth.uid())
-          OR (
-            active_post.visibility = 'followers'
-            AND EXISTS (
-              SELECT 1
-              FROM public.user_follows AS visible_follow
-              WHERE visible_follow.follower_id = (SELECT auth.uid())
-                AND visible_follow.following_id = active_post.author_id
-            )
-          )
-          OR (
-            active_post.visibility = 'group'
-            AND EXISTS (
-              SELECT 1
-              FROM public.group_members AS visible_member
-              WHERE visible_member.group_id = active_post.group_id
-                AND visible_member.user_id = (SELECT auth.uid())
-            )
-          )
-        )
+      FROM public.posts AS visible_post
+      WHERE visible_post.id = comments.post_id
+        AND visible_post.deleted_at IS NULL
+        AND visible_post.status <> 'deleted'::public.post_status
     )
   );
 
@@ -1605,39 +1552,13 @@ CREATE POLICY "Comment likes are viewable by everyone"
   FOR SELECT
   TO public
   USING (
-    EXISTS (
+    NOT public.has_block_with_current_user(user_id)
+    AND EXISTS (
       SELECT 1
-      FROM public.comments AS active_comment
-      JOIN public.posts AS active_post ON active_post.id = active_comment.post_id
-      WHERE active_comment.id = comment_likes.comment_id
-        AND active_comment.deleted_at IS NULL
-        AND NOT public.has_block_with_current_user(active_comment.user_id)
-        AND NOT public.has_block_with_current_user(comment_likes.user_id)
-        AND active_post.deleted_at IS NULL
-        AND active_post.status <> 'deleted'::public.post_status
-        AND NOT public.has_block_with_current_user(active_post.author_id)
-        AND (
-          active_post.visibility = 'public'
-          OR active_post.author_id = (SELECT auth.uid())
-          OR (
-            active_post.visibility = 'followers'
-            AND EXISTS (
-              SELECT 1
-              FROM public.user_follows AS visible_follow
-              WHERE visible_follow.follower_id = (SELECT auth.uid())
-                AND visible_follow.following_id = active_post.author_id
-            )
-          )
-          OR (
-            active_post.visibility = 'group'
-            AND EXISTS (
-              SELECT 1
-              FROM public.group_members AS visible_member
-              WHERE visible_member.group_id = active_post.group_id
-                AND visible_member.user_id = (SELECT auth.uid())
-            )
-          )
-        )
+      FROM public.comments AS visible_comment
+      WHERE visible_comment.id = comment_likes.comment_id
+        AND visible_comment.deleted_at IS NULL
+        AND NOT public.has_block_with_current_user(visible_comment.user_id)
     )
   );
 
