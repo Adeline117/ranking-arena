@@ -858,21 +858,21 @@ export type Database = {
           comment_id: string
           created_at: string | null
           id: string
-          reaction_type: string | null
+          reaction_type: string
           user_id: string
         }
         Insert: {
           comment_id: string
           created_at?: string | null
           id?: string
-          reaction_type?: string | null
+          reaction_type?: string
           user_id: string
         }
         Update: {
           comment_id?: string
           created_at?: string | null
           id?: string
-          reaction_type?: string | null
+          reaction_type?: string
           user_id?: string
         }
         Relationships: [
@@ -894,11 +894,12 @@ export type Database = {
           delete_reason: string | null
           deleted_at: string | null
           deleted_by: string | null
-          dislike_count: number | null
+          dislike_count: number
           id: string
-          like_count: number | null
+          like_count: number
           parent_id: string | null
           post_id: string
+          ranking_score: number
           updated_at: string | null
           user_id: string
         }
@@ -910,11 +911,12 @@ export type Database = {
           delete_reason?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
-          dislike_count?: number | null
+          dislike_count?: number
           id?: string
-          like_count?: number | null
+          like_count?: number
           parent_id?: string | null
           post_id: string
+          ranking_score?: never
           updated_at?: string | null
           user_id: string
         }
@@ -926,11 +928,12 @@ export type Database = {
           delete_reason?: string | null
           deleted_at?: string | null
           deleted_by?: string | null
-          dislike_count?: number | null
+          dislike_count?: number
           id?: string
-          like_count?: number | null
+          like_count?: number
           parent_id?: string | null
           post_id?: string
+          ranking_score?: never
           updated_at?: string | null
           user_id?: string
         }
@@ -8311,6 +8314,17 @@ export type Database = {
           total_sybils: number
         }[]
       }
+      delete_own_comment: {
+        Args: {
+          p_comment_id: string
+          p_post_id: string
+          p_user_id: string
+        }
+        Returns: {
+          comment_count: number
+          deleted_count: number
+        }[]
+      }
       decrement_bookmark_count: {
         Args: { post_id: string }
         Returns: {
@@ -8811,6 +8825,10 @@ export type Database = {
         Args: { p_group_id: string; p_user_id: string }
         Returns: boolean
       }
+      has_block_with_current_user: {
+        Args: { p_other_user_id: string }
+        Returns: boolean
+      }
       http: {
         Args: { request: Database['public']['CompositeTypes']['http_request'] }
         Returns: Database['public']['CompositeTypes']['http_response']
@@ -8985,6 +9003,19 @@ export type Database = {
       }
       increment_view_count: { Args: { post_id: string }; Returns: undefined }
       is_group_admin: { Args: { gid: string; uid: string }; Returns: boolean }
+      moderate_comment: {
+        Args: {
+          p_action: string
+          p_actor_id: string | null
+          p_comment_id: string
+          p_reason?: string | null
+        }
+        Returns: {
+          affected_count: number
+          comment_count: number
+          post_id: string
+        }[]
+      }
       project_stats: {
         Args: never
         Returns: {
@@ -9133,11 +9164,45 @@ export type Database = {
       }
       snapshot_score_backtest: { Args: never; Returns: number }
       text_to_bytea: { Args: { data: string }; Returns: string }
+      toggle_comment_reaction: {
+        Args: {
+          p_comment_id: string
+          p_post_id: string
+          p_reaction_type?: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       toggle_post_reaction: {
         Args: { p_post_id: string; p_reaction_type?: string; p_user_id: string }
         Returns: Json
       }
       trunc_hour: { Args: { ts: string }; Returns: string }
+      update_own_comment: {
+        Args: {
+          p_comment_id: string
+          p_content: string
+          p_post_id: string
+          p_user_id: string
+        }
+        Returns: {
+          author_handle: string | null
+          author_id: string | null
+          content: string
+          created_at: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          dislike_count: number
+          id: string
+          like_count: number
+          parent_id: string | null
+          post_id: string
+          ranking_score: number
+          updated_at: string | null
+          user_id: string
+        }[]
+      }
       update_post_report_counts: { Args: never; Returns: number }
       update_post_velocity: { Args: never; Returns: number }
       update_subscription_and_profile: {
