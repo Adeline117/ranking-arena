@@ -398,6 +398,12 @@ html.theme-transition #main-content {
   --background: #ffffff;
   --foreground: #111111;
 
+  /* Text links and filled controls both consume --color-brand. The root purple
+     (#9373b5) only reached 3.3:1 on light surfaces; use the existing deep brand
+     shade here so nav labels, links and white-on-brand CTAs clear WCAG AA. */
+  --color-brand: #604184;
+  --color-brand-hover: #523770;
+
   /* Brand gradients — deeper purples for contrast on light surfaces */
   --gradient-primary: linear-gradient(135deg, #8a6cb0 0%, #6f4e96 100%);
   --gradient-primary-hover: linear-gradient(135deg, #9b7fc0 0%, #8a6cb0 100%);
@@ -437,7 +443,7 @@ html.theme-transition #main-content {
   --color-translated-20: rgba(53, 117, 116, 0.2);
   --color-accent-success: #15803d; /* Darkened from #22C55E for WCAG AA 5.1:1 on #FAFAFE */
   --color-accent-success-20: rgba(21, 128, 61, 0.2);
-  --color-accent-error: #dc2626; /* Darkened from #EF4444 for WCAG AA 4.6:1 on #FAFAFE */
+  --color-accent-error: #b91c1c; /* 6.1:1 on card bg #F4F4F8 */
   --color-accent-error-20: rgba(220, 38, 38, 0.2);
   --color-accent-warning: #b45309; /* Already darkened (5.3:1) */
   --color-accent-primary-15: rgba(123, 95, 152, 0.15);
