@@ -12,13 +12,14 @@
  */
 
 import { create } from 'zustand'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import {
   fetchPostCommentsPage,
   isCreatedCommentAcknowledgement,
   isDefinitiveMutationRejection,
 } from '@/lib/api/comments-client'
 import { logger } from '@/lib/logger'
+import { getViewerScope } from '@/lib/auth/viewer-scope'
 
 export type PostData = {
   id: string
@@ -62,17 +63,24 @@ type CommentsPagination = {
 }
 
 type PostStoreState = {
+  /** Principal that owns every viewer-specific value below. */
+  viewerKey: string
+  sessionGeneration: number
   /** Canonical post cache: postId → PostData */
   posts: Record<string, PostData>
   /** Canonical comment cache: postId → CommentData[] */
   comments: Record<string, CommentData[]>
   /** Comment pagination state per post */
   commentsPagination: Record<string, CommentsPagination>
+  /** Local monotonic tree revision used to reject older async reads. */
+  commentsRevision: Record<string, number>
   /** Feed refresh trigger - increment to signal feeds to refresh */
   feedRefreshTrigger: number
 }
 
 type PostStoreActions = {
+  /** Atomically change cache owner and clear all viewer-specific values. */
+  setViewerScope: (viewerKey: string, sessionGeneration: number) => void
   /** Update a single post in the cache (merge with existing) */
   setPost: (post: PostData) => void
   /** Update multiple posts in the cache */
@@ -120,10 +128,27 @@ function evictOldest<T>(record: Record<string, T>, maxSize: number): Record<stri
 }
 
 export const usePostStore = create<PostStoreState & PostStoreActions>((set) => ({
+  viewerKey: 'pending',
+  sessionGeneration: 0,
   posts: {},
   comments: {},
   commentsPagination: {},
+  commentsRevision: {},
   feedRefreshTrigger: 0,
+
+  setViewerScope: (viewerKey, sessionGeneration) =>
+    set((state) => {
+      if (state.viewerKey === viewerKey && state.sessionGeneration === sessionGeneration)
+        return state
+      return {
+        viewerKey,
+        sessionGeneration,
+        posts: {},
+        comments: {},
+        commentsPagination: {},
+        commentsRevision: {},
+      }
+    }),
 
   setPost: (post) =>
     set((state) => ({
@@ -179,6 +204,10 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
   setComments: (postId, comments) =>
     set((state) => ({
       comments: evictOldest({ ...state.comments, [postId]: comments }, MAX_CACHED_COMMENT_SETS),
+      commentsRevision: {
+        ...state.commentsRevision,
+        [postId]: (state.commentsRevision[postId] || 0) + 1,
+      },
     })),
 
   appendComments: (postId, newComments) =>
@@ -192,6 +221,10 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
           { ...state.comments, [postId]: [...existing, ...unique] },
           MAX_CACHED_COMMENT_SETS
         ),
+        commentsRevision: {
+          ...state.commentsRevision,
+          [postId]: (state.commentsRevision[postId] || 0) + 1,
+        },
       }
     }),
 
@@ -202,6 +235,10 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
       if (existing.some((c) => c.id === comment.id)) return state
       return {
         comments: { ...state.comments, [postId]: [...existing, comment] },
+        commentsRevision: {
+          ...state.commentsRevision,
+          [postId]: (state.commentsRevision[postId] || 0) + 1,
+        },
       }
     }),
 
@@ -218,7 +255,14 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
       feedRefreshTrigger: state.feedRefreshTrigger + 1,
     })),
 
-  clear: () => set({ posts: {}, comments: {}, commentsPagination: {}, feedRefreshTrigger: 0 }),
+  clear: () =>
+    set({
+      posts: {},
+      comments: {},
+      commentsPagination: {},
+      commentsRevision: {},
+      feedRefreshTrigger: 0,
+    }),
 }))
 
 function getDefaultPagination(): CommentsPagination {
@@ -227,36 +271,96 @@ function getDefaultPagination(): CommentsPagination {
 
 const COMMENTS_PER_PAGE = 10
 
+export type PostStoreViewerScope = {
+  viewerKey: string
+  sessionGeneration: number
+  userId: string | null
+}
+
+const commentLoadGeneration = new Map<string, number>()
+const commentLoadMoreGeneration = new Map<string, number>()
+
+function captureStoreScope(scope?: PostStoreViewerScope): PostStoreViewerScope {
+  if (scope) return scope
+  const current = getViewerScope()
+  return {
+    viewerKey: current.viewerKey,
+    sessionGeneration: current.sessionGeneration,
+    userId: current.userId,
+  }
+}
+
+function storeScopeIsCurrent(scope: PostStoreViewerScope): boolean {
+  const store = usePostStore.getState()
+  return store.viewerKey === scope.viewerKey && store.sessionGeneration === scope.sessionGeneration
+}
+
+function requestKey(scope: PostStoreViewerScope, postId: string): string {
+  return `${scope.viewerKey}\u0000${scope.sessionGeneration}\u0000${postId}`
+}
+
+function viewerReadOptions(scope: PostStoreViewerScope) {
+  return {
+    expectedUserId: scope.userId,
+    expectedSessionGeneration: scope.sessionGeneration,
+  }
+}
+
 /**
  * Load comments for a post. Resets pagination.
  */
 export async function loadPostComments(
   postId: string,
-  accessToken: string | null = null
+  accessToken: string | null = null,
+  scope?: PostStoreViewerScope
 ): Promise<void> {
+  const capturedScope = captureStoreScope(scope)
+  if (!storeScopeIsCurrent(capturedScope)) return
   const store = usePostStore.getState()
+  const key = requestKey(capturedScope, postId)
+  const generation = (commentLoadGeneration.get(key) || 0) + 1
+  commentLoadGeneration.set(key, generation)
+  const requestStartRevision = store.commentsRevision[postId] || 0
   store.setCommentsPagination(postId, { loading: true, offset: 0, hasMore: true })
 
   try {
     const page = await fetchPostCommentsPage<CommentData>(postId, accessToken, {
       limit: COMMENTS_PER_PAGE,
       offset: 0,
+      ...(scope ? { viewerScope: viewerReadOptions(capturedScope) } : {}),
     })
 
-    if (page.ok) {
-      store.setComments(postId, page.comments)
-      store.updatePostCommentCount(postId, page.commentCount)
-      store.setCommentsPagination(postId, {
+    if (
+      page.ok &&
+      storeScopeIsCurrent(capturedScope) &&
+      commentLoadGeneration.get(key) === generation
+    ) {
+      const current = usePostStore.getState()
+      if ((current.commentsRevision[postId] || 0) !== requestStartRevision) {
+        // A realtime/local commit landed after this read began. A fresh read is
+        // the only safe source for pagination/count after that boundary.
+        current.setCommentsPagination(postId, { loading: false })
+        await loadPostComments(postId, accessToken, capturedScope)
+        return
+      }
+      current.setComments(postId, page.comments)
+      current.updatePostCommentCount(postId, page.commentCount)
+      current.setCommentsPagination(postId, {
         loading: false,
         offset: page.comments.length,
         hasMore: page.hasMore,
       })
-    } else {
-      store.setCommentsPagination(postId, { loading: false })
+    } else if (
+      storeScopeIsCurrent(capturedScope) &&
+      commentLoadGeneration.get(key) === generation
+    ) {
+      usePostStore.getState().setCommentsPagination(postId, { loading: false })
     }
   } catch (err) {
     logger.error('[postStore] loadPostComments failed:', err)
-    store.setCommentsPagination(postId, { loading: false })
+    if (storeScopeIsCurrent(capturedScope) && commentLoadGeneration.get(key) === generation) {
+      usePostStore.getState().setCommentsPagination(postId, { loading: false })
+    }
   }
 }
 
@@ -265,46 +369,77 @@ export async function loadPostComments(
  */
 export async function loadMorePostComments(
   postId: string,
-  accessToken: string | null = null
+  accessToken: string | null = null,
+  scope?: PostStoreViewerScope
 ): Promise<void> {
+  const capturedScope = captureStoreScope(scope)
+  if (!storeScopeIsCurrent(capturedScope)) return
   const store = usePostStore.getState()
   const pagination = store.commentsPagination[postId]
   if (!pagination || pagination.loadingMore || !pagination.hasMore) return
 
   store.setCommentsPagination(postId, { loadingMore: true })
+  const key = requestKey(capturedScope, postId)
+  const generation = (commentLoadMoreGeneration.get(key) || 0) + 1
+  commentLoadMoreGeneration.set(key, generation)
+  const requestStartRevision = store.commentsRevision[postId] || 0
 
   try {
     const page = await fetchPostCommentsPage<CommentData>(postId, accessToken, {
       limit: COMMENTS_PER_PAGE,
       offset: pagination.offset,
+      ...(scope ? { viewerScope: viewerReadOptions(capturedScope) } : {}),
     })
 
-    if (page.ok) {
-      store.appendComments(postId, page.comments)
-      store.updatePostCommentCount(postId, page.commentCount)
-      store.setCommentsPagination(postId, {
+    if (
+      page.ok &&
+      storeScopeIsCurrent(capturedScope) &&
+      commentLoadMoreGeneration.get(key) === generation
+    ) {
+      const current = usePostStore.getState()
+      if ((current.commentsRevision[postId] || 0) !== requestStartRevision) {
+        current.setCommentsPagination(postId, { loadingMore: false })
+        await loadPostComments(postId, accessToken, capturedScope)
+        return
+      }
+      current.appendComments(postId, page.comments)
+      current.updatePostCommentCount(postId, page.commentCount)
+      current.setCommentsPagination(postId, {
         loadingMore: false,
         offset: pagination.offset + page.comments.length,
         hasMore: page.hasMore,
       })
-    } else {
-      store.setCommentsPagination(postId, { loadingMore: false })
+    } else if (
+      storeScopeIsCurrent(capturedScope) &&
+      commentLoadMoreGeneration.get(key) === generation
+    ) {
+      usePostStore.getState().setCommentsPagination(postId, { loadingMore: false })
     }
   } catch (err) {
     logger.error('[postStore] loadMorePostComments failed:', err)
-    store.setCommentsPagination(postId, { loadingMore: false })
+    if (storeScopeIsCurrent(capturedScope) && commentLoadMoreGeneration.get(key) === generation) {
+      usePostStore.getState().setCommentsPagination(postId, { loadingMore: false })
+    }
   }
 }
 
-async function reconcilePostStoreComments(postId: string, accessToken: string): Promise<boolean> {
+async function reconcilePostStoreComments(
+  postId: string,
+  accessToken: string,
+  scope: PostStoreViewerScope
+): Promise<boolean> {
+  if (!storeScopeIsCurrent(scope)) return false
+  const requestStartRevision = usePostStore.getState().commentsRevision[postId] || 0
   try {
     const page = await fetchPostCommentsPage<CommentData>(postId, accessToken, {
       limit: COMMENTS_PER_PAGE,
       offset: 0,
+      viewerScope: viewerReadOptions(scope),
     })
-    if (!page.ok) return false
+    if (!page.ok || !storeScopeIsCurrent(scope)) return false
 
     const store = usePostStore.getState()
+    if ((store.commentsRevision[postId] || 0) !== requestStartRevision) return false
     store.setComments(postId, page.comments)
     store.updatePostCommentCount(postId, page.commentCount)
     store.setCommentsPagination(postId, {
@@ -325,25 +460,35 @@ async function reconcilePostStoreComments(postId: string, accessToken: string): 
 export async function submitPostComment(
   postId: string,
   content: string,
-  accessToken: string
+  accessToken: string,
+  scope?: PostStoreViewerScope
 ): Promise<{ comment: CommentData } | { error: string }> {
+  const capturedScope = captureStoreScope(scope)
+  if (!storeScopeIsCurrent(capturedScope)) return { error: 'STALE_AUTH_SCOPE' }
   try {
-    const response = await fetch(`/api/posts/${postId}/comments`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-        ...getCsrfHeaders(),
-      },
-      body: JSON.stringify({ content }),
+    const response = await authedFetch<{
+      success?: boolean
+      error?: string
+      data?: { comment?: unknown }
+    }>(`/api/posts/${postId}/comments`, 'POST', accessToken, { content }, 15_000, {
+      expectedUserId: capturedScope.userId,
+      expectedSessionGeneration: capturedScope.sessionGeneration,
     })
 
-    const json = await response.json().catch(() => null)
+    if (!storeScopeIsCurrent(capturedScope) || response.stale) {
+      return { error: 'STALE_AUTH_SCOPE' }
+    }
+
+    const json = response.data
 
     if (
       response.ok &&
       json?.success &&
-      isCreatedCommentAcknowledgement(json.data?.comment, { postId, content })
+      isCreatedCommentAcknowledgement(json.data?.comment, {
+        postId,
+        content,
+        userId: capturedScope.userId,
+      })
     ) {
       const acknowledgement = json.data.comment
       const comment: CommentData = {
@@ -353,20 +498,21 @@ export async function submitPostComment(
       // The ACK proves the row committed, while the follow-up authenticated
       // read supplies the absolute post count. Keep the ACK visible even when
       // it falls outside the first canonical page or that read is unavailable.
-      await reconcilePostStoreComments(postId, accessToken)
+      await reconcilePostStoreComments(postId, accessToken, capturedScope)
+      if (!storeScopeIsCurrent(capturedScope)) return { error: 'STALE_AUTH_SCOPE' }
       usePostStore.getState().addComment(postId, comment)
       return { comment }
     }
 
-    if (isDefinitiveMutationRejection({ ok: response.ok, status: response.status })) {
+    if (isDefinitiveMutationRejection(response)) {
       return { error: json?.error || '发表评论失败' }
     }
 
-    await reconcilePostStoreComments(postId, accessToken)
+    await reconcilePostStoreComments(postId, accessToken, capturedScope)
     return { error: json?.error || '发表评论结果未知，请检查最新评论' }
   } catch (err) {
     logger.error('[postStore] submitPostComment failed:', err)
-    await reconcilePostStoreComments(postId, accessToken)
+    await reconcilePostStoreComments(postId, accessToken, capturedScope)
     return { error: '发表评论结果未知，请检查最新评论' }
   }
 }
@@ -377,22 +523,29 @@ export async function submitPostComment(
 export async function togglePostReaction(
   postId: string,
   reactionType: 'up' | 'down',
-  accessToken: string
+  accessToken: string,
+  scope?: PostStoreViewerScope
 ): Promise<{ success: boolean; error?: string }> {
+  const capturedScope = captureStoreScope(scope)
+  if (!storeScopeIsCurrent(capturedScope)) {
+    return { success: false, error: 'STALE_AUTH_SCOPE' }
+  }
   try {
-    const response = await fetch(`/api/posts/${postId}/like`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${accessToken}`,
-        ...getCsrfHeaders(),
-      },
-      body: JSON.stringify({ reaction_type: reactionType }),
+    const response = await authedFetch<{
+      success?: boolean
+      error?: string
+      data?: { like_count: number; dislike_count: number; reaction: 'up' | 'down' | null }
+    }>(`/api/posts/${postId}/like`, 'POST', accessToken, { reaction_type: reactionType }, 15_000, {
+      expectedUserId: capturedScope.userId,
+      expectedSessionGeneration: capturedScope.sessionGeneration,
     })
 
-    const json = await response.json()
+    if (!storeScopeIsCurrent(capturedScope) || response.stale) {
+      return { success: false, error: 'STALE_AUTH_SCOPE' }
+    }
+    const json = response.data
 
-    if (response.ok && json.success) {
+    if (response.ok && json?.success && json.data) {
       const result = json.data
       // Update store with server-confirmed data
       usePostStore.getState().updatePostReaction(postId, {
@@ -402,7 +555,7 @@ export async function togglePostReaction(
       })
       return { success: true }
     } else {
-      return { success: false, error: json.error || '操作失败' }
+      return { success: false, error: json?.error || '操作失败' }
     }
   } catch (err) {
     logger.error('[postStore] togglePostReaction failed:', err)
