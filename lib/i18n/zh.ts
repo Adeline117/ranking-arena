@@ -1150,6 +1150,9 @@ const zh = {
   traderAlertsRemoveFailed: '无法删除交易员告警，请重试。',
   traderAlertsLoadFailed: '无法加载交易员告警，请重试。',
   traderAlertsProRequired: '交易员告警管理需要 Pro。',
+  alertScoreChangeLabel: 'Arena Score 变动',
+  alertScoreChangeDesc: '当该交易员的 Arena Score 变动达到此分数时通知我。',
+  alertScoreUnit: '分',
   // 隐私设置详细
   followListVisibilityNote: '关闭后，其他用户将无法查看对应列表',
   showFollowingListLabel: '公开我的关注列表',

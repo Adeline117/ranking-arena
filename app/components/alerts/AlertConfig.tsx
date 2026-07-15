@@ -312,6 +312,17 @@ export default function AlertConfig({
         onThresholdChange={(v) => setAlert((prev) => ({ ...prev, rank_change_threshold: v }))}
         unit={t('alertRankUnit')}
       />
+      <AlertRow
+        label={t('alertScoreChangeLabel')}
+        desc={t('alertScoreChangeDesc')}
+        checked={alert.alert_score_change}
+        onToggle={() =>
+          setAlert((prev) => ({ ...prev, alert_score_change: !prev.alert_score_change }))
+        }
+        threshold={alert.score_change_threshold}
+        onThresholdChange={(v) => setAlert((prev) => ({ ...prev, score_change_threshold: v }))}
+        unit={t('alertScoreUnit')}
+      />
       {/* Price alerts (above/below) are UI-complete but have NO backend:
           check-trader-alerts fetches no price feed and never evaluates
           alert_price_above/below. Hidden until that path exists, so a paying
