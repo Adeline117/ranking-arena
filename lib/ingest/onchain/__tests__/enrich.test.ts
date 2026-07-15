@@ -1,4 +1,5 @@
 import {
+  bscHistoryEvidence,
   chainForSource,
   enrichmentExtras,
   enrichmentSeries,
@@ -6,6 +7,58 @@ import {
   solanaHistoryEvidence,
   type OnchainEnrichment,
 } from '../enrich'
+
+describe('bscHistoryEvidence', () => {
+  const base = {
+    transferCoverage: {
+      fromAddress: {
+        scanComplete: true,
+        truncated: false,
+        stopReason: 'history_exhausted' as const,
+        pagesFetched: 1,
+        recordsSeen: 2,
+        recordsReturned: 2,
+        recordsMissingTimestamp: 0,
+      },
+      toAddress: {
+        scanComplete: true,
+        truncated: false,
+        stopReason: 'history_exhausted' as const,
+        pagesFetched: 1,
+        recordsSeen: 1,
+        recordsReturned: 1,
+        recordsMissingTimestamp: 0,
+      },
+      scanComplete: true,
+      truncated: false,
+    },
+    transfers: 3,
+    swaps: 1,
+  }
+
+  it('requires explicit internal-transfer coverage in addition to both base cursors', () => {
+    expect(bscHistoryEvidence(base, false)).toEqual({
+      scanComplete: false,
+      truncated: false,
+      recordsFetched: 3,
+      txsFetched: null,
+      swapsDecoded: 1,
+    })
+    expect(bscHistoryEvidence(base, true).scanComplete).toBe(true)
+  })
+
+  it('preserves base transfer truncation even with internal coverage proof', () => {
+    expect(
+      bscHistoryEvidence(
+        {
+          ...base,
+          transferCoverage: { ...base.transferCoverage, scanComplete: false, truncated: true },
+        },
+        true
+      )
+    ).toMatchObject({ scanComplete: false, truncated: true })
+  })
+})
 
 describe('solanaHistoryEvidence', () => {
   const base = {
