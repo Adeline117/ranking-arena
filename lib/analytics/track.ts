@@ -1,12 +1,13 @@
 /**
- * Custom event tracking utility — dual-emits to Plausible AND PostHog.
+ * Custom event tracking utility — emits to Vercel Analytics and mirrors to
+ * Plausible/PostHog when those optional providers are configured.
  *
- * Safe to call anywhere: no-ops for whichever provider is not loaded. Both are
- * key-gated (Plausible via its script tag, PostHog via NEXT_PUBLIC_POSTHOG_KEY),
- * so with no keys set this is a silent no-op. The moment the owner adds a
- * PostHog key, every trackEvent call already sprinkled through the app starts
- * flowing into PostHog funnels with zero further code changes.
+ * Safe to call anywhere: server calls are ignored and optional providers no-op
+ * when not loaded. Vercel Analytics is the production baseline because its
+ * <Analytics /> component is already mounted in the app layout.
  */
+
+import { track as trackVercelEvent } from '@vercel/analytics'
 
 type EventProps = Record<string, string | number | boolean>
 
@@ -72,6 +73,10 @@ interface PostHogLike {
 
 export function trackEvent(name: AnalyticsEventName, props?: EventProps) {
   if (typeof window === 'undefined') return
+
+  // Vercel Web Analytics is the always-on production baseline. Keep payloads
+  // flat and primitive so they satisfy the custom-event ingestion contract.
+  trackVercelEvent(name, props ?? {})
 
   // Plausible
   const plausible = (window as unknown as { plausible?: PlausibleFn }).plausible
