@@ -16,6 +16,61 @@ export const RAW_BUCKET = 'raw-snapshots'
 
 let storageClient: SupabaseClient | null = null
 
+const RAW_UPLOAD_ATTEMPTS = 3
+const RAW_UPLOAD_RETRY_BASE_MS = 750
+
+interface StorageUploadError {
+  message?: string
+  status?: number | string
+  statusCode?: number | string
+}
+
+function storageErrorStatus(error: StorageUploadError): number | null {
+  const raw = error.statusCode ?? error.status
+  const parsed = typeof raw === 'number' ? raw : Number(raw)
+  return Number.isFinite(parsed) ? parsed : null
+}
+
+function isTransientStorageError(error: StorageUploadError): boolean {
+  const status = storageErrorStatus(error)
+  if (status !== null && [408, 429, 500, 502, 503, 504].includes(status)) return true
+
+  return /timeout|timed out|connection|econnreset|etimedout|fetch failed|bad gateway|service unavailable/i.test(
+    error.message ?? ''
+  )
+}
+
+function isAlreadyUploaded(error: StorageUploadError): boolean {
+  return storageErrorStatus(error) === 409 || /already exists|duplicate/i.test(error.message ?? '')
+}
+
+async function uploadRawPayload(storagePath: string, gz: Buffer): Promise<void> {
+  const bucket = getStorageClient().storage.from(RAW_BUCKET)
+
+  for (let attempt = 1; attempt <= RAW_UPLOAD_ATTEMPTS; attempt += 1) {
+    const { error } = await bucket.upload(storagePath, gz, {
+      contentType: 'application/gzip',
+      upsert: false,
+    })
+    if (!error) return
+
+    // A previous timed-out request may have committed before its response was
+    // lost. The content-addressed path and identical payload make 409 on a
+    // retry equivalent to success without weakening RAW immutability.
+    if (attempt > 1 && isAlreadyUploaded(error)) return
+
+    if (attempt === RAW_UPLOAD_ATTEMPTS || !isTransientStorageError(error)) {
+      throw new Error(`[ingest] RAW upload failed (${storagePath}): ${error.message}`)
+    }
+
+    const delayMs = RAW_UPLOAD_RETRY_BASE_MS * 2 ** (attempt - 1)
+    console.warn(
+      `[ingest] RAW upload transient failure (${attempt}/${RAW_UPLOAD_ATTEMPTS}); retrying in ${delayMs}ms: ${error.message}`
+    )
+    await new Promise((resolve) => setTimeout(resolve, delayMs))
+  }
+}
+
 function getStorageClient(): SupabaseClient {
   if (storageClient) return storageClient
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
@@ -51,13 +106,7 @@ export async function writeRawObject(input: WriteRawInput): Promise<number> {
     `${input.sourceSlug}/${input.jobType}/${yyyy}/${mm}/${dd}/` +
     `${now.getTime()}_${contentHash}.json.gz`
 
-  const { error } = await getStorageClient().storage.from(RAW_BUCKET).upload(storagePath, gz, {
-    contentType: 'application/gzip',
-    upsert: false,
-  })
-  if (error) {
-    throw new Error(`[ingest] RAW upload failed (${storagePath}): ${error.message}`)
-  }
+  await uploadRawPayload(storagePath, gz)
 
   const { rows } = await getIngestPool().query<{ id: number }>(
     `INSERT INTO arena.raw_objects
