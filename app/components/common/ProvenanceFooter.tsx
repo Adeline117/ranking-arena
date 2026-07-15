@@ -51,7 +51,11 @@ export default function ProvenanceFooter({
     >
       <Text size="xs" color="tertiary">
         {t('provenanceSource')}: {name} · {t('provenanceAsOf')}{' '}
-        <time dateTime={provenance.asOf} title={new Date(provenance.asOf).toLocaleString()}>
+        <time
+          dateTime={provenance.asOf}
+          title={new Date(provenance.asOf).toLocaleString()}
+          suppressHydrationWarning
+        >
           {formatTimeAgo(provenance.asOf, language)}
         </time>
       </Text>
