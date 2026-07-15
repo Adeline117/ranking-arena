@@ -158,22 +158,46 @@ else
 fi
 
 # 5. Restart + verify ready, AUTO-ROLLBACK on failure.
+# Ready-check evidence must be newer than this deployment. Grepping a fixed PM2
+# log window can match an old "ready" line and falsely pass a broken restart.
+# Append a unique marker before each restart, then require BOTH a ready line and
+# the expected heartbeat SHA after that marker. 90s < BullMQ's stall window.
+READY_LOG="$REMOTE_DIR/worker/logs/ingest-out.log"
+READY_MARKER="arena-deploy-$TS-${SHA:0:9}"
+
+wait_for_fresh_ready() {
+  local marker="$1"
+  local expected_sha="$2"
+  ssh_sg "for i in \$(seq 1 90); do
+    awk -v marker='$marker' -v sha='$expected_sha' '
+      index(\$0, marker) { after = 1; ready = 0; heartbeat = 0; next }
+      after && index(\$0, \"[ingest-worker] ready\") { ready = 1 }
+      after && index(\$0, \"[heartbeat]\") && (sha == \"\" || index(\$0, \"sha=\" sha)) { heartbeat = 1 }
+      END { exit !(ready && heartbeat) }
+    ' '$READY_LOG' && { echo READY; exit 0; }
+    sleep 1
+  done
+  exit 1"
+}
+
+ssh_sg "mkdir -p '$REMOTE_DIR/worker/logs'; printf '%s\\n' '$READY_MARKER' >> '$READY_LOG'"
 echo "5/5 restarting $PM2_APP"
 ssh_sg "pm2 restart $PM2_APP --update-env || pm2 start $REMOTE_DIR/worker/ecosystem.sg.config.cjs --only $PM2_APP" || true
 
-# Ready-check: this box is slow + the worker is chatty, so the boot "ready" line
-# scrolls out of a small --lines window within seconds. Use a WIDE window (400)
-# + a LONGER wait (90s), else a worker that IS ready is falsely declared failed
-# and needlessly rolled back (2026-07-08: rollback itself "failed" this way while
-# actually healthy). 90s < BullMQ stall window so no interaction with locks.
 echo "--- waiting for ready (up to 90s) ---"
-if ssh_sg "for i in \$(seq 1 90); do pm2 logs $PM2_APP --lines 400 --nostream 2>/dev/null | grep -q 'ingest-worker. ready' && { echo READY; exit 0; }; sleep 1; done; exit 1"; then
+if wait_for_fresh_ready "$READY_MARKER" "${SHA:0:9}"; then
   echo "✓ deploy OK — $PM2_APP ready on ${SHA:0:9}"
   echo "  (manual rollback if needed: ssh $VPS_HOST 'rm -rf $REMOTE_DIR && mv $REMOTE_DIR.bak-$TS $REMOTE_DIR && pm2 restart $PM2_APP')"
 else
   echo "✗ $PM2_APP did NOT report ready — AUTO-ROLLING BACK to $REMOTE_DIR.bak-$TS (code+node_modules pair)…" >&2
-  ssh_sg "pm2 stop $PM2_APP || true; rm -rf $REMOTE_DIR && mv $REMOTE_DIR.bak-$TS $REMOTE_DIR && pm2 restart $PM2_APP --update-env"
-  if ssh_sg "for i in \$(seq 1 90); do pm2 logs $PM2_APP --lines 400 --nostream 2>/dev/null | grep -q 'ingest-worker. ready' && exit 0; sleep 1; done; exit 1"; then
+  ROLLBACK_MARKER="arena-rollback-$TS"
+  ssh_sg "pm2 stop $PM2_APP || true
+    rm -rf $REMOTE_DIR && mv $REMOTE_DIR.bak-$TS $REMOTE_DIR
+    mkdir -p '$REMOTE_DIR/worker/logs'
+    printf '%s\\n' '$ROLLBACK_MARKER' >> '$READY_LOG'
+    pm2 restart $PM2_APP --update-env"
+  ROLLBACK_SHA="$(ssh_sg "cat '$REMOTE_DIR/DEPLOYED_SHA' 2>/dev/null | cut -c1-9" || true)"
+  if wait_for_fresh_ready "$ROLLBACK_MARKER" "$ROLLBACK_SHA"; then
     echo "✓ rolled back — $PM2_APP is ready on the previous version. Investigate 'pm2 logs $PM2_APP' before retrying." >&2
   else
     echo "✗✗ ROLLBACK ALSO FAILED — SG ingestion is DOWN. Manual intervention required: 'ssh $VPS_HOST pm2 logs $PM2_APP'." >&2
