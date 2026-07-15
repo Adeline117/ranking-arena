@@ -8445,6 +8445,23 @@ export type Database = {
           trader_count: number
         }[]
       }
+      get_token_trader_rankings: {
+        Args: {
+          lookback_days?: number
+          max_traders?: number
+          row_offset?: number
+          token_symbol: string
+        }
+        Returns: {
+          source: string
+          source_trader_id: string
+          token_avg_pnl_pct: number | null
+          token_pnl: number
+          token_trade_count: number
+          token_win_rate: number | null
+          total_count: number
+        }[]
+      }
       get_post_penalty: {
         Args: {
           p_dislike_count: number
