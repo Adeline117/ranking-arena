@@ -259,18 +259,18 @@ The data pipeline consists of 53 Vercel cron jobs organized into several categor
 
 ### Monitoring and Maintenance
 
-| Job                        | Schedule        | Description                                         |
-| -------------------------- | --------------- | --------------------------------------------------- |
-| `check-data-freshness`     | Every 3 hours   | Alert if any exchange data goes stale               |
-| `verify-fetchers`          | Every 3 hours   | Verify all fetcher modules are responding correctly |
-| `check-data-gaps`          | Every 4 hours   | Identify missing data windows and trigger backfills |
-| `backfill-data`            | Every 2 hours   | Auto-backfill detected data gaps                    |
-| `cleanup-data`             | Daily 01:00 UTC | Clean up stale data                                 |
-| `cleanup-deleted-accounts` | Daily 03:00 UTC | Remove data for deleted user accounts               |
-| `cleanup-stuck-logs`       | Every hour      | Clean stuck pipeline log entries                    |
-| `subscription-expiry`      | Daily 00:04 UTC | Process expired Pro subscriptions                   |
-| `backfill-avatars`         | Daily 02:30 UTC | Backfill missing trader avatar images               |
-| `check-trader-alerts`      | Every 6 hours   | Check and send trader rank change alerts            |
+| Job                        | Schedule         | Description                                         |
+| -------------------------- | ---------------- | --------------------------------------------------- |
+| `check-data-freshness`     | Every 3 hours    | Alert if any exchange data goes stale               |
+| `verify-fetchers`          | Every 3 hours    | Verify all fetcher modules are responding correctly |
+| `check-data-gaps`          | Every 4 hours    | Identify missing data windows and trigger backfills |
+| `backfill-data`            | Every 2 hours    | Auto-backfill detected data gaps                    |
+| `cleanup-data`             | Daily 01:00 UTC  | Clean up stale data                                 |
+| `cleanup-deleted-accounts` | Daily 03:00 UTC  | Remove data for deleted user accounts               |
+| `cleanup-stuck-logs`       | Every hour       | Clean stuck pipeline log entries                    |
+| `subscription-expiry`      | Daily 00:04 UTC  | Process expired Pro subscriptions                   |
+| `backfill-avatars`         | Daily 02:30 UTC  | Backfill missing trader avatar images               |
+| `check-trader-alerts`      | Every 30 minutes | Check and send Pro trader metric alerts             |
 
 All cron jobs use `PipelineLogger` for structured execution logging with three destinations: Supabase `pipeline_logs` table, ClickHouse (dual write), and Healthchecks.io dead man's switch for 5 critical jobs. Failures trigger Telegram alerts via the OpenClaw monitoring system on Mac Mini.
 

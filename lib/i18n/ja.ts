@@ -1577,6 +1577,7 @@ const ja = {
   sendMediaFile: '画像/動画/ファイルを送信',
 
   alertMonitoring: '監視中：{handle}',
+  alertCheckCadence: '有効な Pro メンバーは 30 分ごとにチェックされます。',
   alertRoiChangeLabel: 'ROI変動',
   alertRoiChangeDesc: 'ROIが閾値を超えて変動した際にアラート',
   alertDrawdownLabel: 'ドローダウンアラート',

@@ -1657,6 +1657,7 @@ const ko = {
 
   // AdvancedAlerts
   alertMonitoring: '모니터링 중: {handle}',
+  alertCheckCadence: '활성 Pro 회원은 30분마다 확인합니다.',
   alertRoiChangeLabel: 'ROI 변동',
   alertRoiChangeDesc: 'ROI가 임계값만큼 변동하면 알림',
   alertDrawdownLabel: '낙폭 알림',

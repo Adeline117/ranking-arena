@@ -1,593 +1,145 @@
 /**
- * 交易员变动检测 Cron
- * Pro 会员功能：检测关注交易员的变动并发送提醒
+ * Pro trader-alert scheduler.
  *
- * GET /api/cron/check-trader-alerts - 健康检查
- * POST /api/cron/check-trader-alerts - 执行检测
+ * The durable in-app notification, audit trail and baseline advance happen in
+ * one database transaction. Push and email follow only newly finalized events.
  */
 
 import { NextResponse } from 'next/server'
+import { createHash } from 'node:crypto'
 import logger from '@/lib/logger'
+import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { runTraderAlerts, type DeliveredTraderAlert } from '@/lib/alerts/run-trader-alerts'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { getPushNotificationService } from '@/lib/services/push-notification'
 import { sendEmail, buildTraderAlertEmail } from '@/lib/services/email'
-import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 120
 
-// 验证 Cron 密钥 (timing-safe)
-function isAuthorized(req: Request): boolean {
-  return verifyCronSecret(req)
-}
-
-interface TraderData {
-  source_trader_id: string
-  source: string
-  roi: number
-  roi_7d?: number
-  roi_30d?: number
-  pnl?: number
-  pnl_7d?: number
-  pnl_30d?: number
-  max_drawdown?: number
-  win_rate?: number
-  arena_score?: number
-  rank?: number
-}
-
-interface AlertConfig {
-  id: string
-  user_id: string
-  trader_id: string
-  source?: string
-  alert_roi_change: boolean
-  roi_change_threshold: number
-  alert_drawdown: boolean
-  drawdown_threshold: number
-  alert_pnl_change: boolean
-  pnl_change_threshold: number
-  alert_score_change: boolean
-  score_change_threshold: number
-  alert_rank_change: boolean
-  rank_change_threshold: number
-  one_time: boolean
-}
-
-interface Snapshot {
-  trader_id: string
-  source: string
-  roi_90d?: number
-  pnl_90d?: number
-  max_drawdown?: number
-  arena_score?: number
-}
-
-/**
- * GET - 健康检查
- */
-/**
- * GET - Vercel cron calls this endpoint. Execute trader alert checks.
- */
-export async function GET(req: Request) {
-  const startTime = Date.now()
-  const plog = await PipelineLogger.start('check-trader-alerts')
+async function sendPushNotifications(alerts: DeliveredTraderAlert[]): Promise<number> {
+  if (alerts.length === 0) return 0
 
   try {
-    // 验证授权
-    if (!isAuthorized(req)) {
-      return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-    }
-
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
-    // 1. 获取启用的提醒配置（限制最大数量防止内存爆炸）
-    const MAX_ALERTS_PER_RUN = 1000
-    const { data: alerts, error: alertsError } = await supabase
-      .from('trader_alerts')
-      .select(
-        'id, user_id, trader_id, source, alert_roi_change, roi_change_threshold, alert_drawdown, drawdown_threshold, alert_pnl_change, pnl_change_threshold, alert_score_change, score_change_threshold, alert_rank_change, rank_change_threshold, one_time'
+    const pushService = getPushNotificationService()
+    let sent = 0
+    const batchSize = 10
+    for (let index = 0; index < alerts.length; index += batchSize) {
+      const results = await Promise.allSettled(
+        alerts.slice(index, index + batchSize).map((alert) =>
+          pushService.sendToUser(alert.userId, {
+            title: alert.title,
+            body: alert.message,
+            data: {
+              url: alert.link,
+              type: alert.notificationType,
+              deliveryId: alert.deliveryId,
+            },
+          })
+        )
       )
-      .eq('enabled', true)
-      .limit(MAX_ALERTS_PER_RUN)
+      sent += results.filter((result) => result.status === 'fulfilled').length
+    }
+    return sent
+  } catch (error) {
+    logger.warn('[TraderAlerts Cron] Push delivery failed', { error })
+    return 0
+  }
+}
 
-    if (alertsError) {
-      logger.error('[TraderAlerts Cron] 获取提醒配置Failed:', alertsError)
-      return NextResponse.json({ ok: false, error: alertsError.message }, { status: 500 })
+async function sendAlertEmails(alerts: DeliveredTraderAlert[]): Promise<number> {
+  if (alerts.length === 0) return 0
+
+  try {
+    const supabase = getSupabaseAdmin()
+    const byUser = new Map<string, DeliveredTraderAlert[]>()
+    for (const alert of alerts) {
+      const userAlerts = byUser.get(alert.userId) ?? []
+      userAlerts.push(alert)
+      byUser.set(alert.userId, userAlerts)
     }
 
-    if (!alerts || alerts.length === 0) {
-      await plog.success(0, { message: 'No active alerts to process' })
-      return NextResponse.json({
-        ok: true,
-        message: 'No active alerts to process',
-        alertsChecked: 0,
-        alertsSent: 0,
+    const { data: profiles, error } = await supabase
+      .from('user_profiles')
+      .select('id, email, email_digest')
+      .in('id', [...byUser.keys()])
+    if (error) throw error
+
+    let sent = 0
+    for (const profile of profiles ?? []) {
+      if (!profile.email || profile.email_digest === 'none') continue
+      const userAlerts = byUser.get(profile.id)
+      if (!userAlerts?.length) continue
+      const emailDeliveryKey = createHash('sha256')
+        .update(
+          userAlerts
+            .map((alert) => alert.deliveryId)
+            .sort()
+            .join('.')
+        )
+        .digest('hex')
+
+      const delivered = await sendEmail({
+        to: profile.email,
+        subject: `Arena: ${userAlerts.length} trader alert${userAlerts.length === 1 ? '' : 's'} triggered`,
+        html: buildTraderAlertEmail(
+          userAlerts.map((alert) => ({
+            title: alert.title,
+            message: alert.message,
+            link: alert.link,
+          }))
+        ),
+        idempotencyKey: `trader-alert/${emailDeliveryKey}`,
       })
+      if (delivered) sent++
     }
+    return sent
+  } catch (error) {
+    logger.warn('[TraderAlerts Cron] Email delivery failed', { error })
+    return 0
+  }
+}
 
-    // 2. 收集需要检查的交易员 ID
-    const traderIds = [...new Set(alerts.map((a: AlertConfig) => a.trader_id))]
+export async function GET(request: Request) {
+  if (!verifyCronSecret(request)) {
+    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  }
 
-    // 3. 获取这些交易员的当前数据 (from leaderboard_ranks, 90D period)
-    const { data: lrData, error: tradersError } = await supabase
-      .from('leaderboard_ranks')
-      .select(
-        'source_trader_id, source, roi, pnl, max_drawdown, win_rate, arena_score, rank, season_id'
-      )
-      .in('source_trader_id', traderIds)
-      .eq('season_id', '90D')
+  const startedAt = Date.now()
+  const pipeline = await PipelineLogger.start('check-trader-alerts')
 
-    if (tradersError) {
-      logger.error('[TraderAlerts Cron] 获取交易员数据Failed:', tradersError)
-      return NextResponse.json({ ok: false, error: tradersError.message }, { status: 500 })
-    }
+  try {
+    const result = await runTraderAlerts(getSupabaseAdmin())
+    const [pushSent, emailsSent] = await Promise.all([
+      sendPushNotifications(result.deliveredAlerts),
+      sendAlertEmails(result.deliveredAlerts),
+    ])
 
-    // Map leaderboard_ranks data to TraderData shape for compatibility
-    const tradersData: TraderData[] | null =
-      lrData?.map((lr) => ({
-        source_trader_id: lr.source_trader_id,
-        source: lr.source,
-        roi: lr.roi ?? 0,
-        pnl: lr.pnl ?? undefined,
-        max_drawdown: lr.max_drawdown ?? undefined,
-        win_rate: lr.win_rate ?? undefined,
-        arena_score: lr.arena_score ?? undefined,
-        rank: lr.rank ?? undefined,
-      })) ?? null
-
-    // 4. 获取昨天的快照数据 (from trader_daily_snapshots)
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yesterdayStr = yesterday.toISOString().split('T')[0]
-
-    const { data: snapshots, error: snapshotsError } = await supabase
-      .from('trader_daily_snapshots')
-      .select('trader_key, platform, roi, pnl, max_drawdown')
-      .in('trader_key', traderIds)
-      .eq('date', yesterdayStr)
-      .limit(MAX_ALERTS_PER_RUN)
-
-    if (snapshotsError) {
-      logger.error('[TraderAlerts Cron] 获取快照Failed:', snapshotsError)
-      // 继续执行，可能是第一次运行
-    }
-
-    // Also get arena_score from leaderboard_ranks for comparison (already fetched above as lrData)
-    // Build a map of arena scores from yesterday's daily snapshots + current LR data
-    const arenaScoreMap = new Map<string, number>()
-    if (lrData) {
-      for (const lr of lrData) {
-        arenaScoreMap.set(`${lr.source_trader_id}_${lr.source}`, lr.arena_score ?? 0)
-      }
-    }
-
-    // 创建快照映射
-    const snapshotMap = new Map<string, Snapshot>()
-    if (snapshots) {
-      for (const snap of snapshots) {
-        snapshotMap.set(`${snap.trader_key}_${snap.platform}`, {
-          trader_id: snap.trader_key,
-          source: snap.platform,
-          roi_90d: snap.roi ?? undefined,
-          pnl_90d: snap.pnl ?? undefined,
-          max_drawdown: snap.max_drawdown ?? undefined,
-          arena_score: undefined, // daily snapshots don't have arena_score
-        })
-      }
-    }
-
-    // Yesterday's ranks for rank_change alerts — trader_daily_snapshots has no
-    // rank column, so read from rank_history (written daily by snapshot-ranks).
-    const prevRankMap = new Map<string, number>()
-    const { data: prevRanks, error: prevRanksError } = await supabase
-      .from('rank_history')
-      .select('trader_key, platform, rank')
-      .in('trader_key', traderIds)
-      .eq('period', '90D')
-      .eq('snapshot_date', yesterdayStr)
-    if (prevRanksError) {
-      logger.error('[TraderAlerts Cron] 获取历史排名Failed:', prevRanksError)
-      // non-fatal — rank_change alerts simply won't fire this run
-    } else if (prevRanks) {
-      for (const r of prevRanks) {
-        if (r.rank != null) prevRankMap.set(`${r.trader_key}_${r.platform}`, r.rank)
-      }
-    }
-
-    // 创建当前数据映射
-    const traderDataMap = new Map<string, TraderData>()
-    if (tradersData) {
-      for (const trader of tradersData) {
-        traderDataMap.set(`${trader.source_trader_id}_${trader.source}`, trader)
-      }
-    }
-
-    // 5. Save today's snapshot to trader_daily_snapshots for tomorrow's comparison
-    const today = new Date().toISOString().split('T')[0]
-    const snapshotsToInsert =
-      tradersData?.map((t: TraderData) => ({
-        platform: t.source,
-        trader_key: t.source_trader_id,
-        date: today,
-        roi: t.roi,
-        pnl: t.pnl ?? null,
-        max_drawdown: t.max_drawdown ?? null,
-        win_rate: t.win_rate ?? null,
-      })) || []
-
-    if (snapshotsToInsert.length > 0) {
-      const { error: insertError } = await supabase
-        .from('trader_daily_snapshots')
-        .upsert(snapshotsToInsert, {
-          onConflict: 'platform,trader_key,date',
-          ignoreDuplicates: true,
-        })
-
-      if (insertError) {
-        logger.error('[TraderAlerts Cron] 保存快照Failed:', insertError)
-      }
-    }
-
-    // 6. 检测变动并发送提醒（批量处理）
-    let alertsSent = 0
-    const alertsToSend: Array<{
-      user_id: string
-      trader_id: string
-      type: string
-      title: string
-      message: string
-      link: string
-    }> = []
-
-    // 收集所有日志，最后批量插入
-    const alertLogsToInsert: Array<{
-      alert_id: string
-      user_id: string
-      trader_id: string
-      alert_type: string
-      old_value: number | null | undefined
-      new_value: number | null | undefined
-      change_percent?: number
-      message: string
-    }> = []
-
-    for (const alert of alerts as AlertConfig[]) {
-      const key = `${alert.trader_id}_${alert.source || ''}`
-      const currentData =
-        traderDataMap.get(key) ||
-        // 尝试不带 source 的匹配
-        Array.from(traderDataMap.values()).find((t) => t.source_trader_id === alert.trader_id)
-
-      if (!currentData) continue
-
-      const snapshotKey = `${alert.trader_id}_${currentData.source}`
-      const prevSnapshot = snapshotMap.get(snapshotKey)
-
-      if (!prevSnapshot) continue // 没有历史数据，跳过
-
-      // 检查 ROI 变动
-      if (alert.alert_roi_change && prevSnapshot.roi_90d != null && currentData.roi != null) {
-        const change = Math.abs(currentData.roi - prevSnapshot.roi_90d)
-        if (change >= alert.roi_change_threshold) {
-          const direction = currentData.roi > prevSnapshot.roi_90d ? 'up' : 'down'
-          alertsToSend.push({
-            user_id: alert.user_id,
-            trader_id: alert.trader_id,
-            type: 'trader_alert_roi',
-            title: 'ROI Alert',
-            message: `Trader ${alert.trader_id} ROI ${direction} ${change.toFixed(2)}% (${prevSnapshot.roi_90d.toFixed(2)}% → ${currentData.roi.toFixed(2)}%)`,
-            link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
-          })
-
-          // 收集日志（不再单独插入）
-          alertLogsToInsert.push({
-            alert_id: alert.id,
-            user_id: alert.user_id,
-            trader_id: alert.trader_id,
-            alert_type: 'roi_change',
-            old_value: prevSnapshot.roi_90d,
-            new_value: currentData.roi,
-            change_percent: change,
-            message: `ROI ${direction} ${change.toFixed(2)}%`,
-          })
-        }
-      }
-
-      // 检查回撤
-      if (alert.alert_drawdown && currentData.max_drawdown != null) {
-        const drawdown = Math.abs(currentData.max_drawdown)
-        if (drawdown >= alert.drawdown_threshold) {
-          alertsToSend.push({
-            user_id: alert.user_id,
-            trader_id: alert.trader_id,
-            type: 'trader_alert_drawdown',
-            title: 'Drawdown Alert',
-            message: `Trader ${alert.trader_id} max drawdown reached ${drawdown.toFixed(2)}%`,
-            link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
-          })
-
-          alertLogsToInsert.push({
-            alert_id: alert.id,
-            user_id: alert.user_id,
-            trader_id: alert.trader_id,
-            alert_type: 'drawdown',
-            old_value: prevSnapshot.max_drawdown,
-            new_value: currentData.max_drawdown,
-            message: `Drawdown reached ${drawdown.toFixed(2)}%`,
-          })
-        }
-      }
-
-      // 检查 Score 变动
-      if (
-        alert.alert_score_change &&
-        prevSnapshot.arena_score != null &&
-        currentData.arena_score != null
-      ) {
-        const change = Math.abs(currentData.arena_score - prevSnapshot.arena_score)
-        if (change >= alert.score_change_threshold) {
-          const direction = currentData.arena_score > prevSnapshot.arena_score ? 'up' : 'down'
-          alertsToSend.push({
-            user_id: alert.user_id,
-            trader_id: alert.trader_id,
-            type: 'trader_alert_score',
-            title: 'Arena Score Change',
-            message: `Trader ${alert.trader_id} Arena Score ${direction} ${change.toFixed(1)} pts (${prevSnapshot.arena_score.toFixed(1)} → ${currentData.arena_score.toFixed(1)})`,
-            link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
-          })
-
-          alertLogsToInsert.push({
-            alert_id: alert.id,
-            user_id: alert.user_id,
-            trader_id: alert.trader_id,
-            alert_type: 'score_change',
-            old_value: prevSnapshot.arena_score,
-            new_value: currentData.arena_score,
-            change_percent: change,
-            message: `Arena Score ${direction} ${change.toFixed(1)} 分`,
-          })
-        }
-      }
-
-      // 检查 PnL 变动 (was configurable in the UI but never evaluated)
-      if (alert.alert_pnl_change && prevSnapshot.pnl_90d != null && currentData.pnl != null) {
-        const change = Math.abs(currentData.pnl - prevSnapshot.pnl_90d)
-        if (change >= alert.pnl_change_threshold) {
-          const direction = currentData.pnl > prevSnapshot.pnl_90d ? 'up' : 'down'
-          alertsToSend.push({
-            user_id: alert.user_id,
-            trader_id: alert.trader_id,
-            type: 'trader_alert_pnl',
-            title: 'PnL Alert',
-            message: `Trader ${alert.trader_id} PnL ${direction} $${change.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
-            link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
-          })
-          alertLogsToInsert.push({
-            alert_id: alert.id,
-            user_id: alert.user_id,
-            trader_id: alert.trader_id,
-            alert_type: 'pnl_change',
-            old_value: prevSnapshot.pnl_90d,
-            new_value: currentData.pnl,
-            change_percent: change,
-            message: `PnL ${direction} $${change.toLocaleString('en-US', { maximumFractionDigits: 0 })}`,
-          })
-        }
-      }
-
-      // 检查排名变动 (was configurable in the UI but never evaluated).
-      // Lower rank number = better; alert on absolute movement past the threshold.
-      const prevRank = prevRankMap.get(snapshotKey)
-      if (alert.alert_rank_change && prevRank != null && currentData.rank != null) {
-        const change = Math.abs(currentData.rank - prevRank)
-        if (change >= alert.rank_change_threshold) {
-          const direction = currentData.rank < prevRank ? '上升' : '下降'
-          alertsToSend.push({
-            user_id: alert.user_id,
-            trader_id: alert.trader_id,
-            type: 'trader_alert',
-            title: '排名变动提醒',
-            message: `Trader ${alert.trader_id} 排名${direction} ${change} 位（#${prevRank} → #${currentData.rank}）`,
-            link: `/trader/${encodeURIComponent(alert.trader_id)}?platform=${alert.source}`,
-          })
-          alertLogsToInsert.push({
-            alert_id: alert.id,
-            user_id: alert.user_id,
-            trader_id: alert.trader_id,
-            alert_type: 'rank_change',
-            old_value: prevRank,
-            new_value: currentData.rank,
-            change_percent: change,
-            message: `排名${direction} ${change} 位`,
-          })
-        }
-      }
-    }
-
-    // 批量插入日志（替代单个插入）
-    if (alertLogsToInsert.length > 0) {
-      const { error: logsError } = await supabase
-        .from('trader_alert_logs')
-        .insert(alertLogsToInsert)
-
-      if (logsError) {
-        logger.error('[TraderAlerts Cron] 批量保存日志Failed:', logsError)
-      }
-    }
-
-    // 批量插入 alert_history
-    if (alertLogsToInsert.length > 0) {
-      const historyToInsert = alertLogsToInsert.map((log) => ({
-        alert_id: log.alert_id,
-        user_id: log.user_id,
-        alert_type: log.alert_type,
-        triggered_at: new Date().toISOString(),
-        data: {
-          trader_id: log.trader_id,
-          old_value: log.old_value,
-          new_value: log.new_value,
-          change_percent: log.change_percent,
-          message: log.message,
-        },
-      }))
-
-      const { error: historyError } = await supabase.from('alert_history').insert(historyToInsert)
-
-      if (historyError) {
-        logger.error('[TraderAlerts Cron] 保存 alert_history Failed:', historyError)
-      }
-    }
-
-    // Update last_triggered_at + disable one-time alerts (merged into fewer queries)
-    const triggeredAlertIds = [...new Set(alertLogsToInsert.map((l) => l.alert_id))]
-    if (triggeredAlertIds.length > 0) {
-      const oneTimeAlertIds = (alerts as AlertConfig[])
-        .filter((a) => a.one_time && triggeredAlertIds.includes(a.id))
-        .map((a) => a.id)
-      const nonOneTimeIds = triggeredAlertIds.filter((id) => !oneTimeAlertIds.includes(id))
-      const now = new Date().toISOString()
-
-      // One-time alerts: update both last_triggered_at + enabled=false in single query
-      const updates = []
-      if (oneTimeAlertIds.length > 0) {
-        updates.push(
-          supabase
-            .from('trader_alerts')
-            .update({ last_triggered_at: now, enabled: false })
-            .in('id', oneTimeAlertIds)
-        )
-      }
-      if (nonOneTimeIds.length > 0) {
-        updates.push(
-          supabase.from('trader_alerts').update({ last_triggered_at: now }).in('id', nonOneTimeIds)
-        )
-      }
-      await Promise.all(updates)
-    }
-
-    // 7. 批量发送通知
-    if (alertsToSend.length > 0) {
-      const notifications = alertsToSend.map((a) => ({
-        user_id: a.user_id,
-        type: a.type,
-        title: a.title,
-        message: a.message,
-        link: a.link,
-      }))
-
-      const { error: notifyError } = await supabase.from('notifications').insert(notifications)
-
-      if (notifyError) {
-        logger.error('[TraderAlerts Cron] 发送通知Failed:', notifyError)
-      } else {
-        alertsSent = alertsToSend.length
-      }
-
-      // Send push notifications in parallel (was serial — 100 alerts = 100 sequential HTTP calls)
-      try {
-        const pushService = getPushNotificationService()
-        const PUSH_BATCH = 10
-        let pushSent = 0
-        for (let i = 0; i < alertsToSend.length; i += PUSH_BATCH) {
-          const batch = alertsToSend.slice(i, i + PUSH_BATCH)
-          const results = await Promise.allSettled(
-            batch.map((alert) =>
-              pushService.sendToUser(alert.user_id, {
-                title: alert.title,
-                body: alert.message,
-                data: { url: alert.link || '/notifications', type: 'rank_change' },
-              })
-            )
-          )
-          pushSent += results.filter((r) => r.status === 'fulfilled').length
-        }
-        logger.info(`[TraderAlerts Cron] Push notifications sent: ${pushSent}`)
-      } catch (pushError) {
-        logger.warn('[TraderAlerts Cron] Failed to send push notifications', { error: pushError })
-      }
-
-      // Send email notifications grouped by user
-      try {
-        // Group alerts by user_id
-        const alertsByUser = new Map<string, typeof alertsToSend>()
-        for (const alert of alertsToSend) {
-          const existing = alertsByUser.get(alert.user_id) || []
-          existing.push(alert)
-          alertsByUser.set(alert.user_id, existing)
-        }
-
-        // Look up user emails
-        const userIds = [...alertsByUser.keys()]
-        const { data: userProfiles } = await supabase
-          .from('user_profiles')
-          .select('id, email, email_digest')
-          .in('id', userIds)
-
-        let emailsSent = 0
-        if (userProfiles) {
-          for (const profile of userProfiles) {
-            // Skip if no email or user opted out
-            if (!profile.email) continue
-            if (profile.email_digest === 'none') continue
-
-            const userAlerts = alertsByUser.get(profile.id)
-            if (!userAlerts || userAlerts.length === 0) continue
-
-            const html = buildTraderAlertEmail(
-              userAlerts.map((a) => ({
-                title: a.title,
-                message: a.message,
-                link: a.link,
-              }))
-            )
-
-            const sent = await sendEmail({
-              to: profile.email,
-              subject: `Arena: ${userAlerts.length} trader alert${userAlerts.length > 1 ? 's' : ''} triggered`,
-              html,
-            })
-            if (sent) emailsSent++
-          }
-        }
-
-        if (emailsSent > 0) {
-          logger.info(`[TraderAlerts Cron] Emails sent: ${emailsSent}`)
-        }
-      } catch (emailError) {
-        logger.warn('[TraderAlerts Cron] Failed to send email notifications', { error: emailError })
-      }
-    }
-
-    const duration = Date.now() - startTime
-
-    await plog.success(alertsSent, {
-      alertsChecked: alerts.length,
-      tradersChecked: traderIds.length,
+    await pipeline.success(result.alertsSent, {
+      alertsChecked: result.alertsChecked,
+      tradersChecked: result.tradersChecked,
+      skippedNoSubscription: result.alertsSkippedNoSubscription,
+      deliveryFailures: result.deliveryFailures,
     })
 
     return NextResponse.json({
       ok: true,
       message: 'Trader alerts check completed',
-      duration: `${duration}ms`,
-      alertsChecked: alerts.length,
-      tradersChecked: traderIds.length,
-      snapshotsSaved: snapshotsToInsert.length,
-      alertsSent,
+      durationMs: Date.now() - startedAt,
+      ...result,
+      deliveredAlerts: undefined,
+      pushSent,
+      emailsSent,
       timestamp: new Date().toISOString(),
     })
-  } catch (error: unknown) {
-    logger.error('[TraderAlerts Cron] 执行Failed:', error)
-    await plog.error(error)
+  } catch (error) {
+    logger.error('[TraderAlerts Cron] Execution failed', { error })
+    await pipeline.error(error)
     return NextResponse.json(
-      {
-        ok: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      },
+      { ok: false, error: error instanceof Error ? error.message : 'Unknown error' },
       { status: 500 }
     )
   }

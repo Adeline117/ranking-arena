@@ -109,7 +109,7 @@
     },
     {
       "path": "/api/cron/check-trader-alerts",
-      "schedule": "6 4 * * *"
+      "schedule": "*/30 * * * *"
     },
     {
       "path": "/api/cron/data-reconciliation",

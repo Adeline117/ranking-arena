@@ -1686,6 +1686,7 @@ const zh = {
 
   // AdvancedAlerts
   alertMonitoring: '监控: {handle}',
+  alertCheckCadence: '有效 Pro 会员每 30 分钟检测一次。',
   alertRoiChangeLabel: 'ROI 变化',
   alertRoiChangeDesc: '当 ROI 变化超过阈值时提醒',
   alertDrawdownLabel: '回撤警告',
