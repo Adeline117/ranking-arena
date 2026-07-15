@@ -38,12 +38,21 @@ export async function getVisibleSearchInput(page: Page): Promise<Locator> {
     .getByPlaceholder(/搜索|Search/i)
     .filter({ visible: true })
     .first()
-  if (await input.isVisible({ timeout: 2000 }).catch(() => false)) return input
+  const isMobile = (page.viewportSize()?.width ?? 1280) <= 768
+
+  if (!isMobile) {
+    // Desktop navigation can hydrate after DOMContentLoaded. It has no mobile
+    // trigger, so wait for the responsive input itself.
+    await input.waitFor({ state: 'visible', timeout: 10_000 })
+    return input
+  }
 
   const trigger = page
-    .locator('button[aria-label="Search"]:visible, button[aria-label="搜索"]:visible')
+    .getByRole('button', { name: /^(Search|搜索)$/i })
+    .filter({ visible: true })
     .first()
-  await trigger.click({ timeout: 10_000 })
+  await trigger.waitFor({ state: 'visible', timeout: 10_000 })
+  await trigger.click()
 
   input = page
     .getByPlaceholder(/搜索|Search/i)
