@@ -43,10 +43,10 @@ ssh root@45.76.152.169 'chmod +x /opt/arena/scripts/*.mjs /opt/arena/scripts/*.s
 ```bash
 ssh root@45.76.152.169
 
-# 创建环境配置文件
-cat > /opt/arena/.env << 'EOF'
-DATABASE_URL=postgresql://postgres.iknktzifjdyujdccyhsv:j0qvCCZDzOHDfBka@aws-0-us-west-2.pooler.supabase.com:6543/postgres
-EOF
+# 从密码管理器读取真实连接串，并通过安全编辑器写入；不要粘贴到仓库、聊天或日志
+install -m 600 /dev/null /opt/arena/.env
+${EDITOR:-vi} /opt/arena/.env
+# 文件格式：DATABASE_URL=postgresql://<DB_USER>:<DB_PASSWORD>@<DB_HOST>:6543/postgres
 
 # 保护环境文件
 chmod 600 /opt/arena/.env
@@ -112,10 +112,13 @@ ssh root@45.76.152.169
 cat > /opt/arena/scripts/check-enrichment-health.sh << 'EOF'
 #!/bin/bash
 # 健康检查脚本 - 检测enrichment是否正常工作
+set -a
+source /opt/arena/.env
+set +a
 
-PGPASSWORD='j0qvCCZDzOHDfBka' psql -h aws-0-us-west-2.pooler.supabase.com -p 6543 -U postgres.iknktzifjdyujdccyhsv -d postgres << 'SQL'
+psql "$DATABASE_URL" << 'SQL'
 WITH current_status AS (
-  SELECT 
+  SELECT
     source,
     COUNT(*) FILTER (WHERE win_rate IS NULL) as wr_null,
     COUNT(*) FILTER (WHERE max_drawdown IS NULL) as mdd_null
@@ -123,9 +126,9 @@ WITH current_status AS (
   WHERE source IN ('hyperliquid', 'aevo', 'gains', 'gmx')
   GROUP BY source
 )
-SELECT 
+SELECT
   source,
-  CASE 
+  CASE
     WHEN wr_null > 1000 OR mdd_null > 1000 THEN '⚠️ HIGH'
     WHEN wr_null > 500 OR mdd_null > 500 THEN '⚠️ MEDIUM'
     ELSE '✅ OK'
@@ -162,7 +165,7 @@ ssh root@45.76.152.169 'cd /opt/arena && node -e "import(\"node-fetch\").then(()
 ### 3. 验证数据库连接
 
 ```bash
-ssh root@45.76.152.169 'PGPASSWORD="j0qvCCZDzOHDfBka" psql -h aws-0-us-west-2.pooler.supabase.com -p 6543 -U postgres.iknktzifjdyujdccyhsv -d postgres -c "SELECT COUNT(*) FROM leaderboard_ranks WHERE source = '\''hyperliquid'\'';"'
+ssh root@45.76.152.169 'set -a; source /opt/arena/.env; set +a; psql "$DATABASE_URL" -c "SELECT COUNT(*) FROM leaderboard_ranks WHERE source = '\''hyperliquid'\'';"'
 ```
 
 ### 4. 验证cron
@@ -203,7 +206,7 @@ ssh root@45.76.152.169 'tail -100 /var/log/arena-enrichment.log'
 
 ```bash
 # 测试连接
-ssh root@45.76.152.169 'PGPASSWORD="j0qvCCZDzOHDfBka" psql -h aws-0-us-west-2.pooler.supabase.com -p 6543 -U postgres.iknktzifjdyujdccyhsv -d postgres -c "SELECT 1"'
+ssh root@45.76.152.169 'set -a; source /opt/arena/.env; set +a; psql "$DATABASE_URL" -c "SELECT 1"'
 
 # 检查防火墙
 ssh root@45.76.152.169 'ping -c 3 aws-0-us-west-2.pooler.supabase.com'
