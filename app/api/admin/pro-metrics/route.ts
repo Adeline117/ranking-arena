@@ -2,12 +2,8 @@
  * Admin Pro Metrics API
  *
  * GET /api/admin/pro-metrics
- * Returns the paying-subscriber KPIs the CEO review 2026-04-09 flagged as
- * the three numbers that matter most:
- *   - total paying (active + trialing, pro + lifetime)
- *   - signups this week (created_at >= 7d ago, paying only)
- *   - WAU (distinct user_ids in user_activity, 7d)
- *   - recent paying signups (last 10)
+ * Returns the exact database-owned B2C acquisition, activation, activity,
+ * payment and journey metrics plus recent paying signups.
  *
  * Weekly Telegram script (scripts/openclaw/weekly-metrics.mjs) covers the
  * same data surface for the "report to Telegram" channel; this endpoint
@@ -17,6 +13,7 @@
 import { withAdminAuth } from '@/lib/api/with-admin-auth'
 import { success as apiSuccess } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
+import { parseB2CProductMetrics } from '@/lib/analytics/b2c-metrics'
 
 const logger = createLogger('admin-pro-metrics')
 
@@ -24,57 +21,24 @@ export const dynamic = 'force-dynamic'
 
 export const GET = withAdminAuth(
   async ({ supabase }) => {
-    const now = new Date()
-    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)
+    const [metricsRes, recentSignupsRes] = await Promise.allSettled([
+      // One exact, server-owned KPI contract. This prevents the dashboard,
+      // cron and scripts from silently defining WAU or paying differently.
+      supabase.rpc('b2c_product_metrics', { p_window_days: 7 }),
+      // Recent paying signups — last 10 across pro+lifetime
+      supabase
+        .from('subscriptions')
+        .select('id, user_id, tier, plan, status, created_at')
+        .in('status', ['active', 'trialing'])
+        .in('tier', ['pro', 'lifetime'])
+        .order('created_at', { ascending: false })
+        .limit(10),
+    ])
 
-    // All read-only queries in parallel — they don't depend on each other.
-    const [totalPayingRes, newPayingThisWeekRes, activityRes, recentSignupsRes] =
-      await Promise.allSettled([
-        // Total active paying subscribers
-        supabase
-          .from('subscriptions')
-          .select('id', { count: 'estimated', head: true })
-          .in('status', ['active', 'trialing'])
-          .in('tier', ['pro', 'lifetime']),
-        // Paying subscribers that signed up in the last 7 days
-        supabase
-          .from('subscriptions')
-          .select('id', { count: 'estimated', head: true })
-          .in('status', ['active', 'trialing'])
-          .in('tier', ['pro', 'lifetime'])
-          .gte('created_at', weekAgo.toISOString()),
-        // WAU: distinct user_ids in user_interactions for the last 7d.
-        // （user_activity 表已删；埋点管线 2026-06-12 修通后 user_interactions
-        //   开始落库 — 初期读数偏低。）
-        // Fetch user_ids and dedupe client-side (Supabase REST has no DISTINCT).
-        // Capped at 50k rows which is enough for current user base.
-        supabase
-          .from('user_interactions')
-          .select('user_id')
-          .gte('created_at', weekAgo.toISOString())
-          .limit(50_000),
-        // Recent paying signups — last 10 across pro+lifetime
-        supabase
-          .from('subscriptions')
-          .select('id, user_id, tier, plan, status, created_at')
-          .in('status', ['active', 'trialing'])
-          .in('tier', ['pro', 'lifetime'])
-          .order('created_at', { ascending: false })
-          .limit(10),
-      ])
-
-    const totalPaying =
-      totalPayingRes.status === 'fulfilled' ? (totalPayingRes.value.count ?? 0) : null
-    const newPayingThisWeek =
-      newPayingThisWeekRes.status === 'fulfilled' ? (newPayingThisWeekRes.value.count ?? 0) : null
-
-    let wau: number | null = null
-    if (activityRes.status === 'fulfilled' && activityRes.value.data) {
-      const unique = new Set(
-        (activityRes.value.data as Array<{ user_id: string }>).map((r) => r.user_id)
-      )
-      wau = unique.size
-    }
+    const metrics =
+      metricsRes.status === 'fulfilled' && !metricsRes.value.error
+        ? parseB2CProductMetrics(metricsRes.value.data)
+        : null
 
     const recentSignups =
       recentSignupsRes.status === 'fulfilled' && recentSignupsRes.value.data
@@ -89,21 +53,23 @@ export const GET = withAdminAuth(
         : []
 
     // Log any failed sub-queries (non-fatal — dashboard surfaces partial data)
-    if (totalPayingRes.status === 'rejected')
-      logger.warn('totalPaying failed', totalPayingRes.reason)
-    if (newPayingThisWeekRes.status === 'rejected')
-      logger.warn('newPaying failed', newPayingThisWeekRes.reason)
-    if (activityRes.status === 'rejected') logger.warn('activity failed', activityRes.reason)
+    if (!metrics) logger.warn('B2C metrics contract unavailable')
     if (recentSignupsRes.status === 'rejected')
       logger.warn('recentSignups failed', recentSignupsRes.reason)
 
     return apiSuccess({
-      totalPaying,
-      newPayingThisWeek,
-      wau,
+      totalPaying: metrics?.totalPaying ?? null,
+      newPayingThisWeek: metrics?.newPaying ?? null,
+      wau: metrics?.wau ?? null,
+      newSignups: metrics?.newSignups ?? null,
+      activated7d: metrics?.activated7d ?? null,
+      activationEligible: metrics?.activationEligible ?? null,
+      funnel: metrics?.funnel ?? null,
+      eventCollectionStartedAt: metrics?.eventCollectionStartedAt ?? null,
+      measurementAvailable: metrics !== null,
       recentSignups,
-      windowDays: 7,
-      timestamp: new Date().toISOString(),
+      windowDays: metrics?.windowDays ?? 7,
+      timestamp: metrics?.generatedAt ?? new Date().toISOString(),
     })
   },
   { name: 'admin-pro-metrics' }
