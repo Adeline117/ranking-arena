@@ -22,6 +22,7 @@ import {
 } from '@/app/(app)/user-center/membership-config'
 import { useDirectCheckout } from '@/lib/hooks/useDirectCheckout'
 import { useToast } from '@/app/components/ui/Toast'
+import { useProductFacts } from '@/lib/hooks/useProductFacts'
 
 const CheckIcon = ({ size = 16, color }: { size?: number; color?: string }) => (
   <svg
@@ -120,6 +121,7 @@ interface PricingPageClientProps {
 export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClientProps) {
   const { email } = useAuthSession()
   const { t } = useLanguage()
+  const productFacts = useProductFacts()
   const { showToast } = useToast()
   const [billing, setBillingRaw] = useState<'monthly' | 'yearly'>(() => {
     // Persist billing selection across React re-mounts caused by Suspense/streaming
@@ -229,7 +231,9 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             letterSpacing: '-0.02em',
           }}
         >
-          {resolved(t('pricingTitle'), 'pricingTitle', 'Upgrade to Pro')}
+          {PRO_FREE_PROMO
+            ? resolved(t('pricingPromoTitle'), 'pricingPromoTitle', 'Pro is unlocked during beta')
+            : resolved(t('pricingTitle'), 'pricingTitle', 'Upgrade to Pro')}
         </h1>
         <p
           style={{
@@ -239,28 +243,36 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             lineHeight: 1.5,
           }}
         >
-          {resolved(t('pricingSubtitle'), 'pricingSubtitle', 'Unlock all premium features')}
+          {PRO_FREE_PROMO
+            ? resolved(
+                t('pricingPromoSubtitle'),
+                'pricingPromoSubtitle',
+                'Use every Pro feature now. Subscribe only if you want to lock in the founding price.'
+              )
+            : resolved(t('pricingSubtitle'), 'pricingSubtitle', 'Unlock all premium features')}
         </p>
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 8,
-            padding: '8px 16px',
-            borderRadius: 20,
-            background: 'var(--color-accent-primary-bg, rgba(59, 130, 246, 0.1))',
-            color: 'var(--color-accent-primary)',
-            fontSize: 14,
-            fontWeight: 600,
-            marginBottom: tokens.spacing[6],
-          }}
-        >
-          {resolved(
-            t('pricingTrialBadge'),
-            'pricingTrialBadge',
-            '7-day free trial on Pro monthly & yearly. Cancel anytime.'
-          )}
-        </div>
+        {!PRO_FREE_PROMO && (
+          <div
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 8,
+              padding: '8px 16px',
+              borderRadius: 20,
+              background: 'var(--color-accent-primary-bg, rgba(59, 130, 246, 0.1))',
+              color: 'var(--color-accent-primary)',
+              fontSize: 14,
+              fontWeight: 600,
+              marginBottom: tokens.spacing[6],
+            }}
+          >
+            {resolved(
+              t('pricingTrialBadge'),
+              'pricingTrialBadge',
+              '7-day free trial on Pro monthly & yearly. Cancel anytime.'
+            )}
+          </div>
+        )}
 
         {/* 促销期提示(2026-07-10 owner 拍板):顶栏喊「Pro 全免费」而本页推
             付费,同屏矛盾——促销开着时明说「现在免费,买=锁定价格支持我们」。
@@ -336,7 +348,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
         >
           {[
             {
-              value: '45+',
+              value: `${productFacts.exchangeCount}+`,
               label: resolved(
                 t('pricingStatExchangesTracked'),
                 'pricingStatExchangesTracked',
@@ -344,7 +356,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               ),
             },
             {
-              value: '30min',
+              value: productFacts.leaderboardRefreshLabel,
               label: resolved(
                 t('pricingStatUpdateFrequency'),
                 'pricingStatUpdateFrequency',
@@ -694,33 +706,41 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 >
                   {checkoutLoading
                     ? '...'
-                    : resolved(t('upgradeToPro'), 'upgradeToPro', 'Upgrade to Pro')}
+                    : PRO_FREE_PROMO
+                      ? resolved(
+                          t('pricingPromoCta'),
+                          'pricingPromoCta',
+                          'Lock in the founding price'
+                        )
+                      : resolved(t('upgradeToPro'), 'upgradeToPro', 'Upgrade to Pro')}
                 </button>
-                <button
-                  onClick={() => {
-                    trackEvent('click_free_trial', { plan: billing })
-                    directCheckout(billing, { trial: true })
-                  }}
-                  disabled={checkoutLoading}
-                  style={{
-                    display: 'block',
-                    width: '100%',
-                    padding: '12px 0',
-                    borderRadius: tokens.radius.md,
-                    background: 'transparent',
-                    textAlign: 'center',
-                    color: tokens.colors.accent.brand,
-                    border: `1px solid ${tokens.colors.accent.brand}`,
-                    fontWeight: 600,
-                    fontSize: 14,
-                    marginTop: tokens.spacing[3],
-                    transition: 'all 0.2s',
-                    cursor: checkoutLoading ? 'wait' : 'pointer',
-                    opacity: checkoutLoading ? 0.5 : 1,
-                  }}
-                >
-                  {resolved(t('startFreeTrial'), 'startFreeTrial', 'Start 7-Day Free Trial')}
-                </button>
+                {!PRO_FREE_PROMO && (
+                  <button
+                    onClick={() => {
+                      trackEvent('click_free_trial', { plan: billing })
+                      directCheckout(billing, { trial: true })
+                    }}
+                    disabled={checkoutLoading}
+                    style={{
+                      display: 'block',
+                      width: '100%',
+                      padding: '12px 0',
+                      borderRadius: tokens.radius.md,
+                      background: 'transparent',
+                      textAlign: 'center',
+                      color: tokens.colors.accent.brand,
+                      border: `1px solid ${tokens.colors.accent.brand}`,
+                      fontWeight: 600,
+                      fontSize: 14,
+                      marginTop: tokens.spacing[3],
+                      transition: 'all 0.2s',
+                      cursor: checkoutLoading ? 'wait' : 'pointer',
+                      opacity: checkoutLoading ? 0.5 : 1,
+                    }}
+                  >
+                    {resolved(t('startFreeTrial'), 'startFreeTrial', 'Start 7-Day Free Trial')}
+                  </button>
+                )}
               </>
             ) : (
               <>
@@ -742,28 +762,36 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                     boxShadow: '0 4px 14px color-mix(in srgb, var(--color-brand) 35%, transparent)',
                   }}
                 >
-                  {resolved(t('signUpForPro'), 'signUpForPro', 'Sign Up for Pro')}
+                  {PRO_FREE_PROMO
+                    ? resolved(
+                        t('pricingPromoSignupCta'),
+                        'pricingPromoSignupCta',
+                        'Create an account to lock the price'
+                      )
+                    : resolved(t('signUpForPro'), 'signUpForPro', 'Sign Up for Pro')}
                 </Link>
-                <Link
-                  href="/login"
-                  onClick={() => trackEvent('click_free_trial', { plan: billing })}
-                  style={{
-                    display: 'block',
-                    padding: '12px 0',
-                    borderRadius: tokens.radius.md,
-                    background: 'transparent',
-                    textAlign: 'center',
-                    color: tokens.colors.accent.brand,
-                    textDecoration: 'none',
-                    border: `1px solid ${tokens.colors.accent.brand}`,
-                    fontWeight: 600,
-                    fontSize: 14,
-                    marginTop: tokens.spacing[3],
-                    transition: 'all 0.2s',
-                  }}
-                >
-                  {resolved(t('startFreeTrial'), 'startFreeTrial', 'Start 7-Day Free Trial')}
-                </Link>
+                {!PRO_FREE_PROMO && (
+                  <Link
+                    href="/login"
+                    onClick={() => trackEvent('click_free_trial', { plan: billing })}
+                    style={{
+                      display: 'block',
+                      padding: '12px 0',
+                      borderRadius: tokens.radius.md,
+                      background: 'transparent',
+                      textAlign: 'center',
+                      color: tokens.colors.accent.brand,
+                      textDecoration: 'none',
+                      border: `1px solid ${tokens.colors.accent.brand}`,
+                      fontWeight: 600,
+                      fontSize: 14,
+                      marginTop: tokens.spacing[3],
+                      transition: 'all 0.2s',
+                    }}
+                  >
+                    {resolved(t('startFreeTrial'), 'startFreeTrial', 'Start 7-Day Free Trial')}
+                  </Link>
+                )}
               </>
             )}
 
@@ -776,11 +804,17 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 marginBottom: 0,
               }}
             >
-              {resolved(
-                t('freeTrialDesc'),
-                'freeTrialDesc',
-                'Try all Pro features free for 7 days. Cancel anytime.'
-              )}
+              {PRO_FREE_PROMO
+                ? resolved(
+                    t('pricingPromoFinePrint'),
+                    'pricingPromoFinePrint',
+                    'No purchase is required to use Pro during the beta promotion.'
+                  )
+                : resolved(
+                    t('freeTrialDesc'),
+                    'freeTrialDesc',
+                    'Try all Pro features free for 7 days. Cancel anytime.'
+                  )}
             </p>
 
             <TrustStrip

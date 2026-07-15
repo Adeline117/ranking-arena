@@ -35,11 +35,16 @@ export default function BetaBanner() {
   // NEXT_PUBLIC_HIDE_BETA_BANNER=true to turn it off without a code change
   if (process.env.NEXT_PUBLIC_HIDE_BETA_BANNER === 'true') return null
 
+  // The time-bound Pro promotion owns the single announcement slot. Do not
+  // render a second banner and mutate it to display:none before hydration —
+  // that produced a root-layout hydration mismatch on every app route.
+  if (PRO_FREE_PROMO) return null
+
   // Single-banner coordination: while the Pro-free promo is running, the
   // ProPromoBanner owns the top slot (more useful, time-bound message). We hide
   // the closed-beta notice until the promo banner is dismissed, so the two never
   // double-stack and push the ranking data below the fold on mobile.
-  const promoActive = PRO_FREE_PROMO ? 'true' : 'false'
+  const promoActive = 'false'
 
   return (
     <>

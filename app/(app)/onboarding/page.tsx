@@ -15,6 +15,7 @@ import InterestsStep from './components/InterestsStep'
 import TradersStep from './components/TradersStep'
 import GroupsStep from './components/GroupsStep'
 import CompleteStep from './components/CompleteStep'
+import { trackEvent } from '@/lib/analytics/track'
 
 type Theme = 'dark' | 'light'
 type Step = 'welcome' | 'interests' | 'traders' | 'groups' | 'complete'
@@ -44,11 +45,16 @@ export default function OnboardingPage() {
   const [joinedGroups, setJoinedGroups] = useState<Set<string>>(new Set())
   const [loadingTraders, setLoadingTraders] = useState(false)
   const [loadingGroups, setLoadingGroups] = useState(false)
+  const startedRef = useRef(false)
 
   const tr = (key: string) => translations[language][key] || translations.en[key] || key
 
   useEffect(() => {
     setMounted(true)
+    if (!startedRef.current) {
+      startedRef.current = true
+      trackEvent('onboarding_start')
+    }
     const savedLang = localStorage.getItem('language') as Language | null
     const savedTheme = localStorage.getItem('theme') as Theme | null
     if (savedLang) setLang(savedLang)
@@ -135,6 +141,13 @@ export default function OnboardingPage() {
   }
 
   const goToStep = (nextStep: Step) => {
+    trackEvent('onboarding_step_complete', {
+      step,
+      nextStep,
+      interests: selectedInterests.length,
+      followedTraders: followedTraders.size,
+      joinedGroups: joinedGroups.size,
+    })
     if (nextStep === 'traders') fetchTraders()
     if (nextStep === 'groups') fetchGroups()
     setStep(nextStep)
@@ -277,6 +290,11 @@ export default function OnboardingPage() {
         if (error) logger.error('Error saving onboarding:', error)
       }
       localStorage.setItem('hasOnboarded', 'true')
+      trackEvent('onboarding_complete', {
+        interests: selectedInterests.length,
+        followedTraders: followedTraders.size,
+        joinedGroups: joinedGroups.size,
+      })
       setStep('complete')
     } catch (err) {
       logger.error('Error completing onboarding:', err)
@@ -291,6 +309,7 @@ export default function OnboardingPage() {
   const handleSkip = async () => {
     if (saving) return
     setSaving(true)
+    trackEvent('onboarding_skip', { step })
     try {
       if (userId) {
         const { error } = await supabase
