@@ -406,6 +406,8 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
           {(['monthly', 'yearly'] as const).map((b) => (
             <button
               key={b}
+              type="button"
+              aria-pressed={billing === b}
               onClick={() => setBilling(b)}
               style={{
                 padding: '10px 24px',
