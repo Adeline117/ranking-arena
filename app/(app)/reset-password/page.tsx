@@ -156,7 +156,7 @@ const injectStyles = () => {
       left: 0;
       width: 0;
       height: 1px;
-      background: var(--color-brand);
+      background: var(--color-brand-text);
       transition: width 0.3s ease;
     }
     
@@ -169,7 +169,7 @@ const injectStyles = () => {
     }
     
     .password-toggle:hover {
-      color: var(--color-brand) !important;
+      color: var(--color-brand-text) !important;
     }
 
     @media (prefers-reduced-motion: reduce) {
@@ -828,7 +828,7 @@ function ResetPasswordContent() {
             alignItems: 'center',
             justifyContent: 'center',
             gap: 6,
-            color: 'var(--color-brand)',
+            color: 'var(--color-brand-text)',
             fontSize: 14,
             fontWeight: 600,
             textDecoration: 'none',
