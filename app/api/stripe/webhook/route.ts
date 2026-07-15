@@ -118,6 +118,7 @@ export async function POST(request: NextRequest) {
             await handleSubscriptionCanceled(event.data.object as Stripe.Subscription)
             break
 
+          case 'invoice.paid':
           case 'invoice.payment_succeeded':
             await handlePaymentSucceeded(event.data.object as Stripe.Invoice)
             break
@@ -131,6 +132,7 @@ export async function POST(request: NextRequest) {
             break
 
           case 'charge.refund.updated':
+          case 'refund.updated':
             await handleRefundUpdated(event.data.object as Stripe.Refund)
             break
 
