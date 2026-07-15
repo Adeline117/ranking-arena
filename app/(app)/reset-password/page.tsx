@@ -449,7 +449,7 @@ function ResetPasswordContent() {
                   ? '1px solid var(--color-accent-primary-60)'
                   : '1px solid var(--glass-border-light)',
               background: lang === 'zh' ? 'var(--color-accent-primary-15)' : 'transparent',
-              color: lang === 'zh' ? 'var(--color-brand-accent)' : 'var(--color-text-secondary)',
+              color: lang === 'zh' ? 'var(--color-brand-text)' : 'var(--color-text-secondary)',
               cursor: 'pointer',
               fontWeight: lang === 'zh' ? 700 : 500,
               fontSize: 13,
@@ -468,7 +468,7 @@ function ResetPasswordContent() {
                   ? '1px solid var(--color-accent-primary-60)'
                   : '1px solid var(--glass-border-light)',
               background: lang === 'en' ? 'var(--color-accent-primary-15)' : 'transparent',
-              color: lang === 'en' ? 'var(--color-brand-accent)' : 'var(--color-text-secondary)',
+              color: lang === 'en' ? 'var(--color-brand-text)' : 'var(--color-text-secondary)',
               cursor: 'pointer',
               fontWeight: lang === 'en' ? 700 : 500,
               fontSize: 13,
