@@ -44,7 +44,6 @@ interface BookmarkRepostState {
   setUserBookmarks: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   bookmarkCounts: Record<string, number>
   setBookmarkCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>
-  setRepostCounts: React.Dispatch<React.SetStateAction<Record<string, number>>>
   showBookmarkModal: boolean
   setShowBookmarkModal: (v: boolean) => void
   bookmarkingPostId: string | null
@@ -137,7 +136,6 @@ export function usePostActions({
   const [repostComment, setRepostComment] = useState('')
   const [userBookmarks, setUserBookmarks] = useState<Record<string, boolean>>({})
   const [bookmarkCounts, setBookmarkCounts] = useState<Record<string, number>>({})
-  const [, setRepostCounts] = useState<Record<string, number>>({})
   const [showBookmarkModal, setShowBookmarkModal] = useState(false)
   const [bookmarkingPostId, setBookmarkingPostId] = useState<string | null>(null)
 
@@ -605,6 +603,9 @@ export function usePostActions({
         showToast(t('cannotRepostOwn'), 'warning')
         return
       }
+      const key = `repost-${postId}`
+      if (lockRef.current.has(key)) return
+      lockRef.current.add(key)
       setRepostLoading((prev) => ({ ...prev, [postId]: true }))
       try {
         const response = await fetch(`/api/posts/${postId}/repost`, {
@@ -618,6 +619,19 @@ export function usePostActions({
         })
         const result = await response.json()
         if (response.ok) {
+          if (typeof result.repost_count === 'number') {
+            const rootPostId =
+              typeof result.root_post_id === 'string' ? result.root_post_id : postId
+            setPosts((prev) =>
+              prev.map((item) =>
+                item.id === rootPostId ? { ...item, repost_count: result.repost_count } : item
+              )
+            )
+            const op = openPostRef.current
+            if (!openPostAliasesPosts && op && op.id === rootPostId) {
+              setOpenPost({ ...op, repost_count: result.repost_count })
+            }
+          }
           setShowRepostModal(null)
           setRepostComment('')
           trackEvent('post_repost', { post_id: postId, with_comment: comment ? 1 : 0 })
@@ -630,10 +644,11 @@ export function usePostActions({
         showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
         setRepostLoading((prev) => ({ ...prev, [postId]: false }))
+        lockRef.current.delete(key)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, posts, openPost, currentUserId, showToast]
+    [accessToken, posts, openPost, currentUserId, showToast, openPostAliasesPosts]
   )
 
   // Load user bookmarks
@@ -803,7 +818,6 @@ export function usePostActions({
     setUserBookmarks,
     bookmarkCounts,
     setBookmarkCounts,
-    setRepostCounts,
     showBookmarkModal,
     setShowBookmarkModal,
     bookmarkingPostId,

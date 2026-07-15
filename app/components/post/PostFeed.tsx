@@ -287,7 +287,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   })
 
   // Load posts
-  // Sync bookmark/repost counts from loaded posts + update Zustand store
+  // Sync bookmark counts from loaded posts + update Zustand store
   const prevPostIdsRef = useRef<string>('')
   useEffect(() => {
     if (posts.length === 0) return
@@ -314,15 +314,12 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       author_avatar_url: p.author_avatar_url || undefined,
     }))
     storeSetPosts(canonicalPosts)
-    // Sync bookmark/repost counts
+    // Sync bookmark counts
     const ibc: Record<string, number> = {}
-    const irc: Record<string, number> = {}
     posts.forEach((post) => {
       ibc[post.id] = post.bookmark_count || 0
-      irc[post.id] = post.repost_count || 0
     })
     actions.setBookmarkCounts((prev) => ({ ...prev, ...ibc }))
-    actions.setRepostCounts((prev) => ({ ...prev, ...irc }))
     if (accessToken && !bookmarksLoadedRef.current) {
       bookmarksLoadedRef.current = true
       actions.loadUserBookmarksAndReposts(posts.map((p) => p.id))

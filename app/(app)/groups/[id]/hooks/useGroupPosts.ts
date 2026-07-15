@@ -74,6 +74,33 @@ async function fetchUserInteractions(
   return map
 }
 
+// Reposts are canonical post rows authored by the viewer whose
+// original_post_id points at the root post. The legacy `reposts` table has not
+// been written since reposts were redesigned as posts in 2026-01.
+async function fetchUserReposts(
+  postIds: string[],
+  userId: string
+): Promise<Record<string, boolean>> {
+  if (!userId || postIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('posts')
+    .select('original_post_id')
+    .eq('author_id', userId)
+    .in('original_post_id', postIds)
+    .is('deleted_at', null)
+
+  if (error) {
+    logger.warn('[useGroupPosts] canonical repost status query failed:', error)
+    return {}
+  }
+
+  const map: Record<string, boolean> = {}
+  data?.forEach((item) => {
+    if (item.original_post_id) map[item.original_post_id] = true
+  })
+  return map
+}
+
 // Fetch author avatars in batch and mutate posts
 async function enrichPostsWithAvatars(postsList: Post[]): Promise<void> {
   const authorIds = [...new Set(postsList.map((p) => p.author_id).filter(Boolean))] as string[]
@@ -98,7 +125,7 @@ async function enrichPostsWithUserState(postsList: Post[], userId: string): Prom
   const [likeMap, bookmarkMap, repostMap] = await Promise.all([
     fetchUserInteractions('post_likes', postIds, userId),
     fetchUserInteractions('post_bookmarks', postIds, userId),
-    fetchUserInteractions('reposts', postIds, userId),
+    fetchUserReposts(postIds, userId),
   ])
   postsList.forEach((post) => {
     post.user_liked = likeMap[post.id] || false
@@ -143,6 +170,7 @@ export function useGroupPosts({
   const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
   const [showRepostModal, setShowRepostModal] = useState<string | null>(null)
   const [repostComment, setRepostComment] = useState('')
+  const repostRequestLockRef = useRef<Set<string>>(new Set())
 
   // Comments state
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
@@ -480,22 +508,28 @@ export function useGroupPosts({
         showToast(t('alreadyReposted'), 'warning')
         return
       }
+      if (repostRequestLockRef.current.has(postId)) return
+      repostRequestLockRef.current.add(postId)
       setPostLoading(setRepostLoading, postId, true)
-      const result = await apiCall(`/api/posts/${postId}/repost`, { body: { comment } })
-      if (result.ok) {
-        const data = result.data as { repost_count: number }
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId ? { ...p, user_reposted: true, repost_count: data.repost_count } : p
+      try {
+        const result = await apiCall(`/api/posts/${postId}/repost`, { body: { comment } })
+        if (result.ok) {
+          const data = result.data as { repost_count: number }
+          setPosts((prev) =>
+            prev.map((p) =>
+              p.id === postId ? { ...p, user_reposted: true, repost_count: data.repost_count } : p
+            )
           )
-        )
-        setShowRepostModal(null)
-        setRepostComment('')
-        showToast(t('repostSuccess'), 'success')
-      } else {
-        showToast(result.error || t('repostFailed'), 'error')
+          setShowRepostModal(null)
+          setRepostComment('')
+          showToast(t('repostSuccess'), 'success')
+        } else {
+          showToast(result.error || t('repostFailed'), 'error')
+        }
+      } finally {
+        repostRequestLockRef.current.delete(postId)
+        setPostLoading(setRepostLoading, postId, false)
       }
-      setPostLoading(setRepostLoading, postId, false)
     },
     [accessToken, t, showToast, posts, userId, apiCall, setPostLoading]
   )
