@@ -141,3 +141,58 @@ export async function handlePaymentFailed(invoice: Stripe.Invoice) {
 
   logger.info(`Payment failed for user ${profile.id}`, { invoiceId: invoice.id })
 }
+
+export async function handlePaymentActionRequired(invoice: Stripe.Invoice) {
+  const customerId =
+    typeof invoice.customer === 'string' ? invoice.customer : invoice.customer?.id || ''
+  if (!customerId) {
+    logger.warn('Payment action required but invoice has no customer', { invoiceId: invoice.id })
+    return
+  }
+
+  const { data: profile } = await getSupabase()
+    .from('user_profiles')
+    .select('id')
+    .eq('stripe_customer_id', customerId)
+    .single()
+  if (!profile) {
+    logger.warn('Payment action required but no user found', { customerId, invoiceId: invoice.id })
+    return
+  }
+
+  await sendNotification(
+    getSupabase(),
+    {
+      user_id: profile.id,
+      type: 'subscription_expiring',
+      title: 'Payment verification required',
+      message:
+        'Your bank requires an extra verification step. Open Settings and complete payment verification to keep your Pro access.',
+      reference_id: `payment_action_required_${invoice.id}`,
+    },
+    'stripe-payment-action-required'
+  )
+  logger.info('Payment action required notification sent', {
+    userId: profile.id,
+    invoiceId: invoice.id,
+  })
+}
+
+export async function handleInvoiceFinalizationFailed(invoice: Stripe.Invoice) {
+  const failureReason = invoice.last_finalization_error?.message || 'Unknown finalization error'
+  logger.error('Stripe invoice finalization failed', {
+    invoiceId: invoice.id,
+    reason: failureReason,
+  })
+  const { sendRateLimitedAlert } = await import('@/lib/alerts/send-alert')
+  await sendRateLimitedAlert(
+    {
+      title: 'Stripe invoice finalization failed',
+      message: `Invoice could not be finalized: ${failureReason}`,
+      level: 'critical',
+      details: { invoiceId: invoice.id },
+    },
+    `stripe:invoice-finalization:${invoice.id}`,
+    6 * 60 * 60 * 1000
+  )
+}

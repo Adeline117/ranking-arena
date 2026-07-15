@@ -23,6 +23,8 @@ export const REQUIRED_WEBHOOK_EVENTS = [
   'invoice.paid',
   'invoice.payment_succeeded',
   'invoice.payment_failed',
+  'invoice.payment_action_required',
+  'invoice.finalization_failed',
   'charge.refunded',
   'charge.refund.updated',
   'refund.updated',

@@ -12,7 +12,12 @@ import {
   handleSubscriptionCanceled,
   handleTrialWillEnd,
 } from './handlers/subscription'
-import { handlePaymentSucceeded, handlePaymentFailed } from './handlers/invoice'
+import {
+  handlePaymentSucceeded,
+  handlePaymentFailed,
+  handlePaymentActionRequired,
+  handleInvoiceFinalizationFailed,
+} from './handlers/invoice'
 import {
   handleChargeRefunded,
   handleRefundUpdated,
@@ -125,6 +130,14 @@ export async function POST(request: NextRequest) {
 
           case 'invoice.payment_failed':
             await handlePaymentFailed(event.data.object as Stripe.Invoice)
+            break
+
+          case 'invoice.payment_action_required':
+            await handlePaymentActionRequired(event.data.object as Stripe.Invoice)
+            break
+
+          case 'invoice.finalization_failed':
+            await handleInvoiceFinalizationFailed(event.data.object as Stripe.Invoice)
             break
 
           case 'charge.refunded':

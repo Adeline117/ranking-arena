@@ -35,7 +35,7 @@ ArenaFi 的 B2C Pro 支付代码和测试沙盒已具备上线前验证条件，
   - `checkout.session.completed`
   - `checkout.session.expired`
   - `customer.subscription.created|updated|deleted|trial_will_end`
-  - `invoice.paid|payment_succeeded|payment_failed`
+  - `invoice.paid|payment_succeeded|payment_failed|payment_action_required|finalization_failed`
   - `charge.refunded|refund.updated|charge.refund.updated`
   - `charge.dispute.created`
 - Production `STRIPE_WEBHOOK_SECRET` 是这个 live endpoint 新生成的签名密钥。
