@@ -165,6 +165,7 @@ const enCore = {
   // ── Not Found ───────────────────────────────────────────────────────
   notFoundTitle: 'Page Not Found',
   notFoundDesc: 'All rankings in crypto — This page may have been moved or deleted',
+  notFoundExplore: 'Or explore these',
   backToHome: 'Back to Home',
 
   // ── Rankings / Leaderboard ──────────────────────────────────────────

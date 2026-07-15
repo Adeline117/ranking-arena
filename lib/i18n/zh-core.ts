@@ -199,6 +199,7 @@ const zhCore = {
   notAvailable: 'N/A',
   notFound: '内容不存在或已被移除',
   notFoundDesc: '加密万物排行榜 — 这个页面可能已被移动或删除',
+  notFoundExplore: '或者探索这些内容',
   notFoundTitle: '页面不存在',
   notInvestmentAdvice: '数据仅供参考，不构成投资建议。请自行研究。',
   notifications: '通知',
