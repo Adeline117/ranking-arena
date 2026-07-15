@@ -6,6 +6,7 @@ import { BASE_URL } from '@/lib/constants/urls'
 import { getCriticalCss, getResourceHints } from '@/lib/performance/critical-css'
 import BetaBanner from './components/layout/BetaBanner'
 import ProPromoBanner from './components/layout/ProPromoBanner'
+import { Analytics } from '@vercel/analytics/next'
 // Mounted in the ROOT layout (not just (app)/) so the homepage — the #1 airdrop
 // landing page — is no longer a client-error monitoring blind spot. Safe for LCP:
 // lib/sentry-init defers the Sentry chunk to requestIdleCallback (after `load`),
@@ -301,6 +302,10 @@ export default function RootLayout({
         <BetaBanner />
         <ProPromoBanner />
         {children}
+        {/* Root-level so the provider-light homepage records landing and
+            ranking funnel events too. The nested app layout must not mount a
+            second instance. */}
+        <Analytics />
       </body>
     </html>
   )
