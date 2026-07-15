@@ -4105,6 +4105,21 @@ td[data-numeric],
 .beta-banner .beta-short {
   display: none;
 }
+.beta-banner .beta-lang {
+  display: none;
+}
+.beta-banner .beta-lang[data-beta-lang='en'],
+html[lang='ja'] .beta-banner .beta-lang[data-beta-lang='ja'],
+html[lang='ko'] .beta-banner .beta-lang[data-beta-lang='ko'],
+html[lang='zh-CN'] .beta-banner .beta-lang[data-beta-lang='zh'] {
+  display: inline;
+}
+html[lang='ja'] .beta-banner .beta-lang[data-beta-lang='en'],
+html[lang='ko'] .beta-banner .beta-lang[data-beta-lang='en'],
+html[lang='zh-CN'] .beta-banner .beta-lang[data-beta-lang='en'],
+html[data-beta-banner-hidden='true'] .beta-banner {
+  display: none;
+}
 @media (max-width: 480px) {
   .beta-banner {
     padding: 7px 38px 7px 12px !important;
