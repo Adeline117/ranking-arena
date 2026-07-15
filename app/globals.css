@@ -3748,6 +3748,49 @@ td[data-numeric],
 }
 
 /* Pricing: feature card hover */
+@media (max-width: 639px) {
+  .pricing-page-content {
+    padding: 24px 16px 96px !important;
+  }
+  .pricing-page-title {
+    margin-bottom: 8px !important;
+  }
+  .pricing-page-subtitle {
+    margin-bottom: 12px !important;
+    font-size: 15px !important;
+  }
+  .pricing-promo-note {
+    margin-bottom: 10px !important;
+    padding: 8px 12px !important;
+  }
+  .pricing-founding-banner {
+    margin-bottom: 12px !important;
+    padding: 10px 12px !important;
+  }
+  .pricing-proof-stats {
+    gap: 24px !important;
+    margin-bottom: 16px !important;
+  }
+  .pricing-billing-toggle {
+    margin-bottom: 24px !important;
+  }
+  .pricing-billing-toggle button {
+    min-height: 44px;
+  }
+  .pricing-plan-grid {
+    gap: 24px !important;
+  }
+  .pricing-pro-plan {
+    order: 1;
+    padding: 28px 20px 20px !important;
+    transform: none !important;
+  }
+  .pricing-free-plan {
+    order: 2;
+    padding: 20px !important;
+  }
+}
+
 .pricing-feature-card {
   transition:
     border-color var(--transition-fast),

@@ -214,6 +214,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
       }}
     >
       <div
+        className="pricing-page-content"
         style={{
           maxWidth: 960,
           margin: '0 auto',
@@ -223,6 +224,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
       >
         {/* Header */}
         <h1
+          className="pricing-page-title"
           style={{
             fontSize: 'clamp(24px, 6vw, 36px)',
             fontWeight: 800,
@@ -235,6 +237,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             : resolved(t('pricingTitle'), 'pricingTitle', 'Upgrade to Pro')}
         </h1>
         <p
+          className="pricing-page-subtitle"
           style={{
             fontSize: 17,
             color: tokens.colors.text.secondary,
@@ -252,6 +255,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
         </p>
         {!PRO_FREE_PROMO && (
           <div
+            className="pricing-promo-note"
             style={{
               display: 'inline-flex',
               alignItems: 'center',
@@ -302,6 +306,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
         {/* Founding member urgency banner */}
         <div
+          className="pricing-founding-banner"
           style={{
             maxWidth: 560,
             margin: `0 auto ${tokens.spacing[8]}`,
@@ -337,6 +342,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
         {/* Social proof stats */}
         <div
+          className="pricing-proof-stats"
           style={{
             display: 'flex',
             justifyContent: 'center',
@@ -387,6 +393,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
         {/* Billing toggle */}
         <div
+          className="pricing-billing-toggle"
           style={{
             display: 'inline-flex',
             gap: 4,
@@ -434,6 +441,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
         {/* Plans grid */}
         <div
+          className="pricing-plan-grid"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
@@ -446,6 +454,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
         >
           {/* Free Plan */}
           <div
+            className="pricing-free-plan"
             style={{
               padding: tokens.spacing[8],
               borderRadius: tokens.radius.lg,
@@ -560,6 +569,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
 
           {/* Pro Plan — elevated with shadow + scale */}
           <div
+            className="pricing-pro-plan"
             style={{
               padding: tokens.spacing[8],
               paddingTop: tokens.spacing[10],

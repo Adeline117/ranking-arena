@@ -310,14 +310,18 @@ test.describe('Responsive & Error Pages', () => {
     await expect(monthlyBtn.first()).toBeVisible()
     await monthlyBtn.first().click()
 
-    // Plans should stack vertically (cards should be visible without horizontal scroll)
+    // Pro is the conversion plan, so its price must be visible in the first fold;
+    // Free still renders below it for a complete comparison.
     const freePlan = page.locator('h3:has-text("Free")').first()
-    const box = await freePlan.boundingBox()
-    // Card should be within the 375px viewport
-    expect(box).toBeTruthy()
-    if (box) {
-      expect(box.x).toBeGreaterThanOrEqual(0)
-      expect(box.x + box.width).toBeLessThanOrEqual(400) // small tolerance
+    const proPlan = page.locator('h3:has-text("Pro")').first()
+    const [freeBox, proBox] = await Promise.all([freePlan.boundingBox(), proPlan.boundingBox()])
+    expect(freeBox).toBeTruthy()
+    expect(proBox).toBeTruthy()
+    if (freeBox && proBox) {
+      expect(proBox.y).toBeLessThan(freeBox.y)
+      expect(proBox.y).toBeLessThan(812)
+      expect(proBox.x).toBeGreaterThanOrEqual(0)
+      expect(proBox.x + proBox.width).toBeLessThanOrEqual(400)
     }
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/pricing-mobile.png`, fullPage: true })
