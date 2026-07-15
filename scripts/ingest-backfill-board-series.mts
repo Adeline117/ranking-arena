@@ -18,7 +18,7 @@ import { readRawObject } from '../lib/ingest/raw'
 import { publishBoardSeries } from '../lib/ingest/serving/publish'
 import type { BoardSeriesBlock, ParseCtx, RankingTimeframe } from '../lib/ingest/core/types'
 
-const SERIES_SLUGS = ['okx', 'toobit', 'xt', 'blofin', 'bitunix']
+const SERIES_SLUGS = ['okx', 'toobit', 'xt', 'blofin', 'bitunix', 'binance_web3']
 
 async function sourceSlugsForAdapter(adapterSlug: string): Promise<string[]> {
   const { rows } = await getIngestPool().query<{ slug: string }>(
@@ -98,12 +98,9 @@ async function main() {
         const pageArr = Array.isArray(pages) ? (pages as Array<{ payload?: unknown }>) : []
         const merged = new Map<string, BoardSeriesBlock[]>()
         for (const page of pageArr) {
-          const payload = page && typeof page === 'object' && 'payload' in page ? page.payload : page
-          const m = adapter.parseLeaderboardSeries(
-            payload,
-            ctx,
-            snap.timeframe as RankingTimeframe
-          )
+          const payload =
+            page && typeof page === 'object' && 'payload' in page ? page.payload : page
+          const m = adapter.parseLeaderboardSeries(payload, ctx, snap.timeframe as RankingTimeframe)
           for (const [id, blocks] of m) {
             const ex = merged.get(id)
             if (ex) ex.push(...blocks)

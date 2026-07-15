@@ -14,6 +14,7 @@ import { parseToobitLeaderboardSeries } from '../toobit/parsers'
 import { parseXtLeaderboardSeries } from '../xt/parsers'
 import { parseBlofinLeaderboardSeries } from '../blofin/parsers'
 import { parseBitunixLeaderboardSeries } from '../bitunix/parsers'
+import { parseBinanceWeb3LeaderboardSeries } from '../binance-web3/parsers'
 
 function fixture(adapter: string, name: string): unknown {
   return JSON.parse(
@@ -99,14 +100,25 @@ describe('bitunix parseLeaderboardSeries (dailyWinRate → roi)', () => {
   })
 })
 
+describe('binance web3 parseLeaderboardSeries (dailyPNL → pnl_daily)', () => {
+  it('decodes native daily realized PnL for every ranked wallet', () => {
+    const map = parseBinanceWeb3LeaderboardSeries(
+      fixture('binance-web3', 'board-page.json'),
+      ctx,
+      7
+    )
+    assertWellFormed(map, 7, ['pnl_daily'])
+  })
+})
+
 describe('adapters without inline board series', () => {
   it('omit parseLeaderboardSeries entirely (no-cost opt-out)', async () => {
     const { getAdapter } = await import('../../core/adapter')
     await import('../register') // populate the registry
     // bitget has no inline board series — must not implement the optional hook
     expect(getAdapter('bitget').parseLeaderboardSeries).toBeUndefined()
-    // the five that do, implement it
-    for (const slug of ['okx', 'toobit', 'xt', 'blofin', 'bitunix']) {
+    // the six that do, implement it
+    for (const slug of ['okx', 'toobit', 'xt', 'blofin', 'bitunix', 'binance_web3']) {
       expect(typeof getAdapter(slug).parseLeaderboardSeries).toBe('function')
     }
   })

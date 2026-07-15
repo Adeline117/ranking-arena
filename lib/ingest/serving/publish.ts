@@ -401,8 +401,8 @@ export async function publishProfile(
 
 /**
  * Board-level "free series" publish (spec §13.1): the Tier-A leaderboard row
- * already carries a per-trader cumulative sparkline for SOME sources (okx,
- * toobit, xt, blofin, bitunix), so every ranked trader — not just the topN
+ * already carries a per-trader sparkline for SOME sources (okx, toobit, xt,
+ * blofin, bitunix, binance_web3), so every ranked trader — not just the topN
  * that Tier-B crawls — gets a chart at zero extra fetch cost. Idempotent
  * upsert into the SAME arena.trader_series table the profile crawl writes,
  * so the maintenance downsample/retention (90d native → weekly rollup) and
