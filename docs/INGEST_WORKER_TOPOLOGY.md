@@ -4,10 +4,10 @@ The arena ingest worker runs on **two nodes** sharing one Supabase DB + Upstash 
 A source's `arena.sources.fetch_region` decides which node crawls it (region-affine
 BullMQ queues, `worker/src/ingest/queues.ts`).
 
-| Node               | Host                 | pm2 app                  | `INGEST_REGIONS` | Runs from                                     | Git?                |
-| ------------------ | -------------------- | ------------------------ | ---------------- | --------------------------------------------- | ------------------- |
-| Mac Mini (primary) | local                | `arena-ingest-worker`    | `local,vps_jp`   | `/Users/adelinewen/ranking-arena` (this repo) | yes (`main`)        |
-| Singapore VPS      | `root@45.76.152.169` | `arena-ingest-worker-sg` | `vps_sg`         | **`/opt/arena-ingest`**                       | **NO — rsync copy** |
+| Node               | Host                 | pm2 app                  | `INGEST_REGIONS` | Runs from                                         | Git?                |
+| ------------------ | -------------------- | ------------------------ | ---------------- | ------------------------------------------------- | ------------------- |
+| Mac Mini (primary) | local                | `arena-ingest-worker`    | `local,vps_jp`   | `/Users/adelinewen/ranking-arena-releases/<sha9>` | detached release    |
+| Singapore VPS      | `root@45.76.152.169` | `arena-ingest-worker-sg` | `vps_sg`         | **`/opt/arena-ingest`**                           | **NO — rsync copy** |
 
 ## ⚠️ Gotchas (cost real debugging time 2026-06-29)
 
@@ -27,12 +27,32 @@ BullMQ queues, `worker/src/ingest/queues.ts`).
 ```bash
 # from project root on the Mac Mini, after pushing to main:
 bash worker/deploy-ingest-sg.sh --dry-run   # inspect the changeset first
-bash worker/deploy-ingest-sg.sh             # rsync → backup → npm ci (if lock changed) → restart → verify
+bash worker/deploy-ingest-sg.sh --code-only # dep-free change: backup → rsync → restart → verify
 ```
 
 The script excludes `.env`/`.git`/`node_modules`/logs, backs up `/opt/arena-ingest`
 for rollback, stamps `DEPLOYED_SHA`, and does stop→sync→start to minimise scheduler
 split-brain (`queues.ts:66-85`).
+
+The verify step is deployment-scoped: a unique log marker must be followed by a
+new `ready` line and the exact target heartbeat SHA. Never accept a historical
+`ready` line as proof of the current PID.
+
+## Mac release discipline
+
+The Mac worker must not run from the shared/dirty live checkout. Create a detached
+release, link `node_modules`, `.arena-ingest`, `worker/logs`, `worker/.env` and
+`.env.local`, then use `pm2 stop` → `delete` → `start`. `pm2 restart` preserves the
+old cwd. Start from a minimal environment; runtime secrets belong in the mode-0600
+`worker/.env`, not the operator shell. Full commands live in
+`docs/INGEST_WORKER_DEPLOY.md`.
+
+## On-chain enrichment owner
+
+`maint:onchain-enrich` is reconciled every 12 hours on the local BullMQ queue and
+is the only recurring owner. The former Mac crontab calls to
+`scripts/onchain-enrich-web3.mts` were retired on 2026-07-15: the two paths have no
+shared lock and can otherwise duplicate RPC spend and overwrite the same extras.
 
 ## ⚠️ SG box npm-install hazard (2026-06-30 — learned the hard way)
 
