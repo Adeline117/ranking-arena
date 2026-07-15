@@ -130,6 +130,27 @@ describe('fetchSignatures', () => {
     })
   })
 
+  it('ignores a missing timestamp on a failed transaction', async () => {
+    mockRpc(() => [
+      { signature: 'failed', blockTime: null, err: { code: 1 } },
+      { signature: 'available', blockTime: 200, err: null },
+    ])
+
+    const scan = await scanSignatures('wallet', {
+      rpcUrl: 'https://rpc.invalid',
+      sinceMs: 100_000,
+      maxSigs: 5,
+    })
+
+    expect(scan.signatures).toEqual(['available'])
+    expect(scan.coverage).toMatchObject({
+      scanComplete: true,
+      truncated: false,
+      stopReason: 'history_exhausted',
+      recordsMissingTimestamp: 0,
+    })
+  })
+
   it('paginates with the last raw signature and proves exhaustion', async () => {
     const first = Array.from({ length: 1000 }, (_, i) => ({
       signature: `page-1-${i}`,
@@ -163,6 +184,46 @@ describe('fetchSignatures', () => {
       scanSignatures('wallet', { rpcUrl: 'https://rpc.invalid', maxSigs })
     ).rejects.toThrow('maxSigs must be a positive safe integer')
     expect(requests).toHaveLength(0)
+  })
+
+  it.each([0, -1, Number.NaN, 1.5])('rejects invalid maxPages=%s', async (maxPages) => {
+    const requests = mockRpc(() => [])
+    await expect(
+      scanSignatures('wallet', { rpcUrl: 'https://rpc.invalid', maxPages })
+    ).rejects.toThrow('maxPages must be a positive safe integer')
+    expect(requests).toHaveLength(0)
+  })
+
+  it('marks the strict page budget as truncation when failed records fill a page', async () => {
+    mockRpc((request) =>
+      Array.from({ length: request.params[1].limit }, (_, i) => ({
+        signature: `failed-${i}`,
+        blockTime: 1_800_000_000 - i,
+        err: { code: 1 },
+      }))
+    )
+
+    const scan = await scanSignatures('wallet', {
+      rpcUrl: 'https://rpc.invalid',
+      maxSigs: 5,
+      maxPages: 1,
+    })
+
+    expect(scan.signatures).toEqual([])
+    expect(scan.coverage).toMatchObject({
+      scanComplete: false,
+      truncated: true,
+      stopReason: 'page_cap',
+      pagesFetched: 1,
+      recordsSeen: 5,
+    })
+  })
+
+  it('rejects a malformed signature RPC result instead of claiming exhaustion', async () => {
+    mockRpc(() => undefined)
+    await expect(
+      scanSignatures('wallet', { rpcUrl: 'https://rpc.invalid', maxSigs: 5 })
+    ).rejects.toThrow('invalid result')
   })
 
   it('reports transaction fetch failures separately from signature coverage', async () => {
@@ -199,6 +260,6 @@ describe('fetchSignatures', () => {
       stopReason: 'history_exhausted',
     })
     expect(result.txsFetched).toBe(1)
-    expect(result.txFetchFailures).toBe(1)
+    expect(result.txsUnresolved).toBe(1)
   })
 })
