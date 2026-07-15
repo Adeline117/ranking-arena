@@ -13,16 +13,14 @@ const GlobalProgress = dynamic(() =>
   import('../components/ui/GlobalProgress').then((m) => ({ default: m.GlobalProgress }))
 )
 const MobileBottomNav = dynamic(() => import('../components/layout/MobileBottomNav'))
-// Vercel Analytics / WebVitals stay separate because they're loaded from
-// node_modules chunks that webpack may split differently.
+// WebVitals stays separate because it is loaded from a node_modules chunk that
+// webpack may split differently. Vercel Analytics is mounted once in the root
+// layout so the provider-light homepage is covered too.
 const WebVitals = dynamic(() =>
   import('../components/Providers/WebVitals').then((m) => ({ default: m.WebVitals }))
 )
 const SpeedInsights = dynamic(() =>
   import('@vercel/speed-insights/next').then((m) => ({ default: m.SpeedInsights }))
-)
-const Analytics = dynamic(() =>
-  import('@vercel/analytics/next').then((m) => ({ default: m.Analytics }))
 )
 // DeferredLayoutWidgets groups 10 non-critical widgets (Sentry, network
 // banner, SW, keyboard shortcuts, compare bar, scroll-to-top, feedback,
@@ -56,7 +54,6 @@ export default function AppLayout({
           <Suspense fallback={null}>
             <WebVitals />
             <SpeedInsights />
-            <Analytics />
           </Suspense>
           <SkipLink targetId="main-content" />
           <TopNav />
