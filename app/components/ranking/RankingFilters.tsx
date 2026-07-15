@@ -554,7 +554,7 @@ export function RankingFilters({
                       : 'transparent',
                   color:
                     traderTypeFilter === opt.value
-                      ? tokens.colors.accent.primary
+                      ? 'var(--color-brand-text)'
                       : tokens.colors.text.tertiary,
                   fontSize: tokens.typography.fontSize.xs,
                   fontWeight: traderTypeFilter === opt.value ? 700 : 500,
