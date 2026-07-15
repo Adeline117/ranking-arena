@@ -8240,6 +8240,14 @@ export type Database = {
       exec_sql: { Args: { sql: string }; Returns: undefined }
       expire_group_subscriptions: { Args: never; Returns: number }
       fill_null_pnl_from_siblings: { Args: never; Returns: number }
+      finalize_trader_alert_delivery: {
+        Args: {
+          p_delivery_id: string
+          p_last_value: number
+          p_observed_at?: string
+        }
+        Returns: boolean
+      }
       find_data_gaps: {
         Args: { p_limit?: number; p_max_age_hours?: number }
         Returns: {
