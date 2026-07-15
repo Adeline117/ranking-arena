@@ -17,7 +17,11 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
-import { getTokenTraderRankings, type TokenTraderRanking } from '@/lib/rankings/token-traders'
+import {
+  getTokenTraderRankingCacheKey,
+  getTokenTraderRankings,
+  type TokenTraderRanking,
+} from '@/lib/rankings/token-traders'
 
 export const runtime = 'nodejs'
 
@@ -127,7 +131,7 @@ export async function GET(request: NextRequest) {
   const { token, period, limit, offset } = parsed.data
 
   try {
-    const CACHE_KEY = `rankings:by-token:${token}:${period}:${limit}:${offset}`
+    const CACHE_KEY = getTokenTraderRankingCacheKey(token, period, limit, offset)
 
     const result = await tieredGetOrSet<{
       traders: TokenTraderRanking[]

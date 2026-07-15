@@ -1,4 +1,12 @@
-import { mergeTokenRankingsWithProfiles } from './token-traders'
+import { getTokenTraderRankingCacheKey, mergeTokenRankingsWithProfiles } from './token-traders'
+
+describe('getTokenTraderRankingCacheKey', () => {
+  test('uses the aggregate-backed cache namespace', () => {
+    expect(getTokenTraderRankingCacheKey('BTC', '90D', 25, 0)).toBe(
+      'rankings:by-token:v2:BTC:90D:25:0'
+    )
+  })
+})
 
 describe('mergeTokenRankingsWithProfiles', () => {
   test('preserves aggregate rank data and enriches matching trader profiles', () => {

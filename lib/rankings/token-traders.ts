@@ -7,6 +7,21 @@ const PERIOD_DAYS: Record<string, number> = {
   '90D': 90,
 }
 
+// Cache namespace is versioned because the original endpoint cached empty
+// results produced by its retired raw-history query. Reusing that namespace
+// after switching to the aggregate RPC can keep a repaired token board empty
+// until the old Redis entry expires.
+export const TOKEN_TRADER_RANKING_CACHE_VERSION = 'v2'
+
+export function getTokenTraderRankingCacheKey(
+  token: string,
+  period: string,
+  limit: number,
+  offset: number
+): string {
+  return `rankings:by-token:${TOKEN_TRADER_RANKING_CACHE_VERSION}:${token}:${period}:${limit}:${offset}`
+}
+
 interface AggregatedTokenTrader {
   source: string
   source_trader_id: string
