@@ -52,6 +52,7 @@ import {
   ExchangeBindingBanner,
 } from './components'
 import { ApiKeysSection } from './components/ApiKeysSection'
+import TraderAlertsManager from '@/app/components/alerts/TraderAlertsManager'
 import { logger } from '@/lib/logger'
 
 function SettingsContent() {
@@ -501,13 +502,11 @@ function SettingsContent() {
             title={t('traderAlertsTitle')}
             description={t('traderAlertsDesc2')}
           >
-            {/* The former AdvancedAlerts panel only changed demo React state: it
-                never persisted a condition or delivered a notification. The
-                profile alert bell is now the one real, account-specific surface. */}
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
               <Text size="sm" color="secondary">
                 {t('traderAlertsConfigureOnProfile')}
               </Text>
+              <TraderAlertsManager />
               <Link
                 href="/"
                 style={{

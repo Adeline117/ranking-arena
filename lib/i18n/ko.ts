@@ -1097,6 +1097,15 @@ const ko = {
   traderAlertsConfigureOnProfile:
     '각 알림이 올바른 거래소 계정에 연결되도록 트레이더 프로필에서 알림을 설정하세요.',
   traderAlertsBrowse: '트레이더 둘러보기',
+  traderAlertsNone: '설정된 트레이더 알림이 없습니다.',
+  traderAlertsEnabled: '활성화됨',
+  traderAlertsPaused: '일시 중지됨',
+  traderAlertsNoConditions: '활성 조건 없음',
+  traderAlertsRemove: '삭제',
+  traderAlertsRemoveConfirm: '이 트레이더 알림을 삭제할까요?',
+  traderAlertsRemoveFailed: '트레이더 알림을 삭제하지 못했습니다. 다시 시도하세요.',
+  traderAlertsLoadFailed: '트레이더 알림을 불러오지 못했습니다. 다시 시도하세요.',
+  traderAlertsProRequired: '트레이더 알림 관리에는 Pro가 필요합니다.',
   // Privacy settings detail
   followListVisibilityNote: '비활성화하면 다른 사용자가 이 목록을 볼 수 없습니다',
   showFollowingListLabel: '내 팔로잉 목록 표시',

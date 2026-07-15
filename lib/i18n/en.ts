@@ -1163,6 +1163,15 @@ const en = {
   traderAlertsConfigureOnProfile:
     'Set alerts from a trader profile so each notification is tied to the correct exchange account.',
   traderAlertsBrowse: 'Browse traders',
+  traderAlertsNone: 'No trader alerts configured yet.',
+  traderAlertsEnabled: 'Enabled',
+  traderAlertsPaused: 'Paused',
+  traderAlertsNoConditions: 'No active conditions',
+  traderAlertsRemove: 'Remove',
+  traderAlertsRemoveConfirm: 'Remove this trader alert?',
+  traderAlertsRemoveFailed: 'Could not remove the trader alert. Please try again.',
+  traderAlertsLoadFailed: 'Could not load trader alerts. Please try again.',
+  traderAlertsProRequired: 'Trader alert management is available with Pro.',
   // Privacy settings detail
   followListVisibilityNote: 'When disabled, other users cannot view these lists',
   showFollowingListLabel: 'Show my following list',
