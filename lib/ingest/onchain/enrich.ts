@@ -15,7 +15,7 @@
 
 import { computeBscWalletOnchain, type BscWalletResult } from './bsc-fetch'
 import { computeSolanaWalletOnchain, type SolWalletResult } from './solana-fetch'
-import { fetchMoralisInternalBnb } from './moralis-bsc-internal'
+import { scanMoralisInternalBnb } from './moralis-bsc-internal'
 import { fetchTokenInfo, unrealizedFromHoldings, type TokenInfo } from './token-prices'
 import type { PerTokenPnl } from './pnl-accounting'
 import type { NormalizedTransfer } from './bsc-swaps'
@@ -220,13 +220,20 @@ export async function enrichWeb3Wallet(
       solanaHistoryEvidence(r)
     )
   }
-  // Native-BNB SELL receipts (item C): caller-supplied (Dune batch) wins;
-  // otherwise auto-fetch per wallet from Moralis (owner key 2026-07-09,
-  // live-verified inbound router→wallet legs). Fail-soft [] → realized-partial.
+  // Native-BNB SELL receipts (item C): caller-supplied Dune batch wins;
+  // otherwise scan the wallet through Moralis. Only an explicitly exhausted
+  // provider cursor can complete internal-transfer coverage; a non-empty array
+  // proves records exist, not that the requested history is complete.
   let internalLegs = opts.bscInternalBnb
+  let internalCoverageComplete =
+    opts.bscInternalCoverageComplete === true && internalLegs !== undefined
   if (internalLegs === undefined && process.env.MORALIS_API_KEY) {
-    const fetched = await fetchMoralisInternalBnb(wallet, { lookbackDays })
-    if (fetched.length > 0) internalLegs = fetched
+    const scan = await scanMoralisInternalBnb(wallet, {
+      lookbackDays,
+      maxPages: opts.maxPages,
+    })
+    internalLegs = scan.transfers
+    internalCoverageComplete = scan.coverage.scanComplete
   }
   const r = await computeBscWalletOnchain(wallet, {
     lookbackDays,
@@ -234,11 +241,6 @@ export async function enrichWeb3Wallet(
     extraTransfers: internalLegs,
   })
   const { u, info } = await priceAndMeta(r.pnl.perToken)
-  // A non-empty array proves records were found, not that pagination finished.
-  // Require an independent coverage flag; current Dune/Moralis callers do not
-  // have that proof, so production remains conservatively partial.
-  const internalCoverageComplete =
-    opts.bscInternalCoverageComplete === true && internalLegs !== undefined
   const partial = !internalCoverageComplete
   return normalize(
     'bsc',
