@@ -1,6 +1,6 @@
 import 'server-only'
 import Stripe from 'stripe'
-import { PRICING } from '@/app/(app)/user-center/membership-config'
+import { API_PRICING, PRICING } from '@/app/(app)/user-center/membership-config'
 
 /**
  * Validates that a required Stripe environment variable is set.
@@ -43,6 +43,9 @@ export const stripe = {
   get subscriptions() {
     return getStripe().subscriptions
   },
+  get prices() {
+    return getStripe().prices
+  },
   get checkout() {
     return getStripe().checkout
   },
@@ -82,6 +85,58 @@ export const API_TIER_LIMITS: Record<string, number> = {
   free: 100,
   starter: 10_000,
   pro: 0, // 0 = unlimited
+}
+
+type PriceContract = {
+  unitAmount: number
+  interval: 'month' | 'year' | null
+}
+
+async function assertPriceContract(priceId: string, expected: PriceContract): Promise<void> {
+  if (!priceId || !priceId.startsWith('price_')) {
+    throw new Error('Stripe price is not configured')
+  }
+
+  const price = await stripe.prices.retrieve(priceId, { expand: ['product'] })
+  const product = typeof price.product === 'string' ? null : price.product
+  const secretIsLive = requireEnv('STRIPE_SECRET_KEY').startsWith('sk_live_')
+  const productionPaywallEnabled =
+    process.env.VERCEL_ENV === 'production' && process.env.NEXT_PUBLIC_PRO_FREE_PROMO === 'false'
+
+  if (productionPaywallEnabled && (!secretIsLive || !price.livemode)) {
+    throw new Error('Stripe live mode is required before the production paywall can be enabled')
+  }
+  if (price.livemode !== secretIsLive) {
+    throw new Error('Stripe key and price mode do not match')
+  }
+  if (!price.active || !product || !('active' in product) || !product.active) {
+    throw new Error('Stripe price or product is inactive')
+  }
+  if (price.currency !== 'usd' || price.unit_amount !== expected.unitAmount) {
+    throw new Error('Stripe price amount does not match the product pricing contract')
+  }
+  if ((price.recurring?.interval ?? null) !== expected.interval) {
+    throw new Error('Stripe price billing interval does not match the product pricing contract')
+  }
+}
+
+export async function assertProPriceReady(
+  plan: 'monthly' | 'yearly' | 'lifetime',
+  priceId: string
+): Promise<void> {
+  const expected: Record<typeof plan, PriceContract> = {
+    monthly: { unitAmount: Math.round(PRICING.monthly.price * 100), interval: 'month' },
+    yearly: { unitAmount: Math.round(PRICING.yearly.price * 100), interval: 'year' },
+    lifetime: { unitAmount: Math.round(PRICING.lifetime.price * 100), interval: null },
+  }
+  await assertPriceContract(priceId, expected[plan])
+}
+
+export async function assertApiPriceReady(plan: 'starter' | 'pro', priceId: string): Promise<void> {
+  await assertPriceContract(priceId, {
+    unitAmount: Math.round(API_PRICING[plan].price * 100),
+    interval: 'month',
+  })
 }
 
 // 订阅计划配置 - prices sourced from PRICING (single source of truth)

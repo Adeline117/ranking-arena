@@ -4,6 +4,7 @@ import {
   STRIPE_API_PRICE_IDS,
   getOrCreateStripeCustomer,
   createCheckoutSession,
+  assertApiPriceReady,
 } from '@/lib/stripe'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -51,14 +52,11 @@ export async function POST(request: NextRequest) {
 
     // Check if user already has an active API tier subscription
     const supabaseAdmin = getSupabaseAdmin()
-    // api_tier column added in migration 20260519124947 — cast to bypass generated types
-    const { data: profile } = (await (supabaseAdmin.from('user_profiles') as any)
+    const { data: profile } = await supabaseAdmin
+      .from('user_profiles')
       .select('api_tier, api_stripe_subscription_id')
       .eq('id', user.id)
-      .maybeSingle()) as {
-      data: { api_tier?: string; api_stripe_subscription_id?: string } | null
-      error: unknown
-    }
+      .maybeSingle()
 
     if (profile?.api_tier === plan) {
       return NextResponse.json(
@@ -74,6 +72,19 @@ export async function POST(request: NextRequest) {
     if (!priceId || !priceId.startsWith('price_')) {
       return NextResponse.json(
         { error: 'API plan pricing not configured. Please contact support.' },
+        { status: 503 }
+      )
+    }
+
+    try {
+      await assertApiPriceReady(plan as ApiPlan, priceId)
+    } catch (priceError) {
+      logger.error('Stripe API price readiness check failed', {
+        plan,
+        error: priceError instanceof Error ? priceError.message : String(priceError),
+      })
+      return NextResponse.json(
+        { error: 'API plan pricing is not ready. Please contact support.' },
         { status: 503 }
       )
     }
