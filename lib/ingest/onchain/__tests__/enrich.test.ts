@@ -278,6 +278,18 @@ describe('enrichmentExtras', () => {
     expect(x.onchain_top_earning_tokens_provenance).toBeNull()
     expect('top_earning_tokens' in x).toBe(false)
   })
+
+  it('drops reconstructed top tokens without finite realized PnL', () => {
+    const x = enrichmentExtras({
+      ...base,
+      topEarningTokens: [
+        { symbol: 'NAN', realized_pnl: Number.NaN },
+        { symbol: 'INF', realized_pnl: Number.POSITIVE_INFINITY },
+      ],
+    })
+    expect(x.onchain_top_earning_tokens).toBeNull()
+    expect(x.onchain_top_earning_tokens_provenance).toBeNull()
+  })
 })
 
 describe('enrichmentSeries (BSC chain-derived pnl_daily)', () => {

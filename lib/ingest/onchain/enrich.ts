@@ -369,15 +369,18 @@ export function enrichmentExtras(e: OnchainEnrichment): Record<string, unknown> 
   // profit_pct can never escape into serving. Reconstructed realized PnL has
   // no trustworthy invested-capital denominator in quality schema v1.
   const onchainTopTokens = e.topEarningTokens
-    .filter((token) => typeof token.symbol === 'string' && token.symbol.length > 0)
+    .filter(
+      (token) =>
+        typeof token.symbol === 'string' &&
+        token.symbol.length > 0 &&
+        typeof token.realized_pnl === 'number' &&
+        Number.isFinite(token.realized_pnl)
+    )
     .map((token) => ({
       symbol: token.symbol,
       address: typeof token.address === 'string' ? token.address : '',
       logo: typeof token.logo === 'string' ? token.logo : null,
-      realized_pnl:
-        typeof token.realized_pnl === 'number' && Number.isFinite(token.realized_pnl)
-          ? token.realized_pnl
-          : null,
+      realized_pnl: token.realized_pnl,
     }))
   const hasTokens = onchainTopTokens.length > 0
   const hasDistribution = Object.values(e.tokenDistribution).some((count) => count > 0)
