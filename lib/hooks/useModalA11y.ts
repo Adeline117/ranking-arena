@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, type RefObject } from 'react'
+import { useEffect, useRef, type RefObject } from 'react'
 import { useScrollLock } from './useScrollLock'
 
 /**
@@ -29,16 +29,23 @@ export function useModalA11y({
   modalRef?: RefObject<HTMLElement | null>
 }) {
   useScrollLock(open)
+  // Callers commonly pass an inline close handler. Depending on that function
+  // made the effect clean up and restore pre-modal focus on every parent
+  // render (for example, every character typed into a controlled textarea).
+  // Keep the latest handler without restarting the focus lifecycle.
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     if (!open) return
 
     const previousFocus = document.activeElement as HTMLElement | null
+    let focusFrame: number | null = null
 
     // Auto-focus first focusable element inside the modal
     if (modalRef?.current) {
       // Use rAF to let the DOM settle (e.g. after animation start)
-      requestAnimationFrame(() => {
+      focusFrame = requestAnimationFrame(() => {
         const first = modalRef.current?.querySelector<HTMLElement>(FOCUSABLE)
         first?.focus()
       })
@@ -46,7 +53,7 @@ export function useModalA11y({
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        onClose()
+        onCloseRef.current()
         return
       }
 
@@ -69,8 +76,9 @@ export function useModalA11y({
     document.addEventListener('keydown', handleKeyDown)
 
     return () => {
+      if (focusFrame != null) cancelAnimationFrame(focusFrame)
       document.removeEventListener('keydown', handleKeyDown)
       previousFocus?.focus()
     }
-  }, [open, onClose, modalRef])
+  }, [open, modalRef])
 }
