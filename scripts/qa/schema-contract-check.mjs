@@ -37,6 +37,54 @@ const TABLE_IGNORE = new Set([
   'chat',
 ])
 
+// Two-phase schema expansion is the one intentional exception to "production
+// first": compatibility code must be serving before the new write boundary is
+// installed, otherwise old instances can race the new trigger lock order. Keep
+// the exception narrow, self-expiring, and tied to the checked-in migration
+// that creates each RPC. Once the expand migration is applied these entries are
+// inert; remove them after rollout rather than extending the deadline.
+const EXPAND_ROLLOUT_RPCS = new Map(
+  ['toggle_comment_reaction', 'update_own_comment', 'delete_own_comment', 'moderate_comment'].map(
+    (rpc) => [
+      rpc,
+      {
+        migration: 'supabase/migrations/20260715091500_atomic_comment_integrity.sql',
+        expiresAt: '2026-07-17T23:59:59Z',
+      },
+    ]
+  )
+)
+
+function validateExpandRollout(rpc) {
+  const rollout = EXPAND_ROLLOUT_RPCS.get(rpc)
+  if (!rollout) return null
+
+  const expiresAt = Date.parse(rollout.expiresAt)
+  if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) {
+    return {
+      valid: false,
+      reason: `临时 expand-rollout 已过期 (${rollout.expiresAt})`,
+    }
+  }
+
+  const migrationPath = path.join(process.cwd(), rollout.migration)
+  if (!fs.existsSync(migrationPath)) {
+    return { valid: false, reason: `迁移文件缺失: ${rollout.migration}` }
+  }
+
+  const migration = fs.readFileSync(migrationPath, 'utf8')
+  const escapedRpc = rpc.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const declaration = new RegExp(
+    `CREATE\\s+OR\\s+REPLACE\\s+FUNCTION\\s+public\\.${escapedRpc}\\s*\\(`,
+    'i'
+  )
+  if (!declaration.test(migration)) {
+    return { valid: false, reason: `迁移未声明 public.${rpc}(...)` }
+  }
+
+  return { valid: true, migration: rollout.migration, expiresAt: rollout.expiresAt }
+}
+
 // ---------- env ----------
 function readEnv(name) {
   if (process.env[name]) return process.env[name].replace(/^"|"$/g, '')
@@ -103,8 +151,20 @@ const prodColumns = inv.columns || {}
 
 // ---------- 3. 差集 ----------
 const failures = []
+const expandRolloutWarnings = []
 for (const rpc of codeRpcs) {
-  if (!prodFunctions.has(rpc)) failures.push(`RPC 缺失: ${rpc}（代码在调用）`)
+  if (prodFunctions.has(rpc)) continue
+
+  const rollout = validateExpandRollout(rpc)
+  if (!rollout) {
+    failures.push(`RPC 缺失: ${rpc}（代码在调用）`)
+  } else if (!rollout.valid) {
+    failures.push(`RPC 缺失: ${rpc}；${rollout.reason}`)
+  } else {
+    expandRolloutWarnings.push(
+      `RPC 待 expand: ${rpc} ← ${rollout.migration}（最迟 ${rollout.expiresAt}）`
+    )
+  }
 }
 for (const t of codeTables) {
   // .from() 也可能是视图 — inventory 的 tables 含视图（information_schema.tables）
@@ -121,6 +181,10 @@ for (const [t, cols] of Object.entries(CRITICAL_COLUMNS)) {
 console.log(
   `检查范围: 代码 ${codeRpcs.length} RPC + ${codeTables.length} 表 vs 生产 ${prodFunctions.size} 函数 + ${prodTables.size} 表`
 )
+if (expandRolloutWarnings.length) {
+  console.warn(`\n⚠️ 受控 schema expand (${expandRolloutWarnings.length}):`)
+  for (const warning of expandRolloutWarnings) console.warn(`   ${warning}`)
+}
 if (failures.length) {
   console.error(`\n❌ Schema 契约失败 (${failures.length}):`)
   for (const f of failures) console.error(`   ${f}`)
