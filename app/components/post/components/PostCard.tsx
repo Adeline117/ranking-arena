@@ -457,6 +457,7 @@ export const PostCard = memo(function PostCard({
         }}
       >
         <ReactButton
+          ariaLabel={t('upvote')}
           onClick={(e) => {
             e.stopPropagation()
             onReact?.(post.id, 'up')
@@ -467,6 +468,7 @@ export const PostCard = memo(function PostCard({
         />
 
         <ReactButton
+          ariaLabel={t('downvote')}
           onClick={(e) => {
             e.stopPropagation()
             onReact?.(post.id, 'down')

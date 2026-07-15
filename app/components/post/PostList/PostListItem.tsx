@@ -53,22 +53,19 @@ export const PostListItem = memo(
     t,
   }: PostListItemProps) {
     return (
-      <div
-        role="button"
+      <article
         tabIndex={0}
         aria-label={p.title || t('openPost')}
         onClick={(e: React.MouseEvent) => {
           // Don't hijack clicks on interactive CHILDREN. NOTE: this container itself
-          // has role="button", and .closest() includes the element itself — so we must
-          // exclude currentTarget, otherwise EVERY body click matches the container's
-          // own role="button" and the guard swallows it (card became unclickable — U9-2).
           const interactive = (e.target as HTMLElement).closest(
             'a, button, [role="button"], input, textarea, select'
           )
-          if (interactive && interactive !== e.currentTarget) return
+          if (interactive) return
           onOpenPost(p)
         }}
         onKeyDown={(e: React.KeyboardEvent) => {
+          if (e.target !== e.currentTarget) return
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
             onOpenPost(p)
@@ -296,6 +293,7 @@ export const PostListItem = memo(
           }}
         >
           <ReactButton
+            ariaLabel={t('upvote')}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -307,6 +305,7 @@ export const PostListItem = memo(
             showCount={true}
           />
           <ReactButton
+            ariaLabel={t('downvote')}
             onClick={(e) => {
               e.preventDefault()
               e.stopPropagation()
@@ -317,9 +316,28 @@ export const PostListItem = memo(
             count={p.dislike_count}
             showCount={false}
           />
-          <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+          <button
+            type="button"
+            aria-label={`${t('openPost')} — ${p.comment_count} ${t('comments')}`}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenPost(p)
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              minHeight: 44,
+              padding: '6px 8px',
+              border: 'none',
+              borderRadius: tokens.radius.sm,
+              background: 'transparent',
+              color: 'inherit',
+              cursor: 'pointer',
+            }}
+          >
             <CommentIcon size={14} /> {p.comment_count}
-          </span>
+          </button>
           <span
             style={{ color: tokens.colors.text.tertiary }}
             title={new Date(p.created_at).toLocaleString()}
@@ -449,7 +467,7 @@ export const PostListItem = memo(
             </span>
           )}
         </div>
-      </div>
+      </article>
     )
   },
   (prev, next) => {

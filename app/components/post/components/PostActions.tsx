@@ -10,9 +10,17 @@ interface ReactButtonProps {
   icon: React.ReactNode
   count: number
   showCount?: boolean
+  ariaLabel: string
 }
 
-export function ReactButton({ onClick, active, icon, count, showCount = true }: ReactButtonProps) {
+export function ReactButton({
+  onClick,
+  active,
+  icon,
+  count,
+  showCount = true,
+  ariaLabel,
+}: ReactButtonProps) {
   const [isPressed, setIsPressed] = useState(false)
   const [isAnimating, setIsAnimating] = useState(false)
   const processingRef = useRef(false)
@@ -37,7 +45,7 @@ export function ReactButton({ onClick, active, icon, count, showCount = true }: 
     // 如果 onClick 返回 Promise，等待完成后才解锁
     // 否则使用 500ms 作为最小防抖时间
     if (result && typeof (result as Promise<void>).then === 'function') {
-      (result as Promise<void>).finally(() => {
+      ;(result as Promise<void>).finally(() => {
         processingRef.current = false
       })
     } else {
@@ -49,6 +57,7 @@ export function ReactButton({ onClick, active, icon, count, showCount = true }: 
 
   return (
     <button
+      aria-label={ariaLabel}
       onClick={handleClick}
       onMouseDown={() => setIsPressed(true)}
       onMouseUp={() => setIsPressed(false)}
@@ -180,5 +189,3 @@ export function Action({ icon, text, onClick, active, count, showCount }: Action
     </button>
   )
 }
-
-
