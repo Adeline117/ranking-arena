@@ -310,11 +310,22 @@ describe('enrichmentSeries (BSC chain-derived pnl_daily)', () => {
     realizedPartial: false,
   }
   const nowMs = Date.parse('2026-07-10T12:00:00Z')
+  const canonical = {
+    ...base,
+    quality: {
+      ...base.quality,
+      completeness: 'complete' as const,
+      priceQuality: 'historical_execution' as const,
+      scoreEligible: true,
+      reasons: [],
+      history: { ...base.quality.history, scanComplete: true, truncated: false },
+    },
+  }
 
   it('zero-fills idle days and slices tf 7/30/90 like okx_web3_solana convention', () => {
     const blocks = enrichmentSeries(
       {
-        ...base,
+        ...canonical,
         dailyRealized: [
           { ts: '2026-07-02', value: 20 },
           { ts: '2026-07-06', value: -5 },
@@ -345,5 +356,24 @@ describe('enrichmentSeries (BSC chain-derived pnl_daily)', () => {
 
   it('returns [] when no realized activity', () => {
     expect(enrichmentSeries({ ...base, dailyRealized: [] }, nowMs)).toEqual([])
+  })
+
+  it('returns [] when quality is partial', () => {
+    expect(
+      enrichmentSeries({ ...base, dailyRealized: [{ ts: '2026-07-02', value: 20 }] }, nowMs)
+    ).toEqual([])
+  })
+
+  it('returns [] when realized coverage is partial despite canonical-looking quality', () => {
+    expect(
+      enrichmentSeries(
+        {
+          ...canonical,
+          realizedPartial: true,
+          dailyRealized: [{ ts: '2026-07-02', value: 20 }],
+        },
+        nowMs
+      )
+    ).toEqual([])
   })
 })
