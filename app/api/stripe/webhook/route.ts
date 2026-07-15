@@ -55,97 +55,121 @@ export async function POST(request: NextRequest) {
 
       const supabase = getSupabase()
 
-      // Atomic idempotency: INSERT first, skip if duplicate (race-safe)
-      const { error: idempotencyError } = await supabase.from('stripe_events').insert({
-        event_id: event.id,
-        event_type: event.type,
-        processed_at: new Date().toISOString(),
+      // Atomically claim the event without calling it processed yet. A prior
+      // failed (or stale processing) delivery remains claimable on retry.
+      const { data: claimResult, error: claimError } = await supabase.rpc('claim_stripe_event', {
+        p_event_id: event.id,
+        p_event_type: event.type,
       })
 
-      if (idempotencyError) {
-        // Unique constraint violation = already processed (the safe path)
-        if (idempotencyError.code === '23505') {
-          logger.info(`Event ${event.id} already processed, skipping`, { type: event.type })
-          return NextResponse.json({ received: true, skipped: true })
-        }
-        // SECURITY (audit P1-9, 2026-04-09): non-23505 errors are transient
-        // (DB pool exhaustion, network blip, statement timeout). Returning 500
-        // makes Stripe retry the webhook with exponential backoff. The
-        // alternative — proceeding without the idempotency row — risks
-        // double-processing this event AND any future delivery of the same
-        // event_id, which for payment events means double crediting,
-        // double-issuing entitlements, double notifications, etc.
-        // It is strictly safer to drop a delivery and let Stripe retry than
-        // to process without the idempotency guard.
-        logger.error('Idempotency insert failed — returning 500 to trigger Stripe retry', {
+      if (claimError) {
+        logger.error('Stripe event claim failed — returning 500 for retry', {
           eventId: event.id,
           eventType: event.type,
-          errorCode: idempotencyError.code,
-          errorMessage: idempotencyError.message,
+          errorCode: claimError.code,
+          errorMessage: claimError.message,
           correlationId,
         })
-        return NextResponse.json(
-          { error: 'Idempotency check failed, please retry' },
-          { status: 500 }
-        )
+        return NextResponse.json({ error: 'Event claim failed, please retry' }, { status: 500 })
+      }
+
+      if (claimResult === 'processed') {
+        logger.info(`Event ${event.id} already processed, skipping`, { type: event.type })
+        return NextResponse.json({ received: true, skipped: true })
+      }
+
+      if (claimResult !== 'claimed') {
+        // A concurrent delivery owns this event, or the function returned an
+        // unknown state. A non-2xx response asks Stripe to retry rather than
+        // acknowledging work that has not completed.
+        logger.warn('Stripe event is not available for processing', {
+          eventId: event.id,
+          eventType: event.type,
+          claimResult,
+        })
+        return NextResponse.json({ error: 'Event is already processing' }, { status: 500 })
       }
 
       logger.info(`[Stripe Webhook] Processing ${event.type}`, { eventId: event.id, correlationId })
 
-      // Dispatch to handlers
-      switch (event.type) {
-        case 'checkout.session.completed': {
-          const session = event.data.object as Stripe.Checkout.Session
-          if (session.metadata?.type === 'tip') {
-            await handleTipPaymentCompleted(session)
-          } else {
-            await handleCheckoutComplete(session)
+      try {
+        // Dispatch to handlers
+        switch (event.type) {
+          case 'checkout.session.completed': {
+            const session = event.data.object as Stripe.Checkout.Session
+            if (session.metadata?.type === 'tip') {
+              await handleTipPaymentCompleted(session)
+            } else {
+              await handleCheckoutComplete(session)
+            }
+            break
           }
-          break
+
+          case 'checkout.session.expired':
+            await handleCheckoutExpired(event.data.object as Stripe.Checkout.Session)
+            break
+
+          case 'customer.subscription.created':
+          case 'customer.subscription.updated':
+            await handleSubscriptionUpdate(event.data.object as Stripe.Subscription)
+            break
+
+          case 'customer.subscription.deleted':
+            await handleSubscriptionCanceled(event.data.object as Stripe.Subscription)
+            break
+
+          case 'invoice.payment_succeeded':
+            await handlePaymentSucceeded(event.data.object as Stripe.Invoice)
+            break
+
+          case 'invoice.payment_failed':
+            await handlePaymentFailed(event.data.object as Stripe.Invoice)
+            break
+
+          case 'charge.refunded':
+            await handleChargeRefunded(event.data.object as Stripe.Charge)
+            break
+
+          case 'charge.refund.updated':
+            await handleRefundUpdated(event.data.object as Stripe.Refund)
+            break
+
+          case 'customer.subscription.trial_will_end':
+            await handleTrialWillEnd(event.data.object as Stripe.Subscription)
+            break
+
+          case 'charge.dispute.created':
+            await handleChargeDisputeCreated(event.data.object as Stripe.Dispute)
+            break
+
+          default:
+            logger.info(`Unhandled event type: ${event.type}`)
         }
 
-        case 'checkout.session.expired':
-          await handleCheckoutExpired(event.data.object as Stripe.Checkout.Session)
-          break
-
-        case 'customer.subscription.created':
-        case 'customer.subscription.updated':
-          await handleSubscriptionUpdate(event.data.object as Stripe.Subscription)
-          break
-
-        case 'customer.subscription.deleted':
-          await handleSubscriptionCanceled(event.data.object as Stripe.Subscription)
-          break
-
-        case 'invoice.payment_succeeded':
-          await handlePaymentSucceeded(event.data.object as Stripe.Invoice)
-          break
-
-        case 'invoice.payment_failed':
-          await handlePaymentFailed(event.data.object as Stripe.Invoice)
-          break
-
-        case 'charge.refunded':
-          await handleChargeRefunded(event.data.object as Stripe.Charge)
-          break
-
-        case 'charge.refund.updated':
-          await handleRefundUpdated(event.data.object as Stripe.Refund)
-          break
-
-        case 'customer.subscription.trial_will_end':
-          await handleTrialWillEnd(event.data.object as Stripe.Subscription)
-          break
-
-        case 'charge.dispute.created':
-          await handleChargeDisputeCreated(event.data.object as Stripe.Dispute)
-          break
-
-        default:
-          logger.info(`Unhandled event type: ${event.type}`)
+        const { data: finished, error: finishError } = await supabase.rpc('finish_stripe_event', {
+          p_event_id: event.id,
+          p_succeeded: true,
+          p_error: null,
+        })
+        if (finishError || finished !== true) {
+          throw new Error(finishError?.message || 'Stripe event success state was not persisted')
+        }
+      } catch (handlerError) {
+        const message = handlerError instanceof Error ? handlerError.message : String(handlerError)
+        const { error: failureStateError } = await supabase.rpc('finish_stripe_event', {
+          p_event_id: event.id,
+          p_succeeded: false,
+          p_error: message,
+        })
+        logger.error('Stripe webhook handler failed; event remains retryable', {
+          eventId: event.id,
+          eventType: event.type,
+          error: message,
+          failureStateError: failureStateError?.message,
+          correlationId,
+        })
+        return NextResponse.json({ error: 'Webhook handler failed' }, { status: 500 })
       }
-
-      // Event already recorded at start (atomic idempotency)
 
       const duration = Date.now() - startTime
       logger.info(`[Stripe Webhook] Completed ${event.type} in ${duration}ms`, {
