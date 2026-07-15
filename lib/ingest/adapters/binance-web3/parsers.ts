@@ -15,6 +15,7 @@
  */
 
 import type {
+  BoardSeriesBlock,
   HistoryKind,
   ParseCtx,
   ParsedHistoryRow,
@@ -22,6 +23,7 @@ import type {
   ParsedLeaderboardRow,
   ParsedPosition,
   ParsedProfile,
+  RankingTimeframe,
 } from '../../core/types'
 
 type Dict = Record<string, unknown>
@@ -78,16 +80,24 @@ function topEarningTokens(item: Dict): Array<Record<string, unknown>> | null {
   return out.length > 0 ? out : null
 }
 
-/** §2.5d PnL calendar — dailyPNL [{dt, realizedPnl}] → [{date, pnl}], sorted. */
-function pnlCalendar(item: Dict): Array<{ date: string; pnl: number }> | null {
+/** Strict UTC calendar-day decoder shared by extras and trader_series. */
+function dailyPnl(item: Dict): Array<{ date: string; pnl: number }> {
   const list = Array.isArray(item.dailyPNL) ? (item.dailyPNL as Dict[]) : []
-  const out: Array<{ date: string; pnl: number }> = []
+  const byDate = new Map<string, number>()
   for (const p of list) {
     const date = str(p.dt)
     const pnl = num(p.realizedPnl)
-    if (date !== null && pnl !== null) out.push({ date, pnl })
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || pnl === null) continue
+    const parsed = new Date(`${date}T00:00:00.000Z`)
+    if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== date) continue
+    byDate.set(date, pnl) // duplicate upstream day: last value wins
   }
-  out.sort((a, b) => a.date.localeCompare(b.date))
+  return [...byDate].sort(([a], [b]) => a.localeCompare(b)).map(([date, pnl]) => ({ date, pnl }))
+}
+
+/** §2.5d PnL calendar — dailyPNL [{dt, realizedPnl}] → [{date, pnl}], sorted. */
+function pnlCalendar(item: Dict): Array<{ date: string; pnl: number }> | null {
+  const out = dailyPnl(item)
   return out.length > 0 ? out : null
 }
 
@@ -187,6 +197,40 @@ export function parseBinanceWeb3LeaderboardPage(
   // asserts completeness against `pages`; entries gate uses the rolling
   // count baseline (expected_count=NULL).
   return { rows, reportedTotal: null }
+}
+
+/**
+ * Board-level free series: every row already contains daily realized PnL in
+ * USD. These are per-day deltas (not a cumulative balance), so publish them as
+ * pnl_daily for the board's native timeframe. No extra upstream request.
+ */
+export function parseBinanceWeb3LeaderboardSeries(
+  raw: unknown,
+  _ctx: ParseCtx,
+  timeframe: RankingTimeframe
+): Map<string, BoardSeriesBlock[]> {
+  const out = new Map<string, BoardSeriesBlock[]>()
+  const payload = (raw ?? {}) as { board?: unknown; timeframe?: unknown }
+  const embeddedTimeframe = num(payload.timeframe)
+  if (embeddedTimeframe !== null && embeddedTimeframe !== timeframe) return out
+
+  const board = (payload.board ?? {}) as { data?: unknown }
+  const data = (board.data ?? {}) as Dict
+  const items = Array.isArray(data.data) ? (data.data as Dict[]) : []
+  for (const item of items) {
+    const address = String(item.address ?? '')
+      .trim()
+      .toLowerCase()
+    if (!address.startsWith('0x')) continue
+    const points = dailyPnl(item).map(({ date, pnl }) => ({
+      ts: `${date}T00:00:00.000Z`,
+      value: pnl,
+    }))
+    if (points.length > 0) {
+      out.set(address, [{ timeframe, metric: 'pnl_daily', points }])
+    }
+  }
+  return out
 }
 
 // ── Profile / positions / histories: not publicly reachable (v1) ──

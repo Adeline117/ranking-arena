@@ -83,7 +83,7 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
       const rows: ParsedLeaderboardRow[] = []
       // Board-level "free series" (spec §13.1): merged across pages, keyed by
       // exchange_trader_id. Only populated for sources whose board embeds a
-      // per-trader sparkline (okx/toobit/xt/blofin/bitunix) — adapters without
+      // per-trader sparkline (okx/toobit/xt/blofin/bitunix/binance_web3) — adapters without
       // parseLeaderboardSeries contribute nothing and pay zero cost.
       const boardSeries = new Map<string, BoardSeriesBlock[]>()
       for (const page of pages) {

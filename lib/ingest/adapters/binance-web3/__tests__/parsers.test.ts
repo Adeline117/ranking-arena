@@ -11,6 +11,7 @@ import { join } from 'path'
 import {
   parseBinanceWeb3History,
   parseBinanceWeb3LeaderboardPage,
+  parseBinanceWeb3LeaderboardSeries,
   parseBinanceWeb3Positions,
   parseBinanceWeb3Profile,
 } from '../parsers'
@@ -114,6 +115,66 @@ describe('parseBinanceWeb3LeaderboardPage', () => {
     }
     expect(parseBinanceWeb3LeaderboardPage(doctored, ctx).rows).toHaveLength(0)
     expect(parseBinanceWeb3LeaderboardPage({}, ctx).rows).toHaveLength(0)
+  })
+})
+
+describe('parseBinanceWeb3LeaderboardSeries', () => {
+  const payload = fixture('board-page.json')
+
+  it('publishes native daily realized PnL as ascending UTC pnl_daily points', () => {
+    const series = parseBinanceWeb3LeaderboardSeries(payload, ctx, 7)
+    expect(series.size).toBe(4)
+    const first = series.get('0xffae19561c038747c5c9f79f7777c29f28c4b4ad')
+    expect(first).toHaveLength(1)
+    expect(first![0]).toMatchObject({ timeframe: 7, metric: 'pnl_daily' })
+    expect(first![0].points).toHaveLength(7)
+    expect(first![0].points[0]).toEqual({
+      ts: '2026-06-06T00:00:00.000Z',
+      value: 2134.074704988429,
+    })
+    expect(first![0].points.at(-1)).toEqual({
+      ts: '2026-06-12T00:00:00.000Z',
+      value: 1.4815761456534673,
+    })
+  })
+
+  it('fails closed on a mismatched embedded timeframe', () => {
+    expect(parseBinanceWeb3LeaderboardSeries(payload, ctx, 90)).toEqual(new Map())
+  })
+
+  it('deduplicates valid days and rejects invalid dates and values', () => {
+    const raw = {
+      timeframe: 7,
+      board: {
+        data: {
+          data: [
+            {
+              address: '0xABC',
+              dailyPNL: [
+                { dt: '2026-02-31', realizedPnl: '10' },
+                { dt: '2026-06-01', realizedPnl: 'bad' },
+                { dt: '2026-06-02', realizedPnl: '1' },
+                { dt: '2026-06-02', realizedPnl: '2' },
+              ],
+            },
+          ],
+        },
+      },
+    }
+    expect(parseBinanceWeb3LeaderboardSeries(raw, ctx, 7)).toEqual(
+      new Map([
+        [
+          '0xabc',
+          [
+            {
+              timeframe: 7,
+              metric: 'pnl_daily',
+              points: [{ ts: '2026-06-02T00:00:00.000Z', value: 2 }],
+            },
+          ],
+        ],
+      ])
+    )
   })
 })
 

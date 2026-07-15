@@ -87,7 +87,8 @@ export interface SourceAdapter {
    * OPTIONAL board-level series (spec §13.1 "free series"). Some boards embed
    * a per-trader cumulative ROI/PnL sparkline IN the leaderboard row (okx
    * pnlRatios, toobit leaderTradeProfit, xt chart, blofin chart_data.roi,
-   * bitunix dailyWinRate/dailyPl). Decoding it costs ZERO extra fetches —
+   * bitunix dailyWinRate/dailyPl, binance_web3 dailyPNL). Decoding it costs
+   * ZERO extra fetches —
    * the array already rides in row.raw from the Tier-A crawl. When present,
    * EVERY ranked trader (not just topN) gets a chart for free, closing the
    * long-tail coverage gap that otherwise waits on Tier-B/C profile fetches.

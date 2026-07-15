@@ -33,6 +33,7 @@ import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
 import {
   parseBinanceWeb3History,
   parseBinanceWeb3LeaderboardPage,
+  parseBinanceWeb3LeaderboardSeries,
   parseBinanceWeb3Positions,
   parseBinanceWeb3Profile,
 } from './parsers'
@@ -220,6 +221,7 @@ const binanceWeb3Adapter: SourceAdapter = {
   },
 
   parseLeaderboard: parseBinanceWeb3LeaderboardPage,
+  parseLeaderboardSeries: parseBinanceWeb3LeaderboardSeries,
   parseProfile: parseBinanceWeb3Profile,
   parsePositions: parseBinanceWeb3Positions,
   parseHistory: parseBinanceWeb3History,
