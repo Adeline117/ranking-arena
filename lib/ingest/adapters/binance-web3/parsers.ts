@@ -212,7 +212,7 @@ export function parseBinanceWeb3LeaderboardSeries(
   const out = new Map<string, BoardSeriesBlock[]>()
   const payload = (raw ?? {}) as { board?: unknown; timeframe?: unknown }
   const embeddedTimeframe = num(payload.timeframe)
-  if (embeddedTimeframe !== null && embeddedTimeframe !== timeframe) {
+  if (embeddedTimeframe !== timeframe) {
     throw new Error(
       `[binance_web3] leaderboard series timeframe mismatch: raw=${embeddedTimeframe}, expected=${timeframe}`
     )
