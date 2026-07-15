@@ -47,37 +47,37 @@ test.describe('Pricing Page', () => {
     await expect(lifetimePlan.first()).toBeVisible()
 
     // Verify price amounts appear
-    await expect(page.locator('text=$0')).toBeVisible()
-    await expect(page.locator('text=$49.99')).toBeVisible()
+    await expect(page.getByText(/^\$0\/mo$/).filter({ visible: true })).toBeVisible()
+    await expect(page.getByText('$49.99', { exact: true }).filter({ visible: true })).toBeVisible()
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/pricing-plans.png`, fullPage: true })
   })
 
   test('2. Monthly/yearly toggle switch', async ({ page }) => {
     // Find the billing toggle buttons
-    const monthlyBtn = page.locator('button:has-text("Monthly"), button:has-text("monthly")')
-    const yearlyBtn = page.locator('button:has-text("Yearly"), button:has-text("yearly")')
+    const monthlyBtn = page.getByRole('button', { name: /Monthly|月付|月間|월간/i })
+    const yearlyBtn = page.getByRole('button', { name: /Yearly|年付|年間|연간/i })
 
     await expect(monthlyBtn.first()).toBeVisible()
     await expect(yearlyBtn.first()).toBeVisible()
 
     // Click monthly
     await monthlyBtn.first().click()
-    await page.waitForTimeout(300)
+    await expect(monthlyBtn.first()).toHaveAttribute('aria-pressed', 'true')
 
     // In monthly mode, Pro price should show $4.99
-    await expect(page.locator('text=$4.99')).toBeVisible()
+    await expect(page.getByText(/^\$4\.99\/mo$/).filter({ visible: true })).toBeVisible()
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/pricing-monthly.png`, fullPage: false })
 
     // Click yearly
     await yearlyBtn.first().click()
-    await page.waitForTimeout(300)
+    await expect(yearlyBtn.first()).toHaveAttribute('aria-pressed', 'true')
 
     // In yearly mode, per-month price should show $2.50 (29.99/12)
-    await expect(page.locator('text=$2.50')).toBeVisible()
+    await expect(page.getByText(/^\$2\.50\/mo/).filter({ visible: true })).toBeVisible()
     // Yearly total should show $29.99
-    await expect(page.locator('text=$29.99')).toBeVisible()
+    await expect(page.getByText(/^\$29\.99\/year/).filter({ visible: true })).toBeVisible()
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/pricing-yearly.png`, fullPage: false })
   })
@@ -148,12 +148,10 @@ test.describe('Info Pages', () => {
     await expect(page.locator('h2:has-text("Time Windows")')).toBeVisible()
     await expect(page.locator('h2:has-text("Anti-Gaming")')).toBeVisible()
 
-    // Formula box should contain key formula terms
-    await expect(page.locator('text=ReturnScore').first()).toBeVisible()
-    await expect(page.locator('text=PnlScore').first()).toBeVisible()
-
-    // Chinese section should also be present
-    await expect(page.locator('h1:has-text("方法论")')).toBeVisible()
+    // The current v4 formula and its two factors should render in the active locale.
+    const scoreSection = page.locator('section').filter({ has: page.locator('#arena-score') })
+    await expect(scoreSection.getByText(/100.*(?:Quality|质量|品質|품질)/i)).toBeVisible()
+    await expect(scoreSection.getByText(/Confidence|置信度|信頼度|신뢰도/i).first()).toBeVisible()
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/methodology.png`, fullPage: true })
   })
@@ -188,12 +186,11 @@ test.describe('Info Pages', () => {
     await page.goto('/terms', { timeout: 90_000 })
     await page.waitForLoadState('domcontentloaded')
 
-    await expect(page.locator('h1:has-text("Terms of Service")')).toBeVisible({ timeout: 30_000 })
-    await expect(page.locator('h2:has-text("1. Service Description")')).toBeVisible()
-    await expect(page.locator('h2:has-text("2. Disclaimer")')).toBeVisible()
-
-    // Chinese section
-    await expect(page.locator('h1:has-text("服务条款")')).toBeVisible()
+    await expect(page.locator('h1')).toHaveText(/Terms of Service|服务条款|利用規約|이용약관/, {
+      timeout: 30_000,
+    })
+    await expect(page.locator('#service-description')).toBeVisible()
+    await expect(page.locator('#disclaimer')).toBeVisible()
 
     await page.screenshot({ path: `${SCREENSHOT_DIR}/terms.png`, fullPage: true })
   })
@@ -275,7 +272,9 @@ test.describe('Info Pages', () => {
     await expect(heroOrHeading).toBeVisible({ timeout: 60_000 })
 
     // Search section for finding trader should be present
-    const searchInput = page.locator('input[type="text"], input[type="search"], input[placeholder]')
+    const searchInput = page
+      .locator('input[type="text"], input[type="search"], input[placeholder]')
+      .filter({ visible: true })
     await expect(searchInput.first()).toBeVisible({ timeout: 15_000 })
 
     // Should have meaningful content
