@@ -338,6 +338,7 @@ html.theme-transition #main-content {
 
   /* Founding member accent (amber) */
   --color-founding-accent: #f59e0b;
+  --color-on-founding: #111827;
   --color-founding-accent-muted: rgba(245, 158, 11, 0.08);
   --color-founding-accent-border: rgba(245, 158, 11, 0.3);
   --color-founding-accent-shadow: rgba(245, 158, 11, 0.3);
@@ -589,6 +590,7 @@ html.theme-transition #main-content {
 
   /* Founding member accent (amber, darker for light bg) */
   --color-founding-accent: #92400e;
+  --color-on-founding: #ffffff;
   --color-founding-accent-muted: rgba(146, 64, 14, 0.08);
   --color-founding-accent-border: rgba(146, 64, 14, 0.3);
   --color-founding-accent-shadow: rgba(146, 64, 14, 0.3);
