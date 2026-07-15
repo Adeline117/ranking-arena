@@ -1,6 +1,7 @@
 'use client'
 
 import { Suspense, lazy } from 'react'
+import { tokens } from '@/lib/design-tokens'
 import ThreeColumnLayout from '../layout/ThreeColumnLayout'
 const MobileBottomNav = lazy(() => import('../layout/MobileBottomNav'))
 const Footer = lazy(() => import('../layout/Footer'))
@@ -14,7 +15,6 @@ import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import DeferredMount from '../utils/DeferredMount'
 // RankingSkeleton removed from Phase 2 — see SSR comment above
 import { features } from '@/lib/features'
-import { useLanguage } from '../Providers/LanguageProvider'
 // Lazy-load sidebar widgets
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
@@ -51,7 +51,6 @@ export default function HomePage({
   initialTotalCount,
   initialCategoryCounts,
 }: HomePageProps) {
-  const { t } = useLanguage()
   // SSR TopNav stays visible permanently (no portal, no removal).
   // globals.css no longer hides #ssr-topnav when Phase 2 loads.
 
@@ -69,10 +68,127 @@ export default function HomePage({
               <FoundingMemberBanner />
             </Suspense>
           </div>
-          {/* The leaderboard is the B2C primary task, so it gets the full content
-              width. Discovery widgets are deferred below it instead of squeezing
-              the decision table into a narrow three-column center rail. */}
-          <ThreeColumnLayout>
+          {/* Keep the desktop discovery surface in its established three-column
+              layout: social context left, rankings center, market context right. */}
+          <Suspense
+            fallback={
+              <div
+                className="contain-layout-style"
+                style={{ height: 47, borderBottom: '1px solid var(--color-border-primary)' }}
+              />
+            }
+          >
+            <ExchangePartners />
+          </Suspense>
+          <ThreeColumnLayout
+            leftSidebar={
+              features.social ? (
+                <SectionErrorBoundary>
+                  <DeferredMount
+                    delayMs={WIDGET_DELAYS.hotDiscussions}
+                    fallback={
+                      <div
+                        className="skeleton contain-layout-style"
+                        style={{ minHeight: 400, borderRadius: tokens.radius.lg }}
+                      />
+                    }
+                  >
+                    <Suspense
+                      fallback={
+                        <div
+                          className="skeleton contain-layout-style"
+                          style={{ minHeight: 400, borderRadius: tokens.radius.lg }}
+                        />
+                      }
+                    >
+                      <HotDiscussions />
+                    </Suspense>
+                  </DeferredMount>
+                </SectionErrorBoundary>
+              ) : null
+            }
+            rightSidebar={
+              <div
+                className="contain-layout-style"
+                style={{ display: 'flex', flexDirection: 'column', gap: 16 }}
+              >
+                <div style={{ flexShrink: 0 }}>
+                  <SectionErrorBoundary>
+                    <DeferredMount
+                      delayMs={WIDGET_DELAYS.watchlist}
+                      fallback={
+                        <div
+                          className="skeleton contain-layout-style"
+                          style={{ minHeight: 200, borderRadius: tokens.radius.lg }}
+                        />
+                      }
+                    >
+                      <Suspense
+                        fallback={
+                          <div
+                            className="skeleton contain-layout-style"
+                            style={{ minHeight: 200, borderRadius: tokens.radius.lg }}
+                          />
+                        }
+                      >
+                        <WatchlistMarket />
+                      </Suspense>
+                    </DeferredMount>
+                  </SectionErrorBoundary>
+                </div>
+                {features.social && (
+                  <div style={{ flexShrink: 0 }}>
+                    <SectionErrorBoundary>
+                      <DeferredMount
+                        delayMs={WIDGET_DELAYS.trendingHashtags}
+                        fallback={
+                          <div
+                            className="skeleton contain-layout-style"
+                            style={{ minHeight: 120, borderRadius: tokens.radius.lg }}
+                          />
+                        }
+                      >
+                        <Suspense
+                          fallback={
+                            <div
+                              className="skeleton contain-layout-style"
+                              style={{ minHeight: 120, borderRadius: tokens.radius.lg }}
+                            />
+                          }
+                        >
+                          <TrendingHashtags />
+                        </Suspense>
+                      </DeferredMount>
+                    </SectionErrorBoundary>
+                  </div>
+                )}
+                <div style={{ flex: 1, minHeight: 0 }}>
+                  <SectionErrorBoundary>
+                    <DeferredMount
+                      delayMs={WIDGET_DELAYS.newsFlash}
+                      fallback={
+                        <div
+                          className="skeleton contain-layout-style"
+                          style={{ minHeight: 300, borderRadius: tokens.radius.lg }}
+                        />
+                      }
+                    >
+                      <Suspense
+                        fallback={
+                          <div
+                            className="skeleton contain-layout-style"
+                            style={{ minHeight: 300, borderRadius: tokens.radius.lg }}
+                          />
+                        }
+                      >
+                        <NewsFlash />
+                      </Suspense>
+                    </DeferredMount>
+                  </SectionErrorBoundary>
+                </div>
+              </div>
+            }
+          >
             <SectionErrorBoundary>
               {/* No Suspense wrapper — HomePageClient is statically imported (not lazy),
                   so its code is already in the main bundle. Wrapping in Suspense caused
@@ -89,50 +205,6 @@ export default function HomePage({
               />
             </SectionErrorBoundary>
           </ThreeColumnLayout>
-          <Suspense
-            fallback={
-              <div
-                className="contain-layout-style"
-                style={{ height: 47, borderBottom: '1px solid var(--color-border-primary)' }}
-              />
-            }
-          >
-            <ExchangePartners />
-          </Suspense>
-          <section className="home-secondary-grid" aria-label={t('discoverMore')}>
-            {features.social && (
-              <SectionErrorBoundary>
-                <DeferredMount delayMs={WIDGET_DELAYS.hotDiscussions}>
-                  <Suspense fallback={null}>
-                    <HotDiscussions />
-                  </Suspense>
-                </DeferredMount>
-              </SectionErrorBoundary>
-            )}
-            <SectionErrorBoundary>
-              <DeferredMount delayMs={WIDGET_DELAYS.watchlist}>
-                <Suspense fallback={null}>
-                  <WatchlistMarket />
-                </Suspense>
-              </DeferredMount>
-            </SectionErrorBoundary>
-            {features.social && (
-              <SectionErrorBoundary>
-                <DeferredMount delayMs={WIDGET_DELAYS.trendingHashtags}>
-                  <Suspense fallback={null}>
-                    <TrendingHashtags />
-                  </Suspense>
-                </DeferredMount>
-              </SectionErrorBoundary>
-            )}
-            <SectionErrorBoundary>
-              <DeferredMount delayMs={WIDGET_DELAYS.newsFlash}>
-                <Suspense fallback={null}>
-                  <NewsFlash />
-                </Suspense>
-              </DeferredMount>
-            </SectionErrorBoundary>
-          </section>
         </div>
 
         <div className="contain-content">
