@@ -47,10 +47,12 @@
  * edits needed. Checkout/subscribe keep working in both states — users CAN still
  * subscribe during the promo; they just don't need to.
  *
- * NOTE: this file is server-safe (no 'use client'), which is why the flag lives
- * here and the client const imports it — guaranteeing client + server share ONE flag.
+ * The value must be public because this module is imported by client components.
+ * `NEXT_PUBLIC_PRO_FREE_PROMO` is replaced at build time in both client and
+ * server bundles, so Preview can exercise the locked state without changing
+ * Production. Missing means true, preserving the open-beta default.
  */
-export const PRO_FREE_PROMO = true
+export const PRO_FREE_PROMO = process.env.NEXT_PUBLIC_PRO_FREE_PROMO !== 'false'
 
 export type SubscriptionTier = 'free' | 'pro'
 

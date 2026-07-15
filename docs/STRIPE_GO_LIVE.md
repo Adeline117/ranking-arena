@@ -10,9 +10,9 @@
 
 ## 前提:先定收费时机
 
-当前 `PRO_FREE_PROMO = true`(`lib/types/premium.ts`)全站限免。切了 live 也**没人付费**,
+当前未设置 `NEXT_PUBLIC_PRO_FREE_PROMO=false`，因此全站仍限免。切了 live 也**没人付费**,
 因为付费墙被 promo 短路。所以真正要 owner 定的是**promo 结束日**——那天一次性:
-配 live env + 建 live price + 翻 `PRO_FREE_PROMO=false`。切 live 与关 promo 应同时做。
+配 live env + 建 live price + 设 `NEXT_PUBLIC_PRO_FREE_PROMO=false`。切 live 与关 promo 应同时做。
 
 ## ⚠️ 切 live 前必做:清理生产库 test 数据(2026-07-11 审计新增)
 
@@ -58,8 +58,8 @@ DELETE FROM public.subscriptions
    | `STRIPE_PRO_MONTHLY_PRICE_ID` | `price_live_...` | 月付 |
    | `STRIPE_PRO_YEARLY_PRICE_ID` | `price_live_...` | 年付 |
    | **`STRIPE_PRO_LIFETIME_PRICE_ID`** | `price_live_...` | **修创始会员 CTA 500** |
-5. **翻 promo 开关**:`lib/types/premium.ts` 的 `PRO_FREE_PROMO=false`(一处改动,恢复
-   全站付费墙 + 付费诱导文案;#6 的诚实文案会自动切回付费口径)。这是代码改动,走正常 commit。
+5. **翻 promo 开关**:Production 构建环境设 `NEXT_PUBLIC_PRO_FREE_PROMO=false`（一处配置,恢复
+   全站付费墙 + 付费诱导文案;#6 的诚实文案会自动切回付费口径）。
 6. **部署 + 验证**:Vercel 重部署使 env 生效 → 用真卡小额或 Stripe test-clock 走通一次
    checkout(月付+终身各一)、确认 webhook 回调入账、`/pricing/success` 显示真实订单。
 
