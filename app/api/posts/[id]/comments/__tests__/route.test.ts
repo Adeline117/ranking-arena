@@ -61,30 +61,64 @@ const mockSupabaseFrom = jest.fn()
 
 // Mock middleware to pass through to existing mockRequireAuth
 jest.mock('@/lib/api/middleware', () => ({
-  withAuth: (handler: Function, _opts?: unknown) => async (req: unknown, ctx?: unknown) => {
-    try {
-      const user = await mockRequireAuth(req)
-      if (!user) {
-        const { NextResponse: NR } = require('next/server')
-        return NR.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+  withAuth:
+    (
+      handler: (context: {
+        user: { id: string; email?: string }
+        supabase: ReturnType<typeof mockGetSupabaseAdmin>
+        request: unknown
+        version: { current: string }
+      }) => unknown,
+      _opts?: unknown
+    ) =>
+    async (req: unknown) => {
+      try {
+        const user = await mockRequireAuth(req)
+        if (!user) {
+          return {
+            status: 401,
+            _body: { success: false, error: 'Unauthorized' },
+            async json() {
+              return this._body
+            },
+            headers: new Map(),
+          }
+        }
+        return await handler({
+          user,
+          supabase: mockGetSupabaseAdmin(),
+          request: req,
+          version: { current: 'v1' },
+        })
+      } catch (err: unknown) {
+        const statusCode = (err as { statusCode?: number })?.statusCode || 500
+        const message = err instanceof Error ? err.message : 'Internal error'
+        return {
+          status: statusCode,
+          _body: { success: false, error: message },
+          async json() {
+            return this._body
+          },
+          headers: new Map(),
+        }
       }
-      const mockSb = require('@/lib/supabase/server').getSupabaseAdmin()
-      return await handler(
-        { user, supabase: mockSb, request: req, version: { current: 'v1' } },
-        ctx
-      )
-    } catch (err: unknown) {
-      const { NextResponse: NR } = require('next/server')
-      const statusCode = (err as { statusCode?: number })?.statusCode || 500
-      const message = err instanceof Error ? err.message : 'Internal error'
-      return NR.json({ success: false, error: message }, { status: statusCode })
-    }
-  },
-  withPublic: (handler: Function, _opts?: unknown) => async (req: unknown) => {
-    const mockSb = require('@/lib/supabase/server').getSupabaseAdmin()
-    return handler({ supabase: mockSb, request: req, version: { current: 'v1' } })
-  },
-  withApiMiddleware: (handler: Function) => handler,
+    },
+  withPublic:
+    (
+      handler: (context: {
+        supabase: ReturnType<typeof mockGetSupabaseAdmin>
+        request: unknown
+        version: { current: string }
+      }) => unknown,
+      _opts?: unknown
+    ) =>
+    async (req: unknown) =>
+      handler({
+        supabase: mockGetSupabaseAdmin(),
+        request: req,
+        version: { current: 'v1' },
+      }),
+  withApiMiddleware: (handler: (...args: unknown[]) => unknown) => handler,
 }))
 
 const mockRpc = jest.fn().mockResolvedValue({ data: null, error: null })
@@ -107,10 +141,28 @@ jest.mock('@/lib/supabase/server', () => ({
 jest.mock('@/lib/api', () => ({
   getSupabaseAdmin: (...args: unknown[]) => mockGetSupabaseAdmin(...args),
   requireAuth: (...args: unknown[]) => mockRequireAuth(...args),
-  ApiError: {
-    validation: (msg: string, details?: unknown) =>
-      Object.assign(new Error(msg), { statusCode: 400, details }),
+  ApiError: class MockApiError extends Error {
+    statusCode: number
+    details?: unknown
+    constructor(message: string, options: { statusCode?: number; details?: unknown } = {}) {
+      super(message)
+      this.statusCode = options.statusCode ?? 500
+      this.details = options.details
+    }
+    static validation(message: string, details?: unknown) {
+      return new MockApiError(message, { statusCode: 400, details })
+    }
+    static notFound(message: string) {
+      return new MockApiError(message, { statusCode: 404 })
+    }
+    static forbidden(message: string) {
+      return new MockApiError(message, { statusCode: 403 })
+    }
+    static internal(message: string) {
+      return new MockApiError(message, { statusCode: 500 })
+    }
   },
+  ErrorCode: { OPERATION_FAILED: 'OPERATION_FAILED', INTERNAL_ERROR: 'INTERNAL_ERROR' },
   success: (data: unknown, status = 200) => ({
     status,
     _body: { success: true, data },
@@ -153,12 +205,25 @@ jest.mock('@/lib/api', () => ({
 
 const mockGetPostComments = jest.fn()
 const mockCreateComment = jest.fn()
-const mockDeleteComment = jest.fn()
+const mockUpdateOwnCommentWithRollout = jest.fn()
+const mockDeleteOwnCommentWithRollout = jest.fn()
 
 jest.mock('@/lib/data/comments', () => ({
   getPostComments: (...args: unknown[]) => mockGetPostComments(...args),
   createComment: (...args: unknown[]) => mockCreateComment(...args),
-  deleteComment: (...args: unknown[]) => mockDeleteComment(...args),
+}))
+
+jest.mock('@/lib/data/comment-mutation-rollout', () => ({
+  CommentMutationRolloutError: class CommentMutationRolloutError extends Error {
+    constructor(
+      public readonly kind: string,
+      public readonly databaseCode?: string
+    ) {
+      super(`Comment mutation failed: ${kind}`)
+    }
+  },
+  updateOwnCommentWithRollout: (...args: unknown[]) => mockUpdateOwnCommentWithRollout(...args),
+  deleteOwnCommentWithRollout: (...args: unknown[]) => mockDeleteOwnCommentWithRollout(...args),
 }))
 
 jest.mock('@/lib/features', () => ({
@@ -174,7 +239,8 @@ jest.mock('@/lib/utils/logger', () => ({
 }))
 
 import { NextRequest } from 'next/server'
-import { GET, POST, DELETE } from '../route'
+import { CommentMutationRolloutError } from '@/lib/data/comment-mutation-rollout'
+import { GET, POST, PUT, DELETE } from '../route'
 
 const TEST_POST_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
 const createContext = (id: string = TEST_POST_ID) => ({ params: Promise.resolve({ id }) })
@@ -187,6 +253,18 @@ describe('/api/posts/[id]/comments', () => {
     mockRequireAuth.mockResolvedValue(mockUser)
     mockSupabaseAuth = { data: { user: null }, error: null }
     mockGetPostComments.mockResolvedValue([])
+    mockUpdateOwnCommentWithRollout.mockResolvedValue({
+      id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
+      post_id: TEST_POST_ID,
+      user_id: mockUser.id,
+      content: 'Updated comment',
+      deleted_at: null,
+      updated_at: '2026-07-15T20:00:00.000Z',
+    })
+    mockDeleteOwnCommentWithRollout.mockResolvedValue({
+      deleted_count: 2,
+      comment_count: 7,
+    })
     mockSupabaseFrom.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       eq: jest.fn().mockReturnThis(),
@@ -307,6 +385,64 @@ describe('/api/posts/[id]/comments', () => {
     })
   })
 
+  // --- PUT: Edit Comment ---
+
+  describe('PUT /api/posts/[id]/comments', () => {
+    it('updates through the rollout bridge with the URL-bound post', async () => {
+      const commentId = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e'
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
+        method: 'PUT',
+        body: { comment_id: commentId, content: 'Updated comment' },
+      })
+
+      const res = await PUT(req, createContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(mockUpdateOwnCommentWithRollout).toHaveBeenCalledWith(expect.anything(), {
+        commentId,
+        postId: TEST_POST_ID,
+        userId: mockUser.id,
+        content: 'Updated comment',
+      })
+      expect(body.data.comment).toMatchObject({ id: commentId, post_id: TEST_POST_ID })
+    })
+
+    it('rejects an invalid URL post id before invoking the bridge', async () => {
+      const req = new NextRequest('http://localhost/api/posts/not-a-uuid/comments', {
+        method: 'PUT',
+        body: {
+          comment_id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
+          content: 'Updated comment',
+        },
+      })
+
+      const res = await PUT(req, createContext())
+
+      expect(res.status).toBe(400)
+      expect(mockUpdateOwnCommentWithRollout).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['forbidden', 403],
+      ['conflict', 409],
+      ['database', 500],
+    ] as const)('maps a %s bridge failure to HTTP %i', async (kind, status) => {
+      mockUpdateOwnCommentWithRollout.mockRejectedValue(new CommentMutationRolloutError(kind))
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
+        method: 'PUT',
+        body: {
+          comment_id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
+          content: 'Updated comment',
+        },
+      })
+
+      const res = await PUT(req, createContext())
+
+      expect(res.status).toBe(status)
+    })
+  })
+
   // --- DELETE: Delete Comment ---
 
   describe('DELETE /api/posts/[id]/comments', () => {
@@ -342,17 +478,37 @@ describe('/api/posts/[id]/comments', () => {
 
     it('deletes comment successfully', async () => {
       mockRequireAuth.mockResolvedValue(mockUser)
-      mockDeleteComment.mockResolvedValue(undefined)
+      const commentId = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e'
 
       const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
         method: 'DELETE',
-        body: { comment_id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e' },
+        body: { comment_id: commentId },
       })
       const res = await DELETE(req, createContext())
       const body = await res.json()
 
       expect(res.status).toBe(200)
       expect(body.success).toBe(true)
+      expect(mockDeleteOwnCommentWithRollout).toHaveBeenCalledWith(expect.anything(), {
+        commentId,
+        postId: TEST_POST_ID,
+        userId: mockUser.id,
+      })
+      expect(body.data).toMatchObject({ deleted_count: 2, comment_count: 7 })
+    })
+
+    it('maps a missing delete target to 404', async () => {
+      mockDeleteOwnCommentWithRollout.mockRejectedValue(
+        new CommentMutationRolloutError('not_found')
+      )
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
+        method: 'DELETE',
+        body: { comment_id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e' },
+      })
+
+      const res = await DELETE(req, createContext())
+
+      expect(res.status).toBe(404)
     })
   })
 })
