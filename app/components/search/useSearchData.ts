@@ -1,9 +1,6 @@
 'use client'
 
 import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
-import { supabase as _supabase } from '@/lib/supabase/client'
-import type { SupabaseClient } from '@supabase/supabase-js'
-const supabase = _supabase as SupabaseClient
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import {
@@ -16,6 +13,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import type { UnifiedSearchResponse, UnifiedSearchResult } from '@/app/api/search/route'
 import { logger } from '@/lib/logger'
 import { features } from '@/lib/features'
+import { mapHotPosts } from './hot-posts'
 
 // Module-level cache for trending searches (5-min TTL)
 let _trendingCache: { data: TrendingSearchItem[]; ts: number } | null = null
@@ -126,46 +124,12 @@ export function useSearchData(open: boolean, query: string) {
     if (!open || !features.social) return
     setLoading(true)
     try {
-      const { data, error } = await supabase
-        .from('posts')
-        .select('id, title, content, hot_score, view_count, like_count, comment_count')
-        .order('hot_score', { ascending: false, nullsFirst: false })
-        .order('view_count', { ascending: false, nullsFirst: false })
-        .order('like_count', { ascending: false, nullsFirst: false })
-        .limit(10)
+      const response = await fetch('/api/posts?sort_by=hot_score&sort_order=desc&limit=10&offset=0')
+      if (!response.ok) return
 
-      if (error) return
-
-      if (data && data.length > 0) {
-        setHotPosts(
-          data.map((post, index) => {
-            // Derive a display title: prefer real title, fall back to content snippet
-            const rawTitle = post.title
-            const hasRealTitle = rawTitle && rawTitle !== 'Untitled' && rawTitle !== 'untitled'
-            let displayTitle: string
-            if (hasRealTitle) {
-              displayTitle = rawTitle
-            } else if (post.content) {
-              // Strip markdown/HTML-like artifacts for a clean snippet
-              const plain = post.content.replace(/[#*_~`>|\[\]()]/g, '').trim()
-              displayTitle = plain.length > 80 ? plain.slice(0, 80) + '...' : plain
-            } else {
-              displayTitle = t('noTitle')
-            }
-            return {
-              id: post.id,
-              title: displayTitle,
-              hotScore:
-                post.hot_score ||
-                (post.view_count || 0) * 0.1 +
-                  (post.like_count || 0) * 2 +
-                  (post.comment_count || 0) * 3,
-              rank: index + 1,
-              view_count: post.view_count,
-            }
-          })
-        )
-      }
+      const result = await response.json()
+      const posts = result.data?.posts
+      if (Array.isArray(posts)) setHotPosts(mapHotPosts(posts, t('noTitle')))
     } catch (e) {
       logger.error('Failed to load hot posts:', e)
     } finally {
