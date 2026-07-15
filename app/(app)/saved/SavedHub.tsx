@@ -10,24 +10,34 @@
  * 底层表/hook/API 原封不动。用户从此只有一个"收藏"目的地。
  */
 
+import { useEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import TraderAlertsManager from '@/app/components/alerts/TraderAlertsManager'
+import { ANALYTICS_EVENTS, trackEvent } from '@/lib/analytics/track'
 import WatchlistClient from '../watchlist/WatchlistClient'
 import FavoritesPageClient from '../favorites/FavoritesPageClient'
 
-type SavedTab = 'traders' | 'posts'
+type SavedTab = 'traders' | 'posts' | 'alerts'
 
 export default function SavedHub() {
   const { t } = useLanguage()
   const params = useSearchParams()
-  const tab: SavedTab = params.get('tab') === 'posts' ? 'posts' : 'traders'
+  const requestedTab = params.get('tab')
+  const tab: SavedTab =
+    requestedTab === 'posts' || requestedTab === 'alerts' ? requestedTab : 'traders'
 
   const TABS: Array<{ id: SavedTab; label: string }> = [
     { id: 'traders', label: t('savedTabTraders') },
     { id: 'posts', label: t('savedTabPosts') },
+    { id: 'alerts', label: t('savedTabAlerts') },
   ]
+
+  useEffect(() => {
+    trackEvent(ANALYTICS_EVENTS.savedView, { tab })
+  }, [tab])
 
   return (
     <div style={{ maxWidth: 1120, margin: '0 auto', padding: `0 ${tokens.spacing[4]}` }}>
@@ -41,6 +51,15 @@ export default function SavedHub() {
       >
         {t('savedHubTitle')}
       </h1>
+      <p
+        style={{
+          color: 'var(--color-text-secondary)',
+          fontSize: tokens.typography.fontSize.sm,
+          margin: `0 0 ${tokens.spacing[4]}`,
+        }}
+      >
+        {t('savedHubSubtitle')}
+      </p>
 
       {/* Tab 栏 — 交易员 / 帖子。用 Link 切 ?tab,SSR 友好 */}
       <nav
@@ -80,7 +99,13 @@ export default function SavedHub() {
 
       {/* 内容 — 复用现成 client,数据层零改动。embedded 抑制各自的整页 chrome
           (100vh 包裹 / PageHeader / Breadcrumb / FAB),只渲染内容,避免堆叠标题。 */}
-      {tab === 'posts' ? <FavoritesPageClient embedded /> : <WatchlistClient embedded />}
+      {tab === 'posts' ? (
+        <FavoritesPageClient embedded />
+      ) : tab === 'alerts' ? (
+        <TraderAlertsManager />
+      ) : (
+        <WatchlistClient embedded />
+      )}
     </div>
   )
 }
