@@ -27,6 +27,7 @@ const mockSupabaseClient = { from: mockFrom }
 const mockStripeRetrieve = jest.fn()
 const mockStripeList = jest.fn()
 const mockUpdateUserSubscription = jest.fn()
+const mockCheckNFTMembership = jest.fn()
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => mockSupabaseClient),
@@ -87,7 +88,7 @@ jest.mock('@/lib/utils/logger', () => ({
 }))
 
 jest.mock('@/lib/web3/nft', () => ({
-  checkNFTMembership: jest.fn().mockResolvedValue(false),
+  checkNFTMembership: (...args: unknown[]) => mockCheckNFTMembership(...args),
 }))
 
 jest.mock('@/lib/logger', () => ({
@@ -224,6 +225,7 @@ describe('GET /api/cron/subscription-expiry', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockUpdateUserSubscription.mockResolvedValue(undefined)
+    mockCheckNFTMembership.mockResolvedValue(false)
   })
 
   // ---- Auth ----------------------------------------------------------------
@@ -352,5 +354,59 @@ describe('GET /api/cron/subscription-expiry', () => {
     expect(body.downgraded).toBe(0)
     expect(body.errors).toHaveLength(1)
     expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
+  })
+
+  it('preserves an expired NFT user when Stripe fallback verification fails', async () => {
+    queueDatabaseResults(
+      { data: [], error: null },
+      { data: [], error: null },
+      {
+        data: [
+          {
+            id: 'user1',
+            wallet_address: '0x123',
+            subscription_tier: 'pro',
+            stripe_customer_id: 'cus_1',
+            pro_plan: 'monthly',
+          },
+        ],
+        error: null,
+      },
+      { data: [], error: null }
+    )
+    mockStripeList.mockRejectedValue(new Error('Stripe unavailable'))
+
+    const res = await GET(createCronRequest(CRON_SECRET))
+    const body = await res.json()
+
+    expect(body.downgraded).toBe(0)
+    expect(body.errors).toHaveLength(1)
+  })
+
+  it('downgrades an expired NFT only when no Stripe fallback exists', async () => {
+    queueDatabaseResults(
+      { data: [], error: null },
+      { data: [], error: null },
+      {
+        data: [
+          {
+            id: 'user1',
+            wallet_address: '0x123',
+            subscription_tier: 'pro',
+            stripe_customer_id: null,
+            pro_plan: null,
+          },
+        ],
+        error: null,
+      },
+      { data: [], error: null },
+      { data: null, error: null }
+    )
+
+    const res = await GET(createCronRequest(CRON_SECRET))
+    const body = await res.json()
+
+    expect(body.downgraded).toBe(1)
+    expect(mockStripeList).not.toHaveBeenCalled()
   })
 })

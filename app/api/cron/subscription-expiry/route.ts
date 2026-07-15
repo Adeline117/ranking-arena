@@ -279,7 +279,7 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
   // ============================================
   const { data: nftUsers } = await supabase
     .from('user_profiles')
-    .select('id, wallet_address, subscription_tier')
+    .select('id, wallet_address, subscription_tier, stripe_customer_id, pro_plan')
     .not('wallet_address', 'is', null)
     .eq('subscription_tier', 'pro')
 
@@ -313,56 +313,116 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
     const nftUserIds = nftResults.filter((r) => !r.hasValidNFT).map((r) => r.user.id)
 
     if (nftUserIds.length > 0) {
-      const { data: activeSubUsers } = await supabase
+      const { data: activeSubUsers, error: activeSubUsersError } = await supabase
         .from('subscriptions')
-        .select('user_id')
+        .select('user_id, stripe_customer_id')
         .in('user_id', nftUserIds)
-        .eq('status', 'active')
+        .in('status', ['active', 'trialing'])
 
-      const usersWithActiveSub = new Set(activeSubUsers?.map((s) => s.user_id) || [])
+      if (activeSubUsersError) {
+        results.errors.push(
+          `Active subscription query for NFT fallback failed: ${activeSubUsersError.message}`
+        )
+      } else {
+        const localActiveByUser = new Map(
+          (activeSubUsers || []).map((subscription) => [subscription.user_id, subscription])
+        )
+        const toDowngrade: typeof nftResults = []
 
-      // Users to downgrade: no valid NFT AND no active subscription
-      const toDowngrade = nftResults.filter(
-        (r) => !r.hasValidNFT && !usersWithActiveSub.has(r.user.id)
-      )
+        for (const result of nftResults.filter((item) => !item.hasValidNFT)) {
+          if (result.user.pro_plan === 'lifetime') continue
 
-      if (toDowngrade.length > 0) {
-        const downgradeIds = toDowngrade.map((r) => r.user.id)
+          const localActive = localActiveByUser.get(result.user.id)
+          const customerId = result.user.stripe_customer_id || localActive?.stripe_customer_id
+          if (!customerId) {
+            if (localActive) {
+              results.errors.push(`Cannot verify Stripe fallback for NFT user ${result.user.id}`)
+              continue
+            }
+            toDowngrade.push(result)
+            continue
+          }
 
-        // Batch UPDATE user_profiles → free tier
-        const { error: profileErr } = await supabase
-          .from('user_profiles')
-          .update({
-            subscription_tier: 'free',
-            updated_at: now.toISOString(),
-          })
-          .in('id', downgradeIds)
-
-        if (profileErr) {
-          results.errors.push(`Batch NFT profile downgrade error: ${profileErr.message}`)
+          try {
+            const stripeSubscriptions = await stripe.subscriptions.list({
+              customer: customerId,
+              status: 'all',
+              limit: 100,
+            })
+            const classification = classifyActiveProSubscription(
+              stripeSubscriptions.data,
+              configuredPrices
+            )
+            if (classification.kind === 'active') {
+              await updateUserSubscription(
+                result.user.id,
+                classification.subscription,
+                classification.plan
+              )
+              results.repaired++
+              continue
+            }
+            if (classification.kind === 'unknown-active-price') {
+              results.errors.push(`Unknown active Stripe price for NFT user ${result.user.id}`)
+              continue
+            }
+            toDowngrade.push(result)
+          } catch (_error) {
+            results.errors.push(`Stripe NFT fallback verification failed for ${result.user.id}`)
+          }
         }
 
-        // Send NFT expiry notifications with dedup
-        const { sendNotification: sendNftNotif } = await import('@/lib/data/notifications')
-        await Promise.allSettled(
-          toDowngrade.map((r) =>
-            sendNftNotif(
-              supabase,
-              {
-                user_id: r.user.id,
-                type: 'nft_expired' as import('@/lib/data/notifications').NotificationType,
-                title: 'NFT 会员已过期',
-                message:
-                  '您的 NFT 会员证已过期，账号已降级为免费用户。如需继续使用 Pro 功能，请续费或重新购买 NFT。',
-                reference_id: `nft_expired_${r.user.id}`,
-              },
-              'subscription-expiry'
-            )
-          )
-        )
+        if (toDowngrade.length > 0) {
+          const downgradeIds = toDowngrade.map((r) => r.user.id)
 
-        results.downgraded += toDowngrade.length
-        logger.info(`Batch downgraded ${toDowngrade.length} users due to NFT expiry`)
+          // Batch UPDATE user_profiles → free tier
+          const { error: profileErr } = await supabase
+            .from('user_profiles')
+            .update({
+              subscription_tier: 'free',
+              pro_plan: null,
+              updated_at: now.toISOString(),
+            })
+            .in('id', downgradeIds)
+
+          if (profileErr) {
+            results.errors.push(`Batch NFT profile downgrade error: ${profileErr.message}`)
+          } else {
+            // Send NFT expiry notifications with dedup
+            const { sendNotification: sendNftNotif } = await import('@/lib/data/notifications')
+            await Promise.allSettled(
+              toDowngrade.map((r) =>
+                sendNftNotif(
+                  supabase,
+                  {
+                    user_id: r.user.id,
+                    type: 'nft_expired' as import('@/lib/data/notifications').NotificationType,
+                    title: 'NFT 会员已过期',
+                    message:
+                      '您的 NFT 会员证已过期，账号已降级为免费用户。如需继续使用 Pro 功能，请续费或重新购买 NFT。',
+                    reference_id: `nft_expired_${r.user.id}`,
+                  },
+                  'subscription-expiry'
+                )
+              )
+            )
+
+            const proGroupId = process.env.PRO_OFFICIAL_GROUP_ID || ''
+            if (proGroupId) {
+              const { error: groupError } = await supabase
+                .from('group_members')
+                .delete()
+                .in('user_id', downgradeIds)
+                .eq('group_id', proGroupId)
+              if (groupError) {
+                results.errors.push(`NFT Pro group removal error: ${groupError.message}`)
+              }
+            }
+
+            results.downgraded += toDowngrade.length
+            logger.info(`Batch downgraded ${toDowngrade.length} users due to NFT expiry`)
+          }
+        }
       }
     }
   }
