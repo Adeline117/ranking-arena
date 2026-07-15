@@ -85,6 +85,7 @@ describe('parseBinanceWeb3LeaderboardPage', () => {
     const ext = page.rows[0].headlineExtras as Record<string, unknown>
     // token distribution → clean keys, counts preserved
     expect(ext.token_distribution).toMatchObject({ gt_500: 0, p0_500: 9, n50_0: 10, lt_n50: 0 })
+    expect(ext.token_distribution_unit).toBe('pnl_percent')
     // PnL calendar → [{date, pnl}] sorted, length matches dailyPNL
     const cal = ext.pnl_calendar as Array<{ date: string; pnl: number }>
     expect(Array.isArray(cal)).toBe(true)

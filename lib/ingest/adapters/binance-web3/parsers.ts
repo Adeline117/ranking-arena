@@ -116,7 +116,10 @@ function web3BoardExtras(item: Dict): Record<string, unknown> | null {
   if (ms !== null && ms > 0) ext.last_trade_time = new Date(ms).toISOString()
   // §2.5d structured blocks (NULL-collapse — only set when the board shipped them)
   const td = tokenDistribution(item)
-  if (td) ext.token_distribution = td
+  if (td) {
+    ext.token_distribution = td
+    ext.token_distribution_unit = 'pnl_percent'
+  }
   const tokensTop = topEarningTokens(item)
   if (tokensTop) ext.top_earning_tokens = tokensTop
   const cal = pnlCalendar(item)

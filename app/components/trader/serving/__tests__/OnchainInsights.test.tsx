@@ -66,4 +66,27 @@ describe('OnchainInsights quality disclosure', () => {
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
     expect(screen.queryByText('estimatedPnl')).not.toBeInTheDocument()
   })
+
+  it('labels on-chain dollar buckets as dollars, never percentages', () => {
+    render(
+      <OnchainInsights
+        currency="USD"
+        extras={{
+          onchain_token_distribution_unit: 'realized_pnl_usd',
+          onchain_token_distribution_usd: {
+            gt_500: 1,
+            p0_500: 2,
+            n50_0: 3,
+            lt_n50: 4,
+          },
+        }}
+      />
+    )
+
+    expect(screen.getByText('>+$500')).toBeInTheDocument()
+    expect(screen.getByText('$0~+$500')).toBeInTheDocument()
+    expect(screen.getByText('-$50~$0')).toBeInTheDocument()
+    expect(screen.getByText('<-$50')).toBeInTheDocument()
+    expect(screen.queryByText('>+500%')).not.toBeInTheDocument()
+  })
 })
