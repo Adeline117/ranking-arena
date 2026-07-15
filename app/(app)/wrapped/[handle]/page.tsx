@@ -9,6 +9,7 @@
 import type { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { resolveTrader } from '@/lib/data/unified'
+import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import WrappedCardClient from './WrappedCardClient'
 import WrappedEmptyState from './WrappedEmptyState'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -49,6 +50,8 @@ export interface WrappedTraderData {
   rank: number | null
   /** Movement vs the previous ranking computation (+ = climbed). */
   rankChange: number | null
+  /** Active read-only exchange authorization; source of the ✓ Verified data mark. */
+  isVerifiedData: boolean
   total: number | null
   roi: number | null
   winRate: number | null
@@ -152,6 +155,10 @@ async function fetchWrappedData(
       ),
     ])
     const total = maxRankRow?.rank ?? null
+    const verifiedKeys = await getVerifiedTraderKeys(supabase)
+    const isVerifiedData = verifiedKeys.has(
+      verifiedTraderKey(resolved.platform, resolved.traderKey)
+    )
 
     return {
       ok: true,
@@ -162,6 +169,7 @@ async function fetchWrappedData(
         platformLabel,
         rank: lr?.rank ?? null,
         rankChange: lr?.rank_change ?? null,
+        isVerifiedData,
         total,
         roi: lr?.roi ?? null,
         winRate: lr?.win_rate ?? null,
@@ -216,6 +224,7 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   })
   if (rank != null) ogParams.set('rank', String(rank))
   if (data?.rankChange != null) ogParams.set('rankChange', String(data.rankChange))
+  if (data?.isVerifiedData) ogParams.set('verified', '1')
   if (data?.total != null) ogParams.set('total', String(data.total))
   if (roi != null) ogParams.set('roi', String(roi))
   if (data?.winRate != null) ogParams.set('winRate', String(data.winRate))
@@ -274,6 +283,7 @@ export default async function WrappedPage({ params, searchParams }: Props) {
   })
   if (data.rank != null) ogParams.set('rank', String(data.rank))
   if (data.rankChange != null) ogParams.set('rankChange', String(data.rankChange))
+  if (data.isVerifiedData) ogParams.set('verified', '1')
   if (data.total != null) ogParams.set('total', String(data.total))
   if (data.roi != null) ogParams.set('roi', String(data.roi))
   if (data.winRate != null) ogParams.set('winRate', String(data.winRate))
