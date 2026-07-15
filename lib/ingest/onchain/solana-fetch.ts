@@ -120,37 +120,91 @@ interface SigInfo {
   err: unknown
 }
 
-/** Paginated signatures for an address, newest first, stopping at `sinceMs`. */
+export interface SolanaSignatureCoverage {
+  scanComplete: boolean
+  truncated: boolean
+  stopReason: 'lookback_boundary' | 'history_exhausted' | 'record_cap'
+  pagesFetched: number
+  recordsSeen: number
+  recordsReturned: number
+  recordsMissingTimestamp: number
+}
+
+export interface SolanaSignatureScan {
+  signatures: string[]
+  coverage: SolanaSignatureCoverage
+}
+
+/**
+ * Paginated signatures for an address, newest first, with explicit proof of
+ * why the scan stopped. A record cap is always conservative truncation: a page
+ * containing exactly the requested remainder cannot prove history exhaustion.
+ */
+export async function scanSignatures(
+  wallet: string,
+  opts: RpcOpts & { sinceMs?: number; maxSigs?: number } = {}
+): Promise<SolanaSignatureScan> {
+  const sinceSec = opts.sinceMs ? opts.sinceMs / 1000 : 0
+  const maxSigs = opts.maxSigs ?? 1000
+  if (!Number.isSafeInteger(maxSigs) || maxSigs <= 0) {
+    throw new RangeError('maxSigs must be a positive safe integer')
+  }
+  const sigs: string[] = []
+  let before: string | undefined
+  let pagesFetched = 0
+  let recordsSeen = 0
+  let recordsMissingTimestamp = 0
+
+  const finish = (stopReason: SolanaSignatureCoverage['stopReason']): SolanaSignatureScan => ({
+    signatures: sigs,
+    coverage: {
+      scanComplete: stopReason !== 'record_cap' && recordsMissingTimestamp === 0,
+      truncated: stopReason === 'record_cap',
+      stopReason,
+      pagesFetched,
+      recordsSeen,
+      recordsReturned: sigs.length,
+      recordsMissingTimestamp,
+    },
+  })
+
+  while (sigs.length < maxSigs) {
+    const remaining = maxSigs - sigs.length
+    const requestLimit = Math.min(1000, remaining)
+    const batch = await solRpc<SigInfo[]>(
+      'getSignaturesForAddress',
+      [wallet, { limit: requestLimit, ...(before ? { before } : {}) }],
+      opts
+    )
+    pagesFetched += 1
+    if (!Array.isArray(batch) || batch.length === 0) return finish('history_exhausted')
+    recordsSeen += batch.length
+
+    for (const s of batch) {
+      // Test the boundary before skipping failed transactions: a failed old
+      // transaction is still valid chronological evidence that the requested
+      // window has been fully crossed.
+      if (sinceSec && s.blockTime !== null && s.blockTime < sinceSec) {
+        return finish('lookback_boundary')
+      }
+      if (s.blockTime === null) recordsMissingTimestamp += 1
+      if (s.err) continue // failed tx — no balance change of interest
+      if (sigs.length >= maxSigs) return finish('record_cap')
+      sigs.push(s.signature)
+      if (sigs.length >= maxSigs) return finish('record_cap')
+    }
+    if (batch.length < requestLimit) return finish('history_exhausted')
+    before = batch[batch.length - 1].signature
+  }
+  return finish('record_cap')
+}
+
+/** Compatibility wrapper for callers that only need the bounded signatures. */
 export async function fetchSignatures(
   wallet: string,
   opts: RpcOpts & { sinceMs?: number; maxSigs?: number } = {}
 ): Promise<string[]> {
-  const sinceSec = opts.sinceMs ? opts.sinceMs / 1000 : 0
-  const maxSigs = opts.maxSigs ?? 1000
-  const sigs: string[] = []
-  let before: string | undefined
-  while (sigs.length < maxSigs) {
-    const remaining = maxSigs - sigs.length
-    const batch = await solRpc<SigInfo[]>(
-      'getSignaturesForAddress',
-      [wallet, { limit: Math.min(1000, remaining), ...(before ? { before } : {}) }],
-      opts
-    )
-    if (!Array.isArray(batch) || batch.length === 0) break
-    let reachedOld = false
-    for (const s of batch) {
-      if (sigs.length >= maxSigs) break
-      if (s.err) continue // failed tx — no balance change of interest
-      if (sinceSec && s.blockTime && s.blockTime < sinceSec) {
-        reachedOld = true
-        break
-      }
-      sigs.push(s.signature)
-    }
-    if (reachedOld || batch.length < 1000) break
-    before = batch[batch.length - 1].signature
-  }
-  return sigs
+  return (await scanSignatures(wallet, opts)).signatures
 }
 
 interface RawTx {
@@ -222,6 +276,8 @@ export interface SolWalletResult {
   txsFetched: number
   swaps: number
   solUsd: number
+  signatureCoverage: SolanaSignatureCoverage
+  txFetchFailures: number
   pnl: WalletPnl
 }
 
@@ -237,10 +293,11 @@ export async function computeSolanaWalletOnchain(
 ): Promise<SolWalletResult> {
   const lookbackDays = opts.lookbackDays ?? 90
   const sinceMs = Date.now() - lookbackDays * 86_400_000
-  const [sigs, solUsd] = await Promise.all([
-    fetchSignatures(wallet, { ...opts, sinceMs }),
+  const [signatureScan, solUsd] = await Promise.all([
+    scanSignatures(wallet, { ...opts, sinceMs }),
     opts.solUsd !== undefined ? Promise.resolve(opts.solUsd) : fetchSolUsd(opts),
   ])
+  const sigs = signatureScan.signatures
 
   // Fetch tx metas with bounded concurrency (public/free RPC friendliness).
   const conc = opts.concurrency ?? 3 // free-tier CU/s friendly
@@ -259,6 +316,8 @@ export async function computeSolanaWalletOnchain(
     txsFetched: metas.length,
     swaps: swaps.length,
     solUsd,
+    signatureCoverage: signatureScan.coverage,
+    txFetchFailures: sigs.length - metas.length,
     pnl: computeWalletPnl(swaps),
   }
 }
