@@ -32,14 +32,8 @@ export interface AffiliateReferral {
  * `binance_spot`, … all resolve to `binance`). Add real entries as deals sign.
  */
 const AFFILIATE_REFERRALS: Record<string, AffiliateReferral> = {
-  // Pre-existing (migrated from ExchangeLinksBar's inline config). Replace the
-  // ref code with the real Arena affiliate code when the Binance deal is live.
-  binance: {
-    url: 'https://www.binance.com/en/register?ref=ARENA',
-    code: 'ARENA',
-    color: '#F0B90B',
-  },
   // ── Add as signed (URLs/codes are owner-supplied partnership data): ──
+  // binance: { url: 'https://www.binance.com/en/register?ref=REAL_CODE', code: 'REAL_CODE', color: '#F0B90B' },
   // bybit:  { url: 'https://www.bybit.com/invite?ref=XXXXXX',        code: 'XXXXXX', color: '#F7A600' },
   // bitget: { url: 'https://partner.bitget.com/bg/XXXXXX',           code: 'XXXXXX', color: '#00D4AA' },
   // okx:    { url: 'https://www.okx.com/join/XXXXXX',                code: 'XXXXXX', color: '#FFFFFF' },
