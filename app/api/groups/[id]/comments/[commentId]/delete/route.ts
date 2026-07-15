@@ -3,6 +3,10 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
+import {
+  CommentMutationRolloutError,
+  moderateCommentHardDeleteWithRollout,
+} from '@/lib/data/comment-mutation-rollout'
 
 // 检查用户是否是小组管理员或组长
 async function canManageGroup(
@@ -18,8 +22,8 @@ async function canManageGroup(
     .maybeSingle()
 
   if (error) {
-    logger.error('[canManageGroup] query failed', { groupId, userId, error: error.message })
-    return false
+    logger.error('[canManageGroup] query failed', { code: error.code })
+    throw error
   }
 
   return data?.role === 'owner' || data?.role === 'admin'
@@ -43,22 +47,32 @@ export async function POST(
       }
 
       // 获取评论信息，检查是否属于此小组的帖子
-      const { data: commentData } = await supabase
+      const { data: commentData, error: commentError } = await supabase
         .from('comments')
         .select('id, post_id')
         .eq('id', commentId)
-        .single()
+        .maybeSingle()
+
+      if (commentError) {
+        logger.error('Comment lookup failed', { code: commentError.code })
+        return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
+      }
 
       if (!commentData) {
         return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
       }
 
       // 检查帖子是否属于此小组
-      const { data: postData } = await supabase
+      const { data: postData, error: postError } = await supabase
         .from('posts')
         .select('group_id')
         .eq('id', commentData.post_id)
-        .single()
+        .maybeSingle()
+
+      if (postError) {
+        logger.error('Comment post lookup failed', { code: postError.code })
+        return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
+      }
 
       if (!postData || postData.group_id !== groupId) {
         return NextResponse.json(
@@ -67,16 +81,29 @@ export async function POST(
         )
       }
 
-      // 硬删除评论（与全站标准 lib/data/comments.ts deleteComment 一致——
-      // comments 表无软删列，读路径也不过滤，软删只会 500 且形同虚设）
-      const { error: deleteError } = await supabase.from('comments').delete().eq('id', commentId)
-
-      if (deleteError) {
-        logger.error('Delete comment error:', deleteError)
+      let result
+      try {
+        result = await moderateCommentHardDeleteWithRollout(supabase, {
+          commentId,
+          expectedPostId: commentData.post_id,
+          actorId: user.id,
+          reason: 'Deleted by group administrator',
+        })
+      } catch (error: unknown) {
+        if (error instanceof CommentMutationRolloutError && error.kind === 'not_found') {
+          return NextResponse.json({ error: 'Comment not found' }, { status: 404 })
+        }
+        logger.error('Delete comment failed', {
+          code: error instanceof CommentMutationRolloutError ? error.databaseCode : undefined,
+        })
         return NextResponse.json({ error: 'Delete failed' }, { status: 500 })
       }
 
-      return NextResponse.json({ success: true })
+      return NextResponse.json({
+        success: true,
+        affected_count: result.affected_count,
+        comment_count: result.comment_count,
+      })
     },
     { name: 'group-comment-delete', rateLimit: 'sensitive' }
   )

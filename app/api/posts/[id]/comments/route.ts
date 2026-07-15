@@ -10,17 +10,17 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { success, successWithPagination, validateNumber, ApiError, ErrorCode } from '@/lib/api'
 import { withPublic, withAuth } from '@/lib/api/middleware'
+import { getPostComments, createComment, type CommentSortMode } from '@/lib/data/comments'
 import {
-  getPostComments,
-  createComment,
-  deleteComment,
-  type CommentSortMode,
-} from '@/lib/data/comments'
+  CommentMutationRolloutError,
+  deleteOwnCommentWithRollout,
+  updateOwnCommentWithRollout,
+} from '@/lib/data/comment-mutation-rollout'
 import { sendNotification } from '@/lib/data/notifications'
 import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
-import logger, { fireAndForget } from '@/lib/logger'
+import { fireAndForget } from '@/lib/logger'
 // sanitizeText is dynamically imported inside POST/PUT only — keeps the
 // sanitize-html parser out of the GET handler's module graph at cold-start.
 
@@ -47,11 +47,40 @@ const DeleteCommentSchema = z.object({
   comment_id: z.string().uuid('Invalid comment ID'),
 })
 
+const PostIdSchema = z.string().uuid('Invalid post ID')
+
 /** Extract post id from URL path */
 function extractPostId(url: string): string {
   const pathParts = new URL(url).pathname.split('/')
   const postsIdx = pathParts.indexOf('posts')
   return pathParts[postsIdx + 1]
+}
+
+function requirePostId(url: string): string {
+  const parsed = PostIdSchema.safeParse(extractPostId(url))
+  if (!parsed.success) throw ApiError.validation('Invalid post ID')
+  return parsed.data
+}
+
+function rethrowCommentMutation(error: unknown, action: 'updated' | 'deleted'): never {
+  if (!(error instanceof CommentMutationRolloutError)) throw error
+
+  if (error.kind === 'not_found') throw ApiError.notFound('Comment not found')
+  if (error.kind === 'forbidden') {
+    throw ApiError.forbidden(
+      action === 'updated'
+        ? 'You can only edit your own comments'
+        : 'You can only delete your own comments'
+    )
+  }
+  if (error.kind === 'validation') throw ApiError.validation('Invalid comment mutation')
+  if (error.kind === 'conflict') {
+    throw new ApiError(`Comment could not be ${action}`, {
+      code: ErrorCode.OPERATION_FAILED,
+      statusCode: 409,
+    })
+  }
+  throw ApiError.internal(`Comment could not be ${action}`)
 }
 
 export const GET = withPublic(
@@ -231,6 +260,8 @@ export const PUT = withAuth(
     const guard = socialFeatureGuard()
     if (guard) return guard
 
+    const postId = requirePostId(request.url)
+
     let body: Record<string, unknown>
     try {
       body = await request.json()
@@ -246,35 +277,18 @@ export const PUT = withAuth(
     // Sanitize edited content — strip HTML/scripts before DB storage
     const { sanitizeText } = await import('@/lib/utils/sanitize')
     const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 2000 })
+    if (!content.trim()) throw ApiError.validation('Comment content is required')
 
-    // Verify ownership
-    const { data: existing, error: fetchError } = await supabase
-      .from('comments')
-      .select('user_id')
-      .eq('id', comment_id)
-      .single()
-
-    if (fetchError || !existing) {
-      throw ApiError.notFound('Comment not found')
-    }
-    if (existing.user_id !== user.id) {
-      throw ApiError.forbidden('You can only edit your own comments')
-    }
-
-    // Update comment
-    const { data: updated, error: updateError } = await supabase
-      .from('comments')
-      .update({
+    let updated
+    try {
+      updated = await updateOwnCommentWithRollout(supabase, {
+        commentId: comment_id,
+        postId,
+        userId: user.id,
         content,
-        updated_at: new Date().toISOString(),
       })
-      .eq('id', comment_id)
-      .select()
-      .single()
-
-    if (updateError) {
-      logger.error('[comments PUT] Update failed:', updateError)
-      throw new ApiError('Update failed', { code: ErrorCode.INTERNAL_ERROR })
+    } catch (error: unknown) {
+      rethrowCommentMutation(error, 'updated')
     }
 
     return success({ comment: updated })
@@ -286,6 +300,8 @@ export const DELETE = withAuth(
   async ({ user, supabase, request }) => {
     const guard = socialFeatureGuard()
     if (guard) return guard
+
+    const postId = requirePostId(request.url)
 
     let body: Record<string, unknown>
     try {
@@ -300,13 +316,18 @@ export const DELETE = withAuth(
     }
     const commentId = parsed.data.comment_id
 
-    const id = extractPostId(request.url)
-    await deleteComment(supabase, commentId, user.id)
+    let result
+    try {
+      result = await deleteOwnCommentWithRollout(supabase, {
+        commentId,
+        postId,
+        userId: user.id,
+      })
+    } catch (error: unknown) {
+      rethrowCommentMutation(error, 'deleted')
+    }
 
-    // Atomically decrement comment count (trigger was non-atomic, now dropped)
-    updateCount(supabase, 'decrement_comment_count', { p_post_id: id }, 'Decrement comment count')
-
-    return success({ message: 'Comment deleted' })
+    return success({ message: 'Comment deleted', ...result })
   },
   { name: 'posts/comments-delete', rateLimit: 'write' }
 )
