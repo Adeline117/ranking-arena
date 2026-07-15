@@ -311,9 +311,14 @@ function normalize(
   }
 }
 
+/** Shared publication boundary for any typed or generic serving field. */
+export function isCanonicalOnchainEnrichment(e: OnchainEnrichment): boolean {
+  return !e.realizedPartial && isOnchainQualityCanonical(e.quality)
+}
+
 /** Only canonical, complete on-chain metrics may populate typed score inputs. */
 export function scoreEligibleWinRate(e: OnchainEnrichment): number | null {
-  return !e.realizedPartial && isOnchainQualityCanonical(e.quality) ? e.winRate : null
+  return isCanonicalOnchainEnrichment(e) ? e.winRate : null
 }
 
 /**
@@ -330,7 +335,9 @@ export function enrichmentSeries(
   e: OnchainEnrichment,
   nowMs: number
 ): Array<{ timeframe: number; metric: string; points: Array<{ ts: string; value: number }> }> {
-  if (e.chain !== 'bsc' || e.dailyRealized.length === 0) return []
+  if (e.chain !== 'bsc' || e.dailyRealized.length === 0 || !isCanonicalOnchainEnrichment(e)) {
+    return []
+  }
   const byDay = new Map(e.dailyRealized.map((d) => [d.ts, d.value]))
   const first = e.dailyRealized[0].ts
   const today = new Date(nowMs).toISOString().slice(0, 10)
