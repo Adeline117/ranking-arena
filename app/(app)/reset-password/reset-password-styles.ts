@@ -142,7 +142,7 @@ export const injectStyles = () => {
       left: 0;
       width: 0;
       height: 1px;
-      background: var(--color-brand);
+      background: var(--color-brand-text);
       transition: width 0.3s ease;
     }
 
@@ -155,7 +155,7 @@ export const injectStyles = () => {
     }
 
     .password-toggle:hover {
-      color: var(--color-brand) !important;
+      color: var(--color-brand-text) !important;
     }
   `
   document.head.appendChild(style)
