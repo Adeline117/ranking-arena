@@ -281,7 +281,8 @@ const enCore = {
 
   // ── Hero Section ────────────────────────────────────────────────────
   heroHeadline: "Track the World's Best Crypto Traders",
-  heroSubtitle: 'Real-time rankings across {exchanges} exchanges, scored by Arena Score.',
+  heroSubtitle:
+    'Rankings across {exchanges} tracked sources, recomputed every 2 hours from the latest available data.',
   heroCTABrowse: 'Browse Rankings',
   heroCTASignUp: 'Sign Up Free',
   heroStatTraders: 'Traders',

@@ -17,6 +17,23 @@ export const PRODUCT_FACTS = {
   sourceRefreshHours: { min: 3, max: 6 },
 } as const
 
+/**
+ * Homepage copy tied to operational facts. Keep these claims next to the
+ * scheduler cadence so metadata and social cards cannot drift back to
+ * "real-time" or invent a separate coverage count.
+ */
+export const HOMEPAGE_TRUST_COPY = {
+  metadataDescription: `Explore public crypto trader rankings, community discussions, and trading resources. Rankings are recomputed every ${PRODUCT_FACTS.leaderboardRefreshHours} hours from the latest available source data.`,
+  ogCoverageLabel: 'Tracked Public Sources',
+  ogCadenceLabel: `Recomputed Every ${PRODUCT_FACTS.leaderboardRefreshHours}h`,
+} as const
+
+export function formatTrackedSourceCoverage(count?: number | null): string {
+  return typeof count === 'number' && Number.isInteger(count) && count > 0
+    ? `${count} tracked source families`
+    : 'tracked public sources'
+}
+
 export interface ProductFactsSnapshot {
   exchangeCount: number
   rankedTraderCount: number

@@ -2910,7 +2910,8 @@ const ja = {
   faqNoResults: '一致する質問が見つかりません。別のキーワードをお試しください。',
 
   heroHeadline: '世界最高の暗号トレーダーを追跡',
-  heroSubtitle: '{exchanges}以上の取引所でリアルタイムランキング、Arena Scoreで評価',
+  heroSubtitle:
+    '{exchanges}の追跡対象ソースを横断し、最新の利用可能なデータで2時間ごとに再計算するランキング',
   heroScoreExplainer:
     'Arena Score は追跡中のすべての取引所の全トレーダーを横断でランク付け——あなたの立ち位置がひと目でわかります。',
   heroNeutrality:

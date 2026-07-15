@@ -10,20 +10,23 @@ import { SkipLink } from './components/Providers/Accessibility'
 import { JsonLd } from './components/Providers/JsonLd'
 import { PageErrorBoundary } from './components/utils/ErrorBoundary'
 import { BASE_URL } from '@/lib/constants/urls'
+import {
+  HOMEPAGE_TRUST_COPY,
+  PRODUCT_FACTS,
+  formatTrackedSourceCoverage,
+} from '@/lib/config/product-facts'
 import { generateTraderItemListSchema } from '@/lib/seo/structured-data'
 import type { Period } from '@/lib/utils/arena-score'
 
 export const metadata: Metadata = {
   title: 'Arena | Crypto Trader Rankings & Community',
-  description:
-    'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
+  description: HOMEPAGE_TRUST_COPY.metadataDescription,
   alternates: {
     canonical: BASE_URL,
   },
   openGraph: {
     title: 'Arena | Crypto Trader Rankings & Community',
-    description:
-      'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
+    description: HOMEPAGE_TRUST_COPY.metadataDescription,
     url: BASE_URL,
     siteName: 'Arena',
     type: 'website',
@@ -39,8 +42,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Arena | Crypto Trader Rankings & Community',
-    description:
-      'Discover and rank the best crypto traders. Real-time performance leaderboards, community discussions, and trading resources.',
+    description: HOMEPAGE_TRUST_COPY.metadataDescription,
     images: [`${BASE_URL}/api/og/homepage`],
     creator: '@arenafi',
   },
@@ -49,14 +51,11 @@ export const metadata: Metadata = {
 // ISR: Revalidate every 5 minutes (300s)
 export const revalidate = 300
 
-// Site-level JSON-LD structured data. Exchange count is interpolated from the
-// live hero stat — a hardcoded "45+" contradicted the real 18 shown in the hero
-// (audit 2026-07-03). Falls back to a neutral phrasing when the stat is absent.
+// Site-level JSON-LD structured data. The hero RPC currently reports a
+// deduplicated source-family count, not a canonical arena.exchanges count, so
+// describe it as source coverage and fall back to neutral wording when absent.
 function buildOrganizationJsonLd(exchangeCount?: number | null) {
-  const exchanges =
-    typeof exchangeCount === 'number' && exchangeCount > 0
-      ? `${exchangeCount}+ exchanges`
-      : 'exchanges'
+  const sourceCoverage = formatTrackedSourceCoverage(exchangeCount)
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',
@@ -64,7 +63,7 @@ function buildOrganizationJsonLd(exchangeCount?: number | null) {
     url: BASE_URL,
     logo: `${BASE_URL}/logo-symbol.png`,
     sameAs: ['https://twitter.com/arenafi'],
-    description: `Arena aggregates trader rankings from ${exchanges}. Follow top traders, share insights, and level up your trading.`,
+    description: `Arena aggregates public trader rankings from ${sourceCoverage}. Rankings are recomputed every ${PRODUCT_FACTS.leaderboardRefreshHours} hours from the latest available source data.`,
   }
 }
 
