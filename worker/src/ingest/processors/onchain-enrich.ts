@@ -20,7 +20,7 @@ import {
   onchainFetchBudget,
   scoreEligibleWinRate,
 } from '@/lib/ingest/onchain/enrich'
-import { fetchBscInternalBnb } from '@/lib/ingest/onchain/dune-bsc-internal'
+import { scanBscInternalBnb } from '@/lib/ingest/onchain/dune-bsc-internal'
 import type { NormalizedTransfer } from '@/lib/ingest/onchain/bsc-swaps'
 import { logger } from '@/lib/logger'
 
@@ -85,12 +85,18 @@ export async function processOnchainEnrich(
     // BSC only: one batched Dune query for all wallets' native-BNB sell
     // receipts (item C — Alchemy omits BSC internal txs). $0, existing key.
     let internalByWallet = new Map<string, NormalizedTransfer[]>()
+    let internalCoverageComplete = false
     if (chain === 'bsc' && rows.length > 0) {
       try {
-        internalByWallet = await fetchBscInternalBnb(rows.map((r) => r.wallet))
-        logger.info(
-          `[onchain-enrich] ${slug}: Dune internal-BNB for ${internalByWallet.size} wallets`
-        )
+        const scan = await scanBscInternalBnb(rows.map((r) => r.wallet))
+        internalByWallet = scan.transfersByWallet
+        internalCoverageComplete = scan.coverage.scanComplete
+        const message =
+          `[onchain-enrich] ${slug}: Dune internal-BNB ` +
+          `${scan.coverage.stopReason}, rows=${scan.coverage.rowsFetched}, ` +
+          `pages=${scan.coverage.pagesFetched}, wallets=${scan.coverage.walletsRequested}`
+        if (internalCoverageComplete) logger.info(message)
+        else logger.warn(message)
       } catch (err) {
         logger.error(`[onchain-enrich] ${slug}: Dune internal fetch failed:`, err)
       }
@@ -98,10 +104,17 @@ export async function processOnchainEnrich(
 
     for (const { wallet } of rows) {
       try {
+        const internalLegs =
+          chain === 'bsc'
+            ? internalCoverageComplete
+              ? (internalByWallet.get(wallet.toLowerCase()) ?? [])
+              : internalByWallet.get(wallet.toLowerCase())
+            : undefined
         const e = await enrichWeb3Wallet(chain, wallet, {
           lookbackDays: 90,
           ...onchainFetchBudget(chain, 'scheduled'),
-          bscInternalBnb: chain === 'bsc' ? internalByWallet.get(wallet.toLowerCase()) : undefined,
+          bscInternalBnb: internalLegs,
+          bscInternalCoverageComplete: chain === 'bsc' && internalCoverageComplete,
         })
         const extras = { ...enrichmentExtras(e), onchain_enriched_at: new Date().toISOString() }
         await pool.query(
