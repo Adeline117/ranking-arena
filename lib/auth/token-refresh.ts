@@ -269,6 +269,24 @@ export type RefreshScope = {
   sessionGeneration: number
 }
 
+function viewerScopeFromRefreshScope(scope: RefreshScope): ViewerScope {
+  return {
+    viewerKey: scope.expectedUserId ? `user:${scope.expectedUserId}` : 'anon',
+    sessionGeneration: scope.sessionGeneration,
+    userId: scope.expectedUserId,
+  }
+}
+
+function staleAuthResponse(): Response {
+  return new Response(JSON.stringify({ error: 'stale_auth_scope' }), {
+    status: 401,
+    headers: {
+      'content-type': 'application/json',
+      'x-arena-stale-auth': '1',
+    },
+  })
+}
+
 /** Singleton instance */
 export const tokenRefreshCoordinator = new TokenRefreshCoordinator()
 
@@ -290,8 +308,17 @@ export async function fetchWithTokenRefresh(
     sessionGeneration: getViewerScope().sessionGeneration,
   }
 ): Promise<Response> {
-  // Make the initial request
+  const headers = new Headers(init?.headers)
+  const hadAuth = headers.has('Authorization')
+  const capturedScope = viewerScopeFromRefreshScope(scope)
+
+  // Never send credentials captured for an identity that is already stale.
+  if (hadAuth && !isViewerScopeCurrent(capturedScope)) return staleAuthResponse()
+
   const response = await fetch(input, init)
+
+  // A successful A response is still unsafe to apply after A -> B/logout.
+  if (hadAuth && !isViewerScopeCurrent(capturedScope)) return staleAuthResponse()
 
   // If not a 401, return as-is
   if (response.status !== 401) {
@@ -299,8 +326,6 @@ export async function fetchWithTokenRefresh(
   }
 
   // Check if the request had an auth header — only refresh if it was an authed request
-  const headers = new Headers(init?.headers)
-  const hadAuth = headers.has('Authorization')
   if (!hadAuth) {
     return response // Not an authed request, don't try to refresh
   }
@@ -312,8 +337,15 @@ export async function fetchWithTokenRefresh(
     return response
   }
 
+  // The refresh may resolve in the same microtask in which an account switch
+  // begins. Validate again immediately before issuing the retry.
+  if (!isViewerScopeCurrent(capturedScope)) return staleAuthResponse()
+
   // Retry with the new token
   const retryHeaders = new Headers(init?.headers)
   retryHeaders.set('Authorization', `Bearer ${newToken}`)
-  return fetch(input, { ...init, headers: retryHeaders })
+  const retryResponse = await fetch(input, { ...init, headers: retryHeaders })
+  // Check once more after the retry completes, before any caller can parse or
+  // apply its body to the new viewer.
+  return isViewerScopeCurrent(capturedScope) ? retryResponse : staleAuthResponse()
 }

@@ -4,7 +4,7 @@ jest.mock('@/lib/auth/token-refresh', () => ({
   },
 }))
 
-import { authedFetch } from '../client'
+import { apiRequest, authedFetch } from '../client'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import {
   __resetViewerScopeForTests,
@@ -21,6 +21,14 @@ function response(status: number, data: unknown): Response {
     json: jest.fn().mockResolvedValue(data),
     headers: new Headers({ 'content-type': 'application/json' }),
   } as unknown as Response
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
 }
 
 describe('authedFetch viewer-bound retry', () => {
@@ -70,5 +78,53 @@ describe('authedFetch viewer-bound retry', () => {
     expect((global.fetch as jest.Mock).mock.calls[1][1].headers.Authorization).toBe(
       'Bearer token-a2'
     )
+  })
+
+  it('apiRequest discards an A response that resolves after switching to B', async () => {
+    synchronizeViewerScope(true, 'user-a')
+    const initial = deferred<Response>()
+    ;(global.fetch as jest.Mock).mockReturnValueOnce(initial.promise)
+
+    const request = apiRequest('/api/private')
+    beginViewerTransition('user-b')
+    initial.resolve(response(200, { secret: 'A' }))
+
+    await expect(request).resolves.toMatchObject({
+      success: false,
+      error: { code: 'STALE_AUTH_SCOPE' },
+    })
+  })
+
+  it('apiRequest checks scope after refresh and does not retry A as B', async () => {
+    synchronizeViewerScope(true, 'user-a')
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce(response(401, { error: 'expired' }))
+    mockForceRefresh.mockImplementationOnce(async () => {
+      beginViewerTransition('user-b')
+      return 'token-b'
+    })
+
+    const result = await apiRequest('/api/private')
+
+    expect(result).toMatchObject({ success: false, error: { code: 'STALE_AUTH_SCOPE' } })
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('apiRequest checks scope after retry parsing when logout happens in flight', async () => {
+    synchronizeViewerScope(true, 'user-a')
+    const retry = deferred<Response>()
+    ;(global.fetch as jest.Mock)
+      .mockResolvedValueOnce(response(401, { error: 'expired' }))
+      .mockReturnValueOnce(retry.promise)
+    mockForceRefresh.mockResolvedValueOnce('token-a2')
+
+    const request = apiRequest('/api/private')
+    while ((global.fetch as jest.Mock).mock.calls.length < 2) await Promise.resolve()
+    beginViewerTransition(null)
+    retry.resolve(response(200, { secret: 'A' }))
+
+    await expect(request).resolves.toMatchObject({
+      success: false,
+      error: { code: 'STALE_AUTH_SCOPE' },
+    })
   })
 })
