@@ -97,6 +97,7 @@ describe('parseBinanceWeb3LeaderboardPage', () => {
     const top = ext.top_earning_tokens as Array<Record<string, unknown>>
     expect(Array.isArray(top)).toBe(true)
     expect(top.length).toBe(3)
+    expect(ext.top_earning_tokens_provenance).toBe('source_native')
     expect(typeof top[0].symbol).toBe('string')
     expect(typeof top[0].profit_pct).toBe('number')
     // buy/sell granularity surfaced

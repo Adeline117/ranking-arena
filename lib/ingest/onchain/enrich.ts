@@ -81,7 +81,7 @@ export interface OnchainEnrichment {
   unpricedTokens: number
   /** OnchainInsights token_distribution buckets (by realized PnL). */
   tokenDistribution: Record<string, number>
-  /** OnchainInsights top_earning_tokens ({symbol,address,logo,profit_pct,realized_pnl}). */
+  /** Estimated top tokens by reconstructed realized PnL (never a return percentage). */
   topEarningTokens: Array<Record<string, unknown>>
   provenance: 'onchain-computed'
   quality: OnchainQuality
@@ -167,7 +167,13 @@ function tokenDistribution(perToken: PerTokenPnl[]): Record<string, number> {
   return d
 }
 
-/** Top earning tokens (realized) with symbols/logos for the insights card. */
+/** Top earning tokens (realized) with symbols/logos for the insights card.
+ *
+ * costBasisUsd is the cost of the remaining holding, not the total invested
+ * capital behind realized PnL. It therefore cannot be used as a return-rate
+ * denominator (and is zero after a full close), so this reconstruction emits
+ * dollars only.
+ */
 function topEarningTokens(
   perToken: PerTokenPnl[],
   info: Map<string, TokenInfo>
@@ -182,8 +188,6 @@ function topEarningTokens(
         symbol: meta?.symbol ?? t.token.slice(0, 6), // fallback to short addr
         address: t.token,
         logo: meta?.logo ?? null,
-        profit_pct:
-          t.costBasisUsd > 0 ? Math.round((t.realizedPnlUsd / t.costBasisUsd) * 10000) / 100 : null,
         realized_pnl: t.realizedPnlUsd,
       }
     })
@@ -361,7 +365,21 @@ export function enrichmentSeries(
 
 /** The trader_stats.extras patch — onchain_* scalars + estimated insight blocks. */
 export function enrichmentExtras(e: OnchainEnrichment): Record<string, unknown> {
-  const hasTokens = e.topEarningTokens.length > 0
+  // Re-shape at the publication boundary so an accidentally supplied
+  // profit_pct can never escape into serving. Reconstructed realized PnL has
+  // no trustworthy invested-capital denominator in quality schema v1.
+  const onchainTopTokens = e.topEarningTokens
+    .filter((token) => typeof token.symbol === 'string' && token.symbol.length > 0)
+    .map((token) => ({
+      symbol: token.symbol,
+      address: typeof token.address === 'string' ? token.address : '',
+      logo: typeof token.logo === 'string' ? token.logo : null,
+      realized_pnl:
+        typeof token.realized_pnl === 'number' && Number.isFinite(token.realized_pnl)
+          ? token.realized_pnl
+          : null,
+    }))
+  const hasTokens = onchainTopTokens.length > 0
   const hasDistribution = Object.values(e.tokenDistribution).some((count) => count > 0)
   const quality = {
     schema_version: e.quality.schemaVersion,
@@ -410,6 +428,9 @@ export function enrichmentExtras(e: OnchainEnrichment): Record<string, unknown> 
     // Always emit null when empty so shallow JSONB merge clears stale estimates.
     onchain_token_distribution_usd: hasDistribution ? e.tokenDistribution : null,
     onchain_token_distribution_unit: hasDistribution ? 'realized_pnl_usd' : null,
-    top_earning_tokens: hasTokens ? e.topEarningTokens : null,
+    // Never overwrite the exchange-owned top_earning_tokens list. The two
+    // sources use different methodologies and only native data has profit %.
+    onchain_top_earning_tokens: hasTokens ? onchainTopTokens : null,
+    onchain_top_earning_tokens_provenance: hasTokens ? e.provenance : null,
   }
 }

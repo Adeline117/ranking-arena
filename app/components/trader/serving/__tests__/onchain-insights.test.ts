@@ -74,6 +74,7 @@ describe('onchain-insights shapers', () => {
 
   it('shapes top tokens and drops entries without a symbol', () => {
     const out = shapeTopTokens({
+      top_earning_tokens_provenance: 'source_native',
       top_earning_tokens: [
         {
           symbol: 'BILL',
@@ -87,6 +88,41 @@ describe('onchain-insights shapers', () => {
     })
     expect(out).toHaveLength(1)
     expect(out![0]).toMatchObject({ symbol: 'BILL', profitPct: 141.3, realizedPnl: 79357 })
+  })
+
+  it('prefers native top tokens when native and reconstructed lists coexist', () => {
+    const out = shapeTopTokens({
+      top_earning_tokens_provenance: 'source_native',
+      top_earning_tokens: [{ symbol: 'NATIVE', profit_pct: 25, realized_pnl: 50 }],
+      onchain_top_earning_tokens_provenance: 'onchain-computed',
+      onchain_top_earning_tokens: [{ symbol: 'ESTIMATE', profit_pct: 999, realized_pnl: 100 }],
+    })
+    expect(out).toEqual([
+      { symbol: 'NATIVE', address: '', logo: null, profitPct: 25, realizedPnl: 50 },
+    ])
+  })
+
+  it('never exposes a percentage from reconstructed top tokens', () => {
+    const out = shapeTopTokens({
+      onchain_top_earning_tokens_provenance: 'onchain-computed',
+      onchain_top_earning_tokens: [
+        { symbol: 'WIF', address: 'abc', profit_pct: 999, realized_pnl: 1000 },
+      ],
+    })
+    expect(out).toEqual([
+      { symbol: 'WIF', address: 'abc', logo: null, profitPct: null, realizedPnl: 1000 },
+    ])
+  })
+
+  it('supports unambiguous legacy native tokens but hides old mixed on-chain rows', () => {
+    const legacy = [{ symbol: 'LEGACY', profit_pct: 10, realized_pnl: 20 }]
+    expect(shapeTopTokens({ top_earning_tokens: legacy })).toHaveLength(1)
+    expect(
+      shapeTopTokens({ top_earning_tokens: legacy, onchain_derivation: 'onchain-computed' })
+    ).toBeNull()
+    expect(
+      shapeTopTokens({ top_earning_tokens: legacy, top_earning_tokens_provenance: 'unknown' })
+    ).toBeNull()
   })
 
   it('converts daily PnL calendar to a cumulative series for the heatmap', () => {
