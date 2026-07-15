@@ -65,6 +65,8 @@ const EXPECTED_INTERVALS: Record<string, number> = {
 
   // Subscriptions
   'subscription-expiry': 1440,
+  'reconcile-subscriptions': 1440,
+  'stripe-readiness': 1440,
 }
 
 export const GET = withCron('meta-monitor', async (_request: NextRequest) => {

@@ -64,6 +64,10 @@
       "schedule": "15 3 * * *"
     },
     {
+      "path": "/api/cron/stripe-readiness",
+      "schedule": "45 7 * * *"
+    },
+    {
       "path": "/api/cron/fetch-market-data?type=prices",
       "schedule": "14 */4 * * *"
     },
