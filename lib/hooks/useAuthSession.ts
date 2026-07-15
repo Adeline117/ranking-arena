@@ -17,6 +17,14 @@ import type { User, Session } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { t } from '@/lib/i18n'
 import { tokenRefreshCoordinator, registerAuthStateSetter } from '@/lib/auth/token-refresh'
+import {
+  beginViewerTransition,
+  finishViewerTransition,
+  getViewerScope,
+  isExpectedTransitionSession,
+  synchronizeViewerScope,
+  type ViewerKey,
+} from '@/lib/auth/viewer-scope'
 
 // Lazy-load Supabase client to avoid pulling ~50KB into the initial client bundle.
 // The actual import happens on first use (initializeAuth), which is deferred.
@@ -44,6 +52,10 @@ export type AuthState = {
   loading: boolean
   /** True once the initial auth check has completed */
   authChecked: boolean
+  /** Stable cache identity. Token refreshes for the same user do not change it. */
+  viewerKey: ViewerKey
+  /** Monotonic principal epoch used to discard work from an older viewer. */
+  sessionGeneration: number
 }
 
 export type AuthError = {
@@ -79,14 +91,41 @@ let globalAuthState: AuthState = {
   isLoggedIn: false,
   loading: true,
   authChecked: false,
+  viewerKey: 'pending',
+  sessionGeneration: 0,
 }
 
 // Global listeners for state updates
 const listeners = new Set<(state: AuthState) => void>()
 
 function setGlobalAuthState(newState: Partial<AuthState>) {
-  globalAuthState = { ...globalAuthState, ...newState }
+  const next = { ...globalAuthState, ...newState }
+  const scope = synchronizeViewerScope(next.authChecked, next.userId)
+  globalAuthState = {
+    ...next,
+    viewerKey: scope.viewerKey,
+    sessionGeneration: scope.sessionGeneration,
+  }
   listeners.forEach((listener) => listener(globalAuthState))
+}
+
+function enterIdentityTransition(expectedUserId: string | null): number {
+  const generation = beginViewerTransition(expectedUserId)
+  const scope = getViewerScope()
+  globalAuthState = {
+    ...globalAuthState,
+    user: null,
+    userId: null,
+    email: null,
+    accessToken: null,
+    isLoggedIn: false,
+    loading: true,
+    authChecked: false,
+    viewerKey: scope.viewerKey,
+    sessionGeneration: scope.sessionGeneration,
+  }
+  listeners.forEach((listener) => listener(globalAuthState))
+  return generation
 }
 
 // Initialize auth state once
@@ -99,6 +138,7 @@ function initializeAuth() {
   // Register setGlobalAuthState with the centralized token refresh coordinator
   // so it can update auth state when tokens are refreshed or sessions expire.
   registerAuthStateSetter((state) => setGlobalAuthState(state))
+  tokenRefreshCoordinator.registerIdentityTransitionSetter(enterIdentityTransition)
 
   // Listen for auth-lost events (fired by token-refresh.ts on unrecoverable refresh failure)
   // and show a toast notification so the user knows they need to log in again.
@@ -129,9 +169,16 @@ function initializeAuth() {
   getSupabase()
     .then((sb) => {
       // Get initial session
+      const initialScope = getViewerScope()
       sb.auth
         .getSession()
         .then(({ data }) => {
+          if (
+            getViewerScope().sessionGeneration !== initialScope.sessionGeneration ||
+            !isExpectedTransitionSession(data.session?.user.id ?? null)
+          ) {
+            return
+          }
           updateFromSession(data.session)
           setGlobalAuthState({ loading: false, authChecked: true })
         })
@@ -147,6 +194,7 @@ function initializeAuth() {
           const authChannel = new BroadcastChannel('ranking-arena:auth-state')
           authChannel.onmessage = (event: MessageEvent) => {
             if (event.data?.type === 'USER_LOGGED_OUT') {
+              const transitionGeneration = enterIdentityTransition(null)
               setGlobalAuthState({
                 user: null,
                 userId: null,
@@ -156,13 +204,20 @@ function initializeAuth() {
                 authChecked: true,
                 loading: false,
               })
+              finishViewerTransition(transitionGeneration)
             } else if (event.data?.type === 'TOKEN_REFRESHED') {
               // Another tab refreshed the token — re-read session from shared cookie store
               // so this tab picks up the fresh token without an independent refresh request.
+              const scope = getViewerScope()
               sb.auth
                 .getSession()
                 .then(({ data }) => {
-                  if (data.session) {
+                  if (
+                    data.session &&
+                    getViewerScope().sessionGeneration === scope.sessionGeneration &&
+                    data.session.user.id === scope.userId &&
+                    isExpectedTransitionSession(data.session.user.id)
+                  ) {
                     updateFromSession(data.session)
                     setGlobalAuthState({ loading: false, authChecked: true })
                   }
@@ -182,6 +237,7 @@ function initializeAuth() {
       // Subscribe to auth state changes
       sb.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT') {
+          if (!isExpectedTransitionSession(null)) return
           setGlobalAuthState({
             user: null,
             userId: null,
@@ -196,6 +252,17 @@ function initializeAuth() {
           event === 'TOKEN_REFRESHED' ||
           event === 'INITIAL_SESSION'
         ) {
+          if (!isExpectedTransitionSession(session?.user.id ?? null)) return
+          // A refresh that began for A may finish after a completed A -> B
+          // account switch. Supabase emits that result independently of the
+          // awaiting coordinator, so reject it at the event boundary too.
+          if (
+            event === 'TOKEN_REFRESHED' &&
+            getViewerScope().userId !== null &&
+            session?.user.id !== getViewerScope().userId
+          ) {
+            return
+          }
           updateFromSession(session)
           setGlobalAuthState({ loading: false, authChecked: true })
 
@@ -272,7 +339,8 @@ export function useAuthSession(): AuthSessionReturn {
   // Delegates to the centralized TokenRefreshCoordinator which handles
   // thundering herd prevention (concurrent callers share one in-flight refresh).
   const getToken = useCallback(async (): Promise<string | null> => {
-    return tokenRefreshCoordinator.getValidToken()
+    const { userId, sessionGeneration } = stateRef.current
+    return tokenRefreshCoordinator.getValidToken({ expectedUserId: userId, sessionGeneration })
   }, [])
 
   const getAuthHeaders = useCallback((): Record<string, string> | null => {
@@ -323,7 +391,11 @@ export function useAuthSession(): AuthSessionReturn {
   // Force a token refresh via the centralized coordinator.
   // Returns true if refresh succeeded, false otherwise.
   const refreshSession = useCallback(async (): Promise<boolean> => {
-    const token = await tokenRefreshCoordinator.forceRefresh()
+    const { userId, sessionGeneration } = stateRef.current
+    const token = await tokenRefreshCoordinator.forceRefresh({
+      expectedUserId: userId,
+      sessionGeneration,
+    })
     return token !== null
   }, [])
 
@@ -346,7 +418,13 @@ export function useAuthSession(): AuthSessionReturn {
 
   const signOut = useCallback(async () => {
     const sb = await getSupabase()
-    await sb.auth.signOut()
+    const transitionGeneration = tokenRefreshCoordinator.beginIdentityTransition(null)
+    try {
+      await tokenRefreshCoordinator.settleInflightRefreshes()
+      await sb.auth.signOut()
+    } finally {
+      tokenRefreshCoordinator.completeIdentityTransition(transitionGeneration)
+    }
     setGlobalAuthState({
       user: null,
       userId: null,
@@ -411,7 +489,11 @@ export async function authFetch(
   const { requireAuth: needsAuth = true, ...fetchOptions } = options
 
   // Get a valid token (proactively refreshes if near expiry)
-  const token = await tokenRefreshCoordinator.getValidToken()
+  const scope = getViewerScope()
+  const token = await tokenRefreshCoordinator.getValidToken({
+    expectedUserId: scope.userId,
+    sessionGeneration: scope.sessionGeneration,
+  })
 
   if (needsAuth && !token) {
     throw Object.assign(new Error('Not authenticated'), {
@@ -428,7 +510,10 @@ export async function authFetch(
 
   // Handle 401: refresh via coordinator (queues concurrent requests) and retry once
   if (response.status === 401 && token) {
-    const newToken = await tokenRefreshCoordinator.forceRefresh()
+    const newToken = await tokenRefreshCoordinator.forceRefresh({
+      expectedUserId: scope.userId,
+      sessionGeneration: scope.sessionGeneration,
+    })
     if (newToken) {
       headers.set('Authorization', `Bearer ${newToken}`)
       return fetch(url, { ...fetchOptions, headers })

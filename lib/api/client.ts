@@ -1,5 +1,6 @@
 import { logger } from '@/lib/logger'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { getViewerScope, isViewerScopeCurrent, type ViewerScope } from '@/lib/auth/viewer-scope'
 /**
  * 客户端 API 请求工具
  * 自动处理 CSRF Token 和通用配置
@@ -13,7 +14,7 @@ const CSRF_HEADER_NAME = 'x-csrf-token'
  */
 function getCsrfTokenFromCookie(): string | null {
   if (typeof document === 'undefined') return null
-  
+
   const cookies = document.cookie.split(';')
   for (const cookie of cookies) {
     const [name, value] = cookie.trim().split('=')
@@ -29,19 +30,19 @@ function getCsrfTokenFromCookie(): string | null {
  */
 function setCsrfTokenCookie(token: string): void {
   if (typeof document === 'undefined') return
-  
+
   const isProduction = process.env.NODE_ENV === 'production'
   const maxAge = 24 * 60 * 60 // 24 小时（秒）
-  
+
   let cookieString = `${CSRF_COOKIE_NAME}=${encodeURIComponent(token)}`
   cookieString += `; path=/`
   cookieString += `; max-age=${maxAge}`
   cookieString += `; samesite=strict`
-  
+
   if (isProduction) {
     cookieString += `; secure`
   }
-  
+
   document.cookie = cookieString
 }
 
@@ -51,7 +52,7 @@ function setCsrfTokenCookie(token: string): void {
 function generateClientCsrfToken(): string {
   const timestamp = Date.now().toString(36)
   const randomPart = Array.from(crypto.getRandomValues(new Uint8Array(32)))
-    .map(b => b.toString(16).padStart(2, '0'))
+    .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
   return `${timestamp}.${randomPart}`
 }
@@ -61,14 +62,14 @@ function generateClientCsrfToken(): string {
  */
 function ensureCsrfToken(): string | null {
   if (typeof document === 'undefined') return null
-  
+
   let token = getCsrfTokenFromCookie()
-  
+
   if (!token) {
     token = generateClientCsrfToken()
     setCsrfTokenCookie(token)
   }
-  
+
   return token
 }
 
@@ -119,12 +120,12 @@ export async function apiRequest<T = unknown>(
 
   // 构建 headers
   const headers = new Headers(customHeaders)
-  
+
   // 添加 Content-Type（如果有 body 且未设置）
   if (body && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json')
   }
-  
+
   // 添加 CSRF Token（对于状态修改请求）
   const method = (options.method || 'GET').toUpperCase()
   if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
@@ -143,7 +144,7 @@ export async function apiRequest<T = unknown>(
       const delay = lastResult.error.retryAfter
         ? lastResult.error.retryAfter * 1000
         : retryBaseDelayMs * Math.pow(2, attempt - 1)
-      await new Promise(r => setTimeout(r, delay))
+      await new Promise((r) => setTimeout(r, delay))
     }
 
     const controller = new AbortController()
@@ -164,11 +165,7 @@ export async function apiRequest<T = unknown>(
 
       if (!response.ok) {
         // 401 token refresh: attempt once, then retry the request
-        if (
-          response.status === 401 &&
-          !hasAttempted401Refresh &&
-          typeof window !== 'undefined'
-        ) {
+        if (response.status === 401 && !hasAttempted401Refresh && typeof window !== 'undefined') {
           hasAttempted401Refresh = true
           try {
             const newToken = await tokenRefreshCoordinator.forceRefresh()
@@ -223,10 +220,11 @@ export async function apiRequest<T = unknown>(
         const errorCode = isRateLimited
           ? 'RATE_LIMITED'
           : (errorIsObject ? rawError.code : null) || httpStatusToErrorCode(response.status)
-        const errorMessage = (errorIsObject ? rawError.message : null)
-          || (typeof rawError === 'string' ? rawError : null)
-          || data?.message
-          || (isRateLimited ? '请求频率超限' : '请求失败')
+        const errorMessage =
+          (errorIsObject ? rawError.message : null) ||
+          (typeof rawError === 'string' ? rawError : null) ||
+          data?.message ||
+          (isRateLimited ? '请求频率超限' : '请求失败')
 
         if (!retryAfter && errorIsObject && rawError.details?.retryAfter) {
           retryAfter = rawError.details.retryAfter
@@ -280,9 +278,10 @@ function isProviderRateLimitResponse(data: unknown): boolean {
   if (!data || typeof data !== 'object') return false
 
   const obj = data as Record<string, unknown>
-  const error = typeof obj.error === 'object' && obj.error !== null
-    ? (obj.error as Record<string, unknown>)
-    : obj
+  const error =
+    typeof obj.error === 'object' && obj.error !== null
+      ? (obj.error as Record<string, unknown>)
+      : obj
 
   if (error.type !== 'provider' || error.reason !== 'provider_error') {
     return false
@@ -293,9 +292,10 @@ function isProviderRateLimitResponse(data: unknown): boolean {
     return true
   }
 
-  const provider = typeof error.provider === 'object' && error.provider !== null
-    ? (error.provider as Record<string, unknown>)
-    : null
+  const provider =
+    typeof error.provider === 'object' && error.provider !== null
+      ? (error.provider as Record<string, unknown>)
+      : null
   return provider?.status === 429
 }
 
@@ -384,6 +384,37 @@ export type FetchResult<T> = {
  * for hooks that need status-code-level control (e.g. mapping 401/429
  * to user-friendly messages) without the full ApiResponse wrapper.
  */
+export type AuthedFetchScope = {
+  expectedUserId?: string | null
+  expectedSessionGeneration?: number
+  signal?: AbortSignal
+}
+
+export type ScopedFetchResult<T> = FetchResult<T> & { stale?: boolean }
+
+function jwtSubject(accessToken: string | null): string | null {
+  if (!accessToken) return null
+  try {
+    const payload = accessToken.split('.')[1]
+    if (!payload) return null
+    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const decoded = JSON.parse(atob(normalized)) as { sub?: unknown }
+    return typeof decoded.sub === 'string' && decoded.sub ? decoded.sub : null
+  } catch {
+    return null
+  }
+}
+
+function captureFetchScope(accessToken: string | null, options?: AuthedFetchScope): ViewerScope {
+  const current = getViewerScope()
+  const expectedUserId = options?.expectedUserId ?? jwtSubject(accessToken) ?? current.userId
+  return {
+    viewerKey: expectedUserId ? `user:${expectedUserId}` : current.viewerKey,
+    sessionGeneration: options?.expectedSessionGeneration ?? current.sessionGeneration,
+    userId: expectedUserId,
+  }
+}
+
 export async function authedFetch<T>(
   url: string,
   method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH',
@@ -391,7 +422,17 @@ export async function authedFetch<T>(
   body?: Record<string, unknown>,
   /** Request timeout in milliseconds (default: 15000 — mobile-friendly) */
   timeoutMs = 15_000,
-): Promise<FetchResult<T>> {
+  scopeOptions?: AuthedFetchScope
+): Promise<ScopedFetchResult<T>> {
+  const requestScope = captureFetchScope(accessToken, scopeOptions)
+  const scopeBound =
+    scopeOptions?.expectedSessionGeneration !== undefined ||
+    scopeOptions?.expectedUserId !== undefined ||
+    requestScope.userId !== null
+  if (scopeBound && !isViewerScopeCurrent(requestScope)) {
+    return { ok: false, status: 0, data: null, stale: true }
+  }
+
   const headers: Record<string, string> = {}
 
   if (accessToken) {
@@ -409,7 +450,7 @@ export async function authedFetch<T>(
       method,
       headers,
       body: body ? JSON.stringify(body) : undefined,
-      signal: AbortSignal.timeout(timeoutMs),
+      signal: scopeOptions?.signal ?? AbortSignal.timeout(timeoutMs),
     })
   } catch (error) {
     if (error instanceof DOMException && error.name === 'AbortError') {
@@ -422,8 +463,17 @@ export async function authedFetch<T>(
 
   // On 401 with an auth token, attempt refresh and retry once
   if (response.status === 401 && accessToken && typeof window !== 'undefined') {
-    const newToken = await tokenRefreshCoordinator.forceRefresh()
+    if (scopeBound && !isViewerScopeCurrent(requestScope)) {
+      return { ok: false, status: 0, data: null, stale: true }
+    }
+    const newToken = await tokenRefreshCoordinator.forceRefresh({
+      expectedUserId: requestScope.userId,
+      sessionGeneration: requestScope.sessionGeneration,
+    })
     if (newToken) {
+      if (scopeBound && !isViewerScopeCurrent(requestScope)) {
+        return { ok: false, status: 0, data: null, stale: true }
+      }
       headers['Authorization'] = `Bearer ${newToken}`
       let retryResponse: Response
       try {
@@ -431,7 +481,7 @@ export async function authedFetch<T>(
           method,
           headers,
           body: body ? JSON.stringify(body) : undefined,
-          signal: AbortSignal.timeout(timeoutMs),
+          signal: scopeOptions?.signal ?? AbortSignal.timeout(timeoutMs),
         })
       } catch (error) {
         if (error instanceof DOMException && error.name === 'AbortError') {
@@ -442,10 +492,15 @@ export async function authedFetch<T>(
       const retryData = await retryResponse.json().catch(() => {
         const ct = retryResponse.headers.get('content-type') || ''
         if (!ct.includes('application/json')) {
-          logger.warn(`[api-client] Retry response is not JSON (status=${retryResponse.status}, content-type=${ct}), likely HTML error page`)
+          logger.warn(
+            `[api-client] Retry response is not JSON (status=${retryResponse.status}, content-type=${ct}), likely HTML error page`
+          )
         }
         return null
       })
+      if (scopeBound && !isViewerScopeCurrent(requestScope)) {
+        return { ok: false, status: 0, data: null, stale: true }
+      }
       return { ok: retryResponse.ok, status: retryResponse.status, data: retryData }
     }
   }
@@ -453,10 +508,15 @@ export async function authedFetch<T>(
   const data = await response.json().catch(() => {
     const ct = response.headers.get('content-type') || ''
     if (!ct.includes('application/json')) {
-      logger.warn(`[api-client] Response is not JSON (status=${response.status}, content-type=${ct}), likely HTML error page`)
+      logger.warn(
+        `[api-client] Response is not JSON (status=${response.status}, content-type=${ct}), likely HTML error page`
+      )
     }
     return null
   })
+  if (scopeBound && !isViewerScopeCurrent(requestScope)) {
+    return { ok: false, status: 0, data: null, stale: true }
+  }
   return { ok: response.ok, status: response.status, data }
 }
 

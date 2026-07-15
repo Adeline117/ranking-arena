@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase/client'
 import { useMultiAccountStore, StoredAccount } from '@/lib/stores/multiAccountStore'
 import { usePremium } from '@/lib/premium/hooks'
 import { logger } from '@/lib/logger'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 const MAX_ACCOUNTS_FREE = 1
 const MAX_ACCOUNTS_PRO = 5
@@ -140,11 +141,12 @@ export function useMultiAccount() {
       }
 
       // Restore target account session
-      const { data, error } = await supabase.auth.refreshSession({
-        refresh_token: target.refreshToken,
-      })
+      const session = await tokenRefreshCoordinator.switchSession(
+        target.refreshToken,
+        target.userId
+      )
 
-      if (error || !data.session) {
+      if (!session) {
         // Token expired — remove stale account from store so user isn't stuck
         removeAccount(userId)
         return { success: false, error: 'session_expired', userId }
@@ -153,7 +155,7 @@ export function useMultiAccount() {
       // Update stored refresh token
       addAccount({
         ...target,
-        refreshToken: data.session.refresh_token,
+        refreshToken: session.refresh_token,
         isActive: true,
         lastActiveAt: new Date().toISOString(),
       })
