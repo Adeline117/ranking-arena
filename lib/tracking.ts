@@ -14,6 +14,9 @@
  */
 
 import { getCsrfHeaders } from '@/lib/api/client'
+import { getLocalAccessToken, hasLocalSession } from '@/lib/auth/local-session'
+
+export { hasLocalSession } from '@/lib/auth/local-session'
 
 type InteractionEvent = {
   action: string
@@ -27,46 +30,6 @@ const eventQueue: InteractionEvent[] = []
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 const FLUSH_INTERVAL = 5000 // Batch flush every 5s (PostHog pattern)
 const MAX_QUEUE_SIZE = 20
-
-// Matches `storageKey` in lib/supabase/client.ts — Supabase persists the session here.
-// Cheap synchronous login signal: lets us skip auth-required tracking endpoints for
-// anonymous visitors (avoids 401/403 console noise) without importing the Supabase client.
-const AUTH_STORAGE_KEY = 'arena-auth'
-
-/**
- * Synchronous best-effort login check (reads the persisted Supabase session key).
- * Use to gate fire-and-forget tracking calls to auth-required endpoints so
- * anonymous visitors don't generate 401/403 console errors. NOT a security
- * boundary — the server still validates the real token.
- */
-export function hasLocalSession(): boolean {
-  if (typeof window === 'undefined') return false
-  try {
-    return !!window.localStorage.getItem(AUTH_STORAGE_KEY)
-  } catch {
-    return false // localStorage blocked (private mode) — treat as anonymous
-  }
-}
-
-/**
- * Best-effort synchronous read of the Supabase access token from the persisted
- * session (same `arena-auth` key as hasLocalSession). The tracking endpoints
- * authenticate via `Authorization: Bearer` only — cookies are never read — so
- * fire-and-forget tracking must attach this token. NOT a security boundary;
- * the server validates the token. A stale/expired token just means the event
- * is silently dropped server-side, which is acceptable for tracking.
- */
-function getLocalAccessToken(): string | null {
-  if (typeof window === 'undefined') return null
-  try {
-    const raw = window.localStorage.getItem(AUTH_STORAGE_KEY)
-    if (!raw) return null
-    const token = (JSON.parse(raw) as { access_token?: unknown }).access_token
-    return typeof token === 'string' && token.length > 0 ? token : null
-  } catch {
-    return null // unparseable session or localStorage blocked — treat as anonymous
-  }
-}
 
 /**
  * Fire-and-forget authenticated tracking POST. Never throws, never blocks UI.
