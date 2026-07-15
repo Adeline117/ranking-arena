@@ -3242,6 +3242,9 @@ const ko = {
   onChainVolume: '온체인 거래량',
   swapCount: '스왑 횟수',
   estimatedPnl: '추정 PnL',
+  onchainEstimatedData: '온체인 재구성 · 추정 데이터',
+  onchainEstimatedDataHint:
+    '제한된 이력, 체결 시점이 아닌 가격, 알 수 없는 기초 보유량의 영향을 받으므로 참고용이며 Arena Score에 반영되지 않습니다.',
   walletAddress: '지갑 주소',
   tokenDistribution: '보유 분포',
   tokenDistributionEmpty: '토큰 보유 데이터가 없습니다',

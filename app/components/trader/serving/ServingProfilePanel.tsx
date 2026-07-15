@@ -27,6 +27,7 @@ import MetricGrid from './MetricGrid'
 import SignalChips from './SignalChips'
 import TraderMetaStrip from './TraderMetaStrip'
 import CopyTradingCard from './CopyTradingCard'
+import OnchainInsights from './OnchainInsights'
 import CoreCharts from './CoreCharts'
 import DrawdownModule from './DrawdownModule'
 import AssetPreference from './AssetPreference'
@@ -211,6 +212,7 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
           <SignalChips source={source} extras={core.modules.extras} />
           <TraderMetaStrip extras={core.modules.extras} currency={core.modules.currency} />
           <CopyTradingCard extras={core.modules.extras} currency={core.modules.currency} />
+          <OnchainInsights extras={core.modules.extras} currency={core.modules.currency} />
           {isDormant && (
             <Text size="sm" color="tertiary">
               {t('traderDormantForPeriod')}

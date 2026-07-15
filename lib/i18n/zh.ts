@@ -3271,6 +3271,9 @@ const zh = {
   onChainVolume: '链上交易量',
   swapCount: '交易次数',
   estimatedPnl: '预估盈亏',
+  onchainEstimatedData: '链上重建 · 估算数据',
+  onchainEstimatedDataHint:
+    '受有限历史、非成交时点价格和未知期初持仓影响，这些数值仅供参考，不计入 Arena Score。',
   walletAddress: '钱包地址',
   tokenDistribution: '持仓分布',
   tokenDistributionEmpty: '暂无代币持仓数据',

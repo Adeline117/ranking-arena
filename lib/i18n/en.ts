@@ -3359,6 +3359,9 @@ const en = {
   onChainVolume: 'On-chain Volume',
   swapCount: 'Swap Count',
   estimatedPnl: 'Estimated PnL',
+  onchainEstimatedData: 'On-chain reconstruction · Estimated',
+  onchainEstimatedDataHint:
+    'Limited history, non-execution-time pricing, and unknown opening inventory may affect these figures. They are not used in Arena Score.',
   walletAddress: 'Wallet Address',
   tokenDistribution: 'Token Distribution',
   tokenDistributionEmpty: 'No token holdings data',

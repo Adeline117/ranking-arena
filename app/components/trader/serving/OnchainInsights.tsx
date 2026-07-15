@@ -19,6 +19,8 @@ import {
   shapeTokenDistribution,
   shapeTopTokens,
   shapePnlCalendar,
+  shapeOnchainPnl,
+  shapeOnchainQuality,
   type TokenDistBucket,
 } from './onchain-insights'
 
@@ -63,13 +65,84 @@ export default function OnchainInsights({ extras, currency }: OnchainInsightsPro
   const dist = shapeTokenDistribution(extras)
   const tokensTop = shapeTopTokens(extras)
   const calendar = shapePnlCalendar(extras)
+  const pnl = shapeOnchainPnl(extras)
+  const quality = shapeOnchainQuality(extras)
 
-  if (!dist && !tokensTop && !calendar) return null
+  if (!dist && !tokensTop && !calendar && !pnl) return null
 
   const distTotal = dist ? dist.reduce((s, b) => s + b.count, 0) : 0
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+      {quality && !quality.canonical && (
+        <Box
+          role="note"
+          aria-label={t('onchainEstimatedData')}
+          style={{
+            padding: tokens.spacing[3],
+            borderRadius: tokens.radius.lg,
+            background: alpha(tokens.colors.accent.warning, 8),
+            border: `1px solid ${alpha(tokens.colors.accent.warning, 24)}`,
+          }}
+        >
+          <Text
+            size="sm"
+            weight="bold"
+            style={{ display: 'block', color: tokens.colors.accent.warning }}
+          >
+            {t('onchainEstimatedData')}
+          </Text>
+          <Text
+            size="xs"
+            color="tertiary"
+            style={{ display: 'block', marginTop: tokens.spacing[1], lineHeight: 1.5 }}
+          >
+            {t('onchainEstimatedDataHint')}
+          </Text>
+        </Box>
+      )}
+
+      {pnl && (
+        <Card title={quality?.canonical ? t('metricTotalPnl') : t('estimatedPnl')}>
+          <Box
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+              gap: tokens.spacing[3],
+            }}
+          >
+            {[
+              { label: 'metricTotalPnl', value: pnl.total },
+              { label: 'metricRealizedPnl', value: pnl.realized },
+              { label: 'metricUnrealizedPnl', value: pnl.unrealized },
+            ]
+              .filter((row): row is { label: string; value: number } => row.value !== null)
+              .map((row) => (
+                <Box key={row.label}>
+                  <Text size="xs" color="tertiary" style={{ display: 'block' }}>
+                    {t(row.label)}
+                  </Text>
+                  <Text
+                    size="md"
+                    weight="bold"
+                    style={{
+                      display: 'block',
+                      marginTop: tokens.spacing[1],
+                      color:
+                        row.value >= 0
+                          ? 'var(--color-accent-success)'
+                          : 'var(--color-accent-error)',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {formatMoney({ value: row.value, currency }, { compact: true, signed: true })}
+                  </Text>
+                </Box>
+              ))}
+          </Box>
+        </Card>
+      )}
+
       {dist && distTotal > 0 && (
         <Card title={t('tokenPnlDistribution')}>
           <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
