@@ -1,5 +1,9 @@
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, conflict, serverError, success } from '@/lib/api/response'
+import {
+  CommentMutationRolloutError,
+  moderateCommentWithRollout,
+} from '@/lib/data/comment-mutation-rollout'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('report-api')
@@ -94,24 +98,29 @@ export const POST = withAuth(
     // Auto-hide: compute a WEIGHTED report score (per-reporter trust) and only
     // auto-hide when it crosses the threshold. Comments are SOFT-deleted
     // (recoverable, audited) — NEVER hard-deleted from user reports.
+    let moderationStatus: 'not_required' | 'applied' | 'pending' = 'not_required'
     try {
       // Pull the distinct pending reporters for this content, then weight each
       // by account age + reputation so bot swarms can't cross the threshold.
-      const { data: pendingReports } = await supabase
+      const { data: pendingReports, error: pendingReportsError } = await supabase
         .from('content_reports')
         .select('reporter_id')
         .eq('content_type', content_type)
         .eq('content_id', content_id)
         .eq('status', 'pending')
 
+      if (pendingReportsError) throw pendingReportsError
+
       const reporterIds = [...new Set((pendingReports || []).map((r) => r.reporter_id))]
 
       let weightedScore = 0
       if (reporterIds.length > 0) {
-        const { data: profiles } = await supabase
+        const { data: profiles, error: profilesError } = await supabase
           .from('user_profiles')
           .select('id, created_at, reputation_score')
           .in('id', reporterIds)
+
+        if (profilesError) throw profilesError
 
         const profileMap = new Map(
           (profiles || []).map((p) => [
@@ -139,30 +148,36 @@ export const POST = withAuth(
           `Auto-hidden post ${content_id} (weighted ${weightedScore.toFixed(1)}, ${reporterIds.length} reporters)`
         )
       } else if (content_type === 'comment' && weightedScore >= COMMENT_REPORT_WEIGHT_THRESHOLD) {
-        // SOFT delete only — mirror the post path. Never hard delete: the row
-        // stays recoverable and a moderator can restore it if the reports were
-        // abusive. Reads filter deleted_at IS NULL (lib/data/comments.ts).
-        await supabase
-          .from('comments')
-          .update({
-            deleted_at: new Date().toISOString(),
-            deleted_by: null,
-            delete_reason: `Auto-hidden: weighted report score ${weightedScore.toFixed(1)} (${reporterIds.length} reporters)`,
-          })
-          .eq('id', content_id)
-          .is('deleted_at', null)
+        const hideReason = `Auto-hidden: weighted report score ${weightedScore.toFixed(1)} (${reporterIds.length} reporters)`
+        await moderateCommentWithRollout(supabase, {
+          commentId: content_id,
+          actorId: null,
+          action: 'soft_delete',
+          reason: hideReason,
+        })
+        moderationStatus = 'applied'
         logger.info(
           `Auto-hidden comment ${content_id} (weighted ${weightedScore.toFixed(1)}, ${reporterIds.length} reporters)`
         )
       }
     } catch (autoHideErr) {
       // Non-blocking: report was saved successfully, auto-hide is best-effort
+      moderationStatus = 'pending'
       logger.warn('Auto-hide check failed', {
-        error: autoHideErr instanceof Error ? autoHideErr.message : String(autoHideErr),
+        ...(autoHideErr instanceof CommentMutationRolloutError
+          ? {
+              kind: autoHideErr.kind,
+              code: autoHideErr.databaseCode,
+              stage: autoHideErr.stage,
+            }
+          : { error: autoHideErr instanceof Error ? autoHideErr.message : String(autoHideErr) }),
       })
     }
 
-    return success({ ok: true })
+    return success({
+      ok: true,
+      ...(content_type === 'comment' ? { moderation_status: moderationStatus } : {}),
+    })
   },
   { name: 'report', rateLimit: 'write' }
 )

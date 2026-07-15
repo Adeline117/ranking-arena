@@ -40,6 +40,16 @@ export type ModerateCommentResult = {
   comment_count: number
 }
 
+export type ModerateCommentAction = 'hard_delete' | 'soft_delete' | 'restore_auto_hidden'
+
+export type ModerateCommentInput = {
+  commentId: string
+  expectedPostId?: string
+  actorId: string | null
+  action: ModerateCommentAction
+  reason: string | null
+}
+
 export function isMissingDatabaseFunction(error: DatabaseError): boolean {
   return error.code === 'PGRST202' || error.code === '42883'
 }
@@ -374,6 +384,310 @@ export async function deleteOwnCommentWithRollout(
   return { deleted_count: deletedCount as number, comment_count: commentCount }
 }
 
+type LegacyModerationComment = {
+  id: string
+  post_id: string
+  parent_id: string | null
+  deleted_at: string | null
+  deleted_by: string | null
+  delete_reason: string | null
+}
+
+type DeletionMarker = {
+  deleted_at: string
+  deleted_by: string | null
+  delete_reason: string | null
+}
+
+function parseLegacyModerationComment(value: unknown): LegacyModerationComment | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const candidate = value as Record<string, unknown>
+  if (
+    typeof candidate.id !== 'string' ||
+    typeof candidate.post_id !== 'string' ||
+    (candidate.parent_id !== null && typeof candidate.parent_id !== 'string') ||
+    (candidate.deleted_at !== null && typeof candidate.deleted_at !== 'string') ||
+    (typeof candidate.deleted_at === 'string' &&
+      !Number.isFinite(Date.parse(candidate.deleted_at))) ||
+    (candidate.deleted_by !== null && typeof candidate.deleted_by !== 'string') ||
+    (candidate.delete_reason !== null && typeof candidate.delete_reason !== 'string')
+  ) {
+    return null
+  }
+  return candidate as LegacyModerationComment
+}
+
+function matchesDeletionMarker(value: unknown, marker: DeletionMarker): boolean {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const candidate = value as Record<string, unknown>
+  return (
+    candidate.deleted_at === marker.deleted_at &&
+    candidate.deleted_by === marker.deleted_by &&
+    candidate.delete_reason === marker.delete_reason
+  )
+}
+
+function parseLegacyModerationRows(
+  value: unknown,
+  input: {
+    commentId: string
+    postId: string
+    parentId: string | null
+    marker: DeletionMarker | null
+  }
+): Array<Record<string, unknown>> | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+
+  const seenIds = new Set<string>()
+  let includesTarget = false
+  for (const row of value) {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) return null
+    const candidate = row as Record<string, unknown>
+    if (
+      typeof candidate.id !== 'string' ||
+      seenIds.has(candidate.id) ||
+      candidate.post_id !== input.postId ||
+      (candidate.id !== input.commentId &&
+        (input.parentId !== null || candidate.parent_id !== input.commentId))
+    ) {
+      return null
+    }
+
+    if (input.marker) {
+      if (!matchesDeletionMarker(candidate, input.marker)) return null
+    } else if (
+      candidate.deleted_at !== null ||
+      candidate.deleted_by !== null ||
+      candidate.delete_reason !== null
+    ) {
+      return null
+    }
+
+    seenIds.add(candidate.id)
+    if (candidate.id === input.commentId) includesTarget = true
+  }
+
+  return includesTarget ? (value as Array<Record<string, unknown>>) : null
+}
+
+async function readLegacyModerationResource(
+  supabase: SupabaseClient,
+  input: ModerateCommentInput,
+  operation: string
+): Promise<LegacyModerationComment> {
+  const { data, error } = await supabase
+    .from('comments')
+    .select('id, post_id, parent_id, deleted_at, deleted_by, delete_reason')
+    .eq('id', input.commentId)
+    .maybeSingle()
+
+  if (error) fail(operation, 'comment-read', 'database', error)
+  const comment = parseLegacyModerationComment(data)
+  if (
+    !comment ||
+    comment.id !== input.commentId ||
+    (input.expectedPostId && comment.post_id !== input.expectedPostId)
+  ) {
+    fail(operation, 'comment-read', 'not_found')
+  }
+
+  const { data: post, error: postError } = await supabase
+    .from('posts')
+    .select('id')
+    .eq('id', comment.post_id)
+    .maybeSingle()
+
+  if (postError) fail(operation, 'post-read', 'database', postError)
+  if (!post || post.id !== comment.post_id) fail(operation, 'post-read', 'not_found')
+  return comment
+}
+
+async function legacyHardDeleteComment(
+  supabase: SupabaseClient,
+  comment: LegacyModerationComment,
+  operation: string
+): Promise<ModerateCommentResult> {
+  let activeQuery = supabase
+    .from('comments')
+    .select('id', { count: 'exact', head: true })
+    .eq('post_id', comment.post_id)
+    .is('deleted_at', null)
+  activeQuery = comment.parent_id
+    ? activeQuery.eq('id', comment.id)
+    : activeQuery.or(`id.eq.${comment.id},parent_id.eq.${comment.id}`)
+  const { count, error: countError } = await activeQuery
+
+  if (countError) fail(operation, 'subtree-count', 'database', countError)
+  if (!Number.isSafeInteger(count) || (count as number) < 0) {
+    fail(operation, 'subtree-count', 'database')
+  }
+
+  const { data: deleted, error: deleteError } = await supabase
+    .from('comments')
+    .delete()
+    .eq('id', comment.id)
+    .eq('post_id', comment.post_id)
+    .select('id')
+    .maybeSingle()
+
+  if (deleteError) fail(operation, 'source-delete', 'database', deleteError)
+  if (!deleted || deleted.id !== comment.id) fail(operation, 'source-ack', 'conflict')
+
+  const commentCount = await updateCommentCountFromSource(supabase, comment.post_id, operation)
+  return {
+    post_id: comment.post_id,
+    affected_count: count as number,
+    comment_count: commentCount,
+  }
+}
+
+async function legacySoftDeleteComment(
+  supabase: SupabaseClient,
+  comment: LegacyModerationComment,
+  input: ModerateCommentInput,
+  operation: string
+): Promise<ModerateCommentResult> {
+  if (comment.deleted_at) {
+    const commentCount = await updateCommentCountFromSource(supabase, comment.post_id, operation)
+    return { post_id: comment.post_id, affected_count: 0, comment_count: commentCount }
+  }
+
+  const marker: DeletionMarker = {
+    deleted_at: new Date().toISOString(),
+    deleted_by: input.actorId,
+    delete_reason: input.reason,
+  }
+  let mutation = supabase
+    .from('comments')
+    .update(marker)
+    .eq('post_id', comment.post_id)
+    .is('deleted_at', null)
+  mutation = comment.parent_id
+    ? mutation.eq('id', comment.id)
+    : mutation.or(`id.eq.${comment.id},parent_id.eq.${comment.id}`)
+  const { data: updated, error: updateError } = await mutation.select(
+    'id, post_id, parent_id, deleted_at, deleted_by, delete_reason'
+  )
+
+  if (updateError) fail(operation, 'source-update', 'database', updateError)
+  const rows = parseLegacyModerationRows(updated, {
+    commentId: comment.id,
+    postId: comment.post_id,
+    parentId: comment.parent_id,
+    marker,
+  })
+  if (!rows) fail(operation, 'source-ack', 'conflict')
+
+  const commentCount = await updateCommentCountFromSource(supabase, comment.post_id, operation)
+  return {
+    post_id: comment.post_id,
+    affected_count: rows.length,
+    comment_count: commentCount,
+  }
+}
+
+async function legacyRestoreAutoHiddenComment(
+  supabase: SupabaseClient,
+  comment: LegacyModerationComment,
+  operation: string
+): Promise<ModerateCommentResult> {
+  if (!comment.deleted_at) {
+    const commentCount = await updateCommentCountFromSource(supabase, comment.post_id, operation)
+    return { post_id: comment.post_id, affected_count: 0, comment_count: commentCount }
+  }
+
+  // Queue approval must not undo an unrelated administrator deletion. Mirror
+  // the expand RPC's locked marker contract during the legacy window.
+  if (
+    comment.deleted_by !== null ||
+    comment.delete_reason === null ||
+    !comment.delete_reason.startsWith('Auto-hidden:')
+  ) {
+    fail(operation, 'restore-marker', 'forbidden')
+  }
+
+  const oldMarker: DeletionMarker = {
+    deleted_at: comment.deleted_at,
+    deleted_by: comment.deleted_by,
+    delete_reason: comment.delete_reason,
+  }
+  let mutation = supabase
+    .from('comments')
+    .update({ deleted_at: null, deleted_by: null, delete_reason: null })
+    .eq('post_id', comment.post_id)
+    .eq('deleted_at', oldMarker.deleted_at)
+  mutation =
+    oldMarker.deleted_by === null
+      ? mutation.is('deleted_by', null)
+      : mutation.eq('deleted_by', oldMarker.deleted_by)
+  mutation =
+    oldMarker.delete_reason === null
+      ? mutation.is('delete_reason', null)
+      : mutation.eq('delete_reason', oldMarker.delete_reason)
+  mutation = comment.parent_id
+    ? mutation.eq('id', comment.id)
+    : mutation.or(`id.eq.${comment.id},parent_id.eq.${comment.id}`)
+  const { data: restored, error: restoreError } = await mutation.select(
+    'id, post_id, parent_id, deleted_at, deleted_by, delete_reason'
+  )
+
+  if (restoreError) fail(operation, 'source-update', 'database', restoreError)
+  const rows = parseLegacyModerationRows(restored, {
+    commentId: comment.id,
+    postId: comment.post_id,
+    parentId: comment.parent_id,
+    marker: null,
+  })
+  if (!rows) fail(operation, 'source-ack', 'conflict')
+
+  const commentCount = await updateCommentCountFromSource(supabase, comment.post_id, operation)
+  return {
+    post_id: comment.post_id,
+    affected_count: rows.length,
+    comment_count: commentCount,
+  }
+}
+
+export async function moderateCommentWithRollout(
+  supabase: SupabaseClient,
+  input: ModerateCommentInput
+): Promise<ModerateCommentResult> {
+  const operation = 'moderate-comment'
+  if (!['hard_delete', 'soft_delete', 'restore_auto_hidden'].includes(input.action)) {
+    fail(operation, 'input', 'validation')
+  }
+  const { data, error } = await supabase.rpc('moderate_comment', {
+    p_comment_id: input.commentId,
+    p_actor_id: input.actorId,
+    p_action: input.action,
+    p_reason: input.reason,
+  })
+
+  if (!error) {
+    const result = parseModerateComment(data)
+    if (!result) fail(operation, 'rpc-ack', 'database')
+    if (input.expectedPostId && result.post_id !== input.expectedPostId) {
+      fail(operation, 'rpc-resource-ack', 'conflict')
+    }
+    return result
+  }
+  if (!isMissingDatabaseFunction(error)) failForRpc(operation, error)
+
+  logger.warn('[comment mutation rollout] RPC missing; using legacy path', {
+    operation,
+    action: input.action,
+    code: error.code,
+  })
+  const comment = await readLegacyModerationResource(supabase, input, operation)
+  if (input.action === 'hard_delete') {
+    return legacyHardDeleteComment(supabase, comment, operation)
+  }
+  if (input.action === 'soft_delete') {
+    return legacySoftDeleteComment(supabase, comment, input, operation)
+  }
+  return legacyRestoreAutoHiddenComment(supabase, comment, operation)
+}
+
 export async function moderateCommentHardDeleteWithRollout(
   supabase: SupabaseClient,
   input: {
@@ -383,81 +697,5 @@ export async function moderateCommentHardDeleteWithRollout(
     reason: string | null
   }
 ): Promise<ModerateCommentResult> {
-  const operation = 'moderate-comment'
-  const { data, error } = await supabase.rpc('moderate_comment', {
-    p_comment_id: input.commentId,
-    p_actor_id: input.actorId,
-    p_action: 'hard_delete',
-    p_reason: input.reason,
-  })
-
-  if (!error) {
-    const result = parseModerateComment(data)
-    if (!result) fail(operation, 'rpc-ack', 'database')
-    if (result.post_id !== input.expectedPostId) {
-      fail(operation, 'rpc-resource-ack', 'conflict')
-    }
-    return result
-  }
-  if (!isMissingDatabaseFunction(error)) failForRpc(operation, error)
-
-  logger.warn('[comment mutation rollout] RPC missing; using legacy path', {
-    operation,
-    code: error.code,
-  })
-  const { data: comment, error: commentError } = await supabase
-    .from('comments')
-    .select('id, post_id, parent_id, deleted_at')
-    .eq('id', input.commentId)
-    .maybeSingle()
-
-  if (commentError) fail(operation, 'comment-read', 'database', commentError)
-  if (!comment || comment.post_id !== input.expectedPostId) {
-    fail(operation, 'comment-read', 'not_found')
-  }
-
-  const { data: post, error: postError } = await supabase
-    .from('posts')
-    .select('id')
-    .eq('id', input.expectedPostId)
-    .maybeSingle()
-
-  if (postError) fail(operation, 'post-read', 'database', postError)
-  if (!post) fail(operation, 'post-read', 'not_found')
-
-  let activeQuery = supabase
-    .from('comments')
-    .select('id', { count: 'exact', head: true })
-    .eq('post_id', input.expectedPostId)
-    .is('deleted_at', null)
-  activeQuery = comment.parent_id
-    ? activeQuery.eq('id', input.commentId)
-    : activeQuery.or(`id.eq.${input.commentId},parent_id.eq.${input.commentId}`)
-  const { count, error: countError } = await activeQuery
-
-  if (countError) fail(operation, 'subtree-count', 'database', countError)
-  if (!Number.isSafeInteger(count) || (count as number) < 0) {
-    fail(operation, 'subtree-count', 'database')
-  }
-  const affectedCount = count as number
-
-  const { data: deleted, error: deleteError } = await supabase
-    .from('comments')
-    .delete()
-    .eq('id', input.commentId)
-    .eq('post_id', input.expectedPostId)
-    .select('id')
-    .maybeSingle()
-
-  if (deleteError) fail(operation, 'source-delete', 'database', deleteError)
-  if (!deleted || deleted.id !== input.commentId) {
-    fail(operation, 'source-ack', 'conflict')
-  }
-
-  const commentCount = await updateCommentCountFromSource(supabase, input.expectedPostId, operation)
-  return {
-    post_id: input.expectedPostId,
-    affected_count: affectedCount,
-    comment_count: commentCount,
-  }
+  return moderateCommentWithRollout(supabase, { ...input, action: 'hard_delete' })
 }
