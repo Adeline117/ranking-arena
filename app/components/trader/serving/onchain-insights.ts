@@ -131,7 +131,8 @@ export function shapeTopTokens(extras: Record<string, unknown>): TopToken[] | nu
 
   if (extras.onchain_top_earning_tokens_provenance === 'onchain-computed') {
     const estimated = shapeTopTokenList(extras.onchain_top_earning_tokens, false)
-    if (estimated) return estimated
+    const withRealizedPnl = estimated?.filter((token) => token.realizedPnl !== null) ?? null
+    if (withRealizedPnl?.length) return withRealizedPnl
   }
 
   const hasExplicitGenericProvenance =

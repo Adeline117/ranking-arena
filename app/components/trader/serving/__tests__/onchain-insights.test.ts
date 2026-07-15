@@ -114,6 +114,18 @@ describe('onchain-insights shapers', () => {
     ])
   })
 
+  it('drops reconstructed top tokens without finite realized PnL', () => {
+    expect(
+      shapeTopTokens({
+        onchain_top_earning_tokens_provenance: 'onchain-computed',
+        onchain_top_earning_tokens: [
+          { symbol: 'MISSING' },
+          { symbol: 'NAN', realized_pnl: Number.NaN },
+        ],
+      })
+    ).toBeNull()
+  })
+
   it('supports unambiguous legacy native tokens but hides old mixed on-chain rows', () => {
     const legacy = [{ symbol: 'LEGACY', profit_pct: 10, realized_pnl: 20 }]
     expect(shapeTopTokens({ top_earning_tokens: legacy })).toHaveLength(1)
