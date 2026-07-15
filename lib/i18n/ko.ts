@@ -5009,7 +5009,8 @@ const ko = {
   pricingFaqSwitchQ: '요금제 변경이 가능한가요?',
   pricingFaqSwitchA: '네, 월간과 연간 요금제를 언제든 전환할 수 있으며 차액은 일할 계산됩니다.',
   pricingFaqApiQ: 'Pro에 API 접근이 포함되나요?',
-  pricingFaqApiA: 'API 접근은 곧 출시됩니다. Pro 회원이 가장 먼저 이용할 수 있습니다.',
+  pricingFaqApiA:
+    '아니요. 데이터 API 요금제는 Arena Pro와 별도로 판매됩니다. Pro는 트레이더 탐색, 알림, 비교 및 심층 분석을 위한 상품입니다.',
   pricingLimitedTimeBanner: '한정 기간: 모든 Pro 기능이 현재 무료입니다!',
   pricingStatTradersRanked: '랭킹된 트레이더',
   pricingStatExchangesTracked: '추적 중인 거래소',

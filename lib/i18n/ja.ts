@@ -4763,7 +4763,8 @@ const ja = {
   pricingFaqSwitchQ: 'プランの切り替えはできますか？',
   pricingFaqSwitchA: 'はい、月額と年額はいつでも切り替えられます。差額は日割り計算されます。',
   pricingFaqApiQ: 'Pro には API アクセスが含まれますか？',
-  pricingFaqApiA: 'API アクセスは近日公開予定です。Pro メンバーが最初にアクセスできます。',
+  pricingFaqApiA:
+    'いいえ。データ API プランは Arena Pro とは別売りです。Pro はトレーダーの発見、アラート、比較、詳細分析向けです。',
   pricingLimitedTimeBanner: '期間限定：すべての Pro 機能が現在無料です！',
   pricingStatTradersRanked: 'ランク付けされたトレーダー',
   pricingStatExchangesTracked: '追跡中の取引所',

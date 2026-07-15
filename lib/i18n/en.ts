@@ -5155,7 +5155,8 @@ const en = {
   pricingFaqSwitchA:
     'Yes, you can switch between monthly and yearly anytime. We will prorate the difference.',
   pricingFaqApiQ: 'Does Pro include API access?',
-  pricingFaqApiA: 'API access is coming soon for Pro members. You will be the first to get access.',
+  pricingFaqApiA:
+    'No. Data API plans are sold separately from Arena Pro. Pro is for trader discovery, alerts, comparison, and deeper analytics.',
   pricingLimitedTimeBanner: 'Limited Time: All Pro features are currently free!',
   pricingStatTradersRanked: 'Traders Ranked',
   pricingStatExchangesTracked: 'Exchanges Tracked',

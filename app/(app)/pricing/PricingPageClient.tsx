@@ -155,7 +155,6 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
     resolved(t('freeFeatureRankings'), 'freeFeatureRankings', 'Basic Rankings'),
     resolved(t('freeFeaturePosts'), 'freeFeaturePosts', 'Community Posts'),
     resolved(t('freeFeatureGroups'), 'freeFeatureGroups', 'Public Groups'),
-    resolved(t('freeFeatureLibrary'), 'freeFeatureLibrary', 'Library Access'),
     resolved(t('freeFeatureMarket'), 'freeFeatureMarket', 'Market Overview'),
   ]
 
@@ -1252,13 +1251,6 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                   t('pricingProPriority'),
                   'pricingProPriority',
                   'Priority support & early access to new features'
-                ),
-              },
-              {
-                text: resolved(
-                  t('pricingProApiAccess'),
-                  'pricingProApiAccess',
-                  'API access (coming soon)'
                 ),
               },
             ].map((item) => (
