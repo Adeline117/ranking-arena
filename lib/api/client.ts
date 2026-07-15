@@ -101,6 +101,17 @@ type ApiResponse<T = unknown> = {
   }
 }
 
+function staleAuthApiResponse<T>(): ApiResponse<T> {
+  return {
+    success: false,
+    error: {
+      code: 'STALE_AUTH_SCOPE',
+      message: 'Authentication identity changed while the request was in flight',
+      retryable: false,
+    },
+  }
+}
+
 /**
  * 封装的 API 请求函数
  * 自动添加 CSRF Token 和通用 headers
@@ -120,6 +131,8 @@ export async function apiRequest<T = unknown>(
 
   // 构建 headers
   const headers = new Headers(customHeaders)
+  const requestScope = getViewerScope()
+  const isViewerBoundRequest = requestScope.viewerKey.startsWith('user:')
 
   // 添加 Content-Type（如果有 body 且未设置）
   if (body && !headers.has('Content-Type')) {
@@ -139,6 +152,9 @@ export async function apiRequest<T = unknown>(
   let hasAttempted401Refresh = false
 
   for (let attempt = 0; attempt <= retries; attempt++) {
+    if (isViewerBoundRequest && !isViewerScopeCurrent(requestScope)) {
+      return staleAuthApiResponse<T>()
+    }
     // Wait before retry (exponential backoff)
     if (attempt > 0 && lastResult?.error) {
       const delay = lastResult.error.retryAfter
@@ -163,14 +179,27 @@ export async function apiRequest<T = unknown>(
 
       const data = await response.json()
 
+      if (isViewerBoundRequest && !isViewerScopeCurrent(requestScope)) {
+        return staleAuthApiResponse<T>()
+      }
+
       if (!response.ok) {
         // 401 token refresh: attempt once, then retry the request
         if (response.status === 401 && !hasAttempted401Refresh && typeof window !== 'undefined') {
           hasAttempted401Refresh = true
           try {
-            const newToken = await tokenRefreshCoordinator.forceRefresh()
+            const newToken = await tokenRefreshCoordinator.forceRefresh({
+              expectedUserId: requestScope.userId,
+              sessionGeneration: requestScope.sessionGeneration,
+            })
             if (newToken) {
+              if (isViewerBoundRequest && !isViewerScopeCurrent(requestScope)) {
+                return staleAuthApiResponse<T>()
+              }
               // Retry the request with fresh credentials (cookies will be updated)
+              if (headers.has('Authorization')) {
+                headers.set('Authorization', `Bearer ${newToken}`)
+              }
               const retryController = new AbortController()
               const retryTimeoutId = setTimeout(() => retryController.abort(), timeoutMs)
               try {
@@ -183,6 +212,9 @@ export async function apiRequest<T = unknown>(
                 })
                 clearTimeout(retryTimeoutId)
                 const retryData = await retryResponse.json()
+                if (isViewerBoundRequest && !isViewerScopeCurrent(requestScope)) {
+                  return staleAuthApiResponse<T>()
+                }
                 if (retryResponse.ok) {
                   return { success: true, data: retryData as T }
                 }

@@ -10,7 +10,11 @@ jest.mock('@/lib/supabase/client', () => ({
   },
 }))
 
-import { tokenRefreshCoordinator } from '../token-refresh'
+import {
+  fetchWithTokenRefresh,
+  registerAuthStateSetter,
+  tokenRefreshCoordinator,
+} from '../token-refresh'
 import {
   __resetViewerScopeForTests,
   beginViewerTransition,
@@ -24,6 +28,10 @@ function deferred<T>() {
     resolve = done
   })
   return { promise, resolve }
+}
+
+function fetchResponse(status: number): Response {
+  return { status } as Response
 }
 
 function session(userId: string, accessToken: string) {
@@ -40,6 +48,8 @@ describe('TokenRefreshCoordinator viewer binding', () => {
     __resetViewerScopeForTests()
     mockGetSession.mockReset()
     mockRefreshSession.mockReset()
+    registerAuthStateSetter(() => {})
+    global.fetch = jest.fn()
   })
 
   it('coalesces refreshes only within the same user epoch', async () => {
@@ -83,5 +93,66 @@ describe('TokenRefreshCoordinator viewer binding', () => {
 
     await expect(request).resolves.toBeNull()
     expect(getViewerScope().viewerKey).toBe('pending')
+  })
+
+  it('does not send an initial request whose captured A scope is already stale', async () => {
+    const scope = synchronizeViewerScope(true, 'user-a')
+    beginViewerTransition('user-b')
+
+    const result = await fetchWithTokenRefresh(
+      '/api/private',
+      { headers: { Authorization: 'Bearer token-a' } },
+      { expectedUserId: 'user-a', sessionGeneration: scope.sessionGeneration }
+    )
+
+    expect(result.status).toBe(401)
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('checks scope after refresh resolution and before issuing the retry', async () => {
+    const scope = synchronizeViewerScope(true, 'user-a')
+    ;(global.fetch as jest.Mock).mockResolvedValueOnce(fetchResponse(401))
+    mockRefreshSession.mockResolvedValueOnce({
+      data: { session: session('user-a', 'token-a2') },
+      error: null,
+    })
+    // Simulate an account transition at the exact boundary where refresh has
+    // resolved but its awaiting request has not issued the retry yet.
+    registerAuthStateSetter(() => {
+      beginViewerTransition('user-b')
+    })
+
+    const result = await fetchWithTokenRefresh(
+      '/api/private',
+      { headers: { Authorization: 'Bearer token-a1' } },
+      { expectedUserId: 'user-a', sessionGeneration: scope.sessionGeneration }
+    )
+
+    expect(result.status).toBe(401)
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+  })
+
+  it('discards a successful retry response when logout happens while it is in flight', async () => {
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const retry = deferred<Response>()
+    ;(global.fetch as jest.Mock)
+      .mockResolvedValueOnce(fetchResponse(401))
+      .mockReturnValueOnce(retry.promise)
+    mockRefreshSession.mockResolvedValueOnce({
+      data: { session: session('user-a', 'token-a2') },
+      error: null,
+    })
+
+    const request = fetchWithTokenRefresh(
+      '/api/private',
+      { headers: { Authorization: 'Bearer token-a1' } },
+      { expectedUserId: 'user-a', sessionGeneration: scope.sessionGeneration }
+    )
+    while ((global.fetch as jest.Mock).mock.calls.length < 2) await Promise.resolve()
+    beginViewerTransition(null)
+    retry.resolve(fetchResponse(200))
+
+    await expect(request).resolves.toMatchObject({ status: 401 })
+    expect(global.fetch).toHaveBeenCalledTimes(2)
   })
 })
