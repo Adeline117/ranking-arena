@@ -16,6 +16,9 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkNFTMembership } from '@/lib/web3/nft'
 import { withCron } from '@/lib/api/with-cron'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
+import { getStripe, STRIPE_API_PRICE_IDS, STRIPE_PRICE_IDS } from '@/lib/stripe'
+import { classifyActiveProSubscription, getProPlan } from '@/lib/stripe/reconciliation'
+import { updateUserSubscription } from '@/app/api/stripe/webhook/handlers/subscription'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -30,8 +33,16 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
   const results = {
     expiringReminders: 0,
     downgraded: 0,
+    repaired: 0,
     nftChecked: 0,
     errors: [] as string[],
+  }
+  const stripe = getStripe()
+  const configuredPrices = {
+    monthly: STRIPE_PRICE_IDS.monthly,
+    yearly: STRIPE_PRICE_IDS.yearly,
+    apiStarter: STRIPE_API_PRICE_IDS.starter,
+    apiPro: STRIPE_API_PRICE_IDS.pro,
   }
 
   // ============================================
@@ -39,16 +50,53 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
   // ============================================
   const sevenDaysLater = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000)
 
-  const { data: expiringSubscriptions } = await supabase
+  const { data: expiringSubscriptions, error: expiringQueryError } = await supabase
     .from('subscriptions')
-    .select('user_id, current_period_end, plan, cancel_at_period_end')
+    .select(
+      'user_id, stripe_subscription_id, stripe_customer_id, current_period_end, plan, cancel_at_period_end'
+    )
     .eq('status', 'active')
     .eq('cancel_at_period_end', true)
     .lt('current_period_end', sevenDaysLater.toISOString())
     .gt('current_period_end', now.toISOString())
 
-  if (expiringSubscriptions && expiringSubscriptions.length > 0) {
-    const expiringUserIds = expiringSubscriptions.map((s) => s.user_id)
+  if (expiringQueryError) {
+    results.errors.push(`Expiring subscription query failed: ${expiringQueryError.message}`)
+  } else if (expiringSubscriptions && expiringSubscriptions.length > 0) {
+    const verifiedExpiring: typeof expiringSubscriptions = []
+    for (const local of expiringSubscriptions) {
+      if (!local.stripe_subscription_id || !local.stripe_customer_id) {
+        results.errors.push(`Cannot verify expiring subscription for ${local.user_id}`)
+        continue
+      }
+      try {
+        const subscription = await stripe.subscriptions.retrieve(local.stripe_subscription_id)
+        const customerId =
+          typeof subscription.customer === 'string'
+            ? subscription.customer
+            : subscription.customer.id
+        const classification = classifyActiveProSubscription([subscription], configuredPrices)
+        const periodEnd = subscription.items.data[0]?.current_period_end
+        if (
+          customerId === local.stripe_customer_id &&
+          classification.kind === 'active' &&
+          subscription.cancel_at_period_end &&
+          periodEnd &&
+          periodEnd * 1000 > now.getTime() &&
+          periodEnd * 1000 < sevenDaysLater.getTime()
+        ) {
+          verifiedExpiring.push({
+            ...local,
+            current_period_end: new Date(periodEnd * 1000).toISOString(),
+            plan: classification.plan,
+          })
+        }
+      } catch (_error) {
+        results.errors.push(`Stripe expiry-reminder verification failed for ${local.user_id}`)
+      }
+    }
+
+    const expiringUserIds = verifiedExpiring.map((s) => s.user_id)
     const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000).toISOString()
     const { data: existingNotifs } = await supabase
       .from('notifications')
@@ -58,7 +106,7 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
       .gte('created_at', threeDaysAgo)
     const alreadyNotified = new Set(existingNotifs?.map((n) => n.user_id) || [])
 
-    const toInsert = expiringSubscriptions
+    const toInsert = verifiedExpiring
       .filter((sub) => !alreadyNotified.has(sub.user_id))
       .map((sub) => {
         const expiryDate = new Date(sub.current_period_end!).toLocaleDateString('zh-CN')
@@ -99,48 +147,97 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
   // ============================================
   // 2. 自动降级已过期用户
   // ============================================
-  const { data: expiredSubscriptions } = await supabase
+  const { data: expiredSubscriptions, error: expiredQueryError } = await supabase
     .from('subscriptions')
-    .select('user_id, stripe_subscription_id, plan')
+    .select('user_id, stripe_subscription_id, stripe_customer_id, plan')
     .eq('status', 'active')
     .or('plan.is.null,plan.neq.lifetime') // Never expire lifetime; NULL plan must still expire (三值逻辑洞 2026-07-11)
     .lt('current_period_end', now.toISOString())
 
-  if (expiredSubscriptions && expiredSubscriptions.length > 0) {
+  if (expiredQueryError) {
+    results.errors.push(`Expired subscription query failed: ${expiredQueryError.message}`)
+  } else if (expiredSubscriptions && expiredSubscriptions.length > 0) {
     const expiredUserIds = expiredSubscriptions.map((s) => s.user_id)
+    const { data: expiredProfiles, error: expiredProfilesError } = await supabase
+      .from('user_profiles')
+      .select('id, pro_plan, wallet_address')
+      .in('id', expiredUserIds)
 
-    try {
-      // Batch UPDATE subscriptions → expired
-      const { error: subErr } = await supabase
-        .from('subscriptions')
-        .update({
-          status: 'expired',
-          updated_at: now.toISOString(),
-        })
-        .in('user_id', expiredUserIds)
-        .eq('status', 'active')
+    if (expiredProfilesError) {
+      results.errors.push(`Expired profile query failed: ${expiredProfilesError.message}`)
+    } else {
+      const profileByUser = new Map((expiredProfiles || []).map((profile) => [profile.id, profile]))
+      const confirmedExpired: typeof expiredSubscriptions = []
 
-      if (subErr) {
-        results.errors.push(`Batch subscription update error: ${subErr.message}`)
-      }
+      for (const local of expiredSubscriptions) {
+        const profile = profileByUser.get(local.user_id)
+        if (
+          profile?.pro_plan === 'lifetime' ||
+          !local.stripe_subscription_id ||
+          !local.stripe_customer_id
+        ) {
+          results.errors.push(`Cannot verify expired subscription for ${local.user_id}`)
+          continue
+        }
 
-      // Batch UPDATE user_profiles → free tier
-      const { error: profileErr } = await supabase
-        .from('user_profiles')
-        .update({
-          subscription_tier: 'free',
-          updated_at: now.toISOString(),
-        })
-        .in('id', expiredUserIds)
+        try {
+          const stripeSubscriptions = await stripe.subscriptions.list({
+            customer: local.stripe_customer_id,
+            status: 'all',
+            limit: 100,
+          })
+          const classification = classifyActiveProSubscription(
+            stripeSubscriptions.data,
+            configuredPrices
+          )
 
-      if (profileErr) {
-        results.errors.push(`Batch profile downgrade error: ${profileErr.message}`)
+          if (classification.kind === 'active') {
+            await updateUserSubscription(
+              local.user_id,
+              classification.subscription,
+              classification.plan
+            )
+            results.repaired++
+            continue
+          }
+          if (classification.kind === 'unknown-active-price') {
+            results.errors.push(`Unknown active Stripe price for ${local.user_id}`)
+            continue
+          }
+
+          const endedSubscription = stripeSubscriptions.data.find(
+            (subscription) => subscription.id === local.stripe_subscription_id
+          )
+          const endedPlan = getProPlan(endedSubscription?.items.data[0]?.price.id, configuredPrices)
+          if (!endedSubscription || !endedPlan) {
+            results.errors.push(`No verified ended Pro subscription for ${local.user_id}`)
+            continue
+          }
+
+          if (profile?.wallet_address) {
+            try {
+              if (await checkNFTMembership(profile.wallet_address)) {
+                results.nftChecked++
+                continue
+              }
+              results.nftChecked++
+            } catch (_error) {
+              results.errors.push(`NFT fallback verification failed for ${local.user_id}`)
+              continue
+            }
+          }
+
+          await updateUserSubscription(local.user_id, endedSubscription, endedPlan)
+          confirmedExpired.push(local)
+        } catch (_error) {
+          results.errors.push(`Stripe expiration verification failed for ${local.user_id}`)
+        }
       }
 
       // Send notifications with dedup (prevents duplicates on cron double-fire)
       const { sendNotification: sendNotif } = await import('@/lib/data/notifications')
       await Promise.allSettled(
-        expiredSubscriptions.map((sub) =>
+        confirmedExpired.map((sub) =>
           sendNotif(
             supabase,
             {
@@ -159,11 +256,12 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
 
       // Batch DELETE group_members for pro group
       const proGroupId = process.env.PRO_OFFICIAL_GROUP_ID || ''
-      if (proGroupId) {
+      const confirmedExpiredUserIds = confirmedExpired.map((subscription) => subscription.user_id)
+      if (proGroupId && confirmedExpiredUserIds.length > 0) {
         const { error: groupErr } = await supabase
           .from('group_members')
           .delete()
-          .in('user_id', expiredUserIds)
+          .in('user_id', confirmedExpiredUserIds)
           .eq('group_id', proGroupId)
 
         if (groupErr) {
@@ -171,12 +269,8 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
         }
       }
 
-      results.downgraded = expiredSubscriptions.length
-      logger.info(
-        `Batch downgraded ${expiredSubscriptions.length} users due to subscription expiry`
-      )
-    } catch (err) {
-      results.errors.push(`Batch downgrade error: ${err}`)
+      results.downgraded = confirmedExpired.length
+      logger.info(`Downgraded ${confirmedExpired.length} Stripe-verified expired subscriptions`)
     }
   }
 

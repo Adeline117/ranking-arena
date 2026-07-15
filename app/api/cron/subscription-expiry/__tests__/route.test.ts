@@ -24,6 +24,9 @@ jest.mock('@/lib/env', () => ({
 
 const mockFrom = jest.fn()
 const mockSupabaseClient = { from: mockFrom }
+const mockStripeRetrieve = jest.fn()
+const mockStripeList = jest.fn()
+const mockUpdateUserSubscription = jest.fn()
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => mockSupabaseClient),
@@ -31,6 +34,22 @@ jest.mock('@supabase/supabase-js', () => ({
 
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => mockSupabaseClient),
+}))
+
+jest.mock('@/lib/stripe', () => ({
+  getStripe: () => ({
+    subscriptions: { retrieve: mockStripeRetrieve, list: mockStripeList },
+  }),
+  STRIPE_PRICE_IDS: {
+    monthly: 'price_monthly',
+    yearly: 'price_yearly',
+    lifetime: 'price_lifetime',
+  },
+  STRIPE_API_PRICE_IDS: { starter: 'price_api_starter', pro: 'price_api_pro' },
+}))
+
+jest.mock('@/app/api/stripe/webhook/handlers/subscription', () => ({
+  updateUserSubscription: (...args: unknown[]) => mockUpdateUserSubscription(...args),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -167,6 +186,28 @@ function chainable(result: { data?: unknown; error?: unknown; count?: number | n
   return handler()
 }
 
+function queueDatabaseResults(
+  ...results: Array<{ data?: unknown; error?: unknown; count?: number | null }>
+) {
+  const queue = [...results]
+  mockFrom.mockImplementation(() => {
+    const result = queue.shift()
+    if (!result) throw new Error('Unexpected database query')
+    return chainable(result)
+  })
+}
+
+function stripeSubscription(status: 'active' | 'canceled') {
+  return {
+    id: 'sub_1',
+    status,
+    customer: 'cus_1',
+    start_date: 1_700_000_000,
+    cancel_at_period_end: false,
+    items: { data: [{ price: { id: 'price_monthly' } }] },
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -182,6 +223,7 @@ describe('GET /api/cron/subscription-expiry', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockUpdateUserSubscription.mockResolvedValue(undefined)
   })
 
   // ---- Auth ----------------------------------------------------------------
@@ -213,10 +255,25 @@ describe('GET /api/cron/subscription-expiry', () => {
   // ---- Downgrade expired subscriptions -------------------------------------
 
   it('downgrades expired subscriptions', async () => {
-    const expiredSubs = [{ user_id: 'user1', stripe_subscription_id: 'sub_1' }]
-
-    // Use chainable proxy — handles any method chain (.eq().neq().lt() etc.)
-    mockFrom.mockImplementation(() => chainable({ data: expiredSubs, error: null }))
+    const expiredSubs = [
+      {
+        user_id: 'user1',
+        stripe_subscription_id: 'sub_1',
+        stripe_customer_id: 'cus_1',
+        plan: 'monthly',
+      },
+    ]
+    const ended = stripeSubscription('canceled')
+    queueDatabaseResults(
+      { data: [], error: null },
+      { data: expiredSubs, error: null },
+      {
+        data: [{ id: 'user1', pro_plan: 'monthly', wallet_address: null }],
+        error: null,
+      },
+      { data: [], error: null }
+    )
+    mockStripeList.mockResolvedValue({ data: [ended] })
 
     const res = await GET(createCronRequest(CRON_SECRET))
     const body = await res.json()
@@ -224,6 +281,35 @@ describe('GET /api/cron/subscription-expiry', () => {
     expect(res.status).toBe(200)
     expect(body.ok).toBe(true)
     expect(body.downgraded).toBe(1)
+    expect(mockUpdateUserSubscription).toHaveBeenCalledWith('user1', ended, 'monthly')
+  })
+
+  it('repairs a stale local expiry when Stripe still says active', async () => {
+    const expiredSubs = [
+      {
+        user_id: 'user1',
+        stripe_subscription_id: 'sub_1',
+        stripe_customer_id: 'cus_1',
+        plan: 'monthly',
+      },
+    ]
+    const active = stripeSubscription('active')
+    queueDatabaseResults(
+      { data: [], error: null },
+      { data: expiredSubs, error: null },
+      {
+        data: [{ id: 'user1', pro_plan: 'monthly', wallet_address: null }],
+        error: null,
+      },
+      { data: [], error: null }
+    )
+    mockStripeList.mockResolvedValue({ data: [active] })
+
+    const res = await GET(createCronRequest(CRON_SECRET))
+    const body = await res.json()
+
+    expect(body).toMatchObject({ downgraded: 0, repaired: 1 })
+    expect(mockUpdateUserSubscription).toHaveBeenCalledWith('user1', active, 'monthly')
   })
 
   // ---- Error handling ------------------------------------------------------
@@ -237,27 +323,34 @@ describe('GET /api/cron/subscription-expiry', () => {
     expect(res.status).toBe(500)
   })
 
-  it('catches thrown errors during downgrade and records them', async () => {
-    // Use chainable for most calls but throw on update
-    let callCount = 0
-    mockFrom.mockImplementation(() => {
-      const proxy = chainable({
-        data: [{ user_id: 'user1', stripe_subscription_id: 'sub_1', plan: 'monthly' }],
+  it('preserves access when Stripe expiration verification fails', async () => {
+    queueDatabaseResults(
+      { data: [], error: null },
+      {
+        data: [
+          {
+            user_id: 'user1',
+            stripe_subscription_id: 'sub_1',
+            stripe_customer_id: 'cus_1',
+            plan: 'monthly',
+          },
+        ],
         error: null,
-      })
-      // Override update to throw on first call
-      const origUpdate = proxy.update
-      proxy.update = jest.fn().mockImplementation(() => {
-        if (callCount++ === 0) throw new Error('Update failed')
-        return origUpdate()
-      })
-      return proxy
-    })
+      },
+      {
+        data: [{ id: 'user1', pro_plan: 'monthly', wallet_address: null }],
+        error: null,
+      },
+      { data: [], error: null }
+    )
+    mockStripeList.mockRejectedValue(new Error('Stripe unavailable'))
 
     const res = await GET(createCronRequest(CRON_SECRET))
     const body = await res.json()
 
-    // The route should handle the error and still return 200
     expect(res.status).toBe(200)
+    expect(body.downgraded).toBe(0)
+    expect(body.errors).toHaveLength(1)
+    expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
   })
 })
