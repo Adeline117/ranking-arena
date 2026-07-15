@@ -13,34 +13,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { z } from 'zod'
 import { getSupabaseAdmin } from '@/lib/api'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 import { logger } from '@/lib/logger'
 import { isValidTokenSymbol } from '@/lib/utils/token-symbol'
+import { getTokenTraderRankings, type TokenTraderRanking } from '@/lib/rankings/token-traders'
 
 export const runtime = 'nodejs'
-
-// Map period to a lookback window in days
-const PERIOD_DAYS: Record<string, number> = {
-  '7D': 7,
-  '30D': 30,
-  '90D': 90,
-}
-
-interface TokenTrader {
-  source: string
-  source_trader_id: string
-  handle: string | null
-  avatar_url: string | null
-  arena_score: number | null
-  roi: number | null
-  total_pnl: number
-  token_pnl: number
-  token_trade_count: number
-  token_win_rate: number | null
-  token_avg_pnl_pct: number | null
-}
 
 interface PopularToken {
   token: string
@@ -55,7 +34,7 @@ async function handlePopularTokens(): Promise<NextResponse> {
     const result = await tieredGetOrSet<PopularToken[]>(
       'rankings:popular-tokens',
       async () => {
-        const supabase = getSupabaseAdmin() as SupabaseClient
+        const supabase = getSupabaseAdmin()
 
         // Use AbortController with 10s timeout
         const controller = new AbortController()
@@ -151,151 +130,21 @@ export async function GET(request: NextRequest) {
     const CACHE_KEY = `rankings:by-token:${token}:${period}:${limit}:${offset}`
 
     const result = await tieredGetOrSet<{
-      traders: TokenTrader[]
+      traders: TokenTraderRanking[]
       token: string
       period: string
       total: number
     }>(
       CACHE_KEY,
       async () => {
-        const supabase = getSupabaseAdmin() as SupabaseClient
-        const lookbackDays = PERIOD_DAYS[period] || 90
-        const cutoffDate = new Date()
-        cutoffDate.setDate(cutoffDate.getDate() - lookbackDays)
-        const cutoffISO = cutoffDate.toISOString()
-
-        // Fetch position history rows matching the token symbol patterns
-        const allRows: Array<{
-          source: string
-          source_trader_id: string
-          pnl_usd: number | null
-          pnl_pct: number | null
-        }> = []
-
-        // Query each common symbol format individually with .eq() (indexed, fast)
-        // ilike('symbol', 'BTC%') causes statement timeout on large tables
-        const symbolVariants = [
-          `${token}USDT`,
-          `${token}USDT.P`,
-          `${token}USD`,
-          `${token}/USDT`,
-          `${token}/USD`,
-          `${token}-PERP`,
-        ]
-
-        // Single query with .in() instead of 6 parallel queries (saves 5 connection pool slots)
-        const { data: positionData } = await supabase
-          .from('trader_position_history')
-          .select('source, source_trader_id, pnl_usd, pnl_pct')
-          .in('symbol', symbolVariants)
-          .gte('close_time', cutoffISO)
-          .not('pnl_usd', 'is', null)
-          .limit(3000)
-
-        if (positionData) {
-          allRows.push(...(positionData as typeof allRows))
-        }
-
-        if (allRows.length === 0) {
-          return { traders: [], token, period, total: 0 }
-        }
-
-        // Aggregate by (source, source_trader_id)
-        const traderMap = new Map<
-          string,
-          {
-            source: string
-            source_trader_id: string
-            totalPnl: number
-            tradeCount: number
-            winCount: number
-            pnlPcts: number[]
-          }
-        >()
-
-        for (const row of allRows) {
-          const key = `${row.source}:${row.source_trader_id}`
-          if (!traderMap.has(key)) {
-            traderMap.set(key, {
-              source: row.source,
-              source_trader_id: row.source_trader_id,
-              totalPnl: 0,
-              tradeCount: 0,
-              winCount: 0,
-              pnlPcts: [],
-            })
-          }
-          const acc = traderMap.get(key)!
-          const pnl = Number(row.pnl_usd) || 0
-          acc.totalPnl += pnl
-          acc.tradeCount++
-          if (pnl > 0) acc.winCount++
-          if (row.pnl_pct != null) acc.pnlPcts.push(Number(row.pnl_pct))
-        }
-
-        // Sort by total PnL descending
-        const sorted = [...traderMap.values()].sort((a, b) => b.totalPnl - a.totalPnl)
-        const total = sorted.length
-        const page = sorted.slice(offset, offset + limit)
-
-        if (page.length === 0) {
-          return { traders: [], token, period, total }
-        }
-
-        // Enrich with leaderboard_ranks data
-        const traderIds = page.map((t) => t.source_trader_id)
-        const { data: lrData } = await supabase
-          .from('leaderboard_ranks')
-          .select('source, source_trader_id, handle, avatar_url, arena_score, roi, pnl')
-          .eq('season_id', period)
-          .in('source_trader_id', traderIds)
-
-        const lrMap = new Map<
-          string,
-          {
-            handle: string | null
-            avatar_url: string | null
-            arena_score: number | null
-            roi: number | null
-            pnl: number | null
-          }
-        >()
-
-        if (lrData) {
-          for (const row of lrData as Array<Record<string, unknown>>) {
-            const key = `${row.source}:${row.source_trader_id}`
-            lrMap.set(key, {
-              handle: (row.handle as string) || null,
-              avatar_url: (row.avatar_url as string) || null,
-              arena_score: row.arena_score != null ? Number(row.arena_score) : null,
-              roi: row.roi != null ? Number(row.roi) : null,
-              pnl: row.pnl != null ? Number(row.pnl) : null,
-            })
-          }
-        }
-
-        const traders: TokenTrader[] = page.map((t) => {
-          const key = `${t.source}:${t.source_trader_id}`
-          const lr = lrMap.get(key)
-          const avgPnlPct =
-            t.pnlPcts.length > 0 ? t.pnlPcts.reduce((s, v) => s + v, 0) / t.pnlPcts.length : null
-
-          return {
-            source: t.source,
-            source_trader_id: t.source_trader_id,
-            handle: lr?.handle || null,
-            avatar_url: lr?.avatar_url || null,
-            arena_score: lr?.arena_score || null,
-            roi: lr?.roi || null,
-            total_pnl: lr?.pnl != null ? Number(lr.pnl) : 0,
-            token_pnl: Math.round(t.totalPnl * 100) / 100,
-            token_trade_count: t.tradeCount,
-            token_win_rate:
-              t.tradeCount > 0 ? Math.round((t.winCount / t.tradeCount) * 10000) / 100 : null,
-            token_avg_pnl_pct: avgPnlPct != null ? Math.round(avgPnlPct * 100) / 100 : null,
-          }
-        })
-
+        const supabase = getSupabaseAdmin()
+        const { traders, total } = await getTokenTraderRankings(
+          supabase,
+          token,
+          period,
+          limit,
+          offset
+        )
         return { traders, token, period, total }
       },
       'cold',
