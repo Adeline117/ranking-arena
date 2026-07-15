@@ -415,7 +415,7 @@ export default function SectorTreemap({
                 borderRadius: tokens.radius.sm,
                 border: 'none',
                 cursor: 'pointer',
-                background: timeframe === tf.key ? tokens.colors.accent.primary : 'transparent',
+                background: timeframe === tf.key ? 'var(--color-brand-deep)' : 'transparent',
                 color: timeframe === tf.key ? tokens.colors.white : tokens.colors.text.tertiary,
                 transition: `all ${tokens.transition.base}`,
               }}
