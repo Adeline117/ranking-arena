@@ -150,21 +150,6 @@ async function loadLang(lang: Language): Promise<void> {
   }
 }
 
-// Eagerly start loading the full English dictionary on module init.
-// This is async so it doesn't block; core keys cover the first paint.
-if (typeof window !== 'undefined') {
-  // Client: load after a microtask so it doesn't compete with hydration
-  Promise.resolve().then(() => {
-    // eslint-disable-next-line no-restricted-syntax
-    loadLang('en').catch(() => {
-      // Silent fail — core keys are still available
-    })
-  })
-} else {
-  // Server: load synchronously is not possible with dynamic import,
-  // but core keys cover SSR output. Full dict loads on client hydration.
-}
-
 export async function loadTranslations(lang: Language): Promise<void> {
   return loadLang(lang)
 }

@@ -458,6 +458,7 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
                       <time
                         dateTime={row.provenance.asOf}
                         title={new Date(row.provenance.asOf).toLocaleString()}
+                        suppressHydrationWarning
                       >
                         {formatTimeAgo(row.provenance.asOf, language)}
                       </time>

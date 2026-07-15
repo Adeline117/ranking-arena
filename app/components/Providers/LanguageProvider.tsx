@@ -50,8 +50,14 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   const [txnVersion, setTxnVersion] = useState(() => getTranslationVersion())
 
   useEffect(() => {
-    // Re-render once when English translations finish loading (async import on client)
+    // Full dictionaries must start AFTER React's first hydration commit. Starting
+    // the English import in a module-level microtask can mutate translationCache
+    // between SSR markup and the first client render, producing React #418 on
+    // feature pages whose labels are outside en-core.
     const unsub = onTranslationsReady(() => setTxnVersion((v) => v + 1))
+    loadTranslations('en').catch((error) => {
+      console.warn('[i18n] Full English dictionary failed to load after hydration', error)
+    })
 
     const savedLanguage = getLanguage()
     if (savedLanguage !== 'en') {
@@ -141,6 +147,9 @@ export function useLanguage() {
     if (context) return // provider present — fallback unused, skip listeners
 
     const unsub = onTranslationsReady(() => setFallbackTxnVersion((v) => v + 1))
+    loadTranslations('en').catch((error) => {
+      console.warn('[i18n] Full English dictionary failed to load after hydration', error)
+    })
 
     const savedLanguage = getLanguage()
     if (savedLanguage !== 'en') {
