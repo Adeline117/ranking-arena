@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { verifyEdgeCronSecret } from '@/lib/auth/edge-cron-auth'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 
@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
   const rl = await checkRateLimit(request, RateLimitPresets.public)
   if (rl) return rl
   // Require authentication to prevent data scraping
-  if (!verifyCronSecret(request)) {
+  if (!(await verifyEdgeCronSecret(request))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
