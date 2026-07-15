@@ -3,10 +3,10 @@
  *
  * When a web3 wallet profile (okx_web3_solana / binance_web3_bsc) is opened and
  * has no `onchain_*` data yet, the client POSTs here to compute it NOW instead
- * of waiting for the 12h rotation. Bounded (maxSigs cap + no Dune) so it fits in
- * the serverless window; the cron later produces the complete version. Result is
- * persisted via the SECURITY DEFINER RPC arena_apply_onchain_enrichment, then
- * the client refetches /core to render it.
+ * of waiting for the 12h rotation. Chain-specific signature/page budgets keep
+ * it inside the serverless window; the cron later refreshes more deeply. Result
+ * is persisted via the SECURITY DEFINER RPC arena_apply_onchain_enrichment,
+ * then the client refetches /core to render it.
  *
  * Dedup: skips if the wallet was enriched within DEDUP_MINUTES.
  */
@@ -16,6 +16,7 @@ import {
   chainForSource,
   enrichWeb3Wallet,
   enrichmentExtras,
+  onchainFetchBudget,
   scoreEligibleWinRate,
 } from '@/lib/ingest/onchain/enrich'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -69,7 +70,10 @@ export async function POST(req: NextRequest) {
   try {
     // Bounded for the serverless window; no Dune on-demand (BSC realized may be
     // partial until the cron completes it).
-    const e = await enrichWeb3Wallet(chain, exchangeTraderId, { lookbackDays: 90, maxSigs: 150 })
+    const e = await enrichWeb3Wallet(chain, exchangeTraderId, {
+      lookbackDays: 90,
+      ...onchainFetchBudget(chain, 'interactive'),
+    })
     const extras = { ...enrichmentExtras(e), onchain_enriched_at: new Date().toISOString() }
     const { data: updated, error } = await supabase.rpc('arena_apply_onchain_enrichment', {
       p_source: source,

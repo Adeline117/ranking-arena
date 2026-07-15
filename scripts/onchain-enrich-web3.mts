@@ -40,6 +40,7 @@ async function main() {
     enrichWeb3Wallet,
     enrichmentExtras,
     enrichmentSeries,
+    onchainFetchBudget,
     scoreEligibleWinRate,
   } = await import('@/lib/ingest/onchain/enrich')
   const dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL
@@ -97,7 +98,10 @@ async function main() {
         const { wallet, pnl } = next
         const rank = `pnl$${Math.round(pnl)}`
         try {
-          const e = await enrichWeb3Wallet(chain, wallet, { lookbackDays: 90, maxSigs: 250 })
+          const e = await enrichWeb3Wallet(chain, wallet, {
+            lookbackDays: 90,
+            ...onchainFetchBudget(chain, 'backfill'),
+          })
           const extras = enrichmentExtras(e)
           const upd = await pool.query(
             `UPDATE arena.trader_stats ts SET

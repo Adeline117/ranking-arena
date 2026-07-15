@@ -3,6 +3,7 @@ import {
   chainForSource,
   enrichmentExtras,
   enrichmentSeries,
+  onchainFetchBudget,
   scoreEligibleWinRate,
   solanaHistoryEvidence,
   type OnchainEnrichment,
@@ -103,6 +104,20 @@ describe('chainForSource', () => {
     expect(chainForSource('binance_web3_bsc')).toBe('bsc')
     expect(chainForSource('binance_futures')).toBeNull()
     expect(chainForSource('gate_cfd')).toBeNull()
+  })
+})
+
+describe('onchainFetchBudget', () => {
+  it('uses signature budgets only for Solana', () => {
+    expect(onchainFetchBudget('solana', 'interactive')).toEqual({ maxSigs: 150 })
+    expect(onchainFetchBudget('solana', 'scheduled')).toEqual({ maxSigs: 400 })
+    expect(onchainFetchBudget('solana', 'backfill')).toEqual({ maxSigs: 250 })
+  })
+
+  it('uses explicit per-direction page budgets for BSC', () => {
+    expect(onchainFetchBudget('bsc', 'interactive')).toEqual({ maxPages: 1 })
+    expect(onchainFetchBudget('bsc', 'scheduled')).toEqual({ maxPages: 4 })
+    expect(onchainFetchBudget('bsc', 'backfill')).toEqual({ maxPages: 6 })
   })
 })
 
