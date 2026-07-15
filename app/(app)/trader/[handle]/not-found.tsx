@@ -76,7 +76,7 @@ export default function TraderNotFound() {
           style={{
             padding: '10px 28px',
             borderRadius: tokens.radius.md,
-            background: tokens.colors.accent.brand,
+            background: 'var(--color-brand-deep)',
             color: tokens.colors.white,
             textDecoration: 'none',
             fontWeight: 600,

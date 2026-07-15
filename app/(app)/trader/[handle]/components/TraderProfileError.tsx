@@ -21,14 +21,22 @@ interface TraderProfileErrorProps {
 
 export function TraderProfileError({ t, errorMessage }: TraderProfileErrorProps) {
   return (
-    <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary, color: tokens.colors.text.primary }}>
-      <Box style={{
-        maxWidth: 1200,
-        margin: '0 auto',
-        padding: tokens.spacing[6],
-        textAlign: 'center',
-        paddingTop: tokens.spacing[8],
-      }}>
+    <Box
+      style={{
+        minHeight: '100vh',
+        background: tokens.colors.bg.primary,
+        color: tokens.colors.text.primary,
+      }}
+    >
+      <Box
+        style={{
+          maxWidth: 1200,
+          margin: '0 auto',
+          padding: tokens.spacing[6],
+          textAlign: 'center',
+          paddingTop: tokens.spacing[8],
+        }}
+      >
         <div style={{ fontSize: 48, marginBottom: tokens.spacing[4] }}>⚠️</div>
         <Text size="xl" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
           {t('loadFailedRetryMsg')}
@@ -43,7 +51,7 @@ export function TraderProfileError({ t, errorMessage }: TraderProfileErrorProps)
               padding: `${tokens.spacing[3]} ${tokens.spacing[5]}`,
               borderRadius: tokens.radius.lg,
               border: 'none',
-              background: tokens.colors.accent.brand,
+              background: 'var(--color-brand-deep)',
               color: tokens.colors.white,
               fontWeight: 700,
               cursor: 'pointer',
