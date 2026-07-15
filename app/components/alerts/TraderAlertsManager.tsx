@@ -17,6 +17,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import EmptyState from '@/app/components/ui/EmptyState'
 
 interface TraderAlert {
   id: string
@@ -104,19 +105,51 @@ export default function TraderAlertsManager() {
     )
   }
 
+  if (!accessToken) {
+    return (
+      <EmptyState
+        variant="card"
+        title={t('watchlistSignInTitle')}
+        description={t('watchlistSignInDesc')}
+        action={
+          <Link
+            href={`/login?redirect=${encodeURIComponent('/saved?tab=alerts')}`}
+            style={ctaStyle}
+          >
+            {t('login')}
+          </Link>
+        }
+      />
+    )
+  }
+
   if (forbidden) {
     return (
-      <Text size="sm" color="secondary">
-        {t('traderAlertsProRequired')}
-      </Text>
+      <EmptyState
+        variant="card"
+        title={t('traderAlertsProRequired')}
+        description={t('pricingProAlerts')}
+        action={
+          <Link href="/pricing" style={ctaStyle}>
+            {t('upgrade')}
+          </Link>
+        }
+      />
     )
   }
 
   if (alerts.length === 0) {
     return (
-      <Text size="sm" color="secondary">
-        {t('traderAlertsNone')}
-      </Text>
+      <EmptyState
+        variant="card"
+        title={t('traderAlertsNone')}
+        description={t('traderAlertsDesc2')}
+        action={
+          <Link href="/rankings" style={ctaStyle}>
+            {t('watchlistBrowseRankings')}
+          </Link>
+        }
+      />
     )
   }
 
@@ -148,7 +181,7 @@ export default function TraderAlertsManager() {
                 href={profileHref(alert)}
                 style={{
                   color: tokens.colors.text.primary,
-                  fontWeight: 600,
+                  fontWeight: tokens.typography.fontWeight.semibold,
                   textDecoration: 'none',
                 }}
               >
@@ -177,4 +210,17 @@ export default function TraderAlertsManager() {
       })}
     </Box>
   )
+}
+
+const ctaStyle: React.CSSProperties = {
+  display: 'inline-flex',
+  minHeight: 44,
+  alignItems: 'center',
+  justifyContent: 'center',
+  padding: `${tokens.spacing[2]} ${tokens.spacing[5]}`,
+  borderRadius: tokens.radius.md,
+  background: 'var(--color-accent-primary)',
+  color: 'var(--color-bg-primary)',
+  fontWeight: tokens.typography.fontWeight.semibold,
+  textDecoration: 'none',
 }

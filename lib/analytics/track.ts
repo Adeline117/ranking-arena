@@ -28,6 +28,7 @@ export const ANALYTICS_EVENTS = {
   viewTrader: 'view_trader',
   followTrader: 'follow_trader',
   saveTrader: 'save_trader',
+  savedView: 'saved_view',
   compareTrader: 'compare_trader',
   createTraderAlert: 'create_trader_alert',
   signupStart: 'signup_start',
