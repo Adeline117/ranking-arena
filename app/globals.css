@@ -441,7 +441,7 @@ html.theme-transition #main-content {
   --color-translated: #357574;
   --color-translated-08: rgba(53, 117, 116, 0.08);
   --color-translated-20: rgba(53, 117, 116, 0.2);
-  --color-accent-success: #15803d; /* Darkened from #22C55E for WCAG AA 5.1:1 on #FAFAFE */
+  --color-accent-success: #166534; /* AA on both plain and success-tinted light surfaces */
   --color-accent-success-20: rgba(21, 128, 61, 0.2);
   --color-accent-error: #b91c1c; /* 6.1:1 on card bg #F4F4F8 */
   --color-accent-error-20: rgba(220, 38, 38, 0.2);
@@ -460,7 +460,7 @@ html.theme-transition #main-content {
   --color-accent-error-15: rgba(239, 68, 68, 0.15);
 
   /* Sentiment (bull/bear) — darkened for WCAG AA on light backgrounds */
-  --color-sentiment-bull: #15803d; /* 5.1:1 on #FAFAFE (was #00C853 at 2.1:1) */
+  --color-sentiment-bull: #166534;
   --color-sentiment-bear: #dc2626; /* 4.6:1 on #FAFAFE (was #F44336 at 3.5:1) */
   --color-sentiment-neutral: #767676;
 

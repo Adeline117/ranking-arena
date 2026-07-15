@@ -49,7 +49,7 @@ export default function ProvenanceFooter({
         ...style,
       }}
     >
-      <Text size="xs" color="tertiary" style={{ opacity: 0.75 }}>
+      <Text size="xs" color="tertiary">
         {t('provenanceSource')}: {name} · {t('provenanceAsOf')}{' '}
         <time dateTime={provenance.asOf} title={new Date(provenance.asOf).toLocaleString()}>
           {formatTimeAgo(provenance.asOf, language)}
