@@ -121,12 +121,13 @@ describe('parseBinanceWeb3LeaderboardPage', () => {
 describe('parseBinanceWeb3LeaderboardSeries', () => {
   const payload = fixture('board-page.json')
 
-  it('publishes native daily realized PnL as ascending UTC pnl_daily points', () => {
+  it('publishes native daily and cumulative realized PnL as ascending UTC points', () => {
     const series = parseBinanceWeb3LeaderboardSeries(payload, ctx, 7)
     expect(series.size).toBe(4)
     const first = series.get('0xffae19561c038747c5c9f79f7777c29f28c4b4ad')
-    expect(first).toHaveLength(1)
+    expect(first).toHaveLength(2)
     expect(first![0]).toMatchObject({ timeframe: 7, metric: 'pnl_daily' })
+    expect(first![1]).toMatchObject({ timeframe: 7, metric: 'pnl' })
     expect(first![0].points).toHaveLength(7)
     expect(first![0].points[0]).toEqual({
       ts: '2026-06-06T00:00:00.000Z',
@@ -136,6 +137,13 @@ describe('parseBinanceWeb3LeaderboardSeries', () => {
       ts: '2026-06-12T00:00:00.000Z',
       value: 1.4815761456534673,
     })
+    expect(first![1].points.map((point) => point.ts)).toEqual(
+      first![0].points.map((point) => point.ts)
+    )
+    const headline = parseBinanceWeb3LeaderboardPage(payload, ctx).rows.find(
+      (row) => row.exchangeTraderId === '0xffae19561c038747c5c9f79f7777c29f28c4b4ad'
+    )?.headlinePnl
+    expect(first![1].points.at(-1)?.value).toBeCloseTo(headline!, 6)
   })
 
   it('fails closed on a mismatched embedded timeframe', () => {
@@ -152,8 +160,12 @@ describe('parseBinanceWeb3LeaderboardSeries', () => {
     const page = parseBinanceWeb3LeaderboardPage(payload, ctx)
     const series = parseBinanceWeb3LeaderboardSeries(payload, ctx, 7)
     for (const row of page.rows) {
-      const points = series.get(row.exchangeTraderId)![0].points
-      expect(points.reduce((sum, point) => sum + point.value, 0)).toBeCloseTo(row.headlinePnl!, 6)
+      const [daily, cumulative] = series.get(row.exchangeTraderId)!
+      expect(daily.points.reduce((sum, point) => sum + point.value, 0)).toBeCloseTo(
+        row.headlinePnl!,
+        6
+      )
+      expect(cumulative.points.at(-1)?.value).toBeCloseTo(row.headlinePnl!, 6)
     }
     const second = series.get('0x2b98a23bd28e0ea02f4402b4e553c63403d43115')![0].points
     expect(second.some((point) => point.value < 0)).toBe(true)
@@ -171,6 +183,7 @@ describe('parseBinanceWeb3LeaderboardSeries', () => {
         data: {
           data: [
             {
+              realizedPnl: '2',
               address: '0xABC',
               dailyPNL: [
                 { dt: '2026-02-31', realizedPnl: '10' },
@@ -193,9 +206,26 @@ describe('parseBinanceWeb3LeaderboardSeries', () => {
               metric: 'pnl_daily',
               points: [{ ts: '2026-06-02T00:00:00.000Z', value: 2 }],
             },
+            {
+              timeframe: 7,
+              metric: 'pnl',
+              points: [{ ts: '2026-06-02T00:00:00.000Z', value: 2 }],
+            },
           ],
         ],
       ])
+    )
+  })
+
+  it('rejects a cumulative curve whose native daily sum disagrees with the headline', () => {
+    const board = (payload.board ?? {}) as { data?: { data?: Array<Record<string, unknown>> } }
+    const first = board.data?.data?.[0] ?? {}
+    const inconsistent = {
+      ...payload,
+      board: { ...board, data: { ...board.data, data: [{ ...first, realizedPnl: '0' }] } },
+    }
+    expect(() => parseBinanceWeb3LeaderboardSeries(inconsistent, ctx, 7)).toThrow(
+      'daily PnL sum mismatch'
     )
   })
 })

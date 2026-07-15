@@ -100,14 +100,17 @@ describe('bitunix parseLeaderboardSeries (dailyWinRate → roi)', () => {
   })
 })
 
-describe('binance web3 parseLeaderboardSeries (dailyPNL → pnl_daily)', () => {
-  it('decodes native daily realized PnL for every ranked wallet', () => {
+describe('binance web3 parseLeaderboardSeries (dailyPNL → pnl_daily + cumulative pnl)', () => {
+  it('decodes native daily and chart-ready cumulative PnL for every ranked wallet', () => {
     const map = parseBinanceWeb3LeaderboardSeries(
       fixture('binance-web3', 'board-page.json'),
       ctx,
       7
     )
-    assertWellFormed(map, 7, ['pnl_daily'])
+    assertWellFormed(map, 7, ['pnl_daily', 'pnl'])
+    for (const blocks of map.values()) {
+      expect(blocks.map((block) => block.metric).sort()).toEqual(['pnl', 'pnl_daily'])
+    }
   })
 })
 
