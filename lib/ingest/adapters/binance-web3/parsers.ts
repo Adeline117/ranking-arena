@@ -201,8 +201,9 @@ export function parseBinanceWeb3LeaderboardPage(
 
 /**
  * Board-level free series: every row already contains daily realized PnL in
- * USD. These are per-day deltas (not a cumulative balance), so publish them as
- * pnl_daily for the board's native timeframe. No extra upstream request.
+ * USD. Preserve the source-native deltas as pnl_daily and also expose their
+ * date-ordered prefix sum as pnl, which is the cumulative series consumed by
+ * profile and ranking charts. Missing dates stay missing; no zero is invented.
  */
 export function parseBinanceWeb3LeaderboardSeries(
   raw: unknown,
@@ -231,7 +232,23 @@ export function parseBinanceWeb3LeaderboardSeries(
       value: pnl,
     }))
     if (points.length > 0) {
-      out.set(address, [{ timeframe, metric: 'pnl_daily', points }])
+      const headlinePnl = num(item.realizedPnl)
+      const sum = points.reduce((total, point) => total + point.value, 0)
+      const tolerance = Math.max(1e-6, Math.abs(headlinePnl ?? 0) * 1e-9)
+      if (headlinePnl === null || Math.abs(sum - headlinePnl) > tolerance) {
+        throw new Error(
+          `[binance_web3] daily PnL sum mismatch for ${address}: daily=${sum}, headline=${headlinePnl}`
+        )
+      }
+      let cumulative = 0
+      const cumulativePoints = points.map((point) => ({
+        ts: point.ts,
+        value: (cumulative += point.value),
+      }))
+      out.set(address, [
+        { timeframe, metric: 'pnl_daily', points },
+        { timeframe, metric: 'pnl', points: cumulativePoints },
+      ])
     }
   }
   return out
