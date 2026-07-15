@@ -414,7 +414,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 cursor: 'pointer',
                 fontWeight: 600,
                 fontSize: 14,
-                background: billing === b ? tokens.colors.accent.brand : 'transparent',
+                background: billing === b ? 'var(--color-brand-deep)' : 'transparent',
                 color:
                   billing === b ? 'var(--color-on-accent, #fff)' : tokens.colors.text.secondary,
                 transition: 'all 0.2s',
@@ -591,7 +591,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 top: -13,
                 left: '50%',
                 transform: 'translateX(-50%)',
-                background: tokens.colors.accent.brand,
+                background: 'var(--color-brand-deep)',
                 color: 'var(--color-on-accent, #fff)',
                 padding: '5px 18px',
                 borderRadius: tokens.radius.full,
@@ -701,7 +701,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                     borderRadius: tokens.radius.md,
                     background: checkoutLoading
                       ? tokens.colors.bg.tertiary
-                      : tokens.colors.accent.brand,
+                      : 'var(--color-brand-deep)',
                     textAlign: 'center',
                     color: 'var(--color-on-accent, #fff)',
                     border: 'none',
@@ -737,7 +737,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                       borderRadius: tokens.radius.md,
                       background: 'transparent',
                       textAlign: 'center',
-                      color: tokens.colors.accent.brand,
+                      color: 'var(--color-brand-text)',
                       border: `1px solid ${tokens.colors.accent.brand}`,
                       fontWeight: 600,
                       fontSize: 14,
@@ -760,7 +760,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                     display: 'block',
                     padding: '14px 0',
                     borderRadius: tokens.radius.md,
-                    background: tokens.colors.accent.brand,
+                    background: 'var(--color-brand-deep)',
                     textAlign: 'center',
                     color: 'var(--color-on-accent, #fff)',
                     textDecoration: 'none',
@@ -789,7 +789,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                       borderRadius: tokens.radius.md,
                       background: 'transparent',
                       textAlign: 'center',
-                      color: tokens.colors.accent.brand,
+                      color: 'var(--color-brand-text)',
                       textDecoration: 'none',
                       border: `1px solid ${tokens.colors.accent.brand}`,
                       fontWeight: 600,
@@ -897,7 +897,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 left: '50%',
                 transform: 'translateX(-50%)',
                 background: 'var(--color-founding-accent)',
-                color: 'var(--color-on-accent, #fff)',
+                color: 'var(--color-on-founding)',
                 padding: '5px 18px',
                 borderRadius: tokens.radius.full,
                 fontSize: 11,
@@ -1062,7 +1062,9 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                     ? tokens.colors.bg.tertiary
                     : 'var(--color-founding-accent)',
                   textAlign: 'center',
-                  color: 'var(--color-on-accent, #fff)',
+                  color: checkoutLoading
+                    ? tokens.colors.text.secondary
+                    : 'var(--color-on-founding)',
                   border: 'none',
                   fontWeight: 700,
                   fontSize: 15,
@@ -1090,7 +1092,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                   borderRadius: tokens.radius.md,
                   background: 'var(--color-founding-accent)',
                   textAlign: 'center',
-                  color: 'var(--color-on-accent, #fff)',
+                  color: 'var(--color-on-founding)',
                   textDecoration: 'none',
                   fontWeight: 700,
                   fontSize: 15,
@@ -1161,7 +1163,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               <span style={{ textAlign: 'center' }}>
                 {resolved(t('pricingPlanFree'), 'pricingPlanFree', 'Free')}
               </span>
-              <span style={{ textAlign: 'center', color: tokens.colors.accent.brand }}>Pro</span>
+              <span style={{ textAlign: 'center', color: 'var(--color-brand-text)' }}>Pro</span>
             </div>
             {/* Rows — single source of truth: membership-config */}
             {getPricingComparisonData(t).map((row, i) => (
