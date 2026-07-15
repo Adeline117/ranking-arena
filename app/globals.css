@@ -307,7 +307,7 @@ html.theme-transition #main-content {
   --color-score-legendary: #a78bfa;
   --color-score-great: #10b981;
   --color-score-average: #f59e0b;
-  --color-score-below: #fb923c;
+  --color-score-below: #fdba74;
   --color-score-low: #8891a0; /* Raised from #6b7280 for WCAG AA 5.6:1 on #0B0A10 */
   /* Bright score colors are foregrounds on dark surfaces. When the same
      colors become solid badges, dark ink is the accessible counterpart. */
