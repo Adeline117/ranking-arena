@@ -105,7 +105,9 @@ export function ApiPricingSection() {
                 style={{
                   fontSize: tokens.typography.fontSize.sm,
                   fontWeight: 600,
-                  color: plan.highlighted ? 'var(--color-brand)' : 'var(--color-text-secondary)',
+                  color: plan.highlighted
+                    ? 'var(--color-brand-text)'
+                    : 'var(--color-text-secondary)',
                   marginBottom: tokens.spacing[1],
                 }}
               >
@@ -187,7 +189,9 @@ export function ApiPricingSection() {
                   textAlign: 'center',
                   padding: '10px 0',
                   borderRadius: tokens.radius.md,
-                  background: plan.highlighted ? 'var(--color-brand)' : 'var(--color-bg-tertiary)',
+                  background: plan.highlighted
+                    ? 'var(--color-brand-deep)'
+                    : 'var(--color-bg-tertiary)',
                   color: plan.highlighted ? '#fff' : 'var(--color-text-primary)',
                   fontSize: 14,
                   fontWeight: 600,

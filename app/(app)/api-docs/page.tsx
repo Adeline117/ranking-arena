@@ -406,7 +406,9 @@ export default async function ApiDocsPage() {
                 <button type="button" data-copy-btn style={copyBtn}>
                   {t('copy')}
                 </button>
-                <pre style={preBlock}>{code}</pre>
+                <pre tabIndex={0} style={preBlock}>
+                  {code}
+                </pre>
               </div>
             </div>
           ))}
@@ -427,7 +429,9 @@ export default async function ApiDocsPage() {
             <button type="button" data-copy-btn style={copyBtn}>
               {t('copy')}
             </button>
-            <pre style={{ ...preBlock, fontSize: 14 }}>https://www.arenafi.org/api/v3</pre>
+            <pre tabIndex={0} style={{ ...preBlock, fontSize: 14 }}>
+              https://www.arenafi.org/api/v3
+            </pre>
           </div>
           <p
             style={{
@@ -468,7 +472,7 @@ export default async function ApiDocsPage() {
             <button type="button" data-copy-btn style={copyBtn}>
               {t('copy')}
             </button>
-            <pre style={preBlock}>
+            <pre tabIndex={0} style={preBlock}>
               {`curl "https://www.arenafi.org/api/v3?endpoint=rankings&period=90D&limit=200&format=csv"`}
             </pre>
           </div>
@@ -626,6 +630,7 @@ export default async function ApiDocsPage() {
                     {t('copy')}
                   </button>
                   <pre
+                    tabIndex={0}
                     style={{
                       ...preBlock,
                       fontSize: 12,
@@ -639,7 +644,7 @@ export default async function ApiDocsPage() {
                   <button type="button" data-copy-btn style={copyBtn}>
                     {t('copy')}
                   </button>
-                  <pre style={{ ...preBlock, fontSize: 11, maxHeight: 320 }}>
+                  <pre tabIndex={0} style={{ ...preBlock, fontSize: 11, maxHeight: 320 }}>
                     {ep.example.response}
                   </pre>
                 </div>
@@ -764,7 +769,7 @@ if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.write
               display: 'inline-block',
               padding: '10px 28px',
               borderRadius: tokens.radius.md,
-              background: 'var(--color-brand)',
+              background: 'var(--color-brand-deep)',
               color: '#fff',
               fontSize: 14,
               fontWeight: 600,
