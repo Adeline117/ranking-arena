@@ -270,6 +270,7 @@ function PodiumCard({ row, place }: { row: WeeklyLeaderRow; place: number }) {
       style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
     >
       <Box
+        className="weekly-podium-card"
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -290,6 +291,7 @@ function PodiumCard({ row, place }: { row: WeeklyLeaderRow; place: number }) {
         <Text
           size="sm"
           weight="bold"
+          title={row.nickname ?? row.exchangeTraderId}
           style={{
             maxWidth: '100%',
             overflow: 'hidden',
@@ -306,12 +308,14 @@ function PodiumCard({ row, place }: { row: WeeklyLeaderRow; place: number }) {
           </Text>
         </Box>
         <Metric
+          className="weekly-podium-roi"
           value={row.roi}
           format="roi"
           display={fmtRoi(row.roi)}
           showArrow
           size="lg"
           as="span"
+          style={{ maxWidth: '100%' }}
         />
       </Box>
     </Link>
@@ -501,6 +505,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
           {/* ── Top-3 podium (canonical ROI ranking) ── */}
           {podium.length > 0 && (
             <Box
+              className="weekly-podium-grid"
               style={{
                 display: 'grid',
                 gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',

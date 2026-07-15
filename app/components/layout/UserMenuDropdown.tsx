@@ -318,8 +318,10 @@ export default function UserMenuDropdown({
             </svg>
             <span>{t('portfolio')}</span>
           </Link>
+          {/* B2C primary navigation: saved traders belongs in the account menu.
+              The developer API remains available from the footer/docs routes. */}
           <Link
-            href="/api-docs"
+            href="/saved?tab=traders"
             role="menuitem"
             className="top-nav-menu-link"
             style={MENU_LINK_STYLE}
@@ -335,10 +337,9 @@ export default function UserMenuDropdown({
               strokeLinecap="round"
               strokeLinejoin="round"
             >
-              <path d="M16 18l6-6-6-6" />
-              <path d="M8 6l-6 6 6 6" />
+              <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
             </svg>
-            <span>API</span>
+            <span>{t('watchlist')}</span>
           </Link>
           <Link
             href="/settings"

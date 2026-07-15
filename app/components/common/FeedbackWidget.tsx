@@ -80,7 +80,7 @@ export default function FeedbackWidget() {
           // bar when one is showing, instead of hiding behind it (z300 > this z100).
           bottom: hasFab
             ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 152px + var(--transient-bottom-bar, 0px))'
-            : 'calc(var(--mobile-nav-height, 60px) + 16px + var(--transient-bottom-bar, 0px))',
+            : 'calc(var(--mobile-nav-height, 60px) + 72px + var(--transient-bottom-bar, 0px))',
           right: 16,
           width: 44,
           height: 44,
@@ -116,7 +116,7 @@ export default function FeedbackWidget() {
             position: 'fixed',
             bottom: hasFab
               ? 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 208px + var(--transient-bottom-bar, 0px))'
-              : 'calc(var(--mobile-nav-height, 60px) + 72px + var(--transient-bottom-bar, 0px))',
+              : 'calc(var(--mobile-nav-height, 60px) + 128px + var(--transient-bottom-bar, 0px))',
             right: 16,
             width: 'min(320px, calc(100vw - 32px))',
             background: 'var(--color-bg-secondary)',

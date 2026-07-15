@@ -20,6 +20,7 @@ body{margin:0;font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5
 
 /* 关键布局样式 */
 .top-nav{position:sticky;top:0;z-index:100;background:var(--bg-primary,#0B0A10);height:56px;border-bottom:1px solid var(--glass-border,rgba(255,255,255,0.08))}
+@media(max-width:360px){.top-nav-theme-action{display:none!important}}
 main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 
 /* 字体变量 */

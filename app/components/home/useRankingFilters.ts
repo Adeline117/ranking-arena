@@ -375,6 +375,10 @@ export function useRankingFilters({
   // Filter change handler
   const handleFilterChange = useCallback(
     (config: FilterConfig) => {
+      trackEvent('ranking_filter', {
+        kind: 'advanced',
+        active_count: Object.keys(config).length,
+      })
       setFilterConfig(config)
       syncFilterToUrl(config)
       try {
@@ -396,6 +400,7 @@ export function useRankingFilters({
       col: 'score' | 'roi' | 'pnl' | 'winrate' | 'mdd' | 'sortino' | 'alpha',
       dir: 'asc' | 'desc'
     ) => {
+      trackEvent('ranking_sort', { column: col, direction: dir })
       setSortColumn(col)
       setSortDir(dir)
       setCurrentPage(1)

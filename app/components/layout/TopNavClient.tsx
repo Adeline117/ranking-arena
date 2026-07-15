@@ -126,7 +126,9 @@ export default function TopNavClient({ email = null }: { email?: string | null }
           <GoProButton />
         </div>
         <LanguageSwitcher />
-        <ThemeToggle />
+        <div className="top-nav-theme-action">
+          <ThemeToggle />
+        </div>
         {!isReady ? (
           authChecked && authLoggedIn ? (
             <div

@@ -674,7 +674,7 @@ export function RankingFilters({
             href="/compare"
             prefetch={false}
             title={t('compareTraders')}
-            className="toolbar-btn touch-target-sm"
+            className="toolbar-btn touch-target-sm ranking-toolbar-compare"
             style={{ gap: 4 }}
           >
             <CompareIcon size={11} />
@@ -704,7 +704,11 @@ export function RankingFilters({
           </Link>
 
           {/* Column settings */}
-          <div ref={columnSettingsRef} style={{ position: 'relative' }}>
+          <div
+            ref={columnSettingsRef}
+            className="ranking-toolbar-secondary"
+            style={{ position: 'relative' }}
+          >
             <button
               ref={columnSettingsBtnRef}
               type="button"
@@ -784,39 +788,42 @@ export function RankingFilters({
           </div>
 
           {/* Export */}
-          {traders.length > 0 &&
-            (isPro ? (
-              <ExportRankingButton
-                traders={traders}
-                source={source}
-                timeRange={timeRange}
-                language={language}
-              />
-            ) : (
-              <button
-                onClick={() => onProRequired?.()}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 4,
-                  padding: '4px 8px',
-                  borderRadius: tokens.radius.sm,
-                  border: '1px solid var(--color-border-primary)',
-                  background: 'transparent',
-                  color: 'var(--color-text-tertiary)',
-                  fontSize: tokens.typography.fontSize.xs,
-                  fontWeight: tokens.typography.fontWeight.medium,
-                  cursor: 'pointer',
-                  opacity: 0.7,
-                }}
-                title={t('proFeature')}
-              >
-                <svg width={10} height={10} viewBox="0 0 24 24" fill="currentColor">
-                  <path d="M12 1C8.676 1 6 3.676 6 7V8H4V21H20V8H18V7C18 3.676 15.324 1 12 1ZM12 3C14.276 3 16 4.724 16 7V8H8V7C8 4.724 9.724 3 12 3Z" />
-                </svg>
-                {t('exportRankingShort')}
-              </button>
-            ))}
+          {traders.length > 0 && (
+            <div className="ranking-toolbar-secondary">
+              {isPro ? (
+                <ExportRankingButton
+                  traders={traders}
+                  source={source}
+                  timeRange={timeRange}
+                  language={language}
+                />
+              ) : (
+                <button
+                  onClick={() => onProRequired?.()}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '4px 8px',
+                    borderRadius: tokens.radius.sm,
+                    border: '1px solid var(--color-border-primary)',
+                    background: 'transparent',
+                    color: 'var(--color-text-tertiary)',
+                    fontSize: tokens.typography.fontSize.xs,
+                    fontWeight: tokens.typography.fontWeight.medium,
+                    cursor: 'pointer',
+                    opacity: 0.7,
+                  }}
+                  title={t('proFeature')}
+                >
+                  <svg width={10} height={10} viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 1C8.676 1 6 3.676 6 7V8H4V21H20V8H18V7C18 3.676 15.324 1 12 1ZM12 3C14.276 3 16 4.724 16 7V8H8V7C8 4.724 9.724 3 12 3Z" />
+                  </svg>
+                  {t('exportRankingShort')}
+                </button>
+              )}
+            </div>
+          )}
         </Box>
       </Box>
 

@@ -11,6 +11,7 @@ import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { SearchResultGroup, type CategoryKey } from './SearchResultGroup'
 import { SearchEmptyState, SearchSkeleton } from './SearchEmptyState'
 import { useSearchData } from './useSearchData'
+import { trackEvent } from '@/lib/analytics/track'
 
 interface SearchDropdownProps {
   open: boolean
@@ -144,6 +145,12 @@ export default function SearchDropdown({
   }
 
   const handleResultClick = (resultId?: string, resultType?: string) => {
+    trackEvent('search_result_click', {
+      queryLength: query.trim().length,
+      resultId: resultId || '',
+      resultType: resultType || 'all_results',
+      surface: 'global_search',
+    })
     if (query.trim()) saveToHistory(query)
     if (resultId && query.trim()) {
       fetch(

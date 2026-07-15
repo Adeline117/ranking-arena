@@ -17,6 +17,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
+import { trackEvent } from '@/lib/analytics/track'
 
 // Heavy config panel — load only when the modal opens (keeps the header light).
 const AlertConfig = dynamic(() => import('@/app/components/alerts/AlertConfig'), { ssr: false })
@@ -68,6 +69,7 @@ export default function AlertBellButton({ traderId, traderHandle, source }: Aler
       useLoginModal.getState().openLoginModal()
       return
     }
+    trackEvent('create_trader_alert', { traderId, source: source || '', step: 'open' })
     setOpen(true)
   }
 

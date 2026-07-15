@@ -2068,7 +2068,7 @@ button:focus-visible,
 /* The mobile bottom nav is display:none at >=768px (verified: visible <=767px,
    hidden >=768px). --mobile-nav-height was a constant 60px everywhere, so on
    desktop the 7 floating elements that clear the nav (cookie banner, FAB,
-   FeedbackWidget, ScrollToTop, CompareFloatingBar, GuestSignupPrompt) plus the
+   FeedbackWidget, ScrollToTop and CompareFloatingBar) plus the
    layout spacer were offset 60px into / below content. Zero it on desktop. */
 @media (min-width: 768px) {
   :root {
@@ -2748,6 +2748,141 @@ input[type='search']::-webkit-search-cancel-button:hover {
 }
 .home-mesh-bg {
   display: none;
+}
+.home-secondary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin: 24px auto 0;
+  max-width: 1400px;
+  align-items: start;
+}
+@media (max-width: 1199px) {
+  .home-secondary-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 767px) {
+  .home-secondary-grid {
+    grid-template-columns: 1fr;
+    margin-top: 16px;
+  }
+}
+.ranking-inline-signup {
+  grid-column: 1 / -1;
+  width: 100%;
+  min-height: 72px;
+  padding: 14px 18px;
+  border: 1px solid var(--color-accent-primary-30);
+  border-radius: 12px;
+  background: var(--color-accent-primary-08);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  cursor: pointer;
+  text-align: center;
+}
+.ranking-inline-signup:hover,
+.ranking-inline-signup:focus-visible {
+  background: var(--color-accent-primary-15);
+  border-color: var(--color-accent-primary-60);
+}
+
+/* The ranking controls should enter the first mobile viewport. The hero keeps
+   the trust essentials (what Arena ranks, coverage, freshness and methodology)
+   while dropping desktop-scale whitespace and decorative hierarchy. */
+@media (max-width: 767px) {
+  #ssr-hero-shell {
+    padding: 8px 8px 0 !important;
+  }
+  .home-hero {
+    min-height: 0 !important;
+    margin-bottom: 12px !important;
+    padding: 20px 18px 16px !important;
+    border-radius: 14px !important;
+  }
+  .home-hero-main {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 14px !important;
+  }
+  .home-hero-copy {
+    flex-basis: auto !important;
+  }
+  .home-hero-title {
+    font-size: clamp(1.75rem, 9vw, 2.25rem) !important;
+    line-height: 1.05 !important;
+    margin-bottom: 8px !important;
+  }
+  .home-hero-subtitle {
+    font-size: 0.875rem !important;
+    line-height: 1.45 !important;
+  }
+  .home-hero-explainer {
+    font-size: 0.75rem !important;
+    line-height: 1.4 !important;
+    margin-top: 8px !important;
+  }
+  .home-hero-methodology {
+    margin-top: 8px !important;
+  }
+  .home-hero-stats {
+    width: 100%;
+    justify-content: flex-start;
+    gap: 28px !important;
+  }
+  .home-hero-stats > div {
+    text-align: left !important;
+  }
+  .home-hero-stats > div > div:first-child {
+    font-size: 1.375rem !important;
+  }
+  .home-hero-actions {
+    margin-top: 14px !important;
+    gap: 8px !important;
+  }
+
+  /* B2C mobile leaderboard: keep the primary toolbar to one decision row. */
+  .ranking-toolbar-row {
+    flex-wrap: nowrap !important;
+    padding: 6px 8px !important;
+  }
+  .ranking-toolbar-row > div:last-child {
+    min-width: 0;
+  }
+  .ranking-toolbar-row .view-toggle-group,
+  .ranking-toolbar-row .ranking-toolbar-secondary {
+    display: none !important;
+  }
+  .ranking-toolbar-row .toolbar-btn {
+    min-height: 40px;
+  }
+
+  .weekly-podium-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .weekly-podium-card {
+    gap: 6px !important;
+    min-width: 0;
+    padding: 10px 6px !important;
+  }
+  .weekly-podium-card img,
+  .weekly-podium-card > span:nth-child(2) {
+    width: 36px !important;
+    height: 36px !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .home-hero-explainer {
+    display: none;
+  }
+  .ranking-toolbar-compare > span {
+    display: none;
+  }
 }
 .flex-between {
   display: flex;

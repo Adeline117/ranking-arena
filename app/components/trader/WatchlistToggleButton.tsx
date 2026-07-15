@@ -7,6 +7,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { trackEvent } from '@/lib/analytics/track'
 
 interface WatchlistToggleButtonProps {
   source: string
@@ -43,6 +44,7 @@ export default function WatchlistToggleButton({
         showToast(t('removedFromWatchlist'), 'info')
       } else {
         await addToWatchlist(source, sourceTraderID, handle)
+        trackEvent('save_trader', { traderId: sourceTraderID, source })
         showToast(t('addedToWatchlist'), 'success')
       }
     } catch {
