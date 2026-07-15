@@ -1,5 +1,8 @@
-import { internalRowsToTransfers } from '../dune-bsc-internal'
+import { internalRowsToTransfers, scanBscInternalBnb } from '../dune-bsc-internal'
 import { NATIVE_BNB } from '../bsc-swaps'
+
+const response = (body: unknown, ok = true, status = ok ? 200 : 500) =>
+  ({ ok, status, json: async () => body }) as Response
 
 describe('internalRowsToTransfers', () => {
   it('groups internal BNB rows into NATIVE_BNB in-legs per wallet (0x-keyed)', () => {
@@ -85,5 +88,200 @@ describe('internalRowsToTransfers', () => {
     expect(pnl.txsBuy).toBe(1)
     expect(pnl.txsSell).toBe(1) // the Dune leg completed the sell
     expect(pnl.realizedPnlUsd).toBeCloseTo(600, 0) // sold 2 BNB($1200) − cost 1 BNB($600)
+  })
+})
+
+describe('scanBscInternalBnb', () => {
+  const originalKey = process.env.DUNE_API_KEY
+  const originalFetch = global.fetch
+
+  beforeEach(() => {
+    process.env.DUNE_API_KEY = 'test-key'
+  })
+
+  afterEach(() => {
+    if (originalFetch) global.fetch = originalFetch
+    else delete (global as typeof global & { fetch?: typeof fetch }).fetch
+    if (originalKey === undefined) delete process.env.DUNE_API_KEY
+    else process.env.DUNE_API_KEY = originalKey
+  })
+
+  it('proves a successful zero-row result instead of conflating it with failure', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(response({ execution_id: 'exec-1' }))
+      .mockResolvedValueOnce(response({ state: 'QUERY_STATE_COMPLETED' }))
+      .mockResolvedValueOnce(response({ state: 'QUERY_STATE_COMPLETED', result: { rows: [] } }))
+    global.fetch = fetchMock as jest.MockedFunction<typeof fetch>
+
+    const scan = await scanBscInternalBnb(['0xABC'], { pollMs: 0 })
+
+    expect(scan.transfersByWallet.size).toBe(0)
+    expect(scan.coverage).toEqual({
+      scanComplete: true,
+      truncated: false,
+      stopReason: 'results_complete',
+      walletsRequested: 1,
+      pagesFetched: 1,
+      rowsFetched: 0,
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('follows result pagination until Dune supplies no next page', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(response({ execution_id: 'exec-2' }))
+      .mockResolvedValueOnce(response({ state: 'QUERY_STATE_COMPLETED' }))
+      .mockResolvedValueOnce(
+        response({
+          state: 'QUERY_STATE_COMPLETED',
+          result: {
+            rows: [
+              {
+                wallet: 'abc',
+                tx_hash: 'first',
+                bnb: 1,
+                block_time: '2026-07-01T00:00:00Z',
+              },
+            ],
+          },
+          next_offset: 1,
+          next_uri: 'https://api.dune.com/api/v1/execution/exec-2/results?offset=1&limit=1',
+        })
+      )
+      .mockResolvedValueOnce(
+        response({
+          state: 'QUERY_STATE_COMPLETED',
+          result: {
+            rows: [
+              {
+                wallet: 'abc',
+                tx_hash: 'second',
+                bnb: 2,
+                block_time: '2026-07-02T00:00:00Z',
+              },
+            ],
+          },
+        })
+      )
+    global.fetch = fetchMock as jest.MockedFunction<typeof fetch>
+
+    const scan = await scanBscInternalBnb(['0xABC', '0xabc'], {
+      pollMs: 0,
+      resultPageSize: 1,
+    })
+
+    expect(scan.coverage).toMatchObject({
+      scanComplete: true,
+      truncated: false,
+      pagesFetched: 2,
+      rowsFetched: 2,
+      walletsRequested: 1,
+    })
+    expect(scan.transfersByWallet.get('0xabc')).toHaveLength(2)
+    expect(String(fetchMock.mock.calls[3][0])).toContain('offset=1')
+  })
+
+  it('fails closed when polling never reaches a completed terminal state', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(response({ execution_id: 'exec-3' }))
+      .mockResolvedValue(response({ state: 'QUERY_STATE_EXECUTING' })) as jest.MockedFunction<
+      typeof fetch
+    >
+
+    const scan = await scanBscInternalBnb(['0xabc'], { pollMs: 0, maxPolls: 2 })
+
+    expect(scan.coverage).toMatchObject({
+      scanComplete: false,
+      truncated: false,
+      stopReason: 'poll_limit',
+      pagesFetched: 0,
+    })
+  })
+
+  it('marks a partial execution truncated and never reads partial results', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(response({ execution_id: 'exec-4' }))
+      .mockResolvedValueOnce(response({ state: 'QUERY_STATE_COMPLETED_PARTIAL' }))
+    global.fetch = fetchMock as jest.MockedFunction<typeof fetch>
+
+    const scan = await scanBscInternalBnb(['0xabc'], { pollMs: 0 })
+
+    expect(scan.coverage).toMatchObject({
+      scanComplete: false,
+      truncated: true,
+      stopReason: 'execution_partial',
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not call Dune or claim coverage without an API key', async () => {
+    delete process.env.DUNE_API_KEY
+    const fetchMock = jest.fn()
+    global.fetch = fetchMock as jest.MockedFunction<typeof fetch>
+
+    const scan = await scanBscInternalBnb(['0xabc'])
+
+    expect(scan.coverage.stopReason).toBe('api_key_missing')
+    expect(scan.coverage.scanComplete).toBe(false)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('marks a remaining next page truncated when the result page cap is reached', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(response({ execution_id: 'exec-5' }))
+      .mockResolvedValueOnce(response({ state: 'QUERY_STATE_COMPLETED' }))
+      .mockResolvedValueOnce(
+        response({
+          state: 'QUERY_STATE_COMPLETED',
+          result: {
+            rows: [
+              {
+                wallet: 'abc',
+                tx_hash: 'only-page',
+                bnb: 1,
+                block_time: '2026-07-01T00:00:00Z',
+              },
+            ],
+          },
+          next_offset: 1,
+          next_uri: 'https://api.dune.com/next',
+        })
+      ) as jest.MockedFunction<typeof fetch>
+
+    const scan = await scanBscInternalBnb(['0xabc'], {
+      pollMs: 0,
+      maxResultPages: 1,
+    })
+
+    expect(scan.coverage).toMatchObject({
+      scanComplete: false,
+      truncated: true,
+      stopReason: 'result_page_cap',
+      pagesFetched: 1,
+      rowsFetched: 1,
+    })
+  })
+
+  it('rejects a malformed result page instead of treating it as zero rows', async () => {
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(response({ execution_id: 'exec-6' }))
+      .mockResolvedValueOnce(response({ state: 'QUERY_STATE_COMPLETED' }))
+      .mockResolvedValueOnce(
+        response({ state: 'QUERY_STATE_COMPLETED', result: { rows: null } })
+      ) as jest.MockedFunction<typeof fetch>
+
+    const scan = await scanBscInternalBnb(['0xabc'], { pollMs: 0 })
+
+    expect(scan.coverage).toMatchObject({
+      scanComplete: false,
+      stopReason: 'invalid_response',
+      rowsFetched: 0,
+    })
   })
 })
