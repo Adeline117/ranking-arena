@@ -500,7 +500,7 @@ function SearchContent() {
               href={`/search?q=${encodeURIComponent(query)}&tab=${tabParam}`}
               style={{
                 fontSize: 13,
-                color: tokens.colors.accent.brand,
+                color: 'var(--color-brand-text)',
                 textDecoration: 'none',
                 fontWeight: 500,
               }}
@@ -797,7 +797,7 @@ function SearchContent() {
                     border: `1px solid ${activeTab === tab.key ? 'var(--color-accent-primary-40, var(--color-accent-primary-40))' : tokens.colors.border.primary}`,
                     color:
                       activeTab === tab.key
-                        ? tokens.colors.accent.brand
+                        ? 'var(--color-brand-text)'
                         : tokens.colors.text.secondary,
                     fontSize: tokens.typography.fontSize.sm,
                     fontWeight: activeTab === tab.key ? 700 : 500,
@@ -849,7 +849,7 @@ function SearchContent() {
                     ? 'var(--color-accent-primary-15)'
                     : tokens.colors.bg.secondary,
                   border: `1px solid ${!platformFilter ? 'var(--color-accent-primary-40)' : tokens.colors.border.primary}`,
-                  color: !platformFilter ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+                  color: !platformFilter ? 'var(--color-brand-text)' : tokens.colors.text.tertiary,
                   textDecoration: 'none',
                   transition: 'all 0.15s',
                 }}
@@ -872,7 +872,7 @@ function SearchContent() {
                         ? 'var(--color-accent-primary-15)'
                         : tokens.colors.bg.secondary,
                       border: `1px solid ${isActive ? 'var(--color-accent-primary-40)' : tokens.colors.border.primary}`,
-                      color: isActive ? tokens.colors.accent.brand : tokens.colors.text.tertiary,
+                      color: isActive ? 'var(--color-brand-text)' : tokens.colors.text.tertiary,
                       textDecoration: 'none',
                       transition: 'all 0.15s',
                     }}

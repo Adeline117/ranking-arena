@@ -212,7 +212,7 @@ export function SearchResultGroup({
                         borderRadius: 4,
                         fontSize: 10,
                         fontWeight: 600,
-                        color: 'var(--color-brand)',
+                        color: 'var(--color-brand-text)',
                         background: 'var(--color-brand-muted)',
                         border: '1px solid color-mix(in srgb, var(--color-brand) 25%, transparent)',
                         lineHeight: 1.4,
