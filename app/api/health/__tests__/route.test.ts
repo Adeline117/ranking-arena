@@ -61,6 +61,8 @@ describe('GET /api/health', () => {
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-key'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'service-key'
+    delete process.env.VERCEL_GIT_COMMIT_SHA
+    process.env.ARENA_RELEASE_SHA = 'release-sha-for-test'
   })
 
   it('should return health check response with correct structure', async () => {
@@ -72,6 +74,7 @@ describe('GET /api/health', () => {
     expect(['healthy', 'degraded', 'unhealthy']).toContain(body.status)
     expect(body).toHaveProperty('timestamp')
     expect(body).toHaveProperty('version')
+    expect(body.commit).toBe('release-sha-for-test')
     expect(body).toHaveProperty('uptime')
     expect(body).toHaveProperty('responseTimeMs')
     expect(body).toHaveProperty('checks')

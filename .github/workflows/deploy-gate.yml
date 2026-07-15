@@ -81,9 +81,12 @@ jobs:
         id: fresh
         run: |
           git fetch origin main --quiet
-          SERVING=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&target=production&state=READY&limit=1" \
+          DEPLOYMENTS=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
+            "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&target=production&state=READY&limit=1")
+          SERVING=$(echo "$DEPLOYMENTS" \
             | jq -r '.deployments[0].meta.gateSha // .deployments[0].meta.githubCommitSha // empty')
+          PREVIOUS_ID=$(echo "$DEPLOYMENTS" | jq -r '.deployments[0].uid // empty')
+          echo "previous_id=$PREVIOUS_ID" >> "$GITHUB_OUTPUT"
           echo "serving=$SERVING run=$HEAD_SHA"
           if [ -z "$SERVING" ]; then
             echo "serving SHA unknown — deploy"
@@ -106,6 +109,8 @@ jobs:
           # gateSha meta：CLI 部署没有 githubCommitSha，后续 run 的 ancestry
           # 判断靠它读出"当前线上是哪个 commit"
           npx vercel@latest deploy --prod --yes --meta gateSha="$HEAD_SHA" \
+            --build-env ARENA_RELEASE_SHA="$HEAD_SHA" \
+            --env ARENA_RELEASE_SHA="$HEAD_SHA" \
             --token="$VERCEL_TOKEN" > /tmp/deploy-url.txt
           echo "Deployed: $(cat /tmp/deploy-url.txt)"
 
@@ -114,31 +119,24 @@ jobs:
         run: |
           sleep 45
           BASE="https://www.arenafi.org"
-          FAIL=0
-          for path in "/" "/trader/soul" "/login" "/pricing" "/api/health"; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${BASE}${path}?_smoke=$(date +%s)")
-            if [ "$STATUS" = "500" ] || [ "$STATUS" = "000" ]; then
-              echo "❌ FAIL [$STATUS] $path"; FAIL=$((FAIL+1))
-            else
-              echo "✅ PASS [$STATUS] $path"
-            fi
-          done
-          if [ "$FAIL" -gt 0 ]; then
-            echo "🔄 smoke failed — rolling back to previous READY deployment"
-            PREV_ID=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&target=production&limit=5&state=READY" \
-              | jq -r '.deployments[1].uid // empty')
+          if ! scripts/post-deploy-check.sh "$BASE" "$HEAD_SHA"; then
+            echo "🔄 smoke failed — rolling back to the deployment captured before release"
+            PREV_ID="${{ steps.fresh.outputs.previous_id }}"
             if [ -n "$PREV_ID" ]; then
-              curl -s -X POST -H "Authorization: Bearer $VERCEL_TOKEN" \
-                "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$PREV_ID" || true
-              ROLLED="已自动回滚到上一个部署"
+              PROMOTE_HTTP=$(curl -sS -o /tmp/rollback-response.json -w "%{http_code}" \
+                -X POST -H "Authorization: Bearer $VERCEL_TOKEN" \
+                "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$PREV_ID" || true)
+              case "$PROMOTE_HTTP" in
+                2??) ROLLED="已自动回滚到发布前部署 $PREV_ID" ;;
+                *) ROLLED="⚠️ 回滚请求失败 HTTP ${PROMOTE_HTTP:-000}，需人工处理" ;;
+              esac
             else
-              ROLLED="⚠️ 未找到可回滚的部署，需人工处理"
+              ROLLED="⚠️ 发布前未捕获回滚部署，需人工处理"
             fi
             if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
               curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
                 -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
-                -d "text=🚨 Deploy Gate smoke 失败（${FAIL}/5）%0ACommit: ${HEAD_SHA:0:8}%0A${ROLLED}" || true
+                -d "text=🚨 Deploy Gate 业务/SHA smoke 失败%0ACommit: ${HEAD_SHA:0:8}%0A${ROLLED}" || true
             fi
             exit 1
           fi

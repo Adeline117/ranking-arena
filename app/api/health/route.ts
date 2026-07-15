@@ -22,7 +22,7 @@ const version = process.env.npm_package_version || '0.1.0'
 // scheduled deploy-freshness sentinel can compare it to origin/main HEAD and catch
 // a stuck deploy pipeline — the failure mode where CI-red silently withheld 28
 // production deploys and the only alert (Telegram) was 401-broken, so nobody knew.
-const commit = process.env.VERCEL_GIT_COMMIT_SHA || 'unknown'
+const commit = process.env.VERCEL_GIT_COMMIT_SHA || process.env.ARENA_RELEASE_SHA || 'unknown'
 // Deploy timestamp from env (set at build time), fallback to module load time
 const deployTime = process.env.NEXT_PUBLIC_DEPLOY_TIME
   ? safeParseInt(process.env.NEXT_PUBLIC_DEPLOY_TIME, startTime)
