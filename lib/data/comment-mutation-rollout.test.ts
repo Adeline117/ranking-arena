@@ -107,25 +107,32 @@ function arrangeLegacyUpdate(
   options: {
     post?: QueryResult
     blocked?: QueryResult
+    group?: QueryResult
+    ban?: QueryResult
+    membership?: QueryResult
     comment?: QueryResult
     update?: QueryResult
   } = {}
 ) {
+  const postResult =
+    options.post ??
+    ({
+      data: {
+        id: POST_ID,
+        author_id: AUTHOR_ID,
+        visibility: 'public',
+        group_id: null,
+        status: 'active',
+        deleted_at: null,
+      },
+    } satisfies QueryResult)
+  const post = postResult.data as { group_id?: string | null } | null
   const builders = {
-    post: queue(
-      'posts',
-      options.post ?? {
-        data: {
-          id: POST_ID,
-          author_id: AUTHOR_ID,
-          visibility: 'public',
-          group_id: null,
-          status: 'active',
-          deleted_at: null,
-        },
-      }
-    ),
+    post: queue('posts', postResult),
     blocked: queue('blocked_users', options.blocked ?? { data: null }),
+    group: undefined as QueryBuilder | undefined,
+    ban: undefined as QueryBuilder | undefined,
+    membership: undefined as QueryBuilder | undefined,
     comment: queue(
       'comments',
       options.comment ?? {
@@ -138,6 +145,17 @@ function arrangeLegacyUpdate(
       }
     ),
     update: queue('comments', options.update ?? { data: updatedComment }),
+  }
+  if (post?.group_id) {
+    builders.group = queue(
+      'groups',
+      options.group ?? { data: { id: post.group_id, dissolved_at: null } }
+    )
+    builders.ban = queue('group_bans', options.ban ?? { data: null })
+    builders.membership = queue(
+      'group_members',
+      options.membership ?? { data: { user_id: USER_ID, muted_until: null } }
+    )
   }
   return builders
 }
@@ -259,6 +277,33 @@ describe('comment mutation rollout bridges', () => {
       expect(builders.update.eq).toHaveBeenCalledWith('user_id', USER_ID)
       expect(builders.update.is).toHaveBeenCalledWith('deleted_at', null)
       expect(builders.update.maybeSingle).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['missing group', { group: { data: null } }, 'forbidden'],
+      [
+        'dissolved group',
+        { group: { data: { id: 'group-1', dissolved_at: '2026-07-15T00:00:00.000Z' } } },
+        'forbidden',
+      ],
+      ['group lookup failure', { group: { error: { code: 'XX005' } } }, 'database'],
+    ] as const)('fails closed for a legacy %s edit', async (_label, options, kind) => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } })
+      arrangeLegacyUpdate({
+        post: {
+          data: {
+            id: POST_ID,
+            author_id: AUTHOR_ID,
+            visibility: 'public',
+            group_id: 'group-1',
+            status: 'active',
+            deleted_at: null,
+          },
+        },
+        ...options,
+      })
+
+      await expectFailure(updateOwnCommentWithRollout(supabase, input), kind)
     })
 
     it.each([
