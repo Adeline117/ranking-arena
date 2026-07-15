@@ -5043,7 +5043,8 @@ const zh = {
   pricingFaqSwitchQ: '可以切换套餐吗？',
   pricingFaqSwitchA: '可以，你可以随时在月付和年付之间切换，我们会按比例计算差额。',
   pricingFaqApiQ: 'Pro 包含 API 访问吗？',
-  pricingFaqApiA: 'API 访问功能即将上线，Pro 会员将率先获得使用权。',
+  pricingFaqApiA:
+    '不包含。数据 API 套餐与 Arena Pro 分开销售；Pro 面向交易员发现、提醒、对比和深度分析。',
   pricingLimitedTimeBanner: '限时优惠：所有 Pro 功能目前免费开放！',
   pricingStatTradersRanked: '交易员已排名',
   pricingStatExchangesTracked: '交易所覆盖',

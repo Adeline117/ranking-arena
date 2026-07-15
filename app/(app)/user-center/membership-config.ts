@@ -113,9 +113,7 @@ export const getPricingComparisonData = (t: (key: string) => string): Comparison
   { feature: t('pricingCompareCategoryRankings'), free: false, pro: true },
   { feature: t('pricingCompareCsvExport'), free: false, pro: true },
   { feature: t('pricingCompareTraderAlerts'), free: false, pro: true },
-  { feature: t('pricingCompareApiAccess'), free: false, pro: true },
   { feature: t('pricingCompareCommunityPosts'), free: true, pro: true },
-  { feature: t('pricingCompareLibrary'), free: true, pro: true },
   { feature: t('pricingComparePublicGroups'), free: true, pro: true },
   { feature: t('pricingCompareMarketOverview'), free: true, pro: true },
 ]
