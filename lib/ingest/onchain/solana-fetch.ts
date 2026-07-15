@@ -123,7 +123,7 @@ interface SigInfo {
 export interface SolanaSignatureCoverage {
   scanComplete: boolean
   truncated: boolean
-  stopReason: 'lookback_boundary' | 'history_exhausted' | 'record_cap'
+  stopReason: 'lookback_boundary' | 'history_exhausted' | 'record_cap' | 'page_cap'
   pagesFetched: number
   recordsSeen: number
   recordsReturned: number
@@ -142,12 +142,19 @@ export interface SolanaSignatureScan {
  */
 export async function scanSignatures(
   wallet: string,
-  opts: RpcOpts & { sinceMs?: number; maxSigs?: number } = {}
+  opts: RpcOpts & { sinceMs?: number; maxSigs?: number; maxPages?: number } = {}
 ): Promise<SolanaSignatureScan> {
   const sinceSec = opts.sinceMs ? opts.sinceMs / 1000 : 0
   const maxSigs = opts.maxSigs ?? 1000
   if (!Number.isSafeInteger(maxSigs) || maxSigs <= 0) {
     throw new RangeError('maxSigs must be a positive safe integer')
+  }
+  // A successful-signature cap alone is not a network budget: an address with
+  // many failed transactions could otherwise paginate indefinitely. Default to
+  // the minimum pages needed for maxSigs when every returned record succeeds.
+  const maxPages = opts.maxPages ?? Math.max(1, Math.ceil(maxSigs / 1000))
+  if (!Number.isSafeInteger(maxPages) || maxPages <= 0) {
+    throw new RangeError('maxPages must be a positive safe integer')
   }
   const sigs: string[] = []
   let before: string | undefined
@@ -158,8 +165,9 @@ export async function scanSignatures(
   const finish = (stopReason: SolanaSignatureCoverage['stopReason']): SolanaSignatureScan => ({
     signatures: sigs,
     coverage: {
-      scanComplete: stopReason !== 'record_cap' && recordsMissingTimestamp === 0,
-      truncated: stopReason === 'record_cap',
+      scanComplete:
+        stopReason !== 'record_cap' && stopReason !== 'page_cap' && recordsMissingTimestamp === 0,
+      truncated: stopReason === 'record_cap' || stopReason === 'page_cap',
       stopReason,
       pagesFetched,
       recordsSeen,
@@ -169,6 +177,7 @@ export async function scanSignatures(
   })
 
   while (sigs.length < maxSigs) {
+    if (pagesFetched >= maxPages) return finish('page_cap')
     const remaining = maxSigs - sigs.length
     const requestLimit = Math.min(1000, remaining)
     const batch = await solRpc<SigInfo[]>(
@@ -177,7 +186,10 @@ export async function scanSignatures(
       opts
     )
     pagesFetched += 1
-    if (!Array.isArray(batch) || batch.length === 0) return finish('history_exhausted')
+    if (!Array.isArray(batch)) {
+      throw new Error('sol getSignaturesForAddress: invalid result')
+    }
+    if (batch.length === 0) return finish('history_exhausted')
     recordsSeen += batch.length
 
     for (const s of batch) {
@@ -187,8 +199,8 @@ export async function scanSignatures(
       if (sinceSec && s.blockTime !== null && s.blockTime < sinceSec) {
         return finish('lookback_boundary')
       }
-      if (s.blockTime === null) recordsMissingTimestamp += 1
       if (s.err) continue // failed tx — no balance change of interest
+      if (s.blockTime === null) recordsMissingTimestamp += 1
       if (sigs.length >= maxSigs) return finish('record_cap')
       sigs.push(s.signature)
       if (sigs.length >= maxSigs) return finish('record_cap')
@@ -202,7 +214,7 @@ export async function scanSignatures(
 /** Compatibility wrapper for callers that only need the bounded signatures. */
 export async function fetchSignatures(
   wallet: string,
-  opts: RpcOpts & { sinceMs?: number; maxSigs?: number } = {}
+  opts: RpcOpts & { sinceMs?: number; maxSigs?: number; maxPages?: number } = {}
 ): Promise<string[]> {
   return (await scanSignatures(wallet, opts)).signatures
 }
@@ -277,7 +289,8 @@ export interface SolWalletResult {
   swaps: number
   solUsd: number
   signatureCoverage: SolanaSignatureCoverage
-  txFetchFailures: number
+  /** Requested signatures without a usable transaction/meta/wallet record. */
+  txsUnresolved: number
   pnl: WalletPnl
 }
 
@@ -287,6 +300,7 @@ export async function computeSolanaWalletOnchain(
   opts: RpcOpts & {
     lookbackDays?: number
     maxSigs?: number
+    maxPages?: number
     concurrency?: number
     solUsd?: number
   } = {}
@@ -317,7 +331,7 @@ export async function computeSolanaWalletOnchain(
     swaps: swaps.length,
     solUsd,
     signatureCoverage: signatureScan.coverage,
-    txFetchFailures: sigs.length - metas.length,
+    txsUnresolved: sigs.length - metas.length,
     pnl: computeWalletPnl(swaps),
   }
 }
