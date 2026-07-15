@@ -126,6 +126,7 @@ jest.mock('@/lib/stripe', () => ({
 
 // Mock supabase: auth.getUser and from().upsert()
 const mockGetUser = jest.fn()
+const mockProfileUpsert = jest.fn().mockResolvedValue({ data: null, error: null })
 
 // The route uses getSupabaseAdmin() from '@/lib/supabase/server', not createClient directly
 const mockSubscriptionQuery = {
@@ -137,13 +138,17 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
     auth: { getUser: (...args: unknown[]) => mockGetUser(...args) },
     from: jest.fn(() => ({
-      upsert: jest.fn().mockResolvedValue({ data: null, error: null }),
+      upsert: (...args: unknown[]) => mockProfileUpsert(...args),
       select: jest.fn().mockReturnValue({
+        ...mockSubscriptionQuery,
         eq: jest.fn().mockReturnValue({
           ...mockSubscriptionQuery,
+          single: jest.fn().mockResolvedValue({
+            data: { stripe_customer_id: null },
+            error: null,
+          }),
           mockResolvedValue: undefined,
         }),
-        ...mockSubscriptionQuery,
       }),
     })),
     rpc: jest.fn().mockResolvedValue({ data: true, error: null }),
@@ -181,6 +186,7 @@ describe('POST /api/stripe/create-checkout', () => {
     mockGetUser.mockResolvedValue({ data: { user: validUser }, error: null })
     mockExtractUser.mockResolvedValue({ user: validUser, error: null })
     mockGetOrCreateStripeCustomer.mockResolvedValue('cus_test123')
+    mockProfileUpsert.mockResolvedValue({ data: null, error: null })
     mockAssertProPriceReady.mockResolvedValue(undefined)
     mockCreateCheckoutSession.mockResolvedValue({
       url: 'https://checkout.stripe.com/session',
@@ -294,6 +300,23 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
 
+  it('blocks checkout when the customer-to-user webhook link cannot persist', async () => {
+    mockProfileUpsert.mockResolvedValue({
+      data: null,
+      error: { message: 'database unavailable' },
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly' }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
   // --- Success Cases ---
 
   it('creates monthly subscription checkout session', async () => {
@@ -311,7 +334,8 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(mockGetOrCreateStripeCustomer).toHaveBeenCalledWith(
       'user-123',
       'user@test.com',
-      expect.objectContaining({ plan: 'monthly' })
+      expect.objectContaining({ plan: 'monthly' }),
+      null
     )
     expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
       expect.objectContaining({

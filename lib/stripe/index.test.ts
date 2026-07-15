@@ -30,6 +30,7 @@ jest.mock('stripe', () => {
     customers: {
       list: jest.fn(),
       create: jest.fn(),
+      retrieve: jest.fn(),
     },
     subscriptions: {
       list: jest.fn(),
@@ -234,7 +235,7 @@ describe('getOrCreateStripeCustomer', () => {
     expect(result).toBe(mockCustomerId)
     expect(stripe.customers.list).toHaveBeenCalledWith({
       email: 'test@example.com',
-      limit: 1,
+      limit: 10,
     })
   })
 
@@ -245,10 +246,13 @@ describe('getOrCreateStripeCustomer', () => {
 
     const result = await getOrCreateStripeCustomer('user123', 'test@example.com')
     expect(result).toBe(mockNewCustomerId)
-    expect(stripe.customers.create).toHaveBeenCalledWith({
-      email: 'test@example.com',
-      metadata: { userId: 'user123' },
-    })
+    expect(stripe.customers.create).toHaveBeenCalledWith(
+      {
+        email: 'test@example.com',
+        metadata: { userId: 'user123' },
+      },
+      { idempotencyKey: 'arena_customer_test_user123' }
+    )
   })
 
   test('should include metadata when creating customer', async () => {
@@ -256,10 +260,26 @@ describe('getOrCreateStripeCustomer', () => {
     stripe.customers.create = jest.fn().mockResolvedValue({ id: 'cus_new123' })
 
     await getOrCreateStripeCustomer('user123', 'test@example.com', { plan: 'pro' })
-    expect(stripe.customers.create).toHaveBeenCalledWith({
-      email: 'test@example.com',
-      metadata: { userId: 'user123', plan: 'pro' },
+    expect(stripe.customers.create).toHaveBeenCalledWith(
+      {
+        email: 'test@example.com',
+        metadata: { userId: 'user123', plan: 'pro' },
+      },
+      { idempotencyKey: 'arena_customer_test_user123' }
+    )
+  })
+
+  test('reuses the customer already linked to the user profile', async () => {
+    stripe.customers.retrieve = jest.fn().mockResolvedValue({
+      id: 'cus_linked',
+      deleted: false,
+      metadata: { userId: 'user123' },
     })
+
+    await expect(
+      getOrCreateStripeCustomer('user123', 'test@example.com', undefined, 'cus_linked')
+    ).resolves.toBe('cus_linked')
+    expect(stripe.customers.list).not.toHaveBeenCalled()
   })
 })
 

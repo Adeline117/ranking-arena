@@ -198,26 +198,50 @@ export const SUBSCRIPTION_STATUS_MAP: Record<Stripe.Subscription.Status, string>
 export async function getOrCreateStripeCustomer(
   userId: string,
   email: string,
-  metadata?: Record<string, string>
+  metadata?: Record<string, string>,
+  existingCustomerId?: string | null
 ): Promise<string> {
-  // 先查找是否已存在客户
-  const existingCustomers = await stripe.customers.list({
-    email,
-    limit: 1,
-  })
-
-  if (existingCustomers.data.length > 0) {
-    return existingCustomers.data[0].id
+  if (existingCustomerId) {
+    try {
+      const existing = await stripe.customers.retrieve(existingCustomerId)
+      if (!existing.deleted) {
+        const owner = existing.metadata.userId
+        if (owner && owner !== userId) {
+          throw new Error('Stored Stripe customer belongs to a different user')
+        }
+        return existing.id
+      }
+    } catch (error) {
+      const code = (error as { code?: string }).code
+      // Expected during test→live cutover: a test customer ID does not exist
+      // under the live key. Other failures must block checkout.
+      if (code !== 'resource_missing') throw error
+    }
   }
 
-  // 创建新客户
-  const customer = await stripe.customers.create({
+  const existingCustomers = await stripe.customers.list({
     email,
-    metadata: {
-      userId,
-      ...metadata,
-    },
+    limit: 10,
   })
+
+  const ownedCustomer = existingCustomers.data.find(
+    (customer) => !customer.metadata?.userId || customer.metadata.userId === userId
+  )
+  if (ownedCustomer) {
+    return ownedCustomer.id
+  }
+
+  const mode = requireEnv('STRIPE_SECRET_KEY').startsWith('sk_live_') ? 'live' : 'test'
+  const customer = await stripe.customers.create(
+    {
+      email,
+      metadata: {
+        userId,
+        ...metadata,
+      },
+    },
+    { idempotencyKey: `arena_customer_${mode}_${userId}` }
+  )
 
   return customer.id
 }
