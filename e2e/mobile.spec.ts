@@ -8,7 +8,12 @@ import { test, expect } from '@playwright/test'
 /** Helper: dismiss cookie consent banner if visible */
 async function dismissCookieConsent(page: import('@playwright/test').Page) {
   const acceptCookies = page.locator('button:has-text("接受全部"), button:has-text("Accept")')
-  if (await acceptCookies.first().isVisible({ timeout: 2000 }).catch(() => false)) {
+  if (
+    await acceptCookies
+      .first()
+      .isVisible({ timeout: 2000 })
+      .catch(() => false)
+  ) {
     await acceptCookies.first().click()
     await page.waitForTimeout(500)
   }
@@ -55,9 +60,14 @@ test.describe('移动端导航测试', () => {
   })
 
   test('移动端搜索入口可用', async ({ page }) => {
-    const searchTrigger = page.locator('[aria-label*="搜索"], [aria-label*="search"], button:has-text("搜索"), a[href*="/search"]')
+    const searchTrigger = page.locator(
+      '[aria-label*="搜索"], [aria-label*="search"], button:has-text("搜索"), a[href*="/search"]'
+    )
 
-    const isVisible = await searchTrigger.first().isVisible({ timeout: 5_000 }).catch(() => false)
+    const isVisible = await searchTrigger
+      .first()
+      .isVisible({ timeout: 5_000 })
+      .catch(() => false)
     // Search entry may not be visible on mobile if header is simplified — soft assertion
     expect(isVisible || true).toBeTruthy()
   })
@@ -80,8 +90,10 @@ test.describe('移动端排行榜测试', () => {
       return
     }
     // Mobile uses card view or simplified grid rows - check for any ranking items
-    const rankingItems = page.locator('.ranking-row, [class*="trader-card"], [class*="ranking-item"], a[href*="/trader/"]')
-    await expect(rankingItems.first()).toBeVisible({ timeout: 10_000 })
+    const rankingItems = page.locator(
+      '.ranking-row, [class*="trader-card"], [class*="ranking-item"], a[href*="/trader/"]'
+    )
+    await expect(rankingItems.filter({ visible: true }).first()).toBeVisible({ timeout: 10_000 })
   })
 
   test('时间切换器在移动端可用', async ({ page }) => {
@@ -90,7 +102,10 @@ test.describe('移动端排行榜测试', () => {
       test.skip()
       return
     }
-    const timeButtons = page.locator('[data-testid="time-range-7D"], button:has-text("7D"), button:has-text("7天")').first()
+    const timeButtons = page
+      .locator('[data-testid="time-range-7D"], button:has-text("7D"), button:has-text("7天")')
+      .filter({ visible: true })
+      .first()
     await expect(timeButtons).toBeVisible({ timeout: 10_000 })
 
     await timeButtons.click()
@@ -110,7 +125,7 @@ test.describe('移动端排行榜测试', () => {
   test('移动端分数徽章显示', async ({ page }) => {
     const scoreBadge = page.locator('.mobile-score-badge')
 
-    if (await scoreBadge.count() > 0) {
+    if ((await scoreBadge.count()) > 0) {
       await expect(scoreBadge.first()).toBeVisible()
     }
   })
@@ -123,7 +138,7 @@ test.describe('移动端触摸交互测试', () => {
     await page.goto('/')
     await page.waitForLoadState('domcontentloaded')
 
-    const scrollHeight = await page.evaluate(() => document.body.scrollHeight)
+    const scrollHeight = await page.evaluate(() => document.documentElement.scrollHeight)
     expect(scrollHeight).toBeGreaterThan(667)
   })
 

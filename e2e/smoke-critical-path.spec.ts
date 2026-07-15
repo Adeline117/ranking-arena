@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test'
-import { dismissOverlays } from './helpers'
+import { dismissOverlays, getVisibleSearchInput } from './helpers'
 
 /**
  * Critical Path Smoke Tests
@@ -88,25 +88,7 @@ test.describe('Critical Path Smoke Tests', () => {
     await page.waitForLoadState('domcontentloaded')
     await dismissOverlays(page)
 
-    // Desktop exposes the nav input directly. Mobile intentionally hides that
-    // input and exposes a search button that opens a full-screen dialog.
-    let searchInput = page
-      .getByPlaceholder(/搜索|Search/i)
-      .filter({ visible: true })
-      .first()
-
-    if (!(await searchInput.isVisible().catch(() => false))) {
-      const searchButton = page
-        .getByRole('button', { name: /搜索|Search/i })
-        .filter({ visible: true })
-        .first()
-      await expect(searchButton).toBeVisible({ timeout: 15_000 })
-      await searchButton.click()
-
-      const searchDialog = page.getByRole('dialog', { name: /搜索|Search/i })
-      await expect(searchDialog).toBeVisible({ timeout: 10_000 })
-      searchInput = searchDialog.getByPlaceholder(/搜索|Search/i).first()
-    }
+    const searchInput = await getVisibleSearchInput(page)
 
     await expect(searchInput).toBeVisible({ timeout: 15_000 })
 
