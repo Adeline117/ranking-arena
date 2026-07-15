@@ -9,11 +9,11 @@ deploys reproducible and self-healing. See also `docs/INGEST_WORKER_TOPOLOGY.md`
 
 ## TL;DR — pick the path
 
-| Your change                                                    | Path                                                     | Command                                        |
-| -------------------------------------------------------------- | -------------------------------------------------------- | ---------------------------------------------- |
-| Parser/logic, **no new dependency** (`package-lock` unchanged) | **code-only** (zero box risk)                            | `bash worker/deploy-ingest-sg.sh --code-only`  |
-| **New/changed dependency** (`package-lock` changed)            | **CI artifact** (build deps on Linux-x64, ship the tree) | Actions tab → run `Deploy Ingest Worker (SG)`  |
-| Mac Mini node (local/vps_jp)                                   | just restart — it runs from the live repo                | `pm2 restart arena-ingest-worker --update-env` |
+| Your change                                                    | Path                                                     | Command                                       |
+| -------------------------------------------------------------- | -------------------------------------------------------- | --------------------------------------------- |
+| Parser/logic, **no new dependency** (`package-lock` unchanged) | **code-only** (zero box risk)                            | `bash worker/deploy-ingest-sg.sh --code-only` |
+| **New/changed dependency** (`package-lock` changed)            | **CI artifact** (build deps on Linux-x64, ship the tree) | Actions tab → run `Deploy Ingest Worker (SG)` |
+| Mac Mini node (local/vps_jp)                                   | **immutable release worktree** + stop/delete/start       | See “Mac Mini release deploy” below           |
 
 **Golden rule: never run `npm install`/`npm ci` on the SG box.** Its npm is not
 concurrency-safe and drops .js files under interruption. The script refuses it by
@@ -22,8 +22,9 @@ default; `--force-npm-ci` is a documented last resort only.
 ## The two nodes
 
 - **Mac Mini** (`arena-ingest-worker`, regions `local,vps_jp`): runs `npx tsx
-worker/src/ingest-worker.ts` from the live git checkout. **A `pm2 restart`
-  picks up code changes** (tsx re-reads the .ts files — no build step).
+worker/src/ingest-worker.ts` from an immutable detached worktree under
+  `/Users/adelinewen/ranking-arena-releases/<sha9>`. A plain `pm2 restart`
+  retains the old cwd and therefore does **not** deploy a new release.
 - **Singapore VPS** (`arena-ingest-worker-sg`, region `vps_sg`: binance / okx /
   bitmart / toobit / binance_spot): runs from `/opt/arena-ingest`, a NON-git
   rsync copy. Deploy via the CI workflow or `worker/deploy-ingest-sg.sh`.
@@ -137,6 +138,46 @@ Before any mutating path, the script checks the VPS for a running SG ingest
 container and refuses to start PM2 until it is stopped. Then every path runs:
 backup → graceful stop → sync → restart → verify `ready` →
 **auto-rollback** (restores the code+node_modules pair from `.bak`) on failure.
+The ready gate writes a unique deployment marker and requires both a fresh
+`ready` line and the target heartbeat SHA after that marker; old log lines cannot
+make a failed restart look healthy.
+
+## Mac Mini release deploy
+
+Create a detached release only after the target SHA is pushed. Reuse dependencies,
+runtime state, logs and secret files through symlinks; never copy secrets into the
+release. The source secret files must remain mode `0600`.
+
+```bash
+TARGET_SHA="$(git rev-parse origin/main)"
+RELEASE="/Users/adelinewen/ranking-arena-releases/${TARGET_SHA:0:9}"
+git worktree add --detach "$RELEASE" "$TARGET_SHA"
+ln -s /Users/adelinewen/ranking-arena/node_modules "$RELEASE/node_modules"
+ln -s /Users/adelinewen/ranking-arena/.arena-ingest "$RELEASE/.arena-ingest"
+ln -s /Users/adelinewen/ranking-arena/worker/logs "$RELEASE/worker/logs"
+ln -s /Users/adelinewen/ranking-arena/worker/.env "$RELEASE/worker/.env"
+ln -s /Users/adelinewen/ranking-arena/.env.local "$RELEASE/.env.local"
+chmod 600 /Users/adelinewen/ranking-arena/{.env.local,worker/.env}
+```
+
+Switch cwd with stop/delete/start. Start PM2 from a minimal environment so
+unrelated shell/session tokens are not captured in the worker process record;
+`ingest-worker.ts` loads its required values from `worker/.env` itself.
+
+```bash
+pm2 stop arena-ingest-worker
+pm2 delete arena-ingest-worker
+env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" PM2_HOME="$HOME/.pm2" \
+  PATH="/opt/homebrew/bin:/usr/bin:/bin" \
+  /opt/homebrew/bin/pm2 start "$RELEASE/worker/ecosystem.config.cjs" \
+  --only arena-ingest-worker
+env -i HOME="$HOME" USER="$USER" LOGNAME="$USER" PM2_HOME="$HOME/.pm2" \
+  PATH="/opt/homebrew/bin:/usr/bin:/bin" /opt/homebrew/bin/pm2 save
+```
+
+Do not restore the old standalone `onchain-enrich-web3.mts` crontab entries.
+`maint:onchain-enrich` on the local BullMQ queue is the sole recurring owner;
+running both paths has no shared lock and can duplicate provider calls/writes.
 
 ## Recovery (if SG crash-loops on `Cannot find module`)
 
