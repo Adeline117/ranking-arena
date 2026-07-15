@@ -2,6 +2,7 @@ import {
   chainForSource,
   enrichmentExtras,
   enrichmentSeries,
+  scoreEligibleWinRate,
   type OnchainEnrichment,
 } from '../enrich'
 
@@ -36,7 +37,31 @@ describe('enrichmentExtras', () => {
       { symbol: 'WIF', address: '0xabc', logo: null, profit_pct: 50, realized_pnl: 1000 },
     ],
     provenance: 'onchain-computed',
+    quality: {
+      schemaVersion: 1,
+      methodology: 'wallet-balance-delta-average-cost',
+      methodologyVersion: '1.0.0',
+      completeness: 'partial',
+      priceQuality: 'non_historical_approx',
+      scoreEligible: false,
+      reasons: [
+        'opening_inventory_unknown',
+        'history_scan_not_proven_complete',
+        'historical_native_quote_not_execution_priced',
+        'generic_balance_delta_decoder',
+      ],
+      history: {
+        requestedDays: 90,
+        scanComplete: null,
+        truncated: null,
+        recordsFetched: 150,
+        txsFetched: 145,
+        swapsDecoded: 6,
+      },
+      pricing: { pricedTokens: 3, unpricedTokens: 1 },
+    },
     realizedPartial: false,
+    dailyRealized: [],
   }
 
   it('emits only onchain_* keys + provenance', () => {
@@ -45,7 +70,39 @@ describe('enrichmentExtras', () => {
     expect(x.onchain_total_pnl).toBe(1204)
     expect(x.onchain_win_rate).toBe(66.67)
     expect(x.onchain_derivation).toBe('onchain-computed')
-    expect(x.onchain_realized_partial).toBeUndefined() // not partial
+    expect(x.onchain_methodology).toBe('wallet-balance-delta-average-cost@1.0.0')
+    expect(x.onchain_quality).toEqual({
+      schema_version: 1,
+      score_eligible: false,
+      methodology: 'wallet-balance-delta-average-cost',
+      methodology_version: '1.0.0',
+      completeness: 'partial',
+      price_quality: 'non_historical_approx',
+      reasons: [
+        'opening_inventory_unknown',
+        'history_scan_not_proven_complete',
+        'historical_native_quote_not_execution_priced',
+        'generic_balance_delta_decoder',
+      ],
+      history: {
+        requested_days: 90,
+        scan_complete: null,
+        truncated: null,
+        records_fetched: 150,
+        txs_fetched: 145,
+        swaps_decoded: 6,
+      },
+      pricing: { priced_tokens: 3, unpriced_tokens: 1 },
+      realized_partial: false,
+    })
+    expect(x.onchain_score_eligible).toBe(false)
+    expect(x.onchain_limitations).toEqual([
+      'opening_inventory_unknown',
+      'history_scan_not_proven_complete',
+      'historical_native_quote_not_execution_priced',
+      'generic_balance_delta_decoder',
+    ])
+    expect(x.onchain_realized_partial).toBe(false)
     // OnchainInsights blocks surfaced when tokens exist
     expect(x.token_distribution).toEqual({ gt_500: 1, p0_500: 2, n50_0: 0, lt_n50: 1 })
     expect(Array.isArray(x.top_earning_tokens)).toBe(true)
@@ -54,9 +111,36 @@ describe('enrichmentExtras', () => {
     expect('roi' in x).toBe(false)
   })
 
+  it('keeps estimated wallet win rate out of typed score inputs', () => {
+    expect(scoreEligibleWinRate(base)).toBeNull()
+    expect(
+      scoreEligibleWinRate({ ...base, quality: { ...base.quality, scoreEligible: true } })
+    ).toBeNull()
+    expect(
+      scoreEligibleWinRate({
+        ...base,
+        quality: {
+          ...base.quality,
+          scoreEligible: true,
+          completeness: 'complete',
+          priceQuality: 'historical_execution',
+          reasons: [],
+          history: { ...base.quality.history, scanComplete: true, truncated: false },
+        },
+      })
+    ).toBe(66.67)
+  })
+
   it('flags partial realized for BSC native-BNB sellers', () => {
     const x = enrichmentExtras({ ...base, chain: 'bsc', realizedPartial: true })
     expect(x.onchain_realized_partial).toBe(true)
+    expect(x.onchain_quality).toMatchObject({ realized_partial: true })
+  })
+
+  it('emits null insight blocks so a shallow JSONB merge clears stale cards', () => {
+    const x = enrichmentExtras({ ...base, tokenDistribution: {}, topEarningTokens: [] })
+    expect(x.token_distribution).toBeNull()
+    expect(x.top_earning_tokens).toBeNull()
   })
 })
 
@@ -80,6 +164,29 @@ describe('enrichmentSeries (BSC chain-derived pnl_daily)', () => {
     tokenDistribution: {},
     topEarningTokens: [],
     provenance: 'onchain-computed' as const,
+    quality: {
+      schemaVersion: 1 as const,
+      methodology: 'wallet-balance-delta-average-cost' as const,
+      methodologyVersion: '1.0.0' as const,
+      completeness: 'partial' as const,
+      priceQuality: 'non_historical_approx' as const,
+      scoreEligible: false,
+      reasons: [
+        'opening_inventory_unknown' as const,
+        'history_scan_not_proven_complete' as const,
+        'historical_native_quote_not_execution_priced' as const,
+        'generic_balance_delta_decoder' as const,
+      ],
+      history: {
+        requestedDays: 90,
+        scanComplete: null,
+        truncated: null,
+        recordsFetched: 3,
+        txsFetched: null,
+        swapsDecoded: 3,
+      },
+      pricing: { pricedTokens: 0, unpricedTokens: 0 },
+    },
     realizedPartial: false,
   }
   const nowMs = Date.parse('2026-07-10T12:00:00Z')

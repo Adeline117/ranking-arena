@@ -3,9 +3,9 @@
  *
  * Ties the chain fetchers + pricing into ONE normalized result that a pipeline
  * step writes to arena.trader_stats.extras (never clobbering board values —
- * ADDS onchain_* fields + fills win_rate when the board left it null). This is
- * the durable replacement for the WAF-blocked profile detail: computed 100%
- * from chain data, tagged provenance='onchain-computed'.
+ * ADDS onchain_* fields only). This is
+ * the durable replacement for the WAF-blocked profile detail: reconstructed
+ * from chain activity plus marked pricing, tagged provenance='onchain-computed'.
  *
  * Chain dispatch by source slug:
  *   *_solana → Solana balance-delta path (sells fully captured)
@@ -21,6 +21,41 @@ import type { PerTokenPnl } from './pnl-accounting'
 import type { NormalizedTransfer } from './bsc-swaps'
 
 export type OnchainChain = 'bsc' | 'solana'
+
+/**
+ * Current wallet accounting contract. It is intentionally score-ineligible:
+ * the bounded lookback does not replay opening inventory and native quote legs
+ * lack execution-time prices. Keep these limitations machine readable until
+ * the canonical event/equity ledger replaces this methodology.
+ */
+export const ONCHAIN_METHODOLOGY = 'wallet-balance-delta-average-cost' as const
+export const ONCHAIN_METHODOLOGY_VERSION = '1.0.0' as const
+
+export type OnchainQualityReason =
+  | 'opening_inventory_unknown'
+  | 'history_scan_not_proven_complete'
+  | 'historical_native_quote_not_execution_priced'
+  | 'generic_balance_delta_decoder'
+  | 'internal_transfer_coverage_unknown'
+
+export interface OnchainQuality {
+  schemaVersion: 1
+  methodology: typeof ONCHAIN_METHODOLOGY
+  methodologyVersion: typeof ONCHAIN_METHODOLOGY_VERSION
+  completeness: 'partial' | 'complete'
+  priceQuality: 'non_historical_approx' | 'historical_execution'
+  scoreEligible: boolean
+  reasons: OnchainQualityReason[]
+  history: {
+    requestedDays: number
+    scanComplete: boolean | null
+    truncated: boolean | null
+    recordsFetched: number
+    txsFetched: number | null
+    swapsDecoded: number
+  }
+  pricing: { pricedTokens: number; unpricedTokens: number }
+}
 
 /** Map a source slug to its chain, or null if not an on-chain wallet source. */
 export function chainForSource(slug: string): OnchainChain | null {
@@ -50,6 +85,7 @@ export interface OnchainEnrichment {
   /** OnchainInsights top_earning_tokens ({symbol,address,logo,profit_pct,realized_pnl}). */
   topEarningTokens: Array<Record<string, unknown>>
   provenance: 'onchain-computed'
+  quality: OnchainQuality
   /** True when realized may understate (BSC native-BNB sells not yet captured). */
   realizedPartial: boolean
   /** Per-day realized PnL deltas (active days only) — raw material for
@@ -126,7 +162,11 @@ export async function enrichWeb3Wallet(
   if (chain === 'solana') {
     const r = await computeSolanaWalletOnchain(wallet, { lookbackDays, maxSigs: opts.maxSigs })
     const { u, info } = await priceAndMeta(r.pnl.perToken)
-    return normalize('solana', wallet, lookbackDays, r.pnl, u, info, false)
+    return normalize('solana', wallet, lookbackDays, r.pnl, u, info, false, {
+      recordsFetched: r.signatures,
+      txsFetched: r.txsFetched,
+      swapsDecoded: r.swaps,
+    })
   }
   // Native-BNB SELL receipts (item C): caller-supplied (Dune batch) wins;
   // otherwise auto-fetch per wallet from Moralis (owner key 2026-07-09,
@@ -142,11 +182,16 @@ export async function enrichWeb3Wallet(
     extraTransfers: internalLegs,
   })
   const { u, info } = await priceAndMeta(r.pnl.perToken)
-  // With internal-BNB legs injected (Dune batch or Moralis per-wallet),
-  // native-BNB sells ARE captured → realized complete. Only flag partial when
-  // we had NO internal data to inject.
+  // Only a caller-supplied coverage result or at least one Moralis leg proves
+  // the internal-transfer gap was queried. Fail-soft [] is ambiguous (a valid
+  // zero-row result and an upstream failure currently share that shape), so it
+  // remains partial until the fetchers expose an explicit coverage contract.
   const partial = !internalLegs
-  return normalize('bsc', wallet, lookbackDays, r.pnl, u, info, partial)
+  return normalize('bsc', wallet, lookbackDays, r.pnl, u, info, partial, {
+    recordsFetched: r.transfers,
+    txsFetched: null,
+    swapsDecoded: r.swaps,
+  })
 }
 
 function normalize(
@@ -156,8 +201,16 @@ function normalize(
   pnl: import('./pnl-accounting').WalletPnl,
   u: { unrealizedUsd: number; pricedTokens: number; unpricedTokens: number },
   info: Map<string, TokenInfo>,
-  realizedPartial: boolean
+  realizedPartial: boolean,
+  historyCounts: Pick<OnchainQuality['history'], 'recordsFetched' | 'txsFetched' | 'swapsDecoded'>
 ): OnchainEnrichment {
+  const reasons: OnchainQualityReason[] = [
+    'opening_inventory_unknown',
+    'history_scan_not_proven_complete',
+    'historical_native_quote_not_execution_priced',
+    'generic_balance_delta_decoder',
+  ]
+  if (realizedPartial) reasons.push('internal_transfer_coverage_unknown')
   return {
     chain,
     wallet,
@@ -177,9 +230,38 @@ function normalize(
     tokenDistribution: tokenDistribution(pnl.perToken),
     topEarningTokens: topEarningTokens(pnl.perToken, info),
     provenance: 'onchain-computed',
-    realizedPartial: realizedPartial && pnl.txsSell === 0,
+    quality: {
+      schemaVersion: 1,
+      methodology: ONCHAIN_METHODOLOGY,
+      methodologyVersion: ONCHAIN_METHODOLOGY_VERSION,
+      completeness: 'partial',
+      priceQuality: 'non_historical_approx',
+      scoreEligible: false,
+      reasons,
+      history: {
+        requestedDays: lookbackDays,
+        scanComplete: null,
+        truncated: null,
+        ...historyCounts,
+      },
+      pricing: { pricedTokens: u.pricedTokens, unpricedTokens: u.unpricedTokens },
+    },
+    realizedPartial,
     dailyRealized: pnl.dailyRealized,
   }
+}
+
+/** Only canonical, complete on-chain metrics may populate typed score inputs. */
+export function scoreEligibleWinRate(e: OnchainEnrichment): number | null {
+  const q = e.quality
+  const canonical =
+    q.scoreEligible &&
+    q.completeness === 'complete' &&
+    q.priceQuality === 'historical_execution' &&
+    q.history.scanComplete === true &&
+    q.history.truncated === false &&
+    q.reasons.length === 0
+  return canonical ? e.winRate : null
 }
 
 /**
@@ -222,6 +304,28 @@ export function enrichmentSeries(
  *  token blocks (token_distribution / top_earning_tokens) our compute fills. */
 export function enrichmentExtras(e: OnchainEnrichment): Record<string, unknown> {
   const hasTokens = e.topEarningTokens.length > 0
+  const quality = {
+    schema_version: e.quality.schemaVersion,
+    methodology: e.quality.methodology,
+    methodology_version: e.quality.methodologyVersion,
+    completeness: e.quality.completeness,
+    price_quality: e.quality.priceQuality,
+    score_eligible: e.quality.scoreEligible,
+    reasons: [...e.quality.reasons],
+    history: {
+      requested_days: e.quality.history.requestedDays,
+      scan_complete: e.quality.history.scanComplete,
+      truncated: e.quality.history.truncated,
+      records_fetched: e.quality.history.recordsFetched,
+      txs_fetched: e.quality.history.txsFetched,
+      swaps_decoded: e.quality.history.swapsDecoded,
+    },
+    pricing: {
+      priced_tokens: e.quality.pricing.pricedTokens,
+      unpriced_tokens: e.quality.pricing.unpricedTokens,
+    },
+    realized_partial: e.realizedPartial,
+  }
   return {
     onchain_realized_pnl: e.realizedPnlUsd,
     onchain_unrealized_pnl: e.unrealizedPnlUsd,
@@ -233,12 +337,18 @@ export function enrichmentExtras(e: OnchainEnrichment): Record<string, unknown> 
     onchain_sell_volume: e.sellVolumeUsd,
     onchain_tokens_traded: e.tokensTraded,
     onchain_derivation: e.provenance,
+    onchain_methodology: `${e.quality.methodology}@${e.quality.methodologyVersion}`,
+    // Whole-object replacement prevents a prior partial/error state from
+    // surviving JSONB's shallow extras merge after a later complete recompute.
+    onchain_quality: quality,
+    onchain_score_eligible: e.quality.scoreEligible,
+    onchain_limitations: [...e.quality.reasons],
+    onchain_realized_partial: e.realizedPartial,
     // Freshness stamp — the runner's sweep selection skips wallets enriched
     // within its window and refreshes stalest-first (Phase B recurring, 2026-07-09).
     onchain_enriched_at: new Date().toISOString(),
-    // OnchainInsights blocks — only when we actually have tokens (NULL-collapse).
-    ...(hasTokens ? { token_distribution: e.tokenDistribution } : {}),
-    ...(hasTokens ? { top_earning_tokens: e.topEarningTokens } : {}),
-    ...(e.realizedPartial ? { onchain_realized_partial: true } : {}),
+    // Always emit null when empty so shallow JSONB merge clears stale cards.
+    token_distribution: hasTokens ? e.tokenDistribution : null,
+    top_earning_tokens: hasTokens ? e.topEarningTokens : null,
   }
 }
