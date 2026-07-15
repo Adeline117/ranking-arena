@@ -1679,3 +1679,120 @@
     display: none !important;
   }
 }
+
+/* ============================================
+   B2C ranking decision controls
+   ============================================ */
+
+@media (max-width: 767px) {
+  .ranking-toolbar-row {
+    flex-wrap: nowrap !important;
+    padding: 6px 8px !important;
+  }
+
+  .ranking-toolbar-row > div:last-child {
+    min-width: 0;
+  }
+
+  .ranking-toolbar-row .view-toggle-group,
+  .ranking-toolbar-row .ranking-toolbar-secondary {
+    display: none !important;
+  }
+
+  .ranking-toolbar-row .toolbar-btn {
+    min-height: 40px;
+  }
+
+  .weekly-podium-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .weekly-podium-card {
+    min-width: 0;
+    gap: 6px !important;
+    padding: 10px 6px !important;
+  }
+
+  .weekly-podium-card img,
+  .weekly-podium-card > span:nth-child(2) {
+    width: 36px !important;
+    height: 36px !important;
+  }
+
+  .weekly-podium-roi > span {
+    max-width: 100%;
+    font-size: clamp(12px, 3.7vw, 16px) !important;
+    letter-spacing: -0.04em !important;
+  }
+}
+
+@media (max-width: 360px) {
+  .top-nav-theme-action {
+    display: none !important;
+  }
+
+  .ranking-toolbar-compare > span {
+    display: none !important;
+  }
+}
+
+/* Trader profile actions: Follow/Save stay primary; Alert/Compare/Share move
+   into one accessible mobile overflow menu instead of wrapping to three rows. */
+.trader-actions-more {
+  display: none;
+}
+
+.trader-secondary-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+@media (max-width: 767px) {
+  .profile-header-actions {
+    width: 100%;
+    flex-wrap: nowrap !important;
+  }
+
+  .trader-actions-more {
+    min-height: 44px;
+    margin-left: auto;
+    padding: 8px 12px;
+    border: 1px solid var(--color-border-primary);
+    border-radius: 10px;
+    background: var(--color-bg-tertiary);
+    color: var(--color-text-secondary);
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+  }
+
+  .trader-secondary-actions {
+    display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    right: 0;
+    width: min(240px, calc(100vw - 32px));
+    padding: 8px;
+    border: 1px solid var(--color-border-primary);
+    border-radius: 12px;
+    background: var(--color-bg-secondary);
+    box-shadow: var(--shadow-lg);
+    z-index: 50;
+  }
+
+  .trader-secondary-actions[data-open='true'] {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .trader-secondary-actions > button {
+    width: 100%;
+    justify-content: flex-start !important;
+  }
+}

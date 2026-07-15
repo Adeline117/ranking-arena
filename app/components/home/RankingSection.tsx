@@ -15,7 +15,8 @@ import { RankingTable } from '../ranking/RankingTable'
 
 import TimeRangeSelector from './TimeRangeSelector'
 import { useRankingFilters, FREE_LEADERBOARD_LIMIT } from './useRankingFilters'
-import CategoryRankingTabs from '../ranking/CategoryRankingTabs'
+import CategoryRankingTabs, { type CategoryType } from '../ranking/CategoryRankingTabs'
+import { trackEvent } from '@/lib/analytics/track'
 
 const AdvancedFilterPanel = dynamic(() => import('./AdvancedFilterPanel'), { ssr: false })
 const FilterStatusMessages = dynamic(() => import('./FilterStatusMessages'), { ssr: false })
@@ -157,6 +158,14 @@ export default function RankingSection({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  const handleCategoryChange = useCallback(
+    (nextCategory: CategoryType) => {
+      trackEvent('ranking_filter', { kind: 'category', value: nextCategory })
+      setCategory(nextCategory)
+    },
+    [setCategory]
+  )
+
   return (
     <section className="home-ranking-section contain-layout-style" style={{ minWidth: 0 }}>
       {/* Period + Category tabs in one row */}
@@ -198,7 +207,7 @@ export default function RankingSection({
         />
         <CategoryRankingTabs
           currentCategory={category}
-          onCategoryChange={setCategory}
+          onCategoryChange={handleCategoryChange}
           isPro={isPro}
           onProRequired={onProRequired}
           categoryCounts={categoryCounts}
@@ -343,7 +352,7 @@ export default function RankingSection({
         timeRange={activeTimeRange}
         isPro={isPro}
         category={category}
-        onCategoryChange={setCategory}
+        onCategoryChange={handleCategoryChange}
         onProRequired={onProRequired}
         onFilterToggle={handleFilterToggle}
         hasActiveFilters={hasActiveFilters}

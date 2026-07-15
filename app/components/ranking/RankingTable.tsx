@@ -1305,18 +1305,34 @@ function RankingTableInner(props: {
                     const series =
                       rankSeries[`${seriesPeriod}:${trader.source || source || ''}:${trader.id}`]
                     return (
-                      <SectionErrorBoundary key={`${trader.id}-${trader.source || 'unknown'}`}>
-                        <TraderCard
-                          trader={trader}
-                          rank={rank}
-                          source={source}
-                          language={language}
-                          searchQuery={debouncedSearch}
-                          getMedalGlowClass={getMedalGlowClass}
-                          parseSourceInfo={parseSourceInfoWithT}
-                          series={series}
-                        />
-                      </SectionErrorBoundary>
+                      <React.Fragment key={`${trader.id}-${trader.source || 'unknown'}`}>
+                        <SectionErrorBoundary>
+                          <TraderCard
+                            trader={trader}
+                            rank={rank}
+                            source={source}
+                            language={language}
+                            searchQuery={debouncedSearch}
+                            getMedalGlowClass={getMedalGlowClass}
+                            parseSourceInfo={parseSourceInfoWithT}
+                            series={series}
+                          />
+                        </SectionErrorBoundary>
+                        {!props.loggedIn && idx === 7 && (
+                          <button
+                            type="button"
+                            className="ranking-inline-signup"
+                            onClick={() => useLoginModal.getState().openLoginModal()}
+                          >
+                            <Text size="sm" weight="semibold">
+                              {t('rankingSignUpFree')}
+                            </Text>
+                            <Text size="xs" color="secondary">
+                              {t('guestSignupSubtitle')}
+                            </Text>
+                          </button>
+                        )}
+                      </React.Fragment>
                     )
                   })}
                 </Box>

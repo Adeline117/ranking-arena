@@ -12,6 +12,7 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import type { TimeRange } from './hooks/useTraderData'
 import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 import type { Trader } from '../ranking/RankingTable'
+import { trackEvent } from '@/lib/analytics/track'
 
 interface HomePageClientProps {
   initialTraders?: InitialTrader[]
@@ -87,6 +88,19 @@ export default function HomePageClient({
     initialCategoryCounts,
   })
 
+  useEffect(() => {
+    trackEvent('landing_view', { authenticated: isLoggedIn })
+  }, [isLoggedIn])
+
+  useEffect(() => {
+    if (loading || traders.length === 0) return
+    trackEvent('ranking_visible', {
+      period: activeTimeRange,
+      visible_count: traders.length,
+      total_count: totalCount,
+    })
+  }, [activeTimeRange, loading, totalCount, traders.length])
+
   // Hide SSR ranking table only AFTER we have real data to show.
   // Previously this ran on mount (useLayoutEffect + []), which hid the SSR
   // table immediately — before React had data to replace it with. On slow
@@ -131,6 +145,7 @@ export default function HomePageClient({
 
   const handleTimeRangeChange = useCallback(
     (range: TimeRange) => {
+      trackEvent('ranking_filter', { kind: 'period', value: range })
       changeTimeRange(range)
       const params = new URLSearchParams(window.location.search)
       params.set('range', range)

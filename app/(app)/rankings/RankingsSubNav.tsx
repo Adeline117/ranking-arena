@@ -4,6 +4,14 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import enFull from '@/lib/i18n/en'
+import { registerFullDict } from '@/lib/i18n'
+
+// Rankings routes use feature-level copy that is intentionally absent from the
+// tiny global core dictionary. Register it synchronously in this route chunk so
+// SSR and the first client render resolve the same labels (no raw-key flash or
+// hydration replacement on direct links such as /rankings/weekly).
+registerFullDict('en', enFull as unknown as Record<string, string>)
 
 // 2026-07-04 下线 bots/exchanges/weekly 三个子导航(U1/#3):数据陈旧/整页空
 // (bots 自曝 143 天未刷、exchanges/weekly 全空),挂着自曝烂尾比没有更伤信任。

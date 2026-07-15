@@ -1,5 +1,6 @@
 'use client'
 
+import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Box } from '../base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -11,6 +12,7 @@ import AlertBellButton from './AlertBellButton'
 import TraderShareActions from './TraderShareActions'
 import { ActionButton } from './TraderHeaderHelpers'
 import { formatDisplayName } from '@/app/components/ranking/utils'
+import { trackEvent } from '@/lib/analytics/track'
 
 interface TraderHeaderActionsProps {
   traderId: string
@@ -52,6 +54,7 @@ function CompareToggle({
     } else {
       addTrader({ id: traderId, handle, source, avatarUrl })
     }
+    trackEvent('compare_trader', { traderId, source, selected: !isSelected })
   }
 
   const label = isSelected ? t('comparing') : t('compare')
@@ -127,11 +130,30 @@ export function TraderHeaderActions({
 }: TraderHeaderActionsProps) {
   const router = useRouter()
   const { t } = useLanguage()
+  const [moreOpen, setMoreOpen] = useState(false)
+  const actionsRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (!moreOpen) return
+    const close = (event: MouseEvent) => {
+      if (!actionsRef.current?.contains(event.target as Node)) setMoreOpen(false)
+    }
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setMoreOpen(false)
+    }
+    document.addEventListener('mousedown', close)
+    document.addEventListener('keydown', closeOnEscape)
+    return () => {
+      document.removeEventListener('mousedown', close)
+      document.removeEventListener('keydown', closeOnEscape)
+    }
+  }, [moreOpen])
 
   const resolvedDisplayName = displayName || formatDisplayName(handle, source)
 
   return (
     <Box
+      ref={actionsRef}
       className="profile-header-actions action-buttons"
       style={{
         display: 'flex',
@@ -187,34 +209,51 @@ export function TraderHeaderActions({
         <WatchlistToggleButton source={source} sourceTraderID={traderId} handle={handle} />
       )}
 
-      {/* Alert bell — notify me when this trader's rank/ROI/score moves (A4).
-          Explicit opt-in; opens the existing AlertConfig in a modal. */}
-      {!isOwnProfile && source && (
-        <AlertBellButton traderId={traderId} traderHandle={handle || traderId} source={source} />
-      )}
+      <button
+        type="button"
+        className="trader-actions-more"
+        aria-label={t('more')}
+        aria-expanded={moreOpen}
+        aria-haspopup="menu"
+        onClick={() => setMoreOpen((open) => !open)}
+      >
+        <span aria-hidden="true">•••</span>
+        <span>{t('more')}</span>
+      </button>
 
-      {/* Compare toggle (P0-4) */}
-      {!isOwnProfile && (
-        <CompareToggle
-          traderId={traderId}
+      <div
+        className="trader-secondary-actions"
+        data-open={moreOpen ? 'true' : 'false'}
+        role={moreOpen ? 'menu' : undefined}
+      >
+        {/* Alert bell — notify me when this trader's rank/ROI/score moves (A4).
+            Explicit opt-in; opens the existing AlertConfig in a modal. */}
+        {!isOwnProfile && source && (
+          <AlertBellButton traderId={traderId} traderHandle={handle || traderId} source={source} />
+        )}
+
+        {/* Compare toggle (P0-4) */}
+        {!isOwnProfile && (
+          <CompareToggle
+            traderId={traderId}
+            handle={handle}
+            source={source || ''}
+            avatarUrl={effectiveAvatarUrl}
+          />
+        )}
+
+        {/* Prominent quiz-grade share: OG rank-card preview + one-tap
+            X / Telegram / WhatsApp / native-share + download card, with the
+            sharer's referral code auto-appended when logged in. */}
+        <TraderShareActions
           handle={handle}
-          source={source || ''}
-          avatarUrl={effectiveAvatarUrl}
+          displayName={resolvedDisplayName}
+          platform={source}
+          rank={rank}
+          roi={roi90d}
+          arenaScore={arenaScore}
         />
-      )}
-
-      {/* Prominent quiz-grade share: OG rank-card preview + one-tap
-          X / Telegram / WhatsApp / native-share + download card, with the
-          sharer's referral code auto-appended when logged in. Replaces the
-          previous bare copy/X buttons + generic share dropdown. */}
-      <TraderShareActions
-        handle={handle}
-        displayName={resolvedDisplayName}
-        platform={source}
-        rank={rank}
-        roi={roi90d}
-        arenaScore={arenaScore}
-      />
+      </div>
     </Box>
   )
 }

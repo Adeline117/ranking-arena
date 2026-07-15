@@ -17,6 +17,7 @@ import { features } from '@/lib/features'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 import { getScoreColor } from '@/lib/utils/score-colors'
+import { trackEvent } from '@/lib/analytics/track'
 
 interface SearchResult {
   type: 'group' | 'post' | 'trader'
@@ -521,6 +522,14 @@ function SearchContent() {
               }}
               tabIndex={globalIndex === Math.max(selectedIndex, 0) ? 0 : -1}
               onFocus={() => setSelectedIndex(globalIndex)}
+              onClick={() =>
+                trackEvent('search_result_click', {
+                  queryLength: query.trim().length,
+                  resultId: result.id,
+                  resultType: result.type,
+                  surface: 'search_page',
+                })
+              }
               style={{
                 display: 'flex',
                 alignItems: 'center',
