@@ -134,6 +134,9 @@ export async function GET(request: NextRequest) {
     const rank = safeParseInt(searchParams.get('rank'), 0)
     // Positive = climbed (same convention as leaderboard_ranks.rank_change).
     const rankChange = safeParseInt(searchParams.get('rankChange'), 0)
+    // Same active read-only authorization truth used by profiles and rankings.
+    // The server page sets this; the image route deliberately does no DB work.
+    const verified = searchParams.get('verified') === '1'
     const total = safeParseInt(searchParams.get('total'), 0)
     const roi = parseFloat(searchParams.get('roi') || 'NaN')
     const winRate = parseFloat(searchParams.get('winRate') || 'NaN')
@@ -529,6 +532,28 @@ export async function GET(request: NextRequest) {
                     }}
                   >
                     {rankChangeUp ? '▲' : '▼'} {Math.abs(rankChange)} places
+                  </span>
+                </div>
+              )}
+              {verified && (
+                <div
+                  style={{
+                    display: 'flex',
+                    padding: '4px 12px',
+                    borderRadius: 999,
+                    background: 'rgba(47,229,125,0.12)',
+                    border: '1px solid rgba(47,229,125,0.35)',
+                  }}
+                >
+                  <span
+                    style={{
+                      fontSize: 13,
+                      fontWeight: 800,
+                      color: C.success,
+                      letterSpacing: '0.3px',
+                    }}
+                  >
+                    ✓ VERIFIED DATA
                   </span>
                 </div>
               )}
