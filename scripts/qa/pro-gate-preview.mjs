@@ -7,6 +7,10 @@
  *
  * Run:
  *   BASE_URL=https://<preview>.vercel.app node scripts/qa/pro-gate-preview.mjs
+ *
+ * If the Preview project has Vercel Deployment Protection enabled, also set
+ * VERCEL_AUTOMATION_BYPASS_SECRET. The secret is sent only as Vercel's
+ * protection-bypass request header and is never printed.
  */
 import crypto from 'node:crypto'
 import { chromium } from 'playwright'
@@ -32,7 +36,19 @@ async function main() {
 
   const browser = await chromium.launch({ headless: true })
   try {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 800 } })
+    const bypassSecret = process.env.VERCEL_AUTOMATION_BYPASS_SECRET
+    const context = await browser.newContext({
+      viewport: { width: 1280, height: 800 },
+      ...(bypassSecret
+        ? {
+            extraHTTPHeaders: {
+              'x-vercel-protection-bypass': bypassSecret,
+              // Persist the bypass through browser navigations and assets.
+              'x-vercel-set-bypass-cookie': 'true',
+            },
+          }
+        : {}),
+    })
     await context.addInitScript((savedSession) => {
       localStorage.setItem('arena-auth', JSON.stringify(savedSession))
     }, session)
@@ -62,7 +78,24 @@ async function main() {
     await page.waitForTimeout(3_000)
 
     const gate = page.getByText('Compare up to 5 traders side by side', { exact: true })
-    await gate.waitFor({ state: 'visible', timeout: 10_000 })
+    try {
+      await gate.waitFor({ state: 'visible', timeout: 10_000 })
+    } catch (error) {
+      // Keep a failed Preview acceptance diagnosable without emitting secrets
+      // or a full authenticated page. This distinguishes a Vercel login wall,
+      // a lost QA session, and a missing gate configuration.
+      const body = (
+        await page
+          .locator('body')
+          .innerText()
+          .catch(() => '')
+      )
+        .replace(/\s+/g, ' ')
+        .slice(0, 300)
+      throw new Error(
+        `Compare gate did not render (url=${page.url()}, title=${await page.title()}, body=${JSON.stringify(body)}): ${error instanceof Error ? error.message : String(error)}`
+      )
+    }
     const cta = page.getByRole('button', { name: 'Start 7-Day Free Trial' })
     await cta.waitFor({ state: 'visible', timeout: 5_000 })
     await cta.click()
