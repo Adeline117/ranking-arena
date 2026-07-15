@@ -4237,6 +4237,48 @@ export type Database = {
           },
         ]
       }
+      product_events: {
+        Row: {
+          anonymous_id_hash: string | null
+          event_id: string
+          event_name: string
+          id: string
+          occurred_at: string
+          path: string | null
+          properties: Json
+          received_at: string
+          session_id_hash: string | null
+          source: string
+          user_id: string | null
+        }
+        Insert: {
+          anonymous_id_hash?: string | null
+          event_id: string
+          event_name: string
+          id?: string
+          occurred_at: string
+          path?: string | null
+          properties?: Json
+          received_at?: string
+          session_id_hash?: string | null
+          source?: string
+          user_id?: string | null
+        }
+        Update: {
+          anonymous_id_hash?: string | null
+          event_id?: string
+          event_name?: string
+          id?: string
+          occurred_at?: string
+          path?: string | null
+          properties?: Json
+          received_at?: string
+          session_id_hash?: string | null
+          source?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       project_cache: {
         Row: {
           bt_t: number | null
@@ -6914,6 +6956,30 @@ export type Database = {
         }
         Relationships: []
       }
+      user_activity_days: {
+        Row: {
+          activity_date: string
+          first_seen_at: string
+          heartbeat_count: number
+          last_seen_at: string
+          user_id: string
+        }
+        Insert: {
+          activity_date: string
+          first_seen_at: string
+          heartbeat_count?: number
+          last_seen_at: string
+          user_id: string
+        }
+        Update: {
+          activity_date?: string
+          first_seen_at?: string
+          heartbeat_count?: number
+          last_seen_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_collections: {
         Row: {
           created_at: string | null
@@ -8040,6 +8106,7 @@ export type Database = {
       arena_source_capabilities: { Args: never; Returns: Json }
       arena_trust_scorecard: { Args: never; Returns: Json }
       arena_weekly_leaders: { Args: { p_limit?: number }; Returns: Json }
+      b2c_product_metrics: { Args: { p_window_days?: number }; Returns: Json }
       bulk_enrich_sync_v2: { Args: { updates: Json }; Returns: number }
       bulk_update_snapshot_metrics: { Args: { updates: Json }; Returns: number }
       bytea_to_text: { Args: { data: string }; Returns: string }
@@ -8922,6 +8989,10 @@ export type Database = {
         }[]
       }
       record_rejected_writes: { Args: { p_rows: Json }; Returns: undefined }
+      record_user_activity: {
+        Args: { p_seen_at?: string; p_user_id: string }
+        Returns: undefined
+      }
       recount_all_follow_counts: {
         Args: never
         Returns: {
