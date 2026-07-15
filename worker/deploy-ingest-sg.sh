@@ -17,6 +17,8 @@
 #     last resort, knowing the hazard.
 #   - --code-only syncs ONLY code (lib/worker/tsconfig), never node_modules — the
 #     safe path for the common case (parser/logic fix with no new dependency).
+#   - every mutating mode refuses to start PM2 while a known SG ingest container
+#     is running. Stop the container first; two vps_sg consumers hide split-brain.
 #   - on a failed `ready`, it AUTO-rolls-back (pair: code + node_modules together).
 #
 # Usage (from project root on the Mac Mini, after pushing to main):
@@ -69,9 +71,27 @@ echo "=== Deploy ingest worker → $VPS_HOST:$REMOTE_DIR (main @ ${SHA:0:9}, mod
 # ── dry-run ────────────────────────────────────────────────────────────────
 if [ "$MODE" = "dry-run" ]; then
   echo "--- rsync dry-run (no changes) ---"
-  rsync -azn --delete "${RSYNC_EXCLUDES[@]}" "${FULL_PATHS[@]}" "$VPS_HOST:$REMOTE_DIR/" | sed 's/^/  /'
+  rsync -az --dry-run --itemize-changes --delete \
+    "${RSYNC_EXCLUDES[@]}" "${FULL_PATHS[@]}" "$VPS_HOST:$REMOTE_DIR/" | sed 's/^/  /'
   echo "--- end dry-run ---"
   exit 0
+fi
+
+# ── GUARD: PM2 and Docker must never consume vps_sg together ───────────────
+# Both container deployment paths include this name prefix. Check before backup,
+# stop, or sync so a refused deploy has made no remote changes. A stopped
+# container is safe and intentionally ignored. `docker ps` errors propagate and
+# abort the deploy; inability to prove exclusivity must fail closed.
+RUNNING_INGEST_CONTAINERS="$(
+  ssh_sg "if command -v docker >/dev/null 2>&1; then docker ps --filter 'name=arena-ingest-worker-sg' --format '{{.Names}}'; fi"
+)"
+if [ -n "$RUNNING_INGEST_CONTAINERS" ]; then
+  echo "✗ PM2 deploy refused: Docker ingest consumer still running on $VPS_HOST:" >&2
+  printf '  %s\n' "$RUNNING_INGEST_CONTAINERS" >&2
+  echo "  Stop it first, verify it is stopped, then rerun this deploy:" >&2
+  echo "    ssh $VPS_HOST \"docker stop \$(docker ps -q --filter 'name=arena-ingest-worker-sg')\"" >&2
+  echo "  This guard prevents two workers from consuming arena-ingest-vps_sg." >&2
+  exit 1
 fi
 
 # ── lock-change detection (drives whether deps need a rebuild) ───────────────

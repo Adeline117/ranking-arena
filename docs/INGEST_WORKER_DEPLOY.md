@@ -90,13 +90,14 @@ rsync -az --exclude node_modules --exclude logs --exclude .arena-ingest \
   root@SG:/opt/arena-ingest-build/
 # 2. build on the box (~25 min: npm ci 1869 pkgs + chrome; run detached via setsid)
 ssh SG 'cd /opt/arena-ingest-build && docker build -f worker/Dockerfile.ingest -t arena-ingest:local .'
-# 3. cut over (verify then stop pm2) — see docker-run-sg.sh
+# 3. cut over: stop PM2 first; Docker deploy refuses to overlap it
 ssh SG 'bash -s -- stop-pm2'      < worker/docker-run-sg.sh
 ssh SG "DEPLOYED_SHA=$(git rev-parse HEAD) bash -s -- deploy-local" < worker/docker-run-sg.sh
 # rollback: ssh SG 'bash -s -- start-pm2' < worker/docker-run-sg.sh
 ```
 
-**Four gotchas each cost a failed verify run** (all handled by `docker-run-sg.sh`):
+**Five deployment gotchas** (the first four each cost a failed verify run; all
+are handled by `docker-run-sg.sh`):
 
 1. **.env quotes** — the box `.env` has `KEY="value"`; docker `--env-file` does NOT
    strip quotes → pg gets a quoted connection string → misparsed host `base`.
@@ -110,16 +111,20 @@ ssh SG "DEPLOYED_SHA=$(git rev-parse HEAD) bash -s -- deploy-local" < worker/doc
 4. **heartbeat SHA** — the container isn't a git checkout → `resolveDeployedSha()`
    returns `unknown` → drift sentinel sees Mac's real SHA + SG's `unknown` = two
    live SHAs = false page. Pass `DEPLOYED_SHA=$(git rev-parse HEAD)`.
+5. **heartbeat node identity** — Docker's generated hostname changes on every
+   recreate and leaves a stale roster identity behind. Both SG container paths
+   pin the logical node to `vps-sg-docker`; PM2 and Docker deploy paths both
+   refuse to overlap the other active consumer.
 
-**Current SG state (2026-07-01):** cut over to the container — `arena-ingest:local`
-built on the box, run via `docker-run-sg.sh deploy-local` (`--restart unless-stopped`),
-pm2 `arena-ingest-worker-sg` stopped + saved. `.env` files are now `.dockerignore`d
-so a rebuild never bakes secrets. To update: rebuild on the box (rsync + build +
-`deploy-local`), or cut to the GHCR image once a PAT is set.
+**Current SG state (2026-07-15):** PM2 `arena-ingest-worker-sg` is the sole active
+`vps_sg` consumer; the old `arena-ingest-worker-sg-ctr` container is stopped and
+retained only as a rollback path. Code-only PM2 deploys must keep that container
+stopped. A future Docker cutover must stop and save PM2 first. `.env` files remain
+`.dockerignore`d so image rebuilds never bake secrets.
 
 ## `worker/deploy-ingest-sg.sh` modes
 
-- `--dry-run` — preview the rsync, no changes.
+- `--dry-run` — preview itemized rsync changes, no writes.
 - `--code-only` — rsync `lib/ worker/ tsconfig.json` only (no `node_modules`,
   no npm). Refuses if `package-lock` actually changed.
 - `--from-artifact=PATH.tgz` — ship a CI-built tree + atomic swap (what CI uses).
@@ -128,7 +133,9 @@ so a rebuild never bakes secrets. To update: rebuild on the box (rsync + build +
   and surgically repair any missing package (`npm pack` + `tar` + `cp`). **Never
   `rm -rf node_modules`** on the working install.
 
-Every path: backup → graceful stop → sync → restart → verify `ready` →
+Before any mutating path, the script checks the VPS for a running SG ingest
+container and refuses to start PM2 until it is stopped. Then every path runs:
+backup → graceful stop → sync → restart → verify `ready` →
 **auto-rollback** (restores the code+node_modules pair from `.bak`) on failure.
 
 ## Recovery (if SG crash-loops on `Cannot find module`)
