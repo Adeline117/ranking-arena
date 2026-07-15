@@ -1,0 +1,55 @@
+/**
+ * Product facts that affect trust-sensitive UI copy.
+ *
+ * Dynamic counts come from `getHeroStats()` / `/api/hero-stats`; this module
+ * owns the safe fallback and the operational cadence so marketing pages never
+ * invent their own "45+" / "30 min" claims again.
+ */
+
+export const PRODUCT_FACTS = {
+  /** Deduplicated active exchange families represented in the leaderboard. */
+  fallbackExchangeCount: 18,
+  /** Ranked 90D population, also used as the percentile denominator fallback. */
+  fallbackRankedTraderCount: 9_600,
+  /** BullMQ `SCORE_INTERVALS_MS` in worker/src/scheduler.ts. */
+  leaderboardRefreshHours: 2,
+  /** Typical upstream refresh range; individual sources may differ. */
+  sourceRefreshHours: { min: 3, max: 6 },
+} as const
+
+export interface ProductFactsSnapshot {
+  exchangeCount: number
+  rankedTraderCount: number
+  leaderboardRefreshHours: number
+  leaderboardRefreshLabel: string
+  sourceRefreshLabel: string
+  isFallback: boolean
+}
+
+export function buildProductFactsSnapshot(input?: {
+  exchangeCount?: number | null
+  traderCount?: number | null
+  isDefault?: boolean
+}): ProductFactsSnapshot {
+  const exchangeCount =
+    typeof input?.exchangeCount === 'number' && input.exchangeCount > 0
+      ? input.exchangeCount
+      : PRODUCT_FACTS.fallbackExchangeCount
+  const rankedTraderCount =
+    typeof input?.traderCount === 'number' && input.traderCount > 0
+      ? input.traderCount
+      : PRODUCT_FACTS.fallbackRankedTraderCount
+
+  return {
+    exchangeCount,
+    rankedTraderCount,
+    leaderboardRefreshHours: PRODUCT_FACTS.leaderboardRefreshHours,
+    leaderboardRefreshLabel: `${PRODUCT_FACTS.leaderboardRefreshHours}h`,
+    sourceRefreshLabel: `${PRODUCT_FACTS.sourceRefreshHours.min}-${PRODUCT_FACTS.sourceRefreshHours.max}h`,
+    isFallback: input?.isDefault === true || !input,
+  }
+}
+
+export function formatRankedTraderCount(count: number, locale = 'en-US'): string {
+  return new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(count)
+}

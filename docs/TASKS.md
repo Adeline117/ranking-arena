@@ -14,10 +14,16 @@
 
 ## 🔴 P0 - Critical
 
-### Hybrid Pivot: B2B Data API + Leaderboard as Showcase
+### B2C Consumer Product + Data API as Secondary Capability
 
-**Decision (2026-05-12)**: 2 paying subs after 30 days → B2C alone isn't working.
-Pivot to B2B data API as primary revenue, keep leaderboard as showcase/SEO funnel.
+**Current decision (2026-07-14)**: Arena is a B2C-first product. Prioritize the
+consumer leaderboard, discovery, saved traders, alerts, onboarding, retention,
+and Pro conversion. Keep the data API available as a secondary capability and
+revenue channel, not the primary product or navigation focus.
+
+**Historical context (2026-05-12)**: The team explored a B2B API-led pivot after
+early B2C subscription traction was limited. The API foundation below remains
+useful, but it no longer defines the primary product direction.
 
 **Existing foundation**: `/api/v3` — rankings, trader, search endpoints with
 API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
@@ -46,7 +52,7 @@ API key auth, rate limiting (100/day free), edge runtime, CORS, Zod validation.
 
 ## 🟠 P1 - High Priority
 
-### Data Quality (feeds directly into API product value)
+### Data Quality (builds consumer trust and supports the secondary API)
 
 - [x] Verify overall Sharpe lifts from 29% → 45%+ — actual: 77% (7D), 85% (30D), 91% (90D)
 - [x] Verify okx_futures staleness — 0 gaps >2h in last 7 days (worker fixed it)

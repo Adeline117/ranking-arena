@@ -523,6 +523,12 @@ const en = {
   // Pricing page
   pricingTitle: 'Upgrade to Pro',
   pricingSubtitle: 'Unlock all premium features',
+  pricingPromoTitle: 'Pro is unlocked during beta',
+  pricingPromoSubtitle:
+    'Use every Pro feature now. Subscribe only if you want to lock in the founding price.',
+  pricingPromoCta: 'Lock in the founding price',
+  pricingPromoSignupCta: 'Create an account to lock the price',
+  pricingPromoFinePrint: 'No purchase is required to use Pro during the beta promotion.',
   pricingTrialBadge: '7-day free trial on Pro monthly & yearly. Cancel anytime.',
   pricingPromoNote:
     'All Pro features are currently free for everyone. Subscribing now locks in this price and supports Arena.',
@@ -2013,13 +2019,16 @@ const en = {
   loginWelcomeBack: 'Welcome Back',
   loginCreateAccount: 'Create Account',
   loginSubtitle: 'Arena ranks everything in crypto',
-  loginValueProp1: '160,000+ traders tracked in real-time',
-  loginValueProp2: 'Compare ROI across 45+ exchanges',
+  loginValueProp1: '{count} traders in the current 90-day ranking',
+  loginValueProp2: 'Compare performance across {count} active exchange sources',
   loginValueProp3: 'Join trading communities',
+  discoverMore: 'Discover more on Arena',
   loginConnectWallet: 'Connect Wallet',
   loginWalletSignIn: 'Sign in with Wallet',
   loginWalletConnecting: 'Connecting...',
   loginWalletSignInSuccess: 'Wallet sign-in successful',
+  loginOtherOptions: 'Other sign-in options',
+  loginHideOtherOptions: 'Hide other sign-in options',
   loginPleaseEnterEmail: 'Please enter email',
   loginConfigError: 'Configuration error: Please check Supabase settings',
   loginSendFailed: 'Failed to send, please retry',
@@ -2136,7 +2145,7 @@ const en = {
   helpGettingStartedTitle: 'Getting Started',
   helpWhatIsArenaQ: 'What is Arena?',
   helpWhatIsArenaA:
-    'Arena is a crypto trader leaderboard and community platform. We track 160,000+ traders across 20+ exchanges, ranking them by ROI, risk management, and consistency so you can discover top performers.',
+    'Arena is a crypto trader leaderboard and community platform. We currently rank 9,600+ traders across 18+ active exchange sources by ROI, risk management, and consistency.',
   helpHowToStartQ: 'How do I get started?',
   helpHowToStartA:
     'Sign up with Google, email, or a crypto wallet. After registration, you can personalize your experience by selecting interests and following top traders. Then explore the Rankings page to discover traders.',
@@ -2177,7 +2186,8 @@ const en = {
 
   // Exchange landing page (/exchange/[slug])
   exchangePageTitle: '{name} Top Traders & Rankings',
-  exchangePageSubtitle: '{count} ranked traders on {name} ({type}). Updated every 30 minutes.',
+  exchangePageSubtitle:
+    '{count} ranked traders on {name} ({type}). Leaderboard updated every 2 hours.',
   exchangePageTop10: 'Top 10 Traders by Arena Score',
   exchangePageColRank: 'RANK',
   exchangePageColTrader: 'TRADER',
@@ -2187,7 +2197,7 @@ const en = {
   exchangePageCta: 'View Full {name} Rankings',
   exchangePageAboutTitle: 'About {name} Trader Rankings',
   exchangePageAboutBody:
-    'Arena tracks {count} active traders on {name}, ranking them by Arena Score — a composite metric combining ROI, PnL, risk management, and consistency across 7-day, 30-day, and 90-day periods. {name} is a {type} trading platform. All performance data is refreshed every 30 minutes from live exchange APIs.',
+    'Arena tracks {count} active traders on {name}, ranking them by Arena Score — a composite metric combining ROI, PnL, risk management, and consistency across 7-day, 30-day, and 90-day periods. {name} is a {type} trading platform. Source data is refreshed every 3–6 hours and the leaderboard is recomputed every 2 hours.',
   exchangePageTypeFutures: 'Futures',
   exchangePageTypeSpot: 'Spot',
   exchangePageTypeDefi: 'DeFi / On-Chain',
@@ -3099,7 +3109,7 @@ const en = {
   aboutSubtitle: 'The open ranking platform for crypto traders',
   aboutIntroTitle: 'What is Arena?',
   aboutIntroP1:
-    'Arena is a data-driven crypto trader ranking platform. We aggregate on-chain and exchange data from 20+ centralized and decentralized exchanges, tracking 160K+ traders to build transparent, verifiable performance leaderboards.',
+    'Arena is a data-driven crypto trader ranking platform. We currently rank 9,600+ traders from 18+ active centralized, decentralized, and on-chain exchange sources.',
   aboutIntroP2:
     'Whether you are looking for top-performing traders to follow, comparing strategies across exchanges, or showcasing your own track record, Arena provides the tools and data you need.',
   aboutFeaturesTitle: 'Core Features',
@@ -3131,7 +3141,7 @@ const en = {
   aboutVisionDesc:
     'We believe transparency breeds trust. In a space where inflated screenshots and fake PnL run rampant, Arena provides a neutral, data-backed arena where performance speaks for itself. Our goal is to become the standard for crypto trader evaluation worldwide.',
   aboutStatsTitle: 'Arena in Numbers',
-  aboutStatTraders: '160K+',
+  aboutStatTraders: '9.6K+',
   aboutStatTradersLabel: 'Traders Tracked',
   aboutStatExchanges: '20+',
   aboutStatExchangesLabel: 'Exchanges Covered',
@@ -6560,11 +6570,11 @@ const en = {
   privacySec10Body: 'For questions or concerns about this Privacy Policy, please send a message to',
   methodologyTitle: 'Methodology',
   methodologySubtitle:
-    'How Arena ranks crypto traders across 25+ exchanges — transparent, data-driven, updated every 30 minutes',
+    'How Arena ranks crypto traders across 18+ active exchange sources — transparent, data-driven, recomputed every 2 hours',
   methodologyBackRankings: 'Back to Rankings',
   methodologyKeyPoint1: 'Arena Score (0–100) measures risk-adjusted performance, not raw ROI.',
   methodologyKeyPoint2:
-    'We aggregate public data from 25+ exchanges and recompute the leaderboard every 30 minutes.',
+    'We aggregate public data from 18+ active exchange sources and recompute the leaderboard every 2 hours.',
   methodologyKeyPoint3: 'Long-term consistency dominates: 90D is weighted 70%, 30D 25%, and 7D 5%.',
   methodologyKeyPoint4:
     'Tanh normalization, outlier checks, and server-side computation guard against gaming.',
@@ -6577,7 +6587,7 @@ const en = {
     'Data is collected via official exchange APIs and, for geo-restricted or WAF-protected exchanges, through VPS-based scrapers deployed in multiple regions (Singapore, Japan).',
   methodologySec2Title: 'Update Frequency',
   methodologySec2List:
-    'CEX data: Refreshed every 3-6 hours\nDEX data: Refreshed every 4 hours\nLeaderboard: Recomputed every 30 minutes\nStale threshold: Data older than 48 hours (CEX) or 72 hours (DEX) is excluded from composite score computation',
+    'CEX data: Refreshed every 3-6 hours\nDEX data: Refreshed every 4 hours\nLeaderboard: Recomputed every 2 hours\nStale threshold: Data older than 48 hours (CEX) or 72 hours (DEX) is excluded from composite score computation',
   methodologySec3Title: 'Arena Score Algorithm (0-100)',
   methodologySec3Intro:
     'The Arena Score is a composite rating designed to measure risk-adjusted performance across exchanges. It consists of two primary components:',
@@ -6612,7 +6622,7 @@ const en = {
     'A: Arena Score weighs long-term consistency (90D = 70%). A trader with spectacular short-term gains but inconsistent history may score lower than a steady performer. Data completeness also affects scores — missing metrics result in a confidence penalty.',
   methodologyFaqQ2: 'Q: How often are rankings updated?',
   methodologyFaqA2:
-    'A: Raw data is fetched every 3-6 hours. The leaderboard is recomputed every 30 minutes using the latest available data.',
+    'A: Raw data is fetched every 3-6 hours. The leaderboard is recomputed every 2 hours using the latest available data.',
   methodologyFaqQ3: 'Q: Can I compare traders across different exchanges?',
   methodologyFaqA3:
     'A: Yes, that is the primary purpose of Arena Score. However, for the most accurate comparison, we recommend also checking the per-exchange rankings, as data reporting standards vary between platforms.',

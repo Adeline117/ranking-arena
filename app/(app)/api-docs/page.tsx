@@ -2,6 +2,8 @@ import type { Metadata } from 'next'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { ApiPricingSection } from './ApiPricingSection'
 import { getServerTranslation } from '@/lib/i18n/server'
+import { getHeroStats } from '@/lib/data/hero-stats'
+import { buildProductFactsSnapshot } from '@/lib/config/product-facts'
 
 // Stable, XSS-safe anchor id for an endpoint name.
 function epId(name: string): string {
@@ -17,7 +19,7 @@ function epId(name: string): string {
 export const metadata: Metadata = {
   title: 'API Documentation — Arena Data API',
   description:
-    'Access crypto trader rankings, performance data, and search across 45+ exchanges. Free tier: 100 requests/day.',
+    'Access cross-exchange crypto trader rankings, performance data, and search. Free tier: 100 requests/day.',
 }
 
 // ---------------------------------------------------------------------------
@@ -290,6 +292,7 @@ const copyBtn = {
 // ---------------------------------------------------------------------------
 
 export default async function ApiDocsPage() {
+  const productFacts = buildProductFactsSnapshot(await getHeroStats())
   const { t } = await getServerTranslation()
 
   return (
@@ -341,8 +344,9 @@ export default async function ApiDocsPage() {
             margin: '0 auto',
           }}
         >
-          Crypto trader rankings across 45+ exchanges. Risk-adjusted scores, equity curves, and
-          performance data — updated every 30 minutes.
+          Crypto trader rankings across {productFacts.exchangeCount}+ active exchange sources.
+          Risk-adjusted scores, equity curves, and performance data — leaderboard recomputed every{' '}
+          {productFacts.leaderboardRefreshLabel}.
         </p>
       </div>
 

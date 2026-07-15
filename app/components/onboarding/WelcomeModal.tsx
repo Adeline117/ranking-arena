@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { tokens } from '@/lib/design-tokens'
+import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 
 const STORAGE_KEY = 'onboarding_complete'
 
@@ -15,7 +16,7 @@ interface Step {
 const STEPS: Step[] = [
   {
     title: 'Welcome to Arena',
-    description: 'Browse trader rankings across 45+ exchanges',
+    description: `Browse trader rankings across ${PRODUCT_FACTS.fallbackExchangeCount}+ active exchange sources`,
     cta: 'Explore Rankings →',
   },
   {
