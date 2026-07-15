@@ -219,7 +219,12 @@ describe('enrichmentExtras', () => {
     })
     expect(x.onchain_token_distribution_unit).toBe('realized_pnl_usd')
     expect('token_distribution' in x).toBe(false)
-    expect(Array.isArray(x.top_earning_tokens)).toBe(true)
+    expect(x.onchain_top_earning_tokens).toEqual([
+      { symbol: 'WIF', address: '0xabc', logo: null, realized_pnl: 1000 },
+    ])
+    expect(x.onchain_top_earning_tokens_provenance).toBe('onchain-computed')
+    expect('top_earning_tokens' in x).toBe(false)
+    expect(JSON.stringify(x.onchain_top_earning_tokens)).not.toContain('profit_pct')
     // never emits board-owned keys
     expect('pnl' in x).toBe(false)
     expect('roi' in x).toBe(false)
@@ -269,7 +274,9 @@ describe('enrichmentExtras', () => {
     const x = enrichmentExtras({ ...base, tokenDistribution: {}, topEarningTokens: [] })
     expect(x.onchain_token_distribution_usd).toBeNull()
     expect(x.onchain_token_distribution_unit).toBeNull()
-    expect(x.top_earning_tokens).toBeNull()
+    expect(x.onchain_top_earning_tokens).toBeNull()
+    expect(x.onchain_top_earning_tokens_provenance).toBeNull()
+    expect('top_earning_tokens' in x).toBe(false)
   })
 })
 

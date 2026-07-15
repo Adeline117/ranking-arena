@@ -100,22 +100,47 @@ export function shapeTokenDistribution(extras: Record<string, unknown>): TokenDi
     : null
 }
 
-/** extras.top_earning_tokens → TopToken[] (already normalized upstream). Null
- *  when absent/empty. */
-export function shapeTopTokens(extras: Record<string, unknown>): TopToken[] | null {
-  const list = Array.isArray(extras.top_earning_tokens)
-    ? (extras.top_earning_tokens as Array<Record<string, unknown>>)
-    : []
+function shapeTopTokenList(list: unknown, includeProfitPct: boolean): TopToken[] | null {
+  if (!Array.isArray(list)) return null
   const out = list
+    .filter((token): token is Record<string, unknown> =>
+      Boolean(token && typeof token === 'object')
+    )
     .filter((t) => typeof t.symbol === 'string' && t.symbol)
     .map((t) => ({
       symbol: String(t.symbol),
       address: typeof t.address === 'string' ? t.address : '',
       logo: typeof t.logo === 'string' ? t.logo : null,
-      profitPct: typeof t.profit_pct === 'number' ? t.profit_pct : null,
-      realizedPnl: typeof t.realized_pnl === 'number' ? t.realized_pnl : null,
+      profitPct: includeProfitPct ? finiteOrNull(t.profit_pct) : null,
+      realizedPnl: finiteOrNull(t.realized_pnl),
     }))
   return out.length > 0 ? out : null
+}
+
+/**
+ * Source-aware top-token selection. Explicit exchange-native data wins and may
+ * include the upstream return percentage. Reconstructed on-chain data is kept
+ * separate and can display realized dollars only. Old generic rows are shown
+ * only when there is no onchain_* trace; historical mixed rows fail closed.
+ */
+export function shapeTopTokens(extras: Record<string, unknown>): TopToken[] | null {
+  if (extras.top_earning_tokens_provenance === 'source_native') {
+    const native = shapeTopTokenList(extras.top_earning_tokens, true)
+    if (native) return native
+  }
+
+  if (extras.onchain_top_earning_tokens_provenance === 'onchain-computed') {
+    const estimated = shapeTopTokenList(extras.onchain_top_earning_tokens, false)
+    if (estimated) return estimated
+  }
+
+  const hasExplicitGenericProvenance =
+    extras.top_earning_tokens_provenance !== null &&
+    extras.top_earning_tokens_provenance !== undefined
+  const hasOnchainTrace = Object.keys(extras).some((key) => key.startsWith('onchain_'))
+  return !hasExplicitGenericProvenance && !hasOnchainTrace
+    ? shapeTopTokenList(extras.top_earning_tokens, true)
+    : null
 }
 
 /**

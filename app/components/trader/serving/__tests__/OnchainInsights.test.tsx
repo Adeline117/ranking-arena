@@ -89,4 +89,20 @@ describe('OnchainInsights quality disclosure', () => {
     expect(screen.getByText('<-$50')).toBeInTheDocument()
     expect(screen.queryByText('>+500%')).not.toBeInTheDocument()
   })
+
+  it('renders reconstructed top-token dollars without a fabricated return rate', () => {
+    render(
+      <OnchainInsights
+        currency="USD"
+        extras={{
+          onchain_top_earning_tokens_provenance: 'onchain-computed',
+          onchain_top_earning_tokens: [{ symbol: 'WIF', realized_pnl: 1234, profit_pct: 999 }],
+        }}
+      />
+    )
+
+    expect(screen.getByText('WIF')).toBeInTheDocument()
+    expect(screen.getByText('$1.23K USD')).toBeInTheDocument()
+    expect(screen.queryByText('+999.0%')).not.toBeInTheDocument()
+  })
 })

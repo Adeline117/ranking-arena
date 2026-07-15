@@ -121,7 +121,10 @@ function web3BoardExtras(item: Dict): Record<string, unknown> | null {
     ext.token_distribution_unit = 'pnl_percent'
   }
   const tokensTop = topEarningTokens(item)
-  if (tokensTop) ext.top_earning_tokens = tokensTop
+  if (tokensTop) {
+    ext.top_earning_tokens = tokensTop
+    ext.top_earning_tokens_provenance = 'source_native'
+  }
   const cal = pnlCalendar(item)
   if (cal) ext.pnl_calendar = cal
   return Object.keys(ext).length > 0 ? ext : null
