@@ -9,7 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
+import { verifyEdgeCronSecret } from '@/lib/auth/edge-cron-auth'
 import { createLogger } from '@/lib/utils/logger'
 
 const log = createLogger('api:phemex-proxy')
@@ -28,8 +28,8 @@ export const runtime = 'edge'
 export const preferredRegion = ['iad1'] // US East — different from default hnd1
 
 export async function GET(req: NextRequest) {
-  // SECURITY: timing-safe auth via shared utility
-  if (!verifyCronSecret(req)) {
+  // SECURITY: fixed-length Web Crypto comparison keeps this Edge route free of Node crypto.
+  if (!(await verifyEdgeCronSecret(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
