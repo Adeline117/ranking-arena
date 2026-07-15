@@ -21,7 +21,10 @@ test.describe('Critical Path Smoke Tests', () => {
 
     await expect(page).toHaveTitle(/Arena/)
 
-    const traderLinks = page.locator('a[href*="/trader/"]')
+    // Scope to the hydrated surface. The SSR fallback remains in the DOM but
+    // is intentionally hidden after hydration, so a page-wide `.first()` can
+    // select a healthy-but-hidden fallback card and report a false failure.
+    const traderLinks = page.locator('#homepage-interactive a[href*="/trader/"]')
     await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 })
     expect(await traderLinks.count()).toBeGreaterThan(0)
 
@@ -46,7 +49,7 @@ test.describe('Critical Path Smoke Tests', () => {
     await dismissOverlays(page)
 
     // Click the first trader link
-    const traderLink = page.locator('a[href*="/trader/"]').first()
+    const traderLink = page.locator('#homepage-interactive a[href*="/trader/"]').first()
     await traderLink.waitFor({ state: 'visible', timeout: 30_000 })
     const href = await traderLink.getAttribute('href')
     await traderLink.click()
