@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, memo } from 'react'
 import { usePathname } from 'next/navigation'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
-import { features } from '@/lib/features'
+import { isFloatingActionRoute } from '@/lib/features'
 
 export default memo(function ScrollToTop() {
   const [visible, setVisible] = useState(false)
@@ -16,10 +16,7 @@ export default memo(function ScrollToTop() {
   // ['/','/groups'] and missed every real FAB route (/hot, /market/*,
   // /watchlist, /saved, /referral) → scroll-to-top landed on top of the FAB
   // on mobile. Match the actual FAB-rendering routes here.
-  const FAB_PREFIXES = ['/hot', '/market', '/watchlist', '/saved', '/referral']
-  const hasFab =
-    FAB_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + '/')) ||
-    (features.social && (pathname === '/groups' || pathname.startsWith('/groups/')))
+  const hasFab = isFloatingActionRoute(pathname)
 
   useEffect(() => {
     const handleScroll = () => {
