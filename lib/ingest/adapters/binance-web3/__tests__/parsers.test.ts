@@ -139,7 +139,23 @@ describe('parseBinanceWeb3LeaderboardSeries', () => {
   })
 
   it('fails closed on a mismatched embedded timeframe', () => {
-    expect(parseBinanceWeb3LeaderboardSeries(payload, ctx, 90)).toEqual(new Map())
+    expect(() => parseBinanceWeb3LeaderboardSeries(payload, ctx, 90)).toThrow('timeframe mismatch')
+  })
+
+  it('preserves negative/zero days, never fills gaps, and sums to the native headline', () => {
+    const page = parseBinanceWeb3LeaderboardPage(payload, ctx)
+    const series = parseBinanceWeb3LeaderboardSeries(payload, ctx, 7)
+    for (const row of page.rows) {
+      const points = series.get(row.exchangeTraderId)![0].points
+      expect(points.reduce((sum, point) => sum + point.value, 0)).toBeCloseTo(row.headlinePnl!, 6)
+    }
+    const second = series.get('0x2b98a23bd28e0ea02f4402b4e553c63403d43115')![0].points
+    expect(second.some((point) => point.value < 0)).toBe(true)
+    const first = series.get('0xffae19561c038747c5c9f79f7777c29f28c4b4ad')![0].points
+    expect(first.some((point) => point.value === 0)).toBe(true)
+    const third = series.get('0x561a3a8f7c97b66248c8a343a2649301740ce7c5')![0].points
+    expect(third).toHaveLength(6)
+    expect(third.some((point) => point.ts.startsWith('2026-06-12'))).toBe(false)
   })
 
   it('deduplicates valid days and rejects invalid dates and values', () => {

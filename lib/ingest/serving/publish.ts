@@ -413,46 +413,80 @@ export async function publishProfile(
  * exchange_trader_id → arena.traders.id map from the snapshot publish.
  * Returns the number of series points written.
  */
-export async function publishBoardSeries(
-  src: SourceRow,
+export interface PreparedBoardSeriesRow {
+  trader_id: number
+  timeframe: number
+  metric: string
+  ts: string
+  value: number
+}
+
+/** Pure publication-boundary preparation, also used by replay dry-runs. */
+export function prepareBoardSeriesRows(
   seriesByTrader: Map<string, BoardSeriesBlock[]>,
   traderIds: Map<string, number>
-): Promise<{ traders: number; points: number }> {
+): { rows: PreparedBoardSeriesRow[]; traders: number } {
   // Flatten to one row-set: {trader_id, timeframe, metric, ts, value},
   // de-duplicated by the (trader_id, timeframe, metric, ts) upsert key —
   // a trader can repeat across board pages, and a sparkline can carry the
   // same date twice; Postgres rejects "ON CONFLICT affecting a row twice"
   // unless we collapse those here first (last value wins).
-  type Flat = { trader_id: number; timeframe: number; metric: string; ts: string; value: number }
-  const byKey = new Map<string, Flat>()
+  const byKey = new Map<string, PreparedBoardSeriesRow>()
   const tradersSeen = new Set<number>()
   for (const [exchangeTraderId, blocks] of seriesByTrader) {
     const traderId = traderIds.get(exchangeTraderId)
     if (traderId === undefined) continue // not in the passed snapshot
     for (const block of blocks) {
       for (const p of block.points) {
-        byKey.set(`${traderId}|${block.timeframe}|${block.metric}|${p.ts}`, {
+        const parsedTs = Date.parse(p.ts)
+        if (
+          ![7, 30, 90].includes(block.timeframe) ||
+          block.metric.trim().length === 0 ||
+          !Number.isFinite(parsedTs) ||
+          !Number.isFinite(p.value)
+        ) {
+          continue
+        }
+        const ts = new Date(parsedTs).toISOString()
+        byKey.set(`${traderId}|${block.timeframe}|${block.metric}|${ts}`, {
           trader_id: traderId,
           timeframe: block.timeframe,
           metric: block.metric,
-          ts: p.ts,
+          ts,
           value: p.value,
         })
         tradersSeen.add(traderId)
       }
     }
   }
-  const flat = [...byKey.values()]
-  const tradersWithSeries = tradersSeen.size
+  return { rows: [...byKey.values()], traders: tradersSeen.size }
+}
+
+export async function publishBoardSeries(
+  src: SourceRow,
+  seriesByTrader: Map<string, BoardSeriesBlock[]>,
+  traderIds: Map<string, number>
+): Promise<{ traders: number; points: number }> {
+  const prepared = prepareBoardSeriesRows(seriesByTrader, traderIds)
+  const flat = prepared.rows
+  const tradersWithSeries = prepared.traders
   if (flat.length === 0) return { traders: 0, points: 0 }
 
   // Chunk the insert — boards reach thousands of traders × ~30-90 pts each.
   const CHUNK = 5000
   const client = await ingestClientConnect()
+  let transactionStarted = false
   try {
+    await client.query('BEGIN')
+    transactionStarted = true
+    // Serialize live Tier-A publication and operator replay for one source.
+    // Transaction-scoped lock is safe through PgBouncer transaction mode.
+    await client.query(`SELECT pg_advisory_xact_lock(hashtextextended($1, 0))`, [
+      `arena.publish-board-series:${src.id}`,
+    ])
     for (let i = 0; i < flat.length; i += CHUNK) {
       const slice = flat.slice(i, i + CHUNK)
-      await client.query(
+      const result = await client.query(
         `INSERT INTO arena.trader_series (trader_id, timeframe, metric, ts, value, currency)
          SELECT r.trader_id, r.timeframe, r.metric, r.ts::timestamptz, r.value, $2
            FROM jsonb_to_recordset($1::jsonb) AS r(
@@ -461,6 +495,11 @@ export async function publishBoardSeries(
          DO UPDATE SET value = EXCLUDED.value`,
         [JSON.stringify(slice), src.currency]
       )
+      if (result.rowCount !== slice.length) {
+        throw new Error(
+          `[board-series] write count mismatch for ${src.slug}: expected=${slice.length}, actual=${result.rowCount ?? 0}`
+        )
+      }
     }
 
     // Board-path self-derivation — PURE-DEX only (see publishProfile note +
@@ -510,6 +549,17 @@ export async function publishBoardSeries(
         [JSON.stringify(slice)]
       )
     }
+    await client.query('COMMIT')
+    transactionStarted = false
+  } catch (err) {
+    if (transactionStarted) {
+      try {
+        await client.query('ROLLBACK')
+      } catch {
+        // Preserve the publication error; the broken client is released below.
+      }
+    }
+    throw err
   } finally {
     client.release()
   }

@@ -212,7 +212,11 @@ export function parseBinanceWeb3LeaderboardSeries(
   const out = new Map<string, BoardSeriesBlock[]>()
   const payload = (raw ?? {}) as { board?: unknown; timeframe?: unknown }
   const embeddedTimeframe = num(payload.timeframe)
-  if (embeddedTimeframe !== null && embeddedTimeframe !== timeframe) return out
+  if (embeddedTimeframe !== null && embeddedTimeframe !== timeframe) {
+    throw new Error(
+      `[binance_web3] leaderboard series timeframe mismatch: raw=${embeddedTimeframe}, expected=${timeframe}`
+    )
+  }
 
   const board = (payload.board ?? {}) as { data?: unknown }
   const data = (board.data ?? {}) as Dict
