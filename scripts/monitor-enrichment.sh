@@ -1,6 +1,11 @@
 #!/bin/bash
 # Monitor onchain enrichment progress
 
+if [[ -z "${DATABASE_URL:-}" ]]; then
+  echo "DATABASE_URL must be injected from the deployment secret store" >&2
+  exit 1
+fi
+
 echo "=== Enrichment Progress Monitor ==="
 echo ""
 
@@ -21,7 +26,7 @@ done
 
 # Database status
 echo "=== Current Database Status ==="
-PGPASSWORD='j0qvCCZDzOHDfBka' psql -h aws-0-us-west-2.pooler.supabase.com -p 6543 -U postgres.iknktzifjdyujdccyhsv -d postgres << 'SQL'
+psql "$DATABASE_URL" << 'SQL'
 SELECT 
   source,
   COUNT(*) as total,
