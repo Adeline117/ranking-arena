@@ -2,21 +2,19 @@
 /**
  * Weekly Product Metrics → Telegram
  *
- * Tracks the three numbers that matter most post-paywall:
- *   1. WAU (Weekly Active Users) — distinct users in user_interactions in last 7d
- *   2. Paying subscribers — subscriptions with status in (active, trialing) and tier != free
- *   3. Top-10 trust ratio — fraction of top-10 leaderboard_ranks where
+ * Reads the same exact B2C KPI contract as the admin dashboard and Vercel
+ * cron, then adds the top-10 ranking trust ratio. One database function owns
+ * the definitions so these reporting surfaces cannot drift apart.
+ *
+ *   1. Acquisition and journey funnel
+ *   2. Seven-day activation and WAU
+ *   3. Paying subscribers and new paying subscribers
+ *   4. Top-10 trust ratio — fraction of top-10 leaderboard_ranks where
  *      joined trader_sources.score_confidence = 'full'
  *
  * CEO review 2026-04-09 flagged that without these numbers, every product
  * decision is a guess. This script is designed to run weekly on Fridays
  * from the OpenClaw scheduler and post the result to Telegram.
- *
- * Known limitations:
- *   - WAU relies on user_interactions being populated by client tracking
- *     (/api/interactions + /api/track). The pipeline was repaired 2026-06-12
- *     (commit a11ff20e0) — data only accumulates since that deploy, so WAU
- *     reads artificially low until a full 7-day window has elapsed.
  *
  * Usage:
  *   SUPABASE_URL=... SUPABASE_SERVICE_ROLE_KEY=... TELEGRAM_BOT_TOKEN=... \
@@ -70,39 +68,29 @@ async function supabase(pathAndQuery, options = {}) {
   return { res, data: await res.json().catch(() => null) }
 }
 
-function getCountHeader(res) {
-  const range = res.headers.get('content-range') || ''
-  const total = range.split('/')[1]
-  const n = Number.parseInt(total || '0', 10)
-  return Number.isFinite(n) ? n : 0
-}
-
 // ---------------------------------------------------------------------------
 // Metric fetchers
 // ---------------------------------------------------------------------------
 
-/** WAU: distinct users with any interaction in the last 7 days */
-async function fetchWAU() {
-  const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
-  // Supabase REST doesn't support DISTINCT directly, so we fetch user_ids and
-  // dedupe client-side. For <10k active users this is <100kb of payload.
-  // NOTE: user_interactions only receives data since the 2026-06-12 tracking
-  // pipeline repair (a11ff20e0) — WAU reads low until a full 7d window exists.
-  const { data } = await supabase(
-    `user_interactions?select=user_id&created_at=gte.${encodeURIComponent(since)}&limit=50000`,
-    { prefer: 'count=none' }
-  )
-  const unique = new Set((data || []).map((r) => r.user_id))
-  return unique.size
-}
-
-/** Paying subscribers: status active|trialing AND tier in ('pro', 'lifetime') */
-async function fetchPayingSubscribers() {
-  const { res } = await supabase(
-    `subscriptions?select=id&status=in.(active,trialing)&tier=in.(pro,lifetime)&limit=1`,
-    { prefer: 'count=exact,head=true', method: 'HEAD' }
-  )
-  return getCountHeader(res)
+/** Exact B2C metrics owned by public.b2c_product_metrics(). */
+async function fetchB2CMetrics() {
+  const { data } = await supabase('rpc/b2c_product_metrics', {
+    method: 'POST',
+    body: JSON.stringify({ p_window_days: 7 }),
+    prefer: 'count=none',
+  })
+  const requiredCounts = [
+    'wau',
+    'total_paying',
+    'new_paying',
+    'new_signups',
+    'activation_eligible',
+    'activated_7d',
+  ]
+  if (!data || requiredCounts.some((key) => !Number.isInteger(data[key]) || data[key] < 0)) {
+    throw new Error('Invalid b2c_product_metrics response')
+  }
+  return data
 }
 
 /**
@@ -167,21 +155,25 @@ async function sendTelegram(text) {
 // ---------------------------------------------------------------------------
 async function main() {
   const started = Date.now()
-  const [wau, paying, trust] = await Promise.allSettled([
-    fetchWAU(),
-    fetchPayingSubscribers(),
-    fetchTop10TrustRatio(),
-  ])
+  const [metrics, trust] = await Promise.allSettled([fetchB2CMetrics(), fetchTop10TrustRatio()])
 
-  const wauValue = wau.status === 'fulfilled' ? wau.value : null
-  const payingValue = paying.status === 'fulfilled' ? paying.value : null
+  const metricValue = metrics.status === 'fulfilled' ? metrics.value : null
   const trustValue = trust.status === 'fulfilled' ? trust.value : null
+  const funnel = metricValue?.funnel || {}
+  const activationRate = metricValue?.activation_eligible
+    ? Math.round((metricValue.activated_7d / metricValue.activation_eligible) * 100)
+    : null
 
   const lines = [
     '<b>📊 Arena Weekly Metrics</b>',
     '',
-    `<b>WAU (7d):</b> ${wauValue ?? '<i>failed</i>'}`,
-    `<b>Paying subscribers:</b> ${payingValue ?? '<i>failed</i>'}`,
+    `<b>WAU (7d):</b> ${metricValue?.wau ?? '<i>failed</i>'}`,
+    `<b>Total paying:</b> ${metricValue?.total_paying ?? '<i>failed</i>'}`,
+    `<b>New paying:</b> ${metricValue?.new_paying ?? '<i>failed</i>'}`,
+    `<b>New signups:</b> ${metricValue?.new_signups ?? '<i>failed</i>'}`,
+    `<b>7d activation:</b> ${metricValue ? `${metricValue.activated_7d}/${metricValue.activation_eligible}${activationRate === null ? '' : ` (${activationRate}%)`}` : '<i>failed</i>'}`,
+    `<b>Journey:</b> ${funnel.landing_view ?? 0} land → ${funnel.ranking_visible ?? 0} rank → ${funnel.view_trader ?? 0} trader → ${funnel.signup ?? 0} signup → ${funnel.start_checkout ?? 0} checkout`,
+    `<i>Event collection: ${metricValue?.event_collection_started_at || 'not started; funnel zeros are not historical zeros'}</i>`,
     trustValue
       ? `<b>Top-10 trust (full confidence):</b> ${trustValue.fullCount}/${trustValue.totalCount} (${Math.round(trustValue.ratio * 100)}%)`
       : `<b>Top-10 trust:</b> <i>failed</i>`,
@@ -190,9 +182,8 @@ async function main() {
   ]
 
   // Failure notes so they land in logs even on success send
-  if (wau.status === 'rejected') console.error('WAU failed:', wau.reason?.message || wau.reason)
-  if (paying.status === 'rejected')
-    console.error('paying subs failed:', paying.reason?.message || paying.reason)
+  if (metrics.status === 'rejected')
+    console.error('B2C metrics failed:', metrics.reason?.message || metrics.reason)
   if (trust.status === 'rejected')
     console.error('trust ratio failed:', trust.reason?.message || trust.reason)
 

@@ -19,6 +19,7 @@ import { tokens } from '@/lib/design-tokens'
 import Metric from '@/app/components/ui/Metric'
 import { useAdminAuth } from '../hooks/useAdminAuth'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { B2C_FUNNEL_STEPS, type B2CFunnelStep } from '@/lib/analytics/b2c-metrics'
 
 interface RecentSignup {
   id: string
@@ -33,6 +34,12 @@ interface ProMetricsData {
   totalPaying: number | null
   newPayingThisWeek: number | null
   wau: number | null
+  newSignups: number | null
+  activated7d: number | null
+  activationEligible: number | null
+  funnel: Partial<Record<B2CFunnelStep, number>> | null
+  eventCollectionStartedAt: string | null
+  measurementAvailable: boolean
   recentSignups: RecentSignup[]
   windowDays: number
   timestamp: string
@@ -42,6 +49,18 @@ interface ProMetricsData {
   totalPayingPrev?: number | null
   newPayingPrevWeek?: number | null
   wauPrev?: number | null
+}
+
+const FUNNEL_LABELS: Record<B2CFunnelStep, string> = {
+  landing_view: 'Landing',
+  ranking_visible: 'Ranking',
+  view_trader: 'Trader',
+  signup_start: 'Signup start',
+  signup: 'Signup',
+  onboarding_complete: 'Onboarded',
+  view_pricing: 'Pricing',
+  start_checkout: 'Checkout',
+  pro_subscribe: 'Pro',
 }
 
 function MetricTile({
@@ -75,7 +94,7 @@ function MetricTile({
           color: 'var(--color-text-tertiary)',
           textTransform: 'uppercase',
           letterSpacing: '0.05em',
-          fontWeight: 600,
+          fontWeight: tokens.typography.fontWeight.semibold,
           marginBottom: tokens.spacing[2],
         }}
       >
@@ -128,7 +147,7 @@ function MetricTile({
 
 export default function ProMetricsPage() {
   const { t } = useLanguage()
-  const { email, isAdmin, authChecking, accessToken } = useAdminAuth()
+  const { isAdmin, authChecking, accessToken } = useAdminAuth()
   const [data, setData] = useState<ProMetricsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -198,7 +217,7 @@ export default function ProMetricsPage() {
           <h1
             style={{
               fontSize: tokens.typography.fontSize['3xl'],
-              fontWeight: 800,
+              fontWeight: tokens.typography.fontWeight.black,
               margin: 0,
             }}
           >
@@ -228,7 +247,7 @@ export default function ProMetricsPage() {
           <div
             style={{
               padding: tokens.spacing[4],
-              background: 'var(--color-accent-error-10, rgba(255,80,80,0.1))',
+              background: 'color-mix(in srgb, var(--color-accent-error) 10%, transparent)',
               border: '1px solid var(--color-accent-error)',
               borderRadius: tokens.radius.lg,
               color: 'var(--color-accent-error)',
@@ -278,13 +297,103 @@ export default function ProMetricsPage() {
                 delta={data.wau != null && data.wauPrev != null ? data.wau - data.wauPrev : null}
                 deltaLabel={t('vsPriorPeriod')}
               />
+              <MetricTile
+                label={t('newSignups7d')}
+                value={data.newSignups}
+                sub={t('lastNDays').replace('{n}', String(data.windowDays))}
+              />
+              <MetricTile
+                label={t('activation7d')}
+                value={data.activated7d}
+                sub={t('activationSub')
+                  .replace('{activated}', String(data.activated7d ?? '—'))
+                  .replace('{eligible}', String(data.activationEligible ?? '—'))}
+              />
+            </section>
+
+            <section style={{ marginBottom: tokens.spacing[8] }}>
+              <h2
+                style={{
+                  fontSize: tokens.typography.fontSize.lg,
+                  fontWeight: tokens.typography.fontWeight.bold,
+                  marginBottom: tokens.spacing[3],
+                }}
+              >
+                {t('journeyFunnel')}
+              </h2>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(100px, 1fr))',
+                  gap: tokens.spacing[2],
+                }}
+              >
+                {B2C_FUNNEL_STEPS.map((step, index) => {
+                  const value = data.funnel?.[step] ?? 0
+                  const previousStep = B2C_FUNNEL_STEPS[index - 1]
+                  const previous = previousStep ? (data.funnel?.[previousStep] ?? 0) : null
+                  const conversion =
+                    previous && previous > 0 ? `${Math.round((value / previous) * 100)}%` : null
+                  return (
+                    <div
+                      key={step}
+                      style={{
+                        padding: tokens.spacing[3],
+                        border: '1px solid var(--color-border-primary)',
+                        borderRadius: tokens.radius.md,
+                        background: 'var(--color-bg-secondary)',
+                      }}
+                    >
+                      <div
+                        style={{
+                          fontSize: tokens.typography.fontSize.xs,
+                          color: 'var(--color-text-tertiary)',
+                        }}
+                      >
+                        {FUNNEL_LABELS[step]}
+                      </div>
+                      <div
+                        style={{
+                          fontSize: tokens.typography.fontSize.xl,
+                          fontWeight: tokens.typography.fontWeight.bold,
+                        }}
+                      >
+                        {value.toLocaleString()}
+                      </div>
+                      {conversion && (
+                        <div
+                          style={{
+                            fontSize: tokens.typography.fontSize.xs,
+                            color: 'var(--color-text-secondary)',
+                          }}
+                        >
+                          {conversion}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+              <p
+                style={{
+                  fontSize: tokens.typography.fontSize.xs,
+                  color: 'var(--color-text-tertiary)',
+                }}
+              >
+                {data.eventCollectionStartedAt
+                  ? t('collectionSince').replace(
+                      '{time}',
+                      new Date(data.eventCollectionStartedAt).toLocaleString()
+                    )
+                  : t('collectionPending')}
+              </p>
             </section>
 
             <section>
               <h2
                 style={{
                   fontSize: tokens.typography.fontSize.lg,
-                  fontWeight: 700,
+                  fontWeight: tokens.typography.fontWeight.bold,
                   marginBottom: tokens.spacing[4],
                 }}
               >
