@@ -6,6 +6,7 @@
 
 export const ONCHAIN_METHODOLOGY = 'wallet-balance-delta-average-cost' as const
 export const ONCHAIN_METHODOLOGY_VERSION = '1.0.0' as const
+export const MIN_ONCHAIN_SCORE_HISTORY_DAYS = 90
 
 export type OnchainQualityReason =
   | 'opening_inventory_unknown'
@@ -63,6 +64,7 @@ export function isOnchainQualityCanonical(q: OnchainQuality): boolean {
     q.scoreEligible &&
     q.completeness === 'complete' &&
     q.priceQuality === 'historical_execution' &&
+    q.history.requestedDays >= MIN_ONCHAIN_SCORE_HISTORY_DAYS &&
     q.history.scanComplete === true &&
     q.history.truncated === false &&
     q.reasons.length === 0
@@ -76,6 +78,20 @@ export function readStoredOnchainQuality(
   const raw = objectOrNull(extras.onchain_quality)
   if (raw) {
     const history = objectOrNull(raw.history)
+    const parsedReasons =
+      Array.isArray(raw.reasons) && raw.reasons.every((reason) => typeof reason === 'string')
+        ? (raw.reasons as string[])
+        : null
+    const contractMetadataValid =
+      raw.schema_version === 1 &&
+      raw.methodology === ONCHAIN_METHODOLOGY &&
+      raw.methodology_version === ONCHAIN_METHODOLOGY_VERSION
+    const topLevelMethodologyValid =
+      !Object.prototype.hasOwnProperty.call(extras, 'onchain_methodology') ||
+      extras.onchain_methodology === `${ONCHAIN_METHODOLOGY}@${ONCHAIN_METHODOLOGY_VERSION}`
+    const limitationsValid =
+      !Object.prototype.hasOwnProperty.call(extras, 'onchain_limitations') ||
+      (Array.isArray(extras.onchain_limitations) && extras.onchain_limitations.length === 0)
     const completeness =
       raw.completeness === 'partial' || raw.completeness === 'complete'
         ? raw.completeness
@@ -90,21 +106,26 @@ export function readStoredOnchainQuality(
       completeness,
       priceQuality,
       scoreEligible: raw.score_eligible === true,
-      reasons: Array.isArray(raw.reasons)
-        ? raw.reasons.filter((reason): reason is string => typeof reason === 'string')
-        : [],
+      reasons: parsedReasons ? [...parsedReasons] : ['quality_reasons_invalid'],
       requestedDays: finiteOrNull(history?.requested_days),
       scanComplete: typeof history?.scan_complete === 'boolean' ? history.scan_complete : null,
       truncated: typeof history?.truncated === 'boolean' ? history.truncated : null,
     }
     parsed.canonical =
+      contractMetadataValid &&
+      topLevelMethodologyValid &&
+      limitationsValid &&
       parsed.scoreEligible &&
       (!Object.prototype.hasOwnProperty.call(extras, 'onchain_score_eligible') ||
         extras.onchain_score_eligible === true) &&
       parsed.completeness === 'complete' &&
       parsed.priceQuality === 'historical_execution' &&
+      parsed.requestedDays !== null &&
+      parsed.requestedDays >= MIN_ONCHAIN_SCORE_HISTORY_DAYS &&
       parsed.scanComplete === true &&
       parsed.truncated === false &&
+      raw.realized_partial === false &&
+      extras.onchain_realized_partial !== true &&
       parsed.reasons.length === 0
     return parsed
   }

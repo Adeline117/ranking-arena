@@ -31,6 +31,12 @@ describe('on-chain quality gate', () => {
     expect(
       isOnchainQualityCanonical({
         ...canonical,
+        history: { ...canonical.history, requestedDays: 30 },
+      })
+    ).toBe(false)
+    expect(
+      isOnchainQualityCanonical({
+        ...canonical,
         history: { ...canonical.history, truncated: true },
       })
     ).toBe(false)
@@ -54,10 +60,14 @@ describe('on-chain quality gate', () => {
   it('parses and accepts only a complete stored JSONB contract', () => {
     const extras = {
       onchain_quality: {
+        schema_version: 1,
+        methodology: 'wallet-balance-delta-average-cost',
+        methodology_version: '1.0.0',
         completeness: 'complete',
         price_quality: 'historical_execution',
         score_eligible: true,
         reasons: [],
+        realized_partial: false,
         history: {
           requested_days: 90,
           scan_complete: true,
@@ -78,10 +88,102 @@ describe('on-chain quality gate', () => {
       isStoredOnchainMetricEligible({
         onchain_score_eligible: false,
         onchain_quality: {
+          schema_version: 1,
+          methodology: 'wallet-balance-delta-average-cost',
+          methodology_version: '1.0.0',
           completeness: 'complete',
           price_quality: 'historical_execution',
           score_eligible: true,
           reasons: [],
+          realized_partial: false,
+          history: {
+            requested_days: 90,
+            scan_complete: true,
+            truncated: false,
+          },
+        },
+      })
+    ).toBe(false)
+  })
+
+  it.each([
+    ['missing schema version', { schema_version: undefined }],
+    ['unknown schema version', { schema_version: 2 }],
+    ['wrong methodology', { methodology: 'unknown' }],
+    ['wrong methodology version', { methodology_version: '9.9.9' }],
+    ['missing reasons', { reasons: undefined }],
+    ['malformed reasons', { reasons: [123] }],
+    ['partial realized history', { realized_partial: true }],
+  ])('rejects %s in an otherwise canonical stored contract', (_label, patch) => {
+    const extras = {
+      onchain_quality: {
+        schema_version: 1,
+        methodology: 'wallet-balance-delta-average-cost',
+        methodology_version: '1.0.0',
+        completeness: 'complete',
+        price_quality: 'historical_execution',
+        score_eligible: true,
+        reasons: [],
+        realized_partial: false,
+        history: {
+          requested_days: 90,
+          scan_complete: true,
+          truncated: false,
+        },
+        ...patch,
+      },
+    }
+    expect(isStoredOnchainMetricEligible(extras)).toBe(false)
+  })
+
+  it('rejects conflicting top-level methodology, limitations, or partial flags', () => {
+    const quality = {
+      schema_version: 1,
+      methodology: 'wallet-balance-delta-average-cost',
+      methodology_version: '1.0.0',
+      completeness: 'complete',
+      price_quality: 'historical_execution',
+      score_eligible: true,
+      reasons: [],
+      realized_partial: false,
+      history: {
+        requested_days: 90,
+        scan_complete: true,
+        truncated: false,
+      },
+    }
+    expect(
+      isStoredOnchainMetricEligible({
+        onchain_methodology: 'unknown@9.9.9',
+        onchain_quality: quality,
+      })
+    ).toBe(false)
+    expect(
+      isStoredOnchainMetricEligible({
+        onchain_limitations: ['opening_inventory_unknown'],
+        onchain_quality: quality,
+      })
+    ).toBe(false)
+    expect(
+      isStoredOnchainMetricEligible({
+        onchain_realized_partial: true,
+        onchain_quality: quality,
+      })
+    ).toBe(false)
+  })
+
+  it('requires at least the score window in stored history evidence', () => {
+    expect(
+      isStoredOnchainMetricEligible({
+        onchain_quality: {
+          schema_version: 1,
+          methodology: 'wallet-balance-delta-average-cost',
+          methodology_version: '1.0.0',
+          completeness: 'complete',
+          price_quality: 'historical_execution',
+          score_eligible: true,
+          reasons: [],
+          realized_partial: false,
           history: { scan_complete: true, truncated: false },
         },
       })

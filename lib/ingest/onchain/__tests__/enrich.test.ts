@@ -167,6 +167,20 @@ describe('enrichmentExtras', () => {
         },
       })
     ).toBe(66.67)
+    expect(
+      scoreEligibleWinRate({
+        ...base,
+        realizedPartial: true,
+        quality: {
+          ...base.quality,
+          scoreEligible: true,
+          completeness: 'complete',
+          priceQuality: 'historical_execution',
+          reasons: [],
+          history: { ...base.quality.history, scanComplete: true, truncated: false },
+        },
+      })
+    ).toBeNull()
   })
 
   it('flags partial realized for BSC native-BNB sellers', () => {
