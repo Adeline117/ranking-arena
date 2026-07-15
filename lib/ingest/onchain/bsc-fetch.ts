@@ -38,8 +38,6 @@ interface RpcOpts {
   timeoutMs?: number
 }
 
-const DEFAULT_RPCS = [] as string[] // set lazily to alchemyBscUrl()
-
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 
 function isTransient(msg: string): boolean {
@@ -114,25 +112,71 @@ interface AlchemyTransfersPage {
   pageKey?: string
 }
 
+export interface BscDirectionCoverage {
+  scanComplete: boolean
+  truncated: boolean
+  stopReason: 'lookback_boundary' | 'history_exhausted' | 'page_cap'
+  pagesFetched: number
+  recordsSeen: number
+  recordsReturned: number
+  recordsMissingTimestamp: number
+}
+
+export interface BscTransferCoverage {
+  fromAddress: BscDirectionCoverage
+  toAddress: BscDirectionCoverage
+  scanComplete: boolean
+  truncated: boolean
+}
+
+export interface BscTransferScan {
+  transfers: NormalizedTransfer[]
+  coverage: BscTransferCoverage
+}
+
 /**
  * Fetch a wallet's ERC-20 transfers (both directions) via
  * alchemy_getAssetTransfers — address-indexed, decoded values + timestamps, no
  * block scan. Paginates by pageKey; `sinceMs` stops once transfers predate the
  * lookback window (order desc). Two directions merged.
  */
-export async function fetchWalletTransfers(
+export async function scanWalletTransfers(
   wallet: string,
   opts: RpcOpts & { sinceMs?: number; maxPages?: number } = {}
-): Promise<NormalizedTransfer[]> {
-  const out: NormalizedTransfer[] = []
+): Promise<BscTransferScan> {
   const sinceMs = opts.sinceMs ?? 0
   const maxPages = opts.maxPages ?? 20
+  if (!Number.isSafeInteger(maxPages) || maxPages <= 0) {
+    throw new RangeError('maxPages must be a positive safe integer')
+  }
 
   // erc20 = token legs; external/internal = NATIVE BNB legs (most BSC memecoin
   // swaps pay in native BNB — without these every swap looks quote-less).
   const categories = ['erc20', 'external', 'internal']
-  for (const dir of ['fromAddress', 'toAddress'] as const) {
+  const scanDirection = async (
+    dir: 'fromAddress' | 'toAddress'
+  ): Promise<{ transfers: NormalizedTransfer[]; coverage: BscDirectionCoverage }> => {
+    const transfers: NormalizedTransfer[] = []
     let pageKey: string | undefined
+    let pagesFetched = 0
+    let recordsSeen = 0
+    let recordsMissingTimestamp = 0
+
+    const finish = (
+      stopReason: BscDirectionCoverage['stopReason']
+    ): { transfers: NormalizedTransfer[]; coverage: BscDirectionCoverage } => ({
+      transfers,
+      coverage: {
+        scanComplete: stopReason !== 'page_cap' && recordsMissingTimestamp === 0,
+        truncated: stopReason === 'page_cap',
+        stopReason,
+        pagesFetched,
+        recordsSeen,
+        recordsReturned: transfers.length,
+        recordsMissingTimestamp,
+      },
+    })
+
     for (let page = 0; page < maxPages; page++) {
       const params: Record<string, unknown> = {
         [dir]: wallet,
@@ -143,26 +187,59 @@ export async function fetchWalletTransfers(
       }
       if (pageKey) params.pageKey = pageKey
       const res = await rpc<AlchemyTransfersPage>('alchemy_getAssetTransfers', [params], opts)
-      const rows = res?.transfers ?? []
-      let reachedOld = false
+      pagesFetched += 1
+      if (!res || !Array.isArray(res.transfers)) {
+        throw new Error('alchemy_getAssetTransfers: invalid result')
+      }
+      const rows = res.transfers
+      recordsSeen += rows.length
       for (const t of rows) {
         const ts = t.metadata?.blockTimestamp
-        if (!ts || t.value == null || !Number.isFinite(t.value) || t.value <= 0) continue
-        if (sinceMs && Date.parse(ts) < sinceMs) {
-          reachedOld = true
+        if (!ts) {
+          recordsMissingTimestamp += 1
           continue
         }
+        const tsMs = Date.parse(ts)
+        if (!Number.isFinite(tsMs)) {
+          recordsMissingTimestamp += 1
+          continue
+        }
+        if (sinceMs && tsMs < sinceMs) {
+          return finish('lookback_boundary')
+        }
+        if (t.value == null || !Number.isFinite(t.value) || t.value <= 0) continue
         // Native BNB leg (no contract) → sentinel token; else the ERC-20 contract.
         const contract = t.rawContract?.address?.toLowerCase()
         const token = contract ?? (t.asset === 'BNB' ? NATIVE_BNB : null)
         if (!token) continue
-        out.push({ token, from: t.from, to: t.to ?? '', amount: t.value, tx: t.hash, ts })
+        transfers.push({ token, from: t.from, to: t.to ?? '', amount: t.value, tx: t.hash, ts })
       }
       pageKey = res?.pageKey
-      if (!pageKey || reachedOld) break // done or crossed the window boundary
+      if (!pageKey) return finish('history_exhausted')
     }
+
+    return finish('page_cap')
   }
-  return out
+
+  const fromAddress = await scanDirection('fromAddress')
+  const toAddress = await scanDirection('toAddress')
+  return {
+    transfers: [...fromAddress.transfers, ...toAddress.transfers],
+    coverage: {
+      fromAddress: fromAddress.coverage,
+      toAddress: toAddress.coverage,
+      scanComplete: fromAddress.coverage.scanComplete && toAddress.coverage.scanComplete,
+      truncated: fromAddress.coverage.truncated || toAddress.coverage.truncated,
+    },
+  }
+}
+
+/** Compatibility wrapper for callers that only need normalized transfers. */
+export async function fetchWalletTransfers(
+  wallet: string,
+  opts: RpcOpts & { sinceMs?: number; maxPages?: number } = {}
+): Promise<NormalizedTransfer[]> {
+  return (await scanWalletTransfers(wallet, opts)).transfers
 }
 
 /** Public BNB/USD spot (keyless). Falls back to a sane default on failure. */
@@ -191,6 +268,7 @@ export interface BscWalletResult {
   transfers: number
   swaps: number
   bnbUsd: number
+  transferCoverage: BscTransferCoverage
   pnl: WalletPnl
 }
 
@@ -208,10 +286,11 @@ export async function computeBscWalletOnchain(
 ): Promise<BscWalletResult> {
   const lookbackDays = opts.lookbackDays ?? 90
   const sinceMs = Date.now() - lookbackDays * 86_400_000
-  const [transfers, bnbUsd] = await Promise.all([
-    fetchWalletTransfers(wallet, { ...opts, sinceMs }),
+  const [transferScan, bnbUsd] = await Promise.all([
+    scanWalletTransfers(wallet, { ...opts, sinceMs }),
     opts.bnbUsd !== undefined ? Promise.resolve(opts.bnbUsd) : fetchBnbUsd(opts),
   ])
+  const transfers = transferScan.transfers
   const allTransfers = opts.extraTransfers ? [...transfers, ...opts.extraTransfers] : transfers
   const swaps = decodeTransfersToSwaps(allTransfers, wallet, bscQuoteConfig(bnbUsd))
   return {
@@ -220,6 +299,7 @@ export async function computeBscWalletOnchain(
     transfers: allTransfers.length,
     swaps: swaps.length,
     bnbUsd,
+    transferCoverage: transferScan.coverage,
     pnl: computeWalletPnl(swaps),
   }
 }
