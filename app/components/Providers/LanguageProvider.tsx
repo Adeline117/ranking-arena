@@ -60,8 +60,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
 
     // Pre-cache all language files in the background
     const preloadLangs: Language[] = ['zh', 'ja', 'ko']
-    if (requestIdleCallback) {
-      requestIdleCallback(() => {
+    if (typeof window.requestIdleCallback === 'function') {
+      window.requestIdleCallback(() => {
         preloadLangs.forEach((lang) => loadTranslations(lang))
       })
     } else {
