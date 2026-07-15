@@ -149,6 +149,25 @@ Arena Score = (ReturnScore + PnlScore) * confidenceMultiplier * trustWeight
 
 **Rule**: Always fix core path bugs before secondary. When prioritizing features, core path UX > secondary features.
 
+### Homepage Information Architecture — OWNER-PROTECTED
+
+The established wide-desktop homepage is a three-column discovery surface:
+
+- Left: Hot Discussions / social discovery
+- Center: trader rankings and ranking controls
+- Right: Watchlist, trending topics, and market news
+
+**B2C priority does not authorize changing this layout.** It guides content,
+journeys, and conversion priorities inside the product. Moving either sidebar
+below the leaderboard, replacing the layout with a full-width leaderboard or
+card grid, or otherwise changing these three information-architecture slots
+requires explicit owner approval first.
+
+Any owner-approved homepage layout change must include before/after desktop
+screenshots and intentional updates to both guards:
+`app/components/home/__tests__/HomePage.layout.test.tsx` and the 1440px layout
+assertion in `e2e/smoke-critical-path.spec.ts`.
+
 ## Conventions
 
 ### Modals & Overlays — MANDATORY PATTERN
