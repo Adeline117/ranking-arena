@@ -3662,6 +3662,7 @@ const ko = {
   allTimeHigh: '역대 최고가',
   allTimeLow: '역대 최저가',
   gainersTop5: '상승 상위 5',
+  marketPriceFeedChecked: '가격 피드 확인',
   losersTop5: '하락 상위 5',
   fundFlow: '자금 흐름',
   noGainers: '전체 시장 하락 중, 상승 종목 없음',

@@ -101,12 +101,13 @@ test.describe('Market Page — Desktop', () => {
     await expect(fundFlow).toBeVisible({ timeout: 30_000 })
     await screenshot(page, '08-fund-flow')
 
-    // ── Test 6: Auto-refresh indicator shows "Updated Xs ago" ──
+    // ── Test 6: Auto-refresh indicator scopes freshness to the price feed ──
     // Wait for CoreCards to fetch data and set lastFetchedAt timestamp
     const updatedLabel = page
-      .locator('text=/Updated \\d+/i')
-      .or(page.locator('text=/已更新 \\d+/'))
-      .or(page.locator('text=/更新 \\d+/'))
+      .locator('text=/Price feed checked \\d+/i')
+      .or(page.locator('text=/价格源检查于 \\d+/'))
+      .or(page.locator('text=/価格フィード確認 \\d+/'))
+      .or(page.locator('text=/가격 피드 확인 \\d+/'))
     await expect(updatedLabel.first()).toBeVisible({ timeout: 20_000 })
     await screenshot(page, '06-auto-refresh-indicator')
 

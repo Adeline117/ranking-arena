@@ -3490,6 +3490,7 @@ const ja = {
   allTimeHigh: '過去最高値',
   allTimeLow: '過去最安値',
   gainersTop5: '値上がりトップ5',
+  marketPriceFeedChecked: '価格フィード確認',
   losersTop5: '値下がりトップ5',
   fundFlow: '資金フロー',
   noGainers: '全市場下落、値上がりなし',
