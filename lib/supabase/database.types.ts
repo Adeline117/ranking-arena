@@ -8184,10 +8184,6 @@ export type Database = {
             }
             Returns: number
           }
-      claim_stripe_event: {
-        Args: { p_event_id: string; p_event_type: string; p_stale_after?: string }
-        Returns: string
-      }
       calculate_overall_score: {
         Args: { score_30d: number; score_7d: number; score_90d: number }
         Returns: number
@@ -8248,6 +8244,14 @@ export type Database = {
           isOneToOne: false
           isSetofReturn: true
         }
+      }
+      claim_stripe_event: {
+        Args: {
+          p_event_id: string
+          p_event_type: string
+          p_stale_after?: string
+        }
+        Returns: string
       }
       claimant_counts: {
         Args: never
@@ -8362,10 +8366,6 @@ export type Database = {
         }
         Returns: boolean
       }
-      finish_stripe_event: {
-        Args: { p_error?: string; p_event_id: string; p_succeeded: boolean }
-        Returns: boolean
-      }
       find_data_gaps: {
         Args: { p_limit?: number; p_max_age_hours?: number }
         Returns: {
@@ -8374,6 +8374,10 @@ export type Database = {
           source: string
           source_trader_id: string
         }[]
+      }
+      finish_stripe_event: {
+        Args: { p_error?: string; p_event_id: string; p_succeeded: boolean }
+        Returns: boolean
       }
       fix_snapshot_violations: {
         Args: { batch_size?: number }
