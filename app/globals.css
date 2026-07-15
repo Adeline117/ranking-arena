@@ -580,10 +580,10 @@ html.theme-transition #main-content {
   --color-chart-indigo: #4f46e5;
 
   /* Founding member accent (amber, darker for light bg) */
-  --color-founding-accent: #d97706;
-  --color-founding-accent-muted: rgba(217, 119, 6, 0.08);
-  --color-founding-accent-border: rgba(217, 119, 6, 0.3);
-  --color-founding-accent-shadow: rgba(217, 119, 6, 0.3);
+  --color-founding-accent: #92400e;
+  --color-founding-accent-muted: rgba(146, 64, 14, 0.08);
+  --color-founding-accent-border: rgba(146, 64, 14, 0.3);
+  --color-founding-accent-shadow: rgba(146, 64, 14, 0.3);
 
   /* Medal/rank colors */
   --color-medal-gold: #b8860b;

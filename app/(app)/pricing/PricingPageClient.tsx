@@ -429,7 +429,8 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                     marginLeft: 8,
                     fontSize: 12,
                     fontWeight: 700,
-                    color: billing === b ? '#ffd700' : tokens.colors.accent.brand,
+                    color:
+                      billing === b ? 'var(--color-on-accent, #fff)' : tokens.colors.accent.brand,
                   }}
                 >
                   -{yearlySavings}%
@@ -514,7 +515,6 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                     padding: '8px 0',
                     fontSize: 14,
                     color: tokens.colors.text.tertiary,
-                    opacity: 0.55,
                   }}
                 >
                   <LockIcon size={14} /> {f}
