@@ -13,7 +13,7 @@
  *     BscScan internal txs — see memory; realized may understate until added)
  */
 
-import { computeBscWalletOnchain } from './bsc-fetch'
+import { computeBscWalletOnchain, type BscWalletResult } from './bsc-fetch'
 import { computeSolanaWalletOnchain, type SolWalletResult } from './solana-fetch'
 import { fetchMoralisInternalBnb } from './moralis-bsc-internal'
 import { fetchTokenInfo, unrealizedFromHoldings, type TokenInfo } from './token-prices'
@@ -88,6 +88,28 @@ export function solanaHistoryEvidence(
   }
 }
 
+/**
+ * BSC base transfer cursors are only one part of realized-history coverage.
+ * Native/internal receipts must also have an explicit complete-zero/success
+ * contract before the combined history can be called complete.
+ */
+export function bscHistoryEvidence(
+  r: Pick<BscWalletResult, 'transferCoverage' | 'transfers' | 'swaps'>,
+  internalCoverageComplete: boolean
+): Pick<
+  OnchainQuality['history'],
+  'scanComplete' | 'truncated' | 'recordsFetched' | 'txsFetched' | 'swapsDecoded'
+> {
+  return {
+    scanComplete:
+      r.transferCoverage.scanComplete && !r.transferCoverage.truncated && internalCoverageComplete,
+    truncated: r.transferCoverage.truncated,
+    recordsFetched: r.transfers,
+    txsFetched: null,
+    swapsDecoded: r.swaps,
+  }
+}
+
 /** Price held tokens + surface symbols for the OnchainInsights token blocks. */
 async function priceAndMeta(perToken: PerTokenPnl[]) {
   // Fetch info for BOTH held tokens (unrealized) and top realized tokens (for
@@ -148,8 +170,11 @@ export async function enrichWeb3Wallet(
     lookbackDays?: number
     maxSigs?: number
     maxPages?: number
-    /** Dune-sourced native-BNB SELL receipts (item C) — completes BSC sells. */
+    /** Dune/Moralis native-BNB SELL receipts; coverage proof is separate. */
     bscInternalBnb?: NormalizedTransfer[]
+    /** True only when the internal-transfer provider proves a complete query,
+     * including a successful zero-row result and no cursor/page truncation. */
+    bscInternalCoverageComplete?: boolean
   } = {}
 ): Promise<OnchainEnrichment> {
   const lookbackDays = opts.lookbackDays ?? 90
@@ -182,16 +207,22 @@ export async function enrichWeb3Wallet(
     extraTransfers: internalLegs,
   })
   const { u, info } = await priceAndMeta(r.pnl.perToken)
-  // Only a caller-supplied coverage result or at least one Moralis leg proves
-  // the internal-transfer gap was queried. Fail-soft [] is ambiguous (a valid
-  // zero-row result and an upstream failure currently share that shape), so it
-  // remains partial until the fetchers expose an explicit coverage contract.
-  const partial = !internalLegs
-  return normalize('bsc', wallet, lookbackDays, r.pnl, u, info, partial, {
-    recordsFetched: r.transfers,
-    txsFetched: null,
-    swapsDecoded: r.swaps,
-  })
+  // A non-empty array proves records were found, not that pagination finished.
+  // Require an independent coverage flag; current Dune/Moralis callers do not
+  // have that proof, so production remains conservatively partial.
+  const internalCoverageComplete =
+    opts.bscInternalCoverageComplete === true && internalLegs !== undefined
+  const partial = !internalCoverageComplete
+  return normalize(
+    'bsc',
+    wallet,
+    lookbackDays,
+    r.pnl,
+    u,
+    info,
+    partial,
+    bscHistoryEvidence(r, internalCoverageComplete)
+  )
 }
 
 function normalize(
