@@ -17,6 +17,7 @@ import {
   chainForSource,
   enrichWeb3Wallet,
   enrichmentExtras,
+  onchainFetchBudget,
   scoreEligibleWinRate,
 } from '@/lib/ingest/onchain/enrich'
 import { fetchBscInternalBnb } from '@/lib/ingest/onchain/dune-bsc-internal'
@@ -99,7 +100,7 @@ export async function processOnchainEnrich(
       try {
         const e = await enrichWeb3Wallet(chain, wallet, {
           lookbackDays: 90,
-          maxSigs: 400,
+          ...onchainFetchBudget(chain, 'scheduled'),
           bscInternalBnb: chain === 'bsc' ? internalByWallet.get(wallet.toLowerCase()) : undefined,
         })
         const extras = { ...enrichmentExtras(e), onchain_enriched_at: new Date().toISOString() }

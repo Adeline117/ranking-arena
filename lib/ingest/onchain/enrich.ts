@@ -36,6 +36,33 @@ export function chainForSource(slug: string): OnchainChain | null {
   return null
 }
 
+export type OnchainBudgetProfile = 'interactive' | 'scheduled' | 'backfill'
+export interface OnchainFetchBudget {
+  maxSigs?: number
+  maxPages?: number
+}
+
+const ONCHAIN_FETCH_BUDGETS: Record<
+  OnchainBudgetProfile,
+  Record<OnchainChain, OnchainFetchBudget>
+> = {
+  // Vercel's 60-second user-facing path: at most 2,000 BSC records total
+  // (one 1,000-record page for each direction).
+  interactive: { solana: { maxSigs: 150 }, bsc: { maxPages: 1 } },
+  // Recurring worker is long-lived but still bounded per wallet and per run.
+  scheduled: { solana: { maxSigs: 400 }, bsc: { maxPages: 4 } },
+  // Operator backfill trades more BSC depth for a smaller Solana tx budget.
+  backfill: { solana: { maxSigs: 250 }, bsc: { maxPages: 6 } },
+}
+
+/** Chain-specific budgets prevent maxSigs from silently doing nothing on BSC. */
+export function onchainFetchBudget(
+  chain: OnchainChain,
+  profile: OnchainBudgetProfile
+): OnchainFetchBudget {
+  return { ...ONCHAIN_FETCH_BUDGETS[profile][chain] }
+}
+
 export interface OnchainEnrichment {
   chain: OnchainChain
   wallet: string
