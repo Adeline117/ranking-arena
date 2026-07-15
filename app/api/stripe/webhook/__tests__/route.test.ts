@@ -23,6 +23,8 @@ const mockHandleSubscriptionCanceled = jest.fn()
 const mockHandleTrialWillEnd = jest.fn()
 const mockHandlePaymentSucceeded = jest.fn()
 const mockHandlePaymentFailed = jest.fn()
+const mockHandlePaymentActionRequired = jest.fn()
+const mockHandleInvoiceFinalizationFailed = jest.fn()
 const mockHandleChargeRefunded = jest.fn()
 const mockHandleRefundUpdated = jest.fn()
 const mockHandleChargeDisputeCreated = jest.fn()
@@ -40,6 +42,9 @@ jest.mock('@/app/api/stripe/webhook/handlers/subscription', () => ({
 jest.mock('@/app/api/stripe/webhook/handlers/invoice', () => ({
   handlePaymentSucceeded: (...args: unknown[]) => mockHandlePaymentSucceeded(...args),
   handlePaymentFailed: (...args: unknown[]) => mockHandlePaymentFailed(...args),
+  handlePaymentActionRequired: (...args: unknown[]) => mockHandlePaymentActionRequired(...args),
+  handleInvoiceFinalizationFailed: (...args: unknown[]) =>
+    mockHandleInvoiceFinalizationFailed(...args),
 }))
 jest.mock('@/app/api/stripe/webhook/handlers/refund', () => ({
   handleChargeRefunded: (...args: unknown[]) => mockHandleChargeRefunded(...args),
@@ -197,6 +202,8 @@ describe('POST /api/stripe/webhook', () => {
     ['invoice.payment_succeeded', mockHandlePaymentSucceeded],
     ['invoice.paid', mockHandlePaymentSucceeded],
     ['invoice.payment_failed', mockHandlePaymentFailed],
+    ['invoice.payment_action_required', mockHandlePaymentActionRequired],
+    ['invoice.finalization_failed', mockHandleInvoiceFinalizationFailed],
     ['charge.refunded', mockHandleChargeRefunded],
     ['charge.refund.updated', mockHandleRefundUpdated],
     ['refund.updated', mockHandleRefundUpdated],
