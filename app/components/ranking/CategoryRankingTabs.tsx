@@ -151,7 +151,6 @@ export default function CategoryRankingTabs({
               <span
                 style={{
                   fontSize: 11,
-                  opacity: 0.7,
                   background: isActive ? 'rgba(255,255,255,0.2)' : 'var(--color-bg-tertiary)',
                   borderRadius: tokens.radius.full,
                   padding: '1px 6px',
