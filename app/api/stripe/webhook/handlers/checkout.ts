@@ -264,45 +264,11 @@ async function handleLifetimePayment(userId: string, customerId: string) {
   logger.info('Processing lifetime payment', { userId, customerId })
 
   await withRetry(async () => {
-    // Update subscriptions table
-    const { error: subError } = await getSupabase()
-      .from('subscriptions')
-      .upsert(
-        {
-          user_id: userId,
-          stripe_customer_id: customerId,
-          stripe_subscription_id: `lifetime_${userId}`,
-          status: 'active',
-          tier: 'pro',
-          plan: 'lifetime',
-          current_period_start: new Date().toISOString(),
-          current_period_end: null,
-          cancel_at_period_end: false,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: 'user_id',
-        }
-      )
-
-    if (subError) {
-      throw new Error(`Failed to upsert subscription: ${subError.message}`)
-    }
-
-    // Update user_profiles
-    const { error: profileError } = await getSupabase()
-      .from('user_profiles')
-      .update({
-        subscription_tier: 'pro',
-        pro_plan: 'lifetime',
-        stripe_customer_id: customerId,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', userId)
-
-    if (profileError) {
-      throw new Error(`Failed to update user_profiles: ${profileError.message}`)
-    }
+    const { error } = await getSupabase().rpc('activate_lifetime_membership', {
+      p_user_id: userId,
+      p_stripe_customer_id: customerId,
+    })
+    if (error) throw new Error(`Failed to activate lifetime membership: ${error.message}`)
   })
 
   // Join Pro official group

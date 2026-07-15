@@ -7976,6 +7976,10 @@ export type Database = {
     }
     Functions: {
       acquire_leaderboard_lock: { Args: { season: string }; Returns: boolean }
+      activate_lifetime_membership: {
+        Args: { p_stripe_customer_id: string; p_user_id: string }
+        Returns: undefined
+      }
       adjust_pro_group_member_count: {
         Args: { p_delta: number; p_group_id: string }
         Returns: undefined

@@ -69,6 +69,7 @@ describe('handleCheckoutComplete entitlement safety', () => {
       status: 'active',
     })
     mockUpdateUserSubscription.mockResolvedValue(undefined)
+    mockRpc.mockResolvedValue({ error: null })
   })
 
   it('rethrows a Stripe lookup failure so the webhook remains retryable', async () => {
@@ -113,5 +114,21 @@ describe('handleCheckoutComplete entitlement safety', () => {
 
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
+  })
+
+  it('activates a paid lifetime membership through one atomic RPC', async () => {
+    await handleCheckoutComplete(
+      checkoutSession({
+        mode: 'payment',
+        payment_status: 'paid',
+        subscription: null,
+        metadata: { userId: 'user-123', plan: 'lifetime' },
+      })
+    )
+
+    expect(mockRpc).toHaveBeenCalledWith('activate_lifetime_membership', {
+      p_user_id: 'user-123',
+      p_stripe_customer_id: 'cus_test_123',
+    })
   })
 })
