@@ -7,14 +7,15 @@
  *
  * Now rendered as a server component with fixed positioning (no layout shift).
  * Dismiss logic is handled via a tiny inline script that reads localStorage
- * before paint, avoiding a flash of the banner for dismissed users.
+ * before paint and sets an attribute on the hydration-suppressed root element.
+ * CSS owns visibility, so the script never mutates React-managed banner markup.
  *
  * i18n: because this is server-rendered in the root layout (which stays static
  * for homepage LCP and does NOT read the language cookie), we render all four
- * localized variants and let the same pre-paint inline script pick the one that
- * matches localStorage.getItem('language'). English is the default (shown when
- * JS is disabled or no preference is stored). This keeps the component fully
- * static — no dynamic layout, no LCP/SSG regression — while still localizing.
+ * localized variants and let CSS select the one matching the root `lang`
+ * attribute set by app/layout.tsx before paint. English is the default (shown
+ * when JS is disabled or no preference is stored). This keeps the component
+ * fully static — no dynamic layout, no LCP/SSG regression — while localizing.
  */
 
 import en from '@/lib/i18n/en'
@@ -40,12 +41,6 @@ export default function BetaBanner() {
   // that produced a root-layout hydration mismatch on every app route.
   if (PRO_FREE_PROMO) return null
 
-  // Single-banner coordination: while the Pro-free promo is running, the
-  // ProPromoBanner owns the top slot (more useful, time-bound message). We hide
-  // the closed-beta notice until the promo banner is dismissed, so the two never
-  // double-stack and push the ranking data below the fold on mobile.
-  const promoActive = 'false'
-
   return (
     <>
       <div
@@ -67,12 +62,7 @@ export default function BetaBanner() {
             Within the shown wrapper, .beta-full/.beta-short toggle via CSS on
             small screens (terser copy on mobile). */}
         {LANGS.map(({ code, dict }) => (
-          <span
-            key={code}
-            className="beta-lang"
-            data-beta-lang={code}
-            style={code === 'en' ? undefined : { display: 'none' }}
-          >
+          <span key={code} className="beta-lang" data-beta-lang={code}>
             <span className="beta-full">{dict.betaBannerFull}</span>
             <span className="beta-short">{dict.betaBannerShort}</span>
           </span>
@@ -103,14 +93,12 @@ export default function BetaBanner() {
           ✕
         </button>
       </div>
-      {/* Inline script: pick the localized variant, ALWAYS wire the dismiss
-          button (so the beta banner works even when revealed later by the Pro
-          promo banner's dismissal), then decide visibility — hidden while the
-          Pro promo owns the slot, hidden if beta itself was dismissed <30d ago.
-          Runs synchronously before paint to avoid flash. */}
+      {/* Inline script only writes state onto the root element, whose hydration
+          warning is suppressed in app/layout.tsx. It deliberately does not
+          mutate React-owned banner styles/text before hydration. */}
       <script
         dangerouslySetInnerHTML={{
-          __html: `(function(){var k='beta-banner-dismissed-at',b=document.getElementById('beta-banner');if(!b)return;try{var lang=localStorage.getItem('language');if(lang!=='ja'&&lang!=='ko'&&lang!=='zh')lang='en';var ws=b.querySelectorAll('.beta-lang');for(var i=0;i<ws.length;i++){ws[i].style.display=ws[i].getAttribute('data-beta-lang')===lang?'':'none'}}catch(e){}var btn=document.getElementById('beta-banner-dismiss');if(btn)btn.onclick=function(){try{localStorage.setItem(k,String(Date.now()))}catch(e){}b.style.display='none'};if(${promoActive}){var pd='0';try{pd=localStorage.getItem('pro-free-promo-dismissed')}catch(e){}if(pd!=='1'){b.style.display='none';return}}try{var d=localStorage.getItem(k);if(d&&Date.now()-Number(d)<2592e6){b.style.display='none'}}catch(e){}})()`,
+          __html: `(function(){var k='beta-banner-dismissed-at',root=document.documentElement,b=document.getElementById('beta-banner');if(!b)return;try{var d=localStorage.getItem(k);if(d&&Date.now()-Number(d)<2592e6)root.setAttribute('data-beta-banner-hidden','true')}catch(e){}var btn=document.getElementById('beta-banner-dismiss');if(btn)btn.onclick=function(){try{localStorage.setItem(k,String(Date.now()))}catch(e){}root.setAttribute('data-beta-banner-hidden','true')}})()`,
         }}
       />
     </>
