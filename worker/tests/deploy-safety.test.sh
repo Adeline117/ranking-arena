@@ -112,9 +112,26 @@ test_running_pm2_refuses_docker_deploy() {
   echo 'ok - running PM2 consumer blocks Docker deploy before mutation'
 }
 
+test_ready_check_requires_fresh_sha_evidence() {
+  local deploy
+  deploy="$(<"$DEPLOY_SCRIPT")"
+  assert_contains "$deploy" 'READY_MARKER="arena-deploy-' \
+    'PM2 deploy must create a unique readiness marker'
+  assert_contains "$deploy" 'index(\$0, marker) { after = 1; ready = 0; heartbeat = 0; next }' \
+    'readiness must ignore log lines before the deployment marker'
+  assert_contains "$deploy" 'index(\$0, \"sha=\" sha)' \
+    'readiness must require the expected deployed heartbeat SHA'
+  [[ "${deploy%%ssh_sg \"pm2 restart*}" == *'printf '\''%s\\n'\'' '\''$READY_MARKER'\'''* ]] || \
+    fail 'deployment marker must be written before PM2 restart'
+  [[ "$deploy" != *"pm2 logs \$PM2_APP --lines 400"* ]] || \
+    fail 'readiness must not pass on an old line from a fixed PM2 log window'
+  echo 'ok - PM2 readiness requires fresh post-marker SHA evidence'
+}
+
 bash -n "$DEPLOY_SCRIPT" "$DOCKER_SCRIPT" "$0"
 test_dry_run_itemizes_changes
 test_running_container_refuses_pm2_deploy
 test_docker_inspection_failure_aborts_deploy
 test_stable_docker_node_identity
 test_running_pm2_refuses_docker_deploy
+test_ready_check_requires_fresh_sha_evidence
