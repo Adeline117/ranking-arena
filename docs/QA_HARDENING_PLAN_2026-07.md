@@ -16,8 +16,10 @@
 > 建基线，避免历史记录误判。所有本轮帖子、两条评论、关注、pending 申请与五条通知
 > 都已通过用户 API 清理，并以 service-role **只读**核验为零残留。B-4 的“提交申请
 > → 本人读取 pending → 精确 pending 清理”也已通过；完整的管理员批准→建群→加入→
-> 群内发帖→解散仍需管理员权限，B-5 仍需 `NEXT_PUBLIC_PRO_FREE_PROMO=false` preview，二者不可
-> 伪称已验收。
+> 群内发帖→解散仍需管理员权限，不能伪称已验收。B-5 已于 2026-07-14 在受保护的
+> Preview 实测通过：将 **Preview-only** `NEXT_PUBLIC_PRO_FREE_PROMO` 精确设为 `false`（此前误写
+> 成字面量 `false\\n`，已纠正），QA-B 免费账号在 `/compare` 看到内联 ProGate，点击
+> “Start 7-Day Free Trial” 实际抵达 `/pricing`。生产 promo 配置未改动。
 
 ---
 
@@ -150,16 +152,19 @@
   在生产不可达**。
 - **无 per-account 覆盖开关**。→ 测锁定态只能用 `NEXT_PUBLIC_PRO_FREE_PROMO=false` 的 **preview 部署**
   （sweep 已参数化 `BASE_URL`）。列为**非生产子波**，promo 结束后或 preview 上单独做。
+- **完成（2026-07-14）**：`scripts/qa/pro-gate-preview.mjs` 已在受 Vercel Deployment Protection
+  保护的 Preview 中用 QA-B 真实浏览器会话验收门禁和 CTA 跳转；脚本支持
+  `VERCEL_AUTOMATION_BYPASS_SECRET`，但不会输出该密钥。生产仍保持 open-beta 默认值。
 
 ## B5. 阶段划分
 
-| 阶段 | 内容                                                                     | CC 工时 | 前置                 |
-| ---- | ------------------------------------------------------------------------ | ------- | -------------------- |
-| B-1  | 建第二 QA 账号 + seed profile + `qa-auth.mjs` 双 session                 | ~3h     | 无（头号阻塞，先做） |
-| B-2  | 扩展 `auth-button-sweep.mjs`：用户对用户 follow + 通知落 QA-B + 通知清理 | ~4h     | B-1                  |
-| B-3  | 补 bookmark/vote/comment-like/reply 写流程 + 每写 GET 复查               | ~4h     | B-1                  |
-| B-4  | 群组 join / 群内发帖（若 QA-B 可建私群）                                 | ~3h     | B-1                  |
-| B-5  | Pro 锁定态 preview 子波（`NEXT_PUBLIC_PRO_FREE_PROMO=false`）            | ~2h     | preview 部署         |
+| 阶段 | 内容                                                                     | CC 工时   | 前置                 |
+| ---- | ------------------------------------------------------------------------ | --------- | -------------------- |
+| B-1  | 建第二 QA 账号 + seed profile + `qa-auth.mjs` 双 session                 | ~3h       | 无（头号阻塞，先做） |
+| B-2  | 扩展 `auth-button-sweep.mjs`：用户对用户 follow + 通知落 QA-B + 通知清理 | ~4h       | B-1                  |
+| B-3  | 补 bookmark/vote/comment-like/reply 写流程 + 每写 GET 复查               | ~4h       | B-1                  |
+| B-4  | 群组 join / 群内发帖（若 QA-B 可建私群）                                 | ~3h       | B-1                  |
+| B-5  | Pro 锁定态 preview 子波（`NEXT_PUBLIC_PRO_FREE_PROMO=false`）            | ✅ 已验收 | Preview-only 部署    |
 
 **风险最高的是 B-1**（建账号/seed，动生产 auth + user_profiles，须 service role 小心）。
 
