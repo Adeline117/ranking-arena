@@ -11,7 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
-import { getStripe, SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
+import { getStripe, STRIPE_PRICE_IDS, SUBSCRIPTION_STATUS_MAP } from '@/lib/stripe'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { logger } from '@/lib/logger'
 
@@ -35,10 +35,7 @@ export async function POST(request: NextRequest) {
   const userId = searchParams.get('userId')
 
   if (!userId) {
-    return NextResponse.json(
-      { error: 'Missing required query param: userId' },
-      { status: 400 }
-    )
+    return NextResponse.json({ error: 'Missing required query param: userId' }, { status: 400 })
   }
 
   const supabase = getSupabaseAdmin()
@@ -47,19 +44,16 @@ export async function POST(request: NextRequest) {
     // 1. Look up user's stripe_customer_id from user_profiles
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('id, stripe_customer_id, subscription_tier')
+      .select('id, stripe_customer_id, subscription_tier, pro_plan')
       .eq('id', userId)
       .single()
 
     if (profileError || !profile) {
       logger.warn('sync-subscription: user not found', { userId })
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      )
+      return NextResponse.json({ error: 'User not found' }, { status: 404 })
     }
 
-    const stripeCustomerId = (profile as unknown as Record<string, unknown>).stripe_customer_id as string | null
+    const stripeCustomerId = profile.stripe_customer_id
 
     if (!stripeCustomerId) {
       logger.warn('sync-subscription: user has no stripe_customer_id', { userId })
@@ -87,44 +81,49 @@ export async function POST(request: NextRequest) {
     if (activeSub) {
       // Determine plan from price ID
       const priceId = activeSub.items.data[0]?.price.id
-      const lifetimePriceId = process.env.STRIPE_PRO_LIFETIME_PRICE_ID
-      const yearlyPriceId = process.env.STRIPE_PRO_YEARLY_PRICE_ID
-      const plan = priceId === yearlyPriceId
-        ? 'yearly'
-        : (lifetimePriceId && priceId === lifetimePriceId)
-          ? 'lifetime'
-          : 'monthly'
+      const plan =
+        priceId === STRIPE_PRICE_IDS.monthly
+          ? 'monthly'
+          : priceId === STRIPE_PRICE_IDS.yearly
+            ? 'yearly'
+            : null
+      if (!plan) {
+        logger.error('sync-subscription: active subscription has unknown price; access unchanged', {
+          userId,
+          stripeSubscriptionId: activeSub.id,
+          priceId,
+        })
+        return NextResponse.json(
+          { error: 'Active Stripe subscription has an unknown price; no entitlement changed.' },
+          { status: 409 }
+        )
+      }
 
       const status = SUBSCRIPTION_STATUS_MAP[activeSub.status] || activeSub.status
-      const sub = activeSub as unknown as Record<string, unknown>
-      const itemPeriod = activeSub.items?.data?.[0] as unknown as Record<string, unknown> | undefined
-      const pStart = (sub.current_period_start ?? itemPeriod?.current_period_start) as number | undefined
-      const pEnd = (sub.current_period_end ?? itemPeriod?.current_period_end) as number | undefined
+      const itemPeriod = activeSub.items.data[0]
+      const pStart = itemPeriod?.current_period_start
+      const pEnd = itemPeriod?.current_period_end
       const periodStart = pStart
         ? new Date(pStart * 1000).toISOString()
         : new Date(activeSub.start_date * 1000).toISOString()
-      const periodEnd = pEnd
-        ? new Date(pEnd * 1000).toISOString()
-        : null
+      const periodEnd = pEnd ? new Date(pEnd * 1000).toISOString() : null
 
       // Upsert the subscriptions table
-      const { error: subError } = await supabase
-        .from('subscriptions')
-        .upsert(
-          {
-            user_id: userId,
-            stripe_subscription_id: activeSub.id,
-            stripe_customer_id: customerId,
-            status,
-            tier: 'pro',
-            plan,
-            current_period_start: periodStart,
-            current_period_end: periodEnd,
-            cancel_at_period_end: activeSub.cancel_at_period_end,
-            updated_at: new Date().toISOString(),
-          },
-          { onConflict: 'user_id' }
-        )
+      const { error: subError } = await supabase.from('subscriptions').upsert(
+        {
+          user_id: userId,
+          stripe_subscription_id: activeSub.id,
+          stripe_customer_id: customerId,
+          status,
+          tier: 'pro',
+          plan,
+          current_period_start: periodStart,
+          current_period_end: periodEnd,
+          cancel_at_period_end: activeSub.cancel_at_period_end,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      )
 
       if (subError) {
         logger.error('sync-subscription: failed to upsert subscription', {
@@ -175,6 +174,12 @@ export async function POST(request: NextRequest) {
       })
     } else {
       // 4. No active subscription — downgrade to free
+      // Lifetime is a one-time payment and has no active Stripe Subscription
+      // object. Refund/dispute webhooks are authoritative for its revocation.
+      if (profile.pro_plan === 'lifetime') {
+        logger.info('sync-subscription: preserved lifetime membership', { userId })
+        return NextResponse.json({ success: true, action: 'preserved_lifetime' })
+      }
       const { error: subError } = await supabase
         .from('subscriptions')
         .update({
@@ -218,9 +223,6 @@ export async function POST(request: NextRequest) {
     }
   } catch (error) {
     logger.apiError('/api/admin/sync-subscription', error, { userId })
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
