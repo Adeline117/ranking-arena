@@ -1,10 +1,11 @@
 /**
  * On-chain web3 enrichment processor (Phase A — cron-wired, item A).
  *
- * Periodically recomputes the top-N web3 wallets' profile detail 100% from
- * chain data (durable — no exchange/WAF) and writes onchain_* fields into
- * arena.trader_stats.extras (90d), never clobbering board values. The durable
- * replacement for the AWS-WAF-blocked binance_web3 / okx_web3 profile detail.
+ * Periodically reconstructs the top-N web3 wallets' profile detail from chain
+ * activity plus marked pricing (durable — no exchange/WAF) and writes onchain_*
+ * fields into arena.trader_stats.extras (90d), never clobbering board values.
+ * The durable replacement for the AWS-WAF-blocked binance_web3 / okx_web3
+ * profile detail.
  *
  * Bounded to top-N per source (deep-profile budget) + retry/backoff in the
  * fetchers keeps it within the shared Alchemy free tier ($0). Ordered by 90d
@@ -12,7 +13,12 @@
  */
 import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
-import { chainForSource, enrichWeb3Wallet, enrichmentExtras } from '@/lib/ingest/onchain/enrich'
+import {
+  chainForSource,
+  enrichWeb3Wallet,
+  enrichmentExtras,
+  scoreEligibleWinRate,
+} from '@/lib/ingest/onchain/enrich'
 import { fetchBscInternalBnb } from '@/lib/ingest/onchain/dune-bsc-internal'
 import type { NormalizedTransfer } from '@/lib/ingest/onchain/bsc-swaps'
 import { logger } from '@/lib/logger'
@@ -94,8 +100,7 @@ export async function processOnchainEnrich(
         const e = await enrichWeb3Wallet(chain, wallet, {
           lookbackDays: 90,
           maxSigs: 400,
-          bscInternalBnb:
-            chain === 'bsc' ? (internalByWallet.get(wallet.toLowerCase()) ?? []) : undefined,
+          bscInternalBnb: chain === 'bsc' ? internalByWallet.get(wallet.toLowerCase()) : undefined,
         })
         const extras = { ...enrichmentExtras(e), onchain_enriched_at: new Date().toISOString() }
         await pool.query(
@@ -105,7 +110,7 @@ export async function processOnchainEnrich(
            FROM arena.traders t, arena.sources s
            WHERE ts.trader_id = t.id AND t.source_id = s.id
              AND s.slug = $1 AND t.exchange_trader_id = $2 AND ts.timeframe = 90`,
-          [slug, wallet, JSON.stringify(extras), e.winRate]
+          [slug, wallet, JSON.stringify(extras), scoreEligibleWinRate(e)]
         )
         enriched += 1
       } catch (err) {

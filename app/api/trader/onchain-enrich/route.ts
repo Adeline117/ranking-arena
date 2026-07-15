@@ -12,7 +12,12 @@
  */
 import { NextResponse, type NextRequest } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { chainForSource, enrichWeb3Wallet, enrichmentExtras } from '@/lib/ingest/onchain/enrich'
+import {
+  chainForSource,
+  enrichWeb3Wallet,
+  enrichmentExtras,
+  scoreEligibleWinRate,
+} from '@/lib/ingest/onchain/enrich'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -70,7 +75,9 @@ export async function POST(req: NextRequest) {
       p_source: source,
       p_exchange_trader_id: exchangeTraderId,
       p_extras: extras,
-      p_win_rate: e.winRate ?? undefined,
+      // The current bounded accounting is useful profile evidence but is not
+      // score-grade until opening inventory + execution-time prices are replayed.
+      p_win_rate: scoreEligibleWinRate(e) ?? undefined,
     })
     if (error) throw error
     return NextResponse.json({

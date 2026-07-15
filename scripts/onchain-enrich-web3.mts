@@ -1,11 +1,11 @@
 /**
  * Web3 wallet on-chain enrichment runner (Phase A item A → Phase B recurring).
  *
- * Recomputes web3 wallets' profile detail 100% from chain data (durable — no
- * exchange/WAF) and writes onchain_* fields into arena.trader_stats.extras
- * (90d row) WITHOUT clobbering board values. Solana via HELIUS_API_KEY
- * (fallback ALCHEMY_API_KEY), BSC via Alchemy + Dune internal legs, pricing
- * via keyless Dexscreener.
+ * Reconstructs web3 wallets' profile detail from chain activity plus marked
+ * pricing (durable — no exchange/WAF) and writes onchain_* fields into
+ * arena.trader_stats.extras (90d row) WITHOUT clobbering board values. Solana
+ * via HELIUS_API_KEY (fallback ALCHEMY_API_KEY), BSC via Alchemy + Dune
+ * internal legs, pricing via keyless Dexscreener.
  *
  * Phase B sweep semantics (2026-07-09, owner 批全量): selection prefers
  * never-enriched wallets, then stalest (extras.onchain_enriched_at), skipping
@@ -35,9 +35,13 @@ const onlyWallets = (process.argv[5] ?? '')
 
 async function main() {
   const { Pool } = await import('pg')
-  const { chainForSource, enrichWeb3Wallet, enrichmentExtras, enrichmentSeries } = await import(
-    '@/lib/ingest/onchain/enrich'
-  )
+  const {
+    chainForSource,
+    enrichWeb3Wallet,
+    enrichmentExtras,
+    enrichmentSeries,
+    scoreEligibleWinRate,
+  } = await import('@/lib/ingest/onchain/enrich')
   const dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL
   if (!dbUrl) throw new Error('SUPABASE_DB_URL / DATABASE_URL missing')
   const pool = new Pool({ connectionString: dbUrl, max: 3 })
@@ -102,7 +106,7 @@ async function main() {
              FROM arena.traders t, arena.sources s
              WHERE ts.trader_id = t.id AND t.source_id = s.id
                AND s.slug = $1 AND t.exchange_trader_id = $2 AND ts.timeframe = 90`,
-            [slug, wallet, JSON.stringify(extras), e.winRate]
+            [slug, wallet, JSON.stringify(extras), scoreEligibleWinRate(e)]
           )
           // 链上自算 pnl_daily 序列(BSC-only,见 enrichmentSeries 注释)——
           // 与 publishBoardSeries 同款 (trader,tf,metric,ts) upsert,后到覆盖。
