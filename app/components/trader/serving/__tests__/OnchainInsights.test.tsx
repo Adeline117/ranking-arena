@@ -20,11 +20,15 @@ describe('OnchainInsights quality disclosure', () => {
           onchain_realized_pnl: 900,
           onchain_unrealized_pnl: 300,
           onchain_quality: {
+            schema_version: 1,
+            methodology: 'wallet-balance-delta-average-cost',
+            methodology_version: '1.0.0',
             completeness: 'partial',
             price_quality: 'non_historical_approx',
             score_eligible: false,
             reasons: ['opening_inventory_unknown'],
-            history: { scan_complete: null, truncated: null },
+            realized_partial: false,
+            history: { requested_days: 90, scan_complete: null, truncated: null },
           },
         }}
       />
@@ -45,11 +49,15 @@ describe('OnchainInsights quality disclosure', () => {
         extras={{
           onchain_total_pnl: 1200,
           onchain_quality: {
+            schema_version: 1,
+            methodology: 'wallet-balance-delta-average-cost',
+            methodology_version: '1.0.0',
             completeness: 'complete',
             price_quality: 'historical_execution',
             score_eligible: true,
             reasons: [],
-            history: { scan_complete: true, truncated: false },
+            realized_partial: false,
+            history: { requested_days: 90, scan_complete: true, truncated: false },
           },
         }}
       />

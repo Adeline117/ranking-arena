@@ -253,7 +253,7 @@ function normalize(
 
 /** Only canonical, complete on-chain metrics may populate typed score inputs. */
 export function scoreEligibleWinRate(e: OnchainEnrichment): number | null {
-  return isOnchainQualityCanonical(e.quality) ? e.winRate : null
+  return !e.realizedPartial && isOnchainQualityCanonical(e.quality) ? e.winRate : null
 }
 
 /**

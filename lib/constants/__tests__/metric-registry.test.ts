@@ -104,11 +104,15 @@ describe('promoteExtrasMetrics', () => {
       {
         onchain_total_pnl: 1200,
         onchain_quality: {
+          schema_version: 1,
+          methodology: 'wallet-balance-delta-average-cost',
+          methodology_version: '1.0.0',
           completeness: 'complete',
           price_quality: 'historical_execution',
           score_eligible: true,
           reasons: [],
-          history: { scan_complete: true, truncated: false },
+          realized_partial: false,
+          history: { requested_days: 90, scan_complete: true, truncated: false },
         },
       }
     )
