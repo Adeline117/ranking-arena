@@ -683,15 +683,13 @@ export function RankingFilters({
             {BETA_PRO_FEATURES_FREE && (
               <span
                 style={{
-                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design (8px Pro micro-badge)
-                  fontSize: 8,
+                  fontSize: tokens.typography.fontSize.xs,
                   fontWeight: tokens.typography.fontWeight.bold,
                   padding: '1px 4px',
                   // eslint-disable-next-line no-restricted-syntax -- off-scale by design (4px radius on micro-badge; nearest token is 2px off)
                   borderRadius: 4,
-                  background:
-                    'color-mix(in srgb, var(--color-pro-gradient-start) 20%, transparent)',
-                  color: 'var(--color-pro-gradient-start)',
+                  background: 'var(--color-brand-deep)',
+                  color: 'var(--color-on-accent)',
                   border:
                     '1px solid color-mix(in srgb, var(--color-pro-gradient-start) 40%, transparent)',
                   whiteSpace: 'nowrap',

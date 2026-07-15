@@ -128,6 +128,7 @@ html.theme-transition #main-content {
 
   /* Brand colors - Arena Purple (slightly more saturated) */
   --color-brand: #9373b5;
+  --color-brand-text: #a98cc4;
   --color-brand-hover: #a68ec5;
   --color-brand-muted: var(--color-accent-primary-15);
   --color-brand-light: var(--color-accent-primary-30);
@@ -405,6 +406,7 @@ html.theme-transition #main-content {
      (#9373b5) only reached 3.3:1 on light surfaces; use the existing deep brand
      shade here so nav labels, links and white-on-brand CTAs clear WCAG AA. */
   --color-brand: #604184;
+  --color-brand-text: #604184;
   --color-brand-hover: #523770;
 
   /* Brand gradients — deeper purples for contrast on light surfaces */
@@ -1417,7 +1419,7 @@ select:focus-visible {
 
 .top-nav-link-active {
   background: var(--color-accent-primary-12) !important;
-  color: var(--color-brand) !important;
+  color: var(--color-brand-text) !important;
   box-shadow: inset 0 0 0 1px var(--color-accent-primary-20);
 }
 
@@ -1429,7 +1431,7 @@ select:focus-visible {
   transform: translateX(-50%);
   width: 60%;
   height: 2.5px;
-  background: var(--color-brand);
+  background: var(--color-brand-text);
   border-radius: 2px;
   box-shadow: 0 1px 6px var(--color-accent-primary-40);
 }

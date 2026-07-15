@@ -50,7 +50,7 @@ export default function NavLinks() {
             style={{
               padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
               borderRadius: tokens.radius.md,
-              color: isActive ? 'var(--color-brand)' : 'var(--color-text-secondary)',
+              color: isActive ? 'var(--color-brand-text)' : 'var(--color-text-secondary)',
               textDecoration: 'none',
               fontWeight: isActive ? 800 : 600,
               fontSize: tokens.typography.fontSize.sm,
