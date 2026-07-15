@@ -443,7 +443,10 @@ FOR EACH ROW
 EXECUTE FUNCTION public.sync_post_comment_count();
 
 -- Repair every post, including stale non-zero rows that now have no active
--- comments. UPDATE only drifted rows to avoid changing unrelated timestamps.
+-- comments. Remove an expand bridge left by an earlier replay first so it
+-- cannot turn this canonical repair into a no-op. UPDATE only drifted rows to
+-- avoid changing unrelated timestamps.
+DROP TRIGGER IF EXISTS trg_posts_05_authoritative_comment_count ON public.posts;
 UPDATE public.posts AS post_row
 SET comment_count = counts.comment_count
 FROM (
@@ -457,6 +460,37 @@ FROM (
 ) AS counts
 WHERE post_row.id = counts.id
   AND post_row.comment_count IS DISTINCT FROM counts.comment_count;
+
+-- Expand-phase bridge: an already-running legacy handler or maintenance script
+-- may still recount comments and issue a top-level absolute post counter UPDATE.
+-- The source-row trigger above has already applied the canonical delta, so keep
+-- its OLD value instead of allowing a stale read-then-write to overwrite a
+-- concurrent insert/delete. Nested UPDATEs issued by sync_post_comment_count()
+-- run at trigger depth > 1 and remain authoritative. The contract migration
+-- later turns top-level attempts into explicit failures after every legacy
+-- writer has drained.
+CREATE OR REPLACE FUNCTION public.bridge_legacy_post_comment_count()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  IF pg_trigger_depth() = 1 THEN
+    NEW.comment_count := OLD.comment_count;
+  END IF;
+
+  RETURN NEW;
+END;
+$$;
+
+REVOKE ALL ON FUNCTION public.bridge_legacy_post_comment_count()
+  FROM PUBLIC, anon, authenticated;
+
+CREATE TRIGGER trg_posts_05_authoritative_comment_count
+BEFORE UPDATE OF comment_count
+ON public.posts
+FOR EACH ROW
+EXECUTE FUNCTION public.bridge_legacy_post_comment_count();
 
 -- Reactions cannot change ownership or move between comments. Locking the
 -- active comment makes trigger-owned counter deltas safe for every writer,
@@ -687,7 +721,10 @@ FOR EACH ROW
 EXECUTE FUNCTION public.sync_comment_reaction_counts();
 
 -- Repair cached reaction counts from the source table before making them
--- non-null. UPDATE only drifted comments to preserve unrelated updated_at.
+-- non-null. Remove an expand bridge left by an earlier replay first so it
+-- cannot preserve stale values. UPDATE only drifted comments to preserve
+-- unrelated updated_at.
+DROP TRIGGER IF EXISTS trg_comments_05_authoritative_reaction_counts ON public.comments;
 UPDATE public.comments AS comment_row
 SET like_count = counts.like_count,
     dislike_count = counts.dislike_count
@@ -759,7 +796,6 @@ $$;
 REVOKE ALL ON FUNCTION public.bridge_legacy_comment_reaction_counts()
   FROM PUBLIC, anon, authenticated;
 
-DROP TRIGGER IF EXISTS trg_comments_05_authoritative_reaction_counts ON public.comments;
 CREATE TRIGGER trg_comments_05_authoritative_reaction_counts
 BEFORE UPDATE OF like_count, dislike_count
 ON public.comments
@@ -1051,13 +1087,17 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
+  -- The comment validation trigger takes FOR NO KEY UPDATE on this same post.
+  -- Acquire that mode up front in the canonical post -> group -> comment order;
+  -- starting with FOR SHARE would make concurrent editors deadlock while both
+  -- try to upgrade their post row lock from inside the BEFORE UPDATE trigger.
   SELECT author_id, visibility, group_id
   INTO v_post_author_id, v_post_visibility, v_post_group_id
   FROM public.posts
   WHERE id = p_post_id
     AND deleted_at IS NULL
     AND status = 'active'::public.post_status
-  FOR SHARE;
+  FOR NO KEY UPDATE;
 
   IF NOT FOUND THEN
     RAISE EXCEPTION 'active post not found'
