@@ -2,8 +2,8 @@
  * Cron: Sync authorized trader data
  * Schedule: Every 5 minutes
  *
- * Calls /api/trader/sync with no body (cron mode)
- * which syncs all active authorizations respecting sync_frequency.
+ * Compatibility cron: asks the canonical ingest worker to queue all eligible
+ * authorizations. The worker owns exchange access, retries, and persistence.
  */
 
 import { NextRequest } from 'next/server'
@@ -34,11 +34,11 @@ export const GET = withCron('sync-authorized-traders', async (request: NextReque
   }
 
   const result = await response.json()
-  logger.info('[Cron] Authorized trader sync completed', result)
+  logger.info('[Cron] Authorized trader sync queued', result)
 
   return {
-    count: result.synced || 0,
-    synced: result.synced,
+    count: result.queued || 0,
+    queued: result.queued,
     errors: result.errors,
     total: result.total,
   }

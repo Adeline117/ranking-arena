@@ -90,7 +90,7 @@ export async function getTraderDataWithPriority(
 }
 
 /**
- * Check if a trader has any active authorization (bound API key or verified wallet).
+ * Check whether a trader currently satisfies the full Verified Data contract.
  * Used for badge display without requiring a specific userId.
  */
 export async function isTraderAuthorized(
@@ -99,12 +99,11 @@ export async function isTraderAuthorized(
   traderKey: string
 ): Promise<{ authorized: boolean; authorizationId: string | null; lastVerifiedAt: string | null }> {
   const { data, error } = await supabase
-    .from('trader_authorizations')
-    .select('id, last_verified_at')
+    .from('verified_data_authorizations')
+    .select('authorization_id, last_sync_at')
     .eq('platform', platform)
     .eq('trader_id', traderKey)
-    .eq('status', 'active')
-    .order('last_verified_at', { ascending: false })
+    .order('last_sync_at', { ascending: false })
     .limit(1)
     .maybeSingle()
 
@@ -115,8 +114,8 @@ export async function isTraderAuthorized(
 
   return {
     authorized: !!data,
-    authorizationId: data?.id ?? null,
-    lastVerifiedAt: data?.last_verified_at ?? null,
+    authorizationId: data?.authorization_id ?? null,
+    lastVerifiedAt: data?.last_sync_at ?? null,
   }
 }
 
@@ -147,22 +146,31 @@ async function getAuthorizedData(
   userId: string
 ): Promise<TraderDataWithSource | null> {
   // Check if user has an active authorization for this trader
-  const { data: auth, error: authError } = await supabase
+  const { data: ownedAuth } = await supabase
     .from('trader_authorizations')
-    .select('id, last_verified_at, status')
+    .select('id')
     .eq('user_id', userId)
     .eq('platform', platform)
     .eq('trader_id', traderKey)
-    .eq('status', 'active')
     .maybeSingle()
 
-  if (authError || !auth) {
+  if (!ownedAuth) {
     return null
   }
 
-  // Authorized data is stored as snapshots with is_authorized=true
-  // or in authorization_sync_logs. For now, we check leaderboard_ranks
-  // and mark it as authorized since the data pipeline handles syncing.
+  const { data: auth } = await supabase
+    .from('verified_data_authorizations')
+    .select('authorization_id, last_sync_at')
+    .eq('authorization_id', ownedAuth.id)
+    .maybeSingle()
+
+  if (!auth) {
+    return null
+  }
+
+  // The eligibility view only returns after first-party 7/30/90D stats have
+  // propagated into leaderboard_ranks, so this row cannot be stale board data
+  // relabeled as authorized.
   const { data: snapshot } = await supabase
     .from('leaderboard_ranks')
     .select(
@@ -194,8 +202,8 @@ async function getAuthorizedData(
     source: DataSourcePriority.AUTHORIZED,
     sourceLabel: 'authorized',
     isVerified: true,
-    verifiedAt: auth.last_verified_at,
-    authorizationId: auth.id,
+    verifiedAt: auth.last_sync_at,
+    authorizationId: auth.authorization_id,
   }
 }
 
@@ -329,15 +337,9 @@ async function getVerificationStatus(
   platform: string,
   traderKey: string
 ): Promise<{ isVerified: boolean; verifiedAt: string | null }> {
-  const { data } = await supabase
-    .from('verified_traders')
-    .select('verified_at')
-    .eq('trader_id', traderKey)
-    .eq('source', platform)
-    .maybeSingle()
-
+  const authorization = await isTraderAuthorized(supabase, platform, traderKey)
   return {
-    isVerified: !!data,
-    verifiedAt: data?.verified_at ?? null,
+    isVerified: authorization.authorized,
+    verifiedAt: authorization.lastVerifiedAt,
   }
 }

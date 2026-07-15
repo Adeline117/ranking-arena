@@ -10,20 +10,11 @@ import type { Platform, MarketType, Window, LeaderboardEntry } from '@/connector
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { del as cacheDelete } from '@/lib/cache'
-import { decrypt } from '@/lib/crypto/encryption'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
-import { BybitAdapter } from '@/lib/adapters/bybit-adapter'
 import { logger } from '@/lib/logger'
-import {
-  sanitizeRow,
-  logRejectedWrites,
-  type ValidationFailure,
-} from '@/lib/pipeline/validate-before-write'
+import { sanitizeRow } from '@/lib/pipeline/validate-before-write'
 // validate-snapshot.ts deleted — consolidated into validate-before-write.ts (P0-1)
 import { createLogger } from '@/lib/utils/logger'
-import { calculateArenaScore } from '@/lib/utils/arena-score'
-import type { Period } from '@/lib/utils/arena-score'
-import type { TraderData } from '@/lib/adapters/types'
 import { truncateToHour } from '@/lib/utils/date'
 
 const hotScoreLogger = createLogger('refresh-hot-scores')
@@ -528,143 +519,6 @@ export async function refreshHotScoresInline(): Promise<InlineJobResult> {
       status: 'success',
       durationMs: Date.now() - start,
       detail: { method: 'fallback', count: posts.length },
-    }
-  } catch (err) {
-    return {
-      name,
-      status: 'error',
-      durationMs: Date.now() - start,
-      error: err instanceof Error ? err.message : String(err),
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// 3. sync-traders: Sync authorized trader data from exchanges
-// ---------------------------------------------------------------------------
-export async function syncTradersInline(): Promise<InlineJobResult> {
-  const start = Date.now()
-  const name = 'trader-sync'
-  try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
-
-    const { data: authorizations, error: authErr } = await supabase
-      .from('trader_authorizations')
-      .select('id, platform, trader_id, encrypted_api_key, encrypted_api_secret, status')
-      .eq('status', 'active')
-
-    if (authErr) {
-      return { name, status: 'error', durationMs: Date.now() - start, error: authErr.message }
-    }
-
-    if (!authorizations || authorizations.length === 0) {
-      return {
-        name,
-        status: 'success',
-        durationMs: Date.now() - start,
-        detail: { synced: 0, total: 0 },
-      }
-    }
-
-    let synced = 0
-    let errors = 0
-
-    for (const auth of authorizations) {
-      try {
-        const apiKey = decrypt(auth.encrypted_api_key)
-        const apiSecret = decrypt(auth.encrypted_api_secret)
-        const platformLower = auth.platform.toLowerCase()
-
-        let traderData: TraderData | null = null
-        if (platformLower.includes('bybit')) {
-          const adapter = new BybitAdapter({ apiKey, apiSecret })
-          traderData = await adapter.fetchTraderDetail({
-            platform: 'bybit',
-            traderId: auth.trader_id,
-          })
-        }
-
-        if (!traderData) {
-          throw new Error(`Platform ${auth.platform} not supported or trader not found`)
-        }
-
-        // Store synced data
-        const period: Period = traderData.periodDays === 30 ? '30D' : '7D'
-        const arenaScoreResult = calculateArenaScore(
-          {
-            roi: traderData.roi,
-            pnl: traderData.pnl,
-            maxDrawdown: traderData.maxDrawdown,
-            winRate: traderData.winRate,
-          },
-          period
-        )
-
-        // (removed 2026-06-15) snapshot write to trader_snapshots_v2 (retiring,
-        // orphan). Identity is still upserted to trader_sources below.
-        void arenaScoreResult
-
-        const { error: srcErr } = await supabase.from('trader_sources').upsert(
-          {
-            source: auth.platform,
-            source_trader_id: auth.trader_id,
-            nickname: traderData.nickname,
-            avatar_url: traderData.avatar,
-            description: traderData.description,
-            verified: traderData.verified,
-            last_updated: new Date().toISOString(),
-          },
-          { onConflict: 'source,source_trader_id' }
-        )
-        if (srcErr)
-          logger.warn(
-            `[Sync] source upsert failed for ${auth.platform}/${auth.trader_id}: ${srcErr.message}`
-          )
-
-        await supabase.from('authorization_sync_logs').insert({
-          authorization_id: auth.id,
-          sync_status: 'success',
-          records_synced: 1,
-          synced_data: traderData,
-        })
-
-        const { error: authErr } = await supabase
-          .from('trader_authorizations')
-          .update({
-            last_verified_at: new Date().toISOString(),
-            verification_error: null,
-          })
-          .eq('id', auth.id)
-        if (authErr)
-          logger.warn(`[Sync] authorization update failed for ${auth.id}: ${authErr.message}`)
-
-        synced++
-      } catch (error) {
-        logger.error(
-          '[Sync] Failed',
-          { authorizationId: auth.id, platform: auth.platform },
-          error instanceof Error ? error : new Error(String(error))
-        )
-        await supabase.from('authorization_sync_logs').insert({
-          authorization_id: auth.id,
-          sync_status: 'failed',
-          error_message: error instanceof Error ? error.message : String(error),
-        })
-        await supabase
-          .from('trader_authorizations')
-          .update({
-            verification_error: error instanceof Error ? error.message : String(error),
-          })
-          .eq('id', auth.id)
-        errors++
-      }
-    }
-
-    return {
-      name,
-      status: 'success',
-      durationMs: Date.now() - start,
-      detail: { synced, errors, total: authorizations.length },
     }
   } catch (err) {
     return {

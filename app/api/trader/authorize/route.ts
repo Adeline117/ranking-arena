@@ -8,11 +8,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import { encrypt } from '@/lib/crypto/encryption'
+import { encryptAuthorizationCredential } from '@/lib/exchange/authorization-credentials'
 import { validateExchangeApiKey } from '@/lib/validators/api-key-validator'
 import { logger } from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { env } from '@/lib/env'
+import { enqueueFirstPartySync } from '@/lib/ingest/first-party/enqueue'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,12 +85,8 @@ export async function POST(request: NextRequest) {
     ]
 
     if (!validPlatforms.includes(platform.toLowerCase())) {
-      return NextResponse.json(
-        { error: `Unsupported platform: ${platform}` },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: `Unsupported platform: ${platform}` }, { status: 400 })
     }
-
 
     // Validate API key with exchange
     const validationResult = await validateExchangeApiKey(platform, {
@@ -115,11 +111,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-
     // Encrypt credentials
-    const encryptedApiKey = encrypt(apiKey)
-    const encryptedApiSecret = encrypt(apiSecret)
-    const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
+    const encryptedApiKey = encryptAuthorizationCredential(apiKey)
+    const encryptedApiSecret = encryptAuthorizationCredential(apiSecret)
+    const encryptedPassphrase = passphrase ? encryptAuthorizationCredential(passphrase) : null
+    const now = new Date().toISOString()
 
     // Use service role client for database write
     const supabaseService = getSupabaseAdmin()
@@ -144,12 +140,16 @@ export async function POST(request: NextRequest) {
           encrypted_api_secret: encryptedApiSecret,
           encrypted_passphrase: encryptedPassphrase,
           permissions: validationResult.permissions || [],
+          read_only_verified_at: now,
           status: 'active',
-          last_verified_at: new Date().toISOString(),
+          last_verified_at: now,
+          last_sync_at: null,
+          last_sync_status: 'pending',
+          consecutive_failures: 0,
           verification_error: null,
           label,
           sync_frequency: syncFrequency || 'realtime',
-          updated_at: new Date().toISOString(),
+          updated_at: now,
         })
         .eq('id', existing.id)
         .select('id')
@@ -160,10 +160,7 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           platform,
         })
-        return NextResponse.json(
-          { error: 'Failed to update authorization' },
-          { status: 500 }
-        )
+        return NextResponse.json({ error: 'Failed to update authorization' }, { status: 500 })
       }
 
       authorizationId = updated!.id
@@ -179,8 +176,10 @@ export async function POST(request: NextRequest) {
           encrypted_api_secret: encryptedApiSecret,
           encrypted_passphrase: encryptedPassphrase,
           permissions: validationResult.permissions || [],
+          read_only_verified_at: now,
           status: 'active',
-          last_verified_at: new Date().toISOString(),
+          last_verified_at: now,
+          last_sync_status: 'pending',
           label,
           sync_frequency: syncFrequency || 'realtime',
         })
@@ -192,28 +191,15 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           platform,
         })
-        return NextResponse.json(
-          { error: 'Failed to create authorization' },
-          { status: 500 }
-        )
+        return NextResponse.json({ error: 'Failed to create authorization' }, { status: 500 })
       }
 
       authorizationId = created!.id
     }
 
-    // Trigger initial data sync (async, don't wait)
-    fetch(`${env.NEXT_PUBLIC_APP_URL}/api/trader/sync`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${env.CRON_SECRET}`,
-      },
-      body: JSON.stringify({
-        authorizationId,
-      }),
-    }).catch((error) => {
-      logger.error('[Authorize] Failed to trigger initial sync', {}, error)
-    })
+    // Queue the canonical worker pipeline. The periodic worker scheduler is the
+    // durability fallback, but a successful bind should not wait for its next pass.
+    const initialSyncQueued = await enqueueFirstPartySync(authorizationId)
 
     return NextResponse.json({
       success: true,
@@ -221,15 +207,15 @@ export async function POST(request: NextRequest) {
       traderId: validationResult.traderId,
       nickname: validationResult.nickname,
       permissions: validationResult.permissions,
-      message: 'Authorization successful! Your live trading data will start syncing in a few minutes.',
+      initialSyncQueued,
+      message: initialSyncQueued
+        ? 'Authorization successful! Your live trading data is queued for verification.'
+        : 'Authorization saved. The background scheduler will verify it shortly.',
     })
   } catch (error) {
     logger.apiError('/api/trader/authorize', error, {})
     // SECURITY: Do not leak internal error details to client
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -271,17 +257,16 @@ export async function GET(request: NextRequest) {
     // Get user's authorizations (RLS policy handles filtering)
     const { data: authorizations, error } = await supabase
       .from('trader_authorizations')
-      .select('id, platform, trader_id, status, permissions, label, sync_frequency, last_verified_at, created_at')
+      .select(
+        'id, platform, trader_id, status, permissions, label, sync_frequency, read_only_verified_at, last_sync_at, last_sync_status, verification_error, created_at'
+      )
       .eq('user_id', user.id)
       .eq('status', 'active')
       .order('created_at', { ascending: false })
 
     if (error) {
       logger.dbError('fetch-authorizations', error, { userId: user.id })
-      return NextResponse.json(
-        { error: 'Failed to fetch authorizations' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to fetch authorizations' }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -289,10 +274,7 @@ export async function GET(request: NextRequest) {
     })
   } catch (error) {
     logger.apiError('/api/trader/authorize', error, {})
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
@@ -339,10 +321,7 @@ export async function DELETE(request: NextRequest) {
     const authorizationId = searchParams.get('id')
 
     if (!authorizationId) {
-      return NextResponse.json(
-        { error: 'Missing authorization ID' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Missing authorization ID' }, { status: 400 })
     }
 
     // Revoke authorization (RLS policy handles ownership check)
@@ -360,10 +339,7 @@ export async function DELETE(request: NextRequest) {
         userId: user.id,
         authorizationId,
       })
-      return NextResponse.json(
-        { error: 'Failed to revoke authorization' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Failed to revoke authorization' }, { status: 500 })
     }
 
     return NextResponse.json({
@@ -372,9 +348,6 @@ export async function DELETE(request: NextRequest) {
     })
   } catch (error) {
     logger.apiError('/api/trader/authorize', error, {})
-    return NextResponse.json(
-      { error: 'Internal server error' },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

@@ -9,8 +9,7 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 }
 
-
 export default function MessagesPage() {
   if (!features.social) redirect('/')
-  redirect('/inbox')
+  redirect('/inbox?tab=messages&chat=direct')
 }

@@ -385,10 +385,11 @@ export async function activateClaim(supabase: SupabaseClient, claim: TraderClaim
     .eq('id', user_id)
 
   // trader_authorizations（api_key 认领：把加密凭证从 exchange connection 接管）
+  let authorizationId: string | null = null
   if (verification_method === 'api_key') {
     const { data: existingAuth, error: existingAuthError } = await supabase
       .from('trader_authorizations')
-      .select('id')
+      .select('id, read_only_verified_at')
       .eq('user_id', user_id)
       .eq('platform', source)
       .eq('trader_id', trader_id)
@@ -398,31 +399,67 @@ export async function activateClaim(supabase: SupabaseClient, claim: TraderClaim
         '[activateClaim] trader_authorizations query error (drift?):',
         existingAuthError.message
       )
-    if (!existingAuth) {
-      const { data: conn, error: connError } = await supabase
-        .from('user_exchange_connections')
-        .select('api_key_encrypted, api_secret_encrypted, passphrase_encrypted')
-        .eq('user_id', user_id)
-        .eq('is_active', true)
-        .maybeSingle()
-      if (connError)
-        logger.warn(
-          '[activateClaim] user_exchange_connections query error (drift?):',
-          connError.message
-        )
-      if (conn?.api_key_encrypted) {
-        await supabase.from('trader_authorizations').insert({
-          user_id,
-          platform: source,
-          trader_id,
-          encrypted_api_key: conn.api_key_encrypted,
-          encrypted_api_secret: conn.api_secret_encrypted,
-          encrypted_passphrase: conn.passphrase_encrypted,
-          permissions: ['read'],
-          status: 'active',
-          last_verified_at: now,
-          sync_frequency: 'realtime',
-        })
+
+    authorizationId = existingAuth?.id ?? null
+    const connectionExchange = source.replace(/_(futures|spot)$/, '')
+    const { data: conn, error: connError } = await supabase
+      .from('user_exchange_connections')
+      .select('api_key_encrypted, api_secret_encrypted, passphrase_encrypted, scope_permissions')
+      .eq('user_id', user_id)
+      .eq('exchange', connectionExchange)
+      .eq('is_active', true)
+      .maybeSingle()
+    if (connError)
+      logger.warn(
+        '[activateClaim] user_exchange_connections query error (drift?):',
+        connError.message
+      )
+
+    // `scope_permissions` is written only after the exchange itself proves the
+    // key is read-only. Older connections must be re-verified; never promote a
+    // hard-coded `['read']` claim into a Verified Data authorization.
+    const readOnlyPermissions = Array.isArray(conn?.scope_permissions)
+      ? conn.scope_permissions.map(String)
+      : []
+    if (conn?.api_key_encrypted && readOnlyPermissions.length > 0) {
+      const authorizationInput = {
+        encrypted_api_key: conn.api_key_encrypted,
+        encrypted_api_secret: conn.api_secret_encrypted,
+        encrypted_passphrase: conn.passphrase_encrypted,
+        permissions: readOnlyPermissions,
+        read_only_verified_at: now,
+        status: 'active',
+        last_verified_at: now,
+        last_sync_at: null,
+        last_sync_status: 'pending',
+        consecutive_failures: 0,
+        verification_error: null,
+        sync_frequency: 'realtime',
+      }
+      if (existingAuth) {
+        const { error: updateAuthError } = await supabase
+          .from('trader_authorizations')
+          .update(authorizationInput)
+          .eq('id', existingAuth.id)
+        if (updateAuthError) {
+          logger.error('[activateClaim] trader_authorizations update failed', updateAuthError)
+        }
+      } else {
+        const { data: insertedAuth, error: insertAuthError } = await supabase
+          .from('trader_authorizations')
+          .insert({
+            ...authorizationInput,
+            user_id,
+            platform: source,
+            trader_id,
+          })
+          .select('id')
+          .single()
+        if (insertAuthError) {
+          logger.error('[activateClaim] trader_authorizations insert failed', insertAuthError)
+        } else {
+          authorizationId = insertedAuth?.id ?? null
+        }
       }
     }
   }
@@ -439,6 +476,14 @@ export async function activateClaim(supabase: SupabaseClient, claim: TraderClaim
   })
   if (claimedError) {
     logger.error('[trader-claims] activateClaim: arena_set_trader_claimed 失败', claimedError)
+  }
+
+  if (!claimedError && authorizationId) {
+    const { enqueueFirstPartySync } = await import('@/lib/ingest/first-party/enqueue')
+    const queued = await enqueueFirstPartySync(authorizationId)
+    if (!queued) {
+      logger.warn('[activateClaim] immediate first-party sync was not queued; scheduler will retry')
+    }
   }
 
   // 站内通知申请人（fire-and-forget）

@@ -146,7 +146,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
               ? t('channelNotFoundDesc')
               : t('loadFailed2')
         showToast(msg, 'error')
-        router.push('/inbox')
+        router.push('/inbox?tab=messages&chat=group')
         return
       }
       setChannel(data.channel)
@@ -515,7 +515,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
       })
       if (res.ok) {
         showToast(t('leftGroup'), 'success')
-        router.push('/inbox')
+        router.push('/inbox?tab=messages&chat=group')
       }
     } catch {
       showToast(t('operationFailed'), 'error')
@@ -583,7 +583,7 @@ export default function ChannelPage({ params }: { params: Promise<{ channelId: s
         }}
       >
         <Link
-          href="/inbox"
+          href="/inbox?tab=messages&chat=group"
           style={{
             display: 'flex',
             alignItems: 'center',

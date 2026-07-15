@@ -151,7 +151,10 @@ export async function reconcileSchedulers(): Promise<void> {
   try {
     const { rows: fpAuths } = await (await import('@/lib/ingest/db'))
       .getIngestPool()
-      .query<{ id: string }>(`SELECT id FROM public.trader_authorizations WHERE status = 'active'`)
+      .query<{ id: string }>(
+        `SELECT id FROM public.trader_authorizations
+          WHERE status = 'active' AND read_only_verified_at IS NOT NULL`
+      )
     for (const a of fpAuths) {
       const key = `fp:${a.id}`
       wanted.set(key, regionQueueName('local'))

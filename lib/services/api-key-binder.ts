@@ -16,7 +16,7 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
-import { encrypt } from '@/lib/crypto/encryption'
+import { encryptAuthorizationCredential } from '@/lib/exchange/authorization-credentials'
 import {
   validateExchangeApiKey,
   type ExchangeCredentials,
@@ -32,29 +32,41 @@ export interface BindApiKeyInput {
   platform: string
   apiKey: string
   apiSecret: string
-  passphrase?: string    // Required for OKX, Bitget
-  label?: string         // User-friendly name for this connection
+  passphrase?: string // Required for OKX, Bitget
+  label?: string // User-friendly name for this connection
   syncFrequency?: 'realtime' | '5min' | '15min' | '1hour'
 }
 
 export interface BindApiKeyResult {
   success: boolean
   authorizationId?: string
-  traderId?: string      // Exchange UID extracted from the key
-  nickname?: string      // Exchange nickname if available
+  traderId?: string // Exchange UID extracted from the key
+  nickname?: string // Exchange nickname if available
   error?: string
 }
 
 /** Platforms that support API key binding */
 const SUPPORTED_PLATFORMS = [
-  'binance', 'binance_futures', 'binance_spot',
-  'bybit', 'bybit_spot',
-  'okx', 'okx_futures',
-  'bitget', 'bitget_futures', 'bitget_spot',
+  'binance',
+  'binance_futures',
+  'binance_spot',
+  'bybit',
+  'bybit_spot',
+  'okx',
+  'okx_futures',
+  'bitget',
+  'bitget_futures',
+  'bitget_spot',
 ] as const
 
 /** Platforms that require a passphrase */
-const PASSPHRASE_REQUIRED_PLATFORMS = ['okx', 'okx_futures', 'bitget', 'bitget_futures', 'bitget_spot']
+const PASSPHRASE_REQUIRED_PLATFORMS = [
+  'okx',
+  'okx_futures',
+  'bitget',
+  'bitget_futures',
+  'bitget_spot',
+]
 
 // ============================================
 // Core Functions
@@ -110,9 +122,9 @@ export async function bindApiKey(
   }
 
   // 4. Encrypt credentials
-  const encryptedApiKey = encrypt(apiKey)
-  const encryptedApiSecret = encrypt(apiSecret)
-  const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
+  const encryptedApiKey = encryptAuthorizationCredential(apiKey)
+  const encryptedApiSecret = encryptAuthorizationCredential(apiSecret)
+  const encryptedPassphrase = passphrase ? encryptAuthorizationCredential(passphrase) : null
 
   // 5. Upsert into trader_authorizations
   const now = new Date().toISOString()
@@ -137,8 +149,12 @@ export async function bindApiKey(
           encrypted_api_secret: encryptedApiSecret,
           encrypted_passphrase: encryptedPassphrase,
           permissions: validation.permissions || ['read'],
+          read_only_verified_at: now,
           status: 'active',
           last_verified_at: now,
+          last_sync_at: null,
+          last_sync_status: 'pending',
+          consecutive_failures: 0,
           verification_error: null,
           label: label || undefined,
           sync_frequency: syncFrequency || 'realtime',
@@ -165,8 +181,10 @@ export async function bindApiKey(
           encrypted_api_secret: encryptedApiSecret,
           encrypted_passphrase: encryptedPassphrase,
           permissions: validation.permissions || ['read'],
+          read_only_verified_at: now,
           status: 'active',
           last_verified_at: now,
+          last_sync_status: 'pending',
           label: label || null,
           sync_frequency: syncFrequency || 'realtime',
         })
@@ -198,6 +216,7 @@ export async function bindApiKey(
           is_active: true,
           verified_uid: validation.traderId,
           last_verified_at: now,
+          scope_permissions: validation.permissions || ['read'],
         },
         { onConflict: 'user_id,exchange' }
       )
@@ -250,41 +269,16 @@ export async function revokeApiKey(
   return { success: true }
 }
 
-/**
- * Re-validate an existing API key binding.
- * Used to check if a stored key is still valid.
- */
-export async function revalidateApiKey(
-  supabase: SupabaseClient,
-  authorizationId: string
-): Promise<{ valid: boolean; error?: string }> {
-  // This would need to decrypt and re-test the key
-  // For now, we update the last_verified_at timestamp after a successful sync
-  const { error } = await supabase
-    .from('trader_authorizations')
-    .update({
-      last_verified_at: new Date().toISOString(),
-      verification_error: null,
-    })
-    .eq('id', authorizationId)
-
-  if (error) {
-    return { valid: false, error: 'Failed to update verification status' }
-  }
-
-  return { valid: true }
-}
-
 // ============================================
 // Helpers
 // ============================================
 
 export function isSupportedPlatform(platform: string): boolean {
-  return SUPPORTED_PLATFORMS.some(p => platform.toLowerCase() === p)
+  return SUPPORTED_PLATFORMS.some((p) => platform.toLowerCase() === p)
 }
 
 export function requiresPassphrase(platform: string): boolean {
-  return PASSPHRASE_REQUIRED_PLATFORMS.some(p => platform.toLowerCase() === p)
+  return PASSPHRASE_REQUIRED_PLATFORMS.some((p) => platform.toLowerCase() === p)
 }
 
 export function getSupportedPlatforms(): readonly string[] {

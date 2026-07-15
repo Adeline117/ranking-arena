@@ -21,7 +21,13 @@ beforeEach(() => {
 
 describe('validateExchangeApiKey — 路由', () => {
   it('binance 别名都路由到 binance resolver', async () => {
-    mockResolve.mockResolvedValue({ success: true, uid: '123', nickname: 'me' })
+    mockResolve.mockResolvedValue({
+      success: true,
+      uid: '123',
+      nickname: 'me',
+      isReadOnly: true,
+      permissions: ['read'],
+    })
     for (const p of ['binance', 'binance_futures', 'binance_spot', 'BINANCE']) {
       await validateExchangeApiKey(p, creds)
       expect(mockResolve).toHaveBeenLastCalledWith('binance', creds)
@@ -29,7 +35,12 @@ describe('validateExchangeApiKey — 路由', () => {
   })
 
   it('平台名大小写不敏感', async () => {
-    mockResolve.mockResolvedValue({ success: true, uid: '1' })
+    mockResolve.mockResolvedValue({
+      success: true,
+      uid: '1',
+      isReadOnly: true,
+      permissions: ['read'],
+    })
     const r = await validateExchangeApiKey('ByBit', creds)
     expect(mockResolve).toHaveBeenCalledWith('bybit', creds)
     expect(r.isValid).toBe(true)
@@ -58,7 +69,12 @@ describe('passphrase 守卫（OKX/Bitget）', () => {
   })
 
   it('OKX 带 passphrase → 正常走 resolver', async () => {
-    mockResolve.mockResolvedValue({ success: true, uid: 'okx-1' })
+    mockResolve.mockResolvedValue({
+      success: true,
+      uid: 'okx-1',
+      isReadOnly: true,
+      permissions: ['read_balance', 'read_positions'],
+    })
     const r = await validateExchangeApiKey('okx', credsWithPass)
     expect(r.isValid).toBe(true)
     expect(r.traderId).toBe('okx-1')
@@ -68,7 +84,13 @@ describe('passphrase 守卫（OKX/Bitget）', () => {
 
 describe('resolver 结果映射', () => {
   it('成功 → isValid + traderId + nickname', async () => {
-    mockResolve.mockResolvedValue({ success: true, uid: 'u9', nickname: 'whale' })
+    mockResolve.mockResolvedValue({
+      success: true,
+      uid: 'u9',
+      nickname: 'whale',
+      isReadOnly: true,
+      permissions: ['read'],
+    })
     const r = await validateExchangeApiKey('binance', creds)
     expect(r).toMatchObject({ isValid: true, traderId: 'u9', nickname: 'whale' })
   })
@@ -84,6 +106,18 @@ describe('resolver 结果映射', () => {
     mockResolve.mockResolvedValue({ success: false })
     const r = await validateExchangeApiKey('bybit', creds)
     expect(r.error).toBe('Invalid API key')
+  })
+
+  it('交易所未证明只读权限 → 拒绝绑定', async () => {
+    mockResolve.mockResolvedValue({
+      success: true,
+      uid: 'u9',
+      isReadOnly: false,
+      permissions: ['read', 'trade'],
+    })
+    const r = await validateExchangeApiKey('binance', creds)
+    expect(r.isValid).toBe(false)
+    expect(r.error).toContain('must be read-only')
   })
 
   it('resolver 抛异常 → 捕获，不泄漏，返回通用 error', async () => {
