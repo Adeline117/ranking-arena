@@ -1,0 +1,163 @@
+import { act, renderHook } from '@testing-library/react'
+import { useCallback, useState } from 'react'
+import type { PostWithUserState } from '@/lib/types'
+import { usePostActions } from '../usePostActions'
+
+const mockSetOpenPost = jest.fn()
+const mockUpdatePostReaction = jest.fn()
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: jest.fn() }),
+}))
+
+jest.mock('@/lib/stores/postStore', () => ({
+  usePostStore: {
+    getState: () => ({ updatePostReaction: mockUpdatePostReaction }),
+  },
+}))
+
+jest.mock('@/lib/utils/haptics', () => ({ haptic: jest.fn() }))
+jest.mock('@/lib/analytics/track', () => ({ trackEvent: jest.fn() }))
+
+const initialPost: PostWithUserState = {
+  id: 'post-1',
+  title: 'Post',
+  content: 'Body',
+  author_id: 'author-1',
+  author_handle: 'author',
+  poll_enabled: false,
+  poll_bull: 0,
+  poll_bear: 0,
+  poll_wait: 0,
+  like_count: 10,
+  dislike_count: 2,
+  comment_count: 0,
+  bookmark_count: 3,
+  repost_count: 0,
+  view_count: 0,
+  hot_score: 0,
+  is_pinned: false,
+  created_at: '2026-07-08T00:00:00.000Z',
+  user_reaction: null,
+  user_vote: null,
+}
+
+function useAliasedPostActions() {
+  const [post, setPost] = useState(initialPost)
+  const setPosts = useCallback<React.Dispatch<React.SetStateAction<PostWithUserState[]>>>(
+    (action) => {
+      setPost((previous) => {
+        const next =
+          typeof action === 'function'
+            ? (action as (posts: PostWithUserState[]) => PostWithUserState[])([previous])
+            : action
+        return next[0] ?? previous
+      })
+    },
+    []
+  )
+
+  const actions = usePostActions({
+    accessToken: 'token',
+    currentUserId: 'viewer-1',
+    posts: [post],
+    setPosts,
+    openPost: post,
+    setOpenPost: mockSetOpenPost,
+    openPostAliasesPosts: true,
+    showToast: jest.fn(),
+    showDangerConfirm: async () => true,
+    t: (key) => key,
+  })
+
+  return { actions, post, setPost }
+}
+
+function jsonResponse(body: unknown, ok = true): Response {
+  return { ok, json: async () => body } as Response
+}
+
+describe('usePostActions aliased detail state', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    global.fetch = jest.fn()
+  })
+
+  it('updates the detail post once and preserves optimistic counts when ACK counts are null', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: { reaction: 'up', like_count: null, dislike_count: null },
+      })
+    )
+    const { result } = renderHook(() => useAliasedPostActions())
+
+    await act(async () => {
+      await result.current.actions.toggleReaction('post-1', 'up')
+    })
+
+    expect(result.current.post).toMatchObject({
+      like_count: 11,
+      dislike_count: 2,
+      user_reaction: 'up',
+    })
+    expect(mockSetOpenPost).not.toHaveBeenCalled()
+    expect(mockUpdatePostReaction).toHaveBeenCalledWith('post-1', {
+      like_count: 11,
+      dislike_count: 2,
+      reaction: 'up',
+    })
+  })
+
+  it('does not let a bookmark ACK overwrite a concurrent reaction update', async () => {
+    let resolveFetch: ((response: Response) => void) | undefined
+    ;(global.fetch as jest.Mock).mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve
+      })
+    )
+    const { result } = renderHook(() => useAliasedPostActions())
+
+    let bookmarkRequest: Promise<void>
+    act(() => {
+      bookmarkRequest = result.current.actions.handleBookmark('post-1')
+    })
+    act(() => {
+      result.current.setPost((previous) => ({
+        ...previous,
+        like_count: 11,
+        user_reaction: 'up',
+      }))
+    })
+
+    await act(async () => {
+      resolveFetch?.(jsonResponse({ bookmarked: true, bookmark_count: 4 }))
+      await bookmarkRequest!
+    })
+
+    expect(result.current.post).toMatchObject({
+      like_count: 11,
+      user_reaction: 'up',
+      bookmark_count: 4,
+    })
+    expect(mockSetOpenPost).not.toHaveBeenCalled()
+  })
+
+  it('reverses one optimistic reaction delta when the server rejects the request', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({ success: false, error: 'rejected' }, false)
+    )
+    const { result } = renderHook(() => useAliasedPostActions())
+
+    await act(async () => {
+      await result.current.actions.toggleReaction('post-1', 'up')
+    })
+
+    expect(result.current.post).toMatchObject({
+      like_count: 10,
+      dislike_count: 2,
+      user_reaction: null,
+    })
+    expect(mockSetOpenPost).not.toHaveBeenCalled()
+  })
+})

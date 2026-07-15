@@ -83,6 +83,7 @@ export function usePostActions({
   setPosts,
   openPost,
   setOpenPost,
+  openPostAliasesPosts = false,
   showToast,
   showDangerConfirm,
   t,
@@ -93,6 +94,12 @@ export function usePostActions({
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>
   openPost: Post | null
   setOpenPost: (v: Post | null) => void
+  /**
+   * True when `posts` and `openPost` are adapters over the same React state
+   * (the standalone post-detail page). Record updates must then use only the
+   * `setPosts` path or the second whole-object write can overwrite newer data.
+   */
+  openPostAliasesPosts?: boolean
   showToast: (msg: string, type: 'error' | 'success' | 'warning' | 'info') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
   t: (key: string) => string
@@ -189,7 +196,7 @@ export function usePostActions({
       )
       {
         const op = openPostRef.current
-        if (op?.id === postId)
+        if (!openPostAliasesPosts && op?.id === postId)
           setOpenPost({
             ...op,
             like_count: op.like_count + likeDelta,
@@ -213,20 +220,34 @@ export function usePostActions({
         if (response.ok && json.success) {
           // Reconcile with server truth (overwrites optimistic)
           const result = json.data
-          const serverUpdate = {
-            like_count: result.like_count,
-            dislike_count: result.dislike_count,
+          // The route intentionally returns null counts when its post-count
+          // read fails after the reaction transaction commits. Preserve the
+          // optimistic counts in that case; only the reaction ACK is required.
+          const reconcileServer = (post: Post): Post => ({
+            ...post,
+            ...(typeof result.like_count === 'number' ? { like_count: result.like_count } : {}),
+            ...(typeof result.dislike_count === 'number'
+              ? { dislike_count: result.dislike_count }
+              : {}),
             user_reaction: result.reaction,
-          }
-          setPosts((prev) => prev.map((p) => (p.id === postId ? { ...p, ...serverUpdate } : p)))
+          })
+          setPosts((prev) => prev.map((p) => (p.id === postId ? reconcileServer(p) : p)))
+          const resolvedLikeCount =
+            typeof result.like_count === 'number'
+              ? result.like_count
+              : currentPost.like_count + likeDelta
+          const resolvedDislikeCount =
+            typeof result.dislike_count === 'number'
+              ? result.dislike_count
+              : currentPost.dislike_count + dislikeDelta
           usePostStore.getState().updatePostReaction(postId, {
-            like_count: result.like_count,
-            dislike_count: result.dislike_count,
+            like_count: resolvedLikeCount,
+            dislike_count: resolvedDislikeCount,
             reaction: result.reaction,
           })
           {
             const op = openPostRef.current
-            if (op?.id === postId) setOpenPost({ ...op, ...serverUpdate } as Post)
+            if (!openPostAliasesPosts && op?.id === postId) setOpenPost(reconcileServer(op))
           }
           // Analytics: only count a NEW reaction, not an un-react (result.reaction null)
           if (result.reaction) {
@@ -248,7 +269,7 @@ export function usePostActions({
           )
           {
             const op = openPostRef.current
-            if (op?.id === postId) {
+            if (!openPostAliasesPosts && op?.id === postId) {
               setOpenPost({
                 ...op,
                 like_count: op.like_count - likeDelta,
@@ -275,7 +296,7 @@ export function usePostActions({
         )
         {
           const op = openPostRef.current
-          if (op?.id === postId) {
+          if (!openPostAliasesPosts && op?.id === postId) {
             setOpenPost({
               ...op,
               like_count: op.like_count - likeDelta,
@@ -291,7 +312,7 @@ export function usePostActions({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, openPost?.id, showToast]
+    [accessToken, openPost?.id, openPostAliasesPosts, showToast]
   )
 
   // Built-in poll voting
@@ -331,7 +352,7 @@ export function usePostActions({
                 : p
             )
           )
-          if (openPost?.id === postId)
+          if (!openPostAliasesPosts && openPost?.id === postId)
             setOpenPost({
               ...openPost!,
               poll_bull: result.poll.bull,
@@ -350,7 +371,7 @@ export function usePostActions({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, openPost?.id, showToast]
+    [accessToken, openPost?.id, openPostAliasesPosts, showToast]
   )
 
   // Custom poll
@@ -473,8 +494,9 @@ export function usePostActions({
           setPosts((prev) =>
             prev.map((p) => (p.id === postId ? { ...p, bookmark_count: result.bookmark_count } : p))
           )
-          if (openPost?.id === postId)
-            setOpenPost({ ...openPost, bookmark_count: result.bookmark_count } as Post)
+          const op = openPostRef.current
+          if (!openPostAliasesPosts && op?.id === postId)
+            setOpenPost({ ...op, bookmark_count: result.bookmark_count } as Post)
           // Analytics: only count adding a bookmark, not removing one
           if (result.bookmarked) {
             trackEvent('post_bookmark', { post_id: postId })
@@ -496,7 +518,16 @@ export function usePostActions({
         setBookmarkLoading((prev) => ({ ...prev, [postId]: false }))
       }
     },
-    [accessToken, showToast, t, userBookmarks, bookmarkCounts]
+    [
+      accessToken,
+      showToast,
+      t,
+      userBookmarks,
+      bookmarkCounts,
+      openPostAliasesPosts,
+      setOpenPost,
+      setPosts,
+    ]
   )
 
   const openBookmarkFolderModal = useCallback(
@@ -663,8 +694,9 @@ export function usePostActions({
               : p
           )
         )
-        if (openPost?.id === editingPost.id)
-          setOpenPost({ ...openPost!, title: editTitle.trim(), content: editContent.trim() })
+        const op = openPostRef.current
+        if (!openPostAliasesPosts && op?.id === editingPost.id)
+          setOpenPost({ ...op, title: editTitle.trim(), content: editContent.trim() })
         setEditingPost(null)
         showToast(t('editSaved'), 'success')
       } else {
@@ -677,7 +709,15 @@ export function usePostActions({
       setSavingEdit(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs t, setPosts, setOpenPost excluded to avoid re-creating callback
-  }, [editingPost, accessToken, editTitle, editContent, openPost?.id, showToast])
+  }, [
+    editingPost,
+    accessToken,
+    editTitle,
+    editContent,
+    openPost?.id,
+    openPostAliasesPosts,
+    showToast,
+  ])
 
   // Delete
   const handleDeletePost = useCallback(

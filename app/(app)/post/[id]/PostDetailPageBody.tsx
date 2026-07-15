@@ -127,6 +127,7 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
     setPosts,
     openPost: post,
     setOpenPost,
+    openPostAliasesPosts: true,
     showToast,
     showDangerConfirm,
     t,
