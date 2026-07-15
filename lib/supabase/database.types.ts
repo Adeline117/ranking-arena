@@ -173,6 +173,7 @@ export type Database = {
           condition_id: string | null
           data: Json | null
           delivered_at: string
+          delivery_id: string | null
           id: string
           message: string | null
           read_at: string | null
@@ -190,6 +191,7 @@ export type Database = {
           condition_id?: string | null
           data?: Json | null
           delivered_at?: string
+          delivery_id?: string | null
           id?: string
           message?: string | null
           read_at?: string | null
@@ -207,6 +209,7 @@ export type Database = {
           condition_id?: string | null
           data?: Json | null
           delivered_at?: string
+          delivery_id?: string | null
           id?: string
           message?: string | null
           read_at?: string | null
@@ -230,6 +233,13 @@ export type Database = {
             columns: ['condition_id']
             isOneToOne: false
             referencedRelation: 'advanced_alert_conditions'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'alert_history_delivery_id_fkey'
+            columns: ['delivery_id']
+            isOneToOne: false
+            referencedRelation: 'trader_alert_deliveries'
             referencedColumns: ['id']
           },
           {
@@ -5445,12 +5455,84 @@ export type Database = {
         }
         Relationships: []
       }
+      trader_alert_deliveries: {
+        Row: {
+          absolute_change: number
+          alert_id: string
+          attempt_count: number
+          baseline_version: number
+          created_at: string
+          delivered_at: string | null
+          id: string
+          last_error: string | null
+          link: string
+          message: string
+          metric: string
+          new_value: number
+          notification_type: string
+          old_value: number
+          status: string
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          absolute_change: number
+          alert_id: string
+          attempt_count?: number
+          baseline_version: number
+          created_at?: string
+          delivered_at?: string | null
+          id?: string
+          last_error?: string | null
+          link: string
+          message: string
+          metric: string
+          new_value: number
+          notification_type: string
+          old_value: number
+          status?: string
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          absolute_change?: number
+          alert_id?: string
+          attempt_count?: number
+          baseline_version?: number
+          created_at?: string
+          delivered_at?: string | null
+          id?: string
+          last_error?: string | null
+          link?: string
+          message?: string
+          metric?: string
+          new_value?: number
+          notification_type?: string
+          old_value?: number
+          status?: string
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'trader_alert_deliveries_alert_id_fkey'
+            columns: ['alert_id']
+            isOneToOne: false
+            referencedRelation: 'trader_alerts'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       trader_alert_logs: {
         Row: {
           alert_id: string | null
           alert_type: string
           change_percent: number | null
           created_at: string
+          delivery_id: string | null
           id: string
           message: string | null
           new_value: number | null
@@ -5463,6 +5545,7 @@ export type Database = {
           alert_type: string
           change_percent?: number | null
           created_at?: string
+          delivery_id?: string | null
           id?: string
           message?: string | null
           new_value?: number | null
@@ -5475,6 +5558,7 @@ export type Database = {
           alert_type?: string
           change_percent?: number | null
           created_at?: string
+          delivery_id?: string | null
           id?: string
           message?: string | null
           new_value?: number | null
@@ -5485,6 +5569,51 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: 'trader_alert_logs_alert_id_fkey'
+            columns: ['alert_id']
+            isOneToOne: false
+            referencedRelation: 'trader_alerts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'trader_alert_logs_delivery_id_fkey'
+            columns: ['delivery_id']
+            isOneToOne: false
+            referencedRelation: 'trader_alert_deliveries'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      trader_alert_states: {
+        Row: {
+          alert_id: string
+          baseline_value: number
+          baseline_version: number
+          last_value: number
+          metric: string
+          observed_at: string
+          updated_at: string
+        }
+        Insert: {
+          alert_id: string
+          baseline_value: number
+          baseline_version?: number
+          last_value: number
+          metric: string
+          observed_at?: string
+          updated_at?: string
+        }
+        Update: {
+          alert_id?: string
+          baseline_value?: number
+          baseline_version?: number
+          last_value?: number
+          metric?: string
+          observed_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'trader_alert_states_alert_id_fkey'
             columns: ['alert_id']
             isOneToOne: false
             referencedRelation: 'trader_alerts'
