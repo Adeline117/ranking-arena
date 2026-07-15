@@ -81,17 +81,22 @@ jobs:
         id: fresh
         run: |
           git fetch origin main --quiet
+          # READY 列表会包含 --skip-domain 的未提升候选，第一条不等于线上。
+          # 线上 /api/health 才是 alias 当前真正服务的 release identity。
+          SERVING=$(curl -fsS "https://www.arenafi.org/api/health?release_check=$(date +%s)" \
+            | jq -r '.commit // empty')
+          if [ -z "$SERVING" ]; then
+            echo "::error::serving SHA unavailable — refusing blind deployment"
+            exit 1
+          fi
           DEPLOYMENTS=$(curl -sS -H "Authorization: Bearer $VERCEL_TOKEN" \
-            "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&target=production&state=READY&limit=1")
-          SERVING=$(echo "$DEPLOYMENTS" \
-            | jq -r '.deployments[0].meta.gateSha // .deployments[0].meta.githubCommitSha // empty')
-          PREVIOUS_ID=$(echo "$DEPLOYMENTS" | jq -r '.deployments[0].uid // empty')
+            "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&target=production&state=READY&limit=100")
+          PREVIOUS_ID=$(echo "$DEPLOYMENTS" | jq -r --arg sha "$SERVING" \
+            '.deployments[] | select((.meta.gateSha // .meta.githubCommitSha // "") == $sha) | .uid' \
+            | head -1)
           echo "previous_id=$PREVIOUS_ID" >> "$GITHUB_OUTPUT"
           echo "serving=$SERVING run=$HEAD_SHA"
-          if [ -z "$SERVING" ]; then
-            echo "serving SHA unknown — deploy"
-            echo "deploy=true" >> "$GITHUB_OUTPUT"
-          elif [ "$SERVING" = "$HEAD_SHA" ]; then
+          if [ "$SERVING" = "$HEAD_SHA" ]; then
             echo "already serving ${HEAD_SHA:0:8} — skip"
             echo "deploy=false" >> "$GITHUB_OUTPUT"
           elif git merge-base --is-ancestor "$SERVING" "$HEAD_SHA" 2>/dev/null; then
@@ -103,19 +108,51 @@ jobs:
           fi
 
       - name: Deploy to Vercel (build on Vercel infra)
+        id: deploy_candidate
         if: steps.fresh.outputs.deploy == 'true'
         run: |
           git checkout --quiet "$HEAD_SHA"
           # gateSha meta：CLI 部署没有 githubCommitSha，后续 run 的 ancestry
           # 判断靠它读出"当前线上是哪个 commit"
-          npx vercel@latest deploy --prod --yes --meta gateSha="$HEAD_SHA" \
+          # --skip-domain 是防迟到回退的关键：构建完成不自动抢生产域名，
+          # 下一步重新读取 live SHA 后再决定是否 promote。
+          npx vercel@latest deploy --prod --skip-domain --yes --meta gateSha="$HEAD_SHA" \
             --build-env ARENA_RELEASE_SHA="$HEAD_SHA" \
             --env ARENA_RELEASE_SHA="$HEAD_SHA" \
             --token="$VERCEL_TOKEN" > /tmp/deploy-url.txt
-          echo "Deployed: $(cat /tmp/deploy-url.txt)"
+          DEPLOY_URL=$(cat /tmp/deploy-url.txt)
+          echo "url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
+          echo "Built without aliasing: $DEPLOY_URL"
+
+      - name: Promote only if candidate is not stale after build
+        id: promote_candidate
+        if: steps.fresh.outputs.deploy == 'true'
+        run: |
+          git fetch origin main --quiet
+          LIVE_SHA=$(curl -fsS "https://www.arenafi.org/api/health?release_check=$(date +%s)" \
+            | jq -r '.commit // empty')
+          echo "post-build live=$LIVE_SHA candidate=$HEAD_SHA"
+          if [ -z "$LIVE_SHA" ]; then
+            echo "::error::Cannot resolve live SHA after build; refusing blind promotion"
+            exit 1
+          fi
+          if [ "$LIVE_SHA" = "$HEAD_SHA" ]; then
+            echo "Candidate already serving; no promotion needed"
+            echo "promoted=false" >> "$GITHUB_OUTPUT"
+          elif git merge-base --is-ancestor "$HEAD_SHA" "$LIVE_SHA" 2>/dev/null; then
+            echo "Candidate ${HEAD_SHA:0:8} became stale while building; live ${LIVE_SHA:0:8} is newer — skip promotion"
+            echo "promoted=false" >> "$GITHUB_OUTPUT"
+          elif git merge-base --is-ancestor "$LIVE_SHA" "$HEAD_SHA" 2>/dev/null; then
+            npx vercel@latest promote "${{ steps.deploy_candidate.outputs.url }}" \
+              --yes --token="$VERCEL_TOKEN"
+            echo "promoted=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::error::Live and candidate SHAs are not in one ancestry chain; refusing promotion"
+            exit 1
+          fi
 
       - name: Smoke test + auto-rollback
-        if: steps.fresh.outputs.deploy == 'true'
+        if: steps.promote_candidate.outputs.promoted == 'true'
         run: |
           sleep 45
           BASE="https://www.arenafi.org"
