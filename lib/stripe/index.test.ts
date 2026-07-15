@@ -76,6 +76,27 @@ describe('Constants', () => {
     expect(STRIPE_PRICE_IDS.yearly).toBeDefined()
   })
 
+  test('Stripe price IDs ignore accidental environment whitespace', () => {
+    process.env.STRIPE_PRO_MONTHLY_PRICE_ID = ' price_monthly_trimmed\n'
+    process.env.STRIPE_PRO_YEARLY_PRICE_ID = '\tprice_yearly_trimmed '
+    process.env.STRIPE_PRO_LIFETIME_PRICE_ID = ' price_lifetime_trimmed\n'
+    process.env.STRIPE_API_STARTER_PRICE_ID = ' price_api_starter_trimmed\n'
+    process.env.STRIPE_API_PRO_PRICE_ID = '\tprice_api_pro_trimmed '
+
+    jest.isolateModules(() => {
+      const { STRIPE_PRICE_IDS: priceIds, STRIPE_API_PRICE_IDS: apiPriceIds } = require('./index')
+      expect(priceIds).toEqual({
+        monthly: 'price_monthly_trimmed',
+        yearly: 'price_yearly_trimmed',
+        lifetime: 'price_lifetime_trimmed',
+      })
+      expect(apiPriceIds).toEqual({
+        starter: 'price_api_starter_trimmed',
+        pro: 'price_api_pro_trimmed',
+      })
+    })
+  })
+
   test('SUBSCRIPTION_PLANS should have monthly plan', () => {
     expect(SUBSCRIPTION_PLANS.monthly).toBeDefined()
     expect(SUBSCRIPTION_PLANS.monthly.name).toBe('Pro Monthly')
