@@ -19,15 +19,15 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    const { error: updateError } = await supabase
-      .from('user_profiles')
-      .update({ last_seen_at: new Date().toISOString(), is_online: true })
-      .eq('id', user.id)
+    const { error: updateError } = await supabase.rpc('record_user_activity', {
+      p_user_id: user.id,
+      p_seen_at: new Date().toISOString(),
+    })
 
     if (updateError) {
       // Never silently swallow a DB write failure — a swallowed error here is
       // exactly how last_seen_at drifted to NULL for every user undetected.
-      logger.error('last_seen_at update failed', {
+      logger.error('atomic activity update failed', {
         userId: user.id,
         error: updateError.message,
         code: updateError.code,
