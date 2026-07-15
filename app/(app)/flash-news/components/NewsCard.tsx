@@ -103,7 +103,7 @@ export default function NewsCard({
                 top: 0,
                 left: 0,
                 background: impConfig.color,
-                color: 'var(--color-on-accent)',
+                color: 'var(--color-on-score)',
                 padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                 fontSize: '12px',
                 fontWeight: '600',
@@ -131,7 +131,7 @@ export default function NewsCard({
               <Box
                 style={{
                   background: catColor,
-                  color: 'var(--color-on-accent)',
+                  color: 'var(--color-on-score)',
                   padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
                   borderRadius: tokens.radius.sm,
                   fontSize: '12px',

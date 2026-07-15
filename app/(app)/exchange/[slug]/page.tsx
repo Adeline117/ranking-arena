@@ -368,8 +368,8 @@ export default async function ExchangeLandingPage({
                         style={{
                           padding: '12px',
                           textAlign: 'right',
-                          // eslint-disable-next-line no-restricted-syntax -- brand gold (matches purpleGold gradient) by design
-                          color: '#D4AF37',
+
+                          color: 'var(--color-rank-gold)',
                           fontWeight: 700,
                         }}
                       >

@@ -805,10 +805,7 @@ function SearchContent() {
                     transition: tokens.transition.fast,
                   }}
                 >
-                  {tab.label}{' '}
-                  {tab.count > 0 && (
-                    <span style={{ opacity: 0.6, fontSize: 11 }}>({tab.count})</span>
-                  )}
+                  {tab.label} {tab.count > 0 && <span style={{ fontSize: 11 }}>({tab.count})</span>}
                 </Link>
               ))}
           </div>

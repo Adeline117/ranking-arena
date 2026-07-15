@@ -308,6 +308,9 @@ html.theme-transition #main-content {
   --color-score-average: #f59e0b;
   --color-score-below: #f97316;
   --color-score-low: #8891a0; /* Raised from #6b7280 for WCAG AA 5.6:1 on #0B0A10 */
+  /* Bright score colors are foregrounds on dark surfaces. When the same
+     colors become solid badges, dark ink is the accessible counterpart. */
+  --color-on-score: #111827;
 
   /* Score breakdown dimension colors */
   --color-score-profitability: #60a5fa;
@@ -515,7 +518,7 @@ html.theme-transition #main-content {
   --color-silver-bg: rgba(128, 128, 128, 0.08);
   --color-bronze-bg: rgba(139, 90, 43, 0.08);
   --color-gold-highlight: rgba(184, 134, 11, 0.12);
-  --color-rank-gold: #d4af37;
+  --color-rank-gold: #765a00;
   --color-rank-silver: #a0aec0;
   --color-rank-bronze: #cd7f32;
 
@@ -550,15 +553,18 @@ html.theme-transition #main-content {
   --color-sidebar-bg: rgba(248, 248, 250, 0.95);
 
   /* Score tier colors (darker for light bg contrast) */
-  --color-score-legendary: #7c3aed;
-  --color-score-great: #059669;
-  --color-score-average: #d97706;
-  --color-score-below: #ea580c;
-  --color-score-low: #6b7280;
+  --color-score-legendary: #6d28d9;
+  --color-score-great: #047857;
+  --color-score-average: #92400e;
+  --color-score-below: #c2410c;
+  --color-score-low: #4b5563;
+  /* Light-theme score fills are deliberately dark, so white is the matching
+     badge ink while the same values remain readable as text on pale cards. */
+  --color-on-score: #ffffff;
 
   /* Score breakdown dimension colors */
-  --color-score-profitability: #3b82f6;
-  --color-score-risk: #10b981;
+  --color-score-profitability: #1d4ed8;
+  --color-score-risk: #047857;
   --color-score-execution: #b45309;
 
   /* Chart/decorative palette (darker for light bg) */
