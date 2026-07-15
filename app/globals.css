@@ -304,7 +304,7 @@ html.theme-transition #main-content {
   --color-sidebar-bg: rgba(20, 18, 28, 0.9);
 
   /* Score tier colors */
-  --color-score-legendary: #8b5cf6;
+  --color-score-legendary: #a78bfa;
   --color-score-great: #10b981;
   --color-score-average: #f59e0b;
   --color-score-below: #f97316;
@@ -556,7 +556,7 @@ html.theme-transition #main-content {
 
   /* Score tier colors (darker for light bg contrast) */
   --color-score-legendary: #6d28d9;
-  --color-score-great: #047857;
+  --color-score-great: #04704f;
   --color-score-average: #92400e;
   --color-score-below: #c2410c;
   --color-score-low: #4b5563;
