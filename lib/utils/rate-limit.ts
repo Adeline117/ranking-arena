@@ -402,6 +402,10 @@ export const RateLimitPresets = {
   // 搜索 API - 中等限制（新增）
   search: { requests: 60, window: 60, prefix: 'search' } as RateLimitConfig,
 
+  // First-party journey events: enough headroom for normal navigation while
+  // bounding anonymous write amplification per edge IP.
+  analytics: { requests: 120, window: 60, prefix: 'analytics' } as RateLimitConfig,
+
   // WebSocket/实时连接 - 宽松限制（新增）
   realtime: { requests: 1000, window: 60, prefix: 'realtime' } as RateLimitConfig,
   // Long-lived SSE connections are materially more expensive than ordinary
