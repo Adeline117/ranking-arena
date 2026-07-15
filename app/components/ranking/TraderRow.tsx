@@ -184,6 +184,56 @@ export const TraderRow = memo(
           shareUrl={shareUrl}
           displayName={displayName}
         >
+          {/* Keep the compare control beside the row link so the DOM never nests
+              one interactive control inside another. */}
+          <button
+            type="button"
+            className="compare-checkbox-cell row-compare-check"
+            onClick={handleCompareToggle}
+            aria-label={t('compare')}
+            aria-pressed={isSelected}
+            disabled={!isSelected && !canAddMore}
+            title={t('compare')}
+            style={{
+              position: 'absolute',
+              left: 2,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 24,
+              height: 24,
+              minWidth: 24,
+              minHeight: 24,
+              padding: 0,
+              border: 'none',
+              background: 'transparent',
+              opacity: isSelected ? 1 : 0,
+              transition: 'opacity 0.15s ease',
+              zIndex: 3,
+              cursor: 'pointer',
+            }}
+          >
+            <span
+              aria-hidden="true"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 15,
+                height: 15,
+                border: '1px solid var(--color-border-secondary)',
+                borderRadius: 3,
+                background: isSelected ? 'var(--color-brand-deep)' : 'var(--color-bg-primary)',
+                color: 'var(--color-on-accent)',
+                fontSize: 11,
+                lineHeight: 1,
+              }}
+            >
+              {isSelected ? '✓' : ''}
+            </span>
+          </button>
           <Link
             href={href}
             prefetch={false}
@@ -208,37 +258,6 @@ export const TraderRow = memo(
                 ...heroStyle,
               }}
             >
-              {/* 桌面对比勾选(#5):绝对定位于左侧 gutter,不占 grid 列;悬停或选中时
-                  可见(CSS .ranking-row:hover .compare-checkbox-cell)。移动端用卡片自带勾选。 */}
-              <span
-                className="compare-checkbox-cell row-compare-check"
-                onClick={handleCompareToggle}
-                aria-hidden={!isSelected}
-                style={{
-                  position: 'absolute',
-                  left: 2,
-                  top: '50%',
-                  transform: 'translateY(-50%)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  width: 22,
-                  height: 22,
-                  opacity: isSelected ? 1 : 0,
-                  transition: 'opacity 0.15s ease',
-                  zIndex: 2,
-                }}
-              >
-                <input
-                  type="checkbox"
-                  checked={isSelected}
-                  disabled={!isSelected && !canAddMore}
-                  readOnly
-                  aria-label={t('compare')}
-                  style={{ cursor: 'pointer', width: 15, height: 15 }}
-                />
-              </span>
-
               {/* Rank */}
               <RankDisplay
                 rank={rank}
@@ -290,42 +309,42 @@ export const TraderRow = memo(
                 roiSpark={roiSpark}
               />
             </Box>
-
-            {/* Expand button overlay */}
-            {onToggleExpand &&
-              (trader.profitability_score != null ||
-                trader.risk_control_score != null ||
-                trader.execution_score != null) && (
-                <Box
-                  onClick={(e: React.MouseEvent) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    onToggleExpand(trader.id)
-                  }}
-                  role="button"
-                  aria-label="Toggle score breakdown"
-                  aria-expanded={isExpanded}
-                  style={EXPAND_BTN_STYLE}
-                  className="expand-btn"
-                  title={t('expandScoreDetails')}
-                >
-                  <svg
-                    width={10}
-                    height={10}
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden="true"
-                    style={isExpanded ? CHEVRON_EXPANDED_STYLE : CHEVRON_COLLAPSED_STYLE}
-                  >
-                    <path d="M6 9l6 6 6-6" />
-                  </svg>
-                </Box>
-              )}
           </Link>
+
+          {/* The expand control is a sibling of the row link, not a nested button. */}
+          {onToggleExpand &&
+            (trader.profitability_score != null ||
+              trader.risk_control_score != null ||
+              trader.execution_score != null) && (
+              <button
+                type="button"
+                onClick={(e: React.MouseEvent) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  onToggleExpand(trader.id)
+                }}
+                aria-label={t('expandScoreDetails')}
+                aria-expanded={isExpanded}
+                style={EXPAND_BTN_STYLE}
+                className="expand-btn"
+                title={t('expandScoreDetails')}
+              >
+                <svg
+                  width={10}
+                  height={10}
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  aria-hidden="true"
+                  style={isExpanded ? CHEVRON_EXPANDED_STYLE : CHEVRON_COLLAPSED_STYLE}
+                >
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+            )}
 
           {/* Expanded Score Breakdown */}
           {isExpanded && (
