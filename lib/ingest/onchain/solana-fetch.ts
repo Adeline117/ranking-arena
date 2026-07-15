@@ -130,14 +130,16 @@ export async function fetchSignatures(
   const sigs: string[] = []
   let before: string | undefined
   while (sigs.length < maxSigs) {
+    const remaining = maxSigs - sigs.length
     const batch = await solRpc<SigInfo[]>(
       'getSignaturesForAddress',
-      [wallet, { limit: 1000, ...(before ? { before } : {}) }],
+      [wallet, { limit: Math.min(1000, remaining), ...(before ? { before } : {}) }],
       opts
     )
     if (!Array.isArray(batch) || batch.length === 0) break
     let reachedOld = false
     for (const s of batch) {
+      if (sigs.length >= maxSigs) break
       if (s.err) continue // failed tx — no balance change of interest
       if (sinceSec && s.blockTime && s.blockTime < sinceSec) {
         reachedOld = true
