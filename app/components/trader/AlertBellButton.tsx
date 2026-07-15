@@ -39,7 +39,9 @@ export default function AlertBellButton({ traderId, traderHandle, source }: Aler
       return
     }
     let cancelled = false
-    fetch(`/api/trader-alerts?trader_id=${encodeURIComponent(traderId)}`, {
+    const query = new URLSearchParams({ trader_id: traderId })
+    if (source) query.set('source', source)
+    fetch(`/api/trader-alerts?${query}`, {
       headers: { Authorization: `Bearer ${accessToken}` },
     })
       .then((r) => (r.ok ? r.json() : null))
@@ -54,7 +56,7 @@ export default function AlertBellButton({ traderId, traderHandle, source }: Aler
     return () => {
       cancelled = true
     }
-  }, [isLoggedIn, accessToken, traderId])
+  }, [isLoggedIn, accessToken, traderId, source])
 
   useEffect(() => {
     const cleanup = refreshActive()

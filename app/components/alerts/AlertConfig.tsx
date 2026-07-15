@@ -92,7 +92,9 @@ export default function AlertConfig({
   const fetchAlert = useCallback(async () => {
     if (!accessToken) return
     try {
-      const res = await fetch(`/api/trader-alerts?trader_id=${encodeURIComponent(traderId)}`, {
+      const query = new URLSearchParams({ trader_id: traderId })
+      if (source) query.set('source', source)
+      const res = await fetch(`/api/trader-alerts?${query}`, {
         headers: authHeaders(),
       })
       const data = await res.json()
@@ -131,7 +133,7 @@ export default function AlertConfig({
     } finally {
       setLoading(false)
     }
-  }, [traderId, accessToken, authHeaders])
+  }, [traderId, source, accessToken, authHeaders])
 
   useEffect(() => {
     if (userId) fetchAlert()
