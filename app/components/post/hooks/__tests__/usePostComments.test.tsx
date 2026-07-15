@@ -296,13 +296,13 @@ describe('usePostComments post switching', () => {
     })
 
     expect(result.current.comments).toEqual([commentB])
-    expect(mockSetStoreComments).toHaveBeenCalledTimes(2)
+    expect(mockSetStoreComments).toHaveBeenCalledTimes(1)
     expect(mockSetStoreComments).toHaveBeenCalledWith('post-b', expect.any(Array))
     expect(result.current.loadingComments).toBe(false)
   })
 
   it('clears the previous post draft when the next post has no saved draft', () => {
-    localStorage.setItem('comment-draft-post-a', 'draft A')
+    localStorage.setItem('comment-draft-v2:user:legacy:post-a', 'draft A')
     const { result } = renderCommentsHook()
 
     act(() => result.current.restoreDraft('post-a'))
@@ -403,7 +403,7 @@ describe('usePostComments post switching', () => {
       oldSubmit = result.current.submitComment('post-a')
     })
 
-    localStorage.setItem('comment-draft-post-b', 'post B draft')
+    localStorage.setItem('comment-draft-v2:user:legacy:post-b', 'post B draft')
     await act(async () => result.current.loadComments('post-b'))
     expect(result.current.comments).toEqual([commentB])
     expect(result.current.newComment).toBe('post B draft')
@@ -419,9 +419,9 @@ describe('usePostComments post switching', () => {
 
     expect(result.current.comments).toEqual([commentB])
     expect(result.current.newComment).toBe('post B draft')
-    expect(localStorage.getItem('comment-draft-post-a')).toBe('post A failed draft')
+    expect(localStorage.getItem('comment-draft-v2:user:legacy:post-a')).toBe('post A failed draft')
     expect(onCommentCountChange).toHaveBeenCalledWith('post-a', 1)
-    expect(onCommentCountChange).toHaveBeenCalledWith('post-a', -1)
+    expect(onCommentCountChange).toHaveBeenCalledWith('post-a', 0, 0)
   })
 
   it('does not delete the old post comment after switching posts during confirmation', async () => {
@@ -548,5 +548,213 @@ describe('usePostComments deletion counts', () => {
 
     expect(result.current.comments).toEqual([comment])
     expect(onCommentCountChange).not.toHaveBeenCalled()
+  })
+})
+
+describe('usePostComments viewer scope', () => {
+  type ScopeProps = {
+    accessToken: string | null
+    currentUserId: string | null
+    authChecked: boolean
+    viewerKey: string
+    sessionGeneration: number
+  }
+
+  function renderScopedHook(initialProps: ScopeProps) {
+    const showToast = jest.fn()
+    const hook = renderHook(
+      (props: ScopeProps) =>
+        usePostComments({
+          ...props,
+          showToast,
+          showDangerConfirm: async () => true,
+          t: (key) => key,
+        }),
+      { initialProps }
+    )
+    return { ...hook, showToast }
+  }
+
+  const userA: ScopeProps = {
+    accessToken: 'token-a1',
+    currentUserId: 'user-a',
+    authChecked: true,
+    viewerKey: 'user:user-a',
+    sessionGeneration: 1,
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    localStorage.clear()
+  })
+
+  it('waits for pending auth and loads after A resolves', async () => {
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        data: { comments: [makeComment()], post: { comment_count: 1 } },
+      },
+    })
+    const { result, rerender } = renderScopedHook({
+      accessToken: null,
+      currentUserId: null,
+      authChecked: false,
+      viewerKey: 'pending',
+      sessionGeneration: 0,
+    })
+
+    await act(async () => result.current.loadComments('post-1'))
+    expect(mockAuthedFetch).not.toHaveBeenCalled()
+
+    rerender(userA)
+    await act(async () => result.current.loadComments('post-1'))
+    expect(result.current.comments).toHaveLength(1)
+  })
+
+  it('discards an A GET that resolves after B becomes active', async () => {
+    const requests = new Map<string, (value: unknown) => void>()
+    mockAuthedFetch.mockImplementation(
+      (_url: string, _method: string, token: string) =>
+        new Promise((resolve) => {
+          requests.set(token, resolve)
+        })
+    )
+    const commentA = makeComment({ id: 'comment-a', content: 'A private state' })
+    const commentB = makeComment({ id: 'comment-b', content: 'B state' })
+    const { result, rerender } = renderScopedHook(userA)
+
+    let loadA!: Promise<void>
+    act(() => {
+      loadA = result.current.loadComments('post-1')
+    })
+    rerender({
+      accessToken: 'token-b',
+      currentUserId: 'user-b',
+      authChecked: true,
+      viewerKey: 'user:user-b',
+      sessionGeneration: 2,
+    })
+    let loadB!: Promise<void>
+    act(() => {
+      loadB = result.current.loadComments('post-1')
+    })
+
+    await act(async () => {
+      requests.get('token-b')?.({
+        ok: true,
+        status: 200,
+        data: { success: true, data: { comments: [commentB], post: { comment_count: 1 } } },
+      })
+      await loadB
+    })
+    await act(async () => {
+      requests.get('token-a1')?.({
+        ok: true,
+        status: 200,
+        data: { success: true, data: { comments: [commentA], post: { comment_count: 1 } } },
+      })
+      await loadA
+    })
+
+    expect(result.current.comments).toEqual([commentB])
+  })
+
+  it('preserves comments and draft across a same-A token refresh', async () => {
+    const comment = makeComment()
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: { success: true, data: { comments: [comment], post: { comment_count: 1 } } },
+    })
+    const { result, rerender } = renderScopedHook(userA)
+    await act(async () => result.current.loadComments('post-1'))
+    act(() => result.current.setNewComment('A draft'))
+
+    rerender({ ...userA, accessToken: 'token-a2' })
+
+    expect(result.current.comments).toEqual([comment])
+    expect(result.current.newComment).toBe('A draft')
+  })
+
+  it('ignores an old A mutation ACK after logout', async () => {
+    let resolveSubmit!: (value: unknown) => void
+    mockAuthedFetch.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSubmit = resolve
+      })
+    )
+    const { result, rerender, showToast } = renderScopedHook(userA)
+    act(() => result.current.setNewComment('A text'))
+    let submission!: Promise<void>
+    act(() => {
+      submission = result.current.submitComment('post-1')
+    })
+
+    rerender({
+      accessToken: null,
+      currentUserId: null,
+      authChecked: true,
+      viewerKey: 'anon',
+      sessionGeneration: 2,
+    })
+    await act(async () => {
+      resolveSubmit({
+        ok: true,
+        status: 201,
+        data: {
+          success: true,
+          data: {
+            comment: {
+              id: 'comment-a',
+              post_id: 'post-1',
+              user_id: 'user-a',
+              content: 'A text',
+              parent_id: null,
+              like_count: 0,
+              dislike_count: 0,
+              created_at: '2026-07-15T00:00:00.000Z',
+              updated_at: '2026-07-15T00:00:00.000Z',
+            },
+          },
+        },
+      })
+      await submission
+    })
+
+    expect(result.current.comments).toEqual([])
+    expect(result.current.newComment).toBe('')
+    expect(showToast).not.toHaveBeenCalled()
+  })
+
+  it('accepts a sanitized strict ACK and only then clears the draft', async () => {
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 201,
+      data: {
+        success: true,
+        data: {
+          comment: {
+            id: 'comment-a',
+            post_id: 'post-1',
+            user_id: 'user-a',
+            content: 'hello',
+            parent_id: null,
+            like_count: 0,
+            dislike_count: 0,
+            created_at: '2026-07-15T00:00:00.000Z',
+            updated_at: '2026-07-15T00:00:00.000Z',
+          },
+        },
+      },
+    })
+    const { result } = renderScopedHook(userA)
+    act(() => result.current.setNewComment('<b>hello</b>'))
+
+    await act(async () => result.current.submitComment('post-1'))
+
+    expect(result.current.newComment).toBe('')
+    expect(result.current.comments[0].content).toBe('hello')
   })
 })

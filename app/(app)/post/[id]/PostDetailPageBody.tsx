@@ -96,6 +96,10 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
   // Comments hook (single post)
   const commentsHook = usePostComments({
     accessToken,
+    currentUserId,
+    authChecked: auth.authChecked,
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
     showToast,
     showDangerConfirm,
     onCommentCountChange: (postId, delta, absoluteCount) => {

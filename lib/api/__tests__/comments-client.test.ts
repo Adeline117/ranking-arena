@@ -122,11 +122,12 @@ describe('isCreatedCommentAcknowledgement', () => {
     updated_at: '2026-07-15T20:00:00.000Z',
   }
 
-  it('binds a valid ACK to the expected post, parent, and content', () => {
+  it('binds a valid ACK to the expected post, parent, and actor', () => {
     expect(
       isCreatedCommentAcknowledgement(acknowledgement, {
         postId: 'post-1',
         content: 'hello',
+        userId: 'user-1',
       })
     ).toBe(true)
 
@@ -138,10 +139,19 @@ describe('isCreatedCommentAcknowledgement', () => {
     ).toBe(false)
     expect(
       isCreatedCommentAcknowledgement(
-        { ...acknowledgement, content: 'different' },
-        { postId: 'post-1', content: 'hello' }
+        { ...acknowledgement, user_id: 'user-2' },
+        { postId: 'post-1', content: 'hello', userId: 'user-1' }
       )
     ).toBe(false)
+
+    // The server stores sanitized text, so content identity cannot be proven by
+    // comparing the raw input with the returned representation.
+    expect(
+      isCreatedCommentAcknowledgement(
+        { ...acknowledgement, content: 'hello' },
+        { postId: 'post-1', content: '<b>hello</b>', userId: 'user-1' }
+      )
+    ).toBe(true)
   })
 
   it('rejects malformed counters, timestamps, and reply bindings', () => {
