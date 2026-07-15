@@ -1049,6 +1049,9 @@ const ja = {
   linkedAccountCount: 'アカウント',
   traderAlertsTitle: 'トレーダーアラート',
   traderAlertsDesc2: 'カスタムアラート条件を設定してトレーダーの活動をトラッキング（Pro機能）',
+  traderAlertsConfigureOnProfile:
+    '各通知を正しい取引所アカウントに紐づけるため、トレーダープロフィールからアラートを設定してください。',
+  traderAlertsBrowse: 'トレーダーを探す',
   followListVisibilityNote: '無効にすると、他のユーザーはこれらのリストを閲覧できません',
   showFollowingListLabel: 'フォロー中リストを表示',
   showFollowersListLabel: 'フォロワーリストを表示',

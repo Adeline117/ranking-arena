@@ -14,7 +14,6 @@ const ExchangeConnectionManager = dynamic(
 )
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
-const AdvancedAlerts = dynamic(() => import('@/app/components/pro/AdvancedAlerts'), { ssr: false })
 const ReferralCard = dynamic(() => import('@/app/components/profile/ReferralCard'), { ssr: false })
 const WalletSection = dynamic(
   () => import('@/lib/web3/wallet-components').then((m) => ({ default: m.WalletSection })),
@@ -31,7 +30,6 @@ const ImageCropper = dynamic(
 const MobileProfileMenu = dynamic(() => import('@/app/components/profile/MobileProfileMenu'), {
   ssr: false,
 })
-import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
@@ -62,7 +60,6 @@ function SettingsContent() {
   const { showConfirm } = useDialog()
   const { t } = useLanguage()
   const { activeSection, scrollToSection } = useActiveSection()
-  const { isPro } = useSubscription()
 
   // Lazy-load flags
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
@@ -504,7 +501,29 @@ function SettingsContent() {
             title={t('traderAlertsTitle')}
             description={t('traderAlertsDesc2')}
           >
-            <AdvancedAlerts isPro={isPro} isLoggedIn={!!h.userId} />
+            {/* The former AdvancedAlerts panel only changed demo React state: it
+                never persisted a condition or delivered a notification. The
+                profile alert bell is now the one real, account-specific surface. */}
+            <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
+              <Text size="sm" color="secondary">
+                {t('traderAlertsConfigureOnProfile')}
+              </Text>
+              <Link
+                href="/"
+                style={{
+                  alignSelf: 'flex-start',
+                  padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+                  borderRadius: tokens.radius.md,
+                  background: tokens.colors.accent.primary,
+                  color: 'var(--color-on-accent)',
+                  fontSize: tokens.typography.fontSize.sm,
+                  fontWeight: Number(tokens.typography.fontWeight.semibold),
+                  textDecoration: 'none',
+                }}
+              >
+                {t('traderAlertsBrowse')} →
+              </Link>
+            </Box>
           </SectionCard>
 
           <NotificationsSection

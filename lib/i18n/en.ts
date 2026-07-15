@@ -1160,6 +1160,9 @@ const en = {
   // Alerts
   traderAlertsTitle: 'Trader Alerts',
   traderAlertsDesc2: 'Set custom alert conditions to track trader activities (Pro feature)',
+  traderAlertsConfigureOnProfile:
+    'Set alerts from a trader profile so each notification is tied to the correct exchange account.',
+  traderAlertsBrowse: 'Browse traders',
   // Privacy settings detail
   followListVisibilityNote: 'When disabled, other users cannot view these lists',
   showFollowingListLabel: 'Show my following list',

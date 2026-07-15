@@ -1094,6 +1094,9 @@ const ko = {
   // Alerts
   traderAlertsTitle: '트레이더 알림',
   traderAlertsDesc2: '트레이더 활동을 추적하기 위한 맞춤 알림 조건 설정 (Pro 기능)',
+  traderAlertsConfigureOnProfile:
+    '각 알림이 올바른 거래소 계정에 연결되도록 트레이더 프로필에서 알림을 설정하세요.',
+  traderAlertsBrowse: '트레이더 둘러보기',
   // Privacy settings detail
   followListVisibilityNote: '비활성화하면 다른 사용자가 이 목록을 볼 수 없습니다',
   showFollowingListLabel: '내 팔로잉 목록 표시',
