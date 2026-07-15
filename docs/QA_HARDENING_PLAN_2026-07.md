@@ -35,8 +35,10 @@
 2. **crontab 文档 ≠ 现实**：README 记的 health-monitor/schema-canary/ux-patrol 等 sentinel
    **实际没装进 Mac Mini crontab**——真实 `crontab -l` 只有 2 条备份任务（还有注释记录备份曾
    静默丢 3 周）。任何"挂 cron"步骤必须**亲自 `crontab -e` 确认安装**，不能假设基础设施在跑。
-3. **只有一个 QA 账号**（`qa.button.test@arenafi.org`，`QA_USER_ID=1c533890-...`）。真正的
-   用户对用户流程（A 关注 B、A 评论 B 的帖且 B 收到通知）**做不了**——这是 B 计划的头号阻塞。
+3. **历史阻塞，已解除**：计划编写时只有一个 QA 账号
+   （`qa.button.test@arenafi.org`，`QA_USER_ID=1c533890-...`），用户对用户流程做不了。
+   现已有隔离 QA-A/QA-B 双账号，B-2/B-3 的真实互操作、通知和清理均已验收；完整群组生命周期
+   只差 allowlisted 管理员会话的最后一次真运行。
 
 ---
 
@@ -162,15 +164,16 @@
 
 ## B5. 阶段划分
 
-| 阶段 | 内容                                                                     | CC 工时   | 前置                 |
-| ---- | ------------------------------------------------------------------------ | --------- | -------------------- |
-| B-1  | 建第二 QA 账号 + seed profile + `qa-auth.mjs` 双 session                 | ~3h       | 无（头号阻塞，先做） |
-| B-2  | 扩展 `auth-button-sweep.mjs`：用户对用户 follow + 通知落 QA-B + 通知清理 | ~4h       | B-1                  |
-| B-3  | 补 bookmark/vote/comment-like/reply 写流程 + 每写 GET 复查               | ~4h       | B-1                  |
-| B-4  | 群组 join / 群内发帖（若 QA-B 可建私群）                                 | ~3h       | B-1                  |
-| B-5  | Pro 锁定态 preview 子波（`NEXT_PUBLIC_PRO_FREE_PROMO=false`）            | ✅ 已验收 | Preview-only 部署    |
+| 阶段 | 内容                                                          | 当前状态                                          | 前置              |
+| ---- | ------------------------------------------------------------- | ------------------------------------------------- | ----------------- |
+| B-1  | 建第二 QA 账号 + seed profile + `qa-auth.mjs` 双 session      | ✅ 已完成                                         | 无                |
+| B-2  | 用户对用户 follow + 通知落 QA-B + 通知清理                    | ✅ 已验收                                         | B-1               |
+| B-3  | bookmark/vote/comment-like/reply 写流程 + 每写 GET 复查       | ✅ 已验收                                         | B-1               |
+| B-4  | 群组申请、管理员批准、join、群内发帖、解散                    | ⏳ canary 已就绪；待 allowlisted admin token 真跑 | B-1 + owner 会话  |
+| B-5  | Pro 锁定态 Preview 子波（`NEXT_PUBLIC_PRO_FREE_PROMO=false`） | ✅ 已验收                                         | Preview-only 部署 |
 
-**风险最高的是 B-1**（建账号/seed，动生产 auth + user_profiles，须 service role 小心）。
+**唯一剩余验收是 B-4**：不可用 service role 冒充管理员；必须让 `verifyAdmin` 同时通过真实
+session 和 `ADMIN_EMAILS` allowlist。
 
 ---
 
