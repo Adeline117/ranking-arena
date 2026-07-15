@@ -12,6 +12,7 @@
 
 import { createClient } from '@supabase/supabase-js'
 import * as dotenv from 'dotenv'
+import { moderateCommentHardDeleteWithRollout } from '../lib/data/comment-mutation-rollout'
 dotenv.config({ path: '.env.local' })
 
 const supabase = createClient(
@@ -148,41 +149,30 @@ async function main() {
     console.log('Cleaning up old low-quality comments...')
     // Delete comments shorter than 15 chars from seed users
     const seedUserIds = users.map(u => u.id)
-    const { data: shortComments } = await supabase
+    const { data: shortComments, error: shortCommentsError } = await supabase
       .from('comments')
-      .select('id, content')
+      .select('id, post_id, content')
       .in('user_id', seedUserIds)
       .limit(2000)
+
+    if (shortCommentsError) throw shortCommentsError
 
     const toDelete = shortComments?.filter(c => (c.content || '').length < 20) || []
     console.log(`  Found ${toDelete.length} low-quality comments to delete`)
 
     if (toDelete.length > 0) {
-      const batchSize = 100
-      for (let i = 0; i < toDelete.length; i += batchSize) {
-        const batch = toDelete.slice(i, i + batchSize).map(c => c.id)
-        await supabase.from('comments').delete().in('id', batch)
+      for (const comment of toDelete) {
+        await moderateCommentHardDeleteWithRollout(supabase, {
+          commentId: comment.id,
+          expectedPostId: comment.post_id,
+          actorId: null,
+          reason: 'Seed quality cleanup',
+        })
       }
       console.log(`  Deleted ${toDelete.length} comments`)
     }
 
-    // Update comment_count on affected posts
-    const { data: allPosts } = await supabase
-      .from('posts')
-      .select('id')
-      .limit(2000)
-
-    for (const post of (allPosts || [])) {
-      const { count } = await supabase
-        .from('comments')
-        .select('*', { count: 'exact', head: true })
-        .eq('post_id', post.id)
-      await supabase
-        .from('posts')
-        .update({ comment_count: count || 0 })
-        .eq('id', post.id)
-    }
-    console.log('  Updated comment_count on all posts\n')
+    console.log('  Comment counts reconciled during deletion\n')
   }
 
   // ─── Generate new quality posts ───
@@ -298,6 +288,7 @@ async function main() {
         .from('comments')
         .select('*', { count: 'exact', head: true })
         .eq('post_id', pid)
+        .is('deleted_at', null)
       await supabase.from('posts').update({ comment_count: count || 0 }).eq('id', pid)
     }
     console.log(`  Updated comment_count on ${affectedPostIds.length} posts`)

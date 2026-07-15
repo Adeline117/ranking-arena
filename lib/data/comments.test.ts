@@ -4,6 +4,23 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * 测试评论数据层
  */
 
+const mockUpdateOwnCommentWithRollout = jest.fn()
+const mockDeleteOwnCommentWithRollout = jest.fn()
+
+jest.mock('@/lib/data/comment-mutation-rollout', () => ({
+  CommentMutationRolloutError: class MockCommentMutationRolloutError extends Error {
+    constructor(
+      public readonly kind: string,
+      public readonly databaseCode?: string,
+      public readonly stage?: string
+    ) {
+      super(`Comment mutation failed: ${kind}`)
+    }
+  },
+  updateOwnCommentWithRollout: (...args: unknown[]) => mockUpdateOwnCommentWithRollout(...args),
+  deleteOwnCommentWithRollout: (...args: unknown[]) => mockDeleteOwnCommentWithRollout(...args),
+}))
+
 import {
   getPostComments,
   getCommentById,
@@ -179,15 +196,30 @@ describe('createComment', () => {
 })
 
 describe('updateComment', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
   test('should update comment content', async () => {
     const mockSupabase = createMockSupabase()
     const updatedComment = {
       id: 'comment1',
+      post_id: 'post1',
+      user_id: 'user1',
       content: 'Updated content',
+      parent_id: null,
+      like_count: 0,
+      dislike_count: 0,
+      deleted_at: null,
+      created_at: '2024-01-01T00:00:00Z',
       updated_at: '2024-01-02T00:00:00Z',
     }
 
-    mockSupabase.single.mockResolvedValueOnce({ data: updatedComment, error: null })
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: { id: 'comment1', post_id: 'post1', user_id: 'user1', deleted_at: null },
+      error: null,
+    })
+    mockUpdateOwnCommentWithRollout.mockResolvedValue(updatedComment)
 
     const result = await updateComment(
       mockSupabase as unknown as SupabaseClient,
@@ -197,41 +229,111 @@ describe('updateComment', () => {
     )
 
     expect(result.content).toBe('Updated content')
-    expect(mockSupabase.update).toHaveBeenCalled()
+    expect(mockUpdateOwnCommentWithRollout).toHaveBeenCalledWith(mockSupabase, {
+      commentId: 'comment1',
+      postId: 'post1',
+      userId: 'user1',
+      content: 'Updated content',
+    })
+    expect(mockSupabase.update).not.toHaveBeenCalled()
   })
 
   test('should throw error when update fails', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.single.mockResolvedValueOnce({ data: null, error: new Error('Update failed') })
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: { id: 'comment1', post_id: 'post1', user_id: 'user1', deleted_at: null },
+      error: null,
+    })
+    mockUpdateOwnCommentWithRollout.mockRejectedValue(new Error('Update failed'))
 
     await expect(
       updateComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1', 'Updated')
     ).rejects.toThrow()
   })
+
+  test('should reject a resource owned by another user before invoking the mutation bridge', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: { id: 'comment1', post_id: 'post1', user_id: 'user2', deleted_at: null },
+      error: null,
+    })
+
+    await expect(
+      updateComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1', 'Updated')
+    ).rejects.toMatchObject({ kind: 'forbidden', stage: 'data-layer-ownership' })
+    expect(mockUpdateOwnCommentWithRollout).not.toHaveBeenCalled()
+  })
+
+  test('should classify an ownership pre-read database failure', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: null,
+      error: { code: 'XX701' },
+    })
+
+    await expect(
+      updateComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1', 'Updated')
+    ).rejects.toMatchObject({
+      kind: 'database',
+      databaseCode: 'XX701',
+      stage: 'data-layer-read',
+    })
+    expect(mockUpdateOwnCommentWithRollout).not.toHaveBeenCalled()
+  })
+
+  test('should reject a malformed mutation acknowledgement', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: { id: 'comment1', post_id: 'post1', user_id: 'user1', deleted_at: null },
+      error: null,
+    })
+    mockUpdateOwnCommentWithRollout.mockResolvedValue({
+      id: 'comment1',
+      post_id: 'post1',
+      user_id: 'user1',
+      content: 'Updated',
+      deleted_at: null,
+      updated_at: '2024-01-02T00:00:00Z',
+    })
+
+    await expect(
+      updateComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1', 'Updated')
+    ).rejects.toMatchObject({ kind: 'database', stage: 'data-layer-ack' })
+  })
 })
 
 describe('deleteComment', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
   test('should call delete with correct parameters', async () => {
     const mockSupabase = createMockSupabase()
-    // .eq() is called twice: .eq('id', commentId).eq('user_id', userId)
-    // First .eq() returns mockClient, second .eq() returns the result
-    mockSupabase.eq
-      .mockReturnValueOnce(mockSupabase) // First .eq() returns chain
-      .mockResolvedValueOnce({ error: null }) // Second .eq() returns result
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: { id: 'comment1', post_id: 'post1', user_id: 'user1', deleted_at: null },
+      error: null,
+    })
+    mockDeleteOwnCommentWithRollout.mockResolvedValue({ deleted_count: 1, comment_count: 2 })
 
     await deleteComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1')
 
     expect(mockSupabase.from).toHaveBeenCalledWith('comments')
-    expect(mockSupabase.delete).toHaveBeenCalled()
     expect(mockSupabase.eq).toHaveBeenCalledWith('id', 'comment1')
-    expect(mockSupabase.eq).toHaveBeenCalledWith('user_id', 'user1')
+    expect(mockDeleteOwnCommentWithRollout).toHaveBeenCalledWith(mockSupabase, {
+      commentId: 'comment1',
+      postId: 'post1',
+      userId: 'user1',
+    })
+    expect(mockSupabase.delete).not.toHaveBeenCalled()
   })
 
   test('should throw error when delete fails', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.eq
-      .mockReturnValueOnce(mockSupabase) // First .eq() returns chain
-      .mockResolvedValueOnce({ error: new Error('Delete failed') }) // Second .eq() returns error
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: { id: 'comment1', post_id: 'post1', user_id: 'user1', deleted_at: null },
+      error: null,
+    })
+    mockDeleteOwnCommentWithRollout.mockRejectedValue(new Error('Delete failed'))
 
     await expect(
       deleteComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1')

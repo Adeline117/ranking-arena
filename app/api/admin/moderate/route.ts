@@ -9,6 +9,10 @@ import { NextRequest } from 'next/server'
 import { withAdminAuth } from '@/lib/api/with-admin-auth'
 import { success as apiSuccess } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
+import {
+  CommentMutationRolloutError,
+  moderateCommentWithRollout,
+} from '@/lib/data/comment-mutation-rollout'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('api:admin-moderate')
@@ -40,10 +44,7 @@ export async function POST(req: NextRequest) {
 
       switch (action) {
         case 'delete_post': {
-          const { error } = await supabase
-            .from('posts')
-            .delete()
-            .eq('id', targetId)
+          const { error } = await supabase.from('posts').delete().eq('id', targetId)
 
           if (error) {
             logger.error('Error deleting post', { error, postId: targetId })
@@ -64,13 +65,23 @@ export async function POST(req: NextRequest) {
         }
 
         case 'delete_comment': {
-          const { error } = await supabase
-            .from('comments')
-            .delete()
-            .eq('id', targetId)
-
-          if (error) {
-            logger.error('Error deleting comment', { error, commentId: targetId })
+          try {
+            await moderateCommentWithRollout(supabase, {
+              commentId: targetId,
+              actorId: admin.id,
+              action: 'hard_delete',
+              reason: reason || null,
+            })
+          } catch (error) {
+            if (error instanceof CommentMutationRolloutError && error.kind === 'not_found') {
+              throw ApiError.notFound('Comment not found')
+            }
+            logger.error('Error deleting comment', {
+              commentId: targetId,
+              ...(error instanceof CommentMutationRolloutError
+                ? { kind: error.kind, code: error.databaseCode, stage: error.stage }
+                : {}),
+            })
             throw ApiError.database('Database operation failed')
           }
 

@@ -14,6 +14,7 @@ import {
   CommentMutationRolloutError,
   deleteOwnCommentWithRollout,
   moderateCommentHardDeleteWithRollout,
+  moderateCommentWithRollout,
   updateOwnCommentWithRollout,
 } from './comment-mutation-rollout'
 
@@ -84,8 +85,10 @@ const POST_ID = 'a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d'
 const COMMENT_ID = 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e'
 const USER_ID = '11111111-1111-4111-8111-111111111111'
 const AUTHOR_ID = '22222222-2222-4222-8222-222222222222'
+const REPLY_ID = '33333333-3333-4333-8333-333333333333'
 const CONTENT = 'Updated comment'
 const UPDATED_AT = '2026-07-15T20:00:00.000Z'
+const DELETED_AT = '2026-07-15T21:00:00.000Z'
 
 const updatedComment = {
   id: COMMENT_ID,
@@ -209,6 +212,8 @@ function arrangeLegacyModeration(
         post_id: POST_ID,
         parent_id: null,
         deleted_at: null,
+        deleted_by: null,
+        delete_reason: null,
       },
     } satisfies QueryResult)
   return {
@@ -221,8 +226,36 @@ function arrangeLegacyModeration(
   }
 }
 
+function moderationComment(
+  overrides: Partial<{
+    id: string
+    post_id: string
+    parent_id: string | null
+    deleted_at: string | null
+    deleted_by: string | null
+    delete_reason: string | null
+  }> = {}
+) {
+  return {
+    id: COMMENT_ID,
+    post_id: POST_ID,
+    parent_id: null,
+    deleted_at: null,
+    deleted_by: null,
+    delete_reason: null,
+    ...overrides,
+  }
+}
+
+function queueModerationRecount(count = 5) {
+  const recount = queue('comments', { count })
+  const counter = queue('posts', { data: { id: POST_ID, comment_count: count } })
+  return { recount, counter }
+}
+
 describe('comment mutation rollout bridges', () => {
   beforeEach(() => {
+    jest.restoreAllMocks()
     jest.clearAllMocks()
     queues.clear()
   })
@@ -408,6 +441,330 @@ describe('comment mutation rollout bridges', () => {
     })
   })
 
+  describe('moderateCommentWithRollout', () => {
+    it('rejects an invalid runtime action before touching the database', async () => {
+      await expectFailure(
+        moderateCommentWithRollout(supabase, {
+          commentId: COMMENT_ID,
+          actorId: USER_ID,
+          action: 'erase' as 'hard_delete',
+          reason: null,
+        }),
+        'validation'
+      )
+      expect(mockRpc).not.toHaveBeenCalled()
+      expect(mockFrom).not.toHaveBeenCalled()
+    })
+
+    it.each(['hard_delete', 'soft_delete', 'restore_auto_hidden'] as const)(
+      'passes the %s action, actor and reason to the canonical RPC',
+      async (action) => {
+        mockRpc.mockResolvedValue({
+          data: [{ post_id: POST_ID, affected_count: 2, comment_count: 5 }],
+          error: null,
+        })
+
+        await expect(
+          moderateCommentWithRollout(supabase, {
+            commentId: COMMENT_ID,
+            actorId: USER_ID,
+            action,
+            reason: 'Reviewed by a moderator',
+          })
+        ).resolves.toEqual({ post_id: POST_ID, affected_count: 2, comment_count: 5 })
+        expect(mockRpc).toHaveBeenCalledWith('moderate_comment', {
+          p_comment_id: COMMENT_ID,
+          p_actor_id: USER_ID,
+          p_action: action,
+          p_reason: 'Reviewed by a moderator',
+        })
+        expect(mockFrom).not.toHaveBeenCalled()
+      }
+    )
+
+    it('does not use a legacy path for a non-missing RPC error', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: '42501' } })
+
+      await expectFailure(
+        moderateCommentWithRollout(supabase, {
+          commentId: COMMENT_ID,
+          actorId: USER_ID,
+          action: 'soft_delete',
+          reason: null,
+        }),
+        'forbidden'
+      )
+      expect(mockFrom).not.toHaveBeenCalled()
+    })
+
+    it.each(['PGRST202', '42883'])(
+      'soft-deletes a top-level comment and active replies with one exact marker for %s',
+      async (code) => {
+        mockRpc.mockResolvedValue({ data: null, error: { code } })
+        jest.spyOn(Date.prototype, 'toISOString').mockReturnValue(DELETED_AT)
+        queue('comments', { data: moderationComment() })
+        queue('posts', { data: { id: POST_ID } })
+        const mutation = queue('comments', {
+          data: [
+            moderationComment({
+              deleted_at: DELETED_AT,
+              deleted_by: USER_ID,
+              delete_reason: 'Spam',
+            }),
+            moderationComment({
+              id: REPLY_ID,
+              parent_id: COMMENT_ID,
+              deleted_at: DELETED_AT,
+              deleted_by: USER_ID,
+              delete_reason: 'Spam',
+            }),
+          ],
+        })
+        queueModerationRecount(4)
+
+        await expect(
+          moderateCommentWithRollout(supabase, {
+            commentId: COMMENT_ID,
+            expectedPostId: POST_ID,
+            actorId: USER_ID,
+            action: 'soft_delete',
+            reason: 'Spam',
+          })
+        ).resolves.toEqual({ post_id: POST_ID, affected_count: 2, comment_count: 4 })
+        expect(mutation.update).toHaveBeenCalledWith({
+          deleted_at: DELETED_AT,
+          deleted_by: USER_ID,
+          delete_reason: 'Spam',
+        })
+        expect(mutation.eq).toHaveBeenCalledWith('post_id', POST_ID)
+        expect(mutation.is).toHaveBeenCalledWith('deleted_at', null)
+        expect(mutation.or).toHaveBeenCalledWith(`id.eq.${COMMENT_ID},parent_id.eq.${COMMENT_ID}`)
+      }
+    )
+
+    it('treats an already soft-deleted comment as an audited no-op', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } })
+      queue('comments', {
+        data: moderationComment({
+          deleted_at: DELETED_AT,
+          deleted_by: USER_ID,
+          delete_reason: 'Earlier review',
+        }),
+      })
+      queue('posts', { data: { id: POST_ID } })
+      queueModerationRecount(4)
+
+      await expect(
+        moderateCommentWithRollout(supabase, {
+          commentId: COMMENT_ID,
+          actorId: AUTHOR_ID,
+          action: 'soft_delete',
+          reason: 'Do not overwrite the marker',
+        })
+      ).resolves.toEqual({ post_id: POST_ID, affected_count: 0, comment_count: 4 })
+      expect(mockFrom).toHaveBeenCalledTimes(4)
+    })
+
+    it('treats an already active auto-hidden restore as a no-op', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: '42883' } })
+      queue('comments', { data: moderationComment() })
+      queue('posts', { data: { id: POST_ID } })
+      queueModerationRecount(5)
+
+      await expect(
+        moderateCommentWithRollout(supabase, {
+          commentId: COMMENT_ID,
+          actorId: USER_ID,
+          action: 'restore_auto_hidden',
+          reason: 'No marker should be written',
+        })
+      ).resolves.toEqual({ post_id: POST_ID, affected_count: 0, comment_count: 5 })
+      expect(mockFrom).toHaveBeenCalledTimes(4)
+    })
+
+    it('restores only a root and replies carrying its exact deletion marker', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: '42883' } })
+      queue('comments', {
+        data: moderationComment({
+          deleted_at: DELETED_AT,
+          deleted_by: null,
+          delete_reason: 'Auto-hidden: weighted report threshold',
+        }),
+      })
+      queue('posts', { data: { id: POST_ID } })
+      const mutation = queue('comments', {
+        data: [moderationComment(), moderationComment({ id: REPLY_ID, parent_id: COMMENT_ID })],
+      })
+      queueModerationRecount(6)
+
+      await expect(
+        moderateCommentWithRollout(supabase, {
+          commentId: COMMENT_ID,
+          actorId: AUTHOR_ID,
+          action: 'restore_auto_hidden',
+          reason: 'Approved after review',
+        })
+      ).resolves.toEqual({ post_id: POST_ID, affected_count: 2, comment_count: 6 })
+      expect(mutation.update).toHaveBeenCalledWith({
+        deleted_at: null,
+        deleted_by: null,
+        delete_reason: null,
+      })
+      expect(mutation.eq).toHaveBeenCalledWith('deleted_at', DELETED_AT)
+      expect(mutation.is).toHaveBeenCalledWith('deleted_by', null)
+      expect(mutation.eq).toHaveBeenCalledWith(
+        'delete_reason',
+        'Auto-hidden: weighted report threshold'
+      )
+      expect(mutation.or).toHaveBeenCalledWith(`id.eq.${COMMENT_ID},parent_id.eq.${COMMENT_ID}`)
+    })
+
+    it('binds the auto-hidden marker and fails if the target is absent from the ACK', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } })
+      queue('comments', {
+        data: moderationComment({
+          deleted_at: DELETED_AT,
+          deleted_by: null,
+          delete_reason: 'Auto-hidden: threshold',
+        }),
+      })
+      queue('posts', { data: { id: POST_ID } })
+      const mutation = queue('comments', {
+        data: [moderationComment({ id: REPLY_ID, parent_id: COMMENT_ID })],
+      })
+
+      await expectFailure(
+        moderateCommentWithRollout(supabase, {
+          commentId: COMMENT_ID,
+          actorId: USER_ID,
+          action: 'restore_auto_hidden',
+          reason: null,
+        }),
+        'conflict'
+      )
+      expect(mutation.is).toHaveBeenCalledWith('deleted_by', null)
+      expect(mutation.eq).toHaveBeenCalledWith('delete_reason', 'Auto-hidden: threshold')
+    })
+
+    it.each([
+      ['administrator deletion', USER_ID, 'Removed by moderator'],
+      ['non-auto system deletion', null, 'Automated review'],
+      ['missing audit reason', null, null],
+    ])('never restores a %s marker', async (_label, deletedBy, deleteReason) => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } })
+      queue('comments', {
+        data: moderationComment({
+          deleted_at: DELETED_AT,
+          deleted_by: deletedBy,
+          delete_reason: deleteReason,
+        }),
+      })
+      queue('posts', { data: { id: POST_ID } })
+
+      await expectFailure(
+        moderateCommentWithRollout(supabase, {
+          commentId: COMMENT_ID,
+          actorId: USER_ID,
+          action: 'restore_auto_hidden',
+          reason: 'Approved in queue',
+        }),
+        'forbidden'
+      )
+      expect(mockFrom).toHaveBeenCalledTimes(2)
+    })
+
+    it('rejects a soft-delete ACK that does not preserve the requested actor and reason', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } })
+      jest.spyOn(Date.prototype, 'toISOString').mockReturnValue(DELETED_AT)
+      queue('comments', { data: moderationComment() })
+      queue('posts', { data: { id: POST_ID } })
+      queue('comments', {
+        data: [
+          moderationComment({
+            deleted_at: DELETED_AT,
+            deleted_by: AUTHOR_ID,
+            delete_reason: 'Different reason',
+          }),
+        ],
+      })
+
+      await expectFailure(
+        moderateCommentWithRollout(supabase, {
+          commentId: COMMENT_ID,
+          actorId: USER_ID,
+          action: 'soft_delete',
+          reason: 'Expected reason',
+        }),
+        'conflict'
+      )
+    })
+
+    it.each(['soft_delete', 'restore_auto_hidden'] as const)(
+      'fails closed when the legacy %s write fails',
+      async (action) => {
+        mockRpc.mockResolvedValue({ data: null, error: { code: '42883' } })
+        queue('comments', {
+          data: moderationComment(
+            action === 'restore_auto_hidden'
+              ? {
+                  deleted_at: DELETED_AT,
+                  deleted_by: null,
+                  delete_reason: 'Auto-hidden: threshold',
+                }
+              : {}
+          ),
+        })
+        queue('posts', { data: { id: POST_ID } })
+        queue('comments', { error: { code: 'XX302' } })
+
+        await expectFailure(
+          moderateCommentWithRollout(supabase, {
+            commentId: COMMENT_ID,
+            actorId: USER_ID,
+            action,
+            reason: 'Reviewed',
+          }),
+          'database'
+        )
+      }
+    )
+
+    it('rejects a comment-read ACK for a different resource', async () => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } })
+      queue('comments', { data: moderationComment({ id: REPLY_ID }) })
+
+      await expectFailure(
+        moderateCommentWithRollout(supabase, {
+          commentId: COMMENT_ID,
+          actorId: USER_ID,
+          action: 'soft_delete',
+          reason: null,
+        }),
+        'not_found'
+      )
+      expect(mockFrom).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([
+      ['comment read', { data: null, error: { code: 'XX301' } }, 'database'],
+      ['missing resource', { data: null }, 'not_found'],
+      ['malformed resource', { data: { id: COMMENT_ID } }, 'not_found'],
+    ] as const)('fails closed on legacy %s', async (_label, result, kind) => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: 'PGRST202' } })
+      queue('comments', result)
+
+      await expectFailure(
+        moderateCommentWithRollout(supabase, {
+          commentId: COMMENT_ID,
+          actorId: USER_ID,
+          action: 'soft_delete',
+          reason: null,
+        }),
+        kind
+      )
+    })
+  })
+
   describe('moderateCommentHardDeleteWithRollout', () => {
     const hardInput = {
       commentId: COMMENT_ID,
@@ -480,6 +837,8 @@ describe('comment mutation rollout bridges', () => {
               post_id: 'another-post',
               parent_id: null,
               deleted_at: null,
+              deleted_by: null,
+              delete_reason: null,
             },
           },
         },

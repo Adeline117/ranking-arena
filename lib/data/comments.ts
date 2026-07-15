@@ -3,6 +3,12 @@
  */
 
 import { SupabaseClient } from '@supabase/supabase-js'
+import {
+  CommentMutationRolloutError,
+  deleteOwnCommentWithRollout,
+  updateOwnCommentWithRollout,
+  type UpdatedComment,
+} from '@/lib/data/comment-mutation-rollout'
 import { logger } from '@/lib/logger'
 
 export interface Comment {
@@ -77,6 +83,72 @@ function toComment(
     user_disliked: userDisliked,
     replies,
   }
+}
+
+function toCommentFromMutationAck(value: UpdatedComment): Comment {
+  if (
+    typeof value.created_at !== 'string' ||
+    !Number.isFinite(Date.parse(value.created_at)) ||
+    typeof value.updated_at !== 'string' ||
+    !Number.isFinite(Date.parse(value.updated_at)) ||
+    (value.parent_id !== null &&
+      value.parent_id !== undefined &&
+      typeof value.parent_id !== 'string') ||
+    (value.like_count !== undefined &&
+      (!Number.isSafeInteger(value.like_count) || (value.like_count as number) < 0)) ||
+    (value.dislike_count !== undefined &&
+      (!Number.isSafeInteger(value.dislike_count) || (value.dislike_count as number) < 0))
+  ) {
+    throw new CommentMutationRolloutError('database', undefined, 'data-layer-ack')
+  }
+
+  return toComment({
+    id: value.id,
+    post_id: value.post_id,
+    user_id: value.user_id,
+    content: value.content,
+    parent_id: value.parent_id as string | null | undefined,
+    like_count: value.like_count as number | undefined,
+    dislike_count: value.dislike_count as number | undefined,
+    created_at: value.created_at,
+    updated_at: value.updated_at,
+  })
+}
+
+async function getOwnedActiveCommentPostId(
+  supabase: SupabaseClient,
+  commentId: string,
+  userId: string
+): Promise<string> {
+  const { data, error } = await supabase
+    .from('comments')
+    .select('id, post_id, user_id, deleted_at')
+    .eq('id', commentId)
+    .maybeSingle()
+
+  if (error) {
+    throw new CommentMutationRolloutError('database', error.code, 'data-layer-read')
+  }
+  if (!data) {
+    throw new CommentMutationRolloutError('not_found', undefined, 'data-layer-read')
+  }
+  if (
+    data.id !== commentId ||
+    typeof data.post_id !== 'string' ||
+    data.post_id.length === 0 ||
+    typeof data.user_id !== 'string' ||
+    (data.deleted_at !== null && typeof data.deleted_at !== 'string') ||
+    (typeof data.deleted_at === 'string' && !Number.isFinite(Date.parse(data.deleted_at)))
+  ) {
+    throw new CommentMutationRolloutError('database', undefined, 'data-layer-read-ack')
+  }
+  if (data.deleted_at !== null) {
+    throw new CommentMutationRolloutError('not_found', undefined, 'data-layer-read')
+  }
+  if (data.user_id !== userId) {
+    throw new CommentMutationRolloutError('forbidden', undefined, 'data-layer-ownership')
+  }
+  return data.post_id
 }
 
 /**
@@ -350,17 +422,14 @@ export async function updateComment(
 ): Promise<Comment> {
   const { sanitizeText } = await import('@/lib/utils/sanitize')
   const safeContent = sanitizeText(content, { preserveNewlines: true, maxLength: 2000 })
-
-  const { data, error } = await supabase
-    .from('comments')
-    .update({ content: safeContent, updated_at: new Date().toISOString() })
-    .eq('id', commentId)
-    .eq('user_id', userId)
-    .select()
-    .single()
-
-  if (error) throw error
-  return toComment(data)
+  const postId = await getOwnedActiveCommentPostId(supabase, commentId, userId)
+  const updated = await updateOwnCommentWithRollout(supabase, {
+    commentId,
+    postId,
+    userId,
+    content: safeContent,
+  })
+  return toCommentFromMutationAck(updated)
 }
 
 /**
@@ -371,13 +440,8 @@ export async function deleteComment(
   commentId: string,
   userId: string
 ): Promise<void> {
-  const { error } = await supabase
-    .from('comments')
-    .delete()
-    .eq('id', commentId)
-    .eq('user_id', userId)
-
-  if (error) throw error
+  const postId = await getOwnedActiveCommentPostId(supabase, commentId, userId)
+  await deleteOwnCommentWithRollout(supabase, { commentId, postId, userId })
 }
 
 /**

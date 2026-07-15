@@ -8,11 +8,101 @@ import { NextRequest } from 'next/server'
 import { withAdminAuth } from '@/lib/api/with-admin-auth'
 import { success as apiSuccess } from '@/lib/api/response'
 import { ApiError } from '@/lib/api/errors'
+import {
+  CommentMutationRolloutError,
+  moderateCommentWithRollout,
+  type ModerateCommentAction,
+} from '@/lib/data/comment-mutation-rollout'
 import { createLogger } from '@/lib/utils/logger'
 import { autoEscalate } from '@/lib/services/moderation'
 import { parsePage, parseLimit } from '@/lib/utils/safe-parse'
 
 const logger = createLogger('api:moderation-queue')
+
+type ModerationSupabase = Parameters<typeof autoEscalate>[0]
+
+async function moderateQueueComment(
+  supabase: ModerationSupabase,
+  input: {
+    commentId: string
+    actorId: string
+    action: Extract<ModerateCommentAction, 'soft_delete' | 'restore_auto_hidden'>
+    reason: string
+  }
+): Promise<void> {
+  try {
+    await moderateCommentWithRollout(supabase, input)
+  } catch (error) {
+    if (error instanceof CommentMutationRolloutError && error.kind === 'not_found') {
+      throw ApiError.notFound('Comment not found')
+    }
+    logger.error('Comment moderation failed', {
+      commentId: input.commentId,
+      action: input.action,
+      ...(error instanceof CommentMutationRolloutError
+        ? { kind: error.kind, code: error.databaseCode, stage: error.stage }
+        : {}),
+    })
+    throw ApiError.database('Failed to moderate comment')
+  }
+}
+
+async function transitionPendingReports(
+  supabase: ModerationSupabase,
+  input: {
+    reportIds: string[]
+    contentType: string
+    contentId: string
+    status: 'dismissed' | 'actioned'
+    resolvedBy: string
+    actionTaken: string
+  }
+): Promise<void> {
+  const { data, error } = await supabase
+    .from('content_reports')
+    .update({
+      status: input.status,
+      resolved_by: input.resolvedBy,
+      action_taken: input.actionTaken,
+    })
+    .in('id', input.reportIds)
+    .eq('status', 'pending')
+    .eq('content_type', input.contentType)
+    .eq('content_id', input.contentId)
+    .select('id, status, resolved_by, action_taken, content_type, content_id')
+
+  if (error || !Array.isArray(data)) {
+    logger.error('Failed to transition moderation reports', {
+      contentType: input.contentType,
+      contentId: input.contentId,
+      ...(error?.code ? { code: error.code } : {}),
+    })
+    throw ApiError.database('Failed to update reports')
+  }
+
+  const expectedIds = new Set(input.reportIds)
+  const acknowledgedIds = new Set<string>()
+  for (const row of data) {
+    if (
+      !row ||
+      typeof row.id !== 'string' ||
+      !expectedIds.has(row.id) ||
+      acknowledgedIds.has(row.id) ||
+      row.status !== input.status ||
+      row.resolved_by !== input.resolvedBy ||
+      row.action_taken !== input.actionTaken ||
+      row.content_type !== input.contentType ||
+      row.content_id !== input.contentId
+    ) {
+      throw ApiError.database('Failed to verify report update')
+    }
+    acknowledgedIds.add(row.id)
+  }
+
+  if (acknowledgedIds.size !== expectedIds.size) {
+    throw ApiError.database('Failed to verify report update')
+  }
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -198,29 +288,55 @@ export async function POST(req: NextRequest) {
       if (!['approve', 'delete', 'warn', 'ban'].includes(action)) {
         throw ApiError.validation('Action must be: approve, delete, warn, or ban')
       }
+      if (!['post', 'comment'].includes(content_type)) {
+        throw ApiError.validation('Content type must be post or comment')
+      }
+      if ((action === 'warn' || action === 'ban') && !author_id) {
+        throw ApiError.validation('author_id is required for warn and ban actions')
+      }
 
       // Get all pending reports for this content
-      const { data: reports } = await supabase
+      const { data: reports, error: reportsError } = await supabase
         .from('content_reports')
         .select('id')
         .eq('content_type', content_type)
         .eq('content_id', content_id)
         .eq('status', 'pending')
 
-      const reportIds = (reports || []).map((r) => r.id)
+      if (reportsError || !Array.isArray(reports)) {
+        logger.error('Failed to read pending moderation reports', {
+          content_type,
+          content_id,
+          ...(reportsError?.code ? { code: reportsError.code } : {}),
+        })
+        throw ApiError.database('Failed to fetch reports')
+      }
+      const reportIds = reports.map((report) => report.id)
+      if (
+        reportIds.length === 0 ||
+        reportIds.some((reportId) => typeof reportId !== 'string' || reportId.length === 0) ||
+        new Set(reportIds).size !== reportIds.length
+      ) {
+        throw ApiError.notFound('No pending reports found')
+      }
 
       if (action === 'approve') {
-        // Dismiss all reports
-        if (reportIds.length > 0) {
-          await supabase
-            .from('content_reports')
-            .update({
-              status: 'dismissed',
-              resolved_by: admin.id,
-              action_taken: 'approved_content',
-            })
-            .in('id', reportIds)
+        if (content_type === 'comment') {
+          await moderateQueueComment(supabase, {
+            commentId: content_id,
+            actorId: admin.id,
+            action: 'restore_auto_hidden',
+            reason: 'Approved in moderation queue',
+          })
         }
+        await transitionPendingReports(supabase, {
+          reportIds,
+          contentType: content_type,
+          contentId: content_id,
+          status: 'dismissed',
+          resolvedBy: admin.id,
+          actionTaken: 'approved_content',
+        })
 
         await supabase.from('admin_logs').insert({
           admin_id: admin.id,
@@ -237,21 +353,22 @@ export async function POST(req: NextRequest) {
             .update({ deleted_at: new Date().toISOString() })
             .eq('id', content_id)
         } else if (content_type === 'comment') {
-          // comments 表无软删列(deleted_at)且读路径不过滤——硬删，与全站标准一致
-          await supabase.from('comments').delete().eq('id', content_id)
+          await moderateQueueComment(supabase, {
+            commentId: content_id,
+            actorId: admin.id,
+            action: 'soft_delete',
+            reason: 'Deleted from moderation queue',
+          })
         }
 
-        // Mark reports as actioned
-        if (reportIds.length > 0) {
-          await supabase
-            .from('content_reports')
-            .update({
-              status: 'actioned',
-              resolved_by: admin.id,
-              action_taken: 'content_deleted',
-            })
-            .in('id', reportIds)
-        }
+        await transitionPendingReports(supabase, {
+          reportIds,
+          contentType: content_type,
+          contentId: content_id,
+          status: 'actioned',
+          resolvedBy: admin.id,
+          actionTaken: 'content_deleted',
+        })
 
         await supabase.from('admin_logs').insert({
           admin_id: admin.id,
@@ -269,27 +386,43 @@ export async function POST(req: NextRequest) {
           admin.id
         )
 
-        // Mark reports as actioned
-        if (reportIds.length > 0) {
-          await supabase
-            .from('content_reports')
-            .update({
-              status: 'actioned',
-              resolved_by: admin.id,
-              action_taken: 'user_warned',
-            })
-            .in('id', reportIds)
-        }
+        await transitionPendingReports(supabase, {
+          reportIds,
+          contentType: content_type,
+          contentId: content_id,
+          status: 'actioned',
+          resolvedBy: admin.id,
+          actionTaken: 'user_warned',
+        })
       } else if (action === 'ban' && author_id) {
         // Ban the user + delete content
-        await supabase
+        const bannedAt = new Date().toISOString()
+        const bannedReason = `Banned for reported ${content_type}`
+        const { data: bannedUser, error: banError } = await supabase
           .from('user_profiles')
           .update({
-            banned_at: new Date().toISOString(),
-            banned_reason: `Banned for reported ${content_type}`,
+            banned_at: bannedAt,
+            banned_reason: bannedReason,
             banned_by: admin.id,
           })
           .eq('id', author_id)
+          .select('id, banned_at, banned_reason, banned_by')
+          .maybeSingle()
+
+        if (
+          banError ||
+          !bannedUser ||
+          bannedUser.id !== author_id ||
+          bannedUser.banned_at !== bannedAt ||
+          bannedUser.banned_reason !== bannedReason ||
+          bannedUser.banned_by !== admin.id
+        ) {
+          logger.error('Failed to ban reported-content author', {
+            author_id,
+            ...(banError?.code ? { code: banError.code } : {}),
+          })
+          throw ApiError.database('Failed to ban user')
+        }
 
         // Soft delete the content
         if (content_type === 'post') {
@@ -298,21 +431,22 @@ export async function POST(req: NextRequest) {
             .update({ deleted_at: new Date().toISOString() })
             .eq('id', content_id)
         } else if (content_type === 'comment') {
-          // comments 表无软删列(deleted_at)且读路径不过滤——硬删，与全站标准一致
-          await supabase.from('comments').delete().eq('id', content_id)
+          await moderateQueueComment(supabase, {
+            commentId: content_id,
+            actorId: admin.id,
+            action: 'soft_delete',
+            reason: 'Author banned for reported comment',
+          })
         }
 
-        // Mark reports as actioned
-        if (reportIds.length > 0) {
-          await supabase
-            .from('content_reports')
-            .update({
-              status: 'actioned',
-              resolved_by: admin.id,
-              action_taken: 'user_banned',
-            })
-            .in('id', reportIds)
-        }
+        await transitionPendingReports(supabase, {
+          reportIds,
+          contentType: content_type,
+          contentId: content_id,
+          status: 'actioned',
+          resolvedBy: admin.id,
+          actionTaken: 'user_banned',
+        })
 
         await supabase.from('admin_logs').insert({
           admin_id: admin.id,
