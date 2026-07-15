@@ -399,6 +399,8 @@ export default function LiveTradesFeed() {
       {/* Trade list */}
       <div
         ref={containerRef}
+        tabIndex={0}
+        aria-label={t('liveTradesFeed')}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         style={{
