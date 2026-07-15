@@ -621,6 +621,8 @@ if [[ -n "$CONTRACT_MIGRATION" ]]; then
   fi
 
   "${PSQL[@]}" -f "$CONTRACT_MIGRATION" >/dev/null
+  # Contract migrations must be safe to replay after an uncertain deploy.
+  "${PSQL[@]}" -f "$CONTRACT_MIGRATION" >/dev/null
 
   # The contract allows service-role INSERT but blocks direct DELETE. Hide the
   # source through the canonical moderation RPC, replay 093000, then prove the
@@ -643,6 +645,107 @@ VALUES (
   '11111111-1111-1111-1111-111111111111',
   'contract replay target'
 );
+DO $contract_write_boundary$
+DECLARE
+  v_reaction jsonb;
+BEGIN
+  IF NOT pg_catalog.has_table_privilege('service_role', 'public.comments', 'INSERT')
+     OR pg_catalog.has_table_privilege('service_role', 'public.comments', 'UPDATE')
+     OR pg_catalog.has_table_privilege('service_role', 'public.comments', 'DELETE')
+     OR pg_catalog.has_table_privilege('service_role', 'public.comment_likes', 'INSERT')
+     OR pg_catalog.has_table_privilege('service_role', 'public.comment_likes', 'UPDATE')
+     OR pg_catalog.has_table_privilege('service_role', 'public.comment_likes', 'DELETE') THEN
+    RAISE EXCEPTION 'service_role table ACL does not match the comment contract';
+  END IF;
+
+  IF (SELECT comment_count FROM public.posts
+      WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6') <> 1 THEN
+    RAISE EXCEPTION 'clean contracted comment insert did not update the canonical post count';
+  END IF;
+
+  BEGIN
+    UPDATE public.posts
+    SET comment_count = 99
+    WHERE id = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6';
+    RAISE EXCEPTION 'direct post comment counter update unexpectedly succeeded';
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      IF SQLERRM <> 'direct post comment counter updates are disabled' THEN
+        RAISE;
+      END IF;
+  END;
+
+  BEGIN
+    INSERT INTO public.posts (id, author_id, visibility, status, comment_count)
+    VALUES (
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa7',
+      '11111111-1111-1111-1111-111111111111',
+      'public',
+      'active',
+      1
+    );
+    RAISE EXCEPTION 'post with a nonzero initial comment counter unexpectedly succeeded';
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      IF SQLERRM <> 'new posts must start with a zero comment counter' THEN
+        RAISE;
+      END IF;
+  END;
+
+  BEGIN
+    INSERT INTO public.comments (
+      id, post_id, user_id, author_id, content, deleted_at
+    ) VALUES (
+      'e3000000-0000-0000-0000-000000000002',
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6',
+      '11111111-1111-1111-1111-111111111111',
+      '11111111-1111-1111-1111-111111111111',
+      'invalid hidden insert',
+      clock_timestamp()
+    );
+    RAISE EXCEPTION 'comment with initial moderation state unexpectedly succeeded';
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      IF SQLERRM <> 'new comments must start active without moderation metadata' THEN
+        RAISE;
+      END IF;
+  END;
+
+  BEGIN
+    INSERT INTO public.comments (
+      id, post_id, user_id, author_id, content, like_count
+    ) VALUES (
+      'e3000000-0000-0000-0000-000000000003',
+      'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6',
+      '11111111-1111-1111-1111-111111111111',
+      '11111111-1111-1111-1111-111111111111',
+      'invalid counted insert',
+      1
+    );
+    RAISE EXCEPTION 'comment with a nonzero initial reaction counter unexpectedly succeeded';
+  EXCEPTION
+    WHEN insufficient_privilege THEN
+      IF SQLERRM <> 'new comments must start with zero reaction counters' THEN
+        RAISE;
+      END IF;
+  END;
+
+  SELECT public.toggle_comment_reaction(
+    'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaa6',
+    'e3000000-0000-0000-0000-000000000001',
+    '22222222-2222-2222-2222-222222222222',
+    'like'
+  ) INTO STRICT v_reaction;
+
+  IF v_reaction ->> 'action' IS DISTINCT FROM 'added'
+     OR v_reaction ->> 'reaction' IS DISTINCT FROM 'like'
+     OR (v_reaction ->> 'like_count')::integer IS DISTINCT FROM 1
+     OR (v_reaction ->> 'dislike_count')::integer IS DISTINCT FROM 0 THEN
+    RAISE EXCEPTION 'canonical reaction did not cross the contracted boundary: %',
+      v_reaction;
+  END IF;
+END
+$contract_write_boundary$;
 SELECT * FROM public.moderate_comment(
   'e3000000-0000-0000-0000-000000000001',
   NULL,
