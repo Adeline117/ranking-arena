@@ -22,16 +22,11 @@ function getStripe() {
 }
 
 // 从价格 ID 获取订阅等级
-function getTierFromPriceId(priceId: string): 'free' | 'pro' {
-  if (
-    priceId === env.STRIPE_PRO_MONTHLY_PRICE_ID ||
-    priceId === env.STRIPE_PRO_YEARLY_PRICE_ID ||
-    priceId === process.env.STRIPE_PRO_LIFETIME_PRICE_ID ||
-    priceId === process.env.STRIPE_PRO_PRICE_ID
-  ) {
-    return 'pro'
-  }
-  return 'free'
+function getPlanFromPriceId(priceId: string): 'monthly' | 'yearly' | null {
+  if (priceId && priceId === env.STRIPE_PRO_MONTHLY_PRICE_ID) return 'monthly'
+  if (priceId && priceId === env.STRIPE_PRO_YEARLY_PRICE_ID) return 'yearly'
+  if (priceId && priceId === process.env.STRIPE_PRO_PRICE_ID) return 'monthly'
+  return null
 }
 
 const logger = createLogger('stripe-verify-session')
@@ -72,7 +67,10 @@ export async function POST(request: NextRequest) {
     // 获取 Checkout Session（不展开 subscription，避免类型问题）
     const session = await stripe.checkout.sessions.retrieve(sessionId)
 
-    if (session.payment_status !== 'paid') {
+    const acceptablePaymentStatus =
+      session.payment_status === 'paid' ||
+      (session.mode === 'subscription' && session.payment_status === 'no_payment_required')
+    if (!acceptablePaymentStatus) {
       return NextResponse.json(
         {
           error: 'Payment not completed',
@@ -84,7 +82,9 @@ export async function POST(request: NextRequest) {
 
     // 2026-07-11 修:paid 不代表没退款——重放已退款的 session 可重授 Pro
     // (退款白嫖第二入口)。mode=payment 时核对 charge 退款态;查不到时
-    // 保守放行(避免 Stripe 瞬断拒真付费),webhook 侧仍是权威降级路径。
+    // The refund check is part of the authorization decision. If Stripe is
+    // unavailable, fail closed and let the client retry; never re-grant a
+    // refunded lifetime purchase because a safety lookup timed out.
     if (session.mode === 'payment' && session.payment_intent) {
       try {
         const pi = await stripe.paymentIntents.retrieve(
@@ -102,10 +102,14 @@ export async function POST(request: NextRequest) {
           return NextResponse.json({ error: 'Payment was refunded' }, { status: 400 })
         }
       } catch (refundCheckErr) {
-        logger.error('verify-session refund check failed (fail-open)', {
+        logger.error('verify-session refund check failed (fail-closed)', {
           sessionId,
           error: refundCheckErr instanceof Error ? refundCheckErr.message : refundCheckErr,
         })
+        return NextResponse.json(
+          { error: 'Unable to verify payment safety. Please retry.' },
+          { status: 503 }
+        )
       }
     }
 
@@ -128,39 +132,14 @@ export async function POST(request: NextRequest) {
 
     // Lifetime one-time payment (mode=payment)
     if (session.mode === 'payment' && plan === 'lifetime') {
-      const { error: subError } = await supabaseAdmin.from('subscriptions').upsert(
-        {
-          user_id: userId,
-          stripe_customer_id: customerId,
-          stripe_subscription_id: `lifetime_${userId}`,
-          status: 'active',
-          tier: 'pro',
-          plan: 'lifetime',
-          current_period_start: new Date().toISOString(),
-          current_period_end: null,
-          cancel_at_period_end: false,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: 'user_id' }
-      )
+      const { error: activationError } = await supabaseAdmin.rpc('activate_lifetime_membership', {
+        p_user_id: userId,
+        p_stripe_customer_id: customerId,
+      })
 
-      if (subError) {
-        logger.error('Failed to update subscriptions for lifetime', { error: subError, userId })
-      }
-
-      const { error: profileError } = await supabaseAdmin
-        .from('user_profiles')
-        .update({
-          subscription_tier: 'pro',
-          pro_plan: 'lifetime',
-          stripe_customer_id: customerId,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', userId)
-
-      if (profileError) {
-        logger.error('Failed to update user_profiles for lifetime', { error: profileError, userId })
-        return NextResponse.json({ error: 'Failed to update user profile' }, { status: 500 })
+      if (activationError) {
+        logger.error('Atomic lifetime activation failed', { error: activationError, userId })
+        return NextResponse.json({ error: 'Failed to activate membership' }, { status: 500 })
       }
 
       logger.info('Lifetime payment verified', { userId })
@@ -191,16 +170,29 @@ export async function POST(request: NextRequest) {
     }
 
     // 获取订阅详情
-    let tier: 'free' | 'pro' = 'pro'
+    const tier = 'pro' as const
+    let verifiedPlan: 'monthly' | 'yearly' | null = null
     let periodStart: string | null = null
     let periodEnd: string | null = null
     let subscriptionStatus = 'active'
+    let cancelAtPeriodEnd = false
 
     try {
       const subscription = await stripe.subscriptions.retrieve(subscriptionId)
       const priceId = subscription.items.data[0]?.price.id || ''
-      tier = getTierFromPriceId(priceId)
+      verifiedPlan = getPlanFromPriceId(priceId)
+      if (!verifiedPlan) {
+        logger.error('verify-session encountered unknown Stripe price', {
+          subscriptionId,
+          priceId,
+        })
+        return NextResponse.json(
+          { error: 'Unknown payment configuration. Please contact support.' },
+          { status: 500 }
+        )
+      }
       subscriptionStatus = subscription.status
+      cancelAtPeriodEnd = subscription.cancel_at_period_end
 
       // 检查订阅状态
       if (subscription.status !== 'active' && subscription.status !== 'trialing') {
@@ -213,15 +205,10 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // 获取周期信息（兼容不同 Stripe API 版本）
-      const sub = subscription as unknown as Record<string, unknown>
-      const itemPeriod = subscription.items?.data?.[0] as unknown as
-        | Record<string, unknown>
-        | undefined
-      const pStart = (sub.current_period_start ?? itemPeriod?.current_period_start) as
-        | number
-        | undefined
-      const pEnd = (sub.current_period_end ?? itemPeriod?.current_period_end) as number | undefined
+      // Stripe API 2026-04-22 exposes billing periods on subscription items.
+      const itemPeriod = subscription.items.data[0]
+      const pStart = itemPeriod?.current_period_start
+      const pEnd = itemPeriod?.current_period_end
       if (pStart) {
         periodStart = new Date(pStart * 1000).toISOString()
       }
@@ -240,47 +227,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // 更新订阅记录
-    // S-2 FIX: Include `plan` to prevent nulling it out when racing with webhook
-    const { error: subscriptionError } = await supabaseAdmin.from('subscriptions').upsert(
-      {
-        user_id: userId,
-        stripe_customer_id: customerId,
-        stripe_subscription_id: subscriptionId,
-        tier,
-        status: subscriptionStatus,
-        plan: plan || 'monthly',
-        current_period_start: periodStart,
-        current_period_end: periodEnd,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'user_id',
-      }
-    )
-
-    if (subscriptionError) {
-      logger.error('Failed to update subscriptions table', { error: subscriptionError, userId })
-    } else {
-      logger.info('Updated subscriptions table', { userId })
+    if (!periodStart || !periodEnd || !verifiedPlan) {
+      logger.error('Active Stripe subscription is missing billing contract fields', {
+        subscriptionId,
+        hasPeriodStart: !!periodStart,
+        hasPeriodEnd: !!periodEnd,
+        verifiedPlan,
+      })
+      return NextResponse.json(
+        { error: 'Incomplete subscription data. Please retry.' },
+        { status: 503 }
+      )
     }
 
-    // 同时更新 user_profiles 的 subscription_tier
-    const { error: profileError } = await supabaseAdmin.from('user_profiles').upsert(
-      {
-        id: userId,
-        subscription_tier: tier,
-        stripe_customer_id: customerId,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: 'id',
-      }
-    )
+    const { error: syncError } = await supabaseAdmin.rpc('update_subscription_and_profile', {
+      p_user_id: userId,
+      p_tier: tier,
+      p_status: subscriptionStatus,
+      p_stripe_sub_id: subscriptionId,
+      p_stripe_customer_id: customerId,
+      p_plan: verifiedPlan,
+      p_period_start: periodStart,
+      p_period_end: periodEnd,
+      p_cancel_at_period_end: cancelAtPeriodEnd,
+    })
 
-    if (profileError) {
-      logger.error('Failed to update user_profiles', { error: profileError, userId })
-      return NextResponse.json({ error: 'Failed to update user profile' }, { status: 500 })
+    if (syncError) {
+      logger.error('Atomic subscription verification sync failed', { error: syncError, userId })
+      return NextResponse.json({ error: 'Failed to activate subscription' }, { status: 500 })
     }
 
     logger.info('Updated subscription', { userId, tier })
