@@ -4,17 +4,17 @@
  */
 
 const mockFetchPostCommentsPage = jest.fn()
+const mockAuthedFetch = jest.fn()
 
-jest.mock('@/lib/api/client', () => ({ getCsrfHeaders: () => ({ 'x-csrf-token': 't' }) }))
+jest.mock('@/lib/api/client', () => ({
+  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
+}))
 jest.mock('@/lib/api/comments-client', () => ({
   fetchPostCommentsPage: (...args: unknown[]) => mockFetchPostCommentsPage(...args),
   isCreatedCommentAcknowledgement: (
     value: Record<string, unknown>,
     expected: { postId: string; content: string }
-  ) =>
-    value?.post_id === expected.postId &&
-    value?.content === expected.content &&
-    typeof value?.id === 'string',
+  ) => value?.post_id === expected.postId && typeof value?.id === 'string',
   isDefinitiveMutationRejection: ({ ok, status }: { ok: boolean; status: number }) =>
     !ok && status >= 400 && status < 500 && status !== 408,
 }))
@@ -50,12 +50,10 @@ function comment(id: string, overrides: Partial<CommentData> = {}): CommentData 
   return { id, content: 'c', author_handle: 'h', created_at: '2026-07-03T00:00:00Z', ...overrides }
 }
 
-const mockFetch = jest.fn()
-global.fetch = mockFetch as never
-
 beforeEach(() => {
+  usePostStore.getState().setViewerScope('pending', 0)
   usePostStore.getState().clear()
-  mockFetch.mockReset()
+  mockAuthedFetch.mockReset()
   mockFetchPostCommentsPage.mockReset()
 })
 
@@ -130,6 +128,116 @@ describe('评论缓存', () => {
     const before = usePostStore.getState().feedRefreshTrigger
     usePostStore.getState().triggerFeedRefresh()
     expect(usePostStore.getState().feedRefreshTrigger).toBe(before + 1)
+  })
+})
+
+describe('viewer-scoped cache ownership', () => {
+  const scopeA = {
+    viewerKey: 'user:user-a',
+    sessionGeneration: 1,
+    userId: 'user-a',
+  }
+  const scopeB = {
+    viewerKey: 'user:user-b',
+    sessionGeneration: 2,
+    userId: 'user-b',
+  }
+
+  it('atomically clears posts, comments, and pagination when A changes to B', () => {
+    const store = usePostStore.getState()
+    store.setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    store.setPost(post('p1', { user_reaction: 'up' }))
+    store.setComments('p1', [comment('a-private', { user_liked: true })])
+    store.setCommentsPagination('p1', { offset: 1 })
+
+    store.setViewerScope(scopeB.viewerKey, scopeB.sessionGeneration)
+
+    expect(usePostStore.getState()).toMatchObject({
+      viewerKey: scopeB.viewerKey,
+      sessionGeneration: scopeB.sessionGeneration,
+      posts: {},
+      comments: {},
+      commentsPagination: {},
+      commentsRevision: {},
+    })
+  })
+
+  it('does not let an A GET overwrite a same-post B reload', async () => {
+    const requests = new Map<string, (value: unknown) => void>()
+    mockFetchPostCommentsPage.mockImplementation(
+      (_postId: string, token: string) =>
+        new Promise((resolve) => {
+          requests.set(token, resolve)
+        })
+    )
+    usePostStore.getState().setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    const loadA = loadPostComments('p1', 'token-a', scopeA)
+
+    usePostStore.getState().setViewerScope(scopeB.viewerKey, scopeB.sessionGeneration)
+    const loadB = loadPostComments('p1', 'token-b', scopeB)
+    requests.get('token-b')?.({
+      ok: true,
+      status: 200,
+      comments: [comment('comment-b')],
+      commentCount: 1,
+      hasMore: false,
+    })
+    await loadB
+    requests.get('token-a')?.({
+      ok: true,
+      status: 200,
+      comments: [comment('comment-a')],
+      commentCount: 1,
+      hasMore: false,
+    })
+    await loadA
+
+    expect(usePostStore.getState().comments.p1.map((item) => item.id)).toEqual(['comment-b'])
+  })
+
+  it('preserves the same-A tree when a refreshed-token read fails', async () => {
+    usePostStore.getState().setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    usePostStore.getState().setComments('p1', [comment('existing-a')])
+    mockFetchPostCommentsPage.mockResolvedValue({
+      ok: false,
+      status: 503,
+      comments: [],
+      commentCount: 0,
+      hasMore: false,
+    })
+
+    await loadPostComments('p1', 'token-a2', scopeA)
+
+    expect(usePostStore.getState().comments.p1.map((item) => item.id)).toEqual(['existing-a'])
+  })
+
+  it('ignores an A create ACK after logout clears the store', async () => {
+    usePostStore.getState().setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    let resolveSubmit!: (value: unknown) => void
+    mockAuthedFetch.mockReturnValue(
+      new Promise((resolve) => {
+        resolveSubmit = resolve
+      })
+    )
+    const submission = submitPostComment('p1', 'hello', 'token-a', scopeA)
+
+    usePostStore.getState().setViewerScope('anon', 2)
+    resolveSubmit({
+      ok: true,
+      status: 201,
+      data: {
+        success: true,
+        data: {
+          comment: {
+            ...comment('comment-a', { content: 'hello', user_id: 'user-a' }),
+            post_id: 'p1',
+          },
+        },
+      },
+    })
+
+    await expect(submission).resolves.toEqual({ error: 'STALE_AUTH_SCOPE' })
+    expect(usePostStore.getState().comments).toEqual({})
   })
 })
 
@@ -224,36 +332,40 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
       commentCount: 1,
       hasMore: false,
     })
-    mockFetch.mockResolvedValue({
+    mockAuthedFetch.mockResolvedValue({
       ok: true,
       status: 201,
-      json: () =>
-        Promise.resolve({
-          success: true,
-          data: {
-            comment: {
-              ...comment('new1', { content: 'hello', user_id: 'user-1' }),
-              post_id: 'p1',
-              updated_at: '2026-07-03T00:00:00Z',
-              dislike_count: 0,
-            },
+      data: {
+        success: true,
+        data: {
+          comment: {
+            ...comment('new1', { content: 'hello', user_id: 'user-1' }),
+            post_id: 'p1',
+            updated_at: '2026-07-03T00:00:00Z',
+            dislike_count: 0,
           },
-        }),
+        },
+      },
     })
     const r = await submitPostComment('p1', 'hello', 'tok-123')
     expect('comment' in r).toBe(true)
     expect(usePostStore.getState().comments['p1'].map((c) => c.id)).toContain('new1')
     expect(usePostStore.getState().posts['p1'].comment_count).toBe(1)
-    const headers = mockFetch.mock.calls[0][1].headers
-    expect(headers.Authorization).toBe('Bearer tok-123')
-    expect(headers['x-csrf-token']).toBe('t')
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      '/api/posts/p1/comments',
+      'POST',
+      'tok-123',
+      { content: 'hello' },
+      15_000,
+      { expectedUserId: null, expectedSessionGeneration: 0 }
+    )
   })
 
   it('提交失败 → 返回 error,store 不动', async () => {
-    mockFetch.mockResolvedValue({
+    mockAuthedFetch.mockResolvedValue({
       ok: false,
       status: 400,
-      json: () => Promise.resolve({ error: 'nope' }),
+      data: { error: 'nope' },
     })
     const r = await submitPostComment('p1', 'hello', 'tok')
     expect(r).toEqual({ error: 'nope' })
@@ -262,7 +374,7 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
 
   it('response lost → authenticated canonical GET reconciles a committed comment and count', async () => {
     usePostStore.getState().setPost(post('p1', { comment_count: 2 }))
-    mockFetch.mockRejectedValue(new Error('lost'))
+    mockAuthedFetch.mockRejectedValue(new Error('lost'))
     mockFetchPostCommentsPage.mockResolvedValue({
       ok: true,
       status: 200,
@@ -276,6 +388,7 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
     expect(mockFetchPostCommentsPage).toHaveBeenCalledWith('p1', 'tok', {
       limit: 10,
       offset: 0,
+      viewerScope: { expectedUserId: null, expectedSessionGeneration: 0 },
     })
     expect(usePostStore.getState().comments['p1'][0].id).toBe('committed')
     expect(usePostStore.getState().posts['p1'].comment_count).toBe(3)
@@ -283,13 +396,13 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
 
   it('reaction 成功 → 用 server 确认的计数更新(非乐观)', async () => {
     usePostStore.getState().setPost(post('p1', { like_count: 5 }))
-    mockFetch.mockResolvedValue({
+    mockAuthedFetch.mockResolvedValue({
       ok: true,
-      json: () =>
-        Promise.resolve({
-          success: true,
-          data: { like_count: 6, dislike_count: 0, reaction: 'up' },
-        }),
+      status: 200,
+      data: {
+        success: true,
+        data: { like_count: 6, dislike_count: 0, reaction: 'up' },
+      },
     })
     const r = await togglePostReaction('p1', 'up', 'tok')
     expect(r.success).toBe(true)
@@ -297,7 +410,7 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
   })
 
   it('reaction 网络抛错 → success:false,不外抛', async () => {
-    mockFetch.mockRejectedValue(new Error('offline'))
+    mockAuthedFetch.mockRejectedValue(new Error('offline'))
     const r = await togglePostReaction('p1', 'up', 'tok')
     expect(r.success).toBe(false)
   })

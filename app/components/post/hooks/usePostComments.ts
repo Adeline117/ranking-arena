@@ -293,6 +293,13 @@ export function usePostComments({
   }, [])
 
   useEffect(() => {
+    const store = usePostStore.getState()
+    if ('setViewerScope' in store && typeof store.setViewerScope === 'function') {
+      store.setViewerScope(viewerKey, sessionGeneration)
+    }
+  }, [sessionGeneration, viewerKey])
+
+  useEffect(() => {
     if (previousScopeKeyRef.current === scopeKey) return
     previousScopeKeyRef.current = scopeKey
     loadRequestGenerationRef.current += 1
@@ -319,7 +326,10 @@ export function usePostComments({
 
   // Auth guard helper — opens the login modal (consistent with usePostActions gates)
   const requireAuth = useCallback((): boolean => {
-    if (!authChecked || !accessToken || (suppliedViewerKey !== undefined && !currentUserId)) {
+    // Session restoration is not a logged-out verdict. Writes wait silently so
+    // hydration cannot flash a false login prompt for an authenticated user.
+    if (!authChecked) return false
+    if (!accessToken || (suppliedViewerKey !== undefined && !currentUserId)) {
       useLoginModal.getState().openLoginModal()
       return false
     }

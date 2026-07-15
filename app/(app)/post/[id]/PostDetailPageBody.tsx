@@ -19,6 +19,7 @@ import { DynamicBookmarkModal as BookmarkModal } from '@/app/components/ui/Dynam
 import { trackInteraction } from '@/lib/tracking'
 import type { PostWithAuthor } from '@/lib/data/posts'
 import type { PostWithUserState } from '@/lib/types/post'
+import { authedFetch } from '@/lib/api/client'
 
 type Post = PostWithUserState
 
@@ -144,19 +145,49 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
 
   // Hydrate per-user reaction/vote (server prop is fetched with admin client and
   // has no viewer state), comments, bookmarks, and any custom poll — after mount.
-  const hydratedRef = useRef(false)
+  const hydratedScopeKeyRef = useRef<string | null>(null)
+  const hydrationGenerationRef = useRef(0)
+  const authScopeRef = useRef({
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+  })
+  authScopeRef.current = {
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+  }
   useEffect(() => {
-    if (hydratedRef.current) return
-    hydratedRef.current = true
+    if (!auth.authChecked) return
+    const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+    if (hydratedScopeKeyRef.current === scopeKey) return
+    hydratedScopeKeyRef.current = scopeKey
+    const generation = ++hydrationGenerationRef.current
 
     loadComments(initialPost.id)
     if (post.poll_id) actions.loadCustomPoll(initialPost.id)
 
-    const headers: Record<string, string> = {}
-    if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
-    fetch(`/api/posts/${initialPost.id}`, { headers })
-      .then((res) => res.json())
-      .then((data) => {
+    authedFetch<{ success?: boolean; data?: { post?: Post } }>(
+      `/api/posts/${initialPost.id}`,
+      'GET',
+      accessToken,
+      undefined,
+      15_000,
+      {
+        expectedUserId: currentUserId,
+        expectedSessionGeneration: auth.sessionGeneration,
+      }
+    )
+      .then((result) => {
+        const currentScope = authScopeRef.current
+        if (
+          !result.ok ||
+          result.stale ||
+          generation !== hydrationGenerationRef.current ||
+          currentScope.viewerKey !== auth.viewerKey ||
+          currentScope.sessionGeneration !== auth.sessionGeneration
+        ) {
+          return
+        }
+        const data = result.data
         if (data?.success && data.data?.post) {
           const p = data.data.post
           setPost((prev) => ({
@@ -178,8 +209,10 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
       })
 
     if (accessToken) actions.loadUserBookmarksAndReposts([initialPost.id])
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; hooks are stable refs
-  }, [accessToken])
+    // Same-principal token refresh intentionally keeps this scope key stable;
+    // authedFetch can safely refresh/retry without clearing hydrated state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- actions/hooks are stable adapters
+  }, [auth.authChecked, auth.sessionGeneration, auth.viewerKey, initialPost.id])
 
   return (
     <div

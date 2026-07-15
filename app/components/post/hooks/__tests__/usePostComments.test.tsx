@@ -613,6 +613,23 @@ describe('usePostComments viewer scope', () => {
     expect(result.current.comments).toHaveLength(1)
   })
 
+  it('waits silently instead of showing a false login prompt while auth is pending', async () => {
+    const { result } = renderScopedHook({
+      accessToken: null,
+      currentUserId: null,
+      authChecked: false,
+      viewerKey: 'pending',
+      sessionGeneration: 0,
+    })
+    act(() => result.current.setNewComment('wait for hydration'))
+
+    await act(async () => result.current.submitComment('post-1'))
+
+    expect(mockOpenLoginModal).not.toHaveBeenCalled()
+    expect(mockAuthedFetch).not.toHaveBeenCalled()
+    expect(result.current.newComment).toBe('wait for hydration')
+  })
+
   it('discards an A GET that resolves after B becomes active', async () => {
     const requests = new Map<string, (value: unknown) => void>()
     mockAuthedFetch.mockImplementation(

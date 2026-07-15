@@ -49,8 +49,19 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   const [reacting, setReacting] = useState(false)
 
   // Prevent duplicate submissions
-  const commentPendingRef = useRef(false)
-  const reactionPendingRef = useRef(false)
+  const commentPendingRef = useRef<symbol | null>(null)
+  const reactionPendingRef = useRef<symbol | null>(null)
+  const authScopeRef = useRef({
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
+  })
+  const loadedCommentScopeRef = useRef<string | null>(null)
+  authScopeRef.current = {
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
+  }
   const dialogRef = useRef<HTMLDivElement>(null)
 
   useModalA11y({ open: true, onClose, modalRef: dialogRef })
@@ -63,62 +74,128 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   // Load comments on mount
   useEffect(() => {
     if (!auth.authChecked) return
-    loadPostComments(postId, auth.accessToken)
-  }, [postId, auth.authChecked, auth.accessToken])
+    const resourceScopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${postId}`
+    if (loadedCommentScopeRef.current === resourceScopeKey) return
+    loadedCommentScopeRef.current = resourceScopeKey
+    const scope = {
+      viewerKey: auth.viewerKey,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+    }
+    usePostStore.getState().setViewerScope(scope.viewerKey, scope.sessionGeneration)
+    commentPendingRef.current = null
+    reactionPendingRef.current = null
+    setSubmittingComment(false)
+    setReacting(false)
+    void loadPostComments(postId, auth.accessToken, scope)
+  }, [
+    postId,
+    auth.authChecked,
+    auth.accessToken,
+    auth.userId,
+    auth.viewerKey,
+    auth.sessionGeneration,
+  ])
 
   const handleSubmitComment = useCallback(async () => {
     // Prevent duplicate submissions
-    if (commentPendingRef.current) return
+    if (commentPendingRef.current || !auth.authChecked) return
 
     const token = auth.isLoggedIn ? auth.accessToken : null
     if (!token) return
     if (!newComment.trim()) return
 
-    commentPendingRef.current = true
+    const scope = {
+      viewerKey: auth.viewerKey,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+    }
+    const operation = Symbol('modal-comment')
+    commentPendingRef.current = operation
     setSubmittingComment(true)
     try {
-      const result = await submitPostComment(postId, newComment.trim(), token)
+      const result = await submitPostComment(postId, newComment.trim(), token, scope)
+      const current = authScopeRef.current
+      if (
+        current.viewerKey !== scope.viewerKey ||
+        current.sessionGeneration !== scope.sessionGeneration ||
+        current.userId !== scope.userId
+      ) {
+        return
+      }
       if ('error' in result) {
-        showToast(result.error, 'error')
+        if (result.error !== 'STALE_AUTH_SCOPE') showToast(result.error, 'error')
       } else {
         clearDraft(postId)
       }
     } catch {
       showToast(t('commentFailedRetry'), 'error')
     } finally {
-      setSubmittingComment(false)
-      commentPendingRef.current = false
+      if (commentPendingRef.current === operation) {
+        commentPendingRef.current = null
+        setSubmittingComment(false)
+      }
     }
   }, [postId, newComment, auth, showToast, t, clearDraft])
 
   const handleReaction = useCallback(
     async (reactionType: 'up' | 'down') => {
       // Prevent duplicate reactions
-      if (reactionPendingRef.current || reacting) return
+      if (reactionPendingRef.current || reacting || !auth.authChecked) return
 
       const token = auth.isLoggedIn ? auth.accessToken : null
       if (!token) return
 
-      reactionPendingRef.current = true
+      const scope = {
+        viewerKey: auth.viewerKey,
+        sessionGeneration: auth.sessionGeneration,
+        userId: auth.userId,
+      }
+      const operation = Symbol('modal-reaction')
+      reactionPendingRef.current = operation
       setReacting(true)
       try {
-        const result = await togglePostReaction(postId, reactionType, token)
+        const result = await togglePostReaction(postId, reactionType, token, scope)
+        const current = authScopeRef.current
+        if (
+          current.viewerKey !== scope.viewerKey ||
+          current.sessionGeneration !== scope.sessionGeneration ||
+          current.userId !== scope.userId
+        ) {
+          return
+        }
         if (!result.success) {
-          showToast(result.error || t('operationFailed'), 'error')
+          if (result.error !== 'STALE_AUTH_SCOPE') {
+            showToast(result.error || t('operationFailed'), 'error')
+          }
         }
       } catch {
         showToast(t('operationFailedRetry'), 'error')
       } finally {
-        setReacting(false)
-        reactionPendingRef.current = false
+        if (reactionPendingRef.current === operation) {
+          reactionPendingRef.current = null
+          setReacting(false)
+        }
       }
     },
     [postId, auth, showToast, reacting, t]
   )
 
   const handleLoadMore = useCallback(() => {
-    loadMorePostComments(postId, auth.accessToken)
-  }, [postId, auth.accessToken])
+    if (!auth.authChecked) return
+    void loadMorePostComments(postId, auth.accessToken, {
+      viewerKey: auth.viewerKey,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+    })
+  }, [
+    postId,
+    auth.accessToken,
+    auth.authChecked,
+    auth.sessionGeneration,
+    auth.userId,
+    auth.viewerKey,
+  ])
 
   if (!post) {
     return (
