@@ -10,6 +10,7 @@ import type { Metadata } from 'next'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { resolveTrader } from '@/lib/data/unified'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
+import { createOgVerificationProof } from '@/lib/utils/og-verification-proof'
 import WrappedCardClient from './WrappedCardClient'
 import WrappedEmptyState from './WrappedEmptyState'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -52,6 +53,10 @@ export interface WrappedTraderData {
   rankChange: number | null
   /** Active read-only exchange authorization; source of the ✓ Verified data mark. */
   isVerifiedData: boolean
+  /** Short-lived HMAC proof; only consumed by the public OG image route. */
+  verifiedDataProof: string | null
+  verificationSource: string
+  verificationTraderId: string
   total: number | null
   roi: number | null
   winRate: number | null
@@ -159,6 +164,9 @@ async function fetchWrappedData(
     const isVerifiedData = verifiedKeys.has(
       verifiedTraderKey(resolved.platform, resolved.traderKey)
     )
+    const verifiedDataProof = isVerifiedData
+      ? await createOgVerificationProof(resolved.platform, resolved.traderKey)
+      : null
 
     return {
       ok: true,
@@ -170,6 +178,9 @@ async function fetchWrappedData(
         rank: lr?.rank ?? null,
         rankChange: lr?.rank_change ?? null,
         isVerifiedData,
+        verifiedDataProof,
+        verificationSource: resolved.platform,
+        verificationTraderId: resolved.traderKey,
         total,
         roi: lr?.roi ?? null,
         winRate: lr?.win_rate ?? null,
@@ -224,7 +235,11 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   })
   if (rank != null) ogParams.set('rank', String(rank))
   if (data?.rankChange != null) ogParams.set('rankChange', String(data.rankChange))
-  if (data?.isVerifiedData) ogParams.set('verified', '1')
+  if (data?.verifiedDataProof) {
+    ogParams.set('verification', data.verifiedDataProof)
+    ogParams.set('verificationSource', data.verificationSource)
+    ogParams.set('verificationTrader', data.verificationTraderId)
+  }
   if (data?.total != null) ogParams.set('total', String(data.total))
   if (roi != null) ogParams.set('roi', String(roi))
   if (data?.winRate != null) ogParams.set('winRate', String(data.winRate))
@@ -283,7 +298,11 @@ export default async function WrappedPage({ params, searchParams }: Props) {
   })
   if (data.rank != null) ogParams.set('rank', String(data.rank))
   if (data.rankChange != null) ogParams.set('rankChange', String(data.rankChange))
-  if (data.isVerifiedData) ogParams.set('verified', '1')
+  if (data.verifiedDataProof) {
+    ogParams.set('verification', data.verifiedDataProof)
+    ogParams.set('verificationSource', data.verificationSource)
+    ogParams.set('verificationTrader', data.verificationTraderId)
+  }
   if (data.total != null) ogParams.set('total', String(data.total))
   if (data.roi != null) ogParams.set('roi', String(data.roi))
   if (data.winRate != null) ogParams.set('winRate', String(data.winRate))
