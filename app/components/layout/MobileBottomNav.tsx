@@ -518,7 +518,7 @@ function NavItemLink({ item, active, onClick, t }: NavItemLinkProps): React.Reac
       onClick={onClick}
       style={{
         ...NAV_LINK_BASE_STYLE,
-        color: active ? 'var(--color-brand)' : 'var(--color-text-secondary)',
+        color: active ? 'var(--color-brand-text)' : 'var(--color-text-secondary)',
         background: active ? 'var(--color-accent-primary-12)' : 'transparent',
       }}
       // focus-visible handled by global CSS rule in globals.css
