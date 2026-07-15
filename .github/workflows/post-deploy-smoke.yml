@@ -1,7 +1,7 @@
 name: Post-Deploy Smoke Test
 
 # Runs after every successful Vercel production deployment.
-# Tests 5 critical URLs. If ANY returns 500, sends Telegram alert.
+# Tests 5 critical URLs. If ANY returns a non-2xx/3xx status, sends Telegram alert.
 # This is the "root cause of root cause" fix: ensures no deployment
 # goes live without automated verification of core paths.
 
@@ -31,15 +31,20 @@ jobs:
           FAILURES=""
 
           for path in "/" "/trader/soul" "/login" "/pricing" "/api/health"; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 "${BASE}${path}?_smoke=$(date +%s)")
-            if [ "$STATUS" = "500" ] || [ "$STATUS" = "000" ]; then
-              echo "❌ FAIL [$STATUS] $path"
-              FAIL=$((FAIL+1))
-              FAILURES="${FAILURES}\n❌ ${path} → ${STATUS}"
-            else
-              echo "✅ PASS [$STATUS] $path"
-              PASS=$((PASS+1))
-            fi
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 \
+              --retry 2 --retry-all-errors --retry-delay 1 \
+              "${BASE}${path}?_smoke=$(date +%s)" || true)
+            case "$STATUS" in
+              2??|3??)
+                echo "✅ PASS [$STATUS] $path"
+                PASS=$((PASS+1))
+                ;;
+              *)
+                echo "❌ FAIL [${STATUS:-000}] $path"
+                FAIL=$((FAIL+1))
+                FAILURES="${FAILURES}\n❌ ${path} → ${STATUS:-000}"
+                ;;
+            esac
           done
 
           echo "pass=$PASS" >> $GITHUB_OUTPUT
@@ -109,16 +114,16 @@ jobs:
           # Send Telegram alert with rollback status
           if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" ]; then
             if [ "$ROLLED_BACK" = "true" ]; then
-              MSG="🚨 *SMOKE TEST FAILED → ROLLBACK ACCEPTED*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned 500%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A✅ Vercel accepted the rollback to the previous deployment"
+              MSG="🚨 *SMOKE TEST FAILED → ROLLBACK ACCEPTED*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned an unhealthy status%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A✅ Vercel accepted the rollback to the previous deployment"
             else
-              MSG="🚨 *SMOKE TEST FAILED — MANUAL ROLLBACK NEEDED*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned 500%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A⚡ Roll back: Vercel Dashboard → Deployments → Previous green → Promote"
+              MSG="🚨 *SMOKE TEST FAILED — MANUAL ROLLBACK NEEDED*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned an unhealthy status%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A⚡ Roll back: Vercel Dashboard → Deployments → Previous green → Promote"
             fi
             curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
               -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
               -d "text=${MSG}" \
               -d "parse_mode=Markdown" || true
           fi
-          echo "::error::Post-deploy smoke test failed: ${{ steps.smoke.outputs.fail }} critical paths returned 500"
+          echo "::error::Post-deploy smoke test failed: ${{ steps.smoke.outputs.fail }} critical paths returned an unhealthy status"
           exit 1
 
       - name: Report success
