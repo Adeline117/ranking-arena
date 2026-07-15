@@ -25,6 +25,7 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
     .select('id, original_email')
     .not('deleted_at', 'is', null)
     .lt('deletion_scheduled_at', new Date().toISOString())
+    .limit(100)
 
   if (error) {
     logger.error('[cleanup-deleted-accounts] Query error:', error)
@@ -46,23 +47,25 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
 
     const results = await Promise.allSettled(
       batch.map(async (account) => {
-        // Safety net: cancel any remaining Stripe subscription before hard delete
-        try {
-          const { data: subscription } = await supabase
-            .from('subscriptions')
-            .select('stripe_subscription_id, status')
-            .eq('user_id', account.id)
-            .in('status', ['active', 'trialing', 'past_due'])
-            .maybeSingle()
+        // Never erase the user while a recurring charge may still exist. A
+        // failed Stripe cancellation leaves the account pending for retry.
+        const { data: subscription, error: subscriptionError } = await supabase
+          .from('subscriptions')
+          .select('stripe_subscription_id, status, plan')
+          .eq('user_id', account.id)
+          .in('status', ['active', 'trialing', 'past_due'])
+          .limit(1)
+          .maybeSingle()
+        if (subscriptionError) throw subscriptionError
 
-          if (subscription?.stripe_subscription_id) {
-            const stripe = getStripe()
-            await stripe.subscriptions.cancel(subscription.stripe_subscription_id)
-            logger.info(`[cleanup-deleted-accounts] Cancelled Stripe subscription ${subscription.stripe_subscription_id} for user ${account.id}`)
-          }
-        } catch (stripeErr) {
-          logger.warn(`[cleanup-deleted-accounts] Failed to cancel Stripe subscription for ${account.id}:`, stripeErr)
-          // Continue with deletion — don't block on Stripe failure
+        const subscriptionId = subscription?.stripe_subscription_id ?? null
+        const isLifetime =
+          subscription?.plan === 'lifetime' || subscriptionId?.startsWith('lifetime_')
+        if (subscriptionId && !isLifetime) {
+          await getStripe().subscriptions.cancel(subscriptionId)
+          logger.info(
+            `[cleanup-deleted-accounts] Cancelled Stripe subscription ${subscriptionId} for user ${account.id}`
+          )
         }
 
         // Hard delete from auth
@@ -95,9 +98,14 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
     }
   }
 
+  if (errors.length > 0) {
+    throw new Error(
+      `Failed to permanently delete ${errors.length}/${expiredAccounts.length} account(s): ${errors[0]}`
+    )
+  }
+
   return {
     count: deleted,
     total: expiredAccounts.length,
-    errors: errors.length > 0 ? errors : undefined,
   }
 })

@@ -98,6 +98,7 @@ describe('runTraderAlerts', () => {
     const { client, calls } = clientWith({
       trader_alerts: [{ data: [alert], error: null }],
       subscriptions: [{ data: [], error: null }],
+      user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
     })
 
     const result = await runTraderAlerts(client as never, now)
@@ -125,10 +126,30 @@ describe('runTraderAlerts', () => {
     )
   })
 
+  it('does not notify a paid account while deletion is pending', async () => {
+    const { client, rpc } = clientWith({
+      trader_alerts: [{ data: [alert], error: null }],
+      subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+      user_profiles: [{ data: [], error: null }],
+    })
+
+    const result = await runTraderAlerts(client as never, now)
+
+    expect(result).toMatchObject({
+      alertsConfigured: 1,
+      alertsChecked: 0,
+      alertsSkippedNoSubscription: 1,
+      alertsSent: 0,
+    })
+    expect(client.from).not.toHaveBeenCalledWith('leaderboard_ranks')
+    expect(rpc).not.toHaveBeenCalled()
+  })
+
   it('seeds every available metric on first observation without sending an alert', async () => {
     const { client, calls, rpc } = clientWith({
       trader_alerts: [{ data: [alert], error: null }],
       subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+      user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
       leaderboard_ranks: [{ data: [observation], error: null }],
       trader_alert_states: [
         { data: [], error: null },
@@ -156,6 +177,7 @@ describe('runTraderAlerts', () => {
     const { client, rpc } = clientWith({
       trader_alerts: [{ data: [alert], error: null }],
       subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+      user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
       leaderboard_ranks: [{ data: [observation], error: null }],
       trader_alert_states: [
         {
@@ -197,6 +219,7 @@ describe('runTraderAlerts', () => {
     const { client, rpc } = clientWith({
       trader_alerts: [{ data: [alert], error: null }],
       subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+      user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
       leaderboard_ranks: [{ data: [observation], error: null }],
       trader_alert_states: [
         {

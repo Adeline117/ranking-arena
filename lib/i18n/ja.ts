@@ -535,7 +535,7 @@ const ja = {
   confirmDeleteAccount: '削除を確認',
   deleteAccountTitle: 'アカウント削除の確認',
   deleteAccountDesc:
-    '削除後、30日以内にアカウントが完全に削除されます。この期間中、ログインすることでアカウントを復元できます。',
+    'アカウントは30日後に完全に削除されます。それまでは復元画面からアカウントデータを復元できます。',
   deleteAccountWarning:
     '注意：削除後、投稿やコメントは「削除済みユーザー」と表示され、フォロワーはあなたのアクティビティを見られなくなります。',
   enterPasswordToConfirm: 'パスワードを入力して確認',
@@ -5066,7 +5066,7 @@ const ja = {
   moderationQueue: 'モデレーション',
   auditLog: '操作ログ',
   deleteAccountRecoveryNote:
-    'アカウントは30日間停止され、その後完全に削除されます。この期間中に再ログインするとキャンセルできます。',
+    '30日間の復元期間中、フォロー、アラート、ブックマーク、設定、セキュリティ設定は保持されます。',
   copyBackupCodes: 'すべてのコードをコピー',
   bioTooLong: '自己紹介は200文字以内にしてください',
   invalidEmailFormat: 'メールアドレスの形式が無効です',

@@ -221,19 +221,31 @@ export async function runTraderAlerts(
   if (allAlerts.length === 0) return emptyResult
 
   const userIds = [...new Set(allAlerts.map((alert) => alert.user_id))]
-  const { data: subscriptions, error: subscriptionsError } = await supabase
-    .from('subscriptions')
-    .select('user_id')
-    .in('user_id', userIds)
-    .in('status', ['active', 'trialing'])
-    .in('tier', ['pro', 'lifetime'])
+  const [
+    { data: subscriptions, error: subscriptionsError },
+    { data: activeProfiles, error: profilesError },
+  ] = await Promise.all([
+    supabase
+      .from('subscriptions')
+      .select('user_id')
+      .in('user_id', userIds)
+      .in('status', ['active', 'trialing'])
+      .in('tier', ['pro', 'lifetime']),
+    supabase.from('user_profiles').select('id').in('id', userIds).is('deleted_at', null),
+  ])
 
   if (subscriptionsError) {
     throw new Error(`Failed to verify trader alert subscriptions: ${subscriptionsError.message}`)
   }
+  if (profilesError) {
+    throw new Error(`Failed to verify trader alert account status: ${profilesError.message}`)
+  }
 
   const subscribedUsers = new Set((subscriptions ?? []).map((row) => row.user_id))
-  const alerts = allAlerts.filter((alert) => subscribedUsers.has(alert.user_id))
+  const activeUsers = new Set((activeProfiles ?? []).map((row) => row.id))
+  const alerts = allAlerts.filter(
+    (alert) => subscribedUsers.has(alert.user_id) && activeUsers.has(alert.user_id)
+  )
   emptyResult.alertsSkippedNoSubscription = allAlerts.length - alerts.length
   if (alerts.length === 0) return emptyResult
 

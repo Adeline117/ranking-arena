@@ -1,17 +1,15 @@
 /**
- * Account Deletion Endpoint
- * POST /api/account/delete
- *
- * Soft-deletes user account with 30-day grace period.
- * Requires password confirmation.
+ * Schedule account deletion with a real 30-day recovery window.
+ * Related account data is retained until the hard-delete cron runs.
  */
 
+import { createHash, randomBytes } from 'node:crypto'
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { withAuth } from '@/lib/api/middleware'
 import { badRequest, forbidden } from '@/lib/api/response'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { createClient } from '@supabase/supabase-js'
 import { env } from '@/lib/env'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { getStripe } from '@/lib/stripe'
 
@@ -21,83 +19,95 @@ export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
 export const POST = withAuth(
-  async ({ user, supabase: sb, request }) => {
-    const supabase = sb as SupabaseClient
-
-    let body: { password?: string; reason?: string }
+  async ({ user, request }) => {
+    let body: { password?: string; reason?: string; confirm?: string }
     try {
       body = await request.json()
     } catch {
       return badRequest('Invalid JSON body')
     }
 
-    const { password, reason, confirm } = body as {
-      password?: string
-      reason?: string
-      confirm?: string
-    }
-
-    // 2026-07-11:OAuth(Google 等)/ 钱包(Privy,email 形如 <addr>@wallet.arena)用户
-    // 没有密码凭据,signInWithPassword 永远失败 → 此前删号死路,违反 ToS "随时可删"。
-    // 判定 password-less:provider≠email 或 @wallet.arena 邮箱。这类用户的 withAuth
-    // session bearer 已是完整 re-auth,无需密码 step-up;改用 typed-confirmation("DELETE")
-    // 保留误删摩擦。email/password 用户仍走密码验证。
-    const providers = (user.identities ?? []).map((i) => i.provider)
+    const { password, reason, confirm } = body
+    const providers = (user.identities ?? []).map((identity) => identity.provider)
     const isWalletEmail = (user.email ?? '').endsWith('@wallet.arena')
     const hasPassword = !isWalletEmail && providers.includes('email')
 
     if (hasPassword) {
-      if (!password) {
-        return badRequest('Password required')
-      }
-      // Verify password by attempting sign-in
+      if (!password) return badRequest('Password required')
       const anonClient = createClient(
         env.NEXT_PUBLIC_SUPABASE_URL,
         env.NEXT_PUBLIC_SUPABASE_ANON_KEY
       )
-      const { error: signInError } = await anonClient.auth.signInWithPassword({
+      const { error } = await anonClient.auth.signInWithPassword({
         email: user.email!,
         password,
       })
-      if (signInError) {
-        return forbidden('Invalid password')
-      }
-    } else {
-      // password-less(OAuth/wallet):要求键入 "DELETE" 确认(前端已同 session 鉴权)
-      if ((confirm ?? '').trim().toUpperCase() !== 'DELETE') {
-        return badRequest('Type DELETE to confirm account deletion')
-      }
+      if (error) return forbidden('Invalid password')
+    } else if ((confirm ?? '').trim().toUpperCase() !== 'DELETE') {
+      return badRequest('Type DELETE to confirm account deletion')
     }
 
-    // Get current profile info for recovery
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('handle, email')
-      .eq('id', user.id)
-      .maybeSingle()
-
+    const adminSupabase = getSupabaseAdmin()
     const now = new Date()
-    const scheduledDeletion = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000) // 30 days
+    const scheduledDeletion = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000)
+    const recoveryToken = randomBytes(32).toString('base64url')
+    const recoveryTokenHash = createHash('sha256').update(recoveryToken).digest('hex')
 
-    // Soft delete: set deleted_at, save originals.
-    // CRITICAL: this write MUST be error-checked. If it silently fails, deleted_at
-    // never gets set → the 30-day hard-delete cron never fires → the account
-    // survives while the user was told it's scheduled for deletion (GDPR exposure).
-    const { error: softDeleteError } = await supabase
-      .from('user_profiles')
-      .update({
-        deleted_at: now.toISOString(),
-        deletion_scheduled_at: scheduledDeletion.toISOString(),
-        deletion_reason: reason || null,
-        original_handle: profile?.handle || null,
-        original_email: user.email || null,
-      })
-      .eq('id', user.id)
+    // Stop renewal without destroying a subscription that can still be resumed
+    // during the grace period. Lifetime purchases have no Stripe subscription.
+    let stripeSubscriptionId: string | null = null
+    try {
+      const { data: subscription, error: subscriptionError } = await adminSupabase
+        .from('subscriptions')
+        .select('stripe_subscription_id, status, plan')
+        .eq('user_id', user.id)
+        .in('status', ['active', 'trialing', 'past_due'])
+        .limit(1)
+        .maybeSingle()
+      if (subscriptionError) throw subscriptionError
 
-    if (softDeleteError) {
-      logger.error('Account soft-delete write failed — aborting deletion', {
+      const candidateId = subscription?.stripe_subscription_id ?? null
+      const isLifetime = subscription?.plan === 'lifetime' || candidateId?.startsWith('lifetime_')
+      if (candidateId && !isLifetime) {
+        stripeSubscriptionId = candidateId
+        await getStripe().subscriptions.update(candidateId, { cancel_at_period_end: true })
+      }
+    } catch (error) {
+      logger.error('Failed to stop subscription renewal; deletion not scheduled', {
         userId: user.id,
-        error: softDeleteError.message,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      return NextResponse.json(
+        { error: 'Could not stop subscription renewal. Account deletion was not scheduled.' },
+        { status: 502 }
+      )
+    }
+
+    const { error: scheduleError } = await adminSupabase.rpc('schedule_account_deletion', {
+      p_user_id: user.id,
+      p_reason: reason ?? '',
+      p_scheduled_at: scheduledDeletion.toISOString(),
+      p_recovery_token_hash: recoveryTokenHash,
+    })
+
+    if (scheduleError) {
+      // Compensate the reversible Stripe change when the database transaction
+      // fails, so a failed deletion attempt has no billing side effect.
+      if (stripeSubscriptionId) {
+        try {
+          await getStripe().subscriptions.update(stripeSubscriptionId, {
+            cancel_at_period_end: false,
+          })
+        } catch (error) {
+          logger.error('Failed to resume subscription after deletion rollback', {
+            userId: user.id,
+            error: error instanceof Error ? error.message : String(error),
+          })
+        }
+      }
+      logger.error('Account deletion transaction failed', {
+        userId: user.id,
+        error: scheduleError.message,
       })
       return NextResponse.json(
         { error: 'Failed to schedule account deletion. Please try again.' },
@@ -105,106 +115,32 @@ export const POST = withAuth(
       )
     }
 
-    // Update author_handle on posts to indicate deleted user
-    await supabase.from('posts').update({ author_handle: null }).eq('author_id', user.id)
-
-    // Update author_handle on comments
-    await supabase.from('comments').update({ author_handle: null }).eq('user_id', user.id)
-
-    // Cleanup related data (GDPR compliant - 删除所有用户相关数据)
-    const cleanupPromises = [
-      // Remove exchange connections
-      supabase.from('user_exchange_connections').delete().eq('user_id', user.id),
-      // Remove trader links
-      supabase.from('trader_links').delete().eq('user_id', user.id),
-      // Remove from groups
-      supabase.from('group_members').delete().eq('user_id', user.id),
-      // Remove blocked users entries (both directions)
-      supabase.from('blocked_users').delete().eq('blocker_id', user.id),
-      supabase.from('blocked_users').delete().eq('blocked_id', user.id),
-      // Remove backup codes
-      supabase.from('backup_codes').delete().eq('user_id', user.id),
-      // Remove login sessions
-      supabase.from('login_sessions').delete().eq('user_id', user.id),
-      // Clear 2FA secrets
-      supabase.from('user_profiles').update({ totp_enabled: false }).eq('id', user.id),
-      supabase.from('user_2fa_secrets').delete().eq('user_id', user.id),
-      // Remove notifications
-      supabase.from('notifications').delete().eq('user_id', user.id),
-      // Remove post likes
-      supabase.from('post_likes').delete().eq('user_id', user.id),
-      // Remove post votes
-      supabase.from('post_votes').delete().eq('user_id', user.id),
-      // Remove trader follows
-      supabase.from('trader_follows').delete().eq('user_id', user.id),
-      // Remove user follows (both directions)
-      supabase.from('user_follows').delete().eq('follower_id', user.id),
-      supabase.from('user_follows').delete().eq('following_id', user.id),
-      // Remove bookmarks and bookmark folders (post_bookmarks is the live
-      // table; the legacy `bookmarks` table was dropped)
-      supabase.from('post_bookmarks').delete().eq('user_id', user.id),
-      supabase.from('bookmark_folders').delete().eq('user_id', user.id),
-      // Remove trader alerts
-      supabase.from('trader_alerts').delete().eq('user_id', user.id),
-      // Remove push subscriptions
-      supabase.from('push_subscriptions').delete().eq('user_id', user.id),
-      // Remove user preferences
-      supabase.from('user_preferences').delete().eq('user_id', user.id),
-      // Anonymize DMs (keep for recipient, but remove sender info).
-      // direct_messages is the live DM table; legacy `messages` was dropped.
-      supabase.from('direct_messages').update({ sender_id: null }).eq('sender_id', user.id),
-    ]
-
-    // Execute all cleanup in parallel, don't fail the deletion if some cleanup fails
-    await Promise.allSettled(cleanupPromises.map((p) => Promise.resolve(p)))
-
-    // Cancel Stripe subscription if active (before banning/session invalidation)
-    try {
-      const { data: subscription } = await supabase
+    if (stripeSubscriptionId) {
+      await adminSupabase
         .from('subscriptions')
-        .select('stripe_subscription_id, status')
+        .update({ cancel_at_period_end: true })
         .eq('user_id', user.id)
-        .in('status', ['active', 'trialing', 'past_due'])
-        .maybeSingle()
+    }
 
-      if (subscription?.stripe_subscription_id) {
-        const stripe = getStripe()
-        const cancelled = await stripe.subscriptions.cancel(subscription.stripe_subscription_id)
-        logger.info('Stripe subscription cancelled on account deletion', {
-          userId: user.id,
-          subscriptionId: subscription.stripe_subscription_id,
-          status: cancelled.status,
-        })
-
-        // Update local subscription record
-        await supabase
-          .from('subscriptions')
-          .update({ status: 'canceled', canceled_at: new Date().toISOString() })
-          .eq('user_id', user.id)
-      }
-    } catch (stripeError) {
-      // Don't block account deletion if Stripe cancellation fails
-      logger.error('Failed to cancel Stripe subscription during account deletion', {
+    const { error: banError } = await adminSupabase.auth.admin.updateUserById(user.id, {
+      ban_duration: '720h',
+    })
+    const { error: signOutError } = await adminSupabase.auth.admin.signOut(user.id, 'global')
+    if (banError || signOutError) {
+      // `deleted_at` is independently enforced by server auth, so access stays
+      // blocked even if Supabase session invalidation is temporarily degraded.
+      logger.error('Account scheduled but auth invalidation was incomplete', {
         userId: user.id,
-        error: stripeError instanceof Error ? stripeError.message : String(stripeError),
+        banError: banError?.message,
+        signOutError: signOutError?.message,
       })
     }
 
-    // SECURITY: Invalidate all active sessions before banning
-    await supabase.auth.admin.signOut(user.id, 'global')
-
-    // Ban the user for 30 days (matching the grace period)
-    // After 30 days the cleanup cron hard-deletes the account
-    await supabase.auth.admin.updateUserById(user.id, {
-      ban_duration: '720h',
-    })
-
     logger.info('Account deletion scheduled', { userId: user.id })
-
-    // Backward-compatible response shape
     return NextResponse.json({
       success: true,
       deletion_scheduled_at: scheduledDeletion.toISOString(),
+      recovery_token: recoveryToken,
       message: 'Account marked for deletion, recoverable within 30 days',
     })
   },

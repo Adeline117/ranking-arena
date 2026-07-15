@@ -43,6 +43,7 @@ export default function LoginPageClient() {
   const [mounted, setMounted] = useState(false)
   const [showRecoveryPrompt, setShowRecoveryPrompt] = useState(false)
   const [recovering, setRecovering] = useState(false)
+  const [accountRecoveryToken, setAccountRecoveryToken] = useState<string | null>(null)
   const [rateLimitCountdown, setRateLimitCountdown] = useState(0)
 
   const [touchedFields, setTouchedFields] = useState<{
@@ -133,6 +134,12 @@ export default function LoginPageClient() {
     } else if (errorParam) {
       // Generic error from OAuth callback or other redirects (e.g. provider cancelled)
       setError(decodeURIComponent(errorParam))
+    }
+    const storedRecoveryToken = localStorage.getItem('arena_account_recovery_token')
+    if (searchParams.get('recover') === '1' && storedRecoveryToken) {
+      setAccountRecoveryToken(storedRecoveryToken)
+      setError(t('loginAccountPendingDeletion'))
+      setShowRecoveryPrompt(true)
     }
     // If user is already logged in, redirect them away from the login page
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -643,19 +650,27 @@ export default function LoginPageClient() {
   }
 
   const handleRecoverAccount = async () => {
-    if (recovering || !email || !password) return
+    if (recovering || (!accountRecoveryToken && (!email || !password))) return
     setRecovering(true)
     setError(null)
     try {
       const res = await fetch('/api/account/recover', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify(
+          accountRecoveryToken ? { recovery_token: accountRecoveryToken } : { email, password }
+        ),
       })
       const data = await res.json()
       if (res.ok && data.success) {
         setShowRecoveryPrompt(false)
         showToast(t('loginAccountRecovered'), 'success')
+        if (accountRecoveryToken) {
+          localStorage.removeItem('arena_account_recovery_token')
+          setAccountRecoveryToken(null)
+          setError(null)
+          return
+        }
         // Now sign in normally since the ban has been lifted
         const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
         if (loginError) {
