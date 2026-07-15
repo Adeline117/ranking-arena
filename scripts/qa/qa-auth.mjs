@@ -164,6 +164,7 @@ export async function loginQa({
   srk,
   log = (m) => console.log(m),
   account = ACCOUNT_A,
+  allowPasswordReset = true,
 }) {
   const attemptAll = async () => {
     const seen = new Set()
@@ -178,6 +179,14 @@ export async function loginQa({
 
   const direct = await attemptAll()
   if (direct) return direct
+
+  // CI/browser QA must never rotate a shared account behind another runner's
+  // back. It should fail loudly when its configured password is stale.
+  if (!allowPasswordReset) {
+    throw new Error(
+      `QA login failed for ${account.email}; configure ${account.pwEnv} with the current password`
+    )
+  }
 
   return withQaAuthLock(async () => {
     // 等锁期间另一进程可能已重置并持久化了新密码 — 先重试再重置。
