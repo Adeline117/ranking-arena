@@ -609,7 +609,7 @@ const zh = {
   removeAccount: '移除',
   confirmDeleteAccount: '确认注销',
   deleteAccountTitle: '确认注销账号',
-  deleteAccountDesc: '注销后，你的账号将在 30 天内被永久删除。在此期间，你可以通过登录恢复账号。',
+  deleteAccountDesc: '账号将在 30 天后被永久删除。在此之前，你可以在恢复页面完整恢复账号数据。',
   deleteAccountWarning:
     '注意：注销后你的帖子和评论将显示为"已注销用户"，关注者将无法看到你的动态。',
   enterPasswordToConfirm: '输入密码确认',
@@ -5348,7 +5348,7 @@ const zh = {
   linkAdditionalAccountDesc: '搜索要关联到您个人资料的其他交易员账户。',
   moderationQueue: '审核队列',
   auditLog: '操作日志',
-  deleteAccountRecoveryNote: '您的账户将被停用 30 天，之后永久删除。在此期间重新登录即可取消。',
+  deleteAccountRecoveryNote: '30 天恢复期内，关注、提醒、书签、偏好和安全设置都会保留。',
   copyBackupCodes: '复制所有备用码',
   bioTooLong: '简介不能超过 200 个字符',
   invalidEmailFormat: '邮箱格式无效',

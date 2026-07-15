@@ -620,7 +620,7 @@ const en = {
   confirmDeleteAccount: 'Confirm Delete',
   deleteAccountTitle: 'Confirm Account Deletion',
   deleteAccountDesc:
-    'After deletion, your account will be permanently removed within 30 days. During this period, you can recover your account by logging in.',
+    'Your account will be permanently removed after 30 days. Until then, the recovery screen can restore your account data.',
   deleteAccountWarning:
     'Note: After deletion, your posts and comments will display as "Deleted User", and followers will no longer see your activity.',
   enterPasswordToConfirm: 'Enter password to confirm',
@@ -5469,7 +5469,7 @@ const en = {
 
   // Missing keys discovered in round 79 acceptance
   deleteAccountRecoveryNote:
-    'Your account will be deactivated for 30 days before permanent deletion. You can log back in during this period to cancel.',
+    'Your follows, alerts, bookmarks, preferences, and security settings are retained during the 30-day recovery window.',
   copyBackupCodes: 'Copy all codes',
   bioTooLong: 'Bio must be 200 characters or less',
   invalidEmailFormat: 'Invalid email format',

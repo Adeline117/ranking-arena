@@ -1183,10 +1183,15 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         setDeleteError(data.error || t('operationFailed'))
         return
       }
+      if (typeof data.recovery_token === 'string' && data.recovery_token) {
+        // One-time credential for OAuth/wallet recovery. The server stores only
+        // its SHA-256 hash; retain the plaintext only on this device.
+        localStorage.setItem('arena_account_recovery_token', data.recovery_token)
+      }
       showToast(t('accountMarkedDeleted'), 'success')
       setShowDeleteAccountModal(false)
       await supabase.auth.signOut()
-      router.push('/')
+      router.push('/login?recover=1')
     } catch {
       setDeleteError(t('networkErrorRetry'))
     } finally {

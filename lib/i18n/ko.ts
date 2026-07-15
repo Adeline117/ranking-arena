@@ -560,7 +560,7 @@ const ko = {
   confirmDeleteAccount: '삭제 확인',
   deleteAccountTitle: '계정 삭제 확인',
   deleteAccountDesc:
-    '삭제 후 30일 이내에 계정이 영구 삭제됩니다. 이 기간 동안 로그인하여 계정을 복구할 수 있습니다.',
+    '계정은 30일 후 영구 삭제됩니다. 그전까지 복구 화면에서 계정 데이터를 복원할 수 있습니다.',
   deleteAccountWarning:
     '참고: 삭제 후 게시글과 댓글은 "삭제된 사용자"로 표시되며, 팔로워는 더 이상 활동을 볼 수 없습니다.',
   enterPasswordToConfirm: '비밀번호를 입력하여 확인하세요',
@@ -5307,7 +5307,7 @@ const ko = {
   moderationQueue: '검토 대기',
   auditLog: '감사 로그',
   deleteAccountRecoveryNote:
-    '계정은 30일 동안 비활성화된 후 영구 삭제됩니다. 이 기간 동안 다시 로그인하면 취소할 수 있습니다.',
+    '30일 복구 기간에는 팔로우, 알림, 북마크, 환경설정 및 보안 설정이 유지됩니다.',
   copyBackupCodes: '모든 코드 복사',
   bioTooLong: '자기소개는 200자 이내여야 합니다',
   invalidEmailFormat: '이메일 형식이 올바르지 않습니다',
