@@ -395,6 +395,9 @@ export async function getPosts(
           .from('posts')
           .select('id, title, content, author_id, author_handle, images, created_at')
           .in('id', originalPostIds)
+          .is('deleted_at', null)
+          .eq('visibility', 'public')
+          .is('group_id', null)
       : { data: null }
 
   // Combine post author IDs + original post author IDs into one batch
@@ -504,6 +507,9 @@ export async function getPostById(
           .from('posts')
           .select('id, title, content, author_id, author_handle, images, created_at')
           .eq('id', originalPostId)
+          .is('deleted_at', null)
+          .eq('visibility', 'public')
+          .is('group_id', null)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ])

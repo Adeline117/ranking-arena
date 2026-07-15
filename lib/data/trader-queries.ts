@@ -480,100 +480,127 @@ export async function getTraderPositionHistory(
 export async function getTraderFeed(handle: string): Promise<TraderFeedItem[]> {
   try {
     const decodedHandle = decodeURIComponent(handle)
+    const handleCandidates = [handle, decodedHandle]
+      .map((candidate) => candidate.replace(/[,.()\[\]\\%_]/g, ''))
+      .filter((candidate, index, values) => candidate && values.indexOf(candidate) === index)
+    const handleFilter = handleCandidates.map((candidate) => `handle.eq.${candidate}`).join(',')
 
-    // Launch posts, user profile, and reposts queries in parallel
-    // We need the user profile ID for reposts, so we launch profile + posts together,
-    // then immediately chain the reposts query off the profile result
-    const postsPromise = supabase
-      .from('posts')
-      .select('id, title, content, created_at, group_id, like_count, is_pinned, groups(name)')
-      .or(
-        `author_handle.eq.${handle.replace(/[,.()\[\]\\%_]/g, '')},author_handle.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`
+    // Handles are editable while posts.author_handle is only a historical
+    // display snapshot. Resolve a registered profile first so renamed users do
+    // not lose their earlier posts/reposts from the activity feed.
+    const { data: activityOwner, error: activityOwnerError } = handleFilter
+      ? await supabase.from('user_profiles').select('id').or(handleFilter).limit(1).maybeSingle()
+      : { data: null, error: null }
+    if (activityOwnerError) {
+      createLogger('trader-data').warn(
+        '[getTraderFeed] profile identity query error:',
+        activityOwnerError.message
       )
+    }
+    if (!activityOwner?.id && handleCandidates.length === 0) return []
+
+    // Reposts are canonical rows in `posts` with original_post_id. The legacy
+    // `reposts` table is empty and no longer written, so one author-post query
+    // contains both original posts and repost activity.
+    let activityQuery = supabase
+      .from('posts')
+      .select(
+        'id, title, content, created_at, group_id, like_count, is_pinned, original_post_id, groups(name)'
+      )
+      .is('deleted_at', null)
       .order('created_at', { ascending: false })
       .limit(20)
+    activityQuery = activityOwner?.id
+      ? activityQuery.eq('author_id', activityOwner.id)
+      : activityQuery.or(
+          handleCandidates.map((candidate) => `author_handle.eq.${candidate}`).join(',')
+        )
+    const { data: postsData, error: postsError } = await activityQuery
 
-    const repostsPromise = supabase
-      .from('user_profiles')
-      .select('id')
-      .or(
-        `handle.eq.${handle.replace(/[,.()\[\]\\%_]/g, '')},handle.eq.${decodedHandle.replace(/[,.()\[\]\\%_]/g, '')}`
-      )
-      .limit(1)
-      .maybeSingle()
-      .then(async (userProfileResult) => {
-        const userProfile = userProfileResult.data
-        if (!userProfile?.id) return [] as unknown[]
-        const { data, error } = await supabase
-          .from('reposts')
+    if (postsError) throw postsError
+    const posts = postsData || []
+    const rootIds = [
+      ...new Set(posts.map((post) => post.original_post_id).filter((id): id is string => !!id)),
+    ]
+    const { data: rootPosts, error: rootPostsError } = rootIds.length
+      ? await supabase
+          .from('posts')
           .select(
-            `
-            id,
-            comment,
-            created_at,
-            post_id,
-            posts (
-              id,
-              title,
-              content,
-              author_handle,
-              group_id,
-              like_count,
-              groups (name)
-            )
-          `
+            'id, title, content, author_id, author_handle, group_id, like_count, groups(name)'
           )
-          .eq('user_id', userProfile.id)
-          .order('created_at', { ascending: false })
-          .limit(20)
-        if (error)
-          createLogger('trader-data').warn(
-            '[getTraderFeed] reposts query error (drift?):',
-            error.message
-          )
-        return (data || []) as unknown[]
-      })
+          .in('id', rootIds)
+          .is('deleted_at', null)
+          .eq('visibility', 'public')
+          .is('group_id', null)
+      : { data: [], error: null }
+    if (rootPostsError) {
+      createLogger('trader-data').warn(
+        '[getTraderFeed] canonical repost roots query error:',
+        rootPostsError.message
+      )
+    }
+    const rootMap = new Map((rootPosts || []).map((post) => [post.id, post]))
+    const rootAuthorIds = [
+      ...new Set(
+        (rootPosts || []).map((post) => post.author_id).filter((id): id is string => !!id)
+      ),
+    ]
+    const { data: rootAuthorProfiles, error: rootAuthorProfilesError } = rootAuthorIds.length
+      ? await supabase.from('user_profiles').select('id, handle').in('id', rootAuthorIds)
+      : { data: [], error: null }
+    if (rootAuthorProfilesError) {
+      createLogger('trader-data').warn(
+        '[getTraderFeed] repost author profile query error:',
+        rootAuthorProfilesError.message
+      )
+    }
+    const currentRootHandleMap = new Map(
+      (rootAuthorProfiles || []).map((profile) => [profile.id, profile.handle])
+    )
 
-    const [postsResult, repostsData] = await Promise.all([postsPromise, repostsPromise])
-    const posts = postsResult.data || []
-
-    const feedItems: TraderFeedItem[] = posts.map((post) => {
+    const feedItems = posts.flatMap<TraderFeedItem>((post): TraderFeedItem[] => {
       const p = post as Record<string, unknown>
-      const groups = p.groups as Array<{ name: string }> | null
-      return {
-        id: String(p.id),
-        type: p.group_id ? ('group_post' as const) : ('post' as const),
-        title: String(p.title || ''),
-        content: String(p.content || ''),
-        time: String(p.created_at),
-        groupId: p.group_id ? String(p.group_id) : undefined,
-        groupName: groups?.[0]?.name,
-        like_count: Number(p.like_count) || 0,
-        is_pinned: Boolean(p.is_pinned),
+      const originalPostId = p.original_post_id ? String(p.original_post_id) : null
+      if (originalPostId) {
+        const root = rootMap.get(originalPostId) as Record<string, unknown> | undefined
+        if (!root) return []
+        const rootGroups = root.groups as { name?: string } | Array<{ name?: string }> | null
+        const rootGroup = Array.isArray(rootGroups) ? rootGroups[0] : rootGroups
+        return [
+          {
+            id: `repost-${String(p.id)}`,
+            type: 'repost' as const,
+            title: String(root.title || ''),
+            content: String(root.content || ''),
+            time: String(p.created_at),
+            groupId: root.group_id ? String(root.group_id) : undefined,
+            groupName: rootGroup?.name,
+            like_count: Number(root.like_count) || 0,
+            is_pinned: false,
+            repost_comment: p.content ? String(p.content) : undefined,
+            original_author_handle: String(
+              currentRootHandleMap.get(String(root.author_id || '')) || root.author_handle || ''
+            ),
+            original_post_id: originalPostId,
+          },
+        ]
       }
-    })
 
-    repostsData.forEach((repost) => {
-      const r = repost as Record<string, unknown>
-      const postData = r.posts as Record<string, unknown> | null
-
-      if (postData) {
-        const groups = postData.groups as { name: string } | null
-        feedItems.push({
-          id: `repost-${r.id}`,
-          type: 'repost',
-          title: String(postData.title || ''),
-          content: String(postData.content || ''),
-          time: String(r.created_at),
-          groupId: postData.group_id ? String(postData.group_id) : undefined,
-          groupName: groups?.name,
-          like_count: Number(postData.like_count) || 0,
-          is_pinned: false,
-          repost_comment: r.comment ? String(r.comment) : undefined,
-          original_author_handle: String(postData.author_handle || ''),
-          original_post_id: String(postData.id),
-        })
-      }
+      const groups = p.groups as { name?: string } | Array<{ name?: string }> | null
+      const group = Array.isArray(groups) ? groups[0] : groups
+      return [
+        {
+          id: String(p.id),
+          type: p.group_id ? ('group_post' as const) : ('post' as const),
+          title: String(p.title || ''),
+          content: String(p.content || ''),
+          time: String(p.created_at),
+          groupId: p.group_id ? String(p.group_id) : undefined,
+          groupName: group?.name,
+          like_count: Number(p.like_count) || 0,
+          is_pinned: Boolean(p.is_pinned),
+        },
+      ]
     })
 
     feedItems.sort((a, b) => new Date(b.time).getTime() - new Date(a.time).getTime())

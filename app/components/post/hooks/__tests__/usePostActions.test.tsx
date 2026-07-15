@@ -160,4 +160,81 @@ describe('usePostActions aliased detail state', () => {
     })
     expect(mockSetOpenPost).not.toHaveBeenCalled()
   })
+
+  it('reconciles the canonical repost count returned by the server', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        success: true,
+        post_id: 'repost-1',
+        root_post_id: 'post-1',
+        repost_count: 4,
+      })
+    )
+    const { result } = renderHook(() => useAliasedPostActions())
+
+    await act(async () => {
+      await result.current.actions.handleRepost('post-1', 'worth sharing')
+    })
+
+    expect(result.current.post.repost_count).toBe(4)
+    expect(mockSetOpenPost).not.toHaveBeenCalled()
+  })
+
+  it('does not write a canonical root count onto a clicked child repost', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        success: true,
+        post_id: 'repost-2',
+        root_post_id: 'post-1',
+        repost_count: 4,
+      })
+    )
+    const { result } = renderHook(() => useAliasedPostActions())
+    act(() => {
+      result.current.setPost((previous) => ({
+        ...previous,
+        id: 'repost-1',
+        original_post_id: 'post-1',
+        repost_count: 0,
+      }))
+    })
+
+    await act(async () => {
+      await result.current.actions.handleRepost('repost-1', 'worth sharing')
+    })
+
+    expect(result.current.post.repost_count).toBe(0)
+    expect(mockSetOpenPost).not.toHaveBeenCalled()
+  })
+
+  it('coalesces rapid repost submissions into one request', async () => {
+    let resolveFetch: ((response: Response) => void) | undefined
+    ;(global.fetch as jest.Mock).mockReturnValue(
+      new Promise<Response>((resolve) => {
+        resolveFetch = resolve
+      })
+    )
+    const { result } = renderHook(() => useAliasedPostActions())
+
+    let firstRequest: Promise<void>
+    let duplicateRequest: Promise<void>
+    act(() => {
+      firstRequest = result.current.actions.handleRepost('post-1', 'worth sharing')
+      duplicateRequest = result.current.actions.handleRepost('post-1', 'worth sharing')
+    })
+
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      resolveFetch?.(
+        jsonResponse({
+          success: true,
+          post_id: 'repost-1',
+          root_post_id: 'post-1',
+          repost_count: 4,
+        })
+      )
+      await Promise.all([firstRequest!, duplicateRequest!])
+    })
+  })
 })
