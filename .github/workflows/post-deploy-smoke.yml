@@ -81,13 +81,24 @@ jobs:
               # v10 projects/promote 是唯一真实存在的 promote 端点——旧的
               # /v6/deployments/{id}/promote 返回 404（2026-07-02 实测），
               # 即这段回滚代码在修正前从未可能成功过
-              PROMOTE_RESULT=$(curl -s -X POST \
+              PROMOTE_BODY=$(mktemp)
+              PROMOTE_HTTP=$(curl -sS -o "$PROMOTE_BODY" -w "%{http_code}" -X POST \
                 -H "Authorization: Bearer $VERCEL_TOKEN" \
                 -H "Content-Type: application/json" \
-                "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$PREV_ID" 2>&1)
-              echo "Promote result: $PROMOTE_RESULT"
-              ROLLED_BACK="true"
-              echo "✅ Auto-rollback complete"
+                "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$PREV_ID" || true)
+              PROMOTE_RESULT=$(cat "$PROMOTE_BODY")
+              rm -f "$PROMOTE_BODY"
+              echo "Promote result [$PROMOTE_HTTP]: $PROMOTE_RESULT"
+
+              case "$PROMOTE_HTTP" in
+                2??)
+                  ROLLED_BACK="true"
+                  echo "✅ Auto-rollback request accepted"
+                  ;;
+                *)
+                  echo "⚠️ Auto-rollback request failed (HTTP ${PROMOTE_HTTP:-000})"
+                  ;;
+              esac
             else
               echo "⚠️ Could not find previous deployment to rollback to"
             fi
@@ -98,7 +109,7 @@ jobs:
           # Send Telegram alert with rollback status
           if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" ]; then
             if [ "$ROLLED_BACK" = "true" ]; then
-              MSG="🚨 *SMOKE TEST FAILED → AUTO-ROLLED BACK*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned 500%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A✅ Automatically rolled back to previous deployment"
+              MSG="🚨 *SMOKE TEST FAILED → ROLLBACK ACCEPTED*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned 500%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A✅ Vercel accepted the rollback to the previous deployment"
             else
               MSG="🚨 *SMOKE TEST FAILED — MANUAL ROLLBACK NEEDED*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned 500%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A⚡ Roll back: Vercel Dashboard → Deployments → Previous green → Promote"
             fi
