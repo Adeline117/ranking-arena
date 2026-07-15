@@ -1139,6 +1139,8 @@ const zh = {
   // 警报
   traderAlertsTitle: '交易员警报',
   traderAlertsDesc2: '设置自定义警报条件，及时掌握交易员动态（Pro 功能）',
+  traderAlertsConfigureOnProfile: '请在交易员主页设置告警，确保每条通知都对应正确的交易所账户。',
+  traderAlertsBrowse: '浏览交易员',
   // 隐私设置详细
   followListVisibilityNote: '关闭后，其他用户将无法查看对应列表',
   showFollowingListLabel: '公开我的关注列表',
