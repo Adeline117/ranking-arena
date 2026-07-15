@@ -57,8 +57,8 @@ export const FEATURE_LIMITS = {
  * `useSubscription()` / `effectiveIsPremium` treat everyone as Pro and ProGate
  * renders children ungated (no lock UI).
  *
- * ⚠️ ONE-LINE REVERT: flip `PRO_FREE_PROMO` to `false` in `lib/types/premium.ts`.
- * That single change restores the full paywall on BOTH client (this const) and
+ * ⚠️ ONE-LINE REVERT: set `NEXT_PUBLIC_PRO_FREE_PROMO=false` at build time.
+ * That one environment change restores the full paywall on BOTH client (this const) and
  * server (`hasFeatureAccess`/`getFeatureLimits`) and hides the promo banner.
  * Do NOT hardcode this back to `false` — keep it bound to PRO_FREE_PROMO.
  */

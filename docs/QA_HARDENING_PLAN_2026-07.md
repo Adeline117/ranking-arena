@@ -16,7 +16,7 @@
 > 建基线，避免历史记录误判。所有本轮帖子、两条评论、关注、pending 申请与五条通知
 > 都已通过用户 API 清理，并以 service-role **只读**核验为零残留。B-4 的“提交申请
 > → 本人读取 pending → 精确 pending 清理”也已通过；完整的管理员批准→建群→加入→
-> 群内发帖→解散仍需管理员权限，B-5 仍需 `PRO_FREE_PROMO=false` preview，二者不可
+> 群内发帖→解散仍需管理员权限，B-5 仍需 `NEXT_PUBLIC_PRO_FREE_PROMO=false` preview，二者不可
 > 伪称已验收。
 
 ---
@@ -145,10 +145,10 @@
 
 ## B4. Pro 付费墙锁定态：出带（不在本波主线）
 
-- `PRO_FREE_PROMO=true`（`premium.ts:53`）时**每个账号都 effectively Pro**（客户端
+- `NEXT_PUBLIC_PRO_FREE_PROMO` 未设/非 `false`（`premium.ts`）时**每个账号都 effectively Pro**（客户端
   `hooks.tsx:336` `effectiveIsPremium` 在全局 flag 短路，DB tier 都不看）→ ProGate **锁定分支
   在生产不可达**。
-- **无 per-account 覆盖开关**。→ 测锁定态只能用 `PRO_FREE_PROMO=false` 的 **preview 部署**
+- **无 per-account 覆盖开关**。→ 测锁定态只能用 `NEXT_PUBLIC_PRO_FREE_PROMO=false` 的 **preview 部署**
   （sweep 已参数化 `BASE_URL`）。列为**非生产子波**，promo 结束后或 preview 上单独做。
 
 ## B5. 阶段划分
@@ -159,7 +159,7 @@
 | B-2  | 扩展 `auth-button-sweep.mjs`：用户对用户 follow + 通知落 QA-B + 通知清理 | ~4h     | B-1                  |
 | B-3  | 补 bookmark/vote/comment-like/reply 写流程 + 每写 GET 复查               | ~4h     | B-1                  |
 | B-4  | 群组 join / 群内发帖（若 QA-B 可建私群）                                 | ~3h     | B-1                  |
-| B-5  | Pro 锁定态 preview 子波（`PRO_FREE_PROMO=false`）                        | ~2h     | preview 部署         |
+| B-5  | Pro 锁定态 preview 子波（`NEXT_PUBLIC_PRO_FREE_PROMO=false`）            | ~2h     | preview 部署         |
 
 **风险最高的是 B-1**（建账号/seed，动生产 auth + user_profiles，须 service role 小心）。
 
