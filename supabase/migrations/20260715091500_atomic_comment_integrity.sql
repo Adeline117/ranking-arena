@@ -176,8 +176,9 @@ BEGIN
   END IF;
 
   IF NEW.deleted_at IS NULL THEN
-    -- Keep the global lock order post -> comment. This matches post deletion
-    -- and prevents a create from validating immediately before a soft delete.
+    -- Lock referenced resources in post -> group (for interactions) -> parent
+    -- order. This matches the canonical RPC order and prevents a create from
+    -- validating immediately before a post soft delete.
     SELECT author_id, visibility, group_id, status
     INTO v_post_author_id, v_post_visibility, v_post_group_id, v_post_status
     FROM public.posts
@@ -189,6 +190,30 @@ BEGIN
     IF NOT FOUND THEN
       RAISE EXCEPTION 'comment post must exist and be active'
         USING ERRCODE = '23514';
+    END IF;
+
+    -- A dissolved group is an immutable historical archive. Lock its row after
+    -- the post and before any parent/comment lock so dissolution cannot commit
+    -- between authorization and a new insert/content edit. Non-content system
+    -- updates deliberately skip this gate, as do moderation-only restores.
+    IF v_post_group_id IS NOT NULL
+       AND (
+         TG_OP = 'INSERT'
+         OR (
+           TG_OP = 'UPDATE'
+           AND NEW.content IS DISTINCT FROM OLD.content
+         )
+       ) THEN
+      PERFORM 1
+      FROM public.groups AS interaction_group
+      WHERE interaction_group.id = v_post_group_id
+        AND interaction_group.dissolved_at IS NULL
+      FOR SHARE;
+
+      IF NOT FOUND THEN
+        RAISE EXCEPTION 'comment interactions are disabled for dissolved groups'
+          USING ERRCODE = '42501';
+      END IF;
     END IF;
 
     -- Enforce the same audience contract for every service-role/direct INSERT.
@@ -304,7 +329,7 @@ REVOKE ALL ON FUNCTION public.validate_comment_integrity()
 DROP TRIGGER IF EXISTS trg_comments_00_validate_integrity ON public.comments;
 DROP TRIGGER IF EXISTS trg_comments_10_validate_integrity ON public.comments;
 CREATE TRIGGER trg_comments_10_validate_integrity
-BEFORE INSERT OR UPDATE OF parent_id, post_id, user_id, deleted_at
+BEFORE INSERT OR UPDATE OF parent_id, post_id, user_id, content, deleted_at
 ON public.comments
 FOR EACH ROW
 EXECUTE FUNCTION public.validate_comment_integrity();
@@ -463,8 +488,8 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  -- Resolve without a row lock, then acquire locks in post -> comment order and
-  -- re-check both active predicates under those locks.
+  -- Resolve without a row lock, then acquire locks in post -> group -> comment
+  -- order and re-check both active predicates under those locks.
   SELECT post_id INTO v_post_id
   FROM public.comments
   WHERE id = NEW.comment_id
@@ -504,6 +529,20 @@ BEGIN
   END IF;
 
   IF v_post_group_id IS NOT NULL THEN
+    -- Historical group content stays readable after dissolution, but reactions
+    -- are interactions and therefore stop immediately even while membership
+    -- rows remain present.
+    PERFORM 1
+    FROM public.groups AS interaction_group
+    WHERE interaction_group.id = v_post_group_id
+      AND interaction_group.dissolved_at IS NULL
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'comment reactions are disabled for dissolved groups'
+        USING ERRCODE = '42501';
+    END IF;
+
     IF EXISTS (
       SELECT 1
       FROM public.group_bans AS active_ban
@@ -762,6 +801,7 @@ DECLARE
   v_post_author_id uuid;
   v_post_visibility text;
   v_post_group_id uuid;
+  v_group_dissolved_at timestamptz;
   v_existing_id uuid;
   v_existing_type text;
   v_has_existing boolean;
@@ -783,8 +823,9 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  -- Keep the global lock order post -> comment. A shared post lock allows
-  -- unrelated reactions to proceed together while blocking hard/soft delete.
+  -- Keep the global lock order post -> group -> comment. A shared post lock
+  -- allows unrelated reactions to proceed together while blocking hard/soft
+  -- delete.
   SELECT author_id, visibility, group_id
   INTO v_post_author_id, v_post_visibility, v_post_group_id
   FROM public.posts
@@ -796,6 +837,22 @@ BEGIN
   IF NOT FOUND THEN
     RAISE EXCEPTION 'active comment not found for post'
       USING ERRCODE = 'P0002';
+  END IF;
+
+  -- Every group reaction transaction locks post -> group -> comment. Lock the
+  -- group row even for a removal so users can withdraw an existing reaction
+  -- after dissolution while add/change still observes one stable group state.
+  IF v_post_group_id IS NOT NULL THEN
+    SELECT interaction_group.dissolved_at
+    INTO v_group_dissolved_at
+    FROM public.groups AS interaction_group
+    WHERE interaction_group.id = v_post_group_id
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'comment group not found'
+        USING ERRCODE = '42501';
+    END IF;
   END IF;
 
   -- The comment lock serializes every reaction on this comment, including the
@@ -827,6 +884,12 @@ BEGIN
   -- changing a reaction remains a new interaction and requires every current
   -- post/comment permission below.
   IF NOT v_is_removal THEN
+    IF v_post_group_id IS NOT NULL
+       AND v_group_dissolved_at IS NOT NULL THEN
+      RAISE EXCEPTION 'comment reactions are disabled for dissolved groups'
+        USING ERRCODE = '42501';
+    END IF;
+
     IF EXISTS (
       SELECT 1
       FROM public.blocked_users AS interaction_block
@@ -1017,6 +1080,19 @@ BEGIN
   END IF;
 
   IF v_post_group_id IS NOT NULL THEN
+    -- Editing is a fresh interaction. A dissolved group is read-only even for
+    -- users whose historical membership row still exists.
+    PERFORM 1
+    FROM public.groups AS interaction_group
+    WHERE interaction_group.id = v_post_group_id
+      AND interaction_group.dissolved_at IS NULL
+    FOR SHARE;
+
+    IF NOT FOUND THEN
+      RAISE EXCEPTION 'comment edits are disabled for dissolved groups'
+        USING ERRCODE = '42501';
+    END IF;
+
     IF EXISTS (
       SELECT 1
       FROM public.group_bans AS active_ban
@@ -1250,8 +1326,8 @@ BEGIN
       USING ERRCODE = '22023';
   END IF;
 
-  IF p_action NOT IN ('hard_delete', 'soft_delete', 'restore') THEN
-    RAISE EXCEPTION 'action must be hard_delete, soft_delete, or restore'
+  IF p_action NOT IN ('hard_delete', 'soft_delete', 'restore_auto_hidden') THEN
+    RAISE EXCEPTION 'action must be hard_delete, soft_delete, or restore_auto_hidden'
       USING ERRCODE = '22023';
   END IF;
 
@@ -1331,7 +1407,18 @@ BEGIN
         AND hidden_comment.deleted_at IS NULL;
     END IF;
   ELSE
+    -- Queue approval may undo only the automated report threshold action. The
+    -- target marker was read under the comment row lock above, so an unrelated
+    -- administrator deletion cannot be swapped in between this check and the
+    -- restore. An already-active row is an idempotent successful no-op.
     IF v_comment.deleted_at IS NOT NULL THEN
+      IF v_comment.deleted_by IS NOT NULL
+         OR v_comment.delete_reason IS NULL
+         OR v_comment.delete_reason NOT LIKE 'Auto-hidden:%' THEN
+        RAISE EXCEPTION 'only auto-hidden comments may be restored by queue approval'
+          USING ERRCODE = '42501';
+      END IF;
+
       IF v_comment.parent_id IS NULL THEN
         SELECT COUNT(*)::integer
         INTO affected_count
@@ -1380,7 +1467,7 @@ GRANT EXECUTE ON FUNCTION public.moderate_comment(uuid, uuid, text, text)
   TO service_role;
 
 COMMENT ON FUNCTION public.moderate_comment(uuid, uuid, text, text) IS
-  'Hard-deletes, soft-deletes, or restores one comment under post-to-comment locks and returns absolute counts.';
+  'Hard-deletes, soft-deletes, or restores only an auto-hidden comment under post-to-comment locks and returns absolute counts.';
 
 -- The browser has no direct comment write path. Keep public reads, but require
 -- all mutations to cross authenticated server APIs where resource and product
@@ -1543,7 +1630,7 @@ BEGIN
 END
 $$;
 
--- PostgREST learns the three new mutation RPCs immediately after commit,
+-- PostgREST learns the four new mutation RPCs immediately after commit,
 -- minimizing the schema-cache fallback window in the two-phase rollout.
 NOTIFY pgrst, 'reload schema';
 
