@@ -78,6 +78,8 @@ describe('field coverage ledger renderer', () => {
     expect(output).not.toContain('| pnl |')
     expect(output).toContain('| roi | 25% | 100% |')
     expect(output).toContain('| zebra | 100% | 50% |')
+    expect(output).toMatch(/[^\n]\n$/)
+    expect(output).not.toMatch(/\n\n$/)
   })
 
   it('pins the field coverage contract identity', () => {

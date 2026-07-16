@@ -134,5 +134,5 @@ export function renderFieldCoverageLedger(
     }
   }
 
-  return out.join('\n') + '\n'
+  return out.join('\n').trimEnd() + '\n'
 }

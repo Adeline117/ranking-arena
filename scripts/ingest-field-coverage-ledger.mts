@@ -20,6 +20,7 @@ import { getIngestPool, closeIngestPool } from '../lib/ingest/db'
 import { execFileSync } from 'node:child_process'
 import { writeFileSync } from 'node:fs'
 import { join } from 'node:path'
+import { format } from 'prettier'
 import {
   FIELD_COVERAGE_TYPED_COLUMNS,
   renderFieldCoverageLedger,
@@ -98,10 +99,13 @@ async function main() {
   const gitSha = cleanGitSha()
   try {
     const rows = await collect()
-    const md = renderFieldCoverageLedger(rows, {
-      generatedAt: new Date().toISOString(),
-      gitSha,
-    })
+    const md = await format(
+      renderFieldCoverageLedger(rows, {
+        generatedAt: new Date().toISOString(),
+        gitSha,
+      }),
+      { parser: 'markdown' }
+    )
     const outPath = join(process.cwd(), 'docs', 'EXCHANGE_FIELD_COVERAGE.md')
     writeFileSync(outPath, md, 'utf8')
     process.stdout.write(`✓ wrote ${outPath} (${rows.length} source×timeframe rows)\n`)
