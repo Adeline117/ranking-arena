@@ -14,16 +14,14 @@
 
 const cron = require('node-cron')
 const http = require('http')
+const { loadProxyKeyConfig } = require('./proxy-key-auth.cjs')
 
 // ─── Config ───
 const SCRAPER_URL = process.env.SCRAPER_URL || 'http://localhost:3457'
-const SCRAPER_KEY = process.env.PROXY_KEY?.trim()
+const SCRAPER_KEY = loadProxyKeyConfig().preferred
 const INGEST_URL = process.env.INGEST_URL || 'https://www.arenafi.org/api/pipeline/ingest'
 const INGEST_KEY = process.env.CRON_SECRET?.trim() || process.env.VPS_PROXY_KEY?.trim()
 
-if (!SCRAPER_KEY) {
-  throw new Error('PROXY_KEY is required; refusing to start the VPS cron runner')
-}
 if (!INGEST_KEY) {
   throw new Error('CRON_SECRET or VPS_PROXY_KEY is required for the ingest endpoint')
 }

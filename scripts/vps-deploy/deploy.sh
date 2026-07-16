@@ -27,12 +27,14 @@ SG_FILES=(
   "$SCRIPT_DIR/scraper-v16-parallel.js"
   "$SCRIPT_DIR/scraper-cron.mjs"
   "$SCRIPT_DIR/arena-proxy.mjs"
+  "$SCRIPT_DIR/proxy-key-auth.cjs"
   "$SCRIPT_DIR/scraper-exchanges.js"
   "$INFRA_DIR/ecosystem.config.js"
 )
 
 JP_FILES=(
   "$SCRIPT_DIR/arena-proxy.mjs"
+  "$SCRIPT_DIR/proxy-key-auth.cjs"
   "$INFRA_DIR/ecosystem-jp.config.js"
 )
 
@@ -67,6 +69,7 @@ deploy_to() {
   if [ "$VPS_TYPE" = "sg" ] && [ -f "$SCRIPT_DIR/scraper-v16-parallel.js" ]; then
     echo "  scp scraper-v16-parallel.js -> /opt/scraper/server.js"
     scp -q "$SCRIPT_DIR/scraper-v16-parallel.js" "$HOST:/opt/scraper/server.js"
+    scp -q "$SCRIPT_DIR/proxy-key-auth.cjs" "$HOST:/opt/scraper/proxy-key-auth.cjs"
   fi
 
   # Copy arena-proxy.mjs to /opt/arena-proxy/ (both VPS)
@@ -74,6 +77,7 @@ deploy_to() {
     ssh "$HOST" "mkdir -p /opt/arena-proxy"
     echo "  scp arena-proxy.mjs -> /opt/arena-proxy/server.mjs"
     scp -q "$SCRIPT_DIR/arena-proxy.mjs" "$HOST:/opt/arena-proxy/server.mjs"
+    scp -q "$SCRIPT_DIR/proxy-key-auth.cjs" "$HOST:/opt/arena-proxy/proxy-key-auth.cjs"
   fi
 
   # Select ecosystem config and restart PM2

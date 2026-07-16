@@ -4,9 +4,15 @@
 //
 // Deployed to: /opt/arena-cron/ecosystem-jp.config.js
 
-const proxyKey = process.env.PROXY_KEY?.trim()
-if (!proxyKey) {
-  throw new Error('PROXY_KEY is required to start the VPS proxy')
+const proxyKeyCurrent = process.env.PROXY_KEY_CURRENT?.trim() || process.env.PROXY_KEY?.trim()
+const proxyKeyNext = process.env.PROXY_KEY_NEXT?.trim()
+if (!proxyKeyCurrent && !proxyKeyNext) {
+  throw new Error('PROXY_KEY_CURRENT, PROXY_KEY_NEXT, or PROXY_KEY is required')
+}
+const proxyKeyEnv = {
+  PROXY_KEY_CURRENT: proxyKeyCurrent || '',
+  PROXY_KEY_NEXT: proxyKeyNext || '',
+  PROXY_KEY: proxyKeyNext || proxyKeyCurrent,
 }
 
 module.exports = {
@@ -19,7 +25,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '3456',
-        PROXY_KEY: proxyKey,
+        ...proxyKeyEnv,
       },
       max_memory_restart: '300M',
       cron_restart: '0 */12 * * *',  // restart every 12h

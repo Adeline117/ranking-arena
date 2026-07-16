@@ -9,9 +9,15 @@
 //
 // Secrets must be injected by the host environment. Never bake them into this file.
 
-const proxyKey = process.env.PROXY_KEY?.trim()
-if (!proxyKey) {
-  throw new Error('PROXY_KEY is required to start the VPS scraper services')
+const proxyKeyCurrent = process.env.PROXY_KEY_CURRENT?.trim() || process.env.PROXY_KEY?.trim()
+const proxyKeyNext = process.env.PROXY_KEY_NEXT?.trim()
+if (!proxyKeyCurrent && !proxyKeyNext) {
+  throw new Error('PROXY_KEY_CURRENT, PROXY_KEY_NEXT, or PROXY_KEY is required')
+}
+const proxyKeyEnv = {
+  PROXY_KEY_CURRENT: proxyKeyCurrent || '',
+  PROXY_KEY_NEXT: proxyKeyNext || '',
+  PROXY_KEY: proxyKeyNext || proxyKeyCurrent,
 }
 
 module.exports = {
@@ -24,7 +30,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '3457',
-        PROXY_KEY: proxyKey,
+        ...proxyKeyEnv,
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
         TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
         TELEGRAM_ALERT_CHAT_ID: process.env.TELEGRAM_ALERT_CHAT_ID || '',
@@ -47,7 +53,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '3456',
-        PROXY_KEY: proxyKey,
+        ...proxyKeyEnv,
       },
       max_memory_restart: '300M',
       cron_restart: '0 */12 * * *',  // restart every 12h
@@ -68,6 +74,7 @@ module.exports = {
       autorestart: false,            // cron-driven, don't restart on exit
       env: {
         NODE_ENV: 'production',
+        ...proxyKeyEnv,
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
         TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
         TELEGRAM_ALERT_CHAT_ID: process.env.TELEGRAM_ALERT_CHAT_ID || '',
