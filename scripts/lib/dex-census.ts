@@ -8,6 +8,7 @@ export type DexCoverageScope =
 export type DexCompletenessStatus = 'complete' | 'provisional' | 'bounded_sample'
 export type DexCoverageDenominator = 'eligible' | 'provisional' | 'excluded'
 export type DexWindow = '1D' | '7D' | '30D' | '90D' | 'all_time'
+export type DexCensusTimeframe = 1 | 7 | 30 | 90
 
 export interface DexCensusSource {
   protocol: DexProtocol
@@ -112,7 +113,7 @@ export interface DexCensusObservationInput {
   protocol: DexProtocol
   chainId: number
   address: string
-  timeframe: 7 | 30 | 90
+  timeframe: DexCensusTimeframe
   metricReady: boolean
   /** Census is shadow-only. Any caller attempting promotion fails closed. */
   rankEligible?: boolean
@@ -123,7 +124,7 @@ export interface CanonicalDexCensusIdentity {
   protocol: DexProtocol
   chain_id: number
   address: string
-  timeframes: Array<7 | 30 | 90>
+  timeframes: DexCensusTimeframe[]
   metric_ready: boolean
   rank_eligible: false
 }
@@ -177,6 +178,15 @@ export function assertDexCensusSources(
     ) {
       throw new Error(`bounded sample cannot enter coverage denominator: ${key}`)
     }
+
+    const registered = DEX_CENSUS_SOURCES.find(
+      (candidate) =>
+        candidate.protocol === source.protocol && candidate.chain_id === source.chain_id
+    )
+    if (!registered) throw new Error(`unapproved census source: ${key}`)
+    if (canonicalJson(source) !== canonicalJson(registered)) {
+      throw new Error(`census source contract does not match registry: ${key}`)
+    }
   }
 }
 
@@ -206,7 +216,7 @@ export function mergeDexCensusObservations(
 ): CanonicalDexCensusIdentity[] {
   const merged = new Map<string, CanonicalDexCensusIdentity>()
   for (const observation of observations) {
-    if (![7, 30, 90].includes(observation.timeframe)) {
+    if (![1, 7, 30, 90].includes(observation.timeframe)) {
       throw new Error(`invalid census timeframe: ${observation.timeframe}`)
     }
     if (typeof observation.metricReady !== 'boolean') {
