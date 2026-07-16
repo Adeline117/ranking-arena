@@ -15,6 +15,14 @@ import InterestsStep from './components/InterestsStep'
 import TradersStep from './components/TradersStep'
 import GroupsStep from './components/GroupsStep'
 import CompleteStep from './components/CompleteStep'
+import {
+  OnboardingMembershipIntentLedger,
+  OnboardingMembershipRequestSequencer,
+  rollbackOnboardingMembershipIntent,
+  sendOnboardingMembershipIntent,
+  type OnboardingMembershipIntent,
+  type OnboardingMembershipScope,
+} from './membership-intent'
 import { trackEvent } from '@/lib/analytics/track'
 import { safeInternalReturnPath } from '@/lib/auth/safe-return-path'
 
@@ -46,8 +54,52 @@ export default function OnboardingPage() {
   const [loadingTraders, setLoadingTraders] = useState(false)
   const [loadingGroups, setLoadingGroups] = useState(false)
   const startedRef = useRef(false)
+  const joinedGroupsRef = useRef(joinedGroups)
+  const languageRef = useRef(language)
+  const showToastRef = useRef(showToast)
+  const membershipScopeRef = useRef<OnboardingMembershipScope>({
+    active: true,
+    revision: 0,
+    viewerId: null,
+  })
+  const membershipIntentLedgerRef = useRef(new OnboardingMembershipIntentLedger())
+  const membershipRequestSequencerRef = useRef(new OnboardingMembershipRequestSequencer())
 
   const tr = (key: string) => translations[language][key] || translations.en[key] || key
+
+  useEffect(() => {
+    joinedGroupsRef.current = joinedGroups
+  }, [joinedGroups])
+
+  useEffect(() => {
+    languageRef.current = language
+  }, [language])
+
+  useEffect(() => {
+    showToastRef.current = showToast
+  }, [showToast])
+
+  useEffect(() => {
+    const currentScope = membershipScopeRef.current
+    if (currentScope.viewerId !== userId) {
+      membershipScopeRef.current = {
+        active: true,
+        revision: currentScope.revision + 1,
+        viewerId: userId,
+      }
+    }
+  }, [userId])
+
+  useEffect(() => {
+    return () => {
+      const currentScope = membershipScopeRef.current
+      membershipScopeRef.current = {
+        active: false,
+        revision: currentScope.revision + 1,
+        viewerId: null,
+      }
+    }
+  }, [])
 
   useEffect(() => {
     setMounted(true)
@@ -186,7 +238,7 @@ export default function OnboardingPage() {
 
   // Batch follow/join: queue actions and flush in parallel after a debounce
   const followQueueRef = useRef<Map<string, 'follow' | 'unfollow'>>(new Map())
-  const joinQueueRef = useRef<Map<string, 'join' | 'leave'>>(new Map())
+  const joinQueueRef = useRef<Map<string, OnboardingMembershipIntent>>(new Map())
   const followFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const joinFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -219,25 +271,64 @@ export default function OnboardingPage() {
     const queue = new Map(joinQueueRef.current)
     joinQueueRef.current.clear()
     if (queue.size === 0) return
-    // /api/groups/subscribe is withAuth (Bearer header only) — calls 401'd without the token
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    if (!session?.access_token) return
-    const promises = Array.from(queue.entries()).map(([groupId, action]) =>
-      fetch('/api/groups/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({ groupId, action }),
-      }).catch(() => {
-        /* swallow individual failures; UI already updated optimistically */
-      })
+
+    const failures = await Promise.all(
+      Array.from(queue.values()).map((intent) =>
+        membershipRequestSequencerRef.current.run(intent.groupId, async () => {
+          if (
+            !membershipIntentLedgerRef.current.belongsToScope(intent, membershipScopeRef.current)
+          ) {
+            return null
+          }
+
+          try {
+            const {
+              data: { session },
+            } = await supabase.auth.getSession()
+
+            if (
+              !membershipIntentLedgerRef.current.belongsToScope(intent, membershipScopeRef.current)
+            ) {
+              return null
+            }
+            if (!session?.access_token || session.user.id !== intent.viewerId) {
+              throw new Error('Onboarding membership session is unavailable or stale')
+            }
+
+            await sendOnboardingMembershipIntent(intent, session.access_token, getCsrfHeaders())
+            return null
+          } catch (error) {
+            logger.error('Onboarding group membership request failed', {
+              action: intent.action,
+              error,
+              groupId: intent.groupId,
+            })
+
+            if (!membershipIntentLedgerRef.current.isCurrent(intent, membershipScopeRef.current)) {
+              return null
+            }
+
+            const next = rollbackOnboardingMembershipIntent(joinedGroupsRef.current, intent)
+            joinedGroupsRef.current = next
+            setJoinedGroups(next)
+            return intent
+          }
+        })
+      )
     )
-    Promise.all(promises)
+
+    const currentScope = membershipScopeRef.current
+    if (
+      failures.some(
+        (intent) =>
+          intent !== null && membershipIntentLedgerRef.current.isCurrent(intent, currentScope)
+      )
+    ) {
+      showToastRef.current(
+        translations[languageRef.current].joinFailed || translations.en.joinFailed,
+        'error'
+      )
+    }
   }, [])
 
   const handleFollowTrader = async (traderId: string) => {
@@ -259,13 +350,22 @@ export default function OnboardingPage() {
 
   const handleJoinGroup = async (groupId: string) => {
     if (!userId) return
-    const isJoined = joinedGroups.has(groupId)
-    const next = new Set(joinedGroups)
+    const isJoined = joinedGroupsRef.current.has(groupId)
+    const action = isJoined ? 'leave' : 'join'
+    const intent = membershipIntentLedgerRef.current.issue(
+      groupId,
+      action,
+      membershipScopeRef.current
+    )
+    if (!intent) return
+
+    const next = new Set(joinedGroupsRef.current)
     if (isJoined) next.delete(groupId)
     else next.add(groupId)
+    joinedGroupsRef.current = next
     setJoinedGroups(next)
     // Queue the action and debounce the flush
-    joinQueueRef.current.set(groupId, isJoined ? 'leave' : 'join')
+    joinQueueRef.current.set(groupId, intent)
     if (joinFlushTimerRef.current) clearTimeout(joinFlushTimerRef.current)
     joinFlushTimerRef.current = setTimeout(flushJoinQueue, 500)
   }
