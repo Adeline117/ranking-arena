@@ -167,8 +167,6 @@ describe('atomic content report submission migration', () => {
         'app/api/admin/reports/[id]/resolve/route.ts',
         'app/api/admin/reports/route.ts',
         'app/api/admin/stats/route.ts',
-        'app/api/report/route.ts',
-        'app/api/reports/route.ts',
       ].sort()
     )
 
@@ -182,5 +180,13 @@ describe('atomic content report submission migration', () => {
     expect(readFileSync(join(process.cwd(), 'lib/api/with-admin-auth.ts'), 'utf8')).toContain(
       'getSupabaseAdmin()'
     )
+
+    const canonicalRoute = readFileSync(join(process.cwd(), 'app/api/reports/route.ts'), 'utf8')
+    const retiredRoute = readFileSync(join(process.cwd(), 'app/api/report/route.ts'), 'utf8')
+    expect(canonicalRoute).toContain("supabase.rpc('submit_content_report'")
+    expect(canonicalRoute).not.toMatch(/\.from\(\s*['"]content_reports['"]\s*\)/)
+    expect(canonicalRoute).not.toMatch(/PGRST202|42883/)
+    expect(retiredRoute).toContain('status: 410')
+    expect(retiredRoute).not.toContain('content_reports')
   })
 })

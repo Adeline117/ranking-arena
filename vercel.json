@@ -44,6 +44,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/cleanup-report-evidence",
+      "schedule": "*/15 * * * *"
+    },
+    {
       "path": "/api/cron/recount-follow-counts",
       "schedule": "15 */6 * * *"
     },
@@ -211,6 +215,33 @@
     },
     {
       "source": "/api/notifications/:path*",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/report",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/reports",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "private, no-store"
+        }
+      ]
+    },
+    {
+      "source": "/api/upload",
       "headers": [
         {
           "key": "Cache-Control",

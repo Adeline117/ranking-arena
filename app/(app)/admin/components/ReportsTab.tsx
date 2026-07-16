@@ -236,6 +236,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                           href={img}
                           target="_blank"
                           rel="noopener noreferrer"
+                          referrerPolicy="no-referrer"
                           style={{ display: 'block' }}
                         >
                           <img
@@ -244,6 +245,7 @@ export default function ReportsTab({ accessToken }: ReportsTabProps) {
                             width={120}
                             height={90}
                             loading="lazy"
+                            referrerPolicy="no-referrer"
                             style={{
                               width: 120,
                               height: 90,

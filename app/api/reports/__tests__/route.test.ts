@@ -1,6 +1,7 @@
 jest.mock('next/server', () => {
   class MockNextResponse {
     status: number
+    headers = new Map<string, string>()
 
     constructor(
       private readonly body: unknown,
@@ -21,24 +22,23 @@ jest.mock('next/server', () => {
   return { NextResponse: MockNextResponse }
 })
 
-const mockFrom = jest.fn()
+const mockFrom = jest.fn(() => {
+  throw new Error('Report submission must not access tables directly')
+})
+const mockRpc = jest.fn()
 
 jest.mock('@/lib/api/middleware', () => ({
   withAuth:
     (handler: (context: Record<string, unknown>) => Promise<unknown>) => (request: unknown) =>
       handler({
         user: { id: '11111111-1111-4111-8111-111111111111' },
-        supabase: { from: mockFrom },
+        supabase: { from: mockFrom, rpc: mockRpc },
         request,
       }),
 }))
 
 jest.mock('@/lib/utils/logger', () => {
-  const logger = {
-    info: jest.fn(),
-    warn: jest.fn(),
-    error: jest.fn(),
-  }
+  const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() }
   return { logger, createLogger: () => logger }
 })
 
@@ -46,17 +46,17 @@ import { POST } from '../route'
 
 const REPORTER_ID = '11111111-1111-4111-8111-111111111111'
 const CONTENT_ID = '22222222-2222-4222-8222-222222222222'
+const REPORT_ID = '44444444-4444-4444-8444-444444444444'
+const EVIDENCE_REF = `reports/${REPORTER_ID}/0123456789abcdef.png`
+const CREATED_AT = '2026-07-16T12:00:00.000Z'
 
-type QueryResult = { data: unknown; error: unknown }
-
-function query(result: QueryResult) {
-  const chain: Record<string, jest.Mock> = {}
-  for (const method of ['select', 'eq', 'insert']) {
-    chain[method] = jest.fn(() => chain)
-  }
-  chain.maybeSingle = jest.fn().mockResolvedValue(result)
-  chain.single = jest.fn().mockResolvedValue(result)
-  return chain
+const createdResult = {
+  created: true,
+  report_id: REPORT_ID,
+  status: 'pending',
+  content_type: 'post',
+  reason: 'spam',
+  created_at: CREATED_AT,
 }
 
 function request(overrides: Record<string, unknown> = {}) {
@@ -66,7 +66,7 @@ function request(overrides: Record<string, unknown> = {}) {
       content_id: CONTENT_ID,
       reason: 'spam',
       description: '  This is documented report evidence.  ',
-      images: ['https://evidence.example/report.png'],
+      images: [EVIDENCE_REF],
       ...overrides,
     }),
   } as never
@@ -79,124 +79,111 @@ async function responseBody(response: Awaited<ReturnType<typeof POST>>) {
 describe('POST /api/reports', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockRpc.mockResolvedValue({ data: createdResult, error: null })
   })
 
   test.each([
     ['non-UUID content ID', { content_id: 'post-123' }],
     ['base64 evidence', { images: ['data:image/png;base64,AAAA'] }],
-    ['insecure evidence URL', { images: ['http://evidence.example/report.png'] }],
+    ['external evidence URL', { images: ['https://evidence.example/report.png'] }],
+    [
+      'another reporter evidence',
+      { images: ['reports/99999999-9999-4999-8999-999999999999/0123456789abcdef.png'] },
+    ],
+    ['duplicate evidence', { images: [EVIDENCE_REF, EVIDENCE_REF] }],
     ['non-string evidence', { images: [123] }],
   ])('rejects %s before any database call', async (_label, overrides) => {
     const response = await POST(request(overrides))
     const body = await responseBody(response)
 
     expect(response.status).toBe(400)
-    expect(body).toMatchObject({
-      success: false,
-      error: { code: 'VALIDATION_ERROR' },
-    })
+    expect(body).toMatchObject({ success: false, error: { code: 'VALIDATION_ERROR' } })
+    expect(mockRpc).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('fails closed when the duplicate lookup fails', async () => {
-    mockFrom.mockReturnValueOnce(query({ data: null, error: { code: 'XX000' } }))
-
-    const response = await POST(request())
-    const body = await responseBody(response)
-
-    expect(response.status).toBe(500)
-    expect(body).toMatchObject({
-      success: false,
-      error: { code: 'DATABASE_ERROR' },
-    })
-    expect(mockFrom).toHaveBeenCalledTimes(1)
-  })
-
-  it('returns a conflict for an existing pending report without writing', async () => {
-    mockFrom.mockReturnValueOnce(query({ data: { id: 'report-1' }, error: null }))
-
-    const response = await POST(request())
-    const body = await responseBody(response)
-
-    expect(response.status).toBe(409)
-    expect(body).toMatchObject({
-      success: false,
-      error: { code: 'DUPLICATE_ACTION' },
-    })
-    expect(mockFrom).toHaveBeenCalledTimes(1)
-  })
-
-  it('rejects a missing post before inserting a report', async () => {
-    mockFrom
-      .mockReturnValueOnce(query({ data: null, error: null }))
-      .mockReturnValueOnce(query({ data: null, error: null }))
-
-    const response = await POST(request())
-    const body = await responseBody(response)
-
-    expect(response.status).toBe(404)
-    expect(body).toMatchObject({ success: false, error: { code: 'NOT_FOUND' } })
-    expect(mockFrom).toHaveBeenCalledTimes(2)
-  })
-
-  it('rejects reporting your own comment', async () => {
-    mockFrom.mockReturnValueOnce(query({ data: null, error: null })).mockReturnValueOnce(
-      query({
-        data: { id: CONTENT_ID, user_id: REPORTER_ID, deleted_at: null },
-        error: null,
-      })
-    )
-
-    const response = await POST(request({ content_type: 'comment' }))
-    const body = await responseBody(response)
-
-    expect(response.status).toBe(400)
-    expect(body).toMatchObject({
-      success: false,
-      error: { code: 'VALIDATION_ERROR' },
-    })
-    expect(mockFrom).toHaveBeenCalledTimes(2)
-  })
-
-  it('inserts only normalized bounded evidence for an existing target', async () => {
-    const duplicateQuery = query({ data: null, error: null })
-    const targetQuery = query({
-      data: {
-        id: CONTENT_ID,
-        author_id: '33333333-3333-4333-8333-333333333333',
-        status: 'active',
-        deleted_at: null,
-      },
-      error: null,
-    })
-    const insertQuery = query({
-      data: {
-        id: '44444444-4444-4444-8444-444444444444',
-        content_type: 'post',
-        reason: 'spam',
-        status: 'pending',
-        created_at: '2026-07-16T12:00:00.000Z',
-      },
-      error: null,
-    })
-    mockFrom
-      .mockReturnValueOnce(duplicateQuery)
-      .mockReturnValueOnce(targetQuery)
-      .mockReturnValueOnce(insertQuery)
-
+  it('submits only through the canonical RPC', async () => {
     const response = await POST(request())
     const body = await responseBody(response)
 
     expect(response.status).toBe(201)
-    expect(body).toMatchObject({ success: true })
-    expect(insertQuery.insert).toHaveBeenCalledWith({
-      reporter_id: REPORTER_ID,
-      content_type: 'post',
-      content_id: CONTENT_ID,
-      reason: 'spam',
-      description: 'This is documented report evidence.',
-      images: ['https://evidence.example/report.png'],
-      status: 'pending',
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(body).toMatchObject({
+      success: true,
+      data: {
+        report: {
+          id: REPORT_ID,
+          content_type: 'post',
+          reason: 'spam',
+          status: 'pending',
+          created_at: CREATED_AT,
+        },
+      },
     })
+    expect(mockRpc).toHaveBeenCalledWith('submit_content_report', {
+      p_reporter_id: REPORTER_ID,
+      p_content_type: 'post',
+      p_content_id: CONTENT_ID,
+      p_reason: 'spam',
+      p_description: 'This is documented report evidence.',
+      p_images: [EVIDENCE_REF],
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('maps an exact canonical duplicate result to the stable conflict response', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        created: false,
+        report_id: REPORT_ID,
+        status: 'pending',
+        reason: 'DUPLICATE_PENDING',
+        content_type: 'post',
+        created_at: CREATED_AT,
+      },
+      error: null,
+    })
+
+    const response = await POST(request())
+    expect(response.status).toBe(409)
+    await expect(responseBody(response)).resolves.toMatchObject({
+      success: false,
+      error: { code: 'DUPLICATE_ACTION' },
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  test.each(['PGRST202', '42883', '42501', 'XX000'])(
+    'fails closed on RPC error %s without table fallback',
+    async (code) => {
+      mockRpc.mockResolvedValue({ data: null, error: { code } })
+
+      const response = await POST(request())
+      expect(response.status).toBe(500)
+      await expect(responseBody(response)).resolves.toMatchObject({
+        success: false,
+        error: { code: 'DATABASE_ERROR' },
+      })
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  test.each([
+    ['invalid UUID', { ...createdResult, report_id: 'report-1' }],
+    ['invalid timestamp', { ...createdResult, created_at: 'yesterday' }],
+    ['wrong content type', { ...createdResult, content_type: 'comment' }],
+    ['wrong reason', { ...createdResult, reason: 'fraud' }],
+    ['missing timestamp', { ...createdResult, created_at: undefined }],
+    ['unexpected field', { ...createdResult, legacy: true }],
+  ])('fails closed on a structurally invalid RPC result: %s', async (_label, data) => {
+    mockRpc.mockResolvedValue({ data, error: null })
+
+    const response = await POST(request())
+    expect(response.status).toBe(500)
+    await expect(responseBody(response)).resolves.toMatchObject({
+      success: false,
+      error: { code: 'DATABASE_ERROR' },
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 })
