@@ -39,3 +39,12 @@ test('keeps unrelated operational scripts out of the Vercel upload', () => {
   assert.equal(ignoredByVercelRules('scripts/openclaw/daily-pipeline-report.mjs'), true)
   assert.equal(ignoredByVercelRules('scripts/post-deploy-check.sh'), true)
 })
+
+test('keeps Vercel candidate failures reproducible and diagnosable', () => {
+  const workflow = fs.readFileSync(path.join(root, '.github/workflows/deploy-gate.yml'), 'utf8')
+  assert.doesNotMatch(workflow, /vercel@latest/)
+  assert.match(workflow, /vercel@56\.2\.1 deploy[^\n]+--logs/)
+  assert.match(workflow, /--build-env VERCEL_BUILD_SYSTEM_REPORT=1/)
+  assert.match(workflow, /vercel@56\.2\.1 inspect "\$CANDIDATE_URL" --logs/)
+  assert.match(workflow, /::error title=Vercel candidate build failed::/)
+})

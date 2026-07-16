@@ -1,7 +1,7 @@
 name: Deploy Gate (CI-green production deploy)
 
 # 企业级差距整改 C2：main 的生产部署由本 workflow 在 CI 门禁作业全绿后执行。
-# 配套 scripts/vercel-ignore-build.sh（git push 不再直接触发生产构建）。
+# 配套 vercel.json 内联 ignoreCommand（git push 不再直接触发生产构建）。
 #
 # 门禁只看 4 个 gate 作业：Pre-flight Checks / Lint & Type Check / Unit Tests /
 # Build。E2E 按设计被更新的 push 折叠取消（per-ref concurrency），Data
@@ -116,10 +116,48 @@ jobs:
           # 判断靠它读出"当前线上是哪个 commit"
           # --skip-domain 是防迟到回退的关键：构建完成不自动抢生产域名，
           # 下一步重新读取 live SHA 后再决定是否 promote。
-          npx vercel@latest deploy --prod --skip-domain --yes --meta gateSha="$HEAD_SHA" \
+          # 固定 CLI，避免 `@latest` 在同一 commit 的重试间改变行为。stdout
+          # 必须只保留 deployment URL；官方 `--logs` 走 stderr，失败时提炼为
+          # Actions annotation，使未登录的值班检查也能看到真实 Vercel 原因。
+          set +e
+          npx vercel@56.2.1 deploy --prod --skip-domain --yes --logs --meta gateSha="$HEAD_SHA" \
             --build-env ARENA_RELEASE_SHA="$HEAD_SHA" \
+            --build-env VERCEL_BUILD_SYSTEM_REPORT=1 \
             --env ARENA_RELEASE_SHA="$HEAD_SHA" \
-            --token="$VERCEL_TOKEN" > /tmp/deploy-url.txt
+            --token="$VERCEL_TOKEN" > /tmp/deploy-url.txt \
+            2> >(tee /tmp/vercel-deploy.stderr >&2)
+          DEPLOY_EXIT=$?
+          set -e
+          if [ "$DEPLOY_EXIT" -ne 0 ]; then
+            CANDIDATE_URL=$(tail -1 /tmp/deploy-url.txt | tr -d '\r\n')
+            if [[ "$CANDIDATE_URL" == https://*.vercel.app ]]; then
+              npx vercel@56.2.1 inspect "$CANDIDATE_URL" --logs \
+                --token="$VERCEL_TOKEN" > /tmp/vercel-inspect.log 2>&1 || true
+            else
+              : > /tmp/vercel-inspect.log
+            fi
+            # Strip terminal color/control codes and collapse the last relevant
+            # lines into one escaped annotation. GitHub still masks secrets.
+            { cat /tmp/vercel-deploy.stderr; cat /tmp/vercel-inspect.log; } \
+              | sed -E $'s/\\x1B\\[[0-9;]*[[:alpha:]]//g' \
+              | tail -80 > /tmp/vercel-deploy.clean
+            ERROR_SUMMARY=$(grep -Ei 'error|failed|exceeded|cancel|unauthorized|forbidden|invalid|memory|module' \
+              /tmp/vercel-deploy.clean | tail -12 | tr '\n' ' ' | cut -c1-1800)
+            if [ -z "$ERROR_SUMMARY" ]; then
+              ERROR_SUMMARY=$(tail -8 /tmp/vercel-deploy.clean | tr '\n' ' ' | cut -c1-1800)
+            fi
+            ERROR_SUMMARY=${ERROR_SUMMARY//'%'/'%25'}
+            ERROR_SUMMARY=${ERROR_SUMMARY//$'\r'/'%0D'}
+            ERROR_SUMMARY=${ERROR_SUMMARY//$'\n'/'%0A'}
+            echo "::error title=Vercel candidate build failed::$ERROR_SUMMARY"
+            {
+              echo '### Vercel candidate build failed'
+              echo '```text'
+              tail -80 /tmp/vercel-deploy.clean
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$DEPLOY_EXIT"
+          fi
           DEPLOY_URL=$(cat /tmp/deploy-url.txt)
           echo "url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
           echo "Built without aliasing: $DEPLOY_URL"
@@ -143,7 +181,7 @@ jobs:
             echo "Candidate ${HEAD_SHA:0:8} became stale while building; live ${LIVE_SHA:0:8} is newer — skip promotion"
             echo "promoted=false" >> "$GITHUB_OUTPUT"
           elif git merge-base --is-ancestor "$LIVE_SHA" "$HEAD_SHA" 2>/dev/null; then
-            npx vercel@latest promote "${{ steps.deploy_candidate.outputs.url }}" \
+            npx vercel@56.2.1 promote "${{ steps.deploy_candidate.outputs.url }}" \
               --yes --token="$VERCEL_TOKEN"
             echo "promoted=true" >> "$GITHUB_OUTPUT"
           else
@@ -193,5 +231,5 @@ jobs:
           if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
             curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
               -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
-              -d "text=🚨 Deploy Gate 部署步骤失败（非 CI-red）%0ACommit: ${HEAD_SHA:0:8}%0A生产停在旧部署，未更新。常见因：VERCEL_TOKEN 失效（CLI token 会过期，应换 scoped token）。查 workflow 日志。" || true
+              -d "text=🚨 Deploy Gate 部署步骤失败（非 CI-red）%0ACommit: ${HEAD_SHA:0:8}%0A生产停在旧部署，未更新。优先查 Actions annotation、Vercel Inspect 与 build system report；仅项目检索失败时优先怀疑 token。" || true
           fi
