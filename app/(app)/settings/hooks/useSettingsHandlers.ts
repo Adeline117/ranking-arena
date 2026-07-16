@@ -651,15 +651,25 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     submittingRef.current = true
     setSavingPassword(true)
     try {
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email,
-        password: currentPassword,
-      })
+      const authScope = {
+        expectedUserId: auth.userId,
+        sessionGeneration: auth.sessionGeneration,
+      }
+      const { error: signInError } = await tokenRefreshCoordinator.reauthenticateWithPassword(
+        {
+          email,
+          password: currentPassword,
+        },
+        authScope
+      )
       if (signInError) {
         showToast(t('currentPasswordWrong'), 'error')
         return
       }
-      const { error } = await supabase.auth.updateUser({ password: newPassword })
+      const { error } = await tokenRefreshCoordinator.updateUser(
+        { password: newPassword },
+        authScope
+      )
       if (error) {
         showToast(error.message, 'error')
         return
@@ -699,7 +709,10 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     submittingRef.current = true
     setSavingEmail(true)
     try {
-      const { error } = await supabase.auth.updateUser({ email: newEmail.trim() })
+      const { error } = await tokenRefreshCoordinator.updateUser(
+        { email: newEmail.trim() },
+        { expectedUserId: auth.userId, sessionGeneration: auth.sessionGeneration }
+      )
       if (error) {
         showToast(error.message, 'error')
         return

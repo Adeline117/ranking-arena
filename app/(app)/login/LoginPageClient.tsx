@@ -20,6 +20,7 @@ import LoginForm from './components/LoginForm'
 import { formatRankedTraderCount } from '@/lib/config/product-facts'
 import { useProductFacts } from '@/lib/hooks/useProductFacts'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 export default function LoginPageClient() {
   const { language: lang, t } = useLanguage()
@@ -374,7 +375,7 @@ export default function LoginPageClient() {
     }, 15_000)
 
     try {
-      const { data, error: verifyError } = await supabase.auth.verifyOtp({
+      const { data, error: verifyError } = await tokenRefreshCoordinator.verifyOtp({
         email,
         token: code,
         type: 'email',
@@ -520,7 +521,7 @@ export default function LoginPageClient() {
       const {
         data: { user },
         error: updateError,
-      } = await supabase.auth.updateUser({ password })
+      } = await tokenRefreshCoordinator.updateUser({ password })
       if (updateError) {
         setError(t('loginVerificationFailed'))
         setLoading(false)
@@ -595,7 +596,10 @@ export default function LoginPageClient() {
       if (isAddAccount) {
         await signOut()
       }
-      const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
+      const { error: loginError } = await tokenRefreshCoordinator.signInWithPassword({
+        email,
+        password,
+      })
       if (loginError) {
         clearTimeout(timeoutId)
         const msg = loginError.message
@@ -676,7 +680,10 @@ export default function LoginPageClient() {
           return
         }
         // Now sign in normally since the ban has been lifted
-        const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
+        const { error: loginError } = await tokenRefreshCoordinator.signInWithPassword({
+          email,
+          password,
+        })
         if (loginError) {
           setError(loginError.message)
         } else {

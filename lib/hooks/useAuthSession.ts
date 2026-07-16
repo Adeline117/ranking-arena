@@ -26,6 +26,14 @@ import {
   synchronizeViewerScope,
   type ViewerKey,
 } from '@/lib/auth/viewer-scope'
+import {
+  AUTH_OPERATION_STORAGE_KEY,
+  AUTH_STORAGE_KEY,
+  getCurrentAuthOperation,
+  getStoredAuthSession,
+  isSessionAllowedForCurrentAuthOperation,
+  parseAuthOperationLease,
+} from '@/lib/auth/session-operation'
 
 // Lazy-load Supabase client to avoid pulling ~50KB into the initial client bundle.
 // The actual import happens on first use (initializeAuth), which is deferred.
@@ -110,7 +118,7 @@ function setGlobalAuthState(newState: Partial<AuthState>) {
   listeners.forEach((listener) => listener(globalAuthState))
 }
 
-function enterIdentityTransition(expectedUserId: string | null): number {
+function enterIdentityTransition(expectedUserId?: string | null): number {
   const generation = beginViewerTransition(expectedUserId)
   const scope = getViewerScope()
   globalAuthState = {
@@ -131,6 +139,7 @@ function enterIdentityTransition(expectedUserId: string | null): number {
 
 // Initialize auth state once
 let initialized = false
+let externalAuthTransition: { operationId: string; generation: number } | null = null
 
 function initializeAuth() {
   if (initialized) return
@@ -145,6 +154,72 @@ function initializeAuth() {
   // Listen for auth-lost events (fired by token-refresh.ts on unrecoverable refresh failure)
   // and show a toast notification so the user knows they need to log in again.
   if (typeof window !== 'undefined') {
+    window.addEventListener('storage', (event) => {
+      if (event.key === AUTH_OPERATION_STORAGE_KEY) {
+        const operation = parseAuthOperationLease(event.newValue)
+        if (!operation) return
+        const currentOperation = getCurrentAuthOperation()
+        // Storage events are asynchronous. A logout/login from an older tab can
+        // arrive after a newer operation already owns localStorage; never let
+        // that stale notification move the current viewer back to pending.
+        if (!currentOperation || currentOperation.id !== operation.id) return
+
+        if (!currentOperation.identityTransition) {
+          const stored = getStoredAuthSession() as Session | null
+          const storedUserId = stored?.user?.id ?? null
+          if (currentOperation.targetKnown && currentOperation.expectedUserId === storedUserId) {
+            if (externalAuthTransition?.operationId === currentOperation.id) {
+              if (!commitViewerTransition(externalAuthTransition.generation, storedUserId)) return
+              externalAuthTransition = null
+            }
+            updateFromSession(stored)
+            setGlobalAuthState({ loading: false, authChecked: true })
+          }
+          return
+        }
+        if (!operation.identityTransition) return
+        const generation = enterIdentityTransition(
+          currentOperation.targetKnown ? currentOperation.expectedUserId : undefined
+        )
+        externalAuthTransition = { operationId: currentOperation.id, generation }
+
+        // A failed login rebinds the lease to the session that remained in
+        // storage but does not rewrite that identical session. Resolve that
+        // rollback here instead of leaving another tab permanently pending.
+        if (currentOperation.targetKnown) {
+          const stored = getStoredAuthSession() as Session | null
+          const storedUserId = stored?.user?.id ?? null
+          if (
+            storedUserId === currentOperation.expectedUserId &&
+            commitViewerTransition(generation, storedUserId)
+          ) {
+            externalAuthTransition = null
+            updateFromSession(stored)
+            setGlobalAuthState({ loading: false, authChecked: true })
+          }
+        }
+        return
+      }
+
+      if (event.key !== AUTH_STORAGE_KEY || !externalAuthTransition) return
+      const operation = parseAuthOperationLease(
+        window.localStorage.getItem(AUTH_OPERATION_STORAGE_KEY)
+      )
+      if (!operation || operation.id !== externalAuthTransition.operationId) return
+      let session: Session | null = null
+      try {
+        session = event.newValue ? (JSON.parse(event.newValue) as Session) : null
+      } catch {
+        return
+      }
+      const userId = session?.user?.id ?? null
+      if (!operation.targetKnown || operation.expectedUserId !== userId) return
+      if (!commitViewerTransition(externalAuthTransition.generation, userId)) return
+      externalAuthTransition = null
+      updateFromSession(session)
+      setGlobalAuthState({ loading: false, authChecked: true })
+    })
+
     window.addEventListener('arena:auth-lost', () => {
       // Lazy-import to avoid circular dependency
       Promise.all([import('@/lib/hooks/useApiMutation'), import('@/lib/i18n')])
@@ -177,6 +252,7 @@ function initializeAuth() {
         .then(({ data }) => {
           if (
             getViewerScope().sessionGeneration !== initialScope.sessionGeneration ||
+            !isSessionAllowedForCurrentAuthOperation(data.session?.user.id ?? null) ||
             !isExpectedTransitionSession(data.session?.user.id ?? null)
           ) {
             return
@@ -187,6 +263,7 @@ function initializeAuth() {
         .catch((err) => {
           if (
             getViewerScope().sessionGeneration !== initialScope.sessionGeneration ||
+            !isSessionAllowedForCurrentAuthOperation(null) ||
             !isExpectedTransitionSession(null)
           ) {
             return
@@ -202,6 +279,16 @@ function initializeAuth() {
           const authChannel = new BroadcastChannel('ranking-arena:auth-state')
           authChannel.onmessage = (event: MessageEvent) => {
             if (event.data?.type === 'USER_LOGGED_OUT') {
+              const operation = getCurrentAuthOperation()
+              if (
+                typeof event.data?.payload?.operationId !== 'string' ||
+                !operation ||
+                operation.id !== event.data.payload.operationId ||
+                !operation.targetKnown ||
+                operation.expectedUserId !== null
+              ) {
+                return
+              }
               const transitionGeneration = enterIdentityTransition(null)
               if (commitViewerTransition(transitionGeneration, null)) {
                 setGlobalAuthState({
@@ -225,6 +312,7 @@ function initializeAuth() {
                     data.session &&
                     getViewerScope().sessionGeneration === scope.sessionGeneration &&
                     data.session.user.id === scope.userId &&
+                    isSessionAllowedForCurrentAuthOperation(data.session.user.id) &&
                     isExpectedTransitionSession(data.session.user.id)
                   ) {
                     updateFromSession(data.session)
@@ -246,6 +334,7 @@ function initializeAuth() {
       // Subscribe to auth state changes
       sb.auth.onAuthStateChange((event, session) => {
         if (event === 'SIGNED_OUT') {
+          if (!isSessionAllowedForCurrentAuthOperation(null)) return
           if (!isExpectedTransitionSession(null)) return
           setGlobalAuthState({
             user: null,
@@ -261,6 +350,7 @@ function initializeAuth() {
           event === 'TOKEN_REFRESHED' ||
           event === 'INITIAL_SESSION'
         ) {
+          if (!isSessionAllowedForCurrentAuthOperation(session?.user.id ?? null)) return
           if (!isExpectedTransitionSession(session?.user.id ?? null)) return
           // A refresh that began for A may finish after a completed A -> B
           // account switch. Supabase emits that result independently of the
@@ -291,6 +381,7 @@ function initializeAuth() {
     .catch((err) => {
       if (
         getViewerScope().sessionGeneration !== initializationScope.sessionGeneration ||
+        !isSessionAllowedForCurrentAuthOperation(null) ||
         !isExpectedTransitionSession(null)
       ) {
         return
@@ -318,6 +409,7 @@ function updateFromSession(session: Session | null) {
       isLoggedIn: false,
     })
   }
+  tokenRefreshCoordinator.observeSession(session)
 }
 
 export function useAuthSession(): AuthSessionReturn {
@@ -432,60 +524,7 @@ export function useAuthSession(): AuthSessionReturn {
   )
 
   const signOut = useCallback(async () => {
-    const sb = await getSupabase()
-    const transitionGeneration = tokenRefreshCoordinator.beginIdentityTransition(null)
-    let refreshesSettled = true
-    try {
-      refreshesSettled = await tokenRefreshCoordinator.settleInflightRefreshes(3_000)
-      await sb.auth.signOut()
-    } catch (error) {
-      logger.warn('[useAuthSession] Sign out failed:', error)
-    }
-    if (!tokenRefreshCoordinator.completeIdentityTransition(transitionGeneration, null)) return
-    setGlobalAuthState({
-      user: null,
-      userId: null,
-      email: null,
-      accessToken: null,
-      isLoggedIn: false,
-      loading: false,
-      authChecked: true,
-    })
-
-    // A refresh that outlived the bounded wait may have written its session to
-    // Supabase storage after the first signOut. Clear it again, but only if the
-    // user has not started another login/switch since this anon epoch began.
-    if (!refreshesSettled) {
-      const committedAnonScope = getViewerScope()
-      void tokenRefreshCoordinator.settleInflightRefreshes().then(async () => {
-        if (
-          committedAnonScope.viewerKey !== 'anon' ||
-          getViewerScope().viewerKey !== committedAnonScope.viewerKey ||
-          getViewerScope().sessionGeneration !== committedAnonScope.sessionGeneration
-        ) {
-          return
-        }
-        try {
-          await sb.auth.signOut()
-        } catch {
-          logger.warn('[useAuthSession] Could not clear a late refresh after sign out')
-        }
-      })
-    }
-    // Explicitly broadcast logout to all other tabs via BroadcastChannel.
-    // Supabase's storage-event listener can miss this when tabs are inactive.
-    try {
-      const channel = new BroadcastChannel('ranking-arena:auth-state')
-      channel.postMessage({
-        type: 'USER_LOGGED_OUT',
-        payload: { userId: null, handle: null },
-        timestamp: Date.now(),
-        sourceTabId: `signout-${Date.now()}`,
-      })
-      channel.close()
-    } catch {
-      /* BroadcastChannel not supported — storage events are fallback */
-    }
+    await tokenRefreshCoordinator.signOut()
   }, [])
 
   return useMemo(

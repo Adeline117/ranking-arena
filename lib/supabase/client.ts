@@ -2,6 +2,7 @@
 import { createClient } from "@supabase/supabase-js";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from './database.types';
+import { guardedAuthStorage } from '@/lib/auth/session-operation';
 
 // Singleton — created once on first access to avoid multiple GoTrue instances.
 // The module is eagerly imported by Next.js so we keep createClient() cheap:
@@ -14,8 +15,10 @@ export const supabase: SupabaseClient<Database> = createClient<Database>(url, an
   auth: {
     persistSession: true,
     storageKey: 'arena-auth',
-    storage: typeof window !== 'undefined' ? window.localStorage : undefined,
-    autoRefreshToken: true,
+    storage: typeof window !== 'undefined' ? guardedAuthStorage : undefined,
+    // Refreshes must pass through tokenRefreshCoordinator so their principal
+    // lease is checked at the actual localStorage write boundary.
+    autoRefreshToken: false,
     detectSessionInUrl: true,
   },
   global: {

@@ -17,7 +17,6 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
-import { supabase } from '@/lib/supabase/client'
 
 // Lazy-load siwe (pulls in ethers ~668KB) — only needed when user triggers
 // Web3 sign-in, not on initial page load.
@@ -28,6 +27,7 @@ async function getSiweMessage() {
 import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 interface SiweAuthResult {
   action: 'existing_user' | 'new_user'
@@ -191,11 +191,14 @@ export function useSiweAuth(): UseSiweAuthReturn {
 
       // Complete Supabase auth using the verification token
       if (result.verificationToken && result.email) {
-        const { error: otpError } = await supabase.auth.verifyOtp({
-          email: result.email,
-          token: result.verificationToken,
-          type: 'email',
-        })
+        const { error: otpError } = await tokenRefreshCoordinator.verifyOtp(
+          {
+            email: result.email,
+            token: result.verificationToken,
+            type: 'email',
+          },
+          result.userId
+        )
 
         if (otpError) {
           logger.warn(
