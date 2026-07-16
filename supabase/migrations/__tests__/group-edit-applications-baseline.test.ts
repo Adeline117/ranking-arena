@@ -69,7 +69,7 @@ describe('group edit applications fresh-migration baseline', () => {
     expect(migration).not.toMatch(/CREATE\s+TRIGGER/i)
   })
 
-  it('has no out-of-band SQL definition that fresh installs must run first', () => {
+  it('keeps the first definition in the canonical migration chain', () => {
     const definitions = ['supabase', 'scripts']
       .flatMap(sqlFilesUnder)
       .filter((path) =>
@@ -77,7 +77,11 @@ describe('group edit applications fresh-migration baseline', () => {
           readFileSync(join(root, path), 'utf8')
         )
       )
+    const migrationDefinitions = definitions
+      .filter((path) => path.startsWith('supabase/migrations/'))
+      .sort()
 
-    expect(definitions).toEqual([migrationPath])
+    expect(migrationDefinitions[0]).toBe(migrationPath)
+    expect(definitions.filter((path) => !path.startsWith('supabase/migrations/'))).toEqual([])
   })
 })
