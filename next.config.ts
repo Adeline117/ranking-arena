@@ -58,6 +58,15 @@ const nextConfig = {
   // Webpack config (production builds use webpack for better chunk consolidation)
   webpack: (config: Record<string, any>, { isServer }: { isServer: boolean }) => {
     if (!isServer) {
+      config.resolve.alias = {
+        ...(config.resolve.alias || {}),
+        // Optional Privy Solana funding programs are not used by Arena.
+        '@solana-program/system': false,
+        '@solana-program/memo': false,
+        '@solana-program/token': false,
+        // Optional wagmi Tempo connector peer; no Tempo connector is exposed.
+        accounts: false,
+      }
       config.resolve.fallback = {
         ...config.resolve.fallback,
         dns: false,
@@ -154,11 +163,8 @@ const nextConfig = {
           /^(@react-native-async-storage\/async-storage|@gemini-wallet\/core|porto|porto\/internal|@clickhouse\/client|@farcaster\/mini-app-solana|@farcaster\/miniapp-sdk)$/,
       })
     )
-    // NOTE: Webpack build is broken by wagmi@3.4.5 / viem@2.47.17 version
-    // mismatch (Actions.zone missing from viem/tempo). Turbopack handles this
-    // gracefully. Keep Turbopack for production builds until wagmi/viem are
-    // upgraded together. Commit 795ad9aac incorrectly blamed Turbopack for
-    // batch-fetch-traders failures — actual root cause was VPS_PROXY_KEY mismatch.
+    // Production deliberately uses webpack: Turbopack/SWC has emitted invalid
+    // Math.pow(base, BigInt(exponent)) for noble-curves, breaking Privy at runtime.
     return config
   },
 

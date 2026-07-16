@@ -16,9 +16,9 @@
   },
   "scripts": {
     "dev": "NODE_OPTIONS='--max-old-space-size=3584' next dev",
-    "build": "touch .env && TURBOPACK=0 next build",
-    "build:turbopack": "touch .env && next build",
-    "analyze": "ANALYZE=true TURBOPACK=0 next build",
+    "build": "touch .env && next build --webpack",
+    "build:turbopack": "touch .env && next build --turbopack",
+    "analyze": "ANALYZE=true next build --webpack",
     "start": "next start",
     "lint": "eslint . && scripts/check-service-layer.sh \"$(git diff --name-only HEAD 2>/dev/null || true)\"",
     "check:service-layer": "scripts/check-service-layer.sh \"$(git diff --name-only HEAD 2>/dev/null || true)\"",
