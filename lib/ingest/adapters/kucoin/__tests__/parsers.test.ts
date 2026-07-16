@@ -165,6 +165,7 @@ describe('parseKucoinProfile', () => {
     expect(pnl.points).toHaveLength(30)
     expect(pnl.points[0]).toEqual({ ts: '2026-05-13T16:00:00.000Z', value: -173.12764102 })
     expect(pnl.points[29]).toEqual({ ts: '2026-06-11T16:00:00.000Z', value: 6310.43909344 })
+    expect(profile.replaceSeries).toEqual([{ timeframe: 30, metrics: ['pnl', 'roi'] }])
     expect(validateKucoinProfile(profile, ctx, 30, raw)).toEqual([])
   })
 
@@ -180,6 +181,7 @@ describe('parseKucoinProfile', () => {
     const staleCtx = { ...ctx, scrapedAt: '2026-07-16T16:00:00.000Z' }
     const raw = profileBundle(30)
     const parsed = parseKucoinProfile(raw, staleCtx)
+    expect(parsed.replaceSeries).toEqual([{ timeframe: 30, metrics: ['pnl', 'roi'] }])
     expect(validateKucoinProfile(parsed, staleCtx, 30, raw)[0]).toMatchObject({
       reason: 'profile_series_tail_stale',
       payload: {
@@ -215,6 +217,7 @@ describe('parseKucoinProfile', () => {
         },
       },
     })
+    expect(parsed.replaceSeries).toEqual([])
     expect(parsed.series.find((series) => series.metric === 'pnl')?.points[0].value).not.toBe(0)
   })
 

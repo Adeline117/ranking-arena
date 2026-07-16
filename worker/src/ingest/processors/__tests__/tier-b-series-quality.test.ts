@@ -87,6 +87,7 @@ function profile(): ParsedProfile {
         extras: {},
       },
     ],
+    replaceSeries: [{ timeframe: 30, metrics: ['pnl'] }],
     series: [
       {
         timeframe: 30,
@@ -200,6 +201,9 @@ describe('Tier-B series quality scheduling', () => {
 
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
     expect(mockParseProfile).toHaveBeenCalledTimes(2)
+    expect(mockParseProfile.mock.results[0].value).toMatchObject({
+      replaceSeries: [{ timeframe: 30, metrics: ['pnl'] }],
+    })
     expect(mockValidateProfile).toHaveBeenCalledTimes(2)
     expect(mockWriteRawObject.mock.invocationCallOrder[0]).toBeLessThan(
       mockParseProfile.mock.invocationCallOrder[0]
