@@ -16,7 +16,7 @@ export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 export const GET = withCron('ensure-partitions', async (_request, { supabase }) => {
-  const { data, error } = await supabase.rpc('ensure_future_partitions', { months_ahead: 4 })
+  const { data, error } = await supabase.rpc('ensure_future_partitions', { p_months_ahead: 4 })
 
   if (error) {
     throw new Error(`ensure_future_partitions failed: ${error.message}`)
