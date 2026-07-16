@@ -83,8 +83,15 @@ export const POST = withAuth(
       )
     } else if (permCheck.reason === 'USER_NOT_FOUND') {
       return NextResponse.json({ error: 'User not found' }, { status: 404 })
-    } else if (!canMessage && !permCheck.is_mutual) {
-      // Non-mutual, under limit
+    } else if (!canMessage) {
+      // BLOCKED, SENDER_UNAVAILABLE and future denial reasons must fail closed.
+      // In particular, never create an empty conversation for blocked users.
+      return NextResponse.json(
+        { error: 'Permission denied', error_code: 'PERMISSION_DENIED' },
+        { status: 403 }
+      )
+    } else if (!permCheck.is_mutual) {
+      // Non-mutual sender with capacity remaining.
       messageLimit = { reached: false, sent: permCheck.sent_count || 0, max: 3 }
     }
 
