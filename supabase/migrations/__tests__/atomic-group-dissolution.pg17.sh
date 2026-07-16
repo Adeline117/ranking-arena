@@ -74,11 +74,14 @@ CREATE ROLE postgres NOLOGIN SUPERUSER;
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN NOINHERIT NOBYPASSRLS;
+CREATE ROLE authenticator LOGIN NOINHERIT;
 CREATE ROLE drift_parent NOLOGIN;
 CREATE ROLE drift_child NOLOGIN;
+GRANT service_role TO authenticator WITH INHERIT FALSE, SET TRUE;
 
 ALTER SCHEMA public OWNER TO postgres;
-GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role, drift_parent, drift_child;
+GRANT USAGE ON SCHEMA public
+  TO anon, authenticated, service_role, authenticator, drift_parent, drift_child;
 
 SET ROLE postgres;
 
@@ -244,9 +247,8 @@ GRANT EXECUTE ON FUNCTION public.dissolve_group_atomic(uuid, uuid) TO drift_chil
 RESET ROLE;
 SQL
 
-# An inherited/SET-capable service edge is not safe migration drift to repair.
-# The migration must fail before changing any object, then succeed once the
-# cluster-level role graph is corrected.
+# The canonical authenticator SET-only edge above must pass. A browser edge is
+# unsafe migration drift: fail before changing objects, then pass once removed.
 "${PSQL[@]}" -c 'GRANT service_role TO authenticated' >/dev/null
 if "${PSQL[@]}" -f "$MIGRATION" >/dev/null 2>"$TMP_ROOT/unsafe-role.err"; then
   echo "Migration accepted an unsafe service_role authority edge" >&2
@@ -258,6 +260,23 @@ if ! grep -q 'service_role has an unsafe effective authority edge' "$TMP_ROOT/un
   exit 1
 fi
 "${PSQL[@]}" -c 'REVOKE service_role FROM authenticated' >/dev/null
+
+# The gateway edge itself is allowed only as SET-only/NOINHERIT.  Prove that
+# an inherited gateway edge also fails closed, then restore the canonical graph.
+"${PSQL[@]}" -c \
+  'GRANT service_role TO authenticator WITH INHERIT TRUE, SET TRUE' >/dev/null
+if "${PSQL[@]}" -f "$MIGRATION" >/dev/null 2>"$TMP_ROOT/unsafe-authenticator.err"; then
+  echo "Migration accepted an inherited authenticator service_role edge" >&2
+  exit 1
+fi
+if ! grep -q 'service_role has an unsafe effective authority edge' \
+  "$TMP_ROOT/unsafe-authenticator.err"; then
+  echo "Migration failed for an unexpected authenticator-role reason" >&2
+  cat "$TMP_ROOT/unsafe-authenticator.err" >&2
+  exit 1
+fi
+"${PSQL[@]}" -c \
+  'GRANT service_role TO authenticator WITH INHERIT FALSE, SET TRUE' >/dev/null
 
 "${PSQL[@]}" -f "$MIGRATION" >/dev/null
 
