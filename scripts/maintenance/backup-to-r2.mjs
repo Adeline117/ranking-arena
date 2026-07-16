@@ -12,6 +12,8 @@
 
 import { execSync } from 'child_process'
 import { createReadStream, statSync, unlinkSync } from 'fs'
+import { resolve } from 'path'
+import { pathToFileURL } from 'url'
 import {
   S3Client,
   PutObjectCommand,
@@ -71,15 +73,6 @@ const R2_ACCESS_KEY_ID = process.env.R2_ACCESS_KEY_ID
 const R2_SECRET_ACCESS_KEY = process.env.R2_SECRET_ACCESS_KEY
 const R2_BUCKET = process.env.R2_BUCKET || 'arena-backups'
 
-if (!DATABASE_URL) {
-  console.error('Missing DATABASE_URL')
-  process.exit(1)
-}
-if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ACCOUNT_ID) {
-  console.error('Missing R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)')
-  process.exit(1)
-}
-
 const s3 = new S3Client({
   region: 'auto',
   endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -105,7 +98,93 @@ const backupSchemas = schemaMode
       .filter(Boolean)
   : []
 
+/**
+ * Keep database credentials out of pg_dump's argv. libpq accepts the password
+ * through PGPASSWORD, while the remaining URI (including SSL/query settings)
+ * stays as the database argument.
+ */
+export function preparePgDumpConnection(databaseUrl) {
+  let parsedUrl
+  try {
+    parsedUrl = new URL(databaseUrl)
+  } catch {
+    throw new Error('DATABASE_URL must be a valid PostgreSQL URL')
+  }
+
+  if (parsedUrl.protocol !== 'postgres:' && parsedUrl.protocol !== 'postgresql:') {
+    throw new Error('DATABASE_URL must use the postgres or postgresql protocol')
+  }
+
+  const decodePassword = (value) => {
+    try {
+      return decodeURIComponent(value)
+    } catch {
+      throw new Error('DATABASE_URL password has invalid percent-encoding')
+    }
+  }
+
+  const authorityStart = databaseUrl.indexOf('://') + 3
+  const authorityEndOffset = databaseUrl.slice(authorityStart).search(/[/?#]/)
+  const authorityEnd =
+    authorityEndOffset === -1 ? databaseUrl.length : authorityStart + authorityEndOffset
+  const authority = databaseUrl.slice(authorityStart, authorityEnd)
+  const atIndex = authority.lastIndexOf('@')
+  const userInfo = atIndex >= 0 ? authority.slice(0, atIndex) : ''
+  const passwordSeparator = userInfo.indexOf(':')
+  const hasAuthorityPassword = passwordSeparator >= 0
+  const authorityPassword = hasAuthorityPassword
+    ? decodePassword(userInfo.slice(passwordSeparator + 1))
+    : undefined
+  const sanitizedAuthority = hasAuthorityPassword
+    ? `${userInfo.slice(0, passwordSeparator)}${authority.slice(atIndex)}`
+    : authority
+
+  // Query parameters are parsed after the authority by libpq, so an explicit
+  // ?password= value takes precedence over user:password@host. Preserve that
+  // behavior while removing every password occurrence from the public argv.
+  // Work on the raw query so unrelated libpq values such as `a+b` are not
+  // normalized by URLSearchParams and retain their exact connection meaning.
+  const remainder = databaseUrl.slice(authorityEnd)
+  const fragmentIndex = remainder.indexOf('#')
+  const beforeFragment = fragmentIndex === -1 ? remainder : remainder.slice(0, fragmentIndex)
+  const fragment = fragmentIndex === -1 ? '' : remainder.slice(fragmentIndex)
+  const queryIndex = beforeFragment.indexOf('?')
+  const path = queryIndex === -1 ? beforeFragment : beforeFragment.slice(0, queryIndex)
+  const rawQuery = queryIndex === -1 ? null : beforeFragment.slice(queryIndex + 1)
+  const queryPasswords = []
+  const safeQueryParts = []
+
+  if (rawQuery !== null) {
+    for (const part of rawQuery.split('&')) {
+      const separator = part.indexOf('=')
+      const rawKey = separator === -1 ? part : part.slice(0, separator)
+      if (decodePassword(rawKey) === 'password') {
+        queryPasswords.push(decodePassword(separator === -1 ? '' : part.slice(separator + 1)))
+      } else {
+        safeQueryParts.push(part)
+      }
+    }
+  }
+
+  const safeQuery = safeQueryParts.length > 0 ? `?${safeQueryParts.join('&')}` : ''
+  const password = queryPasswords.length > 0 ? queryPasswords.at(-1) : authorityPassword
+
+  return {
+    connectionUrl: `${databaseUrl.slice(0, authorityStart)}${sanitizedAuthority}${path}${safeQuery}${fragment}`,
+    password,
+  }
+}
+
 async function run() {
+  if (!DATABASE_URL) {
+    console.error('Missing DATABASE_URL')
+    process.exit(1)
+  }
+  if (!R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_ACCOUNT_ID) {
+    console.error('Missing R2 credentials (R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY)')
+    process.exit(1)
+  }
+
   const modeLabel = schemaMode
     ? `schemas [${backupSchemas.join(',')}]`
     : fullMode
@@ -132,9 +211,12 @@ async function run() {
     )
     // 30 tables over network to Supabase can take 15-20min depending on
     // trader_snapshots_v2 size. 30min budget prevents false ETIMEDOUT.
+    const { connectionUrl, password } = preparePgDumpConnection(DATABASE_URL)
+    const pgDumpEnv =
+      password === undefined ? process.env : { ...process.env, PGPASSWORD: password }
     execSync(
-      `${pgDumpPath} "${DATABASE_URL}" ${tableArgs} --no-owner --no-privileges | gzip > ${localPath}`,
-      { stdio: ['pipe', 'pipe', 'pipe'], timeout: 1_800_000 }
+      `${pgDumpPath} "${connectionUrl}" ${tableArgs} --no-owner --no-privileges | gzip > ${localPath}`,
+      { env: pgDumpEnv, stdio: ['pipe', 'pipe', 'pipe'], timeout: 1_800_000 }
     )
 
     const size = statSync(localPath).size
@@ -233,4 +315,8 @@ async function pruneOldBackups() {
   }
 }
 
-run()
+const isDirectRun =
+  process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href
+if (isDirectRun) {
+  run()
+}
