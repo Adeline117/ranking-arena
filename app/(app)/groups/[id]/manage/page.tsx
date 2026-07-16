@@ -38,6 +38,7 @@ import ContentManagement from './components/ContentManagement'
 import GroupSettings from './components/GroupSettings'
 import { MuteModal, NotifyModal } from './components/ManageModals'
 import {
+  advanceGroupMemberModerationResourceScope,
   GroupMemberModerationOperationLedger,
   GroupMemberModerationRequestSingleFlight,
   isGroupMemberModerationViewerCurrent,
@@ -259,10 +260,19 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const moderationOperationsRef = useRef(new GroupMemberModerationOperationLedger())
   const moderationRequestsRef = useRef(new GroupMemberModerationRequestSingleFlight())
   const moderationAccessTokenRef = useRef(accessToken)
+  const moderationResourceScopeRef = useRef({
+    groupId: null as string | null,
+    resourceGeneration: 0,
+  })
+  moderationResourceScopeRef.current = advanceGroupMemberModerationResourceScope(
+    moderationResourceScopeRef.current,
+    groupId
+  )
   const moderationViewerScope: GroupMemberModerationViewerScope = {
     actorId: userId,
     viewerKey,
     sessionGeneration,
+    ...moderationResourceScopeRef.current,
   }
   const moderationViewerScopeRef = useRef(moderationViewerScope)
   moderationAccessTokenRef.current = accessToken
@@ -335,14 +345,14 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           if (groupData.name_en || groupData.description_en) setShowMultiLang(true)
         }
         const { data: memberData } = await supabase
-          .from('group_members')
+          .from('own_group_memberships')
           .select('role')
           .eq('group_id', groupId)
           .eq('user_id', userId)
           .maybeSingle()
         if (memberData) setUserRole(memberData.role as 'owner' | 'admin' | 'member')
         const { data: membersData } = await supabase
-          .from('group_members')
+          .from('group_member_moderation_directory')
           .select('user_id, role, joined_at, muted_until, mute_reason')
           .eq('group_id', groupId)
           .order('role', { ascending: true })
@@ -419,11 +429,12 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
 
   const reconcileMemberModeration = useCallback(
     async (targetUserId: string, expectedScope: GroupMemberModerationViewerScope) => {
-      if (!isModerationViewerScopeCurrent(expectedScope)) return
+      const scopedGroupId = expectedScope.groupId
+      if (!scopedGroupId || !isModerationViewerScopeCurrent(expectedScope)) return
       const { data, error } = await supabase
-        .from('group_members')
+        .from('group_member_moderation_directory')
         .select('user_id, muted_until, mute_reason')
-        .eq('group_id', groupId)
+        .eq('group_id', scopedGroupId)
         .eq('user_id', targetUserId)
         .maybeSingle()
       if (error) throw error
@@ -443,7 +454,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         )
       })
     },
-    [groupId, isModerationViewerScopeCurrent]
+    [isModerationViewerScopeCurrent]
   )
 
   // Handlers
@@ -453,16 +464,24 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
       actorId: userId,
       viewerKey,
       sessionGeneration,
+      ...moderationResourceScopeRef.current,
     }
-    if (!isModerationViewerScopeCurrent(requestScope)) return
+    const requestGroupId = groupId.trim().toLowerCase()
+    if (
+      !requestGroupId ||
+      requestScope.groupId !== requestGroupId ||
+      !isModerationViewerScopeCurrent(requestScope)
+    )
+      return
     let operation: GroupMemberModerationOperation | null = null
     try {
       const requestedOperation = moderationOperationsRef.current.acquire({
         actorId: userId,
         viewerKey,
         sessionGeneration,
+        resourceGeneration: requestScope.resourceGeneration,
         action: 'mute',
-        groupId,
+        groupId: requestGroupId,
         targetUserId,
         durationMs: MUTE_DURATION_MS[muteDuration],
         reason: muteReason,
@@ -518,16 +537,24 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
       actorId: userId,
       viewerKey,
       sessionGeneration,
+      ...moderationResourceScopeRef.current,
     }
-    if (!isModerationViewerScopeCurrent(requestScope)) return
+    const requestGroupId = groupId.trim().toLowerCase()
+    if (
+      !requestGroupId ||
+      requestScope.groupId !== requestGroupId ||
+      !isModerationViewerScopeCurrent(requestScope)
+    )
+      return
     let operation: GroupMemberModerationOperation | null = null
     try {
       const requestedOperation = moderationOperationsRef.current.acquire({
         actorId: userId,
         viewerKey,
         sessionGeneration,
+        resourceGeneration: requestScope.resourceGeneration,
         action: 'unmute',
-        groupId,
+        groupId: requestGroupId,
         targetUserId,
       })
       operation = requestedOperation

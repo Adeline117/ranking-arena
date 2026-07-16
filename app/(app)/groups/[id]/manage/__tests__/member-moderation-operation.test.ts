@@ -1,4 +1,5 @@
 import {
+  advanceGroupMemberModerationResourceScope,
   GroupMemberModerationOperationLedger,
   GroupMemberModerationRequestSingleFlight,
   MAX_PENDING_GROUP_MODERATION_OPERATIONS,
@@ -16,6 +17,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 const GROUP_ID = '10000000-0000-4000-8000-000000000001'
+const OTHER_GROUP_ID = '11000000-0000-4000-8000-000000000011'
 const ACTOR_ID = '90000000-0000-4000-8000-000000000009'
 const OTHER_ACTOR_ID = '80000000-0000-4000-8000-000000000008'
 const TARGET_ID = '20000000-0000-4000-8000-000000000002'
@@ -183,6 +185,8 @@ describe('group member moderation operation ledger', () => {
       actorId: ACTOR_ID,
       viewerKey: `user:${ACTOR_ID}`,
       sessionGeneration: 0,
+      groupId: GROUP_ID,
+      resourceGeneration: 0,
     })
 
     expect(
@@ -227,6 +231,8 @@ describe('group member moderation operation ledger', () => {
       actorId: ACTOR_ID,
       viewerKey: `user:${ACTOR_ID}`,
       sessionGeneration: 8,
+      groupId: GROUP_ID,
+      resourceGeneration: 0,
     })
     const replacement = ledger.acquire({
       actorId: ACTOR_ID,
@@ -252,8 +258,8 @@ describe('group member moderation operation ledger', () => {
       const operation = ledger.acquire({
         actorId: ACTOR_ID,
         action: 'unmute',
-        groupId: `10000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
-        targetUserId: TARGET_ID,
+        groupId: GROUP_ID,
+        targetUserId: `20000000-0000-4000-8000-${String(index).padStart(12, '0')}`,
       })
       if (index === 0) oldestOperation = operation.operationId
     }
@@ -262,8 +268,8 @@ describe('group member moderation operation ledger', () => {
     const recreatedOldest = ledger.acquire({
       actorId: ACTOR_ID,
       action: 'unmute',
-      groupId: '10000000-0000-4000-8000-000000000000',
-      targetUserId: TARGET_ID,
+      groupId: GROUP_ID,
+      targetUserId: '20000000-0000-4000-8000-000000000000',
     })
     expect(recreatedOldest.operationId).not.toBe(oldestOperation)
     expect(ledger.size).toBe(MAX_PENDING_GROUP_MODERATION_OPERATIONS)
@@ -686,6 +692,8 @@ describe('group member moderation viewer guard', () => {
       actorId: ACTOR_ID,
       viewerKey: current.viewerKey,
       sessionGeneration: current.sessionGeneration,
+      groupId: GROUP_ID,
+      resourceGeneration: 1,
     }
 
     expect(isGroupMemberModerationViewerCurrent(rendered, rendered, accessTokenFor(ACTOR_ID))).toBe(
@@ -705,6 +713,81 @@ describe('group member moderation viewer guard', () => {
       false
     )
   })
+
+  it('increments the resource generation across G1 to G2 to G1 transitions', () => {
+    const empty = { groupId: null, resourceGeneration: 0 }
+    const groupOne = advanceGroupMemberModerationResourceScope(empty, GROUP_ID.toUpperCase())
+    const sameGroup = advanceGroupMemberModerationResourceScope(groupOne, GROUP_ID)
+    const groupTwo = advanceGroupMemberModerationResourceScope(groupOne, OTHER_GROUP_ID)
+    const groupOneAgain = advanceGroupMemberModerationResourceScope(groupTwo, GROUP_ID)
+
+    expect(groupOne).toEqual({ groupId: GROUP_ID, resourceGeneration: 1 })
+    expect(sameGroup).toBe(groupOne)
+    expect(groupTwo).toEqual({ groupId: OTHER_GROUP_ID, resourceGeneration: 2 })
+    expect(groupOneAgain).toEqual({ groupId: GROUP_ID, resourceGeneration: 3 })
+  })
+
+  it('drops a G1 late ACK after same-viewer navigation to G2', async () => {
+    __resetViewerScopeForTests()
+    const identity = synchronizeViewerScope(true, ACTOR_ID)
+    const groupOneScope = {
+      actorId: ACTOR_ID,
+      viewerKey: identity.viewerKey,
+      sessionGeneration: identity.sessionGeneration,
+      groupId: GROUP_ID,
+      resourceGeneration: 1,
+    }
+    let renderedScope = groupOneScope
+    const ledger = new GroupMemberModerationOperationLedger(() => OPERATION_ID)
+    const operation = ledger.acquire({
+      actorId: ACTOR_ID,
+      viewerKey: identity.viewerKey,
+      sessionGeneration: identity.sessionGeneration,
+      resourceGeneration: groupOneScope.resourceGeneration,
+      action: 'unmute',
+      groupId: GROUP_ID,
+      targetUserId: TARGET_ID,
+    })
+    let resolveAck!: (value: ReturnType<typeof response>) => void
+    const fetcher = jest.fn(
+      () =>
+        new Promise<ReturnType<typeof response>>((resolve) => {
+          resolveAck = resolve
+        })
+    )
+    const reconcileTarget = jest.fn()
+    const onAcknowledged = jest.fn()
+    const pending = runGroupMemberModerationRequest({
+      operation,
+      ledger,
+      accessToken: accessTokenFor(ACTOR_ID),
+      csrfHeaders: {},
+      fetcher,
+      isViewerCurrent: () =>
+        isGroupMemberModerationViewerCurrent(
+          groupOneScope,
+          renderedScope,
+          accessTokenFor(ACTOR_ID)
+        ),
+      reconcileTarget,
+      onAcknowledged,
+    })
+    await Promise.resolve()
+
+    renderedScope = {
+      ...groupOneScope,
+      groupId: OTHER_GROUP_ID,
+      resourceGeneration: 2,
+    }
+    ledger.scope(renderedScope)
+    resolveAck(response({ success: true, operation_id: OPERATION_ID }))
+
+    await expect(pending).resolves.toEqual({ ok: true, completedCurrentIntent: false })
+    expect(reconcileTarget).not.toHaveBeenCalled()
+    expect(onAcknowledged).not.toHaveBeenCalled()
+    expect(ledger.isCurrent(operation)).toBe(false)
+    expect(ledger.size).toBe(0)
+  })
 })
 
 describe('group management integration', () => {
@@ -712,6 +795,9 @@ describe('group management integration', () => {
     const page = readFileSync(join(process.cwd(), 'app/(app)/groups/[id]/manage/page.tsx'), 'utf8')
     expect(page).toContain('moderationViewerScopeRef.current = moderationViewerScope')
     expect(page).toContain('moderationOperationsRef.current.scope(moderationViewerScope)')
+    expect(page).toContain('advanceGroupMemberModerationResourceScope(')
+    expect(page).toContain('resourceGeneration: requestScope.resourceGeneration')
+    expect(page).toContain('requestScope.groupId !== requestGroupId')
     expect(page).toContain('isGroupMemberModerationViewerCurrent(')
     expect(page).toContain('moderationAccessTokenRef.current')
     expect(page).toContain('moderationRequestsRef.current.run(requestedOperation.operationId')

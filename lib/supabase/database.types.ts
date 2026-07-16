@@ -7887,6 +7887,26 @@ export type Database = {
       }
     }
     Views: {
+      group_member_directory: {
+        Row: {
+          group_id: string
+          joined_at: string
+          role: Database['public']['Enums']['member_role']
+          user_id: string
+        }
+        Relationships: []
+      }
+      group_member_moderation_directory: {
+        Row: {
+          group_id: string
+          joined_at: string
+          mute_reason: string | null
+          muted_until: string | null
+          role: Database['public']['Enums']['member_role']
+          user_id: string
+        }
+        Relationships: []
+      }
       group_subscription_stats: {
         Row: {
           active_subscribers: number | null
@@ -7897,6 +7917,17 @@ export type Database = {
           subscription_price_yearly: number | null
           total_revenue: number | null
           trial_users: number | null
+        }
+        Relationships: []
+      }
+      own_group_memberships: {
+        Row: {
+          group_id: string
+          joined_at: string
+          muted_until: string | null
+          pinned: boolean
+          role: Database['public']['Enums']['member_role']
+          user_id: string
         }
         Relationships: []
       }

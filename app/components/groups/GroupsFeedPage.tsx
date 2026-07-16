@@ -53,11 +53,11 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
 
     const loadMyGroups = async () => {
       try {
-        // Single joined query instead of 2 sequential queries (#36).
-        // pinned = member-controlled self-pin (U9-12) → sort pinned groups first.
+        // Private membership preferences come from the caller-scoped projection;
+        // the public directory intentionally does not expose pinned state.
         const { data: memberships } = await supabase
-          .from('group_members')
-          .select('group_id, pinned, groups:group_id(id, name, name_en, avatar_url, member_count)')
+          .from('own_group_memberships')
+          .select('group_id, pinned')
           .eq('user_id', userId)
 
         if (!memberships || memberships.length === 0) {
@@ -66,10 +66,17 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
           return
         }
 
+        const groupIds = memberships.map((membership) => membership.group_id)
+        const { data: joinedGroups } = await supabase
+          .from('groups')
+          .select('id, name, name_en, avatar_url, member_count')
+          .in('id', groupIds)
+        const groupById = new Map((joinedGroups || []).map((group) => [group.id, group]))
+
         const groupsData = memberships
-          .map((m: Record<string, unknown>) => {
-            const g = m.groups as Group | null
-            return g ? ({ ...g, pinned: !!m.pinned } as Group) : null
+          .map((membership) => {
+            const group = groupById.get(membership.group_id)
+            return group ? ({ ...group, pinned: !!membership.pinned } as Group) : null
           })
           .filter((g): g is Group => g != null)
           // pinned first, then keep insertion order (recency of membership)

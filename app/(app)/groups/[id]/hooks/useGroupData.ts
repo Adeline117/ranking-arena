@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import { logger } from '@/lib/logger'
 import { t } from '@/lib/i18n'
+import { getCsrfHeaders } from '@/lib/api/client'
 
 export type Group = {
   id: string
@@ -36,7 +37,28 @@ interface UseGroupDataOptions {
   language: string
 }
 
-export function useGroupData({ groupId, userId, accessToken, showToast, language: _language }: UseGroupDataOptions) {
+interface MembershipApiResult {
+  action?: 'joined' | 'already_member' | 'left' | 'not_member' | 'requested'
+  role?: 'owner' | 'admin' | 'member'
+  member_count?: number
+  error?: string
+}
+
+function isGroupRole(value: unknown): value is 'owner' | 'admin' | 'member' {
+  return value === 'owner' || value === 'admin' || value === 'member'
+}
+
+function isCanonicalMemberCount(value: unknown): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= 0
+}
+
+export function useGroupData({
+  groupId,
+  userId,
+  accessToken,
+  showToast,
+  language: _language,
+}: UseGroupDataOptions) {
   const [group, setGroup] = useState<Group | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -64,7 +86,9 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
     try {
       const { data: groupData, error: groupErr } = await supabase
         .from('groups')
-        .select('id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, is_premium_only')
+        .select(
+          'id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, is_premium_only'
+        )
         .eq('id', groupId)
         .maybeSingle()
 
@@ -82,18 +106,19 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
 
       if (groupErr) {
         // Sanitize DB error messages — don't show raw SQL errors to users
-        const isInvalidId = groupErr.code === '22P02' || groupErr.message?.includes('invalid input syntax')
+        const isInvalidId =
+          groupErr.code === '22P02' || groupErr.message?.includes('invalid input syntax')
         setError(isInvalidId ? t('groupNotFound') : t('loadFailed'))
         setLoading(false)
         return
       }
 
-      setGroup(groupData ? { ...groupData, owner_handle: ownerHandle } as Group : null)
+      setGroup(groupData ? ({ ...groupData, owner_handle: ownerHandle } as Group) : null)
 
       // Check membership
       if (userId) {
         const { data: membership } = await supabase
-          .from('group_members')
+          .from('own_group_memberships')
           .select('role')
           .eq('group_id', groupId)
           .eq('user_id', userId)
@@ -120,63 +145,97 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
   }, [loadGroup])
 
   // Join group
-  const handleJoin = useCallback(async (_bypassPro = false) => {
-    if (!userId || !accessToken) {
-      showToast(t('pleaseLogin'), 'warning')
-      return
-    }
-
-    setJoining(true)
-    try {
-      const { error: joinErr } = await supabase
-        .from('group_members')
-        .insert({ group_id: groupId, user_id: userId, role: 'member' })
-
-      if (joinErr) {
-        if (joinErr.code === '23505') {
-          setIsMember(true)
-          showToast(t('groupAlreadyMember'), 'warning')
-        } else {
-          showToast(joinErr.message, 'error')
-        }
-      } else {
-        setIsMember(true)
-        setUserRole('member')
-        setGroup(prev => prev ? { ...prev, member_count: (prev.member_count || 0) + 1 } : null)
-        showToast(t('joinedGroup'), 'success')
+  const handleJoin = useCallback(
+    async (_bypassPro = false) => {
+      if (!userId || !accessToken) {
+        showToast(t('pleaseLogin'), 'warning')
+        return
       }
-    } catch (err) {
-      logger.error('Join error:', err)
-      showToast(t('joinFailed'), 'error')
-    } finally {
-      setJoining(false)
-    }
-  }, [userId, accessToken, groupId, showToast])
+
+      setJoining(true)
+      try {
+        const response = await fetch(`/api/groups/${groupId}/membership`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ action: 'join' }),
+        })
+        const result = (await response.json().catch(() => ({}))) as MembershipApiResult
+
+        if (!response.ok) throw new Error(result.error || t('joinFailed'))
+        if (result.action === 'requested') {
+          showToast(t('joinRequestSubmitted'), 'success')
+          return
+        }
+        if (result.action !== 'joined' && result.action !== 'already_member') {
+          throw new Error(t('joinFailed'))
+        }
+        if (!isCanonicalMemberCount(result.member_count)) throw new Error(t('joinFailed'))
+        if (result.action === 'already_member' && !isGroupRole(result.role)) {
+          throw new Error(t('joinFailed'))
+        }
+
+        setIsMember(true)
+        setUserRole(
+          result.action === 'already_member' && isGroupRole(result.role) ? result.role : 'member'
+        )
+        setGroup((previousGroup) =>
+          previousGroup
+            ? { ...previousGroup, member_count: result.member_count as number }
+            : previousGroup
+        )
+        showToast(
+          t(result.action === 'already_member' ? 'groupAlreadyMember' : 'joinedGroup'),
+          result.action === 'already_member' ? 'warning' : 'success'
+        )
+      } catch (err) {
+        logger.error('Join error:', err)
+        showToast(t('joinFailed'), 'error')
+      } finally {
+        setJoining(false)
+      }
+    },
+    [userId, accessToken, groupId, showToast]
+  )
 
   // Leave group
   const handleLeave = useCallback(async () => {
-    if (!userId) return
+    if (!userId || !accessToken) return
 
     try {
-      const { error: leaveErr } = await supabase
-        .from('group_members')
-        .delete()
-        .eq('group_id', groupId)
-        .eq('user_id', userId)
+      const response = await fetch(`/api/groups/${groupId}/membership`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${accessToken}`,
+          ...getCsrfHeaders(),
+        },
+        body: JSON.stringify({ action: 'leave' }),
+      })
+      const result = (await response.json().catch(() => ({}))) as MembershipApiResult
 
-      if (leaveErr) {
-        showToast(leaveErr.message, 'error')
-      } else {
-        setIsMember(false)
-        setUserRole(null)
-        setGroup(prev => prev ? { ...prev, member_count: Math.max(0, (prev.member_count || 1) - 1) } : null)
-        showToast(t('leftGroup'), 'success')
+      if (!response.ok || (result.action !== 'left' && result.action !== 'not_member')) {
+        throw new Error(result.error || t('leaveFailed'))
       }
+      if (result.action === 'left') {
+        if (!isCanonicalMemberCount(result.member_count)) throw new Error(t('leaveFailed'))
+        setGroup((previousGroup) =>
+          previousGroup
+            ? { ...previousGroup, member_count: result.member_count as number }
+            : previousGroup
+        )
+      }
+      setIsMember(false)
+      setUserRole(null)
+      showToast(t('leftGroup'), 'success')
     } catch (err) {
       logger.error('Leave error:', err)
       showToast(t('leaveFailed'), 'error')
     }
-  }, [userId, groupId, showToast])
+  }, [userId, accessToken, groupId, showToast])
 
   // Load members
   const loadMembers = useCallback(async () => {
@@ -184,21 +243,21 @@ export function useGroupData({ groupId, userId, accessToken, showToast, language
     setLoadingMembers(true)
     try {
       const { data } = await supabase
-        .from('group_members')
+        .from('group_member_directory')
         .select('user_id, role, joined_at')
         .eq('group_id', groupId)
         .order('joined_at', { ascending: true })
         .limit(50)
 
       if (data && data.length > 0) {
-        const userIds = data.map(m => m.user_id)
+        const userIds = data.map((m) => m.user_id)
         const { data: profiles } = await supabase
           .from('user_profiles')
           .select('id, handle, avatar_url')
           .in('id', userIds)
 
-        const profileMap = new Map(profiles?.map(p => [p.id, p]) || [])
-        const membersList: GroupMember[] = data.map(m => ({
+        const profileMap = new Map(profiles?.map((p) => [p.id, p]) || [])
+        const membersList: GroupMember[] = data.map((m) => ({
           user_id: m.user_id,
           handle: profileMap.get(m.user_id)?.handle,
           avatar_url: profileMap.get(m.user_id)?.avatar_url,

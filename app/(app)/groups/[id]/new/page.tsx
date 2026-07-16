@@ -103,7 +103,7 @@ export default function NewGroupPostPage(): React.ReactElement {
 
       // Check membership and mute status
       const { data: membership, error: membershipError } = await supabase
-        .from('group_members')
+        .from('own_group_memberships')
         .select('role, muted_until')
         .eq('group_id', groupId)
         .eq('user_id', data.user.id)
