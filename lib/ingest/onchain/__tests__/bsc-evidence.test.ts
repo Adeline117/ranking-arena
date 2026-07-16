@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import {
   BSC_MAINNET_CHAIN_ID,
   BSC_MAINNET_GENESIS_HASH,
@@ -27,8 +28,14 @@ const HASH_A = `0x${'a1'.repeat(32)}`
 const HASH_B = `0x${'b2'.repeat(32)}`
 const HASH_C = `0x${'c3'.repeat(32)}`
 const EMPTY_ROOT = '0x56e81f171bcc55a6ff8345e692c0f86e5b48e01b996cadc001622fb5e363b421'
-const TEST_RPC_URL = 'http://127.0.0.1/private-api-key'
+const TEST_RPC_ORIGIN = 'http://127.0.0.1:8545'
+const TEST_RPC_URL = `${TEST_RPC_ORIGIN}/`
 const TEST_ENDPOINT_ID = 'local_bsc_node' as const
+const TEST_CONNECTION_HASH = createHash('sha256')
+  .update(
+    JSON.stringify(['bsc_evidence_connection_v1', 'local', TEST_ENDPOINT_ID, TEST_RPC_ORIGIN])
+  )
+  .digest('hex')
 const FIXED_NOW = '2026-07-16T19:32:00.000Z'
 
 function genesisBlock(overrides: Record<string, unknown> = {}) {
@@ -141,7 +148,11 @@ describe('fetchBscChainAnchorEvidence', () => {
       status: 'available',
       value: '0x38',
       provider: {
-        servedBy: { providerId: 'local', endpointId: TEST_ENDPOINT_ID },
+        servedBy: {
+          providerId: 'local',
+          endpointId: TEST_ENDPOINT_ID,
+          connectionHash: TEST_CONNECTION_HASH,
+        },
       },
     })
     expect(anchor.genesisBlock).toMatchObject({
@@ -153,7 +164,11 @@ describe('fetchBscChainAnchorEvidence', () => {
       value: { number: '0xa', hash: HASH_A },
     })
     expect(requireBscVerifiedChainAnchor(anchor)).toMatchObject({
-      endpoint: { providerId: 'local', endpointId: TEST_ENDPOINT_ID },
+      endpoint: {
+        providerId: 'local',
+        endpointId: TEST_ENDPOINT_ID,
+        connectionHash: TEST_CONNECTION_HASH,
+      },
       chainId: '0x38',
       genesisBlock: { hash: BSC_MAINNET_GENESIS_HASH },
       finalizedBlock: { number: '0xa', hash: HASH_A },
@@ -198,6 +213,10 @@ describe('fetchBscChainAnchorEvidence', () => {
       (value) => {
         value.headBlock.provider.servedBy.providerId = 'alchemy'
         value.headBlock.provider.attempted[0].providerId = 'alchemy'
+      },
+      (value) => {
+        value.headBlock.provider.servedBy.connectionHash = '0'.repeat(64)
+        value.headBlock.provider.attempted[0].connectionHash = '0'.repeat(64)
       },
       (value) => {
         value.observedAt = 'not-a-timestamp'
@@ -357,6 +376,8 @@ describe('fetchBscChainAnchorEvidence', () => {
     ['https://other.invalid', 'bnb_official_public_seed'],
     ['http://bsc-dataseed.bnbchain.org', 'bnb_official_public_seed'],
     ['http://example.com', 'local_bsc_node'],
+    ['http://127.0.0.1:8545/private-api-key', 'local_bsc_node'],
+    ['http://127.0.0.1:8545/?key=private-api-key', 'local_bsc_node'],
     ['https://user:password@bsc-dataseed.bnbchain.org', 'bnb_official_public_seed'],
   ] as const)(
     'does not call a URL outside the approved endpoint mapping',
