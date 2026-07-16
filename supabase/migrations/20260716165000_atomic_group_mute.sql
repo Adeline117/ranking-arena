@@ -397,18 +397,14 @@ BEGIN
     WITH RECURSIVE service_inheritors(member_oid) AS (
       SELECT membership.member
       FROM pg_catalog.pg_auth_members AS membership
-      JOIN pg_catalog.pg_roles AS member_role
-        ON member_role.oid = membership.member
       WHERE membership.roleid = v_service_oid
-        AND member_role.rolinherit
+        AND membership.inherit_option
       UNION
       SELECT membership.member
       FROM pg_catalog.pg_auth_members AS membership
       JOIN service_inheritors AS inherited
         ON membership.roleid = inherited.member_oid
-      JOIN pg_catalog.pg_roles AS member_role
-        ON member_role.oid = membership.member
-      WHERE member_role.rolinherit
+      WHERE membership.inherit_option
     )
     SELECT 1
     FROM service_inheritors AS inherited
@@ -417,18 +413,14 @@ BEGIN
     WITH RECURSIVE service_inherits(role_oid) AS (
       SELECT membership.roleid
       FROM pg_catalog.pg_auth_members AS membership
-      JOIN pg_catalog.pg_roles AS service_role_row
-        ON service_role_row.oid = membership.member
       WHERE membership.member = v_service_oid
-        AND service_role_row.rolinherit
+        AND membership.inherit_option
       UNION
       SELECT membership.roleid
       FROM pg_catalog.pg_auth_members AS membership
       JOIN service_inherits AS inherited
         ON membership.member = inherited.role_oid
-      JOIN pg_catalog.pg_roles AS inherited_role
-        ON inherited_role.oid = membership.member
-      WHERE inherited_role.rolinherit
+      WHERE membership.inherit_option
     )
     SELECT 1
     FROM service_inherits
@@ -2130,18 +2122,14 @@ BEGIN
     WITH RECURSIVE service_inheritors(member_oid) AS (
       SELECT membership.member
       FROM pg_catalog.pg_auth_members AS membership
-      JOIN pg_catalog.pg_roles AS member_role
-        ON member_role.oid = membership.member
       WHERE membership.roleid = v_service_oid
-        AND member_role.rolinherit
+        AND membership.inherit_option
       UNION
       SELECT membership.member
       FROM pg_catalog.pg_auth_members AS membership
       JOIN service_inheritors AS inherited
         ON membership.roleid = inherited.member_oid
-      JOIN pg_catalog.pg_roles AS member_role
-        ON member_role.oid = membership.member
-      WHERE member_role.rolinherit
+      WHERE membership.inherit_option
     )
     SELECT 1
     FROM service_inheritors AS inherited
@@ -2150,18 +2138,14 @@ BEGIN
     WITH RECURSIVE service_inherits(role_oid) AS (
       SELECT membership.roleid
       FROM pg_catalog.pg_auth_members AS membership
-      JOIN pg_catalog.pg_roles AS service_role_row
-        ON service_role_row.oid = membership.member
       WHERE membership.member = v_service_oid
-        AND service_role_row.rolinherit
+        AND membership.inherit_option
       UNION
       SELECT membership.roleid
       FROM pg_catalog.pg_auth_members AS membership
       JOIN service_inherits AS inherited
         ON membership.member = inherited.role_oid
-      JOIN pg_catalog.pg_roles AS inherited_role
-        ON inherited_role.oid = membership.member
-      WHERE inherited_role.rolinherit
+      WHERE membership.inherit_option
     )
     SELECT 1
     FROM service_inherits

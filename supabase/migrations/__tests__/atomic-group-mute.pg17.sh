@@ -73,7 +73,12 @@ CREATE ROLE postgres NOLOGIN;
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN BYPASSRLS;
+CREATE ROLE authenticator LOGIN NOINHERIT;
 CREATE ROLE drifted_moderator NOLOGIN;
+
+-- PostgREST must be able to SET the JWT-selected role, but it must not
+-- automatically inherit service_role while it remains authenticator.
+GRANT service_role TO authenticator WITH INHERIT FALSE, SET TRUE;
 
 CREATE SCHEMA auth AUTHORIZATION postgres;
 CREATE FUNCTION auth.role()
@@ -1577,23 +1582,62 @@ for concurrency_log in \
 done
 
 # Effective role inheritance is cluster authority, not repairable application
-# data. Either direction that would automatically inherit service authority
-# fails before ACL/policy convergence.
-psql_cmd -c "GRANT drifted_moderator TO service_role" >/dev/null
+# data. PostgreSQL 17 decides automatic inheritance on each membership edge,
+# independently of the member role's INHERIT/NOINHERIT default for new grants.
+psql_cmd -c "ALTER ROLE service_role NOINHERIT" >/dev/null
+psql_cmd -c \
+  "GRANT drifted_moderator TO service_role WITH INHERIT TRUE, SET FALSE" \
+  >/dev/null
 if psql_cmd -f "$MIGRATION" >"$LOG_DIR/service-inherits-drift.log" 2>&1; then
-  echo "Migration accepted service_role inheriting an arbitrary role" >&2
+  echo "Migration accepted an explicit service_role inheritance edge" >&2
   exit 1
 fi
 grep -Fq 'unsafe effective inheritance edge' \
   "$LOG_DIR/service-inherits-drift.log"
 psql_cmd -c "REVOKE drifted_moderator FROM service_role" >/dev/null
-psql_cmd -c "GRANT service_role TO drifted_moderator" >/dev/null
+psql_cmd -c "ALTER ROLE service_role INHERIT" >/dev/null
+
+psql_cmd -c "ALTER ROLE drifted_moderator NOINHERIT" >/dev/null
+psql_cmd -c \
+  "GRANT service_role TO drifted_moderator WITH INHERIT TRUE, SET FALSE" \
+  >/dev/null
 if psql_cmd -f "$MIGRATION" >"$LOG_DIR/drift-inherits-service.log" 2>&1; then
-  echo "Migration accepted an arbitrary role inheriting service_role" >&2
+  echo "Migration accepted a NOINHERIT role with an explicit inheritance edge" >&2
   exit 1
 fi
 grep -Fq 'unsafe effective inheritance edge' \
   "$LOG_DIR/drift-inherits-service.log"
+psql_cmd -c "REVOKE service_role FROM drifted_moderator" >/dev/null
+
+# postgres is the one permitted direct inheritor. A second edge below it must
+# still be traversed and rejected even when that descendant is NOINHERIT.
+psql_cmd -c \
+  "GRANT service_role TO postgres WITH INHERIT TRUE, SET FALSE" \
+  >/dev/null
+psql_cmd -c \
+  "GRANT postgres TO drifted_moderator WITH INHERIT TRUE, SET FALSE" \
+  >/dev/null
+if psql_cmd -f "$MIGRATION" >"$LOG_DIR/indirect-service-inheritance.log" 2>&1; then
+  echo "Migration accepted indirect service_role inheritance through postgres" >&2
+  exit 1
+fi
+grep -Fq 'unsafe effective inheritance edge' \
+  "$LOG_DIR/indirect-service-inheritance.log"
+psql_cmd -c "REVOKE postgres FROM drifted_moderator" >/dev/null
+psql_cmd -c "REVOKE service_role FROM postgres" >/dev/null
+
+# Role-level INHERIT is only the default for a new grant on PostgreSQL 17. An
+# explicit INHERIT FALSE membership must not fail closed. The standing
+# authenticator SET TRUE / INHERIT FALSE edge exercises the same safe shape.
+psql_cmd -c "ALTER ROLE drifted_moderator INHERIT" >/dev/null
+psql_cmd -c \
+  "GRANT service_role TO drifted_moderator WITH INHERIT FALSE, SET FALSE" \
+  >/dev/null
+if ! psql_cmd -f "$MIGRATION" >"$LOG_DIR/noninheriting-membership.log" 2>&1; then
+  echo "Migration rejected an explicit non-inheriting membership" >&2
+  cat "$LOG_DIR/noninheriting-membership.log" >&2
+  exit 1
+fi
 psql_cmd -c "REVOKE service_role FROM drifted_moderator" >/dev/null
 
 # Replay converges arbitrary table/column/policy/function ACL drift and
