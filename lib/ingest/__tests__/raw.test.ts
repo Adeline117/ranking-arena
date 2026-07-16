@@ -1,3 +1,5 @@
+import { gunzipSync } from 'node:zlib'
+
 const mockUpload = jest.fn()
 const mockQuery = jest.fn()
 
@@ -76,5 +78,46 @@ describe('writeRawObject storage retries', () => {
     await expect(writeRawObject(input)).rejects.toThrow('Invalid bucket')
     expect(mockUpload).toHaveBeenCalledTimes(1)
     expect(mockQuery).not.toHaveBeenCalled()
+  })
+
+  it('publishes a full SHA-256 checksum and computed integrity metadata', async () => {
+    mockUpload.mockResolvedValueOnce({ error: null })
+    const expectedJson = '{"roi":12.5}'
+    const expectedHash = 'f2d0bb204039f952e467902406c9f5d82f6a1567c329df3be83af227a4fb76f0'
+
+    await expect(
+      writeRawObject({
+        ...input,
+        meta: {
+          surface: 'board',
+          pageCount: 2,
+          raw_integrity: { version: 999, compressed_bytes: -1 },
+        },
+      })
+    ).resolves.toBe(42)
+
+    const [storagePath, compressedPayload, uploadOptions] = mockUpload.mock.calls[0]
+    expect(storagePath).toMatch(new RegExp(`_${expectedHash}\\.json\\.gz$`))
+    expect(uploadOptions).toEqual({ contentType: 'application/gzip', upsert: false })
+    expect(gunzipSync(compressedPayload).toString('utf8')).toBe(expectedJson)
+
+    const queryArgs = mockQuery.mock.calls[0][1]
+    expect(queryArgs[4]).toBe(storagePath)
+    expect(queryArgs[5]).toBe(compressedPayload.byteLength)
+    expect(queryArgs[6]).toBe(expectedHash)
+    expect(JSON.parse(queryArgs[7])).toEqual({
+      surface: 'board',
+      pageCount: 2,
+      raw_integrity: {
+        version: 1,
+        content_type: 'application/json',
+        encoding: 'utf-8',
+        compression: 'gzip',
+        hash_algorithm: 'sha256',
+        hash_scope: 'json_utf8',
+        compressed_bytes: compressedPayload.byteLength,
+        uncompressed_bytes: Buffer.byteLength(expectedJson, 'utf8'),
+      },
+    })
   })
 })

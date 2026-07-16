@@ -95,8 +95,24 @@ export interface WriteRawInput {
 /** Write one raw payload; returns the arena.raw_objects id. */
 export async function writeRawObject(input: WriteRawInput): Promise<number> {
   const json = JSON.stringify(input.payload)
-  const gz = gzipSync(Buffer.from(json, 'utf8'))
-  const contentHash = createHash('sha256').update(json).digest('hex').slice(0, 32)
+  const jsonBytes = Buffer.from(json, 'utf8')
+  const gz = gzipSync(jsonBytes)
+  const contentHash = createHash('sha256').update(jsonBytes).digest('hex')
+  const meta = {
+    ...(input.meta ?? {}),
+    // Computed fields intentionally win over caller metadata. Readers use this
+    // contract to distinguish new, fully verifiable blobs from legacy rows.
+    raw_integrity: {
+      version: 1,
+      content_type: 'application/json',
+      encoding: 'utf-8',
+      compression: 'gzip',
+      hash_algorithm: 'sha256',
+      hash_scope: 'json_utf8',
+      compressed_bytes: gz.byteLength,
+      uncompressed_bytes: jsonBytes.byteLength,
+    },
+  }
 
   const now = new Date()
   const yyyy = now.getUTCFullYear()
@@ -121,7 +137,7 @@ export async function writeRawObject(input: WriteRawInput): Promise<number> {
       storagePath,
       gz.byteLength,
       contentHash,
-      JSON.stringify(input.meta ?? {}),
+      JSON.stringify(meta),
     ]
   )
   return rows[0].id
