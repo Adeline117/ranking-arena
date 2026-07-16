@@ -2,6 +2,7 @@
 
 const mockFrom = jest.fn()
 const mockSendNotification = jest.fn()
+const mockCanServiceActorReadPost = jest.fn()
 const mockUser = { id: 'viewer-1', email: 'viewer@example.com' }
 const mockSupabase = { from: (...args: unknown[]) => mockFrom(...args) }
 const REQUESTED_POST_ID = '00000000-0000-4000-8000-000000000001'
@@ -16,6 +17,10 @@ jest.mock('@/lib/api/middleware', () => ({
 
 jest.mock('@/lib/data/notifications', () => ({
   sendNotification: (...args: unknown[]) => mockSendNotification(...args),
+}))
+
+jest.mock('@/lib/data/service-post-audience', () => ({
+  canServiceActorReadPost: (...args: unknown[]) => mockCanServiceActorReadPost(...args),
 }))
 
 jest.mock('@/lib/features', () => ({ socialFeatureGuard: () => null }))
@@ -104,6 +109,7 @@ describe('POST /api/posts/[id]/repost', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockFrom.mockReset()
+    mockCanServiceActorReadPost.mockResolvedValue(true)
   })
 
   it('creates one canonical root repost and returns the trigger-maintained count', async () => {
@@ -200,6 +206,20 @@ describe('POST /api/posts/[id]/repost', () => {
 
     expect(response.status).toBe(404)
     expect(mockFrom).toHaveBeenCalledTimes(2)
+  })
+
+  it('fails before reading the requested wrapper when canonical audience denies', async () => {
+    mockCanServiceActorReadPost.mockResolvedValue(false)
+
+    const response = await POST(request({ comment: '' }))
+
+    expect(response.status).toBe(404)
+    expect(mockCanServiceActorReadPost).toHaveBeenCalledWith(
+      mockSupabase,
+      REQUESTED_POST_ID,
+      mockUser.id
+    )
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('rejects comments longer than the UI contract before touching the database', async () => {

@@ -13,6 +13,7 @@ import { withAuth } from '@/lib/api/middleware'
 import logger from '@/lib/logger'
 import { sendNotification } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
+import { canServiceActorReadPost } from '@/lib/data/service-post-audience'
 
 const MAX_REPOST_COMMENT_LENGTH = 280
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
@@ -60,6 +61,10 @@ export const POST = withAuth(
       preserveNewlines: true,
       maxLength: MAX_REPOST_COMMENT_LENGTH,
     })
+
+    if (!(await canServiceActorReadPost(supabase, id, user.id))) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    }
 
     // Resolve every repost-of-a-repost to one canonical root post.
     const { data: requestedPost, error: requestedPostError } = await supabase
