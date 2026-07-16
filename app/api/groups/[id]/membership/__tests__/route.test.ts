@@ -118,6 +118,20 @@ describe('POST atomic group membership', () => {
     expect(mockSendNotification).not.toHaveBeenCalled()
   })
 
+  it.each([
+    [{ status: 'joined', owner_id: OWNER_ID }, 'missing joined count'],
+    [{ status: 'joined', owner_id: OWNER_ID, member_count: -1 }, 'negative joined count'],
+    [{ status: 'already_member', role: 'moderator', member_count: 8 }, 'unknown membership role'],
+    [{ status: 'already_member', role: 'member' }, 'missing existing count'],
+  ])('fails closed on %s evidence (%s)', async (data) => {
+    mockRpc.mockResolvedValue({ data, error: null })
+
+    const response = await POST(request({ action: 'join' }) as never)
+
+    expect(response.status).toBe(500)
+    expect(mockSendNotification).not.toHaveBeenCalled()
+  })
+
   it('leaves idempotently through the atomic RPC', async () => {
     mockRpc
       .mockResolvedValueOnce({ data: { status: 'left', member_count: 7 }, error: null })
@@ -234,6 +248,29 @@ describe('POST atomic group membership', () => {
     expect(mockRpc).toHaveBeenCalledTimes(3)
     expect(mockRpc.mock.calls[2][0]).toBe('mutate_group_membership_atomic')
     expect(mockSendNotification).toHaveBeenCalledTimes(1)
+  })
+
+  it('reconciles an already-member request race through the membership authority', async () => {
+    mockRpc
+      .mockResolvedValueOnce({ data: { status: 'approval_required' }, error: null })
+      .mockResolvedValueOnce({ data: { status: 'already_member' }, error: null })
+      .mockResolvedValueOnce({
+        data: { status: 'already_member', role: 'admin', member_count: 8 },
+        error: null,
+      })
+
+    const response = await POST(request({ action: 'join' }) as never)
+
+    expect(response.status).toBe(200)
+    await expect(response.json()).resolves.toEqual({
+      success: true,
+      action: 'already_member',
+      role: 'admin',
+      member_count: 8,
+    })
+    expect(mockRpc).toHaveBeenCalledTimes(3)
+    expect(mockRpc.mock.calls[2][0]).toBe('mutate_group_membership_atomic')
+    expect(mockSendNotification).not.toHaveBeenCalled()
   })
 
   it('fails closed on RPC errors, malformed results and failed gates', async () => {
