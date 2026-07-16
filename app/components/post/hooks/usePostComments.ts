@@ -238,13 +238,19 @@ export function usePostComments({
   const stateRevisionRef = useRef(0)
   const { t: hookT } = useLanguage()
   const t = externalT || hookT
-  const [comments, setCommentsState] = useState<Comment[]>([])
+  const [commentsState, setCommentsState] = useState<Comment[]>([])
+  const commentsOwnerScopeKeyRef = useRef(scopeKey)
+  const comments = commentsOwnerScopeKeyRef.current === scopeKey ? commentsState : []
   const commentsRef = useRef<Comment[]>(comments)
   commentsRef.current = comments
   const setComments = useCallback<Dispatch<SetStateAction<Comment[]>>>((action) => {
     stateRevisionRef.current += 1
     setCommentsState((previous) => {
-      const next = typeof action === 'function' ? action(previous) : action
+      const current = activeScopeRef.current
+      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+      const ownedPrevious = commentsOwnerScopeKeyRef.current === ownerScopeKey ? previous : []
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      commentsOwnerScopeKeyRef.current = ownerScopeKey
       commentsRef.current = next
       return next
     })
@@ -255,10 +261,9 @@ export function usePostComments({
     draft: newComment,
     setDraft: setNewComment,
     restoreDraft,
-    clearDraft,
+    captureDraftSnapshot,
+    clearDraftIfUnchanged,
   } = useCommentDraftPersistence(undefined, viewerKey)
-  const newCommentRef = useRef(newComment)
-  newCommentRef.current = newComment
   const [replyingTo, setReplyingTo] = useState<{ commentId: string; handle: string } | null>(null)
   const [replyContent, setReplyContent] = useState('')
   const replyContentRef = useRef(replyContent)
@@ -445,6 +450,7 @@ export function usePostComments({
       }
       setComments((prev) => [...prev, optimisticComment])
       const savedContent = newComment.trim()
+      const draftSnapshot = captureDraftSnapshot(postId)
       const optimisticRevision = stateRevisionRef.current
       onCommentCountChange?.(postId, 1)
 
@@ -502,10 +508,7 @@ export function usePostComments({
 
           // Only a strict actor/resource ACK may clear text. Do not erase text
           // typed while this request was in flight.
-          if (newCommentRef.current.trim() === savedContent) {
-            setNewComment('')
-            clearDraft(postId)
-          }
+          clearDraftIfUnchanged(draftSnapshot)
           trackEvent('comment_created', { post_id: postId })
         } else if (isDefinitiveMutationRejection(result)) {
           await rollbackSubmission()
@@ -541,10 +544,10 @@ export function usePostComments({
       showToast,
       onCommentCountChange,
       t,
-      clearDraft,
+      captureDraftSnapshot,
+      clearDraftIfUnchanged,
       reconcileCanonicalComments,
       scopeIsCurrent,
-      setNewComment,
       setComments,
     ]
   )

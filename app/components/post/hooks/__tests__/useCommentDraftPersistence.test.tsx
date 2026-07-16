@@ -97,4 +97,20 @@ describe('useCommentDraftPersistence', () => {
     expect(localStorage.getItem(draftKey('post-a', 'anon'))).toBe('anonymous text')
     expect(localStorage.getItem(draftKey('post-a', 'user:a'))).toBe('A text')
   })
+
+  it('does not clear the same text after the visible post changes', () => {
+    const { result, rerender } = renderHook(
+      ({ postId }: { postId: string }) => useCommentDraftPersistence(postId, 'user:a'),
+      { initialProps: { postId: 'post-a' } }
+    )
+
+    act(() => result.current.setDraft('same text'))
+    const submittedA = result.current.captureDraftSnapshot('post-a')
+
+    rerender({ postId: 'post-b' })
+    act(() => result.current.setDraft('same text'))
+
+    expect(result.current.clearDraftIfUnchanged(submittedA)).toBe(false)
+    expect(result.current.draft).toBe('same text')
+  })
 })
