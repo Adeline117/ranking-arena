@@ -35,6 +35,14 @@ function normalizeUuid(value: unknown): string {
   return value.toLowerCase()
 }
 
+function normalizeNullableTimestamp(value: unknown, field: string): string | null {
+  if (value === null) return null
+  if (typeof value !== 'string' || !Number.isFinite(Date.parse(value))) {
+    throw new ChannelPermissionReadError(new Error(`Invalid channel candidate ${field}`))
+  }
+  return value
+}
+
 function requireRows(
   result: { data: unknown; error: unknown },
   operation: string
@@ -50,24 +58,24 @@ function requireRows(
   })
 }
 
-function validateRelationshipRows(
+function validateBlockGraphRows(
   rows: readonly Record<string, unknown>[],
-  actorId: string,
   candidates: ReadonlySet<string>,
-  direction: 'outgoing-block' | 'incoming-block'
+  participants: ReadonlySet<string>
 ): Set<string> {
-  const relatedIds = new Set<string>()
+  const removedCandidates = new Set<string>()
   for (const row of rows) {
     const blockerId = normalizeUuid(row.blocker_id)
     const blockedId = normalizeUuid(row.blocked_id)
-    const candidateId = direction === 'outgoing-block' ? blockedId : blockerId
-    const returnedActorId = direction === 'outgoing-block' ? blockerId : blockedId
-    if (returnedActorId !== actorId || !candidates.has(candidateId)) {
-      throw new ChannelPermissionReadError(new Error('Block query escaped its reviewed scope'))
+    if (blockerId === blockedId || !participants.has(blockerId) || !participants.has(blockedId)) {
+      throw new ChannelPermissionReadError(
+        new Error('Participant block query escaped its reviewed scope')
+      )
     }
-    relatedIds.add(candidateId)
+    if (candidates.has(blockerId)) removedCandidates.add(blockerId)
+    if (candidates.has(blockedId)) removedCandidates.add(blockedId)
   }
-  return relatedIds
+  return removedCandidates
 }
 
 function validateFollowRows(
@@ -93,7 +101,8 @@ function validateFollowRows(
 export async function filterChannelAddableUsers(
   supabase: SupabaseClient,
   actorIdValue: string,
-  candidateIdValues: string[]
+  candidateIdValues: string[],
+  coMemberIdValues: string[] = []
 ): Promise<ChannelAddFilterResult> {
   const actorId = normalizeUuid(actorIdValue)
   if (!Array.isArray(candidateIdValues)) {
@@ -101,6 +110,9 @@ export async function filterChannelAddableUsers(
   }
   if (candidateIdValues.length > MAX_CHANNEL_ADD_CANDIDATES) {
     throw new ChannelPermissionReadError(new Error('Too many channel membership candidates'))
+  }
+  if (!Array.isArray(coMemberIdValues)) {
+    throw new ChannelPermissionReadError(new Error('Channel co-members must be an array'))
   }
 
   const unique: string[] = []
@@ -114,41 +126,41 @@ export async function filterChannelAddableUsers(
   if (unique.length === 0) return { allowed: [], blocked: [] }
 
   const candidateSet = new Set(unique)
-  let outgoingBlockResult: { data: unknown; error: unknown }
-  let incomingBlockResult: { data: unknown; error: unknown }
+  const participantIds = [actorId]
+  const participantSet = new Set(participantIds)
+  for (const coMemberIdValue of coMemberIdValues) {
+    const coMemberId = normalizeUuid(coMemberIdValue)
+    if (!participantSet.has(coMemberId)) {
+      participantSet.add(coMemberId)
+      participantIds.push(coMemberId)
+    }
+  }
+  for (const candidateId of unique) {
+    if (!participantSet.has(candidateId)) {
+      participantSet.add(candidateId)
+      participantIds.push(candidateId)
+    }
+  }
+  if (participantIds.length > MAX_CHANNEL_ADD_CANDIDATES) {
+    throw new ChannelPermissionReadError(new Error('Channel participant set exceeds its limit'))
+  }
+
+  let blockResult: { data: unknown; error: unknown }
   try {
-    const blockResults = await Promise.all([
-      supabase
-        .from('blocked_users')
-        .select('blocker_id, blocked_id')
-        .eq('blocker_id', actorId)
-        .in('blocked_id', unique),
-      supabase
-        .from('blocked_users')
-        .select('blocker_id, blocked_id')
-        .eq('blocked_id', actorId)
-        .in('blocker_id', unique),
-    ])
-    outgoingBlockResult = blockResults[0]
-    incomingBlockResult = blockResults[1]
+    blockResult = await supabase
+      .from('blocked_users')
+      .select('blocker_id, blocked_id')
+      .in('blocker_id', participantIds)
+      .in('blocked_id', participantIds)
   } catch (error) {
     throw new ChannelPermissionReadError(error)
   }
 
-  const removed = validateRelationshipRows(
-    requireRows(outgoingBlockResult, 'outgoing block result'),
-    actorId,
+  const removed = validateBlockGraphRows(
+    requireRows(blockResult, 'participant block result'),
     candidateSet,
-    'outgoing-block'
+    participantSet
   )
-  for (const candidateId of validateRelationshipRows(
-    requireRows(incomingBlockResult, 'incoming block result'),
-    actorId,
-    candidateSet,
-    'incoming-block'
-  )) {
-    removed.add(candidateId)
-  }
 
   const unblocked = unique.filter((candidateId) => !removed.has(candidateId))
   if (unblocked.length === 0) return { allowed: [], blocked: [...unique] }
@@ -157,7 +169,7 @@ export async function filterChannelAddableUsers(
   try {
     profileResult = await supabase
       .from('user_profiles')
-      .select('id, dm_permission')
+      .select('id, dm_permission, deleted_at, banned_at, is_banned, ban_expires_at')
       .in('id', unblocked)
   } catch (error) {
     throw new ChannelPermissionReadError(error)
@@ -174,6 +186,18 @@ export async function filterChannelAddableUsers(
     profileIds.add(profileId)
     if (typeof row.dm_permission !== 'string' || !DM_PERMISSIONS.has(row.dm_permission)) {
       throw new ChannelPermissionReadError(new Error('Invalid channel candidate DM preference'))
+    }
+    const deletedAt = normalizeNullableTimestamp(row.deleted_at, 'deletion status')
+    const bannedAt = normalizeNullableTimestamp(row.banned_at, 'ban status')
+    const banExpiresAt = normalizeNullableTimestamp(row.ban_expires_at, 'ban expiry')
+    if (row.is_banned !== null && typeof row.is_banned !== 'boolean') {
+      throw new ChannelPermissionReadError(new Error('Invalid channel candidate ban flag'))
+    }
+    const activelyBanned =
+      row.is_banned === true && (banExpiresAt === null || Date.parse(banExpiresAt) > Date.now())
+    if (deletedAt !== null || bannedAt !== null || activelyBanned) {
+      removed.add(profileId)
+      continue
     }
     if (row.dm_permission === 'none') removed.add(profileId)
     if (row.dm_permission === 'mutual') mutualOnlyIds.push(profileId)

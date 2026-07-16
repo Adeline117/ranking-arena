@@ -9,6 +9,7 @@ import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { filterChannelAddableUsers } from '@/lib/data/channel-permissions'
+import { createGroupChannelInputSchema } from './contracts'
 
 const logger = createLogger('api:channels')
 
@@ -97,33 +98,32 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { name, memberIds, description } = await request.json()
-
-    if (!name?.trim() || name.trim().length > 100) {
-      return NextResponse.json({ error: 'Group name must be 1-100 characters' }, { status: 400 })
+    let rawBody: unknown
+    try {
+      rawBody = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-
-    if (!memberIds || memberIds.length < 1) {
+    const parsedBody = createGroupChannelInputSchema.safeParse(rawBody)
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: 'Invalid group channel request' }, { status: 400 })
+    }
+    const { name, memberIds, description } = parsedBody.data
+    const actorId = user.id.toLowerCase()
+    const candidateIds = [...new Set(memberIds)].filter((memberId) => memberId !== actorId)
+    if (candidateIds.length === 0) {
       return NextResponse.json({ error: 'Select at least 1 member' }, { status: 400 })
-    }
-
-    if (memberIds.length > 50) {
-      return NextResponse.json({ error: 'Group cannot exceed 50 members' }, { status: 400 })
     }
 
     const supabase = getSupabaseAdmin()
 
-    // Privacy gate: drop members who blocked the creator (or the creator
-    // blocked) or who disabled DMs without mutually following — prevents
-    // force-adding people into a group to bypass DM block/privacy.
-    const { allowed: addableIds } = await filterChannelAddableUsers(
-      supabase,
-      user.id,
-      memberIds as string[]
-    )
-    if (addableIds.length < 1) {
+    // Privacy gate: reject the complete prospective roster if any participant
+    // block exists, a candidate disabled messages, or a mutual-only candidate
+    // does not mutually follow the creator.
+    const { allowed: addableIds } = await filterChannelAddableUsers(supabase, actorId, candidateIds)
+    if (addableIds.length !== candidateIds.length) {
       return NextResponse.json(
-        { error: 'None of the selected members can be added' },
+        { error: 'One or more selected members cannot be added' },
         { status: 400 }
       )
     }
@@ -134,8 +134,8 @@ export async function POST(request: NextRequest) {
       .insert({
         name: name.trim(),
         type: 'group',
-        created_by: user.id,
-        description: description?.trim() || null,
+        created_by: actorId,
+        description: description || null,
       })
       .select()
       .single()
@@ -146,7 +146,7 @@ export async function POST(request: NextRequest) {
 
     // Add the creator as owner + only the privacy-filtered members
     const members = [
-      { channel_id: channel.id, user_id: user.id, role: 'owner' },
+      { channel_id: channel.id, user_id: actorId, role: 'owner' },
       ...addableIds.map((id: string) => ({
         channel_id: channel.id,
         user_id: id,
@@ -158,7 +158,16 @@ export async function POST(request: NextRequest) {
 
     if (memberError) {
       // Cleanup channel if member insert fails
-      await supabase.from('chat_channels').delete().eq('id', channel.id)
+      const { error: cleanupError } = await supabase
+        .from('chat_channels')
+        .delete()
+        .eq('id', channel.id)
+      if (cleanupError) {
+        logger.error('Failed to clean up channel after member insert failure', {
+          channelId: channel.id,
+          error: cleanupError.message,
+        })
+      }
       return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
     }
 
