@@ -482,6 +482,72 @@ DROP TABLE public.group_invite_redemptions;
 SQL
 psql_cmd -f "$MIGRATION" >"$LOG_DIR/redemption-contract-replay.log"
 
+# A table with the canonical keys plus extra blockers is still incompatible.
+# In particular, a user FK would break account deletion, while an extra group
+# FK, unique index or trigger could reject otherwise-valid redemptions.
+psql_cmd <<'SQL'
+ALTER TABLE public.group_invite_redemptions
+  ADD CONSTRAINT malicious_redemption_group_restrict
+    FOREIGN KEY (group_id) REFERENCES public.groups(id) ON DELETE RESTRICT,
+  ADD CONSTRAINT malicious_redemption_user_restrict
+    FOREIGN KEY (user_id) REFERENCES public.user_profiles(id) ON DELETE RESTRICT;
+CREATE UNIQUE INDEX malicious_redemption_user_unique
+  ON public.group_invite_redemptions (user_id);
+CREATE FUNCTION public.malicious_reject_redemption()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  RAISE EXCEPTION 'redemption rejected';
+END
+$function$;
+CREATE TRIGGER malicious_reject_redemption
+  BEFORE INSERT ON public.group_invite_redemptions
+  FOR EACH ROW
+  WHEN (false)
+  EXECUTE FUNCTION public.malicious_reject_redemption();
+SQL
+if psql_cmd -f "$MIGRATION" >"$LOG_DIR/extra-redemption-authority.log" 2>&1; then
+  echo "Migration replay unexpectedly accepted extra redemption authority" >&2
+  exit 1
+fi
+grep -Fq 'group_invite_redemptions has an incompatible shape' \
+  "$LOG_DIR/extra-redemption-authority.log"
+psql_cmd <<'SQL'
+DO $extra_authority_preserved$
+BEGIN
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) <> 5 OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_index AS index_info
+    WHERE index_info.indrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) <> 2 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_info
+    WHERE trigger_info.tgrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      AND trigger_info.tgname = 'malicious_reject_redemption'
+      AND NOT trigger_info.tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'failed replay silently repaired extra redemption authority';
+  END IF;
+END
+$extra_authority_preserved$;
+DROP TRIGGER malicious_reject_redemption
+  ON public.group_invite_redemptions;
+DROP FUNCTION public.malicious_reject_redemption();
+DROP INDEX public.malicious_redemption_user_unique;
+ALTER TABLE public.group_invite_redemptions
+  DROP CONSTRAINT malicious_redemption_group_restrict,
+  DROP CONSTRAINT malicious_redemption_user_restrict;
+SQL
+psql_cmd -f "$MIGRATION" >"$LOG_DIR/exact-redemption-authority-replay.log"
+
 # INSERT can never mint its own approved credential. A pending request may be
 # approved only through a later state transition with decision evidence.
 if psql_cmd -c \
@@ -822,13 +888,24 @@ BEGIN
     SELECT pg_catalog.count(*)
     FROM pg_catalog.pg_attribute AS attribute
     WHERE attribute.attrelid = 'public.group_invite_redemptions'::regclass
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+  ) <> 4 OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_attribute AS attribute
+    WHERE attribute.attrelid = 'public.group_invite_redemptions'::regclass
       AND attribute.attname IN (
         'invite_id', 'group_id', 'user_id', 'redeemed_at'
       )
       AND attribute.attnotnull
       AND attribute.attnum > 0
       AND NOT attribute.attisdropped
-  ) <> 4 OR NOT EXISTS (
+  ) <> 4 OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_attrdef AS default_info
+    WHERE default_info.adrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) <> 1 OR NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_attribute AS attribute
     JOIN pg_catalog.pg_attrdef AS default_info
@@ -845,7 +922,12 @@ BEGIN
     RAISE EXCEPTION 'redemption evidence nullability/default contract drifted';
   END IF;
 
-  IF NOT EXISTS (
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) <> 3 OR NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_constraint AS constraint_info
     WHERE constraint_info.conrelid =
@@ -911,7 +993,18 @@ BEGIN
           ]::smallint[]
         )
       )
-  ) <> 2 THEN
+  ) <> 2 OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_index AS index_info
+    WHERE index_info.indrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) <> 1 OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_info
+    WHERE trigger_info.tgrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      AND NOT trigger_info.tgisinternal
+  ) THEN
     RAISE EXCEPTION 'redemption evidence key contract drifted';
   END IF;
 
