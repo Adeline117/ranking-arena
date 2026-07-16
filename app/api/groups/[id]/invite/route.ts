@@ -1,213 +1,295 @@
 import { NextResponse } from 'next/server'
-import crypto from 'crypto'
-import { createLogger } from '@/lib/utils/logger'
+import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { socialFeatureGuard } from '@/lib/features'
-import type { SupabaseClient } from '@supabase/supabase-js'
+import { generateInviteToken, hashInviteToken, verifyInviteToken } from '@/lib/groups/invite-tokens'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
+import { createLogger } from '@/lib/utils/logger'
 
-const _log = createLogger('api:group-invite')
+export { verifyInviteToken } from '@/lib/groups/invite-tokens'
 
-// SECURITY (2026-04-09, audit P0-SEC-3):
-// 1. Removed static fallback 'default-invite-secret-for-build' which would
-//    have allowed anyone to forge invite tokens in any deploy where INVITE_SECRET
-//    happened to be unset.
-// 2. Removed slice-of-service-role-key fallback — coupling invite signing to
-//    your highest-privilege secret is a layering violation; if INVITE_SECRET
-//    leaks via a forged token, attacker now has 32 chars of the service role.
-// 3. Use full 32-byte HMAC (was truncated to 64 bits / 16 hex chars). 64 bits
-//    is below modern brute-force threshold and made tokens forge-able with
-//    enough public verify endpoint hammering.
-// 4. Use crypto.timingSafeEqual on equal-length buffers instead of string ===,
-//    eliminating the side-channel that could leak signature bytes via
-//    response-latency probing of the public verify endpoint.
-let _cachedInviteSecret: string | null = null
-function getInviteSecret(): string {
-  // Lazy-evaluate at first request, NOT at module load. Module-load throws
-  // would break Vercel build because Next.js imports route modules during
-  // build to extract metadata, before runtime envs are available.
-  if (_cachedInviteSecret) return _cachedInviteSecret
+const log = createLogger('api:group-invite')
+const GroupIdSchema = z.string().uuid()
+const RevokeBodySchema = z.object({ invite_id: z.string().uuid() }).strict()
+const INVITE_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000
+const INVITE_MAX_USES = 50
+const TOKEN_COLLISION_RETRIES = 3
 
-  // Preferred path: explicit INVITE_SECRET env var (>= 32 chars).
-  const explicit = process.env.INVITE_SECRET
-  if (explicit && explicit.length >= 32) {
-    _cachedInviteSecret = explicit
-    return _cachedInviteSecret
-  }
-
-  // Fallback: derive from SUPABASE_SERVICE_ROLE_KEY via HKDF-SHA256.
-  // HKDF is one-way, so an attacker who recovers an invite token cannot
-  // reverse-derive the service role key. This is strictly better than the
-  // previous `serviceKey.slice(0, 32)` which exposed the first 32 chars
-  // of the highest-privilege secret directly.
-  // The 'arena-invite-token-v1' info string namespaces this derivation —
-  // changing it invalidates all existing invite tokens (intentional kill switch).
-  const root = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!root || root.length < 32) {
-    throw new Error(
-      'INVITE_SECRET (or SUPABASE_SERVICE_ROLE_KEY as fallback) must be set ' +
-        'to a strong (>=32 char) random value. Generate INVITE_SECRET with: ' +
-        'openssl rand -hex 32'
-    )
-  }
-  // Salt should be high-entropy and stable across deploys. Empty string is
-  // acceptable for HKDF when info is non-empty (RFC 5869 §3.1).
-  const derived = crypto.hkdfSync(
-    'sha256',
-    Buffer.from(root, 'utf8'),
-    Buffer.alloc(0),
-    Buffer.from('arena-invite-token-v1', 'utf8'),
-    32
-  )
-  _cachedInviteSecret = Buffer.from(derived).toString('hex')
-  return _cachedInviteSecret
+type AtomicInviteResult = {
+  status: string
+  invite_id?: string
+  expires_at?: string
+  required_score?: number
 }
 
-function generateInviteToken(groupId: string, expiresAt: number): string {
-  const payload = `${groupId}:${expiresAt}`
-  // Full 64-char hex HMAC-SHA256 (was truncated to 16 hex / 64 bits)
-  const signature = crypto.createHmac('sha256', getInviteSecret()).update(payload).digest('hex')
-  return Buffer.from(`${payload}:${signature}`).toString('base64url')
+function readAtomicInviteResult(value: unknown): AtomicInviteResult | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const result = value as Record<string, unknown>
+  if (typeof result.status !== 'string') return null
+
+  return {
+    status: result.status,
+    ...(typeof result.invite_id === 'string' ? { invite_id: result.invite_id } : {}),
+    ...(typeof result.expires_at === 'string' ? { expires_at: result.expires_at } : {}),
+    ...(typeof result.required_score === 'number' ? { required_score: result.required_score } : {}),
+  }
 }
 
-export function verifyInviteToken(token: string): { groupId: string; valid: boolean } {
+/** Extract and validate the group id from the URL path. */
+function readGroupId(url: string): string | null {
   try {
-    const decoded = Buffer.from(token, 'base64url').toString()
-    const parts = decoded.split(':')
-    if (parts.length !== 3) return { groupId: '', valid: false }
-
-    const [groupId, expiresAtStr, signature] = parts
-    const expiresAt = parseInt(expiresAtStr, 10)
-
-    // Check expiry
-    if (!Number.isFinite(expiresAt) || Date.now() > expiresAt) return { groupId, valid: false }
-
-    // Verify signature with timing-safe compare
-    const payload = `${groupId}:${expiresAtStr}`
-    const expectedSig = crypto.createHmac('sha256', getInviteSecret()).update(payload).digest('hex')
-
-    // timingSafeEqual requires equal-length buffers. Hex output is fixed
-    // 64 chars; if attacker supplies a different length, fail fast.
-    if (signature.length !== expectedSig.length) return { groupId, valid: false }
-    const sigBuf = Buffer.from(signature, 'utf8')
-    const expectedBuf = Buffer.from(expectedSig, 'utf8')
-    if (!crypto.timingSafeEqual(sigBuf, expectedBuf)) return { groupId, valid: false }
-
-    return { groupId, valid: true }
+    const pathParts = new URL(url).pathname.split('/')
+    const groupsIndex = pathParts.indexOf('groups')
+    const parsed = GroupIdSchema.safeParse(pathParts[groupsIndex + 1])
+    return parsed.success ? parsed.data : null
   } catch {
-    return { groupId: '', valid: false }
+    return null
   }
 }
 
-/** Extract group id from URL path */
-function extractGroupId(url: string): string {
-  const pathParts = new URL(url).pathname.split('/')
-  const idx = pathParts.indexOf('groups')
-  return pathParts[idx + 1]
+function inspectionResponse(result: AtomicInviteResult | null) {
+  if (!result) {
+    return NextResponse.json({ error: 'Failed to verify invite' }, { status: 500 })
+  }
+
+  switch (result.status) {
+    case 'valid':
+      return NextResponse.json({ success: true, valid: true })
+    case 'already_member':
+      return NextResponse.json({ success: true, valid: true, already_member: true })
+    case 'invite_already_used':
+      return NextResponse.json(
+        { error: 'This invite has already been used by this account', code: 'INVITE_ALREADY_USED' },
+        { status: 409 }
+      )
+    case 'account_inactive':
+      return NextResponse.json({ error: 'Account is not active' }, { status: 403 })
+    case 'banned':
+      return NextResponse.json(
+        { error: 'You are banned from this group', code: 'BANNED' },
+        { status: 403 }
+      )
+    case 'score_too_low':
+      return NextResponse.json(
+        {
+          error: `This group requires Arena Score of ${result.required_score ?? 0}+`,
+          code: 'SCORE_TOO_LOW',
+          required_score: result.required_score ?? 0,
+        },
+        { status: 403 }
+      )
+    case 'verified_only':
+      return NextResponse.json(
+        {
+          error: 'This group is restricted to verified traders only',
+          code: 'VERIFIED_ONLY',
+        },
+        { status: 403 }
+      )
+    case 'premium_required':
+      return NextResponse.json(
+        { error: 'Pro membership is required', code: 'PREMIUM_REQUIRED' },
+        { status: 403 }
+      )
+    case 'not_found':
+      return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+    case 'dissolved':
+      return NextResponse.json({ error: 'This group has been dissolved' }, { status: 409 })
+    case 'invalid':
+    case 'invalid_invite':
+    case 'invite_required':
+      return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 })
+    default:
+      log.error('Atomic invite inspection returned an unknown status', { status: result.status })
+      return NextResponse.json({ error: 'Failed to verify invite' }, { status: 500 })
+  }
 }
 
-// GET: Verify invite token (auth required — see security note below)
+function creationFailureResponse(result: AtomicInviteResult | null) {
+  if (!result) {
+    return NextResponse.json({ error: 'Failed to generate invite link' }, { status: 500 })
+  }
+
+  switch (result.status) {
+    case 'rate_limited':
+      return NextResponse.json({ error: 'Maximum 10 invite links per hour' }, { status: 429 })
+    case 'account_inactive':
+    case 'forbidden':
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+    case 'not_found':
+      return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+    case 'dissolved':
+      return NextResponse.json({ error: 'This group has been dissolved' }, { status: 409 })
+    case 'invalid':
+      return NextResponse.json({ error: 'Invalid invite request' }, { status: 400 })
+    default:
+      log.error('Atomic invite creation returned an unknown status', { status: result.status })
+      return NextResponse.json({ error: 'Failed to generate invite link' }, { status: 500 })
+  }
+}
+
+// GET validates both the signed token and its database state. Inspection is a
+// read-only RPC: refreshing or prefetching this endpoint never consumes a use.
 export const GET = withAuth(
-  async ({ user: _user, supabase, request }) => {
+  async ({ user, request }) => {
     const guard = socialFeatureGuard()
     if (guard) return guard
 
-    const groupId = extractGroupId(request.url)
-    const { searchParams } = new URL(request.url)
-    const token = searchParams.get('verify')
+    const groupId = readGroupId(request.url)
+    if (!groupId) {
+      return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
+    }
 
+    const token = new URL(request.url).searchParams.get('verify')
     if (!token) {
       return NextResponse.json({ error: 'Missing token' }, { status: 400 })
     }
 
-    const result = verifyInviteToken(token)
-    if (!result.valid || result.groupId !== groupId) {
+    const verified = verifyInviteToken(token)
+    if (!verified.valid || verified.groupId !== groupId) {
       return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 })
     }
 
-    // Check usage limits in group_invites table
-    const sb = supabase as SupabaseClient
-    const tokenHash = crypto.createHash('sha256').update(token).digest('hex')
+    const { data, error } = await getSupabaseAdmin().rpc(
+      'inspect_group_invite_atomic' as never,
+      {
+        p_actor_id: user.id,
+        p_group_id: groupId,
+        p_token_hash: hashInviteToken(token),
+        p_pro_free_promo: PRO_FREE_PROMO,
+      } as never
+    )
 
-    const { data: invite } = await sb
-      .from('group_invites')
-      .select('id, used_count, max_uses')
-      .eq('token_hash', tokenHash)
-      .maybeSingle()
-
-    if (invite) {
-      if (invite.used_count >= invite.max_uses) {
-        return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 })
-      }
-
-      // Increment used_count — now safe because endpoint requires auth +
-      // is rate-limited per IP. Burnout-attack vector closed.
-      await sb
-        .from('group_invites')
-        .update({ used_count: invite.used_count + 1 })
-        .eq('id', invite.id)
+    if (error) {
+      log.error('Atomic invite inspection failed', error)
+      return NextResponse.json({ error: 'Failed to verify invite' }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, valid: true })
+    const result = readAtomicInviteResult(data)
+    if (!result) {
+      log.error('Atomic invite inspection returned an invalid result', { data })
+    }
+    return inspectionResponse(result)
   },
   { name: 'group-invite-verify', rateLimit: 'read' }
 )
 
-// POST: Generate invite link
+// POST creates the invite and its audit evidence in one database transaction.
+// A random nonce makes token collisions negligible; bounded retries handle the
+// database uniqueness contract without double-spending the hourly quota.
 export const POST = withAuth(
-  async ({ user, supabase, request }) => {
+  async ({ user, request }) => {
     const guard = socialFeatureGuard()
     if (guard) return guard
 
-    const groupId = extractGroupId(request.url)
-    const sb = supabase as SupabaseClient
-
-    // Check requester is owner/admin
-    const { data: membership } = await sb
-      .from('group_members')
-      .select('role')
-      .eq('group_id', groupId)
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (!membership || (membership.role !== 'owner' && membership.role !== 'admin')) {
-      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+    const groupId = readGroupId(request.url)
+    if (!groupId) {
+      return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
     }
 
-    // Rate limit: max 10 invites per hour per user
-    // KEEP 'exact' — rate-limit enforcement, scoped per-user + 1h
-    // window. Must be accurate to block the 11th invite.
-    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000)
-    const { count: recentInviteCount } = await sb
-      .from('group_invites')
-      .select('id', { count: 'exact', head: true })
-      .eq('created_by', user.id)
-      .gte('created_at', oneHourAgo.toISOString())
+    const expiresAt = Date.now() + INVITE_LIFETIME_MS
+    const admin = getSupabaseAdmin()
 
-    if ((recentInviteCount ?? 0) >= 10) {
-      return NextResponse.json({ error: 'Maximum 10 invite links per hour' }, { status: 429 })
+    for (let attempt = 0; attempt < TOKEN_COLLISION_RETRIES; attempt += 1) {
+      let inviteToken: string
+      try {
+        inviteToken = generateInviteToken(groupId, expiresAt)
+      } catch (error) {
+        log.error('Invite token generation failed', error)
+        return NextResponse.json({ error: 'Failed to generate invite link' }, { status: 500 })
+      }
+
+      const { data, error } = await admin.rpc(
+        'create_group_invite_atomic' as never,
+        {
+          p_actor_id: user.id,
+          p_group_id: groupId,
+          p_token_hash: hashInviteToken(inviteToken),
+          p_expires_at: new Date(expiresAt).toISOString(),
+          p_max_uses: INVITE_MAX_USES,
+        } as never
+      )
+
+      if (error) {
+        log.error('Atomic invite creation failed', error)
+        return NextResponse.json({ error: 'Failed to generate invite link' }, { status: 500 })
+      }
+
+      const result = readAtomicInviteResult(data)
+      if (result?.status === 'token_conflict') continue
+      if (result?.status !== 'created') return creationFailureResponse(result)
+
+      return NextResponse.json({
+        success: true,
+        invite_url: `/groups/${groupId}?invite=${inviteToken}`,
+        expires_at: new Date(expiresAt).toISOString(),
+      })
     }
 
-    // Generate 7-day invite token
-    const expiresAt = Date.now() + 7 * 24 * 60 * 60 * 1000
-    const inviteToken = generateInviteToken(groupId, expiresAt)
-
-    // Track invite in group_invites table
-    await sb.from('group_invites').insert({
-      group_id: groupId,
-      created_by: user.id,
-      token_hash: crypto.createHash('sha256').update(inviteToken).digest('hex'),
-      max_uses: 50,
-      used_count: 0,
-      expires_at: new Date(expiresAt).toISOString(),
-    })
-
-    const inviteUrl = `/groups/${groupId}?invite=${inviteToken}`
-
-    return NextResponse.json({
-      success: true,
-      invite_url: inviteUrl,
-      expires_at: new Date(expiresAt).toISOString(),
-    })
+    log.error('Invite token uniqueness retries were exhausted')
+    return NextResponse.json({ error: 'Failed to generate invite link' }, { status: 503 })
   },
   { name: 'group-invite-create', rateLimit: 'write' }
+)
+
+// DELETE soft-revokes an invite through the same database authority. Repeating
+// the request is intentionally idempotent and never deletes redemption proof.
+export const DELETE = withAuth(
+  async ({ user, request }) => {
+    const guard = socialFeatureGuard()
+    if (guard) return guard
+
+    const groupId = readGroupId(request.url)
+    if (!groupId) {
+      return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
+    }
+
+    const parsedBody = RevokeBodySchema.safeParse(await request.json().catch(() => null))
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: 'A valid invite ID is required' }, { status: 400 })
+    }
+
+    const { data, error } = await getSupabaseAdmin().rpc(
+      'revoke_group_invite_atomic' as never,
+      {
+        p_actor_id: user.id,
+        p_group_id: groupId,
+        p_invite_id: parsedBody.data.invite_id,
+      } as never
+    )
+
+    if (error) {
+      log.error('Atomic invite revocation failed', error)
+      return NextResponse.json({ error: 'Failed to revoke invite' }, { status: 500 })
+    }
+
+    const result = readAtomicInviteResult(data)
+    switch (result?.status) {
+      case 'revoked':
+        return NextResponse.json({ success: true })
+      case 'already_revoked':
+        return NextResponse.json({ success: true, already_revoked: true })
+      case 'invite_not_found':
+        return NextResponse.json({ error: 'Invite not found' }, { status: 404 })
+      case 'not_found':
+        return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+      case 'account_inactive':
+      case 'forbidden':
+        return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+      case 'invalid':
+        return NextResponse.json({ error: 'Invalid request' }, { status: 400 })
+      default:
+        if (!result) {
+          log.error('Atomic invite revocation returned an invalid result', { data })
+        } else {
+          log.error('Atomic invite revocation returned an unknown status', {
+            status: result.status,
+          })
+        }
+        return NextResponse.json({ error: 'Failed to revoke invite' }, { status: 500 })
+    }
+  },
+  { name: 'group-invite-revoke', rateLimit: 'write' }
 )
