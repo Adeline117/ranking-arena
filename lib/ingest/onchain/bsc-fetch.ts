@@ -242,6 +242,185 @@ export async function fetchWalletTransfers(
   return (await scanWalletTransfers(wallet, opts)).transfers
 }
 
+export type BscTransactionUnresolvedReason = 'not_found' | 'rpc_error' | 'invalid_response'
+
+export interface BscTransactionPoint {
+  hash: string
+  from: string
+  to: string | null
+  input: string
+  blockNumber: string | null
+  blockHash: string | null
+}
+
+export interface BscReceiptLog {
+  address: string
+  topics: string[]
+  data: string
+  logIndex: string | null
+}
+
+export interface BscTransactionReceiptPoint {
+  transactionHash: string
+  status: string | null
+  blockNumber: string | null
+  blockHash: string | null
+  logs: BscReceiptLog[]
+}
+
+export interface BscTransactionEvidence {
+  txHash: string
+  transaction: BscTransactionPoint | null
+  receipt: BscTransactionReceiptPoint | null
+  unresolved: {
+    transaction: BscTransactionUnresolvedReason | null
+    receipt: BscTransactionUnresolvedReason | null
+  }
+}
+
+const EVM_ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
+const EVM_HASH_RE = /^0x[0-9a-fA-F]{64}$/
+const HEX_DATA_RE = /^0x(?:[0-9a-fA-F]{2})*$/
+const RPC_QUANTITY_RE = /^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isStringOrNull(value: unknown): value is string | null {
+  return typeof value === 'string' || value === null
+}
+
+function isHashOrNull(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && EVM_HASH_RE.test(value))
+}
+
+function isQuantityOrNull(value: unknown): value is string | null {
+  return value === null || (typeof value === 'string' && RPC_QUANTITY_RE.test(value))
+}
+
+function parseTransactionPoint(value: unknown, txHash: string): BscTransactionPoint | null {
+  if (!isRecord(value)) return null
+  if (
+    typeof value.hash !== 'string' ||
+    !EVM_HASH_RE.test(value.hash) ||
+    value.hash.toLowerCase() !== txHash ||
+    typeof value.from !== 'string' ||
+    !EVM_ADDRESS_RE.test(value.from) ||
+    !isStringOrNull(value.to) ||
+    (value.to !== null && !EVM_ADDRESS_RE.test(value.to)) ||
+    typeof value.input !== 'string' ||
+    !HEX_DATA_RE.test(value.input) ||
+    !isQuantityOrNull(value.blockNumber) ||
+    !isHashOrNull(value.blockHash) ||
+    (value.blockNumber === null) !== (value.blockHash === null)
+  ) {
+    return null
+  }
+  return {
+    hash: value.hash,
+    from: value.from,
+    to: value.to,
+    input: value.input,
+    blockNumber: value.blockNumber,
+    blockHash: value.blockHash,
+  }
+}
+
+function parseReceiptPoint(value: unknown, txHash: string): BscTransactionReceiptPoint | null {
+  if (!isRecord(value) || !Array.isArray(value.logs)) return null
+  if (
+    typeof value.transactionHash !== 'string' ||
+    !EVM_HASH_RE.test(value.transactionHash) ||
+    value.transactionHash.toLowerCase() !== txHash ||
+    !isStringOrNull(value.status) ||
+    (value.status !== null && value.status !== '0x0' && value.status !== '0x1') ||
+    !isQuantityOrNull(value.blockNumber) ||
+    !isHashOrNull(value.blockHash) ||
+    (value.blockNumber === null) !== (value.blockHash === null)
+  ) {
+    return null
+  }
+
+  const logs: BscReceiptLog[] = []
+  for (const rawLog of value.logs) {
+    if (
+      !isRecord(rawLog) ||
+      typeof rawLog.address !== 'string' ||
+      !EVM_ADDRESS_RE.test(rawLog.address) ||
+      !Array.isArray(rawLog.topics) ||
+      !rawLog.topics.every((topic) => typeof topic === 'string' && EVM_HASH_RE.test(topic)) ||
+      typeof rawLog.data !== 'string' ||
+      !HEX_DATA_RE.test(rawLog.data) ||
+      !isQuantityOrNull(rawLog.logIndex)
+    ) {
+      return null
+    }
+    logs.push({
+      address: rawLog.address,
+      topics: rawLog.topics,
+      data: rawLog.data,
+      logIndex: rawLog.logIndex,
+    })
+  }
+
+  return {
+    transactionHash: value.transactionHash,
+    status: value.status,
+    blockNumber: value.blockNumber,
+    blockHash: value.blockHash,
+    logs,
+  }
+}
+
+/**
+ * Read-only point evidence for one BSC transaction. This intentionally does no
+ * router classification or trace lookup and is not part of wallet PnL serving.
+ * Provider failures are reduced to fixed reasons so RPC URLs and credentials
+ * can never enter the returned evidence.
+ */
+export async function fetchBscTransactionEvidence(
+  txHashInput: string,
+  opts: RpcOpts = {}
+): Promise<BscTransactionEvidence> {
+  if (!/^0x[0-9a-fA-F]{64}$/.test(txHashInput)) {
+    throw new TypeError('txHash must be a 0x-prefixed 32-byte hex string')
+  }
+  const txHash = txHashInput.toLowerCase()
+  const [transactionResult, receiptResult] = await Promise.allSettled([
+    rpc<unknown>('eth_getTransactionByHash', [txHash], opts),
+    rpc<unknown>('eth_getTransactionReceipt', [txHash], opts),
+  ])
+
+  const transaction =
+    transactionResult.status === 'fulfilled' && transactionResult.value !== null
+      ? parseTransactionPoint(transactionResult.value, txHash)
+      : null
+  const receipt =
+    receiptResult.status === 'fulfilled' && receiptResult.value !== null
+      ? parseReceiptPoint(receiptResult.value, txHash)
+      : null
+
+  const unresolvedReason = (
+    result: PromiseSettledResult<unknown>,
+    parsed: unknown
+  ): BscTransactionUnresolvedReason | null => {
+    if (result.status === 'rejected') return 'rpc_error'
+    if (result.value === null) return 'not_found'
+    return parsed === null ? 'invalid_response' : null
+  }
+
+  return {
+    txHash,
+    transaction,
+    receipt,
+    unresolved: {
+      transaction: unresolvedReason(transactionResult, transaction),
+      receipt: unresolvedReason(receiptResult, receipt),
+    },
+  }
+}
+
 /** Public BNB/USD spot (keyless). Falls back to a sane default on failure. */
 export async function fetchBnbUsd(opts: { timeoutMs?: number } = {}): Promise<number> {
   const ctrl = new AbortController()
