@@ -7,17 +7,41 @@ import { withAuth } from '@/lib/api/middleware'
 import { createLogger } from '@/lib/utils/logger'
 import { ApiError, ErrorCode } from '@/lib/api/errors'
 import { success as apiSuccess, badRequest, handleError } from '@/lib/api/response'
+import { z } from 'zod'
 
 const logger = createLogger('reports')
 
 export const dynamic = 'force-dynamic'
 
-// Valid content types and reasons
 const VALID_CONTENT_TYPES = ['post', 'comment', 'message', 'user'] as const
-const VALID_REASONS = ['spam', 'harassment', 'inappropriate', 'misinformation', 'fraud', 'other'] as const
+const VALID_REASONS = [
+  'spam',
+  'harassment',
+  'inappropriate',
+  'misinformation',
+  'fraud',
+  'other',
+] as const
 
-type ContentType = typeof VALID_CONTENT_TYPES[number]
-type ReportReason = typeof VALID_REASONS[number]
+const EvidenceUrlSchema = z
+  .string()
+  .max(2048)
+  .url()
+  .refine((value) => {
+    try {
+      return new URL(value).protocol === 'https:' && !/\s/.test(value)
+    } catch {
+      return false
+    }
+  }, 'Evidence must be an HTTPS URL')
+
+const SubmitReportSchema = z.object({
+  content_type: z.enum(VALID_CONTENT_TYPES),
+  content_id: z.string().uuid('Invalid content ID'),
+  reason: z.enum(VALID_REASONS),
+  description: z.string().trim().min(15).max(1000),
+  images: z.array(EvidenceUrlSchema).min(1).max(4),
+})
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
@@ -28,54 +52,27 @@ export const POST = withAuth(
       } catch {
         return badRequest('Invalid JSON body')
       }
-      const { content_type, content_id, reason, description, images } = body as {
-        content_type?: string
-        content_id?: string
-        reason?: string
-        description?: string
-        images?: unknown
+      const parsed = SubmitReportSchema.safeParse(body)
+      if (!parsed.success) {
+        throw ApiError.validation('Invalid report input', {
+          fields: parsed.error.flatten().fieldErrors,
+        })
       }
-
-      // Validate content_type
-      if (!content_type || !VALID_CONTENT_TYPES.includes(content_type as ContentType)) {
-        throw ApiError.validation('Invalid report type', { valid_types: VALID_CONTENT_TYPES as unknown as Record<string, unknown> })
-      }
-
-      // Validate content_id
-      if (!content_id || typeof content_id !== 'string') {
-        throw ApiError.validation('Missing content ID')
-      }
-
-      // Validate reason
-      if (!reason || !VALID_REASONS.includes(reason as ReportReason)) {
-        throw ApiError.validation('Please select a report reason', { valid_reasons: VALID_REASONS as unknown as Record<string, unknown> })
-      }
-
-      // Validate description: required, min 15 chars, max 1000
-      if (!description || typeof description !== 'string' || description.trim().length < 15) {
-        throw ApiError.validation('Report reason must be at least 15 characters')
-      }
-      if (description.length > 1000) {
-        throw ApiError.validation('Report description max 1000 characters')
-      }
-
-      // Validate images: at least 1 required
-      if (!images || !Array.isArray(images) || images.length === 0) {
-        throw ApiError.validation('Please upload at least one screenshot as evidence')
-      }
-      if (images.length > 4) {
-        throw ApiError.validation('Maximum 4 screenshots')
-      }
+      const { content_type, content_id, reason, description, images } = parsed.data
 
       // Check if user already reported this content
-      const { data: existingReport } = await supabase
+      const { data: existingReport, error: existingReportError } = await supabase
         .from('content_reports')
         .select('id')
         .eq('reporter_id', user.id)
         .eq('content_type', content_type)
         .eq('content_id', content_id)
+        .eq('status', 'pending')
         .maybeSingle()
 
+      if (existingReportError) {
+        throw ApiError.database('Failed to verify duplicate report')
+      }
       if (existingReport) {
         throw new ApiError('You have already reported this content', {
           code: ErrorCode.DUPLICATE_ACTION,
@@ -83,13 +80,42 @@ export const POST = withAuth(
       }
 
       // Validate that the content exists and user has access
-      if (content_type === 'message') {
-        const { data: conversation } = await supabase
+      if (content_type === 'post') {
+        const { data: post, error: postError } = await supabase
+          .from('posts')
+          .select('id, author_id, status, deleted_at')
+          .eq('id', content_id)
+          .maybeSingle()
+
+        if (postError) throw ApiError.database('Failed to verify post')
+        if (!post || post.deleted_at || post.status === 'deleted') {
+          throw ApiError.notFound('Post not found')
+        }
+        if (post.author_id === user.id) {
+          throw ApiError.validation('Cannot report your own post')
+        }
+      } else if (content_type === 'comment') {
+        const { data: comment, error: commentError } = await supabase
+          .from('comments')
+          .select('id, user_id, deleted_at')
+          .eq('id', content_id)
+          .maybeSingle()
+
+        if (commentError) throw ApiError.database('Failed to verify comment')
+        if (!comment || comment.deleted_at) {
+          throw ApiError.notFound('Comment not found')
+        }
+        if (comment.user_id === user.id) {
+          throw ApiError.validation('Cannot report your own comment')
+        }
+      } else if (content_type === 'message') {
+        const { data: conversation, error: conversationError } = await supabase
           .from('conversations')
           .select('id, user1_id, user2_id')
           .eq('id', content_id)
           .maybeSingle()
 
+        if (conversationError) throw ApiError.database('Failed to verify conversation')
         if (!conversation) {
           throw ApiError.notFound('Conversation not found')
         }
@@ -98,13 +124,14 @@ export const POST = withAuth(
           throw ApiError.forbidden('No permission to report this conversation')
         }
       } else if (content_type === 'user') {
-        const { data: reportedUser } = await supabase
+        const { data: reportedUser, error: reportedUserError } = await supabase
           .from('user_profiles')
-          .select('id')
+          .select('id, deleted_at')
           .eq('id', content_id)
           .maybeSingle()
 
-        if (!reportedUser) {
+        if (reportedUserError) throw ApiError.database('Failed to verify user')
+        if (!reportedUser || reportedUser.deleted_at) {
           throw ApiError.notFound('User not found')
         }
 
@@ -121,30 +148,44 @@ export const POST = withAuth(
           content_type,
           content_id,
           reason,
-          description: description?.trim() || null,
-          images: images || [],
+          description,
+          images,
           status: 'pending',
         })
         .select()
         .single()
 
       if (error) {
-        logger.error('Failed to create report', { error, userId: user.id, content_type, content_id })
+        logger.error('Failed to create report', {
+          error,
+          userId: user.id,
+          content_type,
+          content_id,
+        })
         throw ApiError.database('Failed to submit report')
       }
 
-      logger.info('Report created', { reportId: report.id, userId: user.id, content_type, content_id, reason })
+      logger.info('Report created', {
+        reportId: report.id,
+        userId: user.id,
+        content_type,
+        content_id,
+        reason,
+      })
 
-      return apiSuccess({
-        message: 'Report submitted, we will review it shortly',
-        report: {
-          id: report.id,
-          content_type: report.content_type,
-          reason: report.reason,
-          status: report.status,
-          created_at: report.created_at,
+      return apiSuccess(
+        {
+          message: 'Report submitted, we will review it shortly',
+          report: {
+            id: report.id,
+            content_type: report.content_type,
+            reason: report.reason,
+            status: report.status,
+            created_at: report.created_at,
+          },
         },
-      }, 201)
+        201
+      )
     } catch (error: unknown) {
       return handleError(error, 'reports')
     }
