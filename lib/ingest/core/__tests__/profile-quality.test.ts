@@ -128,4 +128,25 @@ describe('validateRequiredSeriesTails', () => {
         .reason
     ).toBe('profile_reference_time_invalid')
   })
+
+  it('can require both enough points and enough elapsed coverage', () => {
+    const onePoint = profile(30, ['2026-07-16T00:00:00.000Z'])
+    const rejects = validateRequiredSeriesTails(onePoint, ctx, 30, {
+      requiredMetrics: ['pnl', 'roi'],
+      minPointCount: 2,
+      minCoverageSpanMs: 86_400_000,
+    })
+    expect(rejects[0].payload).toMatchObject({
+      blocking_reasons: [
+        'profile_series_points_insufficient',
+        'profile_series_coverage_insufficient',
+      ],
+      min_point_count: 2,
+      min_coverage_span_ms: 86_400_000,
+      metrics: {
+        pnl: { point_count: 1, coverage_span_ms: 0 },
+        roi: { point_count: 1, coverage_span_ms: 0 },
+      },
+    })
+  })
 })

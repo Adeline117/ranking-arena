@@ -16,6 +16,8 @@ export interface RequiredSeriesTailPolicy {
   maxTailAgeMs?: number
   maxFutureSkewMs?: number
   windowGraceDays?: number
+  minPointCount?: number
+  minCoverageSpanMs?: number
 }
 
 interface MetricEvidence {
@@ -23,6 +25,7 @@ interface MetricEvidence {
   invalid_point_count: number
   first_at: string | null
   tail_at: string | null
+  coverage_span_ms: number | null
 }
 
 function canonicalTimeframe(timeframe: Timeframe): 7 | 30 | 90 {
@@ -55,6 +58,14 @@ export function validateRequiredSeriesTails(
   const maxTailAgeMs = policy.maxTailAgeMs ?? PROFILE_SERIES_MAX_TAIL_AGE_MS
   const maxFutureSkewMs = policy.maxFutureSkewMs ?? PROFILE_SERIES_MAX_FUTURE_SKEW_MS
   const windowGraceDays = policy.windowGraceDays ?? PROFILE_SERIES_WINDOW_GRACE_DAYS
+  const minPointCount =
+    typeof policy.minPointCount === 'number' && Number.isFinite(policy.minPointCount)
+      ? Math.max(1, Math.floor(policy.minPointCount))
+      : 1
+  const minCoverageSpanMs =
+    typeof policy.minCoverageSpanMs === 'number' && Number.isFinite(policy.minCoverageSpanMs)
+      ? Math.max(0, policy.minCoverageSpanMs)
+      : 0
   const blockingReasons: string[] = []
   const metrics: Record<string, MetricEvidence> = {}
 
@@ -90,6 +101,8 @@ export function validateRequiredSeriesTails(
       invalid_point_count: invalidPointCount,
       first_at: Number.isFinite(firstMs) ? new Date(firstMs).toISOString() : null,
       tail_at: Number.isFinite(tailMs) ? new Date(tailMs).toISOString() : null,
+      coverage_span_ms:
+        Number.isFinite(firstMs) && Number.isFinite(tailMs) ? Math.max(0, tailMs - firstMs) : null,
     }
 
     if (pointCount === 0 || !Number.isFinite(tailMs)) {
@@ -109,6 +122,12 @@ export function validateRequiredSeriesTails(
       if (firstMs < oldestAllowedMs) {
         blockingReasons.push('profile_series_point_outside_window')
       }
+      if (pointCount < minPointCount) {
+        blockingReasons.push('profile_series_points_insufficient')
+      }
+      if (tailMs - firstMs < minCoverageSpanMs) {
+        blockingReasons.push('profile_series_coverage_insufficient')
+      }
     }
   }
 
@@ -126,6 +145,8 @@ export function validateRequiredSeriesTails(
         max_tail_age_ms: maxTailAgeMs,
         max_future_skew_ms: maxFutureSkewMs,
         window_grace_days: windowGraceDays,
+        min_point_count: minPointCount,
+        min_coverage_span_ms: minCoverageSpanMs,
         blocking_reasons: uniqueReasons,
         parsed_stats_timeframes: [...new Set(profile.stats.map((stat) => stat.timeframe))].sort(
           (left, right) => left - right

@@ -27,11 +27,19 @@ const ctx: ParseCtx = {
   meta: {},
 }
 
-function profileBundle(timeframe: number): unknown {
+interface ProfileFixtureBundle {
+  summary: { data: Record<string, unknown> }
+  overview: unknown
+  pnlHistory: { data: Array<Record<string, unknown>> }
+  currencyPreference: unknown
+  timeframe: number
+}
+
+function profileBundle(timeframe: number): ProfileFixtureBundle {
   return {
-    summary: fixture('summary.json'),
+    summary: fixture('summary.json') as ProfileFixtureBundle['summary'],
     overview: fixture('overview.json'),
-    pnlHistory: fixture('pnl-history-30.json'),
+    pnlHistory: fixture('pnl-history-30.json') as ProfileFixtureBundle['pnlHistory'],
     currencyPreference: fixture('currency-preference.json'),
     timeframe,
   }
@@ -114,7 +122,8 @@ describe('parseKucoinLeaderboardPage', () => {
 
 describe('parseKucoinProfile', () => {
   it('parses the 30d bundle: chart-derived roi/pnl + overview enrichments', () => {
-    const profile = parseKucoinProfile(profileBundle(30), ctx)
+    const raw = profileBundle(30)
+    const profile = parseKucoinProfile(raw, ctx)
     expect(profile.nickname).toBe('OldWolfofWallStreet_KC')
     expect(profile.avatarUrlOrigin).toMatch(/^https:\/\/assets\.staticimg\.com\//)
 
@@ -156,11 +165,11 @@ describe('parseKucoinProfile', () => {
     expect(pnl.points).toHaveLength(30)
     expect(pnl.points[0]).toEqual({ ts: '2026-05-13T16:00:00.000Z', value: -173.12764102 })
     expect(pnl.points[29]).toEqual({ ts: '2026-06-11T16:00:00.000Z', value: 6310.43909344 })
-    expect(validateKucoinProfile(profile, ctx, 30)).toEqual([])
+    expect(validateKucoinProfile(profile, ctx, 30, raw)).toEqual([])
   })
 
   it('sorts an unsorted chart before deriving its scalar tail', () => {
-    const raw = profileBundle(30) as { pnlHistory: { data: unknown[] } }
+    const raw = profileBundle(30)
     raw.pnlHistory.data = [...raw.pnlHistory.data].reverse()
     const parsed = parseKucoinProfile(raw, ctx)
     expect(parsed.stats[0]).toMatchObject({ roi: 432.1693, pnl: 6310.43909344 })
@@ -169,8 +178,9 @@ describe('parseKucoinProfile', () => {
 
   it('rejects a stopped historical chart without changing its parsed evidence', () => {
     const staleCtx = { ...ctx, scrapedAt: '2026-07-16T16:00:00.000Z' }
-    const parsed = parseKucoinProfile(profileBundle(30), staleCtx)
-    expect(validateKucoinProfile(parsed, staleCtx, 30)[0]).toMatchObject({
+    const raw = profileBundle(30)
+    const parsed = parseKucoinProfile(raw, staleCtx)
+    expect(validateKucoinProfile(parsed, staleCtx, 30, raw)[0]).toMatchObject({
       reason: 'profile_series_tail_stale',
       payload: {
         metrics: {
@@ -179,6 +189,68 @@ describe('parseKucoinProfile', () => {
         },
       },
     })
+  })
+
+  it('rejects malformed RAW chart values instead of coercing them to zero', () => {
+    const raw = profileBundle(30)
+    raw.pnlHistory.data[0] = {
+      ...raw.pnlHistory.data[0],
+      pnl: false,
+      ratio: [],
+    }
+    raw.pnlHistory.data.push({ statTime: 'not-an-epoch', pnl: '1', ratio: '0.01' })
+
+    const parsed = parseKucoinProfile(raw, ctx)
+    const reject = validateKucoinProfile(parsed, ctx, 30, raw)[0]
+    expect(reject).toMatchObject({
+      reason: 'profile_series_point_invalid',
+      payload: {
+        blocking_reasons: ['profile_series_point_invalid'],
+        raw_chart: {
+          row_count: 31,
+          invalid_row_count: 2,
+          invalid_timestamp_count: 1,
+          invalid_pnl_count: 1,
+          invalid_roi_count: 1,
+        },
+      },
+    })
+    expect(parsed.series.find((series) => series.metric === 'pnl')?.points[0].value).not.toBe(0)
+  })
+
+  it('rejects a truncated established-trader window but permits a genuine newcomer', () => {
+    const truncated = profileBundle(90)
+    truncated.pnlHistory.data = truncated.pnlHistory.data.slice(-1)
+    const established = parseKucoinProfile(truncated, ctx)
+    expect(validateKucoinProfile(established, ctx, 90, truncated)[0]).toMatchObject({
+      reason: 'profile_series_points_insufficient',
+      payload: {
+        min_point_count: 72,
+        blocking_reasons: [
+          'profile_series_points_insufficient',
+          'profile_series_coverage_insufficient',
+        ],
+      },
+    })
+
+    const newcomer = profileBundle(90)
+    newcomer.summary.data.leadDays = 1
+    newcomer.pnlHistory.data = newcomer.pnlHistory.data.slice(-1)
+    const newcomerProfile = parseKucoinProfile(newcomer, ctx)
+    expect(validateKucoinProfile(newcomerProfile, ctx, 90, newcomer)).toEqual([])
+  })
+
+  it('deduplicates exact timestamps last-wins before publication', () => {
+    const raw = profileBundle(30)
+    raw.pnlHistory.data.push({
+      ...raw.pnlHistory.data.at(-1),
+      pnl: '7000',
+      ratio: '5',
+    })
+    const parsed = parseKucoinProfile(raw, ctx)
+    expect(parsed.stats[0]).toMatchObject({ pnl: 7000, roi: 500 })
+    expect(parsed.series.find((series) => series.metric === 'pnl')?.points).toHaveLength(30)
+    expect(validateKucoinProfile(parsed, ctx, 30, raw)).toEqual([])
   })
 })
 

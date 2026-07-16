@@ -96,7 +96,8 @@ export interface SourceAdapter {
   validateProfile?(
     profile: ParsedProfile,
     ctx: ParseCtx,
-    requestedTimeframe: Timeframe
+    requestedTimeframe: Timeframe,
+    raw: unknown
   ): ProfileQualityReject[]
 
   /**
