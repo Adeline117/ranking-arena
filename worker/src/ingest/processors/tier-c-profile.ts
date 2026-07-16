@@ -8,7 +8,9 @@
  * RENDER-BEFORE-PERSIST: the parsed payload is written to a short-lived
  * Redis result key FIRST (the Vercel route is polling it) and only then
  * persisted to profile_cache / trader_stats / trader_series — DB write
- * latency never sits in the user's critical path.
+ * latency never sits in the user's critical path. Unproven metric windows are
+ * the exception: their RAW evidence is persisted, but they never enter either
+ * render cache and the job fails so stale proven data remains authoritative.
  */
 
 import type { Job } from 'bullmq'
@@ -16,6 +18,10 @@ import { getConnection } from '../../connection'
 import { getSourceBySlug } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
 import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
+import {
+  findIncompleteProfileWindow,
+  IncompleteProfileWindowError,
+} from '@/lib/ingest/core/profile-coverage'
 import type { ParseCtx } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
@@ -75,13 +81,31 @@ export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
       meta: src.meta,
     }
     const profile = adapter.parseProfile(bundle.pages[0]?.payload, ctx)
+    const incomplete = findIncompleteProfileWindow(profile)
+
+    if (incomplete) {
+      const traderId = await resolveTraderId(src, exchangeTraderId)
+      await writeRawObject({
+        sourceId: src.id,
+        sourceSlug: src.slug,
+        jobType: 'tier_c',
+        traderId,
+        timeframe,
+        payload: bundle.pages,
+      })
+      await publishProfile(src, traderId, profile, { fullSeries: false })
+      throw new IncompleteProfileWindowError(incomplete.timeframe, incomplete.reason)
+    }
 
     // 1. Render path: publish to Redis FIRST — waiters resolve immediately.
+    const targetTimeframe = timeframe === 0 ? 90 : timeframe
+    const profileAsOf =
+      profile.stats.find((stat) => stat.timeframe === targetTimeframe)?.asOf ?? scrapedAt
     const payload = {
       stats: profile.stats,
       series: profile.series,
       currency: src.currency,
-      asOf: scrapedAt,
+      asOf: profileAsOf,
     }
     await redis.set(resultKey, JSON.stringify(payload), 'EX', RESULT_TTL_SECONDS)
 

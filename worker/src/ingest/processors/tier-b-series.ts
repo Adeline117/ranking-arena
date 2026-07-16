@@ -27,6 +27,10 @@ import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
+import {
+  findIncompleteProfileWindow,
+  IncompleteProfileWindowError,
+} from '@/lib/ingest/core/profile-coverage'
 import type { ParseCtx } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
@@ -270,7 +274,8 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
       }
       attempted += 1
       if (fromCursor) cursorAttempted += 1
-      let traderOk = false
+      let traderHadSuccess = false
+      let traderAllTimeframesOk = true
       for (const timeframe of timeframes) {
         try {
           const scrapedAt = new Date().toISOString()
@@ -301,6 +306,11 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
           }
           for (const page of bundle.pages) {
             const profile = adapter.parseProfile(page.payload, ctx)
+            const incomplete = findIncompleteProfileWindow(profile)
+            if (incomplete) {
+              await publishProfile(src, trader.id, profile, { fullSeries: true })
+              throw new IncompleteProfileWindowError(incomplete.timeframe, incomplete.reason)
+            }
             const requiredFields = ((src.meta.profile_required_fields as string[]) ?? []) as Array<
               keyof import('@/lib/ingest/core/types').ParsedStats
             >
@@ -312,8 +322,9 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
             result.seriesWritten += profile.series.reduce((n, s) => n + s.points.length, 0)
           }
           result.surfacesFetched += 1
-          traderOk = true
+          traderHadSuccess = true
         } catch (err) {
+          traderAllTimeframesOk = false
           result.errors += 1
           console.warn(
             `[tier-b-series] ${src.slug} ${trader.exchange_trader_id} ${timeframe}d failed:`,
@@ -321,7 +332,7 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
           )
         }
       }
-      if (traderOk) result.tradersCrawled += 1
+      if (traderHadSuccess && traderAllTimeframesOk) result.tradersCrawled += 1
 
       // Incremental cursor persistence (defense-in-depth, 2026-07-07): write
       // progress after EACH trader, not just once post-loop. NOTE: the actual

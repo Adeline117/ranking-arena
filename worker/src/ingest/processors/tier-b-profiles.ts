@@ -10,6 +10,10 @@ import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
 import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
 import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
+import {
+  findIncompleteProfileWindow,
+  IncompleteProfileWindowError,
+} from '@/lib/ingest/core/profile-coverage'
 import type { HistoryKind, ParseCtx, ParsedHistoryRow, SourceRow } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
@@ -231,7 +235,8 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
       // so a chain can never spin without advancing).
       if (attempted > 0 && Date.now() - startedAt > deadlineMs) break
       attempted += 1
-      let traderOk = false
+      let traderHadSuccess = false
+      let traderAllTimeframesOk = true
       for (const timeframe of timeframes) {
         try {
           const scrapedAt = new Date().toISOString()
@@ -268,6 +273,13 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
           }
           for (const page of bundle.pages) {
             const profile = adapter.parseProfile(page.payload, ctx)
+            const incomplete = findIncompleteProfileWindow(profile)
+            if (incomplete) {
+              // RAW is already durable. Merge audit extras only, then surface
+              // a real failure so this trader is not marked fresh.
+              await publishProfile(src, trader.id, profile, { fullSeries: true })
+              throw new IncompleteProfileWindowError(incomplete.timeframe, incomplete.reason)
+            }
             const requiredFields = ((src.meta.profile_required_fields as string[]) ?? []) as Array<
               keyof import('@/lib/ingest/core/types').ParsedStats
             >
@@ -296,8 +308,9 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
             )
           }
           result.surfacesFetched += 1
-          traderOk = true
+          traderHadSuccess = true
         } catch (err) {
+          traderAllTimeframesOk = false
           result.errors += 1
           console.warn(
             `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} ${timeframe}d failed:`,
@@ -305,7 +318,7 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
           )
         }
       }
-      if (traderOk) {
+      if (traderHadSuccess && traderAllTimeframesOk) {
         result.tradersCrawled += 1
         await markProfiled(trader.id)
         // Histories ride the same session right after the profile (spec
