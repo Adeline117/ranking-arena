@@ -17,6 +17,42 @@ import {
 import { ApiError } from '@/lib/api/errors'
 import { logger } from '@/lib/logger'
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+async function readMutationBody(request: NextRequest): Promise<Record<string, unknown>> {
+  let body: unknown
+  try {
+    body = await request.json()
+  } catch {
+    throw ApiError.validation('Request body must be valid JSON')
+  }
+  if (!isRecord(body)) throw ApiError.validation('Request body must be an object')
+  return body
+}
+
+function requireLinkedTraderId(body: Record<string, unknown>): string {
+  if (typeof body.id !== 'string' || !UUID_PATTERN.test(body.id)) {
+    throw ApiError.validation('Invalid linked trader id')
+  }
+  return body.id
+}
+
+function rejectUnknownFields(body: Record<string, unknown>, allowed: ReadonlySet<string>) {
+  const unknownFields = Object.keys(body).filter((key) => !allowed.has(key))
+  if (unknownFields.length > 0) {
+    throw ApiError.validation('Unknown linked trader fields', { fields: unknownFields })
+  }
+}
+
+function throwRpcError(error: { code?: string; message?: string }): never {
+  if (error.code === 'P0002') throw ApiError.notFound('Linked trader not found')
+  throw error
+}
+
 /**
  * GET /api/traders/linked
  * Return all linked traders for the authenticated user, joined with leaderboard stats
@@ -32,7 +68,9 @@ export async function GET(request: NextRequest) {
     // Get linked traders
     const { data: linked, error } = await supabase
       .from('user_linked_traders')
-      .select('id, user_id, trader_id, source, label, is_primary, display_order, verified_at, verification_method, created_at, updated_at')
+      .select(
+        'id, user_id, trader_id, source, label, is_primary, display_order, verified_at, verification_method, created_at, updated_at'
+      )
       .eq('user_id', user.id)
       .order('display_order', { ascending: true })
 
@@ -43,21 +81,22 @@ export async function GET(request: NextRequest) {
     }
 
     // Batch fetch stats from leaderboard_ranks (avoids N+1 queries)
-    const traderKeys = linked.map(lt => lt.trader_id)
-    const { data: allRanks } = await supabase
+    const traderKeys = linked.map((linkedTrader) => linkedTrader.trader_id)
+    const { data: allRanks, error: ranksError } = await supabase
       .from('leaderboard_ranks')
       .select('source_trader_id, source, arena_score, roi, pnl, rank, handle, avatar_url')
       .in('source_trader_id', traderKeys)
       .eq('season_id', '90D')
+    if (ranksError) throw ranksError
 
     const rankMap = new Map<string, typeof allRanks extends (infer T)[] | null ? T : never>()
     for (const r of allRanks || []) {
       rankMap.set(`${r.source}:${r.source_trader_id}`, r)
     }
 
-    const linkedWithStats = linked.map(lt => ({
-      ...lt,
-      stats: rankMap.get(`${lt.source}:${lt.trader_id}`) || null,
+    const linkedWithStats = linked.map((linkedTrader) => ({
+      ...linkedTrader,
+      stats: rankMap.get(`${linkedTrader.source}:${linkedTrader.trader_id}`) || null,
     }))
 
     return success({
@@ -82,30 +121,56 @@ export async function PATCH(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
-    const body = await request.json()
+    const body = await readMutationBody(request)
+    rejectUnknownFields(body, new Set(['id', 'label', 'display_order', 'is_primary']))
+    const id = requireLinkedTraderId(body)
+    const hasLabel = Object.prototype.hasOwnProperty.call(body, 'label')
+    const hasDisplayOrder = Object.prototype.hasOwnProperty.call(body, 'display_order')
+    const hasPrimary = Object.prototype.hasOwnProperty.call(body, 'is_primary')
 
-    const { id, label, display_order, is_primary } = body
-
-    if (!id) {
-      throw ApiError.validation('Missing linked trader id')
+    if (!hasLabel && !hasDisplayOrder && !hasPrimary) {
+      throw ApiError.validation('No linked trader changes supplied')
     }
 
-    // Build update object
-    const updateData: Record<string, unknown> = { updated_at: new Date().toISOString() }
-    if (label !== undefined) updateData.label = label
-    if (display_order !== undefined) updateData.display_order = display_order
+    if (hasPrimary) {
+      if (body.is_primary !== true) {
+        throw ApiError.validation('A primary trader can only be changed by selecting a replacement')
+      }
+      if (hasLabel || hasDisplayOrder) {
+        throw ApiError.validation('Primary selection cannot be combined with other updates')
+      }
 
-    // If setting as primary, unset all others first (skip the target row to avoid race)
-    if (is_primary === true) {
-      await supabase
-        .from('user_linked_traders')
-        .update({ is_primary: false, updated_at: new Date().toISOString() })
-        .eq('user_id', user.id)
-        .neq('id', id)
+      const { data, error } = await supabase.rpc('set_primary_linked_trader', {
+        p_link_id: id,
+        p_user_id: user.id,
+      })
+      if (error) throwRpcError(error)
+      if (!data) throw ApiError.notFound('Linked trader not found')
+      return success({ linked_trader: data })
+    }
 
-      updateData.is_primary = true
-    } else if (is_primary === false) {
-      updateData.is_primary = false
+    const updateData: { display_order?: number; label?: string | null; updated_at: string } = {
+      updated_at: new Date().toISOString(),
+    }
+    if (hasLabel) {
+      if (body.label !== null && typeof body.label !== 'string') {
+        throw ApiError.validation('Label must be a string or null')
+      }
+      const normalizedLabel = typeof body.label === 'string' ? body.label.trim() : null
+      if (normalizedLabel && normalizedLabel.length > 50) {
+        throw ApiError.validation('Label must be 50 characters or fewer')
+      }
+      updateData.label = normalizedLabel || null
+    }
+    if (hasDisplayOrder) {
+      if (
+        !Number.isInteger(body.display_order) ||
+        (body.display_order as number) < 0 ||
+        (body.display_order as number) > 10_000
+      ) {
+        throw ApiError.validation('Display order must be an integer between 0 and 10000')
+      }
+      updateData.display_order = body.display_order as number
     }
 
     const { data, error } = await supabase
@@ -114,21 +179,10 @@ export async function PATCH(request: NextRequest) {
       .eq('id', id)
       .eq('user_id', user.id)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) throw error
-
-    // If primary changed, also update user_profiles
-    if (is_primary === true && data) {
-      await supabase
-        .from('user_profiles')
-        .update({
-          verified_trader_id: data.trader_id,
-          verified_trader_source: data.source,
-        })
-        .eq('id', user.id)
-    }
-
+    if (!data) throw ApiError.notFound('Linked trader not found')
     return success({ linked_trader: data })
   } catch (error: unknown) {
     return handleError(error, 'linked traders PATCH')
@@ -148,93 +202,25 @@ export async function DELETE(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
-    const body = await request.json()
+    const body = await readMutationBody(request)
+    rejectUnknownFields(body, new Set(['id']))
+    const id = requireLinkedTraderId(body)
 
-    const { id } = body
-    if (!id) {
-      throw ApiError.validation('Missing linked trader id')
-    }
-
-    // Get the record first to check if it's primary
-    const { data: existing } = await supabase
-      .from('user_linked_traders')
-      .select('id, trader_id, source, is_primary')
-      .eq('id', id)
-      .eq('user_id', user.id)
-      .single()
-
-    if (!existing) {
-      throw ApiError.notFound('Linked trader not found')
-    }
-
-    // Delete the link
-    const { error } = await supabase
-      .from('user_linked_traders')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', user.id)
-
-    if (error) throw error
-
-    // Update count
-    const { data: remaining } = await supabase
-      .from('user_linked_traders')
-      .select('id, is_primary')
-      .eq('user_id', user.id)
-      .order('display_order', { ascending: true })
-
-    const newCount = remaining?.length ?? 0
-
-    await supabase
-      .from('user_profiles')
-      .update({ linked_trader_count: newCount })
-      .eq('id', user.id)
-
-    // If the deleted one was primary and there are others, promote the first one
-    if (existing.is_primary && remaining && remaining.length > 0) {
-      const newPrimary = remaining[0]
-      await supabase
-        .from('user_linked_traders')
-        .update({ is_primary: true, updated_at: new Date().toISOString() })
-        .eq('id', newPrimary.id)
-
-      // Fetch full record for user_profiles update
-      const { data: promoted } = await supabase
-        .from('user_linked_traders')
-        .select('trader_id, source')
-        .eq('id', newPrimary.id)
-        .single()
-
-      if (promoted) {
-        await supabase
-          .from('user_profiles')
-          .update({
-            verified_trader_id: promoted.trader_id,
-            verified_trader_source: promoted.source,
-          })
-          .eq('id', user.id)
-      }
-    }
-
-    // If no remaining linked traders, clear verified status
-    if (newCount === 0) {
-      await supabase
-        .from('user_profiles')
-        .update({
-          is_verified_trader: false,
-          verified_trader_id: null,
-          verified_trader_source: null,
-        })
-        .eq('id', user.id)
-    }
+    const { data, error } = await supabase.rpc('unlink_linked_trader', {
+      p_link_id: id,
+      p_user_id: user.id,
+    })
+    if (error) throwRpcError(error)
+    const result = data?.[0]
+    if (!result) throw ApiError.notFound('Linked trader not found')
 
     logger.info('[linked-traders] Unlinked trader', {
       userId: user.id,
-      traderId: existing.trader_id,
-      source: existing.source,
+      traderId: result.removed_trader_id,
+      source: result.removed_source,
     })
 
-    return success({ message: 'Trader unlinked', remaining_count: newCount })
+    return success({ message: 'Trader unlinked', remaining_count: result.remaining_count })
   } catch (error: unknown) {
     return handleError(error, 'linked traders DELETE')
   }
