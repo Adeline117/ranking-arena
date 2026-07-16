@@ -1,18 +1,39 @@
 'use client'
 
-import React, { useState, useCallback } from 'react'
+import React, { useCallback, useEffect, useRef } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { SectionCard } from './shared'
 import { MultiAccountSection } from './MultiAccountSection'
-import { supabase } from '@/lib/supabase/client'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '../hooks/settings-viewer-scope'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 interface AccountSectionProps {
   onLogout: () => void
   onDeleteAccount: () => void
+}
+
+type ExportOperation = {
+  id: number
+  viewer: SettingsViewerSnapshot
+  controller: AbortController
+}
+
+function exportScopeKey(
+  viewer: SettingsViewerSnapshot | null,
+  fallback: { viewerKey: string; sessionGeneration: number }
+): string {
+  return viewer
+    ? `${viewer.viewerKey}\u0000${viewer.sessionGeneration}`
+    : `invalid:${fallback.viewerKey}\u0000${fallback.sessionGeneration}`
 }
 
 export const AccountSection = React.memo(function AccountSection({
@@ -21,54 +42,133 @@ export const AccountSection = React.memo(function AccountSection({
 }: AccountSectionProps) {
   const { t } = useLanguage()
   const { showToast } = useToast()
-  const [exporting, setExporting] = useState(false)
+  const tRef = useRef(t)
+  tRef.current = t
+  const toastRef = useRef(showToast)
+  toastRef.current = showToast
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const currentViewer = captureSettingsViewer(auth)
+  const scopeKey = exportScopeKey(currentViewer, auth)
+  const [exporting, setExporting] = useViewerOwnedState(false, () => false, scopeKey)
+  const mountedRef = useRef(false)
+  const nextOperationIdRef = useRef(0)
+  const operationRef = useRef<ExportOperation | null>(null)
+
+  const operationIsCurrent = useCallback((operation: ExportOperation): boolean => {
+    return (
+      mountedRef.current &&
+      operationRef.current?.id === operation.id &&
+      isSettingsViewerCurrent(operation.viewer, authRef.current)
+    )
+  }, [])
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      operationRef.current?.controller.abort()
+      operationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    const operation = operationRef.current
+    if (operation && !isSettingsViewerCurrent(operation.viewer, authRef.current)) {
+      operation.controller.abort()
+      operationRef.current = null
+    }
+  }, [scopeKey])
 
   const handleExportData = useCallback(async () => {
-    if (exporting) return
+    const viewer = captureSettingsViewer(authRef.current)
+    if (!viewer) {
+      const latestAuth = authRef.current
+      if (
+        mountedRef.current &&
+        latestAuth.authChecked &&
+        !latestAuth.loading &&
+        !latestAuth.userId
+      ) {
+        toastRef.current(tRef.current('pleaseLoginFirst'), 'error')
+      }
+      return
+    }
+
+    const activeOperation = operationRef.current
+    if (activeOperation && operationIsCurrent(activeOperation)) return
+    if (activeOperation) activeOperation.controller.abort()
+
+    const operation: ExportOperation = {
+      id: ++nextOperationIdRef.current,
+      viewer,
+      controller: new AbortController(),
+    }
+    operationRef.current = operation
     setExporting(true)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        showToast(t('pleaseLoginFirst'), 'error')
-        return
-      }
       const res = await fetch('/api/settings/export', {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${operation.viewer.accessToken}`,
           ...getCsrfHeaders(),
         },
+        signal: operation.controller.signal,
       })
+      if (!operationIsCurrent(operation)) return
       if (res.status === 429) {
-        showToast(t('exportRateLimited'), 'error')
+        toastRef.current(tRef.current('exportRateLimited'), 'error')
         return
       }
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        showToast(data.error || t('operationFailed'), 'error')
+        if (!operationIsCurrent(operation)) return
+        const error =
+          typeof data === 'object' &&
+          data !== null &&
+          'error' in data &&
+          typeof data.error === 'string' &&
+          data.error
+            ? data.error
+            : tRef.current('operationFailed')
+        toastRef.current(error, 'error')
         return
       }
       const blob = await res.blob()
+      if (!operationIsCurrent(operation)) return
       const url = URL.createObjectURL(blob)
       try {
+        if (!operationIsCurrent(operation)) return
         const a = document.createElement('a')
         a.href = url
         a.download = `arena-data-export-${new Date().toISOString().slice(0, 10)}.json`
         document.body.appendChild(a)
-        a.click()
-        document.body.removeChild(a)
-        showToast(t('exportSuccess'), 'success')
+        try {
+          if (!operationIsCurrent(operation)) return
+          a.click()
+        } finally {
+          a.remove()
+        }
+        if (operationIsCurrent(operation)) {
+          toastRef.current(tRef.current('exportSuccess'), 'success')
+        }
       } finally {
         URL.revokeObjectURL(url) // Always revoke, even if download trigger fails
       }
     } catch {
-      showToast(t('networkError'), 'error')
+      if (operationIsCurrent(operation)) {
+        toastRef.current(tRef.current('networkError'), 'error')
+      }
     } finally {
-      setExporting(false)
+      if (operationRef.current?.id === operation.id) {
+        operationRef.current = null
+        if (mountedRef.current && isSettingsViewerCurrent(operation.viewer, authRef.current)) {
+          setExporting(false)
+        }
+      }
     }
-  }, [exporting, showToast, t])
+  }, [operationIsCurrent, setExporting])
 
   return (
     <SectionCard id="account" title={t('accountSection')} variant="danger">
