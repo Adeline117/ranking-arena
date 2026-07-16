@@ -6,6 +6,7 @@
  * BSC mainnet genesis block, and BSC's standard economic-finality block tag.
  */
 
+import { createHash } from 'node:crypto'
 import { parseStrictJson } from './strict-json'
 
 export const BSC_MAINNET_CHAIN_ID = '0x38' as const
@@ -26,7 +27,11 @@ const MAX_TIMEOUT_MS = 120_000
 const MAX_FUTURE_BLOCK_SKEW_MS = 60_000
 const MAX_CURRENT_ANCHOR_LAG_MS = 900_000
 const HASH_RE = /^0x[0-9a-fA-F]{64}$/
+const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/
+const DATA_RE = /^0x(?:[0-9a-fA-F]{2})*$/
 const QUANTITY_RE = /^0x(?:0|[1-9a-fA-F][0-9a-fA-F]*)$/
+const CONNECTION_HASH_RE = /^[0-9a-f]{64}$/
+const ALCHEMY_BSC_ORIGIN = 'https://bnb-mainnet.g.alchemy.com'
 
 const CALLER_ENDPOINTS = {
   bnb_official_public_seed: {
@@ -54,7 +59,7 @@ const CALLER_ENDPOINTS = {
     origin: 'https://bsc-dataseed1.defibit.io',
     allowAnyPath: false,
   },
-  local_bsc_node: { providerId: 'local', origin: null, allowAnyPath: true },
+  local_bsc_node: { providerId: 'local', origin: null, allowAnyPath: false },
 } as const
 
 export type BscCallerEndpointId = keyof typeof CALLER_ENDPOINTS
@@ -65,6 +70,8 @@ export type BscEvidenceProviderId =
 export interface BscEvidenceEndpointIdentity {
   providerId: BscEvidenceProviderId
   endpointId: string
+  /** SHA-256 of the approved, secret-free logical RPC origin. */
+  connectionHash: string
 }
 
 export interface BscEvidenceProvider {
@@ -74,7 +81,10 @@ export interface BscEvidenceProvider {
 
 export type BscEvidenceUnavailableReason =
   | 'provider_unconfigured'
+  | 'dependency_unavailable'
   | 'not_found'
+  | 'not_found_or_unindexed'
+  | 'pending'
   | 'rate_limited'
   | 'quota_exhausted'
   | 'timeout'
@@ -160,6 +170,74 @@ export interface BscVerifiedChainAnchor {
   headBlock: BscBlockHeaderEvidence
 }
 
+export interface BscMinedTransactionEvidence {
+  hash: string
+  from: string
+  to: string | null
+  input: string
+  /** Canonical raw quantity; never converted through a JS number. */
+  value: string
+  blockNumber: string
+  blockHash: string
+  transactionIndex: string
+}
+
+export interface BscReceiptLogEvidence {
+  address: string
+  topics: string[]
+  data: string
+  blockNumber: string
+  transactionHash: string
+  transactionIndex: string
+  blockHash: string
+  logIndex: string
+  removed: false
+}
+
+export interface BscTransactionReceiptEvidence {
+  transactionHash: string
+  transactionIndex: string
+  blockNumber: string
+  blockHash: string
+  from: string
+  to: string | null
+  /** `0x0` is retained finalized failure evidence, never a successful hit. */
+  status: '0x0' | '0x1'
+  logs: BscReceiptLogEvidence[]
+}
+
+export interface BscBlockMembershipEvidence extends BscBlockHeaderEvidence {
+  /** Hash-only result from eth_getBlockByNumber(number, false). */
+  transactions: string[]
+}
+
+export interface BscTransactionMembershipEvidence {
+  chain: { namespace: 'eip155'; reference: '56' }
+  txHash: string
+  /** Local completion time; never presented as block or transaction time. */
+  capturedAt: string
+  membershipPolicy: {
+    version: 'bsc_transaction_membership_v1'
+    transactionMethod: 'eth_getTransactionByHash'
+    receiptMethod: 'eth_getTransactionReceipt'
+    blockMethod: 'eth_getBlockByNumber'
+    indexedTransactionMethod: 'eth_getTransactionByBlockNumberAndIndex'
+    fullTransactions: false
+  }
+  anchor: {
+    endpoint: BscEvidenceEndpointIdentity
+    /** SHA-256 of the full, strictly reconstructed verified anchor semantics. */
+    verifiedAnchorHash: string
+    observedAt: string
+    finalityPolicy: BscChainAnchorEvidence['finalityPolicy']
+    finalizedBlock: BscBlockHeaderEvidence
+  }
+  transaction: BscEvidenceLane<BscMinedTransactionEvidence>
+  receipt: BscEvidenceLane<BscTransactionReceiptEvidence>
+  canonicalBlock: BscEvidenceLane<BscBlockMembershipEvidence>
+  indexedTransaction: BscEvidenceLane<BscMinedTransactionEvidence>
+}
+
 interface BscEvidenceEndpoint {
   url: string
   identity: BscEvidenceEndpointIdentity
@@ -180,7 +258,16 @@ interface BscRpcSuccess {
 
 interface BscRpcFailure {
   ok: false
-  reason: Exclude<BscEvidenceUnavailableReason, 'not_found' | 'wrong_chain' | 'wrong_genesis'>
+  reason: Exclude<
+    BscEvidenceUnavailableReason,
+    | 'provider_unconfigured'
+    | 'dependency_unavailable'
+    | 'not_found'
+    | 'not_found_or_unindexed'
+    | 'pending'
+    | 'wrong_chain'
+    | 'wrong_genesis'
+  >
   provider: BscEvidenceProvider
   rpcCode: number | null
   httpStatus: number | null
@@ -189,7 +276,21 @@ interface BscRpcFailure {
 type BscRpcResult = BscRpcSuccess | BscRpcFailure
 
 function endpointCopy(endpoint: BscEvidenceEndpointIdentity): BscEvidenceEndpointIdentity {
-  return { ...endpoint }
+  return {
+    providerId: endpoint.providerId,
+    endpointId: endpoint.endpointId,
+    connectionHash: endpoint.connectionHash,
+  }
+}
+
+function endpointConnectionHash(providerId: string, endpointId: string, rpcOrigin: string): string {
+  return createHash('sha256')
+    .update(JSON.stringify(['bsc_evidence_connection_v1', providerId, endpointId, rpcOrigin]))
+    .digest('hex')
+}
+
+function verifiedChainAnchorHash(anchor: BscVerifiedChainAnchor): string {
+  return createHash('sha256').update(JSON.stringify(anchor)).digest('hex')
 }
 
 function providerEvidence(
@@ -272,7 +373,9 @@ function resolveEndpoint(opts: ParsedBscEvidenceRpcOpts): BscEvidenceEndpoint | 
       if (opts.endpointId === 'local_bsc_node') {
         if (
           !['localhost', '127.0.0.1', '[::1]'].includes(parsed.hostname) ||
-          (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
+          (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') ||
+          parsed.pathname !== '/' ||
+          parsed.search.length > 0
         ) {
           return null
         }
@@ -286,7 +389,11 @@ function resolveEndpoint(opts: ParsedBscEvidenceRpcOpts): BscEvidenceEndpoint | 
       }
       return {
         url: opts.rpcUrl,
-        identity: { providerId: config.providerId, endpointId: opts.endpointId },
+        identity: {
+          providerId: config.providerId,
+          endpointId: opts.endpointId,
+          connectionHash: endpointConnectionHash(config.providerId, opts.endpointId, parsed.origin),
+        },
       }
     } catch {
       return null
@@ -296,8 +403,12 @@ function resolveEndpoint(opts: ParsedBscEvidenceRpcOpts): BscEvidenceEndpoint | 
   const key = process.env.ALCHEMY_API_KEY
   if (!key || key.trim().length === 0) return null
   return {
-    url: `https://bnb-mainnet.g.alchemy.com/v2/${encodeURIComponent(key)}`,
-    identity: { providerId: 'alchemy', endpointId: 'alchemy_bnb_mainnet' },
+    url: `${ALCHEMY_BSC_ORIGIN}/v2/${encodeURIComponent(key)}`,
+    identity: {
+      providerId: 'alchemy',
+      endpointId: 'alchemy_bnb_mainnet',
+      connectionHash: endpointConnectionHash('alchemy', 'alchemy_bnb_mainnet', ALCHEMY_BSC_ORIGIN),
+    },
   }
 }
 
@@ -496,6 +607,164 @@ function canonicalQuantity(value: unknown, maxNibbles = 64): string | null {
   return value.toLowerCase()
 }
 
+function canonicalAddress(value: unknown): string | null {
+  if (typeof value !== 'string' || !ADDRESS_RE.test(value)) return null
+  return value.toLowerCase()
+}
+
+function canonicalData(value: unknown): string | null {
+  if (typeof value !== 'string' || !DATA_RE.test(value)) return null
+  return value.toLowerCase()
+}
+
+function parseMinedTransaction(value: unknown): BscMinedTransactionEvidence | null {
+  if (!isRecord(value)) return null
+  const hash = canonicalHash(value.hash)
+  const from = canonicalAddress(value.from)
+  const to = value.to === null ? null : canonicalAddress(value.to)
+  const input = canonicalData(value.input)
+  const rawValue = canonicalQuantity(value.value)
+  const blockNumber = canonicalQuantity(value.blockNumber, 16)
+  const blockHash = canonicalHash(value.blockHash)
+  const transactionIndex = canonicalQuantity(value.transactionIndex, 16)
+  if (
+    hash === null ||
+    from === null ||
+    (value.to !== null && to === null) ||
+    input === null ||
+    rawValue === null ||
+    blockNumber === null ||
+    blockHash === null ||
+    transactionIndex === null
+  ) {
+    return null
+  }
+  return {
+    hash,
+    from,
+    to,
+    input,
+    value: rawValue,
+    blockNumber,
+    blockHash,
+    transactionIndex,
+  }
+}
+
+function isPendingTransaction(value: unknown, expectedHash: string): boolean {
+  if (!isRecord(value)) return false
+  const to = value.to === null ? null : canonicalAddress(value.to)
+  return (
+    canonicalHash(value.hash) === expectedHash &&
+    canonicalAddress(value.from) !== null &&
+    (value.to === null || to !== null) &&
+    canonicalData(value.input) !== null &&
+    canonicalQuantity(value.value) !== null &&
+    value.blockNumber === null &&
+    value.blockHash === null &&
+    value.transactionIndex === null
+  )
+}
+
+function parseReceiptLog(
+  value: unknown,
+  receiptIdentity: {
+    transactionHash: string
+    transactionIndex: string
+    blockNumber: string
+    blockHash: string
+  }
+): BscReceiptLogEvidence | null {
+  if (!isRecord(value)) return null
+  const address = canonicalAddress(value.address)
+  const data = canonicalData(value.data)
+  const blockNumber = canonicalQuantity(value.blockNumber, 16)
+  const transactionHash = canonicalHash(value.transactionHash)
+  const transactionIndex = canonicalQuantity(value.transactionIndex, 16)
+  const blockHash = canonicalHash(value.blockHash)
+  const logIndex = canonicalQuantity(value.logIndex, 16)
+  if (
+    address === null ||
+    data === null ||
+    blockNumber !== receiptIdentity.blockNumber ||
+    transactionHash !== receiptIdentity.transactionHash ||
+    transactionIndex !== receiptIdentity.transactionIndex ||
+    blockHash !== receiptIdentity.blockHash ||
+    logIndex === null ||
+    value.removed !== false ||
+    !Array.isArray(value.topics) ||
+    value.topics.length > 4
+  ) {
+    return null
+  }
+  const topics: string[] = []
+  for (let index = 0; index < value.topics.length; index += 1) {
+    if (!Object.hasOwn(value.topics, index)) return null
+    const topic = canonicalHash(value.topics[index])
+    if (topic === null) return null
+    topics.push(topic)
+  }
+  return {
+    address,
+    topics,
+    data,
+    blockNumber,
+    transactionHash,
+    transactionIndex,
+    blockHash,
+    logIndex,
+    removed: false,
+  }
+}
+
+function parseTransactionReceipt(value: unknown): BscTransactionReceiptEvidence | null {
+  if (!isRecord(value) || !Array.isArray(value.logs)) return null
+  const transactionHash = canonicalHash(value.transactionHash)
+  const transactionIndex = canonicalQuantity(value.transactionIndex, 16)
+  const blockNumber = canonicalQuantity(value.blockNumber, 16)
+  const blockHash = canonicalHash(value.blockHash)
+  const from = canonicalAddress(value.from)
+  const to = value.to === null ? null : canonicalAddress(value.to)
+  const status = value.status === '0x0' || value.status === '0x1' ? value.status : null
+  if (
+    transactionHash === null ||
+    transactionIndex === null ||
+    blockNumber === null ||
+    blockHash === null ||
+    from === null ||
+    (value.to !== null && to === null) ||
+    status === null
+  ) {
+    return null
+  }
+
+  const identity = { transactionHash, transactionIndex, blockNumber, blockHash }
+  const logs: BscReceiptLogEvidence[] = []
+  const seenLogIndexes = new Set<string>()
+  let previousLogIndex: bigint | null = null
+  for (let index = 0; index < value.logs.length; index += 1) {
+    if (!Object.hasOwn(value.logs, index)) return null
+    const log = parseReceiptLog(value.logs[index], identity)
+    if (!log || seenLogIndexes.has(log.logIndex)) return null
+    const numericLogIndex = BigInt(log.logIndex)
+    if (previousLogIndex !== null && numericLogIndex <= previousLogIndex) return null
+    seenLogIndexes.add(log.logIndex)
+    previousLogIndex = numericLogIndex
+    logs.push(log)
+  }
+  if (status === '0x0' && logs.length > 0) return null
+  return {
+    transactionHash,
+    transactionIndex,
+    blockNumber,
+    blockHash,
+    from,
+    to,
+    status,
+    logs,
+  }
+}
+
 function parseBlockHeader(value: unknown): BscBlockHeaderEvidence | null {
   if (!isRecord(value)) return null
   const number = canonicalQuantity(value.number, 16)
@@ -545,6 +814,22 @@ function isPlausibleProducedHeader(block: BscBlockHeaderEvidence): boolean {
   )
 }
 
+function parseBlockMembership(value: unknown): BscBlockMembershipEvidence | null {
+  if (!isRecord(value) || !Array.isArray(value.transactions)) return null
+  const header = parseBlockHeader(value)
+  if (!header || !isPlausibleProducedHeader(header)) return null
+  const transactions: string[] = []
+  const seen = new Set<string>()
+  for (let index = 0; index < value.transactions.length; index += 1) {
+    if (!Object.hasOwn(value.transactions, index)) return null
+    const hash = canonicalHash(value.transactions[index])
+    if (hash === null || seen.has(hash)) return null
+    seen.add(hash)
+    transactions.push(hash)
+  }
+  return { ...header, transactions }
+}
+
 function canonicalTimestampMs(value: unknown): number | null {
   if (typeof value !== 'string') return null
   const parsed = Date.parse(value)
@@ -569,7 +854,13 @@ function unavailableFromRpc(result: BscRpcFailure): BscEvidenceUnavailable {
 
 function unavailableFromSuccess(
   result: BscRpcSuccess,
-  reason: 'not_found' | 'malformed_response' | 'wrong_chain' | 'wrong_genesis'
+  reason:
+    | 'not_found'
+    | 'not_found_or_unindexed'
+    | 'pending'
+    | 'malformed_response'
+    | 'wrong_chain'
+    | 'wrong_genesis'
 ): BscEvidenceUnavailable {
   return {
     status: 'unavailable',
@@ -626,11 +917,74 @@ function blockLane(
   }
 }
 
+function availableFromSuccess<T>(result: BscRpcSuccess, value: T): BscEvidenceAvailable<T> {
+  return {
+    status: 'available',
+    value,
+    provider: result.provider,
+    httpStatus: result.httpStatus,
+  }
+}
+
+function transactionLane(
+  result: BscRpcResult,
+  expectedHash: string
+): BscEvidenceLane<BscMinedTransactionEvidence> {
+  if (!result.ok) return unavailableFromRpc(result)
+  if (result.result === null) return unavailableFromSuccess(result, 'not_found_or_unindexed')
+  const transaction = parseMinedTransaction(result.result)
+  if (!transaction) {
+    return unavailableFromSuccess(
+      result,
+      isPendingTransaction(result.result, expectedHash) ? 'pending' : 'malformed_response'
+    )
+  }
+  if (transaction.hash !== expectedHash) {
+    return unavailableFromSuccess(result, 'malformed_response')
+  }
+  return availableFromSuccess(result, transaction)
+}
+
+function receiptLane(
+  result: BscRpcResult,
+  expectedHash: string
+): BscEvidenceLane<BscTransactionReceiptEvidence> {
+  if (!result.ok) return unavailableFromRpc(result)
+  if (result.result === null) return unavailableFromSuccess(result, 'not_found_or_unindexed')
+  const receipt = parseTransactionReceipt(result.result)
+  if (!receipt || receipt.transactionHash !== expectedHash) {
+    return unavailableFromSuccess(result, 'malformed_response')
+  }
+  return availableFromSuccess(result, receipt)
+}
+
+function blockMembershipLane(result: BscRpcResult): BscEvidenceLane<BscBlockMembershipEvidence> {
+  if (!result.ok) return unavailableFromRpc(result)
+  if (result.result === null) return unavailableFromSuccess(result, 'not_found_or_unindexed')
+  const block = parseBlockMembership(result.result)
+  if (!block) return unavailableFromSuccess(result, 'malformed_response')
+  return availableFromSuccess(result, block)
+}
+
+function dependencyUnavailableLane(): BscEvidenceUnavailable {
+  return {
+    status: 'unavailable',
+    reason: 'dependency_unavailable',
+    provider: providerEvidence(null, []),
+    rpcCode: null,
+    httpStatus: null,
+  }
+}
+
 function sameEndpoint(
   left: BscEvidenceEndpointIdentity,
   right: BscEvidenceEndpointIdentity
 ): boolean {
-  return left.providerId === right.providerId && left.endpointId === right.endpointId
+  return (
+    left.providerId === right.providerId &&
+    left.endpointId === right.endpointId &&
+    left.connectionHash === right.connectionHash
+  )
 }
 
 function exactDataRecord(
@@ -658,22 +1012,36 @@ function exactDataRecord(
 }
 
 function parseApprovedEndpoint(value: unknown): BscEvidenceEndpointIdentity | null {
-  const endpoint = exactDataRecord(value, ['providerId', 'endpointId'])
+  const endpoint = exactDataRecord(value, ['providerId', 'endpointId', 'connectionHash'])
   if (
     !endpoint ||
     typeof endpoint.providerId !== 'string' ||
-    typeof endpoint.endpointId !== 'string'
+    typeof endpoint.endpointId !== 'string' ||
+    typeof endpoint.connectionHash !== 'string' ||
+    !CONNECTION_HASH_RE.test(endpoint.connectionHash)
   ) {
     return null
   }
   if (endpoint.endpointId === 'alchemy_bnb_mainnet' && endpoint.providerId === 'alchemy') {
-    return { providerId: 'alchemy', endpointId: 'alchemy_bnb_mainnet' }
+    const expected = endpointConnectionHash('alchemy', 'alchemy_bnb_mainnet', ALCHEMY_BSC_ORIGIN)
+    return endpoint.connectionHash === expected
+      ? {
+          providerId: 'alchemy',
+          endpointId: 'alchemy_bnb_mainnet',
+          connectionHash: expected,
+        }
+      : null
   }
   if (!Object.hasOwn(CALLER_ENDPOINTS, endpoint.endpointId)) return null
   const endpointId = endpoint.endpointId as BscCallerEndpointId
   const expectedProvider = CALLER_ENDPOINTS[endpointId].providerId
   if (endpoint.providerId !== expectedProvider) return null
-  return { providerId: expectedProvider, endpointId }
+  if (endpointId !== 'local_bsc_node') {
+    const rpcOrigin = CALLER_ENDPOINTS[endpointId].origin
+    const expected = endpointConnectionHash(expectedProvider, endpointId, rpcOrigin)
+    if (endpoint.connectionHash !== expected) return null
+  }
+  return { providerId: expectedProvider, endpointId, connectionHash: endpoint.connectionHash }
 }
 
 function parseSoleProvider(value: unknown): BscEvidenceEndpointIdentity | null {
@@ -920,5 +1288,90 @@ export async function fetchBscChainAnchorEvidence(
     genesisBlock: blockLane(genesisBlock, 'genesis'),
     finalizedBlock: blockLane(finalizedBlock, 'produced'),
     headBlock: blockLane(headBlock, 'produced'),
+  }
+}
+
+/**
+ * Capture the four same-endpoint observations needed to establish transaction
+ * membership. This is still an RPC-provider assertion, not an MPT inclusion
+ * proof; callers must run the strict aggregate verifier before using it.
+ */
+export async function fetchBscTransactionMembershipEvidence(
+  txHashInput: string,
+  anchorEvidence: unknown,
+  opts: BscEvidenceRpcOpts = {}
+): Promise<BscTransactionMembershipEvidence> {
+  if (typeof txHashInput !== 'string' || !HASH_RE.test(txHashInput)) {
+    throw new TypeError('txHash must be a 0x-prefixed 32-byte hex string')
+  }
+  const txHash = txHashInput.toLowerCase()
+  const anchor = requireBscVerifiedChainAnchor(anchorEvidence)
+  const parsedOpts = parseOptsOrThrow(opts)
+  const endpoint = resolveEndpoint(parsedOpts)
+  if (!endpoint) throw new TypeError('BSC transaction membership endpoint is unavailable')
+  if (!sameEndpoint(endpoint.identity, anchor.endpoint)) {
+    throw new TypeError('BSC transaction membership endpoint does not match anchor')
+  }
+
+  const timeoutMs = parsedOpts.timeoutMs ?? 20_000
+  const [transactionResult, receiptResult] = await Promise.all([
+    bscEvidenceRpc(endpoint, 'eth_getTransactionByHash', [txHash], timeoutMs),
+    bscEvidenceRpc(endpoint, 'eth_getTransactionReceipt', [txHash], timeoutMs),
+  ])
+  const transaction = transactionLane(transactionResult, txHash)
+  const receipt = receiptLane(receiptResult, txHash)
+
+  let canonicalBlock: BscEvidenceLane<BscBlockMembershipEvidence> = dependencyUnavailableLane()
+  let indexedTransaction: BscEvidenceLane<BscMinedTransactionEvidence> = dependencyUnavailableLane()
+  if (receipt.status === 'available') {
+    const [blockResult, indexedTransactionResult] = await Promise.all([
+      bscEvidenceRpc(
+        endpoint,
+        'eth_getBlockByNumber',
+        [receipt.value.blockNumber, false],
+        timeoutMs
+      ),
+      bscEvidenceRpc(
+        endpoint,
+        'eth_getTransactionByBlockNumberAndIndex',
+        [receipt.value.blockNumber, receipt.value.transactionIndex],
+        timeoutMs
+      ),
+    ])
+    canonicalBlock = blockMembershipLane(blockResult)
+    indexedTransaction = transactionLane(indexedTransactionResult, txHash)
+  }
+
+  return {
+    chain: { namespace: 'eip155', reference: '56' },
+    txHash,
+    capturedAt: new Date().toISOString(),
+    membershipPolicy: {
+      version: 'bsc_transaction_membership_v1',
+      transactionMethod: 'eth_getTransactionByHash',
+      receiptMethod: 'eth_getTransactionReceipt',
+      blockMethod: 'eth_getBlockByNumber',
+      indexedTransactionMethod: 'eth_getTransactionByBlockNumberAndIndex',
+      fullTransactions: false,
+    },
+    anchor: {
+      endpoint: endpointCopy(anchor.endpoint),
+      verifiedAnchorHash: verifiedChainAnchorHash(anchor),
+      observedAt: anchor.observedAt,
+      finalityPolicy: {
+        version: 'bsc_standard_finalized_current_v1',
+        method: 'eth_getBlockByNumber',
+        blockTag: 'finalized',
+        headBlockTag: 'latest',
+        fullTransactions: false,
+        maxFutureBlockSkewMs: MAX_FUTURE_BLOCK_SKEW_MS,
+        maxCurrentAnchorLagMs: MAX_CURRENT_ANCHOR_LAG_MS,
+      },
+      finalizedBlock: copyBlockHeader(anchor.finalizedBlock),
+    },
+    transaction,
+    receipt,
+    canonicalBlock,
+    indexedTransaction,
   }
 }
