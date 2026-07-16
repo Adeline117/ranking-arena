@@ -11,6 +11,7 @@ import {
   parseKucoinLeaderboardPage,
   parseKucoinPositions,
   parseKucoinProfile,
+  validateKucoinProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
 
@@ -155,6 +156,29 @@ describe('parseKucoinProfile', () => {
     expect(pnl.points).toHaveLength(30)
     expect(pnl.points[0]).toEqual({ ts: '2026-05-13T16:00:00.000Z', value: -173.12764102 })
     expect(pnl.points[29]).toEqual({ ts: '2026-06-11T16:00:00.000Z', value: 6310.43909344 })
+    expect(validateKucoinProfile(profile, ctx, 30)).toEqual([])
+  })
+
+  it('sorts an unsorted chart before deriving its scalar tail', () => {
+    const raw = profileBundle(30) as { pnlHistory: { data: unknown[] } }
+    raw.pnlHistory.data = [...raw.pnlHistory.data].reverse()
+    const parsed = parseKucoinProfile(raw, ctx)
+    expect(parsed.stats[0]).toMatchObject({ roi: 432.1693, pnl: 6310.43909344 })
+    expect(parsed.series[0].points[0].ts).toBe('2026-05-13T16:00:00.000Z')
+  })
+
+  it('rejects a stopped historical chart without changing its parsed evidence', () => {
+    const staleCtx = { ...ctx, scrapedAt: '2026-07-16T16:00:00.000Z' }
+    const parsed = parseKucoinProfile(profileBundle(30), staleCtx)
+    expect(validateKucoinProfile(parsed, staleCtx, 30)[0]).toMatchObject({
+      reason: 'profile_series_tail_stale',
+      payload: {
+        metrics: {
+          pnl: { tail_at: '2026-06-11T16:00:00.000Z' },
+          roi: { tail_at: '2026-06-11T16:00:00.000Z' },
+        },
+      },
+    })
   })
 })
 

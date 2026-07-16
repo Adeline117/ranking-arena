@@ -46,6 +46,7 @@ import type {
   ParsedStats,
   Timeframe,
 } from '../../core/types'
+import { validateRequiredSeriesTails, type ProfileQualityReject } from '../../core/profile-quality'
 
 type Dict = Record<string, unknown>
 
@@ -92,7 +93,9 @@ function kucoinHeadlineRoi(ratioField: unknown, pnl: unknown, principal: unknown
 /** KuCoin epochs are MILLISECONDS. */
 function iso(msEpoch: unknown): string | null {
   const n = num(msEpoch)
-  return n === null || n <= 0 ? null : new Date(n).toISOString()
+  if (n === null || n <= 0) return null
+  const date = new Date(n)
+  return Number.isFinite(date.getTime()) ? date.toISOString() : null
 }
 
 function data(payload: unknown): unknown {
@@ -198,6 +201,7 @@ export function parseKucoinProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       points.push({ ts, pnl: num(row.pnl), ratio: pct(row.ratio) })
     }
   }
+  points.sort((left, right) => left.ts.localeCompare(right.ts))
   const last = points.length > 0 ? points[points.length - 1] : null
 
   const stats: ParsedStats[] = []
@@ -270,6 +274,18 @@ export function parseKucoinProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     nickname: summary ? ((summary.nickName as string) ?? null) : null,
     avatarUrlOrigin: summary ? ((summary.avatar as string) ?? null) : null,
   }
+}
+
+/** KuCoin derives scalar ROI/PnL from its daily pnl/history chart. A stopped
+ *  chart must reject the whole profile instead of being stamped freshly. */
+export function validateKucoinProfile(
+  profile: ParsedProfile,
+  ctx: ParseCtx,
+  requestedTimeframe: Timeframe
+): ProfileQualityReject[] {
+  return validateRequiredSeriesTails(profile, ctx, requestedTimeframe, {
+    requiredMetrics: ['pnl', 'roi'],
+  })
 }
 
 /** Current positions are not publicly exposed (visibility-gated). */
