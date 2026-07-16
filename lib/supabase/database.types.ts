@@ -1942,6 +1942,54 @@ export type Database = {
           },
         ]
       }
+      group_payment_consumptions: {
+        Row: {
+          amount_cents: number
+          checkout_session_id: string | null
+          consumed_at: string
+          currency: string
+          group_id: string
+          id: string
+          outcome: string
+          payment_intent_id: string
+          provider: string
+          result: Json
+          subscription_id: string
+          tier: string
+          user_id: string
+        }
+        Insert: {
+          amount_cents: number
+          checkout_session_id?: string | null
+          consumed_at?: string
+          currency: string
+          group_id: string
+          id?: string
+          outcome: string
+          payment_intent_id: string
+          provider: string
+          result: Json
+          subscription_id: string
+          tier: string
+          user_id: string
+        }
+        Update: {
+          amount_cents?: number
+          checkout_session_id?: string | null
+          consumed_at?: string
+          currency?: string
+          group_id?: string
+          id?: string
+          outcome?: string
+          payment_intent_id?: string
+          provider?: string
+          result?: Json
+          subscription_id?: string
+          tier?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       group_rules: {
         Row: {
           created_at: string
@@ -1980,6 +2028,7 @@ export type Database = {
       }
       group_subscriptions: {
         Row: {
+          cancel_at_period_end: boolean
           cancelled_at: string | null
           created_at: string | null
           expires_at: string
@@ -1995,6 +2044,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          cancel_at_period_end?: boolean
           cancelled_at?: string | null
           created_at?: string | null
           expires_at: string
@@ -2010,6 +2060,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          cancel_at_period_end?: boolean
           cancelled_at?: string | null
           created_at?: string | null
           expires_at?: string
@@ -2040,6 +2091,27 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      group_trial_consumptions: {
+        Row: {
+          consumed_at: string
+          group_id: string
+          subscription_id: string
+          user_id: string
+        }
+        Insert: {
+          consumed_at?: string
+          group_id: string
+          subscription_id: string
+          user_id: string
+        }
+        Update: {
+          consumed_at?: string
+          group_id?: string
+          subscription_id?: string
+          user_id?: string
+        }
+        Relationships: []
       }
       groups: {
         Row: {
@@ -8121,6 +8193,19 @@ export type Database = {
     }
     Functions: {
       acquire_leaderboard_lock: { Args: { season: string }; Returns: boolean }
+      activate_group_subscription_atomic: {
+        Args: {
+          p_actor_id: string
+          p_amount_cents: number
+          p_checkout_session_id: string | null
+          p_currency: string | null
+          p_group_id: string
+          p_payment_intent_id: string | null
+          p_payment_provider: string | null
+          p_tier: string
+        }
+        Returns: Json
+      }
       activate_lifetime_membership: {
         Args: { p_stripe_customer_id: string; p_user_id: string }
         Returns: undefined
@@ -8354,6 +8439,10 @@ export type Database = {
         Returns: number
       }
       calculate_user_weight: { Args: { p_user_id: string }; Returns: number }
+      cancel_group_subscription_atomic: {
+        Args: { p_actor_id: string; p_subscription_id: string }
+        Returns: Json
+      }
       can_access_group: {
         Args: { p_group_id: string; p_user_id: string }
         Returns: boolean
@@ -9283,6 +9372,10 @@ export type Database = {
         }[]
       }
       qa_schema_inventory: { Args: never; Returns: Json }
+      read_group_subscription_atomic: {
+        Args: { p_actor_id: string; p_group_id: string }
+        Returns: Json
+      }
       recommend_by_collaborative_filtering: {
         Args: { p_limit?: number; p_target_type?: string; p_user_id: string }
         Returns: {

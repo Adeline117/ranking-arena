@@ -5,6 +5,7 @@ const migration = readFileSync(
   join(process.cwd(), 'supabase/migrations/20260716176000_atomic_group_pass.sql'),
   'utf8'
 )
+const databaseTypes = readFileSync(join(process.cwd(), 'lib/supabase/database.types.ts'), 'utf8')
 
 describe('atomic paid-group pass migration', () => {
   it('installs immutable one-time payment and trial ledgers', () => {
@@ -93,5 +94,16 @@ describe('atomic paid-group pass migration', () => {
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)
     expect(migration).not.toMatch(/(?:jsx|tsx|className|grid-template|tailwind)/i)
+  })
+
+  it('keeps generated client types aligned with the atomic pass boundary', () => {
+    expect(databaseTypes).toContain('group_payment_consumptions: {')
+    expect(databaseTypes).toContain('group_trial_consumptions: {')
+    expect(databaseTypes).toContain('cancel_at_period_end: boolean')
+    expect(databaseTypes).toContain('activate_group_subscription_atomic: {')
+    expect(databaseTypes).toContain('cancel_group_subscription_atomic: {')
+    expect(databaseTypes).toContain('read_group_subscription_atomic: {')
+    expect(databaseTypes).toContain('p_payment_intent_id: string | null')
+    expect(databaseTypes).toContain('p_checkout_session_id: string | null')
   })
 })
