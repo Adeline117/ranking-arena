@@ -26,6 +26,24 @@ export const maxDuration = 60
 const BASE_URL = 'https://www.arenafi.org'
 const TRADERS_PER_SHARD = 5000
 
+type SitemapProfileState = {
+  id?: string | null
+  handle?: string | null
+  updated_at?: string | null
+  deleted_at?: string | null
+  banned_at?: string | null
+  is_banned?: boolean | null
+  ban_expires_at?: string | null
+}
+
+export function isSitemapProfileActive(profile: SitemapProfileState, now = Date.now()): boolean {
+  if (profile.deleted_at || profile.banned_at) return false
+  if (!profile.is_banned) return true
+  if (!profile.ban_expires_at) return false
+  const banExpiresAt = Date.parse(profile.ban_expires_at)
+  return Number.isFinite(banExpiresAt) && banExpiresAt <= now
+}
+
 function xmlResponse(xml: string): NextResponse {
   return new NextResponse(xml, {
     headers: {
@@ -115,25 +133,60 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
   // Shard 999: posts, groups, user profiles
   if (shardId === 999) {
     const supabase = getSupabase()
-    const [posts, groups, users] = await Promise.all([
+    const [postCandidates, groups, userCandidates] = await Promise.all([
       supabase
         .from('posts')
-        .select('id, updated_at')
+        .select('id, updated_at, author_id')
+        .eq('status', 'active')
+        .eq('visibility', 'public')
+        .is('deleted_at', null)
+        .is('group_id', null)
+        .is('original_post_id', null)
         .order('hot_score', { ascending: false })
-        .limit(500),
+        .limit(1000),
       supabase
         .from('groups')
         .select('id, created_at')
+        .is('dissolved_at', null)
         .order('member_count', { ascending: false })
         .limit(500),
       supabase
         .from('user_profiles')
-        .select('handle, updated_at')
+        .select('id, handle, updated_at, deleted_at, banned_at, is_banned, ban_expires_at')
         .not('handle', 'is', null)
-        .limit(5000),
+        .limit(6000),
     ])
+    const authorIds = [
+      ...new Set(
+        (postCandidates.data ?? [])
+          .map((post) => post.author_id)
+          .filter((authorId): authorId is string => typeof authorId === 'string')
+      ),
+    ]
+    const authorProfiles =
+      authorIds.length > 0
+        ? await supabase
+            .from('user_profiles')
+            .select('id, deleted_at, banned_at, is_banned, ban_expires_at')
+            .in('id', authorIds)
+        : { data: [], error: null }
+    const profileNow = Date.now()
+    const activeAuthorIds = authorProfiles.error
+      ? new Set<string>()
+      : new Set(
+          (authorProfiles.data ?? [])
+            .filter((profile) => isSitemapProfileActive(profile, profileNow))
+            .map((profile) => profile.id)
+            .filter((authorId): authorId is string => typeof authorId === 'string')
+        )
+    const posts = (postCandidates.data ?? [])
+      .filter((post) => activeAuthorIds.has(post.author_id))
+      .slice(0, 500)
+    const users = (userCandidates.data ?? [])
+      .filter((profile) => isSitemapProfileActive(profile, profileNow))
+      .slice(0, 5000)
     const entries = [
-      ...(posts.data || []).map((p) => ({
+      ...posts.map((p) => ({
         loc: `${BASE_URL}/post/${p.id}`,
         lastmod: p.updated_at,
         changefreq: 'weekly',
@@ -145,7 +198,7 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
         changefreq: 'daily',
         priority: 0.7,
       })),
-      ...(users.data || [])
+      ...users
         .filter((u) => u.handle)
         .map((u) => ({
           loc: `${BASE_URL}/u/${encodeURIComponent(u.handle)}`,
