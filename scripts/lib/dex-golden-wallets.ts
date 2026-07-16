@@ -4,7 +4,7 @@ import { z } from 'zod'
 
 import { hasBase58DecodedByteLength } from '../../lib/utils/base58'
 
-import { canonicalSha256 } from './dex-census'
+import { strictCanonicalSha256 } from './dex-contract-hash'
 
 export const DEX_GOLDEN_WALLET_SCHEMA_VERSION = 1 as const
 export const DEX_GOLDEN_WALLET_CONTRACT = 'arena.dex.golden-wallets@1' as const
@@ -465,7 +465,7 @@ export function buildDexGoldenWalletSnapshot(input: {
     populations,
     wallets,
   }
-  return { snapshot, sha256: canonicalSha256(snapshot) }
+  return { snapshot, sha256: strictCanonicalSha256(snapshot) }
 }
 
 function assertUnique(values: readonly string[], label: string): void {
@@ -629,7 +629,7 @@ export function parseDexGoldenWalletSnapshot(input: unknown): DexGoldenWalletSna
 }
 
 export function dexGoldenWalletSnapshotSha256(input: unknown): string {
-  return canonicalSha256(parseDexGoldenWalletSnapshot(input))
+  return strictCanonicalSha256(parseDexGoldenWalletSnapshot(input))
 }
 
 export function parseDexGoldenWalletChainSubset(input: unknown): DexGoldenWalletChainSubset {
@@ -639,7 +639,7 @@ export function parseDexGoldenWalletChainSubset(input: unknown): DexGoldenWallet
 }
 
 export function dexGoldenWalletChainSubsetSha256(input: unknown): string {
-  return canonicalSha256(parseDexGoldenWalletChainSubset(input))
+  return strictCanonicalSha256(parseDexGoldenWalletChainSubset(input))
 }
 
 export function buildDexGoldenWalletChainSubset(
@@ -652,12 +652,12 @@ export function buildDexGoldenWalletChainSubset(
 
   const subset: DexGoldenWalletChainSubset = {
     data_contract: DEX_GOLDEN_WALLET_SUBSET_CONTRACT,
-    parent_snapshot_sha256: canonicalSha256(snapshot),
+    parent_snapshot_sha256: strictCanonicalSha256(snapshot),
     source_slug: source,
     chain: wallets[0].chain,
     wallet_count: 50,
     wallets,
   }
   const parsedSubset = parseDexGoldenWalletChainSubset(subset)
-  return { subset: parsedSubset, sha256: canonicalSha256(parsedSubset) }
+  return { subset: parsedSubset, sha256: strictCanonicalSha256(parsedSubset) }
 }
