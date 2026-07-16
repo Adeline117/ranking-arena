@@ -1,8 +1,7 @@
 'use client'
 
-import React, { Suspense, useEffect, useState } from 'react'
+import React, { Suspense, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
 import { tokens, alpha } from '@/lib/design-tokens'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text, Button } from '@/app/components/base'
@@ -12,30 +11,27 @@ import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import PageHeader from '@/app/components/ui/PageHeader'
 import { TraderLinksSection } from '../components/TraderLinksSection'
 import { logger } from '@/lib/logger'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { captureSettingsViewer } from '../hooks/settings-viewer-scope'
 
 function LinkedAccountsContent() {
   const router = useRouter()
   const { t } = useLanguage()
-  const [userId, setUserId] = useState<string | null>(null)
-  const [email, setEmail] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const auth = useAuthSession()
+  const viewer = captureSettingsViewer(auth)
+  const userId = viewer?.userId ?? null
+  const isCanonicalAnonymous =
+    auth.authChecked && !auth.loading && auth.userId === null && auth.viewerKey === 'anon'
+  const loading = !viewer && !isCanonicalAnonymous
+  const redirectedScopeRef = useRef<string | null>(null)
 
   useEffect(() => {
-    supabase.auth
-      .getUser()
-      .then(({ data }) => {
-        setEmail(data.user?.email ?? null)
-        if (!data.user) {
-          router.push('/login?redirect=/settings/linked-accounts')
-          return
-        }
-        setUserId(data.user.id)
-        setLoading(false)
-      })
-      .catch(() => {
-        setLoading(false)
-      })
-  }, [router])
+    if (!isCanonicalAnonymous) return
+    const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+    if (redirectedScopeRef.current === scopeKey) return
+    redirectedScopeRef.current = scopeKey
+    router.replace('/login?redirect=/settings/linked-accounts')
+  }, [auth.sessionGeneration, auth.viewerKey, isCanonicalAnonymous, router])
 
   if (loading) {
     return (
