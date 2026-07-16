@@ -356,6 +356,16 @@ describe('/api/posts/[id]/comments', () => {
   // --- GET: List Comments ---
 
   describe('GET /api/posts/[id]/comments', () => {
+    it('returns authoritative absence for an invalid post id', async () => {
+      const req = new NextRequest('http://localhost/api/posts/not-a-uuid/comments')
+
+      await expect(GET(req, createContext('not-a-uuid'))).rejects.toMatchObject({
+        statusCode: 404,
+      })
+      expect(mockSupabaseFrom).not.toHaveBeenCalled()
+      expect(mockGetPostComments).not.toHaveBeenCalled()
+    })
+
     it('returns 401 for an invalid bearer token instead of degrading to anonymous access', async () => {
       const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
         headers: { authorization: 'Bearer expired-token' },
@@ -436,16 +446,11 @@ describe('/api/posts/[id]/comments', () => {
       ['deleted', readablePost({ status: 'deleted' })],
       ['follower-only', readablePost({ visibility: 'followers' })],
       ['group-only', readablePost({ visibility: 'group', group_id: GROUP_ID })],
-    ])('does not expose comments for an anonymous %s post', async (_label, post) => {
+    ])('returns authoritative absence for an anonymous %s post', async (_label, post) => {
       queueTable('posts', { data: post })
 
       const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
-      const res = await GET(req, createContext())
-      const body = await res.json()
-
-      expect(res.status).toBe(200)
-      expect(body.data.comments).toEqual([])
-      expect(body.data.post).toBeUndefined()
+      await expect(GET(req, createContext())).rejects.toMatchObject({ statusCode: 404 })
       expect(mockGetPostComments).not.toHaveBeenCalled()
     })
 
@@ -485,16 +490,13 @@ describe('/api/posts/[id]/comments', () => {
     it.each([
       { blocker_id: mockUser.id, blocked_id: POST_AUTHOR_ID },
       { blocker_id: POST_AUTHOR_ID, blocked_id: mockUser.id },
-    ])('returns an empty page for a block in either direction: %o', async (block) => {
+    ])('returns authoritative absence for a block in either direction: %o', async (block) => {
       mockSupabaseAuth = { data: { user: mockUser }, error: null }
       queueTable('posts', { data: readablePost() })
       queueTable('blocked_users', { data: block })
 
       const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
-      const res = await GET(req, createContext())
-      const body = await res.json()
-
-      expect(body.data.comments).toEqual([])
+      await expect(GET(req, createContext())).rejects.toMatchObject({ statusCode: 404 })
       expect(mockGetPostComments).not.toHaveBeenCalled()
     })
 

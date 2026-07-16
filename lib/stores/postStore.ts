@@ -19,7 +19,7 @@ import {
   isDefinitiveMutationRejection,
 } from '@/lib/api/comments-client'
 import { logger } from '@/lib/logger'
-import { getViewerScope } from '@/lib/auth/viewer-scope'
+import { getViewerScope, subscribeViewerScope } from '@/lib/auth/viewer-scope'
 
 export type PostData = {
   id: string
@@ -104,6 +104,8 @@ type PostStoreActions = {
   appendComments: (postId: string, comments: CommentData[]) => void
   /** Add a single comment (after server ACK) */
   addComment: (postId: string, comment: CommentData) => void
+  /** Authoritatively remove a post and every cached comment projection for it. */
+  removePostResource: (postId: string) => void
   /** Update pagination state */
   setCommentsPagination: (postId: string, pagination: Partial<CommentsPagination>) => void
   /** Trigger feed refresh - increments counter to signal feeds to reload */
@@ -129,9 +131,11 @@ function evictOldest<T>(record: Record<string, T>, maxSize: number): Record<stri
   return result
 }
 
+const initialViewerScope = getViewerScope()
+
 export const usePostStore = create<PostStoreState & PostStoreActions>((set) => ({
-  viewerKey: 'pending',
-  sessionGeneration: 0,
+  viewerKey: initialViewerScope.viewerKey,
+  sessionGeneration: initialViewerScope.sessionGeneration,
   posts: {},
   postsRevision: {},
   comments: {},
@@ -274,6 +278,21 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
       }
     }),
 
+  removePostResource: (postId) =>
+    set((state) => {
+      const posts = { ...state.posts }
+      const postsRevision = { ...state.postsRevision }
+      const comments = { ...state.comments }
+      const commentsPagination = { ...state.commentsPagination }
+      const commentsRevision = { ...state.commentsRevision }
+      delete posts[postId]
+      delete postsRevision[postId]
+      delete comments[postId]
+      delete commentsPagination[postId]
+      delete commentsRevision[postId]
+      return { posts, postsRevision, comments, commentsPagination, commentsRevision }
+    }),
+
   setCommentsPagination: (postId, pagination) =>
     set((state) => ({
       commentsPagination: {
@@ -297,6 +316,13 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
       feedRefreshTrigger: 0,
     }),
 }))
+
+// Process-wide auth transitions synchronously invalidate this process-wide
+// cache. Components may still call setViewerScope while hydrating, but cache
+// safety never depends on waiting for a passive effect.
+subscribeViewerScope((scope) => {
+  usePostStore.getState().setViewerScope(scope.viewerKey, scope.sessionGeneration)
+})
 
 function getDefaultPagination(): CommentsPagination {
   return { offset: 0, hasMore: true, loading: false, loadingMore: false }
@@ -326,7 +352,14 @@ function captureStoreScope(scope?: PostStoreViewerScope): PostStoreViewerScope {
 
 function storeScopeIsCurrent(scope: PostStoreViewerScope): boolean {
   const store = usePostStore.getState()
-  return store.viewerKey === scope.viewerKey && store.sessionGeneration === scope.sessionGeneration
+  const processScope = getViewerScope()
+  return (
+    store.viewerKey === scope.viewerKey &&
+    store.sessionGeneration === scope.sessionGeneration &&
+    processScope.viewerKey === scope.viewerKey &&
+    processScope.sessionGeneration === scope.sessionGeneration &&
+    processScope.userId === scope.userId
+  )
 }
 
 function requestKey(scope: PostStoreViewerScope, postId: string): string {
@@ -415,7 +448,8 @@ export async function loadPostForViewer(
 export async function loadPostComments(
   postId: string,
   accessToken: string | null = null,
-  scope?: PostStoreViewerScope
+  scope?: PostStoreViewerScope,
+  revisionRetryRemaining = 1
 ): Promise<void> {
   const capturedScope = captureStoreScope(scope)
   if (!storeScopeIsCurrent(capturedScope)) return
@@ -439,11 +473,19 @@ export async function loadPostComments(
       commentLoadGeneration.get(key) === generation
     ) {
       const current = usePostStore.getState()
+      if (page.resourceAbsent) {
+        current.removePostResource(postId)
+        return
+      }
       if ((current.commentsRevision[postId] || 0) !== requestStartRevision) {
         // A realtime/local commit landed after this read began. A fresh read is
-        // the only safe source for pagination/count after that boundary.
+        // the only safe source for pagination/count after that boundary. One
+        // retry is enough to converge under normal races; sustained local or
+        // realtime writes must not create an unbounded request loop.
         current.setCommentsPagination(postId, { loading: false })
-        await loadPostComments(postId, accessToken, capturedScope)
+        if (revisionRetryRemaining > 0) {
+          await loadPostComments(postId, accessToken, capturedScope, revisionRetryRemaining - 1)
+        }
         return
       }
       current.setComments(postId, page.comments)
@@ -502,6 +544,10 @@ export async function loadMorePostComments(
       commentLoadMoreGeneration.get(key) === generation
     ) {
       const current = usePostStore.getState()
+      if (page.resourceAbsent) {
+        current.removePostResource(postId)
+        return
+      }
       if ((current.commentsRevision[postId] || 0) !== requestStartRevision) {
         current.setCommentsPagination(postId, { loadingMore: false })
         await loadPostComments(postId, accessToken, capturedScope)
@@ -551,6 +597,10 @@ async function reconcilePostStoreComments(
     if (!storeScopeIsCurrent(scope)) return 'stale'
 
     const store = usePostStore.getState()
+    if (page.resourceAbsent) {
+      store.removePostResource(postId)
+      return 'reconciled'
+    }
     if ((store.commentsRevision[postId] || 0) !== requestStartRevision) {
       return 'revision-conflict'
     }

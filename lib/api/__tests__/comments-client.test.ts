@@ -96,6 +96,37 @@ describe('fetchPostCommentsPage', () => {
       commentCount: 0,
     })
   })
+
+  it.each([403, 404])('turns authoritative HTTP %s absence into a clear signal', async (status) => {
+    mockAuthedFetch.mockResolvedValue({
+      ok: false,
+      status,
+      data: { error: 'Post not found' },
+    })
+
+    await expect(fetchPostCommentsPage('post-1', 'token-1')).resolves.toEqual({
+      ok: true,
+      status,
+      comments: [],
+      commentCount: 0,
+      hasMore: false,
+      resourceAbsent: true,
+      error: 'Post not found',
+    })
+  })
+
+  it('keeps a 5xx read unavailable instead of clearing known state', async () => {
+    mockAuthedFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      data: { error: 'unavailable' },
+    })
+
+    await expect(fetchPostCommentsPage('post-1', 'token-1')).resolves.toMatchObject({
+      ok: false,
+      status: 503,
+    })
+  })
 })
 
 describe('isDefinitiveMutationRejection', () => {
