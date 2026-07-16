@@ -1,5 +1,6 @@
 import {
   buildDexGoldenWalletSnapshot,
+  dexGoldenWalletSnapshotSha256,
   type DexGoldenSource,
   type DexGoldenWalletCandidate,
 } from '../lib/dex-golden-wallets'
@@ -88,6 +89,7 @@ describe('DEX golden-wallet selection contract', () => {
 
     expect(reversed).toEqual(ordered)
     expect(ordered.sha256).toMatch(/^[0-9a-f]{64}$/)
+    expect(ordered.sha256).toBe(dexGoldenWalletSnapshotSha256(ordered.snapshot))
   })
 
   it('reserves the highest non-top activity proxies for the high-frequency cohort', () => {
@@ -190,5 +192,13 @@ describe('DEX golden-wallet selection contract', () => {
         generatedAt: '2026-07-18T17:45:00.001Z',
       })
     ).toThrow(/freshness gate/)
+
+    expect(() =>
+      buildDexGoldenWalletSnapshot({
+        candidates: candidates(),
+        ...METADATA,
+        sampleSeed: '\ud800',
+      })
+    ).toThrow(/isolated surrogate/)
   })
 })
