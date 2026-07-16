@@ -503,7 +503,14 @@ ALTER TABLE public.group_invite_redemptions FORCE ROW LEVEL SECURITY;
 
 DO $redemption_shape_preflight$
 BEGIN
-  IF EXISTS (
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_attribute AS attribute
+    WHERE attribute.attrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+  ) <> 4 OR EXISTS (
     SELECT 1
     FROM (
       VALUES
@@ -523,7 +530,12 @@ BEGIN
         AND attribute.attnum > 0
         AND NOT attribute.attisdropped
     )
-  ) OR NOT EXISTS (
+  ) OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_attrdef AS default_info
+    WHERE default_info.adrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) <> 1 OR NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_attribute AS attribute
     JOIN pg_catalog.pg_attrdef AS default_info
@@ -539,7 +551,12 @@ BEGIN
         default_info.adrelid,
         true
       ) = 'clock_timestamp()'
-  ) OR NOT EXISTS (
+  ) OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) <> 3 OR NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_constraint AS constraint_info
     WHERE constraint_info.conrelid =
@@ -621,6 +638,35 @@ BEGIN
       AND constraint_info.confupdtype = 'a'
       AND constraint_info.confdeltype = 'c'
       AND constraint_info.confmatchtype = 's'
+  ) OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_index AS index_info
+    WHERE index_info.indrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) <> 1 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    JOIN pg_catalog.pg_index AS index_info
+      ON index_info.indexrelid = constraint_info.conindid
+    WHERE constraint_info.conrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      AND constraint_info.contype = 'p'
+      AND index_info.indrelid = constraint_info.conrelid
+      AND index_info.indisprimary
+      AND index_info.indisunique
+      AND index_info.indisvalid
+      AND index_info.indisready
+      AND index_info.indimmediate
+      AND index_info.indnkeyatts = 2
+      AND index_info.indnatts = 2
+      AND index_info.indpred IS NULL
+      AND index_info.indexprs IS NULL
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_info
+    WHERE trigger_info.tgrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      AND NOT trigger_info.tgisinternal
   ) THEN
     RAISE EXCEPTION 'group_invite_redemptions has an incompatible shape';
   END IF;

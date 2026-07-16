@@ -32,6 +32,10 @@ describe('atomic group membership migration contract', () => {
     expect(migration).toContain("'public.group_invites'::pg_catalog.regclass")
     expect(migration).toContain("'public.groups'::pg_catalog.regclass")
     expect(migration.match(/constraint_info\.confdeltype = 'c'/g)).toHaveLength(2)
+    expect(migration).toContain('FROM pg_catalog.pg_constraint AS constraint_info')
+    expect(migration).toContain('FROM pg_catalog.pg_index AS index_info')
+    expect(migration).toContain('AND index_info.indimmediate')
+    expect(migration).toContain('AND NOT trigger_info.tgisinternal')
     expect(migration).toContain('group_invite_redemptions has an incompatible shape')
   })
 
