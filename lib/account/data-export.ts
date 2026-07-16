@@ -17,6 +17,11 @@ export {
   type ExportOwnerPredicate,
 } from './export-pagination'
 
+export {
+  fetchAllExportRowsForUuidParents,
+  MAX_EXPORT_PARENT_KEYS,
+} from './export-parent-pagination'
+
 export type ExportDataset = Readonly<{
   name: string
   table: string

@@ -171,6 +171,10 @@ function validateDataset(dataset: CursorExportDataset): ValidatedDataset {
   }
 }
 
+export function validateCursorExportDataset(dataset: CursorExportDataset): void {
+  validateDataset(dataset)
+}
+
 function normalizeTimestamp(value: unknown): NormalizedCursorValue {
   if (typeof value !== 'string') throw new Error('Timestamp cursor values must be strings')
 
