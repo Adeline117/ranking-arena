@@ -288,7 +288,7 @@ export default function ClaimPage() {
                 color: tokens.colors.accent.success,
               }}
             >
-              {t('claimVerifiedAutoApproved')}
+              {t('claimSubmitted')}
             </h2>
             <Text style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[4] }}>
               {t('redirectingToProfile')}

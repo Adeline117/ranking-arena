@@ -37,6 +37,7 @@ export function DexVerifyForm({
   const isSolana = isSolanaDex(trader.source)
 
   const handleWalletVerify = async () => {
+    if (loading) return
     setLoading(true)
     try {
       const {
@@ -114,31 +115,9 @@ export function DexVerifyForm({
         })) as string
       }
 
-      // Verify on server
-      const verifyRes = await fetch('/api/traders/claim/verify-wallet', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({
-          wallet_address: walletAddress,
-          signature,
-          message,
-          platform: trader.source,
-          trader_key: trader.source_trader_id,
-        }),
-      })
-
-      const verifyData = await verifyRes.json()
-
-      if (!verifyRes.ok || !verifyData.data?.verified) {
-        showToast(verifyData.error || t('claimWalletSignFailed'), 'error')
-        return
-      }
-
-      // Submit claim
+      // The claim endpoint verifies and consumes the signed proof exactly once
+      // before atomically creating the review submission. A separate preflight
+      // verification would consume the replay nonce and make this request fail.
       const claimRes = await fetch('/api/traders/claim', {
         method: 'POST',
         headers: {
@@ -166,7 +145,7 @@ export function DexVerifyForm({
       }
 
       trackEvent('claim_trader', { method: 'dex_wallet' })
-      showToast(t('claimVerifiedAutoApproved'), 'success')
+      showToast(t('claimSubmitted'), 'success')
       onSuccess()
     } catch (error) {
       const msg = error instanceof Error ? error.message : ''

@@ -4681,7 +4681,6 @@ const ja = {
   // Claim - Methods
   claimVerifyMethodApi: 'APIキー',
   claimVerifyMethodWallet: 'ウォレット署名',
-  claimVerifiedAutoApproved: '認証が確認され、自動承認されました！',
   claimVerifyAndClaim: '認証して認領',
   claimFormSafeNote:
     '読み取り専用APIキー（取引や出金権限なし）のみ必要です。キーはAES-256-GCMで暗号化され、ログに記録されません。',
