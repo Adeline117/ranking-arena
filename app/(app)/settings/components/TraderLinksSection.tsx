@@ -33,7 +33,6 @@ interface LinkedTrader {
   user_id: string
   trader_id: string
   source: string
-  market_type: string
   label: string | null
   is_primary: boolean
   display_order: number
@@ -97,7 +96,6 @@ function isLinkedTraderForViewer(value: unknown, userId: string): value is Linke
     trader.user_id === userId &&
     typeof trader.trader_id === 'string' &&
     typeof trader.source === 'string' &&
-    typeof trader.market_type === 'string' &&
     typeof trader.is_primary === 'boolean' &&
     typeof trader.display_order === 'number' &&
     Number.isFinite(trader.display_order) &&
