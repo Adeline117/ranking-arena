@@ -5,6 +5,7 @@ const migration = readFileSync(
   join(process.cwd(), 'supabase/migrations/20260716177000_atomic_pro_official_groups.sql'),
   'utf8'
 )
+const route = readFileSync(join(process.cwd(), 'app/api/pro-official-group/route.ts'), 'utf8')
 
 function functionBody(name: string, signature: string): string {
   const start = migration.indexOf(`CREATE OR REPLACE FUNCTION public.${name}`)
@@ -186,5 +187,24 @@ describe('atomic Pro official groups migration', () => {
     expect(migration).toContain('ALTER TABLE public.%I ENABLE ROW LEVEL SECURITY')
     expect(migration).toContain('legacy Pro official-group mutation surface remains callable')
     expect(migration).toContain('incompatible Pro official-group RPC overload exists')
+  })
+
+  it('cuts GET, route writes and webhook helpers over to strict RPC acknowledgements', () => {
+    expect(route).toContain(".rpc('get_pro_official_group_atomic'")
+    expect(route).toContain(".rpc('join_pro_official_group_atomic'")
+    expect(route).toContain(".rpc('leave_pro_official_group_atomic'")
+    expect(route).toContain('readGetOfficialGroupAcknowledgement(data)')
+    expect(route).toContain('readJoinOfficialGroupAcknowledgement(data)')
+    expect(route).toContain('readLeaveOfficialGroupAcknowledgement(data)')
+    expect(route).toContain("hasExactKeys(result, ['status'])")
+    expect(route).not.toContain(".from('pro_official_groups')")
+    expect(route).not.toContain(".from('pro_official_group_members')")
+    expect(route).not.toContain('adjustMemberCount')
+    expect(route).not.toContain('createNewProOfficialGroup')
+    expect(route).not.toContain('hasFeatureAccess')
+    expect(route).not.toContain('.insert(')
+    expect(route).not.toContain('.update(')
+    expect(route).not.toContain('.upsert(')
+    expect(route).not.toContain('.delete(')
   })
 })
