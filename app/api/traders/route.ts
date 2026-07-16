@@ -24,6 +24,11 @@ import { computeAntiGamingFlags } from '@/lib/scoring/anti-gaming'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import { validateTradersResponse } from '@/lib/api/traders-response-schema'
 import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
+import {
+  currentScoredCount,
+  currentScoredSources,
+  type LeaderboardCountCacheRow,
+} from '@/lib/data/leaderboard-count-cache'
 
 const logger = createLogger('traders-api')
 
@@ -49,9 +54,10 @@ const tradersQuerySchema = z.object({
   page: z.coerce.number().int().min(0).optional(),
 })
 
-// In-memory cache for available sources (shared across requests, TTL 30 min)
+// In-memory cache for available sources. Keep this shorter than a normal capture
+// cycle so a newly visible or withdrawn source reaches filters promptly.
 const availableSourcesCache = new Map<string, { sources: string[]; ts: number }>()
-const SOURCES_TTL = 30 * 60 * 1000 // 30 min — sources change only on cron runs
+const SOURCES_TTL = 5 * 60 * 1000
 const SOURCES_CACHE_MAX = 50 // prevent unbounded growth
 
 // Select only needed columns from leaderboard_ranks (avoid SELECT *)
@@ -83,7 +89,7 @@ export const GET = withPublic(
     const effectiveSortBy = sortBy || 'arena_score'
 
     // Cache key
-    const cacheKey = `leaderboard:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
+    const cacheKey = `leaderboard:v2:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
 
     const cachedData = await getOrSetWithLock(
       cacheKey,
@@ -238,13 +244,18 @@ async function fetchFromLeaderboard(
   // filter. The plain key counts arena_score<=0 rows too → under-counts the
   // served set and makes `hasMore` truncate the board early (see rankings/route).
   const countSource = `${exchangeFilter || '_all'}_gt0`
-  const { data: cacheRow } = await supabase
+  const countKeys = countSource === '_all_gt0' ? [countSource] : [countSource, '_all_gt0']
+  const { data: cacheRows } = await supabase
     .from('leaderboard_count_cache')
-    .select('total_count')
+    .select('source,total_count,updated_at')
     .eq('season_id', timeRange)
-    .eq('source', countSource)
-    .maybeSingle()
-  const totalCount = cacheRow?.total_count ?? 0
+    .in('source', countKeys)
+  const cachedTotal = currentScoredCount(
+    (cacheRows || []) as LeaderboardCountCacheRow[],
+    countSource
+  )
+  const pageStart = useLegacyPaging ? page * limit : 0
+  const totalCount = cachedTotal ?? pageStart + (data?.length || 0)
 
   // Verified-data set (A1): traders with an active read-only API-key
   // authorization → ✓ Verified badge (vs scraped "Tracked"). Cached, O(1) lookup.
@@ -345,8 +356,8 @@ async function fetchFromLeaderboard(
   if (sourceCacheEntry && Date.now() - sourceCacheEntry.ts < SOURCES_TTL) {
     availableSources = sourceCacheEntry.sources
   } else {
-    // Extract distinct sources from the full query data (already fetched above)
-    // Plus a lightweight supplementary query for sources not in the current page
+    // Extract distinct sources from the current page, then supplement them from
+    // the same score-visible cache generation used by totalCount.
     const allSourceSet = new Set<string>()
     for (const r of data || []) allSourceSet.add((r as { source: string }).source)
     // Supplementary: get distinct sources from pre-computed count cache
@@ -354,12 +365,12 @@ async function fetchFromLeaderboard(
     // rows from a single physical index page — same bug fixed in /api/rankings)
     const { data: sourceRows } = await supabase
       .from('leaderboard_count_cache')
-      .select('source')
+      .select('source,total_count,updated_at')
       .eq('season_id', timeRange)
-      .gt('total_count', 0)
-      .neq('source', '_all')
-      .not('source', 'like', '%_gt0')
-    for (const r of sourceRows || []) allSourceSet.add((r as { source: string }).source)
+      .like('source', '%_gt0')
+    for (const source of currentScoredSources((sourceRows || []) as LeaderboardCountCacheRow[])) {
+      allSourceSet.add(source)
+    }
     availableSources = [...allSourceSet].sort()
     if (availableSourcesCache.size >= SOURCES_CACHE_MAX) {
       availableSourcesCache.clear()
