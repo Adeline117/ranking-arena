@@ -5972,6 +5972,11 @@ const zh = {
   dataDelayedNote: '该交易所发布此数据存在延迟。',
   metricRoi: '收益率',
   metricPnl: '盈亏',
+  gmxRealizedNetPnlLabel: '已实现净 PnL',
+  gmxRealizedNetPnlSummary: '已计入费用与价格影响 · 不含未实现盈亏',
+  gmxRealizedNetPnlTooltip:
+    'GMX 已实现净 PnL 计入费用与价格影响，不包含当前未实现盈亏；采用完整 UTC 日窗口，相比滚动当前时间最多滞后 24 小时。',
+  gmxCompletedWindowEnded: '完整 UTC 日窗口截止于',
   metricWinRate: '胜率',
   metricMdd: '最大回撤',
   metricCopierPnl: '跟单者收益',
