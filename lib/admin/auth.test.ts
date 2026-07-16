@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Admin Auth Tests
@@ -122,7 +123,7 @@ describe('verifyAdmin', () => {
       maybeSingle: jest.fn(),
     }
 
-    const result = await verifyAdmin(mockSupabase as unknown as SupabaseClient, null)
+    const result = await verifyAdmin(mockSupabase as unknown as SupabaseClient<Database>, null)
     expect(result).toBeNull()
   })
 
@@ -135,7 +136,10 @@ describe('verifyAdmin', () => {
       maybeSingle: jest.fn(),
     }
 
-    const result = await verifyAdmin(mockSupabase as unknown as SupabaseClient, 'InvalidToken')
+    const result = await verifyAdmin(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'InvalidToken'
+    )
     expect(result).toBeNull()
   })
 
@@ -150,7 +154,10 @@ describe('verifyAdmin', () => {
       maybeSingle: jest.fn(),
     }
 
-    const result = await verifyAdmin(mockSupabase as unknown as SupabaseClient, 'Bearer validtoken')
+    const result = await verifyAdmin(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'Bearer validtoken'
+    )
     expect(result).toBeNull()
   })
 
@@ -177,7 +184,7 @@ describe('verifyAdmin', () => {
     }
 
     const result = await freshVerifyAdmin(
-      mockSupabase as unknown as SupabaseClient,
+      mockSupabase as unknown as SupabaseClient<Database>,
       'Bearer validtoken'
     )
     expect(result).toEqual({ id: 'user123', email: 'admin@example.com' })
@@ -199,7 +206,10 @@ describe('verifyAdmin', () => {
       maybeSingle: jest.fn().mockResolvedValue({ data: { role: 'admin' }, error: null }),
     }
 
-    const result = await verifyAdmin(mockSupabase as unknown as SupabaseClient, 'Bearer validtoken')
+    const result = await verifyAdmin(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'Bearer validtoken'
+    )
     expect(result).toEqual({ id: 'user123', email: 'notadmin@example.com' })
   })
 
@@ -219,7 +229,10 @@ describe('verifyAdmin', () => {
       maybeSingle: jest.fn().mockResolvedValue({ data: { role: 'user' }, error: null }),
     }
 
-    const result = await verifyAdmin(mockSupabase as unknown as SupabaseClient, 'Bearer validtoken')
+    const result = await verifyAdmin(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'Bearer validtoken'
+    )
     expect(result).toBeNull()
   })
 
@@ -239,7 +252,10 @@ describe('verifyAdmin', () => {
       maybeSingle: jest.fn().mockResolvedValue({ data: { role: 'admin' }, error: null }),
     }
 
-    const result = await verifyAdmin(mockSupabase as unknown as SupabaseClient, 'Bearer validtoken')
+    const result = await verifyAdmin(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'Bearer validtoken'
+    )
     expect(result).toEqual({ id: 'user123', email: '' })
   })
 
@@ -262,7 +278,7 @@ describe('verifyAdmin', () => {
     }
 
     await expect(
-      verifyAdmin(mockSupabase as unknown as SupabaseClient, 'Bearer validtoken')
+      verifyAdmin(mockSupabase as unknown as SupabaseClient<Database>, 'Bearer validtoken')
     ).resolves.toBeNull()
   })
 
@@ -288,7 +304,10 @@ describe('verifyAdmin', () => {
     }
 
     await expect(
-      verifyModeratorOrAdmin(mockSupabase as unknown as SupabaseClient, 'Bearer validtoken')
+      verifyModeratorOrAdmin(
+        mockSupabase as unknown as SupabaseClient<Database>,
+        'Bearer validtoken'
+      )
     ).resolves.toBeNull()
   })
 })

@@ -18,6 +18,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import { PipelineLogger, type PipelineLogHandle } from '@/lib/services/pipeline-logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
@@ -28,7 +29,7 @@ import * as Sentry from '@sentry/nextjs'
 
 interface CronContext {
   plog: PipelineLogHandle
-  supabase: SupabaseClient
+  supabase: SupabaseClient<Database>
 }
 
 interface CronOptions {
@@ -105,7 +106,7 @@ export function withCron(jobName: string, handler: CronHandler, options: CronOpt
     // becomes queryable via pipeline_logs (→ ClickHouse dual-write), allowing
     // operators to find every log line for a given cron run with one query.
     const plog = await PipelineLogger.start(jobName, { ...metadata, correlationId })
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSupabaseAdmin()
 
     // 5. Safety timeout
     let safetyFired = false

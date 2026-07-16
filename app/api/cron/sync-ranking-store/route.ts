@@ -19,7 +19,6 @@
 import { NextRequest } from 'next/server'
 import { withCron } from '@/lib/api/with-cron'
 import { syncSortedSetFromLeaderboard } from '@/lib/realtime/ranking-store'
-import type { SupabaseClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
@@ -29,7 +28,7 @@ const SEASONS = ['7D', '30D', '90D'] as const
 export const GET = withCron('sync-ranking-store', async (_request: NextRequest, { supabase }) => {
   const synced: Record<string, number> = {}
   for (const season of SEASONS) {
-    synced[season] = await syncSortedSetFromLeaderboard(supabase as SupabaseClient, season)
+    synced[season] = await syncSortedSetFromLeaderboard(supabase, season)
   }
   const count = Object.values(synced).reduce((a, b) => a + b, 0)
   return { count, synced }

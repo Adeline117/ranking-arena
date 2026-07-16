@@ -14,6 +14,7 @@
 import { getSharedRedis } from '@/lib/cache/redis-client'
 import { createLogger } from '@/lib/utils/logger'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 
 const logger = createLogger('ranking-store')
 
@@ -255,7 +256,7 @@ const SYNC_SELECT_FIELDS = [
  * Returns the number of traders synced.
  */
 export async function syncSortedSetFromLeaderboard(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   period: string
 ): Promise<number> {
   const redis = await getSharedRedis()
