@@ -104,6 +104,8 @@ const CLONE_TABLES: Array<[string, string]> = [
   ['leaderboard_snapshots', 'arena.leaderboard_snapshots'],
   ['leaderboard_entries', 'arena.leaderboard_entries'],
   ['trader_stats', 'arena.trader_stats'],
+  ['trader_series', 'arena.trader_series'],
+  ['trader_series_weekly', 'arena.trader_series_weekly'],
   ['staging_rejects', 'arena.staging_rejects'],
 ]
 

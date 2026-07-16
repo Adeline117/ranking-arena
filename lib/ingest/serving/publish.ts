@@ -28,6 +28,14 @@ import { deriveMissingRatios, deriveRiskFromBlocks } from '../core/series-risk'
  *  self-deriving a daily-approx there is inaccurate (user directive 2026-07-02),
  *  so it's gated OUT for every CEX source. */
 const SELF_DERIVE_RISK_SOURCES = new Set(['hyperliquid', 'gmx', 'gtrade'])
+/**
+ * Ordering watermark for profile publications. `trader_stats.as_of` cannot
+ * serve this purpose: a board and a profile observe different upstream
+ * surfaces, while a partial fill crawl deliberately keeps a conservative
+ * row-level as_of. Keep the independent watermark in extras until a dedicated
+ * field-level provenance table replaces it.
+ */
+const PROFILE_PUBLICATION_EPOCH_KEY = '_arena_profile_publication_epoch_ms'
 import {
   BOOTSTRAP_DEVIATION_PCT,
   ROLLING_DEVIATION_PCT,
@@ -62,6 +70,15 @@ export interface PublishSnapshotResult {
   verdict: CountVerdict
   published: boolean
   traderIds: Map<string, number> // exchange_trader_id → arena.traders.id
+}
+
+export class StaleProfilePublicationError extends Error {
+  constructor(traderId: number, timeframe: number, asOf: string) {
+    super(
+      `stale profile publication rejected: trader=${traderId}, timeframe=${timeframe}, as_of=${asOf}`
+    )
+    this.name = 'StaleProfilePublicationError'
+  }
 }
 
 async function insertRejects(
@@ -381,7 +398,15 @@ export async function publishProfile(
       // metrics while the independent portfolio/risk fields keep refreshing.
       // Complete empty activity sets this flag true and intentionally writes 0.
       const preserveFillMetrics = s.extras.fills_metrics_complete === false
-      await client.query(
+      const publicationEpochMs = Date.parse(s.asOf)
+      if (!Number.isFinite(publicationEpochMs)) {
+        throw new Error(`invalid profile as_of: ${s.asOf}`)
+      }
+      const persistedExtras = {
+        ...s.extras,
+        [PROFILE_PUBLICATION_EPOCH_KEY]: publicationEpochMs,
+      }
+      const statsResult = await client.query(
         `INSERT INTO arena.trader_stats
            (trader_id, timeframe, as_of, currency, roi, pnl, sharpe, mdd, win_rate,
             win_positions, total_positions, copier_pnl, copier_count, aum, volume,
@@ -389,7 +414,13 @@ export async function publishProfile(
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,
                  make_interval(secs => $17), $18, $19)
          ON CONFLICT (trader_id, timeframe) DO UPDATE SET
-           as_of = EXCLUDED.as_of, currency = EXCLUDED.currency,
+           -- A partial fill crawl retains older fill metrics. Its row-level
+           -- freshness must therefore be the older observation, never "now".
+           as_of = CASE WHEN $20
+             THEN LEAST(arena.trader_stats.as_of, EXCLUDED.as_of)
+             ELSE EXCLUDED.as_of
+           END,
+           currency = EXCLUDED.currency,
            roi = EXCLUDED.roi, pnl = EXCLUDED.pnl, sharpe = EXCLUDED.sharpe,
            mdd = EXCLUDED.mdd,
            win_rate = CASE WHEN $20 THEN arena.trader_stats.win_rate ELSE EXCLUDED.win_rate END,
@@ -403,7 +434,16 @@ export async function publishProfile(
            extras = CASE WHEN $20
              THEN COALESCE(arena.trader_stats.extras, '{}'::jsonb) || EXCLUDED.extras
              ELSE EXCLUDED.extras
-           END`,
+           END
+         -- Profile ordering is independent from board as_of. The internal
+         -- numeric watermark is written by every accepted profile and avoids
+         -- timestamp parsing failures from arbitrary source extras.
+         WHERE COALESCE(
+           CASE WHEN jsonb_typeof(arena.trader_stats.extras -> '${PROFILE_PUBLICATION_EPOCH_KEY}') = 'number'
+             THEN (arena.trader_stats.extras ->> '${PROFILE_PUBLICATION_EPOCH_KEY}')::numeric
+           END,
+           -1
+         ) <= extract(epoch FROM EXCLUDED.as_of) * 1000`,
         [
           traderId,
           s.timeframe,
@@ -423,10 +463,15 @@ export async function publishProfile(
           s.profitShareRate,
           s.holdingDurationAvgHours === null ? null : s.holdingDurationAvgHours * 3600,
           s.tradingPreferences ? JSON.stringify(s.tradingPreferences) : null,
-          JSON.stringify(s.extras),
+          JSON.stringify(persistedExtras),
           preserveFillMetrics,
         ]
       )
+      if (statsResult.rowCount === 0) {
+        // Throwing keeps the stats + series transaction atomic and prevents
+        // Tier-B from marking an out-of-order crawl as freshly profiled.
+        throw new StaleProfilePublicationError(traderId, s.timeframe, s.asOf)
+      }
     }
 
     for (const replacement of profile.replaceSeries ?? []) {
