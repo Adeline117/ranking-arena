@@ -234,6 +234,46 @@ describe('POST /api/settings/export', () => {
           },
         ]
       }
+      if (dataset.name === 'account.exchange_connections') {
+        return [
+          {
+            id: '17171717-1717-4717-8717-171717171717',
+            exchange: 'binance',
+            exchange_user_id: 'exchange-user-42',
+            expires_at: null,
+            is_active: true,
+            last_sync_at: null,
+            last_sync_status: 'pending',
+            created_at: '2026-02-20T00:00:00.000Z',
+            updated_at: '2026-02-20T00:30:00.000Z',
+            verified_uid: 'verified-trader-42',
+            last_verified_at: '2026-02-20T00:15:00.000Z',
+            scope_permissions: ['read', 'positions'],
+            user_id: 'must-not-escape-exchange-owner',
+            api_key_encrypted: 'must-not-escape-api-key-ciphertext',
+            api_secret_encrypted: 'must-not-escape-api-secret-ciphertext',
+            passphrase_encrypted: 'must-not-escape-passphrase-ciphertext',
+            access_token_encrypted: 'must-not-escape-access-token-ciphertext',
+            refresh_token_encrypted: 'must-not-escape-refresh-token-ciphertext',
+            last_sync_error: 'must-not-escape-sync-error',
+            future_secret: 'must-not-escape-exchange-normalization',
+          },
+          {
+            id: '18181818-1818-4818-8818-181818181818',
+            exchange: 'okx',
+            exchange_user_id: null,
+            expires_at: null,
+            is_active: null,
+            last_sync_at: null,
+            last_sync_status: null,
+            created_at: null,
+            updated_at: null,
+            verified_uid: null,
+            last_verified_at: null,
+            scope_permissions: null,
+          },
+        ]
+      }
       if (dataset.name === 'blocks.outgoing') {
         return [
           {
@@ -528,6 +568,7 @@ describe('POST /api/settings/export', () => {
       'collections.items': 1,
       'settings.preferences': 1,
       'account.bindings': 2,
+      'account.exchange_connections': 2,
       'account.login_sessions': 1,
       'account.api_keys': 1,
       'account.passkeys': 1,
@@ -809,6 +850,36 @@ describe('POST /api/settings/export', () => {
           created_at: '2026-02-07T00:00:00.000Z',
         },
       ],
+      exchange_connections: [
+        {
+          id: '17171717-1717-4717-8717-171717171717',
+          exchange: 'binance',
+          exchange_user_id: 'exchange-user-42',
+          expires_at: null,
+          is_active: true,
+          last_sync_at: null,
+          last_sync_status: 'pending',
+          created_at: '2026-02-20T00:00:00.000Z',
+          updated_at: '2026-02-20T00:30:00.000Z',
+          verified_uid: 'verified-trader-42',
+          last_verified_at: '2026-02-20T00:15:00.000Z',
+          scope_permissions: ['read', 'positions'],
+        },
+        {
+          id: '18181818-1818-4818-8818-181818181818',
+          exchange: 'okx',
+          exchange_user_id: null,
+          expires_at: null,
+          is_active: null,
+          last_sync_at: null,
+          last_sync_status: null,
+          created_at: null,
+          updated_at: null,
+          verified_uid: null,
+          last_verified_at: null,
+          scope_permissions: null,
+        },
+      ],
       login_sessions: [{ id: 'account.login_sessions-1' }],
       api_keys: [{ id: 'account.api_keys-1' }],
       passkeys: [{ id: 'account.passkeys-1' }],
@@ -819,8 +890,11 @@ describe('POST /api/settings/export', () => {
     expect(JSON.stringify(body.account.bindings)).not.toContain(
       'must-not-escape-binding-normalization'
     )
+    expect(JSON.stringify(body.account.exchange_connections)).not.toMatch(
+      /must-not-escape|"(?:user_id|api_key_encrypted|api_secret_encrypted|passphrase_encrypted|access_token_encrypted|refresh_token_encrypted|last_sync_error|future_secret)"/
+    )
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
-    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(15)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(16)
     expect(mockFetchAllExportRowsForUuidParents).toHaveBeenCalledTimes(1)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
@@ -893,6 +967,46 @@ describe('POST /api/settings/export', () => {
       })
     )
     expect(bindingsCall[1].selectColumns).not.toContain('user_id')
+
+    const exchangeConnectionsCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+      (call) => call[1].name === 'account.exchange_connections'
+    )
+    expect(exchangeConnectionsCall).toBeDefined()
+    expect(exchangeConnectionsCall[2]).toBe(USER_ID)
+    expect(exchangeConnectionsCall[1]).toEqual({
+      name: 'account.exchange_connections',
+      table: 'user_exchange_connections',
+      selectColumns: [
+        'id',
+        'exchange',
+        'exchange_user_id',
+        'expires_at',
+        'is_active',
+        'last_sync_at',
+        'last_sync_status',
+        'created_at',
+        'updated_at',
+        'verified_uid',
+        'last_verified_at',
+        'scope_permissions',
+      ],
+      ownerPredicate: { column: 'user_id', operator: 'eq', valueType: 'uuid' },
+      cursor: {
+        order: 'asc',
+        columns: [{ column: 'exchange', valueType: 'string' }],
+      },
+    })
+    for (const forbiddenField of [
+      'user_id',
+      'api_key_encrypted',
+      'api_secret_encrypted',
+      'passphrase_encrypted',
+      'access_token_encrypted',
+      'refresh_token_encrypted',
+      'last_sync_error',
+    ]) {
+      expect(exchangeConnectionsCall[1].selectColumns).not.toContain(forbiddenField)
+    }
 
     const outgoingBlocksCall = mockFetchAllExportRowsByCursor.mock.calls.find(
       (call) => call[1].name === 'blocks.outgoing'
@@ -1101,6 +1215,70 @@ describe('POST /api/settings/export', () => {
     expect(response.status).toBe(500)
     expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
     expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed without cooldown when exchange connections cannot be read completely', async () => {
+    const defaultCursorRead = mockFetchAllExportRowsByCursor.getMockImplementation()
+    mockFetchAllExportRowsByCursor.mockImplementation(async (client, dataset, owner) => {
+      if (dataset.name === 'account.exchange_connections') {
+        throw new DataExportReadError('account.exchange_connections', { code: 'XX001' })
+      }
+      return defaultCursorRead?.(client, dataset, owner)
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed when exchange scope permissions have an unsafe JSON shape', async () => {
+    const defaultCursorRead = mockFetchAllExportRowsByCursor.getMockImplementation()
+    mockFetchAllExportRowsByCursor.mockImplementation(async (client, dataset, owner) => {
+      if (dataset.name === 'account.exchange_connections') {
+        return [
+          {
+            id: '17171717-1717-4717-8717-171717171717',
+            exchange: 'binance',
+            exchange_user_id: null,
+            expires_at: null,
+            is_active: true,
+            last_sync_at: null,
+            last_sync_status: null,
+            created_at: null,
+            updated_at: null,
+            verified_uid: null,
+            last_verified_at: null,
+            scope_permissions: { read: true, future_secret: 'must-not-escape' },
+          },
+        ]
+      }
+      return defaultCursorRead?.(client, dataset, owner)
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('exports an explicit empty exchange connection array', async () => {
+    const defaultCursorRead = mockFetchAllExportRowsByCursor.getMockImplementation()
+    mockFetchAllExportRowsByCursor.mockImplementation(async (client, dataset, owner) => {
+      if (dataset.name === 'account.exchange_connections') return []
+      return defaultCursorRead?.(client, dataset, owner)
+    })
+
+    const response = await POST(request())
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.account.exchange_connections).toEqual([])
+    expect(
+      body.manifest.datasets.find((dataset) => dataset.name === 'account.exchange_connections')
+    ).toEqual({ name: 'account.exchange_connections', status: 'complete', row_count: 0 })
   })
 
   it('fails closed without cooldown when outgoing blocks cannot be read completely', async () => {

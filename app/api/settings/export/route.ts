@@ -85,6 +85,7 @@ interface ExportData {
   }
   account: {
     bindings: unknown[]
+    exchange_connections: unknown[]
     login_sessions: unknown[]
     api_keys: unknown[]
     passkeys: unknown[]
@@ -95,6 +96,8 @@ interface ExportData {
 }
 
 type UserProfileColumn = keyof Database['public']['Tables']['user_profiles']['Row']
+type UserExchangeConnectionColumn =
+  keyof Database['public']['Tables']['user_exchange_connections']['Row']
 
 const PROFILE_EXPORT_COLUMNS = [
   'id',
@@ -342,6 +345,37 @@ const ACCOUNT_BINDINGS_EXPORT_DATASET = {
   cursor: {
     order: 'asc',
     columns: [{ column: 'platform', valueType: 'string' }],
+  },
+} satisfies CursorExportDataset
+
+const EXCHANGE_CONNECTION_EXPORT_COLUMNS = [
+  'id',
+  'exchange',
+  'exchange_user_id',
+  'expires_at',
+  'is_active',
+  'last_sync_at',
+  'last_sync_status',
+  'created_at',
+  'updated_at',
+  'verified_uid',
+  'last_verified_at',
+  'scope_permissions',
+] as const satisfies readonly UserExchangeConnectionColumn[]
+
+const EXCHANGE_CONNECTIONS_EXPORT_DATASET = {
+  name: 'account.exchange_connections',
+  table: 'user_exchange_connections',
+  selectColumns: EXCHANGE_CONNECTION_EXPORT_COLUMNS,
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    // UNIQUE (user_id, exchange) makes this owner-scoped cursor complete.
+    columns: [{ column: 'exchange', valueType: 'string' }],
   },
 } satisfies CursorExportDataset
 
@@ -683,6 +717,34 @@ function normalizeAccountBindings(rows: Record<string, unknown>[]) {
     platform: row.platform,
     account_id: row.account_id,
     created_at: row.created_at,
+  }))
+}
+
+function normalizeExchangeScopePermissions(value: unknown): string[] | null {
+  if (value === null) return null
+  if (!Array.isArray(value) || value.some((permission) => typeof permission !== 'string')) {
+    throw new DataExportReadError(
+      EXCHANGE_CONNECTIONS_EXPORT_DATASET.name,
+      new Error('Invalid exchange scope permissions shape')
+    )
+  }
+  return [...value]
+}
+
+function normalizeExchangeConnections(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    exchange: row.exchange,
+    exchange_user_id: row.exchange_user_id,
+    expires_at: row.expires_at,
+    is_active: row.is_active,
+    last_sync_at: row.last_sync_at,
+    last_sync_status: row.last_sync_status,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    verified_uid: row.verified_uid,
+    last_verified_at: row.last_verified_at,
+    scope_permissions: normalizeExchangeScopePermissions(row.scope_permissions),
   }))
 }
 
@@ -1046,6 +1108,7 @@ export async function POST(request: NextRequest) {
       recoveryTokens,
       preferences,
       accountBindings,
+      exchangeConnections,
       outgoingBlocks,
       postLikes,
       postVotes,
@@ -1074,6 +1137,7 @@ export async function POST(request: NextRequest) {
       fetchAllExportRows(supabase, EXPORT_DATASETS.recoveryTokens, user.id),
       fetchAllExportRowsByCursor(supabase, PREFERENCES_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, ACCOUNT_BINDINGS_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, EXCHANGE_CONNECTIONS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, OUTGOING_BLOCKS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, POST_LIKES_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, POST_VOTES_EXPORT_DATASET, user.id),
@@ -1109,6 +1173,7 @@ export async function POST(request: NextRequest) {
     const normalizedPostEmojiReactions = normalizePostEmojiReactions(postEmojiReactions)
     const normalizedPreferences = normalizePreferences(preferences)
     const normalizedAccountBindings = normalizeAccountBindings(accountBindings)
+    const normalizedExchangeConnections = normalizeExchangeConnections(exchangeConnections)
     const exportedAt = new Date().toISOString()
     const exportData: ExportData = {
       exportedAt,
@@ -1142,6 +1207,7 @@ export async function POST(request: NextRequest) {
           completedDataset('collections.items', ownedCollectionData.items.length),
           completedDataset('settings.preferences', preferences.length),
           completedDataset('account.bindings', accountBindings.length),
+          completedDataset('account.exchange_connections', exchangeConnections.length),
           completedDataset('account.login_sessions', loginSessions.length),
           completedDataset('account.api_keys', apiKeys.length),
           completedDataset('account.passkeys', passkeys.length),
@@ -1192,6 +1258,7 @@ export async function POST(request: NextRequest) {
       },
       account: {
         bindings: normalizedAccountBindings,
+        exchange_connections: normalizedExchangeConnections,
         login_sessions: loginSessions,
         api_keys: apiKeys,
         passkeys,
