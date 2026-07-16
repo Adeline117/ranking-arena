@@ -206,7 +206,7 @@ describe('getPostById', () => {
     mockSupabase.rpc.mockResolvedValueOnce({ data: false, error: null })
 
     await expect(
-      getPostById(mockSupabase as unknown as SupabaseClient, 'post1', 'viewer1')
+      getPostById(mockSupabase as unknown as Parameters<typeof getPostById>[0], 'post1', 'viewer1')
     ).resolves.toBeNull()
     expect(mockSupabase.rpc).toHaveBeenCalledWith('can_service_actor_read_post', {
       p_post_id: 'post1',
