@@ -5,6 +5,9 @@
  * including parameter validation, auth, caching, and error handling.
  */
 
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
+
 // --- Mocks ---
 
 jest.mock('next/server', () => {
@@ -197,6 +200,10 @@ describe('/api/posts', () => {
       expect(res.status).toBe(200)
       expect(body.success).toBe(true)
       expect(body.data.posts).toBeDefined()
+      expect(res.headers.get('Cache-Control')).toBe(
+        'public, s-maxage=30, stale-while-revalidate=120'
+      )
+      expect(res.headers.get('Vary')).toContain('Authorization')
     })
 
     it('returns posts with pagination params', async () => {
@@ -236,6 +243,10 @@ describe('/api/posts', () => {
       expect(res.status).toBe(200)
       expect(body.data.posts[0].user_reaction).toBe('up')
       expect(body.data.posts[0].user_vote).toBe('bull')
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+      expect(res.headers.get('CDN-Cache-Control')).toBe('no-store')
+      expect(res.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+      expect(res.headers.get('Vary')).toContain('Authorization')
     })
 
     it('returns posts without user state when not authenticated', async () => {
@@ -269,6 +280,8 @@ describe('/api/posts', () => {
       const res = await GET(req)
 
       expect(res.status).toBe(401)
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+      expect(res.headers.get('Vary')).toContain('Authorization')
       expect(mockGetPosts).not.toHaveBeenCalled()
       expect(mockSupabase.from).not.toHaveBeenCalledWith('user_follows')
     })
@@ -282,6 +295,7 @@ describe('/api/posts', () => {
       const res = await GET(req)
 
       expect(res.status).toBe(401)
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
       expect(mockGetPosts).not.toHaveBeenCalled()
     })
 
@@ -297,6 +311,7 @@ describe('/api/posts', () => {
 
       expect(res.status).toBe(200)
       expect(body.data).toEqual({ posts: [], following_count: 0 })
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
       expect(mockGetPosts).not.toHaveBeenCalled()
     })
 
@@ -350,7 +365,16 @@ describe('/api/posts', () => {
       const res = await GET(req)
 
       expect(res.status).toBe(500)
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
       expect(mockGetPosts).not.toHaveBeenCalled()
+    })
+
+    it('has no deployment-wide shared cache override for the posts route', () => {
+      const vercelConfig = JSON.parse(readFileSync(join(process.cwd(), 'vercel.json'), 'utf8')) as {
+        headers?: Array<{ source?: string }>
+      }
+
+      expect(vercelConfig.headers?.find((entry) => entry.source === '/api/posts')).toBeUndefined()
     })
   })
 
