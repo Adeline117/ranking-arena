@@ -3,12 +3,14 @@ import {
   type CursorExportDataset,
   DataExportReadError,
   DataExportTooLargeError,
-  fetchAllExportRowsByCursor,
+  EXPORT_UUID_OWNER_BATCH_SIZE,
+  fetchExportRowsForUuidOwnerBatch,
   MAX_EXPORT_ROWS_PER_DATASET,
   validateCursorExportDataset,
 } from './export-pagination'
 
 export const MAX_EXPORT_PARENT_KEYS = 10_000
+export const EXPORT_PARENT_KEY_BATCH_SIZE = EXPORT_UUID_OWNER_BATCH_SIZE
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -34,8 +36,9 @@ function normalizeParentIds(datasetName: string, parentIds: readonly string[]): 
 
 /**
  * Read a child dataset only through an already owner-verified list of UUID
- * parents. The synchronous row cap is shared across every parent rather than
- * being reset for each child query.
+ * parents. Parents are queried in fixed URL-safe batches and every batch uses
+ * (parent, child cursor...) keyset pagination. The synchronous row cap is
+ * shared across every batch rather than being reset for each child query.
  */
 export async function fetchAllExportRowsForUuidParents(
   supabase: SupabaseClient,
@@ -58,18 +61,32 @@ export async function fetchAllExportRowsForUuidParents(
   const normalizedParentIds = normalizeParentIds(dataset.name, parentIds)
   const rows: Record<string, unknown>[] = []
 
-  for (const parentId of normalizedParentIds) {
-    const parentRows = await fetchAllExportRowsByCursor(supabase, dataset, parentId)
-    if (rows.length + parentRows.length > MAX_EXPORT_ROWS_PER_DATASET) {
+  for (
+    let batchStart = 0;
+    batchStart < normalizedParentIds.length;
+    batchStart += EXPORT_PARENT_KEY_BATCH_SIZE
+  ) {
+    const parentBatch = normalizedParentIds.slice(
+      batchStart,
+      batchStart + EXPORT_PARENT_KEY_BATCH_SIZE
+    )
+    const parentRows = await fetchExportRowsForUuidOwnerBatch(
+      supabase,
+      dataset,
+      parentBatch,
+      MAX_EXPORT_ROWS_PER_DATASET - rows.length
+    )
+    if (parentRows.length > MAX_EXPORT_ROWS_PER_DATASET - rows.length) {
       throw new DataExportTooLargeError(dataset.name)
     }
 
+    const allowedParents = new Set(parentBatch)
     for (const row of parentRows) {
       const returnedParent = row[parentColumn]
       if (
         typeof returnedParent !== 'string' ||
         !UUID.test(returnedParent) ||
-        returnedParent.toLowerCase() !== parentId
+        !allowedParents.has(returnedParent.toLowerCase())
       ) {
         throw new DataExportReadError(dataset.name, new Error('Child row escaped its parent key'))
       }
