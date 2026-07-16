@@ -29,6 +29,7 @@ import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { searchTradersMeili, isMeilisearchAvailable } from '@/lib/search/meilisearch'
 import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
 import { escapeLikePattern } from '@/lib/sanitize'
+import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
 
 // Removed force-dynamic: search results are cacheable via Redis + HTTP cache headers
 // Previous force-dynamic blocked Vercel CDN caching entirely
@@ -224,6 +225,15 @@ interface HotSearchItem {
   trend: 'up' | 'down' | 'stable'
 }
 
+interface HotPostCandidate {
+  id: string
+  title: string | null
+  hot_score: number | null
+  view_count: number | null
+  like_count: number | null
+  comment_count: number | null
+}
+
 function extractKeyword(title: string): string | null {
   if (!title || title.length < 2) return null
 
@@ -253,46 +263,46 @@ function extractKeyword(title: string): string | null {
 async function handleHotSearch(
   supabase: Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']
 ) {
-  const CACHE_KEY = 'search:hot:v1'
+  const CACHE_KEY = 'search:hot:v2:candidates'
 
-  const cached = await cacheGet<HotSearchItem[]>(CACHE_KEY)
-  if (cached) {
-    return success({ hotSearches: cached }, 200, {
-      'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-    })
-  }
+  let hotPostCandidates = features.social ? await cacheGet<HotPostCandidate[]>(CACHE_KEY) : []
 
-  const hotSearches: HotSearchItem[] = []
-
-  if (features.social) {
+  if (!hotPostCandidates && features.social) {
     const { data: hotPosts } = await supabase
       .from('posts')
-      .select('title, hot_score, view_count, like_count, comment_count')
+      .select('id, title, hot_score, view_count, like_count, comment_count')
       .not('title', 'is', null)
       .order('hot_score', { ascending: false, nullsFirst: false })
       .limit(20)
 
-    const seenKeywords = new Set<string>()
+    hotPostCandidates = (hotPosts as HotPostCandidate[] | null) ?? []
+    await cacheSet(CACHE_KEY, hotPostCandidates, { ttl: 300 })
+  }
 
-    if (hotPosts && hotPosts.length > 0) {
-      for (const post of hotPosts) {
-        if (hotSearches.length >= 5) break
-        if (!post.title) continue
-        const keyword = extractKeyword(post.title)
-        if (!keyword || seenKeywords.has(keyword.toLowerCase())) continue
-        // Skip malicious keywords extracted from post titles
-        if (isMaliciousSearchQuery(keyword)) continue
-        seenKeywords.add(keyword.toLowerCase())
-        const score =
-          post.hot_score ||
-          (post.view_count || 0) * 0.1 + (post.like_count || 0) * 2 + (post.comment_count || 0) * 3
-        hotSearches.push({
-          keyword,
-          count: Math.round(score),
-          trend: score > 50 ? 'up' : score > 20 ? 'stable' : 'down',
-        })
-      }
-    }
+  const readableHotPosts = await filterServiceReadablePostRows(
+    supabase,
+    hotPostCandidates ?? [],
+    null
+  )
+  const hotSearches: HotSearchItem[] = []
+  const seenKeywords = new Set<string>()
+
+  for (const post of readableHotPosts) {
+    if (hotSearches.length >= 5) break
+    if (!post.title) continue
+    const keyword = extractKeyword(post.title)
+    if (!keyword || seenKeywords.has(keyword.toLowerCase())) continue
+    // Skip malicious keywords extracted from post titles
+    if (isMaliciousSearchQuery(keyword)) continue
+    seenKeywords.add(keyword.toLowerCase())
+    const score =
+      post.hot_score ||
+      (post.view_count || 0) * 0.1 + (post.like_count || 0) * 2 + (post.comment_count || 0) * 3
+    hotSearches.push({
+      keyword,
+      count: Math.round(score),
+      trend: score > 50 ? 'up' : score > 20 ? 'stable' : 'down',
+    })
   }
 
   if (hotSearches.length === 0) {
@@ -303,10 +313,10 @@ async function handleHotSearch(
     )
   }
 
-  await cacheSet(CACHE_KEY, hotSearches, { ttl: 300 })
-
   return success({ hotSearches }, 200, {
-    'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
+    'Cache-Control': 'private, no-store, max-age=0',
+    'CDN-Cache-Control': 'no-store',
+    'Vercel-CDN-Cache-Control': 'no-store',
   })
 }
 
