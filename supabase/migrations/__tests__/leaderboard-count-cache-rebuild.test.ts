@@ -8,7 +8,9 @@ const migration = readFileSync(
 
 describe('leaderboard count cache rebuild migration', () => {
   it('serializes and clears the old generation before rebuilding every count family', () => {
-    const lock = migration.indexOf('pg_advisory_xact_lock')
+    const lock = migration.indexOf(
+      'LOCK TABLE public.leaderboard_count_cache IN SHARE ROW EXCLUSIVE MODE'
+    )
     const deletion = migration.indexOf('DELETE FROM public.leaderboard_count_cache')
     const firstInsert = migration.indexOf('INSERT INTO public.leaderboard_count_cache')
 
