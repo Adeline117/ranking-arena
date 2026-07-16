@@ -446,7 +446,7 @@ describe('togglePostReaction', () => {
 
   test.each([
     null,
-    { status: 'not_found' },
+    { status: 'unexpected' },
     { status: 'added', action: 'added', reaction: 'down', like_count: 1, dislike_count: 0 },
     { status: 'added', action: 'added', reaction: 'up', like_count: -1, dislike_count: 0 },
   ])('fails closed for malformed reaction acknowledgement %#', async (data) => {
@@ -456,6 +456,15 @@ describe('togglePostReaction', () => {
     await expect(
       togglePostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'up')
     ).rejects.toThrow('invalid acknowledgement')
+  })
+
+  test('surfaces a canonical audience denial without accepting an acknowledgement', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.rpc.mockResolvedValueOnce({ data: { status: 'not_found' }, error: null })
+
+    await expect(
+      togglePostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'up')
+    ).rejects.toMatchObject({ kind: 'not_found' })
   })
 })
 
@@ -542,7 +551,7 @@ describe('togglePostVote', () => {
 
   test.each([
     null,
-    { status: 'not_found' },
+    { status: 'unexpected' },
     {
       status: 'added',
       action: 'added',
@@ -562,6 +571,15 @@ describe('togglePostVote', () => {
     await expect(
       togglePostVote(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'bull')
     ).rejects.toThrow('invalid acknowledgement')
+  })
+
+  test('surfaces a canonical vote audience denial', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.rpc.mockResolvedValueOnce({ data: { status: 'not_found' }, error: null })
+
+    await expect(
+      togglePostVote(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'bull')
+    ).rejects.toMatchObject({ kind: 'not_found' })
   })
 })
 

@@ -6,7 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import { validateEnum, success } from '@/lib/api'
-import { togglePostReaction, getPostById } from '@/lib/data/posts'
+import { togglePostReaction, getPostById, PostInteractionMutationError } from '@/lib/data/posts'
 import { sendNotification } from '@/lib/data/notifications'
 import { deleteServerCacheByPrefix } from '@/lib/utils/server-cache'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -47,7 +47,23 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }) ?? 'up'
 
       // 执行点赞/踩操作
-      const result = await togglePostReaction(supabase, parsedPostId.data, user.id, reactionType)
+      let result
+      try {
+        result = await togglePostReaction(supabase, parsedPostId.data, user.id, reactionType)
+      } catch (error) {
+        if (error instanceof PostInteractionMutationError) {
+          if (error.kind === 'not_found') {
+            return NextResponse.json({ success: false, error: 'Post not found' }, { status: 404 })
+          }
+          if (error.kind === 'invalid') {
+            return NextResponse.json(
+              { success: false, error: 'Invalid reaction request' },
+              { status: 400 }
+            )
+          }
+        }
+        throw error
+      }
 
       // 清除帖子列表缓存
       deleteServerCacheByPrefix('posts:')

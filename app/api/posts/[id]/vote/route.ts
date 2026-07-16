@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
-import { togglePostVote } from '@/lib/data/posts'
+import { PostInteractionMutationError, togglePostVote } from '@/lib/data/posts'
 import { socialFeatureGuard } from '@/lib/features'
 
 // Zod schema for POST /api/posts/[id]/vote
@@ -47,7 +47,20 @@ export const POST = withAuth(
     const { choice } = parsed.data
 
     // 执行投票操作
-    const result = await togglePostVote(supabase, postId.data, user.id, choice)
+    let result
+    try {
+      result = await togglePostVote(supabase, postId.data, user.id, choice)
+    } catch (error) {
+      if (error instanceof PostInteractionMutationError) {
+        if (error.kind === 'not_found') {
+          return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+        }
+        if (error.kind === 'invalid') {
+          return NextResponse.json({ error: 'Invalid vote request' }, { status: 400 })
+        }
+      }
+      throw error
+    }
 
     return NextResponse.json({
       success: true,
