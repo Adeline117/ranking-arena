@@ -56,6 +56,10 @@ interface ExportData {
     sent: unknown[]
     received: unknown[]
   }
+  interactions: {
+    post_likes: unknown[]
+    post_votes: unknown[]
+  }
   settings: {
     preferences: Record<string, unknown> | null
   }
@@ -336,6 +340,36 @@ const OUTGOING_BLOCKS_EXPORT_DATASET = {
   },
 } satisfies CursorExportDataset
 
+const POST_LIKES_EXPORT_DATASET = {
+  name: 'interactions.post_likes',
+  table: 'post_likes',
+  selectColumns: ['post_id', 'reaction_type', 'created_at'],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'post_id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
+const POST_VOTES_EXPORT_DATASET = {
+  name: 'interactions.post_votes',
+  table: 'post_votes',
+  selectColumns: ['post_id', 'choice', 'created_at'],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'post_id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
 function normalizeFollowRows(rows: Record<string, unknown>[], direction: 'following' | 'follower') {
   const otherUserColumn = direction === 'following' ? 'following_id' : 'follower_id'
   return rows.map((row) => ({
@@ -393,6 +427,22 @@ function normalizeAccountBindings(rows: Record<string, unknown>[]) {
 function normalizeOutgoingBlocks(rows: Record<string, unknown>[]) {
   return rows.map((row) => ({
     blocked_user_id: row.blocked_id,
+    created_at: row.created_at,
+  }))
+}
+
+function normalizePostLikes(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    post_id: row.post_id,
+    reaction_type: row.reaction_type,
+    created_at: row.created_at,
+  }))
+}
+
+function normalizePostVotes(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    post_id: row.post_id,
+    choice: row.choice,
     created_at: row.created_at,
   }))
 }
@@ -520,6 +570,8 @@ export async function POST(request: NextRequest) {
       preferences,
       accountBindings,
       outgoingBlocks,
+      postLikes,
+      postVotes,
     ] = await Promise.all([
       fetchAllExportRows(supabase, EXPORT_DATASETS.posts, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.comments, user.id),
@@ -536,6 +588,8 @@ export async function POST(request: NextRequest) {
       fetchAllExportRowsByCursor(supabase, PREFERENCES_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, ACCOUNT_BINDINGS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, OUTGOING_BLOCKS_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, POST_LIKES_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, POST_VOTES_EXPORT_DATASET, user.id),
     ])
 
     const normalizedFollowing = normalizeFollowRows(following, 'following')
@@ -543,6 +597,8 @@ export async function POST(request: NextRequest) {
     const normalizedOutgoingBlocks = normalizeOutgoingBlocks(outgoingBlocks)
     const normalizedTipsSent = normalizeTipRows(tipsSent, 'sent')
     const normalizedTipsReceived = normalizeTipRows(tipsReceived, 'received')
+    const normalizedPostLikes = normalizePostLikes(postLikes)
+    const normalizedPostVotes = normalizePostVotes(postVotes)
     const normalizedPreferences = normalizePreferences(preferences)
     const normalizedAccountBindings = normalizeAccountBindings(accountBindings)
     const exportedAt = new Date().toISOString()
@@ -563,6 +619,8 @@ export async function POST(request: NextRequest) {
           completedDataset('blocks.outgoing', outgoingBlocks.length),
           completedDataset('tips.sent', tipsSent.length),
           completedDataset('tips.received', tipsReceived.length),
+          completedDataset('interactions.post_likes', postLikes.length),
+          completedDataset('interactions.post_votes', postVotes.length),
           completedDataset('settings.preferences', preferences.length),
           completedDataset('account.bindings', accountBindings.length),
           completedDataset('account.login_sessions', loginSessions.length),
@@ -586,6 +644,10 @@ export async function POST(request: NextRequest) {
       tips: {
         sent: normalizedTipsSent,
         received: normalizedTipsReceived,
+      },
+      interactions: {
+        post_likes: normalizedPostLikes,
+        post_votes: normalizedPostVotes,
       },
       settings: {
         preferences: normalizedPreferences,

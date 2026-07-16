@@ -241,6 +241,26 @@ describe('POST /api/settings/export', () => {
           },
         ]
       }
+      if (dataset.name === 'interactions.post_likes') {
+        return [
+          {
+            post_id: '33333333-3333-4333-8333-333333333333',
+            reaction_type: 'like',
+            created_at: '2026-02-09T00:00:00.000Z',
+            user_id: 'must-not-escape-like-owner',
+          },
+        ]
+      }
+      if (dataset.name === 'interactions.post_votes') {
+        return [
+          {
+            post_id: '44444444-4444-4444-8444-444444444444',
+            choice: 'option-a',
+            created_at: '2026-02-10T00:00:00.000Z',
+            user_id: 'must-not-escape-vote-owner',
+          },
+        ]
+      }
       throw new Error(`Unexpected cursor dataset: ${dataset.name}`)
     })
     profileStates = installProfileQueries({})
@@ -303,6 +323,8 @@ describe('POST /api/settings/export', () => {
       'blocks.outgoing': 1,
       'tips.sent': 1,
       'tips.received': 1,
+      'interactions.post_likes': 1,
+      'interactions.post_votes': 1,
       'settings.preferences': 1,
       'account.bindings': 2,
       'account.login_sessions': 1,
@@ -375,6 +397,25 @@ describe('POST /api/settings/export', () => {
         completed_at: '2026-02-04T00:01:00.000Z',
       },
     ])
+    expect(body.interactions).toEqual({
+      post_likes: [
+        {
+          post_id: '33333333-3333-4333-8333-333333333333',
+          reaction_type: 'like',
+          created_at: '2026-02-09T00:00:00.000Z',
+        },
+      ],
+      post_votes: [
+        {
+          post_id: '44444444-4444-4444-8444-444444444444',
+          choice: 'option-a',
+          created_at: '2026-02-10T00:00:00.000Z',
+        },
+      ],
+    })
+    expect(JSON.stringify(body.interactions)).not.toMatch(
+      /must-not-escape-like-owner|must-not-escape-vote-owner|user_id/
+    )
     expect(body.settings).toEqual({
       preferences: {
         watched_traders: ['trader-1'],
@@ -406,7 +447,7 @@ describe('POST /api/settings/export', () => {
       'must-not-escape-binding-normalization'
     )
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
-    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(3)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(5)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -497,6 +538,24 @@ describe('POST /api/settings/export', () => {
       })
     )
     expect(outgoingBlocksCall[1].selectColumns).not.toContain('blocker_id')
+
+    for (const interactionName of ['interactions.post_likes', 'interactions.post_votes']) {
+      const interactionCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+        (call) => call[1].name === interactionName
+      )
+      expect(interactionCall).toBeDefined()
+      expect(interactionCall[2]).toBe(USER_ID)
+      expect(interactionCall[1].ownerPredicate).toEqual({
+        column: 'user_id',
+        operator: 'eq',
+        valueType: 'uuid',
+      })
+      expect(interactionCall[1].cursor).toEqual({
+        order: 'asc',
+        columns: [{ column: 'post_id', valueType: 'uuid' }],
+      })
+      expect(interactionCall[1].selectColumns).not.toContain('user_id')
+    }
   })
 
   it('fails closed without cooldown when preferences cannot be read completely', async () => {
@@ -528,6 +587,21 @@ describe('POST /api/settings/export', () => {
     mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
       if (dataset.name === 'blocks.outgoing') {
         throw new DataExportReadError('blocks.outgoing', { code: 'XX001' })
+      }
+      return []
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed without cooldown when post interactions cannot be read completely', async () => {
+    mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
+      if (dataset.name === 'interactions.post_likes') {
+        throw new DataExportReadError('interactions.post_likes', { code: 'XX001' })
       }
       return []
     })
