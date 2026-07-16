@@ -200,18 +200,38 @@ describe('POST /api/settings/export', () => {
           return [{ id }]
       }
     })
-    mockFetchAllExportRowsByCursor.mockResolvedValue([
-      {
-        user_id: USER_ID,
-        watched_traders: ['trader-1'],
-        email_notifications: true,
-        push_notifications: false,
-        ranking_change_threshold: 5,
-        created_at: '2026-02-05T00:00:00.000Z',
-        updated_at: '2026-02-06T00:00:00.000Z',
-        future_secret: 'must-not-escape-normalization',
-      },
-    ])
+    mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
+      if (dataset.name === 'settings.preferences') {
+        return [
+          {
+            user_id: USER_ID,
+            watched_traders: ['trader-1'],
+            email_notifications: true,
+            push_notifications: false,
+            ranking_change_threshold: 5,
+            created_at: '2026-02-05T00:00:00.000Z',
+            updated_at: '2026-02-06T00:00:00.000Z',
+            future_secret: 'must-not-escape-normalization',
+          },
+        ]
+      }
+      if (dataset.name === 'account.bindings') {
+        return [
+          {
+            platform: '',
+            account_id: null,
+            created_at: null,
+            future_secret: 'must-not-escape-binding-normalization',
+          },
+          {
+            platform: 'kraken,pro',
+            account_id: 'personal-account-1',
+            created_at: '2026-02-07T00:00:00.000Z',
+          },
+        ]
+      }
+      throw new Error(`Unexpected cursor dataset: ${dataset.name}`)
+    })
     profileStates = installProfileQueries({})
   })
 
@@ -309,6 +329,14 @@ describe('POST /api/settings/export', () => {
     })
     expect(JSON.stringify(body.settings)).not.toContain('must-not-escape-normalization')
     expect(body.account).toEqual({
+      bindings: [
+        { platform: '', account_id: null, created_at: null },
+        {
+          platform: 'kraken,pro',
+          account_id: 'personal-account-1',
+          created_at: '2026-02-07T00:00:00.000Z',
+        },
+      ],
       login_sessions: [{ id: 'account.login_sessions-1' }],
       api_keys: [{ id: 'account.api_keys-1' }],
       passkeys: [{ id: 'account.passkeys-1' }],
@@ -316,8 +344,11 @@ describe('POST /api/settings/export', () => {
       backup_codes: [{ id: 'account.backup_codes-1' }],
       recovery_tokens: [{ id: 'account.recovery_tokens-1' }],
     })
+    expect(JSON.stringify(body.account.bindings)).not.toContain(
+      'must-not-escape-binding-normalization'
+    )
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
-    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(1)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(2)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -353,7 +384,10 @@ describe('POST /api/settings/export', () => {
     const recoveryDataset = datasets.find((dataset) => dataset.name === 'account.recovery_tokens')
     expect(recoveryDataset.selectColumns).not.toContain('token_hash')
 
-    const preferencesCall = mockFetchAllExportRowsByCursor.mock.calls[0]
+    const preferencesCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+      (call) => call[1].name === 'settings.preferences'
+    )
+    expect(preferencesCall).toBeDefined()
     expect(preferencesCall[2]).toBe(USER_ID)
     expect(preferencesCall[1]).toEqual(
       expect.objectContaining({
@@ -367,12 +401,44 @@ describe('POST /api/settings/export', () => {
       })
     )
     expect(preferencesCall[1].selectColumns).not.toContain('*')
+
+    const bindingsCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+      (call) => call[1].name === 'account.bindings'
+    )
+    expect(bindingsCall).toBeDefined()
+    expect(bindingsCall[2]).toBe(USER_ID)
+    expect(bindingsCall[1]).toEqual(
+      expect.objectContaining({
+        name: 'account.bindings',
+        table: 'account_bindings',
+        selectColumns: ['platform', 'account_id', 'created_at'],
+        ownerPredicate: { column: 'user_id', operator: 'eq', valueType: 'uuid' },
+        cursor: {
+          order: 'asc',
+          columns: [{ column: 'platform', valueType: 'string' }],
+        },
+      })
+    )
+    expect(bindingsCall[1].selectColumns).not.toContain('user_id')
   })
 
   it('fails closed without cooldown when preferences cannot be read completely', async () => {
     mockFetchAllExportRowsByCursor.mockRejectedValueOnce(
       new DataExportReadError('settings.preferences', { code: 'XX001' })
     )
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed without cooldown when account bindings cannot be read completely', async () => {
+    mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
+      if (dataset.name === 'settings.preferences') return []
+      throw new DataExportReadError('account.bindings', { code: 'XX001' })
+    })
 
     const response = await POST(request())
 
