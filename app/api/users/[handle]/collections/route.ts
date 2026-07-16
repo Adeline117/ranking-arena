@@ -4,35 +4,38 @@
  */
 
 import { NextRequest } from 'next/server'
-import {
-  getSupabaseAdmin,
-  success,
-  handleError,
-} from '@/lib/api'
+import { getSupabaseAdmin, success, handleError, checkRateLimit, RateLimitPresets } from '@/lib/api'
+import { readPublicProfileAudienceByHandle } from '@/lib/profile/public-audience'
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ handle: string }> }
 ) {
   try {
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
+    if (rateLimitResponse) return rateLimitResponse
+
     const { handle } = await params
     const supabase = getSupabaseAdmin()
+    const noStore = { 'Cache-Control': 'private, no-store, max-age=0' }
 
-    // Find user by handle
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('id')
-      .eq('handle', decodeURIComponent(handle))
-      .single()
+    let decodedHandle: string
+    try {
+      decodedHandle = decodeURIComponent(handle)
+    } catch {
+      return success({ collections: [] }, 400, noStore)
+    }
 
-    if (!profile) {
-      return success({ collections: [] })
+    const audience = await readPublicProfileAudienceByHandle(supabase, decodedHandle)
+
+    if (audience.status !== 'active') {
+      return success({ collections: [] }, 404, noStore)
     }
 
     const { data: collections, error } = await supabase
       .from('user_collections')
-      .select('*, collection_items(count)')
-      .eq('user_id', profile.id)
+      .select('id, name, description, is_public, created_at, updated_at, collection_items(count)')
+      .eq('user_id', audience.profile.id)
       .eq('is_public', true)
       .order('created_at', { ascending: true })
 
@@ -40,11 +43,13 @@ export async function GET(
 
     const result = (collections || []).map((c: Record<string, unknown>) => ({
       ...c,
-      item_count: Array.isArray(c.collection_items) ? (c.collection_items[0] as Record<string, number>)?.count || 0 : 0,
+      item_count: Array.isArray(c.collection_items)
+        ? (c.collection_items[0] as Record<string, number>)?.count || 0
+        : 0,
       collection_items: undefined,
     }))
 
-    return success({ collections: result })
+    return success({ collections: result }, 200, noStore)
   } catch (error: unknown) {
     return handleError(error, 'user-collections GET')
   }
