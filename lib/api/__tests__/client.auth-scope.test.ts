@@ -54,13 +54,13 @@ describe('authedFetch viewer-bound retry', () => {
       })
     )
 
-    const request = authedFetch('/api/private', 'POST', 'opaque-a-token', {}, 15_000, {
+    const request = authedFetch('/api/private', 'POST', jwt('user-a'), {}, 15_000, {
       expectedUserId: 'user-a',
       expectedSessionGeneration: scope.sessionGeneration,
     })
     await Promise.resolve()
     beginViewerTransition('user-b')
-    resolveRefresh('token-b')
+    resolveRefresh(jwt('user-b'))
 
     await expect(request).resolves.toMatchObject({ stale: true, ok: false })
     expect(global.fetch).toHaveBeenCalledTimes(1)
@@ -71,9 +71,11 @@ describe('authedFetch viewer-bound retry', () => {
     ;(global.fetch as jest.Mock)
       .mockResolvedValueOnce(response(401, { error: 'expired' }))
       .mockResolvedValueOnce(response(200, { success: true }))
-    mockForceRefresh.mockResolvedValueOnce('token-a2')
+    const tokenA1 = jwt('user-a')
+    const tokenA2 = `${jwt('user-a')}.refreshed`
+    mockForceRefresh.mockResolvedValueOnce(tokenA2)
 
-    const result = await authedFetch('/api/private', 'GET', 'token-a1', undefined, 15_000, {
+    const result = await authedFetch('/api/private', 'GET', tokenA1, undefined, 15_000, {
       expectedUserId: 'user-a',
       expectedSessionGeneration: scope.sessionGeneration,
     })
@@ -82,8 +84,20 @@ describe('authedFetch viewer-bound retry', () => {
     expect(result.stale).toBeUndefined()
     expect(global.fetch).toHaveBeenCalledTimes(2)
     expect((global.fetch as jest.Mock).mock.calls[1][1].headers.Authorization).toBe(
-      'Bearer token-a2'
+      `Bearer ${tokenA2}`
     )
+  })
+
+  it('rejects an explicit scope whose access-token subject belongs to another user', async () => {
+    const scope = synchronizeViewerScope(true, 'user-a')
+
+    const result = await authedFetch('/api/private', 'POST', jwt('user-b'), {}, 15_000, {
+      expectedUserId: 'user-a',
+      expectedSessionGeneration: scope.sessionGeneration,
+    })
+
+    expect(result).toMatchObject({ ok: false, stale: true, status: 0 })
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 
   it('apiRequest discards an A response that resolves after switching to B', async () => {

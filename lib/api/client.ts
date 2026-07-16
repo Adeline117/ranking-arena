@@ -496,6 +496,14 @@ export async function authedFetch<T>(
   timeoutMs = 15_000,
   scopeOptions?: AuthedFetchScope
 ): Promise<ScopedFetchResult<T>> {
+  const tokenUserId = jwtSubject(accessToken)
+  if (
+    accessToken &&
+    scopeOptions?.expectedUserId !== undefined &&
+    tokenUserId !== scopeOptions.expectedUserId
+  ) {
+    return { ok: false, status: 0, data: null, stale: true }
+  }
   const requestScope = captureFetchScope(accessToken, scopeOptions)
   const scopeBound =
     scopeOptions?.expectedSessionGeneration !== undefined ||
@@ -543,6 +551,9 @@ export async function authedFetch<T>(
       sessionGeneration: requestScope.sessionGeneration,
     })
     if (newToken) {
+      if (requestScope.userId && jwtSubject(newToken) !== requestScope.userId) {
+        return { ok: false, status: 0, data: null, stale: true }
+      }
       if (scopeBound && !isViewerScopeCurrent(requestScope)) {
         return { ok: false, status: 0, data: null, stale: true }
       }
