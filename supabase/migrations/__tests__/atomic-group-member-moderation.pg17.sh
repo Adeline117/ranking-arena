@@ -8,6 +8,7 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MEMBERSHIP_MIGRATION="$ROOT_DIR/supabase/migrations/20260716113900_atomic_group_membership.sql"
 MODERATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260716114100_atomic_group_member_moderation.sql"
 IDENTITY_MIGRATION="$ROOT_DIR/supabase/migrations/20260716114600_group_membership_identity_guard.sql"
+JOIN_REQUEST_MIGRATION="$ROOT_DIR/supabase/migrations/20260716114700_atomic_group_join_requests.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -16,7 +17,7 @@ for executable in initdb pg_ctl psql; do
     exit 1
   fi
 done
-for migration in "$MEMBERSHIP_MIGRATION" "$MODERATION_MIGRATION" "$IDENTITY_MIGRATION"; do
+for migration in "$MEMBERSHIP_MIGRATION" "$MODERATION_MIGRATION" "$IDENTITY_MIGRATION" "$JOIN_REQUEST_MIGRATION"; do
   if [[ ! -f "$migration" ]]; then
     echo "Required group migration is missing: $migration" >&2
     exit 1
@@ -187,16 +188,18 @@ VALUES
   ('11111111-1111-4111-8111-111111111111', 'free', 50, true),
   ('22222222-2222-4222-8222-222222222222', 'free', 50, true);
 
-INSERT INTO public.groups(id, created_by, member_count)
+INSERT INTO public.groups(id, created_by, visibility, member_count)
 VALUES
   (
     '10000000-0000-4000-8000-000000000001',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'open',
     99
   ),
   (
     '20000000-0000-4000-8000-000000000002',
     'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    'apply',
     88
   );
 INSERT INTO public.group_members(group_id, user_id, role)
@@ -235,6 +238,7 @@ psql_cmd -c \
   "UPDATE public.groups SET member_count = 777 WHERE id = '10000000-0000-4000-8000-000000000001'" \
   >/dev/null
 psql_cmd -f "$IDENTITY_MIGRATION" >"$LOG_DIR/identity-first-apply.log"
+psql_cmd -f "$JOIN_REQUEST_MIGRATION" >"$LOG_DIR/join-request-first-apply.log"
 
 GROUP_ID="'10000000-0000-4000-8000-000000000001'::uuid"
 OWNER_ID="'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid"
@@ -307,6 +311,155 @@ assert_status self_forbidden \
   "public.moderate_group_member_atomic($ADMIN_ID, $GROUP_ID, $ADMIN_ID, 'kick', NULL)"
 assert_status forbidden \
   "public.moderate_group_member_atomic('dddddddd-dddd-4ddd-8ddd-dddddddddddd', $GROUP_ID, 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'kick', NULL)"
+
+# Apply-group requests are server-owned and become single-use membership proof.
+if psql_cmd -c \
+  "SET ROLE service_role; INSERT INTO public.group_join_requests(id, group_id, user_id) VALUES ('50000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000002', '22222222-2222-4222-8222-222222222222')" \
+  >"$LOG_DIR/direct-request.log" 2>&1; then
+  echo "Service role unexpectedly retained direct join-request mutation" >&2
+  exit 1
+fi
+grep -Fq 'permission denied for table group_join_requests' \
+  "$LOG_DIR/direct-request.log"
+
+APPLY_GROUP="'20000000-0000-4000-8000-000000000002'::uuid"
+REQUEST_USER="'22222222-2222-4222-8222-222222222222'::uuid"
+
+assert_status requested \
+  "public.mutate_group_join_request_atomic($REQUEST_USER, $APPLY_GROUP, 'request', 'I trade systematically', false)"
+assert_status already_pending \
+  "public.mutate_group_join_request_atomic($REQUEST_USER, $APPLY_GROUP, 'request', 'replacement', false)"
+FIRST_REQUEST_ID="$(psql_cmd -Atqc "SELECT id FROM public.group_join_requests WHERE group_id = '20000000-0000-4000-8000-000000000002' AND user_id = '22222222-2222-4222-8222-222222222222' AND status = 'pending'")"
+assert_status approved \
+  "public.review_group_join_request_atomic($OWNER_ID, '$FIRST_REQUEST_ID'::uuid, 'approve')"
+assert_status already_approved \
+  "public.review_group_join_request_atomic($OWNER_ID, '$FIRST_REQUEST_ID'::uuid, 'approve')"
+assert_status joined \
+  "public.mutate_group_membership_atomic($REQUEST_USER, $APPLY_GROUP, 'join', false)"
+assert_status left \
+  "public.mutate_group_membership_atomic($REQUEST_USER, $APPLY_GROUP, 'leave', false)"
+assert_status requested \
+  "public.mutate_group_join_request_atomic($REQUEST_USER, $APPLY_GROUP, 'request', NULL, false)"
+assert_status cancelled \
+  "public.mutate_group_join_request_atomic($REQUEST_USER, $APPLY_GROUP, 'cancel', NULL, false)"
+assert_status no_request \
+  "public.mutate_group_join_request_atomic($REQUEST_USER, $APPLY_GROUP, 'cancel', NULL, false)"
+assert_status open_group \
+  "public.mutate_group_join_request_atomic($REQUEST_USER, $GROUP_ID, 'request', NULL, false)"
+
+if [[ "$(psql_cmd -Atqc "SELECT status || '|' || (consumed_at IS NOT NULL)::text FROM public.group_join_requests WHERE id = '$FIRST_REQUEST_ID'")" != "joined|true" ]]; then
+  echo "Approved join request was not consumed exactly once" >&2
+  exit 1
+fi
+
+# Audit failure must roll back approval and leave pending authority untouched.
+assert_status requested \
+  "public.mutate_group_join_request_atomic('cccccccc-cccc-4ccc-8ccc-cccccccccccc', $APPLY_GROUP, 'request', 'review me', false)"
+ROLLBACK_REQUEST_ID="$(psql_cmd -Atqc "SELECT id FROM public.group_join_requests WHERE group_id = '20000000-0000-4000-8000-000000000002' AND user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc' AND status = 'pending'")"
+psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION public.fail_selected_join_request_audit()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF NEW.target_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+    AND NEW.action = 'join_request_approved'
+  THEN
+    RAISE EXCEPTION 'injected join-request audit failure';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER trg_fail_selected_join_request_audit
+  BEFORE INSERT ON public.group_audit_log
+  FOR EACH ROW EXECUTE FUNCTION public.fail_selected_join_request_audit();
+SQL
+if psql_cmd -c \
+  "SET ROLE service_role; SELECT public.review_group_join_request_atomic('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '$ROLLBACK_REQUEST_ID', 'approve')" \
+  >"$LOG_DIR/request-audit-failure.log" 2>&1; then
+  echo "Injected join-request audit failure unexpectedly committed" >&2
+  exit 1
+fi
+grep -Fq 'injected join-request audit failure' \
+  "$LOG_DIR/request-audit-failure.log"
+if [[ "$(psql_cmd -Atqc "SELECT status FROM public.group_join_requests WHERE id = '$ROLLBACK_REQUEST_ID'")" != "pending" ]]; then
+  echo "Failed join-request audit left approval state behind" >&2
+  exit 1
+fi
+psql_cmd <<'SQL'
+DROP TRIGGER trg_fail_selected_join_request_audit ON public.group_audit_log;
+DROP FUNCTION public.fail_selected_join_request_audit();
+SQL
+assert_status forbidden \
+  "public.review_group_join_request_atomic($ADMIN_ID, '$ROLLBACK_REQUEST_ID'::uuid, 'approve')"
+assert_status rejected \
+  "public.review_group_join_request_atomic($OWNER_ID, '$ROLLBACK_REQUEST_ID'::uuid, 'reject')"
+
+# Concurrent duplicate requests linearize to one created + one already pending.
+for index in 1 2; do
+  psql_cmd -Atqc \
+    "SET ROLE service_role; SELECT (public.mutate_group_join_request_atomic('eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', '20000000-0000-4000-8000-000000000002', 'request', NULL, false))->>'status';" \
+    >"$LOG_DIR/request-race-$index.out" 2>&1 &
+  pids[$index]="$!"
+done
+wait "${pids[1]}"
+wait "${pids[2]}"
+requested_count="$(grep -h '^requested$' "$LOG_DIR"/request-race-*.out | wc -l | tr -d ' ')"
+pending_count="$(grep -h '^already_pending$' "$LOG_DIR"/request-race-*.out | wc -l | tr -d ' ')"
+if [[ "$requested_count" != "1" ]] || [[ "$pending_count" != "1" ]]; then
+  echo "Concurrent join requests did not linearize" >&2
+  exit 1
+fi
+RACE_REQUEST_ID="$(psql_cmd -Atqc "SELECT id FROM public.group_join_requests WHERE group_id = '20000000-0000-4000-8000-000000000002' AND user_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee' AND status = 'pending'")"
+assert_status rejected \
+  "public.review_group_join_request_atomic($OWNER_ID, '$RACE_REQUEST_ID'::uuid, 'reject')"
+
+# Approval first: join waits on the shared applicant edge, then consumes proof.
+assert_status requested \
+  "public.mutate_group_join_request_atomic('11111111-1111-4111-8111-111111111111', $APPLY_GROUP, 'request', NULL, false)"
+APPROVAL_FIRST_ID="$(psql_cmd -Atqc "SELECT id FROM public.group_join_requests WHERE user_id = '11111111-1111-4111-8111-111111111111' AND group_id = '20000000-0000-4000-8000-000000000002' AND status = 'pending'")"
+PGAPPNAME=request_approval_first psql_cmd >"$LOG_DIR/request-approval-first.out" 2>&1 <<SQL &
+BEGIN;
+SET ROLE service_role;
+SELECT public.review_group_join_request_atomic(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  '$APPROVAL_FIRST_ID',
+  'approve'
+);
+SELECT pg_catalog.pg_sleep(2);
+COMMIT;
+SQL
+APPROVAL_FIRST_PID=$!
+wait_for_sleep_gate request_approval_first
+assert_status joined \
+  "public.mutate_group_membership_atomic('11111111-1111-4111-8111-111111111111', $APPLY_GROUP, 'join', false)"
+wait "$APPROVAL_FIRST_PID"
+
+# Join attempt first: it returns approval_required; review then approves the
+# still-pending request, and a later retry consumes it exactly once.
+assert_status requested \
+  "public.mutate_group_join_request_atomic('ffffffff-ffff-4fff-8fff-ffffffffffff', $APPLY_GROUP, 'request', NULL, false)"
+JOIN_FIRST_REQUEST_ID="$(psql_cmd -Atqc "SELECT id FROM public.group_join_requests WHERE user_id = 'ffffffff-ffff-4fff-8fff-ffffffffffff' AND group_id = '20000000-0000-4000-8000-000000000002' AND status = 'pending'")"
+PGAPPNAME=request_join_first psql_cmd >"$LOG_DIR/request-join-first.out" 2>&1 <<'SQL' &
+BEGIN;
+SET ROLE service_role;
+SELECT public.mutate_group_membership_atomic(
+  'ffffffff-ffff-4fff-8fff-ffffffffffff',
+  '20000000-0000-4000-8000-000000000002',
+  'join',
+  false
+);
+SELECT pg_catalog.pg_sleep(2);
+COMMIT;
+SQL
+REQUEST_JOIN_FIRST_PID=$!
+wait_for_sleep_gate request_join_first
+assert_status approved \
+  "public.review_group_join_request_atomic($OWNER_ID, '$JOIN_FIRST_REQUEST_ID'::uuid, 'approve')"
+wait "$REQUEST_JOIN_FIRST_PID"
+grep -Fq 'approval_required' "$LOG_DIR/request-join-first.out"
+assert_status joined \
+  "public.mutate_group_membership_atomic('ffffffff-ffff-4fff-8fff-ffffffffffff', $APPLY_GROUP, 'join', false)"
 
 # An audit failure after delete/ban insertion rolls the entire transaction back.
 psql_cmd <<'SQL'
@@ -562,6 +715,13 @@ if [[ "$admin_visible" != "1" ]] || [[ "$member_visible" != "0" ]]; then
   echo "Authenticated group_bans read policy was not bounded to administrators" >&2
   exit 1
 fi
+request_admin_visible="$(psql_cmd -Atqc "SET request.jwt.claim.sub = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'; SET ROLE authenticated; SELECT count(*) FROM public.group_join_requests WHERE group_id = '20000000-0000-4000-8000-000000000002'; RESET ROLE;")"
+request_self_visible="$(psql_cmd -Atqc "SET request.jwt.claim.sub = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'; SET ROLE authenticated; SELECT count(*) FROM public.group_join_requests WHERE group_id = '20000000-0000-4000-8000-000000000002'; RESET ROLE;")"
+request_other_visible="$(psql_cmd -Atqc "SET request.jwt.claim.sub = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'; SET ROLE authenticated; SELECT count(*) FROM public.group_join_requests WHERE group_id = '20000000-0000-4000-8000-000000000002'; RESET ROLE;")"
+if (( request_admin_visible < 1 )) || [[ "$request_self_visible" != "1" ]] || [[ "$request_other_visible" != "0" ]]; then
+  echo "Authenticated join-request reads were not scoped to self or group administrators" >&2
+  exit 1
+fi
 
 # Replay converges arbitrary ACL/policy/function drift.
 psql_cmd <<'SQL'
@@ -587,9 +747,27 @@ GRANT EXECUTE ON FUNCTION public.reject_group_membership_identity_update()
   TO PUBLIC, drifted_moderator;
 ALTER TABLE public.group_members
   DISABLE TRIGGER trg_group_members_99_identity_immutable;
+GRANT ALL PRIVILEGES ON public.group_join_requests
+  TO PUBLIC, anon, authenticated, service_role, drifted_moderator;
+GRANT SELECT (group_id), INSERT (user_id), UPDATE (status), REFERENCES (id)
+  ON public.group_join_requests
+  TO PUBLIC, anon, authenticated, service_role, drifted_moderator;
+CREATE POLICY unexpected_request_writer
+  ON public.group_join_requests
+  FOR ALL
+  TO drifted_moderator
+  USING (true)
+  WITH CHECK (true);
+GRANT EXECUTE ON FUNCTION public.mutate_group_join_request_atomic(
+  uuid, uuid, text, text, boolean
+) TO drifted_moderator;
+GRANT EXECUTE ON FUNCTION public.review_group_join_request_atomic(
+  uuid, uuid, text
+) TO drifted_moderator;
 SQL
 psql_cmd -f "$MODERATION_MIGRATION" >"$LOG_DIR/replay.log"
 psql_cmd -f "$IDENTITY_MIGRATION" >"$LOG_DIR/identity-replay.log"
+psql_cmd -f "$JOIN_REQUEST_MIGRATION" >"$LOG_DIR/join-request-replay.log"
 
 psql_cmd <<'SQL'
 DO $catalog_and_data_contract$
@@ -649,6 +827,30 @@ BEGIN
       AND tgattr = ''::pg_catalog.int2vector
   ) THEN
     RAISE EXCEPTION 'membership identity guard drift survived replay';
+  END IF;
+
+  IF pg_catalog.has_table_privilege(
+    'service_role', 'public.group_join_requests',
+    'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+  ) OR pg_catalog.has_table_privilege(
+    'drifted_moderator', 'public.group_join_requests',
+    'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+  ) OR pg_catalog.has_any_column_privilege(
+    'drifted_moderator', 'public.group_join_requests',
+    'SELECT,INSERT,UPDATE,REFERENCES'
+  ) OR pg_catalog.has_function_privilege(
+    'drifted_moderator',
+    'public.mutate_group_join_request_atomic(uuid,uuid,text,text,boolean)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'authenticated',
+    'public.review_group_join_request_atomic(uuid,uuid,text)',
+    'EXECUTE'
+  ) OR (
+    SELECT pg_catalog.count(*) FROM pg_catalog.pg_policy
+    WHERE polrelid = 'public.group_join_requests'::regclass
+  ) <> 3 THEN
+    RAISE EXCEPTION 'join-request ACL/policy drift survived replay';
   END IF;
 
   IF pg_catalog.has_table_privilege(
