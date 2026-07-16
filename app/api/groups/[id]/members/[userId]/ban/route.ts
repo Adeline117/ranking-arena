@@ -3,7 +3,6 @@ import { withAuth } from '@/lib/api/middleware'
 import { getGroupRole, canManageMembers } from '@/lib/services/group-permissions'
 import logger from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
-import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
 
 type RouteContext = { params: Promise<{ id: string; userId: string }> }
@@ -68,14 +67,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
             .eq('user_id', targetUserId)
           return NextResponse.json({ error: 'Failed to remove member' }, { status: 500 })
         }
-
-        // Decrement member count (fire-and-forget)
-        updateCount(
-          supabase,
-          'increment_member_count',
-          { p_group_id: groupId, p_delta: -1 },
-          'Ban: decrement member count'
-        )
       }
 
       // Log to group_audit_log (fire-and-forget)

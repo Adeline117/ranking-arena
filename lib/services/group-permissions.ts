@@ -2,13 +2,19 @@ import { SupabaseClient } from '@supabase/supabase-js'
 
 export type GroupRole = 'owner' | 'admin' | 'member'
 
-export async function getGroupRole(supabase: SupabaseClient, userId: string, groupId: string): Promise<GroupRole | null> {
-  const { data } = await supabase
+export async function getGroupRole(
+  supabase: SupabaseClient,
+  userId: string,
+  groupId: string
+): Promise<GroupRole | null> {
+  const { data, error } = await supabase
     .from('group_members')
     .select('role')
     .eq('group_id', groupId)
     .eq('user_id', userId)
     .maybeSingle()
+
+  if (error) throw error
   return data?.role || null
 }
 
