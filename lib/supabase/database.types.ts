@@ -1690,6 +1690,33 @@ export type Database = {
           },
         ]
       }
+      group_edit_application_operation_results: {
+        Row: {
+          actor_id: string
+          created_at: string
+          intent_fingerprint: string
+          operation_id: string
+          operation_kind: string
+          result: Json
+        }
+        Insert: {
+          actor_id: string
+          created_at?: string
+          intent_fingerprint: string
+          operation_id: string
+          operation_kind: string
+          result: Json
+        }
+        Update: {
+          actor_id?: string
+          created_at?: string
+          intent_fingerprint?: string
+          operation_id?: string
+          operation_kind?: string
+          result?: Json
+        }
+        Relationships: []
+      }
       group_edit_applications: {
         Row: {
           applicant_id: string
@@ -9292,6 +9319,16 @@ export type Database = {
         }
         Returns: Json
       }
+      review_group_edit_application_atomic: {
+        Args: {
+          p_application_id: string
+          p_decision: string
+          p_operation_id: string
+          p_reject_reason: string | null
+          p_reviewer_id: string
+        }
+        Returns: Json
+      }
       rollup_api_key_usage: { Args: never; Returns: undefined }
       safe_log1p: { Args: { x: number }; Returns: number }
       scan_data_quality_anomalies: {
@@ -9414,6 +9451,23 @@ export type Database = {
           p_role_names?: Json | null
           p_rules?: string | null
           p_rules_json?: Json | null
+        }
+        Returns: Json
+      }
+      submit_group_edit_application_atomic: {
+        Args: {
+          p_actor_id: string
+          p_avatar_url: string | null
+          p_description: string | null
+          p_description_en: string | null
+          p_group_id: string
+          p_is_premium_only: boolean
+          p_name: string
+          p_name_en: string | null
+          p_operation_id: string
+          p_role_names: Json | null
+          p_rules: string | null
+          p_rules_json: Json | null
         }
         Returns: Json
       }
