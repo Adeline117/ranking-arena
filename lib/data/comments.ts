@@ -250,8 +250,7 @@ export async function getPostComments(
   const { data: replies, error: repliesError } = await repliesQuery
     .order('created_at', { ascending: true })
     .order('id', { ascending: true })
-  if (repliesError)
-    logger.warn('[getPostComments] comment replies query error (drift?):', repliesError.message)
+  if (repliesError) throw repliesError
 
   const allComments = [...comments, ...(replies || [])]
   const userIds = [...new Set(allComments.map((c) => c.user_id))]
@@ -270,6 +269,9 @@ export async function getPostComments(
           .in('comment_id', allCommentIds)
       : Promise.resolve({ data: null }),
   ])
+
+  if (profilesResult.error) throw profilesResult.error
+  if ('error' in likesResult && likesResult.error) throw likesResult.error
 
   const profileMap = profilesResult.data ? buildProfileMap(profilesResult.data) : new Map()
   const userLikedSet = new Set<string>()
