@@ -60,6 +60,10 @@ interface ExportData {
     post_likes: unknown[]
     post_votes: unknown[]
   }
+  bookmarks: {
+    folders: unknown[]
+    posts: unknown[]
+  }
   settings: {
     preferences: Record<string, unknown> | null
   }
@@ -370,6 +374,46 @@ const POST_VOTES_EXPORT_DATASET = {
   },
 } satisfies CursorExportDataset
 
+const BOOKMARK_FOLDERS_EXPORT_DATASET = {
+  name: 'bookmarks.folders',
+  table: 'bookmark_folders',
+  selectColumns: [
+    'id',
+    'name',
+    'description',
+    'avatar_url',
+    'is_default',
+    'is_public',
+    'post_count',
+    'created_at',
+    'updated_at',
+  ],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
+const POST_BOOKMARKS_EXPORT_DATASET = {
+  name: 'bookmarks.posts',
+  table: 'post_bookmarks',
+  selectColumns: ['id', 'post_id', 'folder_id', 'created_at'],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
 function normalizeFollowRows(rows: Record<string, unknown>[], direction: 'following' | 'follower') {
   const otherUserColumn = direction === 'following' ? 'following_id' : 'follower_id'
   return rows.map((row) => ({
@@ -443,6 +487,29 @@ function normalizePostVotes(rows: Record<string, unknown>[]) {
   return rows.map((row) => ({
     post_id: row.post_id,
     choice: row.choice,
+    created_at: row.created_at,
+  }))
+}
+
+function normalizeBookmarkFolders(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    avatar_url: row.avatar_url,
+    is_default: row.is_default,
+    is_public: row.is_public,
+    post_count: row.post_count,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }))
+}
+
+function normalizePostBookmarks(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    post_id: row.post_id,
+    folder_id: row.folder_id,
     created_at: row.created_at,
   }))
 }
@@ -572,6 +639,8 @@ export async function POST(request: NextRequest) {
       outgoingBlocks,
       postLikes,
       postVotes,
+      bookmarkFolders,
+      postBookmarks,
     ] = await Promise.all([
       fetchAllExportRows(supabase, EXPORT_DATASETS.posts, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.comments, user.id),
@@ -590,6 +659,8 @@ export async function POST(request: NextRequest) {
       fetchAllExportRowsByCursor(supabase, OUTGOING_BLOCKS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, POST_LIKES_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, POST_VOTES_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, BOOKMARK_FOLDERS_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, POST_BOOKMARKS_EXPORT_DATASET, user.id),
     ])
 
     const normalizedFollowing = normalizeFollowRows(following, 'following')
@@ -599,6 +670,8 @@ export async function POST(request: NextRequest) {
     const normalizedTipsReceived = normalizeTipRows(tipsReceived, 'received')
     const normalizedPostLikes = normalizePostLikes(postLikes)
     const normalizedPostVotes = normalizePostVotes(postVotes)
+    const normalizedBookmarkFolders = normalizeBookmarkFolders(bookmarkFolders)
+    const normalizedPostBookmarks = normalizePostBookmarks(postBookmarks)
     const normalizedPreferences = normalizePreferences(preferences)
     const normalizedAccountBindings = normalizeAccountBindings(accountBindings)
     const exportedAt = new Date().toISOString()
@@ -621,6 +694,8 @@ export async function POST(request: NextRequest) {
           completedDataset('tips.received', tipsReceived.length),
           completedDataset('interactions.post_likes', postLikes.length),
           completedDataset('interactions.post_votes', postVotes.length),
+          completedDataset('bookmarks.folders', bookmarkFolders.length),
+          completedDataset('bookmarks.posts', postBookmarks.length),
           completedDataset('settings.preferences', preferences.length),
           completedDataset('account.bindings', accountBindings.length),
           completedDataset('account.login_sessions', loginSessions.length),
@@ -648,6 +723,10 @@ export async function POST(request: NextRequest) {
       interactions: {
         post_likes: normalizedPostLikes,
         post_votes: normalizedPostVotes,
+      },
+      bookmarks: {
+        folders: normalizedBookmarkFolders,
+        posts: normalizedPostBookmarks,
       },
       settings: {
         preferences: normalizedPreferences,
