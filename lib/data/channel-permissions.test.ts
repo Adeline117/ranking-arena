@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import {
   ChannelPermissionReadError,
   filterChannelAddableUsers,
@@ -47,7 +48,7 @@ function fakeClient(results: Array<QueryResult | Error>) {
       if (!next) throw new Error('Unexpected query')
       return next.query
     },
-  } as unknown as SupabaseClient
+  } as unknown as SupabaseClient<Database>
   return { client, queries, tables }
 }
 
