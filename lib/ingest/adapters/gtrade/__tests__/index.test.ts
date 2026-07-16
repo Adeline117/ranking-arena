@@ -1,9 +1,16 @@
-import type { SourceRow } from '../../../core/types'
+import type { ParseCtx, SourceRow } from '../../../core/types'
 import type { FetchSession } from '../../../fetch/types'
 import { gtradeAdapter } from '../index'
 
 const ADDRESS = '0x0000000000000000000000000000000000000001'
 const DAY_MS = 86_400_000
+const parseCtx: ParseCtx = {
+  sourceSlug: 'gtrade',
+  currency: 'USDC',
+  tfLabelMap: {},
+  scrapedAt: '2026-07-15T12:00:00.000Z',
+  meta: {},
+}
 
 const src: SourceRow = {
   id: 34,
@@ -209,4 +216,121 @@ describe('gtrade profile transport', () => {
       })
     }
   )
+
+  it('reuses profile pages and rebuilds a position split across their boundary', async () => {
+    let historyRequests = 0
+    const fetchMock = jest.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/stats?')) return response({ totalTrades: 2 })
+      historyRequests += 1
+      const endDate = new URL(url).searchParams.get('endDate')
+      if (!endDate) throw new Error('missing endDate')
+      const end = Date.parse(endDate)
+      if (historyRequests === 1) {
+        return response({
+          data: [
+            {
+              id: 10,
+              date: new Date(end - DAY_MS).toISOString(),
+              action: 'TradeClosedMarket',
+              pair: 'ETH/USD',
+              tradeIndex: 7,
+              pnl_net: 5,
+              collateralPriceUsd: 1,
+              price: 2_100,
+            },
+          ],
+          pagination: { hasMore: true, nextCursor: 10, limit: 1_000 },
+        })
+      }
+      return response({
+        data: [
+          {
+            id: 9,
+            date: new Date(end - 91 * DAY_MS).toISOString(),
+            action: 'TradeOpenedMarket',
+            pair: 'ETH/USD',
+            tradeIndex: 7,
+            pnl_net: 0,
+            price: 2_000,
+            long: true,
+          },
+        ],
+        pagination: { hasMore: true, nextCursor: 9, limit: 1_000 },
+      })
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    const fetchSession = session()
+    await gtradeAdapter.getProfile(fetchSession, src, ADDRESS, 90, undefined, {
+      intent: 'scheduled_full',
+    })
+    const pages = []
+    for await (const page of gtradeAdapter.getHistory(
+      fetchSession,
+      src,
+      ADDRESS,
+      'position_history',
+      null
+    )) {
+      pages.push(page)
+    }
+
+    expect(historyRequests).toBe(2)
+    expect(pages).toHaveLength(1)
+    expect(pages[0].payload).toMatchObject({
+      historyFetchState: 'fetched',
+      tradesSnapshot: { rawPages: [{ pageIndex: 1 }, { pageIndex: 2 }] },
+    })
+    expect(gtradeAdapter.parseHistory(pages[0].payload, 'position_history', parseCtx)).toHaveLength(
+      1
+    )
+  })
+
+  it('yields RAW evidence before rejecting a close whose open is still missing', async () => {
+    const fetchMock = jest.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/stats?')) return response({ totalTrades: 1 })
+      const endDate = new URL(url).searchParams.get('endDate')
+      if (!endDate) throw new Error('missing endDate')
+      const end = Date.parse(endDate)
+      return response({
+        data: [
+          {
+            id: 10,
+            date: new Date(end - 91 * DAY_MS).toISOString(),
+            action: 'TradeClosedMarket',
+            pair: 'ETH/USD',
+            tradeIndex: 7,
+            pnl_net: 5,
+            collateralPriceUsd: 1,
+          },
+        ],
+        pagination: { hasMore: true, nextCursor: 10, limit: 1_000 },
+      })
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    const pages = []
+    let failure: unknown = null
+    try {
+      for await (const page of gtradeAdapter.getHistory(
+        session(),
+        src,
+        ADDRESS,
+        'position_history',
+        null
+      )) {
+        pages.push(page)
+      }
+    } catch (error) {
+      failure = error
+    }
+
+    expect(pages).toHaveLength(1)
+    expect(pages[0].payload).toMatchObject({ tradesSnapshot: { rawPages: [{ pageIndex: 1 }] } })
+    expect(failure).toEqual(
+      expect.objectContaining({ message: expect.stringContaining('missing 1 opening events') })
+    )
+  })
 })

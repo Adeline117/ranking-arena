@@ -326,8 +326,10 @@ export function parseGtradeHistory(
   if (kind !== 'orders' && kind !== 'position_history') {
     throw new Error(`[gtrade] history surface ${kind} not supported`)
   }
-  const payload = (raw ?? {}) as { data?: unknown }
-  const rows = Array.isArray(payload.data) ? (payload.data as TradeRow[]) : []
+  const payload = (raw ?? {}) as { data?: unknown; tradesSnapshot?: unknown }
+  const rows = Array.isArray(payload.data)
+    ? (payload.data as TradeRow[])
+    : (replayGtradeTradesSnapshot(payload.tradesSnapshot).trades as TradeRow[])
   if (kind === 'position_history') return gtradePositionHistory(rows)
 
   const out: ParsedOrderRow[] = []
