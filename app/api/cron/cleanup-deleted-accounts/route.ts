@@ -16,6 +16,29 @@ export const preferredRegion = 'sfo1'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
+interface GroupEdgePurgeResult {
+  status: 'purged'
+  memberships_removed: number
+  bans_removed: number
+  owner_memberships_removed: number
+}
+
+function isGroupEdgePurgeResult(value: unknown): value is GroupEdgePurgeResult {
+  if (!value || typeof value !== 'object') return false
+
+  const result = value as Record<string, unknown>
+  return (
+    result.status === 'purged' &&
+    Number.isSafeInteger(result.memberships_removed) &&
+    (result.memberships_removed as number) >= 0 &&
+    Number.isSafeInteger(result.bans_removed) &&
+    (result.bans_removed as number) >= 0 &&
+    Number.isSafeInteger(result.owner_memberships_removed) &&
+    (result.owner_memberships_removed as number) >= 0 &&
+    (result.owner_memberships_removed as number) <= (result.memberships_removed as number)
+  )
+}
+
 export const GET = withCron('cleanup-deleted-accounts', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin()
 
@@ -66,6 +89,20 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
           logger.info(
             `[cleanup-deleted-accounts] Cancelled Stripe subscription ${subscriptionId} for user ${account.id}`
           )
+        }
+
+        // Auth deletes the parent row first and then cascades group edges. The
+        // edge triggers acquire the same advisory locks used by join/moderation,
+        // so purge those edges in canonical lock order before touching Auth.
+        const { data: groupPurgeResult, error: groupPurgeError } = await supabase.rpc(
+          'purge_deleted_account_group_edges' as never,
+          { p_user_id: account.id } as never
+        )
+        if (groupPurgeError) {
+          throw new Error(`Group edge purge failed: ${groupPurgeError.message}`)
+        }
+        if (!isGroupEdgePurgeResult(groupPurgeResult)) {
+          throw new Error('Group edge purge returned an invalid or incomplete result')
         }
 
         // Hard delete from auth
