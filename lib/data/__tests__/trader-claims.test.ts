@@ -2,7 +2,207 @@
  * trader-claims 数据层测试
  */
 
-import type { TraderClaim, VerifiedTrader, UpdateVerifiedTraderInput } from '../trader-claims'
+const mockSendNotification = jest.fn()
+const mockInvalidateLinkedTraderCache = jest.fn()
+const mockEnqueueFirstPartySync = jest.fn()
+
+jest.mock('@/lib/data/notifications', () => ({
+  sendNotification: (...args: unknown[]) => mockSendNotification(...args),
+}))
+
+jest.mock('@/lib/data/linked-traders', () => ({
+  invalidateLinkedTraderCache: (...args: unknown[]) => mockInvalidateLinkedTraderCache(...args),
+}))
+
+jest.mock('@/lib/ingest/first-party/enqueue', () => ({
+  enqueueFirstPartySync: (...args: unknown[]) => mockEnqueueFirstPartySync(...args),
+}))
+
+jest.mock('@/lib/logger', () => ({
+  logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn() },
+}))
+
+import {
+  activateClaim,
+  reviewClaim,
+  type TraderClaim,
+  type VerifiedTrader,
+  type UpdateVerifiedTraderInput,
+} from '../trader-claims'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+const CLAIM_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const USER_ID = '11111111-1111-4111-8111-111111111111'
+const REVIEWER_ID = '22222222-2222-4222-8222-222222222222'
+
+function claim(overrides: Partial<TraderClaim> = {}): TraderClaim {
+  return {
+    id: CLAIM_ID,
+    user_id: USER_ID,
+    trader_id: 'trader-1',
+    source: 'binance_futures',
+    verification_method: 'api_key',
+    verification_data: null,
+    status: 'verified',
+    reject_reason: null,
+    reviewed_by: REVIEWER_ID,
+    reviewed_at: '2026-07-16T10:00:00.000Z',
+    verified_at: '2026-07-16T10:00:00.000Z',
+    created_at: '2026-07-15T10:00:00.000Z',
+    updated_at: '2026-07-16T10:00:00.000Z',
+    ...overrides,
+  }
+}
+
+function activationPayload(overrides: Record<string, unknown> = {}) {
+  return {
+    claim: claim(),
+    linked_trader_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    primary_link_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    linked_count: 1,
+    authorization_id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+    arena_trader_id: 42,
+    ...overrides,
+  }
+}
+
+describe('trader claim review mutations', () => {
+  const mockRpc = jest.fn()
+  const mockFrom = jest.fn()
+  const client = { rpc: mockRpc, from: mockFrom } as unknown as SupabaseClient
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockInvalidateLinkedTraderCache.mockResolvedValue(undefined)
+    mockEnqueueFirstPartySync.mockResolvedValue(true)
+  })
+
+  it('approves through one atomic RPC before all post-commit effects', async () => {
+    mockRpc.mockResolvedValue({ data: activationPayload(), error: null })
+
+    await expect(reviewClaim(client, CLAIM_ID, REVIEWER_ID, true)).resolves.toMatchObject({
+      id: CLAIM_ID,
+      status: 'verified',
+    })
+
+    expect(mockRpc).toHaveBeenCalledWith('activate_trader_claim', {
+      p_claim_id: CLAIM_ID,
+      p_reviewer_id: REVIEWER_ID,
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockInvalidateLinkedTraderCache).toHaveBeenCalledWith(USER_ID)
+    expect(mockEnqueueFirstPartySync).toHaveBeenCalledWith('cccccccc-cccc-4ccc-8ccc-cccccccccccc')
+    expect(mockSendNotification).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({ user_id: USER_ID, title: 'Claim approved' }),
+      'trader-claim-approve'
+    )
+    expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(
+      mockInvalidateLinkedTraderCache.mock.invocationCallOrder[0]
+    )
+    expect(mockInvalidateLinkedTraderCache.mock.invocationCallOrder[0]).toBeLessThan(
+      mockEnqueueFirstPartySync.mock.invocationCallOrder[0]
+    )
+  })
+
+  it('does not enqueue a first-party sync for a signature claim', async () => {
+    mockRpc.mockResolvedValue({
+      data: activationPayload({
+        claim: claim({ verification_method: 'signature', source: 'hyperliquid' }),
+        authorization_id: null,
+      }),
+      error: null,
+    })
+
+    await reviewClaim(client, CLAIM_ID, REVIEWER_ID, true)
+
+    expect(mockInvalidateLinkedTraderCache).toHaveBeenCalledWith(USER_ID)
+    expect(mockEnqueueFirstPartySync).not.toHaveBeenCalled()
+    expect(mockSendNotification).toHaveBeenCalled()
+  })
+
+  it('runs no post-commit effects when the activation RPC fails', async () => {
+    const rpcError = { code: '23505', message: 'identity conflict' }
+    mockRpc.mockResolvedValue({ data: null, error: rpcError })
+
+    await expect(reviewClaim(client, CLAIM_ID, REVIEWER_ID, true)).rejects.toBe(rpcError)
+
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockInvalidateLinkedTraderCache).not.toHaveBeenCalled()
+    expect(mockEnqueueFirstPartySync).not.toHaveBeenCalled()
+    expect(mockSendNotification).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    null,
+    {},
+    activationPayload({ linked_count: 0 }),
+    activationPayload({ authorization_id: null }),
+    activationPayload({ claim: claim({ status: 'reviewing' }) }),
+  ])('rejects a malformed activation acknowledgement without side effects', async (data) => {
+    mockRpc.mockResolvedValue({ data, error: null })
+
+    await expect(activateClaim(client, CLAIM_ID, REVIEWER_ID)).rejects.toThrow(
+      'Invalid activate_trader_claim response'
+    )
+    expect(mockInvalidateLinkedTraderCache).not.toHaveBeenCalled()
+    expect(mockEnqueueFirstPartySync).not.toHaveBeenCalled()
+    expect(mockSendNotification).not.toHaveBeenCalled()
+  })
+
+  it('rejects only a pending or reviewing claim and then notifies', async () => {
+    const rejected = claim({
+      status: 'rejected',
+      reject_reason: 'ownership proof failed',
+      verified_at: null,
+    })
+    const result = Promise.resolve({ data: rejected, error: null })
+    const builder: Record<string, jest.Mock> = {}
+    builder.update = jest.fn(() => builder)
+    builder.eq = jest.fn(() => builder)
+    builder.in = jest.fn(() => builder)
+    builder.select = jest.fn(() => builder)
+    builder.maybeSingle = jest.fn(() => result)
+    mockFrom.mockReturnValue(builder)
+
+    await expect(
+      reviewClaim(client, CLAIM_ID, REVIEWER_ID, false, 'ownership proof failed')
+    ).resolves.toEqual(rejected)
+
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).toHaveBeenCalledWith('trader_claims')
+    expect(builder.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'rejected',
+        reviewed_by: REVIEWER_ID,
+        reject_reason: 'ownership proof failed',
+      })
+    )
+    expect(builder.eq).toHaveBeenCalledWith('id', CLAIM_ID)
+    expect(builder.in).toHaveBeenCalledWith('status', ['pending', 'reviewing'])
+    expect(mockSendNotification).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({ title: 'Claim rejected' }),
+      'trader-claim-reject'
+    )
+  })
+
+  it('cannot reject a terminal or concurrently reviewed claim', async () => {
+    const result = Promise.resolve({ data: null, error: null })
+    const builder: Record<string, jest.Mock> = {}
+    builder.update = jest.fn(() => builder)
+    builder.eq = jest.fn(() => builder)
+    builder.in = jest.fn(() => builder)
+    builder.select = jest.fn(() => builder)
+    builder.maybeSingle = jest.fn(() => result)
+    mockFrom.mockReturnValue(builder)
+
+    await expect(reviewClaim(client, CLAIM_ID, REVIEWER_ID, false)).rejects.toMatchObject({
+      code: 'P0002',
+    })
+    expect(mockSendNotification).not.toHaveBeenCalled()
+  })
+})
 
 describe('trader-claims types', () => {
   it('TraderClaim should have all required fields', () => {
