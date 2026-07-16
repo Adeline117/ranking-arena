@@ -51,21 +51,120 @@ interface ExportData {
 }
 
 const EXPORT_DATASETS = {
-  posts: { name: 'posts', table: 'posts', ownerColumn: 'author_id' },
-  comments: { name: 'comments', table: 'comments', ownerColumn: 'user_id' },
+  posts: {
+    name: 'posts',
+    table: 'posts',
+    ownerColumn: 'author_id',
+    selectColumns: [
+      'id',
+      'title',
+      'content',
+      'content_warning',
+      'images',
+      'links',
+      'hashtags',
+      'mentions',
+      'language',
+      'visibility',
+      'status',
+      'group_id',
+      'original_post_id',
+      'poll_enabled',
+      'poll_id',
+      'is_sensitive',
+      'is_pinned',
+      'created_at',
+      'updated_at',
+      'deleted_at',
+      'delete_reason',
+    ],
+  },
+  comments: {
+    name: 'comments',
+    table: 'comments',
+    ownerColumn: 'user_id',
+    selectColumns: [
+      'id',
+      'post_id',
+      'parent_id',
+      'content',
+      'created_at',
+      'updated_at',
+      'deleted_at',
+      'delete_reason',
+    ],
+  },
   following: {
     name: 'following',
     table: 'user_follows',
     ownerColumn: 'follower_id',
+    selectColumns: ['id', 'following_id', 'created_at'],
   },
   followers: {
     name: 'followers',
     table: 'user_follows',
     ownerColumn: 'following_id',
+    selectColumns: ['id', 'follower_id', 'created_at'],
   },
-  tipsSent: { name: 'tips.sent', table: 'tips', ownerColumn: 'from_user_id' },
-  tipsReceived: { name: 'tips.received', table: 'tips', ownerColumn: 'to_user_id' },
+  tipsSent: {
+    name: 'tips.sent',
+    table: 'tips',
+    ownerColumn: 'from_user_id',
+    selectColumns: [
+      'id',
+      'to_user_id',
+      'post_id',
+      'amount_cents',
+      'message',
+      'status',
+      'created_at',
+      'updated_at',
+      'completed_at',
+    ],
+  },
+  tipsReceived: {
+    name: 'tips.received',
+    table: 'tips',
+    ownerColumn: 'to_user_id',
+    selectColumns: [
+      'id',
+      'from_user_id',
+      'post_id',
+      'amount_cents',
+      'message',
+      'status',
+      'created_at',
+      'updated_at',
+      'completed_at',
+    ],
+  },
 } satisfies Record<string, ExportDataset>
+
+function normalizeFollowRows(rows: Record<string, unknown>[], direction: 'following' | 'follower') {
+  const otherUserColumn = direction === 'following' ? 'following_id' : 'follower_id'
+  return rows.map((row) => ({
+    id: row.id,
+    direction,
+    other_user_id: row[otherUserColumn],
+    created_at: row.created_at,
+  }))
+}
+
+function normalizeTipRows(rows: Record<string, unknown>[], direction: 'sent' | 'received') {
+  const counterpartyColumn = direction === 'sent' ? 'to_user_id' : 'from_user_id'
+  return rows.map((row) => ({
+    id: row.id,
+    direction,
+    counterparty_user_id: row[counterpartyColumn],
+    post_id: row.post_id,
+    amount_cents: row.amount_cents,
+    message: row.message,
+    status: row.status,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    completed_at: row.completed_at,
+  }))
+}
 
 function parseStoredTimestamp(value: string, field: string): number {
   const timestamp = new Date(value).getTime()
@@ -173,12 +272,12 @@ export async function POST(request: NextRequest) {
       posts,
       comments,
       follows: {
-        following,
-        followers,
+        following: normalizeFollowRows(following, 'following'),
+        followers: normalizeFollowRows(followers, 'follower'),
       },
       tips: {
-        sent: tipsSent,
-        received: tipsReceived,
+        sent: normalizeTipRows(tipsSent, 'sent'),
+        received: normalizeTipRows(tipsReceived, 'received'),
       },
     }
 
@@ -189,7 +288,10 @@ export async function POST(request: NextRequest) {
       status: 200,
       headers: {
         'Content-Type': 'application/json',
-        'Content-Disposition': `attachment; filename="ranking-arena-export-${user.id}.json"`,
+        'Content-Disposition': `attachment; filename="ranking-arena-export-${exportData.exportedAt.slice(0, 10)}.json"`,
+        'Cache-Control': 'private, no-store, max-age=0',
+        Pragma: 'no-cache',
+        'X-Content-Type-Options': 'nosniff',
       },
     })
     const cooldown = await claimExportCooldown(supabase, user.id, new Date())

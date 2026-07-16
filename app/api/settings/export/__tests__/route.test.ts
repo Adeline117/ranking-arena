@@ -136,9 +136,45 @@ describe('POST /api/settings/export', () => {
     mockGetProvisioningAuthUser.mockResolvedValue({ id: USER_ID })
     mockValidateCsrfToken.mockReturnValue(true)
     mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom })
-    mockFetchAllExportRows.mockImplementation(async (_client, dataset) => [
-      { id: `${dataset.name}-1` },
-    ])
+    mockFetchAllExportRows.mockImplementation(async (_client, dataset) => {
+      const id = `${dataset.name}-1`
+      switch (dataset.name) {
+        case 'following':
+          return [{ id, following_id: 'followed-user', created_at: '2026-02-01T00:00:00.000Z' }]
+        case 'followers':
+          return [{ id, follower_id: 'follower-user', created_at: '2026-02-02T00:00:00.000Z' }]
+        case 'tips.sent':
+          return [
+            {
+              id,
+              to_user_id: 'tip-recipient',
+              post_id: 'post-1',
+              amount_cents: 500,
+              message: 'sent tip',
+              status: 'completed',
+              created_at: '2026-02-03T00:00:00.000Z',
+              updated_at: '2026-02-03T00:01:00.000Z',
+              completed_at: '2026-02-03T00:01:00.000Z',
+            },
+          ]
+        case 'tips.received':
+          return [
+            {
+              id,
+              from_user_id: 'tip-sender',
+              post_id: null,
+              amount_cents: 700,
+              message: null,
+              status: 'completed',
+              created_at: '2026-02-04T00:00:00.000Z',
+              updated_at: '2026-02-04T00:01:00.000Z',
+              completed_at: '2026-02-04T00:01:00.000Z',
+            },
+          ]
+        default:
+          return [{ id }]
+      }
+    })
     installProfileQueries({})
   })
 
@@ -157,13 +193,69 @@ describe('POST /api/settings/export', () => {
     })
     expect(body.posts).toEqual([{ id: 'posts-1' }])
     expect(body.comments).toEqual([{ id: 'comments-1' }])
-    expect(body.follows.following).toEqual([{ id: 'following-1' }])
-    expect(body.follows.followers).toEqual([{ id: 'followers-1' }])
-    expect(body.tips.sent).toEqual([{ id: 'tips.sent-1' }])
-    expect(body.tips.received).toEqual([{ id: 'tips.received-1' }])
+    expect(body.follows.following).toEqual([
+      {
+        id: 'following-1',
+        direction: 'following',
+        other_user_id: 'followed-user',
+        created_at: '2026-02-01T00:00:00.000Z',
+      },
+    ])
+    expect(body.follows.followers).toEqual([
+      {
+        id: 'followers-1',
+        direction: 'follower',
+        other_user_id: 'follower-user',
+        created_at: '2026-02-02T00:00:00.000Z',
+      },
+    ])
+    expect(body.tips.sent).toEqual([
+      {
+        id: 'tips.sent-1',
+        direction: 'sent',
+        counterparty_user_id: 'tip-recipient',
+        post_id: 'post-1',
+        amount_cents: 500,
+        message: 'sent tip',
+        status: 'completed',
+        created_at: '2026-02-03T00:00:00.000Z',
+        updated_at: '2026-02-03T00:01:00.000Z',
+        completed_at: '2026-02-03T00:01:00.000Z',
+      },
+    ])
+    expect(body.tips.received).toEqual([
+      {
+        id: 'tips.received-1',
+        direction: 'received',
+        counterparty_user_id: 'tip-sender',
+        post_id: null,
+        amount_cents: 700,
+        message: null,
+        status: 'completed',
+        created_at: '2026-02-04T00:00:00.000Z',
+        updated_at: '2026-02-04T00:01:00.000Z',
+        completed_at: '2026-02-04T00:01:00.000Z',
+      },
+    ])
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(6)
     expect(mockFrom).toHaveBeenCalledTimes(2)
-    expect(response.headers.get('Content-Disposition')).toContain(USER_ID)
+    expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('Pragma')).toBe('no-cache')
+    expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
+
+    const datasets = mockFetchAllExportRows.mock.calls.map((call) => call[1])
+    expect(datasets).toHaveLength(6)
+    for (const dataset of datasets) {
+      expect(dataset.selectColumns).toContain('id')
+      expect(dataset.selectColumns).not.toContain('*')
+      expect(dataset.selectColumns.join(',')).not.toMatch(
+        /stripe|token|secret|password|credential|_encrypted|deleted_by/i
+      )
+    }
+    const commentsDataset = datasets.find((dataset) => dataset.name === 'comments')
+    expect(commentsDataset.selectColumns).not.toContain('author_id')
+    expect(commentsDataset.selectColumns).not.toContain('author_handle')
   })
 
   it('fails closed without consuming cooldown when one dataset page fails', async () => {
