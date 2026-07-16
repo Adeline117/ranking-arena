@@ -34,12 +34,16 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const supabase = getSupabaseAdmin()
     const { posts, total } = await getPostsByHashtag(supabase, tag, { limit, offset, sort_by })
 
-    // Non-personalized public data (posts for a hashtag) — safe to edge-cache briefly.
+    // Post audience can change independently of the hashtag mapping. The data
+    // layer re-authorizes every service-role row, and the final payload must
+    // not outlive that decision in a browser or CDN cache.
     const response = successWithPagination(
       { posts, tag: tag.toLowerCase(), total },
       { limit, offset, has_more: posts.length === limit }
     )
-    response.headers.set('Cache-Control', 'public, s-maxage=60, stale-while-revalidate=300')
+    response.headers.set('Cache-Control', 'private, no-store, max-age=0')
+    response.headers.set('CDN-Cache-Control', 'no-store')
+    response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
     return response
   } catch (error: unknown) {
     return handleError(error, 'hashtags [tag] GET')

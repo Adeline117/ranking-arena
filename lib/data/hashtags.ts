@@ -7,6 +7,7 @@
 
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { filterServiceReadablePostRows } from './service-post-audience'
 
 // Unicode-aware: \w 是 ASCII-only,会把 #比特币 这类 CJK 标签静默丢掉
 // (2026-07-03 修复,与 lib/utils/content.ts 的 linkify regex 保持同步)。
@@ -202,7 +203,10 @@ export async function getPostsByHashtag(
     return { posts: [], total: 0 }
   }
 
-  const rows = (posts || []) as Record<string, unknown>[]
+  const candidateRows = (posts || []).filter(
+    (post): post is Record<string, unknown> & { id: string } => typeof post.id === 'string'
+  )
+  const rows = await filterServiceReadablePostRows(supabase, candidateRows, null)
   const authorIds = [...new Set(rows.map((p) => p.author_id as string).filter(Boolean))]
   const { data: profiles, error: profilesError } = authorIds.length
     ? await supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
