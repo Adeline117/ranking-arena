@@ -11,6 +11,8 @@ export type GtradeTradesStopReason =
 export interface GtradeTradesRawPage {
   pageIndex: number
   requestCursor: number | null
+  /** Frozen upper bound shared by every page in this snapshot. */
+  requestEndTimeMs: number
   url: string
   response: unknown
 }
@@ -166,6 +168,7 @@ export async function fetchGtradeTradesWindow(
     rawPages.push({
       pageIndex: rawPages.length + 1,
       requestCursor: cursor,
+      requestEndTimeMs: asOfTimeMs,
       url,
       response: payload,
     })
@@ -238,6 +241,9 @@ export async function fetchGtradeTradesWindow(
     oldestTimeMs = oldestTimeMs === null ? lastTime : Math.min(oldestTimeMs, lastTime)
 
     if (!response.pagination.hasMore) {
+      if (response.pagination.nextCursor !== null) {
+        throw invalidPage('[gtrade] exhausted trades page has a non-null nextCursor')
+      }
       exhausted = true
       return result('exhausted')
     }
@@ -251,7 +257,10 @@ export async function fetchGtradeTradesWindow(
     ) {
       throw invalidPage('[gtrade] trades page has an invalid or stalled nextCursor')
     }
-    if (oldestTimeMs <= horizonStartTimeMs) {
+    // Dates have second-level precision while the id cursor orders events
+    // within a second. Equality does not prove that every lower-id boundary
+    // event was fetched, so coverage requires one event strictly before it.
+    if (oldestTimeMs < horizonStartTimeMs) {
       horizonCovered = true
       return result('horizon_covered')
     }
