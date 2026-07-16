@@ -1,4 +1,5 @@
 import {
+  hasCurrentStoredOnchainQualitySchema,
   isOnchainQualityCanonical,
   isStoredOnchainMetricEligible,
   readStoredOnchainQuality,
@@ -25,6 +26,29 @@ const canonical: OnchainQuality = {
 }
 
 describe('on-chain quality gate', () => {
+  it('distinguishes current quality evidence from timestamp-only legacy rows', () => {
+    expect(
+      hasCurrentStoredOnchainQualitySchema({
+        onchain_enriched_at: '2026-07-15T00:00:00.000Z',
+      })
+    ).toBe(false)
+    expect(hasCurrentStoredOnchainQualitySchema({ onchain_quality: { schema_version: 2 } })).toBe(
+      false
+    )
+    expect(hasCurrentStoredOnchainQualitySchema({ onchain_quality: { schema_version: 1 } })).toBe(
+      false
+    )
+    expect(
+      hasCurrentStoredOnchainQualitySchema({
+        onchain_quality: {
+          schema_version: 1,
+          methodology: 'wallet-balance-delta-average-cost',
+          methodology_version: '1.0.0',
+        },
+      })
+    ).toBe(true)
+  })
+
   it('requires every canonical condition, not only scoreEligible=true', () => {
     expect(isOnchainQualityCanonical(canonical)).toBe(true)
     expect(isOnchainQualityCanonical({ ...canonical, completeness: 'partial' })).toBe(false)

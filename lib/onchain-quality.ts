@@ -6,6 +6,7 @@
 
 export const ONCHAIN_METHODOLOGY = 'wallet-balance-delta-average-cost' as const
 export const ONCHAIN_METHODOLOGY_VERSION = '1.0.0' as const
+export const ONCHAIN_QUALITY_SCHEMA_VERSION = 1 as const
 export const MIN_ONCHAIN_SCORE_HISTORY_DAYS = 90
 
 export type OnchainQualityReason =
@@ -16,7 +17,7 @@ export type OnchainQualityReason =
   | 'internal_transfer_coverage_unknown'
 
 export interface OnchainQuality {
-  schemaVersion: 1
+  schemaVersion: typeof ONCHAIN_QUALITY_SCHEMA_VERSION
   methodology: typeof ONCHAIN_METHODOLOGY
   methodologyVersion: typeof ONCHAIN_METHODOLOGY_VERSION
   completeness: 'partial' | 'complete'
@@ -52,6 +53,16 @@ function objectOrNull(value: unknown): Record<string, unknown> | null {
     : null
 }
 
+/** Legacy/malformed enrichment must be recomputed even when it has a fresh timestamp. */
+export function hasCurrentStoredOnchainQualitySchema(extras: Record<string, unknown>): boolean {
+  const raw = objectOrNull(extras.onchain_quality)
+  return (
+    raw?.schema_version === ONCHAIN_QUALITY_SCHEMA_VERSION &&
+    raw.methodology === ONCHAIN_METHODOLOGY &&
+    raw.methodology_version === ONCHAIN_METHODOLOGY_VERSION
+  )
+}
+
 function finiteOrNull(value: unknown): number | null {
   if (value === null || value === undefined || value === '') return null
   const n = typeof value === 'number' ? value : Number(value)
@@ -83,7 +94,7 @@ export function readStoredOnchainQuality(
         ? (raw.reasons as string[])
         : null
     const contractMetadataValid =
-      raw.schema_version === 1 &&
+      raw.schema_version === ONCHAIN_QUALITY_SCHEMA_VERSION &&
       raw.methodology === ONCHAIN_METHODOLOGY &&
       raw.methodology_version === ONCHAIN_METHODOLOGY_VERSION
     const topLevelMethodologyValid =

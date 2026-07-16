@@ -21,6 +21,7 @@ import {
 } from '@/lib/ingest/onchain/enrich'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import { hasCurrentStoredOnchainQualitySchema } from '@/lib/onchain-quality'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -60,7 +61,12 @@ export async function POST(req: NextRequest) {
     })
     const extras = (data as { extras?: Record<string, unknown> } | null)?.extras
     const at = extras?.onchain_enriched_at
-    if (typeof at === 'string' && Date.now() - Date.parse(at) < DEDUP_MINUTES * 60_000) {
+    if (
+      extras &&
+      hasCurrentStoredOnchainQualitySchema(extras) &&
+      typeof at === 'string' &&
+      Date.now() - Date.parse(at) < DEDUP_MINUTES * 60_000
+    ) {
       return NextResponse.json({ status: 'fresh', skipped: true })
     }
   } catch {
