@@ -35,6 +35,7 @@ import type {
 type Dict = Record<string, unknown>
 
 const E30 = 1e30
+const DAY_SECONDS = 86_400
 
 function num(v: unknown): number | null {
   if (v === null || v === undefined || v === '') return null
@@ -73,9 +74,51 @@ export function gmxRealizedPnlUsd(row: Dict): number | null {
   return (pnl - fees - swapFees + priceImpact + swapImpact) / E30
 }
 
+interface GmxWindowContract {
+  timeframe: RankingTimeframe
+  from: number
+  to: number
+}
+
+function readGmxWindowContract(payload: {
+  timeframe?: unknown
+  from?: unknown
+  to?: unknown
+}): GmxWindowContract {
+  const timeframe = num(payload.timeframe)
+  if (timeframe !== 7 && timeframe !== 30 && timeframe !== 90) {
+    throw new Error('[gmx] invalid window timeframe')
+  }
+  const from = num(payload.from)
+  const to = num(payload.to)
+  if (
+    from === null ||
+    to === null ||
+    !Number.isInteger(from) ||
+    !Number.isInteger(to) ||
+    from <= 0 ||
+    to <= from ||
+    from % DAY_SECONDS !== 0 ||
+    to % DAY_SECONDS !== 0 ||
+    to - from !== timeframe * DAY_SECONDS
+  ) {
+    throw new Error('[gmx] invalid completed UTC window bounds')
+  }
+  return { timeframe, from, to }
+}
+
+function windowContractExtras(window: GmxWindowContract): Record<string, unknown> {
+  return {
+    window_from: window.from,
+    window_to: window.to,
+    window_duration_days: window.timeframe,
+    window_semantics: 'completed_utc_days',
+  }
+}
+
 function realizedPnlBasisExtras(
   realizedPnl: number,
-  windowFrom: number | null
+  window: GmxWindowContract
 ): Record<string, unknown> {
   return {
     pnl_basis: 'gmx_period_realized_net',
@@ -84,7 +127,7 @@ function realizedPnlBasisExtras(
     realized_pnl_usd: realizedPnl,
     pnl_components_complete: true,
     profile_series_contract: 'unavailable_same_basis',
-    window_from: windowFrom,
+    ...windowContractExtras(window),
   }
 }
 
@@ -104,9 +147,15 @@ function roiOnMaxCapital(pnlUsd: number | null, row: Dict): number | null {
 // ── Leaderboard ──
 
 export function parseGmxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
-  const payload = (raw ?? {}) as { reportedTotal?: unknown; rows?: unknown; from?: unknown }
+  const payload = (raw ?? {}) as {
+    timeframe?: unknown
+    reportedTotal?: unknown
+    rows?: unknown
+    from?: unknown
+    to?: unknown
+  }
   const items = Array.isArray(payload.rows) ? (payload.rows as Dict[]) : []
-  const windowFrom = num(payload.from)
+  const window = readGmxWindowContract(payload)
 
   const rows: ParsedLeaderboardRow[] = []
   for (const item of items) {
@@ -134,7 +183,7 @@ export function parseGmxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
       // the profile uses the same field. Board-level capture covers profile-less
       // traders. (On-chain: no precomputed MDD/Sharpe → those stay N/A.)
       headlineAum: usd(item.maxCapital),
-      headlineExtras: realizedPnlBasisExtras(pnl, windowFrom),
+      headlineExtras: realizedPnlBasisExtras(pnl, window),
       traderMeta: null,
       raw: item, // full PeriodAccountStatObject verbatim (spec §3)
     })
@@ -163,21 +212,10 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     pnlHistory?: unknown
     timeframe?: unknown
     from?: unknown
+    to?: unknown
   }
-  const tfNum = num(payload.timeframe)
-  if (tfNum !== 7 && tfNum !== 30 && tfNum !== 90) {
-    throw new Error('[gmx] invalid profile timeframe')
-  }
-  const tf = tfNum as RankingTimeframe
-  const windowFrom = num(payload.from)
-  if (
-    windowFrom === null ||
-    !Number.isInteger(windowFrom) ||
-    windowFrom <= 0 ||
-    windowFrom % 86_400 !== 0
-  ) {
-    throw new Error('[gmx] invalid profile window start')
-  }
+  const window = readGmxWindowContract(payload)
+  const tf = window.timeframe
 
   if (!Array.isArray(payload.periodStats) || !Array.isArray(payload.pnlHistory)) {
     throw new Error('[gmx] invalid profile bundle arrays')
@@ -195,7 +233,12 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   for (const p of histRaw) {
     const ts = num(p.timestamp)
     const value = usd(p.cumulativePnl)
-    if (ts !== null && value !== null) points.push({ ts: ts * 1000, value })
+    // accountPnlHistoryStats currently has no `to` argument. Keep the RAW
+    // response intact, but only use points inside the exact period window for
+    // audit metadata; canonical realized-net stats never use this MTM history.
+    if (ts !== null && value !== null && ts >= window.from && ts <= window.to) {
+      points.push({ ts: ts * 1000, value })
+    }
   }
   points.sort((a, b) => a.ts - b.ts)
 
@@ -225,10 +268,13 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       holdingDurationAvgHours: null,
       tradingPreferences: null,
       extras: {
-        ...realizedPnlBasisExtras(realizedPnl, windowFrom),
+        ...realizedPnlBasisExtras(realizedPnl, window),
         aum_basis: 'max_capital_proxy', // legacy-connector convention
         gmx_total_mark_to_market_pnl_usd: totalPnl,
         gmx_total_mark_to_market_source: 'account_pnl_history_cumulative',
+        gmx_history_client_window_cutoff: true,
+        gmx_history_rows_raw: histRaw.length,
+        gmx_history_rows_in_window: points.length,
         closed_count: num(row.closedCount),
       },
     })
@@ -255,7 +301,7 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       holdingDurationAvgHours: null,
       tradingPreferences: null,
       extras: {
-        ...realizedPnlBasisExtras(0, windowFrom),
+        ...realizedPnlBasisExtras(0, window),
         profile_window_metrics_complete: true,
         profile_window_empty: true,
         empty_window_evidence: 'explicit_empty_period_stats_and_history',
@@ -290,9 +336,12 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
         profile_window_metrics_complete: false,
         profile_window_metrics_incomplete_reason: 'period_stats_missing_with_history',
         profile_series_contract: 'unavailable_same_basis',
-        window_from: windowFrom,
+        ...windowContractExtras(window),
         gmx_total_mark_to_market_pnl_usd: totalPnl,
         gmx_total_mark_to_market_source: 'account_pnl_history_cumulative',
+        gmx_history_client_window_cutoff: true,
+        gmx_history_rows_raw: histRaw.length,
+        gmx_history_rows_in_window: points.length,
       },
     })
   }

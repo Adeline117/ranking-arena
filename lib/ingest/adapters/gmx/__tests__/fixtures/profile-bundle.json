@@ -88,5 +88,7 @@
     }
   ],
   "timeframe": 7,
-  "from": 1780617600
+  "from": 1780617600,
+  "to": 1781222400,
+  "windowSemantics": "completed_utc_days"
 }

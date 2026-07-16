@@ -398,7 +398,13 @@ const RECIPES: Record<string, Recipe> = {
     return {
       stats: parseGmxProfile(fixture('gmx', 'profile-bundle.json'), g).stats,
       rows: parseGmxLeaderboardPage(
-        { timeframe: 7, from: fx.from, reportedTotal: 2866, rows: fx.rows },
+        {
+          timeframe: 7,
+          from: fx.from,
+          to: Number(fx.from) + 7 * 86_400,
+          reportedTotal: 2866,
+          rows: fx.rows,
+        },
         g
       ).rows,
     }
