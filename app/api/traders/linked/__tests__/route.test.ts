@@ -3,7 +3,12 @@ const LINK_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
+const mockInvalidateLinkedTraderCache = jest.fn()
 const mockRequireAuth = jest.fn().mockResolvedValue({ id: USER_ID })
+
+jest.mock('@/lib/data/linked-traders', () => ({
+  invalidateLinkedTraderCache: (...args: unknown[]) => mockInvalidateLinkedTraderCache(...args),
+}))
 
 jest.mock('@/lib/api', () => ({
   RateLimitPresets: { read: {}, sensitive: {}, write: {} },
@@ -55,6 +60,7 @@ describe('/api/traders/linked atomic mutations', () => {
       p_user_id: USER_ID,
     })
     expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockInvalidateLinkedTraderCache).toHaveBeenCalledWith(USER_ID)
     await expect(response.json()).resolves.toMatchObject({
       success: true,
       data: { linked_trader: linkedTrader },
@@ -71,6 +77,7 @@ describe('/api/traders/linked atomic mutations', () => {
 
     expect(response.status).toBe(404)
     expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockInvalidateLinkedTraderCache).not.toHaveBeenCalled()
   })
 
   it('rejects directly unsetting the primary invariant', async () => {
@@ -102,13 +109,14 @@ describe('/api/traders/linked atomic mutations', () => {
     )
     expect(builder.eq).toHaveBeenNthCalledWith(1, 'id', LINK_ID)
     expect(builder.eq).toHaveBeenNthCalledWith(2, 'user_id', USER_ID)
+    expect(mockInvalidateLinkedTraderCache).toHaveBeenCalledWith(USER_ID)
   })
 
   it('unlinks only through the atomic service RPC', async () => {
     mockRpc.mockResolvedValue({
       data: [
         {
-          promoted_link_id: null,
+          promoted_link_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
           remaining_count: 0,
           removed_source: 'binance',
           removed_trader_id: 'trader-a',
@@ -125,12 +133,16 @@ describe('/api/traders/linked atomic mutations', () => {
       p_user_id: USER_ID,
     })
     expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockInvalidateLinkedTraderCache).toHaveBeenCalledWith(USER_ID)
     expect(mockInfo).toHaveBeenCalledWith(
       '[linked-traders] Unlinked trader',
       expect.objectContaining({ userId: USER_ID, traderId: 'trader-a' })
     )
     await expect(response.json()).resolves.toMatchObject({
-      data: { remaining_count: 0 },
+      data: {
+        promoted_link_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        remaining_count: 0,
+      },
     })
   })
 })

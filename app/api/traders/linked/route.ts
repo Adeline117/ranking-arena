@@ -16,6 +16,7 @@ import {
 } from '@/lib/api'
 import { ApiError } from '@/lib/api/errors'
 import { logger } from '@/lib/logger'
+import { invalidateLinkedTraderCache } from '@/lib/data/linked-traders'
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -146,6 +147,7 @@ export async function PATCH(request: NextRequest) {
       })
       if (error) throwRpcError(error)
       if (!data) throw ApiError.notFound('Linked trader not found')
+      await invalidateLinkedTraderCache(user.id)
       return success({ linked_trader: data })
     }
 
@@ -183,6 +185,7 @@ export async function PATCH(request: NextRequest) {
 
     if (error) throw error
     if (!data) throw ApiError.notFound('Linked trader not found')
+    await invalidateLinkedTraderCache(user.id)
     return success({ linked_trader: data })
   } catch (error: unknown) {
     return handleError(error, 'linked traders PATCH')
@@ -219,8 +222,13 @@ export async function DELETE(request: NextRequest) {
       traderId: result.removed_trader_id,
       source: result.removed_source,
     })
+    await invalidateLinkedTraderCache(user.id)
 
-    return success({ message: 'Trader unlinked', remaining_count: result.remaining_count })
+    return success({
+      message: 'Trader unlinked',
+      promoted_link_id: result.promoted_link_id,
+      remaining_count: result.remaining_count,
+    })
   } catch (error: unknown) {
     return handleError(error, 'linked traders DELETE')
   }
