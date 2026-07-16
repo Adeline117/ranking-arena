@@ -167,11 +167,18 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const tfNum = num(payload.timeframe) ?? 30
   const tf = (tfNum === 0 ? 90 : tfNum) as RankingTimeframe
 
+  if (!Array.isArray(payload.periodStats) || !Array.isArray(payload.pnlHistory)) {
+    throw new Error('[gmx] invalid profile bundle arrays')
+  }
+
   const stats: ParsedProfile['stats'] = []
-  const ps = Array.isArray(payload.periodStats) ? (payload.periodStats as Dict[]) : []
+  const ps = payload.periodStats as Dict[]
+  if (ps.length > 1) {
+    throw new Error('[gmx] duplicate period aggregates for profile window')
+  }
   const row = ps[0] ?? null
 
-  const histRaw = Array.isArray(payload.pnlHistory) ? (payload.pnlHistory as HistPoint[]) : []
+  const histRaw = payload.pnlHistory as HistPoint[]
   const points: Array<{ ts: number; value: number }> = []
   for (const p of histRaw) {
     const ts = num(p.timestamp)
@@ -213,7 +220,7 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
         closed_count: num(row.closedCount),
       },
     })
-  } else if (points.length === 0) {
+  } else if (histRaw.length === 0) {
     // Both complete window queries agree that this account had no activity.
     // Publish an explicit zero so a rolling window that becomes inactive does
     // not keep stale PnL/trade counts forever. Missing capital means ROI stays
@@ -231,7 +238,7 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       copierPnl: null,
       copierCount: null,
       aum: null,
-      volume: null,
+      volume: 0,
       profitShareRate: null,
       holdingDurationAvgHours: null,
       tradingPreferences: null,
@@ -239,6 +246,7 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
         ...realizedPnlBasisExtras(0, num(payload.from)),
         profile_window_metrics_complete: true,
         profile_window_empty: true,
+        empty_window_evidence: 'explicit_empty_period_stats_and_history',
         aum_basis: 'max_capital_proxy',
         gmx_total_mark_to_market_pnl_usd: null,
         gmx_total_mark_to_market_source: 'account_pnl_history_cumulative',

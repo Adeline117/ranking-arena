@@ -36,7 +36,8 @@ export function hasRequiredProfileSeries(core: TraderCoreModules): boolean {
   return (
     core.extras.profile_series_contract === 'unavailable_same_basis' &&
     core.extras.pnl_basis === 'gmx_period_realized_net' &&
-    core.extras.pnl_components_complete === true
+    core.extras.pnl_components_complete === true &&
+    core.extras.profile_window_metrics_complete !== false
   )
 }
 

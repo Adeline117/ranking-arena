@@ -170,6 +170,17 @@ describe('getCoreModules', () => {
     expect(
       hasRequiredProfileSeries({
         ...base,
+        extras: {
+          profile_series_contract: 'unavailable_same_basis',
+          pnl_basis: 'gmx_period_realized_net',
+          pnl_components_complete: true,
+          profile_window_metrics_complete: false,
+        },
+      })
+    ).toBe(false)
+    expect(
+      hasRequiredProfileSeries({
+        ...base,
         extras: { gmx_pnl_contract_version: 2 },
       })
     ).toBe(false)
