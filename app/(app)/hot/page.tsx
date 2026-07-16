@@ -10,6 +10,7 @@ import SocialComingSoonPage from '@/app/components/ui/SocialComingSoonPage'
 import HotContent from './HotContent'
 import { BASE_URL } from '@/lib/constants/urls'
 import { normalizePostTitle } from '@/lib/utils/post-display'
+import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
 
 export const metadata: Metadata = {
   title: 'Hot Posts & Trending Discussions',
@@ -41,23 +42,32 @@ const getHotPosts = unstable_cache(
       // NOTE: posts.author_id references auth.users (not public.user_profiles),
       // so a PostgREST embed fails with PGRST200. Two-step query: fetch posts,
       // then look up author profiles by id and merge.
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('posts')
         .select(
           `
           id, title, content, created_at,
           like_count, comment_count, view_count, hot_score, dislike_count,
-          group_id, author_id,
+          group_id, author_id, original_post_id, visibility, status, deleted_at,
           groups:group_id(name, name_en)
         `
         )
+        .neq('status', 'deleted')
+        .is('deleted_at', null)
+        .eq('visibility', 'public')
+        .is('group_id', null)
         .order('hot_score', { ascending: false })
         .limit(30)
 
-      if (!data || data.length === 0) return []
+      if (error || !data || data.length === 0) return []
+
+      const readablePosts = await filterServiceReadablePostRows(supabase, data, null)
+      if (readablePosts.length === 0) return []
 
       const authorIds = [
-        ...new Set(data.map((p: Record<string, unknown>) => p.author_id as string).filter(Boolean)),
+        ...new Set(
+          readablePosts.map((p: Record<string, unknown>) => p.author_id as string).filter(Boolean)
+        ),
       ]
       // (user_profiles has no display_name column — selecting it 400s with 42703)
       const { data: authorProfiles } = authorIds.length
@@ -67,7 +77,7 @@ const getHotPosts = unstable_cache(
         (authorProfiles || []).map((p: Record<string, unknown>) => [p.id as string, p])
       )
 
-      return data.map((post: Record<string, unknown>) => {
+      return readablePosts.map((post: Record<string, unknown>) => {
         const groups = post.groups as Record<string, unknown> | null
         const author = profileById.get(post.author_id as string) ?? null
         const createdAt = post.created_at as string

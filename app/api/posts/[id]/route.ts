@@ -42,8 +42,9 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const supabase = getSupabaseAdmin()
+    const user = await getAuthUser(request)
 
-    const post = await getPostById(supabase, id)
+    const post = await getPostById(supabase, id, user?.id)
     if (!post) {
       return notFound('Post not found')
     }
@@ -55,7 +56,6 @@ export async function GET(request: NextRequest, context: RouteContext) {
     let user_reaction: 'up' | 'down' | null = null
     let user_vote: 'bull' | 'bear' | 'wait' | null = null
 
-    const user = await getAuthUser(request)
     if (user) {
       const [reaction, vote] = await Promise.all([
         getUserPostReaction(supabase, id, user.id),

@@ -118,6 +118,16 @@ async function getPopularPosts(): Promise<Array<{ id: string; updated_at: string
     const { data, error } = await supabase
       .from('posts')
       .select('id, updated_at, created_at')
+      // This is the exact anonymous-safe root-post subset of the canonical
+      // audience predicate. Keeping it in SQL avoids 500 per-row RPCs during
+      // sitemap generation while excluding reposts whose root needs a second
+      // authorization decision.
+      .in('status', ['active', 'locked'])
+      .is('deleted_at', null)
+      .eq('visibility', 'public')
+      .is('group_id', null)
+      .is('original_post_id', null)
+      .not('author_id', 'is', null)
       .order('hot_score', { ascending: false })
       .limit(MAX_OTHER_URLS)
     if (error) {

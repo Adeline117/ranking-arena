@@ -45,7 +45,7 @@ const createMockSupabase = () => ({
   range: jest.fn().mockReturnThis(),
   maybeSingle: jest.fn(),
   single: jest.fn(),
-  rpc: jest.fn(),
+  rpc: jest.fn().mockResolvedValue({ data: true, error: null }),
 })
 
 describe('getPosts', () => {
@@ -186,6 +186,33 @@ describe('getPostById', () => {
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: new Error('DB Error') })
 
     await expect(getPostById(mockSupabase as unknown as SupabaseClient, 'post1')).rejects.toThrow()
+  })
+
+  test('should deny the row when canonical audience authorization is not explicit', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.maybeSingle.mockResolvedValueOnce({
+      data: {
+        id: 'post1',
+        title: 'Private post',
+        content: 'hidden',
+        author_id: 'user1',
+        author_handle: 'testUser',
+        group_id: null,
+        created_at: '2024-01-01T00:00:00Z',
+        original_post_id: null,
+      },
+      error: null,
+    })
+    mockSupabase.rpc.mockResolvedValueOnce({ data: false, error: null })
+
+    await expect(
+      getPostById(mockSupabase as unknown as SupabaseClient, 'post1', 'viewer1')
+    ).resolves.toBeNull()
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('can_service_actor_read_post', {
+      p_post_id: 'post1',
+      p_actor_id: 'viewer1',
+    })
+    expect(mockSupabase.in).not.toHaveBeenCalled()
   })
 })
 
