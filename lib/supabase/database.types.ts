@@ -9639,6 +9639,14 @@ export type Database = {
         }
       }
       text_to_bytea: { Args: { data: string }; Returns: string }
+      cast_post_poll_vote_atomic: {
+        Args: {
+          p_actor_id: string
+          p_option_indexes: number[]
+          p_post_id: string
+        }
+        Returns: Json
+      }
       toggle_comment_reaction: {
         Args: {
           p_comment_id: string
@@ -9648,8 +9656,24 @@ export type Database = {
         }
         Returns: Json
       }
+      toggle_post_bookmark_atomic: {
+        Args: {
+          p_actor_id: string
+          p_folder_id?: string | null
+          p_post_id: string
+        }
+        Returns: Json
+      }
+      toggle_post_emoji_reaction_atomic: {
+        Args: { p_actor_id: string; p_emoji: string; p_post_id: string }
+        Returns: Json
+      }
       toggle_post_reaction: {
         Args: { p_post_id: string; p_reaction_type?: string; p_user_id: string }
+        Returns: Json
+      }
+      toggle_post_vote_atomic: {
+        Args: { p_actor_id: string; p_choice: string; p_post_id: string }
         Returns: Json
       }
       trunc_hour: { Args: { ts: string }; Returns: string }
