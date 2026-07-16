@@ -2,10 +2,13 @@
 
 import { useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase/client'
+import { createClient, type SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import { useMultiAccountStore, StoredAccount } from '@/lib/stores/multiAccountStore'
 import { usePremium } from '@/lib/premium/hooks'
 import { logger } from '@/lib/logger'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 const MAX_ACCOUNTS_FREE = 1
 const MAX_ACCOUNTS_PRO = 5
@@ -16,32 +19,37 @@ const MAX_ACCOUNTS_PRO = 5
  * original token becomes unusable after this call — which means if it
  * ever leaked (XSS, device compromise) it can no longer mint sessions.
  *
- * We then immediately sign out that new session so we don't leave dangling
- * access tokens on the server, and we restore the currently active session
- * so the user's tab stays logged in.
+ * The exchange runs on a non-persistent isolated client. It must never touch
+ * the singleton client's storage or auth event stream for the active viewer.
  *
  * Best-effort: network failures / already-expired tokens are swallowed —
  * the local-state cleanup still proceeds.
  */
-async function invalidateStoredRefreshToken(refreshToken: string): Promise<void> {
-  if (!refreshToken) return
+function createRevocationClient(): SupabaseClient<Database> {
+  return createClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co',
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'placeholder-anon-key',
+    {
+      auth: {
+        persistSession: false,
+        autoRefreshToken: false,
+        detectSessionInUrl: false,
+      },
+    }
+  )
+}
 
-  // Capture the current session so we can restore it. If the account being
-  // removed IS the active one, currentSession will be null after signOut
-  // and the caller is expected to redirect to login.
-  let currentSession: Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session'] = null
-  try {
-    const { data } = await supabase.auth.getSession()
-    currentSession = data.session
-  } catch {
-    /* ignore — best-effort */
-  }
+export async function invalidateStoredRefreshToken(refreshToken: string): Promise<void> {
+  if (!refreshToken) return
+  const revocationClient = createRevocationClient()
 
   try {
     // Exchange the stored refresh token. Success rotates it (old token is
     // invalidated); failure means the token is already dead — either way
     // the stored value is no longer a valid credential.
-    const { data, error } = await supabase.auth.refreshSession({ refresh_token: refreshToken })
+    const { data, error } = await revocationClient.auth.refreshSession({
+      refresh_token: refreshToken,
+    })
     if (error) {
       logger.info('[multi-account] Stored refresh token already invalid, nothing to revoke')
       return
@@ -51,28 +59,16 @@ async function invalidateStoredRefreshToken(refreshToken: string): Promise<void>
     // rotated refresh token on the server too. scope=local keeps any other
     // devices/accounts unaffected.
     if (data.session) {
-      await supabase.auth.signOut({ scope: 'local' })
+      await revocationClient.auth.signOut({ scope: 'local' })
     }
   } catch (err) {
     logger.warn('[multi-account] Failed to revoke stored refresh token:', err)
-  } finally {
-    // Restore the original active session so this browser tab stays logged
-    // in as the active user. If there was no active session, nothing to do.
-    if (currentSession?.refresh_token) {
-      try {
-        await supabase.auth.setSession({
-          access_token: currentSession.access_token,
-          refresh_token: currentSession.refresh_token,
-        })
-      } catch (err) {
-        logger.warn('[multi-account] Failed to restore active session after revoke:', err)
-      }
-    }
   }
 }
 
 export function useMultiAccount() {
   const { isPremium } = usePremium()
+  const { signOut } = useAuthSession()
   const { accounts, addAccount, removeAccount, setActiveAccount, clear } = useMultiAccountStore()
 
   const activeAccount = useMemo(() => accounts.find((a) => a.isActive), [accounts])
@@ -193,9 +189,9 @@ export function useMultiAccount() {
         await invalidateStoredRefreshToken(account.refreshToken)
       }
     }
-    await supabase.auth.signOut()
+    await signOut()
     clear()
-  }, [accounts, clear])
+  }, [accounts, clear, signOut])
 
   return {
     accounts,

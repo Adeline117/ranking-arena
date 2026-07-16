@@ -8,6 +8,7 @@
 
 import { supabase } from '@/lib/supabase/client'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { getViewerScope, isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
 
 /**
  * 消息发送失败原因枚举
@@ -51,13 +52,22 @@ export type AuthResult = {
  */
 export async function getAuthSession(): Promise<AuthResult> {
   try {
+    const scope = getViewerScope()
+    if (!scope.userId || !isViewerScopeCurrent(scope)) return null
     // Use coordinator for proactive refresh (refreshes if token expires within 60s)
-    const token = await tokenRefreshCoordinator.getValidToken()
-    if (!token) return null
+    const token = await tokenRefreshCoordinator.getValidToken({
+      expectedUserId: scope.userId,
+      sessionGeneration: scope.sessionGeneration,
+    })
+    if (!token || !isViewerScopeCurrent(scope)) return null
 
     // Get user info from current session
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) return null
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session?.user || session.user.id !== scope.userId || !isViewerScopeCurrent(scope)) {
+      return null
+    }
 
     return {
       userId: session.user.id,
@@ -76,11 +86,20 @@ export async function getAuthSession(): Promise<AuthResult> {
  */
 export async function refreshAuthToken(): Promise<AuthResult> {
   try {
-    const token = await tokenRefreshCoordinator.forceRefresh()
-    if (!token) return null
+    const scope = getViewerScope()
+    if (!scope.userId || !isViewerScopeCurrent(scope)) return null
+    const token = await tokenRefreshCoordinator.forceRefresh({
+      expectedUserId: scope.userId,
+      sessionGeneration: scope.sessionGeneration,
+    })
+    if (!token || !isViewerScopeCurrent(scope)) return null
 
-    const { data: { session } } = await supabase.auth.getSession()
-    if (!session?.user) return null
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session?.user || session.user.id !== scope.userId || !isViewerScopeCurrent(scope)) {
+      return null
+    }
 
     return {
       userId: session.user.id,
@@ -134,10 +153,7 @@ export function resolveErrorCode(
  * 获取错误的用户友好消息
  * 优先使用服务端返回的具体消息，如果没有则使用错误码对应的默认消息
  */
-export function getErrorMessage(
-  errorCode: MessageErrorCode,
-  serverMessage?: string
-): string {
+export function getErrorMessage(errorCode: MessageErrorCode, serverMessage?: string): string {
   // 对于权限错误，优先使用服务端返回的具体原因
   if (errorCode === MessageErrorCode.PERMISSION_DENIED && serverMessage) {
     return serverMessage
