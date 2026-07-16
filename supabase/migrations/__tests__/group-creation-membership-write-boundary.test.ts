@@ -92,7 +92,9 @@ describe('group creation and membership server-write boundary', () => {
       /\.from\(['"]group_members['"]\)[\s\S]{0,120}\.(?:insert|update|delete|upsert)\(/
     )
     expect(membershipRoute).toMatch(/export const POST = withAuth\(/)
-    expect(membershipRoute).toContain(".from('group_members')")
+    expect(membershipRoute).toContain("'mutate_group_membership_atomic'")
+    expect(membershipRoute).toContain("'redeem_group_invite_atomic'")
+    expect(membershipRoute).not.toMatch(/\.from\(['"]group_members['"]\)/)
     expect(apiMiddleware).toContain('const supabase = getSupabaseAdmin() as SupabaseClient')
     expect(migration).toContain("NOTIFY pgrst, 'reload schema';")
   })
