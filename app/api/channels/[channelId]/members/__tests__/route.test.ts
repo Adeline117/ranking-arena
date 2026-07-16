@@ -19,7 +19,7 @@ jest.mock('next/server', () => {
 const mockGetAuthUser = jest.fn()
 const mockGetSupabaseAdmin = jest.fn()
 const mockFrom = jest.fn()
-const mockFilterChannelAddableUsers = jest.fn()
+const mockRpc = jest.fn()
 
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
@@ -28,9 +28,6 @@ jest.mock('@/lib/supabase/server', () => ({
 jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: jest.fn().mockResolvedValue(null),
   RateLimitPresets: { write: {} },
-}))
-jest.mock('@/lib/data/channel-permissions', () => ({
-  filterChannelAddableUsers: (...args: unknown[]) => mockFilterChannelAddableUsers(...args),
 }))
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: () => ({ error: jest.fn(), warn: jest.fn(), info: jest.fn() }),
@@ -109,16 +106,6 @@ const channelId = '22222222-2222-4222-8222-222222222222'
 const existingAdminId = '33333333-3333-4333-8333-333333333333'
 const newMemberId = '44444444-4444-4444-8444-444444444444'
 
-function fullRoster(size: number) {
-  return [
-    { user_id: actorId, role: 'owner' },
-    ...Array.from({ length: size - 1 }, (_, index) => ({
-      user_id: `${(index + 10).toString(16).padStart(8, '0')}-0000-4000-8000-000000000001`,
-      role: 'member',
-    })),
-  ]
-}
-
 function request(body: unknown, malformed = false) {
   return {
     json: jest.fn(
@@ -135,13 +122,7 @@ describe('channel member write boundaries', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockGetAuthUser.mockResolvedValue({ id: actorId })
-    mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom })
-    mockFilterChannelAddableUsers.mockImplementation(
-      async (_client: unknown, _actor: string, candidates: string[]) => ({
-        allowed: candidates,
-        blocked: [],
-      })
-    )
+    mockGetSupabaseAdmin.mockReturnValue({ from: mockFrom, rpc: mockRpc })
   })
 
   it.each([
@@ -154,7 +135,7 @@ describe('channel member write boundaries', () => {
 
     expect(response.status).toBe(400)
     expect(mockFrom).not.toHaveBeenCalled()
-    expect(mockFilterChannelAddableUsers).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 
   it('rejects malformed JSON before database access', async () => {
@@ -162,149 +143,96 @@ describe('channel member write boundaries', () => {
 
     expect(response.status).toBe(400)
     expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  it('fails closed when actor membership cannot be verified', async () => {
-    queuedClient([
-      { data: null, error: { code: 'XX001' } },
-      { data: { type: 'group' }, error: null },
-    ])
+  it('fails closed when the atomic RPC fails', async () => {
+    mockRpc.mockResolvedValue({ data: null, error: { message: 'database unavailable' } })
 
     const response = await POST(request({ userIds: [newMemberId] }) as never, context())
 
     expect(response.status).toBe(500)
-    expect(mockFilterChannelAddableUsers).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('does not run group member writes against a direct-message channel', async () => {
-    queuedClient([
-      { data: { role: 'owner' }, error: null },
-      { data: { type: 'direct' }, error: null },
-    ])
-
-    const response = await POST(request({ userIds: [newMemberId] }) as never, context())
-
-    expect(response.status).toBe(400)
-    expect(mockFilterChannelAddableUsers).not.toHaveBeenCalled()
-  })
-
-  it('rejects the entire addition when any candidate privacy check denies it', async () => {
-    queuedClient([
-      { data: { role: 'owner' }, error: null },
-      { data: { type: 'group' }, error: null },
-      { data: null, error: null, count: 1 },
-      { data: [{ user_id: actorId, role: 'owner' }], error: null },
-    ])
-    mockFilterChannelAddableUsers.mockResolvedValue({
-      allowed: [newMemberId],
-      blocked: [existingAdminId],
+  it('passes only normalized distinct non-actor candidates to the atomic RPC', async () => {
+    mockRpc.mockResolvedValue({
+      data: { success: true, channel_id: channelId, added: 2 },
+      error: null,
     })
 
     const response = await POST(
-      request({ userIds: [newMemberId, existingAdminId] }) as never,
-      context()
-    )
-
-    expect(response.status).toBe(400)
-    expect(mockFrom).toHaveBeenCalledTimes(4)
-  })
-
-  it('inserts only new members and never demotes an existing admin through upsert', async () => {
-    const queries = queuedClient([
-      { data: { role: 'owner' }, error: null },
-      { data: { type: 'group' }, error: null },
-      { data: null, error: null, count: 2 },
-      {
-        data: [
-          { user_id: actorId, role: 'owner' },
-          { user_id: existingAdminId, role: 'admin' },
-        ],
-        error: null,
-      },
-      { data: null, error: null },
-    ])
-
-    const response = await POST(
-      request({ userIds: [existingAdminId, newMemberId] }) as never,
+      request({ userIds: [actorId, existingAdminId, newMemberId, existingAdminId] }) as never,
       context()
     )
 
     expect(response.status).toBe(200)
-    await expect(response.json()).resolves.toEqual({ ok: true, added: 1 })
-    expect(queries[4].inserts).toEqual([
-      [{ channel_id: channelId, user_id: newMemberId, role: 'member' }],
-    ])
-    expect(mockFilterChannelAddableUsers).toHaveBeenCalledWith(
-      { from: mockFrom },
-      actorId,
-      [newMemberId],
-      [actorId, existingAdminId]
-    )
-    expect(queries.every(({ upserts }) => upserts.length === 0)).toBe(true)
+    await expect(response.json()).resolves.toEqual({ ok: true, added: 2 })
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenCalledWith('add_channel_members_atomic', {
+      p_channel_id: channelId,
+      p_actor_id: actorId,
+      p_candidate_ids: [existingAdminId, newMemberId],
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it.each([
-    [
-      [
-        { data: { role: 'owner' }, error: null },
-        { data: { type: 'group' }, error: null },
-        { data: null, error: { code: 'XX001' }, count: null },
-        { data: [{ user_id: actorId, role: 'owner' }], error: null },
-      ],
-      500,
-    ],
-    [
-      [
-        { data: { role: 'owner' }, error: null },
-        { data: { type: 'group' }, error: null },
-        { data: null, error: null, count: null },
-        { data: [{ user_id: actorId, role: 'owner' }], error: null },
-      ],
-      500,
-    ],
-    [
-      [
-        { data: { role: 'owner' }, error: null },
-        { data: { type: 'group' }, error: null },
-        { data: null, error: null, count: 50 },
-        { data: fullRoster(50), error: null },
-      ],
-      400,
-    ],
-  ])(
-    'does not write when the exact capacity proof is unavailable or full %#',
-    async (results, status) => {
-      const queries = queuedClient(results)
+    ['CHANNEL_NOT_FOUND', 404],
+    ['CHANNEL_NOT_GROUP', 400],
+    ['PERMISSION_DENIED', 403],
+    ['CAPACITY_EXCEEDED', 400],
+    ['CANDIDATE_UNAVAILABLE', 400],
+    ['PRIVACY_DENIED', 400],
+  ])('maps the exact atomic denial %s without a fallback write', async (reason, status) => {
+    mockRpc.mockResolvedValue({ data: { success: false, reason }, error: null })
 
-      const response = await POST(request({ userIds: [newMemberId] }) as never, context())
+    const response = await POST(request({ userIds: [newMemberId] }) as never, context())
 
-      expect(response.status).toBe(status)
-      expect(queries.every(({ inserts }) => inserts.length === 0)).toBe(true)
-    }
-  )
+    expect(response.status).toBe(status)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
 
-  it('does not rewrite an already-present member', async () => {
-    const queries = queuedClient([
-      { data: { role: 'owner' }, error: null },
-      { data: { type: 'group' }, error: null },
-      { data: null, error: null, count: 2 },
-      {
-        data: [
-          { user_id: actorId, role: 'owner' },
-          { user_id: existingAdminId, role: 'admin' },
-        ],
-        error: null,
-      },
-    ])
+  it.each([
+    null,
+    [],
+    { success: true, channel_id: channelId, added: 1, extra: true },
+    { success: true, channel_id: 'not-a-uuid', added: 1 },
+    { success: true, channel_id: channelId, added: -1 },
+    { success: true, channel_id: channelId, added: 1.5 },
+    { success: false, reason: 'UNKNOWN' },
+    { success: false, reason: 'PRIVACY_DENIED', extra: true },
+  ])('fails closed on a malformed atomic acknowledgement %#', async (data) => {
+    mockRpc.mockResolvedValue({ data, error: null })
+
+    const response = await POST(request({ userIds: [newMemberId] }) as never, context())
+
+    expect(response.status).toBe(500)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { success: true, channel_id: existingAdminId, added: 1 },
+    { success: true, channel_id: channelId, added: 2 },
+  ])('rejects a valid-shaped acknowledgement that does not match the request %#', async (data) => {
+    mockRpc.mockResolvedValue({ data, error: null })
+
+    const response = await POST(request({ userIds: [newMemberId] }) as never, context())
+
+    expect(response.status).toBe(500)
+  })
+
+  it('accepts an exact idempotent acknowledgement without a client-side rewrite', async () => {
+    mockRpc.mockResolvedValue({
+      data: { success: true, channel_id: channelId, added: 0 },
+      error: null,
+    })
 
     const response = await POST(request({ userIds: [existingAdminId] }) as never, context())
 
     expect(response.status).toBe(200)
     await expect(response.json()).resolves.toEqual({ ok: true, added: 0 })
-    expect(queries.every(({ inserts, updates }) => inserts.length + updates.length === 0)).toBe(
-      true
-    )
-    expect(mockFilterChannelAddableUsers).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('prevents the owner from demoting themselves', async () => {

@@ -9,7 +9,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
-import { filterChannelAddableUsers } from '@/lib/data/channel-permissions'
 import {
   addChannelMembersInputSchema,
   channelIdSchema,
@@ -18,6 +17,56 @@ import {
 } from '../../contracts'
 
 const logger = createLogger('api:channels:channelId:members')
+
+const addMemberFailureReasons = new Set([
+  'CHANNEL_NOT_FOUND',
+  'CHANNEL_NOT_GROUP',
+  'PERMISSION_DENIED',
+  'CAPACITY_EXCEEDED',
+  'CANDIDATE_UNAVAILABLE',
+  'PRIVACY_DENIED',
+])
+
+type AddMembersAcknowledgement =
+  | { success: true; channelId: string; added: number }
+  | { success: false; reason: string }
+
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const actual = Object.keys(value).sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function readAddMembersAcknowledgement(value: unknown): AddMembersAcknowledgement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const result = value as Record<string, unknown>
+  if (result.success === true) {
+    if (!hasExactKeys(result, ['added', 'channel_id', 'success'])) return null
+    if (
+      typeof result.channel_id !== 'string' ||
+      !channelIdSchema.safeParse(result.channel_id).success ||
+      !Number.isSafeInteger(result.added) ||
+      (result.added as number) < 0
+    ) {
+      return null
+    }
+    return {
+      success: true,
+      channelId: result.channel_id.toLowerCase(),
+      added: result.added as number,
+    }
+  }
+
+  if (result.success === false) {
+    if (!hasExactKeys(result, ['reason', 'success'])) return null
+    if (typeof result.reason !== 'string' || !addMemberFailureReasons.has(result.reason)) {
+      return null
+    }
+    return { success: false, reason: result.reason }
+  }
+
+  return null
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -55,116 +104,57 @@ export async function POST(
       return NextResponse.json({ error: 'No users specified' }, { status: 400 })
     }
 
-    const supabase = getSupabaseAdmin()
-
-    // Check both the actor's authority and that this is actually a group
-    // channel. Direct-message channel membership is not managed here.
-    const [membershipResult, channelResult] = await Promise.all([
-      supabase
-        .from('channel_members')
-        .select('role')
-        .eq('channel_id', channelId)
-        .eq('user_id', actorId)
-        .maybeSingle(),
-      supabase.from('chat_channels').select('type').eq('id', channelId).maybeSingle(),
-    ])
-
-    if (membershipResult.error || channelResult.error) {
-      return NextResponse.json({ error: 'Failed to verify channel permission' }, { status: 500 })
-    }
-    if (!channelResult.data) {
-      return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
-    }
-    if (channelResult.data.type !== 'group') {
-      return NextResponse.json(
-        { error: 'Channel does not support member management' },
-        { status: 400 }
-      )
-    }
-    const membership = membershipResult.data
-    if (!membership || !['owner', 'admin'].includes(membership.role)) {
-      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
-    }
-
-    // Read the complete current roster. Existing candidates must never be
-    // upserted with role='member' because that would silently demote an owner
-    // or admin, and new candidates must be checked against every co-member's
-    // block relationship before any write.
-    // KEEP 'exact' — 50 member cap enforcement. Scoped per-channel via
-    // (channel_id) index. Must be accurate to block the 51st add.
-    const [countResult, rosterResult] = await Promise.all([
-      supabase
-        .from('channel_members')
-        .select('id', { count: 'exact', head: true })
-        .eq('channel_id', channelId),
-      supabase.from('channel_members').select('user_id, role').eq('channel_id', channelId),
-    ])
-    if (
-      countResult.error ||
-      typeof countResult.count !== 'number' ||
-      rosterResult.error ||
-      !Array.isArray(rosterResult.data)
-    ) {
-      return NextResponse.json({ error: 'Failed to verify channel capacity' }, { status: 500 })
-    }
-    if (countResult.count > 50) {
-      return NextResponse.json({ error: 'Group chat capacity is invalid' }, { status: 500 })
-    }
-    if (rosterResult.data.length !== countResult.count) {
-      return NextResponse.json(
-        { error: 'Failed to verify complete channel roster' },
-        { status: 500 }
-      )
-    }
-    const rosterIds = new Set<string>()
-    let actorRosterRole: string | null = null
-    for (const existingMember of rosterResult.data) {
-      const parsedMemberId = channelIdSchema.safeParse(existingMember.user_id)
-      if (!parsedMemberId.success || rosterIds.has(parsedMemberId.data)) {
-        return NextResponse.json({ error: 'Failed to verify channel capacity' }, { status: 500 })
-      }
-      rosterIds.add(parsedMemberId.data)
-      if (parsedMemberId.data === actorId) actorRosterRole = existingMember.role
-    }
-    if (actorRosterRole !== membership.role) {
-      return NextResponse.json(
-        { error: 'Channel authority changed during request' },
-        { status: 409 }
-      )
-    }
-    const newMemberIds = candidateIds.filter((candidateId) => !rosterIds.has(candidateId))
-
-    if (countResult.count + newMemberIds.length > 50) {
-      return NextResponse.json({ error: 'Group chat max 50 members' }, { status: 400 })
-    }
-    if (newMemberIds.length === 0) {
-      return NextResponse.json({ ok: true, added: 0 })
-    }
-
-    const { allowed: addableIds } = await filterChannelAddableUsers(
-      supabase,
-      actorId,
-      newMemberIds,
-      [...rosterIds]
+    const { data, error } = await getSupabaseAdmin().rpc(
+      'add_channel_members_atomic' as never,
+      {
+        p_channel_id: channelId,
+        p_actor_id: actorId,
+        p_candidate_ids: candidateIds,
+      } as never
     )
-    if (addableIds.length !== newMemberIds.length) {
-      return NextResponse.json(
-        { error: 'One or more selected users cannot be added' },
-        { status: 400 }
-      )
+
+    if (error) {
+      logger.error('Atomic channel member addition failed', { error: error.message })
+      return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
     }
 
-    const newMembers = addableIds.map((id) => ({
-      channel_id: channelId,
-      user_id: id,
-      role: 'member',
-    }))
+    const acknowledgement = readAddMembersAcknowledgement(data)
+    if (!acknowledgement) {
+      logger.error('Atomic channel member addition returned an invalid acknowledgement')
+      return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
+    }
 
-    const { error } = await supabase.from('channel_members').insert(newMembers)
+    if (!acknowledgement.success) {
+      switch (acknowledgement.reason) {
+        case 'CHANNEL_NOT_FOUND':
+          return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
+        case 'CHANNEL_NOT_GROUP':
+          return NextResponse.json(
+            { error: 'Channel does not support member management' },
+            { status: 400 }
+          )
+        case 'PERMISSION_DENIED':
+          return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+        case 'CAPACITY_EXCEEDED':
+          return NextResponse.json({ error: 'Group chat max 50 members' }, { status: 400 })
+        case 'CANDIDATE_UNAVAILABLE':
+        case 'PRIVACY_DENIED':
+          return NextResponse.json(
+            { error: 'One or more selected users cannot be added' },
+            { status: 400 }
+          )
+        default:
+          logger.error('Atomic channel member addition returned an unknown denial')
+          return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
+      }
+    }
 
-    if (error) return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
+    if (acknowledgement.channelId !== channelId || acknowledgement.added > candidateIds.length) {
+      logger.error('Atomic channel member addition acknowledgement did not match its request')
+      return NextResponse.json({ error: 'Failed to add members' }, { status: 500 })
+    }
 
-    return NextResponse.json({ ok: true, added: addableIds.length })
+    return NextResponse.json({ ok: true, added: acknowledgement.added })
   } catch (error) {
     logger.error('ADD_MEMBERS failed', {
       error: error instanceof Error ? error.message : String(error),
