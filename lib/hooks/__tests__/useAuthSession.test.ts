@@ -3,21 +3,28 @@
  * Tests categorizeError utility (pure function, no complex mocks needed)
  */
 
+const mockGetSession = jest.fn().mockResolvedValue({ data: { session: null } })
+const mockRefreshSession = jest.fn().mockResolvedValue({ data: { session: null }, error: null })
+const mockSignOut = jest.fn().mockResolvedValue({})
+let mockAuthStateCallback: ((event: string, session: unknown) => void) | undefined
+const mockOnAuthStateChange = jest.fn((callback: (event: string, session: unknown) => void) => {
+  mockAuthStateCallback = callback
+  return { data: { subscription: { unsubscribe: jest.fn() } } }
+})
+
 // Mock supabase before imports
 jest.mock('@/lib/supabase/client', () => ({
   supabase: {
     auth: {
-      getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
-      onAuthStateChange: jest
-        .fn()
-        .mockReturnValue({ data: { subscription: { unsubscribe: jest.fn() } } }),
-      refreshSession: jest.fn().mockResolvedValue({ data: { session: null }, error: null }),
-      signOut: jest.fn().mockResolvedValue({}),
+      getSession: mockGetSession,
+      onAuthStateChange: mockOnAuthStateChange,
+      refreshSession: mockRefreshSession,
+      signOut: mockSignOut,
     },
   },
 }))
 
-import { renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { useAuthSession } from '../useAuthSession'
 
 describe('useAuthSession', () => {
@@ -74,5 +81,26 @@ describe('useAuthSession', () => {
       const headers = result.current.requireAuth({ redirectToLogin: false })
       expect(headers).toBeNull()
     })
+  })
+
+  it('commits anonymous state even when the Supabase signOut call throws', async () => {
+    const { result } = renderHook(() => useAuthSession())
+    await waitFor(() => expect(mockAuthStateCallback).toBeDefined())
+    act(() => {
+      mockAuthStateCallback?.('SIGNED_IN', {
+        user: { id: 'user-a', email: 'a@example.test' },
+        access_token: 'token-a',
+        refresh_token: 'refresh-a',
+      })
+    })
+    await waitFor(() => expect(result.current.userId).toBe('user-a'))
+    mockSignOut.mockRejectedValueOnce(new Error('network failure'))
+
+    await act(async () => result.current.signOut())
+
+    expect(result.current.authChecked).toBe(true)
+    expect(result.current.isLoggedIn).toBe(false)
+    expect(result.current.userId).toBeNull()
+    expect(result.current.viewerKey).toBe('anon')
   })
 })

@@ -82,6 +82,33 @@ describe('TokenRefreshCoordinator viewer binding', () => {
     expect(getViewerScope()).toEqual(scope)
   })
 
+  it('bounds logout waiting when a refresh never settles', async () => {
+    jest.useFakeTimers()
+    try {
+      const scope = synchronizeViewerScope(true, 'user-a')
+      const stuckRefresh = deferred<{
+        data: { session: null }
+        error: { message: string }
+      }>()
+      mockRefreshSession.mockReturnValueOnce(stuckRefresh.promise)
+      void tokenRefreshCoordinator.forceRefresh({
+        expectedUserId: 'user-a',
+        sessionGeneration: scope.sessionGeneration,
+      })
+      while (mockRefreshSession.mock.calls.length < 1) await Promise.resolve()
+
+      const settlement = tokenRefreshCoordinator.settleInflightRefreshes(3_000)
+      await jest.advanceTimersByTimeAsync(3_000)
+
+      await expect(settlement).resolves.toBe(false)
+      stuckRefresh.resolve({ data: { session: null }, error: { message: 'cancelled' } })
+      await tokenRefreshCoordinator.settleInflightRefreshes()
+    } finally {
+      jest.useRealTimers()
+      __resetViewerScopeForTests()
+    }
+  })
+
   it('discards an A refresh that finishes after an A to B transition begins', async () => {
     const scope = synchronizeViewerScope(true, 'user-a')
     const refresh = deferred<{
