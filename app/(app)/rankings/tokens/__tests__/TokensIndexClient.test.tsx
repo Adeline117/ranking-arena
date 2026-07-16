@@ -36,5 +36,7 @@ describe('TokensIndexClient hydration readiness', () => {
     for (const button of screen.getAllByRole('button')) {
       expect(button).toBeEnabled()
     }
+
+    expect(screen.getByRole('link', { name: /BTC/ })).toHaveAttribute('data-trader-count', '3')
   })
 })

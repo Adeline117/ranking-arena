@@ -269,6 +269,10 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
                 href={`/rankings/tokens/${tk.token}`}
                 className="tk-card-link"
                 aria-label={ariaLabel}
+                data-token={tk.token}
+                data-trader-count={tk.trader_count}
+                data-trade-count={tk.trade_count}
+                data-total-pnl={tk.total_pnl}
               >
                 <Box
                   className="tk-card"

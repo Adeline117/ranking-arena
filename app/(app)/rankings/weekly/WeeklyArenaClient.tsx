@@ -559,6 +559,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                     >
                       <Link
                         href={`/trader/${encodeURIComponent(row.exchangeTraderId)}`}
+                        data-trader-name={row.nickname ?? row.exchangeTraderId}
                         style={{
                           display: 'inline-flex',
                           alignItems: 'center',
