@@ -7,6 +7,14 @@ const migration = readFileSync(
 )
 
 describe('atomic group membership migration contract', () => {
+  it('preflights every join-request column read by its state trigger', () => {
+    expect(migration).toContain("('group_join_requests', 'created_at')")
+    expect(migration).toContain(
+      "('group_join_requests', 'created_at', 'timestamptz'::pg_catalog.regtype)"
+    )
+    expect(migration).toContain('NEW.created_at')
+  })
+
   it('fails closed on deploy-time invite and approval ambiguity without deleting evidence', () => {
     expect(migration).toContain('DO $locked_data_preflight$')
     expect(migration).toContain('duplicate group invite token hashes require explicit review')
