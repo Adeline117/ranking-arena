@@ -22,14 +22,10 @@ docs/
 *.md
 !README.md
 
-# 脚本（只上传 build lifecycle 直接依赖的文件）
-# ⚠️ 目录级排除无法被子文件 ! 负向穿透（gitignore 语义，2026-07-02 实测：
-# !scripts/xxx.sh 无效仍 ENOENT）——ignoreCommand 因此内联在 vercel.json，
-# 不要再让它依赖 scripts/ 下的文件
-scripts/*
-!scripts/qa/
-scripts/qa/*
-!scripts/qa/check-bigint-build-output.mjs
+# 脚本（独立运维工具不上传；build lifecycle checker 必须留在仓库根）
+# Vercel CLI 56.2.1 的实际 `deploy --dry` 清单不遵循嵌套负向规则，
+# 因此禁止再从这个被排除目录引用 package lifecycle 文件。
+scripts/
 
 # 构建工具
 .storybook/

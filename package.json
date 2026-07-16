@@ -87,7 +87,7 @@
     "qa:sweep-unit": "node --test scripts/qa/*.test.mjs",
     "qa:coverage": "tsx --env-file=.env.local scripts/ingest-field-coverage-ledger.mts",
     "qa:coverage-canary": "tsx --env-file=.env.local scripts/openclaw/field-coverage-canary.mts",
-    "qa:build-bigint": "node scripts/qa/check-bigint-build-output.mjs"
+    "qa:build-bigint": "node check-bigint-build-output.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1049.0",
