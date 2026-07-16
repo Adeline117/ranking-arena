@@ -267,7 +267,11 @@ describe('LoginPageClient exact identity boundary', () => {
     expect(mockPush).not.toHaveBeenCalled()
     expect(mockReplace).not.toHaveBeenCalled()
     expect(mockStoreSetState).not.toHaveBeenCalled()
-    expect(mockSignOutIfCurrent).toHaveBeenCalledWith('user-a', 'access-user-a')
+    expect(mockSignOutIfCurrent).toHaveBeenCalledWith(
+      'user-a',
+      'access-user-a',
+      'refresh-access-user-a'
+    )
   })
 
   it('does not let a delayed OTP-send response mutate the form after B wins', async () => {
@@ -303,7 +307,7 @@ describe('LoginPageClient exact identity boundary', () => {
 
     expect(mockPush).not.toHaveBeenCalled()
     expect(mockStoreSetState).not.toHaveBeenCalled()
-    expect(mockSignOutIfCurrent).toHaveBeenCalledWith('user-a', 'access-a1')
+    expect(mockSignOutIfCurrent).toHaveBeenCalledWith('user-a', 'access-a1', 'refresh-access-a1')
   })
 
   it('drops a login completion after logout and after unmount', async () => {
@@ -329,7 +333,11 @@ describe('LoginPageClient exact identity boundary', () => {
 
     expect(mockPush).not.toHaveBeenCalled()
     expect(mockStoreSetState).not.toHaveBeenCalled()
-    expect(mockSignOutIfCurrent).toHaveBeenCalledWith('user-c', 'access-user-c')
+    expect(mockSignOutIfCurrent).toHaveBeenCalledWith(
+      'user-c',
+      'access-user-c',
+      'refresh-access-user-c'
+    )
   })
 
   it('fails closed and rolls back the exact session when its profile is missing', async () => {
@@ -342,7 +350,11 @@ describe('LoginPageClient exact identity boundary', () => {
     await startPasswordLogin(session('user-a'))
 
     await waitFor(() =>
-      expect(mockSignOutIfCurrent).toHaveBeenCalledWith('user-a', 'access-user-a')
+      expect(mockSignOutIfCurrent).toHaveBeenCalledWith(
+        'user-a',
+        'access-user-a',
+        'refresh-access-user-a'
+      )
     )
     expect(mockPush).not.toHaveBeenCalled()
     expect(mockStoreSetState).not.toHaveBeenCalled()
@@ -368,7 +380,30 @@ describe('LoginPageClient exact identity boundary', () => {
 
     expect(mockPush).toHaveBeenCalledTimes(1)
     expect(mockPush).toHaveBeenCalledWith('/')
-    expect(mockSignOutIfCurrent).toHaveBeenCalledWith('user-a', 'access-user-a')
+    expect(mockSignOutIfCurrent).toHaveBeenCalledWith(
+      'user-a',
+      'access-user-a',
+      'refresh-access-user-a'
+    )
+  })
+
+  it('coalesces duplicate events for the same exact external session', async () => {
+    const profileRead = deferred<{ data: ReturnType<typeof profile>; error: null }>()
+    mockProfileMaybeSingle.mockReturnValueOnce(profileRead.promise)
+    await renderLogin()
+    const sessionA = session('user-a')
+    makeCurrent(sessionA)
+
+    act(() => mockAuthStateCallback?.('SIGNED_IN', sessionA))
+    await waitFor(() => expect(mockGetUser).toHaveBeenCalledWith('access-user-a'))
+    act(() => mockAuthStateCallback?.('SIGNED_IN', sessionA))
+    await act(async () => profileRead.resolve({ data: profile('user-a'), error: null }))
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith('/'))
+    expect(mockGetUser).toHaveBeenCalledTimes(1)
+    expect(mockProfileMaybeSingle).toHaveBeenCalledTimes(1)
+    expect(mockPush).toHaveBeenCalledTimes(1)
+    expect(mockSignOutIfCurrent).not.toHaveBeenCalled()
   })
 
   it('atomically stores only the verified add-account identity before clearing its flag', async () => {

@@ -140,7 +140,8 @@ function AuthCallbackContent() {
           logger.error('Auth callback error:', error)
           const rolledBack = await tokenRefreshCoordinator.signOutIfCurrent(
             session.user.id,
-            session.access_token
+            session.access_token,
+            session.refresh_token
           )
           if (!cancelled && rolledBack) {
             const viewer = getViewerScope()
@@ -183,7 +184,8 @@ function AuthCallbackContent() {
         if (cancelled) return
         const rolledBack = await tokenRefreshCoordinator.signOutIfCurrent(
           snapshot.user.id,
-          snapshot.session.access_token
+          snapshot.session.access_token,
+          snapshot.session.refresh_token
         )
         if (cancelled || !rolledBack) return
 

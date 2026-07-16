@@ -53,11 +53,11 @@ function fetchResponse(status: number): Response {
   return { status } as Response
 }
 
-function session(userId: string, accessToken: string) {
+function session(userId: string, accessToken: string, refreshToken = `refresh-${userId}`) {
   return {
     user: { id: userId, email: `${userId}@example.test` },
     access_token: accessToken,
-    refresh_token: `refresh-${userId}`,
+    refresh_token: refreshToken,
   }
 }
 
@@ -67,10 +67,17 @@ function jwt(userId: string): string {
   return `${encode({ alg: 'none' })}.${encode({ sub: userId })}.signature`
 }
 
-async function seedStoredSession(userId: string, accessToken: string): Promise<void> {
+async function seedStoredSession(
+  userId: string,
+  accessToken: string,
+  refreshToken?: string
+): Promise<void> {
   const operation = beginAuthIdentityOperation(userId)
   await withAuthSessionWriter(operation, async () => {
-    guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session(userId, accessToken)))
+    guardedAuthStorage.setItem(
+      AUTH_STORAGE_KEY,
+      JSON.stringify(session(userId, accessToken, refreshToken))
+    )
   })
 }
 
@@ -302,6 +309,18 @@ describe('TokenRefreshCoordinator viewer binding', () => {
 
     await expect(
       tokenRefreshCoordinator.signOutIfCurrent('user-a', `${newerToken}-superseded`)
+    ).resolves.toBe(false)
+    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).not.toBeNull()
+    expect(mockSignOut).not.toHaveBeenCalled()
+  })
+
+  it('does not roll back a rotated refresh token behind the same access token', async () => {
+    const accessToken = jwt('user-a')
+    await seedStoredSession('user-a', accessToken, 'refresh-a2')
+    synchronizeViewerScope(true, 'user-a')
+
+    await expect(
+      tokenRefreshCoordinator.signOutIfCurrent('user-a', accessToken, 'refresh-a1')
     ).resolves.toBe(false)
     expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).not.toBeNull()
     expect(mockSignOut).not.toHaveBeenCalled()

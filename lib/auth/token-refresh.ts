@@ -726,12 +726,18 @@ class TokenRefreshCoordinator {
    * exact principal produced by that attempt. This prevents a late failure for
    * A from signing out B after a rapid account switch.
    */
-  async signOutIfCurrent(expectedUserId: string, expectedAccessToken?: string): Promise<boolean> {
+  async signOutIfCurrent(
+    expectedUserId: string,
+    expectedAccessToken?: string,
+    expectedRefreshToken?: string
+  ): Promise<boolean> {
     if (!expectedUserId) return false
 
     const storedSession = getStoredAuthSession()
     const accessToken =
       typeof storedSession?.access_token === 'string' ? storedSession.access_token : null
+    const refreshToken =
+      typeof storedSession?.refresh_token === 'string' ? storedSession.refresh_token : null
     const viewer = getViewerScope()
     const viewerOwnsExpectedPrincipal =
       isViewerScopeCurrent(viewer) &&
@@ -744,6 +750,7 @@ class TokenRefreshCoordinator {
       !accessToken ||
       jwtSubject(accessToken) !== expectedUserId ||
       (expectedAccessToken !== undefined && accessToken !== expectedAccessToken) ||
+      (expectedRefreshToken !== undefined && refreshToken !== expectedRefreshToken) ||
       !viewerOwnsExpectedPrincipal
     ) {
       return false
