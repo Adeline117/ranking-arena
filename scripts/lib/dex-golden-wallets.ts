@@ -6,6 +6,7 @@ import { canonicalSha256 } from './dex-census'
 
 export const DEX_GOLDEN_WALLET_SCHEMA_VERSION = 1 as const
 export const DEX_GOLDEN_WALLET_CONTRACT = 'arena.dex.golden-wallets@1' as const
+export const DEX_GOLDEN_WALLET_SUBSET_CONTRACT = 'arena.dex.golden-wallet-chain-subset@1' as const
 export const DEX_GOLDEN_SNAPSHOT_MAX_AGE_HOURS = 24 as const
 
 export type DexGoldenSource = 'binance_web3_bsc' | 'okx_web3_solana'
@@ -72,6 +73,15 @@ export interface DexGoldenWalletSnapshot {
     eligible_candidates_with_non_null_pnl: number
     candidates_with_positive_activity_proxy: number
   }>
+  wallets: DexGoldenWallet[]
+}
+
+export interface DexGoldenWalletChainSubset {
+  data_contract: typeof DEX_GOLDEN_WALLET_SUBSET_CONTRACT
+  parent_snapshot_sha256: string
+  source_slug: DexGoldenSource
+  chain: DexGoldenWallet['chain']
+  wallet_count: 50
   wallets: DexGoldenWallet[]
 }
 
@@ -520,4 +530,23 @@ export function parseDexGoldenWalletSnapshot(input: unknown): DexGoldenWalletSna
 
 export function dexGoldenWalletSnapshotSha256(input: unknown): string {
   return canonicalSha256(parseDexGoldenWalletSnapshot(input))
+}
+
+export function buildDexGoldenWalletChainSubset(
+  input: unknown,
+  source: DexGoldenSource
+): { subset: DexGoldenWalletChainSubset; sha256: string } {
+  const snapshot = parseDexGoldenWalletSnapshot(input)
+  const wallets = snapshot.wallets.filter((wallet) => wallet.source_slug === source)
+  if (wallets.length !== 50) throw new Error(`${source} chain subset requires exactly 50 wallets`)
+
+  const subset: DexGoldenWalletChainSubset = {
+    data_contract: DEX_GOLDEN_WALLET_SUBSET_CONTRACT,
+    parent_snapshot_sha256: canonicalSha256(snapshot),
+    source_slug: source,
+    chain: wallets[0].chain,
+    wallet_count: 50,
+    wallets,
+  }
+  return { subset, sha256: canonicalSha256(subset) }
 }

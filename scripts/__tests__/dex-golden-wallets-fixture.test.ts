@@ -1,5 +1,6 @@
 import fixtureJson from '../fixtures/dex-golden-wallets.v1.json'
 import {
+  buildDexGoldenWalletChainSubset,
   dexGoldenWalletSnapshotSha256,
   parseDexGoldenWalletSnapshot,
 } from '../lib/dex-golden-wallets'
@@ -76,6 +77,23 @@ describe('DEX golden-wallet production fixture', () => {
     ]
     expect(Object.keys(fixture.wallets[0]).sort()).toEqual(allowedWalletFields)
     expect(dexGoldenWalletSnapshotSha256(fixtureJson)).toBe(EXPECTED_FIXTURE_SHA256)
+  })
+
+  it('derives exact chain subsets that remain bound to the parent artifact', () => {
+    const expectedSubsetHashes = {
+      binance_web3_bsc: 'dcce3efd3ffd1afa47b832acd623e1455ad2150560f19d11941659aa152cc04d',
+      okx_web3_solana: 'a5e81512feb7ac47dd063f023eeb9ac2f085d6abf259ed03fd092074816933ab',
+    } as const
+    for (const source of Object.keys(expectedSubsetHashes) as Array<
+      keyof typeof expectedSubsetHashes
+    >) {
+      const { subset, sha256 } = buildDexGoldenWalletChainSubset(fixtureJson, source)
+      expect(subset.parent_snapshot_sha256).toBe(EXPECTED_FIXTURE_SHA256)
+      expect(subset.source_slug).toBe(source)
+      expect(subset.wallet_count).toBe(50)
+      expect(subset.wallets).toHaveLength(50)
+      expect(sha256).toBe(expectedSubsetHashes[source])
+    }
   })
 
   it('fails closed on authorization, unknown fields, or duplicate wallets', () => {
