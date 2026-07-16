@@ -33,6 +33,10 @@ import type { FetchSession } from '../fetch/types'
 /** Lets expensive adapters defer deep enrichment off interactive/series paths. */
 export type ProfileFetchIntent = 'scheduled_full' | 'series_only' | 'interactive_deferred'
 
+export interface ProfileFetchOptions {
+  intent: ProfileFetchIntent
+}
+
 export interface SourceAdapter {
   /** Matches arena.sources.adapter_slug. */
   readonly slug: string
@@ -60,8 +64,8 @@ export interface SourceAdapter {
     src: SourceRow,
     exchangeTraderId: string,
     timeframe: Timeframe,
-    traderMeta?: Record<string, unknown> | null,
-    intent?: ProfileFetchIntent
+    traderMeta: Record<string, unknown> | null | undefined,
+    options: ProfileFetchOptions
   ): Promise<RawBundle>
 
   /** Tier D: current open positions (snapshot semantics). */

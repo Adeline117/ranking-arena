@@ -67,7 +67,7 @@ async function main() {
           trader.exchange_trader_id,
           tf,
           trader.meta,
-          'scheduled_full'
+          { intent: 'scheduled_full' }
         )
         await writeRawObject({
           sourceId: src.id,
