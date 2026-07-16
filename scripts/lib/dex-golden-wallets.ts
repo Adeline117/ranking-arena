@@ -13,6 +13,7 @@ export interface DexGoldenWalletCandidate {
   wallet: string
   snapshotId: string
   snapshotScrapedAt: string
+  snapshotActualCount: number
   sourceRank: number | null
   arenaScore: number | null
   pnl90d: number
@@ -37,13 +38,18 @@ export interface DexGoldenWallet {
 export interface DexGoldenWalletSnapshot {
   schema_version: 1
   data_contract: typeof DEX_GOLDEN_WALLET_CONTRACT
+  purpose: 'phase0_shadow_sampling_only'
   generated_at: string
   generator_git_sha: string
   sample_seed: string
-  lookback_days: 7
+  candidate_timeframe_days: 90
+  planned_hit_window_days: 7
   serving_authorized: false
   rank_eligible: false
+  score_eligible: false
   selection: {
+    snapshot_gate: 'latest_count_check_passed_snapshot'
+    candidate_eligibility: 'snapshot_membership_and_non_null_headline_pnl'
     top_per_source: 20
     deterministic_random_per_source: 20
     high_frequency_per_source: 10
@@ -56,8 +62,9 @@ export interface DexGoldenWalletSnapshot {
     source_slug: DexGoldenSource
     snapshot_id: string
     snapshot_scraped_at: string
-    eligible_candidates: number
-    candidates_with_activity_proxy: number
+    snapshot_actual_count: number
+    eligible_candidates_with_non_null_pnl: number
+    candidates_with_positive_activity_proxy: number
     max_metric_as_of: string
   }>
   wallets: DexGoldenWallet[]
@@ -149,12 +156,21 @@ function validateAndCanonicalize(
       throw new Error(`snapshotId must be a positive decimal string: ${identity}`)
     }
     assertCanonicalTimestamp(candidate.snapshotScrapedAt, `snapshotScrapedAt for ${identity}`)
+    if (
+      !Number.isSafeInteger(candidate.snapshotActualCount) ||
+      candidate.snapshotActualCount <= 0
+    ) {
+      throw new Error(`snapshotActualCount must be a positive safe integer: ${identity}`)
+    }
     assertFiniteNullable(candidate.arenaScore, `arenaScore for ${identity}`)
     if (!Number.isFinite(candidate.pnl90d)) throw new Error(`pnl90d must be finite: ${identity}`)
     if (!Number.isSafeInteger(candidate.activityProxyCount) || candidate.activityProxyCount < 0) {
       throw new Error(`activityProxyCount must be a non-negative safe integer: ${identity}`)
     }
     assertCanonicalTimestamp(candidate.metricAsOf, `metricAsOf for ${identity}`)
+    if (candidate.metricAsOf !== candidate.snapshotScrapedAt) {
+      throw new Error(`metrics must come from the same source snapshot: ${identity}`)
+    }
     return { ...candidate, wallet }
   })
 }
@@ -205,6 +221,16 @@ export function buildDexGoldenWalletSnapshot(input: {
     if (snapshotIds.size !== 1 || snapshotTimes.size !== 1) {
       throw new Error(`${source} candidates must come from one passed source snapshot`)
     }
+    const snapshotActualCounts = new Set(
+      sourceCandidates.map((candidate) => candidate.snapshotActualCount)
+    )
+    if (snapshotActualCounts.size !== 1) {
+      throw new Error(`${source} candidates must share one source snapshot actual count`)
+    }
+    const snapshotActualCount = sourceCandidates[0].snapshotActualCount
+    if (sourceCandidates.length > snapshotActualCount) {
+      throw new Error(`${source} eligible candidates exceed source snapshot actual count`)
+    }
     const selected = new Set<string>()
 
     const top = [...sourceCandidates].sort(byRank).slice(0, 20)
@@ -245,8 +271,9 @@ export function buildDexGoldenWalletSnapshot(input: {
       source_slug: source,
       snapshot_id: sourceCandidates[0].snapshotId,
       snapshot_scraped_at: sourceCandidates[0].snapshotScrapedAt,
-      eligible_candidates: sourceCandidates.length,
-      candidates_with_activity_proxy: sourceCandidates.filter(
+      snapshot_actual_count: snapshotActualCount,
+      eligible_candidates_with_non_null_pnl: sourceCandidates.length,
+      candidates_with_positive_activity_proxy: sourceCandidates.filter(
         (candidate) => candidate.activityProxyCount > 0
       ).length,
       max_metric_as_of: sourceCandidates
@@ -269,13 +296,18 @@ export function buildDexGoldenWalletSnapshot(input: {
   const snapshot: DexGoldenWalletSnapshot = {
     schema_version: DEX_GOLDEN_WALLET_SCHEMA_VERSION,
     data_contract: DEX_GOLDEN_WALLET_CONTRACT,
+    purpose: 'phase0_shadow_sampling_only',
     generated_at: input.generatedAt,
     generator_git_sha: input.generatorGitSha,
     sample_seed: input.sampleSeed,
-    lookback_days: 7,
+    candidate_timeframe_days: 90,
+    planned_hit_window_days: 7,
     serving_authorized: false,
     rank_eligible: false,
+    score_eligible: false,
     selection: {
+      snapshot_gate: 'latest_count_check_passed_snapshot',
+      candidate_eligibility: 'snapshot_membership_and_non_null_headline_pnl',
       top_per_source: 20,
       deterministic_random_per_source: 20,
       high_frequency_per_source: 10,
