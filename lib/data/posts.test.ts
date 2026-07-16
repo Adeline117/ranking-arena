@@ -37,6 +37,7 @@ const createMockSupabase = () => ({
   delete: jest.fn().mockReturnThis(),
   eq: jest.fn().mockReturnThis(),
   neq: jest.fn().mockReturnThis(),
+  is: jest.fn().mockReturnThis(),
   in: jest.fn().mockReturnThis(),
   or: jest.fn().mockReturnThis(),
   order: jest.fn().mockReturnThis(),
@@ -79,6 +80,7 @@ describe('getPosts', () => {
     const result = await getPosts(mockSupabase as unknown as SupabaseClient)
     expect(result).toHaveLength(1)
     expect(result[0].author_handle).toBe('testUser')
+    expect(mockSupabase.is).toHaveBeenCalledWith('deleted_at', null)
   })
 
   test('should return empty array when no posts found', async () => {
