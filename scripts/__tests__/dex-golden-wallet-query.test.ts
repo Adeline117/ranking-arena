@@ -107,7 +107,7 @@ describe('DEX golden-wallet production row contract', () => {
       snapshotActualCount: 2,
       sourceRank: 1,
       arenaScore: null,
-      pnl90d: 100.25,
+      pnl90d: '100.25',
       pnlCurrency: 'USDT',
       activityProxyCount: 7,
     })

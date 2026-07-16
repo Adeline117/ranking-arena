@@ -70,10 +70,11 @@ function expectedSourceChainId(source: DexGoldenSource): '56' | '501' {
   return source === 'binance_web3_bsc' ? '56' : '501'
 }
 
-function finitePnl(value: string, label: string): number {
-  const parsed = Number(value)
-  if (!Number.isFinite(parsed)) throw new Error(`${label} must be finite`)
-  return parsed
+function canonicalPnl(value: string, label: string): string {
+  if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value))) {
+    throw new Error(`${label} must be a finite canonical decimal string`)
+  }
+  return value
 }
 
 export function buildDexGoldenWalletCandidates(
@@ -172,7 +173,7 @@ export function buildDexGoldenWalletCandidates(
           snapshotActualCount: row.snapshot_actual_count,
           sourceRank,
           arenaScore: null,
-          pnl90d: finitePnl(row.pnl_90d_raw, `${source} 90D headline PnL`),
+          pnl90d: canonicalPnl(row.pnl_90d_raw, `${source} 90D headline PnL`),
           pnlCurrency,
           activityProxyCount,
         })
