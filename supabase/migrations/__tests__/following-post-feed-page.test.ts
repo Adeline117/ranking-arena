@@ -13,6 +13,7 @@ const functionBody = migration.match(
 describe('following post feed page migration', () => {
   it('retires every legacy overload and exposes the replacement only to service_role', () => {
     expect(migration).toMatch(/function_row\.proname = 'get_following_feed'/)
+    expect(migration).toMatch(/function_row\.prokind = 'f'/)
     expect(migration).toMatch(
       /REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role/
     )

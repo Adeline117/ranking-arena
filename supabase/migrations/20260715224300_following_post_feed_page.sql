@@ -20,6 +20,9 @@ BEGIN
       ON function_schema.oid = function_row.pronamespace
     WHERE function_schema.nspname = 'public'
       AND function_row.proname = 'get_following_feed'
+      -- pg_proc also stores procedures. REVOKE ... ON FUNCTION against a
+      -- same-named procedure aborts the whole migration on PostgreSQL 17.
+      AND function_row.prokind = 'f'
   LOOP
     EXECUTE pg_catalog.format(
       'REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role',
