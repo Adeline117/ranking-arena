@@ -41,9 +41,15 @@ function response(payload: unknown, ok = true) {
   } as unknown as Response
 }
 
+function jwt(userId: string): string {
+  const encode = (value: unknown) =>
+    btoa(JSON.stringify(value)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `${encode({ alg: 'none' })}.${encode({ sub: userId })}.signature`
+}
+
 function authFor(userId: string, sessionGeneration: number) {
   return {
-    accessToken: `token-${userId}`,
+    accessToken: jwt(userId),
     authChecked: true,
     isLoggedIn: true,
     loading: false,
@@ -79,8 +85,19 @@ describe('useWallet viewer scope', () => {
     expect(result.current.linkedAddress).toBe('0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
     expect(result.current.hasNFT).toBe(true)
     expect(mockFetch).toHaveBeenCalledWith('/api/membership/nft', {
-      headers: { Authorization: 'Bearer token-user-a' },
+      headers: { Authorization: `Bearer ${jwt('user-a')}` },
     })
+  })
+
+  it('fails closed when the canonical user and bearer subject disagree', async () => {
+    currentAuth = { ...currentAuth, accessToken: jwt('user-b') }
+
+    const { result } = renderHook(() => useWallet())
+
+    expect(result.current.viewerScopeKey).toBeNull()
+    expect(result.current.linkedAddress).toBeNull()
+    expect(result.current.hasNFT).toBe(false)
+    expect(mockFetch).not.toHaveBeenCalled()
   })
 
   it('discards a deferred A load and synchronously hides A while B resolves', async () => {
@@ -88,8 +105,8 @@ describe('useWallet viewer scope', () => {
     const loadB = deferred<Response>()
     mockFetch.mockImplementation((_url: string, init?: RequestInit) => {
       const authorization = new Headers(init?.headers).get('Authorization')
-      if (authorization === 'Bearer token-user-a') return loadA.promise
-      if (authorization === 'Bearer token-user-b') return loadB.promise
+      if (authorization === `Bearer ${jwt('user-a')}`) return loadA.promise
+      if (authorization === `Bearer ${jwt('user-b')}`) return loadB.promise
       throw new Error(`unexpected token: ${authorization}`)
     })
 
@@ -178,7 +195,7 @@ describe('useWallet viewer scope', () => {
 
     const unlinkA = deferred<Response>()
     mockFetch.mockImplementationOnce((_url: string, init?: RequestInit) => {
-      expect(new Headers(init?.headers).get('Authorization')).toBe('Bearer token-user-a')
+      expect(new Headers(init?.headers).get('Authorization')).toBe(`Bearer ${jwt('user-a')}`)
       return unlinkA.promise
     })
 
