@@ -40,6 +40,7 @@ import {
   parseKucoinLeaderboardPage,
   parseKucoinPositions,
   parseKucoinProfile,
+  validateKucoinProfile,
 } from './parsers'
 
 const BASE = 'https://www.kucoin.com/_api/ct-copy-trade/v1/copyTrading'
@@ -63,9 +64,7 @@ async function warmSession(session: FetchSession, src: SourceRow): Promise<void>
   const page = await session.page()
   const url = src.leaderboard_url ?? 'https://www.kucoin.com/copytrading'
   await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60_000 })
-  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {
-    // networkidle is best-effort — a busy page still yields valid cookies
-  })
+  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => undefined) // best-effort — a busy page still yields valid cookies
   warmedSessions.add(session)
 }
 
@@ -237,6 +236,7 @@ const kucoinAdapter: SourceAdapter = {
 
   parseLeaderboard: parseKucoinLeaderboardPage,
   parseProfile: parseKucoinProfile,
+  validateProfile: validateKucoinProfile,
   parsePositions: parseKucoinPositions,
   parseHistory: parseKucoinHistory,
 }

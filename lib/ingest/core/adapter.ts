@@ -29,6 +29,7 @@ import type {
   Timeframe,
 } from './types'
 import type { FetchSession } from '../fetch/types'
+import type { ProfileQualityReject } from './profile-quality'
 
 /** Lets expensive adapters defer deep enrichment off interactive/series paths. */
 export type ProfileFetchIntent = 'scheduled_full' | 'series_only' | 'interactive_deferred'
@@ -90,6 +91,13 @@ export interface SourceAdapter {
   // ── Pure parsers ──
   parseLeaderboard(raw: unknown, ctx: ParseCtx): ParsedLeaderboardPage
   parseProfile(raw: unknown, ctx: ParseCtx): ParsedProfile
+  /** Optional source-specific whole-profile quality gate. Processors invoke
+   *  it only after RAW is durable and before any serving/cache publication. */
+  validateProfile?(
+    profile: ParsedProfile,
+    ctx: ParseCtx,
+    requestedTimeframe: Timeframe
+  ): ProfileQualityReject[]
 
   /**
    * OPTIONAL board-level series (spec §13.1 "free series"). Some boards embed
