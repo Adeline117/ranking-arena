@@ -19,7 +19,7 @@
  *   BASE_URL=http://localhost:3000 node scripts/qa/exhaustive-sweep.mjs
  *   node scripts/qa/exhaustive-sweep.mjs --auth          # authed (needs /tmp/qa-session.json)
  *   node scripts/qa/exhaustive-sweep.mjs --routes=/,/rankings   # subset
- *   node scripts/qa/exhaustive-sweep.mjs --max-per-route=200    # cap (logged, never silent)
+ *   node scripts/qa/exhaustive-sweep.mjs --max-per-route=1200   # explicit safety cap
  *
  * Safety: every app/Supabase mutation is blocked at the browser network layer
  * and fails the run. Destructive/irreversible controls (logout, delete, pay, disconnect,
@@ -39,6 +39,7 @@ import { fileURLToPath } from 'node:url'
 import { readEnv, qaAuthStatus } from './qa-auth.mjs'
 import { installReadOnlyNetworkGuard } from './read-only-network-guard.mjs'
 import { exerciseFill } from './input-interaction.mjs'
+import { hardSweepFindings } from './sweep-gate.mjs'
 
 // axe-core is already present (transitive dep) — inject its bundle and run ONLY
 // the color-contrast rule. No new devDep = no package.json/lock churn in the
@@ -55,7 +56,10 @@ const flagValue = (name) => {
   return arg ? arg.slice(name.length + 1) : undefined
 }
 const ROUTES_ARG = flagValue('--routes')
-const MAX_PER_ROUTE = Number(flagValue('--max-per-route') || 300)
+// The homepage currently exposes 400+ desktop/mobile interactive nodes. The
+// former 300 default silently left the tail untested; keep headroom while the
+// explicit coverage-cap finding below prevents any future truncation going green.
+const MAX_PER_ROUTE = Number(flagValue('--max-per-route') || 1000)
 const LEDGER_PATH = process.env.QA_LEDGER || 'scripts/qa/.exhaustive-ledger.jsonl'
 // --lang=<en|zh|ja|ko>: preset the UI locale (browser locale + language
 // localStorage/cookie) so a sweep can run any of the 4 shipped languages.
@@ -372,8 +376,9 @@ async function pageQualityCheck(page, keys) {
         errorBoundary: /Something went wrong|出错了|页面加载失败/.test(body),
         blank: body.replace(/\s/g, '').length < 50,
         notFound:
-          /This page could not be found|ページが見つかりません|페이지를 찾을 수 없/.test(body) &&
-          body.length < 600,
+          /This page could not be found|Page Not Found|页面未找到|找不到页面|页面不存在|ページが見つかりません|페이지를 찾을 수 없/i.test(
+            body
+          ) && body.length < 600,
       }
       const leaks = new Set()
       const root = document.body || document.documentElement
@@ -396,8 +401,12 @@ async function pageQualityCheck(page, keys) {
       }
       return { health, leaks: Array.from(leaks).slice(0, 20) }
     }, Array.from(keys))
-  } catch {
-    return { health: { errorBoundary: false, blank: false, notFound: false }, leaks: [] }
+  } catch (error) {
+    return {
+      health: { errorBoundary: false, blank: false, notFound: false },
+      leaks: [],
+      checkError: String(error instanceof Error ? error.message : error).slice(0, 200),
+    }
   }
 }
 
@@ -502,8 +511,13 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
   // Page-level quality scan (once per route): body health + i18n key leaks.
   const quality = await pageQualityCheck(page, I18N_KEYS)
   const qErrors = []
+  if (typeof status === 'number' && status >= 400) {
+    qErrors.push(`http: ${status} document ${routeUrl}`)
+  }
+  if (quality.checkError) qErrors.push(`pageerror: quality check failed: ${quality.checkError}`)
   if (quality.health.errorBoundary) qErrors.push('pagehealth: error-boundary rendered')
   if (quality.health.blank) qErrors.push('pagehealth: page body effectively blank')
+  if (quality.health.notFound) qErrors.push('pagehealth: not-found rendered')
   for (const lk of quality.leaks) qErrors.push(`i18n-leak: ${lk}`)
   // WCAG color-contrast (once per route, non-gating first-run observe).
   const contrast = await contrastViolations(page)
@@ -522,19 +536,26 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
     )
   }
   if (qErrors.length) {
-    counters.quality += quality.leaks.length + (quality.health.errorBoundary ? 1 : 0)
+    counters.quality += qErrors.length
     ledger.push({
       route,
       idx: -1,
       ts: new Date().toISOString(),
-      status: quality.health.errorBoundary
-        ? 'fail:page-error-boundary'
-        : quality.leaks.length
-          ? `i18n-leak:${quality.leaks.length}`
-          : 'pagehealth:blank',
+      status:
+        typeof status === 'number' && status >= 400
+          ? `fail:document-http-${status}`
+          : quality.checkError
+            ? 'fail:quality-check'
+            : quality.health.errorBoundary
+              ? 'fail:page-error-boundary'
+              : quality.health.notFound
+                ? 'pagehealth:not-found'
+                : quality.leaks.length
+                  ? `i18n-leak:${quality.leaks.length}`
+                  : 'pagehealth:blank',
       leaks: quality.leaks,
       health: quality.health,
-      errors: quality.health.errorBoundary ? ['pageerror: error-boundary rendered'] : [],
+      errors: qErrors,
     })
     console.log(
       `  ${route} — quality: ${qErrors.slice(0, 4).join(' | ')}${qErrors.length > 4 ? ` (+${qErrors.length - 4})` : ''}`
@@ -548,6 +569,17 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
     console.log(
       `  ⚠ ${route}: ${total} elements > cap ${MAX_PER_ROUTE} — ${total - cap} NOT tested (logged)`
     )
+    counters.failed++
+    ledger.push({
+      route,
+      idx: -1,
+      ts: new Date().toISOString(),
+      status: 'fail:coverage-cap',
+      errors: [],
+      total,
+      tested: cap,
+      untested: total - cap,
+    })
   }
   console.log(`  ${route} [${status}] — ${total} interactive elements (testing ${cap})`)
 
@@ -1086,9 +1118,9 @@ async function main() {
       for (const e of r.errors.slice(0, 2)) console.log(`      ${e}`)
     }
   }
-  // Non-zero exit if genuine app errors surfaced (not mere click-fails on
-  // transient overlays), so CI can gate on it. exit 3 = auth-taint: results
-  // for those routes are session artifacts and MUST NOT be trusted/re-used.
+  // Non-zero exit if any hard interaction, coverage, page-health, browser, or
+  // HTTP finding surfaced. exit 3 = auth-taint: results for those routes are
+  // session artifacts and MUST NOT be trusted/re-used.
   const authTainted = ledger.filter(
     (r) => r.status === 'fail:tainted' || r.status === 'fail:auth-dead'
   )
@@ -1104,10 +1136,14 @@ async function main() {
     )
     process.exit(4)
   }
-  const realErrors = errored.filter((r) =>
-    r.errors.some((e) => e.startsWith('pageerror:') || e.startsWith('http: 5'))
-  )
-  process.exit(realErrors.length > 0 ? 1 : 0)
+  const hardFindings = hardSweepFindings(ledger)
+  if (hardFindings.length) {
+    console.error(`\n✗ ${hardFindings.length} hard QA finding(s) — exhaustive sweep failed`)
+    for (const { record, reasons } of hardFindings.slice(0, 25)) {
+      console.error(`  ${record.route} #${record.idx}: ${reasons.join(' | ')}`)
+    }
+  }
+  process.exit(hardFindings.length > 0 ? 1 : 0)
 }
 
 main().catch((e) => {
