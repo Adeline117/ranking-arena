@@ -278,6 +278,28 @@ fi
 "${PSQL[@]}" -c \
   'GRANT service_role TO authenticator WITH INHERIT FALSE, SET TRUE' >/dev/null
 
+# Prove recursive browser reachability is rejected too.  The direct
+# authenticated -> bridge -> authenticator -> service_role SET chain must not
+# be mistaken for the trusted gateway's own canonical edge.
+"${PSQL[@]}" <<'SQL'
+GRANT authenticator TO drift_parent WITH INHERIT FALSE, SET TRUE;
+GRANT drift_parent TO authenticated WITH INHERIT FALSE, SET TRUE;
+SQL
+if "${PSQL[@]}" -f "$MIGRATION" >/dev/null 2>"$TMP_ROOT/unsafe-recursive-role.err"; then
+  echo "Migration accepted a recursive browser-to-service_role authority edge" >&2
+  exit 1
+fi
+if ! grep -q 'service_role has an unsafe effective authority edge' \
+  "$TMP_ROOT/unsafe-recursive-role.err"; then
+  echo "Migration failed for an unexpected recursive-role reason" >&2
+  cat "$TMP_ROOT/unsafe-recursive-role.err" >&2
+  exit 1
+fi
+"${PSQL[@]}" <<'SQL'
+REVOKE drift_parent FROM authenticated;
+REVOKE authenticator FROM drift_parent;
+SQL
+
 "${PSQL[@]}" -f "$MIGRATION" >/dev/null
 
 "${PSQL[@]}" <<'SQL'
