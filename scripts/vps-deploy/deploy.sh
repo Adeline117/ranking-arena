@@ -94,7 +94,11 @@ REMOTE_DIR="$1"
 ECOSYSTEM="$2"
 VPS_TYPE="$3"
 
+set -a
 source /etc/environment 2>/dev/null || true
+# Rotation keys live in a root-only file, not world-readable /etc/environment.
+source /etc/arena-proxy.env 2>/dev/null || true
+set +a
 cd "$REMOTE_DIR"
 
 INGEST_PID_BEFORE="0"
