@@ -21,7 +21,12 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { ApiError } from '@/lib/api/errors'
-import { getUserClaim, getUserVerifiedTrader, isTraderClaimed } from '@/lib/data/trader-claims'
+import {
+  getUserClaim,
+  getUserVerifiedTrader,
+  isTraderClaimed,
+  submitClaim,
+} from '@/lib/data/trader-claims'
 import { notifyTraderClaim } from '@/lib/notifications/activity-alerts'
 import { sendNotification } from '@/lib/data/notifications'
 import { verifyWalletOwnership } from '@/lib/services/wallet-verification'
@@ -219,24 +224,19 @@ export async function POST(request: NextRequest) {
       sanitizedVerificationData = { uid_hash: uidHash }
     }
 
-    const { data: claim, error: claimError } = await supabase
-      .from('trader_claims')
-      .insert({
-        user_id: user.id,
+    let claim
+    try {
+      claim = await submitClaim(supabase, user.id, {
         trader_id,
         source,
         verification_method,
         verification_data: sanitizedVerificationData,
-        status: 'reviewing',
       })
-      .select()
-      .single()
-
-    if (claimError) {
-      if (claimError.code === '23505') {
+    } catch (error) {
+      if (error && typeof error === 'object' && 'code' in error && error.code === '23505') {
         throw ApiError.validation('This trader has already been claimed')
       }
-      throw claimError
+      throw error
     }
 
     // In-app notification to the claimant (fire-and-forget, deduped).

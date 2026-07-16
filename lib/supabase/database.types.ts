@@ -6019,7 +6019,7 @@ export type Database = {
       }
       trader_claims: {
         Row: {
-          created_at: string | null
+          created_at: string
           handle: string | null
           id: string
           reject_reason: string | null
@@ -6035,7 +6035,7 @@ export type Database = {
           verified_at: string | null
         }
         Insert: {
-          created_at?: string | null
+          created_at?: string
           handle?: string | null
           id?: string
           reject_reason?: string | null
@@ -6051,7 +6051,7 @@ export type Database = {
           verified_at?: string | null
         }
         Update: {
-          created_at?: string | null
+          created_at?: string
           handle?: string | null
           id?: string
           reject_reason?: string | null
@@ -9238,6 +9238,16 @@ export type Database = {
         }
       }
       snapshot_score_backtest: { Args: never; Returns: number }
+      submit_trader_claim: {
+        Args: {
+          p_source: string
+          p_trader_id: string
+          p_user_id: string
+          p_verification_data: Json
+          p_verification_method: string
+        }
+        Returns: Database['public']['Tables']['trader_claims']['Row']
+      }
       text_to_bytea: { Args: { data: string }; Returns: string }
       toggle_comment_reaction: {
         Args: {

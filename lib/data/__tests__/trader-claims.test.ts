@@ -25,6 +25,7 @@ jest.mock('@/lib/logger', () => ({
 import {
   activateClaim,
   reviewClaim,
+  submitClaim,
   type TraderClaim,
   type VerifiedTrader,
   type UpdateVerifiedTraderInput,
@@ -67,7 +68,7 @@ function activationPayload(overrides: Record<string, unknown> = {}) {
   }
 }
 
-describe('trader claim review mutations', () => {
+describe('trader claim atomic mutations', () => {
   const mockRpc = jest.fn()
   const mockFrom = jest.fn()
   const client = { rpc: mockRpc, from: mockFrom } as unknown as SupabaseClient<Database>
@@ -76,6 +77,79 @@ describe('trader claim review mutations', () => {
     jest.clearAllMocks()
     mockInvalidateLinkedTraderCache.mockResolvedValue(undefined)
     mockEnqueueFirstPartySync.mockResolvedValue(true)
+  })
+
+  it.each(['object', 'singleton array'])(
+    'submits through the atomic RPC (%s response)',
+    async (shape) => {
+      const submitted = claim({
+        status: 'reviewing',
+        verification_data: { uid_hash: 'proof' },
+        reject_reason: null,
+        reviewed_by: null,
+        reviewed_at: null,
+        verified_at: null,
+      })
+      mockRpc.mockResolvedValue({
+        data: shape === 'object' ? submitted : [submitted],
+        error: null,
+      })
+
+      await expect(
+        submitClaim(client, USER_ID, {
+          trader_id: 'trader-1',
+          source: 'binance_futures',
+          verification_method: 'api_key',
+          verification_data: { uid_hash: 'proof' },
+        })
+      ).resolves.toEqual(submitted)
+
+      expect(mockRpc).toHaveBeenCalledWith('submit_trader_claim', {
+        p_user_id: USER_ID,
+        p_trader_id: 'trader-1',
+        p_source: 'binance_futures',
+        p_verification_method: 'api_key',
+        p_verification_data: { uid_hash: 'proof' },
+      })
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    null,
+    [],
+    [claim(), claim()],
+    claim({ status: 'verified' }),
+    claim({ status: 'reviewing', user_id: 'different-user' }),
+    claim({ status: 'reviewing', verification_data: null }),
+  ])('rejects a malformed submit acknowledgement without side effects', async (data) => {
+    mockRpc.mockResolvedValue({ data, error: null })
+
+    await expect(
+      submitClaim(client, USER_ID, {
+        trader_id: 'trader-1',
+        source: 'binance_futures',
+        verification_method: 'api_key',
+        verification_data: { uid_hash: 'proof' },
+      })
+    ).rejects.toThrow('Invalid submit_trader_claim response')
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockSendNotification).not.toHaveBeenCalled()
+  })
+
+  it('propagates an atomic submit conflict without a fallback table write', async () => {
+    const rpcError = { code: '23505', message: 'active identity conflict' }
+    mockRpc.mockResolvedValue({ data: null, error: rpcError })
+
+    await expect(
+      submitClaim(client, USER_ID, {
+        trader_id: 'trader-1',
+        source: 'binance_futures',
+        verification_method: 'api_key',
+        verification_data: { uid_hash: 'proof' },
+      })
+    ).rejects.toBe(rpcError)
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it('approves through one atomic RPC before all post-commit effects', async () => {
