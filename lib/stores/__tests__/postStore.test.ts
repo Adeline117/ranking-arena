@@ -567,12 +567,63 @@ describe('submitPostComment / togglePostReaction — server-ACK-only', () => {
       status: 200,
       data: {
         success: true,
-        data: { like_count: 6, dislike_count: 0, reaction: 'up' },
+        data: { action: 'added', like_count: 6, dislike_count: 0, reaction: 'up' },
       },
     })
     const r = await togglePostReaction('p1', 'up', 'tok')
     expect(r.success).toBe(true)
     expect(usePostStore.getState().posts['p1'].like_count).toBe(6)
+  })
+
+  it('reaction ACK 的 null 计数保留 store 中的已知绝对值', async () => {
+    usePostStore
+      .getState()
+      .setPost(post('p1', { like_count: 5, dislike_count: 2, user_reaction: null }))
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        data: {
+          action: 'added',
+          like_count: null,
+          dislike_count: null,
+          reaction: 'up',
+        },
+      },
+    })
+
+    const result = await togglePostReaction('p1', 'up', 'tok')
+
+    expect(result).toEqual({ success: true })
+    expect(usePostStore.getState().posts['p1']).toMatchObject({
+      like_count: 5,
+      dislike_count: 2,
+      user_reaction: 'up',
+    })
+  })
+
+  it('reaction 畸形 ACK 不写入 store', async () => {
+    usePostStore
+      .getState()
+      .setPost(post('p1', { like_count: 5, dislike_count: 2, user_reaction: null }))
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        data: { action: 'removed', like_count: 99, dislike_count: 0, reaction: 'up' },
+      },
+    })
+
+    const result = await togglePostReaction('p1', 'up', 'tok')
+
+    expect(result).toEqual({ success: false, error: '操作失败' })
+    expect(usePostStore.getState().posts['p1']).toMatchObject({
+      like_count: 5,
+      dislike_count: 2,
+      user_reaction: null,
+    })
   })
 
   it('reaction 网络抛错 → success:false,不外抛', async () => {
