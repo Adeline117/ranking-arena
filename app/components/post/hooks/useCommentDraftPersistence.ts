@@ -20,9 +20,27 @@ function getDraftKey(viewerKey: string, postId: string): string {
   return `comment-draft-v2:${viewerKey}:${postId}`
 }
 
+function getLegacyDraftKey(postId: string): string {
+  return `comment-draft-${postId}`
+}
+
 function readDraft(viewerKey: string, postId: string): string {
   try {
-    return localStorage.getItem(getDraftKey(viewerKey, postId)) || ''
+    const scopedKey = getDraftKey(viewerKey, postId)
+    const scopedDraft = localStorage.getItem(scopedKey)
+    if (scopedDraft !== null) {
+      localStorage.removeItem(getLegacyDraftKey(postId))
+      return scopedDraft
+    }
+    // The v1 key had no owner. Defer migration while auth is unresolved, then
+    // atomically assign it to the first resolved viewer and remove the source
+    // so it can never be copied into another account.
+    if (viewerKey === 'pending') return ''
+    const legacyKey = getLegacyDraftKey(postId)
+    const legacyDraft = localStorage.getItem(legacyKey) || ''
+    if (legacyDraft) localStorage.setItem(scopedKey, legacyDraft)
+    localStorage.removeItem(legacyKey)
+    return legacyDraft
   } catch {
     return ''
   }

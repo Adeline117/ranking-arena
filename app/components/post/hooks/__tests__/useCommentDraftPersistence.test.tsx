@@ -113,4 +113,21 @@ describe('useCommentDraftPersistence', () => {
     expect(result.current.clearDraftIfUnchanged(submittedA)).toBe(false)
     expect(result.current.draft).toBe('same text')
   })
+
+  it('migrates one unowned v1 draft only after the viewer resolves', () => {
+    localStorage.setItem('comment-draft-post-a', 'legacy text')
+    const { result, rerender } = renderHook(
+      ({ viewerKey }: { viewerKey: string }) => useCommentDraftPersistence('post-a', viewerKey),
+      { initialProps: { viewerKey: 'pending' } }
+    )
+
+    expect(result.current.draft).toBe('')
+    expect(localStorage.getItem('comment-draft-post-a')).toBe('legacy text')
+
+    rerender({ viewerKey: 'user:a' })
+
+    expect(result.current.draft).toBe('legacy text')
+    expect(localStorage.getItem(draftKey('post-a', 'user:a'))).toBe('legacy text')
+    expect(localStorage.getItem('comment-draft-post-a')).toBeNull()
+  })
 })
