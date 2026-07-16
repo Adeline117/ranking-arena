@@ -31,7 +31,12 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
-import { registerAdapter, type SourceAdapter } from '../../core/adapter'
+import {
+  registerAdapter,
+  type ProfileFetchOptions,
+  type ProfileFetchIntent,
+  type SourceAdapter,
+} from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
 import {
@@ -41,6 +46,11 @@ import {
   parseHyperliquidProfile,
   TF_WINDOW,
 } from './parsers'
+import {
+  fetchHyperliquidFillsWindow,
+  HyperliquidFillsFetchError,
+  type HyperliquidFillsFetch,
+} from './fills-fetch'
 
 const LEADERBOARD_URL = 'https://stats-data.hyperliquid.xyz/Mainnet/leaderboard'
 const INFO_URL = 'https://api.hyperliquid.xyz/info'
@@ -126,34 +136,63 @@ function effectiveDepth(src: SourceRow): number {
   return maxRows !== null ? Math.min(boardDepth, maxRows) : boardDepth
 }
 
-// ── Profile pair (portfolio + clearinghouseState), memoized per trader ──
+// ── Profile base + fills, independently memoized per trader/session ──
 
-interface ProfilePair {
+interface ProfileBase {
   portfolio: unknown
   clearinghouse: unknown
-  /** userFillsByTime over the last 90d (M3-3a fills replay). Null on fetch
-   *  failure — the parser NULL-collapses the fills-derived stats. */
-  fills: unknown
+}
+
+interface FillsOutcome {
+  state: 'fetched' | 'failed'
+  snapshot: HyperliquidFillsFetch | null
+  reason: string | null
+}
+
+interface ProfileCacheEntry {
+  base?: Promise<ProfileBase>
+  fills?: Promise<FillsOutcome>
 }
 
 const FILLS_WINDOW_MS = 90 * 86_400_000
+const DEFAULT_FILLS_PAGE_GAP_MS = 6_000
 
-const profileCache = new WeakMap<FetchSession, Map<string, Promise<ProfilePair>>>()
+function fillsPageGapMs(src: SourceRow): number {
+  const configured = Number(src.meta.fills_page_gap_ms)
+  return Number.isFinite(configured)
+    ? Math.max(DEFAULT_FILLS_PAGE_GAP_MS, Math.trunc(configured))
+    : DEFAULT_FILLS_PAGE_GAP_MS
+}
 
-function getProfilePair(
-  session: FetchSession,
-  src: SourceRow,
-  address: string
-): Promise<ProfilePair> {
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+const profileCache = new WeakMap<FetchSession, Map<string, ProfileCacheEntry>>()
+
+function profileEntry(session: FetchSession, address: string): ProfileCacheEntry {
   let perSession = profileCache.get(session)
   if (!perSession) {
     perSession = new Map()
     profileCache.set(session, perSession)
   }
-  let cached = perSession.get(address)
-  if (!cached) {
+  let entry = perSession.get(address)
+  if (!entry) {
+    entry = {}
+    perSession.set(address, entry)
+  }
+  return entry
+}
+
+function getProfileBase(
+  session: FetchSession,
+  src: SourceRow,
+  address: string
+): Promise<ProfileBase> {
+  const entry = profileEntry(session, address)
+  if (!entry.base) {
     const url = endpoint(src, 'info', INFO_URL)
-    cached = (async () => {
+    const base = (async () => {
       const portfolio = await fetchJson(session, url, {
         method: 'POST',
         body: { type: 'portfolio', user: address },
@@ -162,24 +201,68 @@ function getProfilePair(
         method: 'POST',
         body: { type: 'clearinghouseState', user: address },
       })
-      // Fills replay (M3-3a): ONE 90d fetch per trader per session — the parser
-      // slices per-TF windows from it. userFillsByTime caps at ~2000 fills; for
-      // hyperactive accounts that truncates the tail (disclosed via count).
-      // Failure never blocks the profile (winRate etc. just stay null).
-      const fills = await fetchJson(session, url, {
-        method: 'POST',
-        body: {
-          type: 'userFillsByTime',
-          user: address,
-          startTime: Date.now() - FILLS_WINDOW_MS,
-        },
-      }).catch(() => null)
-      return { portfolio, clearinghouse, fills }
+      return { portfolio, clearinghouse }
     })()
-    perSession.set(address, cached)
-    cached.catch(() => perSession!.delete(address))
+    entry.base = base
+    base.catch(() => {
+      if (entry.base === base) entry.base = undefined
+    })
   }
-  return cached
+  return entry.base
+}
+
+function getFills(session: FetchSession, src: SourceRow, address: string): Promise<FillsOutcome> {
+  const entry = profileEntry(session, address)
+  if (!entry.fills) {
+    const url = endpoint(src, 'info', INFO_URL)
+    entry.fills = (async () => {
+      const fillsEndTime = Date.now()
+      const fillsStartTime = fillsEndTime - FILLS_WINDOW_MS
+      try {
+        const snapshot = await fetchHyperliquidFillsWindow(
+          (startTime, endTime) =>
+            fetchJson(session, url, {
+              method: 'POST',
+              body: {
+                type: 'userFillsByTime',
+                user: address,
+                startTime,
+                endTime,
+                aggregateByTime: false,
+              },
+            }),
+          fillsStartTime,
+          fillsEndTime,
+          { beforeNextPage: () => sleep(fillsPageGapMs(src)) }
+        )
+        return {
+          state: 'fetched',
+          snapshot,
+          reason: snapshot.meta.failureReason,
+        }
+      } catch (error) {
+        if (error instanceof HyperliquidFillsFetchError) {
+          return { state: 'failed', snapshot: error.partial, reason: error.reason }
+        }
+        return { state: 'failed', snapshot: null, reason: 'unexpected_fetch_failure' }
+      }
+    })()
+  }
+  return entry.fills
+}
+
+const PROFILE_FETCH_INTENTS = new Set<ProfileFetchIntent>([
+  'scheduled_full',
+  'series_only',
+  'interactive_deferred',
+])
+
+function requireProfileIntent(options: ProfileFetchOptions | undefined): ProfileFetchIntent {
+  const intent = options?.intent
+  if (!intent || !PROFILE_FETCH_INTENTS.has(intent)) {
+    throw new Error('[hyperliquid] missing or invalid profile fetch intent')
+  }
+  return intent
 }
 
 const hyperliquidAdapter: SourceAdapter = {
@@ -235,24 +318,43 @@ const hyperliquidAdapter: SourceAdapter = {
   },
 
   /**
-   * Profile bundle: 2 info POSTs, memoized per (session, trader) so the
-   * Tier-B loop over 7/30/90 costs ONE pair per trader. The composite
-   * payload embeds the timeframe so parseProfile stays pure (spec §5.5).
+   * Base profile calls are memoized for every intent. Only scheduled_full
+   * starts the weight-heavy fills pagination; series and interactive paths
+   * explicitly defer it while retaining independently cached portfolio data.
    */
   async getProfile(
     session: FetchSession,
     src: SourceRow,
     exchangeTraderId: string,
-    timeframe: Timeframe
+    timeframe: Timeframe,
+    _traderMeta: Record<string, unknown> | null | undefined,
+    options: ProfileFetchOptions
   ): Promise<RawBundle> {
+    const intent = requireProfileIntent(options)
     const address = exchangeTraderId.toLowerCase()
-    const pair = await getProfilePair(session, src, address)
+    const basePromise = getProfileBase(session, src, address)
+    const outcomePromise =
+      intent === 'scheduled_full'
+        ? getFills(session, src, address)
+        : Promise.resolve({
+            state: 'deferred' as const,
+            snapshot: null,
+            reason: 'deferred_by_profile_intent',
+          })
+    const [base, outcome] = await Promise.all([basePromise, outcomePromise])
     const fetchedAt = new Date().toISOString()
     return {
       pages: [
         {
           pageIndex: 1,
-          payload: { ...pair, timeframe: timeframe === 0 ? 90 : timeframe },
+          payload: {
+            ...base,
+            timeframe: timeframe === 0 ? 90 : timeframe,
+            profileFetchIntent: intent,
+            fillsFetchState: outcome.state,
+            fillsFetchReason: outcome.reason,
+            fillsSnapshot: outcome.snapshot,
+          },
           url: endpoint(src, 'info', INFO_URL),
           fetchedAt,
         },
@@ -286,13 +388,18 @@ const hyperliquidAdapter: SourceAdapter = {
     if (kind !== 'position_history') {
       throw new Error(`[hyperliquid] history surface ${kind} not supported`)
     }
-    // Reuses the memoized profile pair — position_history costs ZERO extra
-    // requests when the Tier-B profile crawl already ran this session.
+    // Reuses a scheduled profile's fill promise, or lazily starts it when the
+    // history surface is the first deep request in this session.
     const address = exchangeTraderId.toLowerCase()
-    const pair = await getProfilePair(session, src, address)
+    const outcome = await getFills(session, src, address)
     yield {
       pageIndex: 1,
-      payload: { fills: pair.fills },
+      payload: {
+        fillsFetchTrigger: 'history',
+        fillsFetchState: outcome.state,
+        fillsFetchReason: outcome.reason,
+        fillsSnapshot: outcome.snapshot,
+      },
       url: endpoint(src, 'info', INFO_URL),
       fetchedAt: new Date().toISOString(),
     }
