@@ -119,6 +119,21 @@ function effectiveDepth(src: SourceRow): number {
   return maxRows !== null ? Math.min(boardDepth, maxRows) : boardDepth
 }
 
+/** Validate every candidate before sorting. A missing component is an
+ * upstream schema/completeness failure, never a zero-PnL trader. */
+export function sortGmxLeaderboardRows(rows: Dict[]): Dict[] {
+  const ranked = rows.map((row) => {
+    const pnl = gmxRealizedPnlUsd(row)
+    if (pnl === null) throw new Error('[gmx] incomplete realized-net leaderboard components')
+    return { row, pnl }
+  })
+  ranked.sort((a, b) => {
+    if (b.pnl !== a.pnl) return b.pnl - a.pnl
+    return String(a.row.id ?? '').localeCompare(String(b.row.id ?? ''))
+  })
+  return ranked.map(({ row }) => row)
+}
+
 // ── Session-memoized markets + tokens (symbol resolution for positions) ──
 
 interface SymbolMaps {
@@ -190,12 +205,7 @@ const gmxAdapter: SourceAdapter = {
     const rows = data.periodAccountStats ?? []
     const fetchedAt = new Date().toISOString()
 
-    const sorted = [...rows].sort((a, b) => {
-      const pa = gmxRealizedPnlUsd(a) ?? 0
-      const pb = gmxRealizedPnlUsd(b) ?? 0
-      if (pb !== pa) return pb - pa
-      return String(a.id ?? '').localeCompare(String(b.id ?? ''))
-    })
+    const sorted = sortGmxLeaderboardRows(rows)
     const truncated = sorted.slice(0, effectiveDepth(src))
 
     const chunkSize = src.page_size ?? 20
