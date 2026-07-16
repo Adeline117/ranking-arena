@@ -2,16 +2,15 @@
  * Integration-test DB harness for the ingest serving layer.
  *
  * Connects to the database behind INGEST_DATABASE_URL (worker/.env) but
- * NEVER touches production tables: setup clones the needed arena DDL +
- * the two legacy compat tables into a dedicated `arena_test` schema
+ * NEVER writes production tables: setup clones the needed arena DDL into a
+ * dedicated `arena_test` schema
  * (CREATE TABLE ... LIKE ... INCLUDING ALL — indexes, identity sequences
  * and CHECK constraints come along, FKs deliberately don't), and the
  * production module `lib/ingest/db` is replaced via jest.mock with a pool
- * wrapper that rewrites every `arena.` / `public.` schema qualifier to
- * `arena_test.` before execution. All SQL in publish.ts /
- * compat-trader-latest.ts / count-check.ts is fully schema-qualified
- * (audited), so no statement can escape the test schema. The sentinel
- * source row uses id 9000 as a second belt-and-braces marker.
+ * wrapper that rewrites every `arena.` schema qualifier to `arena_test.`
+ * before execution. All SQL in publish.ts / count-check.ts is fully
+ * schema-qualified (audited), so no statement can escape the test schema.
+ * The sentinel source row uses id 9000 as a second belt-and-braces marker.
  *
  * Lifecycle: createTestSchema() in beforeAll, resetTables() in beforeEach,
  * dropTestSchema() in afterAll. Run via `npm run test:ingest-integration`
@@ -88,10 +87,12 @@ export function getWrappedPool(): Pool {
 /** Factory for `jest.mock('@/lib/ingest/db', () => require('./test-db').mockDbModule())`. */
 export function mockDbModule(): {
   getIngestPool: () => Pool
+  ingestClientConnect: () => Promise<PoolClient>
   closeIngestPool: () => Promise<void>
 } {
   return {
     getIngestPool: () => getWrappedPool(),
+    ingestClientConnect: async () => wrapClient(await getRawPool().connect()),
     closeIngestPool: async () => undefined,
   }
 }
@@ -104,8 +105,6 @@ const CLONE_TABLES: Array<[string, string]> = [
   ['leaderboard_entries', 'arena.leaderboard_entries'],
   ['trader_stats', 'arena.trader_stats'],
   ['staging_rejects', 'arena.staging_rejects'],
-  ['trader_latest', 'public.trader_latest'],
-  ['trader_sources', 'public.trader_sources'],
 ]
 
 export async function createTestSchema(): Promise<void> {
@@ -162,7 +161,7 @@ export function makeSource(overrides: Partial<SourceRow> = {}): SourceRow {
   }
 }
 
-/** Insert the matching arena_test.sources row (compat writer joins it). */
+/** Insert the matching arena_test.sources row. */
 export async function insertSourceRow(src: SourceRow): Promise<void> {
   await getRawPool().query(
     `INSERT INTO ${TEST_SCHEMA}.sources
