@@ -188,16 +188,18 @@ describe('publishLeaderboardSnapshot — count-check gate', () => {
     const src = makeSource({ expected_count: 100 })
     await insertSourceRow(src)
 
-    // 3 honest passing crawls, then 4 newer FAILED ones at a bogus count.
+    // 3 honest passing crawls, then 4 newer FAILED outliers. Keep the
+    // outliers intentionally inconsistent so they cannot qualify as the
+    // separate sustained-level-shift escape hatch.
     for (const [i, count] of [100, 100, 100].entries()) {
       await seedSnapshot({ actualCount: count, passed: true, minutesAgo: 120 - i * 10 })
     }
-    for (let i = 0; i < 4; i++) {
-      await seedSnapshot({ actualCount: 500, passed: false, minutesAgo: 40 - i * 10 })
+    for (const [i, count] of [500, 900, 300, 700].entries()) {
+      await seedSnapshot({ actualCount: count, passed: false, minutesAgo: 40 - i * 10 })
     }
 
     // Baseline must be median of PASSING crawls (100), not skewed by the
-    // failed 500s — 99 passes; against 500 it would have been gated.
+    // failed outliers — 99 passes; against any of them it would be gated.
     const res = await publishLeaderboardSnapshot({
       src,
       timeframe: 7,
@@ -237,14 +239,37 @@ describe('publishLeaderboardSnapshot — count-check gate', () => {
     expect(res.verdict.baselineUsed).toBe(100)
   })
 
-  test('derived boards: null expected override passes bootstrap on actual', async () => {
-    const src = makeSource({ expected_count: 100 })
+  test('derived boards: publish ranks without refreshing their stats substrate', async () => {
+    const src = makeSource({ expected_count: 7 })
     await insertSourceRow(src)
+
+    const seeded = await publishLeaderboardSnapshot({
+      src,
+      timeframe: 30,
+      rows: makeRows(7),
+      rejects: [],
+      rawObjectId: null,
+    })
+    expect(seeded.published).toBe(true)
+
+    const statsForFirstTrader = async () =>
+      getRawPool().query(
+        `SELECT st.as_of::text, st.roi::text, st.pnl::text, st.win_rate::text
+           FROM ${TEST_SCHEMA}.trader_stats st
+           JOIN ${TEST_SCHEMA}.traders t ON t.id = st.trader_id
+          WHERE t.exchange_trader_id = 't-1' AND st.timeframe = 30`
+      )
+    const before = await statsForFirstTrader()
+    expect(before.rows).toHaveLength(1)
 
     const res = await publishLeaderboardSnapshot({
       src,
       timeframe: 30,
-      rows: makeRows(7),
+      rows: makeRows(7, {
+        headlineRoi: 999,
+        headlinePnl: 99999,
+        headlineWinRate: 99,
+      }),
       rejects: [],
       rawObjectId: null,
       isDerived: true,
@@ -253,9 +278,32 @@ describe('publishLeaderboardSnapshot — count-check gate', () => {
 
     expect(res.published).toBe(true)
     expect(res.verdict.baselineUsed).toBeNull()
+    expect(await countRows('traders')).toBe(7)
+    expect(await countRows('leaderboard_entries')).toBe(14)
+    expect(await countRows('trader_stats')).toBe(7)
+
+    const after = await statsForFirstTrader()
+    expect(after.rows).toEqual(before.rows)
+
+    const { rows: derivedEntry } = await getRawPool().query(
+      `SELECT le.headline_roi, le.headline_pnl, le.headline_win_rate
+         FROM ${TEST_SCHEMA}.leaderboard_entries le
+         JOIN ${TEST_SCHEMA}.traders t ON t.id = le.trader_id
+        WHERE le.snapshot_id = $1 AND t.exchange_trader_id = 't-1'`,
+      [res.snapshotId]
+    )
+    expect(derivedEntry).toHaveLength(1)
+    expect(derivedEntry[0]).toMatchObject({
+      headline_roi: 999,
+      headline_pnl: 99999,
+      headline_win_rate: 99,
+    })
 
     const { rows: snaps } = await getRawPool().query(
-      `SELECT is_derived, count_check_passed FROM ${TEST_SCHEMA}.leaderboard_snapshots`
+      `SELECT is_derived, count_check_passed
+         FROM ${TEST_SCHEMA}.leaderboard_snapshots
+        WHERE id = $1`,
+      [res.snapshotId]
     )
     expect(snaps[0]).toMatchObject({ is_derived: true, count_check_passed: true })
   })
