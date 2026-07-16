@@ -2189,7 +2189,7 @@ const en = {
   // Exchange landing page (/exchange/[slug])
   exchangePageTitle: '{name} Top Traders & Rankings',
   exchangePageSubtitle:
-    '{count} ranked traders on {name} ({type}). Leaderboard updated every 2 hours.',
+    '{count} ranked traders on {name} ({type}). Leaderboard recomputed every 2 hours.',
   exchangePageTop10: 'Top 10 Traders by Arena Score',
   exchangePageColRank: 'RANK',
   exchangePageColTrader: 'TRADER',
