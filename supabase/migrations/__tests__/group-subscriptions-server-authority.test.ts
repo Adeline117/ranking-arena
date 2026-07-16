@@ -79,7 +79,7 @@ describe('group subscriptions server authority migration', () => {
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
   })
 
-  it('guards the zero-browser-call assumption and the admin-client route', () => {
+  it('guards the zero-direct-table-call assumption and the atomic admin route', () => {
     const browserTableCallPattern = /\.from\(\s*['"]group_subscriptions['"]\s*\)/
     const tableCallers = [
       ...sourceFilesBelow(join(root, 'app')),
@@ -89,13 +89,17 @@ describe('group subscriptions server authority migration', () => {
       .map((path) => relative(root, path))
       .sort()
 
-    expect(tableCallers).toEqual(['app/api/groups/subscribe/route.ts'])
+    expect(tableCallers).toEqual([])
 
     const route = readFileSync(join(root, 'app/api/groups/subscribe/route.ts'), 'utf8')
     const middleware = readFileSync(join(root, 'lib/api/middleware.ts'), 'utf8')
 
     expect(route).toContain("import { withAuth } from '@/lib/api/middleware'")
     expect(route.match(/export const (?:GET|POST|DELETE) = withAuth\(/g)).toHaveLength(3)
+    expect(route).toContain("'read_group_subscription_atomic'")
+    expect(route).toContain("'activate_group_subscription_atomic'")
+    expect(route).toContain("'cancel_group_subscription_atomic'")
+    expect(route).not.toMatch(/\.from\(/)
     expect(middleware).toMatch(
       /const supabase = getSupabaseAdmin\(\)[\s\S]*handler\(\{ user, supabase, request, version: versionContext \}\)/
     )
