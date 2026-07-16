@@ -8,6 +8,19 @@ import { Suspense } from 'react'
 import { logger } from '@/lib/logger'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useMultiAccountStore } from '@/lib/stores/multiAccountStore'
+import {
+  assertVerifiedSessionSnapshotCurrent,
+  StaleVerifiedSessionError,
+  verifySessionSnapshot,
+  type VerifiedSessionSnapshot,
+} from '@/lib/auth/verified-session'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { getViewerScope, isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
+import {
+  getCurrentAuthOperation,
+  isAuthOperationCurrent,
+  type AuthOperationLease,
+} from '@/lib/auth/session-operation'
 
 function AuthCallbackContent() {
   const router = useRouter()
@@ -15,6 +28,40 @@ function AuthCallbackContent() {
   const { t, language: _language } = useLanguage()
 
   useEffect(() => {
+    let cancelled = false
+    const retryTimers = new Set<ReturnType<typeof setTimeout>>()
+
+    const assertCallbackCurrent = (snapshot?: VerifiedSessionSnapshot) => {
+      if (cancelled) throw new StaleVerifiedSessionError()
+      if (snapshot) assertVerifiedSessionSnapshotCurrent(snapshot)
+    }
+
+    type CallbackBoundary = {
+      authOperation: AuthOperationLease | null
+      viewerScope: ReturnType<typeof getViewerScope>
+    }
+    const captureCallbackBoundary = (): CallbackBoundary => ({
+      authOperation: getCurrentAuthOperation(),
+      viewerScope: getViewerScope(),
+    })
+    const isCallbackBoundaryCurrent = (boundary: CallbackBoundary) =>
+      boundary.authOperation
+        ? isAuthOperationCurrent(boundary.authOperation)
+        : getCurrentAuthOperation() === null && isViewerScopeCurrent(boundary.viewerScope)
+    const assertCallbackBoundaryCurrent = (boundary: CallbackBoundary) => {
+      assertCallbackCurrent()
+      if (!isCallbackBoundaryCurrent(boundary)) throw new StaleVerifiedSessionError()
+    }
+
+    const waitForRetry = () =>
+      new Promise<void>((resolve) => {
+        const timer = setTimeout(() => {
+          retryTimers.delete(timer)
+          resolve()
+        }, 1000)
+        retryTimers.add(timer)
+      })
+
     const handleCallback = async () => {
       // Check for OAuth provider error params (e.g., user cancelled, access_denied)
       const providerError = searchParams.get('error')
@@ -29,14 +76,34 @@ function AuthCallbackContent() {
         return
       }
 
+      const initialBoundary = captureCallbackBoundary()
       const {
         data: { session },
         error,
       } = await supabase.auth.getSession()
+      assertCallbackCurrent()
 
       if (error) {
+        if (!isCallbackBoundaryCurrent(initialBoundary)) return
         logger.error('Auth callback error:', error)
-        router.replace('/login?error=auth_failed')
+        if (session) {
+          const rolledBack = await tokenRefreshCoordinator.signOutIfCurrent(
+            session.user.id,
+            session.access_token
+          )
+          if (!cancelled && rolledBack) {
+            const viewer = getViewerScope()
+            if (
+              viewer.viewerKey === 'anon' &&
+              viewer.userId === null &&
+              isViewerScopeCurrent(viewer)
+            ) {
+              router.replace('/login?error=auth_failed')
+            }
+          }
+        } else {
+          router.replace('/login?error=auth_failed')
+        }
         return
       }
 
@@ -57,16 +124,42 @@ function AuthCallbackContent() {
       const isSafeReturn = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')
       const defaultRedirect = isAddAccount ? '/' : isSafeReturn ? returnUrl : '/'
 
+      const rollbackAttempt = async (
+        snapshot: Pick<VerifiedSessionSnapshot, 'session' | 'user'>,
+        errorCode: 'auth_failed' | 'profile_provisioning_failed'
+      ) => {
+        if (cancelled) return
+        const rolledBack = await tokenRefreshCoordinator.signOutIfCurrent(
+          snapshot.user.id,
+          snapshot.session.access_token
+        )
+        if (cancelled || !rolledBack) return
+
+        // signOutIfCurrent deliberately invalidates the failed snapshot. Check
+        // the resulting anonymous epoch instead so a login for B that starts
+        // while rollback settles cannot be overwritten by A's error redirect.
+        const viewer = getViewerScope()
+        if (
+          viewer.viewerKey !== 'anon' ||
+          viewer.userId !== null ||
+          !isViewerScopeCurrent(viewer)
+        ) {
+          return
+        }
+        router.replace(`/login?error=${errorCode}`)
+      }
+
       // Fire-and-forget welcome email for genuinely-new signups (created_at window).
       // (route auth reads only the Authorization Bearer header)
-      const sendWelcomeEmailIfNew = (sess: NonNullable<typeof session>) => {
-        const createdAt = new Date(sess.user.created_at).getTime()
+      const sendWelcomeEmailIfNew = (snapshot: VerifiedSessionSnapshot) => {
+        assertCallbackCurrent(snapshot)
+        const createdAt = new Date(snapshot.user.created_at).getTime()
         if (Date.now() - createdAt < 30_000) {
           fetch('/api/email/welcome', {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json',
-              Authorization: `Bearer ${sess.access_token}`,
+              Authorization: `Bearer ${snapshot.session.access_token}`,
             },
           })
             // eslint-disable-next-line no-restricted-syntax
@@ -76,37 +169,47 @@ function AuthCallbackContent() {
         }
       }
 
-      // Durable post-auth routing. New-user detection reads the DB
-      // user_profiles.onboarding_completed flag (durable) rather than a fragile
-      // created_at time window: first-time users (flag false/null) go through the
-      // full /onboarding activation flow; returning users go to their normal
-      // destination. Add-account flows never see onboarding.
-      const finalizeRedirect = async (sess: NonNullable<typeof session>) => {
-        sendWelcomeEmailIfNew(sess)
+      const commitSuccessfulCallback = (identity: {
+        snapshot: VerifiedSessionSnapshot
+        profile: {
+          id: string
+          handle: string | null
+          avatar_url: string | null
+          onboarding_completed: boolean | null
+        }
+      }) => {
+        assertCallbackCurrent(identity.snapshot)
+        const { snapshot, profile } = identity
+        const { session: verifiedSession, user } = snapshot
 
+        // Store mutation, flag cleanup and navigation are intentionally one
+        // synchronous commit after every awaited identity/profile operation.
+        // No A-owned promise can interleave and partially commit after B wins.
+        if (isAddAccount) {
+          const store = useMultiAccountStore.getState()
+          store.accounts.forEach((a) => {
+            if (a.isActive) store.addAccount({ ...a, isActive: false })
+          })
+          store.addAccount({
+            userId: user.id,
+            email: user.email || '',
+            handle: profile.handle || null,
+            avatarUrl: profile.avatar_url || null,
+            refreshToken: verifiedSession.refresh_token,
+            lastActiveAt: new Date().toISOString(),
+            isActive: true,
+          })
+          try {
+            localStorage.removeItem('arena_adding_account')
+          } catch {
+            /* intentional */
+          }
+        }
+
+        sendWelcomeEmailIfNew(snapshot)
         if (isAddAccount) {
           router.replace('/')
-          return
-        }
-
-        let needsOnboarding = false
-        try {
-          const { data: profile, error: profileError } = await supabase
-            .from('user_profiles')
-            .select('onboarding_completed')
-            .eq('id', sess.user.id)
-            .maybeSingle()
-          if (profileError) {
-            // Fail-open: never trap a returning user on a transient read error.
-            logger.warn('Onboarding flag read failed; skipping onboarding', profileError)
-          } else {
-            needsOnboarding = profile?.onboarding_completed !== true
-          }
-        } catch (err) {
-          logger.warn('Onboarding flag read threw; skipping onboarding', err)
-        }
-
-        if (needsOnboarding) {
+        } else if (profile.onboarding_completed !== true) {
           const ru = isSafeReturn ? returnUrl! : '/'
           router.replace(`/onboarding?returnUrl=${encodeURIComponent(ru)}`)
         } else {
@@ -114,84 +217,104 @@ function AuthCallbackContent() {
         }
       }
 
-      // Save new account to multi-account store
-      const saveToStore = async (sess: typeof session) => {
-        if (!isAddAccount || !sess) return
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) return
-        const { data: profile } = await supabase
-          .from('user_profiles')
-          .select('handle, avatar_url')
-          .eq('id', user.id)
-          .maybeSingle()
-        const store = useMultiAccountStore.getState()
-        store.accounts.forEach((a) => {
-          if (a.isActive) store.addAccount({ ...a, isActive: false })
-        })
-        store.addAccount({
-          userId: user.id,
-          email: user.email || '',
-          handle: profile?.handle || null,
-          avatarUrl: profile?.avatar_url || null,
-          refreshToken: sess.refresh_token,
-          lastActiveAt: new Date().toISOString(),
-          isActive: true,
-        })
+      const loadVerifiedIdentity = async (candidateSession: NonNullable<typeof session>) => {
+        let snapshot: VerifiedSessionSnapshot
+        try {
+          snapshot = await verifySessionSnapshot(supabase, candidateSession, {
+            allowPendingViewer: true,
+          })
+          assertCallbackCurrent(snapshot)
+        } catch (verificationError) {
+          if (verificationError instanceof StaleVerifiedSessionError) return null
+          logger.error('OAuth session identity validation failed', {
+            expectedUserId: candidateSession.user.id,
+            error: verificationError,
+          })
+          await rollbackAttempt(
+            { session: candidateSession, user: candidateSession.user },
+            'auth_failed'
+          )
+          return null
+        }
+
+        let profile
+        try {
+          const result = await supabase
+            .from('user_profiles')
+            .select('id, handle, avatar_url, onboarding_completed')
+            .eq('id', snapshot.user.id)
+            .maybeSingle()
+          assertCallbackCurrent(snapshot)
+          profile = result.data
+
+          if (result.error || !profile || profile.id !== snapshot.user.id) {
+            logger.error('Profile provisioning incomplete after OAuth callback', {
+              userId: snapshot.user.id,
+              error: result.error,
+            })
+            await rollbackAttempt(snapshot, 'profile_provisioning_failed')
+            return null
+          }
+        } catch (profileError) {
+          if (profileError instanceof StaleVerifiedSessionError) return null
+          assertCallbackCurrent(snapshot)
+          logger.error('Provisioned profile read threw during OAuth callback', profileError)
+          await rollbackAttempt(snapshot, 'profile_provisioning_failed')
+          return null
+        }
+
+        const oauthAvatar =
+          snapshot.user.user_metadata?.avatar_url || snapshot.user.user_metadata?.picture || null
+        if (oauthAvatar && (!profile.avatar_url || profile.avatar_url.length < 5)) {
+          try {
+            const { data: updatedProfile, error: updateError } = await supabase
+              .from('user_profiles')
+              .update({ avatar_url: oauthAvatar })
+              .eq('id', snapshot.user.id)
+              .select('id')
+              .maybeSingle()
+            assertCallbackCurrent(snapshot)
+            if (updateError || !updatedProfile || updatedProfile.id !== snapshot.user.id) {
+              logger.warn('OAuth profile avatar update failed', {
+                userId: snapshot.user.id,
+                error: updateError,
+              })
+            } else {
+              profile.avatar_url = oauthAvatar
+            }
+          } catch (avatarError) {
+            if (avatarError instanceof StaleVerifiedSessionError) return null
+            assertCallbackCurrent(snapshot)
+            logger.warn('OAuth profile avatar update threw', avatarError)
+          }
+        }
+
+        assertCallbackCurrent(snapshot)
+        return { snapshot, profile }
+      }
+
+      const processSession = async (candidateSession: NonNullable<typeof session>) => {
+        const identity = await loadVerifiedIdentity(candidateSession)
+        if (!identity) return
+        commitSuccessfulCallback(identity)
       }
 
       if (session) {
-        // Sync OAuth avatar to user_profiles if not already set
-        try {
-          const meta = session.user.user_metadata
-          const oauthAvatar = meta?.avatar_url || meta?.picture || null
-          if (oauthAvatar) {
-            const { data: profile } = await supabase
-              .from('user_profiles')
-              .select('id, avatar_url, handle')
-              .eq('id', session.user.id)
-              .maybeSingle()
-
-            if (profile && (!profile.avatar_url || profile.avatar_url.length < 5)) {
-              // Profile exists but no avatar (or invalid) — sync from OAuth
-              await supabase
-                .from('user_profiles')
-                .update({ avatar_url: oauthAvatar })
-                .eq('id', session.user.id)
-            } else if (!profile) {
-              // No profile yet — create one with avatar
-              const emailHandle = session.user.email?.split('@')[0] || session.user.id.slice(0, 8)
-              await supabase.from('user_profiles').upsert(
-                {
-                  id: session.user.id,
-                  email: session.user.email || '',
-                  handle: emailHandle,
-                  avatar_url: oauthAvatar,
-                },
-                { onConflict: 'id' }
-              )
-            }
-          }
-        } catch (err) {
-          logger.warn('Failed to sync OAuth avatar:', err)
-        }
-
-        await saveToStore(session)
-        if (isAddAccount)
-          try {
-            localStorage.removeItem('arena_adding_account')
-          } catch {
-            /* intentional */
-          }
-        await finalizeRedirect(session)
+        await processSession(session)
       } else {
+        // With no principal yet, pin all retries to the exact auth operation
+        // that owned the initial empty read. A new login/account switch must
+        // not be adopted by this older callback just because it appears later.
+        const retryBoundary = captureCallbackBoundary()
         // Retry with backoff: supabase may need time to process the hash fragment
         const tryGetSession = async (
           retries = 0
         ): Promise<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']> => {
-          await new Promise((r) => setTimeout(r, 1000))
-          const { data } = await supabase.auth.getSession()
+          await waitForRetry()
+          assertCallbackBoundaryCurrent(retryBoundary)
+          const { data, error: retryError } = await supabase.auth.getSession()
+          assertCallbackBoundaryCurrent(retryBoundary)
+          if (retryError) throw retryError
           if (data.session) return data.session
           if (retries < 2) return tryGetSession(retries + 1)
           return null
@@ -199,21 +322,24 @@ function AuthCallbackContent() {
 
         const retrySession = await tryGetSession()
         if (retrySession) {
-          await saveToStore(retrySession)
-          if (isAddAccount)
-            try {
-              localStorage.removeItem('arena_adding_account')
-            } catch {
-              /* intentional */
-            }
-          await finalizeRedirect(retrySession)
+          await processSession(retrySession)
         } else {
           router.replace('/login?error=no_session')
         }
       }
     }
 
-    handleCallback()
+    void handleCallback().catch((callbackError) => {
+      if (cancelled || callbackError instanceof StaleVerifiedSessionError) return
+      logger.error('Unhandled auth callback failure', callbackError)
+      router.replace('/login?error=auth_failed')
+    })
+
+    return () => {
+      cancelled = true
+      retryTimers.forEach((timer) => clearTimeout(timer))
+      retryTimers.clear()
+    }
   }, [router, searchParams])
 
   return (
