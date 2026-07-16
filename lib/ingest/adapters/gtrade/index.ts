@@ -44,11 +44,11 @@ import {
   parseGtradeLeaderboardPage,
   parseGtradePositions,
   parseGtradeProfile,
+  unmatchedGtradeCloseKeys,
 } from './parsers'
 import {
   fetchGtradeTradesWindow,
   GtradeTradesFetchError,
-  GTRADE_TRADES_PAGE_LIMIT,
   type GtradeTradesSnapshot,
 } from './trades-fetch'
 
@@ -278,9 +278,9 @@ const gtradeAdapter: SourceAdapter = {
   },
 
   /**
-   * orders: trades-table pages newest→oldest via the id cursor (spec §2.3).
-   * Stops on cursor overlap (oldest row date ≤ stored cursor), page
-   * exhaustion, or the first-sight backfill cap.
+   * Reuse the validated profile snapshot in the same session. Orders retain
+   * exact upstream pages; position_history gets one composite snapshot so an
+   * open/close pair split across page boundaries can be rebuilt atomically.
    */
   async *getHistory(
     session: FetchSession,
@@ -295,32 +295,60 @@ const gtradeAdapter: SourceAdapter = {
       throw new Error(`[gtrade] history surface ${kind} not supported`)
     }
     const base = endpoint(src, 'history', `${API_BASE}/personal-trading-history`)
-    const maxPages = Number(src.meta.history_max_pages ?? 5) || 5
-    const cursorMs = cursor ? Date.parse(cursor) : NaN
+    const maxPages = Number(
+      src.meta.history_max_pages ??
+        src.meta.profile_trades_max_pages ??
+        DEFAULT_PROFILE_TRADES_MAX_PAGES
+    )
+    const outcome = await getTrades(session, src, exchangeTraderId, maxPages)
+    const fetchedAt = new Date().toISOString()
 
-    let pageCursor: number | null = null
-    for (let page = 1; page <= maxPages; page++) {
-      const url =
-        `${base}/${exchangeTraderId}?chainId=${chainId(src)}&limit=${GTRADE_TRADES_PAGE_LIMIT}` +
-        (pageCursor !== null ? `&cursor=${pageCursor}` : '')
-      const payload = (await fetchJson(session, url)) as {
-        data?: Dict[]
-        pagination?: { hasMore?: boolean; nextCursor?: number }
+    if (kind === 'position_history') {
+      yield {
+        pageIndex: 1,
+        payload: {
+          historyFetchState: outcome.state,
+          historyFetchReason: outcome.reason,
+          historyCursor: cursor,
+          tradesSnapshot: outcome.snapshot,
+        },
+        url: outcome.snapshot.rawPages[0]?.url ?? `${base}/${exchangeTraderId}`,
+        fetchedAt,
       }
-      const rows = Array.isArray(payload.data) ? payload.data : []
-      if (rows.length === 0) break
-
-      yield { pageIndex: page, payload, url, fetchedAt: new Date().toISOString() }
-
-      const hasMore = payload.pagination?.hasMore === true
-      const nextCursor = payload.pagination?.nextCursor
-      if (!hasMore || typeof nextCursor !== 'number') break
-      if (Number.isFinite(cursorMs)) {
-        const oldest = Date.parse(String(rows[rows.length - 1].date))
-        // Overlap reached: this page already dips into stored history.
-        if (Number.isFinite(oldest) && oldest <= cursorMs) break
+      if (outcome.state === 'failed') {
+        throw new Error(`[gtrade] position history fetch failed: ${outcome.reason}`)
       }
-      pageCursor = nextCursor
+      const unmatched = unmatchedGtradeCloseKeys(outcome.snapshot.trades, cursor)
+      if (unmatched.length > 0) {
+        throw new Error(
+          `[gtrade] position history prefix is missing ${unmatched.length} opening events`
+        )
+      }
+      return
+    }
+
+    for (const rawPage of outcome.snapshot.rawPages) {
+      yield {
+        pageIndex: rawPage.pageIndex,
+        payload: rawPage.response,
+        url: rawPage.url,
+        fetchedAt,
+      }
+    }
+    if (outcome.snapshot.rawPages.length === 0) {
+      yield {
+        pageIndex: 1,
+        payload: {
+          historyFetchState: outcome.state,
+          historyFetchReason: outcome.reason,
+          tradesSnapshot: outcome.snapshot,
+        },
+        url: `${base}/${exchangeTraderId}`,
+        fetchedAt,
+      }
+    }
+    if (outcome.state === 'failed') {
+      throw new Error(`[gtrade] orders history fetch failed: ${outcome.reason}`)
     }
   },
 
