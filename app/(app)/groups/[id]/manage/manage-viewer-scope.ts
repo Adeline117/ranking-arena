@@ -13,19 +13,26 @@ export type GroupManageParamsSourceScope = {
  * source advances synchronously during render, before either Promise resolves.
  */
 export class GroupManageParamsSourceLedger {
-  private source: unknown = UNSET_PARAMS_SOURCE
-  private paramsRevision = 0
+  private current: GroupManageParamsSourceScope = {
+    source: UNSET_PARAMS_SOURCE,
+    paramsRevision: 0,
+  }
 
   capture(source: unknown): GroupManageParamsSourceScope {
-    if (this.source !== source) {
-      this.source = source
-      this.paramsRevision += 1
+    if (this.current.source !== source) {
+      this.current = {
+        source,
+        paramsRevision: this.current.paramsRevision + 1,
+      }
     }
-    return { source: this.source, paramsRevision: this.paramsRevision }
+    return this.current
   }
 
   isCurrent(expected: GroupManageParamsSourceScope): boolean {
-    return this.source === expected.source && this.paramsRevision === expected.paramsRevision
+    return (
+      this.current.source === expected.source &&
+      this.current.paramsRevision === expected.paramsRevision
+    )
   }
 }
 

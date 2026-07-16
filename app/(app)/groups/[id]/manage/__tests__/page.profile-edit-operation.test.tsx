@@ -94,6 +94,7 @@ jest.mock('../components/GroupSettings', () => ({
 const ACTOR_A = '11111111-1111-4111-8111-111111111111'
 const ACTOR_B = '22222222-2222-4222-8222-222222222222'
 const GROUP_ID = '33333333-3333-4333-8333-333333333333'
+const OTHER_GROUP_ID = '55555555-5555-4555-8555-555555555555'
 const APPLICATION_ID = '44444444-4444-4444-8444-444444444444'
 
 function token(subject: string, marker: string): string {
@@ -149,7 +150,7 @@ function submitAck(callIndex: number) {
   }
 }
 
-function installSupabaseMock() {
+function installSupabaseMock({ groupError = null }: { groupError?: unknown } = {}) {
   const group = {
     id: GROUP_ID,
     name: 'Existing group',
@@ -169,13 +170,16 @@ function installSupabaseMock() {
     for (const method of ['select', 'eq', 'in', 'order', 'limit', 'lt']) {
       builder[method] = jest.fn(() => builder)
     }
-    builder.single = jest.fn().mockResolvedValue({ data: table === 'groups' ? group : null })
+    builder.single = jest.fn().mockResolvedValue({
+      data: table === 'groups' ? group : null,
+      error: table === 'groups' ? groupError : null,
+    })
     builder.maybeSingle = jest
       .fn()
       .mockResolvedValue(
         table === 'own_group_memberships'
-          ? { data: { role: 'owner' } }
-          : { data: { id: ACTOR_A, handle: 'owner', avatar_url: null } }
+          ? { data: { role: 'owner' }, error: null }
+          : { data: { id: ACTOR_A, handle: 'owner', avatar_url: null }, error: null }
       )
     builder.then = (resolve: (value: unknown) => void) =>
       Promise.resolve(
@@ -190,10 +194,11 @@ function installSupabaseMock() {
                   mute_reason: null,
                 },
               ],
+              error: null,
             }
           : table === 'user_profiles'
-            ? { data: [{ id: ACTOR_A, handle: 'owner', avatar_url: null }] }
-            : { data: [] }
+            ? { data: [{ id: ACTOR_A, handle: 'owner', avatar_url: null }], error: null }
+            : { data: [], error: null }
       ).then(resolve)
     return builder
   })
@@ -305,6 +310,30 @@ describe('group profile edit submit operation', () => {
     )
   })
 
+  it('clears the old resource immediately while a replacement params source is pending', async () => {
+    const firstParams = Promise.resolve({ id: GROUP_ID })
+    const nextParams = deferred<{ id: string }>()
+    const view = render(<GroupManagePage params={firstParams} />)
+    await openSettings()
+
+    view.rerender(<GroupManagePage params={nextParams.promise} />)
+    expect(screen.getByText('loading')).toBeInTheDocument()
+    expect(screen.queryByTestId('profile-edit-submit')).not.toBeInTheDocument()
+
+    await act(async () => nextParams.resolve({ id: OTHER_GROUP_ID }))
+    await waitFor(() => expect(screen.queryByText('loading')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'groupSettings' })).toBeInTheDocument()
+  })
+
+  it('fails closed instead of publishing a partial manager snapshot on any query error', async () => {
+    installSupabaseMock({ groupError: { code: 'XX001' } })
+    render(<GroupManagePage params={Promise.resolve({ id: GROUP_ID })} />)
+
+    await waitFor(() => expect(screen.queryByText('loading')).not.toBeInTheDocument())
+    expect(screen.getByText('noManagePermission')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'groupSettings' })).not.toBeInTheDocument()
+  })
+
   it('cannot let an A acknowledgement mutate, toast, or clear B submission ownership', async () => {
     const responseA = deferred<ReturnType<typeof submitAck>>()
     const responseB = deferred<ReturnType<typeof submitAck>>()
@@ -318,7 +347,8 @@ describe('group profile edit submit operation', () => {
     const scopeB = synchronizeViewerScope(true, ACTOR_B)
     currentAuth = authFor(ACTOR_B, scopeB.sessionGeneration, 'b')
     view.rerender(<GroupManagePage params={params} />)
-    const currentSubmit = await screen.findByTestId('profile-edit-submit')
+    await openSettings()
+    const currentSubmit = screen.getByTestId('profile-edit-submit')
     expect(screen.getByTestId('profile-edit-loading')).toHaveTextContent('idle')
     fireEvent.click(currentSubmit)
     await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
@@ -350,6 +380,7 @@ describe('group profile edit submit operation', () => {
     const nextScope = commitViewerTransition(transition, ACTOR_A)!
     currentAuth = authFor(ACTOR_A, nextScope.sessionGeneration, 'reauthenticated')
     view.rerender(<GroupManagePage params={params} />)
+    await openSettings()
     expect(screen.getByTestId('profile-edit-loading')).toHaveTextContent('idle')
 
     await act(async () => response.resolve(submitAck(0)))

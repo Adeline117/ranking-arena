@@ -3,7 +3,7 @@
 import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -38,7 +38,6 @@ import ContentManagement from './components/ContentManagement'
 import GroupSettings from './components/GroupSettings'
 import { MuteModal, NotifyModal } from './components/ManageModals'
 import {
-  advanceGroupMemberModerationResourceScope,
   GroupMemberModerationOperationLedger,
   GroupMemberModerationRequestSingleFlight,
   isGroupMemberModerationViewerCurrent,
@@ -46,6 +45,14 @@ import {
   type GroupMemberModerationOperation,
   type GroupMemberModerationViewerScope,
 } from './member-moderation-operation'
+import {
+  advanceGroupManageResourceScope,
+  canonicalGroupManageId,
+  GroupManageParamsSourceLedger,
+  groupManageOwnerKey,
+  isGroupManageViewerCurrent,
+  type GroupManageOwnerScope,
+} from './manage-viewer-scope'
 
 type GroupMember = {
   user_id: string
@@ -99,6 +106,11 @@ const MUTE_DURATION_MS = {
   '7d': 7 * 24 * 60 * 60 * 1000,
   permanent: 100 * 365 * 24 * 60 * 60 * 1000,
 } as const
+
+function assertGroupManageQueriesSucceeded(results: Array<{ error?: unknown }>): void {
+  const failure = results.find((result) => result.error)
+  if (failure?.error) throw failure.error
+}
 
 function ActivityLogSection({ groupId }: { groupId: string }) {
   const { language, t } = useLanguage()
@@ -176,72 +188,139 @@ function ActivityLogSection({ groupId }: { groupId: string }) {
 export default function GroupManagePage({ params }: { params: Promise<{ id: string }> }) {
   if (!features.social) redirect('/')
 
-  const [groupId, setGroupId] = useState<string>('')
+  const paramsSourceLedgerRef = useRef(new GroupManageParamsSourceLedger())
+  const paramsSourceScope = paramsSourceLedgerRef.current.capture(params)
+  const [resolvedParams, setResolvedParams] = useState({ paramsRevision: 0, groupId: '' })
+  const groupId =
+    resolvedParams.paramsRevision === paramsSourceScope.paramsRevision
+      ? canonicalGroupManageId(resolvedParams.groupId) || ''
+      : ''
   useEffect(() => {
-    if (params && typeof params === 'object' && 'then' in params) {
-      ;(params as Promise<{ id: string }>)
-        .then((resolved) => setGroupId(resolved.id))
-        // eslint-disable-next-line no-restricted-syntax
-        .catch(() => {
-          /* Intentionally swallowed: params resolution should not fail */
+    const expectedSource = paramsSourceScope
+    Promise.resolve(params as Promise<{ id: string }> | { id: string })
+      .then((resolved) => {
+        if (!paramsSourceLedgerRef.current.isCurrent(expectedSource)) return
+        setResolvedParams({
+          paramsRevision: expectedSource.paramsRevision,
+          groupId: String(resolved?.id ?? ''),
         })
-    } else {
-      setGroupId(String((params as { id: string })?.id ?? ''))
-    }
-  }, [params])
+      })
+      .catch(() => {
+        if (!paramsSourceLedgerRef.current.isCurrent(expectedSource)) return
+        setResolvedParams({ paramsRevision: expectedSource.paramsRevision, groupId: '' })
+      })
+  }, [params, paramsSourceScope])
 
   const { language, t } = useLanguage()
-  const { isPro } = useSubscription()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
   const { accessToken, email, userId, viewerKey, sessionGeneration } = useAuthSession()
+  const { isPro } = useSubscription()
   const router = useRouter()
-  const [group, setGroup] = useState<Group | null>(null)
-  const [members, setMembers] = useState<GroupMember[]>([])
-  const [posts, setPosts] = useState<Post[]>([])
-  const [comments, setComments] = useState<Comment[]>([])
-  const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member' | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'members' | 'content' | 'settings' | 'activity'>(
-    'members'
+  const manageResourceScopeRef = useRef({
+    paramsRevision: 0,
+    groupId: null as string | null,
+    resourceGeneration: 0,
+  })
+  manageResourceScopeRef.current = advanceGroupManageResourceScope(
+    manageResourceScopeRef.current,
+    paramsSourceScope.paramsRevision,
+    groupId
   )
-  const [editMode, setEditMode] = useState(false)
-  const [editName, setEditName] = useState('')
-  const [editNameEn, setEditNameEn] = useState('')
-  const [editDescription, setEditDescription] = useState('')
-  const [editDescriptionEn, setEditDescriptionEn] = useState('')
-  const [editRules, setEditRules] = useState<Rule[]>([])
-  const [newRuleZh, setNewRuleZh] = useState('')
-  const [newRuleEn, setNewRuleEn] = useState('')
-  const profileEditStateOwnerKey = `${viewerKey}:${sessionGeneration}:${groupId}`
-  const [submitting, setSubmitting] = useViewerSlotState(profileEditStateOwnerKey, false)
-  const [langTab, setLangTab] = useState<'zh' | 'en'>('zh')
-  const [showMultiLang, setShowMultiLang] = useState(false)
-  const [editAvatarUrl, setEditAvatarUrl] = useState('')
-  const [editRoleNames, setEditRoleNames] = useState<{
+  const scopedParamsRevision = manageResourceScopeRef.current.paramsRevision
+  const scopedGroupId = manageResourceScopeRef.current.groupId
+  const scopedResourceGeneration = manageResourceScopeRef.current.resourceGeneration
+  const manageOwnerScope: GroupManageOwnerScope = useMemo(
+    () => ({
+      userId,
+      viewerKey,
+      sessionGeneration,
+      paramsRevision: scopedParamsRevision,
+      groupId: scopedGroupId,
+      resourceGeneration: scopedResourceGeneration,
+    }),
+    [
+      scopedGroupId,
+      scopedParamsRevision,
+      scopedResourceGeneration,
+      sessionGeneration,
+      userId,
+      viewerKey,
+    ]
+  )
+  const manageStateOwnerKey = groupManageOwnerKey(manageOwnerScope)
+  const manageAccessTokenRef = useRef(accessToken)
+  const manageOwnerScopeRef = useRef(manageOwnerScope)
+  manageAccessTokenRef.current = accessToken
+  manageOwnerScopeRef.current = manageOwnerScope
+  const isManageScopeCurrent = useCallback((expected: GroupManageOwnerScope) => {
+    return isGroupManageViewerCurrent(
+      expected,
+      manageOwnerScopeRef.current,
+      manageAccessTokenRef.current
+    )
+  }, [])
+
+  const [group, setGroup] = useViewerSlotState<Group | null>(manageStateOwnerKey, null)
+  const [members, setMembers] = useViewerSlotState<GroupMember[]>(manageStateOwnerKey, [])
+  const [posts, setPosts] = useViewerSlotState<Post[]>(manageStateOwnerKey, [])
+  const [comments, setComments] = useViewerSlotState<Comment[]>(manageStateOwnerKey, [])
+  const [userRole, setUserRole] = useViewerSlotState<'owner' | 'admin' | 'member' | null>(
+    manageStateOwnerKey,
+    null
+  )
+  const [loading, setLoading] = useViewerSlotState(manageStateOwnerKey, true)
+  const [activeTab, setActiveTab] = useViewerSlotState<
+    'members' | 'content' | 'settings' | 'activity'
+  >(manageStateOwnerKey, 'members')
+  const [editMode, setEditMode] = useViewerSlotState(manageStateOwnerKey, false)
+  const [editName, setEditName] = useViewerSlotState(manageStateOwnerKey, '')
+  const [editNameEn, setEditNameEn] = useViewerSlotState(manageStateOwnerKey, '')
+  const [editDescription, setEditDescription] = useViewerSlotState(manageStateOwnerKey, '')
+  const [editDescriptionEn, setEditDescriptionEn] = useViewerSlotState(manageStateOwnerKey, '')
+  const [editRules, setEditRules] = useViewerSlotState<Rule[]>(manageStateOwnerKey, [])
+  const [newRuleZh, setNewRuleZh] = useViewerSlotState(manageStateOwnerKey, '')
+  const [newRuleEn, setNewRuleEn] = useViewerSlotState(manageStateOwnerKey, '')
+  const [submitting, setSubmitting] = useViewerSlotState(manageStateOwnerKey, false)
+  const [langTab, setLangTab] = useViewerSlotState<'zh' | 'en'>(manageStateOwnerKey, 'zh')
+  const [showMultiLang, setShowMultiLang] = useViewerSlotState(manageStateOwnerKey, false)
+  const [editAvatarUrl, setEditAvatarUrl] = useViewerSlotState(manageStateOwnerKey, '')
+  const [editRoleNames, setEditRoleNames] = useViewerSlotState<{
     admin: { zh: string; en: string }
     member: { zh: string; en: string }
-  }>({ admin: { zh: '管理员', en: 'Admin' }, member: { zh: '成员', en: 'Member' } })
-  const [isPremiumOnly, setIsPremiumOnly] = useState(false)
-  const [contentSearch, setContentSearch] = useState('')
-  const [memberSearch, setMemberSearch] = useState('')
-  const [debouncedMemberSearch, setDebouncedMemberSearch] = useState('')
-  const [memberPage, setMemberPage] = useState(0)
-  const [memberRoleFilter, setMemberRoleFilter] = useState<'all' | 'owner' | 'admin' | 'member'>(
-    'all'
+  }>(manageStateOwnerKey, {
+    admin: { zh: '管理员', en: 'Admin' },
+    member: { zh: '成员', en: 'Member' },
+  })
+  const [isPremiumOnly, setIsPremiumOnly] = useViewerSlotState(manageStateOwnerKey, false)
+  const [contentSearch, setContentSearch] = useViewerSlotState(manageStateOwnerKey, '')
+  const [memberSearch, setMemberSearch] = useViewerSlotState(manageStateOwnerKey, '')
+  const [debouncedMemberSearch, setDebouncedMemberSearch] = useViewerSlotState(
+    manageStateOwnerKey,
+    ''
   )
-  const [hasMorePosts, setHasMorePosts] = useState(false)
-  const [loadingMorePosts, setLoadingMorePosts] = useState(false)
-  const [pinningPost, setPinningPost] = useState<string | null>(null)
-  const [inviteUrl, setInviteUrl] = useState<string | null>(null)
-  const [generatingInvite, setGeneratingInvite] = useState(false)
-  const [showMuteModal, setShowMuteModal] = useState<string | null>(null)
-  const [muteDuration, setMuteDuration] = useState<'3h' | '1d' | '7d' | 'permanent'>('1d')
-  const [muteReason, setMuteReason] = useState('')
-  const [showNotifyModal, setShowNotifyModal] = useState(false)
-  const [notifyTitle, setNotifyTitle] = useState('')
-  const [notifyMessage, setNotifyMessage] = useState('')
-  const [notifySending, setNotifySending] = useState(false)
+  const [memberPage, setMemberPage] = useViewerSlotState(manageStateOwnerKey, 0)
+  const [memberRoleFilter, setMemberRoleFilter] = useViewerSlotState<
+    'all' | 'owner' | 'admin' | 'member'
+  >(manageStateOwnerKey, 'all')
+  const [hasMorePosts, setHasMorePosts] = useViewerSlotState(manageStateOwnerKey, false)
+  const [loadingMorePosts, setLoadingMorePosts] = useViewerSlotState(manageStateOwnerKey, false)
+  const [pinningPost, setPinningPost] = useViewerSlotState<string | null>(manageStateOwnerKey, null)
+  const [inviteUrl, setInviteUrl] = useViewerSlotState<string | null>(manageStateOwnerKey, null)
+  const [generatingInvite, setGeneratingInvite] = useViewerSlotState(manageStateOwnerKey, false)
+  const [showMuteModal, setShowMuteModal] = useViewerSlotState<string | null>(
+    manageStateOwnerKey,
+    null
+  )
+  const [muteDuration, setMuteDuration] = useViewerSlotState<'3h' | '1d' | '7d' | 'permanent'>(
+    manageStateOwnerKey,
+    '1d'
+  )
+  const [muteReason, setMuteReason] = useViewerSlotState(manageStateOwnerKey, '')
+  const [showNotifyModal, setShowNotifyModal] = useViewerSlotState(manageStateOwnerKey, false)
+  const [notifyTitle, setNotifyTitle] = useViewerSlotState(manageStateOwnerKey, '')
+  const [notifyMessage, setNotifyMessage] = useViewerSlotState(manageStateOwnerKey, '')
+  const [notifySending, setNotifySending] = useViewerSlotState(manageStateOwnerKey, false)
   const profileEditSubmitOperationIdRef = useRef<Record<string, string>>({})
   const profileEditContextRef = useRef({
     accessToken,
@@ -249,6 +328,9 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     sessionGeneration,
     userId,
     viewerKey,
+    manageStateOwnerKey,
+    paramsRevision: manageOwnerScope.paramsRevision,
+    resourceGeneration: manageOwnerScope.resourceGeneration,
   })
   profileEditContextRef.current = {
     accessToken,
@@ -256,23 +338,19 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     sessionGeneration,
     userId,
     viewerKey,
+    manageStateOwnerKey,
+    paramsRevision: manageOwnerScope.paramsRevision,
+    resourceGeneration: manageOwnerScope.resourceGeneration,
   }
   const moderationOperationsRef = useRef(new GroupMemberModerationOperationLedger())
   const moderationRequestsRef = useRef(new GroupMemberModerationRequestSingleFlight())
   const moderationAccessTokenRef = useRef(accessToken)
-  const moderationResourceScopeRef = useRef({
-    groupId: null as string | null,
-    resourceGeneration: 0,
-  })
-  moderationResourceScopeRef.current = advanceGroupMemberModerationResourceScope(
-    moderationResourceScopeRef.current,
-    groupId
-  )
   const moderationViewerScope: GroupMemberModerationViewerScope = {
     actorId: userId,
     viewerKey,
     sessionGeneration,
-    ...moderationResourceScopeRef.current,
+    groupId: manageOwnerScope.groupId,
+    resourceGeneration: manageOwnerScope.resourceGeneration,
   }
   const moderationViewerScopeRef = useRef(moderationViewerScope)
   moderationAccessTokenRef.current = accessToken
@@ -292,137 +370,225 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   )
 
   useEffect(() => {
+    const expectedScope = manageOwnerScope
     const timer = setTimeout(() => {
+      if (!isManageScopeCurrent(expectedScope)) return
       setDebouncedMemberSearch(memberSearch)
       setMemberPage(0)
     }, 300)
     return () => clearTimeout(timer)
-  }, [memberSearch])
+  }, [
+    isManageScopeCurrent,
+    manageOwnerScope,
+    manageStateOwnerKey,
+    memberSearch,
+    setDebouncedMemberSearch,
+    setMemberPage,
+  ])
   useEffect(() => {
     setMemberPage(0)
-  }, [memberRoleFilter, activeTab])
+  }, [activeTab, manageStateOwnerKey, memberRoleFilter, setMemberPage])
 
   // Load data
   useEffect(() => {
-    if (!groupId || groupId === 'loading' || !userId) return
+    const expectedScope = manageOwnerScope
+    const requestGroupId = expectedScope.groupId
+    const requestUserId = expectedScope.userId
+    if (!requestGroupId || !requestUserId || !isManageScopeCurrent(expectedScope)) return
+    let active = true
+    const requestIsCurrent = () => active && isManageScopeCurrent(expectedScope)
+
     const load = async () => {
+      if (!requestIsCurrent()) return
       setLoading(true)
       try {
-        const { data: groupData } = await supabase
-          .from('groups')
-          .select(
-            'id, name, name_en, description, description_en, avatar_url, rules_json, role_names, member_count, is_premium_only, created_by, created_at'
-          )
-          .eq('id', groupId)
-          .single()
-        if (groupData) {
-          setGroup(groupData as Group)
-          setEditName(groupData.name || '')
-          setEditNameEn(groupData.name_en || '')
-          setEditDescription(groupData.description || '')
-          setEditDescriptionEn(groupData.description_en || '')
-          setEditRules(groupData.rules_json || [])
-          setEditAvatarUrl(groupData.avatar_url || '')
-          const defaultRN = {
+        const [groupResult, membershipResult, membersResult, postsResult] = await Promise.all([
+          supabase
+            .from('groups')
+            .select(
+              'id, name, name_en, description, description_en, avatar_url, rules_json, role_names, member_count, is_premium_only, created_by, created_at'
+            )
+            .eq('id', requestGroupId)
+            .single(),
+          supabase
+            .from('own_group_memberships')
+            .select('role')
+            .eq('group_id', requestGroupId)
+            .eq('user_id', requestUserId)
+            .maybeSingle(),
+          supabase
+            .from('group_member_moderation_directory')
+            .select('user_id, role, joined_at, muted_until, mute_reason')
+            .eq('group_id', requestGroupId)
+            .order('role', { ascending: true }),
+          supabase
+            .from('posts')
+            .select('id, title, content, author_handle, created_at, is_pinned')
+            .eq('group_id', requestGroupId)
+            .order('is_pinned', { ascending: false, nullsFirst: false })
+            .order('created_at', { ascending: false })
+            .limit(POSTS_PER_PAGE),
+        ])
+        if (!requestIsCurrent()) return
+        assertGroupManageQueriesSucceeded([
+          groupResult,
+          membershipResult,
+          membersResult,
+          postsResult,
+        ])
+
+        const groupData = (groupResult.data || null) as Group | null
+        const membersData = (membersResult.data || []) as GroupMember[]
+        const postsData = (postsResult.data || []) as Post[]
+        const userIds = membersData.map((member) => member.user_id)
+        const loadedPosts = (postsData || []).map((p) => ({ ...p, deleted_at: null })) as Post[]
+        const postIds = (postsData || []).map((p) => p.id)
+
+        const [profilesResult, ownerProfileResult, commentsResult] = await Promise.all([
+          userIds.length > 0
+            ? supabase.from('user_profiles').select('id, handle, avatar_url').in('id', userIds)
+            : Promise.resolve({ data: [], error: null }),
+          membersData.length === 0 && groupData?.created_by
+            ? supabase
+                .from('user_profiles')
+                .select('id, handle, avatar_url')
+                .eq('id', groupData.created_by)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          postIds.length > 0
+            ? supabase
+                .from('comments')
+                .select('id, content, author_handle, created_at, post_id')
+                .in('post_id', postIds)
+                .order('created_at', { ascending: false })
+                .limit(100)
+            : Promise.resolve({ data: [], error: null }),
+        ])
+        if (!requestIsCurrent()) return
+        assertGroupManageQueriesSucceeded([profilesResult, ownerProfileResult, commentsResult])
+
+        const profileMap = new Map<string, { handle?: string | null; avatar_url?: string | null }>()
+        for (const profile of profilesResult.data || []) {
+          profileMap.set(profile.id, {
+            handle: profile.handle,
+            avatar_url: profile.avatar_url,
+          })
+        }
+
+        let loadedMembers: GroupMember[] = membersData
+          .map((member) => ({
+            ...member,
+            handle: profileMap.get(member.user_id)?.handle,
+            avatar_url: profileMap.get(member.user_id)?.avatar_url,
+          }))
+          .sort((left, right) => {
+            const order: Record<string, number> = { owner: 0, admin: 1, member: 2 }
+            return (order[left.role] || 2) - (order[right.role] || 2)
+          })
+        const ownerProfile = ownerProfileResult.data
+        if (loadedMembers.length === 0 && groupData?.created_by && ownerProfile) {
+          loadedMembers = [
+            {
+              user_id: groupData.created_by,
+              role: 'owner',
+              handle: ownerProfile.handle,
+              avatar_url: ownerProfile.avatar_url,
+              joined_at: groupData.created_at || null,
+            },
+          ]
+        }
+
+        const defaultRoleNames = {
+          admin: { zh: '管理员', en: 'Admin' },
+          member: { zh: '成员', en: 'Member' },
+        }
+        const loadedRoleNames = (groupData?.role_names || {}) as {
+          admin?: { zh?: string; en?: string }
+          member?: { zh?: string; en?: string }
+        }
+        const commentsData = (commentsResult.data || []) as Comment[]
+
+        // React batches this single guarded commit; no query can publish a
+        // partial group snapshot before every dependent read has completed.
+        setGroup(groupData)
+        setUserRole(
+          (membershipResult.data?.role as 'owner' | 'admin' | 'member' | undefined) || null
+        )
+        setMembers(loadedMembers)
+        setPosts(loadedPosts)
+        setComments(commentsData.map((comment) => ({ ...comment, deleted_at: null })))
+        setHasMorePosts(loadedPosts.length === POSTS_PER_PAGE)
+        setEditName(groupData?.name || '')
+        setEditNameEn(groupData?.name_en || '')
+        setEditDescription(groupData?.description || '')
+        setEditDescriptionEn(groupData?.description_en || '')
+        setEditRules(groupData?.rules_json || [])
+        setEditAvatarUrl(groupData?.avatar_url || '')
+        setEditRoleNames({
+          admin: {
+            zh: loadedRoleNames.admin?.zh || defaultRoleNames.admin.zh,
+            en: loadedRoleNames.admin?.en || defaultRoleNames.admin.en,
+          },
+          member: {
+            zh: loadedRoleNames.member?.zh || defaultRoleNames.member.zh,
+            en: loadedRoleNames.member?.en || defaultRoleNames.member.en,
+          },
+        })
+        setIsPremiumOnly(Boolean(groupData?.is_premium_only))
+        setShowMultiLang(Boolean(groupData?.name_en || groupData?.description_en))
+      } catch (err) {
+        if (requestIsCurrent()) {
+          // Any failed authority/content query invalidates the entire snapshot.
+          // Never retain a partially loaded manager role or cross-resource data.
+          setGroup(null)
+          setUserRole(null)
+          setMembers([])
+          setPosts([])
+          setComments([])
+          setHasMorePosts(false)
+          setEditName('')
+          setEditNameEn('')
+          setEditDescription('')
+          setEditDescriptionEn('')
+          setEditRules([])
+          setEditAvatarUrl('')
+          setEditRoleNames({
             admin: { zh: '管理员', en: 'Admin' },
             member: { zh: '成员', en: 'Member' },
-          }
-          const loadedRN = (groupData.role_names || {}) as {
-            admin?: { zh?: string; en?: string }
-            member?: { zh?: string; en?: string }
-          }
-          setEditRoleNames({
-            admin: {
-              zh: loadedRN.admin?.zh || defaultRN.admin.zh,
-              en: loadedRN.admin?.en || defaultRN.admin.en,
-            },
-            member: {
-              zh: loadedRN.member?.zh || defaultRN.member.zh,
-              en: loadedRN.member?.en || defaultRN.member.en,
-            },
           })
-          setIsPremiumOnly(groupData.is_premium_only || false)
-          if (groupData.name_en || groupData.description_en) setShowMultiLang(true)
+          setIsPremiumOnly(false)
+          setShowMultiLang(false)
+          logger.error('Error loading data:', err)
         }
-        const { data: memberData } = await supabase
-          .from('own_group_memberships')
-          .select('role')
-          .eq('group_id', groupId)
-          .eq('user_id', userId)
-          .maybeSingle()
-        if (memberData) setUserRole(memberData.role as 'owner' | 'admin' | 'member')
-        const { data: membersData } = await supabase
-          .from('group_member_moderation_directory')
-          .select('user_id, role, joined_at, muted_until, mute_reason')
-          .eq('group_id', groupId)
-          .order('role', { ascending: true })
-        if (membersData && membersData.length > 0) {
-          const userIds = membersData.map((m) => m.user_id)
-          const { data: profilesData } = await supabase
-            .from('user_profiles')
-            .select('id, handle, avatar_url')
-            .in('id', userIds)
-          const profileMap = new Map()
-          profilesData?.forEach((p) =>
-            profileMap.set(p.id, { handle: p.handle, avatar_url: p.avatar_url })
-          )
-          setMembers(
-            membersData
-              .map((m) => ({
-                ...m,
-                handle: profileMap.get(m.user_id)?.handle,
-                avatar_url: profileMap.get(m.user_id)?.avatar_url,
-              }))
-              .sort((a, b) => {
-                const o: Record<string, number> = { owner: 0, admin: 1, member: 2 }
-                return (o[a.role] || 2) - (o[b.role] || 2)
-              }) as GroupMember[]
-          )
-        } else if (groupData?.created_by) {
-          const { data: ownerProfile } = await supabase
-            .from('user_profiles')
-            .select('id, handle, avatar_url')
-            .eq('id', groupData.created_by)
-            .maybeSingle()
-          if (ownerProfile)
-            setMembers([
-              {
-                user_id: groupData.created_by,
-                role: 'owner',
-                handle: ownerProfile.handle,
-                avatar_url: ownerProfile.avatar_url,
-                joined_at: groupData.created_at || null,
-              },
-            ])
-        }
-        const { data: postsData } = await supabase
-          .from('posts')
-          .select('id, title, content, author_handle, created_at, is_pinned')
-          .eq('group_id', groupId)
-          .order('is_pinned', { ascending: false, nullsFirst: false })
-          .order('created_at', { ascending: false })
-          .limit(POSTS_PER_PAGE)
-        const loadedPosts = (postsData || []).map((p) => ({ ...p, deleted_at: null })) as Post[]
-        setPosts(loadedPosts)
-        setHasMorePosts(loadedPosts.length === POSTS_PER_PAGE)
-        const postIds = (postsData || []).map((p) => p.id)
-        if (postIds.length > 0) {
-          const { data: commentsData } = await supabase
-            .from('comments')
-            .select('id, content, author_handle, created_at, post_id')
-            .in('post_id', postIds)
-            .order('created_at', { ascending: false })
-            .limit(100)
-          setComments((commentsData || []).map((c) => ({ ...c, deleted_at: null })) as Comment[])
-        }
-      } catch (err) {
-        logger.error('Error loading data:', err)
       } finally {
-        setLoading(false)
+        if (requestIsCurrent()) setLoading(false)
       }
     }
     load()
-  }, [groupId, userId])
+    return () => {
+      active = false
+    }
+  }, [
+    isManageScopeCurrent,
+    manageOwnerScope,
+    manageStateOwnerKey,
+    setComments,
+    setEditAvatarUrl,
+    setEditDescription,
+    setEditDescriptionEn,
+    setEditName,
+    setEditNameEn,
+    setEditRoleNames,
+    setEditRules,
+    setGroup,
+    setHasMorePosts,
+    setIsPremiumOnly,
+    setLoading,
+    setMembers,
+    setPosts,
+    setShowMultiLang,
+    setUserRole,
+  ])
 
   const canManage = userRole === 'owner' || userRole === 'admin'
   const isOwner = userRole === 'owner' || (userRole === 'admin' && group?.created_by === userId)
@@ -454,7 +620,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         )
       })
     },
-    [isModerationViewerScopeCurrent]
+    [isModerationViewerScopeCurrent, setMembers]
   )
 
   // Handlers
@@ -464,7 +630,8 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
       actorId: userId,
       viewerKey,
       sessionGeneration,
-      ...moderationResourceScopeRef.current,
+      groupId: manageOwnerScope.groupId,
+      resourceGeneration: manageOwnerScope.resourceGeneration,
     }
     const requestGroupId = groupId.trim().toLowerCase()
     if (
@@ -537,7 +704,8 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
       actorId: userId,
       viewerKey,
       sessionGeneration,
-      ...moderationResourceScopeRef.current,
+      groupId: manageOwnerScope.groupId,
+      resourceGeneration: manageOwnerScope.resourceGeneration,
     }
     const requestGroupId = groupId.trim().toLowerCase()
     if (
@@ -955,7 +1123,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   }
 
   // Dissolve group (owner only)
-  const [dissolving, setDissolving] = useState(false)
+  const [dissolving, setDissolving] = useViewerSlotState(manageStateOwnerKey, false)
   const handleDissolve = useCallback(async () => {
     if (!isOwner || dissolving) return
     const confirmed = await showDangerConfirm(t('dissolveGroup'), t('dissolveGroupConfirm'))
@@ -978,7 +1146,17 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
     } finally {
       setDissolving(false)
     }
-  }, [isOwner, dissolving, groupId, accessToken, showDangerConfirm, showToast, router, t])
+  }, [
+    isOwner,
+    dissolving,
+    groupId,
+    accessToken,
+    setDissolving,
+    showDangerConfirm,
+    showToast,
+    router,
+    t,
+  ])
 
   // Filtering
   const searchLower = contentSearch.toLowerCase()
