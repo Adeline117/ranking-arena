@@ -6,20 +6,9 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-
-async function getUser(req: NextRequest) {
-  const authHeader = req.headers.get('authorization')
-  if (!authHeader) return null
-
-  const token = authHeader.replace('Bearer ', '')
-  const adminSupabase = getSupabaseAdmin()
-  const { data: { user }, error } = await adminSupabase.auth.getUser(token)
-  if (error || !user) return null
-  return user
-}
 
 /**
  * POST - 关联交易员账号
@@ -29,7 +18,7 @@ export async function POST(req: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    const user = await getUser(req)
+    const user = await getAuthUser(req)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -61,7 +50,8 @@ export async function POST(req: NextRequest) {
         {
           error: 'Please connect the corresponding exchange account first',
           needConnect: true,
-          message: 'Please connect your exchange account in settings before linking trader identity.',
+          message:
+            'Please connect your exchange account in settings before linking trader identity.',
         },
         { status: 400 }
       )
@@ -88,15 +78,15 @@ export async function POST(req: NextRequest) {
         )
       }
       logger.error('[trader-link] Insert error:', insertError)
-      return NextResponse.json(
-        { error: 'Link failed' },
-        { status: 500 }
-      )
+      return NextResponse.json({ error: 'Link failed' }, { status: 500 })
     }
 
     return NextResponse.json({ success: true, link })
   } catch (error: unknown) {
-    logger.error('[trader-link] POST error:', error instanceof Error ? error.message : String(error))
+    logger.error(
+      '[trader-link] POST error:',
+      error instanceof Error ? error.message : String(error)
+    )
     // SECURITY: Do not leak internal error details to client
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
@@ -107,7 +97,7 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    const user = await getUser(req)
+    const user = await getAuthUser(req)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -141,7 +131,7 @@ export async function DELETE(req: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    const user = await getUser(req)
+    const user = await getAuthUser(req)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -150,10 +140,7 @@ export async function DELETE(req: NextRequest) {
     const linkId = searchParams.get('id')
 
     if (!linkId) {
-      return NextResponse.json(
-        { error: 'Missing parameter: id' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Missing parameter: id' }, { status: 400 })
     }
 
     const adminSupabase = getSupabaseAdmin()
@@ -182,7 +169,10 @@ export async function DELETE(req: NextRequest) {
 
     return NextResponse.json({ success: true })
   } catch (error: unknown) {
-    logger.error('[trader-link] DELETE error:', error instanceof Error ? error.message : String(error))
+    logger.error(
+      '[trader-link] DELETE error:',
+      error instanceof Error ? error.message : String(error)
+    )
     // SECURITY: Do not leak internal error details to client
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }

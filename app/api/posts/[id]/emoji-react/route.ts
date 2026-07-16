@@ -10,6 +10,7 @@ import { withPublic, withAuth } from '@/lib/api/middleware'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { socialFeatureGuard } from '@/lib/features'
 import logger from '@/lib/logger'
+import { getAuthUser } from '@/lib/supabase/server'
 
 // Allowed emoji set (crypto-relevant, keep it focused)
 const ALLOWED_EMOJIS = new Set([
@@ -131,20 +132,14 @@ export const GET = withPublic(
 
     // Check if user is authenticated to get their own reactions
     let userEmojis: string[] = []
-    const authHeader = request.headers.get('Authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7)
-      const {
-        data: { user },
-      } = await sb.auth.getUser(token)
-      if (user) {
-        const { data: userReactions } = await sb
-          .from('post_emoji_reactions')
-          .select('emoji')
-          .eq('post_id', postId)
-          .eq('user_id', user.id)
-        userEmojis = (userReactions || []).map((r: { emoji: string }) => r.emoji)
-      }
+    const user = await getAuthUser(request)
+    if (user) {
+      const { data: userReactions } = await sb
+        .from('post_emoji_reactions')
+        .select('emoji')
+        .eq('post_id', postId)
+        .eq('user_id', user.id)
+      userEmojis = (userReactions || []).map((r: { emoji: string }) => r.emoji)
     }
 
     return success({ counts, userEmojis })

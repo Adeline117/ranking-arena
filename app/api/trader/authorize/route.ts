@@ -7,7 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { encryptAuthorizationCredential } from '@/lib/exchange/authorization-credentials'
 import { validateExchangeApiKey } from '@/lib/validators/api-key-validator'
 import { logger } from '@/lib/logger'
@@ -25,38 +25,37 @@ interface AuthorizeRequest {
   syncFrequency?: 'realtime' | '5min' | '15min' | '1hour'
 }
 
+async function getStrictUserClient(request: NextRequest) {
+  const user = await getAuthUser(request)
+  if (!user) return null
+
+  // getAuthUser already validates this exact Bearer shape. Parse it again only
+  // to pass the verified caller token to the RLS-scoped data client below.
+  const authHeader = request.headers.get('authorization')
+  const match = authHeader?.match(/^Bearer\s+(\S+)$/i)
+  if (!match) return null
+
+  const supabase = createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      global: { headers: { Authorization: `Bearer ${match[1]}` } },
+    }
+  )
+
+  return { user, supabase }
+}
+
 export async function POST(request: NextRequest) {
   const rateLimitResp = await checkRateLimit(request, RateLimitPresets.write)
   if (rateLimitResp) return rateLimitResp
 
   try {
-    // Get user from auth
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader) {
+    const auth = await getStrictUserClient(request)
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const token = authHeader.replace('Bearer ', '')
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    })
-
-    // Get current user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user } = auth
 
     // Parse request body
     const body: AuthorizeRequest = await request.json()
@@ -226,33 +225,11 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    // Get user from auth
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader) {
+    const auth = await getStrictUserClient(request)
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const token = authHeader.replace('Bearer ', '')
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    })
-
-    // Get current user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, supabase } = auth
 
     // Get user's authorizations (RLS policy handles filtering)
     const { data: authorizations, error } = await supabase
@@ -288,33 +265,11 @@ export async function DELETE(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    // Get user from auth
-    const authHeader = request.headers.get('authorization')
-    if (!authHeader) {
+    const auth = await getStrictUserClient(request)
+    if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-
-    const token = authHeader.replace('Bearer ', '')
-
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
-    const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-    const supabase = createClient(supabaseUrl, supabaseAnonKey, {
-      global: {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      },
-    })
-
-    // Get current user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const { user, supabase } = auth
 
     // Get authorization ID from query
     const { searchParams } = new URL(request.url)
