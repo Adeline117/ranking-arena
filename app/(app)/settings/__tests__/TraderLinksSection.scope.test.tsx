@@ -274,6 +274,43 @@ describe('TraderLinksSection viewer ownership', () => {
     expect(mockRefresh).toHaveBeenCalled()
   })
 
+  it('uses the server-promoted link instead of guessing from array order', async () => {
+    const primary = linkedTrader('user-a', 'Primary')
+    const firstRemaining = {
+      ...linkedTrader('user-a', 'Beta', false),
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+      display_order: 0,
+    }
+    const promoted = {
+      ...linkedTrader('user-a', 'Gamma', false),
+      id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+      display_order: 1,
+    }
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url === '/api/traders/linked' && method === 'GET') {
+        return Promise.resolve(listResult([primary, firstRemaining, promoted]))
+      }
+      if (url === '/api/traders/linked' && method === 'DELETE') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: {
+            data: { promoted_link_id: promoted.id, remaining_count: 2 },
+          },
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<TraderLinksSection userId="user-a" />)
+    await screen.findByText('Primary')
+    fireEvent.click(screen.getAllByRole('button', { name: 'unlinkAccount' })[0])
+
+    await waitFor(() => expect(screen.queryByText('Primary')).not.toBeInTheDocument())
+    expect(screen.getByText('Gamma').parentElement).toHaveTextContent('primaryAccount')
+    expect(screen.getByText('Beta').parentElement).not.toHaveTextContent('primaryAccount')
+  })
+
   it('fails closed when the server returns a row owned by another viewer', async () => {
     mockAuthedFetch.mockResolvedValue(listResult([linkedTrader('user-b', 'Foreign')]))
 
