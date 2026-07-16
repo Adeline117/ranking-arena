@@ -211,6 +211,36 @@ describe('useWallet viewer scope', () => {
     expect(success).toBe(false)
     expect(result.current.linkedAddress).toBe('0xbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb')
   })
+
+  it('invalidates a deferred unlink when the owning component unmounts', async () => {
+    mockFetch.mockResolvedValueOnce(
+      response({
+        walletAddress: '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+        hasNft: true,
+      })
+    )
+    const { result, unmount } = renderHook(() => useWallet())
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    const operationA = result.current.captureWalletOperation()!
+
+    const unlinkA = deferred<Response>()
+    mockFetch.mockReturnValueOnce(unlinkA.promise)
+    let unlinkPromise!: Promise<boolean>
+    act(() => {
+      unlinkPromise = result.current.unlinkWallet(operationA)
+    })
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+
+    unmount()
+    expect(result.current.isWalletOperationCurrent(operationA)).toBe(false)
+
+    let success = true
+    await act(async () => {
+      unlinkA.resolve(response({ success: true }))
+      success = await unlinkPromise
+    })
+    expect(success).toBe(false)
+  })
 })
 
 describe('WalletSection confirmation contract', () => {
