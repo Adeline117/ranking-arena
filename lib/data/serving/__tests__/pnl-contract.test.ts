@@ -1,4 +1,4 @@
-import { readGmxRealizedNetDisclosure } from '../pnl-contract'
+import { readGmxRealizedNetDisclosure, readGmxRealizedNetModuleDisclosure } from '../pnl-contract'
 
 const DAY_SECONDS = 86_400
 const WINDOW_TO = Date.UTC(2026, 6, 15) / 1000
@@ -48,5 +48,50 @@ describe('readGmxRealizedNetDisclosure', () => {
     ['non-midnight boundary', 'gmx', verifiedExtras({ window_to: WINDOW_TO + 1 })],
   ])('rejects %s', (_name, source, extras) => {
     expect(readGmxRealizedNetDisclosure(source, extras)).toBeNull()
+  })
+})
+
+describe('readGmxRealizedNetModuleDisclosure', () => {
+  function modules(
+    timeframe: 7 | 30 | 90,
+    overrides: {
+      responseTimeframe?: 7 | 30 | 90
+      provenanceSource?: string
+      pnl?: number | null
+      extras?: Record<string, unknown>
+    } = {}
+  ) {
+    return {
+      timeframe: overrides.responseTimeframe ?? timeframe,
+      stats: { pnl: overrides.pnl === undefined ? 100 : overrides.pnl },
+      extras:
+        overrides.extras ??
+        verifiedExtras({
+          window_from: WINDOW_TO - timeframe * DAY_SECONDS,
+          window_duration_days: timeframe,
+        }),
+      provenance: {
+        source: overrides.provenanceSource ?? 'gmx',
+        asOf: '2026-07-15T01:00:00.000Z',
+      },
+    }
+  }
+
+  it('accepts a visible PnL whose module, provenance, and window match the selected period', () => {
+    expect(readGmxRealizedNetModuleDisclosure('gmx', 30, modules(30))).toMatchObject({
+      windowDurationDays: 30,
+      windowTo: WINDOW_TO,
+    })
+  })
+
+  it.each([
+    ['stale 7D response under a 30D selection', modules(7), 30],
+    ['30D response carrying a 7D contract', modules(30, { extras: modules(7).extras }), 30],
+    ['mismatched provenance', modules(30, { provenanceSource: 'dune_gmx' }), 30],
+    ['missing visible PnL', modules(30, { pnl: null }), 30],
+  ])('rejects %s', (_name, candidate, expectedTimeframe) => {
+    expect(
+      readGmxRealizedNetModuleDisclosure('gmx', expectedTimeframe as 7 | 30 | 90, candidate)
+    ).toBeNull()
   })
 })

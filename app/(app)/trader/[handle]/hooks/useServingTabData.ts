@@ -31,6 +31,7 @@ import type { TraderFirstScreen, SourceCapability, ServingCurrency } from '@/lib
 import type { PortfolioItem, TraderProfile, TraderStats } from '@/lib/data/trader-types'
 import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
 import type { ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
+import { readGmxRealizedNetModuleDisclosure } from '@/lib/data/serving/pnl-contract'
 
 export interface ServingTabData {
   traderProfile: TraderProfile
@@ -142,6 +143,16 @@ export function useServingTabData(
       extras30: m30?.extras ?? null,
       extras90: m90?.extras ?? null,
     })
+    const pnlDisclosures: NonNullable<ExtendedPerformance['pnlDisclosures']> = {}
+    const disclosure7 = readGmxRealizedNetModuleDisclosure(source, 7, m7)
+    const disclosure30 = readGmxRealizedNetModuleDisclosure(source, 30, m30)
+    const disclosure90 = readGmxRealizedNetModuleDisclosure(source, 90, m90)
+    if (disclosure7) pnlDisclosures['7D'] = disclosure7
+    if (disclosure30) pnlDisclosures['30D'] = disclosure30
+    if (disclosure90) pnlDisclosures['90D'] = disclosure90
+    if (Object.keys(pnlDisclosures).length > 0) {
+      traderPerformance.pnlDisclosures = pnlDisclosures
+    }
     // Arena Score breakdown + trading style (2026-07-09): thread the
     // leaderboard_ranks per-season sub-scores into the legacy performance
     // shape ScoreBreakdownSection/TraderHeader read. Mapping mirrors

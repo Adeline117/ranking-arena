@@ -6,15 +6,24 @@ import { useLanguage } from '../../Providers/LanguageProvider'
 import { Sparkline } from '@/app/components/ui/Sparkline'
 import Metric from '@/app/components/ui/Metric'
 import InfoTooltip from '../../ui/InfoTooltip'
+import PnlContractNotice from '../serving/PnlContractNotice'
+import type { GmxRealizedNetDisclosure } from '@/lib/data/serving/pnl-contract'
 
 export interface HeroMetricsProps {
   roi: number | undefined
   pnl: number | undefined
+  pnlDisclosure?: GmxRealizedNetDisclosure
   sparklineData: number[]
   isVisible: boolean
 }
 
-export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsProps) {
+export function HeroMetrics({
+  roi,
+  pnl,
+  pnlDisclosure,
+  sparklineData,
+  isVisible,
+}: HeroMetricsProps) {
   const { t } = useLanguage()
 
   // Shared entrance animation for the headline figures.
@@ -129,8 +138,11 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
             gap: 4,
           }}
         >
-          {t('pnl')}
-          <InfoTooltip text={t('pnlTooltip')} size={11} />
+          {t(pnlDisclosure ? 'gmxRealizedNetPnlLabel' : 'pnl')}
+          <InfoTooltip
+            text={t(pnlDisclosure ? 'gmxRealizedNetPnlTooltip' : 'pnlTooltip')}
+            size={11}
+          />
         </Text>
         {/* Secondary supporting figure — demoted below the ROI hero. */}
         <Metric
@@ -142,6 +154,7 @@ export function HeroMetrics({ roi, pnl, sparklineData, isVisible }: HeroMetricsP
             ...enterStyle(200),
           }}
         />
+        {pnlDisclosure && <PnlContractNotice disclosure={pnlDisclosure} compact />}
       </Box>
     </Box>
   )

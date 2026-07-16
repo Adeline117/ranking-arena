@@ -10,8 +10,11 @@ import { MetricBadgesGrid } from './performance/MetricBadgesGrid'
 import { ScoreBreakdownSection } from './performance/ScoreBreakdownSection'
 import type { Period } from './performance/PeriodSelector'
 import { usePeriodStore } from '@/lib/stores/periodStore'
+import type { GmxRealizedNetDisclosure } from '@/lib/data/serving/pnl-contract'
 
 export interface ExtendedPerformance extends TraderPerformance {
+  /** Source-specific PnL semantics, keyed to the exact rendered period. */
+  pnlDisclosures?: Partial<Record<Period, GmxRealizedNetDisclosure>>
   arena_score_7d?: number
   arena_score_30d?: number
   arena_score_90d?: number
@@ -124,6 +127,7 @@ export default function OverviewPerformanceCard({
         return {
           roi: performance.roi_7d,
           pnl: performance.pnl_7d,
+          pnlDisclosure: performance.pnlDisclosures?.['7D'],
           winRate: performance.win_rate_7d,
           maxDrawdown: performance.max_drawdown_7d,
           arenaScore: performance.arena_score_7d,
@@ -147,6 +151,7 @@ export default function OverviewPerformanceCard({
         return {
           roi: performance.roi_30d,
           pnl: performance.pnl_30d,
+          pnlDisclosure: performance.pnlDisclosures?.['30D'],
           winRate: performance.win_rate_30d,
           maxDrawdown: performance.max_drawdown_30d,
           arenaScore: performance.arena_score_30d,
@@ -171,6 +176,7 @@ export default function OverviewPerformanceCard({
         return {
           roi: performance.roi_90d,
           pnl: performance.pnl,
+          pnlDisclosure: performance.pnlDisclosures?.['90D'],
           winRate: performance.win_rate,
           maxDrawdown: performance.max_drawdown,
           arenaScore: performance.arena_score_90d,
@@ -197,6 +203,7 @@ export default function OverviewPerformanceCard({
   const {
     roi,
     pnl,
+    pnlDisclosure,
     winRate,
     maxDrawdown,
     sharpeRatio,
@@ -256,7 +263,13 @@ export default function OverviewPerformanceCard({
             }}
           >
             {/* ROI & PnL - 主指标区 Hero Metrics */}
-            <HeroMetrics roi={roi} pnl={pnl} sparklineData={sparklineData} isVisible={isVisible} />
+            <HeroMetrics
+              roi={roi}
+              pnl={pnl}
+              pnlDisclosure={pnlDisclosure}
+              sparklineData={sparklineData}
+              isVisible={isVisible}
+            />
 
             {/* 二级指标 - 紧凑徽章布局 */}
             <MetricBadgesGrid
