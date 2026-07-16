@@ -78,6 +78,13 @@ describe('parseGmxLeaderboardPage', () => {
     })
     expect(page.rows[0].headlineRoi).toBeCloseTo(24.84557, 4)
     expect(page.rows[0].headlinePnl).toBeCloseTo(124.189338, 5)
+    expect(page.rows[0].headlineExtras).toMatchObject({
+      pnl_basis: 'gmx_period_realized_net',
+      roi_basis: 'max_capital_usd',
+      pnl_includes_unrealized: false,
+      pnl_components_complete: true,
+      window_from: fx.from,
+    })
     // open-only account: zero closes → null win rate; realized fees remain loss
     expect(page.rows[1].headlineWinRate).toBeNull()
     expect(page.rows[1].headlineRoi).toBeCloseTo(-3.737128, 5)
@@ -98,52 +105,73 @@ describe('parseGmxLeaderboardPage', () => {
     expect(page.rows).toHaveLength(6)
     expect(page.rows[0].rank).toBe(1)
   })
+
+  it('fails closed when a valid leaderboard row loses a realized component', () => {
+    const row = { ...(fx.rows as Array<Record<string, unknown>>)[0] }
+    delete row.realizedSwapImpact
+    expect(() =>
+      parseGmxLeaderboardPage({ timeframe: 7, from: fx.from, reportedTotal: 1, rows: [row] }, ctx)
+    ).toThrow('incomplete realized-net leaderboard components')
+  })
 })
 
 describe('parseGmxProfile', () => {
   const bundle = fixture('profile-bundle.json')
 
-  it('stats: total-basis PnL from cumulative history, ROI on maxCapital', () => {
+  it('stats: same realized-net PnL as the board, ROI on maxCapital', () => {
     const profile = parseGmxProfile(bundle, ctx)
+    const boardRow = parseGmxLeaderboardPage(
+      { from: bundle.from, reportedTotal: 1, rows: bundle.periodStats },
+      ctx
+    ).rows[0]
     expect(profile.stats).toHaveLength(1)
     const s = profile.stats[0]
     expect(s.timeframe).toBe(7)
-    // last cumulativePnl point = window PnL incl. unrealized (verified
-    // identical to accountPnlSummaryStats.pnlUsd live)
-    expect(s.pnl).toBeCloseTo(227.628956, 5)
-    expect(s.roi).toBeCloseTo(45.539908, 5)
+    expect(s.pnl).toBeCloseTo(124.189338, 5)
+    expect(s.roi).toBeCloseTo(24.84557, 5)
     expect(s.winRate).toBe(100)
     expect(s.winPositions).toBe(1)
     expect(s.totalPositions).toBe(1)
     expect(s.volume).toBeCloseTo(7990.7198, 3)
     expect(s.aum).toBeCloseTo(499.845, 3)
-    expect(s.extras.pnl_basis).toBe('total_incl_unrealized')
-    expect(s.extras.realized_pnl_usd as number).toBeCloseTo(124.189338, 5)
-    // Tier-0 daily-approx risk derived from the cumulative-PnL series over the
-    // maxCapital base (was NULL — GMX exposes no MDD/Sharpe). 8 daily samples.
-    expect(s.mdd).toBeCloseTo(1.12, 2)
-    expect(s.sharpe).toBe(10) // mostly-up curve → capped
-    expect(s.extras.sortino).toBe(10)
-    expect(s.extras.risk_derivation).toBe('daily-approx')
-    expect(s.extras.risk_samples).toBe(8)
+    expect(s.extras).toMatchObject({
+      pnl_basis: 'gmx_period_realized_net',
+      roi_basis: 'max_capital_usd',
+      pnl_includes_unrealized: false,
+      pnl_components_complete: true,
+    })
+    expect(s.extras.realized_pnl_usd as number).toBeCloseTo(s.pnl!, 8)
+    expect(s.pnl).toBeCloseTo(boardRow.headlinePnl!, 8)
+    expect(s.roi).toBeCloseTo(boardRow.headlineRoi!, 8)
+    expect(s.extras).toMatchObject(boardRow.headlineExtras!)
+    expect(s.extras.gmx_total_mark_to_market_pnl_usd as number).toBeCloseTo(227.628956, 5)
+    expect(s.mdd).toBeNull()
+    expect(s.sharpe).toBeNull()
+    expect(s.extras).not.toHaveProperty('sortino')
+    expect(s.extras).not.toHaveProperty('risk_derivation')
+    expect(s.extras).not.toHaveProperty('risk_samples')
     expect(s.copierPnl).toBeNull()
   })
 
-  it('series: window-cumulative pnl points, sorted ascending ISO', () => {
+  it('does not publish total mark-to-market history as canonical realized pnl series', () => {
     const profile = parseGmxProfile(bundle, ctx)
-    expect(profile.series).toHaveLength(1)
-    const series = profile.series[0]
-    expect(series.metric).toBe('pnl')
-    expect(series.timeframe).toBe(7)
-    expect(series.points).toHaveLength(8)
-    expect(series.points[0].ts).toBe(new Date(1780617600 * 1000).toISOString())
-    expect(series.points[7].value).toBeCloseTo(227.628956, 5)
+    expect(profile.series).toEqual([])
+    expect(profile.replaceSeries).toEqual([{ timeframe: 7, metrics: ['pnl'] }])
   })
 
   it('empty payload → no stats, no series (never throws)', () => {
     const profile = parseGmxProfile({ periodStats: [], pnlHistory: [], timeframe: 30 }, ctx)
     expect(profile.stats).toHaveLength(0)
     expect(profile.series).toHaveLength(0)
+    expect(profile.replaceSeries).toBeUndefined()
+  })
+
+  it('fails closed without clearing serving data when a realized component is absent', () => {
+    const incomplete = JSON.parse(JSON.stringify(bundle)) as Record<string, unknown>
+    delete (incomplete.periodStats as Array<Record<string, unknown>>)[0].realizedSwapImpact
+    expect(() => parseGmxProfile(incomplete, ctx)).toThrow(
+      'incomplete realized-net profile components'
+    )
   })
 })
 

@@ -15,7 +15,8 @@
  *   - realized-net window PnL = realizedPnl − realizedFees −
  *     realizedSwapFees + realizedPriceImpact + realizedSwapImpact
  *   - total window PnL (incl. unrealized) = last cumulativePnl of
- *     accountPnlHistoryStats (matches summary pnlUsd exactly)
+ *     accountPnlHistoryStats; it is retained as audit metadata, never mixed
+ *     into the canonical realized-net PnL or chart series
  *   - ROI basis = maxCapital (the official pnlBps denominator)
  *   - position entryPrice = raw / 10^(30 − indexTokenDecimals);
  *     leverage = raw / 1e4
@@ -31,8 +32,6 @@ import type {
   ParsedProfile,
   RankingTimeframe,
 } from '../../core/types'
-import { riskFromCumulativePnl } from '../../core/series-risk'
-
 type Dict = Record<string, unknown>
 
 const E30 = 1e30
@@ -74,6 +73,20 @@ export function gmxRealizedPnlUsd(row: Dict): number | null {
   return (pnl - fees - swapFees + priceImpact + swapImpact) / E30
 }
 
+function realizedPnlBasisExtras(
+  realizedPnl: number,
+  windowFrom: number | null
+): Record<string, unknown> {
+  return {
+    pnl_basis: 'gmx_period_realized_net',
+    roi_basis: 'max_capital_usd',
+    pnl_includes_unrealized: false,
+    realized_pnl_usd: realizedPnl,
+    pnl_components_complete: true,
+    window_from: windowFrom,
+  }
+}
+
 function winRatePct(row: Dict): number | null {
   const wins = num(row.wins) ?? 0
   const losses = num(row.losses) ?? 0
@@ -90,8 +103,9 @@ function roiOnMaxCapital(pnlUsd: number | null, row: Dict): number | null {
 // ── Leaderboard ──
 
 export function parseGmxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLeaderboardPage {
-  const payload = (raw ?? {}) as { reportedTotal?: unknown; rows?: unknown }
+  const payload = (raw ?? {}) as { reportedTotal?: unknown; rows?: unknown; from?: unknown }
   const items = Array.isArray(payload.rows) ? (payload.rows as Dict[]) : []
+  const windowFrom = num(payload.from)
 
   const rows: ParsedLeaderboardRow[] = []
   for (const item of items) {
@@ -101,6 +115,9 @@ export function parseGmxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
     if (!address.startsWith('0x')) continue // no identity → cannot publish
 
     const pnl = gmxRealizedPnlUsd(item)
+    if (pnl === null) {
+      throw new Error('[gmx] incomplete realized-net leaderboard components')
+    }
     rows.push({
       exchangeTraderId: address,
       rank: rows.length + 1, // chunk-local; tier-a re-anchors by page_size
@@ -116,6 +133,7 @@ export function parseGmxLeaderboardPage(raw: unknown, _ctx: ParseCtx): ParsedLea
       // the profile uses the same field. Board-level capture covers profile-less
       // traders. (On-chain: no precomputed MDD/Sharpe → those stay N/A.)
       headlineAum: usd(item.maxCapital),
+      headlineExtras: realizedPnlBasisExtras(pnl, windowFrom),
       traderMeta: null,
       raw: item, // full PeriodAccountStatObject verbatim (spec §3)
     })
@@ -133,9 +151,10 @@ interface HistPoint {
 
 /**
  * Profile = periodAccountStats (id_eq) + accountPnlHistoryStats, both for
- * the same window. trader_stats.pnl/roi use the TOTAL basis (incl.
- * unrealized — what the GMX UI shows); the realized basis the board ranks
- * by is disclosed in extras.
+ * the same window. Canonical trader_stats.pnl/roi use the same realized-net
+ * basis as the board. The history endpoint is total mark-to-market and cannot
+ * produce a same-basis canonical series, so it is retained only as explicit
+ * audit metadata and any old generic `pnl` series is cleared.
  */
 export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const payload = (raw ?? {}) as {
@@ -148,8 +167,6 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const tf = (tfNum === 0 ? 90 : tfNum) as RankingTimeframe
 
   const stats: ParsedProfile['stats'] = []
-  const series: ParsedProfile['series'] = []
-
   const ps = Array.isArray(payload.periodStats) ? (payload.periodStats as Dict[]) : []
   const row = ps[0] ?? null
 
@@ -164,59 +181,46 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 
   const totalPnl = points.length > 0 ? points[points.length - 1].value : null
 
-  if (row || totalPnl !== null) {
-    const realizedPnl = row ? gmxRealizedPnlUsd(row) : null
-    const pnl = totalPnl ?? realizedPnl
-    const aum = row ? usd(row.maxCapital) : null
-    // Tier-0 on-chain-equivalent risk: GMX exposes no MDD/Sharpe, so derive
-    // them from the daily cumulative-PnL series (accountPnlHistoryStats) over
-    // the max-capital base. daily-approx — understates intraday DD; see
-    // series-risk.ts provenance note. Returns all-null without a positive base.
-    const risk = riskFromCumulativePnl(
-      points.map((p) => ({ ts: new Date(p.ts).toISOString(), value: p.value })),
-      aum
-    )
-    const riskExtras: Record<string, unknown> =
-      risk.mdd !== null || risk.sharpe !== null
-        ? { risk_derivation: 'daily-approx', risk_samples: risk.samples, sortino: risk.sortino }
-        : {}
+  if (row) {
+    const realizedPnl = gmxRealizedPnlUsd(row)
+    if (realizedPnl === null) {
+      throw new Error('[gmx] incomplete realized-net profile components')
+    }
+    const aum = usd(row.maxCapital)
     stats.push({
       timeframe: tf,
       asOf: ctx.scrapedAt,
-      roi: row ? roiOnMaxCapital(pnl, row) : null,
-      pnl,
-      sharpe: risk.sharpe, // Tier-0 daily-approx (was NULL — not exposed by GMX)
-      mdd: risk.mdd, // Tier-0 daily-approx peak-to-trough on equity curve
-      winRate: row ? winRatePct(row) : null,
-      winPositions: row ? num(row.wins) : null,
-      totalPositions: row ? (num(row.wins) ?? 0) + (num(row.losses) ?? 0) : null,
+      roi: roiOnMaxCapital(realizedPnl, row),
+      pnl: realizedPnl,
+      sharpe: null,
+      mdd: null,
+      winRate: winRatePct(row),
+      winPositions: num(row.wins),
+      totalPositions: (num(row.wins) ?? 0) + (num(row.losses) ?? 0),
       copierPnl: null, // DEX — no copy trading
       copierCount: null,
       aum,
-      volume: row ? usd(row.volume) : null,
+      volume: usd(row.volume),
       profitShareRate: null,
       holdingDurationAvgHours: null,
       tradingPreferences: null,
       extras: {
-        pnl_basis: 'total_incl_unrealized', // accountPnlHistoryStats cumulativePnl
+        ...realizedPnlBasisExtras(realizedPnl, num(payload.from)),
         aum_basis: 'max_capital_proxy', // legacy-connector convention
-        realized_pnl_usd: realizedPnl,
-        window_from: num(payload.from),
-        closed_count: row ? num(row.closedCount) : null,
-        ...riskExtras,
+        gmx_total_mark_to_market_pnl_usd: totalPnl,
+        gmx_total_mark_to_market_source: 'account_pnl_history_cumulative',
+        closed_count: num(row.closedCount),
       },
     })
   }
 
-  if (points.length > 0) {
-    series.push({
-      timeframe: tf,
-      metric: 'pnl', // window-cumulative incl. unrealized (GMX UI chart)
-      points: points.map((p) => ({ ts: new Date(p.ts).toISOString(), value: p.value })),
-    })
+  return {
+    stats,
+    series: [],
+    ...(stats.length > 0 ? { replaceSeries: [{ timeframe: tf, metrics: ['pnl'] }] } : {}),
+    nickname: null,
+    avatarUrlOrigin: null,
   }
-
-  return { stats, series, nickname: null, avatarUrlOrigin: null }
 }
 
 // ── Positions ──
