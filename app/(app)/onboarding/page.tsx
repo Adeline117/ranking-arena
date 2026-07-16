@@ -64,6 +64,7 @@ export default function OnboardingPage() {
   })
   const membershipIntentLedgerRef = useRef(new OnboardingMembershipIntentLedger())
   const membershipRequestSequencerRef = useRef(new OnboardingMembershipRequestSequencer())
+  const membershipSettlingRef = useRef(false)
 
   const tr = (key: string) => translations[language][key] || translations.en[key] || key
 
@@ -331,6 +332,16 @@ export default function OnboardingPage() {
     }
   }, [])
 
+  const settleMembershipIntents = useCallback(async () => {
+    membershipSettlingRef.current = true
+    if (joinFlushTimerRef.current) {
+      clearTimeout(joinFlushTimerRef.current)
+      joinFlushTimerRef.current = null
+    }
+    await flushJoinQueue()
+    await membershipRequestSequencerRef.current.drain()
+  }, [flushJoinQueue])
+
   const handleFollowTrader = async (traderId: string) => {
     if (!userId) {
       const { data } = await supabase.auth.getUser()
@@ -349,7 +360,7 @@ export default function OnboardingPage() {
   }
 
   const handleJoinGroup = async (groupId: string) => {
-    if (!userId) return
+    if (!userId || membershipSettlingRef.current) return
     const isJoined = joinedGroupsRef.current.has(groupId)
     const action = isJoined ? 'leave' : 'join'
     const intent = membershipIntentLedgerRef.current.issue(
@@ -370,19 +381,24 @@ export default function OnboardingPage() {
     joinFlushTimerRef.current = setTimeout(flushJoinQueue, 500)
   }
 
-  // Flush any remaining queued actions on unmount
+  // Follow requests retain their historical fire-and-forget behavior. Group
+  // intents are settled explicitly before completion; an unrelated unmount
+  // invalidates and drops work that has not started instead of publishing UI
+  // reconciliation after ownership is gone.
   useEffect(() => {
+    const pendingJoinQueue = joinQueueRef.current
     return () => {
       if (followFlushTimerRef.current) clearTimeout(followFlushTimerRef.current)
       if (joinFlushTimerRef.current) clearTimeout(joinFlushTimerRef.current)
       flushFollowQueue()
-      flushJoinQueue()
+      pendingJoinQueue.clear()
     }
-  }, [flushFollowQueue, flushJoinQueue])
+  }, [flushFollowQueue])
 
   const saveAndComplete = async () => {
     setSaving(true)
     try {
+      await settleMembershipIntents()
       if (userId) {
         const updates: Record<string, unknown> = { onboarding_completed: true }
         if (selectedInterests.length > 0) updates.interests = selectedInterests
@@ -393,10 +409,11 @@ export default function OnboardingPage() {
       trackEvent('onboarding_complete', {
         interests: selectedInterests.length,
         followedTraders: followedTraders.size,
-        joinedGroups: joinedGroups.size,
+        joinedGroups: joinedGroupsRef.current.size,
       })
       setStep('complete')
     } catch (err) {
+      membershipSettlingRef.current = false
       logger.error('Error completing onboarding:', err)
       showToast(tr('saveFailed'), 'error')
     } finally {

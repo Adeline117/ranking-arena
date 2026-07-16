@@ -191,6 +191,32 @@ describe('onboarding membership request ordering', () => {
     await second
     expect(events).toEqual(['first', 'second'])
   })
+
+  it('drains already-started and queued work before onboarding completes', async () => {
+    const sequencer = new OnboardingMembershipRequestSequencer()
+    const gate = deferred<void>()
+    const events: string[] = []
+    void sequencer.run(GROUP_ID, async () => {
+      events.push('first:start')
+      await gate.promise
+      events.push('first:end')
+    })
+    void sequencer.run(GROUP_ID, async () => {
+      events.push('second')
+    })
+
+    let drained = false
+    const draining = sequencer.drain().then(() => {
+      drained = true
+    })
+    await Promise.resolve()
+    expect(drained).toBe(false)
+
+    gate.resolve()
+    await draining
+    expect(events).toEqual(['first:start', 'first:end', 'second'])
+    expect(drained).toBe(true)
+  })
 })
 
 describe('onboarding page membership guard', () => {
@@ -199,6 +225,7 @@ describe('onboarding page membership guard', () => {
     const renderSuffix = source.slice(source.indexOf('  if (!mounted)'))
 
     expect(source).toContain('sendOnboardingMembershipIntent(')
+    expect(source).toContain('await settleMembershipIntents()')
     expect(source).not.toContain("fetch('/api/groups/subscribe'")
     expect(createHash('sha256').update(renderSuffix).digest('hex')).toBe(
       '9728777d97cf487022d705e28efcdfb8e3c9ffd31dc9e9983411ea96e724db60'
