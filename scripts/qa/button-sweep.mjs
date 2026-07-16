@@ -17,7 +17,7 @@ const LANG_SWEEP = process.argv.includes('--lang-sweep')
 const PAGE_DELAY_MS = 1000 // production politeness
 
 // 动态 ID 在 main() 里从 API 取
-// 覆盖全部 83 个 page.tsx 路由：静态路由直列；动态路由在 main() 取真实 ID；
+// 覆盖页面树中的静态路由；动态路由在 main() 取真实 ID；
 // 需登录态的动态路由（messages/favorites/post-edit/group-manage 等）由
 // auth-button-sweep.mjs 覆盖，这里 log skip 原因（不静默跳过）。
 const STATIC_ROUTES = [
@@ -25,7 +25,6 @@ const STATIC_ROUTES = [
   '/',
   '/rankings',
   '/rankings/tokens',
-  '/rankings/bots',
   '/rankings/exchanges',
   '/rankings/weekly',
   '/trader/soul', // 已知公开交易员（/trader/[handle]）
@@ -296,10 +295,6 @@ async function main() {
   await addDynamic('/feed/[id]', async () => {
     const id = (await jget('/api/feed?limit=1'))?.data?.activities?.[0]?.id
     return id && `/feed/${id}`
-  })
-  await addDynamic('/bot/[id]', async () => {
-    const id = (await jget('/api/bots?limit=1'))?.bots?.[0]?.id
-    return id && `/bot/${id}`
   })
   await addDynamic('/share/rank/[trader_key]', async () => {
     const key = (await jget('/api/rankings?window=30d&limit=1'))?.data?.traders?.[0]?.trader_key

@@ -159,7 +159,6 @@ const ANON_ROUTES = [
   '/',
   '/rankings',
   '/rankings/tokens',
-  '/rankings/bots',
   '/rankings/exchanges',
   '/rankings/weekly',
   '/trader/soul',
