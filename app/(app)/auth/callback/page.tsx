@@ -25,6 +25,7 @@ import {
   type AuthRedirectAcquisitionReceipt,
   type AuthOperationLease,
 } from '@/lib/auth/session-operation'
+import { safeInternalReturnPath } from '@/lib/auth/safe-return-path'
 
 function AuthCallbackContent() {
   const router = useRouter()
@@ -172,9 +173,8 @@ function AuthCallbackContent() {
       // Don't clear flag yet — wait until saveToStore succeeds
 
       const returnUrl = searchParams.get('returnUrl')
-      // Validate returnUrl: must start with / but NOT // (prevents protocol-relative open redirect)
-      const isSafeReturn = returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//')
-      const defaultRedirect = isAddAccount ? '/' : isSafeReturn ? returnUrl : '/'
+      const safeReturnUrl = safeInternalReturnPath(returnUrl)
+      const defaultRedirect = isAddAccount ? '/' : safeReturnUrl || '/'
 
       const rollbackAttempt = async (
         snapshot: Pick<VerifiedSessionSnapshot, 'session' | 'user'>,
@@ -262,7 +262,7 @@ function AuthCallbackContent() {
         if (isAddAccount) {
           replaceFromCallback('/')
         } else if (profile.onboarding_completed !== true) {
-          const ru = isSafeReturn ? returnUrl! : '/'
+          const ru = safeReturnUrl || '/'
           replaceFromCallback(`/onboarding?returnUrl=${encodeURIComponent(ru)}`)
         } else {
           replaceFromCallback(defaultRedirect)
