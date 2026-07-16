@@ -21,6 +21,9 @@ const dissolve = functionBody(
   'dissolve_group_atomic',
   'ALTER FUNCTION public.dissolve_group_atomic(uuid, uuid)'
 )
+const postflightStart = migration.indexOf('DO $postflight$')
+const postflightEnd = migration.indexOf('$postflight$;', postflightStart)
+const postflight = migration.slice(postflightStart, postflightEnd)
 
 describe('atomic group dissolution migration', () => {
   it('is transactional, replay-serialized and schema reloading', () => {
@@ -99,5 +102,10 @@ describe('atomic group dissolution migration', () => {
     expect(migration).toContain('membership.member NOT IN (v_authenticator_oid, v_postgres_oid)')
     expect(migration).toContain('service_role has an unsafe effective authority edge')
     expect(migration).toContain('acl_entry.grantor = v_postgres_oid')
+    expect(postflight).toContain('membership.member = v_authenticator_oid')
+    expect(postflight).toContain('WITH RECURSIVE service_inheritors')
+    expect(postflight).toContain('WITH RECURSIVE service_inherits')
+    expect(postflight).toContain('WITH RECURSIVE browser_authority')
+    expect(postflight).toContain('inherited.role_oid IN (v_service_oid, v_postgres_oid)')
   })
 })

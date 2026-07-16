@@ -879,6 +879,10 @@ DECLARE
     SELECT role_row.oid FROM pg_catalog.pg_roles AS role_row
     WHERE role_row.rolname = 'service_role'
   );
+  v_authenticator_oid oid := (
+    SELECT role_row.oid FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'authenticator'
+  );
   v_guard pg_catalog.regprocedure :=
     'public.enforce_group_dissolution_write()'::pg_catalog.regprocedure;
   v_dissolve pg_catalog.regprocedure :=
@@ -1120,6 +1124,74 @@ BEGIN
       ) = 'true'
   ) THEN
     RAISE EXCEPTION 'group dissolution RLS policy contract drifted';
+  END IF;
+
+  -- Re-attest the complete role graph after all migration writes.  The same
+  -- fail-closed contract runs in preflight so a concurrent GRANT cannot land
+  -- during the DDL window without being detected before commit.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members AS membership
+    WHERE membership.roleid = v_service_oid
+      AND membership.member = v_authenticator_oid
+      AND NOT membership.admin_option
+      AND NOT membership.inherit_option
+      AND membership.set_option
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members AS membership
+    WHERE membership.roleid = v_service_oid
+      AND membership.member NOT IN (v_authenticator_oid, v_postgres_oid)
+  ) OR EXISTS (
+    WITH RECURSIVE service_inheritors(member_oid) AS (
+      SELECT membership.member
+      FROM pg_catalog.pg_auth_members AS membership
+      WHERE membership.roleid = v_service_oid
+        AND membership.inherit_option
+      UNION
+      SELECT membership.member
+      FROM pg_catalog.pg_auth_members AS membership
+      JOIN service_inheritors AS inherited
+        ON membership.roleid = inherited.member_oid
+      WHERE membership.inherit_option
+    )
+    SELECT 1
+    FROM service_inheritors AS inherited
+    WHERE inherited.member_oid <> v_postgres_oid
+  ) OR EXISTS (
+    WITH RECURSIVE service_inherits(role_oid) AS (
+      SELECT membership.roleid
+      FROM pg_catalog.pg_auth_members AS membership
+      WHERE membership.member = v_service_oid
+        AND (membership.inherit_option OR membership.set_option)
+      UNION
+      SELECT membership.roleid
+      FROM pg_catalog.pg_auth_members AS membership
+      JOIN service_inherits AS inherited
+        ON membership.member = inherited.role_oid
+      WHERE membership.inherit_option OR membership.set_option
+    )
+    SELECT 1 FROM service_inherits
+  ) OR EXISTS (
+    WITH RECURSIVE browser_authority(role_oid) AS (
+      SELECT membership.roleid
+      FROM pg_catalog.pg_roles AS browser_role
+      JOIN pg_catalog.pg_auth_members AS membership
+        ON membership.member = browser_role.oid
+       AND (membership.inherit_option OR membership.set_option)
+      WHERE browser_role.rolname IN ('anon', 'authenticated')
+      UNION
+      SELECT membership.roleid
+      FROM browser_authority AS inherited
+      JOIN pg_catalog.pg_auth_members AS membership
+        ON membership.member = inherited.role_oid
+      WHERE membership.inherit_option OR membership.set_option
+    )
+    SELECT 1
+    FROM browser_authority AS inherited
+    WHERE inherited.role_oid IN (v_service_oid, v_postgres_oid)
+  ) THEN
+    RAISE EXCEPTION 'service_role has an unsafe effective authority edge';
   END IF;
 END
 $postflight$;
