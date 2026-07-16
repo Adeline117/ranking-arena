@@ -538,6 +538,23 @@ describe('fetchBscChainAnchorEvidence', () => {
   })
 
   it.each([
+    '{"jsonrpc":"2.0","id":1,"id":2,"result":"0x38"}',
+    '{"jsonrpc":"2.0","id":1,"result":"0x38","result":"0x38"}',
+    '{"jsonrpc":"2.0","\\u0069d":1,"id":1,"result":"0x38"}',
+  ])('rejects duplicate JSON-RPC keys before interpreting the envelope', async (body) => {
+    mockRpc(() => ({ body }))
+    const anchor = await fetchBscChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+
+    expect(anchor.chainId).toMatchObject({
+      status: 'unavailable',
+      reason: 'malformed_response',
+    })
+  })
+
+  it.each([
     [429, 'rate_limited'],
     [402, 'quota_exhausted'],
     [500, 'rpc_error'],
