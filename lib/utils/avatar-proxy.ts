@@ -4,6 +4,8 @@
  * Exchange CDN domains (Binance, Bybit, Bitget, etc.) require the proxy.
  */
 
+import { canonicalizeLocalExchangeLogoPath } from './exchange-logo-path'
+
 // Domains that serve images without CORS/Referrer restrictions — bypass proxy entirely.
 // Bitmap sources here are in next.config.ts remotePatterns, so /_next/image optimizes them.
 // NOTE: SVG sources (dicebear `/svg` endpoints, `*.svg` paths) are NOT handled by the
@@ -63,15 +65,19 @@ export function isSvgAvatarSource(url: string | null | undefined): boolean {
 
 export function avatarSrc(url: string | null | undefined): string {
   if (!url) return ''
+  const normalizedUrl = canonicalizeLocalExchangeLogoPath(url.trim())
+  if (!normalizedUrl) return ''
   // data: URIs (local identicons/blockies) — always direct, zero latency
-  if (url.startsWith('data:') || url.startsWith('/')) return url
+  if (normalizedUrl.startsWith('data:') || normalizedUrl.startsWith('/')) return normalizedUrl
   try {
-    const hostname = new URL(url).hostname
-    if (DIRECT_DOMAINS.has(hostname)) return url
-    if (hostname.endsWith('.supabase.co') || hostname.endsWith('.supabase.in')) return url
-    if (hostname.endsWith('.googleusercontent.com')) return url
+    const hostname = new URL(normalizedUrl).hostname
+    if (DIRECT_DOMAINS.has(hostname)) return normalizedUrl
+    if (hostname.endsWith('.supabase.co') || hostname.endsWith('.supabase.in')) {
+      return normalizedUrl
+    }
+    if (hostname.endsWith('.googleusercontent.com')) return normalizedUrl
   } catch (_err) {
     /* invalid URL — proxy it */
   }
-  return `/api/avatar?url=${encodeURIComponent(url)}`
+  return `/api/avatar?url=${encodeURIComponent(normalizedUrl)}`
 }

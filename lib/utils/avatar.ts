@@ -3,6 +3,8 @@
  * 生成基于用户ID的默认头像
  */
 
+import { canonicalizeLocalExchangeLogoPath } from './exchange-logo-path'
+
 /**
  * 根据用户ID生成一个确定性的颜色
  */
@@ -438,47 +440,52 @@ function isLikelyImageUrl(url: string): boolean {
  */
 export function getTraderAvatarUrl(avatarUrl: string | null | undefined): string | null {
   if (!avatarUrl || avatarUrl.trim() === '') return null
+  const normalizedAvatarUrl = canonicalizeLocalExchangeLogoPath(avatarUrl.trim())
+
+  // Persisted exchange fallbacks are local assets, not remote avatars. Older
+  // rows may still carry stale extensions or the old gateio basename.
+  if (normalizedAvatarUrl.startsWith('/icons/exchanges/')) return normalizedAvatarUrl
 
   // data: URIs (e.g. inline SVG identicons/blockies) — return as-is, never proxy.
   // These are tiny inline images; proxying them creates absurdly long URLs that
   // cause 400 errors from Next.js Image Optimization (_next/image).
   // Callers must use <img> (not next/image) for data: URIs, or set unoptimized.
-  if (avatarUrl.startsWith('data:')) return avatarUrl
+  if (normalizedAvatarUrl.startsWith('data:')) return normalizedAvatarUrl
 
   // 过滤掉明显无效的URL（但保留交易所默认头像如 default-avatar.png）
   if (
-    avatarUrl.includes('t.co') ||
-    avatarUrl.includes('/banner/') ||
-    avatarUrl.includes('placeholder') ||
-    avatarUrl.includes('dicebear.com') ||
-    avatarUrl.includes('identicon') ||
-    avatarUrl.includes('robohash.org')
+    normalizedAvatarUrl.includes('t.co') ||
+    normalizedAvatarUrl.includes('/banner/') ||
+    normalizedAvatarUrl.includes('placeholder') ||
+    normalizedAvatarUrl.includes('dicebear.com') ||
+    normalizedAvatarUrl.includes('identicon') ||
+    normalizedAvatarUrl.includes('robohash.org')
   ) {
     return null // Reject generated avatars — fall back to gradient + initial letter
   }
 
   // 如果是已知交易所域名，信任并直接代理（不需要 isLikelyImageUrl 检查）
-  if (needsProxy(avatarUrl)) {
-    return `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
+  if (needsProxy(normalizedAvatarUrl)) {
+    return `/api/avatar?url=${encodeURIComponent(normalizedAvatarUrl)}`
   }
 
   // 非交易所域名：检查是否像是有效的图片URL
-  if (!isLikelyImageUrl(avatarUrl)) {
+  if (!isLikelyImageUrl(normalizedAvatarUrl)) {
     return null
   }
 
   // Direct-load domains (dicebear, supabase, github, etc.) — serve without proxy
   try {
-    const hostname = new URL(avatarUrl).hostname.toLowerCase()
+    const hostname = new URL(normalizedAvatarUrl).hostname.toLowerCase()
     if (DIRECT_LOAD_DOMAINS.some((domain) => hostname.includes(domain))) {
-      return avatarUrl
+      return normalizedAvatarUrl
     }
   } catch (_err) {
     /* invalid URL — fall through to proxy */
   }
 
   // Unknown domains with valid image URLs — proxy for safety (CORS/Referrer)
-  return `/api/avatar?url=${encodeURIComponent(avatarUrl)}`
+  return `/api/avatar?url=${encodeURIComponent(normalizedAvatarUrl)}`
 }
 
 /**
@@ -501,13 +508,16 @@ export function getTraderAvatarSrc({
   avatarOriginUrl: string | null | undefined
 }): string | null {
   const mirror = avatarMirrorUrl?.trim()
-  if (mirror) return mirror
+  if (mirror) return canonicalizeLocalExchangeLogoPath(mirror)
 
   const origin = avatarOriginUrl?.trim()
   if (origin) {
+    const normalizedOrigin = canonicalizeLocalExchangeLogoPath(origin)
     // Inline data URIs and already-local paths need no proxy hop.
-    if (origin.startsWith('data:') || origin.startsWith('/')) return origin
-    return `/api/avatar?url=${encodeURIComponent(origin)}`
+    if (normalizedOrigin.startsWith('data:') || normalizedOrigin.startsWith('/')) {
+      return normalizedOrigin
+    }
+    return `/api/avatar?url=${encodeURIComponent(normalizedOrigin)}`
   }
 
   return null
@@ -541,27 +551,27 @@ export function isDirectAvatarSrc(src: string): boolean {
  * Returns an absolute path to the local logo file in /public/icons/exchanges/.
  */
 const EXCHANGE_LOGO_MAP: Record<string, string> = {
-  binance_futures: '/icons/exchanges/binance.jpg',
-  binance_spot: '/icons/exchanges/binance.jpg',
-  binance_web3: '/icons/exchanges/binance.jpg',
+  binance_futures: '/icons/exchanges/binance.png',
+  binance_spot: '/icons/exchanges/binance.png',
+  binance_web3: '/icons/exchanges/binance.png',
   bybit: '/icons/exchanges/bybit.png',
   bybit_spot: '/icons/exchanges/bybit.png',
   bitget_futures: '/icons/exchanges/bitget.png',
-  okx_futures: '/icons/exchanges/okx.svg',
-  okx_spot: '/icons/exchanges/okx.svg',
-  okx_web3: '/icons/exchanges/okx.svg',
-  mexc: '/icons/exchanges/mexc.jpeg',
+  okx_futures: '/icons/exchanges/okx.png',
+  okx_spot: '/icons/exchanges/okx.png',
+  okx_web3: '/icons/exchanges/okx.png',
+  mexc: '/icons/exchanges/mexc.png',
   htx_futures: '/icons/exchanges/htx.png',
   kucoin: '/icons/exchanges/kucoin.png',
-  coinex: '/icons/exchanges/coinex.jpg',
+  coinex: '/icons/exchanges/coinex.png',
   bingx: '/icons/exchanges/bingx.png',
   bingx_spot: '/icons/exchanges/bingx.png',
   hyperliquid: '/icons/exchanges/hyperliquid.png',
-  gmx: '/icons/exchanges/gmx.svg',
+  gmx: '/icons/exchanges/gmx.png',
   dydx: '/icons/exchanges/dydx.png',
   jupiter_perps: '/icons/exchanges/jupiter.png',
   aevo: '/icons/exchanges/aevo.png',
-  gains: '/icons/exchanges/gains.svg',
+  gains: '/icons/exchanges/gains.png',
   bitfinex: '/icons/exchanges/bitfinex.png',
   blofin: '/icons/exchanges/blofin.png',
   xt: '/icons/exchanges/xt.png',
@@ -569,17 +579,13 @@ const EXCHANGE_LOGO_MAP: Record<string, string> = {
   toobit: '/icons/exchanges/toobit.png',
   btcc: '/icons/exchanges/btcc.png',
   bitunix: '/icons/exchanges/bitunix.png',
-  etoro: '/icons/exchanges/etoro.svg',
-  woox: '/icons/exchanges/woox.svg',
-  polymarket: '/icons/exchanges/polymarket.svg',
-  copin: '/icons/exchanges/copin.svg',
+  etoro: '/icons/exchanges/etoro.png',
+  woox: '/icons/exchanges/woox.png',
+  polymarket: '/icons/exchanges/polymarket.png',
+  copin: '/icons/exchanges/copin.png',
   paradex: '/icons/exchanges/dydx.png',
 }
 
-// All files in public/icons/exchanges/ are .png; the map historically
-// carried stale .jpg/.svg/.jpeg extensions (binance/okx/gmx/gains/mexc…)
-// that 404'd. Normalize every resolved path to .png so the map's exact
-// filename is irrelevant — only its basename matters.
 // New-source slug aliases the bare-prefix fallback can't derive:
 const LOGO_SLUG_ALIAS: Record<string, string> = {
   gtrade: 'gains',
@@ -594,11 +600,8 @@ const LOGO_SLUG_ALIAS: Record<string, string> = {
 
 export function getExchangeLogoUrl(source: string): string {
   const mapped = EXCHANGE_LOGO_MAP[source]
-  if (mapped) {
-    // Force .png regardless of the stale extension recorded in the map.
-    return mapped.replace(/\.(jpg|jpeg|svg|webp)$/i, '.png')
-  }
+  if (mapped) return canonicalizeLocalExchangeLogoPath(mapped)
   const prefix = source.split('_')[0]
   const base = LOGO_SLUG_ALIAS[source] ?? LOGO_SLUG_ALIAS[prefix] ?? prefix
-  return `/icons/exchanges/${base}.png`
+  return canonicalizeLocalExchangeLogoPath(`/icons/exchanges/${base}.png`)
 }
