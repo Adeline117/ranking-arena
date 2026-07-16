@@ -15,7 +15,7 @@ import {
   ReactNode,
 } from 'react'
 import {
-  premiumService,
+  PremiumService,
   type UserSubscription,
   type FeatureCheckResult,
   type SubscriptionTier,
@@ -24,6 +24,8 @@ import {
 } from './index'
 import { logger } from '@/lib/logger'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { getAuthSession } from '@/lib/auth'
 
 // ============================================
 // Feature Limits Export (for UI display)
@@ -99,6 +101,22 @@ interface PremiumContextValue {
 
 const PremiumContext = createContext<PremiumContextValue | null>(null)
 
+function createFreeSubscription(userId = ''): UserSubscription {
+  const base = new PremiumService().getSubscription()
+  return {
+    ...base,
+    userId,
+    startDate: new Date().toISOString(),
+    usage: { ...base.usage },
+  }
+}
+
+function serviceForSubscription(subscription: UserSubscription | null): PremiumService {
+  const service = new PremiumService()
+  if (subscription) service.setSubscription(subscription)
+  return service
+}
+
 // ============================================
 // Provider
 // ============================================
@@ -110,12 +128,55 @@ interface PremiumProviderProps {
 }
 
 export function PremiumProvider({ children, initialSubscription }: PremiumProviderProps) {
-  const [subscription, setSubscription] = useState<UserSubscription | null>(
+  const auth = useAuthSession()
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  const activeScopeRef = useRef({
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
+  })
+  activeScopeRef.current = {
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
+  }
+  const stateOwnerScopeKeyRef = useRef(scopeKey)
+  const [subscriptionState, setSubscription] = useState<UserSubscription | null>(
     initialSubscription || null
   )
-  const [isLoading, setIsLoading] = useState(!initialSubscription)
-  const [hasNFT, setHasNFT] = useState(false)
-  const [_source, setSource] = useState<'stripe' | 'nft' | 'admin' | 'free'>('free')
+  const [isLoadingState, setIsLoading] = useState(!initialSubscription)
+  const [hasNFTState, setHasNFT] = useState(false)
+  const [_sourceState, setSource] = useState<'stripe' | 'nft' | 'admin' | 'free'>('free')
+  const stateScopeOwned = stateOwnerScopeKeyRef.current === scopeKey
+  const subscription = stateScopeOwned ? subscriptionState : null
+  const isLoading = stateScopeOwned ? isLoadingState : true
+  const hasNFT = stateScopeOwned ? hasNFTState : false
+  const scopeIsCurrent = useCallback(
+    (scope: { viewerKey: string; sessionGeneration: number; userId: string | null }) => {
+      const current = activeScopeRef.current
+      return (
+        current.viewerKey === scope.viewerKey &&
+        current.sessionGeneration === scope.sessionGeneration &&
+        current.userId === scope.userId
+      )
+    },
+    []
+  )
+  const claimScope = useCallback(
+    (scope: { viewerKey: string; sessionGeneration: number; userId: string | null }) => {
+      if (!scopeIsCurrent(scope)) return false
+      const ownerScopeKey = `${scope.viewerKey}\u0000${scope.sessionGeneration}`
+      if (stateOwnerScopeKeyRef.current !== ownerScopeKey) {
+        stateOwnerScopeKeyRef.current = ownerScopeKey
+        setSubscription(null)
+        setIsLoading(true)
+        setHasNFT(false)
+        setSource('free')
+      }
+      return true
+    },
+    [scopeIsCurrent]
+  )
   // Track subscription in a ref so checkNFTMembership can read it without being
   // recreated on every subscription state change (which was causing useEffect churn)
   const subscriptionRef = useRef(subscription)
@@ -125,31 +186,23 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
 
   // 加载订阅状态
   const loadSubscription = useCallback(async () => {
+    const capturedScope = {
+      viewerKey: auth.viewerKey,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+    }
+    if (!auth.authChecked || !claimScope(capturedScope)) return
     try {
       setIsLoading(true)
 
       // 动态导入 supabase 避免服务端问题
       const { supabase } = await import('@/lib/supabase/client')
-      let {
-        data: { session },
-      } = await supabase.auth.getSession()
+      const session = await getAuthSession()
+      if (!scopeIsCurrent(capturedScope)) return
 
-      // 检查 token 是否过期或即将过期，尝试刷新
-      if (session?.expires_at) {
-        const now = Math.floor(Date.now() / 1000)
-        if (session.expires_at - now < 60) {
-          const { data: refreshed } = await supabase.auth.refreshSession()
-          session = refreshed.session
-        }
-      } else if (!session?.access_token) {
-        // 尝试刷新获取新 session
-        const { data: refreshed } = await supabase.auth.refreshSession()
-        session = refreshed.session
-      }
-
-      if (!session?.access_token) {
+      if (!session) {
         // 未登录，使用默认免费订阅
-        const defaultSub = premiumService.getSubscription()
+        const defaultSub = createFreeSubscription()
         setSubscription(defaultSub)
         return
       }
@@ -160,15 +213,15 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
           method: 'GET',
           credentials: 'include',
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${session.accessToken}`,
           },
         })
 
+        if (!scopeIsCurrent(capturedScope)) return
         if (response.ok) {
           const data = await response.json()
-          if (data.subscription) {
+          if (data.subscription && scopeIsCurrent(capturedScope)) {
             setSubscription(data.subscription)
-            premiumService.setSubscription(data.subscription)
             return
           }
         } else {
@@ -180,18 +233,19 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
 
       // API 未实现或失败时，尝试直接从数据库查询（降级方案）
       try {
+        if (!scopeIsCurrent(capturedScope)) return
         const { data: subscription } = await supabase
           .from('subscriptions')
           .select('tier, status')
-          .eq('user_id', session.user.id)
+          .eq('user_id', session.userId)
           .in('status', ['active', 'trialing'])
           .order('created_at', { ascending: false })
           .limit(1)
           .maybeSingle()
 
-        if (subscription && subscription.tier === 'pro') {
+        if (subscription && subscription.tier === 'pro' && scopeIsCurrent(capturedScope)) {
           const fallbackSub: UserSubscription = {
-            userId: session.user.id,
+            userId: session.userId,
             tier: 'pro',
             status: subscription.status as UserSubscription['status'],
             startDate: new Date().toISOString(),
@@ -207,20 +261,20 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
             },
           }
           setSubscription(fallbackSub)
-          premiumService.setSubscription(fallbackSub)
           return
         }
 
         // 最后检查 user_profiles
+        if (!scopeIsCurrent(capturedScope)) return
         const { data: profile } = await supabase
           .from('user_profiles')
           .select('subscription_tier')
-          .eq('id', session.user.id)
+          .eq('id', session.userId)
           .maybeSingle()
 
-        if (profile?.subscription_tier === 'pro') {
+        if (profile?.subscription_tier === 'pro' && scopeIsCurrent(capturedScope)) {
           const fallbackSub: UserSubscription = {
-            userId: session.user.id,
+            userId: session.userId,
             tier: 'pro',
             status: 'active',
             startDate: new Date().toISOString(),
@@ -236,7 +290,6 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
             },
           }
           setSubscription(fallbackSub)
-          premiumService.setSubscription(fallbackSub)
           return
         }
       } catch (dbError) {
@@ -244,41 +297,54 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       }
 
       // 所有方法都失败时使用默认值
-      const defaultSub = premiumService.getSubscription()
-      setSubscription(defaultSub)
+      if (scopeIsCurrent(capturedScope)) {
+        setSubscription(createFreeSubscription(session.userId))
+      }
     } catch (err) {
       // Log so silent downgrade-to-free is visible in DevTools / server logs
       console.error('[premium] subscription load failed:', err)
-      const defaultSub = premiumService.getSubscription()
-      setSubscription(defaultSub)
+      if (scopeIsCurrent(capturedScope)) {
+        setSubscription(createFreeSubscription(capturedScope.userId || ''))
+      }
     } finally {
-      setIsLoading(false)
+      if (scopeIsCurrent(capturedScope)) setIsLoading(false)
     }
-  }, [])
+  }, [
+    auth.authChecked,
+    auth.sessionGeneration,
+    auth.userId,
+    auth.viewerKey,
+    claimScope,
+    scopeIsCurrent,
+  ])
 
   // Check NFT membership in parallel (non-blocking enhancement)
   // Uses subscriptionRef (not subscription state) so this callback is stable and
   // is not recreated on every subscription change, preventing useEffect re-trigger churn.
   const checkNFTMembership = useCallback(async () => {
+    const capturedScope = {
+      viewerKey: auth.viewerKey,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+    }
+    if (!auth.authChecked || !claimScope(capturedScope)) return
     try {
-      const { supabase } = await import('@/lib/supabase/client')
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session?.access_token) return
+      const session = await getAuthSession()
+      if (!session || !scopeIsCurrent(capturedScope)) return
 
       const res = await fetch('/api/membership/nft', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
+        headers: { Authorization: `Bearer ${session.accessToken}` },
       })
-      if (res.ok) {
+      if (res.ok && scopeIsCurrent(capturedScope)) {
         const { hasNFT: nft } = await res.json()
+        if (!scopeIsCurrent(capturedScope)) return
         setHasNFT(nft)
         if (nft) {
           setSource('nft')
           // If NFT holder but no Stripe sub, treat as pro — read from ref to avoid dep
           if (!subscriptionRef.current || subscriptionRef.current.tier === 'free') {
             const nftSub: UserSubscription = {
-              userId: session.user.id,
+              userId: session.userId,
               tier: 'pro',
               status: 'active',
               startDate: new Date().toISOString(),
@@ -295,14 +361,20 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
               },
             }
             setSubscription(nftSub)
-            premiumService.setSubscription(nftSub)
           }
         }
       }
     } catch (_err) {
       // Intentionally swallowed: NFT-based premium check is optional, Stripe subscription is primary
     }
-  }, []) // stable — subscription read via subscriptionRef to avoid recreation on sub change
+  }, [
+    auth.authChecked,
+    auth.sessionGeneration,
+    auth.userId,
+    auth.viewerKey,
+    claimScope,
+    scopeIsCurrent,
+  ])
 
   // Load subscription immediately on mount. Previously deferred via
   // requestIdleCallback (up to 4s), which caused Pro users to see locked
@@ -310,10 +382,10 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
   // loadSubscription() is async (fetch-based), so it doesn't block the
   // main thread. The SSR cookie hint (arena_tier) already handles hydration perf.
   useEffect(() => {
-    if (!initialSubscription) {
+    if (auth.authChecked && (!initialSubscription || stateOwnerScopeKeyRef.current !== scopeKey)) {
       loadSubscription()
     }
-  }, [initialSubscription, loadSubscription])
+  }, [auth.authChecked, initialSubscription, loadSubscription, scopeKey])
 
   // Run NFT check after subscription loads
   useEffect(() => {
@@ -322,16 +394,20 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
     }
   }, [isLoading, checkNFTMembership])
 
-  const checkFeature = useCallback((featureId: PremiumFeatureId): FeatureCheckResult => {
-    return premiumService.checkFeatureAccess(featureId)
-  }, [])
+  const scopedService = useMemo(() => serviceForSubscription(subscription), [subscription])
+  const checkFeature = useCallback(
+    (featureId: PremiumFeatureId): FeatureCheckResult => {
+      return scopedService.checkFeatureAccess(featureId)
+    },
+    [scopedService]
+  )
 
   const refresh = useCallback(async () => {
     await loadSubscription()
   }, [loadSubscription])
 
   const value = useMemo<PremiumContextValue>(() => {
-    const actualIsPremium = (subscription ? premiumService.isPremiumUser() : false) || hasNFT
+    const actualIsPremium = (subscription ? scopedService.isPremiumUser() : false) || hasNFT
     // During open beta, all users get premium features unlocked
     const effectiveIsPremium = BETA_PRO_FEATURES_FREE || actualIsPremium
     return {
@@ -346,7 +422,7 @@ export function PremiumProvider({ children, initialSubscription }: PremiumProvid
       checkFeature,
       refresh,
     }
-  }, [subscription, isLoading, hasNFT, checkFeature, refresh])
+  }, [subscription, isLoading, hasNFT, checkFeature, refresh, scopedService])
 
   return <PremiumContext.Provider value={value}>{children}</PremiumContext.Provider>
 }
@@ -405,8 +481,9 @@ export function useIsPremium(): { isPremium: boolean; isLoading: boolean; tier: 
  * 关注限额检查
  */
 export function useFollowLimit(): FeatureCheckResult & { isLoading: boolean } {
-  const { isLoading } = usePremium()
-  const result = premiumService.checkFollowLimit()
+  const { subscription, isLoading } = usePremium()
+  const service = useMemo(() => serviceForSubscription(subscription), [subscription])
+  const result = service.checkFollowLimit()
   return { ...result, isLoading }
 }
 
@@ -416,8 +493,9 @@ export function useFollowLimit(): FeatureCheckResult & { isLoading: boolean } {
 export function useHistoricalDataAccess(
   requestedDays: number
 ): FeatureCheckResult & { isLoading: boolean } {
-  const { isLoading } = usePremium()
-  const result = premiumService.checkHistoricalDataAccess(requestedDays)
+  const { subscription, isLoading } = usePremium()
+  const service = useMemo(() => serviceForSubscription(subscription), [subscription])
+  const result = service.checkHistoricalDataAccess(requestedDays)
   return { ...result, isLoading }
 }
 
@@ -428,8 +506,9 @@ export function useUpgradeSuggestion(): {
   suggestion: { targetTier: SubscriptionTier; message: string } | null
   isLoading: boolean
 } {
-  const { isLoading } = usePremium()
-  const suggestion = premiumService.getUpgradeSuggestion()
+  const { subscription, isLoading } = usePremium()
+  const service = useMemo(() => serviceForSubscription(subscription), [subscription])
+  const suggestion = service.getUpgradeSuggestion()
   return { suggestion, isLoading }
 }
 
@@ -450,7 +529,7 @@ export function useFeatureQuota(featureId: PremiumFeatureId): {
   }
 
   const usage = subscription.usage
-  const _limits = premiumService.getSubscription().usage
+  const service = serviceForSubscription(subscription)
 
   // 根据功能 ID 获取对应的使用量和限制
   let used = 0
@@ -459,19 +538,19 @@ export function useFeatureQuota(featureId: PremiumFeatureId): {
   switch (featureId) {
     case 'api_access':
       used = usage.apiCallsToday
-      limit = premiumService.checkFeatureAccess('api_access').remaining + used
+      limit = service.checkFeatureAccess('api_access').remaining + used
       break
     case 'trader_comparison':
       used = usage.comparisonReportsThisMonth
-      limit = premiumService.checkFeatureAccess('trader_comparison').remaining + used
+      limit = service.checkFeatureAccess('trader_comparison').remaining + used
       break
     case 'export_data':
       used = usage.exportsThisMonth
-      limit = premiumService.checkFeatureAccess('export_data').remaining + used
+      limit = service.checkFeatureAccess('export_data').remaining + used
       break
     case 'custom_rankings':
       used = usage.currentCustomRankings
-      limit = premiumService.checkFeatureAccess('custom_rankings').remaining + used
+      limit = service.checkFeatureAccess('custom_rankings').remaining + used
       break
   }
 
