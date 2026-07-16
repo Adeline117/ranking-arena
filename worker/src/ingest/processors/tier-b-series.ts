@@ -279,7 +279,8 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
             src,
             trader.exchange_trader_id,
             timeframe,
-            trader.meta
+            trader.meta,
+            'series_only'
           )
 
           await writeRawObject({

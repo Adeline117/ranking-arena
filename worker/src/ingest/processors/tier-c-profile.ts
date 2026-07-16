@@ -62,7 +62,14 @@ export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
   const session = await openSession(src)
   try {
     const scrapedAt = new Date().toISOString()
-    const bundle = await adapter.getProfile(session, src, exchangeTraderId, timeframe, traderMeta)
+    const bundle = await adapter.getProfile(
+      session,
+      src,
+      exchangeTraderId,
+      timeframe,
+      traderMeta,
+      'interactive_deferred'
+    )
 
     const ctx: ParseCtx = {
       sourceSlug: src.slug,
