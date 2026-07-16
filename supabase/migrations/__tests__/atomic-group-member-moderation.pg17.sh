@@ -9,6 +9,7 @@ MEMBERSHIP_MIGRATION="$ROOT_DIR/supabase/migrations/20260716113900_atomic_group_
 MODERATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260716114100_atomic_group_member_moderation.sql"
 IDENTITY_MIGRATION="$ROOT_DIR/supabase/migrations/20260716114600_group_membership_identity_guard.sql"
 JOIN_REQUEST_MIGRATION="$ROOT_DIR/supabase/migrations/20260716114700_atomic_group_join_requests.sql"
+INVITE_MIGRATION="$ROOT_DIR/supabase/migrations/20260716114800_atomic_group_invites.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -17,7 +18,7 @@ for executable in initdb pg_ctl psql; do
     exit 1
   fi
 done
-for migration in "$MEMBERSHIP_MIGRATION" "$MODERATION_MIGRATION" "$IDENTITY_MIGRATION" "$JOIN_REQUEST_MIGRATION"; do
+for migration in "$MEMBERSHIP_MIGRATION" "$MODERATION_MIGRATION" "$IDENTITY_MIGRATION" "$JOIN_REQUEST_MIGRATION" "$INVITE_MIGRATION"; do
   if [[ ! -f "$migration" ]]; then
     echo "Required group migration is missing: $migration" >&2
     exit 1
@@ -239,6 +240,7 @@ psql_cmd -c \
   >/dev/null
 psql_cmd -f "$IDENTITY_MIGRATION" >"$LOG_DIR/identity-first-apply.log"
 psql_cmd -f "$JOIN_REQUEST_MIGRATION" >"$LOG_DIR/join-request-first-apply.log"
+psql_cmd -f "$INVITE_MIGRATION" >"$LOG_DIR/invite-first-apply.log"
 
 GROUP_ID="'10000000-0000-4000-8000-000000000001'::uuid"
 OWNER_ID="'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid"
@@ -460,6 +462,150 @@ wait "$REQUEST_JOIN_FIRST_PID"
 grep -Fq 'approval_required' "$LOG_DIR/request-join-first.out"
 assert_status joined \
   "public.mutate_group_membership_atomic('ffffffff-ffff-4fff-8fff-ffffffffffff', $APPLY_GROUP, 'join', false)"
+
+# Invite inspection never burns capacity; only redeem consumes. Creation and
+# soft revocation are service-owned, audited and serialized at their limits.
+if psql_cmd -c \
+  "SET ROLE service_role; INSERT INTO public.group_invites(id, group_id, token_hash, max_uses, used_count, expires_at) VALUES ('40000000-0000-4000-8000-000000000001', '10000000-0000-4000-8000-000000000001', repeat('f', 64), 1, 0, pg_catalog.clock_timestamp() + interval '1 day')" \
+  >"$LOG_DIR/direct-invite.log" 2>&1; then
+  echo "Service role unexpectedly retained direct group invite mutation" >&2
+  exit 1
+fi
+grep -Fq 'permission denied for table group_invites' \
+  "$LOG_DIR/direct-invite.log"
+
+assert_status forbidden \
+  "public.create_group_invite_atomic($ADMIN_ID, $APPLY_GROUP, repeat('0', 64), pg_catalog.clock_timestamp() + interval '7 days', 50)"
+assert_status invalid \
+  "public.create_group_invite_atomic($OWNER_ID, $GROUP_ID, repeat('0', 64), pg_catalog.clock_timestamp() + interval '31 days', 50)"
+assert_status created \
+  "public.create_group_invite_atomic($OWNER_ID, $GROUP_ID, repeat('1', 64), pg_catalog.clock_timestamp() + interval '7 days', 50)"
+assert_status token_conflict \
+  "public.create_group_invite_atomic($OWNER_ID, $GROUP_ID, repeat('1', 64), pg_catalog.clock_timestamp() + interval '7 days', 50)"
+FIRST_INVITE_ID="$(psql_cmd -Atqc "SELECT id FROM public.group_invites WHERE token_hash = repeat('1', 64)")"
+assert_status valid \
+  "public.inspect_group_invite_atomic($REQUEST_USER, $GROUP_ID, repeat('1', 64), false)"
+assert_status valid \
+  "public.inspect_group_invite_atomic($REQUEST_USER, $GROUP_ID, repeat('1', 64), false)"
+if [[ "$(psql_cmd -Atqc "SELECT used_count FROM public.group_invites WHERE id = '$FIRST_INVITE_ID'")" != "0" ]] || \
+  [[ "$(psql_cmd -Atqc "SELECT count(*) FROM public.group_invite_redemptions WHERE invite_id = '$FIRST_INVITE_ID'")" != "0" ]]; then
+  echo "Invite inspection consumed capacity or redemption evidence" >&2
+  exit 1
+fi
+assert_status joined \
+  "public.redeem_group_invite_atomic($REQUEST_USER, $GROUP_ID, repeat('1', 64), false)"
+assert_status invite_already_used \
+  "public.inspect_group_invite_atomic($REQUEST_USER, $GROUP_ID, repeat('1', 64), false)"
+assert_status left \
+  "public.mutate_group_membership_atomic($REQUEST_USER, $GROUP_ID, 'leave', false)"
+
+# Revoke first: a waiting redemption observes the committed soft expiry.
+assert_status created \
+  "public.create_group_invite_atomic($OWNER_ID, $GROUP_ID, repeat('2', 64), pg_catalog.clock_timestamp() + interval '7 days', 50)"
+REVOKE_FIRST_INVITE_ID="$(psql_cmd -Atqc "SELECT id FROM public.group_invites WHERE token_hash = repeat('2', 64)")"
+PGAPPNAME=invite_revoke_first psql_cmd >"$LOG_DIR/invite-revoke-first.out" 2>&1 <<SQL &
+BEGIN;
+SET ROLE service_role;
+SELECT public.revoke_group_invite_atomic(
+  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+  '10000000-0000-4000-8000-000000000001',
+  '$REVOKE_FIRST_INVITE_ID'
+);
+SELECT pg_catalog.pg_sleep(2);
+COMMIT;
+SQL
+REVOKE_FIRST_PID=$!
+wait_for_sleep_gate invite_revoke_first
+assert_status invalid_invite \
+  "public.redeem_group_invite_atomic('11111111-1111-4111-8111-111111111111', $GROUP_ID, repeat('2', 64), false)"
+wait "$REVOKE_FIRST_PID"
+assert_status already_revoked \
+  "public.revoke_group_invite_atomic($OWNER_ID, $GROUP_ID, '$REVOKE_FIRST_INVITE_ID'::uuid)"
+
+# Redeem first: revocation waits, preserves the committed redemption, then
+# prevents every later use without deleting evidence.
+assert_status created \
+  "public.create_group_invite_atomic($OWNER_ID, $GROUP_ID, repeat('3', 64), pg_catalog.clock_timestamp() + interval '7 days', 50)"
+REDEEM_FIRST_INVITE_ID="$(psql_cmd -Atqc "SELECT id FROM public.group_invites WHERE token_hash = repeat('3', 64)")"
+PGAPPNAME=invite_redeem_first psql_cmd >"$LOG_DIR/invite-redeem-first.out" 2>&1 <<'SQL' &
+BEGIN;
+SET ROLE service_role;
+SELECT public.redeem_group_invite_atomic(
+  'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+  '10000000-0000-4000-8000-000000000001',
+  repeat('3', 64),
+  false
+);
+SELECT pg_catalog.pg_sleep(2);
+COMMIT;
+SQL
+REDEEM_FIRST_PID=$!
+wait_for_sleep_gate invite_redeem_first
+assert_status revoked \
+  "public.revoke_group_invite_atomic($OWNER_ID, $GROUP_ID, '$REDEEM_FIRST_INVITE_ID'::uuid)"
+wait "$REDEEM_FIRST_PID"
+assert_status left \
+  "public.mutate_group_membership_atomic('cccccccc-cccc-4ccc-8ccc-cccccccccccc', $GROUP_ID, 'leave', false)"
+if [[ "$(psql_cmd -Atqc "SELECT count(*) FROM public.group_invite_redemptions WHERE invite_id = '$REDEEM_FIRST_INVITE_ID' AND user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'")" != "1" ]] || \
+  [[ "$(psql_cmd -Atqc "SELECT (revoked_at IS NOT NULL AND revoked_by = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa' AND expires_at <= revoked_at)::text FROM public.group_invites WHERE id = '$REDEEM_FIRST_INVITE_ID'")" != "true" ]]; then
+  echo "Soft revocation deleted redemption evidence or left a usable invite" >&2
+  exit 1
+fi
+
+# Audit failure rolls back invitation creation and does not spend the hourly
+# quota. At the 9→10 boundary, two concurrent creates admit exactly one.
+psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION public.fail_selected_invite_audit()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  IF NEW.action = 'invite_created' THEN
+    RAISE EXCEPTION 'injected invite audit failure';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER trg_fail_selected_invite_audit
+  BEFORE INSERT ON public.group_audit_log
+  FOR EACH ROW EXECUTE FUNCTION public.fail_selected_invite_audit();
+SQL
+if psql_cmd -c \
+  "SET ROLE service_role; SELECT public.create_group_invite_atomic('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '10000000-0000-4000-8000-000000000001', repeat('4', 64), pg_catalog.clock_timestamp() + interval '7 days', 50)" \
+  >"$LOG_DIR/invite-audit-failure.log" 2>&1; then
+  echo "Injected invite audit failure unexpectedly committed" >&2
+  exit 1
+fi
+grep -Fq 'injected invite audit failure' "$LOG_DIR/invite-audit-failure.log"
+if [[ "$(psql_cmd -Atqc "SELECT count(*) FROM public.group_invites WHERE token_hash = repeat('4', 64)")" != "0" ]]; then
+  echo "Failed invite audit left invitation state behind" >&2
+  exit 1
+fi
+psql_cmd <<'SQL'
+DROP TRIGGER trg_fail_selected_invite_audit ON public.group_audit_log;
+DROP FUNCTION public.fail_selected_invite_audit();
+SQL
+for token_char in 4 5 6 7 8 9; do
+  assert_status created \
+    "public.create_group_invite_atomic($OWNER_ID, $GROUP_ID, repeat('$token_char', 64), pg_catalog.clock_timestamp() + interval '7 days', 50)"
+done
+rate_pids=()
+rate_pid_index=0
+for token_char in a b; do
+  psql_cmd -Atqc \
+    "SET ROLE service_role; SELECT (public.create_group_invite_atomic('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', '10000000-0000-4000-8000-000000000001', repeat('$token_char', 64), pg_catalog.clock_timestamp() + interval '7 days', 50))->>'status';" \
+    >"$LOG_DIR/invite-rate-$token_char.out" 2>&1 &
+  rate_pid_index=$((rate_pid_index + 1))
+  rate_pids[$rate_pid_index]="$!"
+done
+wait "${rate_pids[1]}"
+wait "${rate_pids[2]}"
+created_at_limit="$(grep -h '^created$' "$LOG_DIR"/invite-rate-*.out | wc -l | tr -d ' ')"
+rejected_at_limit="$(grep -h '^rate_limited$' "$LOG_DIR"/invite-rate-*.out | wc -l | tr -d ' ')"
+if [[ "$created_at_limit" != "1" ]] || [[ "$rejected_at_limit" != "1" ]]; then
+  echo "Concurrent invitation rate boundary was not exact" >&2
+  exit 1
+fi
 
 # An audit failure after delete/ban insertion rolls the entire transaction back.
 psql_cmd <<'SQL'
@@ -722,6 +868,12 @@ if (( request_admin_visible < 1 )) || [[ "$request_self_visible" != "1" ]] || [[
   echo "Authenticated join-request reads were not scoped to self or group administrators" >&2
   exit 1
 fi
+invite_admin_visible="$(psql_cmd -Atqc "SET request.jwt.claim.sub = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'; SET ROLE authenticated; SELECT count(*) FROM public.group_invites WHERE group_id = '10000000-0000-4000-8000-000000000001'; RESET ROLE;")"
+invite_member_visible="$(psql_cmd -Atqc "SET request.jwt.claim.sub = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'; SET ROLE authenticated; SELECT count(*) FROM public.group_invites WHERE group_id = '10000000-0000-4000-8000-000000000001'; RESET ROLE;")"
+if (( invite_admin_visible < 1 )) || [[ "$invite_member_visible" != "0" ]]; then
+  echo "Authenticated invitation reads were not scoped to creators or group administrators" >&2
+  exit 1
+fi
 
 # Replay converges arbitrary ACL/policy/function drift.
 psql_cmd <<'SQL'
@@ -764,10 +916,34 @@ GRANT EXECUTE ON FUNCTION public.mutate_group_join_request_atomic(
 GRANT EXECUTE ON FUNCTION public.review_group_join_request_atomic(
   uuid, uuid, text
 ) TO drifted_moderator;
+GRANT ALL PRIVILEGES ON public.group_invites
+  TO PUBLIC, anon, authenticated, service_role, drifted_moderator;
+GRANT SELECT (group_id), INSERT (token_hash), UPDATE (expires_at), REFERENCES (id)
+  ON public.group_invites
+  TO PUBLIC, anon, authenticated, service_role, drifted_moderator;
+CREATE POLICY unexpected_invite_writer
+  ON public.group_invites
+  FOR ALL
+  TO drifted_moderator
+  USING (true)
+  WITH CHECK (true);
+GRANT EXECUTE ON FUNCTION public.inspect_group_invite_atomic(
+  uuid, uuid, text, boolean
+) TO drifted_moderator;
+GRANT EXECUTE ON FUNCTION public.create_group_invite_atomic(
+  uuid, uuid, text, timestamp with time zone, integer
+) TO drifted_moderator;
+GRANT EXECUTE ON FUNCTION public.revoke_group_invite_atomic(
+  uuid, uuid, uuid
+) TO drifted_moderator;
+GRANT EXECUTE ON FUNCTION public.redeem_group_invite_atomic(
+  uuid, uuid, text, boolean
+) TO drifted_moderator;
 SQL
 psql_cmd -f "$MODERATION_MIGRATION" >"$LOG_DIR/replay.log"
 psql_cmd -f "$IDENTITY_MIGRATION" >"$LOG_DIR/identity-replay.log"
 psql_cmd -f "$JOIN_REQUEST_MIGRATION" >"$LOG_DIR/join-request-replay.log"
+psql_cmd -f "$INVITE_MIGRATION" >"$LOG_DIR/invite-replay.log"
 
 psql_cmd <<'SQL'
 DO $catalog_and_data_contract$
@@ -867,6 +1043,56 @@ BEGIN
     WHERE polrelid = 'public.group_bans'::regclass
   ) <> 3 THEN
     RAISE EXCEPTION 'group_bans ACL/policy drift survived replay';
+  END IF;
+
+  IF pg_catalog.has_table_privilege(
+    'service_role', 'public.group_invites',
+    'INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+  ) OR pg_catalog.has_table_privilege(
+    'drifted_moderator', 'public.group_invites',
+    'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+  ) OR pg_catalog.has_any_column_privilege(
+    'drifted_moderator', 'public.group_invites',
+    'SELECT,INSERT,UPDATE,REFERENCES'
+  ) OR pg_catalog.has_function_privilege(
+    'drifted_moderator',
+    'public.inspect_group_invite_atomic(uuid,uuid,text,boolean)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'drifted_moderator',
+    'public.create_group_invite_atomic(uuid,uuid,text,timestamp with time zone,integer)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'drifted_moderator',
+    'public.revoke_group_invite_atomic(uuid,uuid,uuid)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'drifted_moderator',
+    'public.redeem_group_invite_atomic(uuid,uuid,text,boolean)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'authenticated',
+    'public.inspect_group_invite_atomic(uuid,uuid,text,boolean)',
+    'EXECUTE'
+  ) OR (
+    SELECT pg_catalog.count(*) FROM pg_catalog.pg_policy
+    WHERE polrelid = 'public.group_invites'::regclass
+  ) <> 3 THEN
+    RAISE EXCEPTION 'group_invites ACL/policy drift survived replay';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.group_invites AS invite
+    JOIN public.group_invite_redemptions AS redemption
+      ON redemption.invite_id = invite.id
+    WHERE invite.token_hash = repeat('3', 64)
+      AND invite.revoked_at IS NOT NULL
+      AND invite.revoked_by = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+      AND invite.expires_at <= invite.revoked_at
+      AND redemption.user_id = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
+  ) THEN
+    RAISE EXCEPTION 'redeemed and revoked invitation evidence was not preserved';
   END IF;
 
   IF NOT EXISTS (
