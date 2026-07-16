@@ -1,10 +1,14 @@
 /** @jest-environment node */
 
 const mockFrom = jest.fn()
+const mockRpc = jest.fn()
 const mockCanServiceActorReadPost = jest.fn()
 const mockUser = { id: '11111111-1111-4111-8111-111111111111' }
 let mockPublicUser: typeof mockUser | null = mockUser
-const mockSupabase = { from: (...args: unknown[]) => mockFrom(...args) }
+const mockSupabase = {
+  from: (...args: unknown[]) => mockFrom(...args),
+  rpc: (...args: unknown[]) => mockRpc(...args),
+}
 
 jest.mock('@/lib/api/middleware', () => ({
   withAuth:
@@ -59,6 +63,16 @@ describe('/api/posts/[id]/emoji-react service audience boundary', () => {
     jest.clearAllMocks()
     mockPublicUser = mockUser
     mockCanServiceActorReadPost.mockResolvedValue(true)
+    mockRpc.mockResolvedValue({
+      data: {
+        status: 'added',
+        action: 'added',
+        emoji: '🔥',
+        counts: { '🔥': 1 },
+        user_emojis: ['🔥'],
+      },
+      error: null,
+    })
   })
 
   it('denies aggregate reads before touching reaction children', async () => {
@@ -93,12 +107,43 @@ describe('/api/posts/[id]/emoji-react service audience boundary', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('denies a mutation before reading or writing reactions', async () => {
-    mockCanServiceActorReadPost.mockResolvedValue(false)
+  it('uses the canonical atomic RPC and does not touch reaction tables directly', async () => {
+    const response = await POST(request('POST', { body: { emoji: '🔥' } }))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(mockRpc).toHaveBeenCalledWith('toggle_post_emoji_reaction_atomic', {
+      p_actor_id: mockUser.id,
+      p_post_id: POST_ID,
+      p_emoji: '🔥',
+    })
+    expect(body.data).toEqual({
+      action: 'added',
+      emoji: '🔥',
+      counts: { '🔥': 1 },
+      userEmojis: ['🔥'],
+    })
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('denies a mutation when the atomic database audience decision denies', async () => {
+    mockRpc.mockResolvedValue({ data: { status: 'not_found' }, error: null })
 
     const response = await POST(request('POST', { body: { emoji: '🔥' } }))
 
     expect(response.status).toBe(404)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it('fails closed for a malformed atomic acknowledgement', async () => {
+    mockRpc.mockResolvedValue({
+      data: { status: 'added', action: 'added', emoji: '🔥', counts: { '🔥': -1 } },
+      error: null,
+    })
+
+    const response = await POST(request('POST', { body: { emoji: '🔥' } }))
+
+    expect(response.status).toBe(500)
     expect(mockFrom).not.toHaveBeenCalled()
   })
 })

@@ -4,14 +4,35 @@
  * GET /api/posts/[id]/poll-vote - 获取投票详情
  */
 
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, getAuthUser, requireAuth, success, handleError } from '@/lib/api'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
+import { canServiceActorReadPost } from '@/lib/data/service-post-audience'
 
 type RouteContext = { params: Promise<{ id: string }> }
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
+type PollOption = { text: string; votes: number }
+
+function parsePollOptions(value: unknown): PollOption[] | null {
+  if (!Array.isArray(value) || value.length === 0) return null
+  const options: PollOption[] = []
+  for (const candidate of value) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) return null
+    const row = candidate as Record<string, unknown>
+    if (
+      typeof row.text !== 'string' ||
+      !Number.isSafeInteger(row.votes) ||
+      (row.votes as number) < 0
+    ) {
+      return null
+    }
+    options.push({ text: row.text, votes: row.votes as number })
+  }
+  return options
+}
 
 // 获取投票详情
 export async function GET(request: NextRequest, context: RouteContext) {
@@ -19,26 +40,42 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (guard) return guard
 
   try {
-    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.write)
+    const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.read)
     if (rateLimitResponse) return rateLimitResponse
 
     const { id: postId } = await context.params
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    if (!UUID_RE.test(postId)) {
+      return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 })
+    }
+    const supabase = getSupabaseAdmin()
 
     // 尝试获取用户（可选，未登录也可以查看）
     let userId: string | null = null
     userId = (await getAuthUser(request))?.id ?? null
+    if (request.headers.get('authorization') && !userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+    if (!(await canServiceActorReadPost(supabase, postId, userId))) {
+      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+    }
 
     // 获取投票信息
     const { data: poll, error: pollError } = await supabase
       .from('polls')
       .select('id, question, options, type, end_at')
       .eq('post_id', postId)
-      .single()
+      .maybeSingle()
 
-    if (pollError || !poll) {
+    if (pollError) {
+      logger.error('[poll-vote GET] poll lookup failed', { code: pollError.code })
+      throw new Error('Poll could not be loaded')
+    }
+    if (!poll) {
       return success({ poll: null, userVotes: [] })
     }
+
+    const options = parsePollOptions(poll.options)
+    if (!options) throw new Error('Poll could not be loaded')
 
     // 检查是否已过期
     const isExpired = poll.end_at ? new Date(poll.end_at) <= new Date() : false
@@ -46,11 +83,16 @@ export async function GET(request: NextRequest, context: RouteContext) {
     // 获取用户投票（如果已登录）
     let userVotes: number[] = []
     if (userId) {
-      const { data: votes } = await supabase
+      const { data: votes, error: votesError } = await supabase
         .from('poll_votes')
         .select('option_index')
         .eq('poll_id', poll.id)
         .eq('user_id', userId)
+
+      if (votesError) {
+        logger.error('[poll-vote GET] viewer vote lookup failed', { code: votesError.code })
+        throw new Error('Poll could not be loaded')
+      }
 
       userVotes = votes?.map((v) => v.option_index) || []
     }
@@ -63,16 +105,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
       poll: {
         id: poll.id,
         question: poll.question,
-        options: showResults
-          ? poll.options
-          : poll.options.map((opt: { text: string }) => ({ text: opt.text, votes: null })),
+        options: showResults ? options : options.map((opt) => ({ text: opt.text, votes: null })),
         type: poll.type,
         endAt: poll.end_at,
         isExpired,
         showResults,
-        totalVotes: showResults
-          ? poll.options.reduce((sum: number, opt: { votes: number }) => sum + opt.votes, 0)
-          : null,
+        totalVotes: showResults ? options.reduce((sum, opt) => sum + opt.votes, 0) : null,
       },
       userVotes,
       hasVoted,
@@ -89,115 +127,81 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
   try {
     const { id: postId } = await context.params
+    if (!UUID_RE.test(postId)) {
+      return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 })
+    }
     const user = await requireAuth(request)
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSupabaseAdmin()
 
-    const body = await request.json()
-    const optionIndexes: number[] = body.optionIndexes
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const optionIndexes =
+      body && typeof body === 'object' && !Array.isArray(body) && 'optionIndexes' in body
+        ? (body as { optionIndexes?: unknown }).optionIndexes
+        : null
 
-    if (!Array.isArray(optionIndexes) || optionIndexes.length === 0) {
-      throw new Error('Please select at least one option')
+    if (
+      !Array.isArray(optionIndexes) ||
+      optionIndexes.length === 0 ||
+      optionIndexes.length > 100 ||
+      !optionIndexes.every((value): value is number => Number.isSafeInteger(value)) ||
+      new Set(optionIndexes).size !== optionIndexes.length
+    ) {
+      return NextResponse.json({ error: 'Invalid poll options' }, { status: 400 })
     }
 
-    // 获取投票信息
-    const { data: poll, error: pollError } = await supabase
-      .from('polls')
-      .select('id, options, type, end_at')
-      .eq('post_id', postId)
-      .single()
+    const { data, error } = await supabase.rpc('cast_post_poll_vote_atomic', {
+      p_actor_id: user.id,
+      p_post_id: postId,
+      p_option_indexes: optionIndexes,
+    })
 
-    if (pollError || !poll) {
-      throw new Error('Poll not found')
+    if (error) {
+      logger.error('[poll-vote POST] atomic vote failed', { code: error.code })
+      throw new Error('Vote could not be recorded')
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      throw new Error('Vote could not be recorded')
     }
 
-    // 检查是否已过期
-    if (poll.end_at && new Date(poll.end_at) <= new Date()) {
-      throw new Error('Poll has ended')
+    const result = data as Record<string, unknown>
+    if (result.status === 'not_found') {
+      return NextResponse.json({ error: 'Poll not found' }, { status: 404 })
+    }
+    if (result.status === 'ended') {
+      return NextResponse.json({ error: 'Poll has ended' }, { status: 409 })
+    }
+    if (result.status === 'invalid') {
+      return NextResponse.json({ error: 'Invalid poll options' }, { status: 400 })
     }
 
-    // 检查选项索引是否有效
-    const optionsCount = poll.options.length
-    for (const idx of optionIndexes) {
-      if (idx < 0 || idx >= optionsCount) {
-        throw new Error('Invalid option')
-      }
-    }
-
-    // 单选投票只能选一个
-    if (poll.type === 'single' && optionIndexes.length > 1) {
-      throw new Error('Single-choice poll allows only one option')
-    }
-
-    // 删除现有投票
-    await supabase.from('poll_votes').delete().eq('poll_id', poll.id).eq('user_id', user.id)
-
-    // 插入新投票
-    const newVotes = optionIndexes.map((optionIndex) => ({
-      poll_id: poll.id,
-      user_id: user.id,
-      option_index: optionIndex,
-    }))
-
-    const { error: insertError } = await supabase.from('poll_votes').insert(newVotes)
-
-    if (insertError) {
-      throw new Error('Vote failed: ' + insertError.message)
-    }
-
-    // Recount votes from poll_votes table (source of truth) to avoid race conditions.
-    // The old approach of read-modify-write on the JSON options field was prone to lost updates.
-    const { data: voteCounts } = await supabase
-      .from('poll_votes')
-      .select('option_index')
-      .eq('poll_id', poll.id)
-
-    // Build accurate counts from source of truth
-    const countMap: Record<number, number> = {}
-    for (const v of voteCounts || []) {
-      countMap[v.option_index] = (countMap[v.option_index] || 0) + 1
-    }
-
-    const updatedOptions = poll.options.map(
-      (opt: { text: string; votes: number }, idx: number) => ({
-        ...opt,
-        votes: countMap[idx] || 0,
-      })
-    )
-
-    // Update polls table with recounted values
-    const { data: updatedPoll, error: updateError } = await supabase
-      .from('polls')
-      .update({ options: updatedOptions, updated_at: new Date().toISOString() })
-      .eq('id', poll.id)
-      .select('id, options')
-      .single()
-
-    if (updateError) {
-      logger.error('更新投票计数Failed:', updateError)
-      return success({
-        poll: {
-          id: poll.id,
-          options: updatedOptions,
-          totalVotes: updatedOptions.reduce(
-            (sum: number, opt: { votes: number }) => sum + (opt.votes || 0),
-            0
-          ),
-        },
-        userVotes: optionIndexes,
-        warning: 'Vote recorded but count update failed',
-      })
+    const updatedOptions = parsePollOptions(result.options)
+    const userVotes = result.user_votes
+    if (
+      result.status !== 'voted' ||
+      typeof result.poll_id !== 'string' ||
+      !UUID_RE.test(result.poll_id) ||
+      !updatedOptions ||
+      !Number.isSafeInteger(result.total_votes) ||
+      (result.total_votes as number) < 0 ||
+      !Array.isArray(userVotes) ||
+      userVotes.length !== optionIndexes.length ||
+      !userVotes.every((value, index) => value === optionIndexes[index])
+    ) {
+      throw new Error('Vote could not be recorded')
     }
 
     return success({
       poll: {
-        id: updatedPoll.id,
-        options: updatedPoll.options,
-        totalVotes: updatedPoll.options.reduce(
-          (sum: number, opt: { votes: number }) => sum + opt.votes,
-          0
-        ),
+        id: result.poll_id,
+        options: updatedOptions,
+        totalVotes: result.total_votes,
       },
-      userVotes: optionIndexes,
+      userVotes,
     })
   } catch (error: unknown) {
     return handleError(error, 'posts/[id]/poll-vote POST')

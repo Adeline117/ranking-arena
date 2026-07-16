@@ -62,92 +62,59 @@ export const POST = withAuth(
       return NextResponse.json({ error: 'Invalid emoji' }, { status: 400 })
     }
 
-    if (!(await canServiceActorReadPost(sb, postId, user.id))) {
+    const { data, error } = await sb.rpc('toggle_post_emoji_reaction_atomic', {
+      p_actor_id: user.id,
+      p_post_id: postId,
+      p_emoji: emoji,
+    })
+
+    if (error) {
+      logger.error('[emoji-react] atomic toggle failed', {
+        postId,
+        error: error.message,
+      })
+      return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
+    }
+    if (!data || typeof data !== 'object' || Array.isArray(data)) {
+      return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
+    }
+
+    const result = data as Record<string, unknown>
+    if (result.status === 'not_found') {
       return NextResponse.json({ error: 'Post not found' }, { status: 404 })
     }
-
-    // Check if reaction exists
-    const { data: existing, error: existingError } = await sb
-      .from('post_emoji_reactions')
-      .select('id')
-      .eq('post_id', postId)
-      .eq('user_id', user.id)
-      .eq('emoji', emoji)
-      .maybeSingle()
-
-    if (existingError) {
-      logger.error('[emoji-react] existing reaction lookup failed', {
-        postId,
-        error: existingError.message,
-      })
-      return NextResponse.json({ error: 'Failed to check reaction' }, { status: 500 })
+    if (result.status === 'invalid') {
+      return NextResponse.json({ error: 'Invalid reaction request' }, { status: 400 })
     }
 
-    if (existing) {
-      // Remove (toggle off)
-      const { error } = await sb
-        .from('post_emoji_reactions')
-        .delete()
-        .eq('id', existing.id)
-        .eq('post_id', postId)
-        .eq('user_id', user.id)
-        .eq('emoji', emoji)
-      if (error) {
-        logger.error('[emoji-react] toggle-off delete failed', { postId, error: error.message })
-        return NextResponse.json({ error: 'Failed to remove reaction' }, { status: 500 })
-      }
-    } else {
-      // Add
-      const { error } = await sb.from('post_emoji_reactions').insert({
-        post_id: postId,
-        user_id: user.id,
-        emoji,
-      })
-      if (error) {
-        logger.error('[emoji-react] add insert failed', { postId, error: error.message })
-        return NextResponse.json({ error: 'Failed to add reaction' }, { status: 500 })
-      }
-    }
-
-    // Get updated aggregated counts
-    const { data: reactions, error: reactionsError } = await sb
-      .from('post_emoji_reactions')
-      .select('emoji')
-      .eq('post_id', postId)
-
-    if (reactionsError) {
-      logger.error('[emoji-react] aggregate lookup failed', {
-        postId,
-        error: reactionsError.message,
-      })
-      return NextResponse.json({ error: 'Failed to load reactions' }, { status: 500 })
-    }
-
-    const counts: Record<string, number> = {}
-    for (const r of reactions || []) {
-      counts[r.emoji] = (counts[r.emoji] || 0) + 1
-    }
-
-    // Get user's own reactions
-    const { data: userReactions, error: userReactionsError } = await sb
-      .from('post_emoji_reactions')
-      .select('emoji')
-      .eq('post_id', postId)
-      .eq('user_id', user.id)
-
-    if (userReactionsError) {
-      logger.error('[emoji-react] viewer reaction lookup failed', {
-        postId,
-        error: userReactionsError.message,
-      })
-      return NextResponse.json({ error: 'Failed to load reactions' }, { status: 500 })
+    const action = result.action
+    const counts = result.counts
+    const userEmojis = result.user_emojis
+    const validCounts =
+      counts &&
+      typeof counts === 'object' &&
+      !Array.isArray(counts) &&
+      Object.entries(counts).every(
+        ([key, value]) => ALLOWED_EMOJIS.has(key) && Number.isSafeInteger(value) && value >= 0
+      )
+    const validUserEmojis =
+      Array.isArray(userEmojis) &&
+      userEmojis.every((value) => typeof value === 'string' && ALLOWED_EMOJIS.has(value))
+    if (
+      result.status !== action ||
+      (action !== 'added' && action !== 'removed') ||
+      result.emoji !== emoji ||
+      !validCounts ||
+      !validUserEmojis
+    ) {
+      return NextResponse.json({ error: 'Failed to update reaction' }, { status: 500 })
     }
 
     return success({
-      action: existing ? 'removed' : 'added',
+      action,
       emoji,
       counts,
-      userEmojis: (userReactions || []).map((r: { emoji: string }) => r.emoji),
+      userEmojis,
     })
   },
   { name: 'posts/emoji-react-post', rateLimit: 'write' }
