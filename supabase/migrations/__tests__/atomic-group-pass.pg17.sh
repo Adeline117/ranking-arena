@@ -52,6 +52,23 @@ expect_failure() {
   fi
 }
 
+expect_migration_failure() {
+  local label="$1"
+  local slug="$2"
+  local error_file="$TMP_ROOT/$slug.err"
+
+  if psql_cmd -f "$MIGRATION" >"$LOG_DIR/$slug.log" 2>"$error_file"; then
+    echo "Migration unexpectedly accepted: $label" >&2
+    return 1
+  fi
+  if ! grep -q 'atomic group pass service-role authority graph is unsafe' \
+    "$error_file"; then
+    echo "Migration failed for an unexpected reason: $label" >&2
+    cat "$error_file" >&2
+    return 1
+  fi
+}
+
 "$PG_BIN/initdb" \
   -D "$DATA_DIR" \
   --auth-local=trust \
@@ -225,6 +242,41 @@ INSERT INTO public.groups (
     29.90, 299.90, 32.90, 329.90, false, 7
   );
 SQL
+
+# The gateway's canonical SET-only edge is the only non-owner path to
+# service_role. Prove direct, inherited, upstream, downstream-recursive, and
+# browser-recursive authority drift all fail before the migration mutates data.
+psql_cmd -c \
+  'GRANT service_role TO hostile_role WITH INHERIT FALSE, SET TRUE' >/dev/null
+expect_migration_failure 'direct custom service_role member' 'unsafe-direct-member'
+psql_cmd -c 'REVOKE service_role FROM hostile_role' >/dev/null
+
+psql_cmd -c \
+  'GRANT service_role TO authenticator WITH INHERIT TRUE, SET TRUE' >/dev/null
+expect_migration_failure 'inherited authenticator gateway edge' 'unsafe-authenticator'
+psql_cmd -c \
+  'GRANT service_role TO authenticator WITH INHERIT FALSE, SET TRUE' >/dev/null
+
+psql_cmd -c \
+  'GRANT hostile_role TO service_role WITH INHERIT FALSE, SET TRUE' >/dev/null
+expect_migration_failure 'service_role upstream authority' 'unsafe-service-upstream'
+psql_cmd -c 'REVOKE hostile_role FROM service_role' >/dev/null
+
+psql_cmd -c \
+  'GRANT service_role TO postgres WITH INHERIT TRUE, SET TRUE' >/dev/null
+psql_cmd -c \
+  'GRANT postgres TO shadow_role WITH INHERIT TRUE, SET TRUE' >/dev/null
+expect_migration_failure 'recursive custom service inheritor' 'unsafe-service-downstream'
+psql_cmd -c 'REVOKE postgres FROM shadow_role' >/dev/null
+psql_cmd -c 'REVOKE service_role FROM postgres' >/dev/null
+
+psql_cmd -c \
+  'GRANT postgres TO hostile_role WITH INHERIT FALSE, SET TRUE' >/dev/null
+psql_cmd -c \
+  'GRANT hostile_role TO authenticated WITH INHERIT FALSE, SET TRUE' >/dev/null
+expect_migration_failure 'recursive browser owner authority' 'unsafe-browser-chain'
+psql_cmd -c 'REVOKE hostile_role FROM authenticated' >/dev/null
+psql_cmd -c 'REVOKE postgres FROM hostile_role' >/dev/null
 
 psql_cmd -f "$MIGRATION" >"$LOG_DIR/first-application.log"
 

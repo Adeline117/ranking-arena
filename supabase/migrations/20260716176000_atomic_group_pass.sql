@@ -24,18 +24,32 @@ DECLARE
     FROM pg_catalog.pg_roles AS role_row
     WHERE role_row.rolname = 'postgres'
   );
+  v_service oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'service_role'
+  );
+  v_authenticator oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'authenticator'
+  );
   v_relation text;
   v_existing pg_catalog.regclass;
 BEGIN
-  IF v_postgres IS NULL OR EXISTS (
-    SELECT 1
-    FROM pg_catalog.unnest(
-      ARRAY['anon', 'authenticated', 'service_role', 'authenticator']::name[]
-    ) AS required_role(role_name)
-    LEFT JOIN pg_catalog.pg_roles AS role_row
-      ON role_row.rolname = required_role.role_name
-    WHERE role_row.oid IS NULL
-  ) THEN
+  IF v_postgres IS NULL
+    OR v_service IS NULL
+    OR v_authenticator IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.unnest(
+        ARRAY['anon', 'authenticated']::name[]
+      ) AS required_role(role_name)
+      LEFT JOIN pg_catalog.pg_roles AS role_row
+        ON role_row.rolname = required_role.role_name
+      WHERE role_row.oid IS NULL
+    )
+  THEN
     RAISE EXCEPTION 'atomic group passes require standard Supabase roles';
   END IF;
 
@@ -135,6 +149,74 @@ BEGIN
       AND function_row.prorettype = 'text'::pg_catalog.regtype
   ) THEN
     RAISE EXCEPTION 'auth.role() text identity helper is missing';
+  END IF;
+
+  -- Supabase's gateway may SET ROLE service_role for a service JWT, but it
+  -- must not inherit that authority.  No other direct or recursive browser,
+  -- custom-role, downstream, or upstream membership path is accepted.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members AS membership
+    WHERE membership.roleid = v_service
+      AND membership.member = v_authenticator
+      AND NOT membership.admin_option
+      AND NOT membership.inherit_option
+      AND membership.set_option
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members AS membership
+    WHERE membership.roleid = v_service
+      AND membership.member NOT IN (v_authenticator, v_postgres)
+  ) OR EXISTS (
+    WITH RECURSIVE service_inheritors(member_oid) AS (
+      SELECT membership.member
+      FROM pg_catalog.pg_auth_members AS membership
+      WHERE membership.roleid = v_service
+        AND membership.inherit_option
+      UNION
+      SELECT membership.member
+      FROM pg_catalog.pg_auth_members AS membership
+      JOIN service_inheritors AS inherited
+        ON membership.roleid = inherited.member_oid
+      WHERE membership.inherit_option OR membership.set_option
+    )
+    SELECT 1
+    FROM service_inheritors AS inherited
+    WHERE inherited.member_oid <> v_postgres
+  ) OR EXISTS (
+    WITH RECURSIVE service_inherits(role_oid) AS (
+      SELECT membership.roleid
+      FROM pg_catalog.pg_auth_members AS membership
+      WHERE membership.member = v_service
+        AND (membership.inherit_option OR membership.set_option)
+      UNION
+      SELECT membership.roleid
+      FROM pg_catalog.pg_auth_members AS membership
+      JOIN service_inherits AS inherited
+        ON membership.member = inherited.role_oid
+      WHERE membership.inherit_option OR membership.set_option
+    )
+    SELECT 1 FROM service_inherits
+  ) OR EXISTS (
+    WITH RECURSIVE browser_authority(role_oid) AS (
+      SELECT membership.roleid
+      FROM pg_catalog.pg_roles AS browser_role
+      JOIN pg_catalog.pg_auth_members AS membership
+        ON membership.member = browser_role.oid
+       AND (membership.inherit_option OR membership.set_option)
+      WHERE browser_role.rolname IN ('anon', 'authenticated')
+      UNION
+      SELECT membership.roleid
+      FROM browser_authority AS inherited
+      JOIN pg_catalog.pg_auth_members AS membership
+        ON membership.member = inherited.role_oid
+      WHERE membership.inherit_option OR membership.set_option
+    )
+    SELECT 1
+    FROM browser_authority AS inherited
+    WHERE inherited.role_oid IN (v_service, v_postgres)
+  ) THEN
+    RAISE EXCEPTION 'atomic group pass service-role authority graph is unsafe';
   END IF;
 
   IF (
@@ -536,7 +618,7 @@ CREATE OR REPLACE FUNCTION public.activate_group_subscription_atomic(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, pg_temp
 AS $function$
 DECLARE
   v_group public.groups%ROWTYPE;
@@ -968,7 +1050,7 @@ CREATE OR REPLACE FUNCTION public.cancel_group_subscription_atomic(
 RETURNS jsonb
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, pg_temp
 AS $function$
 DECLARE
   v_initial public.group_subscriptions%ROWTYPE;
@@ -1055,7 +1137,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, pg_temp
 AS $function$
 DECLARE
   v_group public.groups%ROWTYPE;
@@ -1212,6 +1294,9 @@ DECLARE
   v_service oid := (
     SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'service_role'
   );
+  v_authenticator oid := (
+    SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'authenticator'
+  );
   v_table name;
   v_signature pg_catalog.regprocedure;
 BEGIN
@@ -1311,6 +1396,175 @@ BEGIN
     END IF;
   END LOOP;
 
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_constraint AS constraint_row
+    JOIN pg_catalog.pg_index AS index_row
+      ON index_row.indexrelid = constraint_row.conindid
+    WHERE constraint_row.conrelid =
+        'public.group_payment_consumptions'::pg_catalog.regclass
+      AND constraint_row.conname =
+        'group_payment_consumptions_intent_unique'
+      AND constraint_row.contype = 'u'
+      AND constraint_row.convalidated
+      AND NOT constraint_row.condeferrable
+      AND NOT constraint_row.condeferred
+      AND constraint_row.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.conrelid
+            AND attribute.attname = 'provider'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.conrelid
+            AND attribute.attname = 'payment_intent_id'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+        )
+      ]::smallint[]
+      AND index_row.indrelid = constraint_row.conrelid
+      AND index_row.indisunique
+      AND index_row.indisvalid
+      AND index_row.indisready
+      AND index_row.indnkeyatts = 2
+      AND index_row.indnatts = 2
+      AND index_row.indexprs IS NULL
+      AND index_row.indpred IS NULL
+  ) <> 1 THEN
+    RAISE EXCEPTION 'payment-intent consumption uniqueness drifted';
+  END IF;
+
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_index AS index_row
+    JOIN pg_catalog.pg_class AS index_relation
+      ON index_relation.oid = index_row.indexrelid
+    WHERE index_relation.relnamespace = 'public'::pg_catalog.regnamespace
+      AND index_relation.relname =
+        'group_payment_consumptions_checkout_session_unique'
+      AND index_row.indrelid =
+        'public.group_payment_consumptions'::pg_catalog.regclass
+      AND index_row.indisunique
+      AND index_row.indisvalid
+      AND index_row.indisready
+      AND index_row.indnkeyatts = 2
+      AND index_row.indnatts = 2
+      AND index_row.indexprs IS NULL
+      AND index_row.indkey[0] = (
+        SELECT attribute.attnum
+        FROM pg_catalog.pg_attribute AS attribute
+        WHERE attribute.attrelid = index_row.indrelid
+          AND attribute.attname = 'provider'
+          AND attribute.attnum > 0
+          AND NOT attribute.attisdropped
+      )
+      AND index_row.indkey[1] = (
+        SELECT attribute.attnum
+        FROM pg_catalog.pg_attribute AS attribute
+        WHERE attribute.attrelid = index_row.indrelid
+          AND attribute.attname = 'checkout_session_id'
+          AND attribute.attnum > 0
+          AND NOT attribute.attisdropped
+      )
+      AND pg_catalog.pg_get_expr(
+        index_row.indpred,
+        index_row.indrelid,
+        true
+      ) = 'checkout_session_id IS NOT NULL'
+  ) <> 1 THEN
+    RAISE EXCEPTION 'checkout-session consumption uniqueness drifted';
+  END IF;
+
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_constraint AS constraint_row
+    JOIN pg_catalog.pg_index AS index_row
+      ON index_row.indexrelid = constraint_row.conindid
+    WHERE constraint_row.conrelid =
+        'public.group_trial_consumptions'::pg_catalog.regclass
+      AND constraint_row.conname = 'group_trial_consumptions_pkey'
+      AND constraint_row.contype = 'p'
+      AND constraint_row.convalidated
+      AND NOT constraint_row.condeferrable
+      AND NOT constraint_row.condeferred
+      AND constraint_row.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.conrelid
+            AND attribute.attname = 'group_id'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.conrelid
+            AND attribute.attname = 'user_id'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+        )
+      ]::smallint[]
+      AND index_row.indrelid = constraint_row.conrelid
+      AND index_row.indisprimary
+      AND index_row.indisunique
+      AND index_row.indisvalid
+      AND index_row.indisready
+      AND index_row.indnkeyatts = 2
+      AND index_row.indnatts = 2
+      AND index_row.indexprs IS NULL
+      AND index_row.indpred IS NULL
+  ) <> 1 THEN
+    RAISE EXCEPTION 'trial-consumption primary key drifted';
+  END IF;
+
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgfoid =
+        'public.prevent_group_pass_ledger_mutation()'::pg_catalog.regprocedure
+      AND trigger_row.tgrelid IN (
+        'public.group_payment_consumptions'::pg_catalog.regclass,
+        'public.group_trial_consumptions'::pg_catalog.regclass
+      )
+      AND NOT trigger_row.tgisinternal
+  ) <> 2 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid =
+        'public.group_payment_consumptions'::pg_catalog.regclass
+      AND trigger_row.tgname = 'trg_group_payment_consumptions_immutable'
+      AND trigger_row.tgfoid =
+        'public.prevent_group_pass_ledger_mutation()'::pg_catalog.regprocedure
+      AND trigger_row.tgenabled = 'O'
+      AND NOT trigger_row.tgisinternal
+      AND trigger_row.tgtype = 27
+      AND trigger_row.tgqual IS NULL
+      AND trigger_row.tgnargs = 0
+      AND pg_catalog.cardinality(trigger_row.tgattr::smallint[]) = 0
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid =
+        'public.group_trial_consumptions'::pg_catalog.regclass
+      AND trigger_row.tgname = 'trg_group_trial_consumptions_immutable'
+      AND trigger_row.tgfoid =
+        'public.prevent_group_pass_ledger_mutation()'::pg_catalog.regprocedure
+      AND trigger_row.tgenabled = 'O'
+      AND NOT trigger_row.tgisinternal
+      AND trigger_row.tgtype = 27
+      AND trigger_row.tgqual IS NULL
+      AND trigger_row.tgnargs = 0
+      AND pg_catalog.cardinality(trigger_row.tgattr::smallint[]) = 0
+  ) THEN
+    RAISE EXCEPTION 'group pass immutable ledger triggers drifted';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_index AS index_row
@@ -1343,6 +1597,8 @@ BEGIN
       WHERE function_row.oid = v_signature
         AND function_row.proowner = v_postgres
         AND function_row.prosecdef
+        AND function_row.proconfig =
+          ARRAY['search_path=pg_catalog, pg_temp']::text[]
     ) OR pg_catalog.has_function_privilege(
       'anon', v_signature, 'EXECUTE'
     ) OR pg_catalog.has_function_privilege(
@@ -1393,16 +1649,59 @@ BEGIN
     RAISE EXCEPTION 'service group pass RPC execution drifted';
   END IF;
 
-  IF EXISTS (
-    WITH RECURSIVE browser_authority(root_oid, role_oid) AS (
-      SELECT browser_role.oid, membership.roleid
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members AS membership
+    WHERE membership.roleid = v_service
+      AND membership.member = v_authenticator
+      AND NOT membership.admin_option
+      AND NOT membership.inherit_option
+      AND membership.set_option
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members AS membership
+    WHERE membership.roleid = v_service
+      AND membership.member NOT IN (v_authenticator, v_postgres)
+  ) OR EXISTS (
+    WITH RECURSIVE service_inheritors(member_oid) AS (
+      SELECT membership.member
+      FROM pg_catalog.pg_auth_members AS membership
+      WHERE membership.roleid = v_service
+        AND membership.inherit_option
+      UNION
+      SELECT membership.member
+      FROM pg_catalog.pg_auth_members AS membership
+      JOIN service_inheritors AS inherited
+        ON membership.roleid = inherited.member_oid
+      WHERE membership.inherit_option OR membership.set_option
+    )
+    SELECT 1
+    FROM service_inheritors AS inherited
+    WHERE inherited.member_oid <> v_postgres
+  ) OR EXISTS (
+    WITH RECURSIVE service_inherits(role_oid) AS (
+      SELECT membership.roleid
+      FROM pg_catalog.pg_auth_members AS membership
+      WHERE membership.member = v_service
+        AND (membership.inherit_option OR membership.set_option)
+      UNION
+      SELECT membership.roleid
+      FROM pg_catalog.pg_auth_members AS membership
+      JOIN service_inherits AS inherited
+        ON membership.member = inherited.role_oid
+      WHERE membership.inherit_option OR membership.set_option
+    )
+    SELECT 1 FROM service_inherits
+  ) OR EXISTS (
+    WITH RECURSIVE browser_authority(role_oid) AS (
+      SELECT membership.roleid
       FROM pg_catalog.pg_roles AS browser_role
       JOIN pg_catalog.pg_auth_members AS membership
         ON membership.member = browser_role.oid
        AND (membership.inherit_option OR membership.set_option)
       WHERE browser_role.rolname IN ('anon', 'authenticated')
       UNION
-      SELECT inherited.root_oid, membership.roleid
+      SELECT membership.roleid
       FROM browser_authority AS inherited
       JOIN pg_catalog.pg_auth_members AS membership
         ON membership.member = inherited.role_oid
@@ -1412,7 +1711,7 @@ BEGIN
     FROM browser_authority AS inherited
     WHERE inherited.role_oid IN (v_postgres, v_service)
   ) THEN
-    RAISE EXCEPTION 'browser roles inherit group pass authority';
+    RAISE EXCEPTION 'atomic group pass service-role authority seal drifted';
   END IF;
 END
 $postflight$;
