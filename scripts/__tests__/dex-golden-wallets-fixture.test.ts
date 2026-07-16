@@ -105,6 +105,9 @@ describe('DEX golden-wallet production fixture', () => {
 
     const foreign = JSON.parse(JSON.stringify(subset)) as typeof subset
     foreign.wallets[0].source_slug = 'okx_web3_solana'
+    foreign.wallets[0].wallet = fixture.wallets.find(
+      (wallet) => wallet.source_slug === 'okx_web3_solana'
+    )!.wallet
     expect(() => parseDexGoldenWalletChainSubset(foreign)).toThrow(/foreign source wallet/)
 
     const duplicate = JSON.parse(JSON.stringify(subset)) as typeof subset
@@ -114,6 +117,20 @@ describe('DEX golden-wallet production fixture', () => {
     const reordered = JSON.parse(JSON.stringify(subset)) as typeof subset
     ;[reordered.wallets[0], reordered.wallets[1]] = [reordered.wallets[1], reordered.wallets[0]]
     expect(() => parseDexGoldenWalletChainSubset(reordered)).toThrow(/canonical cohort\/wallet/)
+  })
+
+  it('rejects a Solana subset wallet that only looks like Base58', () => {
+    const { subset } = buildDexGoldenWalletChainSubset(fixtureJson, 'okx_web3_solana')
+    const wrongByteLength = JSON.parse(JSON.stringify(subset)) as typeof subset
+    wrongByteLength.wallets[0].wallet = 'A'.repeat(32)
+
+    expect(() => parseDexGoldenWalletChainSubset(wrongByteLength)).toThrow(/exactly 32 bytes/)
+
+    const disguisedAsBsc = JSON.parse(JSON.stringify(subset)) as typeof subset
+    disguisedAsBsc.wallets[0].source_slug = 'binance_web3_bsc'
+    disguisedAsBsc.wallets[0].chain = { namespace: 'eip155', reference: '56' }
+    disguisedAsBsc.wallets[0].wallet = '0x1111111111111111111111111111111111111111'
+    expect(() => parseDexGoldenWalletChainSubset(disguisedAsBsc)).toThrow(/foreign source wallet/)
   })
 
   it('fails closed on authorization, unknown fields, or duplicate wallets', () => {
@@ -129,5 +146,12 @@ describe('DEX golden-wallet production fixture', () => {
     const wallets = duplicate.wallets as Array<Record<string, unknown>>
     wallets[1].wallet = wallets[0].wallet
     expect(() => parseDexGoldenWalletSnapshot(duplicate)).toThrow(/duplicate global wallet/)
+
+    const wrongSolanaByteLength = mutableFixture()
+    const solanaWallet = (wrongSolanaByteLength.wallets as Array<Record<string, unknown>>).find(
+      (wallet) => wallet.source_slug === 'okx_web3_solana'
+    )!
+    solanaWallet.wallet = 'A'.repeat(32)
+    expect(() => parseDexGoldenWalletSnapshot(wrongSolanaByteLength)).toThrow(/exactly 32 bytes/)
   })
 })

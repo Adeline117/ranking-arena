@@ -2,6 +2,8 @@ import { createHash } from 'node:crypto'
 
 import { z } from 'zod'
 
+import { hasBase58DecodedByteLength } from '../../lib/utils/base58'
+
 import { canonicalSha256 } from './dex-census'
 
 export const DEX_GOLDEN_WALLET_SCHEMA_VERSION = 1 as const
@@ -147,6 +149,18 @@ const goldenWalletSchema = z
     activity_proxy_count: safeNonNegativeIntegerSchema,
   })
   .strict()
+  .superRefine((wallet, context) => {
+    if (
+      wallet.source_slug === 'okx_web3_solana' &&
+      !hasBase58DecodedByteLength(wallet.wallet, 32)
+    ) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'Solana wallet must decode to exactly 32 bytes',
+        path: ['wallet'],
+      })
+    }
+  })
 
 const goldenPopulationSchema = z
   .object({
@@ -197,7 +211,7 @@ const goldenSnapshotSchema = z
   })
   .strict()
 
-export const dexGoldenWalletChainSubsetSchema = z
+const dexGoldenWalletChainSubsetSchema = z
   .object({
     data_contract: z.literal(DEX_GOLDEN_WALLET_SUBSET_CONTRACT),
     parent_snapshot_sha256: z
@@ -227,7 +241,10 @@ function assertCanonicalTimestamp(value: string, label: string): void {
 
 function canonicalWallet(source: DexGoldenSource, wallet: string): string {
   const trimmed = wallet.trim()
-  if (!SOURCE_CONTRACT[source].walletPattern.test(trimmed)) {
+  if (
+    !SOURCE_CONTRACT[source].walletPattern.test(trimmed) ||
+    (source === 'okx_web3_solana' && !hasBase58DecodedByteLength(trimmed, 32))
+  ) {
     throw new Error(`invalid ${source} wallet`)
   }
   return source === 'binance_web3_bsc' ? trimmed.toLowerCase() : trimmed

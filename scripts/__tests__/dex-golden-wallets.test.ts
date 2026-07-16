@@ -126,6 +126,13 @@ describe('DEX golden-wallet selection contract', () => {
       /invalid binance_web3_bsc wallet/
     )
 
+    const wrongSolanaByteLength = candidates()
+    wrongSolanaByteLength.find((candidate) => candidate.sourceSlug === 'okx_web3_solana')!.wallet =
+      'A'.repeat(32)
+    expect(() =>
+      buildDexGoldenWalletSnapshot({ candidates: wrongSolanaByteLength, ...METADATA })
+    ).toThrow(/invalid okx_web3_solana wallet/)
+
     const duplicate = candidates()
     duplicate[1].wallet = duplicate[0].wallet
     expect(() => buildDexGoldenWalletSnapshot({ candidates: duplicate, ...METADATA })).toThrow(
