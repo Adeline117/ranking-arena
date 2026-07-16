@@ -1,4 +1,5 @@
 const mockComputeBsc = jest.fn()
+const mockComputeSolana = jest.fn()
 const mockScanMoralis = jest.fn()
 const mockFetchTokenInfo = jest.fn()
 const mockUnrealized = jest.fn()
@@ -6,18 +7,24 @@ const mockUnrealized = jest.fn()
 jest.mock('../bsc-fetch', () => ({
   computeBscWalletOnchain: (...args: unknown[]) => mockComputeBsc(...args),
 }))
+jest.mock('../solana-fetch', () => ({
+  computeSolanaWalletOnchain: (...args: unknown[]) => mockComputeSolana(...args),
+}))
 jest.mock('../moralis-bsc-internal', () => ({
   scanMoralisInternalBnb: (...args: unknown[]) => mockScanMoralis(...args),
 }))
 jest.mock('../token-prices', () => ({
   fetchTokenInfo: (...args: unknown[]) => mockFetchTokenInfo(...args),
   unrealizedFromHoldings: (...args: unknown[]) => mockUnrealized(...args),
+  tokenAddressKey: (address: string, chain: 'bsc' | 'solana') =>
+    chain === 'solana' ? address.trim() : address.trim().toLowerCase(),
 }))
 
 import { enrichWeb3Wallet } from '../enrich'
 import type { NormalizedTransfer } from '../bsc-swaps'
 
 const WALLET = '0xabc'
+const SOL_MINT = 'ToKenMint1111111111111111111111111111111111'
 const INTERNAL_LEG: NormalizedTransfer = {
   token: 'native:bnb',
   from: '0xrouter',
@@ -76,7 +83,19 @@ describe('enrichWeb3Wallet BSC internal-transfer coverage', () => {
           closedPositions: 0,
           winningPositions: 0,
           winRate: null,
-          perToken: [],
+          perToken: [
+            {
+              token: '0xAaBb',
+              realizedPnlUsd: 0,
+              holding: 1,
+              costBasisUsd: 1,
+              buyVolumeUsd: 1,
+              sellVolumeUsd: 0,
+              swaps: 1,
+              closedPositions: 0,
+              winningPositions: 0,
+            },
+          ],
         },
       })
     )
@@ -107,6 +126,8 @@ describe('enrichWeb3Wallet BSC internal-transfer coverage', () => {
       WALLET,
       expect.objectContaining({ maxPages: 1, extraTransfers: [] })
     )
+    expect(mockFetchTokenInfo).toHaveBeenCalledWith(['0xAaBb'], { chain: 'bsc' })
+    expect(mockUnrealized).toHaveBeenCalledWith(expect.any(Array), new Map(), 'bsc')
     expect(result.realizedPartial).toBe(false)
     expect(result.quality.history.scanComplete).toBe(true)
     expect(result.quality.reasons).not.toContain('internal_transfer_coverage_unknown')
@@ -148,5 +169,84 @@ describe('enrichWeb3Wallet BSC internal-transfer coverage', () => {
     expect(mockScanMoralis).not.toHaveBeenCalled()
     expect(result.realizedPartial).toBe(true)
     expect(result.quality.history.scanComplete).toBe(false)
+  })
+})
+
+describe('enrichWeb3Wallet chain-specific token pricing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockComputeSolana.mockResolvedValue({
+      wallet: 'SolanaWallet1111111111111111111111111111111',
+      lookbackDays: 90,
+      signatures: 2,
+      txsFetched: 2,
+      swaps: 2,
+      solUsd: 150,
+      signatureCoverage: {
+        scanComplete: true,
+        truncated: false,
+        stopReason: 'history_exhausted',
+        pagesFetched: 1,
+        recordsSeen: 2,
+        recordsReturned: 2,
+        recordsMissingTimestamp: 0,
+      },
+      txsUnresolved: 0,
+      txsMissingTimestamp: 0,
+      pnl: {
+        realizedPnlUsd: 25,
+        dailyRealized: [{ ts: '2026-07-01', value: 25 }],
+        buyVolumeUsd: 100,
+        sellVolumeUsd: 125,
+        totalVolumeUsd: 225,
+        txsBuy: 1,
+        txsSell: 1,
+        tokensTraded: 1,
+        closedPositions: 0,
+        winningPositions: 0,
+        winRate: null,
+        perToken: [
+          {
+            token: SOL_MINT,
+            realizedPnlUsd: 25,
+            holding: 10,
+            costBasisUsd: 50,
+            buyVolumeUsd: 100,
+            sellVolumeUsd: 125,
+            swaps: 2,
+            closedPositions: 0,
+            winningPositions: 0,
+          },
+        ],
+      },
+    })
+    mockFetchTokenInfo.mockResolvedValue(
+      new Map([[SOL_MINT, { priceUsd: 7, symbol: 'EXACT', logo: 'https://cdn.example/exact.png' }]])
+    )
+    mockUnrealized.mockReturnValue({
+      unrealizedUsd: 20,
+      pricedTokens: 1,
+      unpricedTokens: 0,
+      heldValueUsd: 70,
+    })
+  })
+
+  it('passes the exact Solana mint and uses it for top-token metadata', async () => {
+    const result = await enrichWeb3Wallet('solana', 'SolanaWallet1111111111111111111111111111111')
+
+    expect(mockFetchTokenInfo).toHaveBeenCalledWith([SOL_MINT], { chain: 'solana' })
+    expect(mockUnrealized).toHaveBeenCalledWith(
+      expect.any(Array),
+      new Map([[SOL_MINT, 7]]),
+      'solana'
+    )
+    expect(result.topEarningTokens).toEqual([
+      {
+        symbol: 'EXACT',
+        address: SOL_MINT,
+        logo: 'https://cdn.example/exact.png',
+        realized_pnl: 25,
+      },
+    ])
   })
 })

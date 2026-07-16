@@ -16,7 +16,12 @@
 import { computeBscWalletOnchain, type BscWalletResult } from './bsc-fetch'
 import { computeSolanaWalletOnchain, type SolWalletResult } from './solana-fetch'
 import { scanMoralisInternalBnb } from './moralis-bsc-internal'
-import { fetchTokenInfo, unrealizedFromHoldings, type TokenInfo } from './token-prices'
+import {
+  fetchTokenInfo,
+  tokenAddressKey,
+  unrealizedFromHoldings,
+  type TokenInfo,
+} from './token-prices'
 import type { PerTokenPnl } from './pnl-accounting'
 import type { NormalizedTransfer } from './bsc-swaps'
 import {
@@ -138,7 +143,7 @@ export function bscHistoryEvidence(
 }
 
 /** Price held tokens + surface symbols for the OnchainInsights token blocks. */
-async function priceAndMeta(perToken: PerTokenPnl[]) {
+async function priceAndMeta(perToken: PerTokenPnl[], chain: OnchainChain) {
   // Fetch info for BOTH held tokens (unrealized) and top realized tokens (for
   // the top-earning-tokens card) so both blocks get symbols/prices.
   const addrs = new Set<string>()
@@ -148,10 +153,11 @@ async function priceAndMeta(perToken: PerTokenPnl[]) {
   for (const t of [...perToken].sort((a, b) => b.realizedPnlUsd - a.realizedPnlUsd).slice(0, 10)) {
     addrs.add(t.token)
   }
-  const info = addrs.size > 0 ? await fetchTokenInfo([...addrs]) : new Map<string, TokenInfo>()
+  const info =
+    addrs.size > 0 ? await fetchTokenInfo([...addrs], { chain }) : new Map<string, TokenInfo>()
   const prices = new Map<string, number>()
   for (const [k, v] of info) prices.set(k, v.priceUsd)
-  return { u: unrealizedFromHoldings(perToken, prices), info }
+  return { u: unrealizedFromHoldings(perToken, prices, chain), info }
 }
 
 /** Bucket per-token realized PnL into the OnchainInsights token_distribution. */
@@ -176,14 +182,15 @@ function tokenDistribution(perToken: PerTokenPnl[]): Record<string, number> {
  */
 function topEarningTokens(
   perToken: PerTokenPnl[],
-  info: Map<string, TokenInfo>
+  info: Map<string, TokenInfo>,
+  chain: OnchainChain
 ): Array<Record<string, unknown>> {
   return [...perToken]
     .filter((t) => t.realizedPnlUsd !== 0)
     .sort((a, b) => b.realizedPnlUsd - a.realizedPnlUsd)
     .slice(0, 10)
     .map((t) => {
-      const meta = info.get(t.token.toLowerCase())
+      const meta = info.get(tokenAddressKey(t.token, chain))
       return {
         symbol: meta?.symbol ?? t.token.slice(0, 6), // fallback to short addr
         address: t.token,
@@ -212,7 +219,7 @@ export async function enrichWeb3Wallet(
 
   if (chain === 'solana') {
     const r = await computeSolanaWalletOnchain(wallet, { lookbackDays, maxSigs: opts.maxSigs })
-    const { u, info } = await priceAndMeta(r.pnl.perToken)
+    const { u, info } = await priceAndMeta(r.pnl.perToken, 'solana')
     return normalize(
       'solana',
       wallet,
@@ -244,7 +251,7 @@ export async function enrichWeb3Wallet(
     maxPages: opts.maxPages,
     extraTransfers: internalLegs,
   })
-  const { u, info } = await priceAndMeta(r.pnl.perToken)
+  const { u, info } = await priceAndMeta(r.pnl.perToken, 'bsc')
   const partial = !internalCoverageComplete
   return normalize(
     'bsc',
@@ -292,7 +299,7 @@ function normalize(
     pricedTokens: u.pricedTokens,
     unpricedTokens: u.unpricedTokens,
     tokenDistribution: tokenDistribution(pnl.perToken),
-    topEarningTokens: topEarningTokens(pnl.perToken, info),
+    topEarningTokens: topEarningTokens(pnl.perToken, info, chain),
     provenance: 'onchain-computed',
     quality: {
       schemaVersion: 1,
