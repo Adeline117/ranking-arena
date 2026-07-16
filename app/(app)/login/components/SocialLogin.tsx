@@ -7,6 +7,12 @@ import { logger } from '@/lib/logger'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { jwtSubject } from '@/lib/auth/token-subject'
 import { PRIVY_SUPABASE_BRIDGE_READY } from '@/lib/privy/config'
+import { safeInternalReturnPath } from '@/lib/auth/safe-return-path'
+import {
+  getCurrentAuthOperation,
+  isAuthOperationCurrent,
+  type AuthOperationLease,
+} from '@/lib/auth/session-operation'
 
 const OneClickWalletButton = dynamic(
   () => import('@/lib/web3/wallet-components').then((m) => ({ default: m.OneClickWalletButton })),
@@ -29,6 +35,22 @@ interface SocialLoginProps {
   t: (key: string) => string
 }
 
+function isSocialAttemptCurrent(boundary: AuthOperationLease | null): boolean {
+  return boundary ? isAuthOperationCurrent(boundary) : getCurrentAuthOperation() === null
+}
+
+function isSocialAttemptRestored(boundary: AuthOperationLease | null): boolean {
+  if (isSocialAttemptCurrent(boundary)) return true
+  const current = getCurrentAuthOperation()
+  const previousUserId = boundary?.targetKnown ? boundary.expectedUserId : null
+  return (
+    !!current &&
+    current.targetKnown &&
+    !current.identityTransition &&
+    current.expectedUserId === previousUserId
+  )
+}
+
 export default function SocialLogin({
   lang: _lang,
   searchParams,
@@ -44,13 +66,18 @@ export default function SocialLogin({
   // which fires onAuthStateChange in LoginPageClient and triggers the redirect.
   const handlePasskeySignIn = async () => {
     if (passkeyLoading) return
+    const authBoundary = getCurrentAuthOperation()
+    const reportCurrentError = (message: string) => {
+      if (isSocialAttemptCurrent(authBoundary)) onError(message)
+    }
     onError('')
     setPasskeyLoading(true)
     try {
       const { startAuthentication, browserSupportsWebAuthn } =
         await import('@simplewebauthn/browser')
+      if (!isSocialAttemptCurrent(authBoundary)) return
       if (!browserSupportsWebAuthn()) {
-        onError(t('passkeyNotSupported'))
+        reportCurrentError(t('passkeyNotSupported'))
         return
       }
 
@@ -59,22 +86,25 @@ export default function SocialLogin({
         headers: { 'Content-Type': 'application/json' },
         body: '{}',
       })
+      if (!isSocialAttemptCurrent(authBoundary)) return
       if (!optRes.ok) {
-        onError(t('passkeyError'))
+        reportCurrentError(t('passkeyError'))
         return
       }
       const { optionsJSON, challengeKey } = await optRes.json()
+      if (!isSocialAttemptCurrent(authBoundary)) return
 
       let assertion
       try {
         assertion = await startAuthentication({ optionsJSON })
+        if (!isSocialAttemptCurrent(authBoundary)) return
       } catch (err) {
         // User cancelled the native prompt or no credential available.
         const name = (err as Error)?.name
         if (name === 'NotAllowedError' || name === 'AbortError') {
-          onError(t('passkeyCancelled'))
+          reportCurrentError(t('passkeyCancelled'))
         } else {
-          onError(t('passkeyError'))
+          reportCurrentError(t('passkeyError'))
         }
         return
       }
@@ -84,25 +114,28 @@ export default function SocialLogin({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assertion, challengeKey }),
       })
+      if (!isSocialAttemptCurrent(authBoundary)) return
       const verifyData = await verifyRes.json().catch(() => ({}))
+      if (!isSocialAttemptCurrent(authBoundary)) return
       if (!verifyRes.ok || !verifyData?.session) {
-        onError(verifyData?.error || t('passkeyNoCredential'))
+        reportCurrentError(verifyData?.error || t('passkeyNoCredential'))
         return
       }
 
       const expectedUserId = jwtSubject(verifyData.session.access_token)
+      if (!isSocialAttemptCurrent(authBoundary)) return
       const established = expectedUserId
         ? await tokenRefreshCoordinator.establishSession(verifyData.session, expectedUserId)
         : null
       if (!established) {
         logger.warn('[Passkey] Could not establish the verified session')
-        onError(t('passkeyError'))
+        if (isSocialAttemptRestored(authBoundary)) onError(t('passkeyError'))
         return
       }
       // onAuthStateChange in LoginPageClient handles the redirect.
     } catch (err) {
       logger.warn('[Passkey] sign-in error:', err)
-      onError(t('passkeyError'))
+      reportCurrentError(t('passkeyError'))
     } finally {
       setPasskeyLoading(false)
     }
@@ -110,8 +143,10 @@ export default function SocialLogin({
 
   const getOAuthHandler =
     (provider: 'google' | 'twitter' | 'discord', providerLabel: string) => async () => {
+      const authBoundary = getCurrentAuthOperation()
       onError('')
-      const returnUrl = searchParams.get('returnUrl') || searchParams.get('redirect') || ''
+      const returnUrl =
+        safeInternalReturnPath(searchParams.get('returnUrl') || searchParams.get('redirect')) || ''
       const addAccountParam = isAddAccount ? 'addAccount=true' : ''
       const params = [
         returnUrl ? `returnUrl=${encodeURIComponent(returnUrl)}` : '',
@@ -132,6 +167,7 @@ export default function SocialLogin({
         } catch {
           /* clipboard may not be available */
         }
+        if (!isSocialAttemptCurrent(authBoundary)) return
         onError(t('socialLoginOpenInBrowser').replace('{provider}', providerLabel))
         window.open(oauthUrl, '_system')
         return
@@ -140,7 +176,7 @@ export default function SocialLogin({
         provider,
         options: { redirectTo: callbackUrl },
       })
-      if (oauthError) onError(oauthError.message)
+      if (oauthError && isSocialAttemptCurrent(authBoundary)) onError(oauthError.message)
     }
 
   // Rendered ABOVE the email form as the primary auth path — Google + wallet
@@ -275,7 +311,10 @@ export default function SocialLogin({
       {/* Privy One-Click Login - compact */}
       {PRIVY_SUPABASE_BRIDGE_READY && showOtherOptions && (
         <PrivyLoginButton
-          redirectUrl={searchParams.get('returnUrl') || searchParams.get('redirect') || undefined}
+          redirectUrl={
+            safeInternalReturnPath(searchParams.get('returnUrl') || searchParams.get('redirect')) ||
+            undefined
+          }
           onError={(msg) => onError(msg)}
         />
       )}
