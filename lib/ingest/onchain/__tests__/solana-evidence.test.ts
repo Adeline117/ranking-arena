@@ -388,6 +388,14 @@ describe('fetchSolanaChainAnchorEvidence', () => {
     expect(() => requireSolanaVerifiedChainAnchor(impossibleHeight)).toThrow(
       'Solana chain anchor is not fully verified'
     )
+
+    for (const field of ['parentSlot', 'blockHeight']) {
+      const negativeZero = clone(anchor) as any
+      negativeZero.finalizedBlock.value[field] = -0
+      expect(() => requireSolanaVerifiedChainAnchor(negativeZero)).toThrow(
+        'Solana chain anchor is not fully verified'
+      )
+    }
   })
 
   it('revalidates capture-time freshness deterministically without consulting Date.now', async () => {

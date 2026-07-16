@@ -55,6 +55,7 @@ export interface SolanaEvidenceProvider {
 export type SolanaEvidenceUnavailableReason =
   | 'provider_unconfigured'
   | 'dependency_unavailable'
+  | 'metadata_unavailable'
   | 'not_found_or_unavailable'
   | 'quota_exhausted'
   | 'rate_limited'
@@ -63,6 +64,7 @@ export type SolanaEvidenceUnavailableReason =
   | 'rpc_error'
   | 'response_too_large'
   | 'malformed_response'
+  | 'unsupported_transaction_version'
   | 'wrong_genesis'
 
 export interface SolanaEvidenceAvailable<T> {
@@ -115,7 +117,9 @@ export interface SolanaRpcFailure {
     SolanaEvidenceUnavailableReason,
     | 'provider_unconfigured'
     | 'dependency_unavailable'
+    | 'metadata_unavailable'
     | 'not_found_or_unavailable'
+    | 'unsupported_transaction_version'
     | 'wrong_genesis'
   >
   provider: SolanaEvidenceProvider
@@ -481,7 +485,12 @@ export function unavailableFromRpc(result: SolanaRpcFailure): SolanaEvidenceUnav
 
 export function unavailableFromSuccess(
   result: SolanaRpcSuccess,
-  reason: 'not_found_or_unavailable' | 'malformed_response' | 'wrong_genesis'
+  reason:
+    | 'metadata_unavailable'
+    | 'not_found_or_unavailable'
+    | 'malformed_response'
+    | 'unsupported_transaction_version'
+    | 'wrong_genesis'
 ): SolanaEvidenceUnavailable {
   return {
     status: 'unavailable',
@@ -513,7 +522,12 @@ export function dependencyUnavailableLane(): SolanaEvidenceUnavailable {
 }
 
 export function safeNonNegativeInteger(value: unknown): number | null {
-  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0 ? value : null
+  return typeof value === 'number' &&
+    Number.isSafeInteger(value) &&
+    value >= 0 &&
+    !Object.is(value, -0)
+    ? value
+    : null
 }
 
 export function exactDataRecord(
