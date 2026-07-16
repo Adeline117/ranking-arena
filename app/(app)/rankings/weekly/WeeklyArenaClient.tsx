@@ -23,6 +23,12 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import DerivedBoardBadge from '@/app/components/common/DerivedBoardBadge'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
+import {
+  formatWeeklyMoney,
+  formatWeeklyRange,
+  formatWeeklyRoi,
+  formatWeeklyWinRate,
+} from '@/lib/rankings/weekly-format'
 import type {
   BitmartWeeklyCategoryKey,
   WeeklyLeaderRow,
@@ -39,34 +45,8 @@ const MEDALS = ['🥇', '🥈', '🥉'] as const
 const MEDAL_RING = [rankColors.gold, rankColors.silver, rankColors.bronze] as const
 const RANK_COL_WIDTH = 64 // px — fixed so the frozen trader column can offset by it
 
-function fmtRoi(v: number): string {
-  const compactOver = 10_000
-  const sign = v > 0 ? '+' : ''
-  if (Math.abs(v) >= compactOver) {
-    return `${sign}${new Intl.NumberFormat('en', {
-      notation: 'compact',
-      maximumFractionDigits: 1,
-    }).format(v)}%`
-  }
-  return `${sign}${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}%`
-}
-
 function roiColor(v: number): string {
   return v >= 0 ? tokens.colors.accent.success : tokens.colors.accent.error
-}
-
-function fmtMoney(value: number, currency: string): string {
-  const sign = value > 0 ? '+' : ''
-  const compact = new Intl.NumberFormat('en', {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value)
-  return `${sign}${compact} ${currency}`
-}
-
-function fmtWinRate(v: number | null): string {
-  if (v === null) return '—'
-  return `${v.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
 }
 
 const TH_STYLE: React.CSSProperties = {
@@ -311,7 +291,7 @@ function PodiumCard({ row, place }: { row: WeeklyLeaderRow; place: number }) {
           className="weekly-podium-roi"
           value={row.roi}
           format="roi"
-          display={fmtRoi(row.roi)}
+          display={formatWeeklyRoi(row.roi)}
           showArrow
           size="lg"
           as="span"
@@ -362,15 +342,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
   )
 
   // Pooled week window: the 7-day span ending at the freshest snapshot.
-  const weekRange = useMemo(() => {
-    if (!newestAsOf) return null
-    const end = new Date(newestAsOf)
-    if (Number.isNaN(end.getTime())) return null
-    const start = new Date(end)
-    start.setDate(start.getDate() - 6)
-    const fmt = (d: Date) => d.toLocaleDateString(language, { month: 'short', day: 'numeric' })
-    return `${fmt(start)} – ${fmt(end)}`
-  }, [newestAsOf, language])
+  const weekRange = useMemo(() => formatWeeklyRange(newestAsOf, language), [newestAsOf, language])
 
   function onSort(key: SortKey) {
     if (key === sortKey) {
@@ -636,7 +608,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                       <Metric
                         value={row.roi}
                         format="roi"
-                        display={fmtRoi(row.roi)}
+                        display={formatWeeklyRoi(row.roi)}
                         showArrow
                         size="sm"
                         as="span"
@@ -647,7 +619,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                         <Metric
                           value={row.pnl.value}
                           format="pnl"
-                          display={fmtMoney(row.pnl.value, row.pnl.currency)}
+                          display={formatWeeklyMoney(row.pnl.value, row.pnl.currency)}
                           showArrow
                           size="sm"
                           as="span"
@@ -656,7 +628,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                         '—'
                       )}
                     </td>
-                    <td style={TD_STYLE}>{fmtWinRate(row.winRate)}</td>
+                    <td style={TD_STYLE}>{formatWeeklyWinRate(row.winRate)}</td>
                     <td style={{ ...TD_STYLE, color: 'var(--color-text-tertiary)' }}>
                       <time
                         dateTime={row.provenance.asOf}
@@ -754,7 +726,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                           fontVariantNumeric: 'tabular-nums',
                         }}
                       >
-                        {fmtRoi(entry.roiPct)}
+                        {formatWeeklyRoi(entry.roiPct)}
                       </Text>
                     </Box>
                   ))}
