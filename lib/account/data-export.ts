@@ -3,6 +3,7 @@ import {
   DataExportReadError,
   fetchAllExportRowsByCursor as fetchCursorRows,
 } from './export-pagination'
+import { validateExportColumns } from './export-safety'
 
 export {
   DataExportReadError,
@@ -23,38 +24,15 @@ export type ExportDataset = Readonly<{
   selectColumns: readonly string[]
 }>
 
-const SIMPLE_COLUMN_NAME = /^[a-z_][a-z0-9_]*$/i
-const FORBIDDEN_EXPORT_COLUMNS = [
-  /(^|_)stripe(_|$)/i,
-  /(^|_)(token|secret|password|credential)(_|$)/i,
-  /(^|_)api_key(_|$)/i,
-  /_encrypted$/i,
-  /^(key|code_hash|token_hash|code_verifier|payment_reference)$/i,
-  /^(payment_intent_id|checkout_session_id|invoice_id|customer_id)$/i,
-  /^(public_key|private_key|auth|p256dh|endpoint|device_id|verification_data)$/i,
-  /^(signup_ip_hash|attempt_count|baseline_version)$/i,
-  /^(deleted_by|banned_by|muted_by|reviewed_by|resolved_by|issued_by)$/i,
-  /^(anonymous_id_hash|session_id_hash|last_error|verification_error|error_message)$/i,
-]
-
 function getSelectColumns(
   datasetName: string,
   selectColumns: readonly string[]
 ): readonly string[] {
-  if (
-    selectColumns.length === 0 ||
-    !selectColumns.includes('id') ||
-    new Set(selectColumns).size !== selectColumns.length ||
-    selectColumns.some(
-      (column) =>
-        !SIMPLE_COLUMN_NAME.test(column) ||
-        FORBIDDEN_EXPORT_COLUMNS.some((forbidden) => forbidden.test(column))
-    )
-  ) {
-    throw new DataExportReadError(datasetName, new Error('Unsafe export column configuration'))
+  try {
+    return validateExportColumns(selectColumns, { requireId: true })
+  } catch (error) {
+    throw new DataExportReadError(datasetName, error)
   }
-
-  return selectColumns
 }
 
 export function projectExportRecord(

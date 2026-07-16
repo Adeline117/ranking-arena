@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import { validateExportColumns } from './export-safety'
 
 export const EXPORT_PAGE_SIZE = 1_000
 export const MAX_EXPORT_ROWS_PER_DATASET = 250_000
@@ -52,19 +53,6 @@ const CONTROL_CHARACTER = /[\u0000-\u001f\u007f]/
 const POSTGRES_BIGINT_MIN = -(1n << 63n)
 const POSTGRES_BIGINT_MAX = (1n << 63n) - 1n
 
-const FORBIDDEN_EXPORT_COLUMNS = [
-  /(^|_)stripe(_|$)/i,
-  /(^|_)(token|secret|password|credential)(_|$)/i,
-  /(^|_)api_key(_|$)/i,
-  /_encrypted$/i,
-  /^(key|code_hash|token_hash|code_verifier|payment_reference)$/i,
-  /^(payment_intent_id|checkout_session_id|invoice_id|customer_id)$/i,
-  /^(public_key|private_key|auth|p256dh|endpoint|device_id|verification_data)$/i,
-  /^(signup_ip_hash|attempt_count|baseline_version)$/i,
-  /^(deleted_by|banned_by|muted_by|reviewed_by|resolved_by|issued_by)$/i,
-  /^(anonymous_id_hash|session_id_hash|last_error|verification_error|error_message)$/i,
-]
-
 const VALUE_TYPES = new Set<ExportCursorValueType>(['string', 'uuid', 'bigint', 'timestamp'])
 
 type NormalizedCursorValue = Readonly<{
@@ -117,19 +105,10 @@ function validateDataset(dataset: CursorExportDataset): ValidatedDataset {
   ) {
     invalidConfiguration(name, 'Unsafe export table configuration')
   }
-  if (!Array.isArray(candidate.selectColumns) || candidate.selectColumns.length === 0) {
-    invalidConfiguration(name, 'Export selectColumns must be explicit and non-empty')
-  }
-
-  const selectColumns = candidate.selectColumns.map((column) =>
-    validateColumnName(name, column, 'selected')
-  )
-  if (
-    new Set(selectColumns).size !== selectColumns.length ||
-    selectColumns.some((column) =>
-      FORBIDDEN_EXPORT_COLUMNS.some((forbidden) => forbidden.test(column))
-    )
-  ) {
+  let selectColumns: readonly string[]
+  try {
+    selectColumns = validateExportColumns(candidate.selectColumns)
+  } catch {
     invalidConfiguration(name, 'Unsafe export column configuration')
   }
 
