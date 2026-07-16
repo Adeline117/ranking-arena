@@ -8,6 +8,9 @@ import { logger } from '@/lib/logger'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { validateHandle } from '../validation'
 import { isHapticsEnabled } from '@/lib/utils/haptics'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { getViewerScope, isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 interface UseSettingsHandlersProps {
   showToast: (msg: string, type?: 'success' | 'error' | 'warning' | 'info') => void
@@ -17,6 +20,7 @@ interface UseSettingsHandlersProps {
 
 export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHandlersProps) {
   const router = useRouter()
+  const auth = useAuthSession()
   const submittingRef = useRef(false)
 
   // Profile data
@@ -602,15 +606,12 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
   // ===== Auth handlers =====
   const getFreshToken = async (): Promise<string | null> => {
-    const {
-      data: { session },
-      error,
-    } = await supabase.auth.refreshSession()
-    if (error || !session?.access_token) {
-      const { data } = await supabase.auth.getSession()
-      return data.session?.access_token || null
-    }
-    return session.access_token
+    const scope = getViewerScope()
+    if (!scope.userId || !isViewerScopeCurrent(scope)) return null
+    return tokenRefreshCoordinator.forceRefresh({
+      expectedUserId: scope.userId,
+      sessionGeneration: scope.sessionGeneration,
+    })
   }
 
   const handleSendResetCode = async () => {
@@ -1114,8 +1115,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
   // ===== Account handlers =====
   const handleLogout = async () => {
+    const scope = getViewerScope()
     const confirmed = await showConfirm(t('logoutTitle'), t('logoutConfirm'))
-    if (!confirmed) return
+    if (!confirmed || !isViewerScopeCurrent(scope)) return
     try {
       const { clearProStatusCache } = await import('@/lib/hooks/useProStatus')
       clearProStatusCache()
@@ -1129,7 +1131,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       } catch {
         /* ignore */
       }
-      await supabase.auth.signOut()
+      await auth.signOut()
       router.push('/')
     } catch {
       showToast(t('logoutFailed'), 'error')
@@ -1158,10 +1160,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     setDeletingAccount(true)
     setDeleteError(null)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) {
+      const scope = getViewerScope()
+      const token = await getFreshToken()
+      if (!token || !isViewerScopeCurrent(scope)) {
         setDeleteError(t('pleaseLoginAgain'))
         return
       }
@@ -1169,7 +1170,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${token}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify(
@@ -1179,6 +1180,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         ),
       })
       const data = await res.json()
+      if (!isViewerScopeCurrent(scope)) return
       if (!res.ok) {
         setDeleteError(data.error || t('operationFailed'))
         return
@@ -1190,7 +1192,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       }
       showToast(t('accountMarkedDeleted'), 'success')
       setShowDeleteAccountModal(false)
-      await supabase.auth.signOut()
+      await auth.signOut()
       router.push('/login?recover=1')
     } catch {
       setDeleteError(t('networkErrorRetry'))
