@@ -1,10 +1,13 @@
 'use client'
 
 import { useState, useEffect, useCallback, useRef } from 'react'
+import Link from 'next/link'
 import { Box, Text, Button } from '../base'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
+import EmptyState from '@/app/components/ui/EmptyState'
+import ErrorMessage from '@/app/components/ui/ErrorMessage'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
@@ -71,6 +74,8 @@ export default function AlertConfig({
   const [alert, setAlert] = useState<AlertData>(DEFAULT_ALERT)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [forbidden, setForbidden] = useState(false)
   const [saving, setSaving] = useState(false)
   const [toggling, setToggling] = useState(false)
   const toggleInFlightRef = useRef(false)
@@ -81,15 +86,38 @@ export default function AlertConfig({
   )
 
   const fetchAlert = useCallback(async () => {
-    if (!accessToken) return
+    setLoading(true)
+    setLoadError(null)
+    setForbidden(false)
+    if (!accessToken) {
+      setLoadError(t('loginRequired'))
+      setLoading(false)
+      return
+    }
     try {
       const query = new URLSearchParams({ trader_id: traderId })
       if (source) query.set('source', source)
       const res = await fetch(`/api/trader-alerts?${query}`, {
         headers: authHeaders(),
+        signal: AbortSignal.timeout(15_000),
       })
-      const data = await res.json()
-      if (data.data?.alerts?.length > 0) {
+      const data = await res.json().catch(() => null)
+      if (res.status === 403) {
+        setForbidden(true)
+        return
+      }
+      if (!res.ok) {
+        throw new Error(
+          typeof data?.error === 'string' && data.error.trim()
+            ? data.error.trim()
+            : t('adminLoadFailed')
+        )
+      }
+      if (!Array.isArray(data?.data?.alerts)) {
+        throw new Error(t('adminLoadFailed'))
+      }
+
+      if (data.data.alerts.length > 0) {
         const existing = data.data.alerts[0]
         setAlert({
           id: existing.id,
@@ -107,19 +135,31 @@ export default function AlertConfig({
         if (existing.id) {
           const histRes = await fetch(`/api/alerts?alert_id=${existing.id}&limit=20`, {
             headers: authHeaders(),
+            signal: AbortSignal.timeout(15_000),
           })
-          const histData = await histRes.json()
-          if (histData.data?.history) {
-            setHistory(histData.data.history)
+          const histData = await histRes.json().catch(() => null)
+          if (histRes.status === 403) {
+            setForbidden(true)
+            return
           }
+          if (!histRes.ok || !Array.isArray(histData?.data?.history)) {
+            throw new Error(
+              typeof histData?.error === 'string' && histData.error.trim()
+                ? histData.error.trim()
+                : t('adminLoadFailed')
+            )
+          }
+          setHistory(histData.data.history)
         }
       }
-    } catch {
-      // ignore
+    } catch (error) {
+      const message = error instanceof Error && error.message ? error.message : t('adminLoadFailed')
+      setLoadError(message)
+      showToast(message, 'error')
     } finally {
       setLoading(false)
     }
-  }, [traderId, source, accessToken, authHeaders])
+  }, [traderId, source, accessToken, authHeaders, showToast, t])
 
   useEffect(() => {
     if (userId) fetchAlert()
@@ -224,6 +264,46 @@ export default function AlertConfig({
     return (
       <Box style={{ padding: 16, textAlign: 'center' }}>
         <Text style={{ color: tokens.colors.text.secondary }}>{t('loading')}</Text>
+      </Box>
+    )
+  }
+
+  if (forbidden) {
+    return (
+      <EmptyState
+        variant="card"
+        title={t('traderAlertsProRequired')}
+        description={t('pricingProAlerts')}
+        action={
+          <Link
+            href="/pricing"
+            className="tap-target"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
+              borderRadius: tokens.radius.md,
+              background: tokens.colors.accent.primary,
+              color: tokens.colors.white,
+              fontWeight: tokens.typography.fontWeight.bold,
+              textDecoration: 'none',
+            }}
+          >
+            {t('upgrade')}
+          </Link>
+        }
+      />
+    )
+  }
+
+  if (loadError) {
+    return (
+      <Box style={{ padding: tokens.spacing[4] }}>
+        <ErrorMessage
+          message={loadError}
+          onRetry={accessToken ? () => void fetchAlert() : undefined}
+        />
       </Box>
     )
   }
