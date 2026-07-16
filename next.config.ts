@@ -568,7 +568,9 @@ const nextConfig = {
       "base-uri 'self'",
       "object-src 'none'",
       "worker-src 'self' blob:",
-      'upgrade-insecure-requests',
+      // Do not add upgrade-insecure-requests to this static global policy.
+      // WebKit applies it to HTTP preview/local origins too, upgrading their
+      // same-origin JS and CSS URLs to HTTPS and disabling all hydration.
     ].join('; ')
 
     // Permissions Policy - 限制浏览器功能访问

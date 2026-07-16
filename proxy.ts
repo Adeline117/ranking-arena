@@ -189,7 +189,9 @@ function generateCsp(): string {
     'base-uri': ["'self'"],
     'form-action': ["'self'"],
     'frame-ancestors': ["'none'"],
-    'upgrade-insecure-requests': [],
+    // Do not add upgrade-insecure-requests to this global static policy.
+    // WebKit applies it to HTTP preview/local origins and upgrades same-origin
+    // bundles to HTTPS, leaving the page permanently stuck on its SSR shell.
   }
 
   // 生产环境移除 unsafe-eval
