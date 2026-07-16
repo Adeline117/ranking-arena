@@ -6,7 +6,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
-import { togglePostVote, getPostById } from '@/lib/data/posts'
+import { togglePostVote } from '@/lib/data/posts'
 import { socialFeatureGuard } from '@/lib/features'
 
 // Zod schema for POST /api/posts/[id]/vote
@@ -25,8 +25,9 @@ export const POST = withAuth(
     const postsIdx = pathParts.indexOf('posts')
     const id = pathParts[postsIdx + 1]
 
-    if (!id) {
-      return NextResponse.json({ error: 'Missing post ID' }, { status: 400 })
+    const postId = z.string().uuid().safeParse(id)
+    if (!postId.success) {
+      return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 })
     }
 
     let body: Record<string, unknown>
@@ -46,21 +47,14 @@ export const POST = withAuth(
     const { choice } = parsed.data
 
     // 执行投票操作
-    const result = await togglePostVote(supabase, id, user.id, choice)
-
-    // 获取更新后的帖子信息
-    const post = await getPostById(supabase, id, user.id)
+    const result = await togglePostVote(supabase, postId.data, user.id, choice)
 
     return NextResponse.json({
       success: true,
       data: {
         action: result.action,
         vote: result.vote,
-        poll: {
-          bull: post?.poll_bull || 0,
-          bear: post?.poll_bear || 0,
-          wait: post?.poll_wait || 0,
-        },
+        poll: result.poll,
       },
     })
   },

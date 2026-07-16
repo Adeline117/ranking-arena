@@ -358,7 +358,13 @@ describe('togglePostReaction', () => {
     const mockSupabase = createMockSupabase()
 
     mockSupabase.rpc.mockResolvedValueOnce({
-      data: { action: 'added', reaction: 'up' },
+      data: {
+        status: 'added',
+        action: 'added',
+        reaction: 'up',
+        like_count: 1,
+        dislike_count: 0,
+      },
       error: null,
     })
 
@@ -381,7 +387,13 @@ describe('togglePostReaction', () => {
     const mockSupabase = createMockSupabase()
 
     mockSupabase.rpc.mockResolvedValueOnce({
-      data: { action: 'removed', reaction: null },
+      data: {
+        status: 'removed',
+        action: 'removed',
+        reaction: null,
+        like_count: 0,
+        dislike_count: 0,
+      },
       error: null,
     })
 
@@ -399,7 +411,13 @@ describe('togglePostReaction', () => {
     const mockSupabase = createMockSupabase()
 
     mockSupabase.rpc.mockResolvedValueOnce({
-      data: { action: 'changed', reaction: 'down' },
+      data: {
+        status: 'changed',
+        action: 'changed',
+        reaction: 'down',
+        like_count: 0,
+        dislike_count: 1,
+      },
       error: null,
     })
 
@@ -424,6 +442,20 @@ describe('togglePostReaction', () => {
     await expect(
       togglePostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'up')
     ).rejects.toThrow('RPC failed')
+  })
+
+  test.each([
+    null,
+    { status: 'not_found' },
+    { status: 'added', action: 'added', reaction: 'down', like_count: 1, dislike_count: 0 },
+    { status: 'added', action: 'added', reaction: 'up', like_count: -1, dislike_count: 0 },
+  ])('fails closed for malformed reaction acknowledgement %#', async (data) => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.rpc.mockResolvedValueOnce({ data, error: null })
+
+    await expect(
+      togglePostReaction(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'up')
+    ).rejects.toThrow('invalid acknowledgement')
   })
 })
 
@@ -456,12 +488,17 @@ describe('getUserPostVote', () => {
 })
 
 describe('togglePostVote', () => {
-  test('should add new vote', async () => {
+  test('should add new vote through the atomic RPC', async () => {
     const mockSupabase = createMockSupabase()
 
-    mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
-    mockSupabase.insert.mockReturnValueOnce({
-      then: (resolve: MockResolve<unknown>) => resolve({ error: null }),
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: {
+        status: 'added',
+        action: 'added',
+        vote: 'bull',
+        poll: { bull: 1, bear: 0, wait: 0 },
+      },
+      error: null,
     })
 
     const result = await togglePostVote(
@@ -470,20 +507,27 @@ describe('togglePostVote', () => {
       'user1',
       'bull'
     )
+    expect(mockSupabase.rpc).toHaveBeenCalledWith('toggle_post_vote_atomic', {
+      p_actor_id: 'user1',
+      p_post_id: 'post1',
+      p_choice: 'bull',
+    })
     expect(result.action).toBe('added')
     expect(result.vote).toBe('bull')
+    expect(result.poll).toEqual({ bull: 1, bear: 0, wait: 0 })
   })
 
-  test('should remove existing same vote', async () => {
+  test('should remove an existing same vote through the atomic RPC', async () => {
     const mockSupabase = createMockSupabase()
 
-    mockSupabase.maybeSingle.mockResolvedValueOnce({
-      data: { id: 'vote1', choice: 'bull' },
+    mockSupabase.rpc.mockResolvedValueOnce({
+      data: {
+        status: 'removed',
+        action: 'removed',
+        vote: null,
+        poll: { bull: 0, bear: 0, wait: 0 },
+      },
       error: null,
-    })
-    mockSupabase.eq.mockReturnValueOnce({
-      ...mockSupabase,
-      then: (resolve: MockResolve<unknown>) => resolve({ error: null }),
     })
 
     const result = await togglePostVote(
@@ -494,6 +538,30 @@ describe('togglePostVote', () => {
     )
     expect(result.action).toBe('removed')
     expect(result.vote).toBeNull()
+  })
+
+  test.each([
+    null,
+    { status: 'not_found' },
+    {
+      status: 'added',
+      action: 'added',
+      vote: 'bear',
+      poll: { bull: 1, bear: 0, wait: 0 },
+    },
+    {
+      status: 'added',
+      action: 'added',
+      vote: 'bull',
+      poll: { bull: -1, bear: 0, wait: 0 },
+    },
+  ])('fails closed for malformed vote acknowledgement %#', async (data) => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.rpc.mockResolvedValueOnce({ data, error: null })
+
+    await expect(
+      togglePostVote(mockSupabase as unknown as SupabaseClient, 'post1', 'user1', 'bull')
+    ).rejects.toThrow('invalid acknowledgement')
   })
 })
 
