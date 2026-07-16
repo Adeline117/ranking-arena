@@ -9,6 +9,13 @@ type PendingDraft = {
   value: string
 }
 
+export type CommentDraftSnapshot = {
+  viewerKey: string
+  postId: string
+  version: number
+  value: string
+}
+
 function getDraftKey(viewerKey: string, postId: string): string {
   return `comment-draft-v2:${viewerKey}:${postId}`
 }
@@ -41,10 +48,12 @@ function persistDraft(viewerKey: string, postId: string, value: string): void {
 export function useCommentDraftPersistence(initialPostId?: string | null, viewerKey = 'anon') {
   const currentPostIdRef = useRef<string | null>(initialPostId || null)
   const currentViewerKeyRef = useRef(viewerKey)
+  const draftVersionRef = useRef(0)
   const pendingDraftsRef = useRef(new Map<string, PendingDraft>())
   const [draft, setDraftRaw] = useState(() =>
     initialPostId ? readDraft(viewerKey, initialPostId) : ''
   )
+  const draftRef = useRef(draft)
 
   const pendingKey = useCallback(
     (postId: string, scopeViewerKey = currentViewerKeyRef.current) =>
@@ -76,6 +85,8 @@ export function useCommentDraftPersistence(initialPostId?: string | null, viewer
 
   const setDraft = useCallback(
     (value: string) => {
+      draftVersionRef.current += 1
+      draftRef.current = value
       setDraftRaw(value)
 
       const postId = currentPostIdRef.current
@@ -107,7 +118,10 @@ export function useCommentDraftPersistence(initialPostId?: string | null, viewer
       }
 
       currentPostIdRef.current = postId
-      setDraftRaw(readDraft(currentViewerKeyRef.current, postId))
+      const restored = readDraft(currentViewerKeyRef.current, postId)
+      draftVersionRef.current += 1
+      draftRef.current = restored
+      setDraftRaw(restored)
     },
     [flushDraft]
   )
@@ -123,7 +137,11 @@ export function useCommentDraftPersistence(initialPostId?: string | null, viewer
       }
 
       persistDraft(scopeViewerKey, postId, value)
-      if (currentPostIdRef.current === postId) setDraftRaw(value)
+      if (currentPostIdRef.current === postId) {
+        draftVersionRef.current += 1
+        draftRef.current = value
+        setDraftRaw(value)
+      }
     },
     [pendingKey]
   )
@@ -131,6 +149,37 @@ export function useCommentDraftPersistence(initialPostId?: string | null, viewer
   const clearDraft = useCallback(
     (postId: string) => {
       saveDraft(postId, '')
+    },
+    [saveDraft]
+  )
+
+  const captureDraftSnapshot = useCallback(
+    (postId: string): CommentDraftSnapshot => ({
+      viewerKey: currentViewerKeyRef.current,
+      postId,
+      version: draftVersionRef.current,
+      value: draftRef.current,
+    }),
+    []
+  )
+
+  const clearDraftIfUnchanged = useCallback(
+    (snapshot: CommentDraftSnapshot): boolean => {
+      if (
+        currentViewerKeyRef.current !== snapshot.viewerKey ||
+        (currentPostIdRef.current !== null && currentPostIdRef.current !== snapshot.postId) ||
+        draftVersionRef.current !== snapshot.version ||
+        draftRef.current !== snapshot.value
+      ) {
+        return false
+      }
+      saveDraft(snapshot.postId, '')
+      if (currentPostIdRef.current === null) {
+        draftVersionRef.current += 1
+        draftRef.current = ''
+        setDraftRaw('')
+      }
+      return true
     },
     [saveDraft]
   )
@@ -147,17 +196,28 @@ export function useCommentDraftPersistence(initialPostId?: string | null, viewer
     const postId = currentPostIdRef.current
     if (postId) flushDraft(postId, previousViewerKey)
     currentViewerKeyRef.current = viewerKey
-    setDraftRaw(postId ? readDraft(viewerKey, postId) : '')
+    const restored = postId ? readDraft(viewerKey, postId) : ''
+    draftVersionRef.current += 1
+    draftRef.current = restored
+    setDraftRaw(restored)
   }, [flushDraft, viewerKey])
 
   useEffect(() => flushAllDrafts, [flushAllDrafts])
 
   return {
-    draft,
+    // Effects perform persistence/cleanup, but ownership is enforced during
+    // render so a previous viewer/post draft is never committed for one frame.
+    draft:
+      currentViewerKeyRef.current === viewerKey &&
+      (!initialPostId || currentPostIdRef.current === initialPostId)
+        ? draft
+        : '',
     setDraft,
     restoreDraft,
     saveDraft,
     clearDraft,
+    captureDraftSnapshot,
+    clearDraftIfUnchanged,
     flushDraft,
   }
 }

@@ -80,18 +80,41 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
+  const auth = useAuthSession()
+  const accessToken = auth.accessToken
+  const currentUserId = auth.userId
+  const authInitialized = auth.authChecked
+  const feedScopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  const authScopeRef = useRef({
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+  })
+  authScopeRef.current = {
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+  }
+  const accessTokenRef = useRef(accessToken)
+  accessTokenRef.current = accessToken
   const [sortType, setSortType] = useState<SortType>('time')
-  const [openPost, setOpenPost] = useState<Post | null>(null)
+  const [openPostState, setOpenPostState] = useState<Post | null>(null)
+  const openPostOwnerScopeKeyRef = useRef(feedScopeKey)
+  const openPost = openPostOwnerScopeKeyRef.current === feedScopeKey ? openPostState : null
+  const setOpenPost = useCallback<React.Dispatch<React.SetStateAction<Post | null>>>((action) => {
+    setOpenPostState((previous) => {
+      const current = authScopeRef.current
+      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+      const ownedPrevious = openPostOwnerScopeKeyRef.current === ownerScopeKey ? previous : null
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      openPostOwnerScopeKeyRef.current = ownerScopeKey
+      return next
+    })
+  }, [])
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const [mobileViewMode, setMobileViewMode] = useState<'list' | 'masonry'>('list')
   const [refreshing, setRefreshing] = useState(false)
 
   const feedRefreshTrigger = usePostStore((s) => s.feedRefreshTrigger)
   const [newPostCount, setNewPostCount] = useState(0)
-  const auth = useAuthSession()
-  const accessToken = auth.accessToken
-  const currentUserId = auth.userId
-  const authInitialized = auth.authChecked
   const queryClient = useQueryClient()
 
   const pageSize = props.limit || 20
@@ -114,12 +137,15 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       props.tag,
       props.sortBy,
       sortType,
-      accessToken,
+      auth.viewerKey,
+      auth.sessionGeneration,
       feedRefreshTrigger,
     ],
     queryFn: async ({ pageParam = 0 }: { pageParam: number }) => {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-      if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
+      if (accessTokenRef.current) {
+        headers['Authorization'] = `Bearer ${accessTokenRef.current}`
+      }
       // Hashtag-scoped feed: paginate the hashtag endpoint so infinite scroll only
       // ever appends posts carrying this tag (never falls back to the global feed).
       let url: string
@@ -192,7 +218,19 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
   // Local posts state — synced from query, mutated by realtime/optimistic updates
   const fetchedPosts = useMemo(() => postPages?.pages.flatMap((p) => p.posts) ?? [], [postPages])
-  const [posts, setPosts] = useState<Post[]>((props.initialPosts as Post[]) || [])
+  const [postsState, setPostsState] = useState<Post[]>((props.initialPosts as Post[]) || [])
+  const postsOwnerScopeKeyRef = useRef(feedScopeKey)
+  const posts = postsOwnerScopeKeyRef.current === feedScopeKey ? postsState : []
+  const setPosts = useCallback<React.Dispatch<React.SetStateAction<Post[]>>>((action) => {
+    setPostsState((previous) => {
+      const current = authScopeRef.current
+      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+      const ownedPrevious = postsOwnerScopeKeyRef.current === ownerScopeKey ? previous : []
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      postsOwnerScopeKeyRef.current = ownerScopeKey
+      return next
+    })
+  }, [])
   const postsRef = useRef<Post[]>([])
   postsRef.current = posts
   useEffect(() => {
@@ -210,15 +248,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const hasLoadedOnceRef = useRef(false)
 
   // Comments hook
-  const commentsHook = usePostComments({
-    accessToken,
-    currentUserId,
-    authChecked: auth.authChecked,
-    viewerKey: auth.viewerKey,
-    sessionGeneration: auth.sessionGeneration,
-    showToast,
-    showDangerConfirm,
-    onCommentCountChange: (postId, delta, absoluteCount) => {
+  const handleCommentCountChange = useCallback(
+    (postId: string, delta: number, absoluteCount?: number) => {
       setPosts((prev) =>
         prev.map((p) =>
           p.id === postId
@@ -238,6 +269,18 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           : prev
       )
     },
+    [setOpenPost, setPosts]
+  )
+
+  const commentsHook = usePostComments({
+    accessToken,
+    currentUserId,
+    authChecked: auth.authChecked,
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    showToast,
+    showDangerConfirm,
+    onCommentCountChange: handleCommentCountChange,
   })
   const { comments, setComments, loadComments } = commentsHook
 
@@ -322,12 +365,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
   // Load posts
   // Sync bookmark counts from loaded posts + update Zustand store
-  const prevPostIdsRef = useRef<string>('')
   useEffect(() => {
     if (posts.length === 0) return
-    const postIds = posts.map((p) => p.id).join(',')
-    if (postIds === prevPostIdsRef.current) return
-    prevPostIdsRef.current = postIds
 
     hasLoadedOnceRef.current = true
     // Update Zustand store

@@ -678,6 +678,53 @@ describe('usePostComments viewer scope', () => {
     expect(result.current.comments).toEqual([commentB])
   })
 
+  it('never exposes A comments during the first B render before cleanup effects', async () => {
+    const snapshots: Array<{ viewerKey: string; commentIds: string[] }> = []
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        data: {
+          comments: [makeComment({ id: 'comment-a' })],
+          post: { comment_count: 1 },
+        },
+      },
+    })
+    const showToast = jest.fn()
+    const { result, rerender } = renderHook(
+      (props: ScopeProps) => {
+        const value = usePostComments({
+          ...props,
+          showToast,
+          showDangerConfirm: async () => true,
+          t: (key) => key,
+        })
+        snapshots.push({
+          viewerKey: props.viewerKey,
+          commentIds: value.comments.map((comment) => comment.id),
+        })
+        return value
+      },
+      { initialProps: userA }
+    )
+
+    await act(async () => result.current.loadComments('post-1'))
+    rerender({
+      accessToken: 'token-b',
+      currentUserId: 'user-b',
+      authChecked: true,
+      viewerKey: 'user:user-b',
+      sessionGeneration: 2,
+    })
+
+    expect(
+      snapshots
+        .filter((snapshot) => snapshot.viewerKey === 'user:user-b')
+        .every((snapshot) => !snapshot.commentIds.includes('comment-a'))
+    ).toBe(true)
+  })
+
   it('preserves comments and draft across a same-A token refresh', async () => {
     const comment = makeComment()
     mockAuthedFetch.mockResolvedValue({
@@ -773,5 +820,57 @@ describe('usePostComments viewer scope', () => {
 
     expect(result.current.newComment).toBe('')
     expect(result.current.comments[0].content).toBe('hello')
+  })
+
+  it('does not let a Post A ACK clear an equal-text Post B draft', async () => {
+    let resolveSubmit!: (value: unknown) => void
+    mockAuthedFetch.mockImplementation((_url: string, method: string) => {
+      if (method === 'GET') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { success: true, data: { comments: [], post: { comment_count: 0 } } },
+        })
+      }
+      return new Promise((resolve) => {
+        resolveSubmit = resolve
+      })
+    })
+    const { result } = renderScopedHook(userA)
+    await act(async () => result.current.loadComments('post-a'))
+    act(() => result.current.setNewComment('same text'))
+
+    let submission!: Promise<void>
+    act(() => {
+      submission = result.current.submitComment('post-a')
+    })
+    await act(async () => result.current.loadComments('post-b'))
+    act(() => result.current.setNewComment('same text'))
+
+    await act(async () => {
+      resolveSubmit({
+        ok: true,
+        status: 201,
+        data: {
+          success: true,
+          data: {
+            comment: {
+              id: 'comment-a',
+              post_id: 'post-a',
+              user_id: 'user-a',
+              content: 'same text',
+              parent_id: null,
+              like_count: 0,
+              dislike_count: 0,
+              created_at: '2026-07-15T00:00:00.000Z',
+              updated_at: '2026-07-15T00:00:00.000Z',
+            },
+          },
+        },
+      })
+      await submission
+    })
+
+    expect(result.current.newComment).toBe('same text')
   })
 })
