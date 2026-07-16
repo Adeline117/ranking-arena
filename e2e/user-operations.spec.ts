@@ -344,10 +344,10 @@ test.describe('Linked Traders API', () => {
 })
 
 // ═══════════════════════════════════════════════
-// 17. WALLET VERIFICATION (NONCE REPLAY)
+// 17. RETIRED WALLET VERIFICATION PREFLIGHT
 // ═══════════════════════════════════════════════
 
-test.describe('Wallet Verify API', () => {
+test.describe('Retired Wallet Verify API', () => {
   test('POST without auth returns 401', async ({ request }) => {
     const res = await request.post(`${BASE_URL}/api/traders/claim/verify-wallet`, {
       data: { message: 'test', signature: '0x123', platform: 'hyperliquid' },
