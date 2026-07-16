@@ -2758,6 +2758,7 @@ const ko = {
   inviteInvalidOrExpired: '초대 링크가 유효하지 않거나 만료되었습니다',
   proMembersOnly: '이 그룹은 Pro 회원 전용입니다',
   joinSuccess: '가입 완료',
+  joinRequestSubmitted: '가입 신청을 제출했습니다',
   newMemberJoined: '새 멤버 가입',
   newMemberJoinedMsg: '새 멤버가 그룹에 가입했습니다',
   joinFailed: '가입 실패',

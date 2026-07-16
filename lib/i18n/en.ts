@@ -2862,6 +2862,7 @@ const en = {
   inviteInvalidOrExpired: 'Invite link is invalid or expired',
   proMembersOnly: 'This group is for Pro members only',
   joinSuccess: 'Joined successfully',
+  joinRequestSubmitted: 'Join request submitted',
   newMemberJoined: 'New Member Joined',
   newMemberJoinedMsg: 'A new member joined your group',
   joinFailed: 'Failed to join',

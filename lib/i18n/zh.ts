@@ -2778,6 +2778,7 @@ const zh = {
   inviteInvalidOrExpired: '邀请链接无效或已过期',
   proMembersOnly: '此小组仅限 Pro 会员加入',
   joinSuccess: '加入成功',
+  joinRequestSubmitted: '加入申请已提交',
   newMemberJoined: '新成员加入',
   newMemberJoinedMsg: '有新成员加入了您的小组',
   joinFailed: '加入失败',
