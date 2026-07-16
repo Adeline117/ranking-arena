@@ -19,9 +19,11 @@ import RegisterForm from './components/RegisterForm'
 import LoginForm from './components/LoginForm'
 import { formatRankedTraderCount } from '@/lib/config/product-facts'
 import { useProductFacts } from '@/lib/hooks/useProductFacts'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 export default function LoginPageClient() {
   const { language: lang, t } = useLanguage()
+  const { signOut } = useAuthSession()
   const [isRegister, setIsRegister] = useState(false)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -591,7 +593,7 @@ export default function LoginPageClient() {
     try {
       // When adding a second account, sign out current session first
       if (isAddAccount) {
-        await supabase.auth.signOut()
+        await signOut()
       }
       const { error: loginError } = await supabase.auth.signInWithPassword({ email, password })
       if (loginError) {

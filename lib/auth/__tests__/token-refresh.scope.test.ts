@@ -1,11 +1,13 @@
 const mockGetSession = jest.fn()
 const mockRefreshSession = jest.fn()
+const mockSetSession = jest.fn()
 
 jest.mock('@/lib/supabase/client', () => ({
   supabase: {
     auth: {
       getSession: mockGetSession,
       refreshSession: mockRefreshSession,
+      setSession: mockSetSession,
     },
   },
 }))
@@ -54,6 +56,7 @@ describe('TokenRefreshCoordinator viewer binding', () => {
     __resetViewerScopeForTests()
     mockGetSession.mockReset()
     mockRefreshSession.mockReset()
+    mockSetSession.mockReset()
     registerAuthStateSetter(() => {})
     global.fetch = jest.fn()
   })
@@ -179,6 +182,27 @@ describe('TokenRefreshCoordinator viewer binding', () => {
     switchResponse.resolve({ data: { session: session('user-b', 'token-b') }, error: null })
 
     await expect(switching).resolves.toBeNull()
+    expect(getViewerScope().viewerKey).toBe('pending')
+    expect(mockGetSession).not.toHaveBeenCalled()
+  })
+
+  it('cannot let a server-issued session overwrite a newer logout transition', async () => {
+    synchronizeViewerScope(true, 'user-a')
+    const establishment = deferred<{
+      data: { session: ReturnType<typeof session> }
+      error: null
+    }>()
+    mockSetSession.mockReturnValueOnce(establishment.promise)
+
+    const login = tokenRefreshCoordinator.establishSession(
+      { access_token: jwt('user-b'), refresh_token: 'refresh-user-b' },
+      'user-b'
+    )
+    while (mockSetSession.mock.calls.length < 1) await Promise.resolve()
+    beginViewerTransition(null)
+    establishment.resolve({ data: { session: session('user-b', 'token-b') }, error: null })
+
+    await expect(login).resolves.toBeNull()
     expect(getViewerScope().viewerKey).toBe('pending')
     expect(mockGetSession).not.toHaveBeenCalled()
   })

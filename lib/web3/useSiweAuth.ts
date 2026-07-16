@@ -27,6 +27,7 @@ async function getSiweMessage() {
 }
 import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 interface SiweAuthResult {
   action: 'existing_user' | 'new_user'
@@ -88,6 +89,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
   const { address, chainId, isConnected } = useAccount()
   const { signMessageAsync } = useSignMessage()
   const { t } = useLanguage()
+  const { email: authEmail, getToken, signOut } = useAuthSession()
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -105,16 +107,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
 
     // Wallet disconnected while we had an address → sign out if the session was wallet-based
     if (prevAddress && !address && !isConnected) {
-      ;(async () => {
-        try {
-          const { data: { session } } = await supabase.auth.getSession()
-          if (session?.user?.email?.endsWith('@wallet.arena')) {
-            await supabase.auth.signOut()
-          }
-        } catch (_err) {
-          // Intentionally swallowed: auto sign-out on wallet disconnect is best-effort
-        }
-      })()
+      if (authEmail?.endsWith('@wallet.arena')) void signOut()
       return
     }
 
@@ -122,7 +115,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
     if (prevAddress && address && prevAddress !== address) {
       setError(null)
     }
-  }, [address, isConnected])
+  }, [address, authEmail, isConnected, signOut])
 
   // Clean up abort controller on unmount
   useEffect(() => {
@@ -133,26 +126,32 @@ export function useSiweAuth(): UseSiweAuthReturn {
 
   const clearError = useCallback(() => setError(null), [])
 
-  const createSiweMessage = useCallback(async (nonce: string): Promise<string> => {
-    const SiweMessage = await getSiweMessage()
-    const message = new SiweMessage({
-      domain: window.location.host,
-      address: address!,
-      statement: t('siweStatement'),
-      uri: window.location.origin,
-      version: '1',
-      chainId: chainId || 8453, // Base mainnet
-      nonce,
-    })
-    return message.prepareMessage()
-  }, [address, chainId, t])
+  const createSiweMessage = useCallback(
+    async (nonce: string): Promise<string> => {
+      const SiweMessage = await getSiweMessage()
+      const message = new SiweMessage({
+        domain: window.location.host,
+        address: address!,
+        statement: t('siweStatement'),
+        uri: window.location.origin,
+        version: '1',
+        chainId: chainId || 8453, // Base mainnet
+        nonce,
+      })
+      return message.prepareMessage()
+    },
+    [address, chainId, t]
+  )
 
-  const fetchNonce = useCallback(async (signal?: AbortSignal): Promise<string> => {
-    const res = await fetch('/api/auth/siwe/nonce', { signal })
-    if (!res.ok) throw new Error(t('siweFetchNonceFailed'))
-    const { nonce } = await res.json()
-    return nonce
-  }, [t])
+  const fetchNonce = useCallback(
+    async (signal?: AbortSignal): Promise<string> => {
+      const res = await fetch('/api/auth/siwe/nonce', { signal })
+      if (!res.ok) throw new Error(t('siweFetchNonceFailed'))
+      const { nonce } = await res.json()
+      return nonce
+    },
+    [t]
+  )
 
   /**
    * Sign in with SIWE — creates or finds a user account linked to the wallet.
@@ -199,7 +198,10 @@ export function useSiweAuth(): UseSiweAuthReturn {
         })
 
         if (otpError) {
-          logger.warn('[SIWE] OTP verification failed, session may require email confirmation:', otpError)
+          logger.warn(
+            '[SIWE] OTP verification failed, session may require email confirmation:',
+            otpError
+          )
         }
       }
 
@@ -237,8 +239,8 @@ export function useSiweAuth(): UseSiweAuthReturn {
       const signature = await signMessageAsync({ message })
 
       // Get current access token
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session?.access_token) {
+      const accessToken = await getToken()
+      if (!accessToken) {
         throw new Error(t('siweNotAuthenticated'))
       }
 
@@ -246,7 +248,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${accessToken}`,
         },
         body: JSON.stringify({ message, signature }),
         signal: controller.signal,
@@ -275,7 +277,7 @@ export function useSiweAuth(): UseSiweAuthReturn {
       inFlightRef.current = false
       setIsLoading(false)
     }
-  }, [address, fetchNonce, createSiweMessage, signMessageAsync, t])
+  }, [address, fetchNonce, createSiweMessage, getToken, signMessageAsync, t])
 
   return { signIn, linkWallet, isLoading, error, clearError }
 }

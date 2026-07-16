@@ -4,6 +4,8 @@ import { useState } from 'react'
 import { supabase } from '@/lib/supabase/client'
 import dynamic from 'next/dynamic'
 import { logger } from '@/lib/logger'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { jwtSubject } from '@/lib/auth/token-subject'
 
 const OneClickWalletButton = dynamic(
   () => import('@/lib/web3/wallet-components').then((m) => ({ default: m.OneClickWalletButton })),
@@ -87,9 +89,12 @@ export default function SocialLogin({
         return
       }
 
-      const { error: setErr } = await supabase.auth.setSession(verifyData.session)
-      if (setErr) {
-        logger.warn('[Passkey] setSession failed:', setErr)
+      const expectedUserId = jwtSubject(verifyData.session.access_token)
+      const established = expectedUserId
+        ? await tokenRefreshCoordinator.establishSession(verifyData.session, expectedUserId)
+        : null
+      if (!established) {
+        logger.warn('[Passkey] Could not establish the verified session')
         onError(t('passkeyError'))
         return
       }
