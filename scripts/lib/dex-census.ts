@@ -4,6 +4,7 @@ export type DexProtocol = 'hyperliquid' | 'gmx' | 'gtrade'
 export type DexCoverageScope =
   | 'full_public_file'
   | 'active_period_stats_offset_scan'
+  | 'legacy_period_stats_offset_scan'
   | 'public_top25_board'
 export type DexCompletenessStatus = 'complete' | 'provisional' | 'bounded_sample'
 export type DexCoverageDenominator = 'eligible' | 'provisional' | 'excluded'
@@ -59,7 +60,6 @@ export const DEX_CENSUS_SOURCES = [
   ...[
     [42161, 'Arbitrum', 'arbitrum'],
     [43114, 'Avalanche', 'avalanche'],
-    [3637, 'Botanix', 'botanix'],
     [4326, 'MegaETH', 'megaeth'],
   ].map(
     ([chainId, network, endpointNetwork]) =>
@@ -77,6 +77,22 @@ export const DEX_CENSUS_SOURCES = [
         truncation_detection: 'scan_drift_or_guard_limit',
       }) satisfies DexCensusSource
   ),
+  // GMX still publishes this endpoint, but its SDK marks Botanix as legacy /
+  // withdrawals-only. Preserve the read-only history lane without allowing it
+  // to inflate the active-market population or any coverage denominator.
+  {
+    protocol: 'gmx',
+    chain_id: 3637,
+    network: 'Botanix (legacy / withdrawals only)',
+    endpoint: GMX_ENDPOINT('botanix'),
+    scope: 'legacy_period_stats_offset_scan',
+    required_windows: ['7D', '30D', '90D'],
+    completeness_status: 'provisional',
+    completeness_basis: 'repeatable_offset_scan_without_order_by',
+    universe_complete: false,
+    coverage_denominator: 'excluded',
+    truncation_detection: 'scan_drift_or_guard_limit',
+  },
   ...[
     [42161, 'Arbitrum'],
     [8453, 'Base'],
@@ -177,6 +193,12 @@ export function assertDexCensusSources(
       source.coverage_denominator !== 'excluded'
     ) {
       throw new Error(`bounded sample cannot enter coverage denominator: ${key}`)
+    }
+    if (
+      source.scope === 'legacy_period_stats_offset_scan' &&
+      source.coverage_denominator !== 'excluded'
+    ) {
+      throw new Error(`legacy source cannot enter coverage denominator: ${key}`)
     }
 
     const registered = DEX_CENSUS_SOURCES.find(
