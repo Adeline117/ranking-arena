@@ -1,144 +1,174 @@
 import { NextResponse } from 'next/server'
+import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { logger } from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
+
+const localizedRoleNameSchema = z
+  .object({
+    zh: z.string().trim().max(50).optional(),
+    en: z.string().trim().max(50).optional(),
+  })
+  .strict()
+
+const groupApplicationInputSchema = z
+  .object({
+    name: z.string().trim().min(1).max(50),
+    name_en: z.string().trim().max(50).nullable().optional(),
+    description: z.string().trim().max(500).nullable().optional(),
+    description_en: z.string().trim().max(500).nullable().optional(),
+    avatar_url: z.string().trim().max(2048).nullable().optional(),
+    role_names: z
+      .object({
+        admin: localizedRoleNameSchema.optional(),
+        member: localizedRoleNameSchema.optional(),
+      })
+      .strict()
+      .nullable()
+      .optional(),
+    rules_json: z
+      .array(
+        z
+          .object({
+            zh: z.string().max(2000),
+            en: z.string().max(2000),
+          })
+          .strict()
+      )
+      .max(100)
+      .nullable()
+      .optional(),
+    rules: z.string().trim().max(10000).nullable().optional(),
+    is_premium_only: z.boolean().optional().default(false),
+  })
+  .strict()
+
+const submitGroupApplicationResultSchema = z.discriminatedUnion('status', [
+  z
+    .object({
+      status: z.literal('submitted'),
+      application_id: z.string().uuid(),
+      created_at: z.string().datetime({ offset: true }),
+    })
+    .strict(),
+  ...(['invalid', 'account_inactive', 'pro_required', 'pending_exists', 'name_taken'] as const).map(
+    (status) => z.object({ status: z.literal(status) }).strict()
+  ),
+])
+
+type SubmitGroupApplicationResult = z.infer<typeof submitGroupApplicationResultSchema>
+
+const defaultRoleNames = {
+  admin: { zh: '管理员', en: 'Admin' },
+  member: { zh: '成员', en: 'Member' },
+}
+
+function emptyToNull(value: string | null | undefined): string | null {
+  return value || null
+}
+
+function submitFailureResponse(result: SubmitGroupApplicationResult): NextResponse {
+  switch (result.status) {
+    case 'invalid':
+      return NextResponse.json({ error: 'Invalid group application' }, { status: 400 })
+    case 'account_inactive':
+      return NextResponse.json({ error: 'Your account is not active' }, { status: 403 })
+    case 'pro_required':
+      return NextResponse.json(
+        { error: 'Only Pro members can create exclusive groups' },
+        { status: 403 }
+      )
+    case 'pending_exists':
+      return NextResponse.json(
+        { error: 'You already have a pending group application' },
+        { status: 409 }
+      )
+    case 'name_taken':
+      return NextResponse.json({ error: 'This group name is already taken' }, { status: 409 })
+    default:
+      return NextResponse.json({ error: 'Failed to submit application' }, { status: 500 })
+  }
+}
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
     const guard = socialFeatureGuard()
     if (guard) return guard
 
-    // 解析请求体
-    let body: Record<string, unknown>
+    let rawBody: unknown
     try {
-      body = await request.json()
+      rawBody = await request.json()
     } catch {
       return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
-    const {
-      name,
-      name_en,
-      description,
-      description_en,
-      avatar_url,
-      role_names,
-      rules_json,
-      rules,
-      is_premium_only,
-    } = body as {
-      name?: string
-      name_en?: string
-      description?: string
-      description_en?: string
-      avatar_url?: string
-      role_names?: { admin?: { zh?: string; en?: string }; member?: { zh?: string; en?: string } }
-      rules_json?: unknown
-      rules?: string
-      is_premium_only?: boolean
+
+    const parsedBody = groupApplicationInputSchema.safeParse(rawBody)
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: 'Invalid group application' }, { status: 400 })
     }
 
-    // 验证必填字段
-    if (!name || typeof name !== 'string' || name.trim().length === 0) {
-      return NextResponse.json({ error: 'Group name cannot be empty' }, { status: 400 })
-    }
-
-    if (name.trim().length > 50) {
-      return NextResponse.json({ error: 'Group name cannot exceed 50 characters' }, { status: 400 })
-    }
-
-    if (description && description.length > 500) {
-      return NextResponse.json(
-        { error: 'Group description cannot exceed 500 characters' },
-        { status: 400 }
-      )
-    }
-
-    // 如果要创建 Pro 专属小组，需要验证用户是 Pro 会员
-    if (is_premium_only) {
-      const { data: profile } = await supabase
-        .from('user_profiles')
-        .select('subscription_tier')
-        .eq('id', user.id)
-        .maybeSingle()
-
-      const isPro =
-        PRO_FREE_PROMO ||
-        (profile as { subscription_tier?: string } | null)?.subscription_tier === 'pro'
-
-      if (!isPro) {
-        return NextResponse.json(
-          { error: 'Only Pro members can create exclusive groups' },
-          { status: 403 }
-        )
-      }
-    }
-
-    // 并行检查：待审核申请 + 小组名重复
-    const [{ data: existingApplication }, { data: existingGroup }] = await Promise.all([
-      supabase
-        .from('group_applications')
-        .select('id')
-        .eq('applicant_id', user.id)
-        .eq('status', 'pending')
-        .maybeSingle(),
-      supabase.from('groups').select('id').eq('name', name.trim()).maybeSingle(),
-    ])
-
-    if (existingApplication) {
-      return NextResponse.json(
-        { error: 'You already have a pending group application' },
-        { status: 400 }
-      )
-    }
-
-    if (existingGroup) {
-      return NextResponse.json({ error: 'This group name is already taken' }, { status: 400 })
-    }
-
-    // 默认角色名称（admin 包含组长和管理员）
-    const defaultRoleNames = {
-      admin: { zh: '管理员', en: 'Admin' },
-      member: { zh: '成员', en: 'Member' },
-    }
-
-    // 合并用户提供的角色名称
-    const finalRoleNames = role_names
+    const input = parsedBody.data
+    const normalizedName = input.name.normalize('NFC')
+    const finalRoleNames = input.role_names
       ? {
-          admin: { ...defaultRoleNames.admin, ...role_names.admin },
-          member: { ...defaultRoleNames.member, ...role_names.member },
+          admin: { ...defaultRoleNames.admin, ...input.role_names.admin },
+          member: { ...defaultRoleNames.member, ...input.role_names.member },
         }
       : defaultRoleNames
 
-    // 创建 pending 申请 —— 真审核流：仅提交申请，不建群。
-    // 建群 + 加组长成员的逻辑已搬到 approve/route.ts，由管理员批准时才执行。
-    const { data: application, error: insertError } = await supabase
-      .from('group_applications')
-      .insert({
-        applicant_id: user.id,
-        name: name.trim(),
-        name_en: name_en?.trim() || null,
-        description: description?.trim() || null,
-        description_en: description_en?.trim() || null,
-        avatar_url: avatar_url || null,
-        role_names: finalRoleNames,
-        rules_json: rules_json || null,
-        rules: rules?.trim() || null,
-        is_premium_only: is_premium_only || false,
-        status: 'pending',
-      })
-      .select()
-      .single()
+    const { data, error } = await supabase.rpc('submit_group_application_atomic', {
+      p_actor_id: user.id,
+      p_name: normalizedName,
+      p_name_en: emptyToNull(input.name_en),
+      p_description: emptyToNull(input.description),
+      p_description_en: emptyToNull(input.description_en),
+      p_avatar_url: emptyToNull(input.avatar_url),
+      p_role_names: finalRoleNames,
+      p_rules_json: input.rules_json ?? null,
+      p_rules: emptyToNull(input.rules),
+      p_is_premium_only: input.is_premium_only,
+      p_promo_unlocked: PRO_FREE_PROMO,
+    })
 
-    if (insertError) {
-      logger.dbError('create-group-application', insertError, { userId: user.id, groupName: name })
+    if (error) {
+      logger.dbError('submit-group-application-atomic', error, {
+        userId: user.id,
+        groupName: normalizedName,
+      })
       return NextResponse.json({ error: 'Failed to submit application' }, { status: 500 })
     }
+
+    const parsedResult = submitGroupApplicationResultSchema.safeParse(data)
+    if (!parsedResult.success) {
+      logger.error('Atomic group application submission returned an invalid result', {
+        userId: user.id,
+        groupName: normalizedName,
+      })
+      return NextResponse.json({ error: 'Failed to submit application' }, { status: 500 })
+    }
+
+    const result = parsedResult.data
+    if (result.status !== 'submitted') return submitFailureResponse(result)
 
     return NextResponse.json({
       success: true,
       message: 'Application submitted, awaiting admin review',
-      application,
+      application: {
+        id: result.application_id,
+        applicant_id: user.id,
+        name: normalizedName,
+        name_en: emptyToNull(input.name_en),
+        description: emptyToNull(input.description),
+        description_en: emptyToNull(input.description_en),
+        avatar_url: emptyToNull(input.avatar_url),
+        role_names: finalRoleNames,
+        rules_json: input.rules_json ?? null,
+        rules: emptyToNull(input.rules),
+        is_premium_only: input.is_premium_only,
+        status: 'pending',
+        created_at: result.created_at,
+      },
     })
   },
   { name: 'groups-apply-post', rateLimit: 'write' }
@@ -153,9 +183,7 @@ export const GET = withAuth(
     // 获取用户的所有申请（含 group_id：批准后前往小组的链接）
     const { data: applications, error } = await supabase
       .from('group_applications')
-      .select(
-        'id, applicant_id, name, name_en, description, description_en, avatar_url, role_names, rules_json, rules, is_premium_only, status, reject_reason, group_id, reviewed_at, reviewed_by, created_at'
-      )
+      .select('id, name, status, reject_reason, group_id, created_at')
       .eq('applicant_id', user.id)
       .order('created_at', { ascending: false })
 
@@ -164,7 +192,16 @@ export const GET = withAuth(
       return NextResponse.json({ error: 'Failed to fetch application list' }, { status: 500 })
     }
 
-    return NextResponse.json({ applications })
+    const safeApplications = (applications || []).map((application) => ({
+      id: application.id,
+      name: application.name,
+      status: application.status,
+      reject_reason: application.reject_reason,
+      group_id: application.group_id,
+      created_at: application.created_at,
+    }))
+
+    return NextResponse.json({ applications: safeApplications })
   },
   { name: 'groups-apply-get', rateLimit: 'read' }
 )

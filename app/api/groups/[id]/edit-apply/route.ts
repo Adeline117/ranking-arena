@@ -50,8 +50,11 @@ export const POST = withAuth(
     const sb = supabase as SupabaseClient
 
     // 只有组长可以提交修改申请
-    if (!await isGroupOwner(sb, groupId, user.id)) {
-      return NextResponse.json({ error: 'Only the group owner can modify group info' }, { status: 403 })
+    if (!(await isGroupOwner(sb, groupId, user.id))) {
+      return NextResponse.json(
+        { error: 'Only the group owner can modify group info' },
+        { status: 403 }
+      )
     }
 
     // 检查是否已有待审核的修改申请
@@ -63,7 +66,10 @@ export const POST = withAuth(
       .maybeSingle()
 
     if (existingApp) {
-      return NextResponse.json({ error: 'You already have a pending edit application' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'You already have a pending edit application' },
+        { status: 400 }
+      )
     }
 
     let body: {
@@ -91,7 +97,7 @@ export const POST = withAuth(
       rules_json,
       rules,
       role_names,
-      is_premium_only
+      is_premium_only,
     } = body
 
     // 验证
@@ -100,7 +106,10 @@ export const POST = withAuth(
     }
 
     if (description && description.length > 500) {
-      return NextResponse.json({ error: 'Group description cannot exceed 500 characters' }, { status: 400 })
+      return NextResponse.json(
+        { error: 'Group description cannot exceed 500 characters' },
+        { status: 400 }
+      )
     }
 
     // 创建修改申请
@@ -118,7 +127,7 @@ export const POST = withAuth(
         rules: rules || null,
         role_names: role_names || null,
         is_premium_only: is_premium_only ?? null,
-        status: 'pending'
+        status: 'pending',
       })
       .select()
       .single()
@@ -131,7 +140,7 @@ export const POST = withAuth(
     return NextResponse.json({
       success: true,
       message: 'Edit application submitted, pending admin review',
-      application
+      application,
     })
   },
   { name: 'groups/edit-apply-post', rateLimit: 'write' }
@@ -147,13 +156,15 @@ export const GET = withAuth(
     const sb = supabase as SupabaseClient
 
     // 检查是否是组长
-    if (!await isGroupOwner(sb, groupId, user.id)) {
+    if (!(await isGroupOwner(sb, groupId, user.id))) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
 
     const { data: applications, error } = await sb
       .from('group_edit_applications')
-      .select('id, group_id, applicant_id, name, name_en, description, description_en, avatar_url, rules_json, rules, role_names, is_premium_only, status, reject_reason, reviewed_at, reviewed_by, created_at')
+      .select(
+        'id, group_id, applicant_id, name, name_en, description, description_en, avatar_url, rules_json, rules, role_names, is_premium_only, status, reject_reason, reviewed_at, created_at'
+      )
       .eq('group_id', groupId)
       .order('created_at', { ascending: false })
 

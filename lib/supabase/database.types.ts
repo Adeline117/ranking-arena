@@ -9233,6 +9233,16 @@ export type Database = {
         Args: { p_recovery_token_hash?: string; p_user_id: string }
         Returns: string
       }
+      review_group_application_atomic: {
+        Args: {
+          p_application_id: string
+          p_decision: string
+          p_promo_unlocked?: boolean
+          p_reject_reason?: string | null
+          p_reviewer_id: string
+        }
+        Returns: Json
+      }
       rollup_api_key_usage: { Args: never; Returns: undefined }
       safe_log1p: { Args: { x: number }; Returns: number }
       scan_data_quality_anomalies: {
@@ -9341,6 +9351,22 @@ export type Database = {
         }
       }
       snapshot_score_backtest: { Args: never; Returns: number }
+      submit_group_application_atomic: {
+        Args: {
+          p_actor_id: string
+          p_avatar_url?: string | null
+          p_description?: string | null
+          p_description_en?: string | null
+          p_is_premium_only?: boolean
+          p_name: string
+          p_name_en?: string | null
+          p_promo_unlocked?: boolean
+          p_role_names?: Json | null
+          p_rules?: string | null
+          p_rules_json?: Json | null
+        }
+        Returns: Json
+      }
       submit_trader_claim: {
         Args: {
           p_source: string
