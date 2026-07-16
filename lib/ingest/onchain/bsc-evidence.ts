@@ -239,6 +239,22 @@ export interface BscTransactionMembershipEvidence {
   indexedTransaction: BscEvidenceLane<BscMinedTransactionEvidence>
 }
 
+/**
+ * A same-provider canonical/finalized RPC assertion. This does not claim an
+ * independently rehashed block header or Merkle-Patricia inclusion proof.
+ */
+export interface BscVerifiedTransactionFinality {
+  chain: { namespace: 'eip155'; reference: '56' }
+  txHash: string
+  capturedAt: string
+  membershipPolicy: BscTransactionMembershipEvidence['membershipPolicy']
+  anchor: BscTransactionMembershipEvidence['anchor']
+  transaction: BscMinedTransactionEvidence
+  receipt: BscTransactionReceiptEvidence
+  canonicalBlock: BscBlockMembershipEvidence
+  indexedTransaction: BscMinedTransactionEvidence
+}
+
 interface BscEvidenceEndpoint {
   url: string
   identity: BscEvidenceEndpointIdentity
@@ -1041,6 +1057,22 @@ function exactDataRecord(
   return snapshot
 }
 
+function exactDenseArray(value: unknown): unknown[] | null {
+  if (!Array.isArray(value) || Object.getPrototypeOf(value) !== Array.prototype) return null
+  const keys = Reflect.ownKeys(value)
+  const keySet = new Set<PropertyKey>(keys)
+  if (keys.length !== value.length + 1 || !keySet.has('length')) return null
+  const items: unknown[] = []
+  for (let index = 0; index < value.length; index += 1) {
+    const key = String(index)
+    if (!keySet.has(key)) return null
+    const descriptor = Object.getOwnPropertyDescriptor(value, key)
+    if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) return null
+    items.push(descriptor.value)
+  }
+  return items
+}
+
 function parseApprovedEndpoint(value: unknown): BscEvidenceEndpointIdentity | null {
   const endpoint = exactDataRecord(value, ['providerId', 'endpointId', 'connectionHash'])
   if (
@@ -1076,22 +1108,10 @@ function parseApprovedEndpoint(value: unknown): BscEvidenceEndpointIdentity | nu
 
 function parseSoleProvider(value: unknown): BscEvidenceEndpointIdentity | null {
   const provider = exactDataRecord(value, ['servedBy', 'attempted'])
-  if (!provider || !Array.isArray(provider.attempted) || provider.attempted.length !== 1)
-    return null
-  const arrayKeys = Reflect.ownKeys(provider.attempted)
-  const itemDescriptor = Object.getOwnPropertyDescriptor(provider.attempted, '0')
-  if (
-    arrayKeys.length !== 2 ||
-    !arrayKeys.includes('0') ||
-    !arrayKeys.includes('length') ||
-    !itemDescriptor ||
-    !itemDescriptor.enumerable ||
-    !('value' in itemDescriptor)
-  ) {
-    return null
-  }
+  const attemptedItems = provider ? exactDenseArray(provider.attempted) : null
+  if (!provider || !attemptedItems || attemptedItems.length !== 1) return null
   const servedBy = parseApprovedEndpoint(provider.servedBy)
-  const attempted = parseApprovedEndpoint(itemDescriptor.value)
+  const attempted = parseApprovedEndpoint(attemptedItems[0])
   if (!servedBy || !attempted || !sameEndpoint(servedBy, attempted)) return null
   return servedBy
 }
@@ -1124,7 +1144,21 @@ function parseExactBlockHeader(value: unknown): BscBlockHeaderEvidence | null {
     'transactionsRoot',
     'receiptsRoot',
   ])
-  return header ? parseBlockHeader(header) : null
+  if (!header) return null
+  const parsed = parseBlockHeader(header)
+  if (
+    !parsed ||
+    header.number !== parsed.number ||
+    header.hash !== parsed.hash ||
+    header.parentHash !== parsed.parentHash ||
+    header.timestamp !== parsed.timestamp ||
+    header.stateRoot !== parsed.stateRoot ||
+    header.transactionsRoot !== parsed.transactionsRoot ||
+    header.receiptsRoot !== parsed.receiptsRoot
+  ) {
+    return null
+  }
+  return parsed
 }
 
 function copyBlockHeader(header: BscBlockHeaderEvidence): BscBlockHeaderEvidence {
@@ -1149,6 +1183,189 @@ function sameBlockHeader(left: BscBlockHeaderEvidence, right: BscBlockHeaderEvid
     left.transactionsRoot === right.transactionsRoot &&
     left.receiptsRoot === right.receiptsRoot
   )
+}
+
+function parseExactMinedTransaction(value: unknown): BscMinedTransactionEvidence | null {
+  const transaction = exactDataRecord(value, [
+    'hash',
+    'from',
+    'to',
+    'input',
+    'value',
+    'blockNumber',
+    'blockHash',
+    'transactionIndex',
+  ])
+  if (!transaction) return null
+  const parsed = parseMinedTransaction(transaction)
+  if (
+    !parsed ||
+    transaction.hash !== parsed.hash ||
+    transaction.from !== parsed.from ||
+    transaction.to !== parsed.to ||
+    transaction.input !== parsed.input ||
+    transaction.value !== parsed.value ||
+    transaction.blockNumber !== parsed.blockNumber ||
+    transaction.blockHash !== parsed.blockHash ||
+    transaction.transactionIndex !== parsed.transactionIndex
+  ) {
+    return null
+  }
+  return parsed
+}
+
+function parseExactTransactionReceipt(value: unknown): BscTransactionReceiptEvidence | null {
+  const receipt = exactDataRecord(value, [
+    'transactionHash',
+    'transactionIndex',
+    'blockNumber',
+    'blockHash',
+    'from',
+    'to',
+    'status',
+    'logs',
+  ])
+  const logItems = receipt ? exactDenseArray(receipt.logs) : null
+  if (!receipt || !logItems) return null
+  const strictLogs: Record<string, unknown>[] = []
+  for (const item of logItems) {
+    const log = exactDataRecord(item, [
+      'address',
+      'topics',
+      'data',
+      'blockNumber',
+      'transactionHash',
+      'transactionIndex',
+      'blockHash',
+      'logIndex',
+      'removed',
+    ])
+    const topics = log ? exactDenseArray(log.topics) : null
+    if (!log || !topics) return null
+    strictLogs.push({
+      address: log.address,
+      topics,
+      data: log.data,
+      blockNumber: log.blockNumber,
+      transactionHash: log.transactionHash,
+      transactionIndex: log.transactionIndex,
+      blockHash: log.blockHash,
+      logIndex: log.logIndex,
+      removed: log.removed,
+    })
+  }
+  const strictReceipt = {
+    transactionHash: receipt.transactionHash,
+    transactionIndex: receipt.transactionIndex,
+    blockNumber: receipt.blockNumber,
+    blockHash: receipt.blockHash,
+    from: receipt.from,
+    to: receipt.to,
+    status: receipt.status,
+    logs: strictLogs,
+  }
+  const parsed = parseTransactionReceipt(strictReceipt)
+  return parsed && JSON.stringify(strictReceipt) === JSON.stringify(parsed) ? parsed : null
+}
+
+function parseExactBlockMembership(value: unknown): BscBlockMembershipEvidence | null {
+  const block = exactDataRecord(value, [
+    'number',
+    'hash',
+    'parentHash',
+    'timestamp',
+    'stateRoot',
+    'transactionsRoot',
+    'receiptsRoot',
+    'transactions',
+  ])
+  const transactions = block ? exactDenseArray(block.transactions) : null
+  if (!block || !transactions) return null
+  const strictBlock = {
+    number: block.number,
+    hash: block.hash,
+    parentHash: block.parentHash,
+    timestamp: block.timestamp,
+    stateRoot: block.stateRoot,
+    transactionsRoot: block.transactionsRoot,
+    receiptsRoot: block.receiptsRoot,
+    transactions,
+  }
+  const parsed = parseBlockMembership(strictBlock)
+  return parsed && JSON.stringify(strictBlock) === JSON.stringify(parsed) ? parsed : null
+}
+
+function sameMinedTransaction(
+  left: BscMinedTransactionEvidence,
+  right: BscMinedTransactionEvidence
+): boolean {
+  return (
+    left.hash === right.hash &&
+    left.from === right.from &&
+    left.to === right.to &&
+    left.input === right.input &&
+    left.value === right.value &&
+    left.blockNumber === right.blockNumber &&
+    left.blockHash === right.blockHash &&
+    left.transactionIndex === right.transactionIndex
+  )
+}
+
+function copyMinedTransaction(
+  transaction: BscMinedTransactionEvidence
+): BscMinedTransactionEvidence {
+  return {
+    hash: transaction.hash,
+    from: transaction.from,
+    to: transaction.to,
+    input: transaction.input,
+    value: transaction.value,
+    blockNumber: transaction.blockNumber,
+    blockHash: transaction.blockHash,
+    transactionIndex: transaction.transactionIndex,
+  }
+}
+
+function copyReceiptLog(log: BscReceiptLogEvidence): BscReceiptLogEvidence {
+  return {
+    address: log.address,
+    topics: log.topics.map((topic) => topic),
+    data: log.data,
+    blockNumber: log.blockNumber,
+    transactionHash: log.transactionHash,
+    transactionIndex: log.transactionIndex,
+    blockHash: log.blockHash,
+    logIndex: log.logIndex,
+    removed: false,
+  }
+}
+
+function copyTransactionReceipt(
+  receipt: BscTransactionReceiptEvidence
+): BscTransactionReceiptEvidence {
+  return {
+    transactionHash: receipt.transactionHash,
+    transactionIndex: receipt.transactionIndex,
+    blockNumber: receipt.blockNumber,
+    blockHash: receipt.blockHash,
+    from: receipt.from,
+    to: receipt.to,
+    status: receipt.status,
+    logs: receipt.logs.map(copyReceiptLog),
+  }
+}
+
+function copyBlockMembership(block: BscBlockMembershipEvidence): BscBlockMembershipEvidence {
+  return {
+    number: block.number,
+    hash: block.hash,
+    parentHash: block.parentHash,
+    timestamp: block.timestamp,
+    stateRoot: block.stateRoot,
+    transactionsRoot: block.transactionsRoot,
+    receiptsRoot: block.receiptsRoot,
+    transactions: block.transactions.map((hash) => hash),
+  }
 }
 
 function invalidVerifiedAnchor(): never {
@@ -1404,5 +1621,197 @@ export async function fetchBscTransactionMembershipEvidence(
     receipt,
     canonicalBlock,
     indexedTransaction,
+  }
+}
+
+function invalidVerifiedTransactionFinality(): never {
+  throw new TypeError('BSC transaction finality evidence is not fully verified')
+}
+
+function requireBscVerifiedTransactionFinalityInternal(
+  evidence: unknown,
+  anchorEvidence: unknown
+): BscVerifiedTransactionFinality {
+  const anchor = requireBscVerifiedChainAnchor(anchorEvidence)
+  const root = exactDataRecord(evidence, [
+    'chain',
+    'txHash',
+    'capturedAt',
+    'membershipPolicy',
+    'anchor',
+    'transaction',
+    'receipt',
+    'canonicalBlock',
+    'indexedTransaction',
+  ])
+  if (!root) return invalidVerifiedTransactionFinality()
+  const chain = exactDataRecord(root.chain, ['namespace', 'reference'])
+  const membershipPolicy = exactDataRecord(root.membershipPolicy, [
+    'version',
+    'transactionMethod',
+    'receiptMethod',
+    'blockMethod',
+    'indexedTransactionMethod',
+    'fullTransactions',
+  ])
+  const anchorBinding = exactDataRecord(root.anchor, [
+    'endpoint',
+    'verifiedAnchorHash',
+    'verifiedAnchorHashPolicy',
+    'observedAt',
+    'finalityPolicy',
+    'finalizedBlock',
+  ])
+  const boundEndpoint = anchorBinding ? parseApprovedEndpoint(anchorBinding.endpoint) : null
+  const boundFinalityPolicy = anchorBinding
+    ? exactDataRecord(anchorBinding.finalityPolicy, [
+        'version',
+        'method',
+        'blockTag',
+        'headBlockTag',
+        'fullTransactions',
+        'maxFutureBlockSkewMs',
+        'maxCurrentAnchorLagMs',
+      ])
+    : null
+  const boundFinalizedBlock = anchorBinding
+    ? parseExactBlockHeader(anchorBinding.finalizedBlock)
+    : null
+  const transactionLaneValue = parseAvailableLane(root.transaction)
+  const receiptLaneValue = parseAvailableLane(root.receipt)
+  const blockLaneValue = parseAvailableLane(root.canonicalBlock)
+  const indexedLaneValue = parseAvailableLane(root.indexedTransaction)
+  const transaction = transactionLaneValue
+    ? parseExactMinedTransaction(transactionLaneValue.value)
+    : null
+  const receipt = receiptLaneValue ? parseExactTransactionReceipt(receiptLaneValue.value) : null
+  const canonicalBlock = blockLaneValue ? parseExactBlockMembership(blockLaneValue.value) : null
+  const indexedTransaction = indexedLaneValue
+    ? parseExactMinedTransaction(indexedLaneValue.value)
+    : null
+  const txHash = canonicalHash(root.txHash)
+  const capturedAtMs = canonicalTimestampMs(root.capturedAt)
+  const anchorObservedAtMs = canonicalTimestampMs(anchor.observedAt)
+  const candidateTimestampMs = canonicalBlock ? blockTimestampMs(canonicalBlock) : null
+  const candidateNumber = canonicalBlock ? BigInt(canonicalBlock.number) : null
+  const finalizedNumber = BigInt(anchor.finalizedBlock.number)
+  const expectedAnchorHash = verifiedChainAnchorHash(anchor)
+  if (
+    !chain ||
+    chain.namespace !== 'eip155' ||
+    chain.reference !== '56' ||
+    txHash === null ||
+    root.txHash !== txHash ||
+    capturedAtMs === null ||
+    anchorObservedAtMs === null ||
+    capturedAtMs + MAX_FUTURE_BLOCK_SKEW_MS < anchorObservedAtMs ||
+    !membershipPolicy ||
+    membershipPolicy.version !== 'bsc_transaction_membership_v1' ||
+    membershipPolicy.transactionMethod !== 'eth_getTransactionByHash' ||
+    membershipPolicy.receiptMethod !== 'eth_getTransactionReceipt' ||
+    membershipPolicy.blockMethod !== 'eth_getBlockByNumber' ||
+    membershipPolicy.indexedTransactionMethod !== 'eth_getTransactionByBlockNumberAndIndex' ||
+    membershipPolicy.fullTransactions !== false ||
+    !anchorBinding ||
+    !boundEndpoint ||
+    !sameEndpoint(boundEndpoint, anchor.endpoint) ||
+    anchorBinding.verifiedAnchorHashPolicy !== 'bsc_verified_anchor_semantics_v1' ||
+    anchorBinding.verifiedAnchorHash !== expectedAnchorHash ||
+    anchorBinding.observedAt !== anchor.observedAt ||
+    !boundFinalityPolicy ||
+    boundFinalityPolicy.version !== anchor.finalityPolicy.version ||
+    boundFinalityPolicy.method !== anchor.finalityPolicy.method ||
+    boundFinalityPolicy.blockTag !== anchor.finalityPolicy.blockTag ||
+    boundFinalityPolicy.headBlockTag !== anchor.finalityPolicy.headBlockTag ||
+    boundFinalityPolicy.fullTransactions !== anchor.finalityPolicy.fullTransactions ||
+    boundFinalityPolicy.maxFutureBlockSkewMs !== anchor.finalityPolicy.maxFutureBlockSkewMs ||
+    boundFinalityPolicy.maxCurrentAnchorLagMs !== anchor.finalityPolicy.maxCurrentAnchorLagMs ||
+    !boundFinalizedBlock ||
+    !sameBlockHeader(boundFinalizedBlock, anchor.finalizedBlock) ||
+    !transactionLaneValue ||
+    !receiptLaneValue ||
+    !blockLaneValue ||
+    !indexedLaneValue ||
+    !transaction ||
+    !receipt ||
+    !canonicalBlock ||
+    !indexedTransaction ||
+    !sameEndpoint(transactionLaneValue.endpoint, boundEndpoint) ||
+    !sameEndpoint(receiptLaneValue.endpoint, boundEndpoint) ||
+    !sameEndpoint(blockLaneValue.endpoint, boundEndpoint) ||
+    !sameEndpoint(indexedLaneValue.endpoint, boundEndpoint) ||
+    transaction.hash !== txHash ||
+    receipt.transactionHash !== txHash ||
+    indexedTransaction.hash !== txHash ||
+    !sameMinedTransaction(transaction, indexedTransaction) ||
+    transaction.from !== receipt.from ||
+    transaction.to !== receipt.to ||
+    transaction.blockNumber !== receipt.blockNumber ||
+    transaction.blockHash !== receipt.blockHash ||
+    transaction.transactionIndex !== receipt.transactionIndex ||
+    canonicalBlock.number !== receipt.blockNumber ||
+    canonicalBlock.hash !== receipt.blockHash ||
+    candidateTimestampMs === null ||
+    candidateNumber === null ||
+    candidateTimestampMs > capturedAtMs + MAX_FUTURE_BLOCK_SKEW_MS ||
+    candidateNumber > finalizedNumber ||
+    BigInt(canonicalBlock.timestamp) > BigInt(anchor.finalizedBlock.timestamp) ||
+    (candidateNumber === finalizedNumber &&
+      !sameBlockHeader(canonicalBlock, anchor.finalizedBlock)) ||
+    (candidateNumber !== finalizedNumber && canonicalBlock.hash === anchor.finalizedBlock.hash)
+  ) {
+    return invalidVerifiedTransactionFinality()
+  }
+  const numericIndex = BigInt(transaction.transactionIndex)
+  if (
+    numericIndex >= BigInt(canonicalBlock.transactions.length) ||
+    canonicalBlock.transactions[Number(numericIndex)] !== txHash
+  ) {
+    return invalidVerifiedTransactionFinality()
+  }
+
+  return {
+    chain: { namespace: 'eip155', reference: '56' },
+    txHash,
+    capturedAt: new Date(capturedAtMs).toISOString(),
+    membershipPolicy: {
+      version: 'bsc_transaction_membership_v1',
+      transactionMethod: 'eth_getTransactionByHash',
+      receiptMethod: 'eth_getTransactionReceipt',
+      blockMethod: 'eth_getBlockByNumber',
+      indexedTransactionMethod: 'eth_getTransactionByBlockNumberAndIndex',
+      fullTransactions: false,
+    },
+    anchor: {
+      endpoint: endpointCopy(boundEndpoint),
+      verifiedAnchorHash: expectedAnchorHash,
+      verifiedAnchorHashPolicy: 'bsc_verified_anchor_semantics_v1',
+      observedAt: anchor.observedAt,
+      finalityPolicy: {
+        version: 'bsc_standard_finalized_current_v1',
+        method: 'eth_getBlockByNumber',
+        blockTag: 'finalized',
+        headBlockTag: 'latest',
+        fullTransactions: false,
+        maxFutureBlockSkewMs: MAX_FUTURE_BLOCK_SKEW_MS,
+        maxCurrentAnchorLagMs: MAX_CURRENT_ANCHOR_LAG_MS,
+      },
+      finalizedBlock: copyBlockHeader(anchor.finalizedBlock),
+    },
+    transaction: copyMinedTransaction(transaction),
+    receipt: copyTransactionReceipt(receipt),
+    canonicalBlock: copyBlockMembership(canonicalBlock),
+    indexedTransaction: copyMinedTransaction(indexedTransaction),
+  }
+}
+
+export function requireBscVerifiedTransactionFinality(
+  evidence: unknown,
+  anchorEvidence: unknown
+): BscVerifiedTransactionFinality {
+  try {
+    return requireBscVerifiedTransactionFinalityInternal(evidence, anchorEvidence)
+  } catch {
+    return invalidVerifiedTransactionFinality()
   }
 }

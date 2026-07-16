@@ -222,6 +222,9 @@ describe('fetchBscChainAnchorEvidence', () => {
         value.observedAt = 'not-a-timestamp'
       },
       (value) => {
+        value.finalizedBlock.value.hash = `0x${value.finalizedBlock.value.hash.slice(2).toUpperCase()}`
+      },
+      (value) => {
         value.finalityPolicy.maxFutureBlockSkewMs = 60_001
       },
       (value) => {

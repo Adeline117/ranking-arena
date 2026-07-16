@@ -3,6 +3,7 @@ import {
   BSC_MAINNET_CHAIN_ID,
   BSC_MAINNET_GENESIS_HASH,
   fetchBscTransactionMembershipEvidence,
+  requireBscVerifiedTransactionFinality,
   type BscChainAnchorEvidence,
   type BscEvidenceEndpointIdentity,
 } from '../bsc-evidence'
@@ -260,6 +261,18 @@ describe('fetchBscTransactionMembershipEvidence', () => {
     ).toBe(true)
     expect(JSON.stringify(evidence)).not.toContain('private-api-key')
     expect(JSON.stringify(evidence)).not.toContain('127.0.0.1')
+
+    const verified = requireBscVerifiedTransactionFinality(
+      JSON.parse(JSON.stringify(evidence)),
+      JSON.parse(JSON.stringify(anchorFixture()))
+    )
+    expect(verified).toMatchObject({
+      txHash: TX_HASH,
+      transaction: { value: '0xa', transactionIndex: '0x1' },
+      receipt: { status: '0x1' },
+      canonicalBlock: { number: '0x123', hash: BLOCK_HASH },
+      indexedTransaction: { hash: TX_HASH },
+    })
   })
 
   it('retains a reverted receipt as non-success evidence and rejects reverted logs', async () => {
@@ -283,6 +296,9 @@ describe('fetchBscTransactionMembershipEvidence', () => {
     })
     expect(JSON.stringify(reverted)).not.toContain('isHit')
     expect(JSON.stringify(reverted)).not.toContain('success')
+    expect(requireBscVerifiedTransactionFinality(reverted, anchorFixture()).receipt.status).toBe(
+      '0x0'
+    )
 
     mockRpc((request) => ({
       payload: {
@@ -306,6 +322,223 @@ describe('fetchBscTransactionMembershipEvidence', () => {
       status: 'unavailable',
       reason: 'dependency_unavailable',
     })
+  })
+
+  it('fails closed on serialized artifact drift across every membership boundary', async () => {
+    mockRpc()
+    const anchor = anchorFixture()
+    const evidence = await fetchBscTransactionMembershipEvidence(TX_HASH, anchor, {
+      rpcUrl: TEST_RPC_URL,
+      endpointId: 'local_bsc_node',
+    })
+    const attacks: Array<(value: any) => void> = [
+      (value) => {
+        value.secret = 'private-api-key'
+      },
+      (value) => {
+        value.txHash = OTHER_HASH
+      },
+      (value) => {
+        value.capturedAt = '2026-07-16T19:30:59.999Z'
+      },
+      (value) => {
+        value.membershipPolicy.version = 'bsc_transaction_membership_v2'
+      },
+      (value) => {
+        value.anchor.verifiedAnchorHash = '0'.repeat(64)
+      },
+      (value) => {
+        value.anchor.finalizedBlock.hash = OTHER_HASH
+      },
+      (value) => {
+        value.transaction.value.secret = 'private-api-key'
+      },
+      (value) => {
+        value.transaction.value.value = '0x0a'
+      },
+      (value) => {
+        value.transaction.value.blockNumber = '0x124'
+      },
+      (value) => {
+        value.receipt.value.blockHash = OTHER_HASH
+      },
+      (value) => {
+        value.receipt.value.blockNumber = '0x124'
+      },
+      (value) => {
+        value.receipt.value.transactionIndex = '0x2'
+      },
+      (value) => {
+        value.receipt.value.from = '0x4444444444444444444444444444444444444444'
+      },
+      (value) => {
+        value.receipt.value.status = '0x2'
+      },
+      (value) => {
+        value.receipt.value.logs[0].transactionIndex = '0x2'
+      },
+      (value) => {
+        value.indexedTransaction.value.input = '0x'
+      },
+      (value) => {
+        value.indexedTransaction.value.value = '0xb'
+      },
+      (value) => {
+        value.indexedTransaction.value.blockHash = OTHER_HASH
+      },
+      (value) => {
+        value.indexedTransaction.value.transactionIndex = '0x2'
+      },
+      (value) => {
+        value.canonicalBlock.value.hash = OTHER_HASH
+      },
+      (value) => {
+        value.canonicalBlock.value.number = '0x124'
+      },
+      (value) => {
+        value.canonicalBlock.value.transactions[1] = OTHER_HASH
+      },
+      (value) => {
+        value.canonicalBlock.value.transactions = [TX_HASH]
+      },
+      (value) => {
+        value.transaction.httpStatus = null
+      },
+      (value) => {
+        value.transaction.provider.servedBy.connectionHash = '0'.repeat(64)
+        value.transaction.provider.attempted[0].connectionHash = '0'.repeat(64)
+      },
+    ]
+    for (const mutate of attacks) {
+      const attacked = JSON.parse(JSON.stringify(evidence))
+      mutate(attacked)
+      expect(() => requireBscVerifiedTransactionFinality(attacked, anchor)).toThrow(
+        'BSC transaction finality evidence is not fully verified'
+      )
+    }
+  })
+
+  it('accepts an exact finalized-height block and rejects finality contradictions', async () => {
+    mockRpc()
+    const anchor = anchorFixture()
+    const evidence = await fetchBscTransactionMembershipEvidence(TX_HASH, anchor, {
+      rpcUrl: TEST_RPC_URL,
+      endpointId: 'local_bsc_node',
+    })
+    const sameHeight = JSON.parse(JSON.stringify(evidence))
+    if (anchor.finalizedBlock.status !== 'available') throw new Error('fixture anchor unavailable')
+    const finalizedHeader = anchor.finalizedBlock.value
+    for (const lane of [
+      sameHeight.transaction,
+      sameHeight.receipt,
+      sameHeight.indexedTransaction,
+    ]) {
+      lane.value.blockNumber = finalizedHeader.number
+      lane.value.blockHash = finalizedHeader.hash
+    }
+    for (const log of sameHeight.receipt.value.logs) {
+      log.blockNumber = finalizedHeader.number
+      log.blockHash = finalizedHeader.hash
+    }
+    Object.assign(sameHeight.canonicalBlock.value, finalizedHeader)
+    expect(requireBscVerifiedTransactionFinality(sameHeight, anchor).canonicalBlock).toMatchObject({
+      number: '0x200',
+      hash: FINALIZED_HASH,
+    })
+    const exactClockSkewBoundary = JSON.parse(JSON.stringify(evidence))
+    exactClockSkewBoundary.capturedAt = '2026-07-16T19:31:00.000Z'
+    expect(requireBscVerifiedTransactionFinality(exactClockSkewBoundary, anchor).capturedAt).toBe(
+      '2026-07-16T19:31:00.000Z'
+    )
+    const sameHeightRootDrift = JSON.parse(JSON.stringify(sameHeight))
+    sameHeightRootDrift.canonicalBlock.value.stateRoot = OTHER_HASH
+    expect(() => requireBscVerifiedTransactionFinality(sameHeightRootDrift, anchor)).toThrow(
+      'BSC transaction finality evidence is not fully verified'
+    )
+
+    const aboveFinalized = JSON.parse(JSON.stringify(evidence))
+    for (const lane of [
+      aboveFinalized.transaction,
+      aboveFinalized.receipt,
+      aboveFinalized.indexedTransaction,
+    ]) {
+      lane.value.blockNumber = '0x201'
+    }
+    for (const log of aboveFinalized.receipt.value.logs) log.blockNumber = '0x201'
+    aboveFinalized.canonicalBlock.value.number = '0x201'
+    expect(() => requireBscVerifiedTransactionFinality(aboveFinalized, anchor)).toThrow(
+      'BSC transaction finality evidence is not fully verified'
+    )
+
+    const reusedFinalizedHash = JSON.parse(JSON.stringify(evidence))
+    for (const lane of [
+      reusedFinalizedHash.transaction,
+      reusedFinalizedHash.receipt,
+      reusedFinalizedHash.indexedTransaction,
+    ]) {
+      lane.value.blockHash = FINALIZED_HASH
+    }
+    for (const log of reusedFinalizedHash.receipt.value.logs) log.blockHash = FINALIZED_HASH
+    reusedFinalizedHash.canonicalBlock.value.hash = FINALIZED_HASH
+    expect(() => requireBscVerifiedTransactionFinality(reusedFinalizedHash, anchor)).toThrow(
+      'BSC transaction finality evidence is not fully verified'
+    )
+
+    const laterTimestamp = JSON.parse(JSON.stringify(evidence))
+    laterTimestamp.canonicalBlock.value.timestamp = '0x6a59319b'
+    expect(() => requireBscVerifiedTransactionFinality(laterTimestamp, anchor)).toThrow(
+      'BSC transaction finality evidence is not fully verified'
+    )
+  })
+
+  it('rejects accessors, exotic arrays, proxies, and a different valid anchor', async () => {
+    mockRpc()
+    const anchor = anchorFixture()
+    const evidence = await fetchBscTransactionMembershipEvidence(TX_HASH, anchor, {
+      rpcUrl: TEST_RPC_URL,
+      endpointId: 'local_bsc_node',
+    })
+
+    const accessor = JSON.parse(JSON.stringify(evidence))
+    Object.defineProperty(accessor.transaction.value, 'input', {
+      enumerable: true,
+      get: () => '0xabcdef12',
+    })
+    expect(() => requireBscVerifiedTransactionFinality(accessor, anchor)).toThrow(
+      'BSC transaction finality evidence is not fully verified'
+    )
+
+    const sparse = JSON.parse(JSON.stringify(evidence))
+    delete sparse.canonicalBlock.value.transactions[1]
+    expect(() => requireBscVerifiedTransactionFinality(sparse, anchor)).toThrow(
+      'BSC transaction finality evidence is not fully verified'
+    )
+
+    const exotic = JSON.parse(JSON.stringify(evidence))
+    Object.setPrototypeOf(exotic.receipt.value.logs, {})
+    expect(() => requireBscVerifiedTransactionFinality(exotic, anchor)).toThrow(
+      'BSC transaction finality evidence is not fully verified'
+    )
+
+    const proxy = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error('private-api-key')
+        },
+      }
+    )
+    expect(() => requireBscVerifiedTransactionFinality(proxy, anchor)).toThrow(
+      'BSC transaction finality evidence is not fully verified'
+    )
+
+    const differentAnchor = JSON.parse(JSON.stringify(anchor))
+    for (const lane of [differentAnchor.finalizedBlock, differentAnchor.headBlock]) {
+      lane.value.hash = OTHER_HASH_2
+    }
+    expect(() => requireBscVerifiedTransactionFinality(evidence, differentAnchor)).toThrow(
+      'BSC transaction finality evidence is not fully verified'
+    )
   })
 
   it.each([
