@@ -625,21 +625,19 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
 
   // Handlers
   const handleMute = async (targetUserId: string) => {
-    if (!accessToken || !userId || !canManage) return
+    const manageRequestScope = manageOwnerScope
+    if (!accessToken || !userId || !canManage || !isManageScopeCurrent(manageRequestScope)) return
     const requestScope: GroupMemberModerationViewerScope = {
       actorId: userId,
       viewerKey,
       sessionGeneration,
-      groupId: manageOwnerScope.groupId,
-      resourceGeneration: manageOwnerScope.resourceGeneration,
+      groupId: manageRequestScope.groupId,
+      resourceGeneration: manageRequestScope.resourceGeneration,
     }
-    const requestGroupId = groupId.trim().toLowerCase()
-    if (
-      !requestGroupId ||
-      requestScope.groupId !== requestGroupId ||
-      !isModerationViewerScopeCurrent(requestScope)
-    )
-      return
+    const requestGroupId = manageRequestScope.groupId
+    const requestIsCurrent = () =>
+      isManageScopeCurrent(manageRequestScope) && isModerationViewerScopeCurrent(requestScope)
+    if (!requestGroupId || requestScope.groupId !== requestGroupId || !requestIsCurrent()) return
     let operation: GroupMemberModerationOperation | null = null
     try {
       const requestedOperation = moderationOperationsRef.current.acquire({
@@ -661,7 +659,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           ledger: moderationOperationsRef.current,
           accessToken,
           csrfHeaders: getCsrfHeaders(),
-          isViewerCurrent: () => isModerationViewerScopeCurrent(requestScope),
+          isViewerCurrent: requestIsCurrent,
           onAcknowledged: () => {
             setShowMuteModal(null)
             setMuteReason('')
@@ -673,13 +671,10 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
       const result = await request.promise
       if (!request.started) return
       if (result.ok) {
-        if (result.completedCurrentIntent && isModerationViewerScopeCurrent(requestScope)) {
+        if (result.completedCurrentIntent && requestIsCurrent()) {
           showToast(t('mutedSuccessfully'), 'success')
         }
-      } else if (
-        isModerationViewerScopeCurrent(requestScope) &&
-        moderationOperationsRef.current.isCurrent(operation)
-      ) {
+      } else if (requestIsCurrent() && moderationOperationsRef.current.isCurrent(operation)) {
         if (result.kind === 'network') {
           logger.error('Mute error:', result.error)
           showToast(t('networkErrorRetry'), 'error')
@@ -688,32 +683,30 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         }
       }
     } catch (err) {
-      logger.error('Mute error:', err)
       if (
-        isModerationViewerScopeCurrent(requestScope) &&
+        requestIsCurrent() &&
         (!operation || moderationOperationsRef.current.isCurrent(operation))
       ) {
+        logger.error('Mute error:', err)
         showToast(t('networkErrorRetry'), 'error')
       }
     }
   }
 
   const handleUnmute = async (targetUserId: string) => {
-    if (!accessToken || !userId || !canManage) return
+    const manageRequestScope = manageOwnerScope
+    if (!accessToken || !userId || !canManage || !isManageScopeCurrent(manageRequestScope)) return
     const requestScope: GroupMemberModerationViewerScope = {
       actorId: userId,
       viewerKey,
       sessionGeneration,
-      groupId: manageOwnerScope.groupId,
-      resourceGeneration: manageOwnerScope.resourceGeneration,
+      groupId: manageRequestScope.groupId,
+      resourceGeneration: manageRequestScope.resourceGeneration,
     }
-    const requestGroupId = groupId.trim().toLowerCase()
-    if (
-      !requestGroupId ||
-      requestScope.groupId !== requestGroupId ||
-      !isModerationViewerScopeCurrent(requestScope)
-    )
-      return
+    const requestGroupId = manageRequestScope.groupId
+    const requestIsCurrent = () =>
+      isManageScopeCurrent(manageRequestScope) && isModerationViewerScopeCurrent(requestScope)
+    if (!requestGroupId || requestScope.groupId !== requestGroupId || !requestIsCurrent()) return
     let operation: GroupMemberModerationOperation | null = null
     try {
       const requestedOperation = moderationOperationsRef.current.acquire({
@@ -732,7 +725,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
           ledger: moderationOperationsRef.current,
           accessToken,
           csrfHeaders: getCsrfHeaders(),
-          isViewerCurrent: () => isModerationViewerScopeCurrent(requestScope),
+          isViewerCurrent: requestIsCurrent,
           reconcileTarget: (target) => reconcileMemberModeration(target, requestScope),
           onReconcileError: (error) => logger.error('Unmute reconciliation error:', error),
         })
@@ -740,13 +733,10 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
       const result = await request.promise
       if (!request.started) return
       if (result.ok) {
-        if (result.completedCurrentIntent && isModerationViewerScopeCurrent(requestScope)) {
+        if (result.completedCurrentIntent && requestIsCurrent()) {
           showToast(t('unmutedSuccessfully'), 'success')
         }
-      } else if (
-        isModerationViewerScopeCurrent(requestScope) &&
-        moderationOperationsRef.current.isCurrent(operation)
-      ) {
+      } else if (requestIsCurrent() && moderationOperationsRef.current.isCurrent(operation)) {
         if (result.kind === 'network') {
           logger.error('Unmute error:', result.error)
           showToast(t('networkErrorRetry'), 'error')
@@ -755,34 +745,43 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         }
       }
     } catch (err) {
-      logger.error('Unmute error:', err)
       if (
-        isModerationViewerScopeCurrent(requestScope) &&
+        requestIsCurrent() &&
         (!operation || moderationOperationsRef.current.isCurrent(operation))
       ) {
+        logger.error('Unmute error:', err)
         showToast(t('networkErrorRetry'), 'error')
       }
     }
   }
 
   const handleNotify = async () => {
-    if (!accessToken || !canManage || !notifyMessage.trim()) return
+    const requestScope = manageOwnerScope
+    const requestToken = accessToken
+    const requestGroupId = requestScope.groupId
+    const requestTitle = notifyTitle.trim()
+    const requestMessage = notifyMessage.trim()
+    const requestIsCurrent = () => isManageScopeCurrent(requestScope)
+    if (!requestToken || !requestGroupId || !canManage || !requestMessage || !requestIsCurrent())
+      return
     setNotifySending(true)
     try {
-      const res = await fetch(`/api/groups/${groupId}/notify`, {
+      const res = await fetch(`/api/groups/${requestGroupId}/notify`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${requestToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
-          title: notifyTitle.trim() || undefined,
-          message: notifyMessage.trim(),
+          title: requestTitle || undefined,
+          message: requestMessage,
         }),
       })
+      if (!requestIsCurrent()) return
       if (res.ok) {
         const data = await res.json()
+        if (!requestIsCurrent()) return
         setShowNotifyModal(false)
         setNotifyTitle('')
         setNotifyMessage('')
@@ -794,28 +793,36 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         const data = res.headers.get('content-type')?.includes('application/json')
           ? await res.json()
           : null
+        if (!requestIsCurrent()) return
         showToast(data?.error || t('sendFailed'), 'error')
       }
     } catch (err) {
-      logger.error('Notify error:', err)
-      showToast(t('networkErrorRetry'), 'error')
+      if (requestIsCurrent()) {
+        logger.error('Notify error:', err)
+        showToast(t('networkErrorRetry'), 'error')
+      }
     } finally {
-      setNotifySending(false)
+      if (requestIsCurrent()) setNotifySending(false)
     }
   }
 
   const handleSetRole = async (targetUserId: string, newRole: 'admin' | 'member') => {
-    if (!accessToken || !isOwner) return
+    const requestScope = manageOwnerScope
+    const requestToken = accessToken
+    const requestGroupId = requestScope.groupId
+    const requestIsCurrent = () => isManageScopeCurrent(requestScope)
+    if (!requestToken || !requestGroupId || !isOwner || !requestIsCurrent()) return
     try {
-      const res = await fetch(`/api/groups/${groupId}/members/${targetUserId}/role`, {
+      const res = await fetch(`/api/groups/${requestGroupId}/members/${targetUserId}/role`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${requestToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({ role: newRole }),
       })
+      if (!requestIsCurrent()) return
       if (res.ok) {
         setMembers((prev) =>
           prev.map((m) => (m.user_id === targetUserId ? { ...m, role: newRole } : m))
@@ -823,22 +830,31 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(t('roleUpdatedSuccessfully'), 'success')
       } else {
         const data = await res.json()
+        if (!requestIsCurrent()) return
         showToast(data.error || t('operationFailed'), 'error')
       }
     } catch (err) {
-      logger.error('Set role error:', err)
-      showToast(t('networkErrorRetry'), 'error')
+      if (requestIsCurrent()) {
+        logger.error('Set role error:', err)
+        showToast(t('networkErrorRetry'), 'error')
+      }
     }
   }
 
   const handleDeletePost = async (postId: string) => {
-    if (!accessToken || !canManage) return
-    if (!(await showDangerConfirm(t('deletePost'), t('confirmDeletePost')))) return
+    const requestScope = manageOwnerScope
+    const requestToken = accessToken
+    const requestGroupId = requestScope.groupId
+    const requestIsCurrent = () => isManageScopeCurrent(requestScope)
+    if (!requestToken || !requestGroupId || !canManage || !requestIsCurrent()) return
+    const confirmed = await showDangerConfirm(t('deletePost'), t('confirmDeletePost'))
+    if (!confirmed || !requestIsCurrent()) return
     try {
-      const res = await fetch(`/api/groups/${groupId}/posts/${postId}/delete`, {
+      const res = await fetch(`/api/groups/${requestGroupId}/posts/${postId}/delete`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+        headers: { Authorization: `Bearer ${requestToken}`, ...getCsrfHeaders() },
       })
+      if (!requestIsCurrent()) return
       if (res.ok) {
         setPosts((prev) =>
           prev.map((p) => (p.id === postId ? { ...p, deleted_at: new Date().toISOString() } : p))
@@ -846,22 +862,31 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(t('postDeleted'), 'success')
       } else {
         const data = await res.json()
+        if (!requestIsCurrent()) return
         showToast(data.error || t('deleteFailed'), 'error')
       }
     } catch (err) {
-      logger.error('Delete post error:', err)
-      showToast(t('networkErrorRetry'), 'error')
+      if (requestIsCurrent()) {
+        logger.error('Delete post error:', err)
+        showToast(t('networkErrorRetry'), 'error')
+      }
     }
   }
 
   const handleDeleteComment = async (commentId: string) => {
-    if (!accessToken || !canManage) return
-    if (!(await showDangerConfirm(t('deleteComment'), t('confirmDeleteComment')))) return
+    const requestScope = manageOwnerScope
+    const requestToken = accessToken
+    const requestGroupId = requestScope.groupId
+    const requestIsCurrent = () => isManageScopeCurrent(requestScope)
+    if (!requestToken || !requestGroupId || !canManage || !requestIsCurrent()) return
+    const confirmed = await showDangerConfirm(t('deleteComment'), t('confirmDeleteComment'))
+    if (!confirmed || !requestIsCurrent()) return
     try {
-      const res = await fetch(`/api/groups/${groupId}/comments/${commentId}/delete`, {
+      const res = await fetch(`/api/groups/${requestGroupId}/comments/${commentId}/delete`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+        headers: { Authorization: `Bearer ${requestToken}`, ...getCsrfHeaders() },
       })
+      if (!requestIsCurrent()) return
       if (res.ok) {
         setComments((prev) =>
           prev.map((c) => (c.id === commentId ? { ...c, deleted_at: new Date().toISOString() } : c))
@@ -869,24 +894,32 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         showToast(t('commentDeleted'), 'success')
       } else {
         const data = await res.json()
+        if (!requestIsCurrent()) return
         showToast(data.error || t('deleteFailed'), 'error')
       }
     } catch (err) {
-      logger.error('Delete comment error:', err)
-      showToast(t('networkErrorRetry'), 'error')
+      if (requestIsCurrent()) {
+        logger.error('Delete comment error:', err)
+        showToast(t('networkErrorRetry'), 'error')
+      }
     }
   }
 
   const handlePinPost = async (postId: string) => {
-    if (!accessToken || !canManage || pinningPost) return
+    const requestScope = manageOwnerScope
+    const requestToken = accessToken
+    const requestIsCurrent = () => isManageScopeCurrent(requestScope)
+    if (!requestToken || !canManage || pinningPost || !requestIsCurrent()) return
     setPinningPost(postId)
     try {
       const res = await fetch(`/api/posts/${postId}/pin`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+        headers: { Authorization: `Bearer ${requestToken}`, ...getCsrfHeaders() },
       })
+      if (!requestIsCurrent()) return
       if (res.ok) {
         const data = await res.json()
+        if (!requestIsCurrent()) return
         const np = data.data?.is_pinned ?? data.is_pinned
         setPosts((prev) =>
           prev.map((p) => {
@@ -900,27 +933,43 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         const data = res.headers.get('content-type')?.includes('application/json')
           ? await res.json()
           : null
+        if (!requestIsCurrent()) return
         showToast(data?.error || t('operationFailed'), 'error')
       }
     } catch (err) {
-      logger.error('Pin post error:', err)
-      showToast(t('networkErrorRetry'), 'error')
+      if (requestIsCurrent()) {
+        logger.error('Pin post error:', err)
+        showToast(t('networkErrorRetry'), 'error')
+      }
     } finally {
-      setPinningPost(null)
+      if (requestIsCurrent()) setPinningPost(null)
     }
   }
 
   const loadMorePosts = async () => {
-    if (loadingMorePosts || !hasMorePosts || posts.length === 0) return
+    const requestScope = manageOwnerScope
+    const requestGroupId = requestScope.groupId
+    const requestCursor = posts.at(-1)?.created_at
+    const requestIsCurrent = () => isManageScopeCurrent(requestScope)
+    if (
+      !requestGroupId ||
+      !requestCursor ||
+      loadingMorePosts ||
+      !hasMorePosts ||
+      !requestIsCurrent()
+    )
+      return
     setLoadingMorePosts(true)
     try {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('posts')
         .select('id, title, content, author_handle, created_at, is_pinned')
-        .eq('group_id', groupId)
-        .lt('created_at', posts[posts.length - 1].created_at)
+        .eq('group_id', requestGroupId)
+        .lt('created_at', requestCursor)
         .order('created_at', { ascending: false })
         .limit(POSTS_PER_PAGE)
+      if (!requestIsCurrent()) return
+      if (error) throw error
       if (data && data.length > 0) {
         setPosts((prev) => [...prev, ...(data.map((p) => ({ ...p, deleted_at: null })) as Post[])])
         setHasMorePosts(data.length === POSTS_PER_PAGE)
@@ -928,22 +977,30 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         setHasMorePosts(false)
       }
     } catch (err) {
-      logger.error('Load more posts error:', err)
+      if (requestIsCurrent()) logger.error('Load more posts error:', err)
     } finally {
-      setLoadingMorePosts(false)
+      if (requestIsCurrent()) setLoadingMorePosts(false)
     }
   }
 
   const handleSubmitEdit = async () => {
-    const requestScope: ViewerScope = { viewerKey, sessionGeneration, userId }
+    const requestManageScope = manageOwnerScope
+    const requestScope: ViewerScope = {
+      viewerKey: requestManageScope.viewerKey,
+      sessionGeneration: requestManageScope.sessionGeneration,
+      userId: requestManageScope.userId,
+    }
     const requestToken = accessToken
+    const requestGroupId = requestManageScope.groupId
     if (
       !requestToken ||
+      !requestGroupId ||
       !userId ||
       !isOwner ||
       jwtSubject(requestToken) !== userId ||
       requestScope.viewerKey !== `user:${userId}` ||
-      !isViewerScopeCurrent(requestScope)
+      !isViewerScopeCurrent(requestScope) ||
+      !isManageScopeCurrent(requestManageScope)
     )
       return
     if (!editName.trim() && !editNameEn.trim()) {
@@ -951,15 +1008,18 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
       return
     }
 
-    const requestGroupId = groupId
-    const requestOwnerKey = `${requestScope.viewerKey}:${requestScope.sessionGeneration}:${requestGroupId}`
+    const requestOwnerKey = groupManageOwnerKey(requestManageScope)
     const requestIsCurrent = () => {
       const current = profileEditContextRef.current
       return (
+        isManageScopeCurrent(requestManageScope) &&
         current.userId === userId &&
         current.viewerKey === requestScope.viewerKey &&
         current.sessionGeneration === requestScope.sessionGeneration &&
         current.groupId === requestGroupId &&
+        current.manageStateOwnerKey === requestOwnerKey &&
+        current.paramsRevision === requestManageScope.paramsRevision &&
+        current.resourceGeneration === requestManageScope.resourceGeneration &&
         jwtSubject(current.accessToken) === userId &&
         isViewerScopeCurrent(requestScope)
       )
@@ -1063,18 +1123,22 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   }
 
   const handleKick = async (targetUserId: string, handle: string) => {
-    if (
-      !(await showDangerConfirm(
-        t('kickMember'),
-        t('confirmKickMember').replace('{handle}', handle)
-      ))
+    const requestScope = manageOwnerScope
+    const requestToken = accessToken
+    const requestGroupId = requestScope.groupId
+    const requestIsCurrent = () => isManageScopeCurrent(requestScope)
+    if (!requestToken || !requestGroupId || !canManage || !requestIsCurrent()) return
+    const confirmed = await showDangerConfirm(
+      t('kickMember'),
+      t('confirmKickMember').replace('{handle}', handle)
     )
-      return
+    if (!confirmed || !requestIsCurrent()) return
     try {
-      const res = await fetch(`/api/groups/${groupId}/members/${targetUserId}/kick`, {
+      const res = await fetch(`/api/groups/${requestGroupId}/members/${targetUserId}/kick`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+        headers: { Authorization: `Bearer ${requestToken}`, ...getCsrfHeaders() },
       })
+      if (!requestIsCurrent()) return
       if (res.ok) {
         setMembers((prev) => prev.filter((m) => m.user_id !== targetUserId))
         showToast(t('kicked'), 'success')
@@ -1082,10 +1146,11 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
         const data = res.headers.get('content-type')?.includes('application/json')
           ? await res.json()
           : null
+        if (!requestIsCurrent()) return
         showToast(data?.error || t('operationFailed'), 'error')
       }
     } catch {
-      showToast(t('networkError'), 'error')
+      if (requestIsCurrent()) showToast(t('networkError'), 'error')
     }
   }
 
@@ -1125,36 +1190,43 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   // Dissolve group (owner only)
   const [dissolving, setDissolving] = useViewerSlotState(manageStateOwnerKey, false)
   const handleDissolve = useCallback(async () => {
-    if (!isOwner || dissolving) return
+    const requestScope = manageOwnerScope
+    const requestToken = accessToken
+    const requestGroupId = requestScope.groupId
+    const requestIsCurrent = () => isManageScopeCurrent(requestScope)
+    if (!requestToken || !requestGroupId || !isOwner || dissolving || !requestIsCurrent()) return
     const confirmed = await showDangerConfirm(t('dissolveGroup'), t('dissolveGroupConfirm'))
-    if (!confirmed) return
+    if (!confirmed || !requestIsCurrent()) return
     setDissolving(true)
     try {
-      const res = await fetch(`/api/groups/${groupId}/dissolve`, {
+      const res = await fetch(`/api/groups/${requestGroupId}/dissolve`, {
         method: 'POST',
-        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+        headers: { Authorization: `Bearer ${requestToken}`, ...getCsrfHeaders() },
       })
+      if (!requestIsCurrent()) return
       if (res.ok) {
         showToast(t('groupDissolved'), 'success')
         router.push('/groups')
       } else {
         const data = await res.json().catch(() => ({}))
+        if (!requestIsCurrent()) return
         showToast(data.error || t('operationFailed'), 'error')
       }
     } catch {
-      showToast(t('networkError'), 'error')
+      if (requestIsCurrent()) showToast(t('networkError'), 'error')
     } finally {
-      setDissolving(false)
+      if (requestIsCurrent()) setDissolving(false)
     }
   }, [
-    isOwner,
-    dissolving,
-    groupId,
     accessToken,
+    dissolving,
+    isManageScopeCurrent,
+    isOwner,
+    manageOwnerScope,
+    router,
     setDissolving,
     showDangerConfirm,
     showToast,
-    router,
     t,
   ])
 
