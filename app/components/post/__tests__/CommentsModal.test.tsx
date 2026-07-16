@@ -40,8 +40,6 @@ function props(comments: Comment[]) {
     onSubmitComment: jest.fn(),
     replyingTo: null,
     setReplyingTo: jest.fn(),
-    replyContent: '',
-    setReplyContent: jest.fn(),
     submittingReply: false,
     onSubmitReply: jest.fn(),
     commentLikeLoading: {},

@@ -5,6 +5,7 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import type { Comment } from './hooks/usePostComments'
 import type { CommentSortMode } from './comments/comment-types'
+import type { ReplyTarget, ReplyTargetSetter } from './comments/reply-types'
 import { CommentThread } from './comments/CommentThread'
 import { CommentInput } from './comments/CommentInput'
 import { CommentSkeleton, EmptyComments, CommentSortToggle } from './comments/CommentActions'
@@ -21,12 +22,10 @@ interface CommentsModalProps {
   submittingComment: boolean
   onSubmitComment: (postId: string, content: string) => Promise<boolean>
   // Reply
-  replyingTo: { commentId: string; handle: string } | null
-  setReplyingTo: (val: { commentId: string; handle: string } | null) => void
-  replyContent: string
-  setReplyContent: (val: string) => void
+  replyingTo: ReplyTarget | null
+  setReplyingTo: ReplyTargetSetter
   submittingReply: boolean
-  onSubmitReply: (postId: string, parentId: string) => void
+  onSubmitReply: (postId: string, parentId: string, content: string) => Promise<boolean>
   // Like
   commentLikeLoading: Record<string, boolean>
   onToggleCommentLike: (postId: string, commentId: string) => void
@@ -62,8 +61,6 @@ export default function CommentsModal({
   onSubmitComment,
   replyingTo,
   setReplyingTo,
-  replyContent,
-  setReplyContent,
   submittingReply,
   onSubmitReply,
   commentLikeLoading,
@@ -189,10 +186,9 @@ export default function CommentsModal({
                 currentUserId={currentUserId}
                 language={language}
                 t={t}
+                viewerKey={viewerKey}
                 replyingTo={replyingTo}
                 setReplyingTo={setReplyingTo}
-                replyContent={replyContent}
-                setReplyContent={setReplyContent}
                 submittingReply={submittingReply}
                 onSubmitReply={onSubmitReply}
                 commentLikeLoading={commentLikeLoading}

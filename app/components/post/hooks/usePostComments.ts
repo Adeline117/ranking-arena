@@ -268,9 +268,6 @@ export function usePostComments({
     commentId: string
     handle: string
   } | null>(null, () => null, scopeKey)
-  const [replyContent, setReplyContent] = useViewerOwnedState('', () => '', scopeKey)
-  const replyContentRef = useRef(replyContent)
-  replyContentRef.current = replyContent
   const [submittingReply, setSubmittingReply] = useViewerOwnedState(false, () => false, scopeKey)
   const [commentLikeLoading, setCommentLikeLoading] = useViewerOwnedState<Record<string, boolean>>(
     {},
@@ -339,7 +336,6 @@ export function usePostComments({
     setCommentLikeLoading({})
     setDeletingCommentId(null)
     setReplyingTo(null)
-    setReplyContent('')
     setExpandedReplies({})
     setEditingComment(null)
     setEditContent('')
@@ -353,7 +349,6 @@ export function usePostComments({
     setEditingComment,
     setExpandedReplies,
     setLoadingComments,
-    setReplyContent,
     setReplyingTo,
     setSubmittingComment,
     setSubmittingEdit,
@@ -455,7 +450,6 @@ export function usePostComments({
         // post while the next post is loading.
         setComments([])
         setReplyingTo(null)
-        setReplyContent('')
         setExpandedReplies({})
         setEditingComment(null)
         setEditContent('')
@@ -486,7 +480,6 @@ export function usePostComments({
       setEditingComment,
       setExpandedReplies,
       setLoadingComments,
-      setReplyContent,
       setReplyingTo,
     ]
   )
@@ -784,12 +777,13 @@ export function usePostComments({
   )
 
   const submitReply = useCallback(
-    async (postId: string, parentId: string): Promise<void> => {
-      if (!requireAuth() || !replyContent.trim()) return
-      if (currentPostIdRef.current !== postId) return
+    async (postId: string, parentId: string, content: string): Promise<boolean> => {
+      const savedContent = content.trim()
+      if (!requireAuth() || !savedContent) return false
+      if (currentPostIdRef.current !== postId) return false
       const parentComment = findComment(commentsRef.current, parentId)
-      if (!parentComment || parentComment.parent_id) return
-      if (submittingReplyRef.current) return // Prevent double submission
+      if (!parentComment || parentComment.parent_id) return false
+      if (submittingReplyRef.current) return false // Prevent double submission
 
       const operation = Symbol('submit-reply')
       const capturedScope = activeScopeRef.current
@@ -800,10 +794,9 @@ export function usePostComments({
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`
       const optimisticReply: Comment = {
         id: tempId,
-        content: replyContent.trim(),
+        content: savedContent,
         created_at: new Date().toISOString(),
       }
-      const savedContent = replyContent.trim()
       setComments((prev) =>
         prev.map((c) =>
           c.id === parentId ? { ...c, replies: [...(c.replies || []), optimisticReply] } : c
@@ -856,7 +849,7 @@ export function usePostComments({
           }
         )
 
-        if (!scopeIsCurrent(capturedScope) || result.stale) return
+        if (!scopeIsCurrent(capturedScope) || result.stale) return false
 
         if (
           result.ok &&
@@ -884,11 +877,8 @@ export function usePostComments({
             )
           } else await reconcileCanonicalComments(postId, 'best', capturedScope)
 
-          if (replyContentRef.current.trim() === savedContent) {
-            setReplyContent('')
-            setReplyingTo(null)
-          }
           if (scopeIsCurrent(capturedScope)) showToast(t('replied'), 'success')
+          return true
         } else if (isDefinitiveMutationRejection(result)) {
           await rollbackReply()
           if (scopeIsCurrent(capturedScope)) {
@@ -897,9 +887,11 @@ export function usePostComments({
               result.status === 429 ? 'warning' : 'error'
             )
           }
+          return false
         } else if (!(await reconcileCanonicalComments(postId, 'best', capturedScope))) {
           if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
+        return false
       } catch {
         if (
           scopeIsCurrent(capturedScope) &&
@@ -907,6 +899,7 @@ export function usePostComments({
         ) {
           if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
+        return false
       } finally {
         if (submittingReplyRef.current === operation) {
           submittingReplyRef.current = null
@@ -918,13 +911,10 @@ export function usePostComments({
       accessToken,
       onCommentCountChange,
       reconcileCanonicalComments,
-      replyContent,
       requireAuth,
       scopeIsCurrent,
       setComments,
       setExpandedReplies,
-      setReplyContent,
-      setReplyingTo,
       setSubmittingReply,
       showToast,
       t,
@@ -1216,8 +1206,6 @@ export function usePostComments({
     submittingComment,
     replyingTo,
     setReplyingTo,
-    replyContent,
-    setReplyContent,
     submittingReply,
     commentLikeLoading,
     expandedReplies,

@@ -357,8 +357,6 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
           onSubmitComment={commentsHook.submitComment}
           replyingTo={commentsHook.replyingTo}
           setReplyingTo={commentsHook.setReplyingTo}
-          replyContent={commentsHook.replyContent}
-          setReplyContent={commentsHook.setReplyContent}
           submittingReply={commentsHook.submittingReply}
           onSubmitReply={commentsHook.submitReply}
           commentLikeLoading={commentsHook.commentLikeLoading}

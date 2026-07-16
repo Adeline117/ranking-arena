@@ -326,7 +326,7 @@ describe('usePostComments post switching', () => {
     expect(result.current.loadingComments).toBe(false)
   })
 
-  it('resets reply, edit, and expansion state when switching posts', async () => {
+  it('resets reply target, edit, and expansion state when switching posts', async () => {
     mockAuthedFetch.mockResolvedValue({
       ok: true,
       status: 200,
@@ -339,7 +339,6 @@ describe('usePostComments post switching', () => {
     act(() => {
       result.current.setComments([comment])
       result.current.setReplyingTo({ commentId: comment.id, handle: 'author' })
-      result.current.setReplyContent('reply draft')
       result.current.setExpandedReplies({ [comment.id]: true })
       result.current.startEditComment(comment)
     })
@@ -347,7 +346,6 @@ describe('usePostComments post switching', () => {
     await act(async () => result.current.loadComments('post-b'))
 
     expect(result.current.replyingTo).toBeNull()
-    expect(result.current.replyContent).toBe('')
     expect(result.current.expandedReplies).toEqual({})
     expect(result.current.editingComment).toBeNull()
     expect(result.current.editContent).toBe('')
@@ -742,7 +740,6 @@ describe('usePostComments viewer scope', () => {
   it('fails A reply and edit interaction state empty during the first B render', async () => {
     const snapshots: Array<{
       viewerKey: string
-      replyContent: string
       replyingTo: string | null
       editingComment: string | null
       editContent: string
@@ -759,7 +756,6 @@ describe('usePostComments viewer scope', () => {
         })
         snapshots.push({
           viewerKey: props.viewerKey,
-          replyContent: value.replyContent,
           replyingTo: value.replyingTo?.commentId ?? null,
           editingComment: value.editingComment?.id ?? null,
           editContent: value.editContent,
@@ -774,7 +770,6 @@ describe('usePostComments viewer scope', () => {
     act(() => {
       result.current.setComments([commentA])
       result.current.setReplyingTo({ commentId: commentA.id, handle: 'alice' })
-      result.current.setReplyContent('A private reply')
       result.current.setExpandedReplies({ [commentA.id]: true })
       result.current.startEditComment(commentA)
     })
@@ -788,7 +783,6 @@ describe('usePostComments viewer scope', () => {
 
     expect(snapshots.filter((snapshot) => snapshot.viewerKey === 'user:user-b')[0]).toEqual({
       viewerKey: 'user:user-b',
-      replyContent: '',
       replyingTo: null,
       editingComment: null,
       editContent: '',
@@ -817,9 +811,6 @@ describe('usePostComments viewer scope', () => {
       })
     )
     await act(async () => result.current.loadComments('post-a'))
-    act(() => {
-      result.current.setReplyContent('A reply')
-    })
     const staleCreate = result.current.submitComment
     const staleReply = result.current.submitReply
 
@@ -828,7 +819,7 @@ describe('usePostComments viewer scope', () => {
     onCommentCountChange.mockClear()
     await act(async () => {
       await staleCreate('post-a', 'A create')
-      await staleReply('post-a', parent.id)
+      await staleReply('post-a', parent.id, 'A reply')
     })
 
     expect(mockAuthedFetch).not.toHaveBeenCalled()
@@ -993,5 +984,60 @@ describe('usePostComments viewer scope', () => {
       { expectedUserId: 'user-a', expectedSessionGeneration: 1 }
     )
     expect(result.current.comments[0].content).toBe('hello')
+  })
+
+  it('returns a successful reply acknowledgement only for the expected actor and parent', async () => {
+    const parent = makeComment({ id: 'parent', post_id: 'post-1', replies: [] })
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: {
+          success: true,
+          data: { comments: [parent], post: { comment_count: 1 } },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        data: {
+          success: true,
+          data: {
+            comment: {
+              id: 'reply-a',
+              post_id: 'post-1',
+              user_id: 'user-a',
+              content: 'reply',
+              parent_id: 'parent',
+              like_count: 0,
+              dislike_count: 0,
+              created_at: '2026-07-15T00:00:00.000Z',
+              updated_at: '2026-07-15T00:00:00.000Z',
+            },
+          },
+        },
+      })
+    const { result } = renderScopedHook(userA)
+    await act(async () => result.current.loadComments('post-1'))
+
+    let acknowledged: boolean | undefined
+    await act(async () => {
+      acknowledged = await result.current.submitReply('post-1', 'parent', '  <b>reply</b>  ')
+    })
+
+    expect(acknowledged).toBe(true)
+    expect(mockAuthedFetch).toHaveBeenLastCalledWith(
+      '/api/posts/post-1/comments',
+      'POST',
+      'token-a1',
+      { content: '<b>reply</b>', parent_id: 'parent' },
+      15_000,
+      { expectedUserId: 'user-a', expectedSessionGeneration: 1 }
+    )
+    expect(result.current.comments[0].replies?.[0]).toMatchObject({
+      id: 'reply-a',
+      content: 'reply',
+      parent_id: 'parent',
+    })
   })
 })

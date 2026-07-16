@@ -101,8 +101,6 @@ describe('PostDetailPageBody scoped hydration', () => {
         submitComment: jest.fn(),
         replyingTo: null,
         setReplyingTo: jest.fn(),
-        replyContent: '',
-        setReplyContent: jest.fn(),
         submittingReply: false,
         submitReply: jest.fn(),
         commentLikeLoading: {},

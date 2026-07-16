@@ -12,6 +12,7 @@ import { AvatarLink, PostModal, CustomPollCard, PostDetailActions } from '.'
 import LevelBadge from '@/app/components/user/LevelBadge'
 import type { PostWithUserState } from '@/lib/types'
 import type { Comment } from '../hooks/usePostComments'
+import type { ReplyTarget, ReplyTargetSetter } from '../comments/reply-types'
 
 type Post = PostWithUserState
 
@@ -67,12 +68,10 @@ interface PostDetailViewProps {
   loadingComments: boolean
   submittingComment: boolean
   onSubmitComment: (postId: string, content: string) => Promise<boolean>
-  replyingTo: { commentId: string; handle: string } | null
-  setReplyingTo: (v: { commentId: string; handle: string } | null) => void
-  replyContent: string
-  setReplyContent: (v: string) => void
+  replyingTo: ReplyTarget | null
+  setReplyingTo: ReplyTargetSetter
   submittingReply: boolean
-  onSubmitReply: (postId: string, parentId: string) => Promise<void>
+  onSubmitReply: (postId: string, parentId: string, content: string) => Promise<boolean>
   commentLikeLoading: Record<string, boolean>
   onToggleCommentLike: (postId: string, commentId: string) => Promise<void>
   onToggleCommentDislike: (postId: string, commentId: string) => Promise<void>
@@ -126,8 +125,6 @@ export default function PostDetailView({
   onSubmitComment,
   replyingTo,
   setReplyingTo,
-  replyContent,
-  setReplyContent,
   submittingReply,
   onSubmitReply,
   commentLikeLoading,
@@ -426,8 +423,6 @@ export default function PostDetailView({
           onSubmitComment={onSubmitComment}
           replyingTo={replyingTo}
           setReplyingTo={setReplyingTo}
-          replyContent={replyContent}
-          setReplyContent={setReplyContent}
           submittingReply={submittingReply}
           onSubmitReply={onSubmitReply}
           commentLikeLoading={commentLikeLoading}

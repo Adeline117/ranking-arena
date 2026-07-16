@@ -7,7 +7,9 @@ import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { formatTimeAgo, type Locale } from '@/lib/utils/date'
 import { renderWithStickers, hasStickers } from '../../ui/StickerRenderer'
 import { commentStyles, REPLIES_PREVIEW_COUNT, type Comment } from './comment-types'
+import type { ReplyTarget, ReplyTargetSetter } from './reply-types'
 import { ProBadge, CommentAvatar } from './CommentAvatar'
+import { useCommentDraftPersistence } from '../hooks/useCommentDraftPersistence'
 
 // An "edited" badge should only appear on genuine edits. A bare
 // `updated_at !== created_at` check is too strict: bulk data operations (e.g.
@@ -31,12 +33,11 @@ export interface CommentThreadProps {
   language: string
   t: (key: string) => string
   // Reply
-  replyingTo: { commentId: string; handle: string } | null
-  setReplyingTo: (val: { commentId: string; handle: string } | null) => void
-  replyContent: string
-  setReplyContent: (val: string) => void
+  viewerKey: string
+  replyingTo: ReplyTarget | null
+  setReplyingTo: ReplyTargetSetter
   submittingReply: boolean
-  onSubmitReply: (postId: string, parentId: string) => void
+  onSubmitReply: (postId: string, parentId: string, content: string) => Promise<boolean>
   // Like
   commentLikeLoading: Record<string, boolean>
   onToggleCommentLike: (postId: string, commentId: string) => void
@@ -59,6 +60,104 @@ export interface CommentThreadProps {
   translatedComments?: Record<string, string>
 }
 
+interface ReplyComposerProps {
+  postId: string
+  parentId: string
+  handle: string
+  viewerKey: string
+  submittingReply: boolean
+  setReplyingTo: ReplyTargetSetter
+  onSubmitReply: (postId: string, parentId: string, content: string) => Promise<boolean>
+  t: (key: string) => string
+}
+
+function ReplyComposer({
+  postId,
+  parentId,
+  handle,
+  viewerKey,
+  submittingReply,
+  setReplyingTo,
+  onSubmitReply,
+  t,
+}: ReplyComposerProps): React.ReactNode {
+  const draftId = `reply:${postId}:${parentId}`
+  const {
+    draft: replyContent,
+    setDraft: setReplyContent,
+    captureDraftSnapshot,
+    clearDraftIfUnchanged,
+  } = useCommentDraftPersistence(draftId, viewerKey)
+
+  const submitCurrentReply = async (): Promise<void> => {
+    const content = replyContent.trim()
+    if (submittingReply || !content) return
+
+    const draftSnapshot = captureDraftSnapshot(draftId)
+    if ((await onSubmitReply(postId, parentId, content)) && clearDraftIfUnchanged(draftSnapshot)) {
+      setReplyingTo((currentTarget) =>
+        currentTarget?.commentId === parentId ? null : currentTarget
+      )
+    }
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault()
+      void submitCurrentReply()
+    }
+  }
+
+  return (
+    <div style={{ marginTop: 8, position: 'relative' }}>
+      <textarea
+        value={replyContent}
+        maxLength={2000}
+        onChange={(event) => {
+          setReplyContent(event.target.value)
+          const textarea = event.target
+          textarea.style.height = 'auto'
+          textarea.style.height = Math.min(textarea.scrollHeight, 100) + 'px'
+        }}
+        placeholder={`${t('reply')} @${handle}`}
+        aria-label={`${t('reply')} @${handle}`}
+        onKeyDown={handleKeyDown}
+        rows={1}
+        style={{
+          ...commentStyles.input,
+          width: '100%',
+          resize: 'none',
+          minHeight: 36,
+          maxHeight: 100,
+          paddingRight: 60,
+          overflow: 'hidden',
+          fontFamily: 'inherit',
+        }}
+      />
+      <button
+        onClick={() => void submitCurrentReply()}
+        disabled={submittingReply || !replyContent.trim()}
+        style={{
+          position: 'absolute',
+          right: 6,
+          bottom: 6,
+          padding: '6px 14px',
+          borderRadius: tokens.radius.sm,
+          border: 'none',
+          background: replyContent.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
+          color: tokens.colors.white,
+          fontSize: 12,
+          fontWeight: 700,
+          cursor: submittingReply || !replyContent.trim() ? 'default' : 'pointer',
+          minHeight: 36,
+        }}
+      >
+        {submittingReply ? '...' : t('send')}
+      </button>
+    </div>
+  )
+}
+
 export function CommentThread({
   comment,
   isReply = false,
@@ -66,10 +165,9 @@ export function CommentThread({
   currentUserId,
   language,
   t,
+  viewerKey,
   replyingTo,
   setReplyingTo,
-  replyContent,
-  setReplyContent,
   submittingReply,
   onSubmitReply,
   commentLikeLoading,
@@ -93,14 +191,6 @@ export function CommentThread({
   const isOwn = currentUserId && comment.user_id === currentUserId
   const showProBadge = comment.author_is_pro && comment.author_show_pro_badge !== false
   const authorHref = comment.author_handle ? `/u/${encodeURIComponent(comment.author_handle)}` : '#'
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>): void => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault()
-      if (submittingReply || !replyContent.trim()) return
-      onSubmitReply(postId, comment.id)
-    }
-  }
 
   const visibleReplies = expandedReplies[comment.id]
     ? comment.replies
@@ -333,52 +423,16 @@ export function CommentThread({
 
           {/* Reply input */}
           {replyingTo?.commentId === comment.id && (
-            <div style={{ marginTop: 8, position: 'relative' }}>
-              <textarea
-                value={replyContent}
-                maxLength={2000}
-                onChange={(e) => {
-                  setReplyContent(e.target.value)
-                  const ta = e.target
-                  ta.style.height = 'auto'
-                  ta.style.height = Math.min(ta.scrollHeight, 100) + 'px'
-                }}
-                placeholder={`${t('reply')} @${replyingTo.handle}`}
-                aria-label={`${t('reply')} @${replyingTo.handle}`}
-                onKeyDown={handleKeyDown}
-                rows={1}
-                style={{
-                  ...commentStyles.input,
-                  width: '100%',
-                  resize: 'none',
-                  minHeight: 36,
-                  maxHeight: 100,
-                  paddingRight: 60,
-                  overflow: 'hidden',
-                  fontFamily: 'inherit',
-                }}
-              />
-              <button
-                onClick={() => onSubmitReply(postId, comment.id)}
-                disabled={submittingReply || !replyContent.trim()}
-                style={{
-                  position: 'absolute',
-                  right: 6,
-                  bottom: 6,
-                  padding: '6px 14px',
-                  borderRadius: tokens.radius.sm,
-                  border: 'none',
-                  background: replyContent.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
-                  color: tokens.colors.white,
-                  fontSize: 12,
-                  fontWeight: 700,
-                  cursor: submittingReply || !replyContent.trim() ? 'default' : 'pointer',
-                  minHeight: 36,
-                }}
-              >
-                {submittingReply ? '...' : t('send')}
-              </button>
-            </div>
+            <ReplyComposer
+              postId={postId}
+              parentId={comment.id}
+              handle={replyingTo.handle}
+              viewerKey={viewerKey}
+              submittingReply={submittingReply}
+              setReplyingTo={setReplyingTo}
+              onSubmitReply={onSubmitReply}
+              t={t}
+            />
           )}
 
           {/* Replies */}
@@ -393,10 +447,9 @@ export function CommentThread({
                   currentUserId={currentUserId}
                   language={language}
                   t={t}
+                  viewerKey={viewerKey}
                   replyingTo={replyingTo}
                   setReplyingTo={setReplyingTo}
-                  replyContent={replyContent}
-                  setReplyContent={setReplyContent}
                   submittingReply={submittingReply}
                   onSubmitReply={onSubmitReply}
                   commentLikeLoading={commentLikeLoading}

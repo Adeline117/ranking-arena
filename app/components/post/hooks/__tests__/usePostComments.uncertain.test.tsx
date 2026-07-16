@@ -273,8 +273,7 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
     mockAuthedFetch.mockRejectedValueOnce(new Error('response lost'))
     mockAuthedFetch.mockResolvedValueOnce(canonical([canonicalParent], 2))
 
-    act(() => result.current.setReplyContent('reply'))
-    await act(async () => result.current.submitReply('post-1', parent.id))
+    await act(async () => result.current.submitReply('post-1', parent.id, 'reply'))
 
     expect(result.current.comments).toEqual([canonicalParent])
     expect(onCommentCountChange).toHaveBeenLastCalledWith('post-1', 0, 2)
