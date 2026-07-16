@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from 'react'
 import { authedFetch, getHttpErrorMessage } from '@/lib/api/client'
 import {
   fetchPostCommentsPage,
@@ -12,6 +12,7 @@ import { usePostStore, type CommentData } from '@/lib/stores/postStore'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useCommentDraftPersistence } from './useCommentDraftPersistence'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 export type Comment = {
   id: string
@@ -187,6 +188,7 @@ interface UsePostCommentsOptions {
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
   showDangerConfirm: (title: string, message: string) => Promise<boolean>
   onCommentCountChange?: (postId: string, delta: number, absoluteCount?: number) => void
+  onResourceAbsent?: (postId: string) => void
   t?: (key: string) => string
 }
 
@@ -194,6 +196,10 @@ type CommentViewerScope = {
   viewerKey: string
   sessionGeneration: number
   userId: string | null
+}
+
+function commentViewerScopeKey(scope: Pick<CommentViewerScope, 'viewerKey' | 'sessionGeneration'>) {
+  return `${scope.viewerKey}\u0000${scope.sessionGeneration}`
 }
 
 // Convert Comment to CommentData for store compatibility
@@ -225,6 +231,7 @@ export function usePostComments({
   showToast,
   showDangerConfirm,
   onCommentCountChange,
+  onResourceAbsent,
   t: externalT,
 }: UsePostCommentsOptions) {
   const currentUserId = suppliedCurrentUserId ?? null
@@ -235,28 +242,29 @@ export function usePostComments({
   activeScopeRef.current = { viewerKey, sessionGeneration, userId: currentUserId }
   const scopeKey = `${viewerKey}\u0000${sessionGeneration}`
   const previousScopeKeyRef = useRef(scopeKey)
-  const stateRevisionRef = useRef(0)
+  const stateRevisionRef = useRef(new Map<string, number>())
   const { t: hookT } = useLanguage()
   const t = externalT || hookT
-  const [commentsState, setCommentsState] = useState<Comment[]>([])
-  const commentsOwnerScopeKeyRef = useRef(scopeKey)
-  const comments = commentsOwnerScopeKeyRef.current === scopeKey ? commentsState : []
+  const [comments, setCommentsOwned] = useViewerOwnedState<Comment[]>([], () => [], scopeKey)
   const commentsRef = useRef<Comment[]>(comments)
   commentsRef.current = comments
-  const setComments = useCallback<Dispatch<SetStateAction<Comment[]>>>((action) => {
-    stateRevisionRef.current += 1
-    setCommentsState((previous) => {
-      const current = activeScopeRef.current
-      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-      const ownedPrevious = commentsOwnerScopeKeyRef.current === ownerScopeKey ? previous : []
-      const next = typeof action === 'function' ? action(ownedPrevious) : action
-      commentsOwnerScopeKeyRef.current = ownerScopeKey
-      commentsRef.current = next
-      return next
-    })
-  }, [])
-  const [loadingComments, setLoadingComments] = useState(false)
-  const [submittingComment, setSubmittingComment] = useState(false)
+  const setComments = useCallback<Dispatch<SetStateAction<Comment[]>>>(
+    (action) => {
+      const invocationScopeKey = commentViewerScopeKey(activeScopeRef.current)
+      stateRevisionRef.current.set(
+        invocationScopeKey,
+        (stateRevisionRef.current.get(invocationScopeKey) || 0) + 1
+      )
+      setCommentsOwned(action)
+    },
+    [setCommentsOwned]
+  )
+  const [loadingComments, setLoadingComments] = useViewerOwnedState(false, () => false, scopeKey)
+  const [submittingComment, setSubmittingComment] = useViewerOwnedState(
+    false,
+    () => false,
+    scopeKey
+  )
   const {
     draft: newComment,
     setDraft: setNewComment,
@@ -264,17 +272,35 @@ export function usePostComments({
     captureDraftSnapshot,
     clearDraftIfUnchanged,
   } = useCommentDraftPersistence(undefined, viewerKey)
-  const [replyingTo, setReplyingTo] = useState<{ commentId: string; handle: string } | null>(null)
-  const [replyContent, setReplyContent] = useState('')
+  const [replyingTo, setReplyingTo] = useViewerOwnedState<{
+    commentId: string
+    handle: string
+  } | null>(null, () => null, scopeKey)
+  const [replyContent, setReplyContent] = useViewerOwnedState('', () => '', scopeKey)
   const replyContentRef = useRef(replyContent)
   replyContentRef.current = replyContent
-  const [submittingReply, setSubmittingReply] = useState(false)
-  const [commentLikeLoading, setCommentLikeLoading] = useState<Record<string, boolean>>({})
-  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
-  const [deletingCommentId, setDeletingCommentId] = useState<string | null>(null)
-  const [editingComment, setEditingComment] = useState<{ id: string; content: string } | null>(null)
-  const [editContent, setEditContent] = useState('')
-  const [submittingEdit, setSubmittingEdit] = useState(false)
+  const [submittingReply, setSubmittingReply] = useViewerOwnedState(false, () => false, scopeKey)
+  const [commentLikeLoading, setCommentLikeLoading] = useViewerOwnedState<Record<string, boolean>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const [expandedReplies, setExpandedReplies] = useViewerOwnedState<Record<string, boolean>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const [deletingCommentId, setDeletingCommentId] = useViewerOwnedState<string | null>(
+    null,
+    () => null,
+    scopeKey
+  )
+  const [editingComment, setEditingComment] = useViewerOwnedState<{
+    id: string
+    content: string
+  } | null>(null, () => null, scopeKey)
+  const [editContent, setEditContent] = useViewerOwnedState('', () => '', scopeKey)
+  const [submittingEdit, setSubmittingEdit] = useViewerOwnedState(false, () => false, scopeKey)
   const submittingEditRef = useRef<symbol | null>(null)
 
   // Ref-based guards to prevent double submissions
@@ -327,7 +353,22 @@ export function usePostComments({
     setEditContent('')
     setSubmittingEdit(false)
     if (currentPostIdRef.current) restoreDraft(currentPostIdRef.current)
-  }, [restoreDraft, scopeKey, setComments])
+  }, [
+    restoreDraft,
+    scopeKey,
+    setCommentLikeLoading,
+    setComments,
+    setDeletingCommentId,
+    setEditContent,
+    setEditingComment,
+    setExpandedReplies,
+    setLoadingComments,
+    setReplyContent,
+    setReplyingTo,
+    setSubmittingComment,
+    setSubmittingEdit,
+    setSubmittingReply,
+  ])
 
   // Auth guard helper — opens the login modal (consistent with usePostActions gates)
   const requireAuth = useCallback((): boolean => {
@@ -352,7 +393,8 @@ export function usePostComments({
       const generationKey = `${capturedScope.viewerKey}\u0000${postId}`
       const generation = (canonicalReadGenerationRef.current.get(generationKey) || 0) + 1
       canonicalReadGenerationRef.current.set(generationKey, generation)
-      const requestStartRevision = stateRevisionRef.current
+      const revisionKey = commentViewerScopeKey(capturedScope)
+      const requestStartRevision = stateRevisionRef.current.get(revisionKey) || 0
 
       try {
         const page = await fetchPostCommentsPage<Comment>(postId, accessToken, {
@@ -370,7 +412,20 @@ export function usePostComments({
           return null
         }
 
-        if (stateRevisionRef.current !== requestStartRevision) {
+        if (page.resourceAbsent) {
+          const store = usePostStore.getState()
+          if ('removePostResource' in store && typeof store.removePostResource === 'function') {
+            store.removePostResource(postId)
+          }
+          onCommentCountChange?.(postId, 0, 0)
+          if (currentPostIdRef.current === postId) {
+            setComments([])
+            onResourceAbsent?.(postId)
+          }
+          return []
+        }
+
+        if ((stateRevisionRef.current.get(revisionKey) || 0) !== requestStartRevision) {
           return retryAfterNewerState &&
             (currentPostIdRef.current === null || currentPostIdRef.current === postId)
             ? reconcileCanonicalComments(postId, sort, capturedScope, false)
@@ -397,7 +452,7 @@ export function usePostComments({
         }
       }
     },
-    [accessToken, onCommentCountChange, scopeIsCurrent, setComments]
+    [accessToken, onCommentCountChange, onResourceAbsent, scopeIsCurrent, setComments]
   )
 
   const loadComments = useCallback(
@@ -432,12 +487,27 @@ export function usePostComments({
         }
       }
     },
-    [authChecked, reconcileCanonicalComments, restoreDraft, scopeIsCurrent, setComments]
+    [
+      authChecked,
+      reconcileCanonicalComments,
+      restoreDraft,
+      scopeIsCurrent,
+      setCommentLikeLoading,
+      setComments,
+      setDeletingCommentId,
+      setEditContent,
+      setEditingComment,
+      setExpandedReplies,
+      setLoadingComments,
+      setReplyContent,
+      setReplyingTo,
+    ]
   )
 
   const submitComment = useCallback(
     async (postId: string): Promise<void> => {
       if (!requireAuth() || !newComment.trim()) return
+      if (currentPostIdRef.current !== postId) return
       if (submittingCommentRef.current) return // Prevent double submission
 
       const operation = Symbol('submit-comment')
@@ -455,13 +525,14 @@ export function usePostComments({
       setComments((prev) => [...prev, optimisticComment])
       const savedContent = newComment.trim()
       const draftSnapshot = captureDraftSnapshot(postId)
-      const optimisticRevision = stateRevisionRef.current
+      const revisionKey = commentViewerScopeKey(capturedScope)
+      const optimisticRevision = stateRevisionRef.current.get(revisionKey) || 0
       onCommentCountChange?.(postId, 1)
 
       const rollbackSubmission = async () => {
         if (!scopeIsCurrent(capturedScope)) return
         if (
-          stateRevisionRef.current === optimisticRevision &&
+          (stateRevisionRef.current.get(revisionKey) || 0) === optimisticRevision &&
           (currentPostIdRef.current === null || currentPostIdRef.current === postId)
         ) {
           setComments((prev) => prev.filter((c) => c.id !== tempId))
@@ -500,7 +571,7 @@ export function usePostComments({
         ) {
           const serverComment = result.data.data.comment
           if (
-            stateRevisionRef.current === optimisticRevision &&
+            (stateRevisionRef.current.get(revisionKey) || 0) === optimisticRevision &&
             (currentPostIdRef.current === null || currentPostIdRef.current === postId)
           ) {
             setComments((prev) => prev.map((c) => (c.id === tempId ? serverComment : c)))
@@ -552,6 +623,7 @@ export function usePostComments({
       reconcileCanonicalComments,
       scopeIsCurrent,
       setComments,
+      setSubmittingComment,
     ]
   )
 
@@ -590,10 +662,14 @@ export function usePostComments({
           dislike_count: optimisticDislikeCount,
         }))
       )
-      const optimisticRevision = stateRevisionRef.current
+      const revisionKey = commentViewerScopeKey(capturedScope)
+      const optimisticRevision = stateRevisionRef.current.get(revisionKey) || 0
 
       const rollback = () => {
-        if (!scopeIsCurrent(capturedScope) || stateRevisionRef.current !== optimisticRevision)
+        if (
+          !scopeIsCurrent(capturedScope) ||
+          (stateRevisionRef.current.get(revisionKey) || 0) !== optimisticRevision
+        )
           return
         if (currentPostIdRef.current !== null && currentPostIdRef.current !== postId) return
         setComments((previous) =>
@@ -647,7 +723,7 @@ export function usePostComments({
         ) {
           const serverReaction = result.data.data
           if (
-            stateRevisionRef.current === optimisticRevision &&
+            (stateRevisionRef.current.get(revisionKey) || 0) === optimisticRevision &&
             (currentPostIdRef.current === null || currentPostIdRef.current === postId)
           ) {
             setComments((previous) =>
@@ -706,6 +782,7 @@ export function usePostComments({
       reconcileCanonicalComments,
       requireAuth,
       scopeIsCurrent,
+      setCommentLikeLoading,
       setComments,
       showToast,
       t,
@@ -725,6 +802,9 @@ export function usePostComments({
   const submitReply = useCallback(
     async (postId: string, parentId: string): Promise<void> => {
       if (!requireAuth() || !replyContent.trim()) return
+      if (currentPostIdRef.current !== postId) return
+      const parentComment = findComment(commentsRef.current, parentId)
+      if (!parentComment || parentComment.parent_id) return
       if (submittingReplyRef.current) return // Prevent double submission
 
       const operation = Symbol('submit-reply')
@@ -745,14 +825,15 @@ export function usePostComments({
           c.id === parentId ? { ...c, replies: [...(c.replies || []), optimisticReply] } : c
         )
       )
-      const optimisticRevision = stateRevisionRef.current
+      const revisionKey = commentViewerScopeKey(capturedScope)
+      const optimisticRevision = stateRevisionRef.current.get(revisionKey) || 0
       setExpandedReplies((prev) => ({ ...prev, [parentId]: true }))
       onCommentCountChange?.(postId, 1)
 
       const rollbackReply = async () => {
         if (!scopeIsCurrent(capturedScope)) return
         if (
-          stateRevisionRef.current === optimisticRevision &&
+          (stateRevisionRef.current.get(revisionKey) || 0) === optimisticRevision &&
           (currentPostIdRef.current === null || currentPostIdRef.current === postId)
         ) {
           setComments((prev) =>
@@ -804,7 +885,7 @@ export function usePostComments({
         ) {
           const serverReply = result.data.data.comment
           if (
-            stateRevisionRef.current === optimisticRevision &&
+            (stateRevisionRef.current.get(revisionKey) || 0) === optimisticRevision &&
             (currentPostIdRef.current === null || currentPostIdRef.current === postId)
           ) {
             setComments((prev) =>
@@ -857,20 +938,27 @@ export function usePostComments({
       requireAuth,
       scopeIsCurrent,
       setComments,
+      setExpandedReplies,
+      setReplyContent,
+      setReplyingTo,
+      setSubmittingReply,
       showToast,
       t,
     ]
   )
 
-  const startEditComment = useCallback((comment: Comment) => {
-    setEditingComment({ id: comment.id, content: comment.content })
-    setEditContent(comment.content)
-  }, [])
+  const startEditComment = useCallback(
+    (comment: Comment) => {
+      setEditingComment({ id: comment.id, content: comment.content })
+      setEditContent(comment.content)
+    },
+    [setEditContent, setEditingComment]
+  )
 
   const cancelEditComment = useCallback(() => {
     setEditingComment(null)
     setEditContent('')
-  }, [])
+  }, [setEditContent, setEditingComment])
 
   const submitEditComment = useCallback(
     async (postId: string): Promise<void> => {
@@ -883,7 +971,8 @@ export function usePostComments({
       const requestGeneration = loadRequestGenerationRef.current
       const expectedContent = editContent.trim()
       const capturedScope = activeScopeRef.current
-      const requestStartRevision = stateRevisionRef.current
+      const revisionKey = commentViewerScopeKey(capturedScope)
+      const requestStartRevision = stateRevisionRef.current.get(revisionKey) || 0
       const operation = Symbol('edit-comment')
 
       submittingEditRef.current = operation
@@ -923,7 +1012,7 @@ export function usePostComments({
           const acknowledgement = result.data.data.comment
           const responseStillTargetsVisibleTree =
             requestGeneration === loadRequestGenerationRef.current &&
-            stateRevisionRef.current === requestStartRevision &&
+            (stateRevisionRef.current.get(revisionKey) || 0) === requestStartRevision &&
             scopeIsCurrent(capturedScope) &&
             currentPostIdRef.current === boundPostId &&
             (currentPostIdRef.current === null || currentPostIdRef.current === postId)
@@ -985,6 +1074,9 @@ export function usePostComments({
       requireAuth,
       scopeIsCurrent,
       setComments,
+      setEditContent,
+      setEditingComment,
+      setSubmittingEdit,
       showToast,
       t,
     ]
@@ -1026,7 +1118,8 @@ export function usePostComments({
         return
       }
 
-      const requestStartRevision = stateRevisionRef.current
+      const revisionKey = commentViewerScopeKey(capturedScope)
+      const requestStartRevision = stateRevisionRef.current.get(revisionKey) || 0
       setDeletingCommentId(commentId)
       try {
         const result = await authedFetch<{
@@ -1051,7 +1144,7 @@ export function usePostComments({
           const acknowledgement = result.data.data
           const responseStillTargetsVisibleTree =
             requestGeneration === loadRequestGenerationRef.current &&
-            stateRevisionRef.current === requestStartRevision &&
+            (stateRevisionRef.current.get(revisionKey) || 0) === requestStartRevision &&
             scopeIsCurrent(capturedScope) &&
             currentPostIdRef.current === boundPostId &&
             (currentPostIdRef.current === null || currentPostIdRef.current === postId)
@@ -1125,6 +1218,7 @@ export function usePostComments({
       requireAuth,
       scopeIsCurrent,
       setComments,
+      setDeletingCommentId,
       showDangerConfirm,
       showToast,
       t,

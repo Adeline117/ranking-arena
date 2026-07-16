@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 const supabase = _supabase as SupabaseClient
-import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import {
   fetchPostCommentsPage,
   isCreatedCommentAcknowledgement,
@@ -12,6 +12,7 @@ import {
 } from '@/lib/api/comments-client'
 import { logger } from '@/lib/logger'
 import { shouldLoadExpandedGroupComments } from '@/lib/comments/group-comment-read'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 export interface Post {
   id: string
@@ -164,6 +165,8 @@ export function useGroupPosts({
   activeScopeRef.current = { viewerKey, sessionGeneration, userId }
   const accessTokenRef = useRef(accessToken)
   accessTokenRef.current = accessToken
+  const activeGroupIdRef = useRef(groupId)
+  activeGroupIdRef.current = groupId
   const scopeKey = `${viewerKey}\u0000${sessionGeneration}`
   const previousScopeKeyRef = useRef(scopeKey)
   const scopeIsCurrent = useCallback(
@@ -177,20 +180,17 @@ export function useGroupPosts({
     },
     []
   )
+  const captureMutationContext = useCallback(
+    () => ({ scope: activeScopeRef.current, groupId: activeGroupIdRef.current }),
+    []
+  )
+  const mutationContextIsCurrent = useCallback(
+    (context: ReturnType<typeof captureMutationContext>) =>
+      scopeIsCurrent(context.scope) && activeGroupIdRef.current === context.groupId,
+    [scopeIsCurrent]
+  )
   // Core state
-  const [postsState, setPostsState] = useState<Post[]>([])
-  const postsOwnerScopeKeyRef = useRef(scopeKey)
-  const posts = postsOwnerScopeKeyRef.current === scopeKey ? postsState : []
-  const setPosts: React.Dispatch<React.SetStateAction<Post[]>> = useCallback((action) => {
-    setPostsState((previous) => {
-      const current = activeScopeRef.current
-      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-      const ownedPrevious = postsOwnerScopeKeyRef.current === ownerScopeKey ? previous : []
-      const next = typeof action === 'function' ? action(ownedPrevious) : action
-      postsOwnerScopeKeyRef.current = ownerScopeKey
-      return next
-    })
-  }, [])
+  const [posts, setPosts] = useViewerOwnedState<Post[]>([], () => [], scopeKey)
   const [sortMode, setSortMode] = useState<'latest' | 'hot'>('latest')
   const [viewMode, setViewMode] = useState<'list' | 'masonry'>(() => {
     if (typeof window !== 'undefined') {
@@ -198,64 +198,118 @@ export function useGroupPosts({
     }
     return 'masonry'
   })
-  const [hasMorePosts, setHasMorePosts] = useState(true)
-  const [loadingMore, setLoadingMore] = useState(false)
+  const [hasMorePosts, setHasMorePosts] = useViewerOwnedState(true, () => true, scopeKey)
+  const [loadingMore, setLoadingMore] = useViewerOwnedState(false, () => false, scopeKey)
   const sentinelRef = useRef<HTMLDivElement>(null)
 
   // Post editing state
-  const [editingPost, setEditingPost] = useState<string | null>(null)
-  const [editTitle, setEditTitle] = useState('')
-  const [editContent, setEditContent] = useState('')
-  const [savingEdit, setSavingEdit] = useState(false)
-  const [deletingPost, setDeletingPost] = useState<string | null>(null)
+  const [editingPost, setEditingPost] = useViewerOwnedState<string | null>(
+    null,
+    () => null,
+    scopeKey
+  )
+  const [editTitle, setEditTitle] = useViewerOwnedState('', () => '', scopeKey)
+  const [editContent, setEditContent] = useViewerOwnedState('', () => '', scopeKey)
+  const [savingEdit, setSavingEdit] = useViewerOwnedState(false, () => false, scopeKey)
+  const [deletingPost, setDeletingPost] = useViewerOwnedState<string | null>(
+    null,
+    () => null,
+    scopeKey
+  )
 
   // Interaction loading states (using single object for each type)
-  const [likeLoading, setLikeLoading] = useState<Record<string, boolean>>({})
-  const [bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
-  const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
-  const [showRepostModal, setShowRepostModal] = useState<string | null>(null)
-  const [repostComment, setRepostComment] = useState('')
+  const [likeLoading, setLikeLoading] = useViewerOwnedState<Record<string, boolean>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const [bookmarkLoading, setBookmarkLoading] = useViewerOwnedState<Record<string, boolean>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const [repostLoading, setRepostLoading] = useViewerOwnedState<Record<string, boolean>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const [showRepostModal, setShowRepostModal] = useViewerOwnedState<string | null>(
+    null,
+    () => null,
+    scopeKey
+  )
+  const [repostComment, setRepostComment] = useViewerOwnedState('', () => '', scopeKey)
   const repostRequestLockRef = useRef<Set<string>>(new Set())
 
   // Comments state
+  // Expansion is resource UI state rather than viewer data. Preserve it across
+  // identity changes so the newly authenticated viewer rehydrates the same
+  // visible thread from its own canonical read.
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
-  const [commentsState, setCommentsRaw] = useState<Record<string, CommentWithAuthor[]>>({})
-  const commentsOwnerScopeKeyRef = useRef(scopeKey)
-  const comments = commentsOwnerScopeKeyRef.current === scopeKey ? commentsState : {}
+  const [expandedPosts, setExpandedPosts] = useViewerOwnedState<Record<string, boolean>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const [comments, setCommentsOwned] = useViewerOwnedState<Record<string, CommentWithAuthor[]>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
   const commentStateRevisionRef = useRef(new Map<string, number>())
   const setComments: React.Dispatch<React.SetStateAction<Record<string, CommentWithAuthor[]>>> =
-    useCallback((action) => {
-      setCommentsRaw((previous) => {
-        const current = activeScopeRef.current
-        const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-        const ownedPrevious = commentsOwnerScopeKeyRef.current === ownerScopeKey ? previous : {}
-        const next = typeof action === 'function' ? action(ownedPrevious) : action
-        const postIds = new Set([...Object.keys(ownedPrevious), ...Object.keys(next)])
-        for (const postId of postIds) {
-          if (ownedPrevious[postId] !== next[postId]) {
-            commentStateRevisionRef.current.set(
-              postId,
-              (commentStateRevisionRef.current.get(postId) || 0) + 1
-            )
-          }
-        }
-        commentsOwnerScopeKeyRef.current = ownerScopeKey
-        return next
-      })
-    }, [])
-  const [newCommentState, setNewCommentRaw] = useState<Record<string, string>>({})
-  const newCommentOwnerScopeKeyRef = useRef(scopeKey)
-  const newComment = newCommentOwnerScopeKeyRef.current === scopeKey ? newCommentState : {}
+    useCallback(
+      (action) => {
+        const invocationScopeKey = `${activeScopeRef.current.viewerKey}\u0000${activeScopeRef.current.sessionGeneration}`
+        commentStateRevisionRef.current.set(
+          invocationScopeKey,
+          (commentStateRevisionRef.current.get(invocationScopeKey) || 0) + 1
+        )
+        setCommentsOwned(action)
+      },
+      [setCommentsOwned]
+    )
+  const [newComment, setNewCommentOwned] = useViewerOwnedState<Record<string, string>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const newCommentWorkingRef = useRef({ scopeKey, value: newComment })
+  if (newCommentWorkingRef.current.scopeKey !== scopeKey) {
+    newCommentWorkingRef.current = { scopeKey, value: newComment }
+  } else if (newCommentWorkingRef.current.value !== newComment) {
+    newCommentWorkingRef.current.value = newComment
+  }
   const newCommentRef = useRef(newComment)
   newCommentRef.current = newComment
-  const [commentLoading, setCommentLoading] = useState<Record<string, boolean>>({})
-  const [replyingTo, setReplyingTo] = useState<Record<string, string | null>>({})
-  const [replyContentState, setReplyContentRaw] = useState<Record<string, string>>({})
-  const replyContentOwnerScopeKeyRef = useRef(scopeKey)
-  const replyContent = replyContentOwnerScopeKeyRef.current === scopeKey ? replyContentState : {}
+  const [commentLoading, setCommentLoading] = useViewerOwnedState<Record<string, boolean>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const [replyingTo, setReplyingTo] = useViewerOwnedState<Record<string, string | null>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const [replyContent, setReplyContentOwned] = useViewerOwnedState<Record<string, string>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const replyContentWorkingRef = useRef({ scopeKey, value: replyContent })
+  if (replyContentWorkingRef.current.scopeKey !== scopeKey) {
+    replyContentWorkingRef.current = { scopeKey, value: replyContent }
+  } else if (replyContentWorkingRef.current.value !== replyContent) {
+    replyContentWorkingRef.current.value = replyContent
+  }
   const replyContentRef = useRef(replyContent)
   replyContentRef.current = replyContent
-  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
+  const [expandedReplies, setExpandedReplies] = useViewerOwnedState<Record<string, boolean>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
   const commentLoadGenerationRef = useRef(new Map<string, number>())
   const commentLoadPromisesRef = useRef(new Map<string, Promise<boolean>>())
   const commentMutationLocksRef = useRef(new Map<string, symbol>())
@@ -271,78 +325,86 @@ export function useGroupPosts({
   // Wrapped setters that auto-save drafts to localStorage
   const setNewComment: React.Dispatch<React.SetStateAction<Record<string, string>>> = useCallback(
     (action) => {
-      setNewCommentRaw((prev) => {
-        const current = activeScopeRef.current
-        const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-        const ownedPrevious = newCommentOwnerScopeKeyRef.current === ownerScopeKey ? prev : {}
-        const next = typeof action === 'function' ? action(ownedPrevious) : action
-        // Persist changed entries and advance a per-resource version even when
-        // a user edits back to the exact text an older request captured.
-        const postIds = new Set([...Object.keys(ownedPrevious), ...Object.keys(next)])
-        for (const postId of postIds) {
-          if (next[postId] !== ownedPrevious[postId]) {
-            const draftViewerKey = activeScopeRef.current.viewerKey
-            const timerKey = `${draftViewerKey}\u0000${postId}`
-            commentDraftVersionRef.current.set(
-              timerKey,
-              (commentDraftVersionRef.current.get(timerKey) || 0) + 1
-            )
-            if (commentDraftTimerRef.current[timerKey])
-              clearTimeout(commentDraftTimerRef.current[timerKey])
-            const val = next[postId]
-            commentDraftTimerRef.current[timerKey] = setTimeout(() => {
-              try {
-                const storageKey = `group-comment-draft-v2:${draftViewerKey}:${postId}`
-                if (val?.trim()) localStorage.setItem(storageKey, val)
-                else localStorage.removeItem(storageKey)
-              } catch {
-                /* ignore */
-              }
-            }, 500)
+      const capturedScope = activeScopeRef.current
+      const invocationScopeKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}`
+      const draftViewerKey = capturedScope.viewerKey
+      const ownedPrevious =
+        newCommentWorkingRef.current.scopeKey === invocationScopeKey
+          ? newCommentWorkingRef.current.value
+          : {}
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      newCommentWorkingRef.current = { scopeKey: invocationScopeKey, value: next }
+      newCommentRef.current = next
+      // Persist changed entries and advance a per-resource version even when a
+      // user edits back to the exact text an older request captured. Resolve
+      // the action once at invocation time so Strict Mode cannot duplicate the
+      // persistence side effects by replaying a React updater.
+      const postIds = new Set([...Object.keys(ownedPrevious), ...Object.keys(next)])
+      for (const postId of postIds) {
+        if (next[postId] !== ownedPrevious[postId]) {
+          const timerKey = `${draftViewerKey}\u0000${postId}`
+          commentDraftVersionRef.current.set(
+            timerKey,
+            (commentDraftVersionRef.current.get(timerKey) || 0) + 1
+          )
+          if (commentDraftTimerRef.current[timerKey]) {
+            clearTimeout(commentDraftTimerRef.current[timerKey])
           }
+          const val = next[postId]
+          commentDraftTimerRef.current[timerKey] = setTimeout(() => {
+            try {
+              const storageKey = `group-comment-draft-v2:${draftViewerKey}:${postId}`
+              if (val?.trim()) localStorage.setItem(storageKey, val)
+              else localStorage.removeItem(storageKey)
+            } catch {
+              /* ignore */
+            }
+          }, 500)
         }
-        newCommentOwnerScopeKeyRef.current = ownerScopeKey
-        return next
-      })
+      }
+      setNewCommentOwned(next)
     },
-    []
+    [setNewCommentOwned]
   )
 
   const setReplyContent: React.Dispatch<React.SetStateAction<Record<string, string>>> = useCallback(
     (action) => {
-      setReplyContentRaw((prev) => {
-        const current = activeScopeRef.current
-        const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-        const ownedPrevious = replyContentOwnerScopeKeyRef.current === ownerScopeKey ? prev : {}
-        const next = typeof action === 'function' ? action(ownedPrevious) : action
-        const commentIds = new Set([...Object.keys(ownedPrevious), ...Object.keys(next)])
-        for (const commentId of commentIds) {
-          if (next[commentId] !== ownedPrevious[commentId]) {
-            const draftViewerKey = activeScopeRef.current.viewerKey
-            const timerKey = `${draftViewerKey}\u0000${commentId}`
-            replyDraftVersionRef.current.set(
-              timerKey,
-              (replyDraftVersionRef.current.get(timerKey) || 0) + 1
-            )
-            if (replyDraftTimerRef.current[timerKey])
-              clearTimeout(replyDraftTimerRef.current[timerKey])
-            const val = next[commentId]
-            replyDraftTimerRef.current[timerKey] = setTimeout(() => {
-              try {
-                const storageKey = `group-reply-draft-v2:${draftViewerKey}:${commentId}`
-                if (val?.trim()) localStorage.setItem(storageKey, val)
-                else localStorage.removeItem(storageKey)
-              } catch {
-                /* ignore */
-              }
-            }, 500)
+      const capturedScope = activeScopeRef.current
+      const invocationScopeKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}`
+      const draftViewerKey = capturedScope.viewerKey
+      const ownedPrevious =
+        replyContentWorkingRef.current.scopeKey === invocationScopeKey
+          ? replyContentWorkingRef.current.value
+          : {}
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      replyContentWorkingRef.current = { scopeKey: invocationScopeKey, value: next }
+      replyContentRef.current = next
+      const commentIds = new Set([...Object.keys(ownedPrevious), ...Object.keys(next)])
+      for (const commentId of commentIds) {
+        if (next[commentId] !== ownedPrevious[commentId]) {
+          const timerKey = `${draftViewerKey}\u0000${commentId}`
+          replyDraftVersionRef.current.set(
+            timerKey,
+            (replyDraftVersionRef.current.get(timerKey) || 0) + 1
+          )
+          if (replyDraftTimerRef.current[timerKey]) {
+            clearTimeout(replyDraftTimerRef.current[timerKey])
           }
+          const val = next[commentId]
+          replyDraftTimerRef.current[timerKey] = setTimeout(() => {
+            try {
+              const storageKey = `group-reply-draft-v2:${draftViewerKey}:${commentId}`
+              if (val?.trim()) localStorage.setItem(storageKey, val)
+              else localStorage.removeItem(storageKey)
+            } catch {
+              /* ignore */
+            }
+          }, 500)
         }
-        replyContentOwnerScopeKeyRef.current = ownerScopeKey
-        return next
-      })
+      }
+      setReplyContentOwned(next)
     },
-    []
+    [setReplyContentOwned]
   )
 
   // Restore drafts when comments are expanded
@@ -391,10 +453,40 @@ export function useGroupPosts({
     setCommentLoading({})
     setReplyingTo({})
     setExpandedReplies({})
-  }, [scopeKey, setComments, setNewComment, setReplyContent])
-
-  // Content expansion
-  const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
+    setExpandedPosts({})
+    setEditingPost(null)
+    setEditTitle('')
+    setEditContent('')
+    setSavingEdit(false)
+    setDeletingPost(null)
+    setLikeLoading({})
+    setBookmarkLoading({})
+    setRepostLoading({})
+    setShowRepostModal(null)
+    setRepostComment('')
+  }, [
+    scopeKey,
+    setBookmarkLoading,
+    setCommentLoading,
+    setComments,
+    setDeletingPost,
+    setEditContent,
+    setEditingPost,
+    setEditTitle,
+    setExpandedPosts,
+    setExpandedReplies,
+    setHasMorePosts,
+    setLikeLoading,
+    setLoadingMore,
+    setNewComment,
+    setPosts,
+    setReplyContent,
+    setReplyingTo,
+    setRepostComment,
+    setRepostLoading,
+    setSavingEdit,
+    setShowRepostModal,
+  ])
 
   // Helper to set loading state for a specific post
   const setPostLoading = useCallback(
@@ -470,7 +562,7 @@ export function useGroupPosts({
         showToast(error, 'error')
       }
     },
-    [groupId, fetchPosts, enrichPosts, scopeIsCurrent, showToast]
+    [enrichPosts, fetchPosts, groupId, scopeIsCurrent, setHasMorePosts, setPosts, showToast]
   )
 
   // Infinite scroll: load more
@@ -508,7 +600,17 @@ export function useGroupPosts({
         setLoadingMore(false)
       }
     }
-  }, [loadingMore, hasMorePosts, posts, fetchPosts, enrichPosts, scopeIsCurrent])
+  }, [
+    enrichPosts,
+    fetchPosts,
+    hasMorePosts,
+    loadingMore,
+    posts,
+    scopeIsCurrent,
+    setHasMorePosts,
+    setLoadingMore,
+    setPosts,
+  ])
 
   // IntersectionObserver for infinite scroll
   useEffect(() => {
@@ -571,26 +673,53 @@ export function useGroupPosts({
   const apiCall = useCallback(
     async (
       url: string,
-      options: { method?: string; body?: unknown; headers?: Record<string, string> } = {}
-    ): Promise<{ ok: boolean; status: number; data?: unknown; error?: string }> => {
+      options: {
+        method?: 'GET' | 'POST' | 'PATCH' | 'DELETE' | 'PUT'
+        body?: Record<string, unknown>
+      } = {},
+      capturedScope = activeScopeRef.current
+    ): Promise<{
+      ok: boolean
+      status: number
+      data?: unknown
+      error?: string
+      stale?: boolean
+    }> => {
+      if (!scopeIsCurrent(capturedScope)) {
+        return { ok: false, status: 0, error: 'STALE_AUTH_SCOPE', stale: true }
+      }
       try {
-        const response = await fetch(url, {
-          method: options.method || 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-            ...options.headers,
-          },
-          body: options.body ? JSON.stringify(options.body) : undefined,
-        })
-        const data = await response.json().catch(() => ({}))
-        return { ok: response.ok, status: response.status, data, error: data.error }
+        const response = await authedFetch<Record<string, unknown>>(
+          url,
+          options.method || 'POST',
+          accessTokenRef.current,
+          options.body,
+          15_000,
+          {
+            expectedUserId: capturedScope.userId,
+            expectedSessionGeneration: capturedScope.sessionGeneration,
+          }
+        )
+        if (response.stale || !scopeIsCurrent(capturedScope)) {
+          return { ok: false, status: response.status, error: 'STALE_AUTH_SCOPE', stale: true }
+        }
+        const data = response.data
+        const rawError = data?.error
+        const error =
+          typeof rawError === 'string'
+            ? rawError
+            : rawError && typeof rawError === 'object' && 'message' in rawError
+              ? String(rawError.message)
+              : undefined
+        return { ok: response.ok, status: response.status, data, error }
       } catch {
+        if (!scopeIsCurrent(capturedScope)) {
+          return { ok: false, status: 0, error: 'STALE_AUTH_SCOPE', stale: true }
+        }
         return { ok: false, status: 0, error: t('networkError') }
       }
     },
-    [accessToken, t]
+    [scopeIsCurrent, t]
   )
 
   // Like handler
@@ -601,8 +730,14 @@ export function useGroupPosts({
         return
       }
       if (likeLoading[postId]) return // prevent double-click
+      const context = captureMutationContext()
       setPostLoading(setLikeLoading, postId, true)
-      const result = await apiCall(`/api/posts/${postId}/like`, { body: { reaction_type: 'up' } })
+      const result = await apiCall(
+        `/api/posts/${postId}/like`,
+        { body: { reaction_type: 'up' } },
+        context.scope
+      )
+      if (!mutationContextIsCurrent(context)) return
       if (result.ok) {
         setPosts((prev) =>
           prev.map((p) => {
@@ -620,7 +755,18 @@ export function useGroupPosts({
       }
       setPostLoading(setLikeLoading, postId, false)
     },
-    [accessToken, t, showToast, apiCall, setPostLoading, likeLoading]
+    [
+      accessToken,
+      apiCall,
+      captureMutationContext,
+      likeLoading,
+      mutationContextIsCurrent,
+      setLikeLoading,
+      setPostLoading,
+      setPosts,
+      showToast,
+      t,
+    ]
   )
 
   // Bookmark handler
@@ -631,8 +777,10 @@ export function useGroupPosts({
         return
       }
       if (bookmarkLoading[postId]) return // prevent double-click
+      const context = captureMutationContext()
       setPostLoading(setBookmarkLoading, postId, true)
-      const result = await apiCall(`/api/posts/${postId}/bookmark`)
+      const result = await apiCall(`/api/posts/${postId}/bookmark`, {}, context.scope)
+      if (!mutationContextIsCurrent(context)) return
       if (result.ok) {
         const data = result.data as { bookmarked: boolean; bookmark_count: number }
         setPosts((prev) =>
@@ -647,7 +795,18 @@ export function useGroupPosts({
       }
       setPostLoading(setBookmarkLoading, postId, false)
     },
-    [accessToken, t, showToast, apiCall, setPostLoading, bookmarkLoading]
+    [
+      accessToken,
+      apiCall,
+      bookmarkLoading,
+      captureMutationContext,
+      mutationContextIsCurrent,
+      setBookmarkLoading,
+      setPostLoading,
+      setPosts,
+      showToast,
+      t,
+    ]
   )
 
   // Repost handler
@@ -666,11 +825,18 @@ export function useGroupPosts({
         showToast(t('alreadyReposted'), 'warning')
         return
       }
-      if (repostRequestLockRef.current.has(postId)) return
-      repostRequestLockRef.current.add(postId)
+      const context = captureMutationContext()
+      const requestLockKey = `${context.scope.viewerKey}\u0000${context.scope.sessionGeneration}\u0000${context.groupId}\u0000${postId}`
+      if (repostRequestLockRef.current.has(requestLockKey)) return
+      repostRequestLockRef.current.add(requestLockKey)
       setPostLoading(setRepostLoading, postId, true)
       try {
-        const result = await apiCall(`/api/posts/${postId}/repost`, { body: { comment } })
+        const result = await apiCall(
+          `/api/posts/${postId}/repost`,
+          { body: { comment } },
+          context.scope
+        )
+        if (!mutationContextIsCurrent(context)) return
         if (result.ok) {
           const data = result.data as { repost_count: number }
           setPosts((prev) =>
@@ -685,21 +851,43 @@ export function useGroupPosts({
           showToast(result.error || t('repostFailed'), 'error')
         }
       } finally {
-        repostRequestLockRef.current.delete(postId)
-        setPostLoading(setRepostLoading, postId, false)
+        repostRequestLockRef.current.delete(requestLockKey)
+        if (mutationContextIsCurrent(context)) {
+          setPostLoading(setRepostLoading, postId, false)
+        }
       }
     },
-    [accessToken, t, showToast, posts, userId, apiCall, setPostLoading]
+    [
+      accessToken,
+      apiCall,
+      captureMutationContext,
+      mutationContextIsCurrent,
+      posts,
+      setPostLoading,
+      setPosts,
+      setRepostComment,
+      setRepostLoading,
+      setShowRepostModal,
+      showToast,
+      t,
+      userId,
+    ]
   )
 
   // Delete post
   const handleDeletePost = useCallback(
     async (postId: string) => {
+      const context = captureMutationContext()
       const confirmed = await showDangerConfirm(t('deletePost'), t('deletePostConfirm'))
-      if (!confirmed) return
+      if (!confirmed || !mutationContextIsCurrent(context)) return
 
       setDeletingPost(postId)
-      const result = await apiCall(`/api/posts/${postId}/delete`, { method: 'DELETE' })
+      const result = await apiCall(
+        `/api/posts/${postId}/delete`,
+        { method: 'DELETE' },
+        context.scope
+      )
+      if (!mutationContextIsCurrent(context)) return
       if (result.ok) {
         setPosts((prev) => prev.filter((p) => p.id !== postId))
         showToast(t('postDeleted'), 'success')
@@ -708,7 +896,16 @@ export function useGroupPosts({
       }
       setDeletingPost(null)
     },
-    [t, showToast, showDangerConfirm, apiCall]
+    [
+      apiCall,
+      captureMutationContext,
+      mutationContextIsCurrent,
+      setDeletingPost,
+      setPosts,
+      showDangerConfirm,
+      showToast,
+      t,
+    ]
   )
 
   // Save edit
@@ -718,15 +915,23 @@ export function useGroupPosts({
         showToast(t('titleRequired'), 'warning')
         return
       }
+      const context = captureMutationContext()
+      const submittedTitle = editTitle.trim()
+      const submittedContent = editContent.trim()
       setSavingEdit(true)
-      const result = await apiCall(`/api/posts/${postId}/edit`, {
-        method: 'PUT',
-        body: { title: editTitle.trim(), content: editContent.trim() },
-      })
+      const result = await apiCall(
+        `/api/posts/${postId}/edit`,
+        {
+          method: 'PUT',
+          body: { title: submittedTitle, content: submittedContent },
+        },
+        context.scope
+      )
+      if (!mutationContextIsCurrent(context)) return
       if (result.ok) {
         setPosts((prev) =>
           prev.map((p) =>
-            p.id === postId ? { ...p, title: editTitle.trim(), content: editContent.trim() } : p
+            p.id === postId ? { ...p, title: submittedTitle, content: submittedContent } : p
           )
         )
         setEditingPost(null)
@@ -736,13 +941,26 @@ export function useGroupPosts({
       }
       setSavingEdit(false)
     },
-    [t, showToast, editTitle, editContent, apiCall]
+    [
+      apiCall,
+      captureMutationContext,
+      editContent,
+      editTitle,
+      mutationContextIsCurrent,
+      setEditingPost,
+      setPosts,
+      setSavingEdit,
+      showToast,
+      t,
+    ]
   )
 
   // Pin/unpin
   const handlePinPost = useCallback(
     async (postId: string) => {
-      const result = await apiCall(`/api/posts/${postId}/pin`)
+      const context = captureMutationContext()
+      const result = await apiCall(`/api/posts/${postId}/pin`, {}, context.scope)
+      if (!mutationContextIsCurrent(context)) return
       if (result.ok) {
         const data = result.data as { data?: { is_pinned: boolean }; is_pinned?: boolean }
         const newPinned = data.data?.is_pinned ?? data.is_pinned
@@ -758,7 +976,7 @@ export function useGroupPosts({
         showToast(result.error || t('operationFailed'), 'error')
       }
     },
-    [t, showToast, apiCall]
+    [apiCall, captureMutationContext, mutationContextIsCurrent, setPosts, showToast, t]
   )
 
   // Load comments for a post
@@ -778,12 +996,12 @@ export function useGroupPosts({
 
       const generation = (commentLoadGenerationRef.current.get(scopedPostKey) || 0) + 1
       commentLoadGenerationRef.current.set(scopedPostKey, generation)
-      const requestStartRevision = commentStateRevisionRef.current.get(postId) || 0
+      const revisionKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}`
+      const requestStartRevision = commentStateRevisionRef.current.get(revisionKey) || 0
       setPostLoading(setCommentLoading, postId, true)
 
       let retryAfterNewerState = false
-      let request!: Promise<boolean>
-      request = (async () => {
+      const request: Promise<boolean> = (async () => {
         try {
           const page = await fetchPostCommentsPage<CommentWithAuthor>(
             postId,
@@ -810,7 +1028,18 @@ export function useGroupPosts({
             return false
           }
 
-          if ((commentStateRevisionRef.current.get(postId) || 0) !== requestStartRevision) {
+          if (page.resourceAbsent) {
+            setComments((previous) => {
+              const next = { ...previous }
+              delete next[postId]
+              return next
+            })
+            setPosts((previous) => previous.filter((post) => post.id !== postId))
+            setExpandedComments((previous) => ({ ...previous, [postId]: false }))
+            return true
+          }
+
+          if ((commentStateRevisionRef.current.get(revisionKey) || 0) !== requestStartRevision) {
             retryAfterNewerState = true
             return false
           }
@@ -837,9 +1066,7 @@ export function useGroupPosts({
             commentLoadGenerationRef.current.get(scopedPostKey) === generation
           ) {
             setPostLoading(setCommentLoading, postId, false)
-            if (commentLoadPromisesRef.current.get(scopedPostKey) === request) {
-              commentLoadPromisesRef.current.delete(scopedPostKey)
-            }
+            commentLoadPromisesRef.current.delete(scopedPostKey)
             commentLoadGenerationRef.current.delete(scopedPostKey)
             if (retryAfterNewerState) {
               queueMicrotask(() => {
@@ -859,8 +1086,10 @@ export function useGroupPosts({
       groupVisibility,
       isMember,
       scopeIsCurrent,
+      setCommentLoading,
       setComments,
       setPostLoading,
+      setPosts,
       showToast,
       t,
     ]
@@ -1052,7 +1281,9 @@ export function useGroupPosts({
       newComment,
       reconcileCommentsAfterMutation,
       scopeIsCurrent,
+      setCommentLoading,
       setComments,
+      setNewComment,
       setPostLoading,
       showToast,
       t,
@@ -1160,6 +1391,8 @@ export function useGroupPosts({
       replyContent,
       scopeIsCurrent,
       setComments,
+      setReplyContent,
+      setReplyingTo,
       showToast,
       t,
     ]
@@ -1211,7 +1444,7 @@ export function useGroupPosts({
         }
         setShowRepostModal(id)
       },
-      [accessToken]
+      [accessToken, setShowRepostModal]
     ),
     repostComment,
     setRepostComment,
@@ -1234,7 +1467,7 @@ export function useGroupPosts({
           return next
         })
       },
-      [restoreReplyDraft]
+      [restoreReplyDraft, setReplyingTo]
     ),
     replyContent,
     setReplyContent,

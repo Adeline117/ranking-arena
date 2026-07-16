@@ -8,12 +8,21 @@ import { usePostsRealtime, useCommentsRealtime } from '@/lib/hooks/useRealtime'
 import { usePostStore } from '@/lib/stores/postStore'
 import PostFeed from '../PostFeed'
 
+const mockAuthedFetch = jest.fn()
+
 jest.mock('@tanstack/react-query', () => ({
   useInfiniteQuery: jest.fn(),
   useQueryClient: jest.fn(),
 }))
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({ useAuthSession: jest.fn() }))
+jest.mock('@/lib/logger', () => ({
+  logger: { error: jest.fn(), warn: jest.fn() },
+}))
+jest.mock('@/lib/api/client', () => ({
+  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
+  getHttpErrorMessage: (_status: number, fallback: string) => fallback,
+}))
 
 jest.mock('@/lib/api/comments-client', () => ({
   ...jest.requireActual('@/lib/api/comments-client'),
@@ -42,7 +51,7 @@ jest.mock('../../ui/Dialog', () => ({
 
 jest.mock('../components', () => ({
   SortButtons: () => null,
-  PostDetailView: () => <div data-testid="post-detail" />,
+  PostDetailView: jest.fn(() => <div data-testid="post-detail" />),
 }))
 
 jest.mock('../PostList', () => ({ PostListItem: () => <div data-testid="post-item" /> }))
@@ -57,6 +66,16 @@ const mockUsePostTranslation = usePostTranslation as jest.Mock
 const mockUsePostActions = usePostActions as jest.Mock
 const mockUsePostsRealtime = usePostsRealtime as jest.Mock
 const mockUseCommentsRealtime = useCommentsRealtime as jest.Mock
+const mockPostDetailView = (jest.requireMock('../components') as { PostDetailView: jest.Mock })
+  .PostDetailView
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((resolvePromise) => {
+    resolve = resolvePromise
+  })
+  return { promise, resolve }
+}
 
 const post = {
   id: 'post-1',
@@ -91,6 +110,7 @@ describe('PostFeed comment loading stability', () => {
       sessionGeneration: 1,
     })
     mockUseQueryClient.mockReturnValue({ invalidateQueries: jest.fn() })
+    mockAuthedFetch.mockReset()
     mockUseInfiniteQuery.mockReturnValue({
       data: { pages: [{ posts: [post], hasMore: false, offset: 1 }] },
       fetchNextPage: jest.fn(),
@@ -218,5 +238,114 @@ describe('PostFeed comment loading stability', () => {
       scopeKey: 'user%3Auser-b:2',
       enabled: true,
     })
+  })
+
+  it('treats raw reply/blocked-looking events as one canonical invalidation', async () => {
+    render(<PostFeed initialPostId="post-1" initialPosts={[post]} />)
+    await waitFor(() => expect(mockFetchPostCommentsPage).toHaveBeenCalledTimes(1))
+    const canonicalRead = deferred<{
+      ok: boolean
+      comments: Array<Record<string, unknown>>
+      commentCount: number
+      hasMore: boolean
+    }>()
+    mockFetchPostCommentsPage.mockReset()
+    mockFetchPostCommentsPage.mockReturnValue(canonicalRead.promise)
+    const callbacks = mockUseCommentsRealtime.mock.calls.at(-1)?.[1]
+
+    act(() => {
+      callbacks.onInsert({
+        id: 'raw-reply',
+        post_id: 'post-1',
+        parent_id: 'parent',
+        content: 'must not render directly',
+      })
+      callbacks.onInsert({
+        id: 'raw-blocked-author',
+        post_id: 'post-1',
+        user_id: 'blocked-user',
+        content: 'must be filtered canonically',
+      })
+      callbacks.onDelete({ id: 'deleted', post_id: 'post-1' })
+    })
+
+    expect(mockFetchPostCommentsPage).toHaveBeenCalledTimes(1)
+    const pendingProps = mockPostDetailView.mock.calls.at(-1)?.[0]
+    expect(pendingProps.comments).toEqual([])
+
+    await act(async () => {
+      canonicalRead.resolve({ ok: true, comments: [], commentCount: 0, hasMore: false })
+      await canonicalRead.promise
+    })
+    expect(mockPostDetailView.mock.calls.at(-1)?.[0].comments).toEqual([])
+  })
+
+  it('rejects an A initial-post response after B becomes the active viewer', async () => {
+    const auth = {
+      accessToken: 'token-a',
+      userId: 'user-a',
+      authChecked: true,
+      viewerKey: 'user:user-a',
+      sessionGeneration: 1,
+    }
+    mockUseAuthSession.mockImplementation(() => auth)
+    mockUseInfiniteQuery.mockReturnValue({
+      data: { pages: [{ posts: [], hasMore: false, offset: 0 }] },
+      fetchNextPage: jest.fn(),
+      hasNextPage: false,
+      isFetchingNextPage: false,
+      isLoading: false,
+      error: null,
+      refetch: jest.fn().mockResolvedValue(undefined),
+    })
+    const reads = new Map<string, ReturnType<typeof deferred<unknown>>>()
+    mockAuthedFetch.mockImplementation((_url: string, _method: string, token: string) => {
+      const read = deferred<unknown>()
+      reads.set(token, read)
+      return read.promise
+    })
+    const view = render(<PostFeed initialPostId="post-private" />)
+    await waitFor(() => expect(reads.has('token-a')).toBe(true))
+
+    Object.assign(auth, {
+      accessToken: 'token-b',
+      userId: 'user-b',
+      viewerKey: 'user:user-b',
+      sessionGeneration: 2,
+    })
+    view.rerender(<PostFeed initialPostId="post-private" />)
+    await waitFor(() => expect(reads.has('token-b')).toBe(true))
+
+    await act(async () => {
+      reads.get('token-a')?.resolve({
+        ok: true,
+        status: 200,
+        data: {
+          success: true,
+          data: { post: { ...post, id: 'post-private', title: 'A private post' } },
+        },
+      })
+      await Promise.resolve()
+    })
+    expect(
+      mockPostDetailView.mock.calls.some((call) => call[0].openPost?.title === 'A private post')
+    ).toBe(false)
+
+    await act(async () => {
+      reads.get('token-b')?.resolve({
+        ok: true,
+        status: 200,
+        data: {
+          success: true,
+          data: { post: { ...post, id: 'post-private', title: 'B visible post' } },
+        },
+      })
+      await Promise.resolve()
+    })
+    await waitFor(() =>
+      expect(mockPostDetailView.mock.calls.map((call) => call[0]?.openPost?.title)).toContain(
+        'B visible post'
+      )
+    )
   })
 })

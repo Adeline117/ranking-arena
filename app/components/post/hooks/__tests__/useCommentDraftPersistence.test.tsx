@@ -1,3 +1,4 @@
+import { useLayoutEffect } from 'react'
 import { act, renderHook } from '@testing-library/react'
 import { useCommentDraftPersistence } from '../useCommentDraftPersistence'
 
@@ -96,6 +97,27 @@ describe('useCommentDraftPersistence', () => {
     expect(result.current.draft).toBe('A text')
     expect(localStorage.getItem(draftKey('post-a', 'anon'))).toBe('anonymous text')
     expect(localStorage.getItem(draftKey('post-a', 'user:a'))).toBe('A text')
+  })
+
+  it('binds input after a B render but before passive owner handoff to B', () => {
+    const { result, rerender } = renderHook(
+      ({ viewerKey, layoutDraft }: { viewerKey: string; layoutDraft: string | null }) => {
+        const persistence = useCommentDraftPersistence('post-a', viewerKey)
+        useLayoutEffect(() => {
+          if (layoutDraft !== null) persistence.setDraft(layoutDraft)
+        }, [layoutDraft, persistence.setDraft])
+        return persistence
+      },
+      { initialProps: { viewerKey: 'user:a', layoutDraft: null } }
+    )
+
+    act(() => result.current.setDraft('A text'))
+    rerender({ viewerKey: 'user:b', layoutDraft: 'B typed before passive effect' })
+    act(() => jest.advanceTimersByTime(500))
+
+    expect(result.current.draft).toBe('B typed before passive effect')
+    expect(localStorage.getItem(draftKey('post-a', 'user:a'))).toBe('A text')
+    expect(localStorage.getItem(draftKey('post-a', 'user:b'))).toBe('B typed before passive effect')
   })
 
   it('does not clear the same text after the visible post changes', () => {

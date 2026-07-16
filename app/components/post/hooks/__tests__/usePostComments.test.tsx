@@ -753,6 +753,143 @@ describe('usePostComments viewer scope', () => {
     ).toBe(true)
   })
 
+  it('fails A reply and edit interaction state empty during the first B render', async () => {
+    const snapshots: Array<{
+      viewerKey: string
+      replyContent: string
+      replyingTo: string | null
+      editingComment: string | null
+      editContent: string
+      expanded: boolean
+    }> = []
+    const showToast = jest.fn()
+    const { result, rerender } = renderHook(
+      (props: ScopeProps) => {
+        const value = usePostComments({
+          ...props,
+          showToast,
+          showDangerConfirm: async () => true,
+          t: (key) => key,
+        })
+        snapshots.push({
+          viewerKey: props.viewerKey,
+          replyContent: value.replyContent,
+          replyingTo: value.replyingTo?.commentId ?? null,
+          editingComment: value.editingComment?.id ?? null,
+          editContent: value.editContent,
+          expanded: value.expandedReplies['comment-a'] ?? false,
+        })
+        return value
+      },
+      { initialProps: userA }
+    )
+    const commentA = makeComment({ id: 'comment-a', content: 'A private text' })
+
+    act(() => {
+      result.current.setComments([commentA])
+      result.current.setReplyingTo({ commentId: commentA.id, handle: 'alice' })
+      result.current.setReplyContent('A private reply')
+      result.current.setExpandedReplies({ [commentA.id]: true })
+      result.current.startEditComment(commentA)
+    })
+    rerender({
+      accessToken: 'token-b',
+      currentUserId: 'user-b',
+      authChecked: true,
+      viewerKey: 'user:user-b',
+      sessionGeneration: 2,
+    })
+
+    expect(snapshots.filter((snapshot) => snapshot.viewerKey === 'user:user-b')[0]).toEqual({
+      viewerKey: 'user:user-b',
+      replyContent: '',
+      replyingTo: null,
+      editingComment: null,
+      editContent: '',
+      expanded: false,
+    })
+  })
+
+  it('rejects stale create and reply callbacks after the visible post changes', async () => {
+    const parent = makeComment({ id: 'parent', post_id: 'post-a' })
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        data: { comments: [parent], post: { comment_count: 1 } },
+      },
+    })
+    const onCommentCountChange = jest.fn()
+    const { result } = renderHook(() =>
+      usePostComments({
+        ...userA,
+        showToast: jest.fn(),
+        showDangerConfirm: async () => true,
+        onCommentCountChange,
+        t: (key) => key,
+      })
+    )
+    await act(async () => result.current.loadComments('post-a'))
+    act(() => {
+      result.current.setNewComment('A create')
+      result.current.setReplyContent('A reply')
+    })
+    const staleCreate = result.current.submitComment
+    const staleReply = result.current.submitReply
+
+    await act(async () => result.current.loadComments('post-b'))
+    mockAuthedFetch.mockClear()
+    onCommentCountChange.mockClear()
+    await act(async () => {
+      await staleCreate('post-a')
+      await staleReply('post-a', parent.id)
+    })
+
+    expect(mockAuthedFetch).not.toHaveBeenCalled()
+    expect(onCommentCountChange).not.toHaveBeenCalled()
+  })
+
+  it('clears a loaded tree immediately when the same viewer loses resource access', async () => {
+    const onResourceAbsent = jest.fn()
+    const onCommentCountChange = jest.fn()
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: {
+          success: true,
+          data: {
+            comments: [makeComment({ id: 'formerly-visible' })],
+            post: { comment_count: 1 },
+          },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 404,
+        data: { error: 'Post not found' },
+      })
+    const { result } = renderHook(() =>
+      usePostComments({
+        ...userA,
+        showToast: jest.fn(),
+        showDangerConfirm: async () => true,
+        onCommentCountChange,
+        onResourceAbsent,
+        t: (key) => key,
+      })
+    )
+
+    await act(async () => result.current.loadComments('post-1'))
+    expect(result.current.comments).toHaveLength(1)
+    await act(async () => result.current.loadComments('post-1'))
+
+    expect(result.current.comments).toEqual([])
+    expect(onResourceAbsent).toHaveBeenCalledWith('post-1')
+    expect(onCommentCountChange).toHaveBeenLastCalledWith('post-1', 0, 0)
+  })
+
   it('preserves comments and draft across a same-A token refresh', async () => {
     const comment = makeComment()
     mockAuthedFetch.mockResolvedValue({
@@ -821,27 +958,37 @@ describe('usePostComments viewer scope', () => {
   })
 
   it('accepts a sanitized strict ACK and only then clears the draft', async () => {
-    mockAuthedFetch.mockResolvedValue({
-      ok: true,
-      status: 201,
-      data: {
-        success: true,
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
         data: {
-          comment: {
-            id: 'comment-a',
-            post_id: 'post-1',
-            user_id: 'user-a',
-            content: 'hello',
-            parent_id: null,
-            like_count: 0,
-            dislike_count: 0,
-            created_at: '2026-07-15T00:00:00.000Z',
-            updated_at: '2026-07-15T00:00:00.000Z',
+          success: true,
+          data: { comments: [], post: { comment_count: 0 } },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 201,
+        data: {
+          success: true,
+          data: {
+            comment: {
+              id: 'comment-a',
+              post_id: 'post-1',
+              user_id: 'user-a',
+              content: 'hello',
+              parent_id: null,
+              like_count: 0,
+              dislike_count: 0,
+              created_at: '2026-07-15T00:00:00.000Z',
+              updated_at: '2026-07-15T00:00:00.000Z',
+            },
           },
         },
-      },
-    })
+      })
     const { result } = renderScopedHook(userA)
+    await act(async () => result.current.loadComments('post-1'))
     act(() => result.current.setNewComment('<b>hello</b>'))
 
     await act(async () => result.current.submitComment('post-1'))
