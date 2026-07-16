@@ -355,6 +355,39 @@ Deploy cron scripts to US-based VPS for geo-unblocked, long-running tasks.
 
 ---
 
+## ADR-023: Production migrations require a proven single-file channel
+
+**Date:** 2026-07-16
+**Status:** Accepted; supersedes the `db push` no-op assumption in ADR-004/012
+
+### Context
+
+The 2026-07-02 ledger reconciliation was a point-in-time repair. Later renamed
+and remote-only migration versions accumulated again. On 2026-07-16,
+`supabase db push --dry-run` refused to plan because remote history could not be
+matched to the repository; treating the earlier no-op result as permanent is unsafe.
+
+### Decision
+
+- Serialize schema writes and prefer Supabase MCP `apply_migration` with exactly
+  one file, using the file description as the migration name.
+- Never run `db push` unless `db push --dry-run` succeeds and lists only the
+  intended migration. Never use `--include-all` to work around history drift.
+- Verify the exact ledger name, live object definition/privileges, and
+  `npm run qa:schema` after applying. Global `qa:migrations` remains advisory
+  while historical renamed entries exist.
+- `migration repair --status reverted` changes history only; schema rollback
+  requires a forward compensating migration (or a deliberately chosen PITR).
+
+### Consequences
+
+- ✅ A stale ledger assumption cannot silently replay unrelated DDL.
+- ✅ Each production schema change has an exact live-definition and ledger proof.
+- ⚠️ If the MCP channel is unavailable, rollout pauses unless an explicitly
+  reviewed break-glass procedure preserves both DDL and ledger evidence.
+
+---
+
 ## Pending Decisions
 
 ### Should we add WebSocket for real-time rankings?
