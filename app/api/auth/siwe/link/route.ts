@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from 'next/server'
 import { SiweMessage } from 'siwe'
 import { cookies } from 'next/headers'
 import { isAddress } from 'viem'
+import { z } from 'zod'
 import { getSupabaseAdmin, getProvisioningAuthUser } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 
 // Must match the verify route's chainId — Base mainnet.
 const EXPECTED_CHAIN_ID = 8453
+
+const requestSchema = z
+  .object({
+    message: z.string().min(1).max(10_000),
+    signature: z.string().min(1).max(2_000),
+  })
+  .strict()
 
 /**
  * POST /api/auth/siwe/link
@@ -24,18 +32,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
 
-    let message: string, signature: string
+    let rawBody: unknown
     try {
-      const body = await request.json()
-      message = body.message
-      signature = body.signature
+      rawBody = await request.json()
     } catch {
       return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
     }
 
-    if (!message || !signature) {
-      return NextResponse.json({ error: 'Missing message or signature' }, { status: 400 })
+    const parsedBody = requestSchema.safeParse(rawBody)
+    if (!parsedBody.success) {
+      return NextResponse.json(
+        { error: 'Missing or invalid message or signature' },
+        { status: 400 }
+      )
     }
+    const { message, signature } = parsedBody.data
 
     const cookieStore = await cookies()
     const storedNonce = cookieStore.get('siwe-nonce')?.value
@@ -79,24 +90,56 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Domain or chain mismatch' }, { status: 400 })
     }
 
-    const walletAddress = fields.address.toLowerCase()
-
     // Validate wallet address format
     if (!isAddress(fields.address)) {
       return NextResponse.json({ error: 'Invalid wallet address' }, { status: 400 })
     }
+    const walletAddress = fields.address.toLowerCase()
 
     cookieStore.delete('siwe-nonce')
 
     const supabase = getSupabaseAdmin()
 
-    // Check if another user already has this wallet
-    const { data: existing } = await supabase
+    // The auth trigger is the only profile provisioner. Linking cannot repair a
+    // missing profile from bearer-token or SIWE metadata.
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id, wallet_address')
+      .eq('id', user.id)
+      .maybeSingle()
+
+    if (profileError || !profile) {
+      logger.error('[SIWE link] Required profile lookup failed', {
+        userId: user.id,
+        code: profileError?.code,
+      })
+      return NextResponse.json({ error: 'Profile provisioning is incomplete' }, { status: 503 })
+    }
+
+    const currentWallet = profile.wallet_address?.toLowerCase() || null
+    if (currentWallet && currentWallet !== walletAddress) {
+      return NextResponse.json(
+        { error: 'This account is already linked to a different wallet' },
+        { status: 409 }
+      )
+    }
+
+    // Check if another user already has this wallet. Query failures must never
+    // be treated as an available wallet.
+    const { data: existing, error: existingError } = await supabase
       .from('user_profiles')
       .select('id')
       .eq('wallet_address', walletAddress)
       .neq('id', user.id)
       .maybeSingle()
+
+    if (existingError) {
+      logger.error('[SIWE link] Wallet ownership lookup failed', {
+        userId: user.id,
+        code: existingError.code,
+      })
+      return NextResponse.json({ error: 'Wallet lookup failed' }, { status: 503 })
+    }
 
     if (existing) {
       return NextResponse.json(
@@ -105,38 +148,29 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Link wallet to current user
-    // First check if profile exists
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('id')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    if (!profile) {
-      // Profile doesn't exist yet - create it with wallet address
-      const { error: insertError } = await supabase.from('user_profiles').insert({
-        id: user.id,
-        email: user.email || `${walletAddress}@wallet.arena`,
-        wallet_address: walletAddress,
-      })
-
-      if (insertError) {
-        logger.error('[SIWE link] Profile insert failed:', insertError)
-        return NextResponse.json(
-          { error: 'Failed to create profile for wallet link' },
-          { status: 500 }
-        )
-      }
-    } else {
-      const { error: updateError } = await supabase
+    if (!currentWallet) {
+      // Bind only an unbound row. A concurrent mutation cannot be overwritten,
+      // and a zero-row result is a hard failure rather than fake success.
+      const { data: updatedProfile, error: updateError } = await supabase
         .from('user_profiles')
         .update({ wallet_address: walletAddress })
         .eq('id', user.id)
+        .is('wallet_address', null)
+        .select('id, wallet_address')
+        .maybeSingle()
 
-      if (updateError) {
-        logger.error('[SIWE link] Wallet update failed:', updateError)
-        return NextResponse.json({ error: 'Failed to link wallet' }, { status: 500 })
+      if (updateError || updatedProfile?.wallet_address?.toLowerCase() !== walletAddress) {
+        logger.error('[SIWE link] Wallet update failed', {
+          userId: user.id,
+          code: updateError?.code,
+        })
+        if (updateError?.code === '23505') {
+          return NextResponse.json(
+            { error: 'This wallet is already linked to another account' },
+            { status: 409 }
+          )
+        }
+        return NextResponse.json({ error: 'Failed to link wallet' }, { status: 503 })
       }
     }
 

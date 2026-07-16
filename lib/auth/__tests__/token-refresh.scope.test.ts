@@ -276,6 +276,37 @@ describe('TokenRefreshCoordinator viewer binding', () => {
     await Promise.resolve()
   })
 
+  it('rolls back only the exact principal that still owns browser auth', async () => {
+    await seedStoredSession('user-a', jwt('user-a'))
+    synchronizeViewerScope(true, 'user-a')
+
+    await expect(tokenRefreshCoordinator.signOutIfCurrent('user-a')).resolves.toBe(true)
+    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+  })
+
+  it('does not let a late A rollback sign out the current B principal', async () => {
+    await seedStoredSession('user-b', jwt('user-b'))
+    synchronizeViewerScope(true, 'user-b')
+
+    await expect(tokenRefreshCoordinator.signOutIfCurrent('user-a')).resolves.toBe(false)
+    expect(JSON.parse(window.localStorage.getItem(AUTH_STORAGE_KEY) ?? '{}')).toMatchObject({
+      user: { id: 'user-b' },
+    })
+    expect(mockSignOut).not.toHaveBeenCalled()
+  })
+
+  it('does not roll back a newer session for the same principal', async () => {
+    const newerToken = jwt('user-a')
+    await seedStoredSession('user-a', newerToken)
+    synchronizeViewerScope(true, 'user-a')
+
+    await expect(
+      tokenRefreshCoordinator.signOutIfCurrent('user-a', `${newerToken}-superseded`)
+    ).resolves.toBe(false)
+    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).not.toBeNull()
+    expect(mockSignOut).not.toHaveBeenCalled()
+  })
+
   it('serializes direct password writers and rejects the superseded login result', async () => {
     const passwordA = deferred<{
       data: { session: ReturnType<typeof session>; user: ReturnType<typeof session>['user'] }
