@@ -16,6 +16,11 @@ describe('atomic paid-group pass migration', () => {
     expect(migration).toContain('group pass consumption ledgers are immutable')
     expect(migration).toContain('BEFORE UPDATE OR DELETE ON public.group_payment_consumptions')
     expect(migration).toContain('BEFORE UPDATE OR DELETE ON public.group_trial_consumptions')
+    expect(migration).toContain('payment-intent consumption uniqueness drifted')
+    expect(migration).toContain('checkout-session consumption uniqueness drifted')
+    expect(migration).toContain('trial-consumption primary key drifted')
+    expect(migration).toContain('trigger_row.tgtype = 27')
+    expect(migration).toContain('group pass immutable ledger triggers drifted')
   })
 
   it('serializes each actor/group and Stripe credential before exact replay comparison', () => {
@@ -62,7 +67,14 @@ describe('atomic paid-group pass migration', () => {
     expect(migration).toContain('ALTER TABLE public.%I NO FORCE ROW LEVEL SECURITY')
     expect(migration).toContain('service_role_manages_group_subscriptions')
     expect(migration).toContain('FULL JOIN actual')
-    expect(migration).toContain('browser roles inherit group pass authority')
+    expect(migration).toContain('membership.member = v_authenticator')
+    expect(migration).toContain('AND NOT membership.inherit_option')
+    expect(migration).toContain('AND membership.set_option')
+    expect(migration).toContain('membership.member NOT IN (v_authenticator, v_postgres)')
+    expect(migration).toContain('WITH RECURSIVE service_inheritors(member_oid)')
+    expect(migration).toContain('WITH RECURSIVE service_inherits(role_oid)')
+    expect(migration).toContain('WITH RECURSIVE browser_authority(role_oid)')
+    expect(migration).toContain('atomic group pass service-role authority seal drifted')
   })
 
   it('exposes only actor-bound service RPCs and contains no presentation change', () => {
@@ -76,6 +88,8 @@ describe('atomic paid-group pass migration', () => {
     expect(migration).toContain(
       'GRANT EXECUTE ON FUNCTION public.read_group_subscription_atomic(uuid, uuid)'
     )
+    expect(migration.match(/SET search_path = pg_catalog, pg_temp/g)).toHaveLength(5)
+    expect(migration).not.toContain('SET search_path = pg_catalog, public')
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)
     expect(migration).not.toMatch(/(?:jsx|tsx|className|grid-template|tailwind)/i)
