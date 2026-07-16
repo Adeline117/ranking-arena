@@ -10,6 +10,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccount } from 'wagmi'
+import { jwtSubject } from '@/lib/auth/token-subject'
 import { isViewerScopeCurrent, type ViewerKey } from '@/lib/auth/viewer-scope'
 import { useAuthSession, type AuthSessionReturn } from '@/lib/hooks/useAuthSession'
 
@@ -71,6 +72,7 @@ function captureCanonicalWalletViewer(auth: CanonicalWalletAuth): WalletViewerOp
     !auth.isLoggedIn ||
     !auth.userId ||
     !auth.accessToken ||
+    jwtSubject(auth.accessToken) !== auth.userId ||
     auth.viewerKey !== (`user:${auth.userId}` as ViewerKey)
   ) {
     return null
