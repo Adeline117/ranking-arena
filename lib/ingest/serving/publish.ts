@@ -344,6 +344,10 @@ export async function publishProfile(
     }
 
     for (const s of profile.stats) {
+      // A deep-enrichment failure/defer must not erase the last proven fill
+      // metrics while the independent portfolio/risk fields keep refreshing.
+      // Complete empty activity sets this flag true and intentionally writes 0.
+      const preserveFillMetrics = s.extras.fills_metrics_complete === false
       await client.query(
         `INSERT INTO arena.trader_stats
            (trader_id, timeframe, as_of, currency, roi, pnl, sharpe, mdd, win_rate,
@@ -354,15 +358,19 @@ export async function publishProfile(
          ON CONFLICT (trader_id, timeframe) DO UPDATE SET
            as_of = EXCLUDED.as_of, currency = EXCLUDED.currency,
            roi = EXCLUDED.roi, pnl = EXCLUDED.pnl, sharpe = EXCLUDED.sharpe,
-           mdd = EXCLUDED.mdd, win_rate = EXCLUDED.win_rate,
-           win_positions = EXCLUDED.win_positions,
-           total_positions = EXCLUDED.total_positions,
+           mdd = EXCLUDED.mdd,
+           win_rate = CASE WHEN $20 THEN arena.trader_stats.win_rate ELSE EXCLUDED.win_rate END,
+           win_positions = CASE WHEN $20 THEN arena.trader_stats.win_positions ELSE EXCLUDED.win_positions END,
+           total_positions = CASE WHEN $20 THEN arena.trader_stats.total_positions ELSE EXCLUDED.total_positions END,
            copier_pnl = EXCLUDED.copier_pnl, copier_count = EXCLUDED.copier_count,
            aum = EXCLUDED.aum, volume = EXCLUDED.volume,
            profit_share_rate = EXCLUDED.profit_share_rate,
-           holding_duration_avg = EXCLUDED.holding_duration_avg,
+           holding_duration_avg = CASE WHEN $20 THEN arena.trader_stats.holding_duration_avg ELSE EXCLUDED.holding_duration_avg END,
            trading_preferences = EXCLUDED.trading_preferences,
-           extras = EXCLUDED.extras`,
+           extras = CASE WHEN $20
+             THEN COALESCE(arena.trader_stats.extras, '{}'::jsonb) || EXCLUDED.extras
+             ELSE EXCLUDED.extras
+           END`,
         [
           traderId,
           s.timeframe,
@@ -383,6 +391,7 @@ export async function publishProfile(
           s.holdingDurationAvgHours === null ? null : s.holdingDurationAvgHours * 3600,
           s.tradingPreferences ? JSON.stringify(s.tradingPreferences) : null,
           JSON.stringify(s.extras),
+          preserveFillMetrics,
         ]
       )
     }
