@@ -29,7 +29,7 @@ const AUTH_PATTERNS = [
   /\bverifyServiceAuth\b/, // lib/auth/verify-service-auth.ts
   /\bauth\.getUser\(/, // 手写 supabase 鉴权（存量，逐步收敛到 wrapper）
   /\bgetAuthenticatedUser\b/,
-  /\bgetAuthUser\b/, // lib/supabase/server.ts
+  /\bget(?:Active|Provisioning)?AuthUser\b/, // strict auth + explicitly scoped provisioning/recovery auth
   /\bverifyAdminAuth\b/, // lib/auth/verify-service-auth.ts
   /\bCRON_SECRET\b/, // 内联 cron Bearer 校验（存量，逐步收敛到 withCron）
   /\bconstructWebhookEvent\b/, // Stripe webhook 签名验证
