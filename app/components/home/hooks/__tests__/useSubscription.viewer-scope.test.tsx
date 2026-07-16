@@ -1,3 +1,4 @@
+import { StrictMode, type ReactNode } from 'react'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import {
   __resetViewerScopeForTests,
@@ -75,6 +76,10 @@ function deferred<T>() {
 
 function queryResult(data: Record<string, unknown> | null, error: unknown = null): QueryResult {
   return { data, error }
+}
+
+function StrictModeWrapper({ children }: { children: ReactNode }) {
+  return <StrictMode>{children}</StrictMode>
 }
 
 describe('useSubscription viewer ownership', () => {
@@ -205,6 +210,43 @@ describe('useSubscription viewer ownership', () => {
     await waitFor(() => expect(view.result.current.isLoading).toBe(false))
     expect(view.result.current.isPro).toBe(false)
     expect(mockSubscriptionResult).toHaveBeenCalledTimes(2)
+  })
+
+  it('survives StrictMode replay and rejects a completion after the true unmount', async () => {
+    const afterUnmount = deferred<QueryResult>()
+    let phase: 'initial' | 'refresh' | 'after-unmount' = 'initial'
+    mockSubscriptionResult.mockImplementation(() => {
+      if (phase === 'initial') return Promise.resolve(queryResult(null))
+      if (phase === 'refresh') {
+        return Promise.resolve(queryResult({ tier: 'pro', status: 'active' }))
+      }
+      return afterUnmount.promise
+    })
+    mockProfileResult.mockResolvedValue(queryResult({ subscription_tier: 'free' }))
+
+    const view = renderHook(() => useSubscription(), { wrapper: StrictModeWrapper })
+    await waitFor(() => expect(view.result.current.isLoading).toBe(false))
+    expect(view.result.current.isPro).toBe(false)
+    expect(mockSubscriptionResult).toHaveBeenCalled()
+
+    phase = 'refresh'
+    act(() => view.result.current.refresh())
+    await waitFor(() => expect(view.result.current.isPro).toBe(true))
+
+    phase = 'after-unmount'
+    const callsBeforePending = mockSubscriptionResult.mock.calls.length
+    act(() => view.result.current.refresh())
+    await waitFor(() =>
+      expect(mockSubscriptionResult.mock.calls.length).toBeGreaterThan(callsBeforePending)
+    )
+    view.unmount()
+    await act(async () => afterUnmount.resolve(queryResult({ tier: 'free', status: 'active' })))
+
+    const callsBeforeRemount = mockSubscriptionResult.mock.calls.length
+    const remount = renderHook(() => useSubscription())
+    await waitFor(() => expect(remount.result.current.isLoading).toBe(false))
+    expect(remount.result.current.isPro).toBe(true)
+    expect(mockSubscriptionResult).toHaveBeenCalledTimes(callsBeforeRemount)
   })
 
   it('immediately fails closed when the current viewer becomes pending', async () => {
