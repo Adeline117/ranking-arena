@@ -190,37 +190,40 @@ export const GET = withPublic(
 
     // Following feed: posts from users the current user follows (Mastodon home timeline pattern)
     if (sort_by === 'following') {
-      if (user) {
-        const { data: followData } = await supabase
-          .from('user_follows')
-          .select('following_id')
-          .eq('follower_id', user.id)
-
-        const followingIds = (followData || []).map((f: { following_id: string }) => f.following_id)
-
-        if (followingIds.length > 0) {
-          posts = await getPosts(supabase, {
-            limit,
-            offset,
-            sort_by: 'created_at',
-            sort_order: 'desc',
-            viewer_id: user.id,
-            language: langFilter,
-            author_ids: followingIds,
-          })
-        }
+      // This route is public for every other sort mode, but following is a
+      // viewer-owned resource.  Never accept a caller-supplied viewer ID and
+      // never substitute the anonymous/hot feed when authentication fails.
+      if (!user) {
+        throw ApiError.unauthorized('Authentication required for following feed')
       }
 
-      // Fallback to hot if not logged in or no follows
-      if (!posts || posts.length === 0) {
+      const { data: followData, error: followError } = await supabase
+        .from('user_follows')
+        .select('following_id')
+        .eq('follower_id', user.id)
+
+      if (followError) {
+        throw new ApiError('Failed to load following feed', {
+          code: ErrorCode.DATABASE_ERROR,
+        })
+      }
+
+      const followingIds = (followData || []).map(
+        (follow: { following_id: string }) => follow.following_id
+      )
+
+      if (followingIds.length > 0) {
         posts = await getPosts(supabase, {
           limit,
           offset,
-          sort_by: 'hot_score',
+          sort_by: 'created_at',
           sort_order: 'desc',
-          viewer_id: user?.id,
+          viewer_id: user.id,
           language: langFilter,
+          author_ids: followingIds,
         })
+      } else {
+        posts = []
       }
 
       // Attach user state
@@ -241,7 +244,7 @@ export const GET = withPublic(
         user_vote: userVotes.get(post.id) || null,
       }))
       return successWithPagination(
-        { posts: postsWithUserState },
+        { posts: postsWithUserState, following_count: followingIds.length },
         { limit, offset, has_more: posts.length === limit }
       )
     }

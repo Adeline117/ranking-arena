@@ -17,7 +17,9 @@ jest.mock('next/server', () => {
       this.status = init.status || 200
       this.headers = new Map()
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -30,15 +32,22 @@ jest.mock('next/server', () => {
     method: string
     _body: unknown
     cookies: { get: () => undefined }
-    constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
+    constructor(
+      url: string,
+      opts?: { headers?: Record<string, string>; method?: string; body?: unknown }
+    ) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Jest Test Runner)', ...(opts?.headers || {}) }))
+      this.headers = new Map(
+        Object.entries({ 'user-agent': 'Mozilla/5.0 (Jest Test Runner)', ...(opts?.headers || {}) })
+      )
       this.method = opts?.method || 'GET'
       this._body = opts?.body
       this.cookies = { get: () => undefined }
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
@@ -70,11 +79,23 @@ const mockChain = () => {
   chain.limit = jest.fn().mockReturnValue(chain)
   chain.maybeSingle = jest.fn().mockReturnValue(chain)
   chain.single = jest.fn().mockReturnValue(chain)
-  chain.then = jest.fn((cb: (v: unknown) => unknown) => Promise.resolve(cb({ data: null, error: null })))
+  chain.then = jest.fn((cb: (v: unknown) => unknown) =>
+    Promise.resolve(cb({ data: null, error: null }))
+  )
   chain.catch = jest.fn().mockReturnValue(chain)
   return chain
 }
-const mockSupabase = { from: jest.fn().mockReturnValue(mockChain()), rpc: jest.fn().mockResolvedValue({ data: null, error: null }) }
+const mockQueryResult = (data: unknown, error: unknown = null) => {
+  const chain = mockChain()
+  chain.then = jest.fn((resolve: (value: unknown) => unknown) =>
+    Promise.resolve(resolve({ data, error }))
+  )
+  return chain
+}
+const mockSupabase = {
+  from: jest.fn().mockReturnValue(mockChain()),
+  rpc: jest.fn().mockResolvedValue({ data: null, error: null }),
+}
 jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => mockSupabase),
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
@@ -206,7 +227,9 @@ describe('/api/posts', () => {
       mockGetUserPostReactions.mockResolvedValue(new Map([['post-1', 'up']]))
       mockGetUserPostVotes.mockResolvedValue(new Map([['post-1', 'bull']]))
 
-      const req = new NextRequest('http://localhost/api/posts', { headers: { authorization: 'Bearer test-token' } })
+      const req = new NextRequest('http://localhost/api/posts', {
+        headers: { authorization: 'Bearer test-token' },
+      })
       const res = await GET(req)
       const body = await res.json()
 
@@ -239,6 +262,95 @@ describe('/api/posts', () => {
         expect.anything(),
         expect.objectContaining({ group_id: 'group-1' })
       )
+    })
+
+    it('rejects an anonymous following feed without falling back to hot posts', async () => {
+      const req = new NextRequest('http://localhost/api/posts?sort_by=following')
+      const res = await GET(req)
+
+      expect(res.status).toBe(401)
+      expect(mockGetPosts).not.toHaveBeenCalled()
+      expect(mockSupabase.from).not.toHaveBeenCalledWith('user_follows')
+    })
+
+    it('rejects an invalid bearer token for the following feed', async () => {
+      mockGetAuthUser.mockResolvedValue(null)
+
+      const req = new NextRequest('http://localhost/api/posts?sort_by=following', {
+        headers: { authorization: 'Bearer invalid-token' },
+      })
+      const res = await GET(req)
+
+      expect(res.status).toBe(401)
+      expect(mockGetPosts).not.toHaveBeenCalled()
+    })
+
+    it('returns an authoritative empty feed when the viewer follows nobody', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: 'viewer-1' })
+      mockSupabase.from.mockReturnValueOnce(mockQueryResult([]))
+
+      const req = new NextRequest('http://localhost/api/posts?sort_by=following', {
+        headers: { authorization: 'Bearer viewer-token' },
+      })
+      const res = await GET(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.data).toEqual({ posts: [], following_count: 0 })
+      expect(mockGetPosts).not.toHaveBeenCalled()
+    })
+
+    it('keeps an empty canonical result empty instead of substituting hot posts', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: 'viewer-1' })
+      mockSupabase.from.mockReturnValueOnce(mockQueryResult([{ following_id: 'followed-1' }]))
+      mockGetPosts.mockResolvedValue([])
+
+      const req = new NextRequest('http://localhost/api/posts?sort_by=following', {
+        headers: { authorization: 'Bearer viewer-token' },
+      })
+      const res = await GET(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.data).toEqual({ posts: [], following_count: 1 })
+      expect(mockGetPosts).toHaveBeenCalledTimes(1)
+      expect(mockGetPosts).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          author_ids: ['followed-1'],
+          viewer_id: 'viewer-1',
+          sort_by: 'created_at',
+        })
+      )
+    })
+
+    it('derives the viewer from the token and ignores a requested user id', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: 'verified-viewer' })
+      const followQuery = mockQueryResult([])
+      mockSupabase.from.mockReturnValueOnce(followQuery)
+
+      const req = new NextRequest(
+        'http://localhost/api/posts?sort_by=following&p_user_id=impersonated-user',
+        { headers: { authorization: 'Bearer viewer-token' } }
+      )
+      await GET(req)
+
+      expect(followQuery.eq).toHaveBeenCalledWith('follower_id', 'verified-viewer')
+    })
+
+    it('fails closed when the following relationship query fails', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: 'viewer-1' })
+      mockSupabase.from.mockReturnValueOnce(
+        mockQueryResult(null, { code: 'DB_DOWN', message: 'unavailable' })
+      )
+
+      const req = new NextRequest('http://localhost/api/posts?sort_by=following', {
+        headers: { authorization: 'Bearer viewer-token' },
+      })
+      const res = await GET(req)
+
+      expect(res.status).toBe(500)
+      expect(mockGetPosts).not.toHaveBeenCalled()
     })
   })
 
