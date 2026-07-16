@@ -2,22 +2,34 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockFetch = jest.fn()
 const mockShowToast = jest.fn()
+const mockUseAuthSession = jest.fn(() => ({ accessToken: 'access-token' }))
+const mockTranslations: Record<string, string> = {
+  adminLoadFailed: 'Failed to load alerts',
+  alertDisabled: 'Alerts disabled',
+  alertEnabled: 'Alerts enabled',
+  alertSettings: 'Alert settings',
+  loading: 'Loading',
+  loginRequired: 'Login required',
+  pricingProAlerts: 'Real-time trader alerts',
+  saveFailed2: 'Save failed',
+  traderAlertsProRequired: 'Trader alerts require Pro',
+  upgrade: 'Upgrade',
+}
+const mockT = (key: string) => mockTranslations[key] ?? key
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
-  useAuthSession: () => ({ accessToken: 'access-token' }),
+  useAuthSession: () => mockUseAuthSession(),
+}))
+
+jest.mock('next/link', () => ({
+  __esModule: true,
+  default: ({ href, children }: { href: string; children: React.ReactNode }) => (
+    <a href={href}>{children}</a>
+  ),
 }))
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
-  useLanguage: () => ({
-    t: (key: string) =>
-      ({
-        alertDisabled: 'Alerts disabled',
-        alertEnabled: 'Alerts enabled',
-        alertSettings: 'Alert settings',
-        loading: 'Loading',
-        saveFailed2: 'Save failed',
-      })[key] ?? key,
-  }),
+  useLanguage: () => ({ t: mockT }),
 }))
 
 jest.mock('@/app/components/ui/Toast', () => ({
@@ -26,6 +38,35 @@ jest.mock('@/app/components/ui/Toast', () => ({
 
 jest.mock('@/lib/api/client', () => ({
   getCsrfHeaders: () => ({ 'X-CSRF-Token': 'csrf-token' }),
+}))
+
+jest.mock('@/app/components/ui/ErrorMessage', () => ({
+  __esModule: true,
+  default: ({ message, onRetry }: { message: string; onRetry?: () => void }) => (
+    <div role="alert">
+      <span>{message}</span>
+      {onRetry && <button onClick={onRetry}>Retry</button>}
+    </div>
+  ),
+}))
+
+jest.mock('@/app/components/ui/EmptyState', () => ({
+  __esModule: true,
+  default: ({
+    title,
+    description,
+    action,
+  }: {
+    title: string
+    description?: string
+    action?: React.ReactNode
+  }) => (
+    <section>
+      <h2>{title}</h2>
+      <p>{description}</p>
+      {action}
+    </section>
+  ),
 }))
 
 jest.mock('../../base', () => {
@@ -97,6 +138,45 @@ describe('AlertConfig enable toggle', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     global.fetch = mockFetch
+    mockUseAuthSession.mockReturnValue({ accessToken: 'access-token' })
+  })
+
+  it('shows a load failure and recovers through the visible retry action', async () => {
+    mockFetch
+      .mockResolvedValueOnce(response({ error: 'Alerts service unavailable' }, 503))
+      .mockResolvedValueOnce(response({ data: { alerts: [existingAlert()] } }))
+      .mockResolvedValueOnce(response({ data: { history: [] } }))
+
+    render(<AlertConfig traderId="trader-1" traderHandle="Trader One" userId="user-1" />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Alerts service unavailable')
+    expect(mockShowToast).toHaveBeenCalledWith('Alerts service unavailable', 'error')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    expect(await screen.findByRole('button', { name: 'Alerts enabled' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('does not spin forever when the authenticated token is unavailable', async () => {
+    mockUseAuthSession.mockReturnValue({ accessToken: null })
+
+    render(<AlertConfig traderId="trader-1" traderHandle="Trader One" userId="user-1" />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Login required')
+    expect(screen.queryByText('Loading')).not.toBeInTheDocument()
+    expect(mockFetch).not.toHaveBeenCalled()
+  })
+
+  it('turns a server 403 into the Pro conversion state', async () => {
+    mockFetch.mockResolvedValueOnce(response({ error: 'Pro membership required' }, 403))
+
+    render(<AlertConfig traderId="trader-1" traderHandle="Trader One" userId="user-1" />)
+
+    expect(await screen.findByRole('heading', { name: 'Trader alerts require Pro' })).toBeVisible()
+    expect(screen.getByText('Real-time trader alerts')).toBeVisible()
+    expect(screen.getByRole('link', { name: 'Upgrade' })).toHaveAttribute('href', '/pricing')
+    expect(mockShowToast).not.toHaveBeenCalled()
   })
 
   it('rolls back a failed server update and never reports success', async () => {
