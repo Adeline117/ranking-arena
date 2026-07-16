@@ -11,9 +11,17 @@ type MockAuthState = {
 
 let mockAuthState: MockAuthState = {
   user: { id: 'viewer-a' },
-  accessToken: 'token-a',
+  accessToken: accessTokenFor('viewer-a'),
   loading: false,
 }
+
+const mockForceRefresh = jest.fn()
+
+jest.mock('@/lib/auth/token-refresh', () => ({
+  tokenRefreshCoordinator: {
+    forceRefresh: (...args: unknown[]) => mockForceRefresh(...args),
+  },
+}))
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
   useAuthSession: () => mockAuthState,
@@ -70,7 +78,12 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
-function apiResponse(postId: string) {
+function accessTokenFor(viewerId: string) {
+  const payload = Buffer.from(JSON.stringify({ sub: viewerId })).toString('base64url')
+  return `eyJhbGciOiJub25lIn0.${payload}.signature`
+}
+
+function apiResponse(postId: string, viewerId: string) {
   return {
     ok: true,
     status: 200,
@@ -78,6 +91,7 @@ function apiResponse(postId: string) {
       success: true,
       data: {
         following_count: 1,
+        viewer_id: viewerId,
         posts: [
           {
             id: postId,
@@ -97,9 +111,10 @@ describe('FollowingFeed viewer ownership', () => {
     jest.clearAllMocks()
     mockAuthState = {
       user: { id: 'viewer-a' },
-      accessToken: 'token-a',
+      accessToken: accessTokenFor('viewer-a'),
       loading: false,
     }
+    mockForceRefresh.mockReset()
   })
 
   afterAll(() => {
@@ -117,7 +132,8 @@ describe('FollowingFeed viewer ownership', () => {
   })
 
   it('uses the canonical API with the current bearer token', async () => {
-    const fetchMock = jest.fn().mockResolvedValue(apiResponse('post-a'))
+    const tokenA = accessTokenFor('viewer-a')
+    const fetchMock = jest.fn().mockResolvedValue(apiResponse('post-a', 'viewer-a'))
     global.fetch = fetchMock as typeof fetch
 
     render(<FollowingFeed />)
@@ -126,7 +142,7 @@ describe('FollowingFeed viewer ownership', () => {
     expect(fetchMock).toHaveBeenCalledWith(
       '/api/posts?sort_by=following&limit=30',
       expect.objectContaining({
-        headers: { Authorization: 'Bearer token-a' },
+        headers: { Authorization: `Bearer ${tokenA}` },
         cache: 'no-store',
       })
     )
@@ -146,20 +162,20 @@ describe('FollowingFeed viewer ownership', () => {
 
     mockAuthState = {
       user: { id: 'viewer-b' },
-      accessToken: 'token-b',
+      accessToken: accessTokenFor('viewer-b'),
       loading: false,
     }
     rerender(<FollowingFeed />)
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
 
     await act(async () => {
-      viewerB.resolve(apiResponse('post-b'))
+      viewerB.resolve(apiResponse('post-b', 'viewer-b'))
       await viewerB.promise
     })
     expect(await screen.findByTestId('post-post-b')).toBeInTheDocument()
 
     await act(async () => {
-      viewerA.resolve(apiResponse('post-a'))
+      viewerA.resolve(apiResponse('post-a', 'viewer-a'))
       await viewerA.promise
     })
     expect(screen.queryByTestId('post-post-a')).not.toBeInTheDocument()
@@ -178,9 +194,96 @@ describe('FollowingFeed viewer ownership', () => {
     expect(screen.getByText('followingFeedLoginPrompt')).toBeInTheDocument()
 
     await act(async () => {
-      viewerA.resolve(apiResponse('post-a'))
+      viewerA.resolve(apiResponse('post-a', 'viewer-a'))
       await viewerA.promise
     })
     expect(screen.queryByTestId('post-post-a')).not.toBeInTheDocument()
+  })
+
+  it('refreshes once after 401 and retries only for the same verified viewer', async () => {
+    const refreshedToken = accessTokenFor('viewer-a')
+    mockForceRefresh.mockResolvedValue(refreshedToken)
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) })
+      .mockResolvedValueOnce(apiResponse('post-a', 'viewer-a'))
+    global.fetch = fetchMock as typeof fetch
+
+    render(<FollowingFeed />)
+
+    expect(await screen.findByTestId('post-post-a')).toBeInTheDocument()
+    expect(mockForceRefresh).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1][1]).toEqual(
+      expect.objectContaining({ headers: { Authorization: `Bearer ${refreshedToken}` } })
+    )
+  })
+
+  it('stops after one refresh when the retry is also unauthorized', async () => {
+    mockForceRefresh.mockResolvedValue(accessTokenFor('viewer-a'))
+    const fetchMock = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({}),
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    render(<FollowingFeed />)
+
+    expect(await screen.findByText('loadFailed')).toBeInTheDocument()
+    expect(mockForceRefresh).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not retry viewer A with a refreshed token after switching to viewer B', async () => {
+    const refresh = deferred<string | null>()
+    mockForceRefresh.mockReturnValue(refresh.promise)
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) })
+      .mockResolvedValueOnce(apiResponse('post-b', 'viewer-b'))
+    global.fetch = fetchMock as typeof fetch
+
+    const { rerender } = render(<FollowingFeed />)
+    await waitFor(() => expect(mockForceRefresh).toHaveBeenCalledTimes(1))
+
+    mockAuthState = {
+      user: { id: 'viewer-b' },
+      accessToken: accessTokenFor('viewer-b'),
+      loading: false,
+    }
+    rerender(<FollowingFeed />)
+    expect(await screen.findByTestId('post-post-b')).toBeInTheDocument()
+
+    await act(async () => {
+      refresh.resolve(accessTokenFor('viewer-a'))
+      await refresh.promise
+    })
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(screen.queryByTestId('post-post-a')).not.toBeInTheDocument()
+  })
+
+  it('fails empty when the rendered user and bearer token principals disagree', async () => {
+    mockAuthState = {
+      user: { id: 'viewer-a' },
+      accessToken: accessTokenFor('viewer-b'),
+      loading: false,
+    }
+    const fetchMock = jest.fn()
+    global.fetch = fetchMock as typeof fetch
+
+    render(<FollowingFeed />)
+
+    expect(await screen.findByText('loadFailed')).toBeInTheDocument()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects a successful response attributed to another verified viewer', async () => {
+    global.fetch = jest.fn().mockResolvedValue(apiResponse('post-b', 'viewer-b')) as typeof fetch
+
+    render(<FollowingFeed />)
+
+    expect(await screen.findByText('loadFailed')).toBeInTheDocument()
+    expect(screen.queryByTestId('post-post-b')).not.toBeInTheDocument()
   })
 })
