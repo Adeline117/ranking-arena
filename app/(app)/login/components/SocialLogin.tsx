@@ -6,6 +6,7 @@ import dynamic from 'next/dynamic'
 import { logger } from '@/lib/logger'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { jwtSubject } from '@/lib/auth/token-subject'
+import { PRIVY_SUPABASE_BRIDGE_READY } from '@/lib/privy/config'
 
 const OneClickWalletButton = dynamic(
   () => import('@/lib/web3/wallet-components').then((m) => ({ default: m.OneClickWalletButton })),
@@ -272,7 +273,7 @@ export default function SocialLogin({
       )}
 
       {/* Privy One-Click Login - compact */}
-      {showOtherOptions && (
+      {PRIVY_SUPABASE_BRIDGE_READY && showOtherOptions && (
         <PrivyLoginButton
           redirectUrl={searchParams.get('returnUrl') || searchParams.get('redirect') || undefined}
           onError={(msg) => onError(msg)}
