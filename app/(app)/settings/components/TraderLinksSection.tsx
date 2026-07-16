@@ -68,6 +68,27 @@ function traderOwnerMatches(
   )
 }
 
+function isNullableFiniteNumber(value: unknown): value is number | null {
+  return value === null || (typeof value === 'number' && Number.isFinite(value))
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === 'string'
+}
+
+function isLinkedTraderStats(value: unknown): value is LinkedTraderStats {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const stats = value as Record<string, unknown>
+  return (
+    isNullableFiniteNumber(stats.arena_score) &&
+    isNullableFiniteNumber(stats.roi) &&
+    isNullableFiniteNumber(stats.pnl) &&
+    isNullableFiniteNumber(stats.rank) &&
+    isNullableString(stats.handle) &&
+    isNullableString(stats.avatar_url)
+  )
+}
+
 function isLinkedTraderForViewer(value: unknown, userId: string): value is LinkedTrader {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const trader = value as Record<string, unknown>
@@ -76,12 +97,16 @@ function isLinkedTraderForViewer(value: unknown, userId: string): value is Linke
     trader.user_id === userId &&
     typeof trader.trader_id === 'string' &&
     typeof trader.source === 'string' &&
+    typeof trader.market_type === 'string' &&
     typeof trader.is_primary === 'boolean' &&
     typeof trader.display_order === 'number' &&
+    Number.isFinite(trader.display_order) &&
     typeof trader.verified_at === 'string' &&
     typeof trader.verification_method === 'string' &&
+    typeof trader.created_at === 'string' &&
+    typeof trader.updated_at === 'string' &&
     (trader.label === null || typeof trader.label === 'string') &&
-    (trader.stats === null || (typeof trader.stats === 'object' && !Array.isArray(trader.stats)))
+    (trader.stats === null || isLinkedTraderStats(trader.stats))
   )
 }
 

@@ -285,4 +285,30 @@ describe('TraderLinksSection viewer ownership', () => {
     expect(screen.queryByText('Foreign')).not.toBeInTheDocument()
     expect(screen.getByText('noLinkedAccounts')).toBeInTheDocument()
   })
+
+  it('rejects malformed nested stats before numeric rendering', async () => {
+    mockAuthedFetch.mockResolvedValue(
+      listResult([
+        {
+          ...linkedTrader('user-a', 'Malformed stats'),
+          stats: {
+            arena_score: '99.5',
+            roi: 12,
+            pnl: 50,
+            rank: 1,
+            handle: null,
+            avatar_url: null,
+          },
+        },
+      ])
+    )
+
+    render(<TraderLinksSection userId="user-a" />)
+
+    await waitFor(() =>
+      expect(mockShowToast).toHaveBeenCalledWith('loadLinkedTradersFailed', 'error')
+    )
+    expect(screen.queryByText('Malformed stats')).not.toBeInTheDocument()
+    expect(screen.getByText('noLinkedAccounts')).toBeInTheDocument()
+  })
 })
