@@ -204,4 +204,65 @@ describe('GET /api/search', () => {
     expect(body.suggestions).toBeUndefined()
     expect(body.total).toBe(0)
   })
+
+  it('rebuilds cached group results and suggestions from current mutable fields', async () => {
+    mockCacheGet.mockResolvedValue({
+      result: {
+        query: 'current',
+        results: {
+          traders: [],
+          posts: [],
+          users: [],
+          groups: [
+            {
+              id: '10000000-0000-4000-8000-000000000001',
+              type: 'group',
+              title: 'Stale secret name',
+              subtitle: 'Stale secret description',
+              href: '/groups/stale-path',
+              meta: { member_count: 99 },
+            },
+          ],
+        },
+        total: 1,
+      },
+      suggestionCandidates: {
+        traders: [],
+        posts: [],
+        groups: [{ id: '10000000-0000-4000-8000-000000000001', name: 'Stale suggestion' }],
+      },
+    })
+    const currentGroupQuery = makeChainMock({
+      data: [
+        {
+          id: '10000000-0000-4000-8000-000000000001',
+          name: 'Current name',
+          description: 'Current description',
+          member_count: 7,
+        },
+      ],
+      error: null,
+    })
+    mockFrom.mockReturnValueOnce(currentGroupQuery)
+
+    const req = new NextRequest('http://localhost/api/search?q=current')
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(body.results.groups).toEqual([
+      {
+        id: '10000000-0000-4000-8000-000000000001',
+        type: 'group',
+        title: 'Current name',
+        subtitle: 'Current description',
+        href: '/groups/10000000-0000-4000-8000-000000000001',
+        meta: { member_count: 7 },
+      },
+    ])
+    expect(body.suggestions).toEqual(['Current name'])
+    expect(JSON.stringify(body)).not.toContain('Stale secret')
+    expect(JSON.stringify(body)).not.toContain('Stale suggestion')
+    expect(currentGroupQuery.is).toHaveBeenCalledWith('dissolved_at', null)
+    expect(currentGroupQuery.in).toHaveBeenCalledWith('visibility', ['open', 'apply'])
+  })
 })
