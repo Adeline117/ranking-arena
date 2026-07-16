@@ -154,4 +154,13 @@ describe('DEX golden-wallet production fixture', () => {
     solanaWallet.wallet = 'A'.repeat(32)
     expect(() => parseDexGoldenWalletSnapshot(wrongSolanaByteLength)).toThrow(/exactly 32 bytes/)
   })
+
+  it('rejects negative zero before it can alias canonical zero in a fixture hash', () => {
+    const negativeZero = mutableFixture()
+    const wallets = negativeZero.wallets as Array<Record<string, unknown>>
+    wallets[0].activity_proxy_count = -0
+
+    expect(() => parseDexGoldenWalletSnapshot(negativeZero)).toThrow(/negative zero/)
+    expect(() => dexGoldenWalletSnapshotSha256(negativeZero)).toThrow(/negative zero/)
+  })
 })

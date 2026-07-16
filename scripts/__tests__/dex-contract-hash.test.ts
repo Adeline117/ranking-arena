@@ -21,7 +21,7 @@ describe('strict DEX contract hashing', () => {
   it('serializes nested plain values and permits repeated non-cyclic references', () => {
     const shared = Object.assign(Object.create(null) as Record<string, unknown>, { b: 2, a: 1 })
 
-    expect(strictCanonicalJson({ shared, list: [null, true, -0, 1.25, shared] })).toBe(
+    expect(strictCanonicalJson({ shared, list: [null, true, 0, 1.25, shared] })).toBe(
       '{"list":[null,true,0,1.25,{"a":1,"b":2}],"shared":{"a":1,"b":2}}'
     )
   })
@@ -34,6 +34,7 @@ describe('strict DEX contract hashing', () => {
     ['NaN', { value: Number.NaN }],
     ['positive infinity', { value: Number.POSITIVE_INFINITY }],
     ['negative infinity', { value: Number.NEGATIVE_INFINITY }],
+    ['negative zero', { value: -0 }],
     ['date', { value: new Date(0) }],
     ['map', { value: new Map() }],
   ])('rejects %s instead of silently coercing it', (_label, value) => {
