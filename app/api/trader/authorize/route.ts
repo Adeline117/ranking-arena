@@ -6,7 +6,6 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { encryptAuthorizationCredential } from '@/lib/exchange/authorization-credentials'
 import { validateExchangeApiKey } from '@/lib/validators/api-key-validator'
@@ -25,25 +24,14 @@ interface AuthorizeRequest {
   syncFrequency?: 'realtime' | '5min' | '15min' | '1hour'
 }
 
-async function getStrictUserClient(request: NextRequest) {
-  const user = await getAuthUser(request)
-  if (!user) return null
-
-  // getAuthUser already validates this exact Bearer shape. Parse it again only
-  // to pass the verified caller token to the RLS-scoped data client below.
+async function getStrictUser(request: NextRequest) {
+  // Keep this endpoint bearer-only. Database access is service-scoped below,
+  // so ownership must always be expressed explicitly in every query.
   const authHeader = request.headers.get('authorization')
   const match = authHeader?.match(/^Bearer\s+(\S+)$/i)
   if (!match) return null
 
-  const supabase = createClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      global: { headers: { Authorization: `Bearer ${match[1]}` } },
-    }
-  )
-
-  return { user, supabase }
+  return getAuthUser(request)
 }
 
 export async function POST(request: NextRequest) {
@@ -51,11 +39,11 @@ export async function POST(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    const auth = await getStrictUserClient(request)
+    const auth = await getStrictUser(request)
     if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const { user } = auth
+    const user = auth
 
     // Parse request body
     const body: AuthorizeRequest = await request.json()
@@ -225,13 +213,15 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
-    const auth = await getStrictUserClient(request)
+    const auth = await getStrictUser(request)
     if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const { user, supabase } = auth
+    const user = auth
+    const supabase = getSupabaseAdmin()
 
-    // Get user's authorizations (RLS policy handles filtering)
+    // Return only the safe status projection; encrypted credentials and OAuth
+    // tokens never leave the service boundary.
     const { data: authorizations, error } = await supabase
       .from('trader_authorizations')
       .select(
@@ -265,11 +255,11 @@ export async function DELETE(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    const auth = await getStrictUserClient(request)
+    const auth = await getStrictUser(request)
     if (!auth) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
-    const { user, supabase } = auth
+    const user = auth
 
     // Get authorization ID from query
     const { searchParams } = new URL(request.url)
@@ -278,9 +268,13 @@ export async function DELETE(request: NextRequest) {
     if (!authorizationId) {
       return NextResponse.json({ error: 'Missing authorization ID' }, { status: 400 })
     }
+    if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(authorizationId)) {
+      return NextResponse.json({ error: 'Invalid authorization ID' }, { status: 400 })
+    }
 
-    // Revoke authorization (RLS policy handles ownership check)
-    const { error } = await supabase
+    // The service client bypasses RLS, so both identifiers are mandatory. The
+    // returned row proves that this caller actually owned the target.
+    const { data: revoked, error } = await getSupabaseAdmin()
       .from('trader_authorizations')
       .update({
         status: 'revoked',
@@ -288,6 +282,8 @@ export async function DELETE(request: NextRequest) {
       })
       .eq('id', authorizationId)
       .eq('user_id', user.id)
+      .select('id')
+      .maybeSingle()
 
     if (error) {
       logger.dbError('revoke-authorization', error, {
@@ -295,6 +291,9 @@ export async function DELETE(request: NextRequest) {
         authorizationId,
       })
       return NextResponse.json({ error: 'Failed to revoke authorization' }, { status: 500 })
+    }
+    if (!revoked) {
+      return NextResponse.json({ error: 'Authorization not found' }, { status: 404 })
     }
 
     return NextResponse.json({
