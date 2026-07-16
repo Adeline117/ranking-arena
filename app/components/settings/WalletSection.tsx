@@ -31,27 +31,52 @@ interface WalletSectionProps {
 export function WalletSection({ onToast, onConfirm }: WalletSectionProps) {
   const { address: connectedAddress, isConnected } = useAccount()
   const { linkWallet, isLoading: linkLoading, error: siweError, clearError } = useSiweAuth()
-  const { linkedAddress, hasNFT, isLoading: walletLoading, unlinkWallet, refresh } = useWallet()
+  const {
+    linkedAddress,
+    hasNFT,
+    isLoading: walletLoading,
+    viewerScopeKey,
+    captureWalletOperation,
+    isWalletOperationCurrent,
+    unlinkWallet,
+    refresh,
+  } = useWallet()
   const { tier } = usePremium()
   const { t } = useLanguage()
-  const [unlinking, setUnlinking] = useState(false)
+  const [unlinkingScopeKey, setUnlinkingScopeKey] = useState<string | null>(null)
+  const unlinking = viewerScopeKey !== null && unlinkingScopeKey === viewerScopeKey
 
   const handleLinkWallet = async () => {
+    const operation = captureWalletOperation()
+    if (!operation) return
+
     clearError()
     const result = await linkWallet()
+    if (!isWalletOperationCurrent(operation)) return
+
     if (result) {
       onToast(t('walletLinkedSuccess'), 'success')
-      refresh()
+      await refresh(operation)
+      if (!isWalletOperationCurrent(operation)) return
     }
   }
 
   const handleUnlinkWallet = async () => {
+    // Capture A before the confirmation dialog. The dialog can remain open
+    // while canonical auth switches to B/C, so nothing after it may re-read a
+    // mutable current session.
+    const operation = captureWalletOperation()
+    if (!operation) return
+
     const confirmed = await onConfirm(t('walletUnlinkTitle'), t('walletUnlinkConfirm'))
+    if (!isWalletOperationCurrent(operation)) return
     if (!confirmed) return
 
-    setUnlinking(true)
-    const success = await unlinkWallet()
-    setUnlinking(false)
+    const operationScopeKey = `${operation.viewerKey}\u0000${operation.sessionGeneration}`
+    setUnlinkingScopeKey(operationScopeKey)
+    const success = await unlinkWallet(operation)
+    if (!isWalletOperationCurrent(operation)) return
+    setUnlinkingScopeKey(null)
 
     if (success) {
       onToast(t('walletUnlinked'), 'success')
