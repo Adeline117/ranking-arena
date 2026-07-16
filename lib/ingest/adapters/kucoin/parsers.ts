@@ -50,9 +50,22 @@ import { validateRequiredSeriesTails, type ProfileQualityReject } from '../../co
 
 type Dict = Record<string, unknown>
 
+const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
+// KuCoin emits one cumulative bucket per day. Permit modest upstream gaps,
+// while still distinguishing a 7D/truncated response from a 30D/90D request.
+const MIN_WINDOW_COVERAGE_RATIO = 0.8
+
 function num(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null
-  const n = Number(v)
+  let n: number
+  if (typeof v === 'number') {
+    n = v
+  } else if (typeof v === 'string') {
+    const normalized = v.trim()
+    if (!DECIMAL_NUMBER.test(normalized)) return null
+    n = Number(normalized)
+  } else {
+    return null
+  }
   return Number.isFinite(n) ? n : null
 }
 
@@ -180,6 +193,64 @@ interface ProfileBundle {
   timeframe?: number
 }
 
+interface KucoinChartEvidence {
+  payload_valid: boolean
+  row_count: number
+  invalid_row_count: number
+  invalid_shape_count: number
+  invalid_timestamp_count: number
+  invalid_pnl_count: number
+  invalid_roi_count: number
+  duplicate_timestamp_count: number
+}
+
+function parseKucoinChart(payload: unknown): {
+  points: Array<{ ts: string; pnl: number | null; ratio: number | null }>
+  evidence: KucoinChartEvidence
+} {
+  const chart = data(payload)
+  const evidence: KucoinChartEvidence = {
+    payload_valid: Array.isArray(chart),
+    row_count: 0,
+    invalid_row_count: 0,
+    invalid_shape_count: 0,
+    invalid_timestamp_count: 0,
+    invalid_pnl_count: 0,
+    invalid_roi_count: 0,
+    duplicate_timestamp_count: 0,
+  }
+  if (!Array.isArray(chart)) return { points: [], evidence }
+
+  const pointsByTimestamp = new Map<
+    string,
+    { ts: string; pnl: number | null; ratio: number | null }
+  >()
+  for (const candidate of chart) {
+    evidence.row_count += 1
+    if (typeof candidate !== 'object' || candidate === null || Array.isArray(candidate)) {
+      evidence.invalid_row_count += 1
+      evidence.invalid_shape_count += 1
+      continue
+    }
+    const row = candidate as Dict
+    const ts = iso(row.statTime)
+    const pnl = num(row.pnl)
+    const ratio = pct(row.ratio)
+    if (ts === null) evidence.invalid_timestamp_count += 1
+    if (pnl === null) evidence.invalid_pnl_count += 1
+    if (ratio === null) evidence.invalid_roi_count += 1
+    if (ts === null || pnl === null || ratio === null) evidence.invalid_row_count += 1
+    if (ts === null) continue
+    if (pointsByTimestamp.has(ts)) evidence.duplicate_timestamp_count += 1
+    pointsByTimestamp.set(ts, { ts, pnl, ratio }) // exact-timestamp last value wins
+  }
+
+  return {
+    points: [...pointsByTimestamp.values()].sort((left, right) => left.ts.localeCompare(right.ts)),
+    evidence,
+  }
+}
+
 /**
  * Profile bundle, one per TF. Per-TF roi/pnl come from the LAST point of the
  * cumulative pnl/history chart for that window; the overview block
@@ -190,18 +261,8 @@ export function parseKucoinProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const tf = ((bundle.timeframe === 0 ? 90 : bundle.timeframe) ?? 30) as Timeframe
   const summary = data(bundle.summary) as Dict | null
   const overview = data(bundle.overview) as Dict | null
-  const chart = data(bundle.pnlHistory)
   const prefs = data(bundle.currencyPreference)
-
-  const points: Array<{ ts: string; pnl: number | null; ratio: number | null }> = []
-  if (Array.isArray(chart)) {
-    for (const row of chart as Dict[]) {
-      const ts = iso(row.statTime)
-      if (ts === null) continue
-      points.push({ ts, pnl: num(row.pnl), ratio: pct(row.ratio) })
-    }
-  }
-  points.sort((left, right) => left.ts.localeCompare(right.ts))
+  const { points } = parseKucoinChart(bundle.pnlHistory)
   const last = points.length > 0 ? points[points.length - 1] : null
 
   const stats: ParsedStats[] = []
@@ -281,11 +342,58 @@ export function parseKucoinProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
 export function validateKucoinProfile(
   profile: ParsedProfile,
   ctx: ParseCtx,
-  requestedTimeframe: Timeframe
+  requestedTimeframe: Timeframe,
+  raw: unknown
 ): ProfileQualityReject[] {
-  return validateRequiredSeriesTails(profile, ctx, requestedTimeframe, {
+  const timeframe = requestedTimeframe === 0 ? 90 : requestedTimeframe
+  const stat = profile.stats.find((candidate) => candidate.timeframe === timeframe)
+  const rawLeadDays = stat?.extras.lead_days
+  const leadDays =
+    typeof rawLeadDays === 'number' && Number.isFinite(rawLeadDays) && rawLeadDays >= 0
+      ? Math.floor(rawLeadDays)
+      : null
+  const expectedDays = Math.min(timeframe, Math.max(1, leadDays ?? timeframe))
+  const minPointCount = Math.max(1, Math.ceil(expectedDays * MIN_WINDOW_COVERAGE_RATIO))
+  const minCoverageSpanMs =
+    expectedDays <= 1 ? 0 : Math.floor((expectedDays - 1) * MIN_WINDOW_COVERAGE_RATIO) * 86_400_000
+
+  const rejects = validateRequiredSeriesTails(profile, ctx, requestedTimeframe, {
     requiredMetrics: ['pnl', 'roi'],
+    minPointCount,
+    minCoverageSpanMs,
   })
+  const bundle = (raw ?? {}) as ProfileBundle
+  const rawEvidence = parseKucoinChart(bundle.pnlHistory).evidence
+  const rawBlockingReasons: string[] = []
+  if (!rawEvidence.payload_valid) rawBlockingReasons.push('profile_series_payload_invalid')
+  if (rawEvidence.invalid_row_count > 0) {
+    rawBlockingReasons.push('profile_series_point_invalid')
+  }
+  if (rawBlockingReasons.length === 0) return rejects
+
+  const existing = rejects[0]
+  const existingReasons = Array.isArray(existing?.payload.blocking_reasons)
+    ? existing.payload.blocking_reasons.filter(
+        (reason): reason is string => typeof reason === 'string'
+      )
+    : existing
+      ? [existing.reason]
+      : []
+  const blockingReasons = [...new Set([...existingReasons, ...rawBlockingReasons])]
+  return [
+    {
+      reason: existing?.reason ?? rawBlockingReasons[0],
+      payload: {
+        ...(existing?.payload ?? {
+          requested_timeframe: requestedTimeframe,
+          canonical_timeframe: timeframe,
+          scraped_at: ctx.scrapedAt,
+        }),
+        blocking_reasons: blockingReasons,
+        raw_chart: rawEvidence,
+      },
+    },
+  ]
 }
 
 /** Current positions are not publicly exposed (visibility-gated). */
