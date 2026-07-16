@@ -1,5 +1,10 @@
 # 迁移漂移审计与对账（2026-07-02）✅ 已完成
 
+> **历史快照，操作结论已被 ADR-023 supersede（2026-07-16）。** 当日补记曾让
+> `db push` no-op，但后续换名/远端-only 版本再次累积；当前实测 `db push --dry-run`
+> 会因历史不可对应而拒绝。不要按本文旧结论裸跑 `db push`，也不要执行 CLI 建议的
+> `migration repair --status reverted`。现行单文件流程见 `CLAUDE.md` 与 ADR-023。
+
 > 差距报告 #5 的专项。审计 + 对账**均已执行完成**。
 > 生产项目 = `iknktzifjdyujdccyhsv`（us-west-2）。
 >

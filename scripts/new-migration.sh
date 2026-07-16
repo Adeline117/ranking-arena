@@ -105,8 +105,9 @@ cat >&2 <<NUDGE
 
 下一步(别只写不应用 —— ~200 迁移漂移就是这么来的):
   1. 写 SQL 进上面的文件
-  2. 应用到生产: supabase db push (name 与文件描述一致, ledger 才对得上)
-                 或 Supabase MCP apply_migration
+  2. 应用到生产: Supabase MCP apply_migration (单文件,name=文件描述)
+     禁止裸跑 db push;当前远端历史仍不可直接重放。只有 db push --dry-run 明确
+     只列目标文件时才可继续,否则停止并按 CLAUDE.md/ADR-023 处理。
   3. 核对落地: npm run qa:schema   (代码 DB 依赖 vs 生产现实)
 NUDGE
 
