@@ -1,9 +1,8 @@
 'use client'
 
-import React, { Suspense, useEffect, useState } from 'react'
+import React, { Suspense, useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase/client'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 // MobileBottomNav is rendered in root layout.tsx — do not duplicate here
 import { Box, Text, Button } from '@/app/components/base'
@@ -54,6 +53,8 @@ import {
 import { ApiKeysSection } from './components/ApiKeysSection'
 import TraderAlertsManager from '@/app/components/alerts/TraderAlertsManager'
 import { logger } from '@/lib/logger'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { captureSettingsViewer, isSettingsViewerCurrent } from './hooks/settings-viewer-scope'
 
 function SettingsContent() {
   const router = useRouter()
@@ -61,55 +62,66 @@ function SettingsContent() {
   const { showConfirm } = useDialog()
   const { t } = useLanguage()
   const { activeSection, scrollToSection } = useActiveSection()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
 
   // Lazy-load flags
   const [sessionsLoaded, setSessionsLoaded] = useState(false)
   const [passkeysLoaded, setPasskeysLoaded] = useState(false)
   const [blockedUsersLoaded, setBlockedUsersLoaded] = useState(false)
 
-  const h = useSettingsHandlers({ showToast, showConfirm, t })
+  const h = useSettingsHandlers({ auth, showToast, showConfirm, t })
+  const {
+    loadBlockedUsers,
+    loadPasskeys,
+    loadSessions,
+    loadingBlockedUsers,
+    loadingPasskeys,
+    loadingSessions,
+    userId,
+  } = h
 
   // ===== Init auth =====
   useEffect(() => {
-    supabase.auth
-      .getUser()
-      .then(({ data }) => {
-        h.setEmail(data.user?.email ?? null)
-        h.setUserId(data.user?.id ?? null)
-        if (!data.user) {
-          router.push('/login?redirect=/settings')
-          return
-        }
-        h.loadProfile(data.user.id)
-      })
-      .catch((err) => {
-        console.warn('[settings] Auth check failed:', err?.message)
-      })
-  }, [router]) // eslint-disable-line react-hooks/exhaustive-deps -- run once on mount; h methods are stable refs defined in useSettingsHandlers
+    if (auth.authChecked && !auth.loading && !auth.userId) {
+      router.push('/login?redirect=/settings')
+    }
+  }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId, router])
+
+  // Viewer-owned lazy flags must never survive an account switch.
+  useEffect(() => {
+    setSessionsLoaded(false)
+    setPasskeysLoaded(false)
+    setBlockedUsersLoaded(false)
+  }, [auth.sessionGeneration])
 
   // ===== Lazy-load sessions and blocked users =====
   useEffect(() => {
-    if (activeSection === 'security' && !sessionsLoaded && !h.loadingSessions) {
+    if (activeSection === 'security' && !sessionsLoaded && !loadingSessions) {
       setSessionsLoaded(true)
-      h.loadSessions()
+      loadSessions()
     }
-    if (activeSection === 'security' && !passkeysLoaded && !h.loadingPasskeys) {
+    if (activeSection === 'security' && !passkeysLoaded && !loadingPasskeys) {
       setPasskeysLoaded(true)
-      h.loadPasskeys()
+      loadPasskeys()
     }
-    if (activeSection === 'privacy' && h.userId && !blockedUsersLoaded && !h.loadingBlockedUsers) {
+    if (activeSection === 'privacy' && userId && !blockedUsersLoaded && !loadingBlockedUsers) {
       setBlockedUsersLoaded(true)
-      h.loadBlockedUsers(h.userId)
+      loadBlockedUsers()
     }
   }, [
     activeSection,
     sessionsLoaded,
     passkeysLoaded,
     blockedUsersLoaded,
-    h.userId,
-    h.loadingSessions,
-    h.loadingPasskeys,
-    h.loadingBlockedUsers,
+    userId,
+    loadingSessions,
+    loadingPasskeys,
+    loadingBlockedUsers,
+    loadSessions,
+    loadPasskeys,
+    loadBlockedUsers,
   ])
 
   // ===== Render: auth required / loading states =====
@@ -611,11 +623,13 @@ function SettingsContent() {
                   variant="secondary"
                   size="sm"
                   onClick={async () => {
+                    const scope = captureSettingsViewer(authRef.current)
+                    if (!scope) return
                     const confirmed = await showConfirm(
                       t('discardChanges'),
                       t('discardChangesConfirm')
                     )
-                    if (confirmed && h.userId) {
+                    if (confirmed && isSettingsViewerCurrent(scope, authRef.current)) {
                       h.setTouchedFields({
                         handle: false,
                         newPassword: false,
@@ -625,7 +639,7 @@ function SettingsContent() {
                       h.setHandleAvailable(null)
                       h.setAvatarFile(null)
                       h.setCoverFile(null)
-                      h.loadProfile(h.userId)
+                      h.loadProfile()
                     }
                   }}
                   disabled={h.saving}
