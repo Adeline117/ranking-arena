@@ -12,7 +12,7 @@ function queryRows(): DexGoldenWalletQueryRow[] {
       snapshot_actual_count: 2,
       source_currency: 'USDT',
       entry_currency: 'USDT',
-      source_chain_id: '56',
+      source_meta_chain_id: null,
       is_derived: false,
       wallet_address: `0x${'1'.repeat(40)}`,
       exchange_trader_id: `0x${'1'.repeat(40)}`,
@@ -34,7 +34,7 @@ function queryRows(): DexGoldenWalletQueryRow[] {
       snapshot_actual_count: 2,
       source_currency: 'USDT',
       entry_currency: 'USDT',
-      source_chain_id: '56',
+      source_meta_chain_id: '56',
       is_derived: false,
       wallet_address: `0x${'2'.repeat(40)}`,
       exchange_trader_id: `0x${'2'.repeat(40)}`,
@@ -56,7 +56,7 @@ function queryRows(): DexGoldenWalletQueryRow[] {
       snapshot_actual_count: 2,
       source_currency: 'USDC',
       entry_currency: 'USDC',
-      source_chain_id: '501',
+      source_meta_chain_id: null,
       is_derived: false,
       wallet_address: 'A'.repeat(44),
       exchange_trader_id: 'A'.repeat(44),
@@ -78,7 +78,7 @@ function queryRows(): DexGoldenWalletQueryRow[] {
       snapshot_actual_count: 2,
       source_currency: 'USDC',
       entry_currency: 'USDC',
-      source_chain_id: '501',
+      source_meta_chain_id: '501',
       is_derived: false,
       wallet_address: 'B'.repeat(44),
       exchange_trader_id: 'B'.repeat(44),
@@ -155,8 +155,8 @@ describe('DEX golden-wallet production row contract', () => {
     expect(() => buildDexGoldenWalletCandidates(wrongCurrency)).toThrow(/PnL currency/)
 
     const wrongChain = queryRows()
-    wrongChain[0].source_chain_id = '1'
-    expect(() => buildDexGoldenWalletCandidates(wrongChain)).toThrow(/source chain id/)
+    wrongChain[0].source_meta_chain_id = '1'
+    expect(() => buildDexGoldenWalletCandidates(wrongChain)).toThrow(/source chain id conflicts/)
 
     const derived = queryRows()
     derived[0].is_derived = true
