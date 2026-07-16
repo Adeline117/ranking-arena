@@ -1,0 +1,582 @@
+{
+  "schema_version": 1,
+  "evidence_as_of": "2026-07-16T00:00:00.000Z",
+  "purpose": "deployment_evidence_only",
+  "artifacts": [
+    {
+      "artifact_id": "gains-addresses-aa7a05a4",
+      "official_url": "https://github.com/GainsNetwork-org/sdk/blob/aa7a05a4919ba6667513c128e6bf5806af0be181/src/contracts/addresses.json",
+      "repository": "https://github.com/GainsNetwork-org/sdk",
+      "git_commit": "aa7a05a4919ba6667513c128e6bf5806af0be181",
+      "path": "src/contracts/addresses.json",
+      "content_sha256": "325ff862ab21af9e6cb8d1220df92f4a5cfe43d4da92e34a3360f4b148da1e5b",
+      "license": "MIT",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "gains-diamond-abi-aa7a05a4",
+      "official_url": "https://github.com/GainsNetwork-org/sdk/blob/aa7a05a4919ba6667513c128e6bf5806af0be181/abi/GNSMultiCollatDiamond.json",
+      "repository": "https://github.com/GainsNetwork-org/sdk",
+      "git_commit": "aa7a05a4919ba6667513c128e6bf5806af0be181",
+      "path": "abi/GNSMultiCollatDiamond.json",
+      "content_sha256": "bd91559761d9a1e971fd339524d619b77c7481d3e1747874d98b6d789f1a06e0",
+      "license": "MIT",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "gmx-contracts-40f71d90",
+      "official_url": "https://github.com/gmx-io/gmx-interface/blob/40f71d90af369b91ac80a5365c1163d5c1e0867a/sdk/src/configs/contracts.ts",
+      "repository": "https://github.com/gmx-io/gmx-interface",
+      "git_commit": "40f71d90af369b91ac80a5365c1163d5c1e0867a",
+      "path": "sdk/src/configs/contracts.ts",
+      "content_sha256": "be70d19a9c9b3f822de060b1eef38c268a18658af0bf7759e3bfdbc2ee1ad9d3",
+      "license": "BUSL-1.1",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "gmx-event-emitter-abi-40f71d90",
+      "official_url": "https://github.com/gmx-io/gmx-interface/blob/40f71d90af369b91ac80a5365c1163d5c1e0867a/sdk/src/abis/EventEmitter.ts",
+      "repository": "https://github.com/gmx-io/gmx-interface",
+      "git_commit": "40f71d90af369b91ac80a5365c1163d5c1e0867a",
+      "path": "sdk/src/abis/EventEmitter.ts",
+      "content_sha256": "943f422f9b2a38796d14245201fe917f90fc161822b95811d838b66256de8e44",
+      "license": "BUSL-1.1",
+      "usage": "reference_only"
+    }
+  ],
+  "non_evm_exemptions": [
+    {
+      "protocol": "hyperliquid",
+      "acquisition_mode": "hypercore_node_s3",
+      "synthetic_census_chain_id": 999,
+      "reason": "Hyperliquid history and live events use the official HyperCore node/S3 path; census chain_id 999 is a synthetic identity, not an EVM deployment."
+    }
+  ],
+  "deployments": [
+    {
+      "deployment_id": "gmx:eip155:42161",
+      "protocol": "gmx",
+      "chain": { "namespace": "eip155", "chain_id": 42161, "network": "Arbitrum" },
+      "lifecycle_status": "active",
+      "status_as_of": "2026-07-16T00:00:00.000Z",
+      "upgrade_model": "modular_contracts",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "decoder_owner_unassigned",
+        "finality_policy_unverified",
+        "golden_event_unverified",
+        "start_block_unverified",
+        "upgrade_epochs_unverified",
+        "validation_abis_unpinned"
+      ],
+      "epochs": [
+        {
+          "version_id": "official-address-snapshot-40f71d90",
+          "start_block": null,
+          "end_block": null,
+          "contracts": [
+            {
+              "role": "event_emitter",
+              "address": "0xC8ee91A54287DB53897056e12D9819156D3822Fb",
+              "event_source": true,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": "gmx-event-emitter-abi-40f71d90"
+            },
+            {
+              "role": "data_store",
+              "address": "0xFD70de6b91282D8017aA4E741e9Ae325CAb992d8",
+              "event_source": false,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": null
+            },
+            {
+              "role": "synthetics_reader",
+              "address": "0x470fbC46bcC0f16532691Df360A07d8Bf5ee0789",
+              "event_source": false,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": null
+            }
+          ]
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "required_fact_families": [
+          "position_lifecycle",
+          "orders",
+          "fees",
+          "funding",
+          "borrowing",
+          "liquidation",
+          "price_impact",
+          "cashflow"
+        ]
+      },
+      "finality_policy": null,
+      "evidence": [
+        {
+          "claim": "GMX lists Arbitrum as an active production network.",
+          "official_url": "https://docs.gmx.io/docs/sdk/overview/"
+        }
+      ]
+    },
+    {
+      "deployment_id": "gmx:eip155:43114",
+      "protocol": "gmx",
+      "chain": { "namespace": "eip155", "chain_id": 43114, "network": "Avalanche" },
+      "lifecycle_status": "active",
+      "status_as_of": "2026-07-16T00:00:00.000Z",
+      "upgrade_model": "modular_contracts",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "decoder_owner_unassigned",
+        "finality_policy_unverified",
+        "golden_event_unverified",
+        "start_block_unverified",
+        "upgrade_epochs_unverified",
+        "validation_abis_unpinned"
+      ],
+      "epochs": [
+        {
+          "version_id": "official-address-snapshot-40f71d90",
+          "start_block": null,
+          "end_block": null,
+          "contracts": [
+            {
+              "role": "event_emitter",
+              "address": "0xDb17B211c34240B014ab6d61d4A31FA0C0e20c26",
+              "event_source": true,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": "gmx-event-emitter-abi-40f71d90"
+            },
+            {
+              "role": "data_store",
+              "address": "0x2F0b22339414ADeD7D5F06f9D604c7fF5b2fe3f6",
+              "event_source": false,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": null
+            },
+            {
+              "role": "synthetics_reader",
+              "address": "0x62Cb8740E6986B29dC671B2EB596676f60590A5B",
+              "event_source": false,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": null
+            }
+          ]
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "required_fact_families": [
+          "position_lifecycle",
+          "orders",
+          "fees",
+          "funding",
+          "borrowing",
+          "liquidation",
+          "price_impact",
+          "cashflow"
+        ]
+      },
+      "finality_policy": null,
+      "evidence": [
+        {
+          "claim": "GMX lists Avalanche as an active production network.",
+          "official_url": "https://docs.gmx.io/docs/sdk/overview/"
+        }
+      ]
+    },
+    {
+      "deployment_id": "gmx:eip155:4326",
+      "protocol": "gmx",
+      "chain": { "namespace": "eip155", "chain_id": 4326, "network": "MegaETH" },
+      "lifecycle_status": "active",
+      "status_as_of": "2026-07-16T00:00:00.000Z",
+      "upgrade_model": "modular_contracts",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "decoder_owner_unassigned",
+        "finality_policy_unverified",
+        "golden_event_unverified",
+        "start_block_unverified",
+        "upgrade_epochs_unverified",
+        "validation_abis_unpinned"
+      ],
+      "epochs": [
+        {
+          "version_id": "official-address-snapshot-40f71d90",
+          "start_block": null,
+          "end_block": null,
+          "contracts": [
+            {
+              "role": "event_emitter",
+              "address": "0xAf2E131d483cedE068e21a9228aD91E623a989C2",
+              "event_source": true,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": "gmx-event-emitter-abi-40f71d90"
+            },
+            {
+              "role": "data_store",
+              "address": "0xE43C7B694f6b652a9F4A0f275C008d18758Dce35",
+              "event_source": false,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": null
+            },
+            {
+              "role": "synthetics_reader",
+              "address": "0x0f038EB4a38B08cd3c937a3256b51aa01904a684",
+              "event_source": false,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": null
+            }
+          ]
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "required_fact_families": [
+          "position_lifecycle",
+          "orders",
+          "fees",
+          "funding",
+          "borrowing",
+          "liquidation",
+          "price_impact",
+          "cashflow"
+        ]
+      },
+      "finality_policy": null,
+      "evidence": [
+        {
+          "claim": "GMX lists MegaETH as an active production network.",
+          "official_url": "https://docs.gmx.io/docs/sdk/overview/"
+        }
+      ]
+    },
+    {
+      "deployment_id": "gmx:eip155:3637",
+      "protocol": "gmx",
+      "chain": { "namespace": "eip155", "chain_id": 3637, "network": "Botanix" },
+      "lifecycle_status": "legacy",
+      "status_as_of": "2026-07-16T00:00:00.000Z",
+      "upgrade_model": "modular_contracts",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "decoder_owner_unassigned",
+        "finality_policy_unverified",
+        "golden_event_unverified",
+        "legacy_withdrawals_only",
+        "start_block_unverified",
+        "upgrade_epochs_unverified",
+        "validation_abis_unpinned"
+      ],
+      "epochs": [
+        {
+          "version_id": "official-address-snapshot-40f71d90",
+          "start_block": null,
+          "end_block": null,
+          "contracts": [
+            {
+              "role": "event_emitter",
+              "address": "0xAf2E131d483cedE068e21a9228aD91E623a989C2",
+              "event_source": true,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": "gmx-event-emitter-abi-40f71d90"
+            },
+            {
+              "role": "data_store",
+              "address": "0xA23B81a89Ab9D7D89fF8fc1b5d8508fB75Cc094d",
+              "event_source": false,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": null
+            },
+            {
+              "role": "synthetics_reader",
+              "address": "0x922766ca6234cD49A483b5ee8D86cA3590D0Fb0E",
+              "event_source": false,
+              "address_artifact_id": "gmx-contracts-40f71d90",
+              "abi_artifact_id": null
+            }
+          ]
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "required_fact_families": [
+          "position_lifecycle",
+          "orders",
+          "fees",
+          "funding",
+          "borrowing",
+          "liquidation",
+          "price_impact",
+          "cashflow"
+        ]
+      },
+      "finality_policy": null,
+      "evidence": [
+        {
+          "claim": "GMX lists Botanix as withdrawals only, so it is a legacy evidence lane.",
+          "official_url": "https://docs.gmx.io/docs/sdk/overview/"
+        }
+      ]
+    },
+    {
+      "deployment_id": "gtrade:eip155:137",
+      "protocol": "gtrade",
+      "chain": { "namespace": "eip155", "chain_id": 137, "network": "Polygon" },
+      "lifecycle_status": "active",
+      "status_as_of": "2026-07-16T00:00:00.000Z",
+      "upgrade_model": "diamond",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "decoder_owner_unassigned",
+        "diamond_upgrade_epochs_unverified",
+        "finality_policy_unverified",
+        "golden_event_unverified",
+        "start_block_unverified"
+      ],
+      "epochs": [
+        {
+          "version_id": "official-address-snapshot-aa7a05a4",
+          "start_block": null,
+          "end_block": null,
+          "contracts": [
+            {
+              "role": "diamond",
+              "address": "0x209A9A01980377916851af2cA075C2b170452018",
+              "event_source": true,
+              "address_artifact_id": "gains-addresses-aa7a05a4",
+              "abi_artifact_id": "gains-diamond-abi-aa7a05a4"
+            }
+          ]
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "required_fact_families": [
+          "position_lifecycle",
+          "fees",
+          "borrowing",
+          "funding",
+          "liquidation",
+          "prices",
+          "cashflow"
+        ]
+      },
+      "finality_policy": null,
+      "evidence": [
+        {
+          "claim": "Gains lists Polygon Mainnet under active contracts.",
+          "official_url": "https://docs.gains.trade/what-is-gains-network/contract-addresses"
+        }
+      ]
+    },
+    {
+      "deployment_id": "gtrade:eip155:42161",
+      "protocol": "gtrade",
+      "chain": { "namespace": "eip155", "chain_id": 42161, "network": "Arbitrum" },
+      "lifecycle_status": "active",
+      "status_as_of": "2026-07-16T00:00:00.000Z",
+      "upgrade_model": "diamond",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "decoder_owner_unassigned",
+        "diamond_upgrade_epochs_unverified",
+        "finality_policy_unverified",
+        "golden_event_unverified",
+        "start_block_unverified"
+      ],
+      "epochs": [
+        {
+          "version_id": "official-address-snapshot-aa7a05a4",
+          "start_block": null,
+          "end_block": null,
+          "contracts": [
+            {
+              "role": "diamond",
+              "address": "0xFF162c694eAA571f685030649814282eA457f169",
+              "event_source": true,
+              "address_artifact_id": "gains-addresses-aa7a05a4",
+              "abi_artifact_id": "gains-diamond-abi-aa7a05a4"
+            }
+          ]
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "required_fact_families": [
+          "position_lifecycle",
+          "fees",
+          "borrowing",
+          "funding",
+          "liquidation",
+          "prices",
+          "cashflow"
+        ]
+      },
+      "finality_policy": null,
+      "evidence": [
+        {
+          "claim": "Gains lists Arbitrum Mainnet under active contracts.",
+          "official_url": "https://docs.gains.trade/what-is-gains-network/contract-addresses"
+        }
+      ]
+    },
+    {
+      "deployment_id": "gtrade:eip155:8453",
+      "protocol": "gtrade",
+      "chain": { "namespace": "eip155", "chain_id": 8453, "network": "Base" },
+      "lifecycle_status": "active",
+      "status_as_of": "2026-07-16T00:00:00.000Z",
+      "upgrade_model": "diamond",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "decoder_owner_unassigned",
+        "diamond_upgrade_epochs_unverified",
+        "finality_policy_unverified",
+        "golden_event_unverified",
+        "start_block_unverified"
+      ],
+      "epochs": [
+        {
+          "version_id": "official-address-snapshot-aa7a05a4",
+          "start_block": null,
+          "end_block": null,
+          "contracts": [
+            {
+              "role": "diamond",
+              "address": "0x6cD5aC19a07518A8092eEFfDA4f1174C72704eeb",
+              "event_source": true,
+              "address_artifact_id": "gains-addresses-aa7a05a4",
+              "abi_artifact_id": "gains-diamond-abi-aa7a05a4"
+            }
+          ]
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "required_fact_families": [
+          "position_lifecycle",
+          "fees",
+          "borrowing",
+          "funding",
+          "liquidation",
+          "prices",
+          "cashflow"
+        ]
+      },
+      "finality_policy": null,
+      "evidence": [
+        {
+          "claim": "Gains lists Base Mainnet under active contracts.",
+          "official_url": "https://docs.gains.trade/what-is-gains-network/contract-addresses"
+        }
+      ]
+    },
+    {
+      "deployment_id": "gtrade:eip155:4326",
+      "protocol": "gtrade",
+      "chain": { "namespace": "eip155", "chain_id": 4326, "network": "MegaETH" },
+      "lifecycle_status": "active",
+      "status_as_of": "2026-07-16T00:00:00.000Z",
+      "upgrade_model": "diamond",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "decoder_owner_unassigned",
+        "diamond_upgrade_epochs_unverified",
+        "finality_policy_unverified",
+        "golden_event_unverified",
+        "start_block_unverified"
+      ],
+      "epochs": [
+        {
+          "version_id": "official-address-snapshot-aa7a05a4",
+          "start_block": null,
+          "end_block": null,
+          "contracts": [
+            {
+              "role": "diamond",
+              "address": "0x2D5B1ba6E2093a5b927Fe5bF8C049B107de31eaF",
+              "event_source": true,
+              "address_artifact_id": "gains-addresses-aa7a05a4",
+              "abi_artifact_id": "gains-diamond-abi-aa7a05a4"
+            }
+          ]
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "required_fact_families": [
+          "position_lifecycle",
+          "fees",
+          "borrowing",
+          "funding",
+          "liquidation",
+          "prices",
+          "cashflow"
+        ]
+      },
+      "finality_policy": null,
+      "evidence": [
+        {
+          "claim": "Gains lists MegaETH Mainnet under active contracts.",
+          "official_url": "https://docs.gains.trade/what-is-gains-network/contract-addresses"
+        }
+      ]
+    },
+    {
+      "deployment_id": "gtrade:eip155:33139",
+      "protocol": "gtrade",
+      "chain": { "namespace": "eip155", "chain_id": 33139, "network": "ApeChain" },
+      "lifecycle_status": "unverified",
+      "status_as_of": "2026-07-16T00:00:00.000Z",
+      "upgrade_model": "diamond",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "decoder_owner_unassigned",
+        "diamond_upgrade_epochs_unverified",
+        "finality_policy_unverified",
+        "golden_event_unverified",
+        "lifecycle_status_reconciliation_pending",
+        "start_block_unverified"
+      ],
+      "epochs": [
+        {
+          "version_id": "official-address-snapshot-aa7a05a4",
+          "start_block": null,
+          "end_block": null,
+          "contracts": [
+            {
+              "role": "diamond",
+              "address": "0x2BE5D7058AdBa14Bc38E4A83E94A81f7491b0163",
+              "event_source": true,
+              "address_artifact_id": "gains-addresses-aa7a05a4",
+              "abi_artifact_id": "gains-diamond-abi-aa7a05a4"
+            }
+          ]
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "required_fact_families": [
+          "position_lifecycle",
+          "fees",
+          "borrowing",
+          "funding",
+          "liquidation",
+          "prices",
+          "cashflow"
+        ]
+      },
+      "finality_policy": null,
+      "evidence": [
+        {
+          "claim": "Gains publishes an ApeChain address, but Arena keeps lifecycle status unverified until conflicting operational evidence is reconciled.",
+          "official_url": "https://docs.gains.trade/what-is-gains-network/contract-addresses"
+        }
+      ]
+    }
+  ]
+}
