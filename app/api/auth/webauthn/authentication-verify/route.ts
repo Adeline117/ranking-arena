@@ -113,18 +113,35 @@ export const POST = withPublic(
       return badRequest('Passkey could not be verified')
     }
 
+    // The auth trigger is the sole profile provisioner. Never mint a session
+    // for an auth identity whose required application profile is missing.
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('id')
+      .eq('id', row.user_id)
+      .maybeSingle()
+
+    if (profileError || !profile) {
+      logger.error('[authentication-verify] Provisioned profile unavailable:', profileError)
+      return serverError('Login failed')
+    }
+
     // Update the signature counter + last used timestamp (replay protection).
-    const { error: updateError } = await supabase
+    // A failed or zero-row counter write must block login; otherwise the same
+    // authenticator response can remain reusable against the stale counter.
+    const { data: updatedCredential, error: updateError } = await supabase
       .from('user_passkeys')
       .update({
         counter: verification.authenticationInfo.newCounter,
         last_used_at: new Date().toISOString(),
       })
       .eq('id', row.id)
+      .select('id')
+      .maybeSingle()
 
-    if (updateError) {
+    if (updateError || !updatedCredential) {
       logger.error('[authentication-verify] Counter update failed:', updateError)
-      // Do not block login on a counter write failure, but log it loudly.
+      return serverError('Login failed')
     }
 
     // Resolve the owning user's email so we can mint a session.
@@ -167,7 +184,7 @@ export const POST = withPublic(
       type: 'email',
     })
 
-    if (otpError || !otpData.session) {
+    if (otpError || !otpData.session || otpData.session.user.id !== row.user_id) {
       logger.error('[authentication-verify] verifyOtp failed:', otpError)
       return serverError('Failed to establish session')
     }
