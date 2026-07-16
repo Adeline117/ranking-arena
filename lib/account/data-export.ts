@@ -41,21 +41,44 @@ export class DataExportTooLargeError extends Error {
   }
 }
 
-function getSelectColumns(dataset: ExportDataset): readonly string[] {
+function getSelectColumns(
+  datasetName: string,
+  selectColumns: readonly string[]
+): readonly string[] {
   if (
-    dataset.selectColumns.length === 0 ||
-    !dataset.selectColumns.includes('id') ||
-    new Set(dataset.selectColumns).size !== dataset.selectColumns.length ||
-    dataset.selectColumns.some(
+    selectColumns.length === 0 ||
+    !selectColumns.includes('id') ||
+    new Set(selectColumns).size !== selectColumns.length ||
+    selectColumns.some(
       (column) =>
         !SIMPLE_COLUMN_NAME.test(column) ||
         FORBIDDEN_EXPORT_COLUMNS.some((forbidden) => forbidden.test(column))
     )
   ) {
-    throw new DataExportReadError(dataset.name, new Error('Unsafe export column configuration'))
+    throw new DataExportReadError(datasetName, new Error('Unsafe export column configuration'))
   }
 
-  return dataset.selectColumns
+  return selectColumns
+}
+
+export function projectExportRecord(
+  datasetName: string,
+  rawRow: unknown,
+  requestedColumns: readonly string[]
+): Record<string, unknown> {
+  const selectColumns = getSelectColumns(datasetName, requestedColumns)
+  if (!rawRow || typeof rawRow !== 'object' || Array.isArray(rawRow)) {
+    throw new DataExportReadError(datasetName, new Error('Invalid row shape'))
+  }
+  const row = rawRow as Record<string, unknown>
+  if (typeof row.id !== 'string' || selectColumns.some((column) => !Object.hasOwn(row, column))) {
+    throw new DataExportReadError(datasetName, new Error('Incomplete selected row'))
+  }
+
+  return Object.fromEntries(selectColumns.map((column) => [column, row[column]])) as Record<
+    string,
+    unknown
+  >
 }
 
 /**
@@ -70,7 +93,7 @@ export async function fetchAllExportRows(
 ): Promise<Record<string, unknown>[]> {
   const rows: Record<string, unknown>[] = []
   let cursor: string | null = null
-  const selectColumns = getSelectColumns(dataset)
+  const selectColumns = getSelectColumns(dataset.name, dataset.selectColumns)
   const selection = selectColumns.join(',')
 
   for (;;) {
@@ -94,27 +117,17 @@ export async function fetchAllExportRows(
 
     let nextCursor: string | null = cursor
     for (const rawRow of data as unknown[]) {
-      if (!rawRow || typeof rawRow !== 'object' || Array.isArray(rawRow)) {
-        throw new DataExportReadError(dataset.name, new Error('Invalid row shape'))
-      }
-      const row = rawRow as Record<string, unknown>
-      if (typeof row.id !== 'string' || (nextCursor !== null && row.id <= nextCursor)) {
-        throw new DataExportReadError(dataset.name, new Error('Non-monotonic row id'))
-      }
-      if (selectColumns.some((column) => !Object.hasOwn(row, column))) {
-        throw new DataExportReadError(dataset.name, new Error('Incomplete selected row'))
-      }
-
       // Project again at the trust boundary. Even if a mock, proxy, or future
       // PostgREST behavior returns extra fields, the export cannot widen beyond
       // the reviewed allowlist.
-      rows.push(
-        Object.fromEntries(selectColumns.map((column) => [column, row[column]])) as Record<
-          string,
-          unknown
-        >
-      )
-      nextCursor = row.id
+      const row = projectExportRecord(dataset.name, rawRow, selectColumns)
+      const rowId = row.id as string
+      if (nextCursor !== null && rowId <= nextCursor) {
+        throw new DataExportReadError(dataset.name, new Error('Non-monotonic row id'))
+      }
+
+      rows.push(row)
+      nextCursor = rowId
     }
 
     if (nextCursor === cursor) {

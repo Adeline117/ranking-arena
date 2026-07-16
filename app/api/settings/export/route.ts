@@ -14,6 +14,7 @@ import {
   DataExportReadError,
   DataExportTooLargeError,
   fetchAllExportRows,
+  projectExportRecord,
   type ExportDataset,
 } from '@/lib/account/data-export'
 
@@ -22,22 +23,9 @@ export const maxDuration = 60 // Allow up to 60s for large exports
 
 const EXPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000 // 24 hours
 
-interface UserProfile {
-  id: string
-  handle: string | null
-  avatar_url: string | null
-  bio: string | null
-  created_at: string
-  updated_at: string | null
-}
-
-interface StoredUserProfile extends UserProfile {
-  last_export_at: string | null
-}
-
 interface ExportData {
   exportedAt: string
-  profile: UserProfile | null
+  profile: Record<string, unknown>
   posts: unknown[]
   comments: unknown[]
   follows: {
@@ -49,6 +37,59 @@ interface ExportData {
     received: unknown[]
   }
 }
+
+const PROFILE_EXPORT_COLUMNS = [
+  'id',
+  'handle',
+  'avatar_url',
+  'cover_url',
+  'bio',
+  'email',
+  'wallet_address',
+  'market_pairs',
+  'interests',
+  'created_at',
+  'updated_at',
+  'email_digest',
+  'email_digest_last_sent',
+  'notify_follow',
+  'notify_like',
+  'notify_comment',
+  'notify_mention',
+  'notify_message',
+  'notify_trader_events',
+  'dm_permission',
+  'show_followers',
+  'show_following',
+  'show_pro_badge',
+  'onboarding_completed',
+  'subscription_tier',
+  'pro_plan',
+  'pro_expires_at',
+  'is_pro',
+  'api_tier',
+  'totp_enabled',
+  'is_verified',
+  'is_verified_trader',
+  'verified_trader_source',
+  'verified_trader_id',
+  'verified_at',
+  'is_banned',
+  'banned_at',
+  'ban_expires_at',
+  'banned_reason',
+  'deleted_at',
+  'deletion_scheduled_at',
+  'deletion_reason',
+  'referral_code',
+  'referred_by',
+  'utm_source',
+  'utm_medium',
+  'utm_campaign',
+  'original_email',
+  'original_handle',
+  'search_history',
+] as const
 
 const EXPORT_DATASETS = {
   posts: {
@@ -232,7 +273,7 @@ export async function POST(request: NextRequest) {
     // 24-hour cooldown.
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select('id, handle, avatar_url, bio, created_at, updated_at, last_export_at')
+      .select([...PROFILE_EXPORT_COLUMNS, 'last_export_at'].join(','))
       .eq('id', user.id)
       .maybeSingle()
 
@@ -241,7 +282,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Profile provisioning is incomplete' }, { status: 503 })
     }
 
-    const { last_export_at: lastExportAt, ...typedProfile } = profile as StoredUserProfile
+    const lastExportAt = (profile as unknown as Record<string, unknown>).last_export_at
+    if (lastExportAt !== null && typeof lastExportAt !== 'string') {
+      throw new DataExportReadError('profile', new Error('Invalid last_export_at value'))
+    }
+    const typedProfile = projectExportRecord('profile', profile, PROFILE_EXPORT_COLUMNS)
 
     if (lastExportAt) {
       const lastExport = parseStoredTimestamp(lastExportAt, 'last_export_at')
