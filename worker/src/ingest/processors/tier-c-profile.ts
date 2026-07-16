@@ -15,6 +15,7 @@ import type { Job } from 'bullmq'
 import { getConnection } from '../../connection'
 import { getSourceBySlug } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
+import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
 import type { ParseCtx } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
@@ -231,8 +232,7 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
         120
       )
 
-      const newCursor = parsed.length > 0 ? scrapedAt : null
-      await publishHistoryRows(src, traderId, kind, parsed, newCursor)
+      await publishHistoryRows(src, traderId, kind, parsed, nextHistoryCursor(parsed, cursor))
     }
 
     // Persist path (after render): RAW + profile_cache for warm re-reads.

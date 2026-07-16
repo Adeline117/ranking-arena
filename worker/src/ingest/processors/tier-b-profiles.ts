@@ -9,6 +9,7 @@ import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
 import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
+import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
 import type { HistoryKind, ParseCtx, ParsedHistoryRow, SourceRow } from '@/lib/ingest/core/types'
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
@@ -161,16 +162,7 @@ async function crawlTraderHistories(
       payload: rawPages,
     })
 
-    // New cursor = newest event ts seen (closed_at for positions, ts else);
-    // never move it backwards.
-    let newest: string | null = null
-    for (const row of rows) {
-      const ts = row.kind === 'position_history' ? row.closedAt : row.ts
-      if (ts && (newest === null || ts > newest)) newest = ts
-    }
-    const newCursor = newest !== null && (cursor === null || newest > cursor) ? newest : null
-
-    written += await publishHistoryRows(src, trader.id, kind, rows, newCursor)
+    written += await publishHistoryRows(src, trader.id, kind, rows, nextHistoryCursor(rows, cursor))
   }
   return written
 }
