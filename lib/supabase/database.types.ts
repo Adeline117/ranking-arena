@@ -8128,6 +8128,18 @@ export type Database = {
       }
       arena_source_capabilities: { Args: never; Returns: Json }
       arena_trust_scorecard: { Args: never; Returns: Json }
+      arena_visible_sources: {
+        Args: { p_season_id?: string }
+        Returns: {
+          cache_updated_at: string
+          exchange_name: string
+          exchange_slug: string
+          filter_source: string
+          product_type: string
+          registry_slug: string
+          trader_count: number
+        }[]
+      }
       arena_weekly_leaders: { Args: { p_limit?: number }; Returns: Json }
       b2c_product_metrics: { Args: { p_window_days?: number }; Returns: Json }
       bulk_enrich_sync_v2: { Args: { updates: Json }; Returns: number }
@@ -8198,6 +8210,29 @@ export type Database = {
       calculate_user_weight: { Args: { p_user_id: string }; Returns: number }
       can_access_group: {
         Args: { p_group_id: string; p_user_id: string }
+        Returns: boolean
+      }
+      can_actor_read_post_fields: {
+        Args: {
+          p_author_id: string
+          p_deleted_at: string
+          p_group_id: string
+          p_status: Database['public']['Enums']['post_status']
+          p_viewer_id: string
+          p_visibility: string
+        }
+        Returns: boolean
+      }
+      can_actor_read_post_id: {
+        Args: { p_post_id: string; p_viewer_id: string }
+        Returns: boolean
+      }
+      can_current_user_read_repost_root: {
+        Args: { p_original_post_id: string }
+        Returns: boolean
+      }
+      can_service_actor_read_post: {
+        Args: { p_actor_id?: string; p_post_id: string }
         Returns: boolean
       }
       check_dm_permission: {
@@ -9016,6 +9051,10 @@ export type Database = {
       }
       increment_view_count: { Args: { post_id: string }; Returns: undefined }
       is_group_admin: { Args: { gid: string; uid: string }; Returns: boolean }
+      lock_actor_can_interact_with_post: {
+        Args: { p_actor_id: string; p_post_id: string }
+        Returns: boolean
+      }
       moderate_comment: {
         Args: {
           p_action: string
@@ -9191,6 +9230,12 @@ export type Database = {
           verification_method: string
           verified_at: string
         }
+        SetofOptions: {
+          from: '*'
+          to: 'user_linked_traders'
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       snapshot_score_backtest: { Args: never; Returns: number }
       text_to_bytea: { Args: { data: string }; Returns: string }
@@ -9211,7 +9256,7 @@ export type Database = {
       unlink_linked_trader: {
         Args: { p_link_id: string; p_user_id: string }
         Returns: {
-          promoted_link_id: string | null
+          promoted_link_id: string
           remaining_count: number
           removed_source: string
           removed_trader_id: string
