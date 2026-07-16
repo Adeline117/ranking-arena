@@ -16,6 +16,7 @@ import {
   DataExportTooLargeError,
   fetchAllExportRows,
   fetchAllExportRowsByCursor,
+  fetchAllExportRowsForUuidParents,
   projectExportRecord,
   type CursorExportDataset,
   type ExportDataset,
@@ -74,6 +75,10 @@ interface ExportData {
   }
   groups: {
     applications: unknown[]
+  }
+  collections: {
+    owned: unknown[]
+    items: unknown[]
   }
   settings: {
     preferences: Record<string, unknown> | null
@@ -541,6 +546,36 @@ const GROUP_APPLICATIONS_EXPORT_DATASET = {
   },
 } satisfies CursorExportDataset
 
+const OWNED_COLLECTIONS_EXPORT_DATASET = {
+  name: 'collections.owned',
+  table: 'user_collections',
+  selectColumns: ['id', 'name', 'description', 'is_public', 'created_at', 'updated_at'],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
+const COLLECTION_ITEMS_EXPORT_DATASET = {
+  name: 'collections.items',
+  table: 'collection_items',
+  selectColumns: ['id', 'collection_id', 'item_type', 'item_id', 'note', 'added_at'],
+  ownerPredicate: {
+    column: 'collection_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
 const NOTIFICATIONS_EXPORT_DATASET = {
   name: 'notifications',
   table: 'notifications',
@@ -815,6 +850,47 @@ function normalizeGroupApplications(rows: Record<string, unknown>[]) {
   }))
 }
 
+function normalizeOwnedCollections(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    is_public: row.is_public,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }))
+}
+
+function normalizeCollectionItems(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    collection_id: row.collection_id,
+    item_type: row.item_type,
+    item_id: row.item_id,
+    note: row.note,
+    added_at: row.added_at,
+  }))
+}
+
+async function fetchOwnedCollectionData(supabase: SupabaseClient<Database>, userId: string) {
+  const owned = await fetchAllExportRowsByCursor(supabase, OWNED_COLLECTIONS_EXPORT_DATASET, userId)
+  const ownedIds = owned.map((collection) => {
+    if (typeof collection.id !== 'string') {
+      throw new DataExportReadError(
+        OWNED_COLLECTIONS_EXPORT_DATASET.name,
+        new Error('Owned collection is missing its UUID')
+      )
+    }
+    return collection.id
+  })
+  const items = await fetchAllExportRowsForUuidParents(
+    supabase,
+    COLLECTION_ITEMS_EXPORT_DATASET,
+    ownedIds
+  )
+  return { owned, items }
+}
+
 function normalizeNotifications(rows: Record<string, unknown>[]) {
   return rows.map((row) => ({
     id: row.id,
@@ -979,6 +1055,7 @@ export async function POST(request: NextRequest) {
       traderWatchlist,
       traderAlerts,
       groupApplications,
+      ownedCollectionData,
       notifications,
       commentLikes,
       postEmojiReactions,
@@ -1006,6 +1083,7 @@ export async function POST(request: NextRequest) {
       fetchAllExportRowsByCursor(supabase, TRADER_WATCHLIST_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, TRADER_ALERTS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, GROUP_APPLICATIONS_EXPORT_DATASET, user.id),
+      fetchOwnedCollectionData(supabase, user.id),
       fetchAllExportRowsByCursor(supabase, NOTIFICATIONS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, COMMENT_LIKES_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, POST_EMOJI_REACTIONS_EXPORT_DATASET, user.id),
@@ -1024,6 +1102,8 @@ export async function POST(request: NextRequest) {
     const normalizedTraderWatchlist = normalizeTraderWatchlist(traderWatchlist)
     const normalizedTraderAlerts = normalizeTraderAlerts(traderAlerts)
     const normalizedGroupApplications = normalizeGroupApplications(groupApplications)
+    const normalizedOwnedCollections = normalizeOwnedCollections(ownedCollectionData.owned)
+    const normalizedCollectionItems = normalizeCollectionItems(ownedCollectionData.items)
     const normalizedNotifications = normalizeNotifications(notifications)
     const normalizedCommentLikes = normalizeCommentLikes(commentLikes)
     const normalizedPostEmojiReactions = normalizePostEmojiReactions(postEmojiReactions)
@@ -1058,6 +1138,8 @@ export async function POST(request: NextRequest) {
           completedDataset('trading.watchlist', traderWatchlist.length),
           completedDataset('trading.alerts', traderAlerts.length),
           completedDataset('groups.applications', groupApplications.length),
+          completedDataset('collections.owned', ownedCollectionData.owned.length),
+          completedDataset('collections.items', ownedCollectionData.items.length),
           completedDataset('settings.preferences', preferences.length),
           completedDataset('account.bindings', accountBindings.length),
           completedDataset('account.login_sessions', loginSessions.length),
@@ -1100,6 +1182,10 @@ export async function POST(request: NextRequest) {
       },
       groups: {
         applications: normalizedGroupApplications,
+      },
+      collections: {
+        owned: normalizedOwnedCollections,
+        items: normalizedCollectionItems,
       },
       settings: {
         preferences: normalizedPreferences,

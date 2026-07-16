@@ -25,6 +25,7 @@ const mockCheckRateLimit = jest.fn()
 const mockValidateCsrfToken = jest.fn()
 const mockFetchAllExportRows = jest.fn()
 const mockFetchAllExportRowsByCursor = jest.fn()
+const mockFetchAllExportRowsForUuidParents = jest.fn()
 const mockFrom = jest.fn()
 let profileStates: QueryState[]
 
@@ -50,6 +51,8 @@ jest.mock('@/lib/account/data-export', () => {
     ...actual,
     fetchAllExportRows: (...args: unknown[]) => mockFetchAllExportRows(...args),
     fetchAllExportRowsByCursor: (...args: unknown[]) => mockFetchAllExportRowsByCursor(...args),
+    fetchAllExportRowsForUuidParents: (...args: unknown[]) =>
+      mockFetchAllExportRowsForUuidParents(...args),
   }
 })
 
@@ -382,6 +385,20 @@ describe('POST /api/settings/export', () => {
           },
         ]
       }
+      if (dataset.name === 'collections.owned') {
+        return [
+          {
+            id: '14141414-1414-4414-8414-141414141414',
+            name: 'My Signals',
+            description: 'Signals to revisit',
+            is_public: false,
+            created_at: '2026-02-16T02:30:00.000Z',
+            updated_at: '2026-02-16T03:00:00.000Z',
+            user_id: 'must-not-escape-collection-owner',
+            future_secret: 'must-not-escape-collection-normalization',
+          },
+        ]
+      }
       if (dataset.name === 'notifications') {
         return [
           {
@@ -424,6 +441,18 @@ describe('POST /api/settings/export', () => {
       }
       throw new Error(`Unexpected cursor dataset: ${dataset.name}`)
     })
+    mockFetchAllExportRowsForUuidParents.mockResolvedValue([
+      {
+        id: '15151515-1515-4515-8515-151515151515',
+        collection_id: '14141414-1414-4414-8414-141414141414',
+        item_type: 'post',
+        item_id: '16161616-1616-4616-8616-161616161616',
+        note: 'Compare this later',
+        added_at: '2026-02-16T03:30:00.000Z',
+        future_secret: 'must-not-escape-collection-item-normalization',
+        expanded_post_content: 'must-not-expand-third-party-content',
+      },
+    ])
     profileStates = installProfileQueries({})
   })
 
@@ -495,6 +524,8 @@ describe('POST /api/settings/export', () => {
       'trading.watchlist': 1,
       'trading.alerts': 1,
       'groups.applications': 1,
+      'collections.owned': 1,
+      'collections.items': 1,
       'settings.preferences': 1,
       'account.bindings': 2,
       'account.login_sessions': 1,
@@ -733,6 +764,31 @@ describe('POST /api/settings/export', () => {
     expect(JSON.stringify(body.groups)).not.toMatch(
       /must-not-escape-application-owner|must-not-escape-application-reviewer|must-not-escape-application-normalization|applicant_id|reviewed_by|future_secret/
     )
+    expect(body.collections).toEqual({
+      owned: [
+        {
+          id: '14141414-1414-4414-8414-141414141414',
+          name: 'My Signals',
+          description: 'Signals to revisit',
+          is_public: false,
+          created_at: '2026-02-16T02:30:00.000Z',
+          updated_at: '2026-02-16T03:00:00.000Z',
+        },
+      ],
+      items: [
+        {
+          id: '15151515-1515-4515-8515-151515151515',
+          collection_id: '14141414-1414-4414-8414-141414141414',
+          item_type: 'post',
+          item_id: '16161616-1616-4616-8616-161616161616',
+          note: 'Compare this later',
+          added_at: '2026-02-16T03:30:00.000Z',
+        },
+      ],
+    })
+    expect(JSON.stringify(body.collections)).not.toMatch(
+      /must-not-escape-collection-owner|must-not-escape-collection-normalization|must-not-escape-collection-item-normalization|must-not-expand-third-party-content|user_id|future_secret|expanded_post_content/
+    )
     expect(body.settings).toEqual({
       preferences: {
         watched_traders: ['trader-1'],
@@ -764,7 +820,8 @@ describe('POST /api/settings/export', () => {
       'must-not-escape-binding-normalization'
     )
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
-    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(14)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(15)
+    expect(mockFetchAllExportRowsForUuidParents).toHaveBeenCalledTimes(1)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -966,6 +1023,37 @@ describe('POST /api/settings/export', () => {
     expect(groupApplicationsCall[1].selectColumns).not.toContain('reviewed_by')
     expect(groupApplicationsCall[1].selectColumns).not.toContain('*')
 
+    const ownedCollectionsCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+      (call) => call[1].name === 'collections.owned'
+    )
+    expect(ownedCollectionsCall).toBeDefined()
+    expect(ownedCollectionsCall[2]).toBe(USER_ID)
+    expect(ownedCollectionsCall[1]).toEqual({
+      name: 'collections.owned',
+      table: 'user_collections',
+      selectColumns: ['id', 'name', 'description', 'is_public', 'created_at', 'updated_at'],
+      ownerPredicate: { column: 'user_id', operator: 'eq', valueType: 'uuid' },
+      cursor: {
+        order: 'asc',
+        columns: [{ column: 'id', valueType: 'uuid' }],
+      },
+    })
+    expect(ownedCollectionsCall[1].selectColumns).not.toContain('user_id')
+
+    const collectionItemsCall = mockFetchAllExportRowsForUuidParents.mock.calls[0]
+    expect(collectionItemsCall[2]).toEqual(['14141414-1414-4414-8414-141414141414'])
+    expect(collectionItemsCall[1]).toEqual({
+      name: 'collections.items',
+      table: 'collection_items',
+      selectColumns: ['id', 'collection_id', 'item_type', 'item_id', 'note', 'added_at'],
+      ownerPredicate: { column: 'collection_id', operator: 'eq', valueType: 'uuid' },
+      cursor: {
+        order: 'asc',
+        columns: [{ column: 'id', valueType: 'uuid' }],
+      },
+    })
+    expect(collectionItemsCall[1].selectColumns).not.toContain('*')
+
     for (const ownerIdDatasetName of [
       'notifications',
       'interactions.comment_likes',
@@ -1122,6 +1210,18 @@ describe('POST /api/settings/export', () => {
       }
       return []
     })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed without cooldown when owned collection items cannot be read completely', async () => {
+    mockFetchAllExportRowsForUuidParents.mockRejectedValueOnce(
+      new DataExportReadError('collections.items', { code: 'XX001' })
+    )
 
     const response = await POST(request())
 
