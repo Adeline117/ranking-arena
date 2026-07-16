@@ -486,7 +486,6 @@ export async function submitPostComment(
       json?.success &&
       isCreatedCommentAcknowledgement(json.data?.comment, {
         postId,
-        content,
         userId: capturedScope.userId,
       })
     ) {

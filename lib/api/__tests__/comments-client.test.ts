@@ -126,7 +126,6 @@ describe('isCreatedCommentAcknowledgement', () => {
     expect(
       isCreatedCommentAcknowledgement(acknowledgement, {
         postId: 'post-1',
-        content: 'hello',
         userId: 'user-1',
       })
     ).toBe(true)
@@ -134,13 +133,13 @@ describe('isCreatedCommentAcknowledgement', () => {
     expect(
       isCreatedCommentAcknowledgement(
         { ...acknowledgement, post_id: 'post-2' },
-        { postId: 'post-1', content: 'hello' }
+        { postId: 'post-1' }
       )
     ).toBe(false)
     expect(
       isCreatedCommentAcknowledgement(
         { ...acknowledgement, user_id: 'user-2' },
-        { postId: 'post-1', content: 'hello', userId: 'user-1' }
+        { postId: 'post-1', userId: 'user-1' }
       )
     ).toBe(false)
 
@@ -149,28 +148,24 @@ describe('isCreatedCommentAcknowledgement', () => {
     expect(
       isCreatedCommentAcknowledgement(
         { ...acknowledgement, content: 'hello' },
-        { postId: 'post-1', content: '<b>hello</b>', userId: 'user-1' }
+        { postId: 'post-1', userId: 'user-1' }
       )
     ).toBe(true)
   })
 
   it('rejects malformed counters, timestamps, and reply bindings', () => {
     expect(
-      isCreatedCommentAcknowledgement(
-        { ...acknowledgement, like_count: 0.5 },
-        { postId: 'post-1', content: 'hello' }
-      )
+      isCreatedCommentAcknowledgement({ ...acknowledgement, like_count: 0.5 }, { postId: 'post-1' })
     ).toBe(false)
     expect(
       isCreatedCommentAcknowledgement(
         { ...acknowledgement, updated_at: 'not-a-date' },
-        { postId: 'post-1', content: 'hello' }
+        { postId: 'post-1' }
       )
     ).toBe(false)
     expect(
       isCreatedCommentAcknowledgement(acknowledgement, {
         postId: 'post-1',
-        content: 'hello',
         parentId: 'parent-1',
       })
     ).toBe(false)

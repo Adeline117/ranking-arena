@@ -35,10 +35,10 @@ export type CreatedCommentAcknowledgement = {
   author_avatar_url?: string
 }
 
-/** Strict resource/content ACK shared by every direct comment-create client. */
+/** Strict actor/resource ACK shared by every direct comment-create client. */
 export function isCreatedCommentAcknowledgement(
   value: unknown,
-  expected: { postId: string; content: string; parentId?: string | null; userId?: string | null }
+  expected: { postId: string; parentId?: string | null; userId?: string | null }
 ): value is CreatedCommentAcknowledgement {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false
   const comment = value as Partial<CreatedCommentAcknowledgement>

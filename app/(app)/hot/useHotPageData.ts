@@ -412,6 +412,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           commentLoadGenerationRef.current.get(generationKey) === generation
         ) {
           setLoadingComments(false)
+          commentLoadGenerationRef.current.delete(generationKey)
         }
       }
     },
@@ -473,6 +474,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         commentLoadMoreGenerationRef.current.get(generationKey) === generation
       ) {
         setLoadingMoreComments(false)
+        commentLoadMoreGenerationRef.current.delete(generationKey)
       }
     }
   }, [
@@ -806,7 +808,6 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           json?.success === true &&
           isCreatedCommentAcknowledgement(rawComment, {
             postId,
-            content,
             userId: capturedScope.userId,
           })
         ) {
