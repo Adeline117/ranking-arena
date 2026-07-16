@@ -5,17 +5,18 @@
 
 import { NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
-import { badRequest, serverError } from '@/lib/api/response'
+import { badRequest, notFound, serverError } from '@/lib/api/response'
 import { createLogger } from '@/lib/utils/logger'
 import { env } from '@/lib/env'
-import { createOneTimePaymentSession, getStripe as getStripeInstance } from '@/lib/stripe'
+import { createOneTimePaymentSession } from '@/lib/stripe'
+import { canServiceActorReadPost } from '@/lib/data/service-post-audience'
+import { sanitizeInput } from '@/lib/utils/sanitize'
 
 const logger = createLogger('tip-checkout')
 
 export const dynamic = 'force-dynamic'
 
-// 打赏金额选项（美分）
-const _TIP_AMOUNTS = [100, 300, 500, 1000, 2000, 5000] // $1, $3, $5, $10, $20, $50
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export const POST = withAuth(
   async ({ user, supabase, request }) => {
@@ -33,17 +34,24 @@ export const POST = withAuth(
     }
 
     // 验证参数
-    if (!post_id) {
-      return badRequest('Missing post_id parameter')
+    if (typeof post_id !== 'string' || !UUID_PATTERN.test(post_id)) {
+      return badRequest('Invalid post_id parameter')
     }
 
     const amount = Number(amount_cents)
-    if (!amount || amount < 100 || amount > 50000) {
+    if (!Number.isInteger(amount) || amount < 100 || amount > 50000) {
       return badRequest('Invalid tip amount ($1 - $500)')
     }
 
+    // withAuth supplies a service-role client, so posts RLS does not protect
+    // this route. Deny missing, private, blocked, deleted, and expired paid
+    // group posts through the same canonical audience decision as post reads.
+    if (!(await canServiceActorReadPost(supabase, post_id, user.id))) {
+      return notFound('Post not found')
+    }
+
     // Idempotency check: prevent duplicate tips within 60 seconds
-    const { data: recentPendingTip } = await supabase
+    const { data: recentPendingTip, error: recentTipError } = await supabase
       .from('tips')
       .select('id')
       .eq('from_user_id', user.id)
@@ -52,6 +60,11 @@ export const POST = withAuth(
       .eq('status', 'pending')
       .gte('created_at', new Date(Date.now() - 60000).toISOString())
       .maybeSingle()
+
+    if (recentTipError) {
+      logger.error('[Tip Checkout] Idempotency lookup failed:', recentTipError)
+      return serverError('Failed to validate tip request')
+    }
 
     if (recentPendingTip) {
       return NextResponse.json(
@@ -68,12 +81,25 @@ export const POST = withAuth(
       .maybeSingle()
 
     if (postError || !post) {
-      return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+      return notFound('Post not found')
     }
 
     // 不能给自己打赏
     if (post.author_id === user.id) {
       return badRequest('Cannot tip your own post')
+    }
+
+    const { data: recipient, error: recipientError } = await supabase
+      .from('public_user_profiles')
+      .select('id')
+      .eq('id', post.author_id)
+      .maybeSingle()
+    if (recipientError) {
+      logger.error('[Tip Checkout] Recipient lookup failed:', recipientError)
+      return serverError('Failed to validate tip recipient')
+    }
+    if (!recipient?.id) {
+      return notFound('Post not found')
     }
 
     // Reuse existing Stripe customer ID from user_profiles (persists across session expirations)
@@ -93,7 +119,10 @@ export const POST = withAuth(
         from_user_id: user.id,
         to_user_id: post.author_id,
         amount_cents: amount,
-        message: typeof message === 'string' ? message.slice(0, 200) : null,
+        message:
+          typeof message === 'string' && message.trim()
+            ? sanitizeInput(message.trim(), { maxLength: 200 })
+            : null,
         status: 'pending',
       })
       .select('id')
@@ -124,7 +153,7 @@ export const POST = withAuth(
         },
       ],
       successUrl: `${env.NEXT_PUBLIC_APP_URL}/tip/success?session_id={CHECKOUT_SESSION_ID}`,
-      cancelUrl: `${env.NEXT_PUBLIC_APP_URL}/groups/${post_id}?tip_canceled=true`,
+      cancelUrl: `${env.NEXT_PUBLIC_APP_URL}/post/${post_id}?tip_canceled=true`,
       metadata: {
         type: 'tip',
         tip_id: tip.id,
@@ -136,7 +165,13 @@ export const POST = withAuth(
     })
 
     // 更新打赏记录的 session ID
-    await supabase.from('tips').update({ stripe_checkout_session_id: session.id }).eq('id', tip.id)
+    const { error: sessionUpdateError } = await supabase
+      .from('tips')
+      .update({ stripe_checkout_session_id: session.id })
+      .eq('id', tip.id)
+    if (sessionUpdateError) {
+      logger.error('[Tip Checkout] Failed to persist checkout session:', sessionUpdateError)
+    }
 
     return NextResponse.json({
       sessionId: session.id,
