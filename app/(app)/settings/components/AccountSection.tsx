@@ -57,9 +57,14 @@ export const AccountSection = React.memo(function AccountSection({
   const operationRef = useRef<ExportOperation | null>(null)
 
   const operationIsCurrent = useCallback((operation: ExportOperation): boolean => {
+    const latestViewer = captureSettingsViewer(authRef.current)
     return (
       mountedRef.current &&
       operationRef.current?.id === operation.id &&
+      latestViewer !== null &&
+      latestViewer.viewerKey === operation.viewer.viewerKey &&
+      latestViewer.sessionGeneration === operation.viewer.sessionGeneration &&
+      latestViewer.userId === operation.viewer.userId &&
       isSettingsViewerCurrent(operation.viewer, authRef.current)
     )
   }, [])
@@ -75,11 +80,12 @@ export const AccountSection = React.memo(function AccountSection({
 
   useEffect(() => {
     const operation = operationRef.current
-    if (operation && !isSettingsViewerCurrent(operation.viewer, authRef.current)) {
+    if (operation && !operationIsCurrent(operation)) {
       operation.controller.abort()
       operationRef.current = null
+      setExporting(false)
     }
-  }, [scopeKey])
+  }, [operationIsCurrent, scopeKey, setExporting])
 
   const handleExportData = useCallback(async () => {
     const viewer = captureSettingsViewer(authRef.current)

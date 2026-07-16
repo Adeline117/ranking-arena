@@ -234,6 +234,45 @@ describe('AccountSection export viewer ownership', () => {
     expect(mockShowToast).not.toHaveBeenCalled()
   })
 
+  it('aborts an in-flight export on invalid auth and does not restore stale busy state', async () => {
+    const blobA = deferred<Blob>()
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      blob: () => blobA.promise,
+      json: () => Promise.resolve({}),
+    })
+    const generationA = mockAuth.sessionGeneration
+    const view = renderSection()
+
+    fireEvent.click(screen.getByRole('button', { name: 'exportData' }))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    const signal = (mockFetch.mock.calls[0][1] as RequestInit).signal
+
+    act(() => {
+      mockAuth = authFor('user-a', generationA, 'user-b')
+      view.rerender(<AccountSection onLogout={jest.fn()} onDeleteAccount={jest.fn()} />)
+    })
+
+    expect(signal?.aborted).toBe(true)
+    expect(screen.getByRole('button', { name: 'exportData' })).not.toBeDisabled()
+
+    act(() => {
+      mockAuth = authFor('user-a', generationA)
+      view.rerender(<AccountSection onLogout={jest.fn()} onDeleteAccount={jest.fn()} />)
+    })
+
+    expect(screen.getByRole('button', { name: 'exportData' })).not.toBeDisabled()
+
+    await act(async () => {
+      blobA.resolve(new Blob(['private user A export']))
+    })
+
+    expect(mockCreateObjectURL).not.toHaveBeenCalled()
+    expect(anchorClickSpy).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
   it('downloads and reports success only for the still-current viewer', async () => {
     const blob = new Blob(['current viewer export'])
     mockFetch.mockResolvedValue({
