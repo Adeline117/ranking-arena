@@ -2,7 +2,7 @@
 
 import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
-import { useState, useEffect, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
@@ -41,26 +41,31 @@ export default function ApplyGroupPage() {
   const { showToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const submitOperationIdRef = useRef<Record<string, string>>({})
+  const avatarUploadOperationIdRef = useRef<Record<string, number>>({})
+  const nextAvatarUploadOperationIdRef = useRef(0)
   const { accessToken, email, userId, viewerKey, sessionGeneration } = useAuthSession()
   const stateOwnerKey = `${viewerKey}:${sessionGeneration}`
   const [loading, setLoading] = useViewerSlotState(stateOwnerKey, false)
   const [error, setError] = useViewerSlotState<string | null>(stateOwnerKey, null)
   const [success, setSuccess] = useViewerSlotState(stateOwnerKey, false)
-  const [uploading, setUploading] = useState(false)
-  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [uploading, setUploading] = useViewerSlotState(stateOwnerKey, false)
+  const [fieldErrors, setFieldErrors] = useViewerSlotState<Record<string, string>>(
+    stateOwnerKey,
+    {}
+  )
 
   // 当前编辑的语言标签
-  const [activeTab, setActiveTab] = useState<'zh' | 'en'>('zh')
+  const [activeTab, setActiveTab] = useViewerSlotState<'zh' | 'en'>(stateOwnerKey, 'zh')
   // 是否显示多语言（英文）
-  const [showMultiLang, setShowMultiLang] = useState(false)
+  const [showMultiLang, setShowMultiLang] = useViewerSlotState(stateOwnerKey, false)
 
   // 表单状态 - 中文
-  const [nameZh, setNameZh] = useState('')
-  const [descriptionZh, setDescriptionZh] = useState('')
+  const [nameZh, setNameZh] = useViewerSlotState(stateOwnerKey, '')
+  const [descriptionZh, setDescriptionZh] = useViewerSlotState(stateOwnerKey, '')
 
   // 表单状态 - 英文
-  const [nameEn, setNameEn] = useState('')
-  const [descriptionEn, setDescriptionEn] = useState('')
+  const [nameEn, setNameEn] = useViewerSlotState(stateOwnerKey, '')
+  const [descriptionEn, setDescriptionEn] = useViewerSlotState(stateOwnerKey, '')
 
   // Draft-loss guard: prompt on tab close/refresh while the application has
   // content and isn't mid-submit (audit 实体/详情).
@@ -71,19 +76,19 @@ export default function ApplyGroupPage() {
   )
 
   // 小组规则（支持多条，中英文）
-  const [rules, setRules] = useState<Rule[]>([])
-  const [newRuleZh, setNewRuleZh] = useState('')
-  const [newRuleEn, setNewRuleEn] = useState('')
+  const [rules, setRules] = useViewerSlotState<Rule[]>(stateOwnerKey, [])
+  const [newRuleZh, setNewRuleZh] = useViewerSlotState(stateOwnerKey, '')
+  const [newRuleEn, setNewRuleEn] = useViewerSlotState(stateOwnerKey, '')
 
   // 头像和角色称呼
-  const [avatarUrl, setAvatarUrl] = useState('')
-  const [roleNames, setRoleNames] = useState<RoleNames>({
+  const [avatarUrl, setAvatarUrl] = useViewerSlotState(stateOwnerKey, '')
+  const [roleNames, setRoleNames] = useViewerSlotState<RoleNames>(stateOwnerKey, {
     admin: { zh: '管理员', en: 'Admin' },
     member: { zh: '成员', en: 'Member' },
   })
 
   // Pro 专属小组选项
-  const [isPremiumOnly, setIsPremiumOnly] = useState(false)
+  const [isPremiumOnly, setIsPremiumOnly] = useViewerSlotState(stateOwnerKey, false)
 
   // 用户已有的申请
   const [existingApplications, setExistingApplications] = useViewerSlotState<any[]>(
@@ -95,7 +100,14 @@ export default function ApplyGroupPage() {
     if (accessToken) {
       fetchMyApplications(accessToken)
     }
-  }, [accessToken])
+  }, [accessToken, sessionGeneration, userId, viewerKey])
+
+  // The DOM file input is shared across renders. Clear A's selected File as
+  // soon as ownership changes, while stale A completions are forbidden from
+  // clearing a later B selection.
+  useEffect(() => {
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }, [stateOwnerKey])
 
   // Field-level validation
   const validateField = (fieldName: string, _value: string) => {
@@ -170,14 +182,24 @@ export default function ApplyGroupPage() {
   }
 
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const requestScope: ViewerScope = { viewerKey, sessionGeneration, userId }
     const files = e.target.files
     if (!files || files.length === 0) return
 
-    if (!userId) {
-      showToast(t('pleaseLoginFirst'), 'warning')
+    if (
+      !accessToken ||
+      !userId ||
+      requestScope.viewerKey !== `user:${userId}` ||
+      jwtSubject(accessToken) !== userId ||
+      !isViewerScopeCurrent(requestScope)
+    ) {
+      if (isViewerScopeCurrent(requestScope)) showToast(t('pleaseLoginFirst'), 'warning')
       return
     }
 
+    const requestUserId = userId
+    const requestOwnerKey = stateOwnerKey
+    const input = e.currentTarget
     const file = files[0]
     const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
     if (!allowedTypes.includes(file.type)) {
@@ -190,44 +212,66 @@ export default function ApplyGroupPage() {
       return
     }
 
+    const uploadOperationId = ++nextAvatarUploadOperationIdRef.current
+    avatarUploadOperationIdRef.current[requestOwnerKey] = uploadOperationId
+    const operationOwnsSlot = () =>
+      avatarUploadOperationIdRef.current[requestOwnerKey] === uploadOperationId
+    const operationIsCurrent = () => operationOwnsSlot() && isViewerScopeCurrent(requestScope)
+
     setUploading(true)
 
     try {
+      const uploadToken = await tokenRefreshCoordinator.getValidToken({
+        expectedUserId: requestUserId,
+        sessionGeneration: requestScope.sessionGeneration,
+      })
+      if (!uploadToken || jwtSubject(uploadToken) !== requestUserId) {
+        if (operationIsCurrent()) showToast(t('authenticationFailed'), 'error')
+        return
+      }
+      if (!operationIsCurrent()) return
+
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('userId', userId)
+      formData.append('userId', requestUserId)
 
       // /api/posts/upload-image is withAuth (Bearer header only) — 401'd without the token
-      const uploadToken = await tokenRefreshCoordinator.getValidToken()
       const response = await fetch('/api/posts/upload-image', {
         method: 'POST',
-        headers: uploadToken ? { Authorization: `Bearer ${uploadToken}` } : undefined,
+        headers: { Authorization: `Bearer ${uploadToken}` },
         body: formData,
       })
+      if (!operationIsCurrent()) return
 
       if (!response.ok) {
         let errorMsg = t('uploadFailed')
         try {
           const errorData = await response.json()
+          if (!operationIsCurrent()) return
           errorMsg = errorData.error || errorMsg
         } catch {
+          if (!operationIsCurrent()) return
           errorMsg = `${errorMsg} (${response.status})`
         }
-        showToast(errorMsg, 'error')
+        if (operationIsCurrent()) showToast(errorMsg, 'error')
         return
       }
 
       const data = await response.json()
+      if (!operationIsCurrent()) return
       setAvatarUrl(data.url)
       showToast(t('imageUploadSuccess'), 'success')
     } catch (error: unknown) {
+      if (!operationIsCurrent()) return
       logger.error('Upload error:', error)
       const errorMsg = error instanceof Error ? error.message : t('networkError')
       showToast(errorMsg, 'error')
     } finally {
-      setUploading(false)
-      if (fileInputRef.current) {
-        fileInputRef.current.value = ''
+      const ownsOperation = operationOwnsSlot()
+      if (ownsOperation) delete avatarUploadOperationIdRef.current[requestOwnerKey]
+      if (ownsOperation && isViewerScopeCurrent(requestScope)) {
+        setUploading(false)
+        if (fileInputRef.current === input) input.value = ''
       }
     }
   }
