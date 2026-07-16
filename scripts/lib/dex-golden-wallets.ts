@@ -17,7 +17,7 @@ export interface DexGoldenWalletCandidate {
   arenaScore: number | null
   pnl90d: number
   activityProxyCount: number
-  statsAsOf: string
+  metricAsOf: string
 }
 
 export interface DexGoldenWallet {
@@ -31,7 +31,7 @@ export interface DexGoldenWallet {
   arena_score: number | null
   pnl_90d: number
   activity_proxy_count: number
-  stats_as_of: string
+  metric_as_of: string
 }
 
 export interface DexGoldenWalletSnapshot {
@@ -47,7 +47,10 @@ export interface DexGoldenWalletSnapshot {
     top_per_source: 20
     deterministic_random_per_source: 20
     high_frequency_per_source: 10
-    activity_metric: 'latest_90d_public_or_onchain_tx_count_proxy'
+    source_rank_field: 'arena.leaderboard_entries.rank'
+    pnl_90d_field: 'arena.leaderboard_entries.headline_pnl'
+    activity_metric: 'latest_passed_90d_snapshot_source_reported_tx_count_proxy'
+    activity_fields: Record<DexGoldenSource, string>
   }
   populations: Array<{
     source_slug: DexGoldenSource
@@ -55,7 +58,7 @@ export interface DexGoldenWalletSnapshot {
     snapshot_scraped_at: string
     eligible_candidates: number
     candidates_with_activity_proxy: number
-    max_stats_as_of: string
+    max_metric_as_of: string
   }>
   wallets: DexGoldenWallet[]
 }
@@ -151,7 +154,7 @@ function validateAndCanonicalize(
     if (!Number.isSafeInteger(candidate.activityProxyCount) || candidate.activityProxyCount < 0) {
       throw new Error(`activityProxyCount must be a non-negative safe integer: ${identity}`)
     }
-    assertCanonicalTimestamp(candidate.statsAsOf, `statsAsOf for ${identity}`)
+    assertCanonicalTimestamp(candidate.metricAsOf, `metricAsOf for ${identity}`)
     return { ...candidate, wallet }
   })
 }
@@ -172,7 +175,7 @@ function selectedWallet(
     arena_score: candidate.arenaScore,
     pnl_90d: candidate.pnl90d,
     activity_proxy_count: candidate.activityProxyCount,
-    stats_as_of: candidate.statsAsOf,
+    metric_as_of: candidate.metricAsOf,
   }
 }
 
@@ -246,8 +249,8 @@ export function buildDexGoldenWalletSnapshot(input: {
       candidates_with_activity_proxy: sourceCandidates.filter(
         (candidate) => candidate.activityProxyCount > 0
       ).length,
-      max_stats_as_of: sourceCandidates
-        .map((candidate) => candidate.statsAsOf)
+      max_metric_as_of: sourceCandidates
+        .map((candidate) => candidate.metricAsOf)
         .sort()
         .at(-1)!,
     })
@@ -276,7 +279,13 @@ export function buildDexGoldenWalletSnapshot(input: {
       top_per_source: 20,
       deterministic_random_per_source: 20,
       high_frequency_per_source: 10,
-      activity_metric: 'latest_90d_public_or_onchain_tx_count_proxy',
+      source_rank_field: 'arena.leaderboard_entries.rank',
+      pnl_90d_field: 'arena.leaderboard_entries.headline_pnl',
+      activity_metric: 'latest_passed_90d_snapshot_source_reported_tx_count_proxy',
+      activity_fields: {
+        binance_web3_bsc: 'arena.leaderboard_entries.raw.totalTxCnt',
+        okx_web3_solana: 'arena.leaderboard_entries.raw.tx',
+      },
     },
     populations,
     wallets,

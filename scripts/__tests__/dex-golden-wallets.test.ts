@@ -27,7 +27,7 @@ function candidates(): DexGoldenWalletCandidate[] {
         arenaScore: 100 - index,
         pnl90d: 10_000 - index,
         activityProxyCount: index + 1,
-        statsAsOf: '2026-07-16T18:00:00.000Z',
+        metricAsOf: '2026-07-16T18:00:00.000Z',
       })
     }
   }
@@ -56,6 +56,14 @@ describe('DEX golden-wallet selection contract', () => {
     }
     expect(snapshot.serving_authorized).toBe(false)
     expect(snapshot.rank_eligible).toBe(false)
+    expect(snapshot.selection).toMatchObject({
+      source_rank_field: 'arena.leaderboard_entries.rank',
+      pnl_90d_field: 'arena.leaderboard_entries.headline_pnl',
+      activity_fields: {
+        binance_web3_bsc: 'arena.leaderboard_entries.raw.totalTxCnt',
+        okx_web3_solana: 'arena.leaderboard_entries.raw.tx',
+      },
+    })
   })
 
   it('is invariant to candidate input order and emits a deterministic hash', () => {
