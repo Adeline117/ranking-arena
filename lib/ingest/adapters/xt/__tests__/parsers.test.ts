@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { parseXtLeaderboardPage, parseXtProfile } from '../parsers'
+import { parseXtLeaderboardPage, parseXtLeaderboardSeries, parseXtProfile } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
 
 function fixture(name: string): unknown {
@@ -76,6 +76,85 @@ describe('parseXtLeaderboardPage', () => {
   it('returns empty on malformed payloads', () => {
     expect(parseXtLeaderboardPage({}, ctx).rows).toHaveLength(0)
     expect(parseXtLeaderboardPage({ result: { items: 'x' } }, ctx).rows).toHaveLength(0)
+  })
+})
+
+describe('parseXtLeaderboardSeries', () => {
+  const DAY_MS = 86_400_000
+  const seriesCtx: ParseCtx = { ...ctx, scrapedAt: '2026-07-16T12:00:00.000Z' }
+  const point = (date: string, amount: number) => ({
+    time: Date.parse(date),
+    amount: String(amount),
+  })
+  const payload = (chart: Array<{ time: number; amount: string }>) => ({
+    result: { items: [{ accountId: 'xt-1', chart }] },
+  })
+  const points = (chart: Array<{ time: number; amount: string }>, timeframe: 7 | 30 | 90) =>
+    parseXtLeaderboardSeries(payload(chart), seriesCtx, timeframe).get('xt-1')?.[0].points ?? []
+
+  it('removes the known detached prefix without truncating the valid 90 UTC days', () => {
+    const detachedPrefixStart = Date.parse('2025-10-15T00:00:00.000Z')
+    const validWindowStart = Date.parse('2026-04-18T00:00:00.000Z')
+    const chart = [
+      ...Array.from({ length: 9 }, (_, i) => ({
+        time: detachedPrefixStart + i * DAY_MS,
+        amount: String(-100 + i),
+      })),
+      ...Array.from({ length: 90 }, (_, i) => ({
+        time: validWindowStart + i * DAY_MS,
+        amount: String(i),
+      })),
+    ]
+
+    const parsed = points(chart, 90)
+    expect(parsed).toHaveLength(90)
+    expect(parsed[0]).toEqual({ ts: '2026-04-18T00:00:00.000Z', value: 0 })
+    expect(parsed.at(-1)).toEqual({ ts: '2026-07-16T00:00:00.000Z', value: 89 })
+  })
+
+  it('uses inclusive UTC-day and bounded future-skew boundaries', () => {
+    const start = Date.parse('2026-07-10T00:00:00.000Z')
+    const scrape = Date.parse(seriesCtx.scrapedAt)
+    const parsed = points(
+      [
+        { time: start - 1, amount: '-1' },
+        { time: start, amount: '1' },
+        { time: scrape + 5 * 60_000, amount: '2' },
+        { time: scrape + 5 * 60_000 + 1, amount: '3' },
+      ],
+      7
+    )
+
+    expect(parsed).toEqual([
+      { ts: '2026-07-10T00:00:00.000Z', value: 1 },
+      { ts: '2026-07-16T12:05:00.000Z', value: 2 },
+    ])
+  })
+
+  it('sorts unsorted points and de-duplicates exact timestamps with last value winning', () => {
+    const duplicate = Date.parse('2026-07-14T00:00:00.000Z')
+    const parsed = points(
+      [
+        point('2026-07-16T00:00:00.000Z', 4),
+        { time: duplicate, amount: '2' },
+        point('2026-07-10T00:00:00.000Z', 1),
+        { time: duplicate, amount: '3' },
+      ],
+      7
+    )
+
+    expect(parsed).toEqual([
+      { ts: '2026-07-10T00:00:00.000Z', value: 1 },
+      { ts: '2026-07-14T00:00:00.000Z', value: 3 },
+      { ts: '2026-07-16T00:00:00.000Z', value: 4 },
+    ])
+  })
+
+  it('fails closed when scrapedAt cannot anchor the requested window', () => {
+    const invalidCtx = { ...seriesCtx, scrapedAt: 'not-a-date' }
+    expect(
+      parseXtLeaderboardSeries(payload([point('2026-07-16T00:00:00.000Z', 1)]), invalidCtx, 7).size
+    ).toBe(0)
   })
 })
 
