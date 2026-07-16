@@ -16,6 +16,7 @@ import TradersStep from './components/TradersStep'
 import GroupsStep from './components/GroupsStep'
 import CompleteStep from './components/CompleteStep'
 import { trackEvent } from '@/lib/analytics/track'
+import { safeInternalReturnPath } from '@/lib/auth/safe-return-path'
 
 type Theme = 'dark' | 'light'
 type Step = 'welcome' | 'interests' | 'traders' | 'groups' | 'complete'
@@ -28,8 +29,7 @@ export default function OnboardingPage() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const returnUrl = searchParams.get('returnUrl')
-  const afterOnboarding =
-    returnUrl && returnUrl.startsWith('/') && !returnUrl.startsWith('//') ? returnUrl : '/'
+  const afterOnboarding = safeInternalReturnPath(returnUrl) || '/'
   const { showToast } = useToast()
   const [language, setLang] = useState<Language>('zh')
   const [theme, setTheme] = useState<Theme>('dark')
