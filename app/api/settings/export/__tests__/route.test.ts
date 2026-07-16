@@ -1230,6 +1230,49 @@ describe('POST /api/settings/export', () => {
     expect(mockFrom).toHaveBeenCalledTimes(1)
   })
 
+  it('does not read collection items or claim cooldown when the owned parent read fails', async () => {
+    const defaultCursorRead = mockFetchAllExportRowsByCursor.getMockImplementation()
+    mockFetchAllExportRowsByCursor.mockImplementation(async (client, dataset, owner) => {
+      if (dataset.name === 'collections.owned') {
+        throw new DataExportReadError('collections.owned', { code: 'XX001' })
+      }
+      return defaultCursorRead?.(client, dataset, owner)
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFetchAllExportRowsForUuidParents).not.toHaveBeenCalled()
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('exports explicit empty collection arrays when the user owns no collections', async () => {
+    const defaultCursorRead = mockFetchAllExportRowsByCursor.getMockImplementation()
+    mockFetchAllExportRowsByCursor.mockImplementation(async (client, dataset, owner) => {
+      if (dataset.name === 'collections.owned') return []
+      return defaultCursorRead?.(client, dataset, owner)
+    })
+    mockFetchAllExportRowsForUuidParents.mockResolvedValueOnce([])
+
+    const response = await POST(request())
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.collections).toEqual({ owned: [], items: [] })
+    expect(mockFetchAllExportRowsForUuidParents).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ name: 'collections.items' }),
+      []
+    )
+    expect(body.manifest.datasets).toEqual(
+      expect.arrayContaining([
+        { name: 'collections.owned', status: 'complete', row_count: 0 },
+        { name: 'collections.items', status: 'complete', row_count: 0 },
+      ])
+    )
+  })
+
   it('represents an uncreated preferences row explicitly without widening the export', async () => {
     mockFetchAllExportRowsByCursor.mockResolvedValueOnce([])
 
