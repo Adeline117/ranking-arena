@@ -1,86 +1,234 @@
 /**
  * Channel membership privacy gate.
  *
- * Group channels (chat_channels type='group') let an owner/admin add arbitrary
- * users. Without a gate this bypasses the DM privacy rules that 1:1 DMs enforce
- * via check_dm_permission — a harasser (or airdrop bot) could force-add someone
- * who blocked them (or who disabled DMs) into a group and message them there.
- *
- * This helper filters a candidate list down to users who may be added by the
- * actor:
- *   - Excludes anyone who blocked the actor, and anyone the actor blocked
- *     (a block is mutual isolation — they should not share a group).
- *   - Excludes anyone with dm_permission='none' unless they mutually follow the
- *     actor (mirrors check_dm_permission's DM_DISABLED / mutual-follow rule).
+ * Group channels must not become a way to bypass a recipient's block or DM
+ * preference. This helper is deliberately fail-closed: callers may only add
+ * IDs returned in `allowed`, and any incomplete/malformed database response
+ * rejects the whole permission check before a membership write can begin.
  */
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 
+export const MAX_CHANNEL_ADD_CANDIDATES = 50
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+const DM_PERMISSIONS = new Set(['all', 'mutual', 'none'])
+
+export class ChannelPermissionReadError extends Error {
+  constructor(readonly causeValue: unknown) {
+    super('Failed to verify channel membership privacy')
+    this.name = 'ChannelPermissionReadError'
+  }
+}
+
 export interface ChannelAddFilterResult {
-  /** Candidate ids the actor is allowed to add. */
+  /** Candidate IDs the actor is allowed to add. */
   allowed: string[]
-  /** Candidate ids removed because of a block or DM-disabled privacy setting. */
+  /** Candidate IDs removed by a block, privacy preference, or missing profile. */
   blocked: string[]
+}
+
+function normalizeUuid(value: unknown): string {
+  if (typeof value !== 'string' || !UUID.test(value)) {
+    throw new ChannelPermissionReadError(new Error('Invalid channel membership UUID'))
+  }
+  return value.toLowerCase()
+}
+
+function requireRows(
+  result: { data: unknown; error: unknown },
+  operation: string
+): Record<string, unknown>[] {
+  if (result.error || !Array.isArray(result.data)) {
+    throw new ChannelPermissionReadError(result.error ?? new Error(`Incomplete ${operation}`))
+  }
+  return result.data.map((row) => {
+    if (!row || typeof row !== 'object' || Array.isArray(row)) {
+      throw new ChannelPermissionReadError(new Error(`Malformed ${operation}`))
+    }
+    return row as Record<string, unknown>
+  })
+}
+
+function validateRelationshipRows(
+  rows: readonly Record<string, unknown>[],
+  actorId: string,
+  candidates: ReadonlySet<string>,
+  direction: 'outgoing-block' | 'incoming-block'
+): Set<string> {
+  const relatedIds = new Set<string>()
+  for (const row of rows) {
+    const blockerId = normalizeUuid(row.blocker_id)
+    const blockedId = normalizeUuid(row.blocked_id)
+    const candidateId = direction === 'outgoing-block' ? blockedId : blockerId
+    const returnedActorId = direction === 'outgoing-block' ? blockerId : blockedId
+    if (returnedActorId !== actorId || !candidates.has(candidateId)) {
+      throw new ChannelPermissionReadError(new Error('Block query escaped its reviewed scope'))
+    }
+    relatedIds.add(candidateId)
+  }
+  return relatedIds
+}
+
+function validateFollowRows(
+  rows: readonly Record<string, unknown>[],
+  actorId: string,
+  candidates: ReadonlySet<string>,
+  direction: 'actor-follows' | 'follows-actor'
+): Set<string> {
+  const relatedIds = new Set<string>()
+  for (const row of rows) {
+    const followerId = normalizeUuid(row.follower_id)
+    const followingId = normalizeUuid(row.following_id)
+    const candidateId = direction === 'actor-follows' ? followingId : followerId
+    const returnedActorId = direction === 'actor-follows' ? followerId : followingId
+    if (returnedActorId !== actorId || !candidates.has(candidateId)) {
+      throw new ChannelPermissionReadError(new Error('Follow query escaped its reviewed scope'))
+    }
+    relatedIds.add(candidateId)
+  }
+  return relatedIds
 }
 
 export async function filterChannelAddableUsers(
   supabase: SupabaseClient,
-  actorId: string,
-  candidateIds: string[]
+  actorIdValue: string,
+  candidateIdValues: string[]
 ): Promise<ChannelAddFilterResult> {
-  const unique = [...new Set(candidateIds)].filter((id) => id && id !== actorId)
-  if (unique.length === 0) return { allowed: [], blocked: [] }
-
-  const removed = new Set<string>()
-
-  // 1. Blocks in EITHER direction between actor and each candidate.
-  const { data: blocks } = await supabase
-    .from('blocked_users')
-    .select('blocker_id, blocked_id')
-    .or(
-      `and(blocker_id.eq.${actorId},blocked_id.in.(${unique.join(',')})),` +
-        `and(blocked_id.eq.${actorId},blocker_id.in.(${unique.join(',')}))`
-    )
-  for (const b of blocks || []) {
-    removed.add(b.blocker_id === actorId ? b.blocked_id : b.blocker_id)
+  const actorId = normalizeUuid(actorIdValue)
+  if (!Array.isArray(candidateIdValues)) {
+    throw new ChannelPermissionReadError(new Error('Channel candidates must be an array'))
+  }
+  if (candidateIdValues.length > MAX_CHANNEL_ADD_CANDIDATES) {
+    throw new ChannelPermissionReadError(new Error('Too many channel membership candidates'))
   }
 
-  // 2. DM-disabled (dm_permission='none') candidates are only addable if they
-  //    mutually follow the actor.
-  const remaining = unique.filter((id) => !removed.has(id))
-  if (remaining.length > 0) {
-    const { data: profiles } = await supabase
+  const unique: string[] = []
+  const seen = new Set<string>()
+  for (const candidateIdValue of candidateIdValues) {
+    const candidateId = normalizeUuid(candidateIdValue)
+    if (candidateId === actorId || seen.has(candidateId)) continue
+    seen.add(candidateId)
+    unique.push(candidateId)
+  }
+  if (unique.length === 0) return { allowed: [], blocked: [] }
+
+  const candidateSet = new Set(unique)
+  let outgoingBlockResult: { data: unknown; error: unknown }
+  let incomingBlockResult: { data: unknown; error: unknown }
+  try {
+    const blockResults = await Promise.all([
+      supabase
+        .from('blocked_users')
+        .select('blocker_id, blocked_id')
+        .eq('blocker_id', actorId)
+        .in('blocked_id', unique),
+      supabase
+        .from('blocked_users')
+        .select('blocker_id, blocked_id')
+        .eq('blocked_id', actorId)
+        .in('blocker_id', unique),
+    ])
+    outgoingBlockResult = blockResults[0]
+    incomingBlockResult = blockResults[1]
+  } catch (error) {
+    throw new ChannelPermissionReadError(error)
+  }
+
+  const removed = validateRelationshipRows(
+    requireRows(outgoingBlockResult, 'outgoing block result'),
+    actorId,
+    candidateSet,
+    'outgoing-block'
+  )
+  for (const candidateId of validateRelationshipRows(
+    requireRows(incomingBlockResult, 'incoming block result'),
+    actorId,
+    candidateSet,
+    'incoming-block'
+  )) {
+    removed.add(candidateId)
+  }
+
+  const unblocked = unique.filter((candidateId) => !removed.has(candidateId))
+  if (unblocked.length === 0) return { allowed: [], blocked: [...unique] }
+
+  let profileResult: { data: unknown; error: unknown }
+  try {
+    profileResult = await supabase
       .from('user_profiles')
       .select('id, dm_permission')
-      .in('id', remaining)
+      .in('id', unblocked)
+  } catch (error) {
+    throw new ChannelPermissionReadError(error)
+  }
 
-    const dmDisabled = (profiles || []).filter((p) => p.dm_permission === 'none').map((p) => p.id)
+  const unblockedSet = new Set(unblocked)
+  const profileIds = new Set<string>()
+  const mutualOnlyIds: string[] = []
+  for (const row of requireRows(profileResult, 'channel candidate profile result')) {
+    const profileId = normalizeUuid(row.id)
+    if (profileIds.has(profileId) || !unblockedSet.has(profileId)) {
+      throw new ChannelPermissionReadError(new Error('Profile query escaped its reviewed scope'))
+    }
+    profileIds.add(profileId)
+    if (typeof row.dm_permission !== 'string' || !DM_PERMISSIONS.has(row.dm_permission)) {
+      throw new ChannelPermissionReadError(new Error('Invalid channel candidate DM preference'))
+    }
+    if (row.dm_permission === 'none') removed.add(profileId)
+    if (row.dm_permission === 'mutual') mutualOnlyIds.push(profileId)
+  }
 
-    if (dmDisabled.length > 0) {
-      // Determine which of the DM-disabled candidates mutually follow the actor.
-      const [{ data: actorFollows }, { data: followsActor }] = await Promise.all([
+  // A deleted/nonexistent profile is never a valid channel member. Treat it as
+  // unavailable without exposing whether the ID existed to the route caller.
+  for (const candidateId of unblocked) {
+    if (!profileIds.has(candidateId)) removed.add(candidateId)
+  }
+
+  if (mutualOnlyIds.length > 0) {
+    const mutualSet = new Set(mutualOnlyIds)
+    let actorFollowsResult: { data: unknown; error: unknown }
+    let followsActorResult: { data: unknown; error: unknown }
+    try {
+      const followResults = await Promise.all([
         supabase
           .from('user_follows')
-          .select('following_id')
+          .select('follower_id, following_id')
           .eq('follower_id', actorId)
-          .in('following_id', dmDisabled),
+          .in('following_id', mutualOnlyIds),
         supabase
           .from('user_follows')
-          .select('follower_id')
+          .select('follower_id, following_id')
           .eq('following_id', actorId)
-          .in('follower_id', dmDisabled),
+          .in('follower_id', mutualOnlyIds),
       ])
-      const actorFollowsSet = new Set((actorFollows || []).map((r) => r.following_id))
-      const followsActorSet = new Set((followsActor || []).map((r) => r.follower_id))
-      for (const id of dmDisabled) {
-        const mutual = actorFollowsSet.has(id) && followsActorSet.has(id)
-        if (!mutual) removed.add(id)
+      actorFollowsResult = followResults[0]
+      followsActorResult = followResults[1]
+    } catch (error) {
+      throw new ChannelPermissionReadError(error)
+    }
+
+    const actorFollows = validateFollowRows(
+      requireRows(actorFollowsResult, 'actor follow result'),
+      actorId,
+      mutualSet,
+      'actor-follows'
+    )
+    const followsActor = validateFollowRows(
+      requireRows(followsActorResult, 'reverse follow result'),
+      actorId,
+      mutualSet,
+      'follows-actor'
+    )
+    for (const candidateId of mutualOnlyIds) {
+      if (!actorFollows.has(candidateId) || !followsActor.has(candidateId)) {
+        removed.add(candidateId)
       }
     }
   }
 
   return {
-    allowed: unique.filter((id) => !removed.has(id)),
-    blocked: [...removed],
+    allowed: unique.filter((candidateId) => !removed.has(candidateId)),
+    blocked: unique.filter((candidateId) => removed.has(candidateId)),
   }
 }
