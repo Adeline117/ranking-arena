@@ -395,6 +395,48 @@ describe('OAuth callback identity ownership', () => {
     }
   })
 
+  it('accepts this tab redirect acquisition while an empty-session retry is sleeping', async () => {
+    jest.useFakeTimers()
+    let view: ReturnType<typeof render> | null = null
+    try {
+      mockSearchParams = new URLSearchParams('returnUrl=%2Ffeed')
+      window.history.replaceState({}, '', '/auth/callback?returnUrl=%2Ffeed&code=oauth-code')
+      const acquiredSession = session('user-a')
+      mockGetSession
+        .mockResolvedValueOnce({ data: { session: null }, error: null })
+        .mockResolvedValueOnce({ data: { session: acquiredSession }, error: null })
+      mockGetUser.mockResolvedValue({ data: { user: acquiredSession.user }, error: null })
+      mockMaybeSingle.mockResolvedValue({ data: profile('user-a'), error: null })
+
+      view = render(<AuthCallbackPage />)
+      await act(async () => {
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+      expect(mockGetSession).toHaveBeenCalledTimes(1)
+
+      guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(acquiredSession))
+      expect(getAuthRedirectAcquisitionReceipt()).toMatchObject({
+        userId: 'user-a',
+        navigationKey: '/auth/callback?returnUrl=%2Ffeed',
+      })
+      await act(async () => {
+        jest.advanceTimersByTime(1000)
+        await Promise.resolve()
+        await Promise.resolve()
+      })
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/feed'))
+      expect(mockGetSession).toHaveBeenCalledTimes(2)
+      expect(mockGetUser).toHaveBeenCalledWith('access-user-a')
+      expect(mockSignOutIfCurrent).not.toHaveBeenCalled()
+      expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
+    } finally {
+      view?.unmount()
+      jest.useRealTimers()
+    }
+  })
+
   it('does not rebase direct-session retries when B wins the initial empty read', async () => {
     const initialRead = deferred<{
       data: { session: null }
