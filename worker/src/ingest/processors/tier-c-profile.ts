@@ -157,6 +157,7 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
 
     let rows: Record<string, unknown>[] = []
     let rawPayload: unknown = null
+    let rawPersisted = false
 
     if (surface === 'positions') {
       if (!adapter.capabilities.positions) {
@@ -190,20 +191,48 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
 
       const cursor = await getHistoryCursor(traderId, kind)
       const pages: import('@/lib/ingest/core/types').RawPage[] = []
+      let fetchError: unknown = null
+      let callerLimited = false
       // On-demand view needs the freshest page or two; deeper pagination is
       // served from arena.* by the records route, not by re-fetching.
-      for await (const page of adapter.getHistory(
-        session,
-        src,
-        exchangeTraderId,
-        kind,
-        cursor,
-        traderMeta
-      )) {
-        pages.push(page)
-        if (pages.length >= 2) break
+      try {
+        for await (const page of adapter.getHistory(
+          session,
+          src,
+          exchangeTraderId,
+          kind,
+          cursor,
+          traderMeta
+        )) {
+          pages.push(page)
+          if (pages.length >= 2) {
+            callerLimited = true
+            break
+          }
+        }
+      } catch (error) {
+        fetchError = error
       }
       rawPayload = pages
+
+      // Evidence first: parser/publication failures must leave a replayable
+      // account of every source page received before the checkpoint stayed put.
+      await writeRawObject({
+        sourceId: src.id,
+        sourceSlug: src.slug,
+        jobType: 'tier_c',
+        traderId,
+        timeframe,
+        payload: rawPayload,
+        meta: {
+          surface,
+          caller_limited: callerLimited,
+          fetch_failed: fetchError !== null,
+        },
+      })
+      rawPersisted = true
+      if (fetchError !== null) throw fetchError
+
       const parsed = pages.flatMap((p) => adapter.parseHistory(p.payload, kind, ctx))
 
       // PII strip for the render path (spec §6) — aggregates only for copiers.
@@ -232,19 +261,27 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
         120
       )
 
-      await publishHistoryRows(src, traderId, kind, parsed, nextHistoryCursor(parsed, cursor))
+      await publishHistoryRows(
+        src,
+        traderId,
+        kind,
+        parsed,
+        callerLimited ? null : nextHistoryCursor(parsed, cursor)
+      )
     }
 
     // Persist path (after render): RAW + profile_cache for warm re-reads.
-    await writeRawObject({
-      sourceId: src.id,
-      sourceSlug: src.slug,
-      jobType: 'tier_c',
-      traderId,
-      timeframe,
-      payload: rawPayload,
-      meta: { surface },
-    })
+    if (!rawPersisted) {
+      await writeRawObject({
+        sourceId: src.id,
+        sourceSlug: src.slug,
+        jobType: 'tier_c',
+        traderId,
+        timeframe,
+        payload: rawPayload,
+        meta: { surface },
+      })
+    }
     await getIngestPool().query(
       `INSERT INTO arena.profile_cache
          (trader_id, timeframe, surface, fetched_at, expires_at, is_refreshing, payload)

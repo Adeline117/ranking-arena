@@ -137,29 +137,42 @@ async function crawlTraderHistories(
   let written = 0
   for (const kind of historyKinds(adapter)) {
     const cursor = await getHistoryCursor(trader.id, kind)
-    const rows: ParsedHistoryRow[] = []
     const rawPages: unknown[] = []
+    let fetchError: unknown = null
 
-    for await (const page of adapter.getHistory(
-      session,
-      src,
-      trader.exchange_trader_id,
-      kind,
-      cursor,
-      trader.meta
-    )) {
-      rawPages.push(page)
-      rows.push(...adapter.parseHistory(page.payload, kind, ctx))
+    try {
+      for await (const page of adapter.getHistory(
+        session,
+        src,
+        trader.exchange_trader_id,
+        kind,
+        cursor,
+        trader.meta
+      )) {
+        rawPages.push(page)
+      }
+    } catch (error) {
+      fetchError = error
     }
+
+    if (rawPages.length > 0 || fetchError !== null) {
+      await writeRawObject({
+        sourceId: src.id,
+        sourceSlug: src.slug,
+        jobType: `history:${kind}`,
+        traderId: trader.id,
+        timeframe: null,
+        payload: rawPages,
+        meta: { fetch_failed: fetchError !== null },
+      })
+    }
+    if (fetchError !== null) throw fetchError
     if (rawPages.length === 0) continue
 
-    await writeRawObject({
-      sourceId: src.id,
-      sourceSlug: src.slug,
-      jobType: `history:${kind}`,
-      traderId: trader.id,
-      timeframe: null,
-      payload: rawPages,
+    // RAW is durable before an incomplete or changed payload can be rejected.
+    const rows: ParsedHistoryRow[] = rawPages.flatMap((rawPage) => {
+      const page = rawPage as import('@/lib/ingest/core/types').RawPage
+      return adapter.parseHistory(page.payload, kind, ctx)
     })
 
     written += await publishHistoryRows(src, trader.id, kind, rows, nextHistoryCursor(rows, cursor))
