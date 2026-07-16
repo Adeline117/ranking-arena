@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import test from 'node:test'
-import { findUnsafeBigIntPower } from './check-bigint-build-output.mjs'
+import { findUnsafeBigIntPower } from '../../check-bigint-build-output.mjs'
 
 function fixture(files) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-bigint-build-'))

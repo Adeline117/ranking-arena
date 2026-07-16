@@ -119,6 +119,17 @@ jobs:
           # 固定 CLI，避免 `@latest` 在同一 commit 的重试间改变行为。stdout
           # 必须只保留 deployment URL；官方 `--logs` 走 stderr，失败时提炼为
           # Actions annotation，使未登录的值班检查也能看到真实 Vercel 原因。
+          # 先用 CLI 自己的真实清单验证 lifecycle 文件；不能再用 gitignore
+          # 模拟（Vercel 对嵌套负向规则的行为不同，曾让完整构建一直到
+          # postbuild 才 MODULE_NOT_FOUND）。
+          npx vercel@56.2.1 deploy --dry --format=json --yes \
+            --token="$VERCEL_TOKEN" > /tmp/vercel-upload-manifest.json
+          REQUIRED_BUILD_FILE=$(node -p \
+            "require('./package.json').scripts['qa:build-bigint'].trim().split(/\\s+/).at(-1)")
+          node -e \
+            "const m=require('/tmp/vercel-upload-manifest.json'); if (!m.files.some(f=>f.path===process.argv[1])) { console.error('Vercel upload manifest is missing required build file: '+process.argv[1]); process.exit(1) }" \
+            "$REQUIRED_BUILD_FILE"
+          echo "Vercel upload includes required build file: $REQUIRED_BUILD_FILE"
           set +e
           npx vercel@56.2.1 deploy --prod --skip-domain --yes --logs --meta gateSha="$HEAD_SHA" \
             --build-env ARENA_RELEASE_SHA="$HEAD_SHA" \
