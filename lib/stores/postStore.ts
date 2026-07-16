@@ -13,6 +13,11 @@
 
 import { create } from 'zustand'
 import { getCsrfHeaders } from '@/lib/api/client'
+import {
+  fetchPostCommentsPage,
+  isCreatedCommentAcknowledgement,
+  isDefinitiveMutationRejection,
+} from '@/lib/api/comments-client'
 import { logger } from '@/lib/logger'
 
 export type PostData = {
@@ -34,13 +39,17 @@ export type PostData = {
 
 export type CommentData = {
   id: string
+  post_id?: string
   content: string
   user_id?: string
   author_handle: string
   author_avatar_url?: string
   created_at: string
+  updated_at?: string
   like_count?: number
+  dislike_count?: number
   user_liked?: boolean
+  user_disliked?: boolean
   parent_id?: string | null
   replies?: CommentData[]
 }
@@ -69,11 +78,16 @@ type PostStoreActions = {
   /** Update multiple posts in the cache */
   setPosts: (posts: PostData[]) => void
   /** Update post reaction from server response */
-  updatePostReaction: (postId: string, data: {
-    like_count: number
-    dislike_count: number
-    reaction: 'up' | 'down' | null
-  }) => void
+  updatePostReaction: (
+    postId: string,
+    data: {
+      like_count: number
+      dislike_count: number
+      reaction: 'up' | 'down' | null
+    }
+  ) => void
+  /** Replace comment count with a server-confirmed absolute value */
+  updatePostCommentCount: (postId: string, commentCount: number) => void
   /** Set comments for a post (replaces existing) */
   setComments: (postId: string, comments: CommentData[]) => void
   /** Append comments (for pagination) */
@@ -111,73 +125,98 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
   commentsPagination: {},
   feedRefreshTrigger: 0,
 
-  setPost: (post) => set((state) => ({
-    posts: evictOldest({ ...state.posts, [post.id]: post }, MAX_CACHED_POSTS),
-  })),
+  setPost: (post) =>
+    set((state) => ({
+      posts: evictOldest({ ...state.posts, [post.id]: post }, MAX_CACHED_POSTS),
+    })),
 
-  setPosts: (posts) => set((state) => {
-    const updated = { ...state.posts }
-    for (const post of posts) {
-      updated[post.id] = post
-    }
-    return { posts: evictOldest(updated, MAX_CACHED_POSTS) }
-  }),
+  setPosts: (posts) =>
+    set((state) => {
+      const updated = { ...state.posts }
+      for (const post of posts) {
+        updated[post.id] = post
+      }
+      return { posts: evictOldest(updated, MAX_CACHED_POSTS) }
+    }),
 
-  updatePostReaction: (postId, data) => set((state) => {
-    const existing = state.posts[postId]
-    if (!existing) return state
-    return {
-      posts: {
-        ...state.posts,
-        [postId]: {
-          ...existing,
-          like_count: data.like_count,
-          dislike_count: data.dislike_count,
-          user_reaction: data.reaction,
+  updatePostReaction: (postId, data) =>
+    set((state) => {
+      const existing = state.posts[postId]
+      if (!existing) return state
+      return {
+        posts: {
+          ...state.posts,
+          [postId]: {
+            ...existing,
+            like_count: data.like_count,
+            dislike_count: data.dislike_count,
+            user_reaction: data.reaction,
+          },
         },
+      }
+    }),
+
+  updatePostCommentCount: (postId, commentCount) =>
+    set((state) => {
+      const existing = state.posts[postId]
+      if (
+        !existing ||
+        !Number.isSafeInteger(commentCount) ||
+        commentCount < 0 ||
+        existing.comment_count === commentCount
+      ) {
+        return state
+      }
+
+      return {
+        posts: {
+          ...state.posts,
+          [postId]: { ...existing, comment_count: commentCount },
+        },
+      }
+    }),
+
+  setComments: (postId, comments) =>
+    set((state) => ({
+      comments: evictOldest({ ...state.comments, [postId]: comments }, MAX_CACHED_COMMENT_SETS),
+    })),
+
+  appendComments: (postId, newComments) =>
+    set((state) => {
+      const existing = state.comments[postId] || []
+      // Deduplicate by ID
+      const existingIds = new Set(existing.map((c) => c.id))
+      const unique = newComments.filter((c) => !existingIds.has(c.id))
+      return {
+        comments: evictOldest(
+          { ...state.comments, [postId]: [...existing, ...unique] },
+          MAX_CACHED_COMMENT_SETS
+        ),
+      }
+    }),
+
+  addComment: (postId, comment) =>
+    set((state) => {
+      const existing = state.comments[postId] || []
+      // Avoid duplicates
+      if (existing.some((c) => c.id === comment.id)) return state
+      return {
+        comments: { ...state.comments, [postId]: [...existing, comment] },
+      }
+    }),
+
+  setCommentsPagination: (postId, pagination) =>
+    set((state) => ({
+      commentsPagination: {
+        ...state.commentsPagination,
+        [postId]: { ...getDefaultPagination(), ...state.commentsPagination[postId], ...pagination },
       },
-    }
-  }),
+    })),
 
-  setComments: (postId, comments) => set((state) => ({
-    comments: evictOldest({ ...state.comments, [postId]: comments }, MAX_CACHED_COMMENT_SETS),
-  })),
-
-  appendComments: (postId, newComments) => set((state) => {
-    const existing = state.comments[postId] || []
-    // Deduplicate by ID
-    const existingIds = new Set(existing.map(c => c.id))
-    const unique = newComments.filter(c => !existingIds.has(c.id))
-    return {
-      comments: evictOldest({ ...state.comments, [postId]: [...existing, ...unique] }, MAX_CACHED_COMMENT_SETS),
-    }
-  }),
-
-  addComment: (postId, comment) => set((state) => {
-    const existing = state.comments[postId] || []
-    // Avoid duplicates
-    if (existing.some(c => c.id === comment.id)) return state
-    // Also update post comment_count
-    const post = state.posts[postId]
-    return {
-      comments: { ...state.comments, [postId]: [...existing, comment] },
-      posts: post ? {
-        ...state.posts,
-        [postId]: { ...post, comment_count: post.comment_count + 1 },
-      } : state.posts,
-    }
-  }),
-
-  setCommentsPagination: (postId, pagination) => set((state) => ({
-    commentsPagination: {
-      ...state.commentsPagination,
-      [postId]: { ...getDefaultPagination(), ...state.commentsPagination[postId], ...pagination },
-    },
-  })),
-
-  triggerFeedRefresh: () => set((state) => ({
-    feedRefreshTrigger: state.feedRefreshTrigger + 1,
-  })),
+  triggerFeedRefresh: () =>
+    set((state) => ({
+      feedRefreshTrigger: state.feedRefreshTrigger + 1,
+    })),
 
   clear: () => set({ posts: {}, comments: {}, commentsPagination: {}, feedRefreshTrigger: 0 }),
 }))
@@ -191,37 +230,43 @@ const COMMENTS_PER_PAGE = 10
 /**
  * Load comments for a post. Resets pagination.
  */
-export async function loadPostComments(postId: string): Promise<void> {
+export async function loadPostComments(
+  postId: string,
+  accessToken: string | null = null
+): Promise<void> {
   const store = usePostStore.getState()
   store.setCommentsPagination(postId, { loading: true, offset: 0, hasMore: true })
 
   try {
-    const response = await fetch(`/api/posts/${postId}/comments?limit=${COMMENTS_PER_PAGE}&offset=0`)
-    const data = await response.json()
+    const page = await fetchPostCommentsPage<CommentData>(postId, accessToken, {
+      limit: COMMENTS_PER_PAGE,
+      offset: 0,
+    })
 
-    if (response.ok) {
-      const comments: CommentData[] = data.comments || []
-      store.setComments(postId, comments)
+    if (page.ok) {
+      store.setComments(postId, page.comments)
+      store.updatePostCommentCount(postId, page.commentCount)
       store.setCommentsPagination(postId, {
         loading: false,
-        offset: COMMENTS_PER_PAGE,
-        hasMore: data.pagination?.has_more ?? false,
+        offset: page.comments.length,
+        hasMore: page.hasMore,
       })
     } else {
-      store.setComments(postId, [])
-      store.setCommentsPagination(postId, { loading: false, hasMore: false })
+      store.setCommentsPagination(postId, { loading: false })
     }
   } catch (err) {
     logger.error('[postStore] loadPostComments failed:', err)
-    store.setComments(postId, [])
-    store.setCommentsPagination(postId, { loading: false, hasMore: false })
+    store.setCommentsPagination(postId, { loading: false })
   }
 }
 
 /**
  * Load more comments (pagination).
  */
-export async function loadMorePostComments(postId: string): Promise<void> {
+export async function loadMorePostComments(
+  postId: string,
+  accessToken: string | null = null
+): Promise<void> {
   const store = usePostStore.getState()
   const pagination = store.commentsPagination[postId]
   if (!pagination || pagination.loadingMore || !pagination.hasMore) return
@@ -229,25 +274,47 @@ export async function loadMorePostComments(postId: string): Promise<void> {
   store.setCommentsPagination(postId, { loadingMore: true })
 
   try {
-    const response = await fetch(
-      `/api/posts/${postId}/comments?limit=${COMMENTS_PER_PAGE}&offset=${pagination.offset}`
-    )
-    const data = await response.json()
+    const page = await fetchPostCommentsPage<CommentData>(postId, accessToken, {
+      limit: COMMENTS_PER_PAGE,
+      offset: pagination.offset,
+    })
 
-    if (response.ok) {
-      const newComments: CommentData[] = data.comments || []
-      store.appendComments(postId, newComments)
+    if (page.ok) {
+      store.appendComments(postId, page.comments)
+      store.updatePostCommentCount(postId, page.commentCount)
       store.setCommentsPagination(postId, {
         loadingMore: false,
-        offset: pagination.offset + COMMENTS_PER_PAGE,
-        hasMore: data.pagination?.has_more ?? false,
+        offset: pagination.offset + page.comments.length,
+        hasMore: page.hasMore,
       })
     } else {
-      store.setCommentsPagination(postId, { loadingMore: false, hasMore: false })
+      store.setCommentsPagination(postId, { loadingMore: false })
     }
   } catch (err) {
     logger.error('[postStore] loadMorePostComments failed:', err)
     store.setCommentsPagination(postId, { loadingMore: false })
+  }
+}
+
+async function reconcilePostStoreComments(postId: string, accessToken: string): Promise<boolean> {
+  try {
+    const page = await fetchPostCommentsPage<CommentData>(postId, accessToken, {
+      limit: COMMENTS_PER_PAGE,
+      offset: 0,
+    })
+    if (!page.ok) return false
+
+    const store = usePostStore.getState()
+    store.setComments(postId, page.comments)
+    store.updatePostCommentCount(postId, page.commentCount)
+    store.setCommentsPagination(postId, {
+      loading: false,
+      offset: page.comments.length,
+      hasMore: page.hasMore,
+    })
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -265,25 +332,42 @@ export async function submitPostComment(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         ...getCsrfHeaders(),
       },
       body: JSON.stringify({ content }),
     })
 
-    const json = await response.json()
+    const json = await response.json().catch(() => null)
 
-    if (response.ok && json.success) {
-      const comment: CommentData = json.data.comment
-      // Only add to store after server ACK
+    if (
+      response.ok &&
+      json?.success &&
+      isCreatedCommentAcknowledgement(json.data?.comment, { postId, content })
+    ) {
+      const acknowledgement = json.data.comment
+      const comment: CommentData = {
+        ...acknowledgement,
+        author_handle: acknowledgement.author_handle || 'user',
+      }
+      // The ACK proves the row committed, while the follow-up authenticated
+      // read supplies the absolute post count. Keep the ACK visible even when
+      // it falls outside the first canonical page or that read is unavailable.
+      await reconcilePostStoreComments(postId, accessToken)
       usePostStore.getState().addComment(postId, comment)
       return { comment }
-    } else {
-      return { error: json.error || '发表评论失败' }
     }
+
+    if (isDefinitiveMutationRejection({ ok: response.ok, status: response.status })) {
+      return { error: json?.error || '发表评论失败' }
+    }
+
+    await reconcilePostStoreComments(postId, accessToken)
+    return { error: json?.error || '发表评论结果未知，请检查最新评论' }
   } catch (err) {
     logger.error('[postStore] submitPostComment failed:', err)
-    return { error: '发表评论失败' }
+    await reconcilePostStoreComments(postId, accessToken)
+    return { error: '发表评论结果未知，请检查最新评论' }
   }
 }
 
@@ -300,7 +384,7 @@ export async function togglePostReaction(
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${accessToken}`,
+        Authorization: `Bearer ${accessToken}`,
         ...getCsrfHeaders(),
       },
       body: JSON.stringify({ reaction_type: reactionType }),

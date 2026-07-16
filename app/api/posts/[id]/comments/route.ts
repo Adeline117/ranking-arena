@@ -7,7 +7,6 @@
  */
 
 import { NextResponse } from 'next/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { z } from 'zod'
 import { success, successWithPagination, validateNumber, ApiError, ErrorCode } from '@/lib/api'
 import { withPublic, withAuth } from '@/lib/api/middleware'
@@ -17,10 +16,10 @@ import {
   deleteOwnCommentWithRollout,
   updateOwnCommentWithRollout,
 } from '@/lib/data/comment-mutation-rollout'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import { sendNotification } from '@/lib/data/notifications'
-import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
-import { getAuthUser, getUserHandle } from '@/lib/supabase/server'
+import { getUserHandle } from '@/lib/supabase/server'
 import logger, { fireAndForget } from '@/lib/logger'
 // sanitizeText is dynamically imported inside POST/PUT only — keeps the
 // sanitize-html parser out of the GET handler's module graph at cold-start.
@@ -38,32 +37,44 @@ const CreateCommentSchema = z
   .strict()
 
 // Zod schema for PUT (edit comment)
-const EditCommentSchema = z.object({
-  comment_id: z.string().uuid('Invalid comment ID'),
-  content: z
-    .string()
-    .min(1, 'Comment content is required')
-    .max(2000, 'Comment must be at most 2000 characters'),
-})
+const EditCommentSchema = z
+  .object({
+    comment_id: z.string().uuid('Invalid comment ID'),
+    content: z
+      .string()
+      .trim()
+      .min(1, 'Comment content is required')
+      .max(2000, 'Comment must be at most 2000 characters'),
+  })
+  .strict()
 
 // Zod schema for DELETE (delete comment)
-const DeleteCommentSchema = z.object({
-  comment_id: z.string().uuid('Invalid comment ID'),
-})
+const DeleteCommentSchema = z
+  .object({
+    comment_id: z.string().uuid('Invalid comment ID'),
+  })
+  .strict()
 
 const PostIdSchema = z.string().uuid('Invalid post ID')
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 /** Extract post id from URL path */
-function extractPostId(url: string): string {
+function extractPostId(url: string): string | undefined {
   const pathParts = new URL(url).pathname.split('/')
   const postsIdx = pathParts.indexOf('posts')
-  return pathParts[postsIdx + 1]
+  return postsIdx >= 0 ? pathParts[postsIdx + 1] : undefined
 }
 
 function requirePostId(url: string): string {
   const parsed = PostIdSchema.safeParse(extractPostId(url))
   if (!parsed.success) throw ApiError.validation('Invalid post ID')
   return parsed.data
+}
+
+function databaseCode(error: unknown): string | undefined {
+  return error && typeof error === 'object' && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : undefined
 }
 
 function rethrowCommentMutation(error: unknown, action: 'updated' | 'deleted'): never {
@@ -87,7 +98,7 @@ function rethrowCommentMutation(error: unknown, action: 'updated' | 'deleted'): 
   throw ApiError.internal(`Comment could not be ${action}`)
 }
 
-type LegacyInteractablePost = {
+type InteractablePost = {
   author_id: string
   group_id: string | null
   visibility: string
@@ -96,13 +107,14 @@ type LegacyInteractablePost = {
 async function hasBidirectionalBlock(
   supabase: SupabaseClient,
   viewerId: string,
-  authorId: string
+  authorId: string,
+  operation: 'GET' | 'POST' | 'PUT'
 ): Promise<boolean> {
   if (viewerId === authorId) return false
 
-  const { data, error } = await supabase
+  const { data: block, error: blocksError } = await supabase
     .from('blocked_users')
-    .select('blocker_id')
+    .select('blocker_id, blocked_id')
     .or(
       `and(blocker_id.eq.${viewerId},blocked_id.eq.${authorId}),` +
         `and(blocker_id.eq.${authorId},blocked_id.eq.${viewerId})`
@@ -110,24 +122,59 @@ async function hasBidirectionalBlock(
     .limit(1)
     .maybeSingle()
 
-  if (error) {
-    logger.error('[comments POST] Block permission lookup failed', { code: error.code })
-    throw ApiError.internal('Comment permission could not be checked')
+  if (blocksError) {
+    logger.error(`[comments ${operation}] Block permission lookup failed`, {
+      code: blocksError.code,
+    })
+    throw ApiError.internal(
+      operation === 'GET'
+        ? 'Comments could not be loaded'
+        : 'Comment permission could not be checked'
+    )
   }
-  return !!data
+
+  return !!block
 }
 
-async function assertLegacyCreateAudience(
+async function assertCanInteractWithPost(
   supabase: SupabaseClient,
   userId: string,
-  post: LegacyInteractablePost
+  post: InteractablePost,
+  operation: 'POST' | 'PUT'
 ): Promise<void> {
-  if (await hasBidirectionalBlock(supabase, userId, post.author_id)) {
+  if (await hasBidirectionalBlock(supabase, userId, post.author_id, operation)) {
     throw ApiError.forbidden('You cannot interact with this user')
   }
 
+  if (post.visibility === 'followers' && post.author_id !== userId) {
+    const { data: follow, error: followError } = await supabase
+      .from('user_follows')
+      .select('following_id')
+      .eq('follower_id', userId)
+      .eq('following_id', post.author_id)
+      .maybeSingle()
+
+    if (followError) {
+      logger.error(`[comments ${operation}] Follower permission lookup failed`, {
+        code: followError.code,
+      })
+      throw ApiError.internal('Comment permission could not be checked')
+    }
+    if (!follow) throw ApiError.forbidden('Only followers can interact with this post')
+  } else if (post.visibility === 'group' && !post.group_id) {
+    throw ApiError.forbidden('This group post is not available')
+  } else if (!['public', 'followers', 'group'].includes(post.visibility)) {
+    throw ApiError.forbidden('This post is not available')
+  }
+
+  // A legacy row may carry group_id while its visibility is still public. The
+  // group resource remains authoritative for write permissions in that case.
   if (post.group_id) {
-    const [groupResult, membershipResult, banResult] = await Promise.all([
+    const [
+      { data: group, error: groupError },
+      { data: membership, error: membershipError },
+      { data: ban, error: banError },
+    ] = await Promise.all([
       supabase.from('groups').select('id, dissolved_at').eq('id', post.group_id).maybeSingle(),
       supabase
         .from('group_members')
@@ -143,59 +190,41 @@ async function assertLegacyCreateAudience(
         .maybeSingle(),
     ])
 
-    if (groupResult.error || membershipResult.error || banResult.error) {
-      logger.error('[comments POST] Group permission lookup failed', {
-        groupCode: groupResult.error?.code,
-        membershipCode: membershipResult.error?.code,
-        banCode: banResult.error?.code,
+    if (groupError || membershipError || banError) {
+      logger.error(`[comments ${operation}] Group permission lookup failed`, {
+        groupCode: groupError?.code,
+        membershipCode: membershipError?.code,
+        banCode: banError?.code,
       })
       throw ApiError.internal('Comment permission could not be checked')
     }
-    if (!groupResult.data || groupResult.data.dissolved_at) {
+    if (!group || group.dissolved_at) {
       throw ApiError.forbidden('This group is read-only')
     }
-    if (banResult.data) throw ApiError.forbidden('You are banned from this group')
-    if (!membershipResult.data) {
-      throw ApiError.forbidden('You must be a member to interact in this group')
-    }
-    if (
-      membershipResult.data.muted_until &&
-      new Date(membershipResult.data.muted_until) > new Date()
-    ) {
+    if (ban) throw ApiError.forbidden('You are banned from this group')
+    if (!membership) throw ApiError.forbidden('You must be a member to interact in this group')
+    if (membership.muted_until && new Date(membership.muted_until) > new Date()) {
       throw ApiError.forbidden('You have been muted')
     }
-    return
-  }
-
-  if (post.visibility === 'followers' && post.author_id !== userId) {
-    const { data, error } = await supabase
-      .from('user_follows')
-      .select('following_id')
-      .eq('follower_id', userId)
-      .eq('following_id', post.author_id)
-      .maybeSingle()
-
-    if (error) {
-      logger.error('[comments POST] Follower permission lookup failed', { code: error.code })
-      throw ApiError.internal('Comment permission could not be checked')
-    }
-    if (!data) throw ApiError.forbidden('Only followers can interact with this post')
-  } else if (post.visibility !== 'public') {
-    // Includes malformed legacy group-only rows without a group resource.
-    throw ApiError.forbidden('This post is not available')
   }
 }
 
 export const GET = withPublic(
-  async ({ supabase, request }) => {
+  async ({ user, supabase, request }) => {
     const guard = socialFeatureGuard()
     if (guard) return guard
+
+    // Optional-auth reads must distinguish a genuinely anonymous request from
+    // an expired/invalid bearer token. Returning 401 lets authedFetch refresh
+    // once instead of silently degrading a member/follower to public access.
+    if (request.headers.get('authorization') && !user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
 
     const id = extractPostId(request.url)
 
     // Validate UUID format to prevent PostgreSQL cast errors
-    const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-    if (!UUID_RE.test(id)) {
+    if (!id || !UUID_RE.test(id)) {
       return successWithPagination({ comments: [] }, { limit: 50, offset: 0, has_more: false })
     }
 
@@ -206,17 +235,90 @@ export const GET = withPublic(
     const sortParam = searchParams.get('sort')
     const sort: CommentSortMode = sortParam === 'time' ? 'time' : 'best'
 
-    // 尝试获取当前用户ID（用于获取点赞状态）
-    const userId = (await getAuthUser(request))?.id
+    // withPublic uses a service-role client, so RLS cannot protect this read.
+    // Resolve the parent post first and enforce the same visibility contract as
+    // the post itself. Missing and inaccessible posts intentionally look alike.
+    const { data: post, error: postError } = await supabase
+      .from('posts')
+      .select('id, author_id, group_id, visibility, status, comment_count')
+      .eq('id', id)
+      .is('deleted_at', null)
+      .maybeSingle()
 
-    const comments = await getPostComments(supabase, id, { limit, offset, userId, sort })
+    if (postError) {
+      logger.error('[comments GET] Post visibility lookup failed', { code: postError.code })
+      throw ApiError.internal('Comments could not be loaded')
+    }
+
+    if (post && user && (await hasBidirectionalBlock(supabase, user.id, post.author_id, 'GET'))) {
+      return successWithPagination({ comments: [] }, { limit, offset, has_more: false })
+    }
+
+    let canRead = !!post && post.status !== 'deleted' && post.visibility === 'public'
+    if (post && post.status !== 'deleted' && user) {
+      if (post.author_id === user.id) {
+        canRead = true
+      } else if (post.visibility === 'followers') {
+        const { data: follow, error: followError } = await supabase
+          .from('user_follows')
+          .select('following_id')
+          .eq('follower_id', user.id)
+          .eq('following_id', post.author_id)
+          .maybeSingle()
+
+        if (followError) {
+          logger.error('[comments GET] Follower visibility lookup failed', {
+            code: followError.code,
+          })
+          throw ApiError.internal('Comments could not be loaded')
+        }
+        canRead = !!follow
+      } else if (post.visibility === 'group' && post.group_id) {
+        const { data: membership, error: membershipError } = await supabase
+          .from('group_members')
+          .select('user_id')
+          .eq('group_id', post.group_id)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (membershipError) {
+          logger.error('[comments GET] Group visibility lookup failed', {
+            code: membershipError.code,
+          })
+          throw ApiError.internal('Comments could not be loaded')
+        }
+        canRead = !!membership
+      }
+    }
+
+    if (!post || !canRead) {
+      return successWithPagination({ comments: [] }, { limit, offset, has_more: false })
+    }
+
+    // Fetch one look-ahead row so a full final page does not falsely claim
+    // there is another page. Block filtering happens before this range.
+    const commentsWithLookahead = await getPostComments(supabase, id, {
+      limit: limit + 1,
+      offset,
+      userId: user?.id,
+      sort,
+    })
+    const hasMore = commentsWithLookahead.length > limit
+    const comments = commentsWithLookahead.slice(0, limit)
+
+    if (!Number.isSafeInteger(post.comment_count) || post.comment_count < 0) {
+      logger.error('[comments GET] Post returned an invalid canonical comment count', {
+        postId: id,
+      })
+      throw ApiError.internal('Comments could not be loaded')
+    }
 
     return successWithPagination(
-      { comments },
-      { limit, offset, has_more: comments.length === limit }
+      { comments, post: { comment_count: post.comment_count } },
+      { limit, offset, has_more: hasMore }
     )
   },
-  { name: 'posts/comments-get', rateLimit: 'read' }
+  { name: 'posts/comments-get', rateLimit: 'read', readsAuth: true }
 )
 
 export const POST = withAuth(
@@ -280,39 +382,48 @@ export const POST = withAuth(
     const parentComment = parentResult.data
     if (parent_id && !parentComment) throw ApiError.notFound('Parent comment not found')
     if (parentComment && parentComment.post_id !== id) {
+      // Treat cross-post IDs as absent in this post, avoiding an existence leak.
       throw ApiError.notFound('Parent comment not found')
     }
     if (parentComment?.parent_id) {
       throw ApiError.validation('Replies may only target a top-level comment')
     }
 
-    // This is the compatibility window before the database integrity trigger
-    // is installed. The service-role client bypasses RLS, so every audience
-    // and dissolved-group check must be explicit here.
-    await assertLegacyCreateAudience(supabase, user.id, post)
+    await assertCanInteractWithPost(supabase, user.id, post, 'POST')
     if (
       parentComment &&
       parentComment.user_id !== post.author_id &&
-      (await hasBidirectionalBlock(supabase, user.id, parentComment.user_id))
+      (await hasBidirectionalBlock(supabase, user.id, parentComment.user_id, 'POST'))
     ) {
       throw ApiError.forbidden('You cannot reply to this user')
     }
 
-    const comment = await createComment(supabase, user.id, {
-      post_id: id,
-      content,
-      parent_id,
-    })
-
-    // Atomically increment comment count (fire-and-forget)
-    updateCount(supabase, 'increment_comment_count', { p_post_id: id }, 'Increment comment count')
+    let comment
+    try {
+      comment = await createComment(supabase, user.id, {
+        post_id: id,
+        content,
+        parent_id,
+      })
+    } catch (error: unknown) {
+      const code = databaseCode(error)
+      if (code === '42501') throw ApiError.forbidden('You cannot comment on this post')
+      if (code === '23503') throw ApiError.notFound('Post or parent comment not found')
+      if (code === '23514' || code === 'P0002') {
+        throw new ApiError('Post or parent comment is no longer available', {
+          code: ErrorCode.OPERATION_FAILED,
+          statusCode: 409,
+        })
+      }
+      logger.error('[comments POST] Insert failed', { code })
+      throw ApiError.internal('Comment could not be created')
+    }
 
     // Send comment notifications (truly fire-and-forget — don't block response)
     fireAndForget(
       (async () => {
         const userHandle = await getUserHandle(user.id, user.email ?? undefined)
 
-        // Notify post author
         if (post.author_id && post.author_id !== user.id) {
           sendNotification(
             supabase,
@@ -369,7 +480,7 @@ export const PUT = withAuth(
 
     const postId = requirePostId(request.url)
 
-    let body: Record<string, unknown>
+    let body: unknown
     try {
       body = await request.json()
     } catch {
@@ -410,7 +521,7 @@ export const DELETE = withAuth(
 
     const postId = requirePostId(request.url)
 
-    let body: Record<string, unknown>
+    let body: unknown
     try {
       body = await request.json()
     } catch {

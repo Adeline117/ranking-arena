@@ -98,9 +98,14 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
     accessToken,
     showToast,
     showDangerConfirm,
-    onCommentCountChange: (postId, delta) => {
+    onCommentCountChange: (postId, delta, absoluteCount) => {
       setPost((prev) =>
-        prev.id === postId ? { ...prev, comment_count: prev.comment_count + delta } : prev
+        prev.id === postId
+          ? {
+              ...prev,
+              comment_count: absoluteCount ?? Math.max(0, (prev.comment_count || 0) + delta),
+            }
+          : prev
       )
     },
     t,

@@ -28,6 +28,7 @@ import {
   togglePostReaction,
 } from '@/lib/stores/postStore'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
+import { useCommentDraftPersistence } from './hooks/useCommentDraftPersistence'
 
 type PostDetailModalProps = {
   postId: string
@@ -39,34 +40,13 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   const { showToast } = useToast()
   const auth = useAuthSession()
 
-  // Restore draft comment from localStorage on mount
-  const [newComment, setNewCommentRaw] = useState(() => {
-    try {
-      return localStorage.getItem(`comment-draft-${postId}`) || ''
-    } catch {
-      return ''
-    }
-  })
+  const {
+    draft: newComment,
+    setDraft: setNewComment,
+    clearDraft,
+  } = useCommentDraftPersistence(postId)
   const [submittingComment, setSubmittingComment] = useState(false)
   const [reacting, setReacting] = useState(false)
-
-  // Auto-save comment draft (debounced 500ms)
-  const draftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const setNewComment = useCallback(
-    (value: string) => {
-      setNewCommentRaw(value)
-      if (draftTimerRef.current) clearTimeout(draftTimerRef.current)
-      draftTimerRef.current = setTimeout(() => {
-        try {
-          if (value.trim()) localStorage.setItem(`comment-draft-${postId}`, value)
-          else localStorage.removeItem(`comment-draft-${postId}`)
-        } catch {
-          /* quota exceeded */
-        }
-      }, 500)
-    },
-    [postId]
-  )
 
   // Prevent duplicate submissions
   const commentPendingRef = useRef(false)
@@ -82,8 +62,9 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
 
   // Load comments on mount
   useEffect(() => {
-    loadPostComments(postId)
-  }, [postId])
+    if (!auth.authChecked) return
+    loadPostComments(postId, auth.accessToken)
+  }, [postId, auth.authChecked, auth.accessToken])
 
   const handleSubmitComment = useCallback(async () => {
     // Prevent duplicate submissions
@@ -100,12 +81,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       if ('error' in result) {
         showToast(result.error, 'error')
       } else {
-        setNewCommentRaw('')
-        try {
-          localStorage.removeItem(`comment-draft-${postId}`)
-        } catch {
-          /* ignore */
-        }
+        clearDraft(postId)
       }
     } catch {
       showToast(t('commentFailedRetry'), 'error')
@@ -113,7 +89,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       setSubmittingComment(false)
       commentPendingRef.current = false
     }
-  }, [postId, newComment, auth, showToast, t])
+  }, [postId, newComment, auth, showToast, t, clearDraft])
 
   const handleReaction = useCallback(
     async (reactionType: 'up' | 'down') => {
@@ -141,8 +117,8 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   )
 
   const handleLoadMore = useCallback(() => {
-    loadMorePostComments(postId)
-  }, [postId])
+    loadMorePostComments(postId, auth.accessToken)
+  }, [postId, auth.accessToken])
 
   if (!post) {
     return (

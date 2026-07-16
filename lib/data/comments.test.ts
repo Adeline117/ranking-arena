@@ -47,6 +47,8 @@ const createMockSupabase = () => {
     eq: jest.fn(),
     is: jest.fn(),
     in: jest.fn(),
+    not: jest.fn(),
+    or: jest.fn(),
     order: jest.fn(),
     limit: jest.fn(),
     range: jest.fn(),
@@ -65,9 +67,7 @@ const createMockSupabase = () => {
 describe('getPostComments', () => {
   test('should return empty array when no comments found', async () => {
     const mockSupabase = createMockSupabase()
-    // The query chain is: from().select().eq().is().order().limit()
-    // limit() is the terminal call that returns the result
-    mockSupabase.limit.mockResolvedValueOnce({ data: [], error: null })
+    mockSupabase.range.mockResolvedValueOnce({ data: [], error: null })
 
     const result = await getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
     expect(result).toEqual([])
@@ -85,13 +85,78 @@ describe('getPostComments', () => {
 
   test('should query correct table with correct filters', async () => {
     const mockSupabase = createMockSupabase()
-    mockSupabase.limit.mockResolvedValueOnce({ data: [], error: null })
+    mockSupabase.range.mockResolvedValueOnce({ data: [], error: null })
 
     await getPostComments(mockSupabase as unknown as SupabaseClient, 'post123')
 
     expect(mockSupabase.from).toHaveBeenCalledWith('comments')
     expect(mockSupabase.eq).toHaveBeenCalledWith('post_id', 'post123')
     expect(mockSupabase.is).toHaveBeenCalledWith('parent_id', null)
+    expect(mockSupabase.order).toHaveBeenNthCalledWith(1, 'ranking_score', { ascending: false })
+    expect(mockSupabase.order).toHaveBeenNthCalledWith(2, 'created_at', { ascending: false })
+    expect(mockSupabase.order).toHaveBeenNthCalledWith(3, 'id', { ascending: false })
+  })
+
+  test('uses stable database ordering for the time sort', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.range.mockResolvedValueOnce({ data: [], error: null })
+
+    await getPostComments(mockSupabase as unknown as SupabaseClient, 'post123', {
+      sort: 'time',
+    })
+
+    expect(mockSupabase.order).toHaveBeenNthCalledWith(1, 'created_at', { ascending: false })
+    expect(mockSupabase.order).toHaveBeenNthCalledWith(2, 'id', { ascending: false })
+    expect(mockSupabase.order).not.toHaveBeenCalledWith('ranking_score', expect.anything())
+  })
+
+  test('filters blocked authors before range and applies the same filter to replies', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.or.mockResolvedValueOnce({
+      data: [{ blocker_id: 'viewer', blocked_id: 'blocked-author' }],
+      error: null,
+    })
+    mockSupabase.range.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'c1',
+          post_id: 'post1',
+          user_id: 'visible-author',
+          content: 'Visible comment',
+          like_count: 0,
+          dislike_count: 0,
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+      error: null,
+    })
+
+    await getPostComments(mockSupabase as unknown as SupabaseClient, 'post1', {
+      userId: 'viewer',
+    })
+
+    expect(mockSupabase.not).toHaveBeenNthCalledWith(1, 'user_id', 'in', '(blocked-author)')
+    expect(mockSupabase.not.mock.invocationCallOrder[0]).toBeLessThan(
+      mockSupabase.range.mock.invocationCallOrder[0]
+    )
+    expect(mockSupabase.not).toHaveBeenNthCalledWith(2, 'user_id', 'in', '(blocked-author)')
+  })
+
+  test('fails closed when the block relationship lookup fails', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.or.mockResolvedValueOnce({
+      data: null,
+      error: new Error('block lookup failed'),
+    })
+
+    await expect(
+      getPostComments(mockSupabase as unknown as SupabaseClient, 'post1', {
+        userId: 'viewer',
+      })
+    ).rejects.toThrow('block lookup failed')
+
+    expect(mockSupabase.range).not.toHaveBeenCalled()
   })
 
   test('should handle comments with replies and profiles', async () => {

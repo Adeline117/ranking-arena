@@ -140,6 +140,7 @@ jest.mock('@/lib/api/middleware', () => ({
   withPublic:
     (
       handler: (context: {
+        user: { id: string } | null
         supabase: ReturnType<typeof mockGetSupabaseAdmin>
         request: unknown
         version: { current: string }
@@ -148,6 +149,7 @@ jest.mock('@/lib/api/middleware', () => ({
     ) =>
     async (req: unknown) =>
       handler({
+        user: mockSupabaseAuth.data.user,
         supabase: mockGetSupabaseAdmin(),
         request: req,
         version: { current: 'v1' },
@@ -264,6 +266,10 @@ jest.mock('@/lib/features', () => ({
   socialFeatureGuard: jest.fn().mockReturnValue(null),
 }))
 
+jest.mock('@/lib/data/notifications', () => ({
+  sendNotification: jest.fn(),
+}))
+
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: jest.fn(() => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() })),
   logger: { error: jest.fn(), warn: jest.fn(), info: jest.fn(), debug: jest.fn() },
@@ -285,6 +291,19 @@ const POST_AUTHOR_ID = '22222222-2222-4222-8222-222222222222'
 const PARENT_AUTHOR_ID = '33333333-3333-4333-8333-333333333333'
 const GROUP_ID = '44444444-4444-4444-8444-444444444444'
 const createContext = (id: string = TEST_POST_ID) => ({ params: Promise.resolve({ id }) })
+
+function readablePost(overrides: Record<string, unknown> = {}) {
+  return {
+    id: TEST_POST_ID,
+    author_id: POST_AUTHOR_ID,
+    group_id: null,
+    title: 'Post title',
+    visibility: 'public',
+    status: 'active',
+    comment_count: 4,
+    ...overrides,
+  }
+}
 
 describe('/api/posts/[id]/comments', () => {
   const mockUser = { id: TEST_USER_ID, email: 'test@test.com' }
@@ -318,16 +337,7 @@ describe('/api/posts/[id]/comments', () => {
       let result = queued?.length ? queued.shift() : undefined
 
       if (!result && table === 'posts') {
-        result = {
-          data: {
-            id: TEST_POST_ID,
-            author_id: POST_AUTHOR_ID,
-            group_id: null,
-            title: 'Post title',
-            visibility: 'public',
-            status: 'active',
-          },
-        }
+        result = { data: readablePost() }
       }
       if (!result && table === 'comments') {
         result = {
@@ -346,6 +356,18 @@ describe('/api/posts/[id]/comments', () => {
   // --- GET: List Comments ---
 
   describe('GET /api/posts/[id]/comments', () => {
+    it('returns 401 for an invalid bearer token instead of degrading to anonymous access', async () => {
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
+        headers: { authorization: 'Bearer expired-token' },
+      })
+
+      const res = await GET(req, createContext())
+
+      expect(res.status).toBe(401)
+      expect(mockSupabaseFrom).not.toHaveBeenCalled()
+      expect(mockGetPostComments).not.toHaveBeenCalled()
+    })
+
     it('returns comments for a post with default pagination', async () => {
       const mockComments = [{ id: 'c1', content: 'Great post!', author_id: 'user-2' }]
       mockGetPostComments.mockResolvedValue(mockComments)
@@ -357,6 +379,12 @@ describe('/api/posts/[id]/comments', () => {
       expect(res.status).toBe(200)
       expect(body.success).toBe(true)
       expect(body.data.comments).toHaveLength(1)
+      expect(body.data.post).toEqual({ comment_count: 4 })
+      expect(mockGetPostComments).toHaveBeenCalledWith(
+        expect.anything(),
+        TEST_POST_ID,
+        expect.objectContaining({ limit: 51, offset: 0, sort: 'best', userId: undefined })
+      )
     })
 
     it('returns paginated comments', async () => {
@@ -383,6 +411,98 @@ describe('/api/posts/[id]/comments', () => {
       expect(res.status).toBe(200)
       expect(body.data.comments).toEqual([])
       expect(body.meta.pagination.has_more).toBe(false)
+    })
+
+    it('uses a look-ahead row so has_more is exact', async () => {
+      mockGetPostComments.mockResolvedValue(
+        Array.from({ length: 11 }, (_, index) => ({ id: `comment-${index}` }))
+      )
+
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments?limit=10`)
+      const res = await GET(req, createContext())
+      const body = await res.json()
+
+      expect(body.data.comments).toHaveLength(10)
+      expect(body.meta.pagination.has_more).toBe(true)
+      expect(mockGetPostComments).toHaveBeenCalledWith(
+        expect.anything(),
+        TEST_POST_ID,
+        expect.objectContaining({ limit: 11 })
+      )
+    })
+
+    it.each([
+      ['missing', null],
+      ['deleted', readablePost({ status: 'deleted' })],
+      ['follower-only', readablePost({ visibility: 'followers' })],
+      ['group-only', readablePost({ visibility: 'group', group_id: GROUP_ID })],
+    ])('does not expose comments for an anonymous %s post', async (_label, post) => {
+      queueTable('posts', { data: post })
+
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
+      const res = await GET(req, createContext())
+      const body = await res.json()
+
+      expect(res.status).toBe(200)
+      expect(body.data.comments).toEqual([])
+      expect(body.data.post).toBeUndefined()
+      expect(mockGetPostComments).not.toHaveBeenCalled()
+    })
+
+    it('allows a current follower and passes the authenticated viewer to the data layer', async () => {
+      mockSupabaseAuth = { data: { user: mockUser }, error: null }
+      queueTable('posts', { data: readablePost({ visibility: 'followers' }) })
+      queueTable('blocked_users', { data: null })
+      queueTable('user_follows', { data: { following_id: POST_AUTHOR_ID } })
+      mockGetPostComments.mockResolvedValue([{ id: 'follower-comment' }])
+
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
+      const res = await GET(req, createContext())
+      const body = await res.json()
+
+      expect(body.data.comments).toEqual([{ id: 'follower-comment' }])
+      expect(mockGetPostComments).toHaveBeenCalledWith(
+        expect.anything(),
+        TEST_POST_ID,
+        expect.objectContaining({ userId: mockUser.id })
+      )
+    })
+
+    it('allows a current group member to read group-only comments', async () => {
+      mockSupabaseAuth = { data: { user: mockUser }, error: null }
+      queueTable('posts', { data: readablePost({ visibility: 'group', group_id: GROUP_ID }) })
+      queueTable('blocked_users', { data: null })
+      queueTable('group_members', { data: { user_id: mockUser.id } })
+      mockGetPostComments.mockResolvedValue([{ id: 'group-comment' }])
+
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
+      const res = await GET(req, createContext())
+      const body = await res.json()
+
+      expect(body.data.comments).toEqual([{ id: 'group-comment' }])
+    })
+
+    it.each([
+      { blocker_id: mockUser.id, blocked_id: POST_AUTHOR_ID },
+      { blocker_id: POST_AUTHOR_ID, blocked_id: mockUser.id },
+    ])('returns an empty page for a block in either direction: %o', async (block) => {
+      mockSupabaseAuth = { data: { user: mockUser }, error: null }
+      queueTable('posts', { data: readablePost() })
+      queueTable('blocked_users', { data: block })
+
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
+      const res = await GET(req, createContext())
+      const body = await res.json()
+
+      expect(body.data.comments).toEqual([])
+      expect(mockGetPostComments).not.toHaveBeenCalled()
+    })
+
+    it('fails closed when a readable post has an invalid canonical count', async () => {
+      queueTable('posts', { data: readablePost({ comment_count: -1 }) })
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
+
+      await expect(GET(req, createContext())).rejects.toMatchObject({ statusCode: 500 })
     })
   })
 
@@ -745,6 +865,32 @@ describe('/api/posts/[id]/comments', () => {
 
       expect(res.status).toBe(201)
       expect(mockCreateComment).toHaveBeenCalledTimes(1)
+    })
+
+    it('rejects a group visibility value without a group resource', async () => {
+      queueTable('posts', { data: activePost({ visibility: 'group', group_id: null }) })
+      queueTable('blocked_users', { data: null })
+
+      const res = await POST(request({ content: 'Unavailable group comment' }), createContext())
+
+      expect(res.status).toBe(403)
+      expect(mockCreateComment).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      ['42501', 403],
+      ['23503', 404],
+      ['23514', 409],
+      ['P0002', 409],
+      ['XX001', 500],
+    ])('maps a canonical create failure %s to HTTP %i', async (code, status) => {
+      queueTable('posts', { data: activePost() })
+      queueTable('blocked_users', { data: null })
+      mockCreateComment.mockRejectedValue(Object.assign(new Error('create failed'), { code }))
+
+      const res = await POST(request({ content: 'Race-safe comment' }), createContext())
+
+      expect(res.status).toBe(status)
     })
   })
 

@@ -5,6 +5,11 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { formatTimeAgo } from '@/lib/utils/date'
 import { getCsrfHeaders } from '@/lib/api/client'
+import {
+  fetchPostCommentsPage,
+  isCreatedCommentAcknowledgement,
+  isDefinitiveMutationRejection,
+} from '@/lib/api/comments-client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { localizedLabel } from '@/lib/utils/format'
 import { normalizePostTitle } from '@/lib/utils/post-display'
@@ -13,6 +18,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 import type { Post, Comment } from './types'
+import { useCommentDraftPersistence } from '@/app/components/post/hooks/useCommentDraftPersistence'
 
 interface UseHotPageDataOptions {
   initialPosts?: Post[]
@@ -57,26 +63,16 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const [openPost, setOpenPost] = useState<Post | null>(null)
   const [comments, setComments] = useState<Comment[]>([])
   const [loadingComments, setLoadingComments] = useState(false)
-  const [newComment, setNewCommentRaw] = useState('')
+  const {
+    draft: newComment,
+    setDraft: setNewComment,
+    clearDraft: clearCommentDraft,
+  } = useCommentDraftPersistence(openPost?.id)
   const [submittingComment, setSubmittingComment] = useState(false)
-
-  // Comment draft persistence — keyed by opened post
-  const hotDraftTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const submittingCommentRef = useRef(false)
   const openPostIdRef = useRef<string | null>(null)
-  const setNewComment = useCallback((value: string) => {
-    setNewCommentRaw(value)
-    if (hotDraftTimerRef.current) clearTimeout(hotDraftTimerRef.current)
-    const pid = openPostIdRef.current
-    if (!pid) return
-    hotDraftTimerRef.current = setTimeout(() => {
-      try {
-        if (value.trim()) localStorage.setItem(`comment-draft-${pid}`, value)
-        else localStorage.removeItem(`comment-draft-${pid}`)
-      } catch {
-        /* quota exceeded */
-      }
-    }, 500)
-  }, [])
+  openPostIdRef.current = openPost?.id || null
+  const commentLoadGenerationRef = useRef(new Map<string, number>())
 
   // Comment pagination
   const COMMENTS_PER_PAGE = 10
@@ -261,35 +257,49 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
   // Load comments (initial)
   const loadComments = useCallback(
-    async (postId: string) => {
+    async (postId: string, showError = true): Promise<boolean> => {
+      const generation = (commentLoadGenerationRef.current.get(postId) || 0) + 1
+      commentLoadGenerationRef.current.set(postId, generation)
       try {
         setLoadingComments(true)
-        setCommentsOffset(0)
-        setHasMoreComments(true)
 
-        const response = await fetch(
-          `/api/posts/${postId}/comments?limit=${COMMENTS_PER_PAGE}&offset=0`
-        )
-        const json = await response.json()
-        if (response.ok && json.success) {
-          const commentsData = json.data?.comments || []
-          setComments(commentsData)
-          setHasMoreComments(json.meta?.pagination?.has_more ?? false)
-          setCommentsOffset(COMMENTS_PER_PAGE)
-        } else {
-          setComments([])
-          setHasMoreComments(false)
+        const page = await fetchPostCommentsPage<Comment>(postId, accessToken, {
+          limit: COMMENTS_PER_PAGE,
+          offset: 0,
+        })
+        if (page.ok && commentLoadGenerationRef.current.get(postId) === generation) {
+          if (openPostIdRef.current === postId) {
+            setComments(page.comments)
+            setHasMoreComments(page.hasMore)
+            setCommentsOffset(page.comments.length)
+          }
+          setPosts((prev) =>
+            prev.map((post) =>
+              post.id === postId ? { ...post, comments: page.commentCount } : post
+            )
+          )
+          setOpenPost((prev) =>
+            prev?.id === postId ? { ...prev, comments: page.commentCount } : prev
+          )
+          return true
         }
+        if (showError && commentLoadGenerationRef.current.get(postId) === generation) {
+          showToast(t('loadCommentsFailed'), 'error')
+        }
+        return false
       } catch (err) {
         logger.error('[HotPage] Load comments failed:', err)
-        setComments([])
-        setHasMoreComments(false)
-        showToast(t('loadCommentsFailed'), 'error')
+        if (showError && commentLoadGenerationRef.current.get(postId) === generation) {
+          showToast(t('loadCommentsFailed'), 'error')
+        }
+        return false
       } finally {
-        setLoadingComments(false)
+        if (commentLoadGenerationRef.current.get(postId) === generation) {
+          setLoadingComments(false)
+        }
       }
     },
-    [showToast, t]
+    [accessToken, showToast, t]
   )
 
   // Load more comments
@@ -298,25 +308,41 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
     try {
       setLoadingMoreComments(true)
-      const response = await fetch(
-        `/api/posts/${openPost.id}/comments?limit=${COMMENTS_PER_PAGE}&offset=${commentsOffset}`
-      )
-      const json = await response.json()
+      const page = await fetchPostCommentsPage<Comment>(openPost.id, accessToken, {
+        limit: COMMENTS_PER_PAGE,
+        offset: commentsOffset,
+      })
 
-      if (response.ok && json.success) {
-        const newComments = json.data?.comments || []
-        setComments((prev) => [...prev, ...newComments])
-        setHasMoreComments(json.meta?.pagination?.has_more ?? false)
-        setCommentsOffset((prev) => prev + COMMENTS_PER_PAGE)
-      } else {
-        setHasMoreComments(false)
+      if (page.ok) {
+        setPosts((prev) =>
+          prev.map((post) =>
+            post.id === openPost.id ? { ...post, comments: page.commentCount } : post
+          )
+        )
+        setOpenPost((prev) =>
+          prev?.id === openPost.id ? { ...prev, comments: page.commentCount } : prev
+        )
+        if (openPostIdRef.current === openPost.id) {
+          setComments((prev) => [...prev, ...page.comments])
+          setHasMoreComments(page.hasMore)
+          setCommentsOffset((prev) => prev + page.comments.length)
+        }
       }
     } catch (err) {
       logger.error('[HotPage] Load more comments failed:', err)
     } finally {
       setLoadingMoreComments(false)
     }
-  }, [openPost, commentsOffset, loadingMoreComments, hasMoreComments])
+  }, [openPost, accessToken, commentsOffset, loadingMoreComments, hasMoreComments])
+
+  // Defer the first read until session restoration is complete, then reload if
+  // the viewer token changes. This prevents URL-restored modals from getting
+  // stuck with an anonymous response for a signed-in viewer.
+  const openPostId = openPost?.id
+  useEffect(() => {
+    if (!authChecked || !openPostId) return
+    void loadComments(openPostId)
+  }, [authChecked, openPostId, loadComments])
 
   // Detect Chinese text
   const isChineseText = useCallback((text: string) => {
@@ -504,21 +530,11 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     (post: Post, fromUrlRestore = false) => {
       justClosedIdRef.current = null
       setOpenPost(post)
-      openPostIdRef.current = post.id
-      // Restore draft comment for this post
-      try {
-        const draft = localStorage.getItem(`comment-draft-${post.id}`)
-        if (draft) setNewCommentRaw(draft)
-        else setNewCommentRaw('')
-      } catch {
-        setNewCommentRaw('')
-      }
       setComments([])
       setCommentsOffset(0)
       setHasMoreComments(true)
       setTranslatedContent(null)
       setShowingOriginal(true)
-      loadComments(post.id)
 
       if (!fromUrlRestore) {
         const params = new URLSearchParams(searchParams.toString())
@@ -539,7 +555,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         }
       }
     },
-    [loadComments, language, isChineseText, translateContent, searchParams, router]
+    [language, isChineseText, translateContent, searchParams, router]
   )
 
   // Close post detail
@@ -610,8 +626,11 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         return
       }
       if (!newComment.trim()) return
+      if (submittingCommentRef.current) return
 
+      submittingCommentRef.current = true
       setSubmittingComment(true)
+      const content = newComment.trim()
       try {
         const response = await fetch(`/api/posts/${postId}/comments`, {
           method: 'POST',
@@ -620,54 +639,49 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
             Authorization: `Bearer ${accessToken}`,
             ...getCsrfHeaders(),
           },
-          body: JSON.stringify({ content: newComment.trim() }),
+          body: JSON.stringify({ content }),
         })
 
-        if (!response.ok) {
+        const json = await response.json().catch(() => null)
+        const rawComment = json?.data?.comment
+        const mutationResult = { ok: response.ok, status: response.status }
+
+        if (
+          response.ok &&
+          json?.success === true &&
+          isCreatedCommentAcknowledgement(rawComment, { postId, content })
+        ) {
+          clearCommentDraft(postId)
+          if (!(await loadComments(postId, false)) && openPostIdRef.current === postId) {
+            setComments((prev) => {
+              if (prev.some((comment) => comment.id === rawComment.id)) return prev
+              return [...prev, rawComment]
+            })
+          }
+        } else if (isDefinitiveMutationRejection(mutationResult)) {
           if (response.status === 401) {
             showToast(t('sessionExpired'), 'error')
           } else if (response.status === 403) {
             showToast(t('permissionDenied'), 'error')
-          } else if (response.status >= 500) {
-            showToast(t('serverErrorRetry'), 'error')
           } else {
-            const json = await response.json().catch(() => null)
-            showToast(json?.error?.message || t('postCommentFailed'), 'error')
+            showToast(json?.error?.message || json?.error || t('postCommentFailed'), 'error')
           }
-          return
-        }
-
-        const json = await response.json()
-        if (json.success && json.data?.comment) {
-          setNewCommentRaw('')
-          try {
-            localStorage.removeItem(`comment-draft-${postId}`)
-          } catch {
-            /* ignore */
-          }
-          setComments((prev) => [...prev, json.data.comment])
-          setPosts((prev) =>
-            prev.map((p) => {
-              if (p.id === postId) {
-                return { ...p, comments: p.comments + 1 }
-              }
-              return p
-            })
-          )
-          if (openPost?.id === postId) {
-            setOpenPost((prev) => (prev ? { ...prev, comments: prev.comments + 1 } : null))
-          }
-        } else {
-          showToast(json.error?.message || t('postCommentFailed'), 'error')
+        } else if (!(await loadComments(postId, false))) {
+          // Transport/408/5xx/malformed 2xx is not proof of rollback. Preserve
+          // the current tree and draft when canonical truth is unavailable.
+          showToast(t('networkErrorRetry'), 'error')
         }
       } catch (err) {
         logger.error('[HotPage] Submit comment failed:', err)
-        showToast(t('networkErrorRetry'), 'error')
+        if (!(await loadComments(postId, false))) {
+          showToast(t('networkErrorRetry'), 'error')
+        }
       } finally {
+        submittingCommentRef.current = false
         setSubmittingComment(false)
       }
     },
-    [accessToken, newComment, openPost?.id, showToast, t]
+    [accessToken, clearCommentDraft, loadComments, newComment, showToast, t]
   )
 
   // Toggle reaction (like/dislike)

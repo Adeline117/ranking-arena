@@ -175,42 +175,7 @@ function buildProfileMap(
   return map
 }
 
-/**
- * Wilson score lower bound for ranking comments.
- * https://www.evanmiller.org/how-not-to-sort-by-average-rating.html
- */
-function wilsonScoreLower(ups: number, downs: number): number {
-  const n = ups + downs
-  if (n === 0) return 0
-  const z = 1.96 // 95% confidence
-  const phat = ups / n
-  return (
-    (phat + (z * z) / (2 * n) - z * Math.sqrt((phat * (1 - phat) + (z * z) / (4 * n)) / n)) /
-    (1 + (z * z) / n)
-  )
-}
-
 export type CommentSortMode = 'best' | 'time'
-
-/**
- * Sort comments by mode:
- * - 'best': Wilson score lower bound (handles small sample sizes correctly)
- * - 'time': newest first
- */
-function sortComments(comments: CommentRow[], mode: CommentSortMode = 'best'): CommentRow[] {
-  if (mode === 'time') {
-    return [...comments].sort(
-      (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-    )
-  }
-  // 'best': Wilson score descending, then created_at descending as tiebreaker
-  return [...comments].sort((a, b) => {
-    const scoreA = wilsonScoreLower(a.like_count || 0, a.dislike_count || 0)
-    const scoreB = wilsonScoreLower(b.like_count || 0, b.dislike_count || 0)
-    if (scoreB !== scoreA) return scoreB - scoreA
-    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  })
-}
 
 /**
  * 获取帖子的评论列表
@@ -222,16 +187,21 @@ export async function getPostComments(
 ): Promise<Comment[]> {
   const { limit = 50, offset = 0, userId, sort = 'best' } = options
 
-  // Fetch blocked users and comments in parallel (was sequential — 15-30ms saved)
-  // Block list is applied as JS post-filter instead of SQL .not() to avoid
-  // the sequential dependency. Pagination may return slightly fewer results
-  // when blocked users are filtered out — acceptable for comment lists.
-  const blockedPromise = userId
-    ? supabase
-        .from('blocked_users')
-        .select('blocker_id, blocked_id')
-        .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`)
-    : Promise.resolve({ data: null })
+  // Resolve blocks before pagination. Filtering a ranged page in JavaScript
+  // produces short/empty pages and incorrect has_more values, and used to leak
+  // replies written by blocked users.
+  const blockedIds = new Set<string>()
+  if (userId) {
+    const { data: blocks, error: blocksError } = await supabase
+      .from('blocked_users')
+      .select('blocker_id, blocked_id')
+      .or(`blocker_id.eq.${userId},blocked_id.eq.${userId}`)
+
+    if (blocksError) throw blocksError
+    for (const block of blocks || []) {
+      blockedIds.add(block.blocker_id === userId ? block.blocked_id : block.blocker_id)
+    }
+  }
 
   let query = supabase
     .from('comments')
@@ -242,50 +212,44 @@ export async function getPostComments(
     .is('parent_id', null)
     .is('deleted_at', null) // hide soft-deleted (auto-moderated) comments
 
+  if (blockedIds.size > 0) {
+    query = query.not('user_id', 'in', `(${[...blockedIds].join(',')})`)
+  }
+
   if (sort === 'time') {
-    query = query.order('created_at', { ascending: false })
+    query = query.order('created_at', { ascending: false }).order('id', { ascending: false })
   } else {
-    // 'best': sort by Wilson score in SQL, then created_at as tiebreaker
-    // Uses wilson_score_lower() SQL function from migration
-    query = query.order('like_count', { ascending: false, nullsFirst: false })
+    // ranking_score is a stored generated Wilson lower-bound column. Ordering
+    // before range makes ranking correct across the complete comment set.
+    query = query
+      .order('ranking_score', { ascending: false })
+      .order('created_at', { ascending: false })
+      .order('id', { ascending: false })
   }
 
   query = query.range(offset, offset + limit - 1)
 
-  const [{ data: allTopCommentsRaw, error }, { data: blocks }] = await Promise.all([
-    query,
-    blockedPromise,
-  ])
+  const { data: comments, error } = await query
 
   if (error) throw error
-  if (!allTopCommentsRaw || allTopCommentsRaw.length === 0) return []
-
-  // Post-filter blocked users (was SQL-level, now JS for parallelism)
-  const blockedIds = new Set<string>()
-  if (blocks && blocks.length > 0) {
-    for (const b of blocks) {
-      if (b.blocker_id === userId) blockedIds.add(b.blocked_id)
-      else blockedIds.add(b.blocker_id)
-    }
-  }
-  const allTopComments =
-    blockedIds.size > 0
-      ? allTopCommentsRaw.filter((c) => !blockedIds.has(c.user_id))
-      : allTopCommentsRaw
-
-  // For 'best' mode, re-sort the page by Wilson score (only the page, not 200 rows)
-  const comments = sort === 'best' ? sortComments(allTopComments, sort) : allTopComments
-  if (comments.length === 0) return []
+  if (!comments || comments.length === 0) return []
 
   const commentIds = comments.map((c) => c.id)
-  const { data: replies, error: repliesError } = await supabase
+  let repliesQuery = supabase
     .from('comments')
     .select(
       'id, post_id, user_id, content, parent_id, like_count, dislike_count, created_at, updated_at'
     )
     .in('parent_id', commentIds)
     .is('deleted_at', null) // hide soft-deleted (auto-moderated) replies
+
+  if (blockedIds.size > 0) {
+    repliesQuery = repliesQuery.not('user_id', 'in', `(${[...blockedIds].join(',')})`)
+  }
+
+  const { data: replies, error: repliesError } = await repliesQuery
     .order('created_at', { ascending: true })
+    .order('id', { ascending: true })
   if (repliesError)
     logger.warn('[getPostComments] comment replies query error (drift?):', repliesError.message)
 
