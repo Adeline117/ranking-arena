@@ -36,6 +36,7 @@ import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
 import { validateStats } from '@/lib/ingest/staging/validate'
 import { publishProfile } from '@/lib/ingest/serving/publish'
+import { logger } from '@/lib/logger'
 import type { TierJobData } from '../queues'
 
 const DEFAULT_BATCH = 150
@@ -120,6 +121,18 @@ async function getNeverCrawledBandTraders(
       WHERE r.rank > $2 AND r.rank <= $3
         AND (t.meta->>'claimed') IS DISTINCT FROM 'true'
         AND NOT EXISTS (SELECT 1 FROM arena.trader_series ts WHERE ts.trader_id = t.id)
+        -- A terminal quality reject intentionally writes no serving series.
+        -- Cool its newcomer fast-path attempt so the same stopped upstream
+        -- chart is not fetched every scheduler tick; the main rank cursor can
+        -- still retry it on its normal sweep.
+        AND NOT EXISTS (
+          SELECT 1
+            FROM arena.raw_objects ro
+           WHERE ro.source_id = $1
+             AND ro.job_type = 'tier_b_series'
+             AND ro.trader_id = t.id
+             AND ro.fetched_at > now() - interval '24 hours'
+        )
       ORDER BY r.rank
       LIMIT $4`,
     [sourceId, topN, backfillTopN, limit]
@@ -267,7 +280,7 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
       // progress so the cursor never stalls). The next iteration continues from
       // the advanced cursor.
       if (attempted > 0 && Date.now() - startedAt > deadlineMs) {
-        console.log(
+        logger.info(
           `[tier-b-series] ${src.slug}: budget ${deadlineMs}ms hit after ${attempted}/${work.length} traders — yielding slot`
         )
         break
@@ -363,7 +376,7 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
   result.cursorTo = nextOffset
   await writeCursor(src.id, nextOffset)
 
-  console.log(
+  logger.info(
     `[tier-b-series] ${src.slug}: ${result.tradersCrawled}/${attempted} traders ` +
       `(band ${src.deep_profile_topn + 1}-${backfillTopN}, ${total} total, ` +
       `offset ${offset}→${nextOffset}), ${result.seriesWritten} series pts, ` +
