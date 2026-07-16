@@ -6,6 +6,8 @@
  * every independently persisted contract field agrees.
  */
 
+import type { TraderCoreModules } from './types'
+
 const DAY_SECONDS = 86_400
 const SUPPORTED_WINDOWS = new Set([7, 30, 90])
 
@@ -64,4 +66,31 @@ export function readGmxRealizedNetDisclosure(
     windowTo,
     windowDurationDays: windowDurationDays as 7 | 30 | 90,
   }
+}
+
+/**
+ * Core-module guard used while a period switch may still expose the previous
+ * React Query result. The copy is safe only when request period, response
+ * period, provenance, persisted window, and the visible PnL value all agree.
+ */
+export function readGmxRealizedNetModuleDisclosure(
+  source: string,
+  expectedTimeframe: 7 | 30 | 90,
+  modules:
+    | Pick<TraderCoreModules, 'timeframe' | 'stats' | 'extras' | 'provenance'>
+    | null
+    | undefined
+): GmxRealizedNetDisclosure | null {
+  if (
+    !modules ||
+    modules.timeframe !== expectedTimeframe ||
+    modules.provenance.source !== source ||
+    typeof modules.stats.pnl !== 'number' ||
+    !Number.isFinite(modules.stats.pnl)
+  ) {
+    return null
+  }
+
+  const disclosure = readGmxRealizedNetDisclosure(source, modules.extras)
+  return disclosure?.windowDurationDays === expectedTimeframe ? disclosure : null
 }
