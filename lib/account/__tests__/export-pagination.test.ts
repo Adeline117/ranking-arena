@@ -234,13 +234,22 @@ describe('fetchAllExportRowsByCursor', () => {
       },
     } satisfies CursorExportDataset
     const exact = fakeClient([
-      { data: [{ id: firstUuid, price_paid: '1234567890.123456789' }], error: null },
+      {
+        data: [
+          { id: firstUuid, price_paid: '1234567890.123456789' },
+          { id: secondUuid, price_paid: null },
+        ],
+        error: null,
+      },
       { data: [], error: null },
     ])
 
     await expect(
       fetchAllExportRowsByCursor(exact.client, numericDataset, ownerUuid)
-    ).resolves.toEqual([{ id: firstUuid, price_paid: '1234567890.123456789' }])
+    ).resolves.toEqual([
+      { id: firstUuid, price_paid: '1234567890.123456789' },
+      { id: secondUuid, price_paid: null },
+    ])
     expect(exact.calls[0].selection).toBe('id,price_paid::text')
 
     const inexact = fakeClient([{ data: [{ id: firstUuid, price_paid: 123.45 }], error: null }])
