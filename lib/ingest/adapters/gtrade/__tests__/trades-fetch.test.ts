@@ -1,6 +1,7 @@
 import {
   fetchGtradeTradesWindow,
   GtradeTradesFetchError,
+  replayGtradeTradesSnapshot,
   type GtradeTradesPageFetcher,
 } from '../trades-fetch'
 
@@ -162,5 +163,77 @@ describe('fetchGtradeTradesWindow', () => {
       fetchGtradeTradesWindow(request, AS_OF, { maxPages: 1, pageLimit: 1_001 })
     ).rejects.toThrow('invalid trades fetch options')
     expect(request).not.toHaveBeenCalled()
+  })
+
+  it('replays raw pages instead of trusting flattened rows or summary flags', async () => {
+    const snapshot = await fetchGtradeTradesWindow(
+      fetcher([page([trade(10, 1), trade(9, 2)], true), page([trade(8, 91)], true)]),
+      AS_OF,
+      { maxPages: 5, pageLimit: 3 }
+    )
+    snapshot.trades = [{ id: 999, date: new Date(AS_OF).toISOString() }]
+    snapshot.meta.complete = false
+    snapshot.meta.exhausted = true
+
+    expect(replayGtradeTradesSnapshot(snapshot)).toMatchObject({
+      asOfTimeMs: AS_OF,
+      trades: [{ id: 10 }, { id: 9 }, { id: 8 }],
+      validPageCount: 2,
+      exhausted: false,
+      stopReason: 'open_prefix',
+      error: null,
+    })
+  })
+
+  it('retains only the valid prefix when a later stored page is corrupt', async () => {
+    const snapshot = await fetchGtradeTradesWindow(
+      fetcher([page([trade(10, 1), trade(9, 8)], true)]),
+      AS_OF,
+      { maxPages: 1, pageLimit: 3 }
+    )
+    snapshot.rawPages.push({
+      pageIndex: 2,
+      requestCursor: 999,
+      requestEndTimeMs: AS_OF,
+      url: 'https://gtrade.test/history?cursor=999',
+      response: page([trade(8, 9)], false),
+    })
+
+    expect(replayGtradeTradesSnapshot(snapshot)).toMatchObject({
+      trades: [{ id: 10 }, { id: 9 }],
+      validPageCount: 1,
+      rawPageCount: 2,
+      oldestTimeMs: AS_OF - 8 * DAY,
+      exhausted: false,
+      stopReason: 'invalid_page',
+    })
+  })
+
+  it('replays an identical page-boundary row once and proves exhaustion', async () => {
+    const boundary = trade(8, 3)
+    const snapshot = await fetchGtradeTradesWindow(
+      fetcher([
+        page([trade(10, 1), trade(9, 2), boundary], true),
+        page([boundary, trade(7, 4)], false),
+      ]),
+      AS_OF,
+      { maxPages: 5, pageLimit: 3 }
+    )
+
+    expect(replayGtradeTradesSnapshot(snapshot)).toMatchObject({
+      trades: [{ id: 10 }, { id: 9 }, { id: 8 }, { id: 7 }],
+      validPageCount: 2,
+      duplicateRowCount: 1,
+      exhausted: true,
+      stopReason: 'exhausted',
+    })
+  })
+
+  it('fails closed on an invalid snapshot envelope', () => {
+    expect(replayGtradeTradesSnapshot({ schemaVersion: 1 })).toMatchObject({
+      asOfTimeMs: null,
+      trades: [],
+      stopReason: 'invalid_snapshot',
+    })
   })
 })
