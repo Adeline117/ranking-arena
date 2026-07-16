@@ -8548,6 +8548,10 @@ export type Database = {
           deleted_count: number
         }[]
       }
+      dissolve_group_atomic: {
+        Args: { p_actor_id: string; p_group_id: string }
+        Returns: Json
+      }
       dissolve_group_channel_atomic: {
         Args: { p_actor_id: string; p_channel_id: string }
         Returns: Json

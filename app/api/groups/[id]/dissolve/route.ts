@@ -1,61 +1,104 @@
 /**
  * POST /api/groups/[id]/dissolve
  *
- * Dissolves a group. Only the owner can do this.
- * Sets dissolved_at = now(). After dissolution:
- * - Historical posts remain readable
- * - No new posts, joins, or member management
- * - Group disappears from owner's sidebar
+ * Irreversibly dissolves a group through the canonical locked database RPC.
+ * Historical content remains readable while new interaction is disabled.
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
+import { socialFeatureGuard } from '@/lib/features'
 import logger from '@/lib/logger'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
-export async function POST(request: NextRequest, context: RouteContext) {
-  const { id: groupId } = await context.params
+const paramsSchema = z.object({ id: z.string().uuid() }).strict()
+const dissolutionResultSchema = z.discriminatedUnion('status', [
+  z.object({ status: z.literal('invalid') }).strict(),
+  z.object({ status: z.literal('actor_unavailable') }).strict(),
+  z.object({ status: z.literal('not_found') }).strict(),
+  z.object({ status: z.literal('forbidden') }).strict(),
+  z
+    .object({
+      status: z.literal('already_dissolved'),
+      dissolved_at: z.string().datetime({ offset: true }),
+    })
+    .strict(),
+  z
+    .object({
+      status: z.literal('dissolved'),
+      dissolved_at: z.string().datetime({ offset: true }),
+      audit_log_id: z.string().uuid(),
+    })
+    .strict(),
+])
 
+export async function POST(request: NextRequest, context: RouteContext) {
   const handler = withAuth(
     async ({ user, supabase }) => {
-      try {
-        // Verify group exists and user is owner
-        const { data: group, error: groupError } = await supabase
-          .from('groups')
-          .select('id, created_by, name, dissolved_at')
-          .eq('id', groupId)
-          .maybeSingle()
+      const guard = socialFeatureGuard()
+      if (guard) return guard
 
-        if (groupError || !group) {
+      const params = paramsSchema.safeParse(await context.params)
+      if (!params.success) {
+        return NextResponse.json({ error: 'Invalid group id' }, { status: 400 })
+      }
+
+      const { data, error } = await supabase.rpc('dissolve_group_atomic', {
+        p_actor_id: user.id,
+        p_group_id: params.data.id,
+      })
+      if (error) {
+        logger.error('[dissolve] Atomic group dissolution failed', {
+          groupId: params.data.id,
+          actorId: user.id,
+          code: error.code,
+        })
+        return NextResponse.json({ error: 'Failed to dissolve group' }, { status: 500 })
+      }
+
+      const parsedResult = dissolutionResultSchema.safeParse(data)
+      if (!parsedResult.success) {
+        logger.error('[dissolve] Atomic group dissolution returned an invalid result', {
+          groupId: params.data.id,
+          actorId: user.id,
+        })
+        return NextResponse.json({ error: 'Failed to dissolve group' }, { status: 500 })
+      }
+
+      const result = parsedResult.data
+      switch (result.status) {
+        case 'invalid':
+          return NextResponse.json({ error: 'Invalid dissolution request' }, { status: 400 })
+        case 'actor_unavailable':
+          return NextResponse.json({ error: 'Account is not active' }, { status: 403 })
+        case 'not_found':
           return NextResponse.json({ error: 'Group not found' }, { status: 404 })
-        }
-
-        if (group.created_by !== user.id) {
-          return NextResponse.json({ error: 'Only the group owner can dissolve the group' }, { status: 403 })
-        }
-
-        if (group.dissolved_at) {
-          return NextResponse.json({ error: 'Group is already dissolved' }, { status: 400 })
-        }
-
-        // Dissolve: set dissolved_at
-        const { error: updateError } = await supabase
-          .from('groups')
-          .update({ dissolved_at: new Date().toISOString() })
-          .eq('id', groupId)
-
-        if (updateError) {
-          logger.error('[dissolve] Failed to dissolve group:', updateError)
-          return NextResponse.json({ error: 'Failed to dissolve group' }, { status: 500 })
-        }
-
-        logger.info(`[dissolve] Group "${group.name}" (${groupId}) dissolved by ${user.id}`)
-
-        return NextResponse.json({ success: true })
-      } catch (err) {
-        logger.error('[dissolve] Error:', err)
-        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+        case 'forbidden':
+          return NextResponse.json(
+            { error: 'Only the group owner can dissolve the group' },
+            { status: 403 }
+          )
+        case 'already_dissolved':
+          // Treat a retry after a lost acknowledgement as success.  The group
+          // row is the one-way idempotency record and the RPC emits no new audit.
+          return NextResponse.json({
+            success: true,
+            action: result.status,
+            dissolved_at: result.dissolved_at,
+          })
+        case 'dissolved':
+          logger.info('[dissolve] Group dissolved', {
+            groupId: params.data.id,
+            actorId: user.id,
+            auditLogId: result.audit_log_id,
+          })
+          return NextResponse.json({
+            success: true,
+            action: result.status,
+            dissolved_at: result.dissolved_at,
+          })
       }
     },
     { name: 'group-dissolve', rateLimit: 'sensitive' }
