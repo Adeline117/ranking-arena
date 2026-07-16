@@ -1124,13 +1124,8 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       {actions.showRepostModal && (
         <RepostModal
           postId={actions.showRepostModal}
-          comment={actions.repostComment}
-          onCommentChange={actions.setRepostComment}
           onRepost={actions.handleRepost}
-          onCancel={() => {
-            actions.setShowRepostModal(null)
-            actions.setRepostComment('')
-          }}
+          onCancel={() => actions.setShowRepostModal(null)}
           loading={actions.repostLoading[actions.showRepostModal] || false}
           t={t}
         />

@@ -9,27 +9,27 @@ import type { Sticker } from '@/lib/stickers'
 
 interface RepostModalProps {
   postId: string
-  comment: string
-  onCommentChange: (comment: string) => void
-  onRepost: (postId: string, comment: string) => void
+  onRepost: (postId: string, comment: string) => Promise<boolean>
   onCancel: () => void
   loading: boolean
   t: (key: string) => string
 }
 
-export function RepostModal({
-  postId,
-  comment,
-  onCommentChange,
-  onRepost,
-  onCancel,
-  loading,
-  t,
-}: RepostModalProps) {
+export function RepostModal({ postId, onRepost, onCancel, loading, t }: RepostModalProps) {
   const { t: tLocal } = useLanguage()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const [comment, setComment] = useState('')
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [showStickerPicker, setShowStickerPicker] = useState(false)
+
+  const handleCancel = () => {
+    setComment('')
+    onCancel()
+  }
+
+  const handleRepost = async () => {
+    if (await onRepost(postId, comment)) handleCancel()
+  }
 
   const insertText = (text: string) => {
     const textarea = textareaRef.current
@@ -38,7 +38,7 @@ export function RepostModal({
       const end = textarea.selectionEnd
       const newValue = comment.slice(0, start) + text + comment.slice(end)
       if (newValue.length <= 280) {
-        onCommentChange(newValue)
+        setComment(newValue)
         requestAnimationFrame(() => {
           textarea.selectionStart = textarea.selectionEnd = start + text.length
           textarea.focus()
@@ -47,13 +47,13 @@ export function RepostModal({
     } else {
       const newValue = comment + text
       if (newValue.length <= 280) {
-        onCommentChange(newValue)
+        setComment(newValue)
       }
     }
   }
 
   return (
-    <ModalOverlay open onClose={onCancel} label={t('repost')} maxWidth={400} portal>
+    <ModalOverlay open onClose={handleCancel} label={t('repost')} maxWidth={400} portal>
       <div
         style={{
           padding: 24,
@@ -73,7 +73,7 @@ export function RepostModal({
         <textarea
           ref={textareaRef}
           value={comment}
-          onChange={(e) => onCommentChange(e.target.value)}
+          onChange={(e) => setComment(e.target.value)}
           placeholder={t('addCommentOptional')}
           aria-label={t('addCommentOptional')}
           style={{
@@ -293,7 +293,7 @@ export function RepostModal({
 
         <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
           <button
-            onClick={onCancel}
+            onClick={handleCancel}
             style={{
               padding: '10px 20px',
               borderRadius: tokens.radius.md,
@@ -308,7 +308,7 @@ export function RepostModal({
             {t('cancel')}
           </button>
           <button
-            onClick={() => onRepost(postId, comment)}
+            onClick={handleRepost}
             disabled={loading}
             style={{
               padding: '10px 20px',

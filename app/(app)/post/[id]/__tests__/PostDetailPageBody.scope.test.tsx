@@ -150,8 +150,6 @@ describe('PostDetailPageBody scoped hydration', () => {
       loadCustomPoll: jest.fn(),
       loadUserBookmarksAndReposts: jest.fn(),
       showRepostModal: null,
-      repostComment: '',
-      setRepostComment: jest.fn(),
       setShowRepostModal: jest.fn(),
       handleRepost: jest.fn(),
       showBookmarkModal: false,

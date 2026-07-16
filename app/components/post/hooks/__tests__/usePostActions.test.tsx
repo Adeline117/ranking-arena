@@ -184,13 +184,18 @@ describe('usePostActions aliased detail state', () => {
       })
     )
     const { result } = renderHook(() => useAliasedPostActions())
+    act(() => result.current.actions.setShowRepostModal('post-1'))
 
+    let succeeded: boolean | undefined
     await act(async () => {
-      await result.current.actions.handleRepost('post-1', 'worth sharing')
+      succeeded = await result.current.actions.handleRepost('post-1', 'worth sharing')
     })
 
+    expect(succeeded).toBe(true)
     expect(result.current.post.repost_count).toBe(4)
     expect(mockSetOpenPost).not.toHaveBeenCalled()
+    // The modal owns its local draft and closes itself after a successful ACK.
+    expect(result.current.actions.showRepostModal).toBe('post-1')
   })
 
   it('does not write a canonical root count onto a clicked child repost', async () => {
@@ -212,10 +217,12 @@ describe('usePostActions aliased detail state', () => {
       }))
     })
 
+    let succeeded: boolean | undefined
     await act(async () => {
-      await result.current.actions.handleRepost('repost-1', 'worth sharing')
+      succeeded = await result.current.actions.handleRepost('repost-1', 'worth sharing')
     })
 
+    expect(succeeded).toBe(true)
     expect(result.current.post.repost_count).toBe(0)
     expect(mockSetOpenPost).not.toHaveBeenCalled()
   })
@@ -229,14 +236,15 @@ describe('usePostActions aliased detail state', () => {
     )
     const { result } = renderHook(() => useAliasedPostActions())
 
-    let firstRequest: Promise<void>
-    let duplicateRequest: Promise<void>
+    let firstRequest: Promise<boolean>
+    let duplicateRequest: Promise<boolean>
     act(() => {
       firstRequest = result.current.actions.handleRepost('post-1', 'worth sharing')
       duplicateRequest = result.current.actions.handleRepost('post-1', 'worth sharing')
     })
 
     expect(global.fetch).toHaveBeenCalledTimes(1)
+    await expect(duplicateRequest!).resolves.toBe(false)
 
     await act(async () => {
       resolveFetch?.(
@@ -247,7 +255,7 @@ describe('usePostActions aliased detail state', () => {
           repost_count: 4,
         })
       )
-      await Promise.all([firstRequest!, duplicateRequest!])
+      await expect(firstRequest!).resolves.toBe(true)
     })
   })
 
@@ -319,14 +327,13 @@ describe('usePostActions aliased detail state', () => {
     expect(result.current.actions.userBookmarks).toEqual({})
   })
 
-  it('rejects an A-rendered action callback and masks A interaction drafts on B first render', async () => {
+  it('rejects an A-rendered action callback and masks A interaction state on B first render', async () => {
     const { result, rerender } = renderHook(
       (viewer: ViewerProps) => useAliasedPostActions(viewer),
       { initialProps: viewerA }
     )
     act(() => {
       result.current.actions.setShowRepostModal('post-1')
-      result.current.actions.setRepostComment('A private repost draft')
       result.current.actions.setShowBookmarkModal(true)
       result.current.actions.setBookmarkingPostId('post-1')
       result.current.actions.setUserBookmarks({ 'post-1': true })
@@ -343,7 +350,6 @@ describe('usePostActions aliased detail state', () => {
     })
 
     expect(result.current.actions.showRepostModal).toBeNull()
-    expect(result.current.actions.repostComment).toBe('')
     expect(result.current.actions.showBookmarkModal).toBe(false)
     expect(result.current.actions.bookmarkingPostId).toBeNull()
     expect(result.current.actions.userBookmarks).toEqual({})
