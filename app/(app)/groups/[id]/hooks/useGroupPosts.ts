@@ -10,6 +10,10 @@ import {
   isCreatedCommentAcknowledgement,
   isDefinitiveMutationRejection,
 } from '@/lib/api/comments-client'
+import {
+  parsePostReactionAcknowledgement,
+  type PostReaction,
+} from '@/lib/api/post-reactions-client'
 import { logger } from '@/lib/logger'
 import { shouldLoadExpandedGroupComments } from '@/lib/comments/group-comment-read'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
@@ -24,11 +28,13 @@ export interface Post {
   author_id?: string | null
   author_avatar_url?: string | null
   like_count?: number | null
+  dislike_count?: number | null
   comment_count?: number | null
   bookmark_count?: number | null
   repost_count?: number | null
   is_pinned?: boolean | null
   user_liked?: boolean
+  user_reaction?: PostReaction | null
   user_bookmarked?: boolean
   user_reposted?: boolean
 }
@@ -65,9 +71,9 @@ interface UseGroupPostsOptions {
 
 const POST_PAGE_SIZE = 20
 const POST_SELECT_FIELDS =
-  'id, group_id, title, content, created_at, author_handle, author_id, like_count, comment_count, bookmark_count, repost_count, is_pinned'
+  'id, group_id, title, content, created_at, author_handle, author_id, like_count, dislike_count, comment_count, bookmark_count, repost_count, is_pinned'
 
-// Generic fetch for user interactions (likes, bookmarks, reposts)
+// Generic fetch for boolean user interactions such as bookmarks.
 async function fetchUserInteractions(
   table: string,
   postIds: string[],
@@ -84,6 +90,31 @@ async function fetchUserInteractions(
     map[item.post_id] = true
   })
   return map
+}
+
+async function fetchUserPostReactions(
+  postIds: string[],
+  userId: string
+): Promise<Record<string, PostReaction>> {
+  if (!userId || postIds.length === 0) return {}
+  const { data, error } = await supabase
+    .from('post_likes')
+    .select('post_id, reaction_type')
+    .eq('user_id', userId)
+    .in('post_id', postIds)
+
+  if (error) {
+    logger.warn('[useGroupPosts] reaction status query failed:', error)
+    return {}
+  }
+
+  const reactions: Record<string, PostReaction> = {}
+  data?.forEach((item) => {
+    if (item.reaction_type === 'up' || item.reaction_type === 'down') {
+      reactions[item.post_id] = item.reaction_type
+    }
+  })
+  return reactions
 }
 
 // Reposts are canonical post rows authored by the viewer whose
@@ -134,13 +165,14 @@ async function enrichPostsWithAvatars(postsList: Post[]): Promise<void> {
 // Enrich posts with user interactions
 async function enrichPostsWithUserState(postsList: Post[], userId: string): Promise<void> {
   const postIds = postsList.map((p) => p.id)
-  const [likeMap, bookmarkMap, repostMap] = await Promise.all([
-    fetchUserInteractions('post_likes', postIds, userId),
+  const [reactionMap, bookmarkMap, repostMap] = await Promise.all([
+    fetchUserPostReactions(postIds, userId),
     fetchUserInteractions('post_bookmarks', postIds, userId),
     fetchUserReposts(postIds, userId),
   ])
   postsList.forEach((post) => {
-    post.user_liked = likeMap[post.id] || false
+    post.user_reaction = reactionMap[post.id] || null
+    post.user_liked = post.user_reaction === 'up'
     post.user_bookmarked = bookmarkMap[post.id] || false
     post.user_reposted = repostMap[post.id] || false
   })
@@ -239,6 +271,7 @@ export function useGroupPosts({
     scopeKey
   )
   const [repostComment, setRepostComment] = useViewerOwnedState('', () => '', scopeKey)
+  const likeRequestLockRef = useRef<Set<string>>(new Set())
   const repostRequestLockRef = useRef<Set<string>>(new Set())
 
   // Comments state
@@ -444,6 +477,7 @@ export function useGroupPosts({
     commentLoadPromisesRef.current.clear()
     commentMutationLocksRef.current.clear()
     replyMutationLocksRef.current.clear()
+    likeRequestLockRef.current.clear()
     setPosts([])
     setHasMorePosts(true)
     setLoadingMore(false)
@@ -729,37 +763,50 @@ export function useGroupPosts({
         showToast(t('pleaseLoginFirst'), 'warning')
         return
       }
-      if (likeLoading[postId]) return // prevent double-click
       const context = captureMutationContext()
+      const lockKey = `${context.scope.viewerKey}\u0000${context.scope.sessionGeneration}\u0000${context.groupId}\u0000${postId}`
+      if (likeRequestLockRef.current.has(lockKey)) return
+      likeRequestLockRef.current.add(lockKey)
       setPostLoading(setLikeLoading, postId, true)
-      const result = await apiCall(
-        `/api/posts/${postId}/like`,
-        { body: { reaction_type: 'up' } },
-        context.scope
-      )
-      if (!mutationContextIsCurrent(context)) return
-      if (result.ok) {
-        setPosts((prev) =>
-          prev.map((p) => {
-            if (p.id !== postId) return p
-            const wasLiked = p.user_liked
-            return {
-              ...p,
-              user_liked: !wasLiked,
-              like_count: wasLiked ? Math.max(0, (p.like_count || 0) - 1) : (p.like_count || 0) + 1,
-            }
-          })
+      try {
+        const result = await apiCall(
+          `/api/posts/${postId}/like`,
+          { body: { reaction_type: 'up' } },
+          context.scope
         )
-      } else {
-        showToast(result.error || t('operationFailed'), 'error')
+        if (!mutationContextIsCurrent(context)) return
+
+        const acknowledgement = result.ok
+          ? parsePostReactionAcknowledgement(result.data, 'up')
+          : null
+        if (!acknowledgement) {
+          showToast(result.error || t('operationFailed'), 'error')
+          return
+        }
+
+        setPosts((prev) =>
+          prev.map((post) =>
+            post.id === postId
+              ? {
+                  ...post,
+                  user_liked: acknowledgement.reaction === 'up',
+                  user_reaction: acknowledgement.reaction,
+                  like_count: acknowledgement.like_count ?? post.like_count,
+                  dislike_count: acknowledgement.dislike_count ?? post.dislike_count,
+                }
+              : post
+          )
+        )
+      } finally {
+        if (likeRequestLockRef.current.delete(lockKey) && mutationContextIsCurrent(context)) {
+          setPostLoading(setLikeLoading, postId, false)
+        }
       }
-      setPostLoading(setLikeLoading, postId, false)
     },
     [
       accessToken,
       apiCall,
       captureMutationContext,
-      likeLoading,
       mutationContextIsCurrent,
       setLikeLoading,
       setPostLoading,
