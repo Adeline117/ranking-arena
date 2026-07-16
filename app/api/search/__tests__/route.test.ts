@@ -140,6 +140,7 @@ describe('GET /api/search', () => {
 
   it('re-authorizes cached unified results and suggestions before returning them', async () => {
     mockCacheGet.mockResolvedValue({
+      groupQuery: 'private',
       result: {
         query: 'private',
         results: {
@@ -177,6 +178,7 @@ describe('GET /api/search', () => {
 
   it('fails closed for cached groups and users that are no longer public', async () => {
     mockCacheGet.mockResolvedValue({
+      groupQuery: 'stale',
       result: {
         query: 'stale',
         results: {
@@ -207,6 +209,7 @@ describe('GET /api/search', () => {
 
   it('rebuilds cached group results and suggestions from current mutable fields', async () => {
     mockCacheGet.mockResolvedValue({
+      groupQuery: 'current',
       result: {
         query: 'current',
         results: {
@@ -263,6 +266,7 @@ describe('GET /api/search', () => {
     expect(JSON.stringify(body)).not.toContain('Stale secret')
     expect(JSON.stringify(body)).not.toContain('Stale suggestion')
     expect(currentGroupQuery.is).toHaveBeenCalledWith('dissolved_at', null)
+    expect(currentGroupQuery.ilike).toHaveBeenCalledWith('name', '%current%')
     expect(currentGroupQuery.in).toHaveBeenCalledWith('visibility', ['open', 'apply'])
   })
 })
