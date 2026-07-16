@@ -425,9 +425,26 @@ export async function publishProfile(
 
     for (const replacement of profile.replaceSeries ?? []) {
       if (incompleteTimeframes.has(replacement.timeframe)) continue
-      const metrics = [...new Set(replacement.metrics.map((metric) => metric.trim()))].filter(
-        Boolean
-      )
+      const declaredMetrics = [
+        ...new Set(replacement.metrics.map((metric) => metric.trim())),
+      ].filter(Boolean)
+      // Tier-C intentionally persists only the newest point. Deleting a proven
+      // non-empty replacement first would therefore collapse an existing rich
+      // Tier-B chart to one point. Preserve those keys and only upsert their
+      // endpoint below. A declared key with no points is still a confirmed
+      // empty snapshot, so it must clear stale daily and weekly series even on
+      // the long-tail path.
+      const metrics = opts.fullSeries
+        ? declaredMetrics
+        : declaredMetrics.filter(
+            (metric) =>
+              !profile.series.some(
+                (series) =>
+                  series.timeframe === replacement.timeframe &&
+                  series.metric === metric &&
+                  series.points.length > 0
+              )
+          )
       if (metrics.length === 0) continue
       // A complete rolling-window snapshot owns these series keys. Removing
       // both stores first makes a confirmed empty window clear stale charts;
