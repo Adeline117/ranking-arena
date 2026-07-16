@@ -451,12 +451,37 @@ const RECIPES: Record<string, Recipe> = {
     })
     const payload = fixture('hyperliquid', 'leaderboard-page.json') as Record<string, unknown>
     const bundle = fixture('hyperliquid', 'profile-bundle.json') as Record<string, unknown>
+    const fillsEnd = Date.parse(h.scrapedAt)
+    const fillsStart = fillsEnd - 90 * 86_400_000
+    const completeEmptyFills = {
+      fillsFetchState: 'fetched',
+      fillsSnapshot: {
+        schemaVersion: 2,
+        rawPages: [{ requestStartTimeMs: fillsStart, requestEndTimeMs: fillsEnd, response: [] }],
+        fills: [],
+        meta: {
+          requestedStartTimeMs: fillsStart,
+          requestedEndTimeMs: fillsEnd,
+          coveredStartTimeMs: null,
+          coveredEndTimeMs: null,
+          requestCount: 1,
+          pageCount: 1,
+          fillCount: 0,
+          exhausted: true,
+          limitHit: false,
+          stalled: false,
+          completeThroughEnd: true,
+          failureReason: null,
+          complete: true,
+        },
+      },
+    }
     return {
       stats: [
         ...parseHyperliquidProfile({ ...bundle, timeframe: 30 }, h).stats,
         ...parseHyperliquidProfile({ ...bundle, timeframe: 90 }, h).stats,
-        // fills present-but-empty → explicit-0 positions (confirmed holder)
-        ...parseHyperliquidProfile({ ...bundle, fills: [], timeframe: 30 }, h).stats,
+        // Versioned, exhausted empty window → explicit-0 positions.
+        ...parseHyperliquidProfile({ ...bundle, ...completeEmptyFills, timeframe: 30 }, h).stats,
       ],
       rows: [
         ...parseHyperliquidLeaderboardPage(payload, h).rows,
