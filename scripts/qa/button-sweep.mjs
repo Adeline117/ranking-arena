@@ -67,9 +67,11 @@ const STATIC_ROUTES = [
   '/favorites',
   '/portfolio',
   '/following',
+  '/channels',
   '/messages',
   '/inbox',
   '/my-posts',
+  '/saved',
   '/user-center',
   // 内容 / 帮助 / 法务
   '/learn',
