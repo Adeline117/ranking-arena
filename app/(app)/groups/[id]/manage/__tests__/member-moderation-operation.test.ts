@@ -795,7 +795,7 @@ describe('group management integration', () => {
     const page = readFileSync(join(process.cwd(), 'app/(app)/groups/[id]/manage/page.tsx'), 'utf8')
     expect(page).toContain('moderationViewerScopeRef.current = moderationViewerScope')
     expect(page).toContain('moderationOperationsRef.current.scope(moderationViewerScope)')
-    expect(page).toContain('advanceGroupMemberModerationResourceScope(')
+    expect(page).toContain('advanceGroupManageResourceScope(')
     expect(page).toContain('resourceGeneration: requestScope.resourceGeneration')
     expect(page).toContain('requestScope.groupId !== requestGroupId')
     expect(page).toContain('isGroupMemberModerationViewerCurrent(')
