@@ -6,10 +6,16 @@ const mockGetSourceBySlug = jest.fn()
 const mockProfileTimeframes = jest.fn()
 const mockGetAdapter = jest.fn()
 const mockGetProfile = jest.fn()
+const mockGetHistory = jest.fn()
 const mockParseProfile = jest.fn()
+const mockValidateProfile = jest.fn()
 const mockOpenSession = jest.fn()
 const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
+const mockRecordStagingRejects = jest.fn()
+const mockValidateStats = jest.fn()
+const mockRoiCrossCheckOk = jest.fn()
+const mockGetHistoryCursor = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockDbQuery = jest.fn()
 
@@ -31,11 +37,14 @@ jest.mock('@/lib/ingest/raw', () => ({
   writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
 }))
 jest.mock('@/lib/ingest/staging/validate', () => ({
-  roiCrossCheckOk: jest.fn(() => null),
-  validateStats: jest.fn((stats: unknown[]) => ({ valid: stats, rejects: [] })),
+  roiCrossCheckOk: (...args: unknown[]) => mockRoiCrossCheckOk(...args),
+  validateStats: (...args: unknown[]) => mockValidateStats(...args),
+}))
+jest.mock('@/lib/ingest/staging/rejects', () => ({
+  recordStagingRejects: (...args: unknown[]) => mockRecordStagingRejects(...args),
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
-  getHistoryCursor: jest.fn(),
+  getHistoryCursor: (...args: unknown[]) => mockGetHistoryCursor(...args),
   publishHistoryRows: jest.fn(),
   publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
 }))
@@ -110,7 +119,9 @@ describe('Tier-B profile coverage accounting', () => {
         copiers: false,
       },
       getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
       parseProfile: mockParseProfile,
+      validateProfile: mockValidateProfile,
     })
     mockGetProfile.mockImplementation(async (_session, _src, _trader, timeframe) => ({
       pages: [
@@ -125,7 +136,11 @@ describe('Tier-B profile coverage accounting', () => {
     }))
     mockOpenSession.mockResolvedValue({ close: mockSessionClose })
     mockSessionClose.mockResolvedValue(undefined)
-    mockWriteRawObject.mockResolvedValue(undefined)
+    mockWriteRawObject.mockResolvedValue(2_081_896)
+    mockRecordStagingRejects.mockResolvedValue(undefined)
+    mockValidateProfile.mockReturnValue([])
+    mockValidateStats.mockImplementation((stats: unknown[]) => ({ valid: stats, rejects: [] }))
+    mockRoiCrossCheckOk.mockReturnValue(null)
     mockPublishProfile.mockResolvedValue(undefined)
     mockDbQuery.mockImplementation(async (sql: string) => {
       if (sql.includes('WITH latest AS')) {
@@ -182,5 +197,230 @@ describe('Tier-B profile coverage accounting', () => {
         String(sql).includes('INSERT INTO arena.ingest_cursors')
       )
     ).toBe(true)
+  })
+
+  it('audits a bundle-wide quality reject before any validation or publication', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockGetProfile.mockResolvedValue({
+      pages: [
+        {
+          pageIndex: 1,
+          payload: { part: 1 },
+          url: 'https://gtrade.test/profile/1',
+          fetchedAt: '2026-07-15T12:00:00.000Z',
+        },
+        {
+          pageIndex: 2,
+          payload: { part: 2 },
+          url: 'https://gtrade.test/profile/2',
+          fetchedAt: '2026-07-15T12:00:00.000Z',
+        },
+      ],
+      fetchedAt: '2026-07-15T12:00:00.000Z',
+    })
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockValidateProfile.mockImplementation(
+      (_parsed: ParsedProfile, _ctx: unknown, _timeframe: number, raw: { part: number }) =>
+        raw.part === 2
+          ? [
+              {
+                reason: 'profile_series_tail_stale',
+                payload: { blocking_reasons: ['profile_series_tail_stale'] },
+              },
+            ]
+          : []
+    )
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      validateProfile: mockValidateProfile,
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      surfacesFetched: 1,
+      rejects: 1,
+      errors: 0,
+      crossCheckFails: 0,
+    })
+
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockParseProfile).toHaveBeenCalledTimes(2)
+    expect(mockValidateProfile).toHaveBeenCalledTimes(2)
+    expect(mockWriteRawObject.mock.invocationCallOrder[0]).toBeLessThan(
+      mockParseProfile.mock.invocationCallOrder[0]
+    )
+    expect(mockParseProfile.mock.invocationCallOrder[1]).toBeLessThan(
+      mockValidateProfile.mock.invocationCallOrder[0]
+    )
+    expect(mockValidateProfile.mock.invocationCallOrder[1]).toBeLessThan(
+      mockRecordStagingRejects.mock.invocationCallOrder[0]
+    )
+    expect(mockRecordStagingRejects).toHaveBeenCalledWith(
+      34,
+      2_081_896,
+      expect.arrayContaining([
+        expect.objectContaining({
+          reason: 'profile_series_tail_stale',
+          payload: expect.objectContaining({ trader_id: 42, timeframe: 30, page_index: 2 }),
+        }),
+      ])
+    )
+    expect(mockValidateStats).not.toHaveBeenCalled()
+    expect(mockRoiCrossCheckOk).not.toHaveBeenCalled()
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(mockGetHistoryCursor).not.toHaveBeenCalled()
+    expect(mockGetHistory).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(true)
+  })
+
+  it('records an empty bundle as an explicit terminal payload reject', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockGetProfile.mockResolvedValue({
+      pages: [],
+      fetchedAt: '2026-07-15T12:00:00.000Z',
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      surfacesFetched: 1,
+      rejects: 1,
+      errors: 0,
+    })
+    expect(mockRecordStagingRejects).toHaveBeenCalledWith(34, 2_081_896, [
+      expect.objectContaining({
+        reason: 'profile_payload_missing',
+        payload: expect.objectContaining({ trader_id: 42, timeframe: 30, page_count: 0 }),
+      }),
+    ])
+    expect(mockParseProfile).not.toHaveBeenCalled()
+    expect(mockValidateProfile).not.toHaveBeenCalled()
+    expect(mockValidateStats).not.toHaveBeenCalled()
+    expect(mockRoiCrossCheckOk).not.toHaveBeenCalled()
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(true)
+  })
+
+  it('marks a mixed success/quality terminal attempt without crawling histories', async () => {
+    mockParseProfile.mockImplementation((raw: { timeframe: 7 | 30 }) =>
+      profile(raw.timeframe, true)
+    )
+    mockValidateProfile.mockImplementation(
+      (_parsed: ParsedProfile, _ctx: unknown, timeframe: number) =>
+        timeframe === 7
+          ? [{ reason: 'profile_series_tail_stale', payload: { tail_at: '2025-01-01' } }]
+          : []
+    )
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positionHistory: false,
+        orders: true,
+        transfers: false,
+        copiers: false,
+      },
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      validateProfile: mockValidateProfile,
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      surfacesFetched: 2,
+      rejects: 1,
+      errors: 0,
+      historyRowsWritten: 0,
+    })
+    expect(mockRecordStagingRejects).toHaveBeenCalledTimes(1)
+    expect(mockValidateStats).toHaveBeenCalledTimes(1)
+    expect(mockPublishProfile).toHaveBeenCalledTimes(1)
+    expect(mockGetHistoryCursor).not.toHaveBeenCalled()
+    expect(mockGetHistory).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(true)
+  })
+
+  it('does not advance the attempt cursor when any timeframe has an operational error', async () => {
+    mockGetProfile.mockImplementation(async (_session, _source, _trader, timeframe) => {
+      if (timeframe === 30) throw new Error('upstream unavailable')
+      return {
+        pages: [
+          {
+            pageIndex: 1,
+            payload: { timeframe },
+            url: 'https://gtrade.test/profile',
+            fetchedAt: '2026-07-15T12:00:00.000Z',
+          },
+        ],
+        fetchedAt: '2026-07-15T12:00:00.000Z',
+      }
+    })
+    mockParseProfile.mockImplementation((raw: { timeframe: 7 | 30 }) =>
+      profile(raw.timeframe, true)
+    )
+    mockValidateProfile.mockImplementation(
+      (_parsed: ParsedProfile, _ctx: unknown, timeframe: number) =>
+        timeframe === 7
+          ? [{ reason: 'profile_series_tail_stale', payload: { tail_at: '2025-01-01' } }]
+          : []
+    )
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      surfacesFetched: 1,
+      rejects: 1,
+      errors: 1,
+      historyRowsWritten: 0,
+    })
+    expect(mockRecordStagingRejects).toHaveBeenCalledTimes(1)
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(false)
+  })
+
+  it('treats a reject-audit write failure as operational and retryable', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockValidateProfile.mockReturnValue([
+      { reason: 'profile_series_tail_stale', payload: { tail_at: '2025-01-01' } },
+    ])
+    mockRecordStagingRejects.mockRejectedValue(new Error('staging audit unavailable'))
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 0,
+      surfacesFetched: 0,
+      rejects: 0,
+      errors: 1,
+      historyRowsWritten: 0,
+    })
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) =>
+        String(sql).includes('INSERT INTO arena.ingest_cursors')
+      )
+    ).toBe(false)
   })
 })

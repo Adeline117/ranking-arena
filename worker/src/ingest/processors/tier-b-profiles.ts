@@ -18,9 +18,11 @@ import type { HistoryKind, ParseCtx, ParsedHistoryRow, SourceRow } from '@/lib/i
 import type { FetchSession } from '@/lib/ingest/fetch/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
+import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import { roiCrossCheckOk, validateStats } from '@/lib/ingest/staging/validate'
 import { getHistoryCursor, publishHistoryRows, publishProfile } from '@/lib/ingest/serving/publish'
 import { recordFieldInventory } from '@/lib/ingest/field-inventory'
+import { fireAndForget, logger } from '@/lib/utils/logger'
 import { getRegionQueue, INGEST_JOB, type TierJobData } from '../queues'
 
 interface TopTrader {
@@ -40,8 +42,9 @@ interface TopTrader {
  *
  * Staleness filter (deadline-chunking, 2026-07-03): only traders NOT
  * deep-profiled since `stalerThan` are returned. The marker is a dedicated
- * arena.ingest_cursors row (kind 'tierb_profiled') written after each
- * successful trader — trader_stats.as_of is NOT usable here because the
+ * arena.ingest_cursors row (kind 'tierb_profiled') written after each trader
+ * whose requested timeframes reached a terminal success/quality-reject state.
+ * trader_stats.as_of is NOT usable here because the
  * tier-A board upsert refreshes it every 2-5h, which would make everyone
  * look "fresh" and starve the deep crawl entirely.
  */
@@ -74,10 +77,10 @@ async function getTopTraders(
   return rows
 }
 
-/** Marker kind in arena.ingest_cursors recording each successful deep profile. */
+/** Compatibility marker recording a terminal deep-profile attempt. */
 const PROFILED_CURSOR_KIND = 'tierb_profiled'
 
-async function markProfiled(traderId: number): Promise<void> {
+async function markProfileAttempted(traderId: number): Promise<void> {
   await getIngestPool().query(
     `INSERT INTO arena.ingest_cursors (trader_id, kind, cursor_value, updated_at)
      VALUES ($1, $2, $3, now())
@@ -217,7 +220,7 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
 
   const topTraders = shuffle(await getTopTraders(src.id, src.deep_profile_topn, stalerThan))
   if (topTraders.length === 0) {
-    console.log(`[tier-b] ${src.slug}: all top-${src.deep_profile_topn} fresh — nothing to crawl`)
+    logger.info(`[tier-b] ${src.slug}: all top-${src.deep_profile_topn} fresh — nothing to crawl`)
     return empty
   }
 
@@ -235,8 +238,10 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
       // so a chain can never spin without advancing).
       if (attempted > 0 && Date.now() - startedAt > deadlineMs) break
       attempted += 1
-      let traderHadSuccess = false
-      let traderAllTimeframesOk = true
+      let terminalTimeframes = 0
+      let successfulTimeframes = 0
+      let traderHadQualityReject = false
+      let traderHadOperationalError = false
       for (const timeframe of timeframes) {
         try {
           const scrapedAt = new Date().toISOString()
@@ -249,7 +254,7 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
             { intent: 'scheduled_full' }
           )
 
-          await writeRawObject({
+          const rawObjectId = await writeRawObject({
             sourceId: src.id,
             sourceSlug: src.slug,
             jobType: 'tier_b',
@@ -261,7 +266,10 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
           // Upstream field radar (P1): 1-in-50 traders sample the profile
           // payload shape. Fire-and-forget — never breaks the crawl.
           if (attempted % 50 === 1 && bundle.pages.length > 0) {
-            recordFieldInventory(src.id, 'tier_b', bundle.pages[0].payload).catch(() => {})
+            fireAndForget(
+              recordFieldInventory(src.id, 'tier_b', bundle.pages[0].payload),
+              `tier-b-field-inventory:${src.slug}`
+            )
           }
 
           const ctx: ParseCtx = {
@@ -271,8 +279,57 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
             scrapedAt,
             meta: src.meta,
           }
-          for (const page of bundle.pages) {
-            const profile = adapter.parseProfile(page.payload, ctx)
+          // Parse the complete logical surface before validating or publishing
+          // any page. One bad page must quarantine the whole bundle rather than
+          // leave a partially-published profile.
+          const parsedPages = bundle.pages.map((page) => ({
+            page,
+            profile: adapter.parseProfile(page.payload, ctx),
+          }))
+          const qualityRejects =
+            parsedPages.length === 0
+              ? [
+                  {
+                    reason: 'profile_payload_missing',
+                    payload: {
+                      source_slug: src.slug,
+                      trader_id: trader.id,
+                      exchange_trader_id: trader.exchange_trader_id,
+                      timeframe,
+                      scraped_at: scrapedAt,
+                      page_count: 0,
+                    },
+                  },
+                ]
+              : parsedPages.flatMap(({ page, profile }) =>
+                  (adapter.validateProfile?.(profile, ctx, timeframe, page.payload) ?? []).map(
+                    (reject) => ({
+                      reason: reject.reason,
+                      payload: {
+                        ...reject.payload,
+                        source_slug: src.slug,
+                        trader_id: trader.id,
+                        exchange_trader_id: trader.exchange_trader_id,
+                        timeframe,
+                        scraped_at: scrapedAt,
+                        page_index: page.pageIndex,
+                      },
+                    })
+                  )
+                )
+
+          if (qualityRejects.length > 0) {
+            // The immutable RAW pointer exists. A durable reject makes this
+            // timeframe terminal without allowing any serving/cache mutation.
+            await recordStagingRejects(src.id, rawObjectId, qualityRejects)
+            result.rejects += qualityRejects.length
+            result.surfacesFetched += 1
+            terminalTimeframes += 1
+            traderHadQualityReject = true
+            continue
+          }
+
+          for (const { profile } of parsedPages) {
             const incomplete = findIncompleteProfileWindow(profile)
             if (incomplete) {
               // RAW is already durable. Merge audit extras only, then surface
@@ -308,9 +365,10 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
             )
           }
           result.surfacesFetched += 1
-          traderHadSuccess = true
+          successfulTimeframes += 1
+          terminalTimeframes += 1
         } catch (err) {
-          traderAllTimeframesOk = false
+          traderHadOperationalError = true
           result.errors += 1
           console.warn(
             `[tier-b] ${src.slug} trader ${trader.exchange_trader_id} ${timeframe}d failed:`,
@@ -318,9 +376,23 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
           )
         }
       }
-      if (traderHadSuccess && traderAllTimeframesOk) {
+      const allTimeframesTerminal =
+        timeframes.length > 0 && terminalTimeframes === timeframes.length
+      const allTimeframesSuccessful =
+        allTimeframesTerminal &&
+        !traderHadQualityReject &&
+        !traderHadOperationalError &&
+        successfulTimeframes === timeframes.length
+
+      if (allTimeframesTerminal && !traderHadOperationalError) {
+        // Quality rejects are terminal for this pass: throttle the next attempt
+        // so continuation jobs cannot hot-loop on a permanently bad upstream
+        // payload. The compatibility cursor kind remains `tierb_profiled`.
+        await markProfileAttempted(trader.id)
+      }
+
+      if (allTimeframesSuccessful) {
         result.tradersCrawled += 1
-        await markProfiled(trader.id)
         // Histories ride the same session right after the profile (spec
         // §2.3): incremental, cursor-overlap stop, idempotent upserts.
         try {
@@ -383,7 +455,7 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
     }
   }
 
-  console.log(
+  logger.info(
     `[tier-b] ${src.slug}: ${result.tradersCrawled}/${attempted} attempted ok ` +
       `(${result.remaining} stale remaining${result.remaining > 0 ? `, continuation depth ${contDepth + 1}` : ''}), ` +
       `${result.surfacesFetched} surfaces, ${result.historyRowsWritten} history rows, ` +
