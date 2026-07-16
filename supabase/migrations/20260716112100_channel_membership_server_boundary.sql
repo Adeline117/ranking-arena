@@ -22,6 +22,7 @@ BEGIN;
 
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '2min';
+SET LOCAL search_path = pg_catalog, pg_temp;
 
 SELECT pg_catalog.pg_advisory_xact_lock(
   pg_catalog.hashtextextended(
@@ -764,7 +765,7 @@ RETURNS boolean
 LANGUAGE plpgsql
 STABLE
 SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, pg_temp
 AS $function$
 DECLARE
   v_actor_id uuid;
@@ -792,8 +793,12 @@ BEGIN
   RETURN EXISTS (
     SELECT 1
     FROM public.channel_members AS membership
+    JOIN public.user_profiles AS actor_profile
+      ON actor_profile.id = membership.user_id
     WHERE membership.channel_id = p_channel_id
       AND membership.user_id = v_actor_id
+      AND actor_profile.deleted_at IS NULL
+      AND actor_profile.banned_at IS NULL
   );
 END
 $function$;
@@ -875,7 +880,7 @@ RETURNS jsonb
 LANGUAGE plpgsql
 VOLATILE
 SECURITY DEFINER
-SET search_path = pg_catalog, public
+SET search_path = pg_catalog, pg_temp
 AS $function$
 DECLARE
   v_dm_permission text;
@@ -896,6 +901,19 @@ BEGIN
   IF p_sender_id = p_receiver_id THEN
     RAISE EXCEPTION 'sender and receiver IDs must differ'
       USING ERRCODE = '22023';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.user_profiles AS sender_profile
+    WHERE sender_profile.id = p_sender_id
+      AND sender_profile.deleted_at IS NULL
+      AND sender_profile.banned_at IS NULL
+  ) THEN
+    RETURN pg_catalog.jsonb_build_object(
+      'allowed', false,
+      'reason', 'SENDER_UNAVAILABLE'
+    );
   END IF;
 
   SELECT profile.dm_permission
@@ -1029,6 +1047,7 @@ DECLARE
   v_column name;
   v_expected_policy name;
   v_expected_read_policy name;
+  v_expected_read_expression text;
   v_expected_service_policy name;
   v_service_role_oid oid := (
     SELECT role_row.oid
@@ -1253,6 +1272,14 @@ BEGIN
       WHEN 'channel_messages' THEN 'Authenticated members read channel messages'
       ELSE 'Authenticated members read channel message reactions'
     END;
+    v_expected_read_expression := CASE v_relation_name
+      WHEN 'channel_messages' THEN
+        'public.is_current_user_channel_member(channel_id)'
+      ELSE
+        '(EXISTS ( SELECT 1 FROM public.channel_messages parent_message '
+          || 'WHERE ((parent_message.id = channel_message_reactions.message_id) '
+          || 'AND public.is_current_user_channel_member(parent_message.channel_id))))'
+    END;
     v_expected_service_policy := CASE v_relation_name
       WHEN 'channel_messages' THEN 'Service role manages channel messages'
       ELSE 'Service role manages channel message reactions'
@@ -1423,7 +1450,12 @@ BEGIN
         AND policy.polcmd = 'r'
         AND policy.polpermissive
         AND policy.polroles = ARRAY[v_authenticated_oid]::oid[]
-        AND policy.polqual IS NOT NULL
+        AND pg_catalog.regexp_replace(
+          pg_catalog.pg_get_expr(policy.polqual, policy.polrelid),
+          '[[:space:]]+',
+          ' ',
+          'g'
+        ) = v_expected_read_expression
         AND policy.polwithcheck IS NULL
     ) OR NOT EXISTS (
       SELECT 1
@@ -1491,7 +1523,7 @@ BEGIN
         OR language.lanname <> 'plpgsql'
         OR procedure.provolatile <> 's'
         OR procedure.proconfig IS DISTINCT FROM
-          ARRAY['search_path=pg_catalog, public']::text[]
+          ARRAY['search_path=pg_catalog, pg_temp']::text[]
       )
   ) THEN
     RAISE EXCEPTION
@@ -1563,7 +1595,7 @@ BEGIN
         OR language.lanname <> 'plpgsql'
         OR procedure.provolatile <> 'v'
         OR procedure.proconfig IS DISTINCT FROM
-          ARRAY['search_path=pg_catalog, public']::text[]
+          ARRAY['search_path=pg_catalog, pg_temp']::text[]
       )
   ) THEN
     RAISE EXCEPTION 'canonical check_dm_permission catalog contract failed';
