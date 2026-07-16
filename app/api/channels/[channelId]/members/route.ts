@@ -104,14 +104,11 @@ export async function POST(
       return NextResponse.json({ error: 'No users specified' }, { status: 400 })
     }
 
-    const { data, error } = await getSupabaseAdmin().rpc(
-      'add_channel_members_atomic' as never,
-      {
-        p_channel_id: channelId,
-        p_actor_id: actorId,
-        p_candidate_ids: candidateIds,
-      } as never
-    )
+    const { data, error } = await getSupabaseAdmin().rpc('add_channel_members_atomic', {
+      p_channel_id: channelId,
+      p_actor_id: actorId,
+      p_candidate_ids: candidateIds,
+    })
 
     if (error) {
       logger.error('Atomic channel member addition failed', { error: error.message })

@@ -160,15 +160,15 @@ describe('atomic existing-channel member addition', () => {
       /export async function POST\([\s\S]*?\nexport async function DELETE/
     )?.[0]
     expect(post).toBeDefined()
-    expect(post).toContain("'add_channel_members_atomic' as never")
+    expect(post).toContain(".rpc('add_channel_members_atomic'")
     expect(post).toContain('readAddMembersAcknowledgement(data)')
     expect(post).toContain('acknowledgement.channelId !== channelId')
     expect(post).not.toContain(".from('channel_members')")
     expect(post).not.toContain('filterChannelAddableUsers')
 
-    // Channel creation is deliberately a separate follow-up boundary.
-    expect(createRoute).toContain('filterChannelAddableUsers')
-    expect(createRoute).toContain("supabase.from('channel_members').insert(members)")
-    expect(createRoute).not.toContain('create_group_channel_atomic')
+    // Channel creation now has its own later atomic boundary as well.
+    expect(createRoute).toContain('create_group_channel_atomic')
+    expect(createRoute).not.toContain('filterChannelAddableUsers')
+    expect(createRoute).not.toContain("supabase.from('channel_members').insert(members)")
   })
 })
