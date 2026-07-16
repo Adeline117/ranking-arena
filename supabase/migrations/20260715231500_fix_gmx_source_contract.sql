@@ -13,7 +13,7 @@ DECLARE
   v_updated integer;
 BEGIN
   UPDATE arena.sources
-  SET timeframes_native = ARRAY[7, 30, 90]::integer[],
+  SET timeframes_native = ARRAY[7, 30]::integer[],
       timeframes_derived = ARRAY[]::integer[],
       meta = (COALESCE(meta, '{}'::jsonb) - 'compute_90d') || jsonb_build_object(
         'endpoints',
@@ -27,7 +27,10 @@ BEGIN
         'roi_basis_board', 'max_capital_usd',
         'pnl_includes_unrealized', false,
         'pnl_provenance', 'arena_normalized_from_gmx_period_components',
-        'pnl_contract_version', 2
+        'pnl_contract_version', 2,
+        'unavailable_timeframes', jsonb_build_object(
+          '90', 'pending_exact_event_reconstruction'
+        )
       )
   WHERE slug = 'gmx';
 
@@ -41,13 +44,15 @@ BEGIN
     FROM arena.sources
     WHERE slug = 'gmx'
       AND (
-        timeframes_native <> ARRAY[7, 30, 90]::integer[]
+        timeframes_native <> ARRAY[7, 30]::integer[]
         OR timeframes_derived <> ARRAY[]::integer[]
         OR meta->'endpoints'->>'subgraph'
           <> 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
         OR meta->>'pnl_basis_board' <> 'gmx_period_realized_net'
         OR meta->>'roi_basis_board' <> 'max_capital_usd'
         OR meta->>'pnl_includes_unrealized' <> 'false'
+        OR meta->'unavailable_timeframes'->>'90'
+          <> 'pending_exact_event_reconstruction'
         OR meta ? 'compute_90d'
       )
   ) THEN

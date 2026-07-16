@@ -249,14 +249,16 @@ describe('parseGmxPositions', () => {
 
 describe('gmxWindowFrom', () => {
   const now = Date.parse('2026-06-12T15:30:00Z')
-  it('midnight-aligned; 90d uses an 89-day window (resolver requires <90d)', () => {
+  it('returns midnight-aligned exact native windows', () => {
     const midnight = Date.parse('2026-06-12T00:00:00Z') / 1000
     expect(gmxWindowFrom(7, now)).toBe(midnight - 7 * 86_400)
     expect(gmxWindowFrom(30, now)).toBe(midnight - 30 * 86_400)
-    expect(gmxWindowFrom(90, now)).toBe(midnight - 89 * 86_400)
-    // strictly <90 days even at 23:59
-    const lateNow = Date.parse('2026-06-12T23:59:59Z')
-    expect((lateNow / 1000 - gmxWindowFrom(90, lateNow)) / 86_400).toBeLessThan(90)
+  })
+
+  it('fails closed for 90d rather than labelling an 89d query as 90d', () => {
+    expect(() => gmxWindowFrom(90, now)).toThrow(
+      '[gmx] exact 90d window unavailable; event reconstruction required'
+    )
   })
 })
 

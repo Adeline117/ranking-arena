@@ -10,9 +10,10 @@
  *   Tier A  POST {subgraph} periodAccountStats(where:{from, maxCapital_gte})
  *           — ONE query per TF returns every account active in the window
  *           (~3k for 7d). The resolver requires `from` rounded to 00:00:00
- *           UTC and a window STRICTLY <90 days, so the 90d board uses an
- *           89-day from (disclosed via payload.from). 90 is NATIVE — no
- *           derive-boards needed (sources row updated accordingly).
+ *           UTC and a window STRICTLY <90 days. Arena therefore publishes
+ *           only the exact upstream 7d/30d windows. 90d remains unavailable
+ *           until the event-first index can reconstruct it exactly; an 89d
+ *           query must never be labelled 90d.
  *           Unsorted → sort by realized-basis window PnL desc, truncate to
  *           meta.board_depth (default 60 = survey count), chunk page_size.
  *   Tier B/C POST periodAccountStats(id_eq) + accountPnlHistoryStats — both
@@ -101,14 +102,16 @@ async function gql<T>(session: FetchSession, src: SourceRow, query: string): Pro
 }
 
 /**
- * Window start per TF: midnight-aligned (resolver hard requirement) and
- * STRICTLY <90 days back — so the "90d" board is an 89-day window
- * (midnight − 89d spans 89.0–89.99 days at query time).
+ * Window start for the exact native windows. The resolver requires a
+ * midnight-aligned `from` and rejects a 90-day boundary, so fail closed for
+ * 90d instead of silently substituting 89d under a false label.
  */
 export function gmxWindowFrom(timeframe: RankingTimeframe, nowMs: number): number {
+  if (timeframe === 90) {
+    throw new Error('[gmx] exact 90d window unavailable; event reconstruction required')
+  }
   const midnight = Math.floor(nowMs / 86_400_000) * 86_400
-  const days = timeframe === 90 ? 89 : timeframe
-  return midnight - days * 86_400
+  return midnight - timeframe * 86_400
 }
 
 /** Effective board depth: meta.board_depth (production knob, default 60),

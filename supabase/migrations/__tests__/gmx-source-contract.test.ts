@@ -15,10 +15,11 @@ describe('GMX source contract migration', () => {
     expect(migration).toContain('gmx source contract verification failed')
   })
 
-  it('declares 7/30/90 native and removes the obsolete computed-90 flag', () => {
-    expect(migration).toContain('timeframes_native = ARRAY[7, 30, 90]::integer[]')
+  it('declares only exact 7/30 native and marks 90d unavailable', () => {
+    expect(migration).toContain('timeframes_native = ARRAY[7, 30]::integer[]')
     expect(migration).toContain('timeframes_derived = ARRAY[]::integer[]')
     expect(migration).toContain("- 'compute_90d'")
+    expect(migration).toContain("'90', 'pending_exact_event_reconstruction'")
   })
 
   it('pins the production graph and discloses Arena realized-net semantics', () => {
