@@ -1,14 +1,10 @@
 /**
- * 处理举报 API
+ * Resolve one content report through the database-owned atomic boundary.
  * POST /api/admin/reports/[id]/resolve
  */
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, verifyAdmin } from '@/lib/admin/auth'
-import {
-  CommentMutationRolloutError,
-  moderateCommentWithRollout,
-} from '@/lib/data/comment-mutation-rollout'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -16,53 +12,179 @@ const logger = createLogger('admin-resolve-report')
 
 export const dynamic = 'force-dynamic'
 
-async function confirmPendingReportCommentIsAbsent(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  input: { reportId: string; commentId: string }
-): Promise<boolean> {
-  const { data: currentReport, error: reportError } = await supabase
-    .from('content_reports')
-    .select('id, status, content_type, content_id')
-    .eq('id', input.reportId)
-    .maybeSingle()
+type ReportAction = 'resolve' | 'dismiss'
+type ReportStatus = 'resolved' | 'dismissed'
+type ReportContentType = 'post' | 'comment' | 'message' | 'user'
+type ReportEffect =
+  | 'content_deleted'
+  | 'content_already_absent'
+  | 'dismissed'
+  | 'approved_content'
+  | 'user_banned'
 
-  if (reportError) {
-    logger.error('Failed to confirm report binding after missing comment', {
-      reportId: input.reportId,
-      code: reportError.code,
-    })
-    throw new Error('Report confirmation failed')
-  }
+type AtomicReportResolution = {
+  applied: boolean
+  result_action: ReportAction
+  result_code: 'applied' | 'already_processed'
+  report_id: string
+  report_status: ReportStatus
+  content_type: ReportContentType
+  content_id: string
+  action_taken: ReportEffect | null
+  content_soft_deleted: boolean | null
+  content_affected_count: number
+  admin_log_id: string | null
+}
+
+const ATOMIC_RESULT_KEYS = [
+  'action_taken',
+  'admin_log_id',
+  'applied',
+  'content_affected_count',
+  'content_id',
+  'content_soft_deleted',
+  'content_type',
+  'report_id',
+  'report_status',
+  'result_action',
+  'result_code',
+] as const
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const MAX_REASON_LENGTH = 500
+
+function parseAtomicReportResolution(
+  value: unknown,
+  expected: { reportId: string; action: ReportAction }
+): AtomicReportResolution | null {
+  if (!Array.isArray(value) || value.length !== 1) return null
+  const row = value[0]
+  if (!row || typeof row !== 'object' || Array.isArray(row)) return null
+
+  const candidate = row as Record<string, unknown>
+  const keys = Object.keys(candidate).sort()
   if (
-    !currentReport ||
-    currentReport.id !== input.reportId ||
-    currentReport.status !== 'pending' ||
-    currentReport.content_type !== 'comment' ||
-    currentReport.content_id !== input.commentId
+    keys.length !== ATOMIC_RESULT_KEYS.length ||
+    !ATOMIC_RESULT_KEYS.every((key, index) => keys[index] === key) ||
+    typeof candidate.applied !== 'boolean' ||
+    candidate.result_action !== expected.action ||
+    candidate.report_id !== expected.reportId ||
+    !['applied', 'already_processed'].includes(candidate.result_code as string) ||
+    !['resolved', 'dismissed'].includes(candidate.report_status as string) ||
+    !['post', 'comment', 'message', 'user'].includes(candidate.content_type as string) ||
+    typeof candidate.content_id !== 'string' ||
+    !UUID_PATTERN.test(candidate.content_id) ||
+    !Number.isSafeInteger(candidate.content_affected_count) ||
+    (candidate.content_affected_count as number) < 0 ||
+    ![true, false, null].includes(candidate.content_soft_deleted as boolean | null) ||
+    (candidate.admin_log_id !== null &&
+      (typeof candidate.admin_log_id !== 'string' || !UUID_PATTERN.test(candidate.admin_log_id)))
   ) {
-    return false
+    return null
   }
 
-  const { data: comment, error: commentError } = await supabase
-    .from('comments')
-    .select('id')
-    .eq('id', input.commentId)
-    .maybeSingle()
-
-  if (commentError) {
-    logger.error('Failed to confirm missing comment after moderation retry', {
-      reportId: input.reportId,
-      commentId: input.commentId,
-      code: commentError.code,
-    })
-    throw new Error('Comment confirmation failed')
+  if (!candidate.applied) {
+    const expectedStatus = expected.action === 'resolve' ? 'resolved' : 'dismissed'
+    const validEquivalentEffect =
+      expected.action === 'dismiss'
+        ? ['dismissed', 'approved_content'].includes(candidate.action_taken as string)
+        : ['post', 'comment'].includes(candidate.content_type as string) &&
+          ['content_deleted', 'content_already_absent', 'user_banned'].includes(
+            candidate.action_taken as string
+          ) &&
+          candidate.content_affected_count === 0 &&
+          [true, null].includes(candidate.content_soft_deleted as boolean | null)
+    if (
+      candidate.result_code !== 'already_processed' ||
+      candidate.report_status !== expectedStatus ||
+      !validEquivalentEffect ||
+      (expected.action === 'dismiss' && candidate.content_soft_deleted !== null) ||
+      candidate.content_affected_count !== 0 ||
+      candidate.admin_log_id === null
+    ) {
+      return null
+    }
+    return candidate as AtomicReportResolution
   }
-  return comment === null
+
+  const expectedStatus = expected.action === 'resolve' ? 'resolved' : 'dismissed'
+  if (
+    candidate.result_code !== 'applied' ||
+    candidate.report_status !== expectedStatus ||
+    candidate.admin_log_id === null
+  ) {
+    return null
+  }
+
+  if (expected.action === 'dismiss') {
+    if (
+      candidate.action_taken !== 'dismissed' ||
+      candidate.content_soft_deleted !== null ||
+      candidate.content_affected_count !== 0
+    ) {
+      return null
+    }
+    return candidate as AtomicReportResolution
+  }
+
+  if (!['post', 'comment'].includes(candidate.content_type as string)) return null
+  if (candidate.action_taken === 'content_deleted') {
+    if (
+      candidate.content_soft_deleted !== true ||
+      (candidate.content_affected_count as number) < 1
+    ) {
+      return null
+    }
+  } else if (candidate.action_taken === 'content_already_absent') {
+    if (
+      candidate.content_affected_count !== 0 ||
+      ![true, null].includes(candidate.content_soft_deleted as boolean | null)
+    ) {
+      return null
+    }
+  } else {
+    return null
+  }
+
+  return candidate as AtomicReportResolution
+}
+
+function resolutionError(error: { code?: string } | null) {
+  switch (error?.code) {
+    case 'P0002':
+      return NextResponse.json(
+        { error: 'Report not found', code: 'REPORT_NOT_FOUND' },
+        { status: 404 }
+      )
+    case '22023':
+      return NextResponse.json(
+        { error: 'Invalid report resolution', code: 'INVALID_INPUT' },
+        { status: 400 }
+      )
+    case '42501':
+      return NextResponse.json({ error: 'Forbidden', code: 'FORBIDDEN' }, { status: 403 })
+    case '0A000':
+      return NextResponse.json(
+        { error: 'This report target cannot be resolved here', code: 'UNSUPPORTED_CONTENT' },
+        { status: 422 }
+      )
+    case '40001':
+    case '40P01':
+    case '55P03':
+      return NextResponse.json(
+        { error: 'Report changed during moderation; retry', code: 'MODERATION_CONFLICT' },
+        { status: 409 }
+      )
+    default:
+      return NextResponse.json(
+        { error: 'Failed to resolve report', code: 'DATABASE_ERROR' },
+        { status: 500 }
+      )
+  }
 }
 
 export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    // Admin sensitive operation — failClose rate limiting
     const rateLimitResponse = await checkRateLimit(req, {
       ...RateLimitPresets.sensitive,
       prefix: 'admin-resolve',
@@ -71,142 +193,97 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     if (rateLimitResponse) return rateLimitResponse
 
     const supabase = getSupabaseAdmin()
-    const authHeader = req.headers.get('authorization')
-
-    const admin = await verifyAdmin(supabase, authHeader)
+    const admin = await verifyAdmin(supabase, req.headers.get('authorization'))
     if (!admin) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { id: reportId } = await params
-    let body: { action?: string; reason?: string }
+    const { id: requestedReportId } = await params
+    if (!UUID_PATTERN.test(requestedReportId)) {
+      return NextResponse.json({ error: 'Invalid report ID' }, { status: 400 })
+    }
+    const reportId = requestedReportId.toLowerCase()
+
+    let body: unknown
     try {
       body = await req.json()
     } catch {
       return NextResponse.json({ error: 'Invalid JSON in request body' }, { status: 400 })
     }
-    const { action, reason } = body
 
-    // action: 'resolve' (delete content), 'dismiss' (ignore report)
-    if (!action || !['resolve', 'dismiss'].includes(action)) {
+    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+      return NextResponse.json({ error: 'Invalid request body' }, { status: 400 })
+    }
+
+    const input = body as Record<string, unknown>
+    const inputKeys = Object.keys(input)
+    if (
+      inputKeys.some((key) => !['action', 'reason'].includes(key)) ||
+      !['resolve', 'dismiss'].includes(input.action as string)
+    ) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
     }
 
-    // Get the report
-    const { data: report, error: reportError } = await supabase
-      .from('content_reports')
-      .select('id, status, content_type, content_id')
-      .eq('id', reportId)
-      .maybeSingle()
-
-    if (reportError) {
-      logger.error('Error fetching report', { reportId, code: reportError.code })
-      return NextResponse.json({ error: 'Failed to fetch report' }, { status: 500 })
-    }
-    if (!report) {
-      return NextResponse.json({ error: 'Report not found' }, { status: 404 })
-    }
-
-    // Check if already processed
-    if (report.status !== 'pending') {
-      return NextResponse.json({ error: 'Report already processed' }, { status: 400 })
-    }
-
-    let actionTaken = ''
-
-    if (action === 'resolve') {
-      // Delete the content
-      if (report.content_type === 'post') {
-        const { error: deleteError } = await supabase
-          .from('posts')
-          .delete()
-          .eq('id', report.content_id)
-
-        if (deleteError) {
-          logger.warn('Error deleting post', { error: deleteError, postId: report.content_id })
-          // Content might already be deleted, continue
-        }
-        actionTaken = 'content_deleted'
-      } else if (report.content_type === 'comment') {
-        try {
-          await moderateCommentWithRollout(supabase, {
-            commentId: report.content_id,
-            actorId: admin.id,
-            action: 'hard_delete',
-            reason: reason || 'Report resolved by moderator',
-          })
-        } catch (error) {
-          const isMissingComment =
-            error instanceof CommentMutationRolloutError && error.kind === 'not_found'
-          const isSafeRetry =
-            isMissingComment &&
-            (await confirmPendingReportCommentIsAbsent(supabase, {
-              reportId,
-              commentId: report.content_id,
-            }))
-
-          if (!isSafeRetry) throw error
-          logger.info('Continuing idempotent report resolution for removed comment', {
-            reportId,
-            commentId: report.content_id,
-          })
-        }
-        actionTaken = 'content_deleted'
+    let reason: string | null = null
+    if (Object.prototype.hasOwnProperty.call(input, 'reason')) {
+      if (typeof input.reason !== 'string') {
+        return NextResponse.json({ error: 'Invalid reason' }, { status: 400 })
       }
-    } else {
-      actionTaken = 'dismissed'
+      reason = input.reason.trim()
+      if (reason.length === 0) reason = null
+      if (reason !== null && Array.from(reason).length > MAX_REASON_LENGTH) {
+        return NextResponse.json({ error: 'Invalid reason' }, { status: 400 })
+      }
     }
 
-    // Update the report
-    const nextStatus = action === 'resolve' ? 'resolved' : 'dismissed'
-    const { data: updatedReport, error: updateError } = await supabase
-      .from('content_reports')
-      .update({
-        status: nextStatus,
-        resolved_by: admin.id,
-        resolved_at: new Date().toISOString(),
-        action_taken: actionTaken + (reason ? `: ${reason}` : ''),
-      })
-      .eq('id', reportId)
-      .eq('status', 'pending')
-      .eq('content_type', report.content_type)
-      .eq('content_id', report.content_id)
-      .select('id, status, content_type, content_id')
-      .maybeSingle()
+    const action = input.action as ReportAction
+    const { data, error } = await supabase.rpc('resolve_content_report_atomic', {
+      p_actor_id: admin.id,
+      p_report_id: reportId,
+      p_action: action,
+      p_reason: reason,
+    })
 
-    if (
-      updateError ||
-      !updatedReport ||
-      updatedReport.id !== reportId ||
-      updatedReport.status !== nextStatus ||
-      updatedReport.content_type !== report.content_type ||
-      updatedReport.content_id !== report.content_id
-    ) {
-      logger.error('Error updating report', {
+    if (error) {
+      logger.error('Atomic report resolution failed', {
         reportId,
         action,
-        ...(updateError?.code ? { code: updateError.code } : {}),
+        code: error.code,
       })
-      return NextResponse.json({ error: 'Failed to update report' }, { status: 500 })
+      return resolutionError(error)
     }
 
-    // Log the action
-    await supabase.from('admin_logs').insert({
-      admin_id: admin.id,
-      action: action === 'resolve' ? 'resolve_report' : 'dismiss_report',
-      target_type: 'report',
-      target_id: reportId,
-      details: {
-        content_type: report.content_type,
-        content_id: report.content_id,
-        action_taken: actionTaken,
-        reason,
-      },
-    })
+    const result = parseAtomicReportResolution(data, { reportId, action })
+    if (!result) {
+      logger.error('Atomic report resolution acknowledgement was invalid', {
+        reportId,
+        action,
+      })
+      return NextResponse.json(
+        { error: 'Invalid moderation acknowledgement', code: 'INVALID_ACK' },
+        { status: 500 }
+      )
+    }
 
     return NextResponse.json({
       ok: true,
-      message: action === 'resolve' ? 'Report resolved and content deleted' : 'Report dismissed',
+      applied: result.applied,
+      result: result.result_code,
+      report: {
+        id: result.report_id,
+        status: result.report_status,
+        content_type: result.content_type,
+        content_id: result.content_id,
+      },
+      action_taken: result.action_taken,
+      content_affected_count: result.content_affected_count,
+      message: result.applied
+        ? action === 'resolve'
+          ? result.action_taken === 'content_deleted'
+            ? 'Report resolved and content soft-deleted'
+            : 'Report resolved; content was already absent'
+          : 'Report dismissed'
+        : 'Report already processed',
     })
   } catch (error: unknown) {
     logger.error('Resolve report API error', { error })
