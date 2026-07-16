@@ -6,6 +6,8 @@
  * BSC mainnet genesis block, and BSC's standard economic-finality block tag.
  */
 
+import { parseStrictJson } from './strict-json'
+
 export const BSC_MAINNET_CHAIN_ID = '0x38' as const
 export const BSC_MAINNET_GENESIS_HASH =
   '0x0d21840abff46b96c84b2ac9e10e4f5cdaeb5693cb665db62a2f3b02d2d57b5b' as const
@@ -437,7 +439,7 @@ async function bscEvidenceRpc(
     }
     let payload: unknown
     try {
-      payload = responseText.text ? JSON.parse(responseText.text) : null
+      payload = responseText.text ? parseStrictJson(responseText.text) : null
     } catch {
       return rpcFailure(endpoint.identity, 'malformed_response', null, httpStatus)
     }
