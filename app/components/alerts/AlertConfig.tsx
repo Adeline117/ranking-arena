@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { Box, Text, Button } from '../base'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -36,6 +36,11 @@ interface AlertData {
   enabled: boolean
 }
 
+interface AlertMutationResponse {
+  error?: unknown
+  data?: { alert?: { enabled?: unknown } }
+}
+
 const DEFAULT_ALERT: AlertData = {
   alert_roi_change: true,
   roi_change_threshold: 10,
@@ -67,6 +72,8 @@ export default function AlertConfig({
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const [toggling, setToggling] = useState(false)
+  const toggleInFlightRef = useRef(false)
 
   const authHeaders = useCallback(
     (): Record<string, string> => (accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
@@ -161,15 +168,46 @@ export default function AlertConfig({
   }
 
   const handleToggle = async () => {
+    if (!alert.id || toggleInFlightRef.current) return
+
+    toggleInFlightRef.current = true
+    setToggling(true)
+    const previousEnabled = alert.enabled
     const newEnabled = !alert.enabled
     setAlert((prev) => ({ ...prev, enabled: newEnabled }))
-    if (alert.id) {
-      await fetch('/api/trader-alerts', {
+
+    try {
+      const res = await fetch('/api/trader-alerts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...authHeaders(), ...getCsrfHeaders() },
         body: JSON.stringify({ trader_id: traderId, source, ...alert, enabled: newEnabled }),
       })
+
+      let data: AlertMutationResponse | null = null
+      try {
+        data = (await res.json()) as AlertMutationResponse
+      } catch {
+        // A proxy may return an HTML error page. The status still decides failure.
+      }
+
+      if (!res.ok) {
+        throw new Error(
+          typeof data?.error === 'string' && data.error.trim()
+            ? data.error.trim()
+            : t('saveFailed2')
+        )
+      }
+      if (data?.data?.alert?.enabled !== newEnabled) {
+        throw new Error(t('saveFailed2'))
+      }
+
       showToast(newEnabled ? t('alertEnabled') : t('alertDisabled'), 'success')
+    } catch (error) {
+      setAlert((prev) => ({ ...prev, enabled: previousEnabled }))
+      showToast(error instanceof Error && error.message ? error.message : t('saveFailed2'), 'error')
+    } finally {
+      toggleInFlightRef.current = false
+      setToggling(false)
     }
   }
 
@@ -225,6 +263,8 @@ export default function AlertConfig({
           {alert.id && (
             <Button
               onClick={handleToggle}
+              disabled={toggling || saving}
+              aria-busy={toggling}
               style={{
                 padding: '4px 12px',
                 fontSize: 13,
@@ -234,7 +274,8 @@ export default function AlertConfig({
                   : tokens.colors.bg.tertiary,
                 color: alert.enabled ? 'var(--color-on-accent)' : tokens.colors.text.secondary,
                 border: 'none',
-                cursor: 'pointer',
+                cursor: toggling || saving ? 'not-allowed' : 'pointer',
+                opacity: toggling || saving ? 0.6 : 1,
               }}
             >
               {alert.enabled ? t('alertEnabled') : t('alertDisabled')}
