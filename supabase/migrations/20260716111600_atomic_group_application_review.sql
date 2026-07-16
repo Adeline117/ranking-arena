@@ -4,8 +4,11 @@
 
 BEGIN;
 
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '90s';
+
 SELECT pg_catalog.pg_advisory_xact_lock(
-  pg_catalog.hashtextextended('20260716111600_atomic_group_application_review', 0)
+  pg_catalog.hashtextextended('group-application-authority-migrations', 0)
 );
 
 -- Fail before changing authority if the production baseline is older than the
@@ -113,13 +116,87 @@ BEGIN
     RAISE EXCEPTION 'member_role owner enum value is missing';
   END IF;
 
-  IF pg_catalog.to_regclass('public.groups_name_lower_unique') IS NULL
-    OR pg_catalog.to_regclass('public.groups_slug_key') IS NULL
-  THEN
-    RAISE EXCEPTION 'required unique group-name/slug indexes are missing';
+  -- Require the exact production partial predicates (`column IS NOT NULL`),
+  -- key expressions and btree state; a same-named decoy is not a backstop.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class AS index_relation
+    JOIN pg_catalog.pg_namespace AS index_namespace
+      ON index_namespace.oid = index_relation.relnamespace
+    JOIN pg_catalog.pg_index AS index_info
+      ON index_info.indexrelid = index_relation.oid
+    JOIN pg_catalog.pg_class AS table_relation
+      ON table_relation.oid = index_info.indrelid
+    JOIN pg_catalog.pg_am AS access_method
+      ON access_method.oid = index_relation.relam
+    WHERE index_namespace.nspname = 'public'
+      AND index_relation.relname = 'groups_name_lower_unique'
+      AND index_relation.relkind = 'i'
+      AND table_relation.oid = 'public.groups'::regclass
+      AND access_method.amname = 'btree'
+      AND index_info.indisunique
+      AND index_info.indisvalid
+      AND index_info.indisready
+      AND index_info.indislive
+      AND NOT index_info.indisprimary
+      AND NOT index_info.indisexclusion
+      AND NOT index_info.indnullsnotdistinct
+      AND index_info.indnkeyatts = 1
+      AND index_info.indnatts = 1
+      AND index_info.indkey = '0'::int2vector
+      AND pg_catalog.pg_get_indexdef(index_relation.oid, 1, true) = 'lower(name)'
+      AND pg_catalog.pg_get_expr(index_info.indpred, index_info.indrelid, true)
+        = 'name IS NOT NULL'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class AS index_relation
+    JOIN pg_catalog.pg_namespace AS index_namespace
+      ON index_namespace.oid = index_relation.relnamespace
+    JOIN pg_catalog.pg_index AS index_info
+      ON index_info.indexrelid = index_relation.oid
+    JOIN pg_catalog.pg_class AS table_relation
+      ON table_relation.oid = index_info.indrelid
+    JOIN pg_catalog.pg_am AS access_method
+      ON access_method.oid = index_relation.relam
+    JOIN pg_catalog.pg_attribute AS slug_attribute
+      ON slug_attribute.attrelid = table_relation.oid
+      AND slug_attribute.attname = 'slug'
+      AND slug_attribute.attnum > 0
+      AND NOT slug_attribute.attisdropped
+    WHERE index_namespace.nspname = 'public'
+      AND index_relation.relname = 'groups_slug_key'
+      AND index_relation.relkind = 'i'
+      AND table_relation.oid = 'public.groups'::regclass
+      AND access_method.amname = 'btree'
+      AND index_info.indisunique
+      AND index_info.indisvalid
+      AND index_info.indisready
+      AND index_info.indislive
+      AND NOT index_info.indisprimary
+      AND NOT index_info.indisexclusion
+      AND NOT index_info.indnullsnotdistinct
+      AND index_info.indnkeyatts = 1
+      AND index_info.indnatts = 1
+      AND index_info.indexprs IS NULL
+      AND index_info.indkey[0] = slug_attribute.attnum
+      AND pg_catalog.pg_get_indexdef(index_relation.oid, 1, true) = 'slug'
+      AND pg_catalog.pg_get_expr(index_info.indpred, index_info.indrelid, true)
+        = 'slug IS NOT NULL'
+  ) THEN
+    RAISE EXCEPTION 'required unique group-name/slug index definitions are invalid';
   END IF;
 END
 $required_schema$;
+
+-- Remove the two pre-promotion overloads. CREATE OR REPLACE with the new
+-- defaulted trailing argument creates a distinct signature and would otherwise
+-- leave the old SECURITY DEFINER entry point callable in parallel.
+DROP FUNCTION IF EXISTS public.submit_group_application_atomic(
+  uuid, text, text, text, text, text, jsonb, jsonb, text, boolean
+);
+DROP FUNCTION IF EXISTS public.review_group_application_atomic(
+  uuid, uuid, text, text
+);
 
 -- Keep premium application eligibility self-contained. The earlier combined
 -- lockdown also defines this predicate, but this focused migration must apply
@@ -144,7 +221,7 @@ AS $entitlement$
           COALESCE(active_profile.is_banned, false)
           AND (
             active_profile.ban_expires_at IS NULL
-            OR active_profile.ban_expires_at > pg_catalog.clock_timestamp()
+            OR active_profile.ban_expires_at > pg_catalog.statement_timestamp()
           )
         )
     )
@@ -157,7 +234,7 @@ AS $entitlement$
           AND COALESCE(subscription.tier, subscription.plan) = 'pro'
           AND (
             subscription.current_period_end IS NULL
-            OR subscription.current_period_end > pg_catalog.clock_timestamp()
+            OR subscription.current_period_end > pg_catalog.statement_timestamp()
           )
       )
       OR EXISTS (
@@ -167,7 +244,7 @@ AS $entitlement$
           AND profile_entitlement.subscription_tier = 'pro'
           AND (
             profile_entitlement.pro_expires_at IS NULL
-            OR profile_entitlement.pro_expires_at > pg_catalog.clock_timestamp()
+            OR profile_entitlement.pro_expires_at > pg_catalog.statement_timestamp()
           )
       )
     )
@@ -306,7 +383,7 @@ ALTER FUNCTION public.submit_group_application_atomic(
 ) OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.submit_group_application_atomic(
   uuid, text, text, text, text, text, jsonb, jsonb, text, boolean, boolean
-) FROM PUBLIC, anon, authenticated;
+) FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.submit_group_application_atomic(
   uuid, text, text, text, text, text, jsonb, jsonb, text, boolean, boolean
 ) TO service_role;
@@ -334,28 +411,11 @@ BEGIN
   END IF;
   IF p_reviewer_id IS NULL
     OR p_application_id IS NULL
+    OR p_decision IS NULL
     OR p_decision NOT IN ('approve', 'reject')
     OR pg_catalog.char_length(COALESCE(p_reject_reason, '')) > 500
   THEN
     RETURN pg_catalog.jsonb_build_object('status', 'invalid');
-  END IF;
-
-  PERFORM 1
-  FROM public.user_profiles AS reviewer
-  WHERE reviewer.id = p_reviewer_id
-    AND reviewer.role = 'admin'
-    AND reviewer.deleted_at IS NULL
-    AND reviewer.banned_at IS NULL
-    AND NOT (
-      COALESCE(reviewer.is_banned, false)
-      AND (
-        reviewer.ban_expires_at IS NULL
-        OR reviewer.ban_expires_at > pg_catalog.clock_timestamp()
-      )
-    )
-  FOR UPDATE;
-  IF NOT FOUND THEN
-    RETURN pg_catalog.jsonb_build_object('status', 'reviewer_unauthorized');
   END IF;
 
   SELECT application.*
@@ -368,6 +428,33 @@ BEGIN
   END IF;
   IF v_application.status <> 'pending' THEN
     RETURN pg_catalog.jsonb_build_object('status', 'already_processed');
+  END IF;
+
+  -- Lock both authority-bearing profiles in a deterministic UUID order. The
+  -- former reviewer -> application -> applicant order deadlocked when two
+  -- admins reviewed each other's applications concurrently.
+  PERFORM profile.id
+  FROM public.user_profiles AS profile
+  WHERE profile.id = ANY(ARRAY[p_reviewer_id, v_application.applicant_id])
+  ORDER BY profile.id
+  FOR UPDATE;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.user_profiles AS reviewer
+    WHERE reviewer.id = p_reviewer_id
+      AND reviewer.role = 'admin'
+      AND reviewer.deleted_at IS NULL
+      AND reviewer.banned_at IS NULL
+      AND NOT (
+        COALESCE(reviewer.is_banned, false)
+        AND (
+          reviewer.ban_expires_at IS NULL
+          OR reviewer.ban_expires_at > pg_catalog.clock_timestamp()
+        )
+      )
+  ) THEN
+    RETURN pg_catalog.jsonb_build_object('status', 'reviewer_unauthorized');
   END IF;
 
   IF p_decision = 'reject' THEN
@@ -400,20 +487,20 @@ BEGIN
     RETURN pg_catalog.jsonb_build_object('status', 'invalid');
   END IF;
 
-  PERFORM 1
-  FROM public.user_profiles AS applicant
-  WHERE applicant.id = v_application.applicant_id
-    AND applicant.deleted_at IS NULL
-    AND applicant.banned_at IS NULL
-    AND NOT (
-      COALESCE(applicant.is_banned, false)
-      AND (
-        applicant.ban_expires_at IS NULL
-        OR applicant.ban_expires_at > pg_catalog.clock_timestamp()
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.user_profiles AS applicant
+    WHERE applicant.id = v_application.applicant_id
+      AND applicant.deleted_at IS NULL
+      AND applicant.banned_at IS NULL
+      AND NOT (
+        COALESCE(applicant.is_banned, false)
+        AND (
+          applicant.ban_expires_at IS NULL
+          OR applicant.ban_expires_at > pg_catalog.clock_timestamp()
+        )
       )
-    )
-  FOR UPDATE;
-  IF NOT FOUND THEN
+  ) THEN
     RETURN pg_catalog.jsonb_build_object('status', 'account_inactive');
   END IF;
 
@@ -515,9 +602,49 @@ $function$;
 ALTER FUNCTION public.review_group_application_atomic(uuid, uuid, text, text, boolean)
   OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.review_group_application_atomic(uuid, uuid, text, text, boolean)
-  FROM PUBLIC, anon, authenticated;
+  FROM PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.review_group_application_atomic(uuid, uuid, text, text, boolean)
   TO service_role;
+
+-- Preserve the canonical routines' OIDs on replay, but remove every other
+-- same-named function/procedure so default parameters cannot leave PostgREST
+-- with an ambiguous or less-restricted entry point.
+DO $drop_noncanonical_group_application_routines$
+DECLARE
+  routine record;
+BEGIN
+  FOR routine IN
+    SELECT
+      function_namespace.nspname,
+      procedure.proname,
+      pg_catalog.pg_get_function_identity_arguments(procedure.oid) AS identity_arguments
+    FROM pg_catalog.pg_proc AS procedure
+    JOIN pg_catalog.pg_namespace AS function_namespace
+      ON function_namespace.oid = procedure.pronamespace
+    WHERE function_namespace.nspname = 'public'
+      AND procedure.proname IN (
+        'submit_group_application_atomic',
+        'review_group_application_atomic'
+      )
+      AND procedure.prokind IN ('f', 'p')
+      AND procedure.oid NOT IN (
+        pg_catalog.to_regprocedure(
+          'public.submit_group_application_atomic(uuid,text,text,text,text,text,jsonb,jsonb,text,boolean,boolean)'
+        ),
+        pg_catalog.to_regprocedure(
+          'public.review_group_application_atomic(uuid,uuid,text,text,boolean)'
+        )
+      )
+  LOOP
+    EXECUTE pg_catalog.format(
+      'DROP ROUTINE %I.%I(%s) RESTRICT',
+      routine.nspname,
+      routine.proname,
+      routine.identity_arguments
+    );
+  END LOOP;
+END
+$drop_noncanonical_group_application_routines$;
 
 NOTIFY pgrst, 'reload schema';
 
