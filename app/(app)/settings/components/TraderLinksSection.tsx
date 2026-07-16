@@ -488,18 +488,28 @@ export function TraderLinksSection({ userId }: { userId: string }) {
       if (!mutationIsCurrent(operation) || result.stale) return
       if (result.ok) {
         const promotedLinkId = result.data?.data?.promoted_link_id
-        setTraders((prev) => {
-          const remaining = prev.filter((candidate) => candidate.id !== ownedTrader.id)
-          // The database chooses the replacement under lock. Reflect that exact row;
-          // local array order is not a concurrency-safe primary selection rule.
-          if (ownedTrader.is_primary && remaining.length > 0) {
-            return remaining.map((candidate) => ({
-              ...candidate,
-              is_primary: candidate.id === promotedLinkId,
-            }))
-          }
-          return remaining
-        })
+        const remaining = traders.filter((candidate) => candidate.id !== ownedTrader.id)
+        const remainingCount = result.data?.data?.remaining_count
+        const responseIsConsistent =
+          Number.isInteger(remainingCount) &&
+          remainingCount === remaining.length &&
+          (promotedLinkId == null || remaining.some((candidate) => candidate.id === promotedLinkId))
+        const unresolvedPrimary =
+          remaining.length > 0 &&
+          promotedLinkId == null &&
+          !remaining.some((candidate) => candidate.is_primary)
+
+        if (!responseIsConsistent || unresolvedPrimary) {
+          await loadLinkedTraders(operation.scope)
+        } else {
+          setTraders(
+            remaining.map((candidate) =>
+              promotedLinkId == null
+                ? candidate
+                : { ...candidate, is_primary: candidate.id === promotedLinkId }
+            )
+          )
+        }
         feedbackRef.current.showToast(feedbackRef.current.t('traderUnlinked'), 'success')
 
         // If no remaining accounts, could refresh to reflect verified status change

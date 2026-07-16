@@ -117,7 +117,7 @@ describe('/api/traders/linked atomic mutations', () => {
       data: [
         {
           promoted_link_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-          remaining_count: 0,
+          remaining_count: 2,
           removed_source: 'binance',
           removed_trader_id: 'trader-a',
         },
@@ -141,7 +141,7 @@ describe('/api/traders/linked atomic mutations', () => {
     await expect(response.json()).resolves.toMatchObject({
       data: {
         promoted_link_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-        remaining_count: 0,
+        remaining_count: 2,
       },
     })
   })
