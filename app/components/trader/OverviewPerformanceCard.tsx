@@ -10,11 +10,16 @@ import { MetricBadgesGrid } from './performance/MetricBadgesGrid'
 import { ScoreBreakdownSection } from './performance/ScoreBreakdownSection'
 import type { Period } from './performance/PeriodSelector'
 import { usePeriodStore } from '@/lib/stores/periodStore'
-import type { GmxRealizedNetDisclosure } from '@/lib/data/serving/pnl-contract'
+import type {
+  GmxMaxCapitalRoiDisclosure,
+  GmxRealizedNetDisclosure,
+} from '@/lib/data/serving/pnl-contract'
 
 export interface ExtendedPerformance extends TraderPerformance {
   /** Source-specific PnL semantics, keyed to the exact rendered period. */
   pnlDisclosures?: Partial<Record<Period, GmxRealizedNetDisclosure>>
+  /** Source-specific ROI formula, independently proven per rendered period. */
+  roiDisclosures?: Partial<Record<Period, GmxMaxCapitalRoiDisclosure>>
   arena_score_7d?: number
   arena_score_30d?: number
   arena_score_90d?: number
@@ -138,6 +143,7 @@ export default function OverviewPerformanceCard({
       case '7D':
         return {
           roi: performance.roi_7d,
+          roiDisclosure: performance.roiDisclosures?.['7D'],
           pnl: performance.pnl_7d,
           pnlDisclosure: performance.pnlDisclosures?.['7D'],
           winRate: performance.win_rate_7d,
@@ -162,6 +168,7 @@ export default function OverviewPerformanceCard({
       case '30D':
         return {
           roi: performance.roi_30d,
+          roiDisclosure: performance.roiDisclosures?.['30D'],
           pnl: performance.pnl_30d,
           pnlDisclosure: performance.pnlDisclosures?.['30D'],
           winRate: performance.win_rate_30d,
@@ -187,6 +194,7 @@ export default function OverviewPerformanceCard({
       default:
         return {
           roi: performance.roi_90d,
+          roiDisclosure: performance.roiDisclosures?.['90D'],
           pnl: performance.pnl,
           pnlDisclosure: performance.pnlDisclosures?.['90D'],
           winRate: performance.win_rate,
@@ -214,6 +222,7 @@ export default function OverviewPerformanceCard({
   const data = getData()
   const {
     roi,
+    roiDisclosure,
     pnl,
     pnlDisclosure,
     winRate,
@@ -277,6 +286,7 @@ export default function OverviewPerformanceCard({
             {/* ROI & PnL - 主指标区 Hero Metrics */}
             <HeroMetrics
               roi={roi}
+              roiDisclosure={roiDisclosure}
               pnl={pnl}
               pnlDisclosure={pnlDisclosure}
               sparklineData={sparklineData}

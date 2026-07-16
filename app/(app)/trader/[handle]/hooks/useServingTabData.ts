@@ -31,7 +31,10 @@ import type { TraderFirstScreen, SourceCapability, ServingCurrency } from '@/lib
 import type { PortfolioItem, TraderProfile, TraderStats } from '@/lib/data/trader-types'
 import type { PositionHistoryEntry } from '@/app/(app)/u/[handle]/components/types'
 import type { ExtendedPerformance } from '@/app/components/trader/OverviewPerformanceCard'
-import { readGmxRealizedNetModuleDisclosure } from '@/lib/data/serving/pnl-contract'
+import {
+  readGmxMaxCapitalRoiModuleDisclosure,
+  readGmxRealizedNetModuleDisclosure,
+} from '@/lib/data/serving/pnl-contract'
 
 export interface ServingTabData {
   traderProfile: TraderProfile
@@ -152,6 +155,16 @@ export function useServingTabData(
     if (disclosure90) pnlDisclosures['90D'] = disclosure90
     if (Object.keys(pnlDisclosures).length > 0) {
       traderPerformance.pnlDisclosures = pnlDisclosures
+    }
+    const roiDisclosures: NonNullable<ExtendedPerformance['roiDisclosures']> = {}
+    const roiDisclosure7 = readGmxMaxCapitalRoiModuleDisclosure(source, 7, m7)
+    const roiDisclosure30 = readGmxMaxCapitalRoiModuleDisclosure(source, 30, m30)
+    const roiDisclosure90 = readGmxMaxCapitalRoiModuleDisclosure(source, 90, m90)
+    if (roiDisclosure7) roiDisclosures['7D'] = roiDisclosure7
+    if (roiDisclosure30) roiDisclosures['30D'] = roiDisclosure30
+    if (roiDisclosure90) roiDisclosures['90D'] = roiDisclosure90
+    if (Object.keys(roiDisclosures).length > 0) {
+      traderPerformance.roiDisclosures = roiDisclosures
     }
     // Arena Score breakdown + trading style (2026-07-09): thread the
     // leaderboard_ranks per-season sub-scores into the legacy performance
