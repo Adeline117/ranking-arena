@@ -1,10 +1,18 @@
 'use client'
 
-import { useEffect, useMemo, useState, useCallback, useRef } from 'react'
+import {
+  useEffect,
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+  type Dispatch,
+  type SetStateAction,
+} from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useModalA11y } from '@/lib/hooks/useModalA11y'
 import { formatTimeAgo } from '@/lib/utils/date'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
 import {
   fetchPostCommentsPage,
   isCreatedCommentAcknowledgement,
@@ -30,8 +38,17 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const { showToast } = useToast()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { accessToken, authChecked, email, userId: currentUserId } = useAuthSession()
+  const auth = useAuthSession()
+  const { accessToken, authChecked, email, userId: currentUserId } = auth
+  const viewerKey = auth.viewerKey ?? (currentUserId ? `user:${currentUserId}` : 'anon')
+  const sessionGeneration = auth.sessionGeneration ?? 0
   const loggedIn = authChecked && !!accessToken
+  const activeScopeRef = useRef({ viewerKey, sessionGeneration, userId: currentUserId })
+  activeScopeRef.current = { viewerKey, sessionGeneration, userId: currentUserId }
+  const accessTokenRef = useRef(accessToken)
+  accessTokenRef.current = accessToken
+  const scopeKey = `${viewerKey}\u0000${sessionGeneration}`
+  const previousScopeKeyRef = useRef(scopeKey)
 
   // Translation state
   const [translatedContent, setTranslatedContent] = useState<string | null>(null)
@@ -43,7 +60,19 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   >({})
   const [translatingList, setTranslatingList] = useState(false)
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
-  const [posts, setPosts] = useState<Post[]>(options.initialPosts || [])
+  const [postsState, setPostsState] = useState<Post[]>(options.initialPosts || [])
+  const postsOwnerScopeKeyRef = useRef(scopeKey)
+  const posts = postsOwnerScopeKeyRef.current === scopeKey ? postsState : []
+  const setPosts = useCallback<Dispatch<SetStateAction<Post[]>>>((action) => {
+    setPostsState((previous) => {
+      const current = activeScopeRef.current
+      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+      const ownedPrevious = postsOwnerScopeKeyRef.current === ownerScopeKey ? previous : []
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      postsOwnerScopeKeyRef.current = ownerScopeKey
+      return next
+    })
+  }, [])
   const [loadingPosts, setLoadingPosts] = useState(
     !options.initialPosts || options.initialPosts.length === 0
   )
@@ -60,19 +89,46 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const latestPostTime = useRef<string>('')
 
   // Post detail modal state
-  const [openPost, setOpenPost] = useState<Post | null>(null)
-  const [comments, setComments] = useState<Comment[]>([])
+  const [openPostState, setOpenPostState] = useState<Post | null>(null)
+  const openPostOwnerScopeKeyRef = useRef(scopeKey)
+  const openPost = openPostOwnerScopeKeyRef.current === scopeKey ? openPostState : null
+  const setOpenPost = useCallback<Dispatch<SetStateAction<Post | null>>>((action) => {
+    setOpenPostState((previous) => {
+      const current = activeScopeRef.current
+      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+      const ownedPrevious = openPostOwnerScopeKeyRef.current === ownerScopeKey ? previous : null
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      openPostOwnerScopeKeyRef.current = ownerScopeKey
+      return next
+    })
+  }, [])
+  const [commentsState, setCommentsState] = useState<Comment[]>([])
+  const commentsOwnerScopeKeyRef = useRef(scopeKey)
+  const comments = commentsOwnerScopeKeyRef.current === scopeKey ? commentsState : []
+  const commentsRevisionRef = useRef(0)
+  const setComments = useCallback<Dispatch<SetStateAction<Comment[]>>>((action) => {
+    commentsRevisionRef.current += 1
+    setCommentsState((previous) => {
+      const current = activeScopeRef.current
+      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+      const ownedPrevious = commentsOwnerScopeKeyRef.current === ownerScopeKey ? previous : []
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      commentsOwnerScopeKeyRef.current = ownerScopeKey
+      return next
+    })
+  }, [])
   const [loadingComments, setLoadingComments] = useState(false)
   const {
     draft: newComment,
     setDraft: setNewComment,
-    clearDraft: clearCommentDraft,
-  } = useCommentDraftPersistence(openPost?.id)
+    captureDraftSnapshot,
+    clearDraftIfUnchanged,
+  } = useCommentDraftPersistence(openPost?.id, viewerKey)
   const [submittingComment, setSubmittingComment] = useState(false)
-  const submittingCommentRef = useRef(false)
+  const submittingCommentRef = useRef<symbol | null>(null)
   const openPostIdRef = useRef<string | null>(null)
-  openPostIdRef.current = openPost?.id || null
   const commentLoadGenerationRef = useRef(new Map<string, number>())
+  const commentLoadMoreGenerationRef = useRef(new Map<string, number>())
 
   // Comment pagination
   const COMMENTS_PER_PAGE = 10
@@ -80,8 +136,33 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const [hasMoreComments, setHasMoreComments] = useState(true)
   const [loadingMoreComments, setLoadingMoreComments] = useState(false)
 
-  // Suppress unused variable warning
-  void currentUserId
+  const scopeIsCurrent = useCallback(
+    (scope: { viewerKey: string; sessionGeneration: number; userId: string | null }) => {
+      const current = activeScopeRef.current
+      return (
+        current.viewerKey === scope.viewerKey &&
+        current.sessionGeneration === scope.sessionGeneration &&
+        current.userId === scope.userId
+      )
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (previousScopeKeyRef.current === scopeKey) return
+    previousScopeKeyRef.current = scopeKey
+    commentLoadGenerationRef.current.clear()
+    commentLoadMoreGenerationRef.current.clear()
+    submittingCommentRef.current = null
+    setComments([])
+    setCommentsOffset(0)
+    setHasMoreComments(true)
+    setLoadingComments(false)
+    setLoadingMoreComments(false)
+    setSubmittingComment(false)
+    setPosts((previous) => previous.map((post) => ({ ...post, user_reaction: null })))
+    setOpenPost((previous) => (previous ? { ...previous, user_reaction: null } : null))
+  }, [scopeKey, setComments])
 
   // AbortController for loadPosts — prevents stale setState after unmount
   // and allows the auto-refresh interval to cancel in-flight requests on cleanup.
@@ -89,6 +170,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
   // Load hot posts from cache API
   const loadPosts = useCallback(async () => {
+    if (!authChecked) return
+    const capturedScope = activeScopeRef.current
     // Cancel any in-flight loadPosts before starting a new one
     loadPostsAbortRef.current?.abort()
     const controller = new AbortController()
@@ -97,15 +180,16 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     setLoadingPosts(true)
     try {
       const headers: Record<string, string> = {}
-      if (accessToken) {
-        headers['Authorization'] = `Bearer ${accessToken}`
+      if (accessTokenRef.current) {
+        headers['Authorization'] = `Bearer ${accessTokenRef.current}`
       }
       const res = await fetch(`/api/posts?sort_by=hot_score&sort_order=desc&limit=30`, {
         headers,
         signal: controller.signal,
       })
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted || !scopeIsCurrent(capturedScope)) return
       const json = await res.json()
+      if (controller.signal.aborted || !scopeIsCurrent(capturedScope)) return
       const data = json.posts || json.data?.posts || []
 
       if (data.length > 0) {
@@ -167,14 +251,14 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     } catch (e) {
       // Swallow aborts (unmount/navigation) — not real errors
       if (e instanceof Error && (e.name === 'AbortError' || controller.signal.aborted)) return
+      if (!scopeIsCurrent(capturedScope)) return
       logger.error('Failed to load posts:', e)
-      setPosts([])
       showToast(t('loadHotPostsFailed'), 'error')
     } finally {
-      if (!controller.signal.aborted) setLoadingPosts(false)
+      if (!controller.signal.aborted && scopeIsCurrent(capturedScope)) setLoadingPosts(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable ref t excluded to avoid re-creating callback
-  }, [showToast, language, accessToken])
+  }, [authChecked, language, scopeIsCurrent, sessionGeneration, showToast, viewerKey])
 
   useEffect(() => {
     loadPosts()
@@ -257,17 +341,38 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
   // Load comments (initial)
   const loadComments = useCallback(
-    async (postId: string, showError = true): Promise<boolean> => {
-      const generation = (commentLoadGenerationRef.current.get(postId) || 0) + 1
-      commentLoadGenerationRef.current.set(postId, generation)
+    async (
+      postId: string,
+      showError = true,
+      capturedScope = activeScopeRef.current,
+      retryAfterNewerState = true
+    ): Promise<boolean> => {
+      if (!authChecked || !scopeIsCurrent(capturedScope)) return false
+      const generationKey = `${capturedScope.viewerKey}\u0000${postId}`
+      const generation = (commentLoadGenerationRef.current.get(generationKey) || 0) + 1
+      commentLoadGenerationRef.current.set(generationKey, generation)
+      const requestStartRevision = commentsRevisionRef.current
       try {
         setLoadingComments(true)
 
-        const page = await fetchPostCommentsPage<Comment>(postId, accessToken, {
+        const page = await fetchPostCommentsPage<Comment>(postId, accessTokenRef.current, {
           limit: COMMENTS_PER_PAGE,
           offset: 0,
+          viewerScope: {
+            expectedUserId: capturedScope.userId,
+            expectedSessionGeneration: capturedScope.sessionGeneration,
+          },
         })
-        if (page.ok && commentLoadGenerationRef.current.get(postId) === generation) {
+        if (
+          page.ok &&
+          scopeIsCurrent(capturedScope) &&
+          commentLoadGenerationRef.current.get(generationKey) === generation
+        ) {
+          if (commentsRevisionRef.current !== requestStartRevision) {
+            return retryAfterNewerState && openPostIdRef.current === postId
+              ? loadComments(postId, showError, capturedScope, false)
+              : false
+          }
           if (openPostIdRef.current === postId) {
             setComments(page.comments)
             setHasMoreComments(page.hasMore)
@@ -283,66 +388,111 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           )
           return true
         }
-        if (showError && commentLoadGenerationRef.current.get(postId) === generation) {
+        if (
+          showError &&
+          scopeIsCurrent(capturedScope) &&
+          commentLoadGenerationRef.current.get(generationKey) === generation
+        ) {
           showToast(t('loadCommentsFailed'), 'error')
         }
         return false
       } catch (err) {
         logger.error('[HotPage] Load comments failed:', err)
-        if (showError && commentLoadGenerationRef.current.get(postId) === generation) {
+        if (
+          showError &&
+          scopeIsCurrent(capturedScope) &&
+          commentLoadGenerationRef.current.get(generationKey) === generation
+        ) {
           showToast(t('loadCommentsFailed'), 'error')
         }
         return false
       } finally {
-        if (commentLoadGenerationRef.current.get(postId) === generation) {
+        if (
+          scopeIsCurrent(capturedScope) &&
+          commentLoadGenerationRef.current.get(generationKey) === generation
+        ) {
           setLoadingComments(false)
         }
       }
     },
-    [accessToken, showToast, t]
+    [authChecked, scopeIsCurrent, showToast, t]
   )
 
   // Load more comments
   const loadMoreComments = useCallback(async () => {
     if (!openPost || loadingMoreComments || !hasMoreComments) return
 
+    const capturedScope = activeScopeRef.current
+    const postId = openPost.id
+    const generationKey = `${capturedScope.viewerKey}\u0000${postId}`
+    const generation = (commentLoadMoreGenerationRef.current.get(generationKey) || 0) + 1
+    commentLoadMoreGenerationRef.current.set(generationKey, generation)
+    const requestStartRevision = commentsRevisionRef.current
+    const requestOffset = commentsOffset
+
     try {
       setLoadingMoreComments(true)
-      const page = await fetchPostCommentsPage<Comment>(openPost.id, accessToken, {
+      const page = await fetchPostCommentsPage<Comment>(postId, accessTokenRef.current, {
         limit: COMMENTS_PER_PAGE,
-        offset: commentsOffset,
+        offset: requestOffset,
+        viewerScope: {
+          expectedUserId: capturedScope.userId,
+          expectedSessionGeneration: capturedScope.sessionGeneration,
+        },
       })
 
-      if (page.ok) {
+      if (
+        page.ok &&
+        scopeIsCurrent(capturedScope) &&
+        commentLoadMoreGenerationRef.current.get(generationKey) === generation
+      ) {
+        if (commentsRevisionRef.current !== requestStartRevision) {
+          await loadComments(postId, false, capturedScope)
+          return
+        }
         setPosts((prev) =>
-          prev.map((post) =>
-            post.id === openPost.id ? { ...post, comments: page.commentCount } : post
-          )
+          prev.map((post) => (post.id === postId ? { ...post, comments: page.commentCount } : post))
         )
         setOpenPost((prev) =>
-          prev?.id === openPost.id ? { ...prev, comments: page.commentCount } : prev
+          prev?.id === postId ? { ...prev, comments: page.commentCount } : prev
         )
-        if (openPostIdRef.current === openPost.id) {
-          setComments((prev) => [...prev, ...page.comments])
+        if (openPostIdRef.current === postId) {
+          setComments((prev) => {
+            const ids = new Set(prev.map((comment) => comment.id))
+            return [...prev, ...page.comments.filter((comment) => !ids.has(comment.id))]
+          })
           setHasMoreComments(page.hasMore)
-          setCommentsOffset((prev) => prev + page.comments.length)
+          setCommentsOffset(requestOffset + page.comments.length)
         }
       }
     } catch (err) {
       logger.error('[HotPage] Load more comments failed:', err)
     } finally {
-      setLoadingMoreComments(false)
+      if (
+        scopeIsCurrent(capturedScope) &&
+        commentLoadMoreGenerationRef.current.get(generationKey) === generation
+      ) {
+        setLoadingMoreComments(false)
+      }
     }
-  }, [openPost, accessToken, commentsOffset, loadingMoreComments, hasMoreComments])
+  }, [
+    commentsOffset,
+    hasMoreComments,
+    loadComments,
+    loadingMoreComments,
+    openPost,
+    scopeIsCurrent,
+    setComments,
+  ])
 
   // Defer the first read until session restoration is complete, then reload if
   // the viewer token changes. This prevents URL-restored modals from getting
   // stuck with an anonymous response for a signed-in viewer.
-  const openPostId = openPost?.id
+  const openPostId = openPostIdRef.current
   useEffect(() => {
     if (!authChecked || !openPostId) return
     void loadComments(openPostId)
-  }, [authChecked, openPostId, loadComments])
+  }, [authChecked, openPostId, loadComments, scopeKey])
 
   // Detect Chinese text
   const isChineseText = useCallback((text: string) => {
@@ -529,6 +679,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const handleOpenPost = useCallback(
     (post: Post, fromUrlRestore = false) => {
       justClosedIdRef.current = null
+      openPostIdRef.current = post.id
       setOpenPost(post)
       setComments([])
       setCommentsOffset(0)
@@ -561,6 +712,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   // Close post detail
   const handleClosePost = useCallback(() => {
     justClosedIdRef.current = searchParams.get('post')
+    openPostIdRef.current = null
     setOpenPost(null)
     openedViaNav.current = false
     const params = new URLSearchParams(searchParams.toString())
@@ -621,6 +773,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   // Submit comment
   const submitComment = useCallback(
     async (postId: string) => {
+      if (!authChecked) return
       if (!accessToken) {
         useLoginModal.getState().openLoginModal()
         return
@@ -628,83 +781,118 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       if (!newComment.trim()) return
       if (submittingCommentRef.current) return
 
-      submittingCommentRef.current = true
+      const operation = Symbol('hot-comment')
+      const capturedScope = activeScopeRef.current
+      submittingCommentRef.current = operation
       setSubmittingComment(true)
       const content = newComment.trim()
+      const draftSnapshot = captureDraftSnapshot(postId)
       try {
-        const response = await fetch(`/api/posts/${postId}/comments`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ content }),
+        const response = await authedFetch<{
+          success?: boolean
+          error?: string | { message?: string }
+          data?: { comment?: unknown }
+        }>(`/api/posts/${postId}/comments`, 'POST', accessToken, { content }, 15_000, {
+          expectedUserId: capturedScope.userId,
+          expectedSessionGeneration: capturedScope.sessionGeneration,
         })
 
-        const json = await response.json().catch(() => null)
+        if (!scopeIsCurrent(capturedScope) || response.stale) return
+        const json = response.data
         const rawComment = json?.data?.comment
-        const mutationResult = { ok: response.ok, status: response.status }
 
         if (
           response.ok &&
           json?.success === true &&
-          isCreatedCommentAcknowledgement(rawComment, { postId, content })
+          isCreatedCommentAcknowledgement(rawComment, {
+            postId,
+            content,
+            userId: capturedScope.userId,
+          })
         ) {
-          clearCommentDraft(postId)
-          if (!(await loadComments(postId, false)) && openPostIdRef.current === postId) {
+          clearDraftIfUnchanged(draftSnapshot)
+          if (
+            !(await loadComments(postId, false, capturedScope)) &&
+            scopeIsCurrent(capturedScope) &&
+            openPostIdRef.current === postId
+          ) {
             setComments((prev) => {
               if (prev.some((comment) => comment.id === rawComment.id)) return prev
               return [...prev, rawComment]
             })
           }
-        } else if (isDefinitiveMutationRejection(mutationResult)) {
+        } else if (isDefinitiveMutationRejection(response)) {
           if (response.status === 401) {
             showToast(t('sessionExpired'), 'error')
           } else if (response.status === 403) {
             showToast(t('permissionDenied'), 'error')
           } else {
-            showToast(json?.error?.message || json?.error || t('postCommentFailed'), 'error')
+            const error = json?.error
+            showToast(
+              (typeof error === 'object' ? error?.message : error) || t('postCommentFailed'),
+              'error'
+            )
           }
-        } else if (!(await loadComments(postId, false))) {
+        } else if (!(await loadComments(postId, false, capturedScope))) {
           // Transport/408/5xx/malformed 2xx is not proof of rollback. Preserve
           // the current tree and draft when canonical truth is unavailable.
-          showToast(t('networkErrorRetry'), 'error')
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkErrorRetry'), 'error')
         }
       } catch (err) {
         logger.error('[HotPage] Submit comment failed:', err)
-        if (!(await loadComments(postId, false))) {
-          showToast(t('networkErrorRetry'), 'error')
+        if (scopeIsCurrent(capturedScope) && !(await loadComments(postId, false, capturedScope))) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkErrorRetry'), 'error')
         }
       } finally {
-        submittingCommentRef.current = false
-        setSubmittingComment(false)
+        if (submittingCommentRef.current === operation) {
+          submittingCommentRef.current = null
+          if (scopeIsCurrent(capturedScope)) setSubmittingComment(false)
+        }
       }
     },
-    [accessToken, clearCommentDraft, loadComments, newComment, showToast, t]
+    [
+      accessToken,
+      authChecked,
+      captureDraftSnapshot,
+      clearDraftIfUnchanged,
+      loadComments,
+      newComment,
+      scopeIsCurrent,
+      setComments,
+      showToast,
+      t,
+    ]
   )
 
   // Toggle reaction (like/dislike)
   const toggleReaction = useCallback(
     async (postId: string, reactionType: 'up' | 'down') => {
+      if (!authChecked) return
       if (!accessToken) {
         useLoginModal.getState().openLoginModal()
         return
       }
 
+      const capturedScope = activeScopeRef.current
       try {
-        const response = await fetch(`/api/posts/${postId}/like`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ reaction_type: reactionType }),
-        })
-
-        const json = await response.json()
-        if (response.ok && json.success) {
+        const response = await authedFetch<{
+          success?: boolean
+          error?: string
+          data?: { like_count: number; dislike_count: number; reaction: 'up' | 'down' | null }
+        }>(
+          `/api/posts/${postId}/like`,
+          'POST',
+          accessToken,
+          { reaction_type: reactionType },
+          15_000,
+          {
+            expectedUserId: capturedScope.userId,
+            expectedSessionGeneration: capturedScope.sessionGeneration,
+          }
+        )
+        if (!scopeIsCurrent(capturedScope) || response.stale) return
+        const json = response.data
+        if (response.ok && json?.success && json.data) {
           const result = json.data
           setPosts((prev) =>
             prev.map((p) => {
@@ -732,15 +920,16 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
             )
           }
         } else {
-          logger.error('[HotPage] Reaction API error:', json.error || response.status)
+          logger.error('[HotPage] Reaction API error:', json?.error || response.status)
           showToast(t('actionFailedRetry'), 'error')
         }
       } catch (err) {
+        if (!scopeIsCurrent(capturedScope)) return
         logger.error('[HotPage] Reaction failed:', err)
         showToast(t('actionFailedRetry'), 'error')
       }
     },
-    [accessToken, openPost?.id, showToast, t]
+    [accessToken, authChecked, openPost?.id, scopeIsCurrent, showToast, t]
   )
 
   return {
