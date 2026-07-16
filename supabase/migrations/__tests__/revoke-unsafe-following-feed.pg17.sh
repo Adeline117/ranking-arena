@@ -66,7 +66,13 @@ PSQL=(
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN BYPASSRLS;
+SQL
 
+# The RPC is a production-only phantom object, so a clean rebuild has no
+# function to revoke. Missing must be a successful, replayable no-op.
+"${PSQL[@]}" -f "$MIGRATION" >/dev/null
+
+"${PSQL[@]}" <<'SQL'
 CREATE TABLE public.posts (
   id uuid PRIMARY KEY,
   author_id uuid NOT NULL,
@@ -101,6 +107,12 @@ GRANT EXECUTE ON FUNCTION public.get_following_feed(uuid, integer, integer)
   TO PUBLIC, anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.get_following_feed(uuid)
   TO PUBLIC, anon, authenticated, service_role;
+
+-- A same-named procedure must neither break the migration nor be mistaken for
+-- a PostgREST-callable function overload.
+CREATE PROCEDURE public.get_following_feed(p_label text)
+LANGUAGE sql
+AS $$ SELECT 1 $$;
 SQL
 
 "${PSQL[@]}" -f "$MIGRATION" >/dev/null
@@ -121,12 +133,30 @@ BEGIN
         ON namespace.oid = procedure.pronamespace
       WHERE namespace.nspname = 'public'
         AND procedure.proname = 'get_following_feed'
+        AND procedure.prokind = 'f'
     LOOP
       IF pg_catalog.has_function_privilege(application_role, function_oid, 'EXECUTE') THEN
         RAISE EXCEPTION '% can still execute %', application_role, function_oid::regprocedure;
       END IF;
     END LOOP;
   END LOOP;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure
+    JOIN pg_catalog.pg_namespace AS namespace
+      ON namespace.oid = procedure.pronamespace
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(procedure.proacl, pg_catalog.acldefault('f', procedure.proowner))
+    ) AS privilege
+    WHERE namespace.nspname = 'public'
+      AND procedure.proname = 'get_following_feed'
+      AND procedure.prokind = 'f'
+      AND privilege.grantee = 0
+      AND privilege.privilege_type = 'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'PUBLIC can still execute a following-feed overload';
+  END IF;
 
   IF (
     SELECT COUNT(*)
@@ -135,8 +165,13 @@ BEGIN
       ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'public'
       AND procedure.proname = 'get_following_feed'
+      AND procedure.prokind = 'f'
   ) <> 2 THEN
     RAISE EXCEPTION 'migration unexpectedly dropped or rewrote an overload';
+  END IF;
+
+  IF pg_catalog.to_regprocedure('public.get_following_feed(text)') IS NULL THEN
+    RAISE EXCEPTION 'migration unexpectedly changed the same-named procedure';
   END IF;
 END;
 $assertions$;

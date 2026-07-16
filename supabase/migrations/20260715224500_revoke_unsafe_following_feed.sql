@@ -21,6 +21,7 @@ BEGIN
       ON namespace.oid = procedure.pronamespace
     WHERE namespace.nspname = 'public'
       AND procedure.proname = 'get_following_feed'
+      AND procedure.prokind = 'f'
   LOOP
     EXECUTE pg_catalog.format(
       'REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role',
@@ -28,8 +29,25 @@ BEGIN
     );
   END LOOP;
 
-  -- Fail closed if any application role can still execute an overload through
-  -- either a direct grant or PUBLIC membership.
+  -- Assert PUBLIC directly as well as the application roles' effective
+  -- privileges. This proves both the ACL shape and inherited access are closed.
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS procedure
+    JOIN pg_catalog.pg_namespace AS namespace
+      ON namespace.oid = procedure.pronamespace
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(procedure.proacl, pg_catalog.acldefault('f', procedure.proowner))
+    ) AS privilege
+    WHERE namespace.nspname = 'public'
+      AND procedure.proname = 'get_following_feed'
+      AND procedure.prokind = 'f'
+      AND privilege.grantee = 0
+      AND privilege.privilege_type = 'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'get_following_feed remains executable by PUBLIC';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM pg_catalog.pg_proc AS procedure
@@ -40,6 +58,7 @@ BEGIN
     ) AS application_role(role_name)
     WHERE namespace.nspname = 'public'
       AND procedure.proname = 'get_following_feed'
+      AND procedure.prokind = 'f'
       AND pg_catalog.has_function_privilege(
         application_role.role_name,
         procedure.oid,
