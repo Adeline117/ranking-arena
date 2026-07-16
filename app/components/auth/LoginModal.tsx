@@ -15,6 +15,14 @@ import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { requireProvisionedProfile } from '@/lib/auth/profile-provisioning'
+import {
+  assertVerifiedSessionSnapshotCurrent,
+  isVerifiedSessionSnapshotCurrent,
+  StaleVerifiedSessionError,
+  verifySessionSnapshot,
+  type VerifiedSessionSnapshot,
+} from '@/lib/auth/verified-session'
 
 const OneClickWalletButton = dynamic(
   () => import('@/lib/web3/wallet-components').then((m) => ({ default: m.OneClickWalletButton })),
@@ -80,9 +88,11 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
   const [resendCooldown, setResendCooldown] = useState(0)
   const emailRef = useRef<HTMLInputElement>(null)
   const otpRef = useRef<HTMLInputElement>(null)
+  const authAttemptGenerationRef = useRef(0)
 
   // Reset state when modal opens/closes
   useEffect(() => {
+    authAttemptGenerationRef.current += 1
     if (open) {
       setStep('choose')
       setEmail('')
@@ -90,6 +100,9 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
       setError('')
       setLoading(false)
       setResendCooldown(0)
+    }
+    return () => {
+      authAttemptGenerationRef.current += 1
     }
   }, [open])
 
@@ -162,26 +175,71 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
 
   const handleVerifyOTP = useCallback(async () => {
     if (!otp.trim() || loading) return
+    const generation = ++authAttemptGenerationRef.current
+    let authenticatedUserId: string | null = null
+    let authenticatedAccessToken: string | null = null
+    let snapshot: VerifiedSessionSnapshot | null = null
     setError('')
     setLoading(true)
 
-    const { error: verifyError } = await tokenRefreshCoordinator.verifyOtp({
-      email: email.trim(),
-      token: otp.trim(),
-      type: 'email',
-    })
+    const rollbackOwnedSession = async (): Promise<boolean> => {
+      if (!authenticatedUserId || !authenticatedAccessToken) return false
+      return tokenRefreshCoordinator.signOutIfCurrent(authenticatedUserId, authenticatedAccessToken)
+    }
 
-    setLoading(false)
-    if (verifyError) {
-      const msg = verifyError.message.toLowerCase()
-      if (msg.includes('expired') || msg.includes('过期')) {
-        setError(t('authCodeExpired'))
-      } else {
-        setError(t('authCodeInvalid'))
+    try {
+      const { data, error: verifyError } = await tokenRefreshCoordinator.verifyOtp({
+        email: email.trim(),
+        token: otp.trim(),
+        type: 'email',
+      })
+
+      if (verifyError || !data.session) {
+        if (generation !== authAttemptGenerationRef.current) return
+        const message = verifyError?.message.toLowerCase() ?? ''
+        if (message.includes('expired') || message.includes('过期')) {
+          setError(t('authCodeExpired'))
+        } else {
+          setError(t('authCodeInvalid'))
+        }
+        return
       }
-    } else {
-      // Auth state change will be picked up by useAuthSession
+
+      authenticatedUserId = data.session.user.id
+      authenticatedAccessToken = data.session.access_token
+      snapshot = await verifySessionSnapshot(supabase, data.session)
+      if (generation !== authAttemptGenerationRef.current) {
+        await rollbackOwnedSession()
+        return
+      }
+
+      const { data: profile, error: profileError } = await supabase
+        .from('user_profiles')
+        .select('handle')
+        .eq('id', snapshot.user.id)
+        .maybeSingle()
+      requireProvisionedProfile(profile, profileError)
+      assertVerifiedSessionSnapshotCurrent(snapshot)
+      if (generation !== authAttemptGenerationRef.current) {
+        await rollbackOwnedSession()
+        return
+      }
+
       onClose()
+    } catch (loginError) {
+      const attemptStillOwnedFailure = snapshot ? isVerifiedSessionSnapshotCurrent(snapshot) : true
+      const rolledBack = await rollbackOwnedSession()
+      if (
+        generation !== authAttemptGenerationRef.current ||
+        loginError instanceof StaleVerifiedSessionError ||
+        !attemptStillOwnedFailure ||
+        !rolledBack
+      ) {
+        return
+      }
+      setError(t('loadUserDataFailed'))
+    } finally {
+      if (generation === authAttemptGenerationRef.current) setLoading(false)
     }
   }, [email, otp, loading, onClose, t])
 
