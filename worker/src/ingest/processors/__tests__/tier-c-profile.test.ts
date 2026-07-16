@@ -159,4 +159,33 @@ describe('Tier-C incomplete profile window gate', () => {
     ).toBe(true)
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
+
+  it('keeps the full parsed series in render and profile caches', async () => {
+    const parsed = parsedProfile(true)
+    parsed.series = [
+      {
+        timeframe: 30,
+        metric: 'pnl',
+        points: [
+          { ts: '2026-07-13T00:00:00.000Z', value: 2 },
+          { ts: '2026-07-14T00:00:00.000Z', value: 6 },
+          { ts: '2026-07-15T00:00:00.000Z', value: 10 },
+        ],
+      },
+    ]
+    mockParseProfile.mockReturnValue(parsed)
+
+    await expect(processTierC(job)).resolves.toMatchObject({ traderId: 42, stats: 1, series: 1 })
+
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload.series).toEqual(parsed.series)
+
+    const cacheCall = mockDbQuery.mock.calls.find(([sql]) =>
+      String(sql).includes('INSERT INTO arena.profile_cache')
+    )
+    expect(cacheCall).toBeDefined()
+    const cachePayload = JSON.parse(String((cacheCall?.[1] as unknown[])[4]))
+    expect(cachePayload.series).toEqual(parsed.series)
+    expect(mockPublishProfile).toHaveBeenCalledWith(src, 42, parsed, { fullSeries: false })
+  })
 })
