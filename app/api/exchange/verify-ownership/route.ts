@@ -28,11 +28,12 @@ import { resolveExchangeUid, isCexVerifiable } from '@/lib/validators/exchange-u
 import { encrypt } from '@/lib/exchange/encryption'
 import { createLogger } from '@/lib/utils/logger'
 import { resolveTrader } from '@/lib/data/unified'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 
 const logger = createLogger('verify-ownership')
 
 export const POST = withAuth(
-  async ({ user, supabase, request }) => {
+  async ({ user, request }) => {
     let body: Record<string, unknown>
     try {
       body = await request.json()
@@ -71,7 +72,8 @@ export const POST = withAuth(
     }
 
     // 2. Look up trader's source_trader_id from Arena DB (unified data layer)
-    const resolved = await resolveTrader(supabase, {
+    const adminSupabase = getSupabaseAdmin()
+    const resolved = await resolveTrader(adminSupabase, {
       handle: traderId,
       platform: source,
     })
@@ -138,7 +140,7 @@ export const POST = withAuth(
     const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
 
     // Upsert exchange connection for this user
-    const { error: upsertError } = await supabase.from('user_exchange_connections').upsert(
+    const { error: upsertError } = await adminSupabase.from('user_exchange_connections').upsert(
       {
         user_id: user.id,
         exchange: connectionExchange,

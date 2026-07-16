@@ -1,5 +1,6 @@
 import { withAuth } from '@/lib/api/middleware'
 import { error, success } from '@/lib/api/response'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('exchange-connections')
@@ -7,8 +8,8 @@ const logger = createLogger('exchange-connections')
 // Credentials and OAuth tokens deliberately never cross this response
 // boundary. Browser clients receive only the fields rendered by Settings.
 export const GET = withAuth(
-  async ({ user, supabase }) => {
-    const { data, error: queryError } = await supabase
+  async ({ user }) => {
+    const { data, error: queryError } = await getSupabaseAdmin()
       .from('user_exchange_connections')
       .select(
         'id, user_id, exchange, is_active, last_sync_at, last_sync_status, last_sync_error, created_at, updated_at'
