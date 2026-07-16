@@ -77,6 +77,43 @@ export function finishViewerTransition(generation: number): void {
   if (activeTransition?.generation === generation) activeTransition = null
 }
 
+/**
+ * True only while `generation` still owns the process-wide identity transition.
+ * A newer switch/logout always replaces the active transition, so older async
+ * completions must treat `false` as a hard stale boundary.
+ */
+export function isViewerTransitionCurrent(generation: number): boolean {
+  return activeTransition?.generation === generation
+}
+
+/**
+ * Atomically resolve the transition that still owns `generation`.
+ *
+ * Supabase may publish the target session through `onAuthStateChange` before
+ * the promise that initiated the switch settles. In that case the viewer is
+ * already resolved and this function only performs the ownership CAS. If a
+ * newer transition has started, it returns null without changing the viewer.
+ */
+export function commitViewerTransition(
+  generation: number,
+  userId: string | null
+): ViewerScope | null {
+  if (activeTransition?.generation !== generation) return null
+
+  activeTransition = null
+  const viewerKey = viewerKeyFor(true, userId)
+  if (currentScope.viewerKey === viewerKey && currentScope.userId === userId) {
+    return currentScope
+  }
+
+  currentScope = {
+    viewerKey,
+    sessionGeneration: currentScope.sessionGeneration + 1,
+    userId,
+  }
+  return currentScope
+}
+
 export function isViewerScopeCurrent(scope: ViewerScope): boolean {
   return (
     currentScope.viewerKey === scope.viewerKey &&

@@ -1,6 +1,7 @@
 import { logger } from '@/lib/logger'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { getViewerScope, isViewerScopeCurrent, type ViewerScope } from '@/lib/auth/viewer-scope'
+import { bearerToken, jwtSubject } from '@/lib/auth/token-subject'
 /**
  * 客户端 API 请求工具
  * 自动处理 CSRF Token 和通用配置
@@ -84,6 +85,11 @@ type ApiRequestOptions = Omit<RequestInit, 'body'> & {
   retries?: number
   /** Base delay between retries in ms, doubles each attempt (default: 1000) */
   retryBaseDelayMs?: number
+  /** Required when an opaque Authorization token cannot identify its owner. */
+  authScope?: {
+    expectedUserId: string
+    sessionGeneration: number
+  }
 }
 
 /**
@@ -137,18 +143,45 @@ export async function apiRequest<T = unknown>(
     timeoutMs = 20_000,
     retries = 0,
     retryBaseDelayMs = 1000,
+    authScope,
     ...restOptions
   } = options
 
   // 构建 headers
   const headers = new Headers(customHeaders)
-  const requestScope = getViewerScope()
+  const currentScope = getViewerScope()
+  const authorizationToken = bearerToken(headers.get('Authorization'))
+  const authorizationUserId = jwtSubject(authorizationToken)
+  const requestScope: ViewerScope = authScope
+    ? {
+        viewerKey: `user:${authScope.expectedUserId}`,
+        sessionGeneration: authScope.sessionGeneration,
+        userId: authScope.expectedUserId,
+      }
+    : authorizationUserId
+      ? {
+          viewerKey: `user:${authorizationUserId}`,
+          sessionGeneration: currentScope.sessionGeneration,
+          userId: authorizationUserId,
+        }
+      : currentScope
   // `credentials: include` means even a nominally public request can be
   // personalized by an auth cookie. In the browser every resolved viewer
   // scope (including anon) is therefore identity-bound.
   const isViewerBoundRequest = typeof window !== 'undefined'
   if (isViewerBoundRequest && requestScope.viewerKey === 'pending') {
     return pendingAuthApiResponse<T>()
+  }
+  if (
+    isViewerBoundRequest &&
+    authorizationToken &&
+    ((!authScope && !authorizationUserId) ||
+      (authScope && authorizationUserId && authorizationUserId !== authScope.expectedUserId))
+  ) {
+    return staleAuthApiResponse<T>()
+  }
+  if (isViewerBoundRequest && !isViewerScopeCurrent(requestScope)) {
+    return staleAuthApiResponse<T>()
   }
 
   // 添加 Content-Type（如果有 body 且未设置）
@@ -443,19 +476,6 @@ export type AuthedFetchScope = {
 }
 
 export type ScopedFetchResult<T> = FetchResult<T> & { stale?: boolean }
-
-function jwtSubject(accessToken: string | null): string | null {
-  if (!accessToken) return null
-  try {
-    const payload = accessToken.split('.')[1]
-    if (!payload) return null
-    const normalized = payload.replace(/-/g, '+').replace(/_/g, '/')
-    const decoded = JSON.parse(atob(normalized)) as { sub?: unknown }
-    return typeof decoded.sub === 'string' && decoded.sub ? decoded.sub : null
-  } catch {
-    return null
-  }
-}
 
 function captureFetchScope(accessToken: string | null, options?: AuthedFetchScope): ViewerScope {
   const current = getViewerScope()

@@ -19,7 +19,7 @@ import { t } from '@/lib/i18n'
 import { tokenRefreshCoordinator, registerAuthStateSetter } from '@/lib/auth/token-refresh'
 import {
   beginViewerTransition,
-  finishViewerTransition,
+  commitViewerTransition,
   getViewerScope,
   isExpectedTransitionSession,
   synchronizeViewerScope,
@@ -195,16 +195,17 @@ function initializeAuth() {
           authChannel.onmessage = (event: MessageEvent) => {
             if (event.data?.type === 'USER_LOGGED_OUT') {
               const transitionGeneration = enterIdentityTransition(null)
-              setGlobalAuthState({
-                user: null,
-                userId: null,
-                email: null,
-                accessToken: null,
-                isLoggedIn: false,
-                authChecked: true,
-                loading: false,
-              })
-              finishViewerTransition(transitionGeneration)
+              if (commitViewerTransition(transitionGeneration, null)) {
+                setGlobalAuthState({
+                  user: null,
+                  userId: null,
+                  email: null,
+                  accessToken: null,
+                  isLoggedIn: false,
+                  authChecked: true,
+                  loading: false,
+                })
+              }
             } else if (event.data?.type === 'TOKEN_REFRESHED') {
               // Another tab refreshed the token — re-read session from shared cookie store
               // so this tab picks up the fresh token without an independent refresh request.
@@ -422,9 +423,10 @@ export function useAuthSession(): AuthSessionReturn {
     try {
       await tokenRefreshCoordinator.settleInflightRefreshes()
       await sb.auth.signOut()
-    } finally {
-      tokenRefreshCoordinator.completeIdentityTransition(transitionGeneration)
+    } catch (error) {
+      logger.warn('[useAuthSession] Sign out failed:', error)
     }
+    if (!tokenRefreshCoordinator.completeIdentityTransition(transitionGeneration, null)) return
     setGlobalAuthState({
       user: null,
       userId: null,

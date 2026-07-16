@@ -1,6 +1,7 @@
 import {
   __resetViewerScopeForTests,
   beginViewerTransition,
+  commitViewerTransition,
   getViewerScope,
   isViewerScopeCurrent,
   synchronizeViewerScope,
@@ -38,5 +39,20 @@ describe('viewer identity scope', () => {
     expect(anonymous.sessionGeneration).toBe(initial.sessionGeneration + 1)
     expect(user.sessionGeneration).toBe(anonymous.sessionGeneration + 1)
     expect(loggedOut.sessionGeneration).toBe(user.sessionGeneration + 1)
+  })
+
+  it('lets only the newest concurrent transition commit its principal', () => {
+    synchronizeViewerScope(true, 'user-a')
+    const switchGeneration = beginViewerTransition('user-b')
+    const logoutGeneration = beginViewerTransition(null)
+
+    expect(commitViewerTransition(switchGeneration, 'user-b')).toBeNull()
+    expect(getViewerScope().viewerKey).toBe('pending')
+
+    expect(commitViewerTransition(logoutGeneration, null)).toMatchObject({
+      viewerKey: 'anon',
+      userId: null,
+    })
+    expect(getViewerScope().viewerKey).toBe('anon')
   })
 })
