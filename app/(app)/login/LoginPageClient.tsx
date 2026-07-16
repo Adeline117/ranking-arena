@@ -49,10 +49,17 @@ type LoginAuthBoundary = Readonly<{
   accessToken: string | null
 }>
 
+type ExactSessionReference = Readonly<{
+  userId: string
+  accessToken: string
+  refreshToken: string
+}>
+
 type LoginAttempt = Readonly<{
   generation: number
   controller: AbortController
   authBoundary: LoginAuthBoundary
+  externalSession: ExactSessionReference | null
 }>
 
 type LoginProfile = {
@@ -156,6 +163,23 @@ function isLoginAuthBoundaryCurrent(boundary: LoginAuthBoundary): boolean {
   )
 }
 
+function exactSessionReference(session: Session): ExactSessionReference {
+  return {
+    userId: session.user.id,
+    accessToken: session.access_token,
+    refreshToken: session.refresh_token,
+  }
+}
+
+function attemptOwnsExactSession(attempt: LoginAttempt, session: Session): boolean {
+  const expected = attempt.externalSession
+  return (
+    expected?.userId === session.user.id &&
+    expected.accessToken === session.access_token &&
+    expected.refreshToken === session.refresh_token
+  )
+}
+
 export default function LoginPageClient() {
   const { language: lang, t } = useLanguage()
   const { signOut } = useAuthSession()
@@ -209,12 +233,13 @@ export default function LoginPageClient() {
   isRegisterRef.current = isRegister
   codeVerifiedRef.current = codeVerified
 
-  const beginAttempt = useCallback((): LoginAttempt => {
+  const beginAttempt = useCallback((externalSession?: Session): LoginAttempt => {
     activeAttemptRef.current?.controller.abort()
     const attempt = {
       generation: ++attemptGenerationRef.current,
       controller: new AbortController(),
       authBoundary: captureLoginAuthBoundary(),
+      externalSession: externalSession ? exactSessionReference(externalSession) : null,
     }
     activeAttemptRef.current = attempt
     return attempt
@@ -391,7 +416,8 @@ export default function LoginPageClient() {
     async (session: Session, errorMessage?: string): Promise<boolean> => {
       const rolledBack = await tokenRefreshCoordinator.signOutIfCurrent(
         session.user.id,
-        session.access_token
+        session.access_token,
+        session.refresh_token
       )
       if (!rolledBack || !mountedRef.current) return rolledBack
 
@@ -411,7 +437,16 @@ export default function LoginPageClient() {
 
   const handleExternalSession = useCallback(
     async (session: Session, replace: boolean) => {
-      const attempt = beginAttempt()
+      const currentAttempt = activeAttemptRef.current
+      if (
+        currentAttempt &&
+        isAttemptCurrent(currentAttempt) &&
+        attemptOwnsExactSession(currentAttempt, session)
+      ) {
+        return
+      }
+
+      const attempt = beginAttempt(session)
       let committed = false
       try {
         const { identity, profile } = await loadAuthenticatedSession(attempt, session, true)
@@ -424,7 +459,7 @@ export default function LoginPageClient() {
         if (!committed) await rollbackSession(session, t('loginSetupFailed'))
       }
     },
-    [beginAttempt, commitLogin, loadAuthenticatedSession, rollbackSession, t]
+    [beginAttempt, commitLogin, isAttemptCurrent, loadAuthenticatedSession, rollbackSession, t]
   )
 
   useEffect(() => {

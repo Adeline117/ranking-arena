@@ -304,7 +304,7 @@ describe('OAuth callback identity ownership', () => {
     await waitFor(() =>
       expect(mockReplace).toHaveBeenCalledWith('/login?error=profile_provisioning_failed')
     )
-    expect(mockSignOutIfCurrent).toHaveBeenCalledWith('user-a', 'access-user-a')
+    expect(mockSignOutIfCurrent).toHaveBeenCalledWith('user-a', 'access-user-a', 'refresh-user-a')
     expect(mockUpdate).not.toHaveBeenCalled()
     expect(mockAddAccount).not.toHaveBeenCalled()
   })
@@ -360,7 +360,7 @@ describe('OAuth callback identity ownership', () => {
     render(<AuthCallbackPage />)
 
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/login?error=auth_failed'))
-    expect(mockSignOutIfCurrent).toHaveBeenCalledWith('user-a', 'access-user-a')
+    expect(mockSignOutIfCurrent).toHaveBeenCalledWith('user-a', 'access-user-a', 'refresh-user-a')
     expect(mockFrom).not.toHaveBeenCalled()
     expect(mockAddAccount).not.toHaveBeenCalled()
   })
