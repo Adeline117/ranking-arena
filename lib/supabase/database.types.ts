@@ -8893,10 +8893,6 @@ export type Database = {
           wallet_address: string
         }[]
       }
-      get_pro_official_group_atomic: {
-        Args: { p_actor_id: string }
-        Returns: Json
-      }
       get_pending_critical_anomalies_count: { Args: never; Returns: number }
       get_personalized_feed: {
         Args: { p_limit?: number; p_offset?: number; p_user_id: string }
@@ -8962,6 +8958,10 @@ export type Database = {
           p_report_count: number
         }
         Returns: number
+      }
+      get_pro_official_group_atomic: {
+        Args: { p_actor_id: string }
+        Returns: Json
       }
       get_related_groups: {
         Args: { p_group_id: string; p_limit?: number }

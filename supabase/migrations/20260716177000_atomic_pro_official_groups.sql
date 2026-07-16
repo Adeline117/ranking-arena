@@ -77,6 +77,33 @@ BEGIN
     RAISE EXCEPTION 'postgres-owned Pro official-group dependency relation is missing';
   END IF;
 
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.unnest(ARRAY[
+      'public.pro_official_groups',
+      'public.pro_official_group_members'
+    ]::text[]) AS required(relation_name)
+    LEFT JOIN pg_catalog.pg_class AS relation
+      ON relation.oid = pg_catalog.to_regclass(required.relation_name)
+    WHERE relation.oid IS NULL
+       OR relation.relkind <> 'r'
+       OR relation.relpersistence <> 'p'
+       OR relation.relispartition
+       OR EXISTS (
+         SELECT 1
+         FROM pg_catalog.pg_inherits AS inheritance_row
+         WHERE inheritance_row.inhrelid = relation.oid
+            OR inheritance_row.inhparent = relation.oid
+       )
+       OR EXISTS (
+         SELECT 1
+         FROM pg_catalog.pg_rewrite AS rewrite_row
+         WHERE rewrite_row.ev_class = relation.oid
+       )
+  ) THEN
+    RAISE EXCEPTION 'Pro official-group relation authority is incompatible';
+  END IF;
+
   IF pg_catalog.to_regtype('public.group_visibility') IS NULL
     OR pg_catalog.to_regtype('public.member_role') IS NULL
     OR NOT EXISTS (
@@ -205,6 +232,117 @@ BEGIN
     HAVING pg_catalog.count(*) = 2
   ) THEN
     RAISE EXCEPTION 'Pro official-group unique-key authority is incompatible';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_row
+    WHERE constraint_row.conrelid = 'public.group_members'::pg_catalog.regclass
+      AND constraint_row.contype = 'p'
+      AND constraint_row.convalidated
+      AND NOT constraint_row.condeferrable
+      AND NOT constraint_row.condeferred
+      AND constraint_row.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.conrelid
+            AND attribute.attname = 'group_id'
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.conrelid
+            AND attribute.attname = 'user_id'
+        )
+      ]::smallint[]
+  ) THEN
+    RAISE EXCEPTION 'canonical group membership edge primary key is incompatible';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_row
+    WHERE constraint_row.conrelid = 'public.pro_official_groups'::pg_catalog.regclass
+      AND constraint_row.confrelid = 'public.groups'::pg_catalog.regclass
+      AND constraint_row.contype = 'f'
+      AND constraint_row.convalidated
+      AND NOT constraint_row.condeferrable
+      AND NOT constraint_row.condeferred
+      AND constraint_row.confdeltype = 'c'
+      AND constraint_row.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.conrelid
+            AND attribute.attname = 'group_id'
+        )
+      ]::smallint[]
+      AND constraint_row.confkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.confrelid
+            AND attribute.attname = 'id'
+        )
+      ]::smallint[]
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_row
+    WHERE constraint_row.conrelid =
+        'public.pro_official_group_members'::pg_catalog.regclass
+      AND constraint_row.confrelid =
+        'public.pro_official_groups'::pg_catalog.regclass
+      AND constraint_row.contype = 'f'
+      AND constraint_row.convalidated
+      AND NOT constraint_row.condeferrable
+      AND NOT constraint_row.condeferred
+      AND constraint_row.confdeltype = 'c'
+      AND constraint_row.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.conrelid
+            AND attribute.attname = 'pro_group_id'
+        )
+      ]::smallint[]
+      AND constraint_row.confkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.confrelid
+            AND attribute.attname = 'id'
+        )
+      ]::smallint[]
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_row
+    WHERE constraint_row.conrelid =
+        'public.pro_official_group_members'::pg_catalog.regclass
+      AND constraint_row.confrelid = 'auth.users'::pg_catalog.regclass
+      AND constraint_row.contype = 'f'
+      AND constraint_row.convalidated
+      AND NOT constraint_row.condeferrable
+      AND NOT constraint_row.condeferred
+      AND constraint_row.confdeltype = 'c'
+      AND constraint_row.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.conrelid
+            AND attribute.attname = 'user_id'
+        )
+      ]::smallint[]
+      AND constraint_row.confkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_row.confrelid
+            AND attribute.attname = 'id'
+        )
+      ]::smallint[]
+  ) THEN
+    RAISE EXCEPTION 'Pro official-group cascade foreign-key authority is incompatible';
   END IF;
 
   IF v_entitlement IS NULL OR NOT EXISTS (
@@ -385,6 +523,24 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'canonical Pro official-group RPC return contract is incompatible';
   END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.pronamespace = 'public'::pg_catalog.regnamespace
+      AND function_row.proname IN (
+        'sync_pro_official_member_count',
+        'guard_pro_official_group_member_edge',
+        'reject_pro_official_registry_identity_update'
+      )
+      AND (
+        pg_catalog.pg_get_function_identity_arguments(function_row.oid) <> ''
+        OR function_row.prokind <> 'f'
+        OR function_row.prorettype <> 'trigger'::pg_catalog.regtype
+      )
+  ) THEN
+    RAISE EXCEPTION 'Pro official-group trigger helper contract is incompatible';
+  END IF;
 END
 $preflight$;
 
@@ -398,6 +554,8 @@ IN ACCESS EXCLUSIVE MODE;
 DROP TRIGGER IF EXISTS trg_group_members_07_guard_pro_official
   ON public.group_members;
 DROP TRIGGER IF EXISTS trg_pro_official_members_20_sync_count
+  ON public.pro_official_group_members;
+DROP TRIGGER IF EXISTS trg_pro_official_members_05_identity_immutable
   ON public.pro_official_group_members;
 
 DROP FUNCTION IF EXISTS public.get_user_pro_official_group(uuid);
@@ -546,6 +704,34 @@ ALTER TABLE public.pro_official_groups
     CHECK (group_number > 0),
   ADD CONSTRAINT pro_official_groups_member_count_bounds
     CHECK (current_member_count BETWEEN 0 AND 500);
+
+CREATE OR REPLACE FUNCTION public.reject_pro_official_registry_identity_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF NEW.user_id IS DISTINCT FROM OLD.user_id
+    OR NEW.pro_group_id IS DISTINCT FROM OLD.pro_group_id
+  THEN
+    RAISE EXCEPTION 'Pro official registry identity is immutable'
+      USING ERRCODE = '23514';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+
+ALTER FUNCTION public.reject_pro_official_registry_identity_update()
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.reject_pro_official_registry_identity_update()
+  FROM PUBLIC, anon, authenticated, service_role, authenticator;
+
+CREATE TRIGGER trg_pro_official_members_05_identity_immutable
+  BEFORE UPDATE OF user_id, pro_group_id
+  ON public.pro_official_group_members
+  FOR EACH ROW
+  EXECUTE FUNCTION public.reject_pro_official_registry_identity_update();
 
 CREATE OR REPLACE FUNCTION public.sync_pro_official_member_count()
 RETURNS trigger
@@ -970,17 +1156,24 @@ BEGIN
   ELSE
     SELECT
       target_group.created_by,
-      target_group.dissolved_at,
-      official_group.is_active
-    INTO v_group_creator, v_group_dissolved_at, v_group_active
+      target_group.dissolved_at
+    INTO v_group_creator, v_group_dissolved_at
     FROM public.groups AS target_group
-    JOIN public.pro_official_groups AS official_group
-      ON official_group.group_id = target_group.id
     WHERE target_group.id = v_group_id
-      AND official_group.id = v_pro_group_id
-    FOR UPDATE OF target_group, official_group;
+    FOR UPDATE;
 
-    IF NOT FOUND OR NOT v_group_active OR v_group_dissolved_at IS NOT NULL THEN
+    IF NOT FOUND OR v_group_dissolved_at IS NOT NULL THEN
+      RETURN pg_catalog.jsonb_build_object('status', 'group_unavailable');
+    END IF;
+
+    SELECT official_group.is_active
+    INTO v_group_active
+    FROM public.pro_official_groups AS official_group
+    WHERE official_group.id = v_pro_group_id
+      AND official_group.group_id = v_group_id
+    FOR UPDATE;
+
+    IF NOT FOUND OR NOT v_group_active THEN
       RETURN pg_catalog.jsonb_build_object('status', 'group_unavailable');
     END IF;
 
@@ -1332,7 +1525,8 @@ BEGIN
     'public.join_pro_official_group_atomic(uuid,uuid)'::pg_catalog.regprocedure,
     'public.leave_pro_official_group_atomic(uuid)'::pg_catalog.regprocedure,
     'public.sync_pro_official_member_count()'::pg_catalog.regprocedure,
-    'public.guard_pro_official_group_member_edge()'::pg_catalog.regprocedure
+    'public.guard_pro_official_group_member_edge()'::pg_catalog.regprocedure,
+    'public.reject_pro_official_registry_identity_update()'::pg_catalog.regprocedure
   ]
   LOOP
     SELECT function_row.proowner INTO v_owner
@@ -1430,7 +1624,8 @@ BEGIN
 
   FOREACH v_signature IN ARRAY ARRAY[
     'public.sync_pro_official_member_count()'::pg_catalog.regprocedure,
-    'public.guard_pro_official_group_member_edge()'::pg_catalog.regprocedure
+    'public.guard_pro_official_group_member_edge()'::pg_catalog.regprocedure,
+    'public.reject_pro_official_registry_identity_update()'::pg_catalog.regprocedure
   ]
   LOOP
     IF NOT EXISTS (
@@ -1512,7 +1707,13 @@ BEGIN
       AND trigger_row.tgfoid =
         'public.guard_pro_official_group_member_edge()'::pg_catalog.regprocedure
       AND NOT trigger_row.tgisinternal
-  ) <> 1 OR NOT EXISTS (
+  ) <> 1 OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid =
+        'public.pro_official_group_members'::pg_catalog.regclass
+      AND NOT trigger_row.tgisinternal
+  ) <> 2 OR NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_trigger AS trigger_row
     WHERE trigger_row.tgrelid = 'public.group_members'::pg_catalog.regclass
@@ -1537,6 +1738,36 @@ BEGIN
         FROM pg_catalog.pg_attribute AS attribute
         WHERE attribute.attrelid = trigger_row.tgrelid
           AND attribute.attname = 'role'
+      ) = ANY(trigger_row.tgattr::smallint[])
+      AND NOT trigger_row.tgisinternal
+  ) OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid =
+        'public.pro_official_group_members'::pg_catalog.regclass
+      AND trigger_row.tgfoid =
+        'public.reject_pro_official_registry_identity_update()'::pg_catalog.regprocedure
+      AND NOT trigger_row.tgisinternal
+  ) <> 1 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid =
+        'public.pro_official_group_members'::pg_catalog.regclass
+      AND trigger_row.tgname = 'trg_pro_official_members_05_identity_immutable'
+      AND trigger_row.tgenabled = 'O'
+      AND trigger_row.tgtype = 19
+      AND pg_catalog.cardinality(trigger_row.tgattr::smallint[]) = 2
+      AND (
+        SELECT attribute.attnum
+        FROM pg_catalog.pg_attribute AS attribute
+        WHERE attribute.attrelid = trigger_row.tgrelid
+          AND attribute.attname = 'user_id'
+      ) = ANY(trigger_row.tgattr::smallint[])
+      AND (
+        SELECT attribute.attnum
+        FROM pg_catalog.pg_attribute AS attribute
+        WHERE attribute.attrelid = trigger_row.tgrelid
+          AND attribute.attname = 'pro_group_id'
       ) = ANY(trigger_row.tgattr::smallint[])
       AND NOT trigger_row.tgisinternal
   ) OR (

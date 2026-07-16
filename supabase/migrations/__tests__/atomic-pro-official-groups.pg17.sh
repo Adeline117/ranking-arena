@@ -378,6 +378,25 @@ WHERE id = '20000000-0000-4000-8000-000000000001';
 RESET ROLE;
 SQL
 
+# Required keys are runtime serialization/cascade authority, not optional shape.
+psql_cmd -c \
+  'ALTER TABLE public.group_members DROP CONSTRAINT group_members_pkey' >/dev/null
+expect_migration_failure \
+  'canonical group membership edge primary key is incompatible' \
+  'missing-group-member-primary-key'
+psql_cmd -c \
+  'ALTER TABLE public.group_members ADD PRIMARY KEY (group_id, user_id)' >/dev/null
+
+psql_cmd -c \
+  'ALTER TABLE public.pro_official_group_members DROP CONSTRAINT pro_official_group_members_pro_group_id_fkey' \
+  >/dev/null
+expect_migration_failure \
+  'Pro official-group cascade foreign-key authority is incompatible' \
+  'missing-registry-parent-cascade'
+psql_cmd -c \
+  'ALTER TABLE public.pro_official_group_members ADD CONSTRAINT pro_official_group_members_pro_group_id_fkey FOREIGN KEY (pro_group_id) REFERENCES public.pro_official_groups(id) ON DELETE CASCADE' \
+  >/dev/null
+
 # The entitlement helper is postgres-private; a leaked grant must fail before
 # any legacy table/function authority is modified.
 psql_cmd -c \
@@ -583,6 +602,10 @@ expect_sql_failure \
   'new Pro official registry edge must exist before membership identity changes' \
   'identity-update-forgery' \
   "SET ROLE postgres; UPDATE public.group_members SET group_id = '20000000-0000-4000-8000-000000000001' WHERE group_id = '20000000-0000-4000-8000-000000000099' AND user_id = '10000000-0000-4000-8000-000000000005'"
+expect_sql_failure \
+  'Pro official registry identity is immutable' \
+  'registry-identity-update-forgery' \
+  "SET ROLE postgres; UPDATE public.pro_official_group_members SET user_id = '10000000-0000-4000-8000-000000000005' WHERE user_id = '10000000-0000-4000-8000-000000000002'"
 
 # Fill the first group to exactly 500 paid slots. Its generic count must be 501
 # (the 500 registry-backed subscribers plus one owner), never double-incremented.
