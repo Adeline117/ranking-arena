@@ -8554,6 +8554,19 @@ export type Database = {
           isSetofReturn: true
         }
       }
+      get_following_posts_page: {
+        Args: {
+          p_author_handle?: string
+          p_before_created_at?: string
+          p_before_id?: string
+          p_group_id?: string
+          p_group_ids?: string[]
+          p_language?: string
+          p_limit?: number
+          p_viewer_id: string
+        }
+        Returns: Json
+      }
       get_hero_stats: {
         Args: never
         Returns: {
