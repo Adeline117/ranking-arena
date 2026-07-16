@@ -283,7 +283,8 @@ describe('TraderLinksSection viewer ownership', () => {
     const promoted = {
       ...linkedTrader('user-a', 'Gamma', false),
       id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
-      display_order: 1,
+      display_order: 0,
+      created_at: '2026-07-14T00:00:00.000Z',
     }
     mockAuthedFetch.mockImplementation((url: string, method: string) => {
       if (url === '/api/traders/linked' && method === 'GET') {
@@ -308,6 +309,38 @@ describe('TraderLinksSection viewer ownership', () => {
     await waitFor(() => expect(screen.queryByText('Primary')).not.toBeInTheDocument())
     expect(screen.getByText('Gamma').parentElement).toHaveTextContent('primaryAccount')
     expect(screen.getByText('Beta').parentElement).not.toHaveTextContent('primaryAccount')
+  })
+
+  it('reloads the authoritative list when unlink metadata contradicts local state', async () => {
+    const primary = linkedTrader('user-a', 'Primary')
+    const remaining = {
+      ...linkedTrader('user-a', 'Local stale', false),
+      id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+    }
+    const authoritative = { ...remaining, label: 'Authoritative', is_primary: true }
+    let getCount = 0
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url === '/api/traders/linked' && method === 'GET') {
+        getCount += 1
+        return Promise.resolve(listResult(getCount === 1 ? [primary, remaining] : [authoritative]))
+      }
+      if (url === '/api/traders/linked' && method === 'DELETE') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { promoted_link_id: 'unknown-link', remaining_count: 1 } },
+        })
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<TraderLinksSection userId="user-a" />)
+    await screen.findByText('Primary')
+    fireEvent.click(screen.getAllByRole('button', { name: 'unlinkAccount' })[0])
+
+    await screen.findByText('Authoritative')
+    expect(getCount).toBe(2)
+    expect(screen.getByText('Authoritative').parentElement).toHaveTextContent('primaryAccount')
   })
 
   it('fails closed when the server returns a row owned by another viewer', async () => {
