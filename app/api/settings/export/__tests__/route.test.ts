@@ -325,6 +325,46 @@ describe('POST /api/settings/export', () => {
           },
         ]
       }
+      if (dataset.name === 'notifications') {
+        return [
+          {
+            id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+            type: 'follow',
+            title: 'New follower',
+            message: 'Someone followed you',
+            link: '/u/follower',
+            read: false,
+            actor_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+            reference_id: null,
+            created_at: '2026-02-17T00:00:00.000Z',
+            read_at: null,
+            user_id: 'must-not-escape-notification-owner',
+            last_error: 'must-not-escape-notification-error',
+          },
+        ]
+      }
+      if (dataset.name === 'interactions.comment_likes') {
+        return [
+          {
+            id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+            comment_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+            reaction_type: 'like',
+            created_at: '2026-02-18T00:00:00.000Z',
+            user_id: 'must-not-escape-comment-like-owner',
+          },
+        ]
+      }
+      if (dataset.name === 'interactions.post_emoji_reactions') {
+        return [
+          {
+            id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+            post_id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+            emoji: '🚀',
+            created_at: '2026-02-19T00:00:00.000Z',
+            user_id: 'must-not-escape-emoji-owner',
+          },
+        ]
+      }
       throw new Error(`Unexpected cursor dataset: ${dataset.name}`)
     })
     profileStates = installProfileQueries({})
@@ -382,6 +422,7 @@ describe('POST /api/settings/export', () => {
       profile: 1,
       posts: 1,
       comments: 1,
+      notifications: 1,
       'follows.following': 1,
       'follows.followers': 1,
       'blocks.outgoing': 1,
@@ -389,6 +430,8 @@ describe('POST /api/settings/export', () => {
       'tips.received': 1,
       'interactions.post_likes': 1,
       'interactions.post_votes': 1,
+      'interactions.comment_likes': 1,
+      'interactions.post_emoji_reactions': 1,
       'bookmarks.folders': 1,
       'bookmarks.posts': 1,
       'trading.copy_configs': 1,
@@ -410,6 +453,23 @@ describe('POST /api/settings/export', () => {
     expect(profileStates[0]?.selection).not.toContain('banned_by')
     expect(body.posts).toEqual([{ id: 'posts-1' }])
     expect(body.comments).toEqual([{ id: 'comments-1' }])
+    expect(body.notifications).toEqual([
+      {
+        id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        type: 'follow',
+        title: 'New follower',
+        message: 'Someone followed you',
+        link: '/u/follower',
+        read: false,
+        actor_id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
+        reference_id: null,
+        created_at: '2026-02-17T00:00:00.000Z',
+        read_at: null,
+      },
+    ])
+    expect(JSON.stringify(body.notifications)).not.toMatch(
+      /must-not-escape-notification-owner|must-not-escape-notification-error|user_id|last_error/
+    )
     expect(body.follows.following).toEqual([
       {
         id: 'following-1',
@@ -480,9 +540,25 @@ describe('POST /api/settings/export', () => {
           created_at: '2026-02-10T00:00:00.000Z',
         },
       ],
+      comment_likes: [
+        {
+          id: 'cccccccc-cccc-4ccc-8ccc-cccccccccccc',
+          comment_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+          reaction_type: 'like',
+          created_at: '2026-02-18T00:00:00.000Z',
+        },
+      ],
+      post_emoji_reactions: [
+        {
+          id: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+          post_id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
+          emoji: '🚀',
+          created_at: '2026-02-19T00:00:00.000Z',
+        },
+      ],
     })
     expect(JSON.stringify(body.interactions)).not.toMatch(
-      /must-not-escape-like-owner|must-not-escape-vote-owner|user_id/
+      /must-not-escape-like-owner|must-not-escape-vote-owner|must-not-escape-comment-like-owner|must-not-escape-emoji-owner|user_id/
     )
     expect(body.bookmarks).toEqual({
       folders: [
@@ -576,7 +652,7 @@ describe('POST /api/settings/export', () => {
       'must-not-escape-binding-normalization'
     )
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
-    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(9)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(12)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -732,6 +808,29 @@ describe('POST /api/settings/export', () => {
       ],
     })
     expect(watchlistCall[1].selectColumns).not.toContain('user_id')
+
+    for (const ownerIdDatasetName of [
+      'notifications',
+      'interactions.comment_likes',
+      'interactions.post_emoji_reactions',
+    ]) {
+      const datasetCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+        (call) => call[1].name === ownerIdDatasetName
+      )
+      expect(datasetCall).toBeDefined()
+      expect(datasetCall[2]).toBe(USER_ID)
+      expect(datasetCall[1].ownerPredicate).toEqual({
+        column: 'user_id',
+        operator: 'eq',
+        valueType: 'uuid',
+      })
+      expect(datasetCall[1].cursor).toEqual({
+        order: 'asc',
+        columns: [{ column: 'id', valueType: 'uuid' }],
+      })
+      expect(datasetCall[1].selectColumns).not.toContain('user_id')
+      expect(datasetCall[1].selectColumns).not.toContain('*')
+    }
   })
 
   it('fails closed without cooldown when preferences cannot be read completely', async () => {
@@ -818,6 +917,21 @@ describe('POST /api/settings/export', () => {
             updated_at: '2026-02-15T00:00:00.000Z',
           },
         ]
+      }
+      return []
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed without cooldown when notification history cannot be read', async () => {
+    mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
+      if (dataset.name === 'notifications') {
+        throw new DataExportReadError('notifications', { code: 'XX001' })
       }
       return []
     })
