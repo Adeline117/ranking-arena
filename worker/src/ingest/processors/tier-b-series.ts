@@ -34,6 +34,7 @@ import {
 import type { ParseCtx } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
+import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import { validateStats } from '@/lib/ingest/staging/validate'
 import { publishProfile } from '@/lib/ingest/serving/publish'
 import { logger } from '@/lib/logger'
@@ -301,7 +302,7 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
             { intent: 'series_only' }
           )
 
-          await writeRawObject({
+          const rawObjectId = await writeRawObject({
             sourceId: src.id,
             sourceSlug: src.slug,
             jobType: 'tier_b_series',
@@ -317,8 +318,54 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
             scrapedAt,
             meta: src.meta,
           }
-          for (const page of bundle.pages) {
-            const profile = adapter.parseProfile(page.payload, ctx)
+          // One logical surface is all-or-nothing: parse every page before any
+          // quality validation or serving publication so a bad later page can
+          // never leave an earlier page partially published.
+          const parsedPages = bundle.pages.map((page) => ({
+            page,
+            profile: adapter.parseProfile(page.payload, ctx),
+          }))
+          const qualityRejects =
+            parsedPages.length === 0
+              ? [
+                  {
+                    reason: 'profile_payload_missing',
+                    payload: {
+                      source_slug: src.slug,
+                      trader_id: trader.id,
+                      exchange_trader_id: trader.exchange_trader_id,
+                      timeframe,
+                      scraped_at: scrapedAt,
+                      page_count: 0,
+                    },
+                  },
+                ]
+              : parsedPages.flatMap(({ page, profile }) =>
+                  (adapter.validateProfile?.(profile, ctx, timeframe, page.payload) ?? []).map(
+                    (reject) => ({
+                      reason: reject.reason,
+                      payload: {
+                        ...reject.payload,
+                        source_slug: src.slug,
+                        trader_id: trader.id,
+                        exchange_trader_id: trader.exchange_trader_id,
+                        timeframe,
+                        scraped_at: scrapedAt,
+                        page_index: page.pageIndex,
+                      },
+                    })
+                  )
+                )
+
+          if (qualityRejects.length > 0) {
+            await recordStagingRejects(src.id, rawObjectId, qualityRejects)
+            result.rejects += qualityRejects.length
+            result.surfacesFetched += 1
+            traderAllTimeframesOk = false
+            continue
+          }
+
+          for (const { profile } of parsedPages) {
             const incomplete = findIncompleteProfileWindow(profile)
             if (incomplete) {
               await publishProfile(src, trader.id, profile, { fullSeries: true })
