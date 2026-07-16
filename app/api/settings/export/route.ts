@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { getProvisioningAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import logger from '@/lib/logger'
@@ -46,7 +46,7 @@ export async function POST(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    const user = await getAuthUser(request)
+    const user = await getProvisioningAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }

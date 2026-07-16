@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { SiweMessage } from 'siwe'
 import { cookies } from 'next/headers'
 import { isAddress } from 'viem'
-import { getSupabaseAdmin, getAuthUser } from '@/lib/supabase/server'
+import { getSupabaseAdmin, getProvisioningAuthUser } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
 
@@ -19,7 +19,7 @@ export async function POST(request: NextRequest) {
   try {
     const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.auth)
     if (rateLimitResponse) return rateLimitResponse
-    const user = await getAuthUser(request)
+    const user = await getProvisioningAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
     }
@@ -45,7 +45,11 @@ export async function POST(request: NextRequest) {
     }
 
     const siweMessage = new SiweMessage(message)
-    const { data: fields, success, error } = await siweMessage.verify({
+    const {
+      data: fields,
+      success,
+      error,
+    } = await siweMessage.verify({
       signature,
       nonce: storedNonce,
     })
@@ -111,17 +115,18 @@ export async function POST(request: NextRequest) {
 
     if (!profile) {
       // Profile doesn't exist yet - create it with wallet address
-      const { error: insertError } = await supabase
-        .from('user_profiles')
-        .insert({
-          id: user.id,
-          email: user.email || `${walletAddress}@wallet.arena`,
-          wallet_address: walletAddress,
-        })
+      const { error: insertError } = await supabase.from('user_profiles').insert({
+        id: user.id,
+        email: user.email || `${walletAddress}@wallet.arena`,
+        wallet_address: walletAddress,
+      })
 
       if (insertError) {
         logger.error('[SIWE link] Profile insert failed:', insertError)
-        return NextResponse.json({ error: 'Failed to create profile for wallet link' }, { status: 500 })
+        return NextResponse.json(
+          { error: 'Failed to create profile for wallet link' },
+          { status: 500 }
+        )
       }
     } else {
       const { error: updateError } = await supabase

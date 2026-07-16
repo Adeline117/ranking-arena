@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
+import { getProvisioningAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -29,7 +29,7 @@ interface DeleteRequestBody {
 
 export async function GET(request: NextRequest) {
   try {
-    const user = await getAuthUser(request)
+    const user = await getProvisioningAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -70,7 +70,7 @@ export async function DELETE(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    const user = await getAuthUser(request)
+    const user = await getProvisioningAuthUser(request)
     if (!user) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
@@ -88,10 +88,7 @@ export async function DELETE(request: NextRequest) {
     const { sessionId, all } = body
 
     if (!sessionId && !all) {
-      return NextResponse.json(
-        { error: 'Provide either sessionId or all: true' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Provide either sessionId or all: true' }, { status: 400 })
     }
 
     // Determine the current session ID from the token

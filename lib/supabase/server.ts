@@ -107,7 +107,68 @@ export function getSupabaseAdmin(): SupabaseClient<Database> {
 const banStatusCache = new Map<string, { ts: number }>()
 const CLEAN_STATUS_TTL_MS = 10_000 // 10 seconds — bans take effect within 10s
 
-export async function getUserFromToken(token: string): Promise<User | null> {
+export type UserAccountStatus = 'active' | 'suspended' | 'missing' | 'unavailable'
+
+/**
+ * Resolve the application-account status for an already verified auth user.
+ *
+ * Only a real, clean profile row may enter the short-lived fast-path cache.
+ * Missing profiles are a temporary legacy/provisioning state, while query
+ * failures are security-sensitive outages; neither may be cached as clean.
+ */
+export async function getUserAccountStatus(userId: string): Promise<UserAccountStatus> {
+  const cached = banStatusCache.get(userId)
+  const now = Date.now()
+  if (cached && now - cached.ts < CLEAN_STATUS_TTL_MS) {
+    return 'active'
+  }
+  if (cached) {
+    banStatusCache.delete(userId)
+  }
+
+  try {
+    const supabase = getSupabaseAdmin()
+    const { data: profile, error: profileError } = await supabase
+      .from('user_profiles')
+      .select('banned_at, deleted_at')
+      .eq('id', userId)
+      .maybeSingle()
+
+    if (profileError) {
+      logger.error('[supabase/server] account status query failed', {
+        userId,
+        error: profileError.message,
+      })
+      return 'unavailable'
+    }
+
+    // A few legacy/auth-provisioning users can temporarily have no profile.
+    // Normal application auth rejects this state. Only explicitly named
+    // provisioning/recovery helpers may admit it.
+    if (!profile) {
+      return 'missing'
+    }
+
+    if (profile.banned_at || profile.deleted_at) {
+      return 'suspended'
+    }
+
+    // Prevent unbounded growth: clear the whole short-lived map when oversized.
+    if (banStatusCache.size > 5000) {
+      banStatusCache.clear()
+    }
+    banStatusCache.set(userId, { ts: now })
+    return 'active'
+  } catch (error) {
+    logger.error('[supabase/server] account status check failed', { userId, error })
+    return 'unavailable'
+  }
+}
+
+async function getUserFromTokenWithProfilePolicy(
+  token: string,
+  allowMissingProfile: boolean
+): Promise<User | null> {
   if (!token) return null
 
   try {
@@ -117,47 +178,39 @@ export async function getUserFromToken(token: string): Promise<User | null> {
       error,
     } = await supabase.auth.getUser(token)
 
-    if (error || !user) {
-      return null
-    }
+    if (error || !user) return null
 
-    // Fast path: we've recently confirmed this user is NOT banned. Only the
-    // "clean" result is cached, so a newly-banned user is always re-queried
-    // on next request (capped at CLEAN_STATUS_TTL_MS of stale caching).
-    const cached = banStatusCache.get(user.id)
-    const now = Date.now()
-    if (cached && now - cached.ts < CLEAN_STATUS_TTL_MS) {
+    const status = await getUserAccountStatus(user.id)
+    if (status === 'active' || (allowMissingProfile && status === 'missing')) {
       return user
     }
-    if (cached) {
-      // Expired — drop the entry so the Map doesn't grow unboundedly.
-      banStatusCache.delete(user.id)
-    }
 
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('banned_at, deleted_at')
-      .eq('id', user.id)
-      .maybeSingle()
-
-    const isBanned = !!(profile?.banned_at || profile?.deleted_at)
-
-    // Only cache the CLEAN result. Banned/deleted status must always hit the DB
-    // so unbans (or re-bans of the same user) reflect within one request.
-    if (!isBanned) {
-      // Prevent unbounded growth: clear entire map when oversized.
-      // Serverless instances are short-lived, so a full clear is cheap and avoids O(n) scans.
-      if (banStatusCache.size > 5000) {
-        banStatusCache.clear()
-      }
-      banStatusCache.set(user.id, { ts: now })
-    }
-
-    return isBanned ? null : user
+    return null
   } catch (error) {
     logger.error('[supabase/server] getUserFromToken 错误:', error)
     return null
   }
+}
+
+/**
+ * Verify auth for normal application reads and writes. An auth identity is not
+ * an active Arena account until its application profile exists.
+ */
+export async function getUserFromToken(token: string): Promise<User | null> {
+  return getUserFromTokenWithProfilePolicy(token, false)
+}
+
+/** Verify auth and require an existing, non-suspended application profile. */
+export async function getActiveAppUserFromToken(token: string): Promise<User | null> {
+  return getUserFromToken(token)
+}
+
+/**
+ * Verify auth while admitting the temporary no-profile state. This is only for
+ * profile provisioning, account export, and session-recovery endpoints.
+ */
+export async function getProvisioningUserFromToken(token: string): Promise<User | null> {
+  return getUserFromTokenWithProfilePolicy(token, true)
 }
 
 /**
@@ -175,6 +228,24 @@ export async function getAuthUser(request: NextRequest): Promise<User | null> {
   if (!match) return null
 
   return getUserFromToken(match[1])
+}
+
+/**
+ * Explicit auth helper for profile provisioning and account recovery paths.
+ */
+export async function getProvisioningAuthUser(request: NextRequest): Promise<User | null> {
+  const authHeader = request.headers.get('authorization')
+  if (!authHeader) return null
+
+  const match = authHeader.match(/^Bearer\s+(\S+)$/i)
+  if (!match) return null
+
+  return getProvisioningUserFromToken(match[1])
+}
+
+/** Alias retained for call sites that want to state the strict policy explicitly. */
+export async function getActiveAuthUser(request: NextRequest): Promise<User | null> {
+  return getAuthUser(request)
 }
 
 /**

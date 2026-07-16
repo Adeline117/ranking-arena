@@ -14,7 +14,11 @@ export * from './with-admin-auth'
 export {
   getSupabaseAdmin,
   getUserFromToken,
+  getActiveAppUserFromToken,
+  getProvisioningUserFromToken,
   getAuthUser,
+  getActiveAuthUser,
+  getProvisioningAuthUser,
   requireAuth,
   getUserHandle,
   getUserProfile,
