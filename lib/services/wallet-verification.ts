@@ -17,6 +17,7 @@ import { isSolanaPlatform, isDexWalletPlatform } from '@/lib/validators/exchange
 import { logger } from '@/lib/logger'
 import { resolveTrader } from '@/lib/data/unified'
 import { getSharedRedis } from '@/lib/cache/redis-client'
+import { canonicalizeWalletIdentity, walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
 
 /** Maximum age of a signature message (5 minutes) */
 const MAX_MESSAGE_AGE_MS = 5 * 60 * 1000
@@ -39,14 +40,24 @@ export interface WalletVerificationResult {
   message: string
 }
 
+function requireInputString(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw new Error(`${field} must be a non-empty string`)
+  }
+  if (value.length > maxLength) {
+    throw new Error(`${field} is too long`)
+  }
+  return value
+}
+
 /**
  * Parse and validate the claim message.
  * Expected format: "I am claiming trader profile {trader_key} on Arena. Timestamp: {unix}"
  */
-export function parseClaimMessage(message: string): { traderKey: string; timestamp: number } | null {
-  const match = message.match(
-    /^I am claiming trader profile (.+) on Arena\. Timestamp: (\d+)$/
-  )
+export function parseClaimMessage(
+  message: string
+): { traderKey: string; timestamp: number } | null {
+  const match = message.match(/^I am claiming trader profile (.+) on Arena\. Timestamp: (\d+)$/)
   if (!match) return null
 
   return {
@@ -79,21 +90,13 @@ async function verifyEvmSignature(
 /**
  * Verify Solana wallet signature using tweetnacl.
  */
-function verifySolanaSignature(
-  address: string,
-  message: string,
-  signature: string
-): boolean {
+function verifySolanaSignature(address: string, message: string, signature: string): boolean {
   try {
     const publicKey = new PublicKey(address)
     const messageBytes = new TextEncoder().encode(message)
     const signatureBytes = Buffer.from(signature, 'base64')
 
-    return nacl.sign.detached.verify(
-      messageBytes,
-      signatureBytes,
-      publicKey.toBytes()
-    )
+    return nacl.sign.detached.verify(messageBytes, signatureBytes, publicKey.toBytes())
   } catch (error) {
     logger.error('[verify-wallet] Solana signature verification failed', {}, error as Error)
     return false
@@ -118,22 +121,28 @@ export async function verifyWalletOwnership(
   userId: string,
   input: WalletVerificationInput
 ): Promise<WalletVerificationResult> {
-  const { wallet_address, signature, message, platform, trader_key } = input
-
-  // Validate required fields
-  if (!wallet_address || !signature || !message || !platform) {
-    throw new Error('Missing required fields: wallet_address, signature, message, platform')
-  }
+  const walletAddress = requireInputString(input.wallet_address, 'wallet_address', 512)
+  const signature = requireInputString(input.signature, 'signature', 2048)
+  const message = requireInputString(input.message, 'message', 2048)
+  const platform = requireInputString(input.platform, 'platform', 100).trim().toLowerCase()
+  const traderKey =
+    input.trader_key === undefined
+      ? undefined
+      : requireInputString(input.trader_key, 'trader_key', 512)
 
   // Validate platform is a DEX
   if (!isDexWalletPlatform(platform)) {
     throw new Error(`Platform ${platform} does not support wallet signature verification`)
   }
 
+  const canonicalWalletAddress = canonicalizeWalletIdentity(walletAddress, platform)
+
   // Parse and validate the message
   const parsed = parseClaimMessage(message)
   if (!parsed) {
-    throw new Error(`Invalid message format. Expected: "${MESSAGE_PREFIX} {trader_key} on Arena. Timestamp: {unix}"`)
+    throw new Error(
+      `Invalid message format. Expected: "${MESSAGE_PREFIX} {trader_key} on Arena. Timestamp: {unix}"`
+    )
   }
 
   // Check message freshness (prevent replay attacks)
@@ -162,7 +171,7 @@ export async function verifyWalletOwnership(
   }
 
   // If trader_key is provided, validate it matches the message
-  if (trader_key && parsed.traderKey !== trader_key) {
+  if (traderKey && !walletIdentitiesMatch(parsed.traderKey, traderKey, platform)) {
     throw new Error('Message trader key does not match the claimed trader')
   }
 
@@ -171,9 +180,9 @@ export async function verifyWalletOwnership(
   let isValid: boolean
 
   if (isSolana) {
-    isValid = verifySolanaSignature(wallet_address, message, signature)
+    isValid = verifySolanaSignature(canonicalWalletAddress, message, signature)
   } else {
-    isValid = await verifyEvmSignature(wallet_address, message, signature)
+    isValid = await verifyEvmSignature(canonicalWalletAddress, message, signature)
   }
 
   if (!isValid) {
@@ -186,7 +195,7 @@ export async function verifyWalletOwnership(
   }
 
   // Verify wallet_address matches the trader's source_trader_id (unified data layer)
-  const traderKeyToCheck = trader_key || parsed.traderKey
+  const traderKeyToCheck = canonicalizeWalletIdentity(traderKey || parsed.traderKey, platform)
 
   // Look up trader via unified resolveTrader()
   const resolved = await resolveTrader(supabase, {
@@ -194,13 +203,11 @@ export async function verifyWalletOwnership(
     platform,
   })
 
-  const knownTraderKey = resolved?.traderKey || traderKeyToCheck
+  if (!resolved) {
+    throw new Error('Trader account was not found in Arena.')
+  }
 
-  // Compare wallet address with trader key (case-insensitive for EVM addresses)
-  const walletNorm = wallet_address.toLowerCase()
-  const traderNorm = String(knownTraderKey).toLowerCase()
-
-  if (walletNorm !== traderNorm) {
+  if (!walletIdentitiesMatch(canonicalWalletAddress, resolved.traderKey, platform)) {
     logger.warn('[verify-wallet] Wallet address mismatch', {
       userId,
       platform,
@@ -216,7 +223,7 @@ export async function verifyWalletOwnership(
 
   return {
     verified: true,
-    wallet_address,
+    wallet_address: canonicalWalletAddress,
     chain: isSolana ? 'solana' : 'evm',
     message: 'Wallet ownership verified successfully',
   }
