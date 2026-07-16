@@ -26,8 +26,22 @@ export const maxDuration = 60 // Allow up to 60s for large exports
 
 const EXPORT_COOLDOWN_MS = 24 * 60 * 60 * 1000 // 24 hours
 
+interface ExportDatasetManifest {
+  name: string
+  status: 'complete'
+  row_count: number
+}
+
 interface ExportData {
   exportedAt: string
+  manifest: {
+    schema_version: '1'
+    scope: 'supported_portable_datasets'
+    consistency: 'best_effort_keyset'
+    started_at: string
+    completed_at: string
+    datasets: ExportDatasetManifest[]
+  }
   profile: Record<string, unknown>
   posts: unknown[]
   comments: unknown[]
@@ -383,6 +397,10 @@ function normalizeOutgoingBlocks(rows: Record<string, unknown>[]) {
   }))
 }
 
+function completedDataset(name: string, rowCount: number): ExportDatasetManifest {
+  return { name, status: 'complete', row_count: rowCount }
+}
+
 function parseStoredTimestamp(value: string, field: string): number {
   const timestamp = new Date(value).getTime()
   if (!Number.isFinite(timestamp)) throw new Error(`Invalid ${field} timestamp`)
@@ -482,6 +500,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    const exportStartedAt = new Date().toISOString()
+
     // Collect complete datasets in parallel. Every table is keyset-paginated;
     // any page error aborts the whole export instead of returning partial JSON.
     const [
@@ -518,27 +538,60 @@ export async function POST(request: NextRequest) {
       fetchAllExportRowsByCursor(supabase, OUTGOING_BLOCKS_EXPORT_DATASET, user.id),
     ])
 
+    const normalizedFollowing = normalizeFollowRows(following, 'following')
+    const normalizedFollowers = normalizeFollowRows(followers, 'follower')
+    const normalizedOutgoingBlocks = normalizeOutgoingBlocks(outgoingBlocks)
+    const normalizedTipsSent = normalizeTipRows(tipsSent, 'sent')
+    const normalizedTipsReceived = normalizeTipRows(tipsReceived, 'received')
+    const normalizedPreferences = normalizePreferences(preferences)
+    const normalizedAccountBindings = normalizeAccountBindings(accountBindings)
+    const exportedAt = new Date().toISOString()
     const exportData: ExportData = {
-      exportedAt: new Date().toISOString(),
+      exportedAt,
+      manifest: {
+        schema_version: '1',
+        scope: 'supported_portable_datasets',
+        consistency: 'best_effort_keyset',
+        started_at: exportStartedAt,
+        completed_at: exportedAt,
+        datasets: [
+          completedDataset('profile', 1),
+          completedDataset('posts', posts.length),
+          completedDataset('comments', comments.length),
+          completedDataset('follows.following', following.length),
+          completedDataset('follows.followers', followers.length),
+          completedDataset('blocks.outgoing', outgoingBlocks.length),
+          completedDataset('tips.sent', tipsSent.length),
+          completedDataset('tips.received', tipsReceived.length),
+          completedDataset('settings.preferences', preferences.length),
+          completedDataset('account.bindings', accountBindings.length),
+          completedDataset('account.login_sessions', loginSessions.length),
+          completedDataset('account.api_keys', apiKeys.length),
+          completedDataset('account.passkeys', passkeys.length),
+          completedDataset('account.push_subscriptions', pushSubscriptions.length),
+          completedDataset('account.backup_codes', backupCodes.length),
+          completedDataset('account.recovery_tokens', recoveryTokens.length),
+        ],
+      },
       profile: typedProfile,
       posts,
       comments,
       follows: {
-        following: normalizeFollowRows(following, 'following'),
-        followers: normalizeFollowRows(followers, 'follower'),
+        following: normalizedFollowing,
+        followers: normalizedFollowers,
       },
       blocks: {
-        outgoing: normalizeOutgoingBlocks(outgoingBlocks),
+        outgoing: normalizedOutgoingBlocks,
       },
       tips: {
-        sent: normalizeTipRows(tipsSent, 'sent'),
-        received: normalizeTipRows(tipsReceived, 'received'),
+        sent: normalizedTipsSent,
+        received: normalizedTipsReceived,
       },
       settings: {
-        preferences: normalizePreferences(preferences),
+        preferences: normalizedPreferences,
       },
       account: {
-        bindings: normalizeAccountBindings(accountBindings),
+        bindings: normalizedAccountBindings,
         login_sessions: loginSessions,
         api_keys: apiKeys,
         passkeys,
