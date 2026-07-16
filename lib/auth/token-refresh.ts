@@ -693,6 +693,38 @@ class TokenRefreshCoordinator {
         .catch((error) => logger.warn('[TokenRefresh] Server session revocation failed:', error))
     }
   }
+
+  /**
+   * Roll back an authentication attempt only while the browser still owns the
+   * exact principal produced by that attempt. This prevents a late failure for
+   * A from signing out B after a rapid account switch.
+   */
+  async signOutIfCurrent(expectedUserId: string, expectedAccessToken?: string): Promise<boolean> {
+    if (!expectedUserId) return false
+
+    const storedSession = getStoredAuthSession()
+    const accessToken =
+      typeof storedSession?.access_token === 'string' ? storedSession.access_token : null
+    const viewer = getViewerScope()
+    const viewerOwnsExpectedPrincipal =
+      isViewerScopeCurrent(viewer) &&
+      (viewer.userId === expectedUserId ||
+        (viewer.userId === null && (viewer.viewerKey === 'pending' || viewer.viewerKey === 'anon')))
+
+    if (
+      !storedSession ||
+      storedSession.user?.id !== expectedUserId ||
+      !accessToken ||
+      jwtSubject(accessToken) !== expectedUserId ||
+      (expectedAccessToken !== undefined && accessToken !== expectedAccessToken) ||
+      !viewerOwnsExpectedPrincipal
+    ) {
+      return false
+    }
+
+    await this.signOut()
+    return true
+  }
 }
 
 export type RefreshScope = {

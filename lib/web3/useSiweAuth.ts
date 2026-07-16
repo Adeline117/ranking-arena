@@ -25,18 +25,15 @@ async function getSiweMessage() {
   return SiweMessage
 }
 import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
-import { logger } from '@/lib/logger'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
-
-interface SiweAuthResult {
-  action: 'existing_user' | 'new_user'
-  userId: string
-  handle?: string
-  walletAddress: string
-  verificationToken?: string
-  email: string
-}
+import {
+  assertExpectedSiweWalletAddress,
+  establishRequiredSiweSession,
+  parseSiweAuthResult,
+  rollbackSiweSessionIfCurrent,
+  SiweSessionCancelledError,
+  type SiweAuthResult,
+} from '@/lib/web3/siwe-session'
 
 interface UseSiweAuthReturn {
   signIn: () => Promise<SiweAuthResult | null>
@@ -44,6 +41,23 @@ interface UseSiweAuthReturn {
   isLoading: boolean
   error: string | null
   clearError: () => void
+}
+
+interface ActiveSiweAttempt {
+  generation: number
+  controller: AbortController
+  walletAddress: string
+}
+
+function sameWalletAddress(left: string | undefined, right: string | undefined): boolean {
+  return Boolean(left && right && left.toLowerCase() === right.toLowerCase())
+}
+
+function isAttemptCancellation(error: unknown): boolean {
+  return (
+    error instanceof SiweSessionCancelledError ||
+    (error instanceof Error && error.name === 'AbortError')
+  )
 }
 
 /**
@@ -99,11 +113,43 @@ export function useSiweAuth(): UseSiweAuthReturn {
   const inFlightRef = useRef(false)
   // Abort controller for fetch requests on unmount
   const abortRef = useRef<AbortController | null>(null)
+  const attemptGenerationRef = useRef(0)
+  const mountedRef = useRef(true)
+  const currentAddressRef = useRef(address)
+  currentAddressRef.current = address
+
+  const isAttemptCurrent = useCallback((attempt: ActiveSiweAttempt): boolean => {
+    return (
+      mountedRef.current &&
+      attemptGenerationRef.current === attempt.generation &&
+      !attempt.controller.signal.aborted &&
+      sameWalletAddress(currentAddressRef.current, attempt.walletAddress)
+    )
+  }, [])
+
+  const assertAttemptCurrent = useCallback(
+    (attempt: ActiveSiweAttempt): void => {
+      if (!isAttemptCurrent(attempt)) throw new SiweSessionCancelledError()
+    },
+    [isAttemptCurrent]
+  )
 
   // ── Handle wallet disconnect & account switch ──
   useEffect(() => {
     const prevAddress = prevAddressRef.current
     prevAddressRef.current = address
+    const addressChanged = Boolean(prevAddress && !sameWalletAddress(prevAddress, address))
+
+    if (addressChanged) {
+      attemptGenerationRef.current += 1
+      abortRef.current?.abort()
+      abortRef.current = null
+      inFlightRef.current = false
+      if (mountedRef.current) {
+        setIsLoading(false)
+        setError(null)
+      }
+    }
 
     // Wallet disconnected while we had an address → sign out if the session was wallet-based
     if (prevAddress && !address && !isConnected) {
@@ -111,43 +157,52 @@ export function useSiweAuth(): UseSiweAuthReturn {
       return
     }
 
-    // Account switched to a different address → warn & clear stale error
-    if (prevAddress && address && prevAddress !== address) {
+    // Account switched to a different address → clear stale error
+    if (prevAddress && address && addressChanged) {
       setError(null)
     }
   }, [address, authEmail, isConnected, signOut])
 
   // Clean up abort controller on unmount
   useEffect(() => {
+    mountedRef.current = true
     return () => {
+      mountedRef.current = false
+      attemptGenerationRef.current += 1
+      inFlightRef.current = false
       abortRef.current?.abort()
+      abortRef.current = null
     }
   }, [])
 
   const clearError = useCallback(() => setError(null), [])
 
   const createSiweMessage = useCallback(
-    async (nonce: string): Promise<string> => {
+    async (nonce: string, walletAddress: string, messageChainId: number): Promise<string> => {
       const SiweMessage = await getSiweMessage()
       const message = new SiweMessage({
         domain: window.location.host,
-        address: address!,
+        address: walletAddress,
         statement: t('siweStatement'),
         uri: window.location.origin,
         version: '1',
-        chainId: chainId || 8453, // Base mainnet
+        chainId: messageChainId,
         nonce,
       })
       return message.prepareMessage()
     },
-    [address, chainId, t]
+    [t]
   )
 
   const fetchNonce = useCallback(
-    async (signal?: AbortSignal): Promise<string> => {
+    async (signal: AbortSignal, assertCurrent: () => void): Promise<string> => {
       const res = await fetch('/api/auth/siwe/nonce', { signal })
+      assertCurrent()
       if (!res.ok) throw new Error(t('siweFetchNonceFailed'))
-      const { nonce } = await res.json()
+      const body = (await res.json()) as { nonce?: unknown }
+      assertCurrent()
+      const nonce = typeof body.nonce === 'string' ? body.nonce : null
+      if (!nonce) throw new Error(t('siweFetchNonceFailed'))
       return nonce
     },
     [t]
@@ -157,8 +212,13 @@ export function useSiweAuth(): UseSiweAuthReturn {
    * Sign in with SIWE — creates or finds a user account linked to the wallet.
    */
   const signIn = useCallback(async (): Promise<SiweAuthResult | null> => {
-    if (!address) {
+    const walletAddress = address
+    if (!walletAddress) {
+      if (!mountedRef.current || currentAddressRef.current) return null
       setError(t('siweNoWallet'))
+      return null
+    }
+    if (!mountedRef.current || !sameWalletAddress(currentAddressRef.current, walletAddress)) {
       return null
     }
     if (inFlightRef.current) return null
@@ -167,13 +227,28 @@ export function useSiweAuth(): UseSiweAuthReturn {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    const attempt: ActiveSiweAttempt = {
+      generation: attemptGenerationRef.current + 1,
+      controller,
+      walletAddress,
+    }
+    attemptGenerationRef.current = attempt.generation
+    assertAttemptCurrent(attempt)
     setIsLoading(true)
+    assertAttemptCurrent(attempt)
     setError(null)
 
+    let completedResult: SiweAuthResult | null = null
+    let completedAccessToken: string | undefined
+    let completionReturned = false
+
     try {
-      const nonce = await fetchNonce(controller.signal)
-      const message = await createSiweMessage(nonce)
+      const nonce = await fetchNonce(controller.signal, () => assertAttemptCurrent(attempt))
+      assertAttemptCurrent(attempt)
+      const message = await createSiweMessage(nonce, walletAddress, chainId || 8453)
+      assertAttemptCurrent(attempt)
       const signature = await signMessageAsync({ message })
+      assertAttemptCurrent(attempt)
 
       const res = await fetch('/api/auth/siwe/verify', {
         method: 'POST',
@@ -181,50 +256,72 @@ export function useSiweAuth(): UseSiweAuthReturn {
         body: JSON.stringify({ message, signature }),
         signal: controller.signal,
       })
+      assertAttemptCurrent(attempt)
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+        assertAttemptCurrent(attempt)
         throw new Error(body.error || t('siweVerificationFailed'))
       }
 
-      const result: SiweAuthResult = await res.json()
-
-      // Complete Supabase auth using the verification token
-      if (result.verificationToken && result.email) {
-        const { error: otpError } = await tokenRefreshCoordinator.verifyOtp(
-          {
-            email: result.email,
-            token: result.verificationToken,
-            type: 'email',
-          },
-          result.userId
-        )
-
-        if (otpError) {
-          logger.warn(
-            '[SIWE] OTP verification failed, session may require email confirmation:',
-            otpError
-          )
-        }
-      }
+      const responseBody = await res.json()
+      assertAttemptCurrent(attempt)
+      const result = parseSiweAuthResult(responseBody)
+      completedResult = result
+      assertAttemptCurrent(attempt)
+      const completedSession = await establishRequiredSiweSession(result, {
+        expectedWalletAddress: walletAddress,
+        signal: controller.signal,
+        isCurrent: () => isAttemptCurrent(attempt),
+      })
+      completedAccessToken = completedSession.snapshot.session.access_token
+      completionReturned = true
+      assertAttemptCurrent(attempt)
 
       return result
     } catch (err) {
-      if ((err as Error).name === 'AbortError') return null
+      const cancelled = isAttemptCancellation(err) || !isAttemptCurrent(attempt)
+      if (completionReturned && completedResult) {
+        try {
+          await rollbackSiweSessionIfCurrent(completedResult.userId, completedAccessToken)
+        } catch {
+          // The coordinator owns fail-closed sign-out diagnostics.
+        }
+      }
+      if (cancelled || !isAttemptCurrent(attempt)) return null
+
+      assertAttemptCurrent(attempt)
       setError(normaliseWalletError(err, t))
       return null
     } finally {
-      inFlightRef.current = false
-      setIsLoading(false)
+      if (attemptGenerationRef.current === attempt.generation) {
+        inFlightRef.current = false
+        if (abortRef.current === controller) abortRef.current = null
+        if (isAttemptCurrent(attempt)) setIsLoading(false)
+      }
     }
-  }, [address, fetchNonce, createSiweMessage, signMessageAsync, t])
+  }, [
+    address,
+    chainId,
+    fetchNonce,
+    createSiweMessage,
+    signMessageAsync,
+    t,
+    assertAttemptCurrent,
+    isAttemptCurrent,
+  ])
 
   /**
    * Link wallet to an existing authenticated account.
    */
   const linkWallet = useCallback(async (): Promise<{ walletAddress: string } | null> => {
-    if (!address) {
+    const walletAddress = address
+    if (!walletAddress) {
+      if (!mountedRef.current || currentAddressRef.current) return null
       setError(t('siweNoWallet'))
+      return null
+    }
+    if (!mountedRef.current || !sameWalletAddress(currentAddressRef.current, walletAddress)) {
       return null
     }
     if (inFlightRef.current) return null
@@ -233,16 +330,28 @@ export function useSiweAuth(): UseSiweAuthReturn {
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    const attempt: ActiveSiweAttempt = {
+      generation: attemptGenerationRef.current + 1,
+      controller,
+      walletAddress,
+    }
+    attemptGenerationRef.current = attempt.generation
+    assertAttemptCurrent(attempt)
     setIsLoading(true)
+    assertAttemptCurrent(attempt)
     setError(null)
 
     try {
-      const nonce = await fetchNonce(controller.signal)
-      const message = await createSiweMessage(nonce)
+      const nonce = await fetchNonce(controller.signal, () => assertAttemptCurrent(attempt))
+      assertAttemptCurrent(attempt)
+      const message = await createSiweMessage(nonce, walletAddress, chainId || 8453)
+      assertAttemptCurrent(attempt)
       const signature = await signMessageAsync({ message })
+      assertAttemptCurrent(attempt)
 
       // Get current access token
       const accessToken = await getToken()
+      assertAttemptCurrent(attempt)
       if (!accessToken) {
         throw new Error(t('siweNotAuthenticated'))
       }
@@ -257,9 +366,11 @@ export function useSiweAuth(): UseSiweAuthReturn {
         signal: controller.signal,
         credentials: 'same-origin',
       })
+      assertAttemptCurrent(attempt)
 
       if (!res.ok) {
         const body = await res.json().catch(() => ({}))
+        assertAttemptCurrent(attempt)
         // Provide more specific error messages
         if (res.status === 409) {
           throw new Error(body.error || t('siweAlreadyLinked'))
@@ -270,17 +381,37 @@ export function useSiweAuth(): UseSiweAuthReturn {
         throw new Error(body.error || t('siweLinkFailed'))
       }
 
-      const result = await res.json()
-      return { walletAddress: result.walletAddress }
+      const result = (await res.json()) as { walletAddress?: unknown }
+      assertAttemptCurrent(attempt)
+      const returnedWalletAddress =
+        typeof result.walletAddress === 'string' ? result.walletAddress : ''
+      assertExpectedSiweWalletAddress(returnedWalletAddress, walletAddress)
+      assertAttemptCurrent(attempt)
+      return { walletAddress: returnedWalletAddress }
     } catch (err) {
-      if ((err as Error).name === 'AbortError') return null
+      if (isAttemptCancellation(err) || !isAttemptCurrent(attempt)) return null
+
+      assertAttemptCurrent(attempt)
       setError(normaliseWalletError(err, t))
       return null
     } finally {
-      inFlightRef.current = false
-      setIsLoading(false)
+      if (attemptGenerationRef.current === attempt.generation) {
+        inFlightRef.current = false
+        if (abortRef.current === controller) abortRef.current = null
+        if (isAttemptCurrent(attempt)) setIsLoading(false)
+      }
     }
-  }, [address, fetchNonce, createSiweMessage, getToken, signMessageAsync, t])
+  }, [
+    address,
+    chainId,
+    fetchNonce,
+    createSiweMessage,
+    getToken,
+    signMessageAsync,
+    t,
+    assertAttemptCurrent,
+    isAttemptCurrent,
+  ])
 
   return { signIn, linkWallet, isLoading, error, clearError }
 }
