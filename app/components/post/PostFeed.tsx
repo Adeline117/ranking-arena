@@ -1056,6 +1056,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           onClose={() => setOpenPost(null)}
           language={language}
           currentUserId={currentUserId}
+          viewerKey={auth.viewerKey}
           accessToken={accessToken}
           showingOriginal={showingOriginal}
           setShowingOriginal={setShowingOriginal}
@@ -1080,8 +1081,6 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
           showToast={showToast}
           comments={comments}
           loadingComments={commentsHook.loadingComments}
-          newComment={commentsHook.newComment}
-          setNewComment={commentsHook.setNewComment}
           submittingComment={commentsHook.submittingComment}
           onSubmitComment={commentsHook.submitComment}
           replyingTo={commentsHook.replyingTo}

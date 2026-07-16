@@ -131,10 +131,9 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
     const serverComment = comment({ id: 'server-comment' })
     mockAuthedFetch.mockResolvedValueOnce(canonical([serverComment], 6))
 
-    act(() => result.current.setNewComment('hello'))
-    let request: Promise<void>
+    let request: Promise<boolean>
     act(() => {
-      request = result.current.submitComment('post-1')
+      request = result.current.submitComment('post-1', 'hello')
     })
 
     act(() => result.current.setComments([serverComment]))
@@ -154,8 +153,7 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
     mockAuthedFetch.mockRejectedValueOnce(new Error('offline'))
     mockAuthedFetch.mockResolvedValueOnce(canonical([], 3))
 
-    act(() => result.current.setNewComment('not committed'))
-    await act(async () => result.current.submitComment('post-1'))
+    await act(async () => result.current.submitComment('post-1', 'not committed'))
 
     expect(result.current.comments).toEqual([])
     expect(onCommentCountChange).toHaveBeenLastCalledWith('post-1', 0, 3)
@@ -168,8 +166,7 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
     mockAuthedFetch.mockRejectedValueOnce(new Error('offline'))
     mockAuthedFetch.mockResolvedValueOnce(unavailable())
 
-    act(() => result.current.setNewComment('still uncertain'))
-    await act(async () => result.current.submitComment('post-1'))
+    await act(async () => result.current.submitComment('post-1', 'still uncertain'))
 
     expect(result.current.comments[0].id).toMatch(/^temp_/)
     expect(onCommentCountChange).not.toHaveBeenCalledWith('post-1', -1)
@@ -185,8 +182,7 @@ describe('usePostComments uncertain create/reply/reaction reconciliation', () =>
       data: { success: false, error: 'rejected' },
     })
 
-    act(() => result.current.setNewComment('rejected'))
-    await act(async () => result.current.submitComment('post-1'))
+    await act(async () => result.current.submitComment('post-1', 'rejected'))
 
     expect(result.current.comments).toEqual([])
     expect(onCommentCountChange).toHaveBeenCalledWith('post-1', -1)

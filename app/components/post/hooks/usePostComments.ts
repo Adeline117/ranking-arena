@@ -11,7 +11,6 @@ import { trackEvent } from '@/lib/analytics/track'
 import { usePostStore, type CommentData } from '@/lib/stores/postStore'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { useCommentDraftPersistence } from './useCommentDraftPersistence'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 export type Comment = {
@@ -265,13 +264,6 @@ export function usePostComments({
     () => false,
     scopeKey
   )
-  const {
-    draft: newComment,
-    setDraft: setNewComment,
-    restoreDraft,
-    captureDraftSnapshot,
-    clearDraftIfUnchanged,
-  } = useCommentDraftPersistence(undefined, viewerKey)
   const [replyingTo, setReplyingTo] = useViewerOwnedState<{
     commentId: string
     handle: string
@@ -352,9 +344,7 @@ export function usePostComments({
     setEditingComment(null)
     setEditContent('')
     setSubmittingEdit(false)
-    if (currentPostIdRef.current) restoreDraft(currentPostIdRef.current)
   }, [
-    restoreDraft,
     scopeKey,
     setCommentLikeLoading,
     setComments,
@@ -473,8 +463,6 @@ export function usePostComments({
         setDeletingCommentId(null)
       }
       currentPostIdRef.current = postId
-      // Restore any saved draft for this post
-      restoreDraft(postId)
       setLoadingComments(true)
       try {
         await reconcileCanonicalComments(postId, sort, capturedScope)
@@ -490,7 +478,6 @@ export function usePostComments({
     [
       authChecked,
       reconcileCanonicalComments,
-      restoreDraft,
       scopeIsCurrent,
       setCommentLikeLoading,
       setComments,
@@ -505,10 +492,11 @@ export function usePostComments({
   )
 
   const submitComment = useCallback(
-    async (postId: string): Promise<void> => {
-      if (!requireAuth() || !newComment.trim()) return
-      if (currentPostIdRef.current !== postId) return
-      if (submittingCommentRef.current) return // Prevent double submission
+    async (postId: string, content: string): Promise<boolean> => {
+      const savedContent = content.trim()
+      if (!requireAuth() || !savedContent) return false
+      if (currentPostIdRef.current !== postId) return false
+      if (submittingCommentRef.current) return false // Prevent double submission
 
       const operation = Symbol('submit-comment')
       const capturedScope = activeScopeRef.current
@@ -519,12 +507,10 @@ export function usePostComments({
       const tempId = `temp_${Date.now()}_${Math.random().toString(36).slice(2)}`
       const optimisticComment: Comment = {
         id: tempId,
-        content: newComment.trim(),
+        content: savedContent,
         created_at: new Date().toISOString(),
       }
       setComments((prev) => [...prev, optimisticComment])
-      const savedContent = newComment.trim()
-      const draftSnapshot = captureDraftSnapshot(postId)
       const revisionKey = commentViewerScopeKey(capturedScope)
       const optimisticRevision = stateRevisionRef.current.get(revisionKey) || 0
       onCommentCountChange?.(postId, 1)
@@ -559,7 +545,7 @@ export function usePostComments({
           }
         )
 
-        if (!scopeIsCurrent(capturedScope) || result.stale) return
+        if (!scopeIsCurrent(capturedScope) || result.stale) return false
 
         if (
           result.ok &&
@@ -580,10 +566,8 @@ export function usePostComments({
             await reconcileCanonicalComments(postId, 'best', capturedScope)
           }
 
-          // Only a strict actor/resource ACK may clear text. Do not erase text
-          // typed while this request was in flight.
-          clearDraftIfUnchanged(draftSnapshot)
           trackEvent('comment_created', { post_id: postId })
+          return true
         } else if (isDefinitiveMutationRejection(result)) {
           await rollbackSubmission()
           if (scopeIsCurrent(capturedScope)) {
@@ -592,11 +576,13 @@ export function usePostComments({
               'error'
             )
           }
+          return false
         } else if (!(await reconcileCanonicalComments(postId, 'best', capturedScope))) {
-          // Commit status is unknown. Keep the optimistic/server-event state
-          // and the viewer-scoped draft in every unknown-outcome branch.
+          // Commit status is unknown. Keep the optimistic/server-event state;
+          // the false ACK tells the local composer to retain its scoped draft.
           if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
+        return false
       } catch {
         if (
           scopeIsCurrent(capturedScope) &&
@@ -604,6 +590,7 @@ export function usePostComments({
         ) {
           if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
+        return false
       } finally {
         if (submittingCommentRef.current === operation) {
           submittingCommentRef.current = null
@@ -613,13 +600,10 @@ export function usePostComments({
     },
     [
       accessToken,
-      newComment,
       requireAuth,
       showToast,
       onCommentCountChange,
       t,
-      captureDraftSnapshot,
-      clearDraftIfUnchanged,
       reconcileCanonicalComments,
       scopeIsCurrent,
       setComments,
@@ -1229,8 +1213,6 @@ export function usePostComments({
     comments,
     setComments,
     loadingComments,
-    newComment,
-    setNewComment,
     submittingComment,
     replyingTo,
     setReplyingTo,
@@ -1248,7 +1230,6 @@ export function usePostComments({
     startEditComment,
     cancelEditComment,
     submitEditComment,
-    restoreDraft,
     loadComments,
     submitComment,
     toggleCommentLike,

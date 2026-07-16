@@ -328,6 +328,7 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
           onClose={() => router.push('/hot')}
           language={language}
           currentUserId={currentUserId}
+          viewerKey={auth.viewerKey}
           accessToken={accessToken}
           showingOriginal={showingOriginal}
           setShowingOriginal={setShowingOriginal}
@@ -352,8 +353,6 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
           showToast={showToast}
           comments={comments}
           loadingComments={commentsHook.loadingComments}
-          newComment={commentsHook.newComment}
-          setNewComment={commentsHook.setNewComment}
           submittingComment={commentsHook.submittingComment}
           onSubmitComment={commentsHook.submitComment}
           replyingTo={commentsHook.replyingTo}

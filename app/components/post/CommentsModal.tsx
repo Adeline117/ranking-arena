@@ -13,14 +13,13 @@ export type { CommentSortMode }
 
 interface CommentsModalProps {
   postId: string
+  viewerKey: string
   comments: Comment[]
   loadingComments: boolean
   currentUserId: string | null
   // Comment input
-  newComment: string
-  setNewComment: (val: string) => void
   submittingComment: boolean
-  onSubmitComment: (postId: string) => void
+  onSubmitComment: (postId: string, content: string) => Promise<boolean>
   // Reply
   replyingTo: { commentId: string; handle: string } | null
   setReplyingTo: (val: { commentId: string; handle: string } | null) => void
@@ -55,11 +54,10 @@ interface CommentsModalProps {
 
 export default function CommentsModal({
   postId,
+  viewerKey,
   comments,
   loadingComments,
   currentUserId,
-  newComment,
-  setNewComment,
   submittingComment,
   onSubmitComment,
   replyingTo,
@@ -163,8 +161,7 @@ export default function CommentsModal({
       {/* Comment input */}
       <CommentInput
         postId={postId}
-        newComment={newComment}
-        setNewComment={setNewComment}
+        viewerKey={viewerKey}
         submittingComment={submittingComment}
         onSubmitComment={onSubmitComment}
         language={language}

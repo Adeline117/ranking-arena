@@ -6,28 +6,43 @@ import { tokens } from '@/lib/design-tokens'
 import { ButtonSpinner } from '../../ui/LoadingSpinner'
 import { ARENA_PURPLE } from '@/lib/utils/content'
 import { STICKERS } from '@/lib/stickers'
+import { useCommentDraftPersistence } from '../hooks/useCommentDraftPersistence'
 
 interface CommentInputProps {
   postId: string
-  newComment: string
-  setNewComment: (val: string) => void
+  viewerKey: string
   submittingComment: boolean
-  onSubmitComment: (postId: string) => void
+  onSubmitComment: (postId: string, content: string) => Promise<boolean>
   language: string
   t: (key: string) => string
 }
 
 export function CommentInput({
   postId,
-  newComment,
-  setNewComment,
+  viewerKey,
   submittingComment,
   onSubmitComment,
   language,
   t,
 }: CommentInputProps): React.ReactNode {
+  const {
+    draft: newComment,
+    setDraft: setNewComment,
+    captureDraftSnapshot,
+    clearDraftIfUnchanged,
+  } = useCommentDraftPersistence(postId, viewerKey)
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const commentInputRef = useRef<HTMLTextAreaElement>(null)
+
+  const submitCurrentDraft = async () => {
+    const content = newComment.trim()
+    if (submittingComment || !content) return
+
+    const draftSnapshot = captureDraftSnapshot(postId)
+    if (await onSubmitComment(postId, content)) {
+      clearDraftIfUnchanged(draftSnapshot)
+    }
+  }
 
   // Close emoji picker on outside click
   useEffect(() => {
@@ -80,10 +95,10 @@ export function CommentInput({
           aria-label={t('writeComment')}
           rows={1}
           onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey) {
+            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
               e.preventDefault()
               if (submittingComment || !newComment.trim()) return
-              onSubmitComment(postId)
+              void submitCurrentDraft()
             }
           }}
           className="comment-input-textarea"
@@ -279,7 +294,7 @@ export function CommentInput({
               {newComment.length}/2000
             </span>
             <button
-              onClick={() => onSubmitComment(postId)}
+              onClick={submitCurrentDraft}
               disabled={submittingComment || !newComment.trim()}
               style={{
                 // Match toolbar button height (36px) for consistent touch targets

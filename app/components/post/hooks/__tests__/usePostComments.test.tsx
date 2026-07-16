@@ -301,17 +301,6 @@ describe('usePostComments post switching', () => {
     expect(result.current.loadingComments).toBe(false)
   })
 
-  it('clears the previous post draft when the next post has no saved draft', () => {
-    localStorage.setItem('comment-draft-v2:user:legacy:post-a', 'draft A')
-    const { result } = renderCommentsHook()
-
-    act(() => result.current.restoreDraft('post-a'))
-    expect(result.current.newComment).toBe('draft A')
-
-    act(() => result.current.restoreDraft('post-b'))
-    expect(result.current.newComment).toBe('')
-  })
-
   it('preserves the visible comment tree when a same-post refresh fails', async () => {
     const existing = makeComment({ id: 'comment-existing' })
     mockAuthedFetch
@@ -364,7 +353,7 @@ describe('usePostComments post switching', () => {
     expect(result.current.editContent).toBe('')
   })
 
-  it('does not let an old failed submit overwrite the new post draft or comments', async () => {
+  it('does not let an old failed submit overwrite the new post comments', async () => {
     let resolveOldSubmit: ((value: unknown) => void) | undefined
     const commentB = makeComment({ id: 'comment-b', content: 'post B comment' })
     mockAuthedFetch.mockImplementation((url: string, method: string) => {
@@ -396,17 +385,14 @@ describe('usePostComments post switching', () => {
     const { result } = renderCommentsHook({ onCommentCountChange })
 
     await act(async () => result.current.loadComments('post-a'))
-    act(() => result.current.setNewComment('post A failed draft'))
 
-    let oldSubmit: Promise<void>
+    let oldSubmit: Promise<boolean>
     act(() => {
-      oldSubmit = result.current.submitComment('post-a')
+      oldSubmit = result.current.submitComment('post-a', 'post A failed draft')
     })
 
-    localStorage.setItem('comment-draft-v2:user:legacy:post-b', 'post B draft')
     await act(async () => result.current.loadComments('post-b'))
     expect(result.current.comments).toEqual([commentB])
-    expect(result.current.newComment).toBe('post B draft')
 
     await act(async () => {
       resolveOldSubmit?.({
@@ -418,8 +404,6 @@ describe('usePostComments post switching', () => {
     })
 
     expect(result.current.comments).toEqual([commentB])
-    expect(result.current.newComment).toBe('post B draft')
-    expect(localStorage.getItem('comment-draft-v2:user:legacy:post-a')).toBe('post A failed draft')
     expect(onCommentCountChange).toHaveBeenCalledWith('post-a', 1)
     expect(onCommentCountChange).toHaveBeenCalledWith('post-a', 0, 0)
   })
@@ -649,13 +633,15 @@ describe('usePostComments viewer scope', () => {
       viewerKey: 'pending',
       sessionGeneration: 0,
     })
-    act(() => result.current.setNewComment('wait for hydration'))
 
-    await act(async () => result.current.submitComment('post-1'))
+    let acknowledged: boolean | undefined
+    await act(async () => {
+      acknowledged = await result.current.submitComment('post-1', 'wait for hydration')
+    })
 
+    expect(acknowledged).toBe(false)
     expect(mockOpenLoginModal).not.toHaveBeenCalled()
     expect(mockAuthedFetch).not.toHaveBeenCalled()
-    expect(result.current.newComment).toBe('wait for hydration')
   })
 
   it('discards an A GET that resolves after B becomes active', async () => {
@@ -832,7 +818,6 @@ describe('usePostComments viewer scope', () => {
     )
     await act(async () => result.current.loadComments('post-a'))
     act(() => {
-      result.current.setNewComment('A create')
       result.current.setReplyContent('A reply')
     })
     const staleCreate = result.current.submitComment
@@ -842,7 +827,7 @@ describe('usePostComments viewer scope', () => {
     mockAuthedFetch.mockClear()
     onCommentCountChange.mockClear()
     await act(async () => {
-      await staleCreate('post-a')
+      await staleCreate('post-a', 'A create')
       await staleReply('post-a', parent.id)
     })
 
@@ -890,7 +875,7 @@ describe('usePostComments viewer scope', () => {
     expect(onCommentCountChange).toHaveBeenLastCalledWith('post-1', 0, 0)
   })
 
-  it('preserves comments and draft across a same-A token refresh', async () => {
+  it('preserves comments across a same-A token refresh', async () => {
     const comment = makeComment()
     mockAuthedFetch.mockResolvedValue({
       ok: true,
@@ -899,26 +884,29 @@ describe('usePostComments viewer scope', () => {
     })
     const { result, rerender } = renderScopedHook(userA)
     await act(async () => result.current.loadComments('post-1'))
-    act(() => result.current.setNewComment('A draft'))
 
     rerender({ ...userA, accessToken: 'token-a2' })
 
     expect(result.current.comments).toEqual([comment])
-    expect(result.current.newComment).toBe('A draft')
   })
 
   it('ignores an old A mutation ACK after logout', async () => {
     let resolveSubmit!: (value: unknown) => void
-    mockAuthedFetch.mockReturnValue(
+    mockAuthedFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: { success: true, data: { comments: [], post: { comment_count: 0 } } },
+    })
+    const { result, rerender, showToast } = renderScopedHook(userA)
+    await act(async () => result.current.loadComments('post-1'))
+    mockAuthedFetch.mockReturnValueOnce(
       new Promise((resolve) => {
         resolveSubmit = resolve
       })
     )
-    const { result, rerender, showToast } = renderScopedHook(userA)
-    act(() => result.current.setNewComment('A text'))
-    let submission!: Promise<void>
+    let submission!: Promise<boolean>
     act(() => {
-      submission = result.current.submitComment('post-1')
+      submission = result.current.submitComment('post-1', 'A text')
     })
 
     rerender({
@@ -953,11 +941,11 @@ describe('usePostComments viewer scope', () => {
     })
 
     expect(result.current.comments).toEqual([])
-    expect(result.current.newComment).toBe('')
+    await expect(submission).resolves.toBe(false)
     expect(showToast).not.toHaveBeenCalled()
   })
 
-  it('accepts a sanitized strict ACK and only then clears the draft', async () => {
+  it('accepts a sanitized strict ACK and returns a successful acknowledgement', async () => {
     mockAuthedFetch
       .mockResolvedValueOnce({
         ok: true,
@@ -989,63 +977,21 @@ describe('usePostComments viewer scope', () => {
       })
     const { result } = renderScopedHook(userA)
     await act(async () => result.current.loadComments('post-1'))
-    act(() => result.current.setNewComment('<b>hello</b>'))
 
-    await act(async () => result.current.submitComment('post-1'))
-
-    expect(result.current.newComment).toBe('')
-    expect(result.current.comments[0].content).toBe('hello')
-  })
-
-  it('does not let a Post A ACK clear an equal-text Post B draft', async () => {
-    let resolveSubmit!: (value: unknown) => void
-    mockAuthedFetch.mockImplementation((_url: string, method: string) => {
-      if (method === 'GET') {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          data: { success: true, data: { comments: [], post: { comment_count: 0 } } },
-        })
-      }
-      return new Promise((resolve) => {
-        resolveSubmit = resolve
-      })
-    })
-    const { result } = renderScopedHook(userA)
-    await act(async () => result.current.loadComments('post-a'))
-    act(() => result.current.setNewComment('same text'))
-
-    let submission!: Promise<void>
-    act(() => {
-      submission = result.current.submitComment('post-a')
-    })
-    await act(async () => result.current.loadComments('post-b'))
-    act(() => result.current.setNewComment('same text'))
-
+    let acknowledged: boolean | undefined
     await act(async () => {
-      resolveSubmit({
-        ok: true,
-        status: 201,
-        data: {
-          success: true,
-          data: {
-            comment: {
-              id: 'comment-a',
-              post_id: 'post-a',
-              user_id: 'user-a',
-              content: 'same text',
-              parent_id: null,
-              like_count: 0,
-              dislike_count: 0,
-              created_at: '2026-07-15T00:00:00.000Z',
-              updated_at: '2026-07-15T00:00:00.000Z',
-            },
-          },
-        },
-      })
-      await submission
+      acknowledged = await result.current.submitComment('post-1', '<b>hello</b>')
     })
 
-    expect(result.current.newComment).toBe('same text')
+    expect(acknowledged).toBe(true)
+    expect(mockAuthedFetch).toHaveBeenLastCalledWith(
+      '/api/posts/post-1/comments',
+      'POST',
+      'token-a1',
+      { content: '<b>hello</b>' },
+      15_000,
+      { expectedUserId: 'user-a', expectedSessionGeneration: 1 }
+    )
+    expect(result.current.comments[0].content).toBe('hello')
   })
 })
