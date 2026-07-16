@@ -6,29 +6,62 @@ const migration = readFileSync(
   'utf8'
 )
 
-describe('GMX source contract migration', () => {
-  it('is atomic, bounded, and fails unless exactly one source row changes', () => {
+describe('GMX source contract PREPARE migration', () => {
+  it('is atomic, bounded, and takes the publisher plus writer locks', () => {
     expect(migration).toMatch(/^--[\s\S]*\nBEGIN;/)
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)
-    expect(migration).toContain("WHERE slug = 'gmx'")
-    expect(migration).toContain('IF v_updated <> 1 THEN')
-    expect(migration).toContain('gmx source contract verification failed')
+    expect(migration).toContain("'arena.publish-board-series:' || id::text")
+    expect(migration).toContain('LOCK TABLE arena.leaderboard_snapshots')
+    expect(migration).toContain('LOCK TABLE public.leaderboard_ranks')
+    expect(migration).toContain('SET LOCAL statement_timeout')
   })
 
-  it('declares exact completed-day 7/30/90 windows as native', () => {
-    expect(migration).toContain('timeframes_native = ARRAY[7, 30, 90]::integer[]')
-    expect(migration).toContain('timeframes_derived = ARRAY[]::integer[]')
-    expect(migration).toContain("- 'compute_90d'")
-    expect(migration).toContain("- 'unavailable_timeframes'")
-    expect(migration).toContain("'window_semantics', 'completed_utc_days'")
-    expect(migration).toContain("'window_timezone', 'UTC'")
+  it('creates a private PREPARED/COMPLETE ledger and all reversible archives', () => {
+    for (const table of [
+      'data_contract_quarantine_batches',
+      'source_registry_quarantine',
+      'leaderboard_snapshots_quarantine',
+      'trader_stats_quarantine',
+      'trader_series_quarantine',
+      'leaderboard_ranks_quarantine',
+      'leaderboard_count_cache_quarantine',
+    ]) {
+      expect(migration).toContain(`arena.${table}`)
+    }
+    expect(migration).toContain("state IN ('PREPARED', 'COMPLETE')")
+    expect(migration).toContain('archive_counts jsonb NOT NULL')
+    expect(migration).toContain('archive_digests jsonb NOT NULL')
+    expect(migration).toContain('FROM PUBLIC, anon, authenticated')
+    expect(migration).toContain('TO service_role')
   })
 
-  it('pins the production graph and discloses Arena realized-net semantics', () => {
-    expect(migration).toContain('https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql')
-    expect(migration).toContain("'pnl_basis_board', 'gmx_period_realized_net'")
-    expect(migration).toContain("'roi_basis_board', 'max_capital_usd'")
-    expect(migration).toContain("'pnl_includes_unrealized', false")
-    expect(migration).toContain("'pnl_contract_version', 2")
+  it('archives every affected serving, rank, and aggregate-cache surface', () => {
+    expect(migration).toContain("series.metric = 'pnl'")
+    expect(migration).toContain('rank_row.source = v_source_slug')
+    for (const cacheKey of ['gmx', 'gmx_gt0', '_all', '_all_gt0']) {
+      expect(migration).toContain(`'${cacheKey}'`)
+    }
+    expect(migration).toContain('to_jsonb(source_row)')
+    expect(migration).toContain('to_jsonb(snapshot)')
+    expect(migration).toContain('to_jsonb(stats)')
+    expect(migration).toContain('to_jsonb(rank_row)')
+    expect(migration).toContain('to_jsonb(cache_row)')
+  })
+
+  it('fails closed on orphan, changed, or digest-mismatched replays', () => {
+    expect(migration).toContain('orphan/partial GMX archive')
+    expect(migration).toContain('archive count/digest mismatch')
+    expect(migration).toContain('live rows changed after PREPARE')
+    expect(migration).toContain("v_batch.state NOT IN ('PREPARED', 'COMPLETE')")
+    expect(migration).toContain('v_archive_counts <> v_live_counts')
+    expect(migration).toContain('v_archive_digests <> v_live_digests')
+  })
+
+  it('does not change any serving or public materialized row', () => {
+    expect(migration).not.toMatch(/UPDATE\s+arena\.sources/i)
+    expect(migration).not.toMatch(/UPDATE\s+arena\.leaderboard_snapshots/i)
+    expect(migration).not.toMatch(/UPDATE\s+arena\.trader_stats/i)
+    expect(migration).not.toMatch(/DELETE\s+FROM\s+(arena|public)\./i)
+    expect(migration).toContain("'PREPARED'")
   })
 })
