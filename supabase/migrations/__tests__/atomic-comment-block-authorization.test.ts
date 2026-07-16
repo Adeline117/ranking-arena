@@ -56,6 +56,19 @@ describe('atomic comment block authorization migration', () => {
     expect(migration).toContain('comment wrappers do not acquire block edges first')
   })
 
+  it('distinguishes fresh cutover from replay and seals every preserved implementation', () => {
+    expect(migration).toContain("v_deploy_state := 'fresh'")
+    expect(migration).toContain("v_deploy_state := 'replay'")
+    expect(migration).toContain('partial atomic comment authorization state')
+    expect(migration).toContain(
+      'DROP FUNCTION IF EXISTS\n      public.lock_actor_can_interact_with_post_locked_impl'
+    )
+    expect(migration).toContain('atomic-comment-block-authorization:v1:')
+    expect(migration).toContain('sealed internal comment implementation has drifted')
+    expect(migration).toContain("pg_catalog.obj_description(function_row.oid, 'pg_proc')")
+    expect(migration).toContain('pg_catalog.md5(function_row.prosrc)')
+  })
+
   it('keeps helpers and implementations internal while exposing only canonical RPCs', () => {
     expect(migration).toContain('DO $converge_function_acls$')
     expect(migration).toContain('GRANT EXECUTE ON FUNCTION public.toggle_comment_reaction(')
@@ -77,5 +90,24 @@ describe('atomic comment block authorization migration', () => {
     expect(migration).toContain(
       '20260716113800 report target authorization must call the post helper before target row locks'
     )
+  })
+
+  it('rejects incompatible relation and dependency shapes before cutover', () => {
+    expect(migration).toContain("relation.relkind = 'r'")
+    expect(migration).toContain("relation.relpersistence = 'p'")
+    expect(migration).toContain('NOT relation.relispartition')
+    expect(migration).toContain('FROM pg_catalog.pg_rewrite AS rewrite_rule')
+    expect(migration).toContain('must not have rewrite rules before comment authorization cutover')
+    expect(migration).toContain('function_row.prolang = v_plpgsql_oid')
+    expect(migration).toContain(
+      "function_row.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype"
+    )
+    expect(migration).toContain(
+      "pg_catalog.strpos(v_comment_validator_source, 'FROM public.posts')"
+    )
+    expect(migration).toContain(
+      "pg_catalog.strpos(v_reaction_validator_source, 'FROM public.blocked_users')"
+    )
+    expect(migration).toContain("v_block_serializer_source ~* 'RETURN[[:space:]]+NEW[[:space:]]*;'")
   })
 })
