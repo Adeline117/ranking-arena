@@ -8,6 +8,7 @@ import { SectionCard, ToggleSwitch, RadioOption } from './shared'
 import { isHapticSupported, haptic, setHapticsEnabled } from '@/lib/utils/haptics'
 import { PushNotificationToggle } from '@/app/components/notifications/PushNotificationToggle'
 import { logger } from '@/lib/logger'
+import type { NotificationPreferenceField } from '@/lib/profile/notification-preferences'
 
 interface NotificationsSectionProps {
   notifyFollow: boolean
@@ -27,7 +28,12 @@ interface NotificationsSectionProps {
   emailDigest: 'none' | 'daily' | 'weekly'
   onEmailDigestChange: (v: 'none' | 'daily' | 'weekly') => void
   onToast?: (message: string, type: 'success' | 'error') => void
-  onToggleSave?: (field: string, value: boolean) => void
+  onToggleSave?: (
+    field: NotificationPreferenceField,
+    value: boolean,
+    previousValue: boolean,
+    setter: (value: boolean) => void
+  ) => void
 }
 
 export const NotificationsSection = React.memo(function NotificationsSection(
@@ -43,36 +49,42 @@ export const NotificationsSection = React.memo(function NotificationsSection(
   const items = [
     {
       key: 'follow',
+      field: 'notify_follow' as const,
       labelKey: 'newFollowerNotify',
       value: props.notifyFollow,
       setter: props.setNotifyFollow,
     },
     {
       key: 'like',
+      field: 'notify_like' as const,
       labelKey: 'postLikedNotify',
       value: props.notifyLike,
       setter: props.setNotifyLike,
     },
     {
       key: 'comment',
+      field: 'notify_comment' as const,
       labelKey: 'postCommentedNotify',
       value: props.notifyComment,
       setter: props.setNotifyComment,
     },
     {
       key: 'mention',
+      field: 'notify_mention' as const,
       labelKey: 'mentionedNotify',
       value: props.notifyMention,
       setter: props.setNotifyMention,
     },
     {
       key: 'message',
+      field: 'notify_message' as const,
       labelKey: 'newMessageNotify',
       value: props.notifyMessage,
       setter: props.setNotifyMessage,
     },
     {
       key: 'trader_events',
+      field: 'notify_trader_events' as const,
       labelKey: 'traderEventsNotify',
       value: props.notifyTraderEvents,
       setter: props.setNotifyTraderEvents,
@@ -114,7 +126,7 @@ export const NotificationsSection = React.memo(function NotificationsSection(
               checked={item.value}
               onChange={(v) => {
                 item.setter(v)
-                props.onToggleSave?.(`notify_${item.key}`, v)
+                props.onToggleSave?.(item.field, v, item.value, item.setter)
               }}
             />
           </Box>

@@ -5,23 +5,88 @@ import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { uiLogger } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
 import { validateHandle } from '../validation'
 import { isHapticsEnabled } from '@/lib/utils/haptics'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
-import { getViewerScope, isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
-import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import type { AuthSessionReturn } from '@/lib/hooks/useAuthSession'
+import {
+  EMAIL_DIGEST_VALUES,
+  type EmailDigestValue,
+  NOTIFICATION_PREFERENCE_INITIAL_KEYS,
+  type NotificationPreferenceField,
+} from '@/lib/profile/notification-preferences'
+import { NotificationPreferenceQueue } from '@/lib/profile/notification-preference-queue'
+import { LatestWriteQueue } from '@/lib/profile/latest-write-queue'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from './settings-viewer-scope'
+
+type NotificationWriteContext = {
+  accessToken: string
+  userId: string
+  sessionGeneration: number
+}
+
+type ProfileLoadOutcome = Pick<
+  SettingsViewerSnapshot,
+  'sessionGeneration' | 'userId' | 'viewerKey'
+> & {
+  status: 'loading' | 'ready' | 'failed'
+}
+
+type SettingsStateOwner = SettingsViewerSnapshot & {
+  profileGeneration: number
+}
+
+function settingsScopeMatches(
+  left: Pick<SettingsViewerSnapshot, 'sessionGeneration' | 'userId' | 'viewerKey'>,
+  right: Pick<SettingsViewerSnapshot, 'sessionGeneration' | 'userId' | 'viewerKey'>
+): boolean {
+  return (
+    left.viewerKey === right.viewerKey &&
+    left.sessionGeneration === right.sessionGeneration &&
+    left.userId === right.userId
+  )
+}
 
 interface UseSettingsHandlersProps {
+  auth: AuthSessionReturn
   showToast: (msg: string, type?: 'success' | 'error' | 'warning' | 'info') => void
   showConfirm: (title: string, message: string) => Promise<boolean>
   t: (key: string, ...args: unknown[]) => string
 }
 
-export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHandlersProps) {
+export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSettingsHandlersProps) {
   const router = useRouter()
-  const auth = useAuthSession()
   const submittingRef = useRef(false)
+  const profileLoadGenerationRef = useRef(0)
+  const authRef = useRef(auth)
+  authRef.current = auth
+
+  const captureViewer = useCallback(() => captureSettingsViewer(authRef.current), [])
+  const viewerIsCurrent = useCallback(
+    (snapshot: SettingsViewerSnapshot) => isSettingsViewerCurrent(snapshot, authRef.current),
+    []
+  )
+  const settingsStateOwnerRef = useRef<SettingsStateOwner | null>(null)
+  const profileLoadOutcomeRef = useRef<ProfileLoadOutcome | null>(null)
+  const stateBelongsToViewer = useCallback(
+    (snapshot: SettingsViewerSnapshot, expectedProfileGeneration?: number) => {
+      const owner = settingsStateOwnerRef.current
+      return (
+        !!owner &&
+        owner.profileGeneration === profileLoadGenerationRef.current &&
+        (expectedProfileGeneration === undefined ||
+          owner.profileGeneration === expectedProfileGeneration) &&
+        settingsScopeMatches(owner, snapshot) &&
+        viewerIsCurrent(snapshot)
+      )
+    },
+    [viewerIsCurrent]
+  )
 
   // Profile data
   const [handle, setHandle] = useState('')
@@ -77,6 +142,79 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   const [notifyMention, setNotifyMention] = useState(true)
   const [notifyMessage, setNotifyMessage] = useState(true)
   const [notifyTraderEvents, setNotifyTraderEvents] = useState(true)
+  const notificationFeedbackRef = useRef({ showToast, t })
+  notificationFeedbackRef.current = { showToast, t }
+  const notificationQueueRef = useRef<NotificationPreferenceQueue<NotificationWriteContext> | null>(
+    null
+  )
+  if (!notificationQueueRef.current) {
+    notificationQueueRef.current = new NotificationPreferenceQueue<NotificationWriteContext>({
+      write: async (field, value, context) => {
+        const result = await authedFetch<{ success?: unknown }>(
+          '/api/profile/notification-preferences',
+          'PATCH',
+          context.accessToken,
+          { field, value },
+          15_000,
+          {
+            expectedUserId: context.userId,
+            expectedSessionGeneration: context.sessionGeneration,
+          }
+        )
+        if (result.stale) return 'stale'
+        return result.ok && result.data?.success === true ? 'saved' : 'failed'
+      },
+      onPersisted: (field, value) => {
+        if (initialValuesRef.current) {
+          initialValuesRef.current[NOTIFICATION_PREFERENCE_INITIAL_KEYS[field]] = value
+        }
+      },
+      onFailed: () => {
+        const feedback = notificationFeedbackRef.current
+        feedback.showToast(feedback.t('saveFailed'), 'error')
+      },
+      onSaved: () => {
+        const feedback = notificationFeedbackRef.current
+        feedback.showToast(feedback.t('settingsSaved'), 'success')
+      },
+    })
+  }
+  const emailDigestPersistedRef = useRef<EmailDigestValue>('none')
+  const emailDigestQueueRef = useRef<LatestWriteQueue<
+    'email_digest',
+    EmailDigestValue,
+    NotificationWriteContext
+  > | null>(null)
+  if (!emailDigestQueueRef.current) {
+    emailDigestQueueRef.current = new LatestWriteQueue({
+      write: async (_field, value, context) => {
+        const result = await authedFetch<{ success?: unknown }>(
+          '/api/profile/notification-preferences',
+          'PATCH',
+          context.accessToken,
+          { field: 'email_digest', value },
+          15_000,
+          {
+            expectedUserId: context.userId,
+            expectedSessionGeneration: context.sessionGeneration,
+          }
+        )
+        if (result.stale) return 'stale'
+        return result.ok && result.data?.success === true ? 'saved' : 'failed'
+      },
+      onPersisted: (_field, value) => {
+        emailDigestPersistedRef.current = value
+      },
+      onFailed: () => {
+        const feedback = notificationFeedbackRef.current
+        feedback.showToast(feedback.t('saveFailed'), 'error')
+      },
+      onSaved: () => {
+        const feedback = notificationFeedbackRef.current
+        feedback.showToast(feedback.t('emailDigestSaved'), 'success')
+      },
+    })
+  }
   // 初值从持久化偏好读(2026-07-11);SSR 返回 true,客户端首渲染再校正
   const [hapticEnabled, setHapticEnabled] = useState(() => isHapticsEnabled())
 
@@ -134,7 +272,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   const [unblockingId, setUnblockingId] = useState<string | null>(null)
 
   // Email digest state
-  const [emailDigest, setEmailDigest] = useState<'none' | 'daily' | 'weekly'>('none')
+  const [emailDigest, setEmailDigest] = useState<EmailDigestValue>('none')
 
   // Account deletion state
   const [showDeleteAccountModal, setShowDeleteAccountModal] = useState(false)
@@ -150,12 +288,23 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   const [handleAvailable, setHandleAvailable] = useState<boolean | null>(null)
   const [checkingHandle, setCheckingHandle] = useState(false)
   const handleCheckTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const handleCheckGenerationRef = useRef(0)
+  const passkeyLoadGenerationRef = useRef(0)
+  const sessionLoadGenerationRef = useRef(0)
+  const blockedUsersLoadGenerationRef = useRef(0)
 
-  // Auth state
-  const [email, setEmail] = useState<string | null>(null)
-  const [userId, setUserId] = useState<string | null>(null)
+  // Profile readiness is separate from canonical authentication. A failed
+  // sensitive read must never turn into writable client-side defaults.
+  const [profileReady, setProfileReady] = useState(false)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
+  const userId = auth.userId
+  const email = auth.email
+
+  useEffect(() => {
+    notificationQueueRef.current?.invalidate()
+    emailDigestQueueRef.current?.invalidate()
+  }, [auth.sessionGeneration, auth.userId])
 
   // Validation state
   const [touchedFields, setTouchedFields] = useState<{
@@ -173,37 +322,70 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
   // ===== Debounced handle uniqueness check =====
   useEffect(() => {
+    const generation = ++handleCheckGenerationRef.current
+    if (handleCheckTimeoutRef.current) clearTimeout(handleCheckTimeoutRef.current)
+
     if (!handle || handle.length < 2 || !validateHandle(handle, t).valid) {
       setHandleAvailable(null)
+      setCheckingHandle(false)
       return
     }
     if (initialValuesRef.current && handle === initialValuesRef.current.handle) {
       setHandleAvailable(null)
+      setCheckingHandle(false)
       return
     }
 
-    if (handleCheckTimeoutRef.current) clearTimeout(handleCheckTimeoutRef.current)
     setCheckingHandle(true)
     handleCheckTimeoutRef.current = setTimeout(async () => {
       try {
-        const { data } = await supabase
-          .from('user_profiles')
-          .select('id')
-          .eq('handle', handle)
-          .neq('id', userId || '')
-          .maybeSingle()
-        setHandleAvailable(!data)
+        const scope = captureViewer()
+        if (!scope || !stateBelongsToViewer(scope) || scope.userId !== userId) {
+          if (handleCheckGenerationRef.current === generation) setHandleAvailable(null)
+          return
+        }
+        const result = await authedFetch<{ available?: unknown }>(
+          '/api/profile/handle-availability',
+          'POST',
+          scope.accessToken,
+          { handle },
+          15_000,
+          {
+            expectedUserId: scope.userId,
+            expectedSessionGeneration: scope.sessionGeneration,
+          }
+        )
+        if (handleCheckGenerationRef.current !== generation || !viewerIsCurrent(scope)) return
+        if (result.stale || !result.ok || typeof result.data?.available !== 'boolean') {
+          setHandleAvailable(null)
+          return
+        }
+        setHandleAvailable(result.data.available)
       } catch {
-        setHandleAvailable(null)
+        if (handleCheckGenerationRef.current === generation) setHandleAvailable(null)
       } finally {
-        setCheckingHandle(false)
+        if (handleCheckGenerationRef.current === generation) setCheckingHandle(false)
       }
     }, 500)
 
     return () => {
       if (handleCheckTimeoutRef.current) clearTimeout(handleCheckTimeoutRef.current)
+      if (handleCheckGenerationRef.current === generation) {
+        handleCheckGenerationRef.current += 1
+      }
     }
-  }, [handle, userId, t])
+  }, [
+    auth.accessToken,
+    auth.sessionGeneration,
+    auth.userId,
+    captureViewer,
+    handle,
+    profileReady,
+    stateBelongsToViewer,
+    t,
+    userId,
+    viewerIsCurrent,
+  ])
 
   // ===== Check unsaved changes =====
   const hasUnsavedChanges = useCallback(() => {
@@ -262,9 +444,104 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   }, [resetCountdown])
 
   // ===== Data loading functions =====
-  const loadProfile = async (uid: string) => {
+  const resetViewerState = useCallback((authPending: boolean) => {
+    if (handleCheckTimeoutRef.current) clearTimeout(handleCheckTimeoutRef.current)
+    handleCheckGenerationRef.current += 1
+    profileLoadGenerationRef.current += 1
+    passkeyLoadGenerationRef.current += 1
+    sessionLoadGenerationRef.current += 1
+    blockedUsersLoadGenerationRef.current += 1
+    notificationQueueRef.current?.invalidate()
+    emailDigestQueueRef.current?.invalidate()
+    settingsStateOwnerRef.current = null
+    profileLoadOutcomeRef.current = null
+
+    setHandle('')
+    setBio('')
+    setAvatarUrl(null)
+    setAvatarFile(null)
+    setPreviewUrl(null)
+    setCoverUrl(null)
+    setCoverFile(null)
+    setCoverPreviewUrl(null)
+    setShowAvatarCropper(false)
+    setShowCoverCropper(false)
+    setCropImageSrc(null)
+    initialValuesRef.current = null
+
+    setCurrentPassword('')
+    setNewPassword('')
+    setConfirmNewPassword('')
+    setSavingPassword(false)
+    setPasswordResetMode('password')
+    setResetCodeSent(false)
+    setSendingResetCode(false)
+    setResetCountdown(0)
+    setNewEmail('')
+    setSavingEmail(false)
+
+    setNotifyFollow(true)
+    setNotifyLike(true)
+    setNotifyComment(true)
+    setNotifyMention(true)
+    setNotifyMessage(true)
+    setNotifyTraderEvents(true)
+    setShowFollowers(true)
+    setShowFollowing(true)
+    setDmPermission('all')
+    setShowProBadge(true)
+
+    setTwoFAEnabled(false)
+    setTwoFASetupData(null)
+    setTwoFACode('')
+    setBackupCodes([])
+    setTwoFALoading(false)
+    setDisablePassword('')
+    setShowDisable2FA(false)
+
+    setPasskeys([])
+    setLoadingPasskeys(false)
+    setPasskeyBusy(false)
+    setNewPasskeyName('')
+    setSessions([])
+    setLoadingSessions(false)
+    setBlockedUsers([])
+    setLoadingBlockedUsers(false)
+    setUnblockingId(null)
+
+    setEmailDigest('none')
+    emailDigestPersistedRef.current = 'none'
+    setShowDeleteAccountModal(false)
+    setDeletePassword('')
+    setDeleteReason('')
+    setDeletingAccount(false)
+    setDeleteConfirm('')
+    setDeleteHasPassword(true)
+    setDeleteError(null)
+
+    setHandleAvailable(null)
+    setCheckingHandle(false)
+    setTouchedFields({ handle: false, newPassword: false, confirmPassword: false, newEmail: false })
+    setProfileReady(false)
+    setSaving(false)
+    setLoading(authPending)
+    submittingRef.current = false
+  }, [])
+
+  const loadProfile = useCallback(async () => {
+    const scope = captureViewer()
+    if (!scope) return
+    const loadGeneration = ++profileLoadGenerationRef.current
+    const loadIsCurrent = () =>
+      profileLoadGenerationRef.current === loadGeneration && viewerIsCurrent(scope)
+
     try {
+      settingsStateOwnerRef.current = null
+      profileLoadOutcomeRef.current = { ...scope, status: 'loading' }
+      notificationQueueRef.current?.invalidate()
+      emailDigestQueueRef.current?.invalidate()
       setLoading(true)
+      setProfileReady(false)
       // Safe columns via regular query + sensitive columns via SECURITY DEFINER RPC
       const [profileResult, sensitiveResult] = await Promise.all([
         supabase
@@ -272,64 +549,118 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
           .select(
             'handle, bio, avatar_url, cover_url, show_followers, show_following, dm_permission, show_pro_badge'
           )
-          .eq('id', uid)
+          .eq('id', scope.userId)
           .maybeSingle(),
-        supabase.rpc('get_own_profile_sensitive' as never).maybeSingle() as unknown as Promise<{
-          data: Record<string, unknown> | null
-          error: unknown
-        }>,
+        supabase.rpc('get_own_profile_sensitive').maybeSingle(),
       ])
-      const userProfile = profileResult.data
-      const sensitive = sensitiveResult.data as Record<string, unknown> | null
+      if (!loadIsCurrent()) return
 
-      if (userProfile) {
-        const p = {
-          handle: userProfile.handle || '',
-          bio: userProfile.bio || '',
-          avatarUrl: userProfile.avatar_url || null,
-          coverUrl: userProfile.cover_url || null,
-          notifyFollow: sensitive?.notify_follow !== false,
-          notifyLike: sensitive?.notify_like !== false,
-          notifyComment: sensitive?.notify_comment !== false,
-          notifyMention: sensitive?.notify_mention !== false,
-          notifyMessage: sensitive?.notify_message !== false,
-          notifyTraderEvents: sensitive?.notify_trader_events !== false,
-          showFollowers: userProfile.show_followers !== false,
-          showFollowing: userProfile.show_following !== false,
-          dmPermission: userProfile.dm_permission || 'all',
-          showProBadge: userProfile.show_pro_badge !== false,
-        }
-
-        setHandle(p.handle)
-        setBio(p.bio)
-        setAvatarUrl(p.avatarUrl)
-        setPreviewUrl(p.avatarUrl)
-        setCoverUrl(p.coverUrl)
-        setCoverPreviewUrl(p.coverUrl)
-        setTwoFAEnabled(sensitive?.totp_enabled === true)
-        setEmailDigest((sensitive?.email_digest as 'none' | 'daily' | 'weekly') || 'none')
-        setNotifyFollow(p.notifyFollow)
-        setNotifyLike(p.notifyLike)
-        setNotifyComment(p.notifyComment)
-        setNotifyMention(p.notifyMention)
-        setNotifyMessage(p.notifyMessage)
-        setNotifyTraderEvents(p.notifyTraderEvents)
-        setShowFollowers(p.showFollowers)
-        setShowFollowing(p.showFollowing)
-        setDmPermission(p.dmPermission as 'all' | 'mutual' | 'none')
-        setShowProBadge(p.showProBadge)
-
-        initialValuesRef.current = p
+      if (
+        profileResult.error ||
+        !profileResult.data ||
+        sensitiveResult.error ||
+        !sensitiveResult.data
+      ) {
+        throw (
+          profileResult.error ||
+          sensitiveResult.error ||
+          new Error('Profile provisioning is incomplete')
+        )
       }
+
+      const userProfile = profileResult.data
+      const sensitive = sensitiveResult.data
+      const digest = sensitive.email_digest
+      if (
+        typeof sensitive.notify_follow !== 'boolean' ||
+        typeof sensitive.notify_like !== 'boolean' ||
+        typeof sensitive.notify_comment !== 'boolean' ||
+        typeof sensitive.notify_mention !== 'boolean' ||
+        typeof sensitive.notify_message !== 'boolean' ||
+        typeof sensitive.notify_trader_events !== 'boolean' ||
+        typeof sensitive.totp_enabled !== 'boolean' ||
+        !EMAIL_DIGEST_VALUES.includes(digest as EmailDigestValue)
+      ) {
+        throw new Error('Sensitive profile contract is incomplete')
+      }
+
+      const dmPermission: 'all' | 'mutual' | 'none' =
+        userProfile.dm_permission === 'mutual' || userProfile.dm_permission === 'none'
+          ? userProfile.dm_permission
+          : 'all'
+      const p = {
+        handle: userProfile.handle || '',
+        bio: userProfile.bio || '',
+        avatarUrl: userProfile.avatar_url || null,
+        coverUrl: userProfile.cover_url || null,
+        notifyFollow: sensitive.notify_follow,
+        notifyLike: sensitive.notify_like,
+        notifyComment: sensitive.notify_comment,
+        notifyMention: sensitive.notify_mention,
+        notifyMessage: sensitive.notify_message,
+        notifyTraderEvents: sensitive.notify_trader_events,
+        showFollowers: userProfile.show_followers !== false,
+        showFollowing: userProfile.show_following !== false,
+        dmPermission,
+        showProBadge: userProfile.show_pro_badge !== false,
+      }
+
+      if (!loadIsCurrent()) return
+      setHandle(p.handle)
+      setBio(p.bio)
+      setAvatarUrl(p.avatarUrl)
+      setPreviewUrl(p.avatarUrl)
+      setCoverUrl(p.coverUrl)
+      setCoverPreviewUrl(p.coverUrl)
+      setTwoFAEnabled(sensitive.totp_enabled)
+      setEmailDigest(digest as EmailDigestValue)
+      emailDigestPersistedRef.current = digest as EmailDigestValue
+      setNotifyFollow(p.notifyFollow)
+      setNotifyLike(p.notifyLike)
+      setNotifyComment(p.notifyComment)
+      setNotifyMention(p.notifyMention)
+      setNotifyMessage(p.notifyMessage)
+      setNotifyTraderEvents(p.notifyTraderEvents)
+      setShowFollowers(p.showFollowers)
+      setShowFollowing(p.showFollowing)
+      setDmPermission(p.dmPermission)
+      setShowProBadge(p.showProBadge)
+      initialValuesRef.current = p
+      settingsStateOwnerRef.current = { ...scope, profileGeneration: loadGeneration }
+      profileLoadOutcomeRef.current = { ...scope, status: 'ready' }
+      setProfileReady(true)
     } catch (error) {
+      if (!loadIsCurrent()) return
       uiLogger.error('Error loading profile:', error)
+      settingsStateOwnerRef.current = null
+      profileLoadOutcomeRef.current = { ...scope, status: 'failed' }
+      initialValuesRef.current = null
+      setProfileReady(false)
+      showToast(t('saveFailedRetry'), 'error')
     } finally {
-      setLoading(false)
+      if (loadIsCurrent()) setLoading(false)
     }
-  }
+  }, [captureViewer, showToast, t, viewerIsCurrent])
+
+  useEffect(() => {
+    const authPending = auth.loading || !auth.authChecked
+    resetViewerState(authPending)
+    if (authPending || !auth.userId) return
+    void loadProfile()
+  }, [
+    auth.authChecked,
+    auth.loading,
+    auth.sessionGeneration,
+    auth.userId,
+    loadProfile,
+    resetViewerState,
+  ])
 
   // ===== Image handlers =====
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
+    const profileGeneration = profileLoadGenerationRef.current
     const file = e.target.files?.[0]
     if (file) {
       if (file.size > 5 * 1024 * 1024) {
@@ -338,6 +669,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       }
       const reader = new FileReader()
       reader.onloadend = () => {
+        if (!stateBelongsToViewer(scope, profileGeneration)) return
         setCropImageSrc(reader.result as string)
         setShowAvatarCropper(true)
       }
@@ -347,6 +679,8 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   }
 
   const handleAvatarCropComplete = (croppedBlob: Blob) => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
     try {
       setAvatarFile(new File([croppedBlob], 'avatar.jpg', { type: 'image/jpeg' }))
       setPreviewUrl(URL.createObjectURL(croppedBlob))
@@ -360,6 +694,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   }
 
   const handleCoverChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
+    const profileGeneration = profileLoadGenerationRef.current
     const file = e.target.files?.[0]
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
@@ -368,6 +705,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       }
       const reader = new FileReader()
       reader.onloadend = () => {
+        if (!stateBelongsToViewer(scope, profileGeneration)) return
         setCropImageSrc(reader.result as string)
         setShowCoverCropper(true)
       }
@@ -377,6 +715,8 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   }
 
   const handleCoverCropComplete = (croppedBlob: Blob) => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
     try {
       setCoverFile(new File([croppedBlob], 'cover.jpg', { type: 'image/jpeg' }))
       setCoverPreviewUrl(URL.createObjectURL(croppedBlob))
@@ -390,20 +730,24 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
   }
 
   const handleRemoveCover = useCallback(() => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
     setCoverFile(null)
     setCoverPreviewUrl(null)
     setCoverUrl(null)
     showToast(t('coverRemoveHint'), 'info')
-  }, [showToast, t])
+  }, [captureViewer, showToast, stateBelongsToViewer, t])
 
   // ===== Upload helper =====
   const uploadFile = async (
     file: File,
     bucket: string,
-    uid: string,
+    scope: SettingsViewerSnapshot,
+    profileGeneration: number,
     maxSize: number
-  ): Promise<string | null> => {
+  ): Promise<string | null | undefined> => {
     try {
+      if (!stateBelongsToViewer(scope, profileGeneration)) return undefined
       if (file.size > maxSize) {
         showToast(
           t('imageSizeExceed').replace('{size}', String(Math.round(maxSize / 1024 / 1024))),
@@ -419,21 +763,20 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('userId', uid)
+      formData.append('userId', scope.userId)
       formData.append('bucket', bucket)
 
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
       const response = await fetch('/api/upload-profile-image', {
         method: 'POST',
         body: formData,
         headers: {
-          ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          Authorization: `Bearer ${scope.accessToken}`,
           ...getCsrfHeaders(),
         },
       })
+      if (!stateBelongsToViewer(scope, profileGeneration)) return undefined
       const result = await response.json()
+      if (!stateBelongsToViewer(scope, profileGeneration)) return undefined
       if (!response.ok) {
         uiLogger.error(`${bucket} upload error:`, result.error)
         showToast(result.error || t('uploadFailed'), 'error')
@@ -441,6 +784,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       }
       return result.url
     } catch (error: unknown) {
+      if (!stateBelongsToViewer(scope, profileGeneration)) return undefined
       const errorMessage = error instanceof Error ? error.message : t('unknownError')
       showToast(`${t('uploadException')}: ${errorMessage}`, 'error')
       return null
@@ -449,7 +793,13 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
   // ===== Save profile =====
   const handleSaveProfile = async () => {
-    if (submittingRef.current || saving || !userId) return
+    const scope = captureViewer()
+    if (submittingRef.current || saving || !scope) return
+    const profileGeneration = profileLoadGenerationRef.current
+    if (!stateBelongsToViewer(scope, profileGeneration) || !initialValuesRef.current) {
+      showToast(t('saveFailedRetry'), 'error')
+      return
+    }
     if (handle && !handleValidation.valid) {
       showToast(handleValidation.message, 'error')
       return
@@ -471,18 +821,29 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     const previousAvatarUrl = avatarUrl
     const previousCoverUrl = coverUrl
     try {
-      const { data: currentProfile } = await supabase
+      const { data: currentProfile, error: currentProfileError } = await supabase
         .from('user_profiles')
         .select('avatar_url, cover_url')
-        .eq('id', userId)
+        .eq('id', scope.userId)
         .maybeSingle()
+      if (!stateBelongsToViewer(scope, profileGeneration)) return
+      if (currentProfileError || !currentProfile) {
+        throw currentProfileError || new Error('Profile provisioning is incomplete')
+      }
 
       let finalAvatarUrl = avatarUrl
       let finalCoverUrl = coverUrl
       let uploadFailed = false
 
       if (avatarFile) {
-        const uploadedUrl = await uploadFile(avatarFile, 'avatars', userId, 5 * 1024 * 1024)
+        const uploadedUrl = await uploadFile(
+          avatarFile,
+          'avatars',
+          scope,
+          profileGeneration,
+          5 * 1024 * 1024
+        )
+        if (!stateBelongsToViewer(scope, profileGeneration) || uploadedUrl === undefined) return
         if (uploadedUrl) {
           finalAvatarUrl = uploadedUrl
           setAvatarUrl(uploadedUrl)
@@ -498,7 +859,14 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       }
 
       if (coverFile) {
-        const uploadedUrl = await uploadFile(coverFile, 'covers', userId, 10 * 1024 * 1024)
+        const uploadedUrl = await uploadFile(
+          coverFile,
+          'covers',
+          scope,
+          profileGeneration,
+          10 * 1024 * 1024
+        )
+        if (!stateBelongsToViewer(scope, profileGeneration) || uploadedUrl === undefined) return
         if (uploadedUrl) {
           finalCoverUrl = uploadedUrl
           setCoverUrl(uploadedUrl)
@@ -513,27 +881,26 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         }
       }
 
-      const { error: saveError } = await supabase
-        .from('user_profiles')
-        .update({
-          handle: handle || null,
-          bio: bio || null,
-          avatar_url: finalAvatarUrl || null,
-          cover_url: finalCoverUrl || null,
-          notify_follow: notifyFollow,
-          notify_like: notifyLike,
-          notify_comment: notifyComment,
-          notify_mention: notifyMention,
-          notify_message: notifyMessage,
-          notify_trader_events: notifyTraderEvents,
-          show_followers: showFollowers,
-          show_following: showFollowing,
-          dm_permission: dmPermission,
-          show_pro_badge: showProBadge,
-        })
-        .eq('id', userId)
+      const profileUpdates: Record<string, unknown> = {
+        bio: bio || null,
+        avatar_url: finalAvatarUrl || null,
+        cover_url: finalCoverUrl || null,
+        show_followers: showFollowers,
+        show_following: showFollowing,
+        dm_permission: dmPermission,
+        show_pro_badge: showProBadge,
+      }
+      if (handle !== initialValuesRef.current?.handle) profileUpdates.handle = handle || null
 
-      if (saveError) {
+      const { data: savedProfile, error: saveError } = await supabase
+        .from('user_profiles')
+        .update(profileUpdates)
+        .eq('id', scope.userId)
+        .select('id')
+        .maybeSingle()
+      if (!stateBelongsToViewer(scope, profileGeneration)) return
+
+      if (saveError || !savedProfile) {
         uiLogger.error('Error saving profile:', JSON.stringify(saveError, null, 2))
         // Revert avatar/cover preview on DB save failure
         setPreviewUrl(previousAvatarUrl)
@@ -541,28 +908,35 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         setCoverPreviewUrl(previousCoverUrl)
         setCoverFile(null)
         if (
-          saveError.code === '23505' ||
-          saveError.message?.includes('unique') ||
-          saveError.message?.includes('duplicate')
+          saveError?.code === '23505' ||
+          saveError?.message?.includes('unique') ||
+          saveError?.message?.includes('duplicate')
         ) {
           showToast(t('usernameInUse'), 'error')
         } else {
-          showToast(t('saveFailedWithMsg').replace('{msg}', saveError.message || ''), 'error')
+          showToast(
+            t('saveFailedWithMsg').replace(
+              '{msg}',
+              saveError?.message || 'Profile update did not match the signed-in user'
+            ),
+            'error'
+          )
         }
         return
       }
 
+      const persistedNotificationValues = initialValuesRef.current
       initialValuesRef.current = {
         handle,
         bio,
         avatarUrl: finalAvatarUrl,
         coverUrl: finalCoverUrl,
-        notifyFollow,
-        notifyLike,
-        notifyComment,
-        notifyMention,
-        notifyMessage,
-        notifyTraderEvents,
+        notifyFollow: persistedNotificationValues?.notifyFollow ?? notifyFollow,
+        notifyLike: persistedNotificationValues?.notifyLike ?? notifyLike,
+        notifyComment: persistedNotificationValues?.notifyComment ?? notifyComment,
+        notifyMention: persistedNotificationValues?.notifyMention ?? notifyMention,
+        notifyMessage: persistedNotificationValues?.notifyMessage ?? notifyMessage,
+        notifyTraderEvents: persistedNotificationValues?.notifyTraderEvents ?? notifyTraderEvents,
         showFollowers,
         showFollowing,
         dmPermission,
@@ -572,25 +946,24 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       setCoverFile(null)
 
       try {
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        if (session?.access_token) {
-          await fetch('/api/revalidate/profile', {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${session.access_token}`, ...getCsrfHeaders() },
-          })
-        }
+        await fetch('/api/revalidate/profile', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${scope.accessToken}`, ...getCsrfHeaders() },
+        })
+        if (!stateBelongsToViewer(scope, profileGeneration)) return
       } catch (revalidateError) {
+        if (!stateBelongsToViewer(scope, profileGeneration)) return
         logger.warn('[Settings] Failed to revalidate profile cache:', revalidateError)
       }
 
+      if (!stateBelongsToViewer(scope, profileGeneration)) return
       showToast(
         uploadFailed ? t('settingsPartialSaved') : t('settingsSaved'),
         uploadFailed ? 'warning' : 'success'
       )
       router.refresh()
     } catch (error) {
+      if (!stateBelongsToViewer(scope, profileGeneration)) return
       uiLogger.error('Error saving:', error)
       // Revert avatar/cover preview on unexpected failure
       setPreviewUrl(previousAvatarUrl)
@@ -599,29 +972,40 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       setCoverFile(null)
       showToast(t('saveFailedRetry'), 'error')
     } finally {
-      setSaving(false)
-      submittingRef.current = false
+      if (viewerIsCurrent(scope)) {
+        setSaving(false)
+        submittingRef.current = false
+      }
     }
   }
 
   // ===== Auth handlers =====
-  const getFreshToken = async (): Promise<string | null> => {
-    const scope = getViewerScope()
-    if (!scope.userId || !isViewerScopeCurrent(scope)) return null
-    return tokenRefreshCoordinator.forceRefresh({
+  const getFreshToken = async (scope: SettingsViewerSnapshot): Promise<string | null> => {
+    if (!viewerIsCurrent(scope)) return null
+    const token = await tokenRefreshCoordinator.forceRefresh({
       expectedUserId: scope.userId,
       sessionGeneration: scope.sessionGeneration,
     })
+    return viewerIsCurrent(scope) ? token : null
   }
 
   const handleSendResetCode = async () => {
-    if (submittingRef.current || sendingResetCode || !email) return
+    const scope = captureViewer()
+    if (
+      submittingRef.current ||
+      sendingResetCode ||
+      !scope ||
+      !stateBelongsToViewer(scope) ||
+      !scope.email
+    )
+      return
     submittingRef.current = true
     setSendingResetCode(true)
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      const { error } = await supabase.auth.resetPasswordForEmail(scope.email, {
         redirectTo: `${window.location.origin}/reset-password`,
       })
+      if (!viewerIsCurrent(scope)) return
       if (error) {
         showToast(error.message, 'error')
         return
@@ -630,15 +1014,27 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       setResetCountdown(60)
       showToast(t('resetEmailSent'), 'success')
     } catch (error: unknown) {
+      if (!viewerIsCurrent(scope)) return
       showToast(error instanceof Error ? error.message : t('sendFailed'), 'error')
     } finally {
-      setSendingResetCode(false)
-      submittingRef.current = false
+      if (viewerIsCurrent(scope)) {
+        setSendingResetCode(false)
+        submittingRef.current = false
+      }
     }
   }
 
   const handleChangePassword = async () => {
-    if (submittingRef.current || savingPassword || !currentPassword || !newPassword || !email)
+    const scope = captureViewer()
+    if (
+      submittingRef.current ||
+      savingPassword ||
+      !scope ||
+      !stateBelongsToViewer(scope) ||
+      !scope.email ||
+      !currentPassword ||
+      !newPassword
+    )
       return
     if (newPassword !== confirmNewPassword) {
       showToast(t('validationPasswordMismatch'), 'error')
@@ -652,16 +1048,17 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     setSavingPassword(true)
     try {
       const authScope = {
-        expectedUserId: auth.userId,
-        sessionGeneration: auth.sessionGeneration,
+        expectedUserId: scope.userId,
+        sessionGeneration: scope.sessionGeneration,
       }
       const { error: signInError } = await tokenRefreshCoordinator.reauthenticateWithPassword(
         {
-          email,
+          email: scope.email,
           password: currentPassword,
         },
         authScope
       )
+      if (!viewerIsCurrent(scope)) return
       if (signInError) {
         showToast(t('currentPasswordWrong'), 'error')
         return
@@ -670,18 +1067,23 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         { password: newPassword },
         authScope
       )
+      if (!viewerIsCurrent(scope)) return
       if (error) {
         showToast(error.message, 'error')
         return
       }
-      // After a password change, terminate OTHER devices FOR REAL. The old call
-      // hit /api/settings/sessions (the login_sessions table), which nothing
-      // enforces — so other devices' Supabase refresh tokens stayed valid and the
-      // "kick out other devices" was a no-op. `signOut({ scope: 'others' })`
-      // invalidates every session except the current one at the Supabase auth layer.
+      // After a password change, terminate OTHER devices FOR REAL. Pass the
+      // exact A token explicitly so a late A completion can never read B's
+      // newly-active browser session and revoke B's other devices.
       try {
-        await supabase.auth.signOut({ scope: 'others' })
+        const revocationToken = await getFreshToken(scope)
+        if (!viewerIsCurrent(scope)) return
+        if (!revocationToken) throw new Error('Could not refresh the session revocation token')
+        const { error: revokeError } = await supabase.auth.admin.signOut(revocationToken, 'others')
+        if (!viewerIsCurrent(scope)) return
+        if (revokeError) throw revokeError
       } catch (revokeErr) {
+        if (!viewerIsCurrent(scope)) return
         // Non-critical: password was changed even if session revocation fails
         uiLogger.warn('[ChangePassword] Failed to revoke other sessions:', revokeErr)
       }
@@ -691,15 +1093,20 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       setConfirmNewPassword('')
       setTouchedFields((prev) => ({ ...prev, newPassword: false, confirmPassword: false }))
     } catch (error: unknown) {
+      if (!viewerIsCurrent(scope)) return
       showToast(error instanceof Error ? error.message : t('changeFailed'), 'error')
     } finally {
-      setSavingPassword(false)
-      submittingRef.current = false
+      if (viewerIsCurrent(scope)) {
+        setSavingPassword(false)
+        submittingRef.current = false
+      }
     }
   }
 
   const handleChangeEmail = async () => {
-    if (submittingRef.current || savingEmail || !newEmail) return
+    const scope = captureViewer()
+    if (submittingRef.current || savingEmail || !scope || !stateBelongsToViewer(scope) || !newEmail)
+      return
     // Basic server-side email format validation before calling Supabase Auth
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
     if (!emailRegex.test(newEmail.trim())) {
@@ -711,8 +1118,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
     try {
       const { error } = await tokenRefreshCoordinator.updateUser(
         { email: newEmail.trim() },
-        { expectedUserId: auth.userId, sessionGeneration: auth.sessionGeneration }
+        { expectedUserId: scope.userId, sessionGeneration: scope.sessionGeneration }
       )
+      if (!viewerIsCurrent(scope)) return
       if (error) {
         showToast(error.message, 'error')
         return
@@ -721,20 +1129,25 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       setNewEmail('')
       setTouchedFields((prev) => ({ ...prev, newEmail: false }))
     } catch (error: unknown) {
+      if (!viewerIsCurrent(scope)) return
       showToast(error instanceof Error ? error.message : t('changeFailed'), 'error')
     } finally {
-      setSavingEmail(false)
-      submittingRef.current = false
+      if (viewerIsCurrent(scope)) {
+        setSavingEmail(false)
+        submittingRef.current = false
+      }
     }
   }
 
   // ===== 2FA handlers =====
   const handleSetup2FA = async () => {
-    if (submittingRef.current || twoFALoading) return
+    const scope = captureViewer()
+    if (submittingRef.current || twoFALoading || !scope || !stateBelongsToViewer(scope)) return
     submittingRef.current = true
     setTwoFALoading(true)
     try {
-      const token = await getFreshToken()
+      const token = await getFreshToken(scope)
+      if (!viewerIsCurrent(scope)) return
       if (!token) {
         showToast(t('pleaseLoginFirst'), 'error')
         return
@@ -743,26 +1156,41 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, ...getCsrfHeaders() },
       })
+      if (!viewerIsCurrent(scope)) return
       const data = await res.json()
+      if (!viewerIsCurrent(scope)) return
       if (!res.ok) {
         showToast(data.error || t('operationFailed'), 'error')
         return
       }
       setTwoFASetupData({ qrCodeDataUrl: data.qrCode, secret: data.secret })
     } catch {
+      if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
     } finally {
-      setTwoFALoading(false)
-      submittingRef.current = false
+      if (viewerIsCurrent(scope)) {
+        setTwoFALoading(false)
+        submittingRef.current = false
+      }
     }
   }
 
   const handleVerify2FA = async () => {
-    if (submittingRef.current || twoFALoading || !twoFACode || twoFACode.length !== 6) return
+    const scope = captureViewer()
+    if (
+      submittingRef.current ||
+      twoFALoading ||
+      !scope ||
+      !stateBelongsToViewer(scope) ||
+      !twoFACode ||
+      twoFACode.length !== 6
+    )
+      return
     submittingRef.current = true
     setTwoFALoading(true)
     try {
-      const token = await getFreshToken()
+      const token = await getFreshToken(scope)
+      if (!viewerIsCurrent(scope)) return
       if (!token) {
         showToast(t('pleaseLoginFirst'), 'error')
         return
@@ -776,7 +1204,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         },
         body: JSON.stringify({ code: twoFACode }),
       })
+      if (!viewerIsCurrent(scope)) return
       const data = await res.json()
+      if (!viewerIsCurrent(scope)) return
       if (!res.ok) {
         showToast(data.error || t('verificationFailed'), 'error')
         return
@@ -787,19 +1217,31 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       setTwoFACode('')
       showToast(t('twoFAEnabled'), 'success')
     } catch {
+      if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
     } finally {
-      setTwoFALoading(false)
-      submittingRef.current = false
+      if (viewerIsCurrent(scope)) {
+        setTwoFALoading(false)
+        submittingRef.current = false
+      }
     }
   }
 
   const handleDisable2FA = async () => {
-    if (submittingRef.current || twoFALoading || !disablePassword) return
+    const scope = captureViewer()
+    if (
+      submittingRef.current ||
+      twoFALoading ||
+      !scope ||
+      !stateBelongsToViewer(scope) ||
+      !disablePassword
+    )
+      return
     submittingRef.current = true
     setTwoFALoading(true)
     try {
-      const token = await getFreshToken()
+      const token = await getFreshToken(scope)
+      if (!viewerIsCurrent(scope)) return
       if (!token) {
         showToast(t('pleaseLoginFirst'), 'error')
         return
@@ -813,7 +1255,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         },
         body: JSON.stringify({ password: disablePassword }),
       })
+      if (!viewerIsCurrent(scope)) return
       const data = await res.json()
+      if (!viewerIsCurrent(scope)) return
       if (!res.ok) {
         showToast(data.error || t('closeFailed'), 'error')
         return
@@ -824,49 +1268,65 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       setBackupCodes([])
       showToast(t('twoFADisabled'), 'success')
     } catch {
+      if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
     } finally {
-      setTwoFALoading(false)
-      submittingRef.current = false
+      if (viewerIsCurrent(scope)) {
+        setTwoFALoading(false)
+        submittingRef.current = false
+      }
     }
   }
 
   // ===== Passkey (WebAuthn) handlers =====
-  const loadPasskeys = useCallback(async () => {
-    setLoadingPasskeys(true)
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        setLoadingPasskeys(false)
-        return
+  const loadPasskeys = useCallback(
+    async (expectedScope?: SettingsViewerSnapshot) => {
+      const scope = expectedScope ?? captureViewer()
+      if (!scope) return
+      const loadGeneration = ++passkeyLoadGenerationRef.current
+      const loadIsCurrent = () =>
+        passkeyLoadGenerationRef.current === loadGeneration && viewerIsCurrent(scope)
+      setLoadingPasskeys(true)
+      try {
+        const result = await authedFetch<{ passkeys?: PasskeyInfo[] }>(
+          '/api/auth/webauthn/credentials',
+          'GET',
+          scope.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: scope.userId,
+            expectedSessionGeneration: scope.sessionGeneration,
+          }
+        )
+        if (!loadIsCurrent() || result.stale) return
+        if (result.ok) {
+          setPasskeys(result.data?.passkeys || [])
+        }
+      } catch (error) {
+        if (!loadIsCurrent()) return
+        uiLogger.error('[Passkeys] Load error:', error)
+      } finally {
+        if (loadIsCurrent()) setLoadingPasskeys(false)
       }
-      const res = await fetch('/api/auth/webauthn/credentials', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setPasskeys((data.passkeys || []) as PasskeyInfo[])
-      }
-    } catch (error) {
-      uiLogger.error('[Passkeys] Load error:', error)
-    } finally {
-      setLoadingPasskeys(false)
-    }
-  }, [])
+    },
+    [captureViewer, viewerIsCurrent]
+  )
 
   const handleAddPasskey = async () => {
-    if (submittingRef.current || passkeyBusy) return
+    const scope = captureViewer()
+    if (submittingRef.current || passkeyBusy || !scope || !stateBelongsToViewer(scope)) return
     submittingRef.current = true
     setPasskeyBusy(true)
     try {
       const { startRegistration, browserSupportsWebAuthn } = await import('@simplewebauthn/browser')
+      if (!viewerIsCurrent(scope)) return
       if (!browserSupportsWebAuthn()) {
         showToast(t('passkeyNotSupported'), 'error')
         return
       }
-      const token = await getFreshToken()
+      const token = await getFreshToken(scope)
+      if (!viewerIsCurrent(scope)) return
       if (!token) {
         showToast(t('pleaseLoginFirst'), 'error')
         return
@@ -876,7 +1336,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         method: 'POST',
         headers: { Authorization: `Bearer ${token}`, ...getCsrfHeaders() },
       })
+      if (!viewerIsCurrent(scope)) return
       const optData = await optRes.json().catch(() => ({}))
+      if (!viewerIsCurrent(scope)) return
       if (!optRes.ok || !optData?.optionsJSON) {
         showToast(optData?.error || t('passkeyError'), 'error')
         return
@@ -885,7 +1347,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       let assertion
       try {
         assertion = await startRegistration({ optionsJSON: optData.optionsJSON })
+        if (!viewerIsCurrent(scope)) return
       } catch (err) {
+        if (!viewerIsCurrent(scope)) return
         const name = (err as Error)?.name
         showToast(
           name === 'NotAllowedError' || name === 'AbortError'
@@ -905,7 +1369,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         },
         body: JSON.stringify({ assertion, deviceName: newPasskeyName.trim() || undefined }),
       })
+      if (!viewerIsCurrent(scope)) return
       const verifyData = await verifyRes.json().catch(() => ({}))
+      if (!viewerIsCurrent(scope)) return
       if (!verifyRes.ok || !verifyData?.verified) {
         showToast(verifyData?.error || t('passkeyError'), 'error')
         return
@@ -913,21 +1379,27 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
 
       showToast(t('passkeyAdded'), 'success')
       setNewPasskeyName('')
-      await loadPasskeys()
+      await loadPasskeys(scope)
     } catch (error) {
+      if (!viewerIsCurrent(scope)) return
       uiLogger.error('[Passkeys] Add error:', error)
       showToast(t('passkeyError'), 'error')
     } finally {
-      setPasskeyBusy(false)
-      submittingRef.current = false
+      if (viewerIsCurrent(scope)) {
+        setPasskeyBusy(false)
+        submittingRef.current = false
+      }
     }
   }
 
   const handleRemovePasskey = async (id: string) => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
     const confirmed = await showConfirm(t('passkeyRemoveTitle'), t('passkeyRemoveConfirm'))
-    if (!confirmed) return
+    if (!confirmed || !viewerIsCurrent(scope)) return
     try {
-      const token = await getFreshToken()
+      const token = await getFreshToken(scope)
+      if (!viewerIsCurrent(scope)) return
       if (!token) {
         showToast(t('pleaseLoginFirst'), 'error')
         return
@@ -941,6 +1413,7 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         },
         body: JSON.stringify({ id }),
       })
+      if (!viewerIsCurrent(scope)) return
       if (res.ok) {
         setPasskeys((prev) => prev.filter((p) => p.id !== id))
         showToast(t('passkeyRemoved'), 'success')
@@ -948,32 +1421,34 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         showToast(t('operationFailed'), 'error')
       }
     } catch {
+      if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
     }
   }
 
   // ===== Sessions handlers =====
   const loadSessions = useCallback(async () => {
+    const scope = captureViewer()
+    if (!scope) return
+    const loadGeneration = ++sessionLoadGenerationRef.current
+    const loadIsCurrent = () =>
+      sessionLoadGenerationRef.current === loadGeneration && viewerIsCurrent(scope)
     setLoadingSessions(true)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        setLoadingSessions(false)
-        return
-      }
-      const res = await fetch('/api/settings/sessions', {
-        headers: { Authorization: `Bearer ${session.access_token}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        const sessionList = (data.sessions || []) as Array<{
+      const result = await authedFetch<{
+        sessions?: Array<{
           id: string
           deviceInfo: string | null
           ipAddress: string | null
           lastActiveAt: string | null
         }>
+      }>('/api/settings/sessions', 'GET', scope.accessToken, undefined, 15_000, {
+        expectedUserId: scope.userId,
+        expectedSessionGeneration: scope.sessionGeneration,
+      })
+      if (!loadIsCurrent() || result.stale) return
+      if (result.ok) {
+        const sessionList = result.data?.sessions || []
         setSessions(
           sessionList.map((s, index) => ({
             id: s.id,
@@ -990,79 +1465,99 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         )
       }
     } catch (error) {
+      if (!loadIsCurrent()) return
       uiLogger.error('[Sessions] Load error:', error)
     } finally {
-      setLoadingSessions(false)
+      if (loadIsCurrent()) setLoadingSessions(false)
     }
-  }, [])
+  }, [captureViewer, viewerIsCurrent])
 
   const handleRevokeSession = async (sessionId: string) => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      const res = await fetch('/api/settings/sessions', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
+      const result = await authedFetch(
+        '/api/settings/sessions',
+        'DELETE',
+        scope.accessToken,
+        {
+          sessionId,
         },
-        body: JSON.stringify({ sessionId }),
-      })
-      if (res.ok) {
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
+      )
+      if (!viewerIsCurrent(scope) || result.stale) return
+      if (result.ok) {
         setSessions((prev) => prev.filter((s) => s.id !== sessionId))
         showToast(t('sessionRevoked'), 'success')
       } else showToast(t('operationFailed'), 'error')
     } catch {
+      if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
     }
   }
 
   const handleRevokeAllSessions = async () => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
     const confirmed = await showConfirm(t('logoutAllDevices'), t('logoutAllDevicesConfirm'))
-    if (!confirmed) return
+    if (!confirmed || !viewerIsCurrent(scope)) return
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      const res = await fetch('/api/settings/sessions', {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
+      const result = await authedFetch(
+        '/api/settings/sessions',
+        'DELETE',
+        scope.accessToken,
+        {
+          all: true,
         },
-        body: JSON.stringify({ all: true }),
-      })
-      if (res.ok) {
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
+      )
+      if (!viewerIsCurrent(scope) || result.stale) return
+      if (result.ok) {
         setSessions((prev) => prev.filter((s) => s.isCurrent))
         showToast(t('logoutAllSuccess'), 'success')
       } else showToast(t('operationFailed'), 'error')
     } catch {
+      if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
     }
   }
 
   // ===== Blocked users handlers =====
-  const loadBlockedUsers = useCallback(async (uid: string) => {
+  const loadBlockedUsers = useCallback(async () => {
+    const scope = captureViewer()
+    if (!scope) return
+    const loadGeneration = ++blockedUsersLoadGenerationRef.current
+    const loadIsCurrent = () =>
+      blockedUsersLoadGenerationRef.current === loadGeneration && viewerIsCurrent(scope)
     setLoadingBlockedUsers(true)
     try {
       const { data: blockedRows, error } = await supabase
         .from('blocked_users')
         .select('blocked_id, created_at')
-        .eq('blocker_id', uid)
-      if (error || !blockedRows || blockedRows.length === 0) {
+        .eq('blocker_id', scope.userId)
+      if (!loadIsCurrent()) return
+      if (error || !blockedRows) throw error || new Error('Blocked users read returned no rows')
+      if (blockedRows.length === 0) {
         setBlockedUsers([])
         return
       }
       const blockedIds = blockedRows.map((r) => r.blocked_id as string)
-      const { data: profiles } = await supabase
+      const { data: profiles, error: profilesError } = await supabase
         .from('user_profiles')
         .select('id, handle, avatar_url')
         .in('id', blockedIds)
+      if (!loadIsCurrent()) return
+      if (profilesError || !profiles) {
+        throw profilesError || new Error('Blocked profile read returned no rows')
+      }
       const profileMap = new Map((profiles || []).map((p) => [p.id as string, p]))
       setBlockedUsers(
         blockedRows.map((row) => {
@@ -1076,63 +1571,75 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
         })
       )
     } catch (error) {
+      if (!loadIsCurrent()) return
       uiLogger.error('[BlockedUsers] Load error:', error)
     } finally {
-      setLoadingBlockedUsers(false)
+      if (loadIsCurrent()) setLoadingBlockedUsers(false)
     }
-  }, [])
+  }, [captureViewer, viewerIsCurrent])
 
   const handleUnblock = async (blockedId: string) => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
     setUnblockingId(blockedId)
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session?.access_token) return
-      const res = await fetch(`/api/users/${blockedId}/block`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${session.access_token}`, ...getCsrfHeaders() },
-      })
-      if (res.ok) {
+      const result = await authedFetch(
+        `/api/users/${blockedId}/block`,
+        'DELETE',
+        scope.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
+      )
+      if (!viewerIsCurrent(scope) || result.stale) return
+      if (result.ok) {
         setBlockedUsers((prev) => prev.filter((u) => u.blockedId !== blockedId))
         showToast(t('unblocked'), 'success')
       } else showToast(t('operationFailed'), 'error')
     } catch {
+      if (!viewerIsCurrent(scope)) return
       showToast(t('networkError'), 'error')
     } finally {
-      setUnblockingId(null)
+      if (viewerIsCurrent(scope)) setUnblockingId(null)
     }
   }
 
   // ===== Email digest handler =====
-  const handleEmailDigestChange = async (value: 'none' | 'daily' | 'weekly') => {
-    if (!userId) return
-    const previous = emailDigest
-    setEmailDigest(value)
-    try {
-      const { error } = await supabase
-        .from('user_profiles')
-        .update({ email_digest: value })
-        .eq('id', userId)
-      if (error) {
-        setEmailDigest(previous)
-        showToast(t('saveFailed'), 'error')
-        return
-      }
-      showToast(t('emailDigestSaved'), 'success')
-    } catch {
-      setEmailDigest(previous)
+  const handleEmailDigestChange = (value: EmailDigestValue) => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) {
+      setEmailDigest(emailDigestPersistedRef.current)
       showToast(t('saveFailed'), 'error')
+      return
     }
+
+    const previousPersisted = emailDigestPersistedRef.current
+    setEmailDigest(value)
+    void emailDigestQueueRef.current?.enqueue(
+      'email_digest',
+      value,
+      previousPersisted,
+      setEmailDigest,
+      {
+        accessToken: scope.accessToken,
+        userId: scope.userId,
+        sessionGeneration: scope.sessionGeneration,
+      }
+    )
   }
 
   // ===== Account handlers =====
   const handleLogout = async () => {
-    const scope = getViewerScope()
+    const scope = captureViewer()
+    if (!scope) return
     const confirmed = await showConfirm(t('logoutTitle'), t('logoutConfirm'))
-    if (!confirmed || !isViewerScopeCurrent(scope)) return
+    if (!confirmed || !viewerIsCurrent(scope)) return
     try {
       const { clearProStatusCache } = await import('@/lib/hooks/useProStatus')
+      if (!viewerIsCurrent(scope)) return
       clearProStatusCache()
       try {
         sessionStorage.clear()
@@ -1147,35 +1654,32 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       await auth.signOut()
       router.push('/')
     } catch {
-      showToast(t('logoutFailed'), 'error')
+      if (viewerIsCurrent(scope)) showToast(t('logoutFailed'), 'error')
     }
   }
 
   // 打开删号弹窗时探测账号是否有密码凭据(OAuth/钱包用户无 → 走 DELETE 确认)。
   useEffect(() => {
     if (!showDeleteAccountModal) return
-    let cancelled = false
-    supabase.auth.getUser().then(({ data }) => {
-      if (cancelled || !data.user) return
-      const providers = (data.user.identities ?? []).map((i) => i.provider)
-      const isWalletEmail = (data.user.email ?? '').endsWith('@wallet.arena')
-      setDeleteHasPassword(!isWalletEmail && providers.includes('email'))
-    })
-    return () => {
-      cancelled = true
-    }
-  }, [showDeleteAccountModal])
+    const scope = captureViewer()
+    if (!scope || auth.user?.id !== scope.userId) return
+    const providers = (auth.user.identities ?? []).map((identity) => identity.provider)
+    const isWalletEmail = (auth.user.email ?? '').endsWith('@wallet.arena')
+    setDeleteHasPassword(!isWalletEmail && providers.includes('email'))
+  }, [auth.sessionGeneration, auth.user, captureViewer, showDeleteAccountModal])
 
   const handleDeleteAccount = async () => {
     // 有密码用户需填密码;无密码(OAuth/钱包)需键入 DELETE。
     if (deleteHasPassword ? !deletePassword : deleteConfirm.trim().toUpperCase() !== 'DELETE')
       return
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
     setDeletingAccount(true)
     setDeleteError(null)
     try {
-      const scope = getViewerScope()
-      const token = await getFreshToken()
-      if (!token || !isViewerScopeCurrent(scope)) {
+      const token = await getFreshToken(scope)
+      if (!viewerIsCurrent(scope)) return
+      if (!token) {
         setDeleteError(t('pleaseLoginAgain'))
         return
       }
@@ -1192,8 +1696,9 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
             : { confirm: deleteConfirm, reason: deleteReason }
         ),
       })
+      if (!viewerIsCurrent(scope)) return
       const data = await res.json()
-      if (!isViewerScopeCurrent(scope)) return
+      if (!viewerIsCurrent(scope)) return
       if (!res.ok) {
         setDeleteError(data.error || t('operationFailed'))
         return
@@ -1205,49 +1710,53 @@ export function useSettingsHandlers({ showToast, showConfirm, t }: UseSettingsHa
       }
       showToast(t('accountMarkedDeleted'), 'success')
       setShowDeleteAccountModal(false)
+      setDeletingAccount(false)
       await auth.signOut()
       router.push('/login?recover=1')
     } catch {
-      setDeleteError(t('networkErrorRetry'))
+      if (viewerIsCurrent(scope)) setDeleteError(t('networkErrorRetry'))
     } finally {
-      setDeletingAccount(false)
+      if (viewerIsCurrent(scope)) setDeletingAccount(false)
     }
   }
 
   // ===== Notification toggle auto-save =====
   const handleNotificationToggleSave = useCallback(
-    async (field: string, value: boolean) => {
-      if (!userId) return
-      try {
-        const { error } = await supabase
-          .from('user_profiles')
-          .update({ [field]: value })
-          .eq('id', userId)
-        if (error) {
-          showToast(t('saveFailed'), 'error')
-          return
-        }
-        showToast(t('settingsSaved'), 'success')
-        if (initialValuesRef.current) {
-          const camelKey = field.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
-          if (camelKey in initialValuesRef.current) {
-            ;(initialValuesRef.current as Record<string, unknown>)[camelKey] = value
-          }
-        }
-      } catch {
+    (
+      field: NotificationPreferenceField,
+      value: boolean,
+      previousValue: boolean,
+      setter: (nextValue: boolean) => void
+    ) => {
+      const scope = captureViewer()
+      if (!scope || !stateBelongsToViewer(scope)) {
+        setter(previousValue)
         showToast(t('saveFailed'), 'error')
+        return
       }
+
+      void notificationQueueRef.current?.enqueue(field, value, previousValue, setter, {
+        accessToken: scope.accessToken,
+        userId: scope.userId,
+        sessionGeneration: scope.sessionGeneration,
+      })
     },
-    [userId, showToast, t]
+    [captureViewer, showToast, stateBelongsToViewer, t]
   )
+
+  const canonicalViewer = captureSettingsViewer(auth)
+  const profileLoadOutcome = profileLoadOutcomeRef.current
+  const viewerBoundaryPending =
+    !!auth.userId &&
+    (!canonicalViewer ||
+      !profileLoadOutcome ||
+      !settingsScopeMatches(profileLoadOutcome, canonicalViewer))
 
   return {
     // Auth state
     email,
-    setEmail,
     userId,
-    setUserId,
-    loading,
+    loading: loading || auth.loading || !auth.authChecked || viewerBoundaryPending,
     saving,
 
     // Profile state
