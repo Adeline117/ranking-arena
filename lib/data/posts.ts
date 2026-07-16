@@ -288,6 +288,12 @@ export async function getPosts(
     language: langFilter,
   } = options
 
+  // An explicit empty scope is empty, never "no filter". Skipping `.in()` for
+  // [] would otherwise widen a following/personalized/group query to all rows.
+  if (group_ids && group_ids.length === 0) return []
+  if (author_ids && author_ids.length === 0) return []
+  if (post_ids && post_ids.length === 0) return []
+
   // Hot feed gets a recency-ordered candidate pool + JS decay re-rank (see
   // hotRankScore). Other sorts keep the direct column order + DB pagination.
   const isHotSort = sort_by === 'hot_score'
@@ -299,6 +305,10 @@ export async function getPosts(
       .range(offset, offset + limit - 1)
       .order(sort_by, { ascending: sort_order === 'asc' })
   }
+
+  // This function is called with a service-role client and therefore bypasses
+  // posts RLS. Deleted rows must be excluded explicitly for every list shape.
+  query = query.neq('status', 'deleted').is('deleted_at', null)
 
   if (group_id) {
     query = query.eq('group_id', group_id)
@@ -319,6 +329,9 @@ export async function getPosts(
   // Visibility filtering: unauthenticated users only see public posts
   if (!group_id && !viewer_id) {
     query = query.eq('visibility', 'public')
+    // Until group containers are checked by the canonical audience RPC, a
+    // stale public row inside a closed group must not enter general anon feeds.
+    if (!group_ids) query = query.is('group_id', null)
   }
 
   // Block filtering: exclude posts from users the viewer has blocked (and vice versa)
@@ -327,8 +340,7 @@ export async function getPosts(
       .from('blocked_users')
       .select('blocker_id, blocked_id')
       .or(`blocker_id.eq.${viewer_id},blocked_id.eq.${viewer_id}`)
-    if (blocksError)
-      logger.warn('[getPosts] blocked_users query error (drift?):', blocksError.message)
+    if (blocksError) throw blocksError
     if (blocks && blocks.length > 0) {
       const blockedIds = new Set<string>()
       for (const b of blocks) {
@@ -449,8 +461,7 @@ export async function getPosts(
         .select('following_id')
         .eq('follower_id', viewer_id)
         .in('following_id', followersPostAuthors)
-      if (followsError)
-        logger.warn('[getPosts] user_follows query error (drift?):', followsError.message)
+      if (followsError) throw followsError
 
       if (follows) {
         followedSet = new Set(follows.map((f: { following_id: string }) => f.following_id))
@@ -463,7 +474,7 @@ export async function getPosts(
         return post.author_id === viewer_id || followedSet.has(post.author_id)
       }
       if (post.visibility === 'group') return false
-      return true
+      return false
     })
   }
 

@@ -111,6 +111,9 @@ const mockGetPosts = jest.fn()
 const mockCreatePost = jest.fn()
 const mockGetUserPostReactions = jest.fn()
 const mockGetUserPostVotes = jest.fn()
+const mockCacheGet = jest.fn().mockResolvedValue(null)
+const mockCacheSet = jest.fn().mockResolvedValue(undefined)
+const mockCacheDel = jest.fn().mockResolvedValue(undefined)
 
 jest.mock('@/lib/data/posts', () => ({
   getPosts: (...args: unknown[]) => mockGetPosts(...args),
@@ -131,9 +134,9 @@ jest.mock('@/lib/utils/server-cache', () => ({
 }))
 
 jest.mock('@/lib/cache', () => ({
-  get: jest.fn().mockResolvedValue(null),
-  set: jest.fn().mockResolvedValue(undefined),
-  del: jest.fn().mockResolvedValue(undefined),
+  get: (...args: unknown[]) => mockCacheGet(...args),
+  set: (...args: unknown[]) => mockCacheSet(...args),
+  del: (...args: unknown[]) => mockCacheDel(...args),
 }))
 
 jest.mock('@/lib/features', () => ({
@@ -310,7 +313,7 @@ describe('/api/posts', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      expect(body.data).toEqual({ posts: [], following_count: 0 })
+      expect(body.data).toEqual({ posts: [], following_count: 0, viewer_id: 'viewer-1' })
       expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
       expect(mockGetPosts).not.toHaveBeenCalled()
     })
@@ -327,7 +330,7 @@ describe('/api/posts', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      expect(body.data).toEqual({ posts: [], following_count: 1 })
+      expect(body.data).toEqual({ posts: [], following_count: 1, viewer_id: 'viewer-1' })
       expect(mockGetPosts).toHaveBeenCalledTimes(1)
       expect(mockGetPosts).toHaveBeenCalledWith(
         expect.anything(),
@@ -367,6 +370,56 @@ describe('/api/posts', () => {
       expect(res.status).toBe(500)
       expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
       expect(mockGetPosts).not.toHaveBeenCalled()
+    })
+
+    it('omits repost wrappers until the same viewer gate has authorized their roots', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: 'viewer-1' })
+      mockSupabase.from.mockReturnValueOnce(mockQueryResult([{ following_id: 'followed-1' }]))
+      mockGetPosts.mockResolvedValue([
+        { id: 'ordinary', original_post_id: null },
+        { id: 'wrapper', original_post_id: 'blocked-root' },
+      ])
+
+      const req = new NextRequest('http://localhost/api/posts?sort_by=following', {
+        headers: { authorization: 'Bearer viewer-token' },
+      })
+      const res = await GET(req)
+      const body = await res.json()
+
+      expect(body.data.posts).toEqual([
+        expect.objectContaining({ id: 'ordinary', original_post_id: null }),
+      ])
+    })
+
+    it('never reads or populates the global hot cache for an authenticated viewer', async () => {
+      mockGetAuthUser.mockResolvedValue({ id: 'viewer-1' })
+      mockGetPosts.mockResolvedValue([{ id: 'viewer-post' }])
+
+      const req = new NextRequest('http://localhost/api/posts?sort_by=hot_score', {
+        headers: { authorization: 'Bearer viewer-token' },
+      })
+      await GET(req)
+
+      expect(mockCacheGet).not.toHaveBeenCalled()
+      expect(mockCacheSet).not.toHaveBeenCalled()
+      expect(mockGetPosts).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ viewer_id: 'viewer-1', limit: 20 })
+      )
+    })
+
+    it('does not use the retired global hot cache even for anonymous requests', async () => {
+      mockGetPosts.mockResolvedValue([{ id: 'public-post' }])
+
+      const req = new NextRequest('http://localhost/api/posts?sort_by=hot_score')
+      await GET(req)
+
+      expect(mockCacheGet).not.toHaveBeenCalled()
+      expect(mockCacheSet).not.toHaveBeenCalled()
+      expect(mockGetPosts).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ viewer_id: undefined, limit: 20 })
+      )
     })
 
     it('has no deployment-wide shared cache override for the posts route', () => {
