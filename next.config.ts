@@ -505,8 +505,8 @@ const nextConfig = {
       'cockatiel',
     ],
 
-    // Enable optimized CSS loading
-    optimizeCss: true,
+    // Keep optimizeCss disabled: Next.js loads the deprecated `critters` package
+    // at runtime when this experimental flag is enabled.
 
     // Partial Prerendering — static shell + streaming dynamic parts
     // ppr merged into cacheComponents in Next.js 16
