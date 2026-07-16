@@ -6120,6 +6120,9 @@ const en = {
   metricRoi: 'ROI',
   metricPnl: 'PnL',
   gmxRealizedNetPnlLabel: 'Realized Net PnL',
+  gmxMaxCapitalRoiLabel: 'Realized ROI · Window Max Capital',
+  gmxMaxCapitalRoiTooltip:
+    'GMX ROI is realized net PnL divided by maximum capital in the selected window. It includes fees and price impact, excludes current unrealized PnL, and uses complete UTC-day windows up to 24 hours behind rolling now.',
   gmxRealizedNetPnlSummary: 'Fees and price impact included · unrealized PnL excluded',
   gmxRealizedNetPnlTooltip:
     'GMX realized net PnL includes fees and price impact and excludes current unrealized PnL. It uses complete UTC-day windows, up to 24 hours behind rolling now.',

@@ -7,12 +7,14 @@ import ko from '../ko'
 
 const KEYS = [
   'gmxRealizedNetPnlLabel',
+  'gmxMaxCapitalRoiLabel',
+  'gmxMaxCapitalRoiTooltip',
   'gmxRealizedNetPnlSummary',
   'gmxRealizedNetPnlTooltip',
   'gmxCompletedWindowEnded',
 ] as const
 
-describe('GMX PnL contract copy', () => {
+describe('GMX metric contract copy', () => {
   it.each([
     ['English', en],
     ['Chinese', zh],

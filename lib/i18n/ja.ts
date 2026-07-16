@@ -5768,6 +5768,9 @@ const ja = {
   metricRoi: 'ROI',
   metricPnl: '損益',
   gmxRealizedNetPnlLabel: '実現損益（純額）',
+  gmxMaxCapitalRoiLabel: '実現 ROI · 期間内最大資本',
+  gmxMaxCapitalRoiTooltip:
+    'GMX ROI は、実現損益（純額）を選択期間内の最大資本で割った値です。手数料と価格インパクトを反映し、現在の未実現損益を含みません。完了済み UTC 日次ウィンドウのため、現在時刻基準より最大 24 時間遅れます。',
   gmxRealizedNetPnlSummary: '手数料・価格インパクト込み · 未実現損益を除外',
   gmxRealizedNetPnlTooltip:
     'GMX の実現損益（純額）は手数料と価格インパクトを反映し、現在の未実現損益を含みません。完了済みの UTC 日次ウィンドウを使用するため、現在時刻基準より最大 24 時間遅れます。',

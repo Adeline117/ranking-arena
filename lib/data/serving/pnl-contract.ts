@@ -18,6 +18,13 @@ export interface GmxRealizedNetDisclosure {
   windowDurationDays: 7 | 30 | 90
 }
 
+export interface GmxMaxCapitalRoiDisclosure {
+  kind: 'gmx_realized_net_on_window_max_capital'
+  windowFrom: number
+  windowTo: number
+  windowDurationDays: 7 | 30 | 90
+}
+
 function integer(value: unknown): number | null {
   return typeof value === 'number' && Number.isSafeInteger(value) ? value : null
 }
@@ -93,4 +100,39 @@ export function readGmxRealizedNetModuleDisclosure(
 
   const disclosure = readGmxRealizedNetDisclosure(source, modules.extras)
   return disclosure?.windowDurationDays === expectedTimeframe ? disclosure : null
+}
+
+/**
+ * GMX ROI is not an exchange-generic return: it divides the same realized-net
+ * numerator by maxCapital inside the selected complete-day window. Keep this
+ * independent from the PnL label so a missing ROI-basis proof cannot be inferred.
+ */
+export function readGmxMaxCapitalRoiModuleDisclosure(
+  source: string,
+  expectedTimeframe: 7 | 30 | 90,
+  modules:
+    | Pick<TraderCoreModules, 'timeframe' | 'stats' | 'extras' | 'provenance'>
+    | null
+    | undefined
+): GmxMaxCapitalRoiDisclosure | null {
+  if (
+    !modules ||
+    modules.timeframe !== expectedTimeframe ||
+    modules.provenance.source !== source ||
+    modules.extras.roi_basis !== 'max_capital_usd' ||
+    typeof modules.stats.roi !== 'number' ||
+    !Number.isFinite(modules.stats.roi)
+  ) {
+    return null
+  }
+
+  const pnlContract = readGmxRealizedNetDisclosure(source, modules.extras)
+  if (!pnlContract || pnlContract.windowDurationDays !== expectedTimeframe) return null
+
+  return {
+    kind: 'gmx_realized_net_on_window_max_capital',
+    windowFrom: pnlContract.windowFrom,
+    windowTo: pnlContract.windowTo,
+    windowDurationDays: pnlContract.windowDurationDays,
+  }
 }
