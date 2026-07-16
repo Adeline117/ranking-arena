@@ -1,24 +1,23 @@
-/**
- * /api/groups route tests
- *
- * Tests listing groups with sorting, pagination, caching,
- * and error handling.
- */
-
-// --- Mocks ---
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
-    headers: Map<string, string>
-    constructor(body?: unknown, init: { status?: number } = {}) {
+    headers: Headers
+
+    constructor(body?: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this._body = body
-      this.status = init.status || 200
-      this.headers = new Map()
+      this.status = init.status ?? 200
+      this.headers = new Headers(init.headers)
     }
-    async json() { return this._body }
-    static json(data: unknown, init?: { status?: number }) {
+
+    async json() {
+      return this._body
+    }
+
+    static json(data: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(data, init)
     }
   }
@@ -26,164 +25,180 @@ jest.mock('next/server', () => {
   class MockNextRequest {
     url: string
     nextUrl: URL
-    headers: Map<string, string>
-    method: string
+    headers: Headers
+    method = 'GET'
+
     constructor(url: string, opts?: { headers?: Record<string, string> }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries(opts?.headers || {}))
-      this.method = 'GET'
+      this.headers = new Headers(opts?.headers)
     }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
 })
 
-let supabaseDataResult: { data: unknown[] | null; error: unknown } = { data: [], error: null }
-let supabaseCountResult: { count: number | null; error: unknown } = { count: 0, error: null }
-
-jest.mock('@supabase/supabase-js', () => ({
-  createClient: jest.fn(() => ({
-    from: jest.fn(() => {
-      const chain: Record<string, jest.Mock> = {}
-      chain.select = jest.fn((_, opts) => {
-        if (opts?.count === 'exact' && opts?.head === true) {
-          return Promise.resolve(supabaseCountResult)
-        }
-        return chain
-      })
-      chain.order = jest.fn(() => chain)
-      chain.range = jest.fn(() => Promise.resolve(supabaseDataResult))
-      return chain
-    }),
-  })),
+jest.mock('@/lib/features', () => ({ socialFeatureGuard: jest.fn(() => null) }))
+jest.mock('@/lib/utils/rate-limit', () => ({
+  checkRateLimit: jest.fn(async () => null),
+  RateLimitPresets: { public: { requests: 100, window: 60 } },
 }))
-
-const mockGetOrSetWithLock = jest.fn()
-jest.mock('@/lib/cache', () => ({
-  getOrSetWithLock: (...args: unknown[]) => mockGetOrSetWithLock(...args),
-}))
-
 jest.mock('@/lib/logger', () => ({
   logger: { apiError: jest.fn(), error: jest.fn(), warn: jest.fn(), info: jest.fn() },
+}))
+
+type QueryResult = {
+  data?: unknown[] | null
+  count?: number | null
+  error: unknown
+}
+
+type QueryChain = Record<string, jest.Mock> & {
+  then: Promise<QueryResult>['then']
+}
+
+function makeQuery(result: QueryResult): QueryChain {
+  const chain = {} as QueryChain
+  for (const method of ['select', 'is', 'in', 'order']) {
+    chain[method] = jest.fn(() => chain)
+  }
+  chain.range = jest.fn(async () => result)
+  chain.then = (resolve, reject) => Promise.resolve(result).then(resolve, reject)
+  return chain
+}
+
+const mockFrom = jest.fn()
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: () => ({ from: mockFrom }),
 }))
 
 import { NextRequest } from 'next/server'
 import { GET } from '../route'
 
-describe('GET /api/groups', () => {
+function queueRequest(
+  dataResult: QueryResult = { data: [], error: null },
+  countResult: QueryResult = { count: 0, error: null }
+) {
+  const dataQuery = makeQuery(dataResult)
+  const countQuery = makeQuery(countResult)
+  mockFrom.mockReturnValueOnce(dataQuery).mockReturnValueOnce(countQuery)
+  return { dataQuery, countQuery }
+}
+
+describe('GET /api/groups current discovery boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    supabaseDataResult = { data: [], error: null }
-    supabaseCountResult = { count: 0, error: null }
-    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
-    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
   })
 
-  it('returns groups list with default pagination', async () => {
-    const mockResult = {
+  it('returns only the freshly queried discoverable subset with current pagination', async () => {
+    const activeGroup = {
+      id: '10000000-0000-4000-8000-000000000001',
+      name: 'Active',
+      member_count: 4,
+    }
+    const { dataQuery, countQuery } = queueRequest(
+      { data: [activeGroup], error: null },
+      { count: 1, error: null }
+    )
+
+    const response = await GET(new NextRequest('http://localhost/api/groups'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body).toEqual({
       success: true,
       data: {
-        groups: [
-          { id: 'g1', name: 'Top Traders', member_count: 150 },
-          { id: 'g2', name: 'Crypto Chat', member_count: 80 },
-        ],
-        pagination: { limit: 10, offset: 0, total: 2, has_more: false },
+        groups: [activeGroup],
+        pagination: { limit: 10, offset: 0, total: 1, has_more: false },
       },
+    })
+    for (const query of [dataQuery, countQuery]) {
+      expect(query.is).toHaveBeenCalledWith('dissolved_at', null)
+      expect(query.in).toHaveBeenCalledWith('visibility', ['open', 'apply'])
     }
-    mockGetOrSetWithLock.mockImplementation(async (_key: string, _fn: () => Promise<unknown>) => {
-      // Execute the function to test its logic
-      return mockResult
+    expect(dataQuery.order).toHaveBeenNthCalledWith(1, 'member_count', {
+      ascending: false,
+      nullsFirst: false,
     })
-
-    const req = new NextRequest('http://localhost/api/groups')
-    const res = await GET(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(body.success).toBe(true)
-    expect(body.data.groups).toBeDefined()
+    expect(dataQuery.order).toHaveBeenNthCalledWith(2, 'id', { ascending: true })
   })
 
-  it('respects limit parameter capped at 50', async () => {
-    mockGetOrSetWithLock.mockImplementation(async (_key: string, _fn: () => Promise<unknown>) => {
-      return {
-        success: true,
-        data: { groups: [], pagination: { limit: 50, offset: 0, total: 0, has_more: false } },
-      }
+  it('does not serve a group after a later request observes dissolution/deletion', async () => {
+    queueRequest(
+      {
+        data: [{ id: '10000000-0000-4000-8000-000000000001', name: 'Before' }],
+        error: null,
+      },
+      { count: 1, error: null }
+    )
+    queueRequest({ data: [], error: null }, { count: 0, error: null })
+
+    const first = await GET(new NextRequest('http://localhost/api/groups'))
+    const second = await GET(new NextRequest('http://localhost/api/groups'))
+
+    expect((await first.json()).data.groups).toHaveLength(1)
+    expect((await second.json()).data).toEqual({
+      groups: [],
+      pagination: { limit: 10, offset: 0, total: 0, has_more: false },
     })
-
-    const req = new NextRequest('http://localhost/api/groups?limit=100')
-    const res = await GET(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(200)
-    // The route clamps limit to 50, but cache key will use 50
-    expect(body.data.pagination.limit).toBeLessThanOrEqual(50)
+    expect(mockFrom).toHaveBeenCalledTimes(4)
   })
 
-  it('supports offset pagination', async () => {
-    mockGetOrSetWithLock.mockImplementation(async () => ({
-      success: true,
-      data: { groups: [], pagination: { limit: 10, offset: 20, total: 30, has_more: true } },
-    }))
+  it('honors bounded pagination and allow-listed sorting', async () => {
+    const { dataQuery } = queueRequest({ data: [], error: null }, { count: 80, error: null })
 
-    const req = new NextRequest('http://localhost/api/groups?offset=20')
-    const res = await GET(req)
-    const body = await res.json()
+    const response = await GET(
+      new NextRequest('http://localhost/api/groups?limit=100&offset=20&sort_by=activity')
+    )
+    const body = await response.json()
 
-    expect(res.status).toBe(200)
-    expect(body.data.pagination.offset).toBe(20)
+    expect(body.data.pagination).toEqual({ limit: 50, offset: 20, total: 80, has_more: true })
+    expect(dataQuery.order).toHaveBeenNthCalledWith(1, 'updated_at', {
+      ascending: false,
+      nullsFirst: false,
+    })
+    expect(dataQuery.range).toHaveBeenCalledWith(20, 69)
   })
 
-  it('supports sort_by parameter', async () => {
-    mockGetOrSetWithLock.mockImplementation(async () => ({
-      success: true,
-      data: { groups: [], pagination: { limit: 10, offset: 0, total: 0, has_more: false } },
-    }))
+  it('defaults an unrecognized sort token instead of creating an arbitrary query surface', async () => {
+    const { dataQuery } = queueRequest()
 
-    const req = new NextRequest('http://localhost/api/groups?sort_by=activity')
-    const res = await GET(req)
+    await GET(new NextRequest('http://localhost/api/groups?sort_by=secret_column'))
 
-    expect(res.status).toBe(200)
+    expect(dataQuery.order).toHaveBeenNthCalledWith(1, 'member_count', {
+      ascending: false,
+      nullsFirst: false,
+    })
   })
 
-  it('returns empty list when no groups exist', async () => {
-    mockGetOrSetWithLock.mockImplementation(async () => ({
-      success: true,
-      data: { groups: [], pagination: { limit: 10, offset: 0, total: 0, has_more: false } },
-    }))
+  it.each([
+    ['data', { data: null, error: new Error('data failed') }, { count: 0, error: null }],
+    ['count', { data: [], error: null }, { count: null, error: new Error('count failed') }],
+  ])('fails closed when the %s query fails', async (_label, dataResult, countResult) => {
+    queueRequest(dataResult, countResult)
 
-    const req = new NextRequest('http://localhost/api/groups')
-    const res = await GET(req)
-    const body = await res.json()
+    const response = await GET(new NextRequest('http://localhost/api/groups'))
+    const body = await response.json()
 
-    expect(res.status).toBe(200)
-    expect(body.data.groups).toEqual([])
+    expect(response.status).toBe(500)
+    expect(body).toEqual({ success: false, error: 'Internal server error' })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
   })
 
-  it('returns 500 on internal error', async () => {
-    mockGetOrSetWithLock.mockRejectedValue(new Error('Redis down'))
+  it('marks successful discovery responses private/no-store at every cache layer', async () => {
+    queueRequest()
 
-    const req = new NextRequest('http://localhost/api/groups')
-    const res = await GET(req)
-    const body = await res.json()
+    const response = await GET(new NextRequest('http://localhost/api/groups'))
 
-    expect(res.status).toBe(500)
-    expect(body.success).toBe(false)
-    expect(body.error).toMatch(/internal/i)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+    expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
+    expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
   })
 
-  it('sets cache headers on successful response', async () => {
-    mockGetOrSetWithLock.mockImplementation(async () => ({
-      success: true,
-      data: { groups: [], pagination: { limit: 10, offset: 0, total: 0, has_more: false } },
-    }))
-
-    const req = new NextRequest('http://localhost/api/groups')
-    const res = await GET(req)
-
-    // The route sets Cache-Control headers
-    expect(res.status).toBe(200)
+  it('contains no final-payload cache path', () => {
+    const source = readFileSync(join(process.cwd(), 'app/api/groups/route.ts'), 'utf8')
+    expect(source).not.toContain("from '@/lib/cache'")
+    expect(source).not.toContain('getOrSetWithLock')
+    expect(source).not.toContain('s-maxage')
   })
 })
