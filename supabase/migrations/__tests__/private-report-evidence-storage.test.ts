@@ -101,13 +101,29 @@ describe('private report evidence storage migration', () => {
     expect(migration).toContain("constraint_row.contype = 'p'")
     expect(migration).toContain("constraint_row.contype = 'u'")
     expect(migration).toContain("constraint_row.contype = 'f'")
-    expect(migration).toContain("constraint_row.confdeltype = 'r'")
+    expect(migration).toContain("constraint_row.confdeltype = 'n'")
+    expect(migration).toContain('constraint_row.confdelsetcols IS NULL')
     expect(migration).toContain('object_name = substr(evidence_ref, 9)')
     expect(migration).toContain('report_evidence_uploads_lifecycle_check')
     expect(migration).toContain('attribute.attnotnull IS DISTINCT FROM expected.required_not_null')
     expect(migration).toContain("attribute.attgenerated <> ''")
     expect(migration).toContain("relation.relpersistence = 'p'")
     expect(migration).not.toMatch(/DELETE\s+FROM\s+storage\.objects/i)
+  })
+
+  it('turns deleted report claims into immediately leased cleanup orphans', () => {
+    expect(migration).toContain(
+      'report_id uuid REFERENCES public.content_reports(id) ON DELETE SET NULL'
+    )
+    expect(migration).toMatch(
+      /status = 'claimed'\s+AND lease_token IS NULL\s+AND lease_expires_at IS NULL/
+    )
+    expect(migration).toContain("WHERE status <> 'claimed' OR report_id IS NULL")
+    expect(migration).toMatch(/upload_row\.status = 'claimed'\s+AND upload_row\.report_id IS NULL/)
+    expect(migration).toContain("IF v_status = 'claimed' AND v_report_id IS NOT NULL THEN")
+    expect(migration).toMatch(
+      /upload_row\.status = 'claimed'\s+AND upload_row\.report_id IS NOT NULL\s+AND NOT EXISTS/
+    )
   })
 
   it('rewrites one fixed-path service RPC that proves every referenced object exists', () => {

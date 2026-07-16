@@ -70,8 +70,11 @@ $$;
 GRANT USAGE ON SCHEMA auth TO anon, authenticated, service_role;
 GRANT EXECUTE ON FUNCTION auth.role() TO anon, authenticated, service_role;
 
+CREATE TABLE auth.users (
+  id uuid PRIMARY KEY
+);
 CREATE TABLE public.user_profiles (
-  id uuid PRIMARY KEY,
+  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   banned_at timestamptz,
   deleted_at timestamptz
 );
@@ -92,7 +95,7 @@ CREATE TABLE public.conversations (
 );
 CREATE TABLE public.content_reports (
   id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
-  reporter_id uuid NOT NULL,
+  reporter_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   content_type text NOT NULL,
   content_id text NOT NULL,
   reason text NOT NULL,
@@ -158,10 +161,14 @@ CREATE POLICY "Legacy broad storage access"
   USING (true)
   WITH CHECK (true);
 
-INSERT INTO public.user_profiles(id) VALUES
+INSERT INTO auth.users(id) VALUES
   ('11111111-1111-4111-8111-111111111111'),
   ('22222222-2222-4222-8222-222222222222'),
-  ('33333333-3333-4333-8333-333333333333');
+  ('33333333-3333-4333-8333-333333333333'),
+  ('44444444-4444-4444-8444-444444444444'),
+  ('55555555-5555-4555-8555-555555555555');
+INSERT INTO public.user_profiles(id)
+SELECT user_row.id FROM auth.users AS user_row;
 INSERT INTO public.posts(id, author_id) VALUES
   ('aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa1', '22222222-2222-4222-8222-222222222222');
 INSERT INTO public.allowed_post_actors(actor_id, post_id) VALUES
@@ -677,6 +684,130 @@ BEGIN
 END
 $stale_lease_retry_proof$;
 
+-- Production deletes content_reports when either a report is removed directly
+-- or its reporter is removed from auth.users. Claimed evidence must not block
+-- either delete: SET NULL creates an immediately leaseable registry orphan,
+-- then the worker deletes Storage first and acknowledges the registry row.
+RESET ROLE;
+DO $claimed_report_delete_cleanup_proof$
+DECLARE
+  v_direct_reservation jsonb;
+  v_account_reservation jsonb;
+  v_direct_report jsonb;
+  v_account_report jsonb;
+  v_direct_ref text;
+  v_account_ref text;
+  v_batch jsonb;
+  v_item jsonb;
+BEGIN
+  v_direct_reservation := public.reserve_report_evidence_upload(
+    '44444444-4444-4444-8444-444444444444', 'png', 'image/png'
+  );
+  v_account_reservation := public.reserve_report_evidence_upload(
+    '55555555-5555-4555-8555-555555555555', 'webp', 'image/webp'
+  );
+  v_direct_ref := v_direct_reservation ->> 'evidence_ref';
+  v_account_ref := v_account_reservation ->> 'evidence_ref';
+
+  INSERT INTO storage.objects(bucket_id, name) VALUES
+    ('reports', v_direct_reservation ->> 'object_name'),
+    ('reports', v_account_reservation ->> 'object_name');
+  PERFORM public.finalize_report_evidence_upload(
+    '44444444-4444-4444-8444-444444444444', v_direct_ref
+  );
+  PERFORM public.finalize_report_evidence_upload(
+    '55555555-5555-4555-8555-555555555555', v_account_ref
+  );
+
+  v_direct_report := public.submit_content_report(
+    '44444444-4444-4444-8444-444444444444',
+    'user',
+    '22222222-2222-4222-8222-222222222222',
+    'other',
+    'direct report deletion must orphan evidence safely',
+    ARRAY[v_direct_ref]
+  );
+  v_account_report := public.submit_content_report(
+    '55555555-5555-4555-8555-555555555555',
+    'user',
+    '22222222-2222-4222-8222-222222222222',
+    'other',
+    'auth user deletion must orphan evidence safely',
+    ARRAY[v_account_ref]
+  );
+
+  DELETE FROM public.content_reports
+  WHERE id = (v_direct_report ->> 'report_id')::uuid;
+  DELETE FROM auth.users
+  WHERE id = '55555555-5555-4555-8555-555555555555';
+
+  IF EXISTS (
+    SELECT 1 FROM auth.users
+    WHERE id = '55555555-5555-4555-8555-555555555555'
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.content_reports AS report_row
+    WHERE report_row.id IN (
+      (v_direct_report ->> 'report_id')::uuid,
+      (v_account_report ->> 'report_id')::uuid
+    )
+  ) OR (
+    SELECT pg_catalog.count(*)
+    FROM public.report_evidence_uploads AS upload_row
+    WHERE upload_row.evidence_ref IN (v_direct_ref, v_account_ref)
+      AND upload_row.status = 'claimed'
+      AND upload_row.report_id IS NULL
+      AND upload_row.lease_token IS NULL
+      AND upload_row.lease_expires_at IS NULL
+  ) <> 2 THEN
+    RAISE EXCEPTION 'report/account delete did not create claimed cleanup orphans';
+  END IF;
+
+  v_batch := public.lease_stale_report_evidence_cleanup(50);
+  IF pg_catalog.jsonb_array_length(v_batch) <> 2 THEN
+    RAISE EXCEPTION 'claimed cleanup orphans were not leased immediately: %', v_batch;
+  END IF;
+
+  FOR v_item IN
+    SELECT batch_item.value
+    FROM pg_catalog.jsonb_array_elements(v_batch) AS batch_item(value)
+  LOOP
+    IF v_item ->> 'evidence_ref' NOT IN (v_direct_ref, v_account_ref) THEN
+      RAISE EXCEPTION 'cleanup leased an unexpected row: %', v_item;
+    END IF;
+
+    -- Test-fixture simulation of the worker's Storage API removal.
+    DELETE FROM storage.objects AS object_row
+    WHERE object_row.bucket_id = 'reports'
+      AND object_row.name = v_item ->> 'object_name';
+    IF NOT public.ack_report_evidence_cleanup(
+      (v_item ->> 'reporter_id')::uuid,
+      v_item ->> 'evidence_ref',
+      (v_item ->> 'lease_token')::uuid
+    ) THEN
+      RAISE EXCEPTION 'claimed cleanup orphan could not be acknowledged: %', v_item;
+    END IF;
+  END LOOP;
+
+  IF EXISTS (
+    SELECT 1
+    FROM public.report_evidence_uploads AS upload_row
+    WHERE upload_row.evidence_ref IN (v_direct_ref, v_account_ref)
+  ) OR EXISTS (
+    SELECT 1
+    FROM storage.objects AS object_row
+    WHERE object_row.bucket_id = 'reports'
+      AND object_row.name IN (
+        v_direct_reservation ->> 'object_name',
+        v_account_reservation ->> 'object_name'
+      )
+  ) THEN
+    RAISE EXCEPTION 'claimed orphan Storage/registry cleanup is incomplete';
+  END IF;
+END
+$claimed_report_delete_cleanup_proof$;
+SET ROLE service_role;
+
 SELECT public.reserve_report_evidence_upload(
   '33333333-3333-4333-8333-333333333333', 'gif', 'image/gif'
 );
@@ -1096,8 +1227,9 @@ WHERE bucket_id = 'reports'
   AND name = '33333333-3333-4333-8333-333333333333/ffffffffffffffff.png';
 SQL
 
-# Same-name constraints are not a contract. CHECK(true), a different UNIQUE
-# key, and a foreign key to the wrong table must each stop replay preflight.
+# Same-name catalogs are not a contract. CHECK(true), the old blocking
+# lifecycle/index/FK action, a different UNIQUE key, and an FK to the wrong
+# table must each stop replay preflight.
 psql_cmd <<'SQL'
 ALTER TABLE public.report_evidence_uploads
   DROP CONSTRAINT report_evidence_uploads_status_check;
@@ -1117,6 +1249,83 @@ ALTER TABLE public.report_evidence_uploads
   CHECK (status IN ('reserved', 'uploaded', 'cleanup', 'claimed'));
 
 ALTER TABLE public.report_evidence_uploads
+  DROP CONSTRAINT report_evidence_uploads_lifecycle_check;
+ALTER TABLE public.report_evidence_uploads
+  ADD CONSTRAINT report_evidence_uploads_lifecycle_check CHECK (
+    (
+      status IN ('reserved', 'uploaded')
+      AND report_id IS NULL
+      AND lease_token IS NULL
+      AND lease_expires_at IS NULL
+    ) OR (
+      status = 'cleanup'
+      AND report_id IS NULL
+      AND lease_token IS NOT NULL
+      AND lease_expires_at IS NOT NULL
+    ) OR (
+      status = 'claimed'
+      AND report_id IS NOT NULL
+      AND lease_token IS NULL
+      AND lease_expires_at IS NULL
+    )
+  );
+SQL
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/registry-lifecycle-drift.log" 2>&1; then
+  echo "private evidence replay accepted the blocking claimed lifecycle" >&2
+  exit 1
+fi
+grep -q 'registry constraint contract drift' \
+  "$TMP_ROOT/registry-lifecycle-drift.log"
+psql_cmd <<'SQL'
+ALTER TABLE public.report_evidence_uploads
+  DROP CONSTRAINT report_evidence_uploads_lifecycle_check;
+ALTER TABLE public.report_evidence_uploads
+  ADD CONSTRAINT report_evidence_uploads_lifecycle_check CHECK (
+    (
+      status IN ('reserved', 'uploaded')
+      AND report_id IS NULL
+      AND lease_token IS NULL
+      AND lease_expires_at IS NULL
+    ) OR (
+      status = 'cleanup'
+      AND report_id IS NULL
+      AND lease_token IS NOT NULL
+      AND lease_expires_at IS NOT NULL
+    ) OR (
+      status = 'claimed'
+      AND lease_token IS NULL
+      AND lease_expires_at IS NULL
+    )
+  );
+
+DROP INDEX public.report_evidence_uploads_cleanup_idx;
+CREATE INDEX report_evidence_uploads_cleanup_idx
+  ON public.report_evidence_uploads (
+    status,
+    expires_at,
+    lease_expires_at,
+    evidence_ref
+  )
+  WHERE status <> 'claimed';
+SQL
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/registry-cleanup-index-drift.log" 2>&1; then
+  echo "private evidence replay accepted an index that hides claimed orphans" >&2
+  exit 1
+fi
+grep -q 'registry constraint contract drift' \
+  "$TMP_ROOT/registry-cleanup-index-drift.log"
+psql_cmd <<'SQL'
+DROP INDEX public.report_evidence_uploads_cleanup_idx;
+CREATE INDEX report_evidence_uploads_cleanup_idx
+  ON public.report_evidence_uploads (
+    status,
+    expires_at,
+    lease_expires_at,
+    evidence_ref
+  )
+  WHERE status <> 'claimed' OR report_id IS NULL;
+
+ALTER TABLE public.report_evidence_uploads
   DROP CONSTRAINT report_evidence_uploads_object_name_key;
 ALTER TABLE public.report_evidence_uploads
   ADD CONSTRAINT report_evidence_uploads_object_name_key
@@ -1133,6 +1342,29 @@ ALTER TABLE public.report_evidence_uploads
 ALTER TABLE public.report_evidence_uploads
   ADD CONSTRAINT report_evidence_uploads_object_name_key UNIQUE (object_name);
 
+ALTER TABLE public.report_evidence_uploads
+  DROP CONSTRAINT report_evidence_uploads_report_id_fkey;
+ALTER TABLE public.report_evidence_uploads
+  ADD CONSTRAINT report_evidence_uploads_report_id_fkey
+  FOREIGN KEY (report_id)
+  REFERENCES public.content_reports(id)
+  ON DELETE RESTRICT;
+SQL
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/registry-fkey-action-drift.log" 2>&1; then
+  echo "private evidence replay accepted a report-blocking registry FK" >&2
+  exit 1
+fi
+grep -q 'registry constraint contract drift' \
+  "$TMP_ROOT/registry-fkey-action-drift.log"
+psql_cmd <<'SQL'
+ALTER TABLE public.report_evidence_uploads
+  DROP CONSTRAINT report_evidence_uploads_report_id_fkey;
+ALTER TABLE public.report_evidence_uploads
+  ADD CONSTRAINT report_evidence_uploads_report_id_fkey
+  FOREIGN KEY (report_id)
+  REFERENCES public.content_reports(id)
+  ON DELETE SET NULL;
+
 CREATE TABLE public.wrong_report_targets (id uuid PRIMARY KEY);
 INSERT INTO public.wrong_report_targets(id)
 SELECT DISTINCT upload_row.report_id
@@ -1144,7 +1376,7 @@ ALTER TABLE public.report_evidence_uploads
   ADD CONSTRAINT report_evidence_uploads_report_id_fkey
   FOREIGN KEY (report_id)
   REFERENCES public.wrong_report_targets(id)
-  ON DELETE RESTRICT;
+  ON DELETE SET NULL;
 SQL
 if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/registry-fkey-drift.log" 2>&1; then
   echo "private evidence replay accepted a wrong same-name registry FK" >&2
@@ -1158,11 +1390,53 @@ ALTER TABLE public.report_evidence_uploads
   ADD CONSTRAINT report_evidence_uploads_report_id_fkey
   FOREIGN KEY (report_id)
   REFERENCES public.content_reports(id)
-  ON DELETE RESTRICT;
+  ON DELETE SET NULL;
 DROP TABLE public.wrong_report_targets;
 SQL
 
 psql_cmd <<'SQL'
+SET request.jwt.claim.role = 'service_role';
+DO $canonical_claimed_orphan_seed$
+DECLARE
+  v_reservation jsonb;
+  v_report jsonb;
+  v_evidence_ref text;
+BEGIN
+  v_reservation := public.reserve_report_evidence_upload(
+    '44444444-4444-4444-8444-444444444444', 'avif', 'image/avif'
+  );
+  v_evidence_ref := v_reservation ->> 'evidence_ref';
+  INSERT INTO storage.objects(bucket_id, name) VALUES (
+    'reports',
+    v_reservation ->> 'object_name'
+  );
+  PERFORM public.finalize_report_evidence_upload(
+    '44444444-4444-4444-8444-444444444444',
+    v_evidence_ref
+  );
+  v_report := public.submit_content_report(
+    '44444444-4444-4444-8444-444444444444',
+    'user',
+    '22222222-2222-4222-8222-222222222222',
+    'other',
+    'canonical replay must preserve a claimed cleanup orphan',
+    ARRAY[v_evidence_ref]
+  );
+  DELETE FROM public.content_reports
+  WHERE id = (v_report ->> 'report_id')::uuid;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM public.report_evidence_uploads AS upload_row
+    WHERE upload_row.evidence_ref = v_evidence_ref
+      AND upload_row.status = 'claimed'
+      AND upload_row.report_id IS NULL
+  ) THEN
+    RAISE EXCEPTION 'could not seed a canonical claimed cleanup orphan';
+  END IF;
+END
+$canonical_claimed_orphan_seed$;
+RESET request.jwt.claim.role;
 
 -- Inject replay drift. Canonical data must survive while catalogs converge.
 UPDATE storage.buckets
@@ -1270,11 +1544,58 @@ BEGIN
        'public.content_report_evidence_refs_valid(uuid,text[])',
        'EXECUTE'
      )
+     OR NOT EXISTS (
+       SELECT 1
+       FROM public.report_evidence_uploads AS upload_row
+       WHERE upload_row.reporter_id =
+         '44444444-4444-4444-8444-444444444444'
+         AND upload_row.status = 'claimed'
+         AND upload_row.report_id IS NULL
+     )
   THEN
     RAISE EXCEPTION 'private report evidence replay/catalog contract failed';
   END IF;
 END
 $catalog_and_replay_proof$;
+
+SET request.jwt.claim.role = 'service_role';
+DO $canonical_claimed_orphan_cleanup$
+DECLARE
+  v_batch jsonb;
+  v_item jsonb;
+BEGIN
+  v_batch := public.lease_stale_report_evidence_cleanup(50);
+  SELECT batch_item.value
+  INTO v_item
+  FROM pg_catalog.jsonb_array_elements(v_batch) AS batch_item(value)
+  WHERE batch_item.value ->> 'reporter_id' =
+    '44444444-4444-4444-8444-444444444444';
+
+  IF v_item IS NULL THEN
+    RAISE EXCEPTION 'replayed claimed cleanup orphan was not leaseable: %', v_batch;
+  END IF;
+
+  -- Test-fixture simulation of the worker's Storage API removal.
+  DELETE FROM storage.objects AS object_row
+  WHERE object_row.bucket_id = 'reports'
+    AND object_row.name = v_item ->> 'object_name';
+  IF NOT public.ack_report_evidence_cleanup(
+    (v_item ->> 'reporter_id')::uuid,
+    v_item ->> 'evidence_ref',
+    (v_item ->> 'lease_token')::uuid
+  ) THEN
+    RAISE EXCEPTION 'replayed claimed cleanup orphan ack failed';
+  END IF;
+  IF EXISTS (
+    SELECT 1
+    FROM public.report_evidence_uploads AS upload_row
+    WHERE upload_row.evidence_ref = v_item ->> 'evidence_ref'
+  ) THEN
+    RAISE EXCEPTION 'replayed claimed cleanup orphan remained after ack';
+  END IF;
+END
+$canonical_claimed_orphan_cleanup$;
+RESET request.jwt.claim.role;
 SQL
 
 echo "private report evidence PostgreSQL 17 proof passed"

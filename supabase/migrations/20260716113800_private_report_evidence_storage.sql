@@ -626,7 +626,8 @@ BEGIN
             AND NOT attribute.attisdropped
         )]::smallint[]
         AND constraint_row.confupdtype = 'a'
-        AND constraint_row.confdeltype = 'r'
+        AND constraint_row.confdeltype = 'n'
+        AND constraint_row.confdelsetcols IS NULL
         AND constraint_row.confmatchtype = 's'
         AND constraint_row.convalidated
         AND NOT constraint_row.condeferrable
@@ -695,7 +696,44 @@ BEGIN
           constraint_row.conbin,
           constraint_row.conrelid,
           true
-        ) = '(status = ANY (ARRAY[''reserved''::text, ''uploaded''::text])) AND report_id IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL OR status = ''cleanup''::text AND report_id IS NULL AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL OR status = ''claimed''::text AND report_id IS NOT NULL AND lease_token IS NULL AND lease_expires_at IS NULL'
+        ) = '(status = ANY (ARRAY[''reserved''::text, ''uploaded''::text])) AND report_id IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL OR status = ''cleanup''::text AND report_id IS NULL AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL OR status = ''claimed''::text AND lease_token IS NULL AND lease_expires_at IS NULL'
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_index AS index_metadata
+      JOIN pg_catalog.pg_class AS index_relation
+        ON index_relation.oid = index_metadata.indexrelid
+      JOIN pg_catalog.pg_am AS access_method
+        ON access_method.oid = index_relation.relam
+      WHERE index_metadata.indexrelid = pg_catalog.to_regclass(
+          'public.report_evidence_uploads_cleanup_idx'
+        )
+        AND index_metadata.indrelid = v_registry
+        AND NOT index_metadata.indisunique
+        AND NOT index_metadata.indisprimary
+        AND NOT index_metadata.indisexclusion
+        AND index_metadata.indisvalid
+        AND index_metadata.indisready
+        AND index_metadata.indimmediate
+        AND index_metadata.indexprs IS NULL
+        AND index_metadata.indnkeyatts = 4
+        AND index_metadata.indnatts = 4
+        AND access_method.amname = 'btree'
+        AND (
+          SELECT pg_catalog.array_agg(
+            attribute.attname ORDER BY key_column.ordinality
+          )
+          FROM pg_catalog.unnest(index_metadata.indkey)
+            WITH ORDINALITY AS key_column(attnum, ordinality)
+          JOIN pg_catalog.pg_attribute AS attribute
+            ON attribute.attrelid = index_metadata.indrelid
+           AND attribute.attnum = key_column.attnum
+        ) = ARRAY[
+          'status', 'expires_at', 'lease_expires_at', 'evidence_ref'
+        ]::name[]
+        AND pg_catalog.pg_get_expr(
+          index_metadata.indpred,
+          index_metadata.indrelid
+        ) = '((status <> ''claimed''::text) OR (report_id IS NULL))'
     )
   ) THEN
     RAISE EXCEPTION
@@ -883,6 +921,7 @@ BEGIN
     SELECT 1
     FROM public.report_evidence_uploads AS upload_row
     WHERE upload_row.status = 'claimed'
+      AND upload_row.report_id IS NOT NULL
       AND NOT EXISTS (
         SELECT 1
         FROM public.content_reports AS report_row
@@ -1034,8 +1073,10 @@ ALTER TABLE public.content_reports
   VALIDATE CONSTRAINT content_reports_private_evidence_refs_check;
 
 -- Registry lifecycle:
---   reserved -> uploaded -> claimed
---                    \-> cleanup -> deleted by service ack
+--   reserved -> uploaded -> claimed -> orphan (report deleted) -> cleanup
+--                    \------------------------------------------> cleanup
+-- An orphan is a claimed row whose report_id was set to NULL by the FK. It is
+-- immediately cleanup-eligible and follows the same Storage API + ack path.
 -- A row lock serializes submit against cleanup. Storage objects are removed
 -- only through the Storage API; database functions never delete storage.objects.
 CREATE TABLE IF NOT EXISTS public.report_evidence_uploads (
@@ -1044,7 +1085,7 @@ CREATE TABLE IF NOT EXISTS public.report_evidence_uploads (
   object_name text NOT NULL UNIQUE,
   mime_type text NOT NULL,
   status text NOT NULL DEFAULT 'reserved',
-  report_id uuid REFERENCES public.content_reports(id) ON DELETE RESTRICT,
+  report_id uuid REFERENCES public.content_reports(id) ON DELETE SET NULL,
   expires_at timestamptz NOT NULL,
   lease_token uuid,
   lease_expires_at timestamptz,
@@ -1076,7 +1117,6 @@ CREATE TABLE IF NOT EXISTS public.report_evidence_uploads (
         AND lease_expires_at IS NOT NULL
       ) OR (
         status = 'claimed'
-        AND report_id IS NOT NULL
         AND lease_token IS NULL
         AND lease_expires_at IS NULL
       )
@@ -1107,7 +1147,7 @@ CREATE INDEX IF NOT EXISTS report_evidence_uploads_cleanup_idx
     lease_expires_at,
     evidence_ref
   )
-  WHERE status <> 'claimed';
+  WHERE status <> 'claimed' OR report_id IS NULL;
 
 DO $revoke_nonowner_registry_table_access$
 DECLARE
@@ -1422,6 +1462,7 @@ SET search_path = pg_catalog, pg_temp
 AS $function$
 DECLARE
   v_status text;
+  v_report_id uuid;
   v_object_name text;
   v_lease_token uuid;
   v_lease_expires_at timestamptz;
@@ -1438,10 +1479,16 @@ BEGIN
 
   SELECT
     upload_row.status,
+    upload_row.report_id,
     upload_row.object_name,
     upload_row.lease_token,
     upload_row.lease_expires_at
-  INTO v_status, v_object_name, v_lease_token, v_lease_expires_at
+  INTO
+    v_status,
+    v_report_id,
+    v_object_name,
+    v_lease_token,
+    v_lease_expires_at
   FROM public.report_evidence_uploads AS upload_row
   WHERE upload_row.evidence_ref = p_evidence_ref
     AND upload_row.reporter_id = p_reporter_id
@@ -1450,7 +1497,7 @@ BEGIN
   IF NOT FOUND THEN
     RETURN pg_catalog.jsonb_build_object('acquired', false, 'reason', 'NOT_FOUND');
   END IF;
-  IF v_status = 'claimed' THEN
+  IF v_status = 'claimed' AND v_report_id IS NOT NULL THEN
     RETURN pg_catalog.jsonb_build_object('acquired', false, 'reason', 'CLAIMED');
   END IF;
 
@@ -1572,8 +1619,15 @@ BEGIN
     ) OR (
       upload_row.status = 'cleanup'
       AND upload_row.lease_expires_at <= pg_catalog.clock_timestamp()
+    ) OR (
+      upload_row.status = 'claimed'
+      AND upload_row.report_id IS NULL
     )
     ORDER BY
+      (
+        upload_row.status = 'claimed'
+        AND upload_row.report_id IS NULL
+      ) DESC,
       COALESCE(upload_row.lease_expires_at, upload_row.expires_at),
       upload_row.evidence_ref
     FOR UPDATE SKIP LOCKED
@@ -2411,7 +2465,8 @@ BEGIN
           AND NOT attribute.attisdropped
       )]::smallint[]
       AND constraint_row.confupdtype = 'a'
-      AND constraint_row.confdeltype = 'r'
+      AND constraint_row.confdeltype = 'n'
+      AND constraint_row.confdelsetcols IS NULL
       AND constraint_row.confmatchtype = 's'
       AND constraint_row.convalidated
       AND NOT constraint_row.condeferrable
@@ -2480,7 +2535,7 @@ BEGIN
         constraint_row.conbin,
         constraint_row.conrelid,
         true
-      ) = '(status = ANY (ARRAY[''reserved''::text, ''uploaded''::text])) AND report_id IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL OR status = ''cleanup''::text AND report_id IS NULL AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL OR status = ''claimed''::text AND report_id IS NOT NULL AND lease_token IS NULL AND lease_expires_at IS NULL'
+      ) = '(status = ANY (ARRAY[''reserved''::text, ''uploaded''::text])) AND report_id IS NULL AND lease_token IS NULL AND lease_expires_at IS NULL OR status = ''cleanup''::text AND report_id IS NULL AND lease_token IS NOT NULL AND lease_expires_at IS NOT NULL OR status = ''claimed''::text AND lease_token IS NULL AND lease_expires_at IS NULL'
   ) THEN
     RAISE EXCEPTION 'report evidence upload registry schema contract is invalid';
   END IF;
@@ -2547,12 +2602,23 @@ BEGIN
   IF NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_index AS index_metadata
+    JOIN pg_catalog.pg_class AS index_relation
+      ON index_relation.oid = index_metadata.indexrelid
+    JOIN pg_catalog.pg_am AS access_method
+      ON access_method.oid = index_relation.relam
     WHERE index_metadata.indexrelid =
       'public.report_evidence_uploads_cleanup_idx'::regclass
       AND index_metadata.indrelid = v_registry
+      AND NOT index_metadata.indisunique
+      AND NOT index_metadata.indisprimary
+      AND NOT index_metadata.indisexclusion
       AND index_metadata.indisvalid
       AND index_metadata.indisready
+      AND index_metadata.indimmediate
+      AND index_metadata.indexprs IS NULL
       AND index_metadata.indnkeyatts = 4
+      AND index_metadata.indnatts = 4
+      AND access_method.amname = 'btree'
       AND (
         SELECT pg_catalog.array_agg(
           attribute.attname ORDER BY key_column.ordinality
@@ -2568,7 +2634,7 @@ BEGIN
       AND pg_catalog.pg_get_expr(
         index_metadata.indpred,
         index_metadata.indrelid
-      ) = '(status <> ''claimed''::text)'
+      ) = '((status <> ''claimed''::text) OR (report_id IS NULL))'
   ) THEN
     RAISE EXCEPTION 'report evidence cleanup index contract is invalid';
   END IF;
@@ -2771,6 +2837,7 @@ BEGIN
     SELECT 1
     FROM public.report_evidence_uploads AS upload_row
     WHERE upload_row.status = 'claimed'
+      AND upload_row.report_id IS NOT NULL
       AND NOT EXISTS (
         SELECT 1
         FROM public.content_reports AS report_row
