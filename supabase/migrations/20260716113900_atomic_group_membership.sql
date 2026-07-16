@@ -15,6 +15,8 @@ DO $preflight$
 DECLARE
   required_relation text;
   required_role text;
+  redemption_relation oid :=
+    pg_catalog.to_regclass('public.group_invite_redemptions');
 BEGIN
   FOREACH required_relation IN ARRAY ARRAY[
     'groups',
@@ -36,6 +38,34 @@ BEGIN
         required_relation;
     END IF;
   END LOOP;
+
+  -- CREATE TABLE IF NOT EXISTS must never bless a same-name relation with a
+  -- different storage or rewrite authority.  Check this before any table lock,
+  -- DDL or count calibration so a replay cannot normalize attacker-controlled
+  -- relation metadata on its way to a later shape failure.
+  IF redemption_relation IS NOT NULL
+    AND (
+      NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_class AS relation
+        WHERE relation.oid = redemption_relation
+          AND relation.relkind = 'r'
+          AND relation.relpersistence = 'p'
+          AND NOT relation.relispartition
+      ) OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_rewrite AS rewrite_info
+        WHERE rewrite_info.ev_class = redemption_relation
+      ) OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_inherits AS inheritance_info
+        WHERE inheritance_info.inhrelid = redemption_relation
+          OR inheritance_info.inhparent = redemption_relation
+      )
+    )
+  THEN
+    RAISE EXCEPTION 'group_invite_redemptions relation authority is incompatible';
+  END IF;
 
   IF EXISTS (
     SELECT 1
@@ -503,7 +533,27 @@ ALTER TABLE public.group_invite_redemptions FORCE ROW LEVEL SECURITY;
 
 DO $redemption_shape_preflight$
 BEGIN
-  IF (
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class AS relation
+    WHERE relation.oid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      AND relation.relkind = 'r'
+      AND relation.relpersistence = 'p'
+      AND NOT relation.relispartition
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_rewrite AS rewrite_info
+    WHERE rewrite_info.ev_class =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_inherits AS inheritance_info
+    WHERE inheritance_info.inhrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      OR inheritance_info.inhparent =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) OR (
     SELECT pg_catalog.count(*)
     FROM pg_catalog.pg_attribute AS attribute
     WHERE attribute.attrelid =
@@ -1804,9 +1854,24 @@ BEGIN
     SELECT 1
     FROM pg_catalog.pg_class AS relation
     WHERE relation.oid = 'public.group_invite_redemptions'::pg_catalog.regclass
+      AND relation.relkind = 'r'
+      AND relation.relpersistence = 'p'
+      AND NOT relation.relispartition
       AND relation.relrowsecurity
       AND relation.relforcerowsecurity
       AND pg_catalog.pg_get_userbyid(relation.relowner) = 'postgres'
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_rewrite AS rewrite_info
+    WHERE rewrite_info.ev_class =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_inherits AS inheritance_info
+    WHERE inheritance_info.inhrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      OR inheritance_info.inhparent =
+        'public.group_invite_redemptions'::pg_catalog.regclass
   ) OR (
     SELECT pg_catalog.count(*)
     FROM pg_catalog.pg_policy AS policy

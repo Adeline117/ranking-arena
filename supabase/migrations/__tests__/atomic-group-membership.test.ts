@@ -39,6 +39,29 @@ describe('atomic group membership migration contract', () => {
     expect(migration).toContain('group_invite_redemptions has an incompatible shape')
   })
 
+  it('rejects non-canonical redemption relation authority before side effects', () => {
+    const preflight = migration.match(/DO \$preflight\$[\s\S]*?\$preflight\$;/)?.[0]
+    const authorityFailure = migration.indexOf(
+      'group_invite_redemptions relation authority is incompatible'
+    )
+    const firstTableLock = migration.indexOf('LOCK TABLE')
+    const redemptionCreate = migration.indexOf(
+      'CREATE TABLE IF NOT EXISTS public.group_invite_redemptions'
+    )
+
+    expect(preflight).toBeDefined()
+    expect(preflight).toContain("relation.relkind = 'r'")
+    expect(preflight).toContain("relation.relpersistence = 'p'")
+    expect(preflight).toContain('AND NOT relation.relispartition')
+    expect(preflight).toContain('FROM pg_catalog.pg_rewrite AS rewrite_info')
+    expect(preflight).toContain('FROM pg_catalog.pg_inherits AS inheritance_info')
+    expect(preflight).toContain('inheritance_info.inhrelid')
+    expect(preflight).toContain('inheritance_info.inhparent')
+    expect(authorityFailure).toBeGreaterThan(0)
+    expect(firstTableLock).toBeGreaterThan(authorityFailure)
+    expect(redemptionCreate).toBeGreaterThan(authorityFailure)
+  })
+
   it('fails closed on deploy-time invite and approval ambiguity without deleting evidence', () => {
     expect(migration).toContain('DO $locked_data_preflight$')
     expect(migration).toContain('duplicate group invite token hashes require explicit review')
