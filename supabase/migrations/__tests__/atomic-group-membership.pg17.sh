@@ -292,6 +292,54 @@ INSERT INTO public.group_join_requests (
   ('51000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'approved', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', pg_catalog.clock_timestamp());
 SQL
 
+# A deferred edge primary key is not usable by the membership/moderation
+# authority. Both edge contracts must fail before consumed_at, counters or RPCs
+# are installed, rather than waiting for the later moderation rollout.
+psql_cmd <<'SQL'
+ALTER TABLE public.group_members DROP CONSTRAINT group_members_pkey;
+ALTER TABLE public.group_members
+  ADD CONSTRAINT group_members_pkey PRIMARY KEY (group_id, user_id)
+  DEFERRABLE INITIALLY DEFERRED;
+SQL
+if psql_cmd -f "$MIGRATION" >"$LOG_DIR/deferred-member-edge.log" 2>&1; then
+  echo "Migration unexpectedly accepted a deferred membership edge" >&2
+  exit 1
+fi
+grep -Fq 'membership edge primary keys are incompatible' \
+  "$LOG_DIR/deferred-member-edge.log"
+if [[ "$(psql_cmd -Atqc "SELECT count(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'public.group_join_requests'::regclass AND attname = 'consumed_at' AND attnum > 0 AND NOT attisdropped")" != "0" ]] || \
+  [[ "$(psql_cmd -Atqc "SELECT pg_catalog.to_regprocedure('public.mutate_group_membership_atomic(uuid,uuid,text,boolean)') IS NULL")" != "t" ]] || \
+  [[ "$(psql_cmd -Atqc "SELECT member_count IS NULL FROM public.groups WHERE id = '10000000-0000-4000-8000-000000000001'")" != "t" ]]; then
+  echo "Deferred membership edge preflight mutated deployment state" >&2
+  exit 1
+fi
+psql_cmd <<'SQL'
+ALTER TABLE public.group_members DROP CONSTRAINT group_members_pkey;
+ALTER TABLE public.group_members
+  ADD CONSTRAINT group_members_pkey PRIMARY KEY (group_id, user_id);
+ALTER TABLE public.group_bans DROP CONSTRAINT group_bans_pkey;
+ALTER TABLE public.group_bans
+  ADD CONSTRAINT group_bans_pkey PRIMARY KEY (group_id, user_id)
+  DEFERRABLE INITIALLY DEFERRED;
+SQL
+if psql_cmd -f "$MIGRATION" >"$LOG_DIR/deferred-ban-edge.log" 2>&1; then
+  echo "Migration unexpectedly accepted a deferred ban edge" >&2
+  exit 1
+fi
+grep -Fq 'membership edge primary keys are incompatible' \
+  "$LOG_DIR/deferred-ban-edge.log"
+if [[ "$(psql_cmd -Atqc "SELECT count(*) FROM pg_catalog.pg_attribute WHERE attrelid = 'public.group_join_requests'::regclass AND attname = 'consumed_at' AND attnum > 0 AND NOT attisdropped")" != "0" ]] || \
+  [[ "$(psql_cmd -Atqc "SELECT pg_catalog.to_regprocedure('public.redeem_group_invite_atomic(uuid,uuid,text,boolean)') IS NULL")" != "t" ]] || \
+  [[ "$(psql_cmd -Atqc "SELECT member_count IS NULL FROM public.groups WHERE id = '10000000-0000-4000-8000-000000000001'")" != "t" ]]; then
+  echo "Deferred ban edge preflight mutated deployment state" >&2
+  exit 1
+fi
+psql_cmd <<'SQL'
+ALTER TABLE public.group_bans DROP CONSTRAINT group_bans_pkey;
+ALTER TABLE public.group_bans
+  ADD CONSTRAINT group_bans_pkey PRIMARY KEY (group_id, user_id);
+SQL
+
 # A trigger column with a plausible name but incompatible type must fail before
 # the migration installs any authority or mutates deployment evidence.
 psql_cmd <<'SQL'
@@ -358,6 +406,81 @@ grep -Fq 'group_invites_token_hash_unique is a conflicting index' \
 psql_cmd -c 'DROP INDEX public.group_invites_token_hash_unique' >/dev/null
 
 psql_cmd -f "$MIGRATION" >"$LOG_DIR/first-apply.log"
+
+# Replay must reject a same-column/same-PK redemption table whose nullable
+# evidence, timestamp default and delete actions violate the durable contract.
+# The failed transaction must preserve the drift for explicit review.
+psql_cmd <<'SQL'
+DROP TABLE public.group_invite_redemptions;
+CREATE TABLE public.group_invite_redemptions (
+  invite_id uuid NOT NULL
+    REFERENCES public.group_invites(id) ON DELETE RESTRICT,
+  group_id uuid
+    REFERENCES public.groups(id) ON DELETE SET NULL,
+  user_id uuid NOT NULL,
+  redeemed_at timestamptz DEFAULT pg_catalog.statement_timestamp(),
+  PRIMARY KEY (invite_id, user_id)
+);
+ALTER TABLE public.group_invite_redemptions OWNER TO postgres;
+SQL
+if psql_cmd -f "$MIGRATION" >"$LOG_DIR/malicious-redemption-replay.log" 2>&1; then
+  echo "Migration replay unexpectedly accepted malformed redemption evidence" >&2
+  exit 1
+fi
+grep -Fq 'group_invite_redemptions has an incompatible shape' \
+  "$LOG_DIR/malicious-redemption-replay.log"
+psql_cmd <<'SQL'
+DO $malicious_redemption_preserved$
+BEGIN
+  IF (
+    SELECT relation.relrowsecurity OR relation.relforcerowsecurity
+    FROM pg_catalog.pg_class AS relation
+    WHERE relation.oid = 'public.group_invite_redemptions'::regclass
+  ) OR (
+    SELECT attribute.attnotnull
+    FROM pg_catalog.pg_attribute AS attribute
+    WHERE attribute.attrelid = 'public.group_invite_redemptions'::regclass
+      AND attribute.attname = 'group_id'
+  ) OR (
+    SELECT attribute.attnotnull
+    FROM pg_catalog.pg_attribute AS attribute
+    WHERE attribute.attrelid = 'public.group_invite_redemptions'::regclass
+      AND attribute.attname = 'redeemed_at'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    JOIN pg_catalog.pg_attrdef AS default_info
+      ON default_info.adrelid = attribute.attrelid
+     AND default_info.adnum = attribute.attnum
+    WHERE attribute.attrelid = 'public.group_invite_redemptions'::regclass
+      AND attribute.attname = 'redeemed_at'
+      AND pg_catalog.pg_get_expr(
+        default_info.adbin,
+        default_info.adrelid,
+        true
+      ) = 'statement_timestamp()'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid = 'public.group_invite_redemptions'::regclass
+      AND constraint_info.contype = 'f'
+      AND constraint_info.confrelid = 'public.group_invites'::regclass
+      AND constraint_info.confdeltype = 'r'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid = 'public.group_invite_redemptions'::regclass
+      AND constraint_info.contype = 'f'
+      AND constraint_info.confrelid = 'public.groups'::regclass
+      AND constraint_info.confdeltype = 'n'
+  ) THEN
+    RAISE EXCEPTION 'failed redemption replay silently repaired malicious drift';
+  END IF;
+END
+$malicious_redemption_preserved$;
+DROP TABLE public.group_invite_redemptions;
+SQL
+psql_cmd -f "$MIGRATION" >"$LOG_DIR/redemption-contract-replay.log"
 
 # INSERT can never mint its own approved credential. A pending request may be
 # approved only through a later state transition with decision evidence.
@@ -695,6 +818,103 @@ DO $catalog_and_data_contract$
 DECLARE
   rpc_signature regprocedure;
 BEGIN
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_attribute AS attribute
+    WHERE attribute.attrelid = 'public.group_invite_redemptions'::regclass
+      AND attribute.attname IN (
+        'invite_id', 'group_id', 'user_id', 'redeemed_at'
+      )
+      AND attribute.attnotnull
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+  ) <> 4 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    JOIN pg_catalog.pg_attrdef AS default_info
+      ON default_info.adrelid = attribute.attrelid
+     AND default_info.adnum = attribute.attnum
+    WHERE attribute.attrelid = 'public.group_invite_redemptions'::regclass
+      AND attribute.attname = 'redeemed_at'
+      AND pg_catalog.pg_get_expr(
+        default_info.adbin,
+        default_info.adrelid,
+        true
+      ) = 'clock_timestamp()'
+  ) THEN
+    RAISE EXCEPTION 'redemption evidence nullability/default contract drifted';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_invite_redemptions'::regclass
+      AND constraint_info.contype = 'p'
+      AND constraint_info.convalidated
+      AND NOT constraint_info.condeferrable
+      AND NOT constraint_info.condeferred
+      AND constraint_info.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.conrelid
+            AND attribute.attname = 'invite_id'
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.conrelid
+            AND attribute.attname = 'user_id'
+        )
+      ]::smallint[]
+  ) OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_invite_redemptions'::regclass
+      AND constraint_info.contype = 'f'
+      AND constraint_info.convalidated
+      AND NOT constraint_info.condeferrable
+      AND NOT constraint_info.condeferred
+      AND constraint_info.confupdtype = 'a'
+      AND constraint_info.confdeltype = 'c'
+      AND constraint_info.confmatchtype = 's'
+      AND constraint_info.confkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.confrelid
+            AND attribute.attname = 'id'
+        )
+      ]::smallint[]
+      AND (
+        (
+          constraint_info.confrelid = 'public.group_invites'::regclass
+          AND constraint_info.conkey = ARRAY[
+            (
+              SELECT attribute.attnum
+              FROM pg_catalog.pg_attribute AS attribute
+              WHERE attribute.attrelid = constraint_info.conrelid
+                AND attribute.attname = 'invite_id'
+            )
+          ]::smallint[]
+        ) OR (
+          constraint_info.confrelid = 'public.groups'::regclass
+          AND constraint_info.conkey = ARRAY[
+            (
+              SELECT attribute.attnum
+              FROM pg_catalog.pg_attribute AS attribute
+              WHERE attribute.attrelid = constraint_info.conrelid
+                AND attribute.attname = 'group_id'
+            )
+          ]::smallint[]
+        )
+      )
+  ) <> 2 THEN
+    RAISE EXCEPTION 'redemption evidence key contract drifted';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM public.groups AS target_group
