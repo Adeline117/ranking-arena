@@ -164,8 +164,20 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     timeframe?: unknown
     from?: unknown
   }
-  const tfNum = num(payload.timeframe) ?? 30
-  const tf = (tfNum === 0 ? 90 : tfNum) as RankingTimeframe
+  const tfNum = num(payload.timeframe)
+  if (tfNum !== 7 && tfNum !== 30 && tfNum !== 90) {
+    throw new Error('[gmx] invalid profile timeframe')
+  }
+  const tf = tfNum as RankingTimeframe
+  const windowFrom = num(payload.from)
+  if (
+    windowFrom === null ||
+    !Number.isInteger(windowFrom) ||
+    windowFrom <= 0 ||
+    windowFrom % 86_400 !== 0
+  ) {
+    throw new Error('[gmx] invalid profile window start')
+  }
 
   if (!Array.isArray(payload.periodStats) || !Array.isArray(payload.pnlHistory)) {
     throw new Error('[gmx] invalid profile bundle arrays')
@@ -213,7 +225,7 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       holdingDurationAvgHours: null,
       tradingPreferences: null,
       extras: {
-        ...realizedPnlBasisExtras(realizedPnl, num(payload.from)),
+        ...realizedPnlBasisExtras(realizedPnl, windowFrom),
         aum_basis: 'max_capital_proxy', // legacy-connector convention
         gmx_total_mark_to_market_pnl_usd: totalPnl,
         gmx_total_mark_to_market_source: 'account_pnl_history_cumulative',
@@ -243,7 +255,7 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       holdingDurationAvgHours: null,
       tradingPreferences: null,
       extras: {
-        ...realizedPnlBasisExtras(0, num(payload.from)),
+        ...realizedPnlBasisExtras(0, windowFrom),
         profile_window_metrics_complete: true,
         profile_window_empty: true,
         empty_window_evidence: 'explicit_empty_period_stats_and_history',
@@ -278,7 +290,7 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
         profile_window_metrics_complete: false,
         profile_window_metrics_incomplete_reason: 'period_stats_missing_with_history',
         profile_series_contract: 'unavailable_same_basis',
-        window_from: num(payload.from),
+        window_from: windowFrom,
         gmx_total_mark_to_market_pnl_usd: totalPnl,
         gmx_total_mark_to_market_source: 'account_pnl_history_cumulative',
       },

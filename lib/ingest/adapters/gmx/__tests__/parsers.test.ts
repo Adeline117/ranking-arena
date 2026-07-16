@@ -196,6 +196,7 @@ describe('parseGmxProfile', () => {
           { timestamp: 1_765_411_200, cumulativePnl: '1000000000000000000000000000000' },
         ],
         timeframe: 30,
+        from: 1_765_411_200,
       },
       ctx
     )
@@ -210,11 +211,16 @@ describe('parseGmxProfile', () => {
   })
 
   it('does not mistake missing arrays or invalid history rows for a confirmed empty window', () => {
-    expect(() => parseGmxProfile({ periodStats: [], timeframe: 30 }, ctx)).toThrow(
-      '[gmx] invalid profile bundle arrays'
-    )
+    expect(() =>
+      parseGmxProfile({ periodStats: [], timeframe: 30, from: 1_765_411_200 }, ctx)
+    ).toThrow('[gmx] invalid profile bundle arrays')
     const profile = parseGmxProfile(
-      { periodStats: [], pnlHistory: [{ unexpected: true }], timeframe: 30 },
+      {
+        periodStats: [],
+        pnlHistory: [{ unexpected: true }],
+        timeframe: 30,
+        from: 1_765_411_200,
+      },
       ctx
     )
     expect(profile.stats[0].extras).toMatchObject({
@@ -226,8 +232,27 @@ describe('parseGmxProfile', () => {
   it('fails closed when id_eq unexpectedly returns duplicate period aggregates', () => {
     const row = (bundle.periodStats as Array<Record<string, unknown>>)[0]
     expect(() =>
-      parseGmxProfile({ periodStats: [row, row], pnlHistory: [], timeframe: 7 }, ctx)
+      parseGmxProfile(
+        { periodStats: [row, row], pnlHistory: [], timeframe: 7, from: bundle.from },
+        ctx
+      )
     ).toThrow('[gmx] duplicate period aggregates for profile window')
+  })
+
+  it('requires an explicit supported timeframe and midnight-aligned window start', () => {
+    const empty = { periodStats: [], pnlHistory: [] }
+    expect(() => parseGmxProfile({ ...empty, from: 1_765_411_200 }, ctx)).toThrow(
+      '[gmx] invalid profile timeframe'
+    )
+    expect(() => parseGmxProfile({ ...empty, timeframe: 999, from: 1_765_411_200 }, ctx)).toThrow(
+      '[gmx] invalid profile timeframe'
+    )
+    expect(() => parseGmxProfile({ ...empty, timeframe: 30 }, ctx)).toThrow(
+      '[gmx] invalid profile window start'
+    )
+    expect(() => parseGmxProfile({ ...empty, timeframe: 30, from: 1_765_411_201 }, ctx)).toThrow(
+      '[gmx] invalid profile window start'
+    )
   })
 
   it('fails closed without clearing serving data when a realized component is absent', () => {
