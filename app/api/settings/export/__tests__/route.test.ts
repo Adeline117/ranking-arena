@@ -325,6 +325,39 @@ describe('POST /api/settings/export', () => {
           },
         ]
       }
+      if (dataset.name === 'trading.alerts') {
+        return [
+          {
+            id: '12121212-1212-4212-8212-121212121212',
+            trader_id: 'trader-beta',
+            source: 'binance_futures',
+            enabled: true,
+            alert_roi_change: true,
+            roi_change_threshold: '10.000000000000000001',
+            alert_drawdown: true,
+            drawdown_threshold: '20',
+            alert_pnl_change: false,
+            pnl_change_threshold: '5000.123456789012345678',
+            alert_score_change: true,
+            score_change_threshold: '5.25',
+            alert_rank_change: false,
+            rank_change_threshold: 5,
+            alert_new_position: true,
+            alert_price_above: false,
+            price_above_value: null,
+            alert_price_below: true,
+            price_below_value: '9007199254740993.0000000001',
+            price_symbol: 'BTCUSDT',
+            last_triggered_at: '2026-02-16T01:00:00.000Z',
+            one_time: false,
+            read_at: null,
+            created_at: '2026-02-16T00:00:00.000Z',
+            updated_at: '2026-02-16T00:30:00.000Z',
+            user_id: 'must-not-escape-alert-owner',
+            future_secret: 'must-not-escape-alert-normalization',
+          },
+        ]
+      }
       if (dataset.name === 'notifications') {
         return [
           {
@@ -436,6 +469,7 @@ describe('POST /api/settings/export', () => {
       'bookmarks.posts': 1,
       'trading.copy_configs': 1,
       'trading.watchlist': 1,
+      'trading.alerts': 1,
       'settings.preferences': 1,
       'account.bindings': 2,
       'account.login_sessions': 1,
@@ -617,9 +651,38 @@ describe('POST /api/settings/export', () => {
           created_at: '2026-02-16T00:00:00.000Z',
         },
       ],
+      alerts: [
+        {
+          id: '12121212-1212-4212-8212-121212121212',
+          trader_id: 'trader-beta',
+          source: 'binance_futures',
+          enabled: true,
+          alert_roi_change: true,
+          roi_change_threshold: '10.000000000000000001',
+          alert_drawdown: true,
+          drawdown_threshold: '20',
+          alert_pnl_change: false,
+          pnl_change_threshold: '5000.123456789012345678',
+          alert_score_change: true,
+          score_change_threshold: '5.25',
+          alert_rank_change: false,
+          rank_change_threshold: 5,
+          alert_new_position: true,
+          alert_price_above: false,
+          price_above_value: null,
+          alert_price_below: true,
+          price_below_value: '9007199254740993.0000000001',
+          price_symbol: 'BTCUSDT',
+          last_triggered_at: '2026-02-16T01:00:00.000Z',
+          one_time: false,
+          read_at: null,
+          created_at: '2026-02-16T00:00:00.000Z',
+          updated_at: '2026-02-16T00:30:00.000Z',
+        },
+      ],
     })
     expect(JSON.stringify(body.trading)).not.toMatch(
-      /must-not-escape-copy-settings|must-not-escape-copy-owner|must-not-escape-watchlist-owner|apiSecret|user_id/
+      /must-not-escape-copy-settings|must-not-escape-copy-owner|must-not-escape-watchlist-owner|must-not-escape-alert-owner|must-not-escape-alert-normalization|apiSecret|future_secret|user_id/
     )
     expect(body.settings).toEqual({
       preferences: {
@@ -652,7 +715,7 @@ describe('POST /api/settings/export', () => {
       'must-not-escape-binding-normalization'
     )
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
-    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(12)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(13)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -809,6 +872,32 @@ describe('POST /api/settings/export', () => {
     })
     expect(watchlistCall[1].selectColumns).not.toContain('user_id')
 
+    const alertsCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+      (call) => call[1].name === 'trading.alerts'
+    )
+    expect(alertsCall).toBeDefined()
+    expect(alertsCall[2]).toBe(USER_ID)
+    expect(alertsCall[1]).toEqual(
+      expect.objectContaining({
+        table: 'trader_alerts',
+        ownerPredicate: { column: 'user_id', operator: 'eq', valueType: 'uuid' },
+        cursor: {
+          order: 'asc',
+          columns: [{ column: 'id', valueType: 'uuid' }],
+        },
+        textCastColumns: [
+          'roi_change_threshold',
+          'drawdown_threshold',
+          'pnl_change_threshold',
+          'score_change_threshold',
+          'price_above_value',
+          'price_below_value',
+        ],
+      })
+    )
+    expect(alertsCall[1].selectColumns).not.toContain('user_id')
+    expect(alertsCall[1].selectColumns).not.toContain('*')
+
     for (const ownerIdDatasetName of [
       'notifications',
       'interactions.comment_likes',
@@ -932,6 +1021,21 @@ describe('POST /api/settings/export', () => {
     mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
       if (dataset.name === 'notifications') {
         throw new DataExportReadError('notifications', { code: 'XX001' })
+      }
+      return []
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed without cooldown when trader alerts cannot be read completely', async () => {
+    mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
+      if (dataset.name === 'trading.alerts') {
+        throw new DataExportReadError('trading.alerts', { code: 'XX001' })
       }
       return []
     })
