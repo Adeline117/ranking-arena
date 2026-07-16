@@ -10,6 +10,7 @@ import { commentStyles, REPLIES_PREVIEW_COUNT, type Comment } from './comment-ty
 import type { ReplyTarget, ReplyTargetSetter } from './reply-types'
 import { ProBadge, CommentAvatar } from './CommentAvatar'
 import { useCommentDraftPersistence } from '../hooks/useCommentDraftPersistence'
+import { useEffect, useRef } from 'react'
 
 // An "edited" badge should only appear on genuine edits. A bare
 // `updated_at !== created_at` check is too strict: bulk data operations (e.g.
@@ -47,12 +48,10 @@ export interface CommentThreadProps {
   onDeleteComment: (postId: string, commentId: string) => void
   // Edit
   editingComment?: { id: string; content: string } | null
-  editContent?: string
-  setEditContent?: (val: string) => void
   submittingEdit?: boolean
   onStartEdit?: (comment: Comment) => void
-  onCancelEdit?: () => void
-  onSubmitEdit?: (postId: string) => void
+  onCancelEdit?: (commentId?: string) => void
+  onSubmitEdit?: (postId: string, commentId: string, content: string) => Promise<boolean>
   // Expand replies
   expandedReplies: Record<string, boolean>
   setExpandedReplies: (updater: (prev: Record<string, boolean>) => Record<string, boolean>) => void
@@ -158,6 +157,130 @@ function ReplyComposer({
   )
 }
 
+interface EditComposerProps {
+  postId: string
+  commentId: string
+  initialContent: string
+  viewerKey: string
+  submittingEdit: boolean
+  onCancelEdit: (commentId?: string) => void
+  onSubmitEdit: (postId: string, commentId: string, content: string) => Promise<boolean>
+  t: (key: string) => string
+}
+
+function EditComposer({
+  postId,
+  commentId,
+  initialContent,
+  viewerKey,
+  submittingEdit,
+  onCancelEdit,
+  onSubmitEdit,
+  t,
+}: EditComposerProps): React.ReactNode {
+  const draftId = `edit:${postId}:${commentId}`
+  const {
+    draft: editContent,
+    setDraft: setEditContent,
+    clearDraft,
+    captureDraftSnapshot,
+    clearDraftIfUnchanged,
+  } = useCommentDraftPersistence(draftId, viewerKey, initialContent)
+  const mountedRef = useRef(true)
+
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
+
+  const cancelCurrentEdit = (): void => {
+    clearDraft(draftId)
+    onCancelEdit(commentId)
+  }
+
+  const submitCurrentEdit = async (): Promise<void> => {
+    const content = editContent.trim()
+    if (submittingEdit || !content) return
+
+    const draftSnapshot = captureDraftSnapshot(draftId)
+    const acknowledged = await onSubmitEdit(postId, commentId, content)
+    if (acknowledged && mountedRef.current && clearDraftIfUnchanged(draftSnapshot)) {
+      onCancelEdit(commentId)
+    }
+  }
+
+  const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>): void => {
+    if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+      event.preventDefault()
+      void submitCurrentEdit()
+    }
+    if (event.key === 'Escape' && !event.nativeEvent.isComposing) cancelCurrentEdit()
+  }
+
+  return (
+    <div style={{ marginTop: 8, position: 'relative' }}>
+      <textarea
+        value={editContent}
+        maxLength={2000}
+        onChange={(e) => {
+          setEditContent(e.target.value)
+          const ta = e.target
+          ta.style.height = 'auto'
+          ta.style.height = Math.min(ta.scrollHeight, 100) + 'px'
+        }}
+        onKeyDown={handleKeyDown}
+        rows={2}
+        style={{
+          ...commentStyles.input,
+          width: '100%',
+          resize: 'none',
+          minHeight: 48,
+          maxHeight: 100,
+          paddingRight: 80,
+          overflow: 'hidden',
+          fontFamily: 'inherit',
+        }}
+      />
+      <div style={{ position: 'absolute', right: 6, bottom: 6, display: 'flex', gap: 4 }}>
+        <button
+          onClick={cancelCurrentEdit}
+          style={{
+            padding: '6px 12px',
+            borderRadius: tokens.radius.sm,
+            border: `1px solid ${tokens.colors.border.primary}`,
+            background: 'transparent',
+            color: tokens.colors.text.tertiary,
+            fontSize: 12,
+            cursor: 'pointer',
+            minHeight: 36,
+          }}
+        >
+          {t('cancel')}
+        </button>
+        <button
+          onClick={() => void submitCurrentEdit()}
+          disabled={submittingEdit || !editContent.trim()}
+          style={{
+            padding: '6px 14px',
+            borderRadius: tokens.radius.sm,
+            border: 'none',
+            background: editContent.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
+            color: tokens.colors.white,
+            fontSize: 12,
+            fontWeight: 700,
+            cursor: submittingEdit || !editContent.trim() ? 'default' : 'pointer',
+            minHeight: 36,
+          }}
+        >
+          {submittingEdit ? '...' : t('save')}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export function CommentThread({
   comment,
   isReply = false,
@@ -176,8 +299,6 @@ export function CommentThread({
   deletingCommentId,
   onDeleteComment,
   editingComment,
-  editContent,
-  setEditContent,
   submittingEdit,
   onStartEdit,
   onCancelEdit,
@@ -354,71 +475,18 @@ export function CommentThread({
           </div>
 
           {/* Edit input */}
-          {editingComment?.id === comment.id && setEditContent && onSubmitEdit && onCancelEdit && (
-            <div style={{ marginTop: 8, position: 'relative' }}>
-              <textarea
-                value={editContent || ''}
-                maxLength={2000}
-                onChange={(e) => {
-                  setEditContent(e.target.value)
-                  const ta = e.target
-                  ta.style.height = 'auto'
-                  ta.style.height = Math.min(ta.scrollHeight, 100) + 'px'
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    if (!submittingEdit && editContent?.trim()) onSubmitEdit(postId)
-                  }
-                  if (e.key === 'Escape') onCancelEdit()
-                }}
-                rows={2}
-                style={{
-                  ...commentStyles.input,
-                  width: '100%',
-                  resize: 'none',
-                  minHeight: 48,
-                  maxHeight: 100,
-                  paddingRight: 80,
-                  overflow: 'hidden',
-                  fontFamily: 'inherit',
-                }}
-              />
-              <div style={{ position: 'absolute', right: 6, bottom: 6, display: 'flex', gap: 4 }}>
-                <button
-                  onClick={onCancelEdit}
-                  style={{
-                    padding: '6px 12px',
-                    borderRadius: tokens.radius.sm,
-                    border: `1px solid ${tokens.colors.border.primary}`,
-                    background: 'transparent',
-                    color: tokens.colors.text.tertiary,
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    minHeight: 36,
-                  }}
-                >
-                  {t('cancel')}
-                </button>
-                <button
-                  onClick={() => onSubmitEdit(postId)}
-                  disabled={submittingEdit || !editContent?.trim()}
-                  style={{
-                    padding: '6px 14px',
-                    borderRadius: tokens.radius.sm,
-                    border: 'none',
-                    background: editContent?.trim() ? ARENA_PURPLE : `${ARENA_PURPLE}40`,
-                    color: tokens.colors.white,
-                    fontSize: 12,
-                    fontWeight: 700,
-                    cursor: submittingEdit || !editContent?.trim() ? 'default' : 'pointer',
-                    minHeight: 36,
-                  }}
-                >
-                  {submittingEdit ? '...' : t('save')}
-                </button>
-              </div>
-            </div>
+          {editingComment?.id === comment.id && onSubmitEdit && onCancelEdit && (
+            <EditComposer
+              key={`${viewerKey}\u0000${postId}\u0000${comment.id}`}
+              postId={postId}
+              commentId={comment.id}
+              initialContent={editingComment.content}
+              viewerKey={viewerKey}
+              submittingEdit={submittingEdit || false}
+              onCancelEdit={onCancelEdit}
+              onSubmitEdit={onSubmitEdit}
+              t={t}
+            />
           )}
 
           {/* Reply input */}
@@ -458,8 +526,6 @@ export function CommentThread({
                   deletingCommentId={deletingCommentId}
                   onDeleteComment={onDeleteComment}
                   editingComment={editingComment}
-                  editContent={editContent}
-                  setEditContent={setEditContent}
                   submittingEdit={submittingEdit}
                   onStartEdit={onStartEdit}
                   onCancelEdit={onCancelEdit}

@@ -101,7 +101,7 @@ function isEditedCommentResponse(
     typeof comment.user_id === 'string' &&
     comment.user_id.length > 0 &&
     (!expected.userId || comment.user_id === expected.userId) &&
-    typeof comment.content === 'string' &&
+    comment.content === expected.content &&
     (comment.author_handle === null || typeof comment.author_handle === 'string') &&
     (comment.author_id === null || typeof comment.author_id === 'string') &&
     (comment.parent_id === null || typeof comment.parent_id === 'string') &&
@@ -288,7 +288,6 @@ export function usePostComments({
     id: string
     content: string
   } | null>(null, () => null, scopeKey)
-  const [editContent, setEditContent] = useViewerOwnedState('', () => '', scopeKey)
   const [submittingEdit, setSubmittingEdit] = useViewerOwnedState(false, () => false, scopeKey)
   const submittingEditRef = useRef<symbol | null>(null)
 
@@ -338,14 +337,12 @@ export function usePostComments({
     setReplyingTo(null)
     setExpandedReplies({})
     setEditingComment(null)
-    setEditContent('')
     setSubmittingEdit(false)
   }, [
     scopeKey,
     setCommentLikeLoading,
     setComments,
     setDeletingCommentId,
-    setEditContent,
     setEditingComment,
     setExpandedReplies,
     setLoadingComments,
@@ -452,7 +449,6 @@ export function usePostComments({
         setReplyingTo(null)
         setExpandedReplies({})
         setEditingComment(null)
-        setEditContent('')
         setCommentLikeLoading({})
         setDeletingCommentId(null)
       }
@@ -476,7 +472,6 @@ export function usePostComments({
       setCommentLikeLoading,
       setComments,
       setDeletingCommentId,
-      setEditContent,
       setEditingComment,
       setExpandedReplies,
       setLoadingComments,
@@ -924,26 +919,29 @@ export function usePostComments({
   const startEditComment = useCallback(
     (comment: Comment) => {
       setEditingComment({ id: comment.id, content: comment.content })
-      setEditContent(comment.content)
     },
-    [setEditContent, setEditingComment]
+    [setEditingComment]
   )
 
-  const cancelEditComment = useCallback(() => {
-    setEditingComment(null)
-    setEditContent('')
-  }, [setEditContent, setEditingComment])
+  const cancelEditComment = useCallback(
+    (commentId?: string) => {
+      setEditingComment((currentTarget) =>
+        !commentId || currentTarget?.id === commentId ? null : currentTarget
+      )
+    },
+    [setEditingComment]
+  )
 
   const submitEditComment = useCallback(
-    async (postId: string): Promise<void> => {
-      if (!editingComment || !editContent.trim() || !requireAuth()) return
+    async (postId: string, commentId: string, content: string): Promise<boolean> => {
+      const expectedContent = content.trim()
+      if (!expectedContent || !requireAuth() || submittingEditRef.current) return false
 
-      const targetComment = findComment(commentsRef.current, editingComment.id)
-      if (!targetComment) return
+      const targetComment = findComment(commentsRef.current, commentId)
+      if (!targetComment) return false
       const boundPostId = currentPostIdRef.current
-      if (boundPostId !== null && boundPostId !== postId) return
+      if (boundPostId !== null && boundPostId !== postId) return false
       const requestGeneration = loadRequestGenerationRef.current
-      const expectedContent = editContent.trim()
       const capturedScope = activeScopeRef.current
       const revisionKey = commentViewerScopeKey(capturedScope)
       const requestStartRevision = stateRevisionRef.current.get(revisionKey) || 0
@@ -961,7 +959,7 @@ export function usePostComments({
           'PUT',
           accessToken,
           {
-            comment_id: editingComment.id,
+            comment_id: commentId,
             content: expectedContent,
           },
           15_000,
@@ -971,13 +969,13 @@ export function usePostComments({
           }
         )
 
-        if (!scopeIsCurrent(capturedScope) || result.stale) return
+        if (!scopeIsCurrent(capturedScope) || result.stale) return false
 
         if (
           result.ok &&
           result.data?.success &&
           isEditedCommentResponse(result.data.data?.comment, {
-            commentId: editingComment.id,
+            commentId,
             postId,
             userId: capturedScope.userId,
             content: expectedContent,
@@ -993,7 +991,7 @@ export function usePostComments({
 
           if (responseStillTargetsVisibleTree) {
             const updateInList = (c: Comment): Comment => {
-              if (c.id === editingComment.id) {
+              if (c.id === commentId) {
                 return {
                   ...c,
                   content: acknowledgement.content,
@@ -1008,14 +1006,13 @@ export function usePostComments({
               return c
             }
             setComments((prev) => prev.map(updateInList))
-            setEditingComment(null)
-            setEditContent('')
             if (scopeIsCurrent(capturedScope)) showToast(t('saved'), 'success')
           } else {
             // The ACK is valid but belongs to an older generation/resource.
             // Refresh its keyed cache without touching the newly visible post.
             await reconcileCanonicalComments(postId, 'best', capturedScope)
           }
+          return true
         } else if (isDefinitiveMutationRejection(result)) {
           if (scopeIsCurrent(capturedScope)) {
             showToast(
@@ -1026,6 +1023,7 @@ export function usePostComments({
         } else if (!(await reconcileCanonicalComments(postId, 'best', capturedScope))) {
           if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
+        return false
       } catch {
         if (
           scopeIsCurrent(capturedScope) &&
@@ -1033,6 +1031,7 @@ export function usePostComments({
         ) {
           if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
+        return false
       } finally {
         if (submittingEditRef.current === operation) {
           submittingEditRef.current = null
@@ -1042,14 +1041,10 @@ export function usePostComments({
     },
     [
       accessToken,
-      editingComment,
-      editContent,
       reconcileCanonicalComments,
       requireAuth,
       scopeIsCurrent,
       setComments,
-      setEditContent,
-      setEditingComment,
       setSubmittingEdit,
       showToast,
       t,
@@ -1212,8 +1207,6 @@ export function usePostComments({
     setExpandedReplies,
     deletingCommentId,
     editingComment,
-    editContent,
-    setEditContent,
     submittingEdit,
     startEditComment,
     cancelEditComment,

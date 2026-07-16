@@ -365,8 +365,6 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
           deletingCommentId={commentsHook.deletingCommentId}
           onDeleteComment={commentsHook.deleteComment}
           editingComment={commentsHook.editingComment}
-          editContent={commentsHook.editContent}
-          setEditContent={commentsHook.setEditContent}
           submittingEdit={commentsHook.submittingEdit}
           onStartEdit={commentsHook.startEditComment}
           onCancelEdit={commentsHook.cancelEditComment}

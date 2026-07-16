@@ -348,7 +348,22 @@ describe('usePostComments post switching', () => {
     expect(result.current.replyingTo).toBeNull()
     expect(result.current.expandedReplies).toEqual({})
     expect(result.current.editingComment).toBeNull()
-    expect(result.current.editContent).toBe('')
+  })
+
+  it('cancels only the edit target named by the caller', () => {
+    const { result } = renderCommentsHook()
+    const commentA = makeComment({ id: 'comment-a', content: 'A' })
+    const commentB = makeComment({ id: 'comment-b', content: 'B' })
+
+    act(() => result.current.startEditComment(commentA))
+    expect(result.current.editingComment).toEqual({ id: 'comment-a', content: 'A' })
+
+    act(() => result.current.startEditComment(commentB))
+    act(() => result.current.cancelEditComment(commentA.id))
+    expect(result.current.editingComment).toEqual({ id: 'comment-b', content: 'B' })
+
+    act(() => result.current.cancelEditComment(commentB.id))
+    expect(result.current.editingComment).toBeNull()
   })
 
   it('does not let an old failed submit overwrite the new post comments', async () => {
@@ -737,12 +752,11 @@ describe('usePostComments viewer scope', () => {
     ).toBe(true)
   })
 
-  it('fails A reply and edit interaction state empty during the first B render', async () => {
+  it('fails A reply and edit-target interaction state empty during the first B render', async () => {
     const snapshots: Array<{
       viewerKey: string
       replyingTo: string | null
       editingComment: string | null
-      editContent: string
       expanded: boolean
     }> = []
     const showToast = jest.fn()
@@ -758,7 +772,6 @@ describe('usePostComments viewer scope', () => {
           viewerKey: props.viewerKey,
           replyingTo: value.replyingTo?.commentId ?? null,
           editingComment: value.editingComment?.id ?? null,
-          editContent: value.editContent,
           expanded: value.expandedReplies['comment-a'] ?? false,
         })
         return value
@@ -785,7 +798,6 @@ describe('usePostComments viewer scope', () => {
       viewerKey: 'user:user-b',
       replyingTo: null,
       editingComment: null,
-      editContent: '',
       expanded: false,
     })
   })

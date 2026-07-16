@@ -79,12 +79,10 @@ interface PostDetailViewProps {
   onDeleteComment: (postId: string, commentId: string) => Promise<void>
   // Edit comment
   editingComment?: { id: string; content: string } | null
-  editContent?: string
-  setEditContent?: (val: string) => void
   submittingEdit?: boolean
   onStartEdit?: (comment: Comment) => void
-  onCancelEdit?: () => void
-  onSubmitEdit?: (postId: string) => void
+  onCancelEdit?: (commentId?: string) => void
+  onSubmitEdit?: (postId: string, commentId: string, content: string) => Promise<boolean>
   expandedReplies: Record<string, boolean>
   setExpandedReplies: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   translatedComments: Record<string, string>
@@ -133,8 +131,6 @@ export default function PostDetailView({
   deletingCommentId,
   onDeleteComment,
   editingComment,
-  editContent,
-  setEditContent,
   submittingEdit,
   onStartEdit,
   onCancelEdit,
@@ -431,8 +427,6 @@ export default function PostDetailView({
           deletingCommentId={deletingCommentId}
           onDeleteComment={onDeleteComment}
           editingComment={editingComment}
-          editContent={editContent}
-          setEditContent={setEditContent}
           submittingEdit={submittingEdit}
           onStartEdit={onStartEdit}
           onCancelEdit={onCancelEdit}

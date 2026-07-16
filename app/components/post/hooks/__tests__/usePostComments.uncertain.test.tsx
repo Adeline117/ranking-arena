@@ -290,10 +290,7 @@ describe('usePostComments uncertain edit reconciliation', () => {
   async function beginEdit(result: ReturnType<typeof renderCommentsHook>['result']) {
     const initial = comment()
     await loadInitial(result, [initial], 1)
-    act(() => {
-      result.current.startEditComment(initial)
-      result.current.setEditContent('edited')
-    })
+    act(() => result.current.startEditComment(initial))
     return initial
   }
 
@@ -306,8 +303,12 @@ describe('usePostComments uncertain edit reconciliation', () => {
       data: { success: true, data: { comment: editedAcknowledgement('edited') } },
     })
 
-    await act(async () => result.current.submitEditComment('post-1'))
+    let acknowledged = false
+    await act(async () => {
+      acknowledged = await result.current.submitEditComment('post-1', 'comment-1', ' edited ')
+    })
 
+    expect(acknowledged).toBe(true)
     expect(result.current.comments[0]).toMatchObject({
       id: 'comment-1',
       content: 'edited',
@@ -323,8 +324,12 @@ describe('usePostComments uncertain edit reconciliation', () => {
     mockAuthedFetch.mockRejectedValueOnce(new Error('response lost'))
     mockAuthedFetch.mockResolvedValueOnce(canonical([edited], 1))
 
-    await act(async () => result.current.submitEditComment('post-1'))
+    let acknowledged = true
+    await act(async () => {
+      acknowledged = await result.current.submitEditComment('post-1', 'comment-1', 'edited')
+    })
 
+    expect(acknowledged).toBe(false)
     expect(result.current.comments).toEqual([edited])
   })
 
@@ -334,8 +339,12 @@ describe('usePostComments uncertain edit reconciliation', () => {
     mockAuthedFetch.mockRejectedValueOnce(new Error('response lost'))
     mockAuthedFetch.mockResolvedValueOnce(canonical([initial], 1))
 
-    await act(async () => result.current.submitEditComment('post-1'))
+    let acknowledged = true
+    await act(async () => {
+      acknowledged = await result.current.submitEditComment('post-1', 'comment-1', 'edited')
+    })
 
+    expect(acknowledged).toBe(false)
     expect(result.current.comments).toEqual([initial])
   })
 
@@ -350,9 +359,36 @@ describe('usePostComments uncertain edit reconciliation', () => {
     })
     mockAuthedFetch.mockResolvedValueOnce(canonical([edited], 1))
 
-    await act(async () => result.current.submitEditComment('post-1'))
+    let acknowledged = true
+    await act(async () => {
+      acknowledged = await result.current.submitEditComment('post-1', 'comment-1', 'edited')
+    })
 
+    expect(acknowledged).toBe(false)
     expect(result.current.comments).toEqual([edited])
+  })
+
+  it('rejects a well-shaped ACK whose content does not match the submitted payload', async () => {
+    const { result } = renderCommentsHook()
+    await beginEdit(result)
+    const canonicalEdit = comment({ content: 'canonical edit' })
+    mockAuthedFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        data: { comment: editedAcknowledgement('different server content') },
+      },
+    })
+    mockAuthedFetch.mockResolvedValueOnce(canonical([canonicalEdit], 1))
+
+    let acknowledged = true
+    await act(async () => {
+      acknowledged = await result.current.submitEditComment('post-1', 'comment-1', 'edited')
+    })
+
+    expect(acknowledged).toBe(false)
+    expect(result.current.comments).toEqual([canonicalEdit])
   })
 
   it('unknown mutation + failed canonical GET preserves the visible tree', async () => {
@@ -361,8 +397,12 @@ describe('usePostComments uncertain edit reconciliation', () => {
     mockAuthedFetch.mockResolvedValueOnce(unavailable())
     mockAuthedFetch.mockResolvedValueOnce(unavailable())
 
-    await act(async () => result.current.submitEditComment('post-1'))
+    let acknowledged = true
+    await act(async () => {
+      acknowledged = await result.current.submitEditComment('post-1', 'comment-1', 'edited')
+    })
 
+    expect(acknowledged).toBe(false)
     expect(result.current.comments).toEqual([initial])
     expect(showToast).toHaveBeenCalledWith('networkError', 'error')
   })
@@ -373,9 +413,9 @@ describe('usePostComments uncertain edit reconciliation', () => {
     let resolveMutation: ((value: unknown) => void) | undefined
     mockAuthedFetch.mockReturnValueOnce(new Promise((resolve) => (resolveMutation = resolve)))
 
-    let request: Promise<void>
+    let request: Promise<boolean>
     act(() => {
-      request = result.current.submitEditComment('post-1')
+      request = result.current.submitEditComment('post-1', 'comment-1', 'edited')
     })
     const postTwoComment = comment({ id: 'comment-2', post_id: 'post-2', content: 'post two' })
     await loadInitial(result, [postTwoComment], 1, 'post-2')

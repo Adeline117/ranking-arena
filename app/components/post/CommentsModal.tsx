@@ -35,12 +35,10 @@ interface CommentsModalProps {
   onDeleteComment: (postId: string, commentId: string) => void
   // Edit
   editingComment?: { id: string; content: string } | null
-  editContent?: string
-  setEditContent?: (val: string) => void
   submittingEdit?: boolean
   onStartEdit?: (comment: Comment) => void
-  onCancelEdit?: () => void
-  onSubmitEdit?: (postId: string) => void
+  onCancelEdit?: (commentId?: string) => void
+  onSubmitEdit?: (postId: string, commentId: string, content: string) => Promise<boolean>
   // Expand replies
   expandedReplies: Record<string, boolean>
   setExpandedReplies: (updater: (prev: Record<string, boolean>) => Record<string, boolean>) => void
@@ -69,8 +67,6 @@ export default function CommentsModal({
   deletingCommentId,
   onDeleteComment,
   editingComment,
-  editContent,
-  setEditContent,
   submittingEdit,
   onStartEdit,
   onCancelEdit,
@@ -197,8 +193,6 @@ export default function CommentsModal({
                 deletingCommentId={deletingCommentId}
                 onDeleteComment={onDeleteComment}
                 editingComment={editingComment}
-                editContent={editContent}
-                setEditContent={setEditContent}
                 submittingEdit={submittingEdit}
                 onStartEdit={onStartEdit}
                 onCancelEdit={onCancelEdit}

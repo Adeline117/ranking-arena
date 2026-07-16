@@ -109,8 +109,6 @@ describe('PostDetailPageBody scoped hydration', () => {
         deletingCommentId: null,
         deleteComment: jest.fn(),
         editingComment: null,
-        editContent: '',
-        setEditContent: jest.fn(),
         submittingEdit: false,
         startEditComment: jest.fn(),
         cancelEditComment: jest.fn(),
