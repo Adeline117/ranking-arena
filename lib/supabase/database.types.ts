@@ -9202,6 +9202,27 @@ export type Database = {
           score: number
         }[]
       }
+      resolve_content_report_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_reason: string | null
+          p_report_id: string
+        }
+        Returns: {
+          action_taken: string | null
+          admin_log_id: string | null
+          applied: boolean
+          content_affected_count: number
+          content_id: string
+          content_soft_deleted: boolean | null
+          content_type: string
+          report_id: string
+          report_status: string
+          result_action: string
+          result_code: string
+        }[]
+      }
       record_rejected_writes: { Args: { p_rows: Json }; Returns: undefined }
       record_user_activity: {
         Args: { p_seen_at?: string; p_user_id: string }
