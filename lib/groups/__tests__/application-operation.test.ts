@@ -2,16 +2,24 @@ import { webcrypto } from 'node:crypto'
 import {
   __resetGroupApplicationOperationsForTests,
   acquireGroupApplicationOperation,
+  canonicalizeGroupProfileEditPayload,
   completeGroupApplicationOperation,
+  groupProfileEditReviewScope,
+  groupProfileEditSubmitScope,
   isCurrentGroupApplicationOperation,
+  isExactApproveGroupProfileEditAck,
   isExactRejectGroupApplicationAck,
+  isExactRejectGroupProfileEditAck,
   isExactSubmitGroupApplicationAck,
+  isExactSubmitGroupProfileEditAck,
   runGroupApplicationSingleFlight,
+  startGroupApplicationSingleFlight,
 } from '../application-operation'
 
 const ACTOR_A = '11111111-1111-4111-8111-111111111111'
 const ACTOR_B = '22222222-2222-4222-8222-222222222222'
 const APPLICATION_ID = '33333333-3333-4333-8333-333333333333'
+const GROUP_ID = '44444444-4444-4444-8444-444444444444'
 
 describe('group-application client operation ledger', () => {
   beforeAll(() => {
@@ -180,5 +188,260 @@ describe('group-application client operation ledger', () => {
     })
 
     expect(replacement.operationId).not.toBe(first.operationId)
+  })
+
+  it('isolates profile-edit submit/review scopes from creation and from each other', () => {
+    expect(groupProfileEditSubmitScope(ACTOR_A, GROUP_ID)).toBe(
+      `group-profile-edit:submit:v1:${ACTOR_A}:${GROUP_ID}`
+    )
+    expect(groupProfileEditReviewScope(ACTOR_A, APPLICATION_ID)).toBe(
+      `group-profile-edit:review:v1:${ACTOR_A}:${APPLICATION_ID}`
+    )
+    expect(groupProfileEditSubmitScope(ACTOR_A, GROUP_ID)).not.toBe(`submit:${ACTOR_A}`)
+    expect(groupProfileEditReviewScope(ACTOR_A, APPLICATION_ID)).not.toBe(
+      `review:${ACTOR_A}:${APPLICATION_ID}`
+    )
+  })
+
+  it('trims and NFC-normalizes the complete profile-edit snapshot by code point', () => {
+    const payload = canonicalizeGroupProfileEditPayload({
+      avatar_url: ' https://example.test/cafe\u0301😀 ',
+      description: ' de\u0301tail 😀 ',
+      description_en: '   ',
+      is_premium_only: true,
+      name: ' Cafe\u0301 😀 ',
+      name_en: null,
+      role_names: {
+        admin: { en: ' Owne\u0301r ', zh: ' 管理员 ' },
+        member: { en: ' Member ', zh: ' 成员 ' },
+      },
+      rules_json: [
+        { en: ' Re\u0301spect 😀 ', zh: ' 尊重 ' },
+        { en: '   ', zh: '   ' },
+      ],
+    })
+
+    expect(payload).toEqual({
+      avatar_url: 'https://example.test/café😀',
+      description: 'détail 😀',
+      description_en: null,
+      is_premium_only: true,
+      name: 'Café 😀',
+      name_en: null,
+      role_names: {
+        admin: { en: 'Ownér', zh: '管理员' },
+        member: { en: 'Member', zh: '成员' },
+      },
+      rules: '尊重',
+      rules_json: [{ en: 'Réspect 😀', zh: '尊重' }],
+    })
+    expect(Array.from(payload.name!)).toHaveLength(6)
+
+    expect(
+      canonicalizeGroupProfileEditPayload({
+        avatar_url: null,
+        description: null,
+        description_en: null,
+        is_premium_only: false,
+        name: null,
+        name_en: ' English fallback ',
+        role_names: null,
+        rules_json: null,
+      })
+    ).toEqual({
+      avatar_url: null,
+      description: null,
+      description_en: null,
+      is_premium_only: false,
+      name: 'English fallback',
+      name_en: 'English fallback',
+      role_names: null,
+      rules: null,
+      rules_json: null,
+    })
+  })
+
+  it('reports single-flight ownership while preserving the legacy promise API', async () => {
+    const operation = await acquireGroupApplicationOperation(
+      groupProfileEditSubmitScope(ACTOR_A, GROUP_ID),
+      ACTOR_A,
+      { group_id: GROUP_ID, name: 'same' }
+    )
+    const pending = new Promise<string>((resolve) => queueMicrotask(() => resolve('ack')))
+    const task = jest.fn(() => pending)
+
+    const first = startGroupApplicationSingleFlight(operation, task)
+    const second = startGroupApplicationSingleFlight(operation, task)
+    const legacy = runGroupApplicationSingleFlight(operation, task)
+
+    expect(first.started).toBe(true)
+    expect(second.started).toBe(false)
+    expect(second.promise).toBe(first.promise)
+    expect(legacy).toBe(first.promise)
+    await expect(first.promise).resolves.toBe('ack')
+    expect(task).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns a boolean CAS result and cannot clear a replacement intent', async () => {
+    const scope = groupProfileEditReviewScope(ACTOR_A, APPLICATION_ID)
+    const first = await acquireGroupApplicationOperation(scope, ACTOR_A, {
+      decision: 'approve',
+      reason: null,
+    })
+    const replacement = await acquireGroupApplicationOperation(scope, ACTOR_A, {
+      decision: 'reject',
+      reason: 'changed',
+    })
+
+    expect(completeGroupApplicationOperation(first)).toBe(false)
+    expect(isCurrentGroupApplicationOperation(replacement)).toBe(true)
+    expect(completeGroupApplicationOperation(replacement)).toBe(true)
+    expect(completeGroupApplicationOperation(replacement)).toBe(false)
+  })
+
+  it('accepts only an exact canonical profile-edit submit snapshot', async () => {
+    const payload = canonicalizeGroupProfileEditPayload({
+      avatar_url: null,
+      description: 'Détail 😀',
+      description_en: null,
+      is_premium_only: false,
+      name: 'Café 😀',
+      name_en: null,
+      role_names: {
+        admin: { en: 'Admin', zh: '管理员' },
+        member: { en: 'Member', zh: '成员' },
+      },
+      rules_json: [{ en: 'Respect', zh: '尊重' }],
+    })
+    const operation = await acquireGroupApplicationOperation(
+      groupProfileEditSubmitScope(ACTOR_A, GROUP_ID),
+      ACTOR_A,
+      { group_id: GROUP_ID, ...payload }
+    )
+    const application = {
+      id: APPLICATION_ID,
+      group_id: GROUP_ID,
+      applicant_id: ACTOR_A,
+      ...payload,
+      status: 'pending',
+      created_at: '2026-07-16T12:00:00.000Z',
+    }
+    const acknowledgement = {
+      success: true,
+      message: 'submitted',
+      operation_id: operation.operationId,
+      application,
+    }
+
+    expect(isExactSubmitGroupProfileEditAck(acknowledgement, operation, GROUP_ID, payload)).toBe(
+      true
+    )
+    expect(
+      isExactSubmitGroupProfileEditAck(
+        { ...acknowledgement, application: { ...application, name: 'Cafe\u0301 😀' } },
+        operation,
+        GROUP_ID,
+        payload
+      )
+    ).toBe(false)
+    expect(
+      isExactSubmitGroupProfileEditAck(
+        { ...acknowledgement, application: { ...application, extra: true } },
+        operation,
+        GROUP_ID,
+        payload
+      )
+    ).toBe(false)
+    expect(
+      isExactSubmitGroupProfileEditAck(acknowledgement, operation, APPLICATION_ID, payload)
+    ).toBe(false)
+
+    const invalidSnapshots: Array<
+      [applicationPatch: Record<string, unknown>, expectedPatch: Record<string, unknown>]
+    > = [
+      [{ name: '😀'.repeat(51) }, { name: '😀'.repeat(51) }],
+      [{ name_en: '😀'.repeat(51) }, { name_en: '😀'.repeat(51) }],
+      [{ description: '😀'.repeat(501) }, { description: '😀'.repeat(501) }],
+      [{ avatar_url: '/relative/avatar.png' }, { avatar_url: '/relative/avatar.png' }],
+      [
+        { avatar_url: `https://example.test/${'😀'.repeat(2_049)}` },
+        { avatar_url: `https://example.test/${'😀'.repeat(2_049)}` },
+      ],
+      [{ rules: '😀'.repeat(10_001) }, { rules: '😀'.repeat(10_001) }],
+      [{ created_at: '2026-07-16 12:00:00' }, {}],
+      [
+        { role_names: { ...payload.role_names!, extra: true } },
+        { role_names: { ...payload.role_names!, extra: true } },
+      ],
+      [
+        { rules_json: Array.from({ length: 101 }, () => ({ en: '', zh: 'rule' })) },
+        { rules_json: Array.from({ length: 101 }, () => ({ en: '', zh: 'rule' })) },
+      ],
+    ]
+    for (const [applicationPatch, expectedPatch] of invalidSnapshots) {
+      expect(
+        isExactSubmitGroupProfileEditAck(
+          { ...acknowledgement, application: { ...application, ...applicationPatch } },
+          operation,
+          GROUP_ID,
+          { ...payload, ...expectedPatch } as typeof payload
+        )
+      ).toBe(false)
+    }
+  })
+
+  it('binds exact approve/reject acknowledgements to app, group, decision, and NFC reason', async () => {
+    const approve = await acquireGroupApplicationOperation(
+      groupProfileEditReviewScope(ACTOR_A, APPLICATION_ID),
+      ACTOR_A,
+      { application_id: APPLICATION_ID, decision: 'approve', reason: null }
+    )
+    const approveAck = {
+      success: true,
+      message: 'approved',
+      operation_id: approve.operationId,
+      application: { id: APPLICATION_ID, group_id: GROUP_ID, status: 'approved' },
+    }
+    expect(isExactApproveGroupProfileEditAck(approveAck, approve, APPLICATION_ID, GROUP_ID)).toBe(
+      true
+    )
+    expect(
+      isExactRejectGroupProfileEditAck(approveAck, approve, APPLICATION_ID, GROUP_ID, null)
+    ).toBe(false)
+
+    const rejectReason = 'Réason 😀'
+    const reject = await acquireGroupApplicationOperation(
+      groupProfileEditReviewScope(ACTOR_A, APPLICATION_ID),
+      ACTOR_A,
+      { application_id: APPLICATION_ID, decision: 'reject', reason: rejectReason }
+    )
+    const rejectAck = {
+      success: true,
+      message: 'rejected',
+      operation_id: reject.operationId,
+      application: {
+        id: APPLICATION_ID,
+        group_id: GROUP_ID,
+        status: 'rejected',
+        reject_reason: rejectReason,
+      },
+    }
+    expect(
+      isExactRejectGroupProfileEditAck(rejectAck, reject, APPLICATION_ID, GROUP_ID, rejectReason)
+    ).toBe(true)
+    expect(
+      isExactRejectGroupProfileEditAck(
+        {
+          ...rejectAck,
+          application: { ...rejectAck.application, reject_reason: 'Re\u0301ason 😀' },
+        },
+        reject,
+        APPLICATION_ID,
+        GROUP_ID,
+        rejectReason
+      )
+    ).toBe(false)
+    expect(completeGroupApplicationOperation(approve)).toBe(false)
+    expect(isCurrentGroupApplicationOperation(reject)).toBe(true)
   })
 })

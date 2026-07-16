@@ -7,6 +7,32 @@ const SHA256_PATTERN = /^[0-9a-f]{64}$/
 type JsonPrimitive = null | boolean | number | string
 type CanonicalValue = JsonPrimitive | CanonicalValue[] | { [key: string]: CanonicalValue }
 
+export type GroupProfileEditRule = { en: string; zh: string }
+export type GroupProfileEditRoleNames = {
+  admin: { en: string; zh: string }
+  member: { en: string; zh: string }
+}
+
+export interface GroupProfileEditPayload {
+  avatar_url: string | null
+  description: string | null
+  description_en: string | null
+  is_premium_only: boolean
+  name: string
+  name_en: string | null
+  role_names: GroupProfileEditRoleNames | null
+  rules: string | null
+  rules_json: GroupProfileEditRule[] | null
+}
+
+export type GroupProfileEditPayloadInput = Omit<
+  GroupProfileEditPayload,
+  'name' | 'rules' | 'rules_json'
+> & {
+  name: string | null
+  rules_json: readonly GroupProfileEditRule[] | null
+}
+
 export interface GroupApplicationOperation {
   actorId: string
   intentFingerprint: string
@@ -153,6 +179,61 @@ export function codePointLength(value: string): number {
   return Array.from(value).length
 }
 
+export function groupProfileEditSubmitScope(actorId: string, groupId: string): string {
+  return `group-profile-edit:submit:v1:${actorId}:${groupId}`
+}
+
+export function groupProfileEditReviewScope(actorId: string, applicationId: string): string {
+  return `group-profile-edit:review:v1:${actorId}:${applicationId}`
+}
+
+function normalizeOptionalText(value: string | null): string | null {
+  const normalized = value?.trim().normalize('NFC') ?? ''
+  return normalized || null
+}
+
+/** Build the exact JSON snapshot fingerprinted by the edit-submit operation. */
+export function canonicalizeGroupProfileEditPayload(
+  input: GroupProfileEditPayloadInput
+): GroupProfileEditPayload {
+  const normalizedName = normalizeOptionalText(input.name)
+  const normalizedNameEn = normalizeOptionalText(input.name_en)
+  const normalizedRules =
+    input.rules_json
+      ?.map((rule) => ({
+        en: rule.en.trim().normalize('NFC'),
+        zh: rule.zh.trim().normalize('NFC'),
+      }))
+      .filter((rule) => rule.zh || rule.en) ?? []
+
+  return {
+    avatar_url: normalizeOptionalText(input.avatar_url),
+    description: normalizeOptionalText(input.description),
+    description_en: normalizeOptionalText(input.description_en),
+    is_premium_only: input.is_premium_only,
+    name: normalizedName ?? normalizedNameEn ?? '',
+    name_en: normalizedNameEn,
+    role_names: input.role_names
+      ? {
+          admin: {
+            en: input.role_names.admin.en.trim().normalize('NFC'),
+            zh: input.role_names.admin.zh.trim().normalize('NFC'),
+          },
+          member: {
+            en: input.role_names.member.en.trim().normalize('NFC'),
+            zh: input.role_names.member.zh.trim().normalize('NFC'),
+          },
+        }
+      : null,
+    rules:
+      normalizedRules
+        .map((rule) => rule.zh)
+        .filter(Boolean)
+        .join('\n') || null,
+    rules_json: normalizedRules.length > 0 ? normalizedRules : null,
+  }
+}
+
 export async function acquireGroupApplicationOperation(
   scope: string,
   actorId: string,
@@ -189,7 +270,7 @@ export function isCurrentGroupApplicationOperation(operation: GroupApplicationOp
   )
 }
 
-export function completeGroupApplicationOperation(operation: GroupApplicationOperation): void {
+export function completeGroupApplicationOperation(operation: GroupApplicationOperation): boolean {
   const entries = readStoredEntries()
   const current = entries[operation.scope]
   if (
@@ -197,18 +278,19 @@ export function completeGroupApplicationOperation(operation: GroupApplicationOpe
     current.intentFingerprint !== operation.intentFingerprint ||
     current.operationId !== operation.operationId
   ) {
-    return
+    return false
   }
   delete entries[operation.scope]
   writeStoredEntries(entries)
+  return true
 }
 
-export function runGroupApplicationSingleFlight<T>(
+export function startGroupApplicationSingleFlight<T>(
   operation: GroupApplicationOperation,
   task: () => Promise<T>
-): Promise<T> {
+): { promise: Promise<T>; started: boolean } {
   const existing = inFlightOperations.get(operation.operationId) as Promise<T> | undefined
-  if (existing) return existing
+  if (existing) return { promise: existing, started: false }
 
   const promise = task().finally(() => {
     if (inFlightOperations.get(operation.operationId) === promise) {
@@ -216,7 +298,14 @@ export function runGroupApplicationSingleFlight<T>(
     }
   })
   inFlightOperations.set(operation.operationId, promise)
-  return promise
+  return { promise, started: true }
+}
+
+export function runGroupApplicationSingleFlight<T>(
+  operation: GroupApplicationOperation,
+  task: () => Promise<T>
+): Promise<T> {
+  return startGroupApplicationSingleFlight(operation, task).promise
 }
 
 export function __resetGroupApplicationOperationsForTests(): void {
@@ -231,6 +320,227 @@ function hasExactKeys(value: Record<string, unknown>, expected: readonly string[
   return (
     actual.length === canonicalExpected.length &&
     actual.every((key, index) => key === canonicalExpected[index])
+  )
+}
+
+function isCanonicalJson(value: unknown): value is CanonicalValue {
+  if (value === null || typeof value === 'boolean') return true
+  if (typeof value === 'number') return Number.isFinite(value)
+  if (typeof value === 'string') return value === value.normalize('NFC')
+  if (Array.isArray(value)) return value.every(isCanonicalJson)
+  if (!isRecord(value)) return false
+  return Object.entries(value).every(
+    ([key, nested]) =>
+      key === key.normalize('NFC') && nested !== undefined && isCanonicalJson(nested)
+  )
+}
+
+function isExactCanonicalJson(actual: unknown, expected: unknown): boolean {
+  return (
+    isCanonicalJson(actual) &&
+    isCanonicalJson(expected) &&
+    canonicalize(actual) === canonicalize(expected)
+  )
+}
+
+function isNullableBoundedString(value: unknown, maximum: number): value is string | null {
+  return value === null || (typeof value === 'string' && codePointLength(value) <= maximum)
+}
+
+function isAbsoluteHttpUrl(value: string): boolean {
+  try {
+    const url = new URL(value)
+    return (url.protocol === 'http:' || url.protocol === 'https:') && Boolean(url.hostname)
+  } catch {
+    return false
+  }
+}
+
+function isStrictIsoTimestamp(value: unknown): value is string {
+  return (
+    typeof value === 'string' &&
+    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    Number.isFinite(Date.parse(value))
+  )
+}
+
+function isValidProfileEditRoleNames(value: unknown): value is GroupProfileEditRoleNames | null {
+  if (value === null) return true
+  if (!isRecord(value) || !hasExactKeys(value, ['admin', 'member'])) return false
+  return ['admin', 'member'].every((role) => {
+    const names = value[role]
+    return (
+      isRecord(names) &&
+      hasExactKeys(names, ['en', 'zh']) &&
+      typeof names.en === 'string' &&
+      typeof names.zh === 'string' &&
+      codePointLength(names.en) <= 50 &&
+      codePointLength(names.zh) <= 50
+    )
+  })
+}
+
+function isValidProfileEditRules(value: unknown): value is GroupProfileEditRule[] | null {
+  if (value === null) return true
+  return (
+    Array.isArray(value) &&
+    value.length <= 100 &&
+    value.every(
+      (rule) =>
+        isRecord(rule) &&
+        hasExactKeys(rule, ['en', 'zh']) &&
+        typeof rule.en === 'string' &&
+        typeof rule.zh === 'string' &&
+        Boolean(rule.en || rule.zh) &&
+        codePointLength(rule.en) <= 2_000 &&
+        codePointLength(rule.zh) <= 2_000
+    )
+  )
+}
+
+function isValidGroupProfileEditSnapshot(value: Record<string, unknown>): boolean {
+  return (
+    typeof value.name === 'string' &&
+    codePointLength(value.name) >= 1 &&
+    codePointLength(value.name) <= 50 &&
+    isNullableBoundedString(value.name_en, 50) &&
+    isNullableBoundedString(value.description, 500) &&
+    isNullableBoundedString(value.description_en, 500) &&
+    isNullableBoundedString(value.avatar_url, 2_048) &&
+    (value.avatar_url === null || isAbsoluteHttpUrl(value.avatar_url)) &&
+    isValidProfileEditRoleNames(value.role_names) &&
+    isValidProfileEditRules(value.rules_json) &&
+    isNullableBoundedString(value.rules, 10_000) &&
+    typeof value.is_premium_only === 'boolean'
+  )
+}
+
+function isExactProfileEditRoot(
+  value: unknown,
+  operation: GroupApplicationOperation
+): value is Record<string, unknown> & { application: Record<string, unknown> } {
+  return (
+    isRecord(value) &&
+    hasExactKeys(value, ['success', 'message', 'operation_id', 'application']) &&
+    value.success === true &&
+    value.operation_id === operation.operationId &&
+    typeof value.message === 'string' &&
+    value.message === value.message.normalize('NFC') &&
+    isRecord(value.application)
+  )
+}
+
+export function isExactSubmitGroupProfileEditAck(
+  value: unknown,
+  operation: GroupApplicationOperation,
+  expectedGroupId: string,
+  expectedPayload: GroupProfileEditPayload
+): boolean {
+  if (
+    !isUuid(expectedGroupId) ||
+    operation.scope !== groupProfileEditSubmitScope(operation.actorId, expectedGroupId) ||
+    !isExactProfileEditRoot(value, operation)
+  ) {
+    return false
+  }
+
+  const application = value.application
+  return (
+    hasExactKeys(application, [
+      'id',
+      'group_id',
+      'applicant_id',
+      'name',
+      'name_en',
+      'description',
+      'description_en',
+      'avatar_url',
+      'role_names',
+      'rules_json',
+      'rules',
+      'is_premium_only',
+      'status',
+      'created_at',
+    ]) &&
+    isUuid(application.id) &&
+    application.group_id === expectedGroupId &&
+    application.applicant_id === operation.actorId &&
+    application.status === 'pending' &&
+    isStrictIsoTimestamp(application.created_at) &&
+    isValidGroupProfileEditSnapshot(application) &&
+    isExactCanonicalJson(application.name, expectedPayload.name) &&
+    isExactCanonicalJson(application.name_en, expectedPayload.name_en) &&
+    isExactCanonicalJson(application.description, expectedPayload.description) &&
+    isExactCanonicalJson(application.description_en, expectedPayload.description_en) &&
+    isExactCanonicalJson(application.avatar_url, expectedPayload.avatar_url) &&
+    isExactCanonicalJson(application.role_names, expectedPayload.role_names) &&
+    isExactCanonicalJson(application.rules_json, expectedPayload.rules_json) &&
+    isExactCanonicalJson(application.rules, expectedPayload.rules) &&
+    application.is_premium_only === expectedPayload.is_premium_only
+  )
+}
+
+function isExactReviewGroupProfileEditAck(
+  value: unknown,
+  operation: GroupApplicationOperation,
+  expectedApplicationId: string,
+  expectedGroupId: string,
+  decision: 'approve' | 'reject',
+  expectedReason: string | null
+): boolean {
+  if (
+    !isUuid(expectedApplicationId) ||
+    !isUuid(expectedGroupId) ||
+    operation.scope !== groupProfileEditReviewScope(operation.actorId, expectedApplicationId) ||
+    !isExactProfileEditRoot(value, operation)
+  ) {
+    return false
+  }
+
+  const application = value.application
+  const expectedKeys =
+    decision === 'approve'
+      ? ['id', 'group_id', 'status']
+      : ['id', 'group_id', 'status', 'reject_reason']
+  return (
+    hasExactKeys(application, expectedKeys) &&
+    application.id === expectedApplicationId &&
+    application.group_id === expectedGroupId &&
+    application.status === (decision === 'approve' ? 'approved' : 'rejected') &&
+    (decision === 'approve' || isExactCanonicalJson(application.reject_reason, expectedReason))
+  )
+}
+
+export function isExactApproveGroupProfileEditAck(
+  value: unknown,
+  operation: GroupApplicationOperation,
+  expectedApplicationId: string,
+  expectedGroupId: string
+): boolean {
+  return isExactReviewGroupProfileEditAck(
+    value,
+    operation,
+    expectedApplicationId,
+    expectedGroupId,
+    'approve',
+    null
+  )
+}
+
+export function isExactRejectGroupProfileEditAck(
+  value: unknown,
+  operation: GroupApplicationOperation,
+  expectedApplicationId: string,
+  expectedGroupId: string,
+  expectedReason: string | null
+): boolean {
+  return isExactReviewGroupProfileEditAck(
+    value,
+    operation,
+    expectedApplicationId,
+    expectedGroupId,
+    'reject',
+    expectedReason
   )
 }
 
