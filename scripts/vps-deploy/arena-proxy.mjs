@@ -3,8 +3,45 @@ import proxyKeyAuth from './proxy-key-auth.cjs'
 
 const { loadProxyKeyConfig, verifyProxyKey } = proxyKeyAuth
 
-const PORT = 3456
+function boundedInt(value, fallback, min, max) {
+  const parsed = Number.parseInt(value || '', 10)
+  return Number.isFinite(parsed) ? Math.min(max, Math.max(min, parsed)) : fallback
+}
+
+const PORT = boundedInt(process.env.PORT, 3456, 1, 65535)
 const PROXY_KEYS = loadProxyKeyConfig().accepted
+const MAX_REQUEST_BYTES = boundedInt(
+  process.env.PROXY_MAX_REQUEST_BYTES,
+  1024 * 1024,
+  128,
+  10 * 1024 * 1024
+)
+const RATE_LIMIT_MAX = boundedInt(process.env.PROXY_RATE_LIMIT_MAX, 120, 1, 10_000)
+const RATE_LIMIT_WINDOW_MS = 60_000
+const rateBuckets = new Map()
+
+function consumeRateLimit(remoteAddress) {
+  const now = Date.now()
+  const key = remoteAddress || 'unknown'
+  let bucket = rateBuckets.get(key)
+  if (!bucket || bucket.resetAt <= now) {
+    bucket = { count: 0, resetAt: now + RATE_LIMIT_WINDOW_MS }
+    rateBuckets.set(key, bucket)
+  }
+  bucket.count += 1
+
+  if (rateBuckets.size > 10_000) {
+    for (const [address, candidate] of rateBuckets) {
+      if (candidate.resetAt <= now) rateBuckets.delete(address)
+    }
+  }
+
+  return {
+    allowed: bucket.count <= RATE_LIMIT_MAX,
+    remaining: Math.max(0, RATE_LIMIT_MAX - bucket.count),
+    retryAfter: Math.max(1, Math.ceil((bucket.resetAt - now) / 1000)),
+  }
+}
 
 // All exchange hosts that Arena connectors need to reach
 const ALLOWED_HOSTS = new Set([
@@ -91,6 +128,18 @@ const server = http.createServer(async (req, res) => {
     return
   }
 
+  const rate = consumeRateLimit(req.socket.remoteAddress)
+  res.setHeader('X-RateLimit-Limit', String(RATE_LIMIT_MAX))
+  res.setHeader('X-RateLimit-Remaining', String(rate.remaining))
+  if (!rate.allowed) {
+    res.writeHead(429, {
+      'Content-Type': 'application/json',
+      'Retry-After': String(rate.retryAfter),
+    })
+    res.end(JSON.stringify({ error: 'rate limit exceeded' }))
+    return
+  }
+
   // Auth
   if (!verifyProxyKey(req.headers['x-proxy-key'], PROXY_KEYS)) {
     res.writeHead(401, { 'Content-Type': 'application/json' })
@@ -107,7 +156,16 @@ const server = http.createServer(async (req, res) => {
 
   try {
     const chunks = []
-    for await (const chunk of req) chunks.push(chunk)
+    let receivedBytes = 0
+    for await (const chunk of req) {
+      receivedBytes += chunk.length
+      if (receivedBytes > MAX_REQUEST_BYTES) {
+        res.writeHead(413, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify({ error: 'request body too large' }))
+        return
+      }
+      chunks.push(chunk)
+    }
     const body = JSON.parse(Buffer.concat(chunks).toString())
 
     const { url, method = 'GET', headers = {}, body: proxyBody } = body
