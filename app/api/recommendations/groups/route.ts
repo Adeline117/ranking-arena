@@ -18,10 +18,17 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { socialFeatureGuard } from '@/lib/features'
-import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
-// 未登录 fallback 对全体匿名一致(popular groups),此前每请求裸打 DB。
-const ANON_CACHE_HEADER = { 'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600' }
+const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply'] as const
+
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
+
+const GROUP_DISCOVERY_SELECT =
+  'id, name, name_en, description, description_en, avatar_url, member_count'
 
 export async function GET(request: NextRequest) {
   const guard = socialFeatureGuard()
@@ -47,12 +54,26 @@ export async function GET(request: NextRequest) {
       })
 
       if (!rpcError && rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
-        // RPC returns group_id + reason/score; fetch full group data
-        const groupIds = rpcData.map((r: Record<string, unknown>) => r.group_id as string)
-        const { data: fullGroups } = await supabase
-          .from('groups')
-          .select('id, name, name_en, description, description_en, avatar_url, member_count')
-          .in('id', groupIds)
+        // The recommendation RPC is only a ranking source. Its group IDs are
+        // untrusted service-role candidates until a fresh groups-table read
+        // confirms the current public-discovery state.
+        const groupIds = [
+          ...new Set(
+            rpcData
+              .map((row: Record<string, unknown>) => row.group_id)
+              .filter((groupId): groupId is string => typeof groupId === 'string' && !!groupId)
+          ),
+        ]
+        const { data: fullGroups, error: fullGroupsError } = groupIds.length
+          ? await supabase
+              .from('groups')
+              .select(GROUP_DISCOVERY_SELECT)
+              .in('id', groupIds)
+              .is('dissolved_at', null)
+              .in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])
+          : { data: [], error: null }
+
+        if (fullGroupsError) throw fullGroupsError
 
         const groupMap = new Map((fullGroups || []).map((g: Record<string, unknown>) => [g.id, g]))
 
@@ -69,11 +90,16 @@ export async function GET(request: NextRequest) {
       // (handles case where user has joined nearly all groups)
       if (groups.length < Math.min(3, limit)) {
         const existingIds = new Set(groups.map((g: Record<string, unknown>) => g.id as string))
-        const { data: popularData } = await supabase
+        const { data: popularData, error: popularError } = await supabase
           .from('groups')
-          .select('id, name, name_en, description, description_en, avatar_url, member_count')
-          .order('member_count', { ascending: false })
-          .limit(limit)
+          .select(GROUP_DISCOVERY_SELECT)
+          .is('dissolved_at', null)
+          .in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])
+          .order('member_count', { ascending: false, nullsFirst: false })
+          .order('id', { ascending: true })
+          .limit(Math.min(50, limit + existingIds.size))
+
+        if (popularError) throw popularError
 
         for (const g of (popularData as Record<string, unknown>[]) || []) {
           if (groups.length >= limit) break
@@ -84,24 +110,27 @@ export async function GET(request: NextRequest) {
         }
       }
     } else {
-      // Unauthenticated fallback — popular groups, 全体匿名共享,Redis 缓存 5min。
-      groups = await tieredGetOrSet(
-        `rec:groups:anon:${limit}`,
-        async () => {
-          const { data: fallbackData } = await supabase
-            .from('groups')
-            .select('id, name, name_en, description, description_en, avatar_url, member_count')
-            .order('member_count', { ascending: false })
-            .limit(limit)
-          return (fallbackData as Record<string, unknown>[]) || []
-        },
-        'cold'
-      )
-      return success({ groups, personalized: false }, 200, ANON_CACHE_HEADER)
+      // Never cache materialized group rows: dissolution, hard deletion, a
+      // visibility change, or profile edits must take effect on the next read.
+      const { data: fallbackData, error: fallbackError } = await supabase
+        .from('groups')
+        .select(GROUP_DISCOVERY_SELECT)
+        .is('dissolved_at', null)
+        .in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])
+        .order('member_count', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: true })
+        .limit(limit)
+      if (fallbackError) throw fallbackError
+      groups = (fallbackData as Record<string, unknown>[]) || []
+      return success({ groups, personalized: false }, 200, NO_STORE_HEADERS)
     }
 
-    return success({ groups, personalized: !!user })
+    return success({ groups, personalized: !!user }, 200, NO_STORE_HEADERS)
   } catch (error: unknown) {
-    return handleError(error, 'recommendations groups GET')
+    const response = handleError(error, 'recommendations groups GET')
+    for (const [name, value] of Object.entries(NO_STORE_HEADERS)) {
+      response.headers.set(name, value)
+    }
+    return response
   }
 }
