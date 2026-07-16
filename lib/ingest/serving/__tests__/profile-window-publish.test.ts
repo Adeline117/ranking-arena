@@ -154,6 +154,22 @@ describe('publishProfile whole-window coverage gate', () => {
     )
   })
 
+  it('clears only empty metrics from a mixed long-tail replacement', async () => {
+    const parsed = profile({ profile_window_metrics_complete: true })
+    parsed.replaceSeries = [{ timeframe: 30, metrics: ['pnl', 'account_value'] }]
+
+    await publishProfile(src, 42, parsed, { fullSeries: false })
+
+    const deleteCalls = query.mock.calls.filter(([statement]) =>
+      String(statement).includes('DELETE FROM arena.trader_series')
+    )
+    expect(deleteCalls).toHaveLength(2)
+    expect(deleteCalls.map(([, params]) => (params as unknown[])[2])).toEqual([
+      ['account_value'],
+      ['account_value'],
+    ])
+  })
+
   it('keeps the narrower Hyperliquid fill-only preservation path unchanged', async () => {
     await publishProfile(
       { ...src, slug: 'hyperliquid' },
