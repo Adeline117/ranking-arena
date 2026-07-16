@@ -41,4 +41,46 @@ describe('useViewerSlotState', () => {
     act(() => setGenerationFour(false))
     expect(hook.result.current[0]).toBe(true)
   })
+
+  it('keeps the setter stable until ownership changes', () => {
+    const hook = renderHook(
+      ({ ownerKey }: { ownerKey: string }) => useViewerSlotState(ownerKey, [] as string[]),
+      { initialProps: { ownerKey: 'user:a:1' } }
+    )
+    const firstSetter = hook.result.current[1]
+
+    hook.rerender({ ownerKey: 'user:a:1' })
+    expect(hook.result.current[1]).toBe(firstSetter)
+
+    hook.rerender({ ownerKey: 'user:b:2' })
+    expect(hook.result.current[1]).not.toBe(firstSetter)
+  })
+
+  it('uses the old owner initial after eviction instead of the current owner initial', () => {
+    const hook = renderHook(
+      ({ initialValue, ownerKey }: { initialValue: string[]; ownerKey: string }) =>
+        useViewerSlotState(ownerKey, initialValue),
+      { initialProps: { ownerKey: 'owner:a', initialValue: ['a-default'] } }
+    )
+    const setOwnerA = hook.result.current[1]
+
+    for (const ownerKey of [
+      'owner:b',
+      'owner:c',
+      'owner:d',
+      'owner:e',
+      'owner:f',
+      'owner:g',
+      'owner:h',
+      'owner:i',
+    ]) {
+      hook.rerender({ ownerKey, initialValue: [`${ownerKey}-default`] })
+      act(() => hook.result.current[1]([`${ownerKey}-ready`]))
+    }
+
+    act(() => setOwnerA((previous) => [...previous, 'late-a']))
+    hook.rerender({ ownerKey: 'owner:a', initialValue: ['new-a-default'] })
+
+    expect(hook.result.current[0]).toEqual(['a-default', 'late-a'])
+  })
 })
