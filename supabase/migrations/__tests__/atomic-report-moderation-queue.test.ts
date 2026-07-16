@@ -151,11 +151,12 @@ describe('atomic report moderation queue contract', () => {
     expect(postHandler).not.toContain("status: 'actioned'")
   })
 
-  it('rejects legacy report statuses at the adjacent admin endpoint', () => {
-    const postHandler = reportsRoute.slice(reportsRoute.indexOf('export async function POST'))
-    expect(postHandler).toContain("['resolved', 'dismissed'].includes(status)")
-    expect(postHandler).not.toContain("['reviewed', 'actioned', 'dismissed']")
-    expect(postHandler).toContain(".eq('status', 'pending')")
-    expect(postHandler).toContain('resolved_at: resolvedAt')
+  it('retires the adjacent collection write endpoint with no direct report mutation', () => {
+    const postHandler = reportsRoute.slice(reportsRoute.indexOf('export function POST'))
+    expect(postHandler).toContain('{ status: 405')
+    expect(postHandler).toContain("headers: { Allow: 'GET' }")
+    expect(postHandler).not.toContain(".from('content_reports')")
+    expect(postHandler).not.toContain('.update(')
+    expect(postHandler).not.toContain("['resolved', 'dismissed']")
   })
 })

@@ -18,6 +18,7 @@ type QueueContentType = 'post' | 'comment'
 
 type AtomicModerationResult = {
   applied: boolean
+  result_operation_id: string
   result_action: QueueAction
   result_content_type: QueueContentType
   result_content_id: string
@@ -48,15 +49,23 @@ const ATOMIC_RESULT_KEYS = [
   'result_action',
   'result_content_id',
   'result_content_type',
+  'result_operation_id',
   'strike_id',
   'strike_type',
 ] as const
+
+const MODERATION_REQUEST_KEYS = ['action', 'content_id', 'content_type', 'operation_id'] as const
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 function parseAtomicModerationResult(
   value: unknown,
-  expected: { action: QueueAction; contentType: QueueContentType; contentId: string }
+  expected: {
+    action: QueueAction
+    contentType: QueueContentType
+    contentId: string
+    operationId: string
+  }
 ): AtomicModerationResult | null {
   if (!Array.isArray(value) || value.length !== 1) return null
   const row = value[0]
@@ -67,6 +76,7 @@ function parseAtomicModerationResult(
     keys.length !== ATOMIC_RESULT_KEYS.length ||
     !ATOMIC_RESULT_KEYS.every((key, index) => keys[index] === key) ||
     typeof candidate.applied !== 'boolean' ||
+    candidate.result_operation_id !== expected.operationId ||
     candidate.result_action !== expected.action ||
     candidate.result_content_type !== expected.contentType ||
     candidate.result_content_id !== expected.contentId ||
@@ -124,7 +134,9 @@ function parseAtomicModerationResult(
     !validActionTaken ||
     (['approve', 'warn'].includes(expected.action) && candidate.content_affected_count !== 0) ||
     (['warn', 'ban'].includes(expected.action) && candidate.author_id === null) ||
-    (expected.action === 'ban' && candidate.content_soft_deleted !== true) ||
+    (expected.action === 'ban' &&
+      (candidate.content_soft_deleted !== true ||
+        (candidate.content_affected_count as number) < 1)) ||
     !validDeleteEffect ||
     (expected.action === 'warn'
       ? candidate.strike_id === null || candidate.strike_type === null
@@ -305,16 +317,42 @@ export const GET = withAdminAuth(
 export async function POST(req: NextRequest) {
   const handler = withAdminAuth(
     async ({ admin, supabase }) => {
-      let body: { content_type?: string; content_id?: string; action?: string }
+      let body: unknown
       try {
         body = await req.json()
       } catch {
         throw ApiError.validation('Invalid JSON in request body')
       }
-      const { content_type, content_id, action } = body
 
-      if (!content_type || !content_id || !action) {
-        throw ApiError.validation('Missing required fields: content_type, content_id, action')
+      if (!body || typeof body !== 'object' || Array.isArray(body)) {
+        throw ApiError.validation('Request body must be a JSON object')
+      }
+      const requestBody = body as Record<string, unknown>
+      const requestKeys = Object.keys(requestBody).sort()
+      if (
+        requestKeys.length !== MODERATION_REQUEST_KEYS.length ||
+        !MODERATION_REQUEST_KEYS.every((key, index) => requestKeys[index] === key)
+      ) {
+        throw ApiError.validation(
+          'Request body must contain exactly: content_type, content_id, action, operation_id'
+        )
+      }
+
+      const { content_type, content_id, action, operation_id } = requestBody
+
+      if (
+        typeof content_type !== 'string' ||
+        typeof content_id !== 'string' ||
+        typeof action !== 'string' ||
+        typeof operation_id !== 'string' ||
+        !content_type ||
+        !content_id ||
+        !action ||
+        !operation_id
+      ) {
+        throw ApiError.validation(
+          'Missing required fields: content_type, content_id, action, operation_id'
+        )
       }
 
       if (!['approve', 'delete', 'warn', 'ban'].includes(action)) {
@@ -326,18 +364,23 @@ export async function POST(req: NextRequest) {
       if (!UUID_PATTERN.test(content_id)) {
         throw ApiError.validation('Content ID must be a UUID')
       }
+      if (!UUID_PATTERN.test(operation_id)) {
+        throw ApiError.validation('Operation ID must be a UUID')
+      }
 
       const expected = {
         action: action as QueueAction,
         contentType: content_type as QueueContentType,
         // PostgreSQL serializes uuid values canonically in lowercase.
         contentId: content_id.toLowerCase(),
+        operationId: operation_id.toLowerCase(),
       }
       const { data, error } = await supabase.rpc('moderate_report_queue_atomic', {
         p_actor_id: admin.id,
         p_content_type: expected.contentType,
         p_content_id: expected.contentId,
         p_action: expected.action,
+        p_operation_id: expected.operationId,
       })
 
       if (error) {

@@ -1,20 +1,27 @@
 jest.mock('next/server', () => {
   class MockNextResponse {
     status: number
-    headers = { set: jest.fn() }
+    private readonly headerValues = new Map<string, string>()
+    headers = {
+      set: jest.fn((name: string, value: string) => this.headerValues.set(name, value)),
+      get: jest.fn((name: string) => this.headerValues.get(name) ?? null),
+    }
 
     constructor(
       private readonly body: unknown,
-      init: { status?: number } = {}
+      init: { status?: number; headers?: Record<string, string> } = {}
     ) {
       this.status = init.status ?? 200
+      for (const [name, value] of Object.entries(init.headers ?? {})) {
+        this.headerValues.set(name, value)
+      }
     }
 
     async json() {
       return this.body
     }
 
-    static json(body: unknown, init?: { status?: number }) {
+    static json(body: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(body, init)
     }
   }
@@ -80,15 +87,6 @@ function profilesQuery(result: { data: unknown; error: unknown }) {
   const chain: Record<string, jest.Mock> = {}
   chain.select = jest.fn(() => chain)
   chain.in = jest.fn().mockResolvedValue(result)
-  return chain
-}
-
-function updateReportQuery(result: { data: unknown; error: unknown }) {
-  const chain: Record<string, jest.Mock> = {}
-  chain.update = jest.fn(() => chain)
-  chain.eq = jest.fn(() => chain)
-  chain.select = jest.fn(() => chain)
-  chain.maybeSingle = jest.fn().mockResolvedValue(result)
   return chain
 }
 
@@ -204,66 +202,19 @@ describe('GET /api/admin/reports private evidence', () => {
   })
 })
 
-describe('POST /api/admin/reports canonical status contract', () => {
-  const reportId = '22222222-2222-4222-8222-222222222222'
-  const resolvedAt = '2026-07-16T16:00:00.000Z'
-
-  function postRequest(status: string, actionTaken = 'reviewed_by_admin') {
-    return {
-      method: 'POST',
-      json: jest.fn().mockResolvedValue({ reportId, status, action_taken: actionTaken }),
-    } as never
-  }
-
+describe('POST /api/admin/reports retired write boundary', () => {
   beforeEach(() => {
     jest.restoreAllMocks()
     jest.clearAllMocks()
     mockAuthorized = true
-    jest.spyOn(Date.prototype, 'toISOString').mockReturnValue(resolvedAt)
   })
 
-  it.each(['reviewed', 'actioned'])('rejects legacy status %s before any write', async (status) => {
-    const response = await POST(postRequest(status))
+  it('always returns 405 without authenticating or writing a report row', async () => {
+    const response = await POST()
 
-    expect(response.status).toBe(400)
+    expect(response.status).toBe(405)
+    expect(response.headers.get('Allow')).toBe('GET')
     expect(mockFrom).not.toHaveBeenCalled()
-  })
-
-  it.each(['resolved', 'dismissed'] as const)(
-    'writes canonical status %s with an exact pending-row acknowledgement',
-    async (status) => {
-      const query = updateReportQuery({
-        data: {
-          id: reportId,
-          status,
-          resolved_by: 'admin-id',
-          resolved_at: resolvedAt,
-          action_taken: 'reviewed_by_admin',
-        },
-        error: null,
-      })
-      mockFrom.mockReturnValue(query)
-
-      const response = await POST(postRequest(status))
-
-      expect(response.status).toBe(200)
-      expect(query.update).toHaveBeenCalledWith({
-        status,
-        resolved_by: 'admin-id',
-        resolved_at: resolvedAt,
-        action_taken: 'reviewed_by_admin',
-      })
-      expect(query.eq).toHaveBeenCalledWith('id', reportId)
-      expect(query.eq).toHaveBeenCalledWith('status', 'pending')
-      expect(query.maybeSingle).toHaveBeenCalledTimes(1)
-    }
-  )
-
-  it('fails closed when the pending report transition is not acknowledged', async () => {
-    mockFrom.mockReturnValue(updateReportQuery({ data: null, error: null }))
-
-    const response = await POST(postRequest('resolved'))
-
-    expect(response.status).toBe(500)
+    expect(mockStorageFrom).not.toHaveBeenCalled()
   })
 })

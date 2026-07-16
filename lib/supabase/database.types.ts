@@ -4792,6 +4792,63 @@ export type Database = {
         }
         Relationships: []
       }
+      report_moderation_operations: {
+        Row: {
+          action: string
+          action_taken: string
+          actor_id: string
+          author_id: string | null
+          content_id: string
+          content_soft_deleted: boolean | null
+          content_type: string
+          created_at: string
+          initial_applied: boolean
+          initial_content_affected_count: number
+          initial_strike_id: string | null
+          initial_strike_type: string | null
+          operation_id: string
+          report_count: number
+          report_ids: string[]
+          report_status: string
+        }
+        Insert: {
+          action: string
+          action_taken: string
+          actor_id: string
+          author_id?: string | null
+          content_id: string
+          content_soft_deleted?: boolean | null
+          content_type: string
+          created_at?: string
+          initial_applied: boolean
+          initial_content_affected_count: number
+          initial_strike_id?: string | null
+          initial_strike_type?: string | null
+          operation_id: string
+          report_count: number
+          report_ids: string[]
+          report_status: string
+        }
+        Update: {
+          action?: string
+          action_taken?: string
+          actor_id?: string
+          author_id?: string | null
+          content_id?: string
+          content_soft_deleted?: boolean | null
+          content_type?: string
+          created_at?: string
+          initial_applied?: boolean
+          initial_content_affected_count?: number
+          initial_strike_id?: string | null
+          initial_strike_type?: string | null
+          operation_id?: string
+          report_count?: number
+          report_ids?: string[]
+          report_status?: string
+        }
+        Relationships: []
+      }
       reports: {
         Row: {
           created_at: string
@@ -9074,6 +9131,7 @@ export type Database = {
           p_actor_id: string
           p_content_id: string
           p_content_type: string
+          p_operation_id: string
         }
         Returns: {
           action_taken: string | null
@@ -9086,6 +9144,7 @@ export type Database = {
           result_action: string
           result_content_id: string
           result_content_type: string
+          result_operation_id: string
           strike_id: string | null
           strike_type: string | null
         }[]
