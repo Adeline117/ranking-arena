@@ -111,7 +111,16 @@ describe('atomic group invite route', () => {
   })
 
   it('creates a nonce-bearing invite through the atomic RPC', async () => {
-    mockRpc.mockResolvedValue({ data: { status: 'created', invite_id: INVITE_ID }, error: null })
+    mockRpc.mockImplementation((_name: string, args: { p_expires_at: string }) =>
+      Promise.resolve({
+        data: {
+          status: 'created',
+          invite_id: INVITE_ID,
+          expires_at: args.p_expires_at,
+        },
+        error: null,
+      })
+    )
 
     const response = await POST(request('POST') as never)
     const body = await response.json()
@@ -135,13 +144,35 @@ describe('atomic group invite route', () => {
   it('retries a token collision with a different hash', async () => {
     mockRpc
       .mockResolvedValueOnce({ data: { status: 'token_conflict' }, error: null })
-      .mockResolvedValueOnce({ data: { status: 'created', invite_id: INVITE_ID }, error: null })
+      .mockImplementationOnce((_name: string, args: { p_expires_at: string }) =>
+        Promise.resolve({
+          data: {
+            status: 'created',
+            invite_id: INVITE_ID,
+            expires_at: args.p_expires_at,
+          },
+          error: null,
+        })
+      )
 
     const response = await POST(request('POST') as never)
 
     expect(response.status).toBe(200)
     expect(mockRpc).toHaveBeenCalledTimes(2)
     expect(mockRpc.mock.calls[0][1].p_token_hash).not.toBe(mockRpc.mock.calls[1][1].p_token_hash)
+  })
+
+  it.each([
+    [{ status: 'created', expires_at: new Date(Date.now() + 60_000).toISOString() }, 'missing id'],
+    [{ status: 'created', invite_id: 'not-a-uuid', expires_at: 'also-invalid' }, 'invalid fields'],
+    [{ status: 'created', invite_id: INVITE_ID }, 'missing expiry'],
+  ])('fails closed when created evidence has %s (%s)', async (data) => {
+    mockRpc.mockResolvedValue({ data, error: null })
+
+    const response = await POST(request('POST') as never)
+
+    expect(response.status).toBe(500)
+    expect(mockLogError).toHaveBeenCalled()
   })
 
   it('maps database-owned creation limits without direct table fallbacks', async () => {
