@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
 import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 const supabase = _supabase as SupabaseClient
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
 import {
   fetchPostCommentsPage,
   isCreatedCommentAcknowledgement,
@@ -50,7 +50,12 @@ interface UseGroupPostsOptions {
   groupId: string
   userId: string | null
   accessToken: string | null
+  authChecked: boolean
+  viewerKey: string
+  sessionGeneration: number
   isMember: boolean
+  groupVisibility: 'open' | 'apply' | null
+  audienceResolved: boolean
   language: string
   t: (key: string) => string
   showToast: (msg: string, type: 'success' | 'error' | 'warning') => void
@@ -144,14 +149,48 @@ export function useGroupPosts({
   groupId,
   userId,
   accessToken,
-  isMember: _isMember,
+  authChecked,
+  viewerKey,
+  sessionGeneration,
+  isMember,
+  groupVisibility,
+  audienceResolved,
   language: _language,
   t,
   showToast,
   showDangerConfirm,
 }: UseGroupPostsOptions) {
+  const activeScopeRef = useRef({ viewerKey, sessionGeneration, userId })
+  activeScopeRef.current = { viewerKey, sessionGeneration, userId }
+  const accessTokenRef = useRef(accessToken)
+  accessTokenRef.current = accessToken
+  const scopeKey = `${viewerKey}\u0000${sessionGeneration}`
+  const previousScopeKeyRef = useRef(scopeKey)
+  const scopeIsCurrent = useCallback(
+    (scope: { viewerKey: string; sessionGeneration: number; userId: string | null }) => {
+      const current = activeScopeRef.current
+      return (
+        current.viewerKey === scope.viewerKey &&
+        current.sessionGeneration === scope.sessionGeneration &&
+        current.userId === scope.userId
+      )
+    },
+    []
+  )
   // Core state
-  const [posts, setPosts] = useState<Post[]>([])
+  const [postsState, setPostsState] = useState<Post[]>([])
+  const postsOwnerScopeKeyRef = useRef(scopeKey)
+  const posts = postsOwnerScopeKeyRef.current === scopeKey ? postsState : []
+  const setPosts: React.Dispatch<React.SetStateAction<Post[]>> = useCallback((action) => {
+    setPostsState((previous) => {
+      const current = activeScopeRef.current
+      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+      const ownedPrevious = postsOwnerScopeKeyRef.current === ownerScopeKey ? previous : []
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      postsOwnerScopeKeyRef.current = ownerScopeKey
+      return next
+    })
+  }, [])
   const [sortMode, setSortMode] = useState<'latest' | 'hot'>('latest')
   const [viewMode, setViewMode] = useState<'list' | 'masonry'>(() => {
     if (typeof window !== 'undefined') {
@@ -180,67 +219,126 @@ export function useGroupPosts({
 
   // Comments state
   const [expandedComments, setExpandedComments] = useState<Record<string, boolean>>({})
-  const [comments, setComments] = useState<Record<string, CommentWithAuthor[]>>({})
-  const [newCommentRaw, setNewCommentRaw] = useState<Record<string, string>>({})
+  const [commentsState, setCommentsRaw] = useState<Record<string, CommentWithAuthor[]>>({})
+  const commentsOwnerScopeKeyRef = useRef(scopeKey)
+  const comments = commentsOwnerScopeKeyRef.current === scopeKey ? commentsState : {}
+  const commentStateRevisionRef = useRef(new Map<string, number>())
+  const setComments: React.Dispatch<React.SetStateAction<Record<string, CommentWithAuthor[]>>> =
+    useCallback((action) => {
+      setCommentsRaw((previous) => {
+        const current = activeScopeRef.current
+        const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+        const ownedPrevious = commentsOwnerScopeKeyRef.current === ownerScopeKey ? previous : {}
+        const next = typeof action === 'function' ? action(ownedPrevious) : action
+        const postIds = new Set([...Object.keys(ownedPrevious), ...Object.keys(next)])
+        for (const postId of postIds) {
+          if (ownedPrevious[postId] !== next[postId]) {
+            commentStateRevisionRef.current.set(
+              postId,
+              (commentStateRevisionRef.current.get(postId) || 0) + 1
+            )
+          }
+        }
+        commentsOwnerScopeKeyRef.current = ownerScopeKey
+        return next
+      })
+    }, [])
+  const [newCommentState, setNewCommentRaw] = useState<Record<string, string>>({})
+  const newCommentOwnerScopeKeyRef = useRef(scopeKey)
+  const newComment = newCommentOwnerScopeKeyRef.current === scopeKey ? newCommentState : {}
+  const newCommentRef = useRef(newComment)
+  newCommentRef.current = newComment
   const [commentLoading, setCommentLoading] = useState<Record<string, boolean>>({})
   const [replyingTo, setReplyingTo] = useState<Record<string, string | null>>({})
-  const [replyContentRaw, setReplyContentRaw] = useState<Record<string, string>>({})
+  const [replyContentState, setReplyContentRaw] = useState<Record<string, string>>({})
+  const replyContentOwnerScopeKeyRef = useRef(scopeKey)
+  const replyContent = replyContentOwnerScopeKeyRef.current === scopeKey ? replyContentState : {}
+  const replyContentRef = useRef(replyContent)
+  replyContentRef.current = replyContent
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
   const commentLoadGenerationRef = useRef(new Map<string, number>())
   const commentLoadPromisesRef = useRef(new Map<string, Promise<boolean>>())
+  const commentMutationLocksRef = useRef(new Map<string, symbol>())
+  const replyMutationLocksRef = useRef(new Map<string, symbol>())
+  const postsRequestGenerationRef = useRef(0)
 
   // Debounce timers for draft persistence
   const commentDraftTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
   const replyDraftTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
+  const commentDraftVersionRef = useRef(new Map<string, number>())
+  const replyDraftVersionRef = useRef(new Map<string, number>())
 
   // Wrapped setters that auto-save drafts to localStorage
-  const newComment = newCommentRaw
   const setNewComment: React.Dispatch<React.SetStateAction<Record<string, string>>> = useCallback(
     (action) => {
       setNewCommentRaw((prev) => {
-        const next = typeof action === 'function' ? action(prev) : action
-        // Persist changed entries
-        for (const postId of Object.keys(next)) {
-          if (next[postId] !== prev[postId]) {
-            if (commentDraftTimerRef.current[postId])
-              clearTimeout(commentDraftTimerRef.current[postId])
+        const current = activeScopeRef.current
+        const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+        const ownedPrevious = newCommentOwnerScopeKeyRef.current === ownerScopeKey ? prev : {}
+        const next = typeof action === 'function' ? action(ownedPrevious) : action
+        // Persist changed entries and advance a per-resource version even when
+        // a user edits back to the exact text an older request captured.
+        const postIds = new Set([...Object.keys(ownedPrevious), ...Object.keys(next)])
+        for (const postId of postIds) {
+          if (next[postId] !== ownedPrevious[postId]) {
+            const draftViewerKey = activeScopeRef.current.viewerKey
+            const timerKey = `${draftViewerKey}\u0000${postId}`
+            commentDraftVersionRef.current.set(
+              timerKey,
+              (commentDraftVersionRef.current.get(timerKey) || 0) + 1
+            )
+            if (commentDraftTimerRef.current[timerKey])
+              clearTimeout(commentDraftTimerRef.current[timerKey])
             const val = next[postId]
-            commentDraftTimerRef.current[postId] = setTimeout(() => {
+            commentDraftTimerRef.current[timerKey] = setTimeout(() => {
               try {
-                if (val?.trim()) localStorage.setItem(`comment-draft-${postId}`, val)
-                else localStorage.removeItem(`comment-draft-${postId}`)
+                const storageKey = `group-comment-draft-v2:${draftViewerKey}:${postId}`
+                if (val?.trim()) localStorage.setItem(storageKey, val)
+                else localStorage.removeItem(storageKey)
               } catch {
                 /* ignore */
               }
             }, 500)
           }
         }
+        newCommentOwnerScopeKeyRef.current = ownerScopeKey
         return next
       })
     },
     []
   )
 
-  const replyContent = replyContentRaw
   const setReplyContent: React.Dispatch<React.SetStateAction<Record<string, string>>> = useCallback(
     (action) => {
       setReplyContentRaw((prev) => {
-        const next = typeof action === 'function' ? action(prev) : action
-        for (const commentId of Object.keys(next)) {
-          if (next[commentId] !== prev[commentId]) {
-            if (replyDraftTimerRef.current[commentId])
-              clearTimeout(replyDraftTimerRef.current[commentId])
+        const current = activeScopeRef.current
+        const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+        const ownedPrevious = replyContentOwnerScopeKeyRef.current === ownerScopeKey ? prev : {}
+        const next = typeof action === 'function' ? action(ownedPrevious) : action
+        const commentIds = new Set([...Object.keys(ownedPrevious), ...Object.keys(next)])
+        for (const commentId of commentIds) {
+          if (next[commentId] !== ownedPrevious[commentId]) {
+            const draftViewerKey = activeScopeRef.current.viewerKey
+            const timerKey = `${draftViewerKey}\u0000${commentId}`
+            replyDraftVersionRef.current.set(
+              timerKey,
+              (replyDraftVersionRef.current.get(timerKey) || 0) + 1
+            )
+            if (replyDraftTimerRef.current[timerKey])
+              clearTimeout(replyDraftTimerRef.current[timerKey])
             const val = next[commentId]
-            replyDraftTimerRef.current[commentId] = setTimeout(() => {
+            replyDraftTimerRef.current[timerKey] = setTimeout(() => {
               try {
-                if (val?.trim()) localStorage.setItem(`reply-draft-${commentId}`, val)
-                else localStorage.removeItem(`reply-draft-${commentId}`)
+                const storageKey = `group-reply-draft-v2:${draftViewerKey}:${commentId}`
+                if (val?.trim()) localStorage.setItem(storageKey, val)
+                else localStorage.removeItem(storageKey)
               } catch {
                 /* ignore */
               }
             }, 500)
           }
         }
+        replyContentOwnerScopeKeyRef.current = ownerScopeKey
         return next
       })
     },
@@ -248,23 +346,52 @@ export function useGroupPosts({
   )
 
   // Restore drafts when comments are expanded
-  const restoreCommentDraft = useCallback((postId: string) => {
-    try {
-      const saved = localStorage.getItem(`comment-draft-${postId}`)
-      if (saved) setNewCommentRaw((prev) => ({ ...prev, [postId]: saved }))
-    } catch {
-      /* ignore */
-    }
-  }, [])
+  const restoreCommentDraft = useCallback(
+    (postId: string) => {
+      try {
+        const saved = localStorage.getItem(
+          `group-comment-draft-v2:${activeScopeRef.current.viewerKey}:${postId}`
+        )
+        if (saved) setNewComment((prev) => ({ ...prev, [postId]: saved }))
+      } catch {
+        /* ignore */
+      }
+    },
+    [setNewComment]
+  )
 
-  const restoreReplyDraft = useCallback((commentId: string) => {
-    try {
-      const saved = localStorage.getItem(`reply-draft-${commentId}`)
-      if (saved) setReplyContentRaw((prev) => ({ ...prev, [commentId]: saved }))
-    } catch {
-      /* ignore */
-    }
-  }, [])
+  const restoreReplyDraft = useCallback(
+    (commentId: string) => {
+      try {
+        const saved = localStorage.getItem(
+          `group-reply-draft-v2:${activeScopeRef.current.viewerKey}:${commentId}`
+        )
+        if (saved) setReplyContent((prev) => ({ ...prev, [commentId]: saved }))
+      } catch {
+        /* ignore */
+      }
+    },
+    [setReplyContent]
+  )
+
+  useEffect(() => {
+    if (previousScopeKeyRef.current === scopeKey) return
+    previousScopeKeyRef.current = scopeKey
+    postsRequestGenerationRef.current += 1
+    commentLoadGenerationRef.current.clear()
+    commentLoadPromisesRef.current.clear()
+    commentMutationLocksRef.current.clear()
+    replyMutationLocksRef.current.clear()
+    setPosts([])
+    setHasMorePosts(true)
+    setLoadingMore(false)
+    setComments({})
+    setNewComment({})
+    setReplyContent({})
+    setCommentLoading({})
+    setReplyingTo({})
+    setExpandedReplies({})
+  }, [scopeKey, setComments, setNewComment, setReplyContent])
 
   // Content expansion
   const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
@@ -324,23 +451,34 @@ export function useGroupPosts({
         return
       }
 
+      const capturedScope = activeScopeRef.current
+      const requestGeneration = ++postsRequestGenerationRef.current
       try {
         const postsList = await fetchPosts()
         await enrichPosts(postsList)
+        if (
+          !scopeIsCurrent(capturedScope) ||
+          requestGeneration !== postsRequestGenerationRef.current
+        ) {
+          return
+        }
         setPosts(postsList)
         setHasMorePosts(postsList.length === POST_PAGE_SIZE)
       } catch (err) {
+        if (!scopeIsCurrent(capturedScope)) return
         const error = err instanceof Error ? err.message : 'Failed to load posts'
         showToast(error, 'error')
       }
     },
-    [groupId, fetchPosts, enrichPosts, showToast]
+    [groupId, fetchPosts, enrichPosts, scopeIsCurrent, showToast]
   )
 
   // Infinite scroll: load more
   const loadMorePosts = useCallback(async () => {
     if (loadingMore || !hasMorePosts || posts.length === 0) return
 
+    const capturedScope = activeScopeRef.current
+    const requestGeneration = ++postsRequestGenerationRef.current
     setLoadingMore(true)
     try {
       const lastPost = posts[posts.length - 1]
@@ -348,17 +486,29 @@ export function useGroupPosts({
 
       if (postsList.length > 0) {
         await enrichPosts(postsList)
+        if (
+          !scopeIsCurrent(capturedScope) ||
+          requestGeneration !== postsRequestGenerationRef.current
+        ) {
+          return
+        }
         setPosts((prev) => [...prev, ...postsList])
         setHasMorePosts(postsList.length === POST_PAGE_SIZE)
       } else {
         setHasMorePosts(false)
       }
     } catch (err) {
+      if (!scopeIsCurrent(capturedScope)) return
       logger.error('Load more posts error:', err)
     } finally {
-      setLoadingMore(false)
+      if (
+        scopeIsCurrent(capturedScope) &&
+        requestGeneration === postsRequestGenerationRef.current
+      ) {
+        setLoadingMore(false)
+      }
     }
-  }, [loadingMore, hasMorePosts, posts, fetchPosts, enrichPosts])
+  }, [loadingMore, hasMorePosts, posts, fetchPosts, enrichPosts, scopeIsCurrent])
 
   // IntersectionObserver for infinite scroll
   useEffect(() => {
@@ -614,24 +764,54 @@ export function useGroupPosts({
   // Load comments for a post
   const loadComments = useCallback(
     (postId: string, showError = true): Promise<boolean> => {
-      // Group threads are member reads. During session restoration a null token
-      // must not be allowed to create a durable anonymous empty cache.
-      if (!accessToken) return Promise.resolve(false)
+      const canRead =
+        authChecked &&
+        audienceResolved &&
+        (groupVisibility === 'open' ||
+          (groupVisibility === 'apply' && isMember && !!accessTokenRef.current))
+      if (!canRead) return Promise.resolve(false)
 
-      const existingRequest = commentLoadPromisesRef.current.get(postId)
+      const capturedScope = activeScopeRef.current
+      const scopedPostKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${postId}`
+      const existingRequest = commentLoadPromisesRef.current.get(scopedPostKey)
       if (existingRequest) return existingRequest
 
-      const generation = (commentLoadGenerationRef.current.get(postId) || 0) + 1
-      commentLoadGenerationRef.current.set(postId, generation)
+      const generation = (commentLoadGenerationRef.current.get(scopedPostKey) || 0) + 1
+      commentLoadGenerationRef.current.set(scopedPostKey, generation)
+      const requestStartRevision = commentStateRevisionRef.current.get(postId) || 0
       setPostLoading(setCommentLoading, postId, true)
 
-      const request = (async () => {
+      let retryAfterNewerState = false
+      let request!: Promise<boolean>
+      request = (async () => {
         try {
-          const page = await fetchPostCommentsPage<CommentWithAuthor>(postId, accessToken)
-          if (!page.ok || commentLoadGenerationRef.current.get(postId) !== generation) {
-            if (showError && commentLoadGenerationRef.current.get(postId) === generation) {
+          const page = await fetchPostCommentsPage<CommentWithAuthor>(
+            postId,
+            accessTokenRef.current,
+            {
+              viewerScope: {
+                expectedUserId: capturedScope.userId,
+                expectedSessionGeneration: capturedScope.sessionGeneration,
+              },
+            }
+          )
+          if (
+            !page.ok ||
+            !scopeIsCurrent(capturedScope) ||
+            commentLoadGenerationRef.current.get(scopedPostKey) !== generation
+          ) {
+            if (
+              showError &&
+              scopeIsCurrent(capturedScope) &&
+              commentLoadGenerationRef.current.get(scopedPostKey) === generation
+            ) {
               showToast(t('loadCommentsFailed'), 'error')
             }
+            return false
+          }
+
+          if ((commentStateRevisionRef.current.get(postId) || 0) !== requestStartRevision) {
+            retryAfterNewerState = true
             return false
           }
 
@@ -643,32 +823,59 @@ export function useGroupPosts({
           )
           return true
         } catch {
-          if (showError && commentLoadGenerationRef.current.get(postId) === generation) {
+          if (
+            showError &&
+            scopeIsCurrent(capturedScope) &&
+            commentLoadGenerationRef.current.get(scopedPostKey) === generation
+          ) {
             showToast(t('networkError'), 'error')
           }
           return false
         } finally {
-          if (commentLoadGenerationRef.current.get(postId) === generation) {
+          if (
+            scopeIsCurrent(capturedScope) &&
+            commentLoadGenerationRef.current.get(scopedPostKey) === generation
+          ) {
             setPostLoading(setCommentLoading, postId, false)
-            commentLoadPromisesRef.current.delete(postId)
+            if (commentLoadPromisesRef.current.get(scopedPostKey) === request) {
+              commentLoadPromisesRef.current.delete(scopedPostKey)
+            }
+            if (retryAfterNewerState) {
+              queueMicrotask(() => {
+                if (scopeIsCurrent(capturedScope)) void loadComments(postId, false)
+              })
+            }
           }
         }
       })()
 
-      commentLoadPromisesRef.current.set(postId, request)
+      commentLoadPromisesRef.current.set(scopedPostKey, request)
       return request
     },
-    [accessToken, t, showToast, setPostLoading]
+    [
+      audienceResolved,
+      authChecked,
+      groupVisibility,
+      isMember,
+      scopeIsCurrent,
+      setComments,
+      setPostLoading,
+      showToast,
+      t,
+    ]
   )
 
   const reconcileCommentsAfterMutation = useCallback(
-    async (postId: string): Promise<boolean> => {
+    async (postId: string, capturedScope = activeScopeRef.current): Promise<boolean> => {
+      if (!scopeIsCurrent(capturedScope)) return false
       // An already-running read may have started before the write and therefore
       // cannot prove its outcome. Let it settle, then issue a fresh token-bound read.
-      await commentLoadPromisesRef.current.get(postId)
+      const scopedPostKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${postId}`
+      await commentLoadPromisesRef.current.get(scopedPostKey)
+      if (!scopeIsCurrent(capturedScope)) return false
       return loadComments(postId, false)
     },
-    [loadComments]
+    [loadComments, scopeIsCurrent]
   )
 
   const toggleComments = useCallback(
@@ -680,75 +887,134 @@ export function useGroupPosts({
         if (
           shouldLoadExpandedGroupComments({
             accessToken,
+            authChecked,
+            audienceResolved,
+            groupVisibility,
+            isMember,
             expanded: true,
             hasCachedComments: Object.prototype.hasOwnProperty.call(comments, postId),
-            loading: commentLoadPromisesRef.current.has(postId),
+            loading: commentLoadPromisesRef.current.has(
+              `${viewerKey}\u0000${sessionGeneration}\u0000${postId}`
+            ),
           })
         ) {
           void loadComments(postId)
         }
       }
     },
-    [accessToken, expandedComments, comments, loadComments, restoreCommentDraft]
+    [
+      accessToken,
+      audienceResolved,
+      authChecked,
+      comments,
+      expandedComments,
+      groupVisibility,
+      isMember,
+      loadComments,
+      restoreCommentDraft,
+      sessionGeneration,
+      viewerKey,
+    ]
   )
 
   // URL/session restoration can expand a thread before the member token is
   // available. When auth arrives, retry only uncached expanded threads.
   useEffect(() => {
-    if (!accessToken) return
     for (const [postId, expanded] of Object.entries(expandedComments)) {
       if (
         shouldLoadExpandedGroupComments({
           accessToken,
+          authChecked,
+          audienceResolved,
+          groupVisibility,
+          isMember,
           expanded,
           hasCachedComments: Object.prototype.hasOwnProperty.call(comments, postId),
-          loading: commentLoadPromisesRef.current.has(postId),
+          loading: commentLoadPromisesRef.current.has(
+            `${viewerKey}\u0000${sessionGeneration}\u0000${postId}`
+          ),
         })
       ) {
         void loadComments(postId)
       }
     }
-  }, [accessToken, comments, expandedComments, loadComments])
+  }, [
+    accessToken,
+    audienceResolved,
+    authChecked,
+    comments,
+    expandedComments,
+    groupVisibility,
+    isMember,
+    loadComments,
+    scopeKey,
+    sessionGeneration,
+    viewerKey,
+  ])
 
   const submitComment = useCallback(
     async (postId: string) => {
+      if (!authChecked) return
       if (!accessToken) {
         showToast(t('pleaseLoginFirst'), 'warning')
         return
       }
       const content = newComment[postId]?.trim()
       if (!content) return
+      const capturedScope = activeScopeRef.current
+      const lockKey = `${capturedScope.viewerKey}\u0000${postId}`
+      if (commentMutationLocksRef.current.has(lockKey)) return
+      const operation = Symbol('group-comment')
+      commentMutationLocksRef.current.set(lockKey, operation)
+      const draftVersion = commentDraftVersionRef.current.get(lockKey) || 0
 
       setPostLoading(setCommentLoading, postId, true)
       try {
-        const result = await apiCall(`/api/posts/${postId}/comments`, { body: { content } })
-        const data = result.data as
-          | { success?: boolean; data?: { comment?: unknown }; error?: string }
-          | undefined
+        const result = await authedFetch<{
+          success?: boolean
+          data?: { comment?: unknown }
+          error?: string
+        }>(`/api/posts/${postId}/comments`, 'POST', accessToken, { content }, 15_000, {
+          expectedUserId: capturedScope.userId,
+          expectedSessionGeneration: capturedScope.sessionGeneration,
+        })
+        if (!scopeIsCurrent(capturedScope) || result.stale) return
+        const data = result.data
         const rawComment = data?.data?.comment
 
         if (
           result.ok &&
           data?.success === true &&
-          isCreatedCommentAcknowledgement(rawComment, { postId, content })
+          isCreatedCommentAcknowledgement(rawComment, {
+            postId,
+            content,
+            userId: capturedScope.userId,
+          })
         ) {
-          const pendingDraft = commentDraftTimerRef.current[postId]
+          const timerKey = `${capturedScope.viewerKey}\u0000${postId}`
+          const pendingDraft = commentDraftTimerRef.current[timerKey]
           if (pendingDraft) {
             clearTimeout(pendingDraft)
-            delete commentDraftTimerRef.current[postId]
+            delete commentDraftTimerRef.current[timerKey]
           }
-          setNewCommentRaw((prev) => ({ ...prev, [postId]: '' }))
-          try {
-            localStorage.removeItem(`comment-draft-${postId}`)
-          } catch {
-            /* ignore */
+          if (
+            commentDraftVersionRef.current.get(lockKey) === draftVersion &&
+            newCommentRef.current[postId]?.trim() === content
+          ) {
+            setNewComment((prev) => ({ ...prev, [postId]: '' }))
+            try {
+              localStorage.removeItem(`group-comment-draft-v2:${capturedScope.viewerKey}:${postId}`)
+            } catch {
+              /* ignore */
+            }
           }
           setExpandedComments((prev) => ({ ...prev, [postId]: true }))
 
           // Prefer the authenticated absolute tree/count. If that read is
           // unavailable, the strict ACK is still safe to render without
           // guessing a post count from a possibly stale base.
-          if (!(await reconcileCommentsAfterMutation(postId))) {
+          if (!(await reconcileCommentsAfterMutation(postId, capturedScope))) {
+            if (!scopeIsCurrent(capturedScope)) return
             setComments((prev) => {
               const existing = prev[postId] || []
               if (existing.some((comment) => comment.id === rawComment.id)) return prev
@@ -756,73 +1022,148 @@ export function useGroupPosts({
             })
           }
         } else if (isDefinitiveMutationRejection(result)) {
-          showToast(result.error || data?.error || t('postCommentFailed'), 'error')
-        } else if (!(await reconcileCommentsAfterMutation(postId))) {
+          if (scopeIsCurrent(capturedScope)) {
+            showToast(data?.error || t('postCommentFailed'), 'error')
+          }
+        } else if (!(await reconcileCommentsAfterMutation(postId, capturedScope))) {
           // Network/408/5xx/malformed 2xx leaves commit state unknown. Keep the
           // current tree and draft when the authoritative read is unavailable.
-          showToast(t('networkError'), 'error')
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
+        }
+      } catch {
+        if (
+          scopeIsCurrent(capturedScope) &&
+          !(await reconcileCommentsAfterMutation(postId, capturedScope))
+        ) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
       } finally {
-        setPostLoading(setCommentLoading, postId, false)
+        if (commentMutationLocksRef.current.get(lockKey) === operation) {
+          commentMutationLocksRef.current.delete(lockKey)
+          if (scopeIsCurrent(capturedScope)) {
+            setPostLoading(setCommentLoading, postId, false)
+          }
+        }
       }
     },
-    [accessToken, apiCall, newComment, reconcileCommentsAfterMutation, setPostLoading, showToast, t]
+    [
+      accessToken,
+      authChecked,
+      newComment,
+      reconcileCommentsAfterMutation,
+      scopeIsCurrent,
+      setComments,
+      setPostLoading,
+      showToast,
+      t,
+    ]
   )
 
   const submitReply = useCallback(
     async (postId: string, commentId: string) => {
-      if (!accessToken) return
+      if (!authChecked || !accessToken) return
       const content = replyContent[commentId]?.trim()
       if (!content) return
-      const result = await apiCall(`/api/posts/${postId}/comments`, {
-        body: { content, parent_id: commentId },
-      })
-      const data = result.data as
-        | { success?: boolean; data?: { comment?: unknown }; error?: string }
-        | undefined
-      const rawComment = data?.data?.comment
+      const capturedScope = activeScopeRef.current
+      const lockKey = `${capturedScope.viewerKey}\u0000${commentId}`
+      if (replyMutationLocksRef.current.has(lockKey)) return
+      const operation = Symbol('group-reply')
+      replyMutationLocksRef.current.set(lockKey, operation)
+      const draftVersion = replyDraftVersionRef.current.get(lockKey) || 0
+      try {
+        const result = await authedFetch<{
+          success?: boolean
+          data?: { comment?: unknown }
+          error?: string
+        }>(
+          `/api/posts/${postId}/comments`,
+          'POST',
+          accessToken,
+          { content, parent_id: commentId },
+          15_000,
+          {
+            expectedUserId: capturedScope.userId,
+            expectedSessionGeneration: capturedScope.sessionGeneration,
+          }
+        )
+        if (!scopeIsCurrent(capturedScope) || result.stale) return
+        const data = result.data
+        const rawComment = data?.data?.comment
 
-      if (
-        result.ok &&
-        data?.success === true &&
-        isCreatedCommentAcknowledgement(rawComment, {
-          postId,
-          content,
-          parentId: commentId,
-        })
-      ) {
-        const pendingDraft = replyDraftTimerRef.current[commentId]
-        if (pendingDraft) {
-          clearTimeout(pendingDraft)
-          delete replyDraftTimerRef.current[commentId]
+        if (
+          result.ok &&
+          data?.success === true &&
+          isCreatedCommentAcknowledgement(rawComment, {
+            postId,
+            content,
+            parentId: commentId,
+            userId: capturedScope.userId,
+          })
+        ) {
+          const timerKey = `${capturedScope.viewerKey}\u0000${commentId}`
+          const pendingDraft = replyDraftTimerRef.current[timerKey]
+          if (pendingDraft) {
+            clearTimeout(pendingDraft)
+            delete replyDraftTimerRef.current[timerKey]
+          }
+          if (
+            replyDraftVersionRef.current.get(lockKey) === draftVersion &&
+            replyContentRef.current[commentId]?.trim() === content
+          ) {
+            setReplyContent((prev) => ({ ...prev, [commentId]: '' }))
+            try {
+              localStorage.removeItem(
+                `group-reply-draft-v2:${capturedScope.viewerKey}:${commentId}`
+              )
+            } catch {
+              /* ignore */
+            }
+            setReplyingTo((prev) => ({ ...prev, [postId]: null }))
+          }
+          if (!(await reconcileCommentsAfterMutation(postId, capturedScope))) {
+            if (!scopeIsCurrent(capturedScope)) return
+            setComments((prev) => ({
+              ...prev,
+              [postId]: (prev[postId] || []).map((comment) =>
+                comment.id === commentId
+                  ? {
+                      ...comment,
+                      replies: [...(comment.replies || []), rawComment],
+                    }
+                  : comment
+              ),
+            }))
+          }
+        } else if (isDefinitiveMutationRejection(result)) {
+          if (scopeIsCurrent(capturedScope)) {
+            showToast(data?.error || t('postCommentFailed'), 'error')
+          }
+        } else if (!(await reconcileCommentsAfterMutation(postId, capturedScope))) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
-        setReplyContentRaw((prev) => ({ ...prev, [commentId]: '' }))
-        try {
-          localStorage.removeItem(`reply-draft-${commentId}`)
-        } catch {
-          /* ignore */
+      } catch {
+        if (
+          scopeIsCurrent(capturedScope) &&
+          !(await reconcileCommentsAfterMutation(postId, capturedScope))
+        ) {
+          if (scopeIsCurrent(capturedScope)) showToast(t('networkError'), 'error')
         }
-        setReplyingTo((prev) => ({ ...prev, [postId]: null }))
-        if (!(await reconcileCommentsAfterMutation(postId))) {
-          setComments((prev) => ({
-            ...prev,
-            [postId]: (prev[postId] || []).map((comment) =>
-              comment.id === commentId
-                ? {
-                    ...comment,
-                    replies: [...(comment.replies || []), rawComment],
-                  }
-                : comment
-            ),
-          }))
+      } finally {
+        if (replyMutationLocksRef.current.get(lockKey) === operation) {
+          replyMutationLocksRef.current.delete(lockKey)
         }
-      } else if (isDefinitiveMutationRejection(result)) {
-        showToast(result.error || data?.error || t('postCommentFailed'), 'error')
-      } else if (!(await reconcileCommentsAfterMutation(postId))) {
-        showToast(t('networkError'), 'error')
       }
     },
-    [accessToken, apiCall, reconcileCommentsAfterMutation, replyContent, showToast, t]
+    [
+      accessToken,
+      authChecked,
+      reconcileCommentsAfterMutation,
+      replyContent,
+      scopeIsCurrent,
+      setComments,
+      showToast,
+      t,
+    ]
   )
 
   // View mode setter

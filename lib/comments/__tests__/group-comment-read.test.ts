@@ -5,6 +5,10 @@ describe('group comment authenticated read gate', () => {
     expect(
       shouldLoadExpandedGroupComments({
         accessToken: null,
+        authChecked: false,
+        audienceResolved: false,
+        groupVisibility: null,
+        isMember: false,
         expanded: true,
         hasCachedComments: false,
         loading: false,
@@ -16,6 +20,10 @@ describe('group comment authenticated read gate', () => {
     expect(
       shouldLoadExpandedGroupComments({
         accessToken: 'token-1',
+        authChecked: true,
+        audienceResolved: true,
+        groupVisibility: 'apply',
+        isMember: true,
         expanded: true,
         hasCachedComments: false,
         loading: false,
@@ -24,6 +32,10 @@ describe('group comment authenticated read gate', () => {
     expect(
       shouldLoadExpandedGroupComments({
         accessToken: 'token-1',
+        authChecked: true,
+        audienceResolved: true,
+        groupVisibility: 'apply',
+        isMember: true,
         expanded: true,
         hasCachedComments: true,
         loading: false,
@@ -32,9 +44,40 @@ describe('group comment authenticated read gate', () => {
     expect(
       shouldLoadExpandedGroupComments({
         accessToken: 'token-1',
+        authChecked: true,
+        audienceResolved: true,
+        groupVisibility: 'apply',
+        isMember: true,
         expanded: true,
         hasCachedComments: false,
         loading: true,
+      })
+    ).toBe(false)
+  })
+
+  it('allows an anonymous expanded thread only after an open audience resolves', () => {
+    expect(
+      shouldLoadExpandedGroupComments({
+        accessToken: null,
+        authChecked: true,
+        audienceResolved: true,
+        groupVisibility: 'open',
+        isMember: false,
+        expanded: true,
+        hasCachedComments: false,
+        loading: false,
+      })
+    ).toBe(true)
+    expect(
+      shouldLoadExpandedGroupComments({
+        accessToken: null,
+        authChecked: true,
+        audienceResolved: true,
+        groupVisibility: 'apply',
+        isMember: false,
+        expanded: true,
+        hasCachedComments: false,
+        loading: false,
       })
     ).toBe(false)
   })

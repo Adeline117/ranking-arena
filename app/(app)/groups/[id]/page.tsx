@@ -55,6 +55,7 @@ interface Group {
   is_premium_only?: boolean | null
   status?: string | null
   dissolved_at?: string | null
+  visibility?: 'open' | 'apply' | null
 }
 
 interface GroupMember {
@@ -128,7 +129,8 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
   const { showDangerConfirm } = useDialog()
   const { isFeaturesUnlocked: isPro } = useSubscription()
   const searchParams = useSearchParams()
-  const { accessToken, email, userId } = useAuthSession()
+  const auth = useAuthSession()
+  const { accessToken, email, userId } = auth
 
   // Group state
   const [group, setGroup] = useState<Group | null>(null)
@@ -173,7 +175,12 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     groupId,
     userId,
     accessToken,
+    authChecked: auth.authChecked,
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
     isMember,
+    groupVisibility: group?.visibility ?? null,
+    audienceResolved: !loading && !!group,
     language,
     t,
     showToast,
@@ -385,7 +392,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           supabase
             .from('groups')
             .select(
-              'id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, rules_json, is_premium_only'
+              'id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, rules_json, is_premium_only, visibility, dissolved_at'
             )
             .eq('id', groupId)
             .maybeSingle(),

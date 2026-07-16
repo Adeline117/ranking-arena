@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 
 const mockFetchPostCommentsPage = jest.fn()
+const mockAuthedFetch = jest.fn()
 const mockFetch = jest.fn()
 const mockRouter = { push: jest.fn(), replace: jest.fn() }
 const mockSearchParams = new URLSearchParams()
@@ -12,7 +13,10 @@ jest.mock('next/navigation', () => ({
   useSearchParams: () => mockSearchParams,
 }))
 jest.mock('@/lib/hooks/useModalA11y', () => ({ useModalA11y: jest.fn() }))
-jest.mock('@/lib/api/client', () => ({ getCsrfHeaders: () => ({ 'x-csrf-token': 'csrf' }) }))
+jest.mock('@/lib/api/client', () => ({
+  authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
+  getCsrfHeaders: () => ({ 'x-csrf-token': 'csrf' }),
+}))
 jest.mock('@/lib/api/comments-client', () => {
   const actual = jest.requireActual('@/lib/api/comments-client')
   return {
@@ -20,14 +24,7 @@ jest.mock('@/lib/api/comments-client', () => {
     fetchPostCommentsPage: (...args: unknown[]) => mockFetchPostCommentsPage(...args),
   }
 })
-jest.mock('@/lib/hooks/useAuthSession', () => ({
-  useAuthSession: () => ({
-    accessToken: 'token-1',
-    authChecked: true,
-    email: 'user@example.com',
-    userId: 'user-1',
-  }),
-}))
+jest.mock('@/lib/hooks/useAuthSession', () => ({ useAuthSession: jest.fn() }))
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
   useLanguage: () => ({ language: 'en', t: mockT }),
 }))
@@ -43,7 +40,10 @@ jest.mock('@/lib/logger', () => ({
 }))
 
 import { useHotPageData } from '../useHotPageData'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import type { Comment, Post } from '../types'
+
+const mockUseAuthSession = useAuthSession as jest.Mock
 
 function page(comments: Comment[], commentCount: number) {
   return {
@@ -88,6 +88,19 @@ describe('useHotPageData comment mutation reconciliation', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     localStorage.clear()
+    mockUseAuthSession.mockReturnValue({
+      accessToken: 'token-1',
+      authChecked: true,
+      email: 'user@example.com',
+      userId: 'user-1',
+      viewerKey: 'user:user-1',
+      sessionGeneration: 1,
+    })
+    mockAuthedFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      data: { success: false, error: 'response lost' },
+    })
     global.fetch = mockFetch as never
     mockFetch.mockImplementation((_url: string, options?: RequestInit) => {
       if (options?.method === 'POST') {
@@ -120,6 +133,7 @@ describe('useHotPageData comment mutation reconciliation', () => {
     expect(mockFetchPostCommentsPage).toHaveBeenLastCalledWith('post-1', 'token-1', {
       limit: 10,
       offset: 0,
+      viewerScope: { expectedUserId: 'user-1', expectedSessionGeneration: 1 },
     })
     expect(result.current.comments).toEqual([initialComment, committedComment])
     expect(result.current.openPost?.comments).toBe(2)
@@ -147,5 +161,78 @@ describe('useHotPageData comment mutation reconciliation', () => {
     expect(result.current.comments).toEqual([initialComment])
     expect(result.current.openPost?.comments).toBe(1)
     expect(result.current.newComment).toBe('hello')
+  })
+
+  it('reloads the same open post for B and discards the late A GET', async () => {
+    const requests = new Map<string, (value: unknown) => void>()
+    const renderSnapshots: string[][] = []
+    mockFetchPostCommentsPage.mockImplementation(
+      (_postId: string, token: string) =>
+        new Promise((resolve) => {
+          requests.set(token, resolve)
+        })
+    )
+    const commentB: Comment = {
+      id: 'comment-b',
+      user_id: 'user-b',
+      content: 'B state',
+      created_at: '2026-07-15T22:00:00.000Z',
+    }
+    const { result, rerender } = renderHook(() => {
+      const value = useHotPageData({ initialPosts: [post] })
+      renderSnapshots.push(value.comments.map((comment) => comment.id))
+      return value
+    })
+    act(() => result.current.handleOpenPost(post))
+    await waitFor(() => expect(requests.has('token-1')).toBe(true))
+
+    mockUseAuthSession.mockReturnValue({
+      accessToken: 'token-b',
+      authChecked: true,
+      email: 'b@example.com',
+      userId: 'user-b',
+      viewerKey: 'user:user-b',
+      sessionGeneration: 2,
+    })
+    const firstBRender = renderSnapshots.length
+    rerender()
+    await waitFor(() => expect(requests.has('token-b')).toBe(true))
+    expect(
+      renderSnapshots
+        .slice(firstBRender)
+        .every((commentIds) => !commentIds.includes(initialComment.id))
+    ).toBe(true)
+
+    await act(async () => {
+      requests.get('token-b')?.(page([commentB], 1))
+      await Promise.resolve()
+    })
+    await act(async () => {
+      requests.get('token-1')?.(page([initialComment], 1))
+      await Promise.resolve()
+    })
+
+    expect(result.current.comments).toEqual([commentB])
+  })
+
+  it('keeps the A tree and avoids a reload for a same-A token refresh', async () => {
+    mockFetchPostCommentsPage.mockResolvedValue(page([initialComment], 1))
+    const { result, rerender } = renderHook(() => useHotPageData({ initialPosts: [post] }))
+    act(() => result.current.handleOpenPost(post))
+    await waitFor(() => expect(result.current.comments).toEqual([initialComment]))
+    const readsBeforeRefresh = mockFetchPostCommentsPage.mock.calls.length
+
+    mockUseAuthSession.mockReturnValue({
+      accessToken: 'token-2',
+      authChecked: true,
+      email: 'user@example.com',
+      userId: 'user-1',
+      viewerKey: 'user:user-1',
+      sessionGeneration: 1,
+    })
+    rerender()
+
+    expect(result.current.comments).toEqual([initialComment])
+    expect(mockFetchPostCommentsPage).toHaveBeenCalledTimes(readsBeforeRefresh)
   })
 })
