@@ -49,7 +49,7 @@ const firstScreen: TraderFirstScreen = {
 const capability: SourceCapability = {
   timeframes: { '7': 'native', '30': 'native', '90': 'native' },
   inceptionTf: false,
-  metrics: ['pnl'],
+  metrics: ['pnl', 'roi'],
   surfaces: {
     positions: false,
     position_history: false,
@@ -67,7 +67,7 @@ const capability: SourceCapability = {
 function coreModules(extras: Record<string, unknown>): TraderCoreModules {
   return {
     timeframe: 90,
-    stats: { pnl: 120 },
+    stats: { pnl: 120, roi: 24 },
     currency: 'USD',
     series: {},
     extras,
@@ -87,10 +87,11 @@ function mockCore(extras: Record<string, unknown>) {
   })
 }
 
-describe('ServingProfilePanel GMX PnL disclosure', () => {
-  it('labels a visible metric only when the exact v2 contract is present', () => {
+describe('ServingProfilePanel GMX metric disclosure', () => {
+  it('labels visible PnL and ROI only when the exact v2 contracts are present', () => {
     mockCore({
       pnl_basis: 'gmx_period_realized_net',
+      roi_basis: 'max_capital_usd',
       pnl_includes_unrealized: false,
       pnl_components_complete: true,
       profile_series_contract: 'unavailable_same_basis',
@@ -104,6 +105,9 @@ describe('ServingProfilePanel GMX PnL disclosure', () => {
     render(<ServingProfilePanel firstScreen={firstScreen} capability={capability} />)
 
     expect(screen.getByText('gmxRealizedNetPnlLabel')).toBeInTheDocument()
+    expect(screen.getByText('gmxMaxCapitalRoiLabel')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'gmxRealizedNetPnlTooltip' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'gmxMaxCapitalRoiTooltip' })).toBeInTheDocument()
     expect(screen.getByRole('note', { name: 'gmxRealizedNetPnlSummary' })).toBeInTheDocument()
     expect(screen.queryByText('metricPnl')).not.toBeInTheDocument()
   })
@@ -114,8 +118,28 @@ describe('ServingProfilePanel GMX PnL disclosure', () => {
     render(<ServingProfilePanel firstScreen={firstScreen} capability={capability} />)
 
     expect(screen.getByText('metricPnl')).toBeInTheDocument()
+    expect(screen.getByText('metricRoi')).toBeInTheDocument()
     expect(screen.queryByText('gmxRealizedNetPnlLabel')).not.toBeInTheDocument()
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
+  })
+
+  it('does not infer the ROI denominator from a valid PnL contract', () => {
+    mockCore({
+      pnl_basis: 'gmx_period_realized_net',
+      pnl_includes_unrealized: false,
+      pnl_components_complete: true,
+      profile_series_contract: 'unavailable_same_basis',
+      window_semantics: 'completed_utc_days',
+      window_from: WINDOW_TO - 90 * 86_400,
+      window_to: WINDOW_TO,
+      window_duration_days: 90,
+    })
+
+    render(<ServingProfilePanel firstScreen={firstScreen} capability={capability} />)
+
+    expect(screen.getByText('gmxRealizedNetPnlLabel')).toBeInTheDocument()
+    expect(screen.getByText('metricRoi')).toBeInTheDocument()
+    expect(screen.queryByText('gmxMaxCapitalRoiLabel')).not.toBeInTheDocument()
   })
 
   it('does not disclose PnL when the capability does not render that metric', () => {

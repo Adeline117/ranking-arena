@@ -21,6 +21,7 @@ describe('MetricGrid label overrides', () => {
         capabilityMetrics={['roi', 'pnl', 'total_pnl']}
         currency="USD"
         metricLabelKeys={{ pnl: 'gmxRealizedNetPnlLabel' }}
+        metricTooltipKeys={{ pnl: 'gmxRealizedNetPnlTooltip' }}
       />
     )
 
@@ -28,5 +29,6 @@ describe('MetricGrid label overrides', () => {
     expect(screen.getByText('metricRoi')).toBeInTheDocument()
     expect(screen.getByText('metricTotalPnl')).toBeInTheDocument()
     expect(screen.queryByText('metricPnl')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'gmxRealizedNetPnlTooltip' })).toBeInTheDocument()
   })
 })
