@@ -83,6 +83,7 @@
     "qa:auth-e2e": "playwright test --config=playwright.authenticated.config.ts",
     "qa:controlled-write": "node scripts/qa/controlled-write-sweep.mjs",
     "qa:vps-topology": "bash scripts/vps-deploy/deploy-safety.test.sh",
+    "qa:sweep-unit": "node --test scripts/qa/*.test.mjs",
     "qa:coverage": "tsx --env-file=.env.local scripts/ingest-field-coverage-ledger.mts",
     "qa:coverage-canary": "tsx --env-file=.env.local scripts/openclaw/field-coverage-canary.mts"
   },

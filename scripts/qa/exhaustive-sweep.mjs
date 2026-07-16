@@ -38,6 +38,7 @@ import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { readEnv, qaAuthStatus } from './qa-auth.mjs'
 import { installReadOnlyNetworkGuard } from './read-only-network-guard.mjs'
+import { exerciseFill } from './input-interaction.mjs'
 
 // axe-core is already present (transitive dep) — inject its bundle and run ONLY
 // the color-contrast rule. No new devDep = no package.json/lock churn in the
@@ -626,11 +627,19 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
         ledger.push(record)
         continue
       }
-      // For text inputs, type a probe instead of clicking (covers form fields).
-      if (desc.tag === 'input' && /text|search|email|url|number|tel|password|/.test(desc.type)) {
-        await el.fill('qa-probe').catch(() => {})
-        await el.press('Escape').catch(() => {})
-        record.status = 'ok:filled'
+      // Fill only controls whose HTML type accepts text. Type-specific probes
+      // keep browser validation meaningful; checkbox/radio/file controls stay
+      // on the click path. A rejected fill is a real coverage failure.
+      const fillResult = await exerciseFill(el, desc)
+      if (fillResult.handled) {
+        if (fillResult.ok) {
+          record.status = 'ok:filled'
+          counters.filled++
+        } else {
+          record.status = 'fail:fill'
+          record.fillError = fillResult.error
+          counters.failed++
+        }
       } else {
         const before = await snapshotEffect(page)
         const reqBefore = bucket.reqCount
@@ -657,8 +666,8 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
           // from a legit no-op (e.g. re-clicking an already-active tab).
           record.effect = { before, after, reqDelta: bucket.reqCount - reqBefore }
         }
+        counters.clicked++
       }
-      counters.clicked++
     } catch (e) {
       // Live-data surfaces re-render on a timer (e.g. /market SectorTreemap:
       // spot data refetches every 30s and re-lays-out the squarified tiles),
@@ -1054,7 +1063,8 @@ async function main() {
   const errored = ledger.filter((r) => r.errors && r.errors.length)
   console.log('\n=== Ledger summary ===')
   console.log(`  elements recorded : ${ledger.length}`)
-  console.log(`  clicked/filled    : ${counters.clicked}`)
+  console.log(`  clicked           : ${counters.clicked}`)
+  console.log(`  filled            : ${counters.filled}`)
   console.log(`  links recorded    : ${counters.links}`)
   console.log(`  denied (safety)   : ${counters.denied}`)
   console.log(`  skipped (hid/dis) : ${counters.skipped}`)
