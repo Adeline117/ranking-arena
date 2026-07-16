@@ -1417,6 +1417,7 @@ const zh = {
   adminReportEvidence: '截图证据',
   reportSubmitted: '举报已提交，我们会尽快处理',
   reportFailed: '举报失败',
+  reportEvidenceTooLarge: '证据图片不能超过 2MB',
 
   // MarketPanel
   requestTimeoutShort: '请求超时，请稍后重试',

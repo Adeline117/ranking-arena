@@ -443,8 +443,8 @@ export default function ReportModal({
                     onChange={async (e) => {
                       const file = e.target.files?.[0]
                       if (!file) return
-                      if (file.size > 5 * 1024 * 1024) {
-                        showToast(t('fileTooLarge'), 'warning')
+                      if (file.size > 2 * 1024 * 1024) {
+                        showToast(t('reportEvidenceTooLarge'), 'warning')
                         return
                       }
                       setUploading(true)
@@ -454,27 +454,34 @@ export default function ReportModal({
                         formData.append('bucket', 'reports')
                         const res = await fetch('/api/upload', {
                           method: 'POST',
-                          headers: { Authorization: `Bearer ${accessToken}` },
+                          headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            ...getCsrfHeaders(),
+                          },
                           body: formData,
                         })
-                        if (res.ok) {
-                          const { url } = await res.json()
-                          setImages((prev) => [...prev, url])
-                        } else {
-                          // Fallback to base64 if upload API not available
-                          const reader = new FileReader()
-                          reader.onload = () => {
-                            setImages((prev) => [...prev, reader.result as string])
-                          }
-                          reader.readAsDataURL(file)
+
+                        if (!res.ok) throw new Error(`Evidence upload failed (${res.status})`)
+
+                        const payload = (await res.json()) as { url?: unknown }
+                        if (typeof payload.url !== 'string') {
+                          throw new Error('Evidence upload returned an invalid URL')
                         }
-                      } catch {
-                        // Fallback to base64
-                        const reader = new FileReader()
-                        reader.onload = () => {
-                          setImages((prev) => [...prev, reader.result as string])
+
+                        let evidenceUrl: URL
+                        try {
+                          evidenceUrl = new URL(payload.url)
+                        } catch {
+                          throw new Error('Evidence upload returned an invalid URL')
                         }
-                        reader.readAsDataURL(file)
+                        if (evidenceUrl.protocol !== 'https:') {
+                          throw new Error('Evidence upload returned an insecure URL')
+                        }
+
+                        setImages((prev) => [...prev, payload.url as string])
+                      } catch (error) {
+                        logger.error('Report evidence upload failed:', error)
+                        showToast(t('uploadFailedRetry'), 'error')
                       } finally {
                         setUploading(false)
                       }

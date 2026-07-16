@@ -1376,6 +1376,7 @@ const ko = {
   adminReportEvidence: '스크린샷 증거',
   reportSubmitted: '신고가 접수되었습니다. 곧 검토하겠습니다',
   reportFailed: '신고에 실패했습니다',
+  reportEvidenceTooLarge: '증거 이미지는 2MB 이하여야 합니다',
 
   // MarketPanel
   requestTimeoutShort: '요청 시간이 초과되었습니다. 나중에 다시 시도해 주세요',

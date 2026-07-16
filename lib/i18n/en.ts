@@ -1444,6 +1444,7 @@ const en = {
   adminReportEvidence: 'Screenshot Evidence',
   reportSubmitted: 'Report submitted, we will review it soon',
   reportFailed: 'Report failed',
+  reportEvidenceTooLarge: 'Evidence image must be 2 MB or smaller',
 
   // MarketPanel
   requestTimeoutShort: 'Request timed out, please try later',
