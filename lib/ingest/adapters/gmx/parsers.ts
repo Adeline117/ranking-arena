@@ -83,6 +83,7 @@ function realizedPnlBasisExtras(
     pnl_includes_unrealized: false,
     realized_pnl_usd: realizedPnl,
     pnl_components_complete: true,
+    profile_series_contract: 'unavailable_same_basis',
     window_from: windowFrom,
   }
 }
