@@ -180,10 +180,13 @@ export function codePointLength(value: string): number {
 }
 
 export function groupProfileEditSubmitScope(actorId: string, groupId: string): string {
+  if (!isUuid(actorId) || !isUuid(groupId)) throw new TypeError('Invalid profile-edit submit scope')
   return `group-profile-edit:submit:v1:${actorId}:${groupId}`
 }
 
 export function groupProfileEditReviewScope(actorId: string, applicationId: string): string {
+  if (!isUuid(actorId) || !isUuid(applicationId))
+    throw new TypeError('Invalid profile-edit review scope')
   return `group-profile-edit:review:v1:${actorId}:${applicationId}`
 }
 
@@ -211,7 +214,7 @@ export function canonicalizeGroupProfileEditPayload(
     description: normalizeOptionalText(input.description),
     description_en: normalizeOptionalText(input.description_en),
     is_premium_only: input.is_premium_only,
-    name: normalizedName ?? normalizedNameEn ?? '',
+    name: normalizedName ?? '',
     name_en: normalizedNameEn,
     role_names: input.role_names
       ? {
@@ -357,9 +360,33 @@ function isAbsoluteHttpUrl(value: string): boolean {
 }
 
 function isStrictIsoTimestamp(value: unknown): value is string {
+  if (typeof value !== 'string') return false
+  const match =
+    /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,6})?(?:Z|([+-])(\d{2}):(\d{2}))$/.exec(
+      value
+    )
+  if (!match) return false
+  const [, yearValue, monthValue, dayValue, hourValue, minuteValue, secondValue] = match
+  const year = Number(yearValue)
+  const month = Number(monthValue)
+  const day = Number(dayValue)
+  const hour = Number(hourValue)
+  const minute = Number(minuteValue)
+  const second = Number(secondValue)
+  const offsetHour = match[8] === undefined ? 0 : Number(match[8])
+  const offsetMinute = match[9] === undefined ? 0 : Number(match[9])
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate()
   return (
-    typeof value === 'string' &&
-    /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})$/.test(value) &&
+    year >= 1 &&
+    month >= 1 &&
+    month <= 12 &&
+    day >= 1 &&
+    day <= daysInMonth &&
+    hour <= 23 &&
+    minute <= 59 &&
+    second <= 59 &&
+    offsetHour <= 23 &&
+    offsetMinute <= 59 &&
     Number.isFinite(Date.parse(value))
   )
 }
@@ -437,6 +464,8 @@ export function isExactSubmitGroupProfileEditAck(
   expectedPayload: GroupProfileEditPayload
 ): boolean {
   if (
+    !isUuid(operation.actorId) ||
+    !isUuid(operation.operationId) ||
     !isUuid(expectedGroupId) ||
     operation.scope !== groupProfileEditSubmitScope(operation.actorId, expectedGroupId) ||
     !isExactProfileEditRoot(value, operation)
@@ -489,8 +518,13 @@ function isExactReviewGroupProfileEditAck(
   expectedReason: string | null
 ): boolean {
   if (
+    !isUuid(operation.actorId) ||
+    !isUuid(operation.operationId) ||
     !isUuid(expectedApplicationId) ||
     !isUuid(expectedGroupId) ||
+    (expectedReason !== null &&
+      (expectedReason !== expectedReason.normalize('NFC') ||
+        codePointLength(expectedReason) > 500)) ||
     operation.scope !== groupProfileEditReviewScope(operation.actorId, expectedApplicationId) ||
     !isExactProfileEditRoot(value, operation)
   ) {
