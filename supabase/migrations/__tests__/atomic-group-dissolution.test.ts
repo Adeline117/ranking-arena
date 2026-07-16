@@ -92,6 +92,11 @@ describe('atomic group dissolution migration', () => {
     expect(migration).toContain(
       'GRANT EXECUTE ON FUNCTION public.dissolve_group_atomic(uuid, uuid)'
     )
+    expect(migration).toContain("WHERE role_row.rolname = 'authenticator'")
+    expect(migration).toContain('membership.member = v_authenticator_oid')
+    expect(migration).toContain('AND NOT membership.inherit_option')
+    expect(migration).toContain('AND membership.set_option')
+    expect(migration).toContain('membership.member NOT IN (v_authenticator_oid, v_postgres_oid)')
     expect(migration).toContain('service_role has an unsafe effective authority edge')
     expect(migration).toContain('acl_entry.grantor = v_postgres_oid')
   })

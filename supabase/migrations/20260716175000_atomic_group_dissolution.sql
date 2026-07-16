@@ -23,6 +23,11 @@ DECLARE
     FROM pg_catalog.pg_roles AS role_row
     WHERE role_row.rolname = 'service_role'
   );
+  v_authenticator_oid oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'authenticator'
+  );
   v_auth_id_attnum smallint;
   v_groups_id_attnum smallint;
   v_audit_id_attnum smallint;
@@ -31,13 +36,18 @@ DECLARE
   v_audit_target_attnum smallint;
   v_existing pg_catalog.regprocedure;
 BEGIN
-  IF v_postgres_oid IS NULL OR v_service_oid IS NULL OR EXISTS (
-    SELECT 1
-    FROM pg_catalog.unnest(ARRAY['anon', 'authenticated']::name[]) AS required(role_name)
-    LEFT JOIN pg_catalog.pg_roles AS role_row
-      ON role_row.rolname = required.role_name
-    WHERE role_row.oid IS NULL
-  ) THEN
+  IF v_postgres_oid IS NULL
+    OR v_service_oid IS NULL
+    OR v_authenticator_oid IS NULL
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.unnest(ARRAY['anon', 'authenticated']::name[])
+        AS required(role_name)
+      LEFT JOIN pg_catalog.pg_roles AS role_row
+        ON role_row.rolname = required.role_name
+      WHERE role_row.oid IS NULL
+    )
+  THEN
     RAISE EXCEPTION 'atomic group dissolution requires the application database roles';
   END IF;
 
@@ -281,24 +291,37 @@ BEGIN
     RAISE EXCEPTION 'deleted-account group purge boundary must be installed first';
   END IF;
 
-  -- Neither inherited privileges nor SET ROLE chains may turn a JWT/custom
-  -- role into service_role.  Function ACLs alone are otherwise insufficient.
-  IF EXISTS (
-    WITH RECURSIVE service_reachable(member_oid) AS (
+  -- Supabase's gateway must be able to SET ROLE service_role without
+  -- inheriting it.  Every other untrusted direct or recursive path is unsafe.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members AS membership
+    WHERE membership.roleid = v_service_oid
+      AND membership.member = v_authenticator_oid
+      AND NOT membership.admin_option
+      AND NOT membership.inherit_option
+      AND membership.set_option
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_auth_members AS membership
+    WHERE membership.roleid = v_service_oid
+      AND membership.member NOT IN (v_authenticator_oid, v_postgres_oid)
+  ) OR EXISTS (
+    WITH RECURSIVE service_inheritors(member_oid) AS (
       SELECT membership.member
       FROM pg_catalog.pg_auth_members AS membership
       WHERE membership.roleid = v_service_oid
-        AND (membership.inherit_option OR membership.set_option)
+        AND membership.inherit_option
       UNION
       SELECT membership.member
       FROM pg_catalog.pg_auth_members AS membership
-      JOIN service_reachable AS reachable
-        ON membership.roleid = reachable.member_oid
-      WHERE membership.inherit_option OR membership.set_option
+      JOIN service_inheritors AS inherited
+        ON membership.roleid = inherited.member_oid
+      WHERE membership.inherit_option
     )
     SELECT 1
-    FROM service_reachable AS reachable
-    WHERE reachable.member_oid <> v_postgres_oid
+    FROM service_inheritors AS inherited
+    WHERE inherited.member_oid <> v_postgres_oid
   ) OR EXISTS (
     WITH RECURSIVE service_inherits(role_oid) AS (
       SELECT membership.roleid
@@ -313,6 +336,24 @@ BEGIN
       WHERE membership.inherit_option OR membership.set_option
     )
     SELECT 1 FROM service_inherits
+  ) OR EXISTS (
+    WITH RECURSIVE browser_authority(role_oid) AS (
+      SELECT membership.roleid
+      FROM pg_catalog.pg_roles AS browser_role
+      JOIN pg_catalog.pg_auth_members AS membership
+        ON membership.member = browser_role.oid
+       AND (membership.inherit_option OR membership.set_option)
+      WHERE browser_role.rolname IN ('anon', 'authenticated')
+      UNION
+      SELECT membership.roleid
+      FROM browser_authority AS inherited
+      JOIN pg_catalog.pg_auth_members AS membership
+        ON membership.member = inherited.role_oid
+      WHERE membership.inherit_option OR membership.set_option
+    )
+    SELECT 1
+    FROM browser_authority AS inherited
+    WHERE inherited.role_oid IN (v_service_oid, v_postgres_oid)
   ) THEN
     RAISE EXCEPTION 'service_role has an unsafe effective authority edge';
   END IF;
