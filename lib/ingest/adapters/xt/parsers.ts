@@ -159,22 +159,57 @@ export function parseXtLeaderboardPage(payload: unknown, ctx: ParseCtx): ParsedL
  * profile series at all (parseXtProfile returns series:[]), so this is the
  * sole series path for XT. The leading {amount:0, time:0} seed point is a
  * placeholder (epoch 0) and is dropped.
+ *
+ * XT has also returned a corrupt prefix from a different date range (for
+ * example nine October 2025 points before an otherwise valid Apr–Jul 2026
+ * 90-day chart). Anchor the inclusive calendar window to the UTC day that
+ * contains ctx.scrapedAt: a 90d chart may contain that day plus the preceding
+ * 89 UTC days. Do not slice to N points — a sparse upstream chart must remain
+ * sparse rather than looking complete. A point may be at most five minutes
+ * after the exact scrape time to tolerate small exchange/worker clock skew;
+ * anything later is future data and is rejected.
+ *
+ * Duplicate exact millisecond timestamps use the last value in the upstream
+ * payload, then the remaining points are sorted chronologically.
  */
+const XT_SERIES_DAY_MS = 86_400_000
+const XT_SERIES_FUTURE_SKEW_MS = 5 * 60_000
+
 export function parseXtLeaderboardSeries(
   payload: unknown,
-  _ctx: ParseCtx,
+  ctx: ParseCtx,
   timeframe: RankingTimeframe
 ): Map<string, BoardSeriesBlock[]> {
   const out = new Map<string, BoardSeriesBlock[]>()
+  const scrapedAtMs = Date.parse(ctx.scrapedAt)
+  if (!Number.isFinite(scrapedAtMs)) return out
+
+  const scrapedAtUtcDayMs = Math.floor(scrapedAtMs / XT_SERIES_DAY_MS) * XT_SERIES_DAY_MS
+  const windowStartMs = scrapedAtUtcDayMs - (timeframe - 1) * XT_SERIES_DAY_MS
+  const latestAllowedMs = scrapedAtMs + XT_SERIES_FUTURE_SKEW_MS
+
   for (const item of items(payload)) {
     const id = item.accountId
     if (id === null || id === undefined) continue
     const chart = Array.isArray(item.chart) ? (item.chart as Dict[]) : []
-    const points = chart
-      .map((p) => ({ t: num(p.time), value: num(p.amount) }))
-      .filter((p): p is { t: number; value: number } => p.t !== null && p.t > 0 && p.value !== null)
-      .sort((a, b) => a.t - b.t)
-      .map((p) => ({ ts: new Date(p.t).toISOString(), value: p.value }))
+    const byTimestamp = new Map<number, number>()
+    for (const point of chart) {
+      const t = num(point.time)
+      const value = num(point.amount)
+      if (
+        t === null ||
+        !Number.isSafeInteger(t) ||
+        value === null ||
+        t < windowStartMs ||
+        t > latestAllowedMs
+      ) {
+        continue
+      }
+      byTimestamp.set(t, value)
+    }
+    const points = [...byTimestamp]
+      .sort(([a], [b]) => a - b)
+      .map(([t, value]) => ({ ts: new Date(t).toISOString(), value }))
     if (points.length > 0) out.set(String(id), [{ timeframe, metric: 'pnl', points }])
   }
   return out
@@ -211,7 +246,7 @@ export function parseXtProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const info = ((bundle.detail as Dict)?.result ?? null) as Dict | null
   // leader-stats = the full per-TF Performance block (live-captured 2026-07-01).
   const perf = ((bundle.stats as Dict)?.result ?? null) as Dict | null
-  const prefRows = ((bundle.symbolPrefer as Dict)?.result ?? null) as unknown
+  const prefRows = bundle.symbolPrefer?.result ?? null
 
   const stats: ParsedStats[] = []
   if (info || perf) {
