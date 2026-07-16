@@ -53,23 +53,25 @@ async function transitionPendingReports(
     reportIds: string[]
     contentType: string
     contentId: string
-    status: 'dismissed' | 'actioned'
+    status: 'dismissed' | 'resolved'
     resolvedBy: string
     actionTaken: string
   }
 ): Promise<void> {
+  const resolvedAt = new Date().toISOString()
   const { data, error } = await supabase
     .from('content_reports')
     .update({
       status: input.status,
       resolved_by: input.resolvedBy,
+      resolved_at: resolvedAt,
       action_taken: input.actionTaken,
     })
     .in('id', input.reportIds)
     .eq('status', 'pending')
     .eq('content_type', input.contentType)
     .eq('content_id', input.contentId)
-    .select('id, status, resolved_by, action_taken, content_type, content_id')
+    .select('id, status, resolved_by, resolved_at, action_taken, content_type, content_id')
 
   if (error || !Array.isArray(data)) {
     logger.error('Failed to transition moderation reports', {
@@ -90,6 +92,7 @@ async function transitionPendingReports(
       acknowledgedIds.has(row.id) ||
       row.status !== input.status ||
       row.resolved_by !== input.resolvedBy ||
+      row.resolved_at !== resolvedAt ||
       row.action_taken !== input.actionTaken ||
       row.content_type !== input.contentType ||
       row.content_id !== input.contentId
@@ -365,7 +368,7 @@ export async function POST(req: NextRequest) {
           reportIds,
           contentType: content_type,
           contentId: content_id,
-          status: 'actioned',
+          status: 'resolved',
           resolvedBy: admin.id,
           actionTaken: 'content_deleted',
         })
@@ -390,7 +393,7 @@ export async function POST(req: NextRequest) {
           reportIds,
           contentType: content_type,
           contentId: content_id,
-          status: 'actioned',
+          status: 'resolved',
           resolvedBy: admin.id,
           actionTaken: 'user_warned',
         })
@@ -443,7 +446,7 @@ export async function POST(req: NextRequest) {
           reportIds,
           contentType: content_type,
           contentId: content_id,
-          status: 'actioned',
+          status: 'resolved',
           resolvedBy: admin.id,
           actionTaken: 'user_banned',
         })
