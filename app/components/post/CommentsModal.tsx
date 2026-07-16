@@ -95,11 +95,20 @@ export default function CommentsModal({
     else setInternalSort(sort)
   }
 
-  // Client-side sort: Wilson score or newest
-  const sortedComments = useMemo(() => {
-    if (comments.length <= 1) return comments
-    const sorted = [...comments]
-    if (commentSort === 'time') {
+  const commentsRef = useRef(comments)
+  commentsRef.current = comments
+  const rootStructureKey = comments.map((comment) => comment.id).join(',')
+  const sortRevision = useMemo(
+    () => ({ postId, rootStructureKey, commentSort }),
+    [postId, rootStructureKey, commentSort]
+  )
+
+  // Freeze root order while only reaction counts/content change. This keeps the
+  // comment the viewer just reacted to from jumping under their pointer. A root
+  // add/remove/replacement, post switch, or explicit sort-mode change re-sorts.
+  const sortedCommentIds = useMemo(() => {
+    const sorted = [...commentsRef.current]
+    if (sortRevision.commentSort === 'time') {
       sorted.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
     } else {
       // Wilson score lower bound (95% confidence)
@@ -120,8 +129,13 @@ export default function CommentsModal({
         return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
       })
     }
-    return sorted
-  }, [comments, commentSort])
+    return sorted.map((comment) => comment.id)
+  }, [sortRevision])
+
+  const commentsById = new Map(comments.map((comment) => [comment.id, comment]))
+  const sortedComments = sortedCommentIds
+    .map((commentId) => commentsById.get(commentId))
+    .filter((comment): comment is Comment => !!comment)
 
   const commentsEndRef = useRef<HTMLDivElement>(null)
   const prevCommentCount = useRef(comments.length)
@@ -132,15 +146,16 @@ export default function CommentsModal({
   // the array 0 -> N, and scrolling on that was landing first-time visitors past the
   // post title/body straight into the comment list (U8-4).
   useEffect(() => {
-    const last = comments[comments.length - 1]
+    const latestComments = commentsRef.current
+    const last = latestComments[latestComments.length - 1]
     if (
-      comments.length > prevCommentCount.current &&
+      latestComments.length > prevCommentCount.current &&
       last?.id?.startsWith('temp_') &&
       commentsEndRef.current
     ) {
       commentsEndRef.current.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
     }
-    prevCommentCount.current = comments.length
+    prevCommentCount.current = latestComments.length
   }, [comments.length])
 
   return (

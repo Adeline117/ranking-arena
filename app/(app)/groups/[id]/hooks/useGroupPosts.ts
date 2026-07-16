@@ -5,7 +5,13 @@ import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 const supabase = _supabase as SupabaseClient
 import { getCsrfHeaders } from '@/lib/api/client'
+import {
+  fetchPostCommentsPage,
+  isCreatedCommentAcknowledgement,
+  isDefinitiveMutationRejection,
+} from '@/lib/api/comments-client'
 import { logger } from '@/lib/logger'
+import { shouldLoadExpandedGroupComments } from '@/lib/comments/group-comment-read'
 
 export interface Post {
   id: string
@@ -180,6 +186,8 @@ export function useGroupPosts({
   const [replyingTo, setReplyingTo] = useState<Record<string, string | null>>({})
   const [replyContentRaw, setReplyContentRaw] = useState<Record<string, string>>({})
   const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({})
+  const commentLoadGenerationRef = useRef(new Map<string, number>())
+  const commentLoadPromisesRef = useRef(new Map<string, Promise<boolean>>())
 
   // Debounce timers for draft persistence
   const commentDraftTimerRef = useRef<Record<string, ReturnType<typeof setTimeout>>>({})
@@ -414,7 +422,7 @@ export function useGroupPosts({
     async (
       url: string,
       options: { method?: string; body?: unknown; headers?: Record<string, string> } = {}
-    ): Promise<{ ok: boolean; data?: unknown; error?: string }> => {
+    ): Promise<{ ok: boolean; status: number; data?: unknown; error?: string }> => {
       try {
         const response = await fetch(url, {
           method: options.method || 'POST',
@@ -427,9 +435,9 @@ export function useGroupPosts({
           body: options.body ? JSON.stringify(options.body) : undefined,
         })
         const data = await response.json().catch(() => ({}))
-        return { ok: response.ok, data, error: data.error }
+        return { ok: response.ok, status: response.status, data, error: data.error }
       } catch {
-        return { ok: false, error: t('networkError') }
+        return { ok: false, status: 0, error: t('networkError') }
       }
     },
     [accessToken, t]
@@ -605,23 +613,62 @@ export function useGroupPosts({
 
   // Load comments for a post
   const loadComments = useCallback(
-    async (postId: string) => {
+    (postId: string, showError = true): Promise<boolean> => {
+      // Group threads are member reads. During session restoration a null token
+      // must not be allowed to create a durable anonymous empty cache.
+      if (!accessToken) return Promise.resolve(false)
+
+      const existingRequest = commentLoadPromisesRef.current.get(postId)
+      if (existingRequest) return existingRequest
+
+      const generation = (commentLoadGenerationRef.current.get(postId) || 0) + 1
+      commentLoadGenerationRef.current.set(postId, generation)
       setPostLoading(setCommentLoading, postId, true)
-      try {
-        const response = await fetch(`/api/posts/${postId}/comments`)
-        const json = await response.json()
-        if (response.ok && json.success) {
-          setComments((prev) => ({ ...prev, [postId]: json.data?.comments || [] }))
-        } else {
-          showToast(t('loadCommentsFailed'), 'error')
+
+      const request = (async () => {
+        try {
+          const page = await fetchPostCommentsPage<CommentWithAuthor>(postId, accessToken)
+          if (!page.ok || commentLoadGenerationRef.current.get(postId) !== generation) {
+            if (showError && commentLoadGenerationRef.current.get(postId) === generation) {
+              showToast(t('loadCommentsFailed'), 'error')
+            }
+            return false
+          }
+
+          setComments((prev) => ({ ...prev, [postId]: page.comments }))
+          setPosts((prev) =>
+            prev.map((post) =>
+              post.id === postId ? { ...post, comment_count: page.commentCount } : post
+            )
+          )
+          return true
+        } catch {
+          if (showError && commentLoadGenerationRef.current.get(postId) === generation) {
+            showToast(t('networkError'), 'error')
+          }
+          return false
+        } finally {
+          if (commentLoadGenerationRef.current.get(postId) === generation) {
+            setPostLoading(setCommentLoading, postId, false)
+            commentLoadPromisesRef.current.delete(postId)
+          }
         }
-      } catch {
-        showToast(t('networkError'), 'error')
-      } finally {
-        setPostLoading(setCommentLoading, postId, false)
-      }
+      })()
+
+      commentLoadPromisesRef.current.set(postId, request)
+      return request
     },
-    [t, showToast, setPostLoading]
+    [accessToken, t, showToast, setPostLoading]
+  )
+
+  const reconcileCommentsAfterMutation = useCallback(
+    async (postId: string): Promise<boolean> => {
+      // An already-running read may have started before the write and therefore
+      // cannot prove its outcome. Let it settle, then issue a fresh token-bound read.
+      await commentLoadPromisesRef.current.get(postId)
+      return loadComments(postId, false)
+    },
+    [loadComments]
   )
 
   const toggleComments = useCallback(
@@ -630,11 +677,38 @@ export function useGroupPosts({
       setExpandedComments((prev) => ({ ...prev, [postId]: !isExpanded }))
       if (!isExpanded) {
         restoreCommentDraft(postId)
-        if (!comments[postId]) loadComments(postId)
+        if (
+          shouldLoadExpandedGroupComments({
+            accessToken,
+            expanded: true,
+            hasCachedComments: Object.prototype.hasOwnProperty.call(comments, postId),
+            loading: commentLoadPromisesRef.current.has(postId),
+          })
+        ) {
+          void loadComments(postId)
+        }
       }
     },
-    [expandedComments, comments, loadComments, restoreCommentDraft]
+    [accessToken, expandedComments, comments, loadComments, restoreCommentDraft]
   )
+
+  // URL/session restoration can expand a thread before the member token is
+  // available. When auth arrives, retry only uncached expanded threads.
+  useEffect(() => {
+    if (!accessToken) return
+    for (const [postId, expanded] of Object.entries(expandedComments)) {
+      if (
+        shouldLoadExpandedGroupComments({
+          accessToken,
+          expanded,
+          hasCachedComments: Object.prototype.hasOwnProperty.call(comments, postId),
+          loading: commentLoadPromisesRef.current.has(postId),
+        })
+      ) {
+        void loadComments(postId)
+      }
+    }
+  }, [accessToken, comments, expandedComments, loadComments])
 
   const submitComment = useCallback(
     async (postId: string) => {
@@ -646,52 +720,82 @@ export function useGroupPosts({
       if (!content) return
 
       setPostLoading(setCommentLoading, postId, true)
-      const result = await apiCall(`/api/posts/${postId}/comments`, { body: { content } })
+      try {
+        const result = await apiCall(`/api/posts/${postId}/comments`, { body: { content } })
+        const data = result.data as
+          | { success?: boolean; data?: { comment?: unknown }; error?: string }
+          | undefined
+        const rawComment = data?.data?.comment
 
-      if (!result.ok) {
-        const errorMsg = result.error || t('postCommentFailed')
-        showToast(errorMsg, 'error')
-        setPostLoading(setCommentLoading, postId, false)
-        return
-      }
+        if (
+          result.ok &&
+          data?.success === true &&
+          isCreatedCommentAcknowledgement(rawComment, { postId, content })
+        ) {
+          const pendingDraft = commentDraftTimerRef.current[postId]
+          if (pendingDraft) {
+            clearTimeout(pendingDraft)
+            delete commentDraftTimerRef.current[postId]
+          }
+          setNewCommentRaw((prev) => ({ ...prev, [postId]: '' }))
+          try {
+            localStorage.removeItem(`comment-draft-${postId}`)
+          } catch {
+            /* ignore */
+          }
+          setExpandedComments((prev) => ({ ...prev, [postId]: true }))
 
-      const data = result.data as {
-        success: boolean
-        data?: { comment: CommentWithAuthor }
-        error?: string
-      }
-      if (data.success && data.data?.comment) {
-        setNewCommentRaw((prev) => ({ ...prev, [postId]: '' }))
-        try {
-          localStorage.removeItem(`comment-draft-${postId}`)
-        } catch {
-          /* ignore */
+          // Prefer the authenticated absolute tree/count. If that read is
+          // unavailable, the strict ACK is still safe to render without
+          // guessing a post count from a possibly stale base.
+          if (!(await reconcileCommentsAfterMutation(postId))) {
+            setComments((prev) => {
+              const existing = prev[postId] || []
+              if (existing.some((comment) => comment.id === rawComment.id)) return prev
+              return { ...prev, [postId]: [...existing, rawComment] }
+            })
+          }
+        } else if (isDefinitiveMutationRejection(result)) {
+          showToast(result.error || data?.error || t('postCommentFailed'), 'error')
+        } else if (!(await reconcileCommentsAfterMutation(postId))) {
+          // Network/408/5xx/malformed 2xx leaves commit state unknown. Keep the
+          // current tree and draft when the authoritative read is unavailable.
+          showToast(t('networkError'), 'error')
         }
-        setExpandedComments((prev) => ({ ...prev, [postId]: true }))
-        setComments((prev) => ({
-          ...prev,
-          [postId]: [...(prev[postId] || []), data.data!.comment],
-        }))
-        setPosts((prev) =>
-          prev.map((p) =>
-            p.id === postId ? { ...p, comment_count: (p.comment_count || 0) + 1 } : p
-          )
-        )
-      } else {
-        showToast(data.error || t('postCommentFailed'), 'error')
+      } finally {
+        setPostLoading(setCommentLoading, postId, false)
       }
-      setPostLoading(setCommentLoading, postId, false)
     },
-    [accessToken, t, showToast, newComment, apiCall, setPostLoading]
+    [accessToken, apiCall, newComment, reconcileCommentsAfterMutation, setPostLoading, showToast, t]
   )
 
   const submitReply = useCallback(
     async (postId: string, commentId: string) => {
-      if (!accessToken || !replyContent[commentId]?.trim()) return
+      if (!accessToken) return
+      const content = replyContent[commentId]?.trim()
+      if (!content) return
       const result = await apiCall(`/api/posts/${postId}/comments`, {
-        body: { content: replyContent[commentId].trim(), parent_id: commentId },
+        body: { content, parent_id: commentId },
       })
-      if (result.ok) {
+      const data = result.data as
+        | { success?: boolean; data?: { comment?: unknown }; error?: string }
+        | undefined
+      const rawComment = data?.data?.comment
+
+      if (
+        result.ok &&
+        data?.success === true &&
+        isCreatedCommentAcknowledgement(rawComment, {
+          postId,
+          content,
+          parentId: commentId,
+        })
+      ) {
+        const pendingDraft = replyDraftTimerRef.current[commentId]
+        if (pendingDraft) {
+          clearTimeout(pendingDraft)
+          delete replyDraftTimerRef.current[commentId]
+        }
         setReplyContentRaw((prev) => ({ ...prev, [commentId]: '' }))
         try {
           localStorage.removeItem(`reply-draft-${commentId}`)
@@ -699,10 +803,26 @@ export function useGroupPosts({
           /* ignore */
         }
         setReplyingTo((prev) => ({ ...prev, [postId]: null }))
-        loadComments(postId)
+        if (!(await reconcileCommentsAfterMutation(postId))) {
+          setComments((prev) => ({
+            ...prev,
+            [postId]: (prev[postId] || []).map((comment) =>
+              comment.id === commentId
+                ? {
+                    ...comment,
+                    replies: [...(comment.replies || []), rawComment],
+                  }
+                : comment
+            ),
+          }))
+        }
+      } else if (isDefinitiveMutationRejection(result)) {
+        showToast(result.error || data?.error || t('postCommentFailed'), 'error')
+      } else if (!(await reconcileCommentsAfterMutation(postId))) {
+        showToast(t('networkError'), 'error')
       }
     },
-    [accessToken, replyContent, loadComments, apiCall]
+    [accessToken, apiCall, reconcileCommentsAfterMutation, replyContent, showToast, t]
   )
 
   // View mode setter

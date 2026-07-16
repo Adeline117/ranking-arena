@@ -22,6 +22,10 @@ import { SortButtons, type SortType, PostDetailView } from './components'
 import { PostListItem } from './PostList'
 import { EditPostModal, RepostModal } from './Modals'
 import { logger } from '@/lib/logger'
+import {
+  applyRealtimePostCommentCount,
+  parseRealtimePostCommentCount,
+} from '@/lib/realtime/post-comment-count'
 
 type Post = PostWithUserState
 
@@ -210,14 +214,25 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     accessToken,
     showToast,
     showDangerConfirm,
-    onCommentCountChange: (postId, delta) => {
+    onCommentCountChange: (postId, delta, absoluteCount) => {
       setPosts((prev) =>
-        prev.map((p) => (p.id === postId ? { ...p, comment_count: p.comment_count + delta } : p))
-      )
-      if (openPost?.id === postId)
-        setOpenPost((prev) =>
-          prev ? { ...prev, comment_count: prev.comment_count + delta } : null
+        prev.map((p) =>
+          p.id === postId
+            ? {
+                ...p,
+                comment_count: absoluteCount ?? Math.max(0, (p.comment_count || 0) + delta),
+              }
+            : p
         )
+      )
+      setOpenPost((prev) =>
+        prev?.id === postId
+          ? {
+              ...prev,
+              comment_count: absoluteCount ?? Math.max(0, (prev.comment_count || 0) + delta),
+            }
+          : prev
+      )
     },
   })
   const { comments, setComments, loadComments } = commentsHook
@@ -253,6 +268,21 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         realtimePostIdsRef.current.add(postId)
         setNewPostCount((prev) => prev + 1)
       }
+    }, []),
+    onUpdate: useCallback((payload: { new: Record<string, unknown> }) => {
+      const update = parseRealtimePostCommentCount(payload.new)
+      if (!update) return
+
+      // Comment row events do not carry a canonical post count. The posts
+      // UPDATE does, so every surface converges by absolute replacement.
+      setPosts((prev) => applyRealtimePostCommentCount(prev, update))
+      setOpenPost((prev) => {
+        if (!prev || prev.id !== update.postId || prev.comment_count === update.commentCount) {
+          return prev
+        }
+        return { ...prev, comment_count: update.commentCount }
+      })
+      usePostStore.getState().updatePostCommentCount(update.postId, update.commentCount)
     }, []),
   })
 
@@ -381,22 +411,22 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   // Handle initialPostId
   const initialPostIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (props.initialPostId && props.initialPostId !== initialPostIdRef.current && !openPost) {
-      initialPostIdRef.current = props.initialPostId
-      const postToOpen = posts.find((p) => p.id === props.initialPostId)
+    // Server-prefetched posts are anonymous. Wait until session restoration has
+    // finished so follower/group visibility and per-user reactions are not
+    // silently loaded through an anonymous comments request.
+    if (!authInitialized) return
+
+    const initialPostId = props.initialPostId
+    if (initialPostId && initialPostId !== initialPostIdRef.current && !openPost) {
+      initialPostIdRef.current = initialPostId
+      const postToOpen = posts.find((p) => p.id === initialPostId)
       if (postToOpen) {
         setOpenPost(postToOpen)
         setComments([])
-        fetch(`/api/posts/${postToOpen.id}/comments`)
-          .then((res) => res.json())
-          .then((data) => {
-            if (data.success && data.data?.comments) setComments(data.data.comments)
-          })
-          .catch((err) => console.warn('[PostFeed] fetch failed', err))
       } else {
         const loadSinglePost = async () => {
           try {
-            const response = await fetch(`/api/posts/${props.initialPostId}`)
+            const response = await fetch(`/api/posts/${initialPostId}`)
             const data = await response.json()
             if (response.ok && data.success && data.data?.post) {
               const post = data.data.post
@@ -426,12 +456,6 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 user_vote: post.user_vote,
               })
               setComments([])
-              fetch(`/api/posts/${props.initialPostId}/comments`)
-                .then((res) => res.json())
-                .then((data) => {
-                  if (data.success && data.data?.comments) setComments(data.data.comments)
-                })
-                .catch((err) => console.warn('[PostFeed] fetch failed', err))
             }
           } catch (err) {
             logger.error('Failed to load single post:', err)
@@ -440,7 +464,16 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
         loadSinglePost()
       }
     }
-  }, [props.initialPostId, posts, openPost, setComments]) // eslint-disable-line react-hooks/exhaustive-deps -- t is excluded; read at call time from closure
+  }, [props.initialPostId, posts, openPost, setComments, authInitialized]) // eslint-disable-line react-hooks/exhaustive-deps -- t is excluded; read at call time from closure
+
+  // Keep every modal entry point on the same authenticated comments read. This
+  // also rehydrates an already-open post if session restoration finishes after
+  // the user opens it.
+  const openPostId = openPost?.id
+  useEffect(() => {
+    if (!authInitialized || !openPostId) return
+    void loadComments(openPostId)
+  }, [authInitialized, openPostId, loadComments])
 
   // Translation effects — only for authenticated users (translate API requires auth)
   useEffect(() => {
@@ -471,7 +504,6 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       setOpenPost(post)
       setComments([])
       setTranslatedContent(null)
-      loadComments(post.id)
       if (post.poll_id) actions.loadCustomPoll(post.id)
       else {
         actions.setSelectedPollOptions([])
@@ -495,14 +527,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (accessToken && !hasTranslatedTitle && needsTitleTranslation)
         translateListPosts([post], translateTarget)
     },
-    [
-      loadComments,
-      language,
-      isChineseText,
-      translateContent,
-      translatedListPosts,
-      translateListPosts,
-    ]
+    [language, isChineseText, translateContent, translatedListPosts, translateListPosts]
   )
 
   if (loading)
