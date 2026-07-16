@@ -28,4 +28,26 @@ describe('content recommendation service audience boundary', () => {
     const actorBoundCalls = route.match(/authorizePostsAndAttachAuthors\([\s\S]*?user\.id\s*\)/g)
     expect(actorBoundCalls).toHaveLength(2)
   })
+
+  it('routes group recommendations through a fresh discoverability boundary', () => {
+    expect(route).toContain("if (contentType === 'group')")
+    expect(route).toContain('getCurrentGroupRecommendations(supabase, user?.id ?? null, limit)')
+    expect(route).toContain(".rpc('recommend_groups_for_user'")
+    expect(route.match(/\.is\('dissolved_at', null\)/g)).toHaveLength(2)
+    expect(route.match(/\.in\('visibility'/g)).toHaveLength(2)
+    expect(route).toContain("const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply']")
+
+    const groupBranch = route.indexOf("if (contentType === 'group')")
+    const anonymousPostCache = route.indexOf('rec:content:v2:candidates:anon:')
+    expect(groupBranch).toBeGreaterThan(-1)
+    expect(groupBranch).toBeLessThan(anonymousPostCache)
+  })
+
+  it('uses the generated collaborative RPC contract and never caches final responses', () => {
+    expect(route).toContain('p_target_type: contentType')
+    expect(route).toContain('row.target_id')
+    expect(route).not.toContain('p_type: contentType')
+    expect(route).not.toContain('row.item_id')
+    expect(route.match(/NO_STORE_HEADERS/g)?.length ?? 0).toBeGreaterThanOrEqual(6)
+  })
 })
