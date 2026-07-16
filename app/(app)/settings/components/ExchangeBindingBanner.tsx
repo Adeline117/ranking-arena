@@ -6,74 +6,48 @@ import { Box, Text, Button } from '@/app/components/base'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-
-type ViewerSnapshot = {
-  viewerKey: string | null
-  accessToken: string | null
-  generation: number
-}
+import { captureExchangeViewer, isExchangeViewerCurrent } from '@/lib/exchange/viewer-scope'
 
 type BannerState = {
-  viewerKey: string | null
-  generation: number
+  viewerKey: `user:${string}` | null
+  sessionGeneration: number
   show: boolean | null
-}
-
-function getAccessTokenSubject(token: string): string | null {
-  try {
-    const encodedPayload = token.split('.')[1]
-    if (!encodedPayload) return null
-    const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/')
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
-    const payload = JSON.parse(atob(padded)) as { sub?: unknown }
-    return typeof payload.sub === 'string' ? payload.sub : null
-  } catch {
-    return null
-  }
 }
 
 export function ExchangeBindingBanner({ userId }: { userId: string | null }) {
   const { t } = useLanguage()
   const auth = useAuthSession()
-  const tokenSubject = auth.accessToken ? getAccessTokenSubject(auth.accessToken) : null
-  const viewerKey =
-    auth.userId && auth.userId === userId && tokenSubject === auth.userId ? auth.userId : null
-  const validAccessToken = viewerKey ? auth.accessToken : null
-  const scopeRef = useRef<ViewerSnapshot>({
-    viewerKey,
-    accessToken: validAccessToken,
-    generation: 0,
-  })
-
-  // Invalidate viewer-owned state during render so account B can never display
-  // a late banner decision computed for account A.
-  if (
-    scopeRef.current.viewerKey !== viewerKey ||
-    scopeRef.current.accessToken !== validAccessToken
-  ) {
-    scopeRef.current = {
-      viewerKey,
-      accessToken: validAccessToken,
-      generation: scopeRef.current.generation + 1,
-    }
-  }
-  const renderedScope = scopeRef.current
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const userIdRef = useRef(userId)
+  userIdRef.current = userId
+  const mountedRef = useRef(false)
+  const requestGenerationRef = useRef(0)
+  const renderedScope = captureExchangeViewer(auth, userId)
   const [bannerState, setBannerState] = useState<BannerState>({
     viewerKey: null,
-    generation: -1,
+    sessionGeneration: -1,
     show: null,
   })
 
   useEffect(() => {
-    const snapshot = renderedScope
-    if (!snapshot.viewerKey || !snapshot.accessToken) return
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      requestGenerationRef.current += 1
+    }
+  }, [])
+
+  useEffect(() => {
+    const snapshot = captureExchangeViewer(authRef.current, userIdRef.current)
+    if (!snapshot) return
+    const requestGeneration = ++requestGenerationRef.current
 
     const isCurrent = () => {
-      const current = scopeRef.current
       return (
-        current.viewerKey === snapshot.viewerKey &&
-        current.accessToken === snapshot.accessToken &&
-        current.generation === snapshot.generation
+        mountedRef.current &&
+        requestGenerationRef.current === requestGeneration &&
+        isExchangeViewerCurrent(snapshot, authRef.current, userIdRef.current)
       )
     }
 
@@ -93,13 +67,13 @@ export function ExchangeBindingBanner({ userId }: { userId: string | null }) {
         const connections = payload.data?.connections
         if (
           !Array.isArray(connections) ||
-          connections.some((connection) => connection.user_id !== snapshot.viewerKey)
+          connections.some((connection) => connection.user_id !== snapshot.userId)
         )
           return
 
         setBannerState({
           viewerKey: snapshot.viewerKey,
-          generation: snapshot.generation,
+          sessionGeneration: snapshot.sessionGeneration,
           show: connections.length === 0,
         })
       } catch {
@@ -108,13 +82,26 @@ export function ExchangeBindingBanner({ userId }: { userId: string | null }) {
     }
 
     void loadBindingState()
-  }, [renderedScope])
+    return () => {
+      if (requestGenerationRef.current === requestGeneration) {
+        requestGenerationRef.current += 1
+      }
+    }
+  }, [auth.accessToken, auth.sessionGeneration, auth.userId, userId])
 
   const show =
+    renderedScope &&
     bannerState.viewerKey === renderedScope.viewerKey &&
-    bannerState.generation === renderedScope.generation
+    bannerState.sessionGeneration === renderedScope.sessionGeneration
       ? bannerState.show
       : null
+
+  const handleBindNavigation = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    const snapshot = captureExchangeViewer(authRef.current, userIdRef.current)
+    if (!snapshot || !isExchangeViewerCurrent(snapshot, authRef.current, userIdRef.current)) {
+      event.preventDefault()
+    }
+  }
 
   if (!show) return null
 
@@ -166,7 +153,11 @@ export function ExchangeBindingBanner({ userId }: { userId: string | null }) {
           {t('bindExchangeBannerDesc')}
         </Text>
       </Box>
-      <Link href="/exchange/auth" style={{ textDecoration: 'none', flexShrink: 0 }}>
+      <Link
+        href="/exchange/auth"
+        onClick={handleBindNavigation}
+        style={{ textDecoration: 'none', flexShrink: 0 }}
+      >
         <Button variant="primary" size="sm">
           {t('goToBind')}
         </Button>

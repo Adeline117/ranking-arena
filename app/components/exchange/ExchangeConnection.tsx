@@ -11,6 +11,11 @@ import { useDialog } from '../ui/Dialog'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { EXCHANGE_BIND_LIST } from '@/app/(app)/exchange/auth/api-key/exchange-configs'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureExchangeViewer,
+  isExchangeViewerCurrent,
+  type ExchangeViewerSnapshot,
+} from '@/lib/exchange/viewer-scope'
 
 interface ExchangeConnectionProps {
   userId: string
@@ -19,101 +24,64 @@ interface ExchangeConnectionProps {
 // Single source of truth: exchange list + display names live in exchange-configs.
 const EXCHANGES = EXCHANGE_BIND_LIST
 
-type ViewerSnapshot = {
-  viewerKey: string | null
-  accessToken: string | null
-  generation: number
-}
-
 type ConnectionState = {
-  viewerKey: string | null
-  generation: number
+  viewerKey: `user:${string}` | null
+  sessionGeneration: number
   connections: ExchangeConnection[]
   loading: boolean
   error: string | null
 }
 
 type SyncState = {
-  viewerKey: string
-  generation: number
+  viewerKey: `user:${string}`
+  sessionGeneration: number
   exchange: string
 } | null
-
-function getAccessTokenSubject(token: string): string | null {
-  try {
-    const encodedPayload = token.split('.')[1]
-    if (!encodedPayload) return null
-    const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/')
-    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
-    const payload = JSON.parse(atob(padded)) as { sub?: unknown }
-    return typeof payload.sub === 'string' ? payload.sub : null
-  } catch {
-    return null
-  }
-}
 
 export default function ExchangeConnectionManager({ userId }: ExchangeConnectionProps) {
   const { t } = useLanguage()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
   const auth = useAuthSession()
-  const tokenSubject = auth.accessToken ? getAccessTokenSubject(auth.accessToken) : null
-  const viewerKey =
-    auth.userId && auth.userId === userId && tokenSubject === auth.userId ? auth.userId : null
-  const validAccessToken = viewerKey ? auth.accessToken : null
-  const scopeRef = useRef<ViewerSnapshot>({
-    viewerKey,
-    accessToken: validAccessToken,
-    generation: 0,
-  })
-
-  // Advance ownership during render, before effects. A late viewer-A request is
-  // therefore unable to commit state after the first render for viewer B.
-  if (
-    scopeRef.current.viewerKey !== viewerKey ||
-    scopeRef.current.accessToken !== validAccessToken
-  ) {
-    scopeRef.current = {
-      viewerKey,
-      accessToken: validAccessToken,
-      generation: scopeRef.current.generation + 1,
-    }
-  }
-  const renderedScope = scopeRef.current
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const userIdRef = useRef(userId)
+  userIdRef.current = userId
+  const mountedRef = useRef(false)
+  const loadGenerationRef = useRef(0)
+  const mutationRef = useRef<{ id: number } | null>(null)
+  const nextMutationIdRef = useRef(0)
+  const renderedScope = captureExchangeViewer(auth, userId)
 
   const [connectionState, setConnectionState] = useState<ConnectionState>({
     viewerKey: null,
-    generation: -1,
+    sessionGeneration: -1,
     connections: [],
     loading: true,
     error: null,
   })
   const [syncState, setSyncState] = useState<SyncState>(null)
 
-  const isCurrentSnapshot = useCallback((snapshot: ViewerSnapshot) => {
-    const current = scopeRef.current
+  const isCurrentSnapshot = useCallback((snapshot: ExchangeViewerSnapshot) => {
     return (
-      snapshot.viewerKey !== null &&
-      snapshot.accessToken !== null &&
-      current.viewerKey === snapshot.viewerKey &&
-      current.accessToken === snapshot.accessToken &&
-      current.generation === snapshot.generation
+      mountedRef.current && isExchangeViewerCurrent(snapshot, authRef.current, userIdRef.current)
     )
   }, [])
 
-  const captureSnapshot = useCallback((): ViewerSnapshot | null => {
-    const snapshot = scopeRef.current
-    if (!snapshot.viewerKey || !snapshot.accessToken) return null
-    return { ...snapshot }
+  const captureSnapshot = useCallback((): ExchangeViewerSnapshot | null => {
+    return captureExchangeViewer(authRef.current, userIdRef.current)
   }, [])
 
   const loadConnections = useCallback(
-    async (snapshot: ViewerSnapshot, toastOnFailure = true) => {
+    async (snapshot: ExchangeViewerSnapshot, toastOnFailure = true) => {
       if (!isCurrentSnapshot(snapshot)) return
+      const loadGeneration = ++loadGenerationRef.current
+      const loadIsCurrent = () =>
+        loadGenerationRef.current === loadGeneration && isCurrentSnapshot(snapshot)
 
       setConnectionState({
         viewerKey: snapshot.viewerKey,
-        generation: snapshot.generation,
+        sessionGeneration: snapshot.sessionGeneration,
         connections: [],
         loading: true,
         error: null,
@@ -127,45 +95,45 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
           headers: { Authorization: `Bearer ${snapshot.accessToken}` },
           cache: 'no-store',
         })
-        if (!isCurrentSnapshot(snapshot)) return
+        if (!loadIsCurrent()) return
 
         const payload = (await response.json()) as {
           data?: { connections?: ExchangeConnection[] }
         }
-        if (!isCurrentSnapshot(snapshot)) return
+        if (!loadIsCurrent()) return
 
         const nextConnections = payload.data?.connections
         if (
           !response.ok ||
           !Array.isArray(nextConnections) ||
-          nextConnections.some((connection) => connection.user_id !== snapshot.viewerKey)
+          nextConnections.some((connection) => connection.user_id !== snapshot.userId)
         ) {
           throw new Error(failureMessage)
         }
 
         setConnectionState({
           viewerKey: snapshot.viewerKey,
-          generation: snapshot.generation,
+          sessionGeneration: snapshot.sessionGeneration,
           connections: nextConnections,
           loading: false,
           error: null,
         })
       } catch {
-        if (!isCurrentSnapshot(snapshot)) return
+        if (!loadIsCurrent()) return
         nextError = failureMessage
         setConnectionState({
           viewerKey: snapshot.viewerKey,
-          generation: snapshot.generation,
+          sessionGeneration: snapshot.sessionGeneration,
           connections: [],
           loading: false,
           error: failureMessage,
         })
         if (toastOnFailure) showToast(failureMessage, 'error')
       } finally {
-        if (!isCurrentSnapshot(snapshot) || nextError) return
+        if (!loadIsCurrent() || nextError) return
         setConnectionState((current) =>
           current.viewerKey === snapshot.viewerKey &&
-          current.generation === snapshot.generation &&
+          current.sessionGeneration === snapshot.sessionGeneration &&
           current.loading
             ? { ...current, loading: false }
             : current
@@ -176,9 +144,46 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   )
 
   useEffect(() => {
-    if (!renderedScope.viewerKey || !renderedScope.accessToken) return
-    void loadConnections(renderedScope)
-  }, [loadConnections, renderedScope])
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      loadGenerationRef.current += 1
+      mutationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    loadGenerationRef.current += 1
+    mutationRef.current = null
+    setSyncState(null)
+    const snapshot = captureSnapshot()
+    if (!snapshot) return
+    void loadConnections(snapshot)
+  }, [
+    auth.accessToken,
+    auth.sessionGeneration,
+    auth.userId,
+    captureSnapshot,
+    loadConnections,
+    userId,
+  ])
+
+  const beginMutation = () => {
+    const snapshot = captureSnapshot()
+    if (!snapshot || mutationRef.current) return null
+    const operation = { id: ++nextMutationIdRef.current, snapshot }
+    mutationRef.current = operation
+    return operation
+  }
+
+  const mutationIsCurrent = (operation: { id: number; snapshot: ExchangeViewerSnapshot }) =>
+    mutationRef.current?.id === operation.id && isCurrentSnapshot(operation.snapshot)
+
+  const finishMutation = (operation: { id: number; snapshot: ExchangeViewerSnapshot }) => {
+    if (mutationRef.current?.id !== operation.id) return
+    mutationRef.current = null
+    if (isCurrentSnapshot(operation.snapshot)) setSyncState(null)
+  }
 
   const handleRetry = () => {
     const snapshot = captureSnapshot()
@@ -186,20 +191,24 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   }
 
   const handleStartAuth = (exchange: string) => {
+    const snapshot = captureSnapshot()
+    if (!snapshot || !isCurrentSnapshot(snapshot)) return
     // 跳转到授权引导页面
     window.location.href = `/exchange/auth?exchange=${exchange}`
   }
 
   const handleSync = async (exchange: string) => {
-    const snapshot = captureSnapshot()
-    if (!snapshot?.viewerKey) {
+    if (mutationRef.current) return
+    const operation = beginMutation()
+    if (!operation) {
       showToast(t('pleaseLogin'), 'warning')
       return
     }
+    const { snapshot } = operation
 
     setSyncState({
       viewerKey: snapshot.viewerKey,
-      generation: snapshot.generation,
+      sessionGeneration: snapshot.sessionGeneration,
       exchange,
     })
 
@@ -213,10 +222,10 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
         },
         body: JSON.stringify({ exchange }),
       })
-      if (!isCurrentSnapshot(snapshot)) return
+      if (!mutationIsCurrent(operation)) return
 
       const result = (await response.json()) as { error?: unknown }
-      if (!isCurrentSnapshot(snapshot)) return
+      if (!mutationIsCurrent(operation)) return
 
       if (!response.ok) {
         showToast(typeof result.error === 'string' ? result.error : t('syncError'), 'error')
@@ -225,37 +234,38 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
       showToast(t('syncSuccess'), 'success')
       await loadConnections(snapshot)
-      if (!isCurrentSnapshot(snapshot)) return
+      if (!mutationIsCurrent(operation)) return
     } catch (err: unknown) {
-      if (!isCurrentSnapshot(snapshot)) return
+      if (!mutationIsCurrent(operation)) return
       showToast(err instanceof Error ? err.message : t('syncError'), 'error')
     } finally {
-      if (!isCurrentSnapshot(snapshot)) return
-      setSyncState((current) =>
-        current?.viewerKey === snapshot.viewerKey &&
-        current.generation === snapshot.generation &&
-        current.exchange === exchange
-          ? null
-          : current
-      )
+      finishMutation(operation)
     }
   }
 
   const handleDisconnect = async (exchange: string) => {
     // Capture both the viewer and credential before the confirmation dialog.
     // Never re-read global auth after the user has had time to switch accounts.
-    const snapshot = captureSnapshot()
-    if (!snapshot) {
+    if (mutationRef.current) return
+    const operation = beginMutation()
+    if (!operation) {
       showToast(t('pleaseLogin'), 'warning')
       return
     }
+    const { snapshot } = operation
 
-    const confirmed = await showConfirm(
-      t('disconnect'),
-      t('confirmDisconnect').replace('{exchange}', exchange)
-    )
-    if (!isCurrentSnapshot(snapshot)) return
+    let confirmed = false
+    try {
+      confirmed = await showConfirm(
+        t('disconnect'),
+        t('confirmDisconnect').replace('{exchange}', exchange)
+      )
+    } catch {
+      if (mutationIsCurrent(operation)) showToast(t('disconnectFailed'), 'error')
+    }
+    if (!mutationIsCurrent(operation)) return
     if (!confirmed) {
+      finishMutation(operation)
       return
     }
 
@@ -269,10 +279,10 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
         },
         body: JSON.stringify({ exchange }),
       })
-      if (!isCurrentSnapshot(snapshot)) return
+      if (!mutationIsCurrent(operation)) return
 
       const result = (await response.json()) as { error?: unknown }
-      if (!isCurrentSnapshot(snapshot)) return
+      if (!mutationIsCurrent(operation)) return
 
       if (!response.ok) {
         showToast(typeof result.error === 'string' ? result.error : t('disconnectFailed'), 'error')
@@ -281,30 +291,34 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
 
       showToast(t('disconnected'), 'success')
       await loadConnections(snapshot)
-      if (!isCurrentSnapshot(snapshot)) return
+      if (!mutationIsCurrent(operation)) return
     } catch (err) {
-      if (!isCurrentSnapshot(snapshot)) return
+      if (!mutationIsCurrent(operation)) return
       const errorMessage = err instanceof Error ? err.message : t('disconnectFailed')
       showToast(errorMessage, 'error')
+    } finally {
+      finishMutation(operation)
     }
   }
 
   const stateIsCurrent =
+    !!renderedScope &&
     connectionState.viewerKey === renderedScope.viewerKey &&
-    connectionState.generation === renderedScope.generation
+    connectionState.sessionGeneration === renderedScope.sessionGeneration
   const connections = stateIsCurrent ? connectionState.connections : []
   const loading =
     auth.loading ||
     !auth.authChecked ||
-    (!!renderedScope.viewerKey && (!stateIsCurrent || connectionState.loading))
+    (!!renderedScope && (!stateIsCurrent || connectionState.loading))
   const error = stateIsCurrent
     ? connectionState.error
-    : auth.authChecked && !auth.loading && !renderedScope.viewerKey
+    : auth.authChecked && !auth.loading && !renderedScope
       ? t('pleaseLogin')
       : null
   const syncing =
+    !!renderedScope &&
     syncState?.viewerKey === renderedScope.viewerKey &&
-    syncState.generation === renderedScope.generation
+    syncState.sessionGeneration === renderedScope.sessionGeneration
       ? syncState.exchange
       : null
 
