@@ -12,11 +12,18 @@ jest.mock('../hooks/useCommentDraftPersistence', () => ({
   useCommentDraftPersistence: () => ({
     draft: '',
     setDraft: jest.fn(),
-    clearDraft: jest.fn(),
+    captureDraftSnapshot: jest.fn(),
+    clearDraftIfUnchanged: jest.fn(),
   }),
 }))
 jest.mock('@/lib/stores/postStore', () => {
-  const state = { posts: {}, comments: {}, commentsPagination: {} }
+  const state = {
+    viewerKey: 'pending',
+    sessionGeneration: 0,
+    posts: {},
+    comments: {},
+    commentsPagination: {},
+  }
   const setViewerScope = jest.fn()
   const usePostStore = Object.assign(
     (selector: (value: typeof state) => unknown) => selector(state),
@@ -24,6 +31,7 @@ jest.mock('@/lib/stores/postStore', () => {
   )
   return {
     usePostStore,
+    loadPostForViewer: jest.fn().mockResolvedValue(undefined),
     loadPostComments: jest.fn().mockResolvedValue(undefined),
     loadMorePostComments: jest.fn(),
     submitPostComment: jest.fn(),
@@ -34,10 +42,11 @@ jest.mock('@/lib/stores/postStore', () => {
 
 import PostDetailModal from '../PostDetailModal'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-import { loadPostComments } from '@/lib/stores/postStore'
+import { loadPostComments, loadPostForViewer } from '@/lib/stores/postStore'
 
 const mockUseAuthSession = useAuthSession as jest.Mock
 const mockLoadPostComments = loadPostComments as jest.Mock
+const mockLoadPostForViewer = loadPostForViewer as jest.Mock
 const mockStoreModule = jest.requireMock('@/lib/stores/postStore') as {
   __setViewerScope: jest.Mock
 }
@@ -69,6 +78,7 @@ describe('PostDetailModal viewer-scoped reload', () => {
     })
     rerender(<PostDetailModal postId="post-1" onClose={jest.fn()} />)
     await waitFor(() => expect(mockLoadPostComments).toHaveBeenCalledTimes(1))
+    expect(mockLoadPostForViewer).toHaveBeenCalledTimes(1)
     expect(mockLoadPostComments).toHaveBeenLastCalledWith('post-1', 'token-a', {
       viewerKey: 'user:user-a',
       sessionGeneration: 1,
@@ -85,6 +95,19 @@ describe('PostDetailModal viewer-scoped reload', () => {
     })
     rerender(<PostDetailModal postId="post-1" onClose={jest.fn()} />)
     expect(mockLoadPostComments).toHaveBeenCalledTimes(1)
+    expect(mockLoadPostForViewer).toHaveBeenCalledTimes(1)
+
+    mockUseAuthSession.mockReturnValue({
+      authChecked: false,
+      isLoggedIn: false,
+      accessToken: null,
+      userId: null,
+      viewerKey: 'pending',
+      sessionGeneration: 2,
+    })
+    rerender(<PostDetailModal postId="post-1" onClose={jest.fn()} />)
+    expect(mockStoreModule.__setViewerScope).toHaveBeenLastCalledWith('pending', 2)
+    expect(mockLoadPostComments).toHaveBeenCalledTimes(1)
 
     mockUseAuthSession.mockReturnValue({
       authChecked: true,
@@ -92,15 +115,21 @@ describe('PostDetailModal viewer-scoped reload', () => {
       accessToken: 'token-b',
       userId: 'user-b',
       viewerKey: 'user:user-b',
-      sessionGeneration: 2,
+      sessionGeneration: 3,
     })
     rerender(<PostDetailModal postId="post-1" onClose={jest.fn()} />)
     await waitFor(() => expect(mockLoadPostComments).toHaveBeenCalledTimes(2))
+    expect(mockLoadPostForViewer).toHaveBeenCalledTimes(2)
 
-    expect(mockStoreModule.__setViewerScope).toHaveBeenLastCalledWith('user:user-b', 2)
+    expect(mockStoreModule.__setViewerScope).toHaveBeenLastCalledWith('user:user-b', 3)
     expect(mockLoadPostComments).toHaveBeenLastCalledWith('post-1', 'token-b', {
       viewerKey: 'user:user-b',
-      sessionGeneration: 2,
+      sessionGeneration: 3,
+      userId: 'user-b',
+    })
+    expect(mockLoadPostForViewer).toHaveBeenLastCalledWith('post-1', 'token-b', {
+      viewerKey: 'user:user-b',
+      sessionGeneration: 3,
       userId: 'user-b',
     })
   })

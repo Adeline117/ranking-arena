@@ -22,10 +22,12 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import {
   usePostStore,
+  loadPostForViewer,
   loadPostComments,
   loadMorePostComments,
   submitPostComment,
   togglePostReaction,
+  type CommentData,
 } from '@/lib/stores/postStore'
 import { renderContentWithLinks, ARENA_PURPLE } from '@/lib/utils/content'
 import { useCommentDraftPersistence } from './hooks/useCommentDraftPersistence'
@@ -35,6 +37,8 @@ type PostDetailModalProps = {
   onClose: () => void
 }
 
+const EMPTY_COMMENTS: CommentData[] = []
+
 export default function PostDetailModal({ postId, onClose }: PostDetailModalProps) {
   const { t, language } = useLanguage()
   const { showToast } = useToast()
@@ -43,7 +47,8 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   const {
     draft: newComment,
     setDraft: setNewComment,
-    clearDraft,
+    captureDraftSnapshot,
+    clearDraftIfUnchanged,
   } = useCommentDraftPersistence(postId, auth.viewerKey)
   const [submittingComment, setSubmittingComment] = useState(false)
   const [reacting, setReacting] = useState(false)
@@ -67,26 +72,46 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
   useModalA11y({ open: true, onClose, modalRef: dialogRef })
 
   // Read from canonical store
-  const post = usePostStore((s) => s.posts[postId])
-  const comments = usePostStore((s) => s.comments[postId] || [])
-  const pagination = usePostStore((s) => s.commentsPagination[postId])
+  const post = usePostStore((s) =>
+    s.viewerKey === auth.viewerKey && s.sessionGeneration === auth.sessionGeneration
+      ? s.posts[postId]
+      : undefined
+  )
+  const comments = usePostStore((s) =>
+    s.viewerKey === auth.viewerKey && s.sessionGeneration === auth.sessionGeneration
+      ? s.comments[postId] || EMPTY_COMMENTS
+      : EMPTY_COMMENTS
+  )
+  const pagination = usePostStore((s) =>
+    s.viewerKey === auth.viewerKey && s.sessionGeneration === auth.sessionGeneration
+      ? s.commentsPagination[postId]
+      : undefined
+  )
 
   // Load comments on mount
   useEffect(() => {
-    if (!auth.authChecked) return
-    const resourceScopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${postId}`
-    if (loadedCommentScopeRef.current === resourceScopeKey) return
-    loadedCommentScopeRef.current = resourceScopeKey
     const scope = {
       viewerKey: auth.viewerKey,
       sessionGeneration: auth.sessionGeneration,
       userId: auth.userId,
     }
     usePostStore.getState().setViewerScope(scope.viewerKey, scope.sessionGeneration)
+    if (!auth.authChecked) {
+      loadedCommentScopeRef.current = null
+      commentPendingRef.current = null
+      reactionPendingRef.current = null
+      setSubmittingComment(false)
+      setReacting(false)
+      return
+    }
+    const resourceScopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}\u0000${postId}`
+    if (loadedCommentScopeRef.current === resourceScopeKey) return
+    loadedCommentScopeRef.current = resourceScopeKey
     commentPendingRef.current = null
     reactionPendingRef.current = null
     setSubmittingComment(false)
     setReacting(false)
+    void loadPostForViewer(postId, auth.accessToken, scope)
     void loadPostComments(postId, auth.accessToken, scope)
   }, [
     postId,
@@ -111,6 +136,7 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       userId: auth.userId,
     }
     const operation = Symbol('modal-comment')
+    const draftSnapshot = captureDraftSnapshot(postId)
     commentPendingRef.current = operation
     setSubmittingComment(true)
     try {
@@ -126,17 +152,24 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
       if ('error' in result) {
         if (result.error !== 'STALE_AUTH_SCOPE') showToast(result.error, 'error')
       } else {
-        clearDraft(postId)
+        clearDraftIfUnchanged(draftSnapshot)
       }
     } catch {
-      showToast(t('commentFailedRetry'), 'error')
+      const current = authScopeRef.current
+      if (
+        current.viewerKey === scope.viewerKey &&
+        current.sessionGeneration === scope.sessionGeneration &&
+        current.userId === scope.userId
+      ) {
+        showToast(t('commentFailedRetry'), 'error')
+      }
     } finally {
       if (commentPendingRef.current === operation) {
         commentPendingRef.current = null
         setSubmittingComment(false)
       }
     }
-  }, [postId, newComment, auth, showToast, t, clearDraft])
+  }, [postId, newComment, auth, showToast, t, captureDraftSnapshot, clearDraftIfUnchanged])
 
   const handleReaction = useCallback(
     async (reactionType: 'up' | 'down') => {
@@ -170,7 +203,14 @@ export default function PostDetailModal({ postId, onClose }: PostDetailModalProp
           }
         }
       } catch {
-        showToast(t('operationFailedRetry'), 'error')
+        const current = authScopeRef.current
+        if (
+          current.viewerKey === scope.viewerKey &&
+          current.sessionGeneration === scope.sessionGeneration &&
+          current.userId === scope.userId
+        ) {
+          showToast(t('operationFailedRetry'), 'error')
+        }
       } finally {
         if (reactionPendingRef.current === operation) {
           reactionPendingRef.current = null
