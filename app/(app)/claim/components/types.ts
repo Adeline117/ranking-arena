@@ -27,6 +27,7 @@ export interface LinkedTrader {
 }
 
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
+import { walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
 
 // Derive CEX platforms from EXCHANGE_CONFIG so adding a new exchange with
 // requiresPassphrase: true automatically shows the passphrase field in the claim form.
@@ -63,4 +64,12 @@ export function isDex(source: string): boolean {
 
 export function isSolanaDex(source: string): boolean {
   return SOLANA_PLATFORMS.some((p) => source.toLowerCase() === p)
+}
+
+export function walletMatchesTrader(
+  walletAddress: string,
+  traderId: string,
+  source: string
+): boolean {
+  return walletIdentitiesMatch(walletAddress, traderId, source)
 }

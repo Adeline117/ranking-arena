@@ -7,7 +7,7 @@ import { supabase } from '@/lib/supabase/client'
 import { Box, Text } from '@/app/components/base'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
-import { SearchResult, isSolanaDex } from './types'
+import { SearchResult, isSolanaDex, walletMatchesTrader } from './types'
 import { trackEvent } from '@/lib/analytics/track'
 
 declare global {
@@ -69,7 +69,7 @@ export function DexVerifyForm({
         const resp = await Promise.race([solanaProvider.connect(), connectTimeout])
         walletAddress = resp.publicKey.toString()
 
-        if (walletAddress.toLowerCase() !== trader.source_trader_id.toLowerCase()) {
+        if (!walletMatchesTrader(walletAddress, trader.source_trader_id, trader.source)) {
           showToast(t('claimWalletMismatch'), 'error')
           return
         }
@@ -103,7 +103,7 @@ export function DexVerifyForm({
           return
         }
 
-        if (walletAddress.toLowerCase() !== trader.source_trader_id.toLowerCase()) {
+        if (!walletMatchesTrader(walletAddress, trader.source_trader_id, trader.source)) {
           showToast(t('claimWalletMismatch'), 'error')
           return
         }
@@ -234,11 +234,11 @@ export function DexVerifyForm({
           width: '100%',
           padding: tokens.spacing[3],
           fontSize: tokens.typography.fontSize.md,
-          fontWeight: 600,
+          fontWeight: tokens.typography.fontWeight.semibold,
           borderRadius: tokens.radius.md,
           border: 'none',
           backgroundColor: loading ? tokens.colors.text.tertiary : tokens.colors.accent.primary,
-          color: '#fff',
+          color: tokens.colors.white,
           cursor: loading ? 'not-allowed' : 'pointer',
           opacity: loading ? 0.6 : 1,
         }}
