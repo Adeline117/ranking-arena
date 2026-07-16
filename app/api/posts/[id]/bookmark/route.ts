@@ -10,6 +10,7 @@ import { withAuth, withApiMiddleware } from '@/lib/api/middleware'
 import { apiLogger } from '@/lib/utils/logger'
 import { updateCountSync } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
+import { canServiceActorReadPost } from '@/lib/data/service-post-audience'
 
 // Zod schema for POST /api/posts/[id]/bookmark (body is optional)
 const BookmarkSchema = z
@@ -17,6 +18,7 @@ const BookmarkSchema = z
     folder_id: z.string().uuid().optional().nullable(),
   })
   .optional()
+const PostIdSchema = z.string().uuid()
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -26,6 +28,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
   if (guard) return guard
 
   const { id } = await context.params
+  const postId = PostIdSchema.safeParse(id)
+  if (!postId.success) {
+    return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 })
+  }
 
   const handler = withApiMiddleware(
     async ({ user, supabase }) => {
@@ -33,10 +39,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
         return NextResponse.json({ bookmarked: false })
       }
 
+      if (!(await canServiceActorReadPost(supabase, postId.data, user.id))) {
+        return NextResponse.json({ bookmarked: false })
+      }
+
       const { data: bookmark } = await supabase
         .from('post_bookmarks')
         .select('id')
-        .eq('post_id', id)
+        .eq('post_id', postId.data)
         .eq('user_id', user.id)
         .maybeSingle()
 
@@ -54,6 +64,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (guard) return guard
 
   const { id } = await context.params
+  const postId = PostIdSchema.safeParse(id)
+  if (!postId.success) {
+    return NextResponse.json({ error: 'Invalid post ID' }, { status: 400 })
+  }
 
   const handler = withAuth(
     async ({ user, supabase, request: req }) => {
@@ -74,19 +88,37 @@ export async function POST(request: NextRequest, context: RouteContext) {
         // Intentionally swallowed: no request body or invalid JSON, proceed with default folder / toggle bookmark
       }
 
-      // 并行检查帖子是否存在 + 是否已收藏
-      const [{ data: post }, { data: existingBookmark }] = await Promise.all([
-        supabase.from('posts').select('id').eq('id', id).maybeSingle(),
-        supabase
-          .from('post_bookmarks')
-          .select('id, folder_id')
-          .eq('post_id', id)
-          .eq('user_id', user.id)
-          .maybeSingle(),
-      ])
-
-      if (!post) {
+      if (!(await canServiceActorReadPost(supabase, postId.data, user.id))) {
         return NextResponse.json({ error: 'Post not found' }, { status: 404 })
+      }
+
+      if (folder_id) {
+        const { data: ownedFolder, error: folderError } = await supabase
+          .from('bookmark_folders')
+          .select('id')
+          .eq('id', folder_id)
+          .eq('user_id', user.id)
+          .maybeSingle()
+
+        if (folderError) {
+          apiLogger.error('Error checking bookmark folder:', folderError)
+          return NextResponse.json({ error: 'Failed to check bookmark folder' }, { status: 500 })
+        }
+        if (!ownedFolder) {
+          return NextResponse.json({ error: 'Bookmark folder not found' }, { status: 404 })
+        }
+      }
+
+      const { data: existingBookmark, error: existingBookmarkError } = await supabase
+        .from('post_bookmarks')
+        .select('id, folder_id')
+        .eq('post_id', postId.data)
+        .eq('user_id', user.id)
+        .maybeSingle()
+
+      if (existingBookmarkError) {
+        apiLogger.error('Error checking bookmark:', existingBookmarkError)
+        return NextResponse.json({ error: 'Failed to check bookmark' }, { status: 500 })
       }
 
       if (existingBookmark) {
@@ -97,6 +129,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
             .from('post_bookmarks')
             .update({ folder_id: folder_id })
             .eq('id', existingBookmark.id)
+            .eq('post_id', postId.data)
+            .eq('user_id', user.id)
 
           if (updateError) {
             apiLogger.error('Error updating bookmark folder:', updateError)
@@ -107,7 +141,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
           const { data: currentPost } = await supabase
             .from('posts')
             .select('bookmark_count')
-            .eq('id', id)
+            .eq('id', postId.data)
             .single()
 
           return NextResponse.json({
@@ -123,6 +157,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
           .from('post_bookmarks')
           .delete()
           .eq('id', existingBookmark.id)
+          .eq('post_id', postId.data)
+          .eq('user_id', user.id)
 
         if (deleteError) {
           apiLogger.error('Error removing bookmark:', deleteError)
@@ -132,7 +168,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         const newCount = await updateCountSync(
           supabase,
           'decrement_bookmark_count',
-          { post_id: id },
+          { post_id: postId.data },
           'Decrement bookmark count'
         )
 
@@ -196,7 +232,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
         // 构建插入数据，如果没有 folder_id 则不包含该字段
         const insertData: { post_id: string; user_id: string; folder_id?: string } = {
-          post_id: id,
+          post_id: postId.data,
           user_id: user.id,
         }
         if (folder_id) {
@@ -220,7 +256,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
         const newCount = await updateCountSync(
           supabase,
           'increment_bookmark_count',
-          { post_id: id },
+          { post_id: postId.data },
           'Increment bookmark count'
         )
 

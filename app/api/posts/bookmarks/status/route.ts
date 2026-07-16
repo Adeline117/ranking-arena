@@ -9,6 +9,9 @@ import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
+import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 // 批量检查多个帖子的收藏状态
 export async function POST(request: NextRequest) {
@@ -33,39 +36,54 @@ export async function POST(request: NextRequest) {
 
     const supabase = getSupabaseAdmin()
 
-    const body = await request.json()
-    const postIds: string[] = body.postIds || []
+    const body: unknown = await request.json()
+    const postIds =
+      body && typeof body === 'object' && !Array.isArray(body) && 'postIds' in body
+        ? (body as { postIds?: unknown }).postIds
+        : null
 
     if (!Array.isArray(postIds) || postIds.length === 0) {
       return NextResponse.json({ bookmarks: {} })
     }
 
     // 限制一次最多查询 100 个帖子
-    const limitedPostIds = postIds.slice(0, 100)
+    const limitedPostIds = [
+      ...new Set(postIds.slice(0, 100).filter((id): id is string => typeof id === 'string')),
+    ]
+    const validPostIds = limitedPostIds.filter((id) => UUID_RE.test(id))
+    const readableRows = await filterServiceReadablePostRows(
+      supabase,
+      validPostIds.map((id) => ({ id })),
+      user.id
+    )
+    const readablePostIds = readableRows.map(({ id }) => id)
+
+    const bookmarkMap: Record<string, boolean> = {}
+    limitedPostIds.forEach((id) => {
+      bookmarkMap[id] = false
+    })
+
+    if (readablePostIds.length === 0) {
+      return NextResponse.json({ bookmarks: bookmarkMap })
+    }
 
     // 批量查询所有收藏记录
     const { data: bookmarks, error: queryError } = await supabase
       .from('post_bookmarks')
       .select('post_id')
       .eq('user_id', user.id)
-      .in('post_id', limitedPostIds)
+      .in('post_id', readablePostIds)
 
     if (queryError) {
       apiLogger.error('Error querying bookmarks:', queryError)
       return NextResponse.json({ bookmarks: {} })
     }
 
-    // 构建返回结果：{ postId: boolean }
-    const bookmarkMap: Record<string, boolean> = {}
-    limitedPostIds.forEach(id => {
-      bookmarkMap[id] = false
-    })
-    bookmarks?.forEach(b => {
+    bookmarks?.forEach((b) => {
       bookmarkMap[b.post_id] = true
     })
 
     return NextResponse.json({ bookmarks: bookmarkMap })
-
   } catch (error: unknown) {
     apiLogger.error('Error checking batch bookmarks:', error)
     return NextResponse.json({ bookmarks: {} })
