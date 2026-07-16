@@ -31,7 +31,12 @@ import type {
   SourceRow,
   Timeframe,
 } from '../../core/types'
-import { registerAdapter, type SourceAdapter } from '../../core/adapter'
+import {
+  registerAdapter,
+  type ProfileFetchIntent,
+  type ProfileFetchOptions,
+  type SourceAdapter,
+} from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
 import {
@@ -40,11 +45,14 @@ import {
   parseGtradePositions,
   parseGtradeProfile,
 } from './parsers'
+import {
+  fetchGtradeTradesWindow,
+  GTRADE_TRADES_PAGE_LIMIT,
+  type GtradeTradesSnapshot,
+} from './trades-fetch'
 
 const API_BASE = 'https://backend-global.gains.trade/api'
-const TRADES_PAGE_LIMIT = 1_000 // endpoint max
 const DEFAULT_PROFILE_TRADES_MAX_PAGES = 5
-const DAY_MS = 86_400_000
 
 type Dict = Record<string, unknown>
 
@@ -99,20 +107,17 @@ function getBoard(session: FetchSession, src: SourceRow): Promise<BoardFetch> {
 
 // ── Trades crawl, memoized per (session, trader) — 3 TFs share one crawl ──
 
-interface TradesCrawl {
-  data: Dict[]
-  /** true when pages ran out before reaching 90d back (under-coverage). */
-  truncated: boolean
-}
-
-const tradesCache = new WeakMap<FetchSession, Map<string, Promise<TradesCrawl>>>()
+const tradesCache = new WeakMap<FetchSession, Map<string, Promise<GtradeTradesSnapshot>>>()
 
 /**
- * Crawl the trades table newest→oldest until it covers 90 days (the widest
- * TF — parseProfile windows down from there), pages exhaust, or the
- * meta.profile_trades_max_pages cap hits (then truncated=true).
+ * Crawl a frozen trades-table snapshot newest→oldest until it strictly
+ * covers 90 days, exhausts, or reaches the configured page cap.
  */
-function getTrades(session: FetchSession, src: SourceRow, address: string): Promise<TradesCrawl> {
+function getTrades(
+  session: FetchSession,
+  src: SourceRow,
+  address: string
+): Promise<GtradeTradesSnapshot> {
   let perSession = tradesCache.get(session)
   if (!perSession) {
     perSession = new Map()
@@ -120,41 +125,41 @@ function getTrades(session: FetchSession, src: SourceRow, address: string): Prom
   }
   let cached = perSession.get(address)
   if (!cached) {
-    cached = (async () => {
-      const base = endpoint(src, 'history', `${API_BASE}/personal-trading-history`)
-      const maxPages =
-        Number(src.meta.profile_trades_max_pages ?? DEFAULT_PROFILE_TRADES_MAX_PAGES) ||
-        DEFAULT_PROFILE_TRADES_MAX_PAGES
-      const horizon = Date.now() - 90 * DAY_MS
-
-      const data: Dict[] = []
-      let cursor: number | null = null
-      let truncated = false
-      for (let page = 1; page <= maxPages; page++) {
-        const url =
-          `${base}/${address}?chainId=${chainId(src)}&limit=${TRADES_PAGE_LIMIT}` +
-          (cursor !== null ? `&cursor=${cursor}` : '')
-        const payload = (await fetchJson(session, url)) as {
-          data?: Dict[]
-          pagination?: { hasMore?: boolean; nextCursor?: number }
-        }
-        const rows = Array.isArray(payload.data) ? payload.data : []
-        data.push(...rows)
-
-        const oldest = rows.length > 0 ? Date.parse(String(rows[rows.length - 1].date)) : NaN
-        const hasMore = payload.pagination?.hasMore === true
-        const nextCursor = payload.pagination?.nextCursor
-        if (!hasMore || rows.length === 0 || typeof nextCursor !== 'number') break
-        if (Number.isFinite(oldest) && oldest < horizon) break // window covered
-        if (page === maxPages) truncated = true
-        cursor = nextCursor
-      }
-      return { data, truncated }
-    })()
+    const asOfTimeMs = Date.now()
+    const base = endpoint(src, 'history', `${API_BASE}/personal-trading-history`)
+    const maxPages = Number(src.meta.profile_trades_max_pages ?? DEFAULT_PROFILE_TRADES_MAX_PAGES)
+    cached = fetchGtradeTradesWindow(
+      async (cursor, limit) => {
+        const params = new URLSearchParams({
+          chainId: chainId(src),
+          limit: String(limit),
+          endDate: new Date(asOfTimeMs).toISOString(),
+        })
+        if (cursor !== null) params.set('cursor', String(cursor))
+        const url = `${base}/${address}?${params.toString()}`
+        return { payload: await fetchJson(session, url), url }
+      },
+      asOfTimeMs,
+      { maxPages }
+    )
     perSession.set(address, cached)
     cached.catch(() => perSession!.delete(address))
   }
   return cached
+}
+
+const PROFILE_FETCH_INTENTS = new Set<ProfileFetchIntent>([
+  'scheduled_full',
+  'series_only',
+  'interactive_deferred',
+])
+
+function requireProfileIntent(options: ProfileFetchOptions | undefined): ProfileFetchIntent {
+  const intent = options?.intent
+  if (!intent || !PROFILE_FETCH_INTENTS.has(intent)) {
+    throw new Error('[gtrade] missing or invalid profile fetch intent')
+  }
+  return intent
 }
 
 const gtradeAdapter: SourceAdapter = {
@@ -203,13 +208,16 @@ const gtradeAdapter: SourceAdapter = {
     session: FetchSession,
     src: SourceRow,
     exchangeTraderId: string,
-    timeframe: Timeframe
+    timeframe: Timeframe,
+    _traderMeta: Record<string, unknown> | null | undefined,
+    options: ProfileFetchOptions
   ): Promise<RawBundle> {
+    const intent = requireProfileIntent(options)
     const tf = (timeframe === 0 ? 90 : timeframe) as RankingTimeframe
     const base = endpoint(src, 'history', `${API_BASE}/personal-trading-history`)
     const statsUrl = `${base}/${exchangeTraderId}/stats?chainId=${chainId(src)}`
     const stats = await fetchJson(session, statsUrl)
-    const trades = await getTrades(session, src, exchangeTraderId)
+    const tradesSnapshot = await getTrades(session, src, exchangeTraderId)
 
     const fetchedAt = new Date().toISOString()
     return {
@@ -218,8 +226,17 @@ const gtradeAdapter: SourceAdapter = {
           pageIndex: 1,
           payload: {
             stats,
-            trades: { data: trades.data, truncated: trades.truncated },
+            // Legacy envelope stays until the pure parser switches to the
+            // replayed snapshot in the next independently deployable step.
+            trades: {
+              data: tradesSnapshot.trades,
+              truncated: !tradesSnapshot.meta.complete,
+            },
             timeframe: tf,
+            profileFetchIntent: intent,
+            tradesFetchState: 'fetched',
+            tradesFetchReason: tradesSnapshot.meta.stopReason,
+            tradesSnapshot,
           },
           url: statsUrl,
           fetchedAt,
@@ -257,7 +274,7 @@ const gtradeAdapter: SourceAdapter = {
     let pageCursor: number | null = null
     for (let page = 1; page <= maxPages; page++) {
       const url =
-        `${base}/${exchangeTraderId}?chainId=${chainId(src)}&limit=${TRADES_PAGE_LIMIT}` +
+        `${base}/${exchangeTraderId}?chainId=${chainId(src)}&limit=${GTRADE_TRADES_PAGE_LIMIT}` +
         (pageCursor !== null ? `&cursor=${pageCursor}` : '')
       const payload = (await fetchJson(session, url)) as {
         data?: Dict[]
