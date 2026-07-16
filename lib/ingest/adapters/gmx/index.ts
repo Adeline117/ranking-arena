@@ -10,10 +10,9 @@
  *   Tier A  POST {subgraph} periodAccountStats(where:{from, maxCapital_gte})
  *           — ONE query per TF returns every account active in the window
  *           (~3k for 7d). The resolver requires `from` rounded to 00:00:00
- *           UTC and a window STRICTLY <90 days. Arena therefore publishes
- *           only the exact upstream 7d/30d windows. 90d remains unavailable
- *           until the event-first index can reconstruct it exactly; an 89d
- *           query must never be labelled 90d.
+ *           UTC. Arena passes BOTH `from` and `to`, so 7d/30d/90d each cover
+ *           an exact number of completed UTC days. This is at most 24h behind
+ *           a rolling-now window and is disclosed in every RAW/stat payload.
  *           Unsorted → sort by realized-basis window PnL desc, truncate to
  *           meta.board_depth (default 60 = survey count), chunk page_size.
  *   Tier B/C POST periodAccountStats(id_eq) + accountPnlHistoryStats — both
@@ -102,16 +101,19 @@ async function gql<T>(session: FetchSession, src: SourceRow, query: string): Pro
 }
 
 /**
- * Window start for the exact native windows. The resolver requires a
- * midnight-aligned `from` and rejects a 90-day boundary, so fail closed for
- * 90d instead of silently substituting 89d under a false label.
+ * Exact completed-UTC-day bounds. An explicit midnight `to` makes 90d valid;
+ * omitting it makes the resolver compare against now and reject the boundary.
  */
+export function gmxWindowBounds(
+  timeframe: RankingTimeframe,
+  nowMs: number
+): { from: number; to: number } {
+  const to = Math.floor(nowMs / 86_400_000) * 86_400
+  return { from: to - timeframe * 86_400, to }
+}
+
 export function gmxWindowFrom(timeframe: RankingTimeframe, nowMs: number): number {
-  if (timeframe === 90) {
-    throw new Error('[gmx] exact 90d window unavailable; event reconstruction required')
-  }
-  const midnight = Math.floor(nowMs / 86_400_000) * 86_400
-  return midnight - timeframe * 86_400
+  return gmxWindowBounds(timeframe, nowMs).from
 }
 
 /** Effective board depth: meta.board_depth (production knob, default 60),
@@ -198,12 +200,12 @@ const gmxAdapter: SourceAdapter = {
     src: SourceRow,
     timeframe: RankingTimeframe
   ): AsyncIterable<RawPage> {
-    const from = gmxWindowFrom(timeframe, Date.now())
+    const { from, to } = gmxWindowBounds(timeframe, Date.now())
     const data = await gql<{ periodAccountStats: Dict[] }>(
       session,
       src,
       `query { periodAccountStats(limit: ${BOARD_FETCH_LIMIT}, ` +
-        `where: { from: ${from}, maxCapital_gte: "0" }) { ${PERIOD_FIELDS} } }`
+        `where: { from: ${from}, to: ${to}, maxCapital_gte: "0" }) { ${PERIOD_FIELDS} } }`
     )
     const rows = data.periodAccountStats ?? []
     const fetchedAt = new Date().toISOString()
@@ -218,6 +220,8 @@ const gmxAdapter: SourceAdapter = {
         payload: {
           timeframe,
           from,
+          to,
+          windowSemantics: 'completed_utc_days',
           reportedTotal: rows.length, // pre-truncation account count
           rows: truncated.slice(i, i + chunkSize),
         },
@@ -237,13 +241,13 @@ const gmxAdapter: SourceAdapter = {
     timeframe: Timeframe
   ): Promise<RawBundle> {
     const tf = (timeframe === 0 ? 90 : timeframe) as RankingTimeframe
-    const from = gmxWindowFrom(tf, Date.now())
+    const { from, to } = gmxWindowBounds(tf, Date.now())
     const account = checksum(exchangeTraderId)
 
     const periodStats = await gql<{ periodAccountStats: Dict[] }>(
       session,
       src,
-      `query { periodAccountStats(where: { id_eq: "${account}", from: ${from} }) ` +
+      `query { periodAccountStats(where: { id_eq: "${account}", from: ${from}, to: ${to} }) ` +
         `{ ${PERIOD_FIELDS} } }`
     )
     const pnlHistory = await gql<{ accountPnlHistoryStats: Dict[] }>(
@@ -263,6 +267,8 @@ const gmxAdapter: SourceAdapter = {
             pnlHistory: pnlHistory.accountPnlHistoryStats ?? [],
             timeframe: tf,
             from,
+            to,
+            windowSemantics: 'completed_utc_days',
           },
           url: endpoint(src, 'subgraph', GMX_SUBGRAPH_URL),
           fetchedAt,

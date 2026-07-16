@@ -16,7 +16,7 @@ import {
   parseGmxPositions,
   parseGmxProfile,
 } from '../parsers'
-import { GMX_SUBGRAPH_URL, gmxWindowFrom, sortGmxLeaderboardRows } from '../index'
+import { GMX_SUBGRAPH_URL, gmxWindowBounds, gmxWindowFrom, sortGmxLeaderboardRows } from '../index'
 import type { ParseCtx } from '../../../core/types'
 
 function fixture(name: string): Record<string, unknown> {
@@ -30,6 +30,7 @@ const ctx: ParseCtx = {
   scrapedAt: '2026-06-12T00:00:00.000Z',
   meta: {},
 }
+const DAY_SECONDS = 86_400
 
 describe('gmxRealizedPnlUsd', () => {
   it('nets every realized fee and impact without mixing in window-start unrealized PnL', () => {
@@ -60,7 +61,14 @@ describe('gmxRealizedPnlUsd', () => {
 
 describe('parseGmxLeaderboardPage', () => {
   const fx = fixture('period-account-stats.json')
-  const payload = { timeframe: 7, from: fx.from, reportedTotal: 2866, rows: fx.rows }
+  const from = Number(fx.from)
+  const payload = {
+    timeframe: 7,
+    from,
+    to: from + 7 * DAY_SECONDS,
+    reportedTotal: 2866,
+    rows: fx.rows,
+  }
 
   it('parses real rows: wallet identity, realized-basis PnL, maxCapital ROI', () => {
     const page = parseGmxLeaderboardPage(payload, ctx)
@@ -84,7 +92,10 @@ describe('parseGmxLeaderboardPage', () => {
       pnl_includes_unrealized: false,
       pnl_components_complete: true,
       profile_series_contract: 'unavailable_same_basis',
-      window_from: fx.from,
+      window_from: from,
+      window_to: from + 7 * DAY_SECONDS,
+      window_duration_days: 7,
+      window_semantics: 'completed_utc_days',
     })
     // open-only account: zero closes → null win rate; realized fees remain loss
     expect(page.rows[1].headlineWinRate).toBeNull()
@@ -100,7 +111,7 @@ describe('parseGmxLeaderboardPage', () => {
 
   it('skips rows without a 0x identity', () => {
     const page = parseGmxLeaderboardPage(
-      { timeframe: 7, reportedTotal: 2, rows: [{ id: 'bogus' }, ...(fx.rows as unknown[])] },
+      { ...payload, reportedTotal: 2, rows: [{ id: 'bogus' }, ...(fx.rows as unknown[])] },
       ctx
     )
     expect(page.rows).toHaveLength(6)
@@ -111,8 +122,21 @@ describe('parseGmxLeaderboardPage', () => {
     const row = { ...(fx.rows as Array<Record<string, unknown>>)[0] }
     delete row.realizedSwapImpact
     expect(() =>
-      parseGmxLeaderboardPage({ timeframe: 7, from: fx.from, reportedTotal: 1, rows: [row] }, ctx)
+      parseGmxLeaderboardPage({ ...payload, reportedTotal: 1, rows: [row] }, ctx)
     ).toThrow('incomplete realized-net leaderboard components')
+  })
+
+  it('rejects legacy 89d replay payloads labelled as 90d', () => {
+    expect(() =>
+      parseGmxLeaderboardPage(
+        {
+          ...payload,
+          timeframe: 90,
+          to: from + 89 * DAY_SECONDS,
+        },
+        ctx
+      )
+    ).toThrow('[gmx] invalid completed UTC window bounds')
   })
 })
 
@@ -122,7 +146,13 @@ describe('parseGmxProfile', () => {
   it('stats: same realized-net PnL as the board, ROI on maxCapital', () => {
     const profile = parseGmxProfile(bundle, ctx)
     const boardRow = parseGmxLeaderboardPage(
-      { from: bundle.from, reportedTotal: 1, rows: bundle.periodStats },
+      {
+        timeframe: bundle.timeframe,
+        from: bundle.from,
+        to: bundle.to,
+        reportedTotal: 1,
+        rows: bundle.periodStats,
+      },
       ctx
     ).rows[0]
     expect(profile.stats).toHaveLength(1)
@@ -140,6 +170,8 @@ describe('parseGmxProfile', () => {
       roi_basis: 'max_capital_usd',
       pnl_includes_unrealized: false,
       pnl_components_complete: true,
+      window_duration_days: 7,
+      window_semantics: 'completed_utc_days',
     })
     expect(s.extras.realized_pnl_usd as number).toBeCloseTo(s.pnl!, 8)
     expect(s.pnl).toBeCloseTo(boardRow.headlinePnl!, 8)
@@ -160,9 +192,33 @@ describe('parseGmxProfile', () => {
     expect(profile.replaceSeries).toEqual([{ timeframe: 7, metrics: ['pnl'] }])
   })
 
+  it('client-cuts audit-only history at window_to because the resolver has no to argument', () => {
+    const raw = JSON.parse(JSON.stringify(bundle)) as Record<string, unknown>
+    ;(raw.pnlHistory as Array<Record<string, unknown>>).push({
+      timestamp: Number(bundle.to) + DAY_SECONDS,
+      cumulativePnl: '999000000000000000000000000000000',
+    })
+    const profile = parseGmxProfile(raw, ctx)
+    expect(profile.stats[0].extras.gmx_total_mark_to_market_pnl_usd as number).toBeCloseTo(
+      227.628956,
+      5
+    )
+    expect(profile.stats[0].extras).toMatchObject({
+      gmx_history_client_window_cutoff: true,
+      gmx_history_rows_raw: 9,
+      gmx_history_rows_in_window: 8,
+    })
+  })
+
   it('confirmed empty window publishes explicit zero and clears stale series', () => {
     const profile = parseGmxProfile(
-      { periodStats: [], pnlHistory: [], timeframe: 30, from: 1_765_411_200 },
+      {
+        periodStats: [],
+        pnlHistory: [],
+        timeframe: 30,
+        from: 1_765_411_200,
+        to: 1_765_411_200 + 30 * DAY_SECONDS,
+      },
       ctx
     )
     expect(profile.stats).toHaveLength(1)
@@ -183,6 +239,9 @@ describe('parseGmxProfile', () => {
       profile_window_empty: true,
       empty_window_evidence: 'explicit_empty_period_stats_and_history',
       window_from: 1_765_411_200,
+      window_to: 1_765_411_200 + 30 * DAY_SECONDS,
+      window_duration_days: 30,
+      window_semantics: 'completed_utc_days',
     })
     expect(profile.series).toHaveLength(0)
     expect(profile.replaceSeries).toEqual([{ timeframe: 30, metrics: ['pnl'] }])
@@ -197,6 +256,7 @@ describe('parseGmxProfile', () => {
         ],
         timeframe: 30,
         from: 1_765_411_200,
+        to: 1_765_411_200 + 30 * DAY_SECONDS,
       },
       ctx
     )
@@ -212,7 +272,15 @@ describe('parseGmxProfile', () => {
 
   it('does not mistake missing arrays or invalid history rows for a confirmed empty window', () => {
     expect(() =>
-      parseGmxProfile({ periodStats: [], timeframe: 30, from: 1_765_411_200 }, ctx)
+      parseGmxProfile(
+        {
+          periodStats: [],
+          timeframe: 30,
+          from: 1_765_411_200,
+          to: 1_765_411_200 + 30 * DAY_SECONDS,
+        },
+        ctx
+      )
     ).toThrow('[gmx] invalid profile bundle arrays')
     const profile = parseGmxProfile(
       {
@@ -220,6 +288,7 @@ describe('parseGmxProfile', () => {
         pnlHistory: [{ unexpected: true }],
         timeframe: 30,
         from: 1_765_411_200,
+        to: 1_765_411_200 + 30 * DAY_SECONDS,
       },
       ctx
     )
@@ -233,26 +302,66 @@ describe('parseGmxProfile', () => {
     const row = (bundle.periodStats as Array<Record<string, unknown>>)[0]
     expect(() =>
       parseGmxProfile(
-        { periodStats: [row, row], pnlHistory: [], timeframe: 7, from: bundle.from },
+        {
+          periodStats: [row, row],
+          pnlHistory: [],
+          timeframe: 7,
+          from: bundle.from,
+          to: bundle.to,
+        },
         ctx
       )
     ).toThrow('[gmx] duplicate period aggregates for profile window')
   })
 
-  it('requires an explicit supported timeframe and midnight-aligned window start', () => {
+  it('requires an explicit supported timeframe and exact completed UTC bounds', () => {
     const empty = { periodStats: [], pnlHistory: [] }
-    expect(() => parseGmxProfile({ ...empty, from: 1_765_411_200 }, ctx)).toThrow(
-      '[gmx] invalid profile timeframe'
-    )
-    expect(() => parseGmxProfile({ ...empty, timeframe: 999, from: 1_765_411_200 }, ctx)).toThrow(
-      '[gmx] invalid profile timeframe'
-    )
-    expect(() => parseGmxProfile({ ...empty, timeframe: 30 }, ctx)).toThrow(
-      '[gmx] invalid profile window start'
-    )
-    expect(() => parseGmxProfile({ ...empty, timeframe: 30, from: 1_765_411_201 }, ctx)).toThrow(
-      '[gmx] invalid profile window start'
-    )
+    expect(() =>
+      parseGmxProfile(
+        {
+          ...empty,
+          from: 1_765_411_200,
+          to: 1_765_411_200 + 30 * DAY_SECONDS,
+        },
+        ctx
+      )
+    ).toThrow('[gmx] invalid window timeframe')
+    expect(() =>
+      parseGmxProfile(
+        {
+          ...empty,
+          timeframe: 999,
+          from: 1_765_411_200,
+          to: 1_765_411_200 + 30 * DAY_SECONDS,
+        },
+        ctx
+      )
+    ).toThrow('[gmx] invalid window timeframe')
+    expect(() =>
+      parseGmxProfile({ ...empty, timeframe: 30, to: 1_765_411_200 + 30 * DAY_SECONDS }, ctx)
+    ).toThrow('[gmx] invalid completed UTC window bounds')
+    expect(() =>
+      parseGmxProfile(
+        {
+          ...empty,
+          timeframe: 30,
+          from: 1_765_411_201,
+          to: 1_765_411_200 + 30 * DAY_SECONDS,
+        },
+        ctx
+      )
+    ).toThrow('[gmx] invalid completed UTC window bounds')
+    expect(() =>
+      parseGmxProfile(
+        {
+          ...empty,
+          timeframe: 90,
+          from: 1_765_411_200,
+          to: 1_765_411_200 + 89 * DAY_SECONDS,
+        },
+        ctx
+      )
+    ).toThrow('[gmx] invalid completed UTC window bounds')
   })
 
   it('fails closed without clearing serving data when a realized component is absent', () => {
@@ -295,18 +404,17 @@ describe('parseGmxPositions', () => {
   })
 })
 
-describe('gmxWindowFrom', () => {
+describe('gmxWindowBounds', () => {
   const now = Date.parse('2026-06-12T15:30:00Z')
   it('returns midnight-aligned exact native windows', () => {
     const midnight = Date.parse('2026-06-12T00:00:00Z') / 1000
     expect(gmxWindowFrom(7, now)).toBe(midnight - 7 * 86_400)
     expect(gmxWindowFrom(30, now)).toBe(midnight - 30 * 86_400)
-  })
-
-  it('fails closed for 90d rather than labelling an 89d query as 90d', () => {
-    expect(() => gmxWindowFrom(90, now)).toThrow(
-      '[gmx] exact 90d window unavailable; event reconstruction required'
-    )
+    expect(gmxWindowFrom(90, now)).toBe(midnight - 90 * 86_400)
+    expect(gmxWindowBounds(90, now)).toEqual({
+      from: midnight - 90 * 86_400,
+      to: midnight,
+    })
   })
 })
 
