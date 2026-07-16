@@ -27,6 +27,15 @@ interface TraderClaimsTabProps {
   accessToken: string | null
 }
 
+type ClaimFilter = 'all' | 'pending' | 'verified' | 'rejected'
+
+interface LoadClaimsOptions {
+  append?: boolean
+  showSpinner?: boolean
+}
+
+const CLAIM_PAGE_SIZE = 50
+
 async function readResponseError(response: Response, fallback: string): Promise<string> {
   try {
     const body = (await response.json()) as {
@@ -53,37 +62,79 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
   const { showToast } = useToast()
   const [claims, setClaims] = useState<TraderClaim[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadingMore, setLoadingMore] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({})
-  const [filter, setFilter] = useState<'all' | 'pending' | 'verified' | 'rejected'>('all')
+  const [filter, setFilter] = useState<ClaimFilter>('pending')
+  const [totals, setTotals] = useState<Partial<Record<ClaimFilter, number>>>({})
+  const [hasMore, setHasMore] = useState(false)
   const [rejectInputs, setRejectInputs] = useState<Record<string, boolean>>({})
   const [rejectReasons, setRejectReasons] = useState<Record<string, string>>({})
   const loadRequestIdRef = useRef(0)
+  const nextOffsetRef = useRef(0)
   const actionInFlightRef = useRef<string | null>(null)
 
   const loadClaims = useCallback(
-    async (showSpinner = true): Promise<boolean> => {
+    async ({ append = false, showSpinner = true }: LoadClaimsOptions = {}): Promise<boolean> => {
       const requestId = ++loadRequestIdRef.current
       if (!accessToken) {
         setClaims([])
+        setHasMore(false)
+        nextOffsetRef.current = 0
         setLoadError(t('adminLoadFailed'))
         setLoading(false)
+        setLoadingMore(false)
         return false
       }
-      if (showSpinner) setLoading(true)
+      const offset = append ? nextOffsetRef.current : 0
+      if (append) setLoadingMore(true)
+      else if (showSpinner) setLoading(true)
       setLoadError(null)
       try {
-        const res = await fetch('/api/admin/claims', {
+        const status = filter === 'pending' ? 'reviewable' : filter
+        const query = new URLSearchParams({
+          status,
+          limit: String(CLAIM_PAGE_SIZE),
+          offset: String(offset),
+        })
+        const res = await fetch(`/api/admin/claims?${query}`, {
           headers: { Authorization: `Bearer ${accessToken}` },
           signal: AbortSignal.timeout(15_000),
         })
         if (!res.ok) {
           throw new Error(await readResponseError(res, t('adminLoadFailed')))
         }
-        const data = await res.json()
+        const payload = (await res.json()) as {
+          data?: {
+            claims?: unknown
+            total?: unknown
+            has_more?: unknown
+          }
+        }
         if (requestId !== loadRequestIdRef.current) return false
-        setClaims(Array.isArray(data.data?.claims) ? data.data.claims : [])
+        const page = payload.data
+        if (
+          !page ||
+          !Array.isArray(page.claims) ||
+          typeof page.total !== 'number' ||
+          !Number.isSafeInteger(page.total) ||
+          page.total < 0 ||
+          typeof page.has_more !== 'boolean'
+        ) {
+          throw new Error(t('adminLoadFailed'))
+        }
+
+        const rows: TraderClaim[] = page.claims
+        const total = page.total
+        setClaims((previous) => {
+          if (!append) return rows
+          const seen = new Set(previous.map((claim) => claim.id))
+          return [...previous, ...rows.filter((claim) => !seen.has(claim.id))]
+        })
+        nextOffsetRef.current = offset + rows.length
+        setHasMore(page.has_more && rows.length > 0)
+        setTotals((previous) => ({ ...previous, [filter]: total }))
         return true
       } catch (error) {
         if (requestId !== loadRequestIdRef.current) return false
@@ -93,13 +144,20 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
         showToast(message, 'error')
         return false
       } finally {
-        if (requestId === loadRequestIdRef.current && showSpinner) setLoading(false)
+        if (requestId === loadRequestIdRef.current) {
+          if (append) setLoadingMore(false)
+          else if (showSpinner) setLoading(false)
+        }
       }
     },
-    [accessToken, showToast, t]
+    [accessToken, filter, showToast, t]
   )
 
   useEffect(() => {
+    setClaims([])
+    setHasMore(false)
+    setLoadingMore(false)
+    nextOffsetRef.current = 0
     void loadClaims()
     return () => {
       loadRequestIdRef.current += 1
@@ -155,7 +213,7 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
       setRejectInputs((prev) => ({ ...prev, [claimId]: false }))
       setRejectReasons((prev) => ({ ...prev, [claimId]: '' }))
       showToast(approved ? t('approved') : t('rejected'), 'success')
-      await loadClaims(false)
+      await loadClaims({ showSpinner: false })
     } catch (error) {
       const message = error instanceof Error && error.message ? error.message : t('claimFailed')
       setActionErrors((prev) => ({ ...prev, [claimId]: message }))
@@ -165,15 +223,6 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
       setActionLoading(null)
     }
   }
-
-  const filtered =
-    filter === 'all'
-      ? claims
-      : claims.filter((claim) =>
-          filter === 'pending'
-            ? claim.status === 'pending' || claim.status === 'reviewing'
-            : claim.status === filter
-        )
 
   const statusColor = (status: string) => {
     switch (status) {
@@ -187,13 +236,6 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
       default:
         return tokens.colors.text.tertiary
     }
-  }
-
-  const counts = {
-    all: claims.length,
-    pending: claims.filter((c) => c.status === 'pending' || c.status === 'reviewing').length,
-    verified: claims.filter((c) => c.status === 'verified').length,
-    rejected: claims.filter((c) => c.status === 'rejected').length,
   }
 
   return (
@@ -213,16 +255,17 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
             aria-pressed={filter === f}
             variant={filter === f ? 'primary' : 'secondary'}
             size="sm"
+            disabled={actionLoading !== null || loadingMore}
             onClick={() => setFilter(f)}
           >
             {f === 'all' ? t('all') : f.charAt(0).toUpperCase() + f.slice(1)}
-            {counts[f] > 0 && ` (${counts[f]})`}
+            {typeof totals[f] === 'number' && totals[f] > 0 && ` (${totals[f]})`}
           </Button>
         ))}
         <Button
           variant="text"
           size="sm"
-          disabled={loading || actionLoading !== null}
+          disabled={loading || loadingMore || actionLoading !== null}
           onClick={() => void loadClaims()}
         >
           {t('refresh')}
@@ -239,13 +282,13 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
         <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
           <Text color="tertiary">{t('loading')}</Text>
         </Box>
-      ) : loadError && claims.length === 0 ? null : filtered.length === 0 ? (
+      ) : loadError && claims.length === 0 ? null : claims.length === 0 ? (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
           <Text color="tertiary">{t('noClaims')}</Text>
         </Box>
       ) : (
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-          {filtered.map((claim) => (
+          {claims.map((claim) => (
             <Box
               key={claim.id}
               style={{
@@ -451,6 +494,19 @@ export default function TraderClaimsTab({ accessToken }: TraderClaimsTabProps) {
               )}
             </Box>
           ))}
+          {hasMore && (
+            <Box style={{ display: 'flex', justifyContent: 'center' }}>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={actionLoading !== null || loadingMore}
+                loading={loadingMore}
+                onClick={() => void loadClaims({ append: true, showSpinner: false })}
+              >
+                {t('loadMore')}
+              </Button>
+            </Box>
+          )}
         </Box>
       )}
     </Card>
