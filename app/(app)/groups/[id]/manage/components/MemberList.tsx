@@ -1,11 +1,20 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import Card from '@/app/components/ui/Card'
 import { Box, Text, Button } from '@/app/components/base'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  advanceGroupManageResourceScope,
+  canonicalGroupManageId,
+  GroupManageParamsSourceLedger,
+  groupManageOwnerKey,
+  isGroupManageViewerCurrent,
+  type GroupManageOwnerScope,
+} from '../manage-viewer-scope'
 
 type GroupMember = {
   user_id: string
@@ -40,7 +49,7 @@ interface MemberListProps {
   onMute: (userId: string) => void
   onUnmute: (userId: string) => void
   onSetRole: (userId: string, role: 'admin' | 'member') => void
-  onKick: (userId: string, handle: string) => void
+  onKick: (userId: string, handle: string) => Promise<void> | void
   onNotifyOpen: () => void
   setMembers: React.Dispatch<React.SetStateAction<GroupMember[]>>
   showToast: (msg: string, type: 'error' | 'success' | 'warning' | 'info') => void
@@ -49,7 +58,50 @@ interface MemberListProps {
 
 const MEMBERS_PER_PAGE = 20
 
-export default function MemberList({
+type ScopedMemberListProps = MemberListProps & { ownerScope: GroupManageOwnerScope }
+
+export default function MemberList(props: MemberListProps) {
+  const auth = useAuthSession()
+  const paramsSourceLedgerRef = useRef(new GroupManageParamsSourceLedger())
+  const paramsSourceScope = paramsSourceLedgerRef.current.capture(props.setMemberSearch)
+  const resourceScopeRef = useRef({
+    paramsRevision: 0,
+    groupId: null as string | null,
+    resourceGeneration: 0,
+  })
+  resourceScopeRef.current = advanceGroupManageResourceScope(
+    resourceScopeRef.current,
+    paramsSourceScope.paramsRevision,
+    props.groupId
+  )
+  const scopedParamsRevision = resourceScopeRef.current.paramsRevision
+  const scopedGroupId = resourceScopeRef.current.groupId
+  const scopedResourceGeneration = resourceScopeRef.current.resourceGeneration
+  const scopedUserId = auth.userId === props.userId ? props.userId : null
+  const ownerScope: GroupManageOwnerScope = useMemo(
+    () => ({
+      userId: scopedUserId,
+      viewerKey: auth.viewerKey,
+      sessionGeneration: auth.sessionGeneration,
+      paramsRevision: scopedParamsRevision,
+      groupId: scopedGroupId,
+      resourceGeneration: scopedResourceGeneration,
+    }),
+    [
+      auth.sessionGeneration,
+      auth.viewerKey,
+      scopedGroupId,
+      scopedParamsRevision,
+      scopedResourceGeneration,
+      scopedUserId,
+    ]
+  )
+  const ownerKey = groupManageOwnerKey(ownerScope)
+  const scopedProps = { ...props, ownerScope }
+  return <ScopedMemberList key={ownerKey} {...scopedProps} />
+}
+
+function ScopedMemberList({
   members,
   groupId,
   userId,
@@ -59,26 +111,42 @@ export default function MemberList({
   createdBy,
   accessToken,
   memberSearch,
-  setMemberSearch,
+  setMemberSearch: unsafeSetMemberSearch,
   debouncedMemberSearch,
   memberPage,
-  setMemberPage,
+  setMemberPage: unsafeSetMemberPage,
   memberRoleFilter,
-  setMemberRoleFilter,
+  setMemberRoleFilter: unsafeSetMemberRoleFilter,
   inviteUrl,
-  setInviteUrl,
+  setInviteUrl: unsafeSetInviteUrl,
   generatingInvite,
-  setGeneratingInvite,
-  onMute,
-  onUnmute,
-  onSetRole,
-  onKick,
-  onNotifyOpen,
-  showToast,
+  setGeneratingInvite: unsafeSetGeneratingInvite,
+  onMute: unsafeOnMute,
+  onUnmute: unsafeOnUnmute,
+  onSetRole: unsafeOnSetRole,
+  onKick: unsafeOnKick,
+  onNotifyOpen: unsafeOnNotifyOpen,
+  showToast: unsafeShowToast,
   t,
-}: MemberListProps) {
+  ownerScope,
+}: ScopedMemberListProps) {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set())
   const [batchKicking, setBatchKicking] = useState(false)
+  const mountedRef = useRef(true)
+  const accessTokenRef = useRef(accessToken)
+  const ownerScopeRef = useRef(ownerScope)
+  accessTokenRef.current = accessToken
+  ownerScopeRef.current = ownerScope
+  const isCurrent = useCallback((expected: GroupManageOwnerScope) => {
+    if (!mountedRef.current) return false
+    return isGroupManageViewerCurrent(expected, ownerScopeRef.current, accessTokenRef.current)
+  }, [])
+  useEffect(
+    () => () => {
+      mountedRef.current = false
+    },
+    []
+  )
 
   const filtered = members
     .filter((m) => memberRoleFilter === 'all' || m.role === memberRoleFilter)
@@ -94,14 +162,119 @@ export default function MemberList({
     (memberPage + 1) * MEMBERS_PER_PAGE
   )
 
-  const toggleSelect = useCallback((uid: string) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev)
-      if (next.has(uid)) next.delete(uid)
-      else next.add(uid)
-      return next
-    })
-  }, [])
+  const toggleSelect = useCallback(
+    (uid: string) => {
+      const requestScope = ownerScope
+      if (!isCurrent(requestScope)) return
+      setSelectedIds((prev) => {
+        const next = new Set(prev)
+        if (next.has(uid)) next.delete(uid)
+        else next.add(uid)
+        return next
+      })
+    },
+    [isCurrent, ownerScope, setSelectedIds]
+  )
+
+  const setMemberSearch = useCallback(
+    (value: string) => {
+      if (isCurrent(ownerScope)) unsafeSetMemberSearch(value)
+    },
+    [isCurrent, ownerScope, unsafeSetMemberSearch]
+  )
+  const setMemberPage = useCallback(
+    (value: number | ((page: number) => number)) => {
+      if (isCurrent(ownerScope)) unsafeSetMemberPage(value)
+    },
+    [isCurrent, ownerScope, unsafeSetMemberPage]
+  )
+  const setMemberRoleFilter = useCallback(
+    (value: 'all' | 'owner' | 'admin' | 'member') => {
+      if (isCurrent(ownerScope)) unsafeSetMemberRoleFilter(value)
+    },
+    [isCurrent, ownerScope, unsafeSetMemberRoleFilter]
+  )
+  const setInviteUrl = useCallback(
+    (value: string | null) => {
+      if (isCurrent(ownerScope)) unsafeSetInviteUrl(value)
+    },
+    [isCurrent, ownerScope, unsafeSetInviteUrl]
+  )
+  const setGeneratingInvite = useCallback(
+    (value: boolean) => {
+      if (isCurrent(ownerScope)) unsafeSetGeneratingInvite(value)
+    },
+    [isCurrent, ownerScope, unsafeSetGeneratingInvite]
+  )
+  const onMute = useCallback(
+    (targetUserId: string) => {
+      if (isCurrent(ownerScope)) unsafeOnMute(targetUserId)
+    },
+    [isCurrent, ownerScope, unsafeOnMute]
+  )
+  const onUnmute = useCallback(
+    (targetUserId: string) => {
+      if (isCurrent(ownerScope)) unsafeOnUnmute(targetUserId)
+    },
+    [isCurrent, ownerScope, unsafeOnUnmute]
+  )
+  const onSetRole = useCallback(
+    (targetUserId: string, role: 'admin' | 'member') => {
+      if (isCurrent(ownerScope)) unsafeOnSetRole(targetUserId, role)
+    },
+    [isCurrent, ownerScope, unsafeOnSetRole]
+  )
+  const onKick = useCallback(
+    (targetUserId: string, handle: string) => {
+      if (isCurrent(ownerScope)) return unsafeOnKick(targetUserId, handle)
+    },
+    [isCurrent, ownerScope, unsafeOnKick]
+  )
+  const onNotifyOpen = useCallback(() => {
+    if (isCurrent(ownerScope)) unsafeOnNotifyOpen()
+  }, [isCurrent, ownerScope, unsafeOnNotifyOpen])
+  const showToast = useCallback(
+    (message: string, type: 'error' | 'success' | 'warning' | 'info') => {
+      if (isCurrent(ownerScope)) unsafeShowToast(message, type)
+    },
+    [isCurrent, ownerScope, unsafeShowToast]
+  )
+  const fetch = useCallback(
+    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const requestScope = ownerScope
+      const requestGroupId = canonicalGroupManageId(requestScope.groupId)
+      const inputUrl =
+        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+      if (
+        !requestGroupId ||
+        !isCurrent(requestScope) ||
+        inputUrl !== `/api/groups/${requestGroupId}/invite` ||
+        init?.method !== 'POST' ||
+        new Headers(init.headers).get('Authorization') !== `Bearer ${accessToken}`
+      ) {
+        throw new Error('Stale group invite request')
+      }
+      const response = await globalThis.fetch(input, init)
+      if (!isCurrent(requestScope)) throw new Error('Stale group invite response')
+      return response
+    },
+    [accessToken, isCurrent, ownerScope]
+  )
+  const navigator = useMemo(
+    () => ({
+      clipboard: {
+        writeText: async (value: string) => {
+          const requestScope = ownerScope
+          if (!isCurrent(requestScope)) throw new Error('Stale group invite clipboard write')
+          const writeText = globalThis.navigator?.clipboard?.writeText
+          if (!writeText) throw new Error('Clipboard is unavailable')
+          await writeText.call(globalThis.navigator.clipboard, value)
+          if (!isCurrent(requestScope)) throw new Error('Stale group invite clipboard result')
+        },
+      },
+    }),
+    [isCurrent, ownerScope]
+  )
 
   const toggleSelectAll = useCallback(() => {
     const kickable = paginatedMembers.filter((m) => {
