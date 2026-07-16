@@ -2,6 +2,58 @@
 
 BEGIN;
 
+-- pg_proc contains both functions and procedures. Re-run the migration's
+-- legacy retirement loop with one of each and prove the FUNCTION command does
+-- not target or revoke a same-named PROCEDURE on PostgreSQL 17.
+CREATE FUNCTION public.get_following_feed(p_regression_marker text)
+RETURNS integer
+LANGUAGE sql
+AS $$ SELECT length(p_regression_marker) $$;
+
+CREATE PROCEDURE public.get_following_feed(p_regression_marker integer)
+LANGUAGE plpgsql
+AS $$
+BEGIN
+  PERFORM p_regression_marker;
+END;
+$$;
+
+GRANT EXECUTE ON FUNCTION public.get_following_feed(text) TO service_role;
+GRANT EXECUTE ON PROCEDURE public.get_following_feed(integer) TO authenticated;
+
+DO $$
+DECLARE
+  v_signature regprocedure;
+BEGIN
+  FOR v_signature IN
+    SELECT function_row.oid::regprocedure
+    FROM pg_catalog.pg_proc AS function_row
+    JOIN pg_catalog.pg_namespace AS function_schema
+      ON function_schema.oid = function_row.pronamespace
+    WHERE function_schema.nspname = 'public'
+      AND function_row.proname = 'get_following_feed'
+      AND function_row.prokind = 'f'
+  LOOP
+    EXECUTE pg_catalog.format(
+      'REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role',
+      v_signature
+    );
+  END LOOP;
+
+  IF pg_catalog.has_function_privilege(
+    'service_role',
+    'public.get_following_feed(text)',
+    'EXECUTE'
+  ) OR NOT pg_catalog.has_function_privilege(
+    'authenticated',
+    'public.get_following_feed(integer)',
+    'EXECUTE'
+  ) THEN
+    RAISE EXCEPTION 'legacy function retirement crossed the routine-kind boundary';
+  END IF;
+END
+$$;
+
 DO $$
 DECLARE
   v_viewer uuid := '12430000-0000-4000-8000-000000000001';
@@ -252,6 +304,7 @@ BEGIN
     CROSS JOIN (VALUES ('anon'), ('authenticated'), ('service_role')) AS api_role(name)
     WHERE legacy_schema.nspname = 'public'
       AND legacy_function.proname = 'get_following_feed'
+      AND legacy_function.prokind = 'f'
       AND pg_catalog.has_function_privilege(
         api_role.name,
         legacy_function.oid,
