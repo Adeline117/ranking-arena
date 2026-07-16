@@ -121,6 +121,8 @@ const ACTOR_B = '22222222-2222-4222-8222-222222222222'
 const GROUP_ID = '33333333-3333-4333-8333-333333333333'
 const OTHER_GROUP_ID = '55555555-5555-4555-8555-555555555555'
 const APPLICATION_ID = '44444444-4444-4444-8444-444444444444'
+const AUDIT_LOG_A = '77777777-7777-4777-8777-777777777777'
+const AUDIT_LOG_B = '88888888-8888-4888-8888-888888888888'
 
 function token(subject: string, marker: string): string {
   const payload = btoa(JSON.stringify({ sub: subject, marker }))
@@ -171,6 +173,26 @@ function submitAck(callIndex: number) {
         status: 'pending',
         created_at: '2026-07-16T12:00:00.000Z',
       },
+    },
+  }
+}
+
+function auditPage(id: string, action: string) {
+  return {
+    ok: true,
+    status: 200,
+    data: {
+      success: true,
+      logs: [
+        {
+          id,
+          action,
+          actor_id: ACTOR_A,
+          target_id: ACTOR_B,
+          created_at: '2026-07-16T12:00:00.000Z',
+        },
+      ],
+      pagination: { limit: 50, has_more: false, next_cursor: null },
     },
   }
 }
@@ -488,6 +510,33 @@ describe('group profile edit submit operation', () => {
     expect(screen.getByTestId('profile-edit-mode')).toHaveTextContent('editing')
   })
 
+  it('drops a complete G1 audit batch after G2 owns the activity view', async () => {
+    const responseA = deferred<ReturnType<typeof auditPage>>()
+    const responseB = deferred<ReturnType<typeof auditPage>>()
+    mockAuthedFetch.mockReturnValueOnce(responseA.promise).mockReturnValueOnce(responseB.promise)
+    const view = render(<GroupManagePage params={Promise.resolve({ id: GROUP_ID })} />)
+    await waitFor(() => expect(screen.queryByText('loading')).not.toBeInTheDocument())
+
+    fireEvent.click(screen.getByRole('button', { name: 'activityLog' }))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+    expect(mockAuthedFetch.mock.calls[0][0]).toBe(`/api/groups/${GROUP_ID}/audit-log?limit=50`)
+
+    view.rerender(<GroupManagePage params={Promise.resolve({ id: OTHER_GROUP_ID })} />)
+    await waitFor(() => expect(screen.queryByText('loading')).not.toBeInTheDocument())
+    fireEvent.click(screen.getByRole('button', { name: 'activityLog' }))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    expect(mockAuthedFetch.mock.calls[1][0]).toBe(
+      `/api/groups/${OTHER_GROUP_ID}/audit-log?limit=50`
+    )
+
+    await act(async () => responseB.resolve(auditPage(AUDIT_LOG_B, 'invite_created')))
+    await screen.findByText('invite_created')
+
+    await act(async () => responseA.resolve(auditPage(AUDIT_LOG_A, 'member_kicked')))
+    expect(screen.getByText('invite_created')).toBeInTheDocument()
+    expect(screen.queryByText('member_kicked')).not.toBeInTheDocument()
+  })
+
   it('keeps the complete render/style/GroupSettings suffix byte-identical', () => {
     const source = readFileSync(
       join(process.cwd(), 'app/(app)/groups/[id]/manage/page.tsx'),
@@ -497,5 +546,17 @@ describe('group profile edit submit operation', () => {
     expect(createHash('sha256').update(suffix).digest('hex')).toBe(
       'b8d3f7b5b6c9db6b5c615ddac884e27830e5e912f8292e7dfa2618fca50a5a00'
     )
+
+    const activityRenderStart = source.indexOf('  if (loading)\n')
+    const activityRenderEnd = source.indexOf(
+      '\n}\n\nexport default function GroupManagePage',
+      activityRenderStart
+    )
+    const activityRender = source.slice(activityRenderStart, activityRenderEnd + 3)
+    expect(createHash('sha256').update(activityRender).digest('hex')).toBe(
+      'd54895fac364d95432cfa85f22493f3a84a21e5539c8d5638a5576c9f73a0a95'
+    )
+    expect(source).not.toContain(".from('notifications')")
+    expect(source).toContain('/audit-log?limit=')
   })
 })

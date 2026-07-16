@@ -53,6 +53,11 @@ import {
   isGroupManageViewerCurrent,
   type GroupManageOwnerScope,
 } from './manage-viewer-scope'
+import {
+  GROUP_AUDIT_PAGE_LIMIT,
+  loadGroupAuditActivities,
+  type GroupAuditActivity,
+} from './activity-log-client'
 
 type GroupMember = {
   user_id: string
@@ -114,34 +119,103 @@ function assertGroupManageQueriesSucceeded(results: Array<{ error?: unknown }>):
 
 function ActivityLogSection({ groupId }: { groupId: string }) {
   const { language, t } = useLanguage()
-  const [activities, setActivities] = useState<
-    Array<{
-      id: string
-      type: string
-      title: string
-      message: string
-      created_at: string
-      actor_id?: string
-    }>
-  >([])
-  const [loading, setLoading] = useState(true)
+  const { accessToken, userId, viewerKey, sessionGeneration } = useAuthSession()
+  const paramsSourceLedgerRef = useRef(new GroupManageParamsSourceLedger())
+  const paramsSourceScope = paramsSourceLedgerRef.current.capture(groupId)
+  const resourceScopeRef = useRef({
+    paramsRevision: 0,
+    groupId: null as string | null,
+    resourceGeneration: 0,
+  })
+  resourceScopeRef.current = advanceGroupManageResourceScope(
+    resourceScopeRef.current,
+    paramsSourceScope.paramsRevision,
+    groupId
+  )
+  const scopedParamsRevision = resourceScopeRef.current.paramsRevision
+  const scopedGroupId = resourceScopeRef.current.groupId
+  const scopedResourceGeneration = resourceScopeRef.current.resourceGeneration
+  const ownerScope: GroupManageOwnerScope = useMemo(
+    () => ({
+      userId,
+      viewerKey,
+      sessionGeneration,
+      paramsRevision: scopedParamsRevision,
+      groupId: scopedGroupId,
+      resourceGeneration: scopedResourceGeneration,
+    }),
+    [
+      scopedGroupId,
+      scopedParamsRevision,
+      scopedResourceGeneration,
+      sessionGeneration,
+      userId,
+      viewerKey,
+    ]
+  )
+  const ownerKey = groupManageOwnerKey(ownerScope)
+  const [activities, setActivities] = useViewerSlotState<GroupAuditActivity[]>(ownerKey, [])
+  const [loading, setLoading] = useViewerSlotState(ownerKey, true)
+  const accessTokenRef = useRef(accessToken)
+  const ownerScopeRef = useRef(ownerScope)
+  accessTokenRef.current = accessToken
+  ownerScopeRef.current = ownerScope
+  const isCurrent = useCallback((expected: GroupManageOwnerScope) => {
+    return isGroupManageViewerCurrent(expected, ownerScopeRef.current, accessTokenRef.current)
+  }, [])
 
   useEffect(() => {
-    if (!groupId) return
+    const requestScope = ownerScope
+    const requestGroupId = canonicalGroupManageId(requestScope.groupId)
+    const requestToken = accessToken
+    const requestUserId = requestScope.userId
+    if (!requestGroupId || !requestToken || !requestUserId || !isCurrent(requestScope)) {
+      setActivities([])
+      setLoading(false)
+      return
+    }
+
+    let active = true
+    const controller = new AbortController()
+    const requestIsCurrent = () => active && isCurrent(requestScope)
     const load = async () => {
       setLoading(true)
-      const { data } = await supabase
-        .from('notifications')
-        .select('id, type, title, message, created_at, actor_id')
-        .eq('reference_id', groupId)
-        .eq('type', 'system')
-        .order('created_at', { ascending: false })
-        .limit(50)
-      setActivities(data || [])
-      setLoading(false)
+      setActivities([])
+      try {
+        const result = await loadGroupAuditActivities({
+          fetchPage: (cursor) =>
+            authedFetch<unknown>(
+              `/api/groups/${requestGroupId}/audit-log?limit=${GROUP_AUDIT_PAGE_LIMIT}${
+                cursor ? `&cursor=${encodeURIComponent(cursor)}` : ''
+              }`,
+              'GET',
+              requestToken,
+              undefined,
+              15_000,
+              {
+                expectedUserId: requestUserId,
+                expectedSessionGeneration: requestScope.sessionGeneration,
+                signal: controller.signal,
+              }
+            ),
+          isCurrent: requestIsCurrent,
+        })
+        if (result.stale || !requestIsCurrent()) return
+        setActivities(result.activities)
+      } catch (error) {
+        if (!requestIsCurrent()) return
+        logger.error('Failed to load group audit activities:', error)
+        setActivities([])
+      } finally {
+        if (requestIsCurrent()) setLoading(false)
+      }
     }
-    load()
-  }, [groupId])
+    void load()
+    return () => {
+      active = false
+      controller.abort()
+    }
+  }, [accessToken, isCurrent, ownerScope, setActivities, setLoading])
 
   if (loading)
     return (
