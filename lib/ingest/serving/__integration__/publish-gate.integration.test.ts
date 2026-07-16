@@ -84,6 +84,63 @@ describe('publishLeaderboardSnapshot — count-check gate', () => {
     expect(stats[0]).toMatchObject({ roi: 12.5, pnl: 1000, win_rate: 55, currency: 'USDT' })
   })
 
+  test('sparse native boards preserve the oldest retained metric freshness', async () => {
+    const src = makeSource({ expected_count: 1 })
+    await insertSourceRow(src)
+
+    const first = await publishLeaderboardSnapshot({
+      src,
+      timeframe: 30,
+      rows: makeRows(1, {
+        headlineRoi: 10,
+        headlinePnl: 100,
+        headlineWinRate: 50,
+        headlineMdd: 5,
+        headlineSharpe: 1.2,
+        headlineAum: 1000,
+        headlineExtras: { risk_label: 'seeded-profile-width' },
+      }),
+      rejects: [],
+      rawObjectId: null,
+    })
+    expect(first.published).toBe(true)
+
+    const readStats = async () =>
+      getRawPool().query(
+        `SELECT as_of::text, roi, pnl, win_rate, mdd, sharpe, aum, extras
+           FROM ${TEST_SCHEMA}.trader_stats st
+           JOIN ${TEST_SCHEMA}.traders t ON t.id = st.trader_id
+          WHERE t.exchange_trader_id = 't-1' AND st.timeframe = 30`
+      )
+    const before = await readStats()
+    expect(before.rows).toHaveLength(1)
+
+    const second = await publishLeaderboardSnapshot({
+      src,
+      timeframe: 30,
+      rows: makeRows(1, {
+        headlineRoi: 20,
+        headlinePnl: 200,
+        headlineWinRate: 60,
+      }),
+      rejects: [],
+      rawObjectId: null,
+    })
+    expect(second.published).toBe(true)
+
+    const after = await readStats()
+    expect(after.rows[0]).toMatchObject({
+      roi: 20,
+      pnl: 200,
+      win_rate: 60,
+      mdd: 5,
+      sharpe: 1.2,
+      aum: 1000,
+      extras: { risk_label: 'seeded-profile-width' },
+    })
+    expect(after.rows[0].as_of).toBe(before.rows[0].as_of)
+  })
+
   test('gate: deviation beyond tolerance records snapshot + rejects but publishes nothing', async () => {
     const src = makeSource({ expected_count: 100 })
     await insertSourceRow(src)
