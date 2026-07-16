@@ -229,7 +229,8 @@ describe('fetchBscTransactionMembershipEvidence', () => {
       membershipPolicy: { version: 'bsc_transaction_membership_v1' },
       anchor: {
         endpoint: TEST_ENDPOINT,
-        verifiedAnchorHash: expect.stringMatching(/^[0-9a-f]{64}$/),
+        verifiedAnchorHash: '85a2b4805b011417ca202dd853532591a0c92f721209bf7d001fad63d3992525',
+        verifiedAnchorHashPolicy: 'bsc_verified_anchor_semantics_v1',
         observedAt: FIXED_NOW,
         finalizedBlock: { number: '0x200', hash: FINALIZED_HASH },
       },

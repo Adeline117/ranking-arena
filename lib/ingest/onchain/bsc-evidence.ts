@@ -228,6 +228,7 @@ export interface BscTransactionMembershipEvidence {
     endpoint: BscEvidenceEndpointIdentity
     /** SHA-256 of the full, strictly reconstructed verified anchor semantics. */
     verifiedAnchorHash: string
+    verifiedAnchorHashPolicy: 'bsc_verified_anchor_semantics_v1'
     observedAt: string
     finalityPolicy: BscChainAnchorEvidence['finalityPolicy']
     finalizedBlock: BscBlockHeaderEvidence
@@ -290,7 +291,36 @@ function endpointConnectionHash(providerId: string, endpointId: string, rpcOrigi
 }
 
 function verifiedChainAnchorHash(anchor: BscVerifiedChainAnchor): string {
-  return createHash('sha256').update(JSON.stringify(anchor)).digest('hex')
+  const headerFields = (header: BscBlockHeaderEvidence): string[] => [
+    header.number,
+    header.hash,
+    header.parentHash,
+    header.timestamp,
+    header.stateRoot,
+    header.transactionsRoot,
+    header.receiptsRoot,
+  ]
+  const semanticFields = [
+    'bsc_verified_anchor_semantics_v1',
+    anchor.chain.namespace,
+    anchor.chain.reference,
+    anchor.finalityPolicy.version,
+    anchor.finalityPolicy.method,
+    anchor.finalityPolicy.blockTag,
+    anchor.finalityPolicy.headBlockTag,
+    anchor.finalityPolicy.fullTransactions,
+    anchor.finalityPolicy.maxFutureBlockSkewMs,
+    anchor.finalityPolicy.maxCurrentAnchorLagMs,
+    anchor.endpoint.providerId,
+    anchor.endpoint.endpointId,
+    anchor.endpoint.connectionHash,
+    anchor.chainId,
+    anchor.observedAt,
+    ...headerFields(anchor.genesisBlock),
+    ...headerFields(anchor.finalizedBlock),
+    ...headerFields(anchor.headBlock),
+  ]
+  return createHash('sha256').update(JSON.stringify(semanticFields)).digest('hex')
 }
 
 function providerEvidence(
@@ -1357,6 +1387,7 @@ export async function fetchBscTransactionMembershipEvidence(
     anchor: {
       endpoint: endpointCopy(anchor.endpoint),
       verifiedAnchorHash: verifiedChainAnchorHash(anchor),
+      verifiedAnchorHashPolicy: 'bsc_verified_anchor_semantics_v1',
       observedAt: anchor.observedAt,
       finalityPolicy: {
         version: 'bsc_standard_finalized_current_v1',
