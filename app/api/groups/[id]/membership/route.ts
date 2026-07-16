@@ -1,181 +1,350 @@
 import { NextResponse } from 'next/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { logger } from '@/lib/logger'
+import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { sendNotification } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
+import { hashInviteToken, verifyInviteToken } from '@/lib/groups/invite-tokens'
+import { logger } from '@/lib/logger'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
 
-/** Extract group id from URL path */
-function extractGroupId(url: string): string {
-  const pathParts = new URL(url).pathname.split('/')
-  const idx = pathParts.indexOf('groups')
-  return pathParts[idx + 1]
+const UuidSchema = z.string().uuid()
+const MembershipBodySchema = z
+  .object({
+    action: z.enum(['join', 'leave']),
+    invite_token: z.string().min(1).max(512).optional(),
+    answer_text: z.string().max(2000).optional(),
+  })
+  .strict()
+
+type AtomicMembershipResult = {
+  status: string
+  owner_id?: string
+  member_count?: number
+  role?: string
+  request_id?: string
+  required_score?: number
+}
+
+function readGroupId(url: string): string | null {
+  try {
+    const pathParts = new URL(url).pathname.split('/')
+    const groupsIndex = pathParts.indexOf('groups')
+    const parsed = UuidSchema.safeParse(pathParts[groupsIndex + 1])
+    return parsed.success ? parsed.data : null
+  } catch {
+    return null
+  }
+}
+
+function readAtomicResult(value: unknown): AtomicMembershipResult | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const result = value as Record<string, unknown>
+  if (typeof result.status !== 'string') return null
+
+  return {
+    status: result.status,
+    ...(typeof result.owner_id === 'string' ? { owner_id: result.owner_id } : {}),
+    ...(typeof result.member_count === 'number' ? { member_count: result.member_count } : {}),
+    ...(typeof result.role === 'string' ? { role: result.role } : {}),
+    ...(typeof result.request_id === 'string' ? { request_id: result.request_id } : {}),
+    ...(typeof result.required_score === 'number' ? { required_score: result.required_score } : {}),
+  }
+}
+
+function failedRpc(operation: string, error: unknown) {
+  logger.error(`Atomic group ${operation} failed:`, error)
+  return NextResponse.json({ error: 'Group membership operation failed' }, { status: 500 })
+}
+
+function commonFailureResponse(result: AtomicMembershipResult | null) {
+  if (!result) {
+    return NextResponse.json({ error: 'Group membership operation failed' }, { status: 500 })
+  }
+
+  switch (result.status) {
+    case 'invalid':
+      return NextResponse.json({ error: 'Invalid membership request' }, { status: 400 })
+    case 'invalid_invite':
+      return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 })
+    case 'invite_already_used':
+      return NextResponse.json(
+        { error: 'This invite has already been used by this account', code: 'INVITE_ALREADY_USED' },
+        { status: 409 }
+      )
+    case 'invalid_answer':
+      return NextResponse.json(
+        { error: 'Join answer must be at most 2000 characters' },
+        { status: 400 }
+      )
+    case 'account_inactive':
+      return NextResponse.json({ error: 'Account is not active' }, { status: 403 })
+    case 'not_found':
+      return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+    case 'dissolved':
+      return NextResponse.json({ error: 'This group has been dissolved' }, { status: 409 })
+    case 'banned':
+      return NextResponse.json(
+        { error: 'You are banned from this group', code: 'BANNED' },
+        { status: 403 }
+      )
+    case 'score_too_low':
+      return NextResponse.json(
+        {
+          error: `This group requires Arena Score of ${result.required_score ?? 0}+`,
+          code: 'SCORE_TOO_LOW',
+          required_score: result.required_score ?? 0,
+        },
+        { status: 403 }
+      )
+    case 'verified_only':
+      return NextResponse.json(
+        {
+          error: 'This group is restricted to verified traders only',
+          code: 'VERIFIED_ONLY',
+        },
+        { status: 403 }
+      )
+    case 'premium_required':
+      return NextResponse.json(
+        { error: 'Pro membership is required', code: 'PREMIUM_REQUIRED' },
+        { status: 403 }
+      )
+    case 'invite_required':
+      return NextResponse.json(
+        { error: 'An invite is required to join this group', code: 'INVITE_REQUIRED' },
+        { status: 403 }
+      )
+    case 'approval_required':
+      return NextResponse.json(
+        { error: 'This group requires approval', code: 'APPROVAL_REQUIRED' },
+        { status: 409 }
+      )
+    case 'owner_forbidden':
+      return NextResponse.json({ error: 'Owner cannot leave the group' }, { status: 403 })
+    default:
+      logger.error('Atomic group membership returned an unknown status', {
+        status: result.status,
+      })
+      return NextResponse.json({ error: 'Group membership operation failed' }, { status: 500 })
+  }
+}
+
+function notifyOwnerAfterJoin(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  result: AtomicMembershipResult,
+  actorId: string,
+  groupId: string
+) {
+  const owner = UuidSchema.safeParse(result.owner_id)
+  if (!owner.success) {
+    logger.error('Atomic group join omitted a valid owner ID', { owner_id: result.owner_id })
+    return
+  }
+  if (owner.data === actorId) return
+
+  // The membership transaction and audit evidence are already committed. This
+  // deduplicated notification is deliberately fire-and-forget afterward.
+  sendNotification(
+    admin,
+    {
+      user_id: owner.data,
+      type: 'group_update',
+      title: 'New member joined',
+      message: 'A new member has joined your group',
+      link: `/groups/${groupId}`,
+      actor_id: actorId,
+      reference_id: groupId,
+    },
+    'Group join notification'
+  )
+}
+
+function successfulJoinResponse(
+  admin: ReturnType<typeof getSupabaseAdmin>,
+  result: AtomicMembershipResult,
+  actorId: string,
+  groupId: string
+) {
+  if (result.status === 'joined') {
+    notifyOwnerAfterJoin(admin, result, actorId, groupId)
+    return NextResponse.json({
+      success: true,
+      action: 'joined',
+      ...(typeof result.member_count === 'number' ? { member_count: result.member_count } : {}),
+    })
+  }
+
+  if (result.status === 'already_member') {
+    return NextResponse.json({
+      success: true,
+      action: 'already_member',
+      ...(result.role ? { role: result.role } : {}),
+      ...(typeof result.member_count === 'number' ? { member_count: result.member_count } : {}),
+    })
+  }
+
+  return commonFailureResponse(result)
 }
 
 export const POST = withAuth(
-  async ({ user, supabase, request }) => {
+  async ({ user, request }) => {
     const guard = socialFeatureGuard()
     if (guard) return guard
 
-    const groupId = extractGroupId(request.url)
-    const sb = supabase as SupabaseClient
-
-    let body: Record<string, unknown>
-    try {
-      body = await request.json()
-    } catch {
-      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
-    }
-    const { action } = body as { action: 'join' | 'leave' }
-
-    if (!action || !['join', 'leave'].includes(action)) {
-      return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    const groupId = readGroupId(request.url)
+    if (!groupId) {
+      return NextResponse.json({ error: 'Invalid group ID' }, { status: 400 })
     }
 
-    // Verify group exists
-    const { data: group, error: groupErr } = await sb
-      .from('groups')
-      .select('id, created_by, is_premium_only, min_arena_score, is_verified_only, dissolved_at')
-      .eq('id', groupId)
-      .maybeSingle()
-
-    if (groupErr) {
-      logger.error('Group membership lookup failed:', groupErr)
-      return NextResponse.json({ error: 'Failed to load group' }, { status: 500 })
-    }
-    if (!group) {
-      return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+    const parsedBody = MembershipBodySchema.safeParse(await request.json().catch(() => null))
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: 'Invalid membership request' }, { status: 400 })
     }
 
-    // Dissolved groups are frozen — no join/leave allowed
-    if (group.dissolved_at) {
-      return NextResponse.json({ error: 'This group has been dissolved' }, { status: 403 })
+    const { action, answer_text: answerText, invite_token: inviteToken } = parsedBody.data
+    if (action === 'leave' && (answerText !== undefined || inviteToken !== undefined)) {
+      return NextResponse.json({ error: 'Leave does not accept join fields' }, { status: 400 })
     }
 
-    if (action === 'join') {
-      // Check if user is banned from this group
-      const { data: ban, error: banError } = await sb
-        .from('group_bans')
-        .select('user_id') // group_bans 无 id(复合主键)——旧 select('id') 400→封禁检查永远失效
-        .eq('group_id', groupId)
-        .eq('user_id', user.id)
-        .maybeSingle()
-      if (banError) {
-        logger.error('Group ban lookup failed:', banError)
-        return NextResponse.json({ error: 'Failed to verify group access' }, { status: 500 })
-      }
-      if (ban) {
-        return NextResponse.json(
-          { error: 'You are banned from this group', code: 'BANNED' },
-          { status: 403 }
-        )
-      }
-
-      // Check score gate and verified-only restrictions
-      if (group.min_arena_score > 0 || group.is_verified_only) {
-        const { data: profile, error: profileError } = await sb
-          .from('user_profiles')
-          .select('reputation_score, is_verified_trader')
-          .eq('id', user.id)
-          .maybeSingle()
-
-        if (profileError) {
-          logger.error('Group eligibility profile lookup failed:', profileError)
-          return NextResponse.json({ error: 'Failed to verify group eligibility' }, { status: 500 })
-        }
-
-        if (group.is_verified_only && !profile?.is_verified_trader) {
-          return NextResponse.json(
-            {
-              error: 'This group is restricted to verified traders only',
-              code: 'VERIFIED_ONLY',
-            },
-            { status: 403 }
-          )
-        }
-
-        if (group.min_arena_score > 0 && (profile?.reputation_score ?? 0) < group.min_arena_score) {
-          return NextResponse.json(
-            {
-              error: `This group requires Arena Score of ${group.min_arena_score}+`,
-              code: 'SCORE_TOO_LOW',
-              required_score: group.min_arena_score,
-            },
-            { status: 403 }
-          )
-        }
-      }
-
-      // Check if already a member
-      const { data: existing, error: existingError } = await sb
-        .from('group_members')
-        .select('user_id')
-        .eq('group_id', groupId)
-        .eq('user_id', user.id)
-        .maybeSingle()
-
-      if (existingError) {
-        logger.error('Existing group membership lookup failed:', existingError)
-        return NextResponse.json({ error: 'Failed to verify membership' }, { status: 500 })
-      }
-
-      if (existing) {
-        return NextResponse.json({ error: 'Already a member' }, { status: 409 })
-      }
-
-      const { error: insertErr } = await sb
-        .from('group_members')
-        .insert({ group_id: groupId, user_id: user.id, role: 'member' })
-
-      if (insertErr) {
-        logger.error('Join group error:', insertErr)
-        return NextResponse.json({ error: 'Failed to join' }, { status: 500 })
-      }
-
-      if (group.created_by && group.created_by !== user.id) {
-        sendNotification(
-          sb,
-          {
-            user_id: group.created_by,
-            type: 'group_update',
-            title: 'New member joined',
-            message: 'A new member has joined your group',
-            link: `/groups/${groupId}`,
-            actor_id: user.id,
-            reference_id: groupId,
-          },
-          'Group join notification'
-        )
-      }
-
-      return NextResponse.json({ success: true, action: 'joined' })
-    }
+    const admin = getSupabaseAdmin()
 
     if (action === 'leave') {
-      // Cannot leave if owner
-      if (group.created_by === user.id) {
-        return NextResponse.json({ error: 'Owner cannot leave the group' }, { status: 403 })
+      const { data, error } = await admin.rpc(
+        'mutate_group_membership_atomic' as never,
+        {
+          p_actor_id: user.id,
+          p_group_id: groupId,
+          p_action: 'leave',
+          p_pro_free_promo: PRO_FREE_PROMO,
+        } as never
+      )
+      if (error) return failedRpc('leave', error)
+
+      const result = readAtomicResult(data)
+      if (!result) {
+        logger.error('Atomic group leave returned an invalid result', { data })
+        return commonFailureResponse(null)
       }
-
-      const { data: deleted, error: deleteErr } = await sb
-        .from('group_members')
-        .delete()
-        .eq('group_id', groupId)
-        .eq('user_id', user.id)
-        .select('user_id')
-
-      if (deleteErr) {
-        logger.error('Leave group error:', deleteErr)
-        return NextResponse.json({ error: 'Failed to leave' }, { status: 500 })
+      if (result.status === 'left') {
+        return NextResponse.json({
+          success: true,
+          action: 'left',
+          ...(typeof result.member_count === 'number' ? { member_count: result.member_count } : {}),
+        })
       }
-
-      return NextResponse.json({
-        success: true,
-        action: deleted && deleted.length > 0 ? 'left' : 'not_member',
-      })
+      if (result.status === 'not_member') {
+        return NextResponse.json({ success: true, action: 'not_member' })
+      }
+      return commonFailureResponse(result)
     }
 
-    return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
+    if (inviteToken) {
+      const verified = verifyInviteToken(inviteToken)
+      if (!verified.valid || verified.groupId !== groupId) {
+        return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 })
+      }
+
+      const { data, error } = await admin.rpc(
+        'redeem_group_invite_atomic' as never,
+        {
+          p_actor_id: user.id,
+          p_group_id: groupId,
+          p_token_hash: hashInviteToken(inviteToken),
+          p_pro_free_promo: PRO_FREE_PROMO,
+        } as never
+      )
+      if (error) return failedRpc('invite redemption', error)
+
+      const result = readAtomicResult(data)
+      if (!result) {
+        logger.error('Atomic invite redemption returned an invalid result', { data })
+        return commonFailureResponse(null)
+      }
+      return successfulJoinResponse(admin, result, user.id, groupId)
+    }
+
+    const join = async () => {
+      const { data, error } = await admin.rpc(
+        'mutate_group_membership_atomic' as never,
+        {
+          p_actor_id: user.id,
+          p_group_id: groupId,
+          p_action: 'join',
+          p_pro_free_promo: PRO_FREE_PROMO,
+        } as never
+      )
+      return { result: readAtomicResult(data), error, data }
+    }
+
+    const firstJoin = await join()
+    if (firstJoin.error) return failedRpc('join', firstJoin.error)
+    if (!firstJoin.result) {
+      logger.error('Atomic group join returned an invalid result', { data: firstJoin.data })
+      return commonFailureResponse(null)
+    }
+    if (firstJoin.result.status !== 'approval_required') {
+      return successfulJoinResponse(admin, firstJoin.result, user.id, groupId)
+    }
+
+    const { data: requestData, error: requestError } = await admin.rpc(
+      'mutate_group_join_request_atomic' as never,
+      {
+        p_actor_id: user.id,
+        p_group_id: groupId,
+        p_action: 'request',
+        p_answer_text: answerText ?? null,
+        p_pro_free_promo: PRO_FREE_PROMO,
+      } as never
+    )
+    if (requestError) return failedRpc('join request', requestError)
+
+    const requestResult = readAtomicResult(requestData)
+    if (!requestResult) {
+      logger.error('Atomic join request returned an invalid result', { data: requestData })
+      return commonFailureResponse(null)
+    }
+
+    if (requestResult.status === 'requested' || requestResult.status === 'already_pending') {
+      const requestId = UuidSchema.safeParse(requestResult.request_id)
+      if (!requestId.success) {
+        logger.error('Atomic join request omitted a valid request ID', {
+          request_id: requestResult.request_id,
+        })
+        return commonFailureResponse(null)
+      }
+      return NextResponse.json(
+        {
+          success: true,
+          action: 'requested',
+          request_id: requestId.data,
+          ...(requestResult.status === 'already_pending' ? { already_pending: true } : {}),
+        },
+        { status: 202 }
+      )
+    }
+
+    // Visibility or review may change between the two committed RPCs. One
+    // bounded retry resolves open-group and already-approved races without a
+    // route-owned write or unbounded loop.
+    if (requestResult.status === 'open_group' || requestResult.status === 'already_approved') {
+      const retriedJoin = await join()
+      if (retriedJoin.error) return failedRpc('join retry', retriedJoin.error)
+      if (!retriedJoin.result) {
+        logger.error('Atomic group join retry returned an invalid result', {
+          data: retriedJoin.data,
+        })
+        return commonFailureResponse(null)
+      }
+      return successfulJoinResponse(admin, retriedJoin.result, user.id, groupId)
+    }
+
+    if (requestResult.status === 'already_member') {
+      return NextResponse.json({ success: true, action: 'already_member' })
+    }
+
+    return commonFailureResponse(requestResult)
   },
   { name: 'groups/membership', rateLimit: 'write' }
 )
