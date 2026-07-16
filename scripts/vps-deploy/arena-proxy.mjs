@@ -1,11 +1,10 @@
 import http from 'node:http'
+import proxyKeyAuth from './proxy-key-auth.cjs'
+
+const { loadProxyKeyConfig, verifyProxyKey } = proxyKeyAuth
 
 const PORT = 3456
-const PROXY_KEY = process.env.PROXY_KEY?.trim()
-
-if (!PROXY_KEY) {
-  throw new Error('PROXY_KEY is required; refusing to start an unauthenticated proxy')
-}
+const PROXY_KEYS = loadProxyKeyConfig().accepted
 
 // All exchange hosts that Arena connectors need to reach
 const ALLOWED_HOSTS = new Set([
@@ -93,7 +92,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   // Auth
-  if (req.headers['x-proxy-key'] !== PROXY_KEY) {
+  if (!verifyProxyKey(req.headers['x-proxy-key'], PROXY_KEYS)) {
     res.writeHead(401, { 'Content-Type': 'application/json' })
     res.end(JSON.stringify({ error: 'unauthorized' }))
     return

@@ -15,6 +15,7 @@ const runtimeCredentialFiles = new Set([
   'scripts/import/import_all_platforms.mjs',
   'scripts/vps-deploy/arena-proxy.mjs',
   'scripts/vps-deploy/cron-runner.js',
+  'scripts/vps-deploy/proxy-key-auth.cjs',
   'scripts/vps-deploy/scraper-cron.mjs',
   'scripts/vps-deploy/scraper-v16-parallel.js',
 ])
@@ -35,9 +36,13 @@ describe('repository proxy credential policy', () => {
     for (const file of runtimeCredentialFiles) {
       const source = readFileSync(file, 'utf8')
       const hasLiteralFallback =
-        /process\.env\.(?:VPS_)?PROXY_KEY\s*(?:\|\||\?\?)\s*['"`][^'"`]+/m.test(source)
+        /process\.env\.(?:VPS_)?PROXY_KEY(?:_CURRENT|_NEXT)?\s*(?:\|\||\?\?)\s*['"`][^'"`]+/m.test(
+          source
+        )
       const hasLiteralAssignment =
-        /(?:PROXY_KEY|SCRAPER_KEY|VPS_KEY|API_KEY)\s*[:=]\s*['"`][^'"`]{8,}/m.test(source)
+        /(?:PROXY_KEY(?:_CURRENT|_NEXT)?|SCRAPER_KEY|VPS_KEY|API_KEY)\s*[:=]\s*['"`][^'"`]{8,}/m.test(
+          source
+        )
 
       if (hasLiteralFallback || hasLiteralAssignment) violations.push(file)
     }
