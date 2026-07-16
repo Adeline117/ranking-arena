@@ -23,6 +23,22 @@ DO $preflight$
 DECLARE
   v_relation_name text;
   v_required_role text;
+  v_postgres_oid oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'postgres'
+  );
+  v_plpgsql_oid oid := (
+    SELECT language_row.oid
+    FROM pg_catalog.pg_language AS language_row
+    WHERE language_row.lanname = 'plpgsql'
+  );
+  v_deploy_state text;
+  v_helper_count integer;
+  v_internal_count integer;
+  v_internal_signature pg_catalog.regprocedure;
+  v_internal_digest text;
+  v_internal_comment text;
   v_block_serializer pg_catalog.regprocedure := pg_catalog.to_regprocedure(
     'public.serialize_post_audience_block_edge()'
   );
@@ -45,6 +61,12 @@ DECLARE
     'public.submit_content_report(uuid,text,uuid,text,text,text[])'
   );
   v_report_source text;
+  v_block_serializer_source text;
+  v_comment_validator_source text;
+  v_reaction_validator_source text;
+  v_lock_source text;
+  v_toggle_source text;
+  v_update_source text;
   v_post_report_case text;
   v_comment_report_case text;
   v_blocker_attnum smallint;
@@ -71,11 +93,24 @@ BEGIN
   ]::text[]
   LOOP
     IF pg_catalog.to_regclass(v_relation_name) IS NULL OR (
-      SELECT relation.relkind
+      SELECT relation.relkind = 'r'
+        AND relation.relpersistence = 'p'
+        AND NOT relation.relispartition
       FROM pg_catalog.pg_class AS relation
       WHERE relation.oid = pg_catalog.to_regclass(v_relation_name)
-    ) NOT IN ('r', 'p') THEN
-      RAISE EXCEPTION '% must be a table before comment authorization cutover',
+    ) IS NOT TRUE THEN
+      RAISE EXCEPTION
+        '% must be a permanent, non-partition ordinary table before comment authorization cutover',
+        v_relation_name;
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_rewrite AS rewrite_rule
+      WHERE rewrite_rule.ev_class = pg_catalog.to_regclass(v_relation_name)
+    ) THEN
+      RAISE EXCEPTION
+        '% must not have rewrite rules before comment authorization cutover',
         v_relation_name;
     END IF;
   END LOOP;
@@ -139,6 +174,67 @@ BEGIN
       'comment authorization requires 20260715091500, 20260715100000, 20260715224000, 20260715224200, and 20260716113800';
   END IF;
 
+  SELECT pg_catalog.count(*)::integer
+  INTO v_helper_count
+  FROM pg_catalog.unnest(ARRAY[
+    'public.guard_post_authorization_identity()',
+    'public.acquire_post_audience_block_edges(uuid,uuid[])',
+    'public.lock_post_interaction_block_edges(uuid,uuid,uuid)',
+    'public.serialize_comment_block_authorization()'
+  ]::text[]) AS expected(signature)
+  WHERE pg_catalog.to_regprocedure(expected.signature) IS NOT NULL;
+
+  SELECT pg_catalog.count(*)::integer
+  INTO v_internal_count
+  FROM pg_catalog.unnest(ARRAY[
+    'public.lock_actor_can_interact_with_post_locked_impl(uuid,uuid)',
+    'public.toggle_comment_reaction_locked_impl(uuid,uuid,uuid,text)',
+    'public.update_own_comment_locked_impl(uuid,uuid,uuid,text)'
+  ]::text[]) AS expected(signature)
+  WHERE pg_catalog.to_regprocedure(expected.signature) IS NOT NULL;
+
+  IF v_helper_count = 0 THEN
+    -- A failed transaction cannot leave these functions behind. Any same-name
+    -- internal residue is safe to replace only while none of this migration's
+    -- public helpers exists; the cutover block below drops it without CASCADE.
+    v_deploy_state := 'fresh';
+  ELSIF v_helper_count = 4 AND v_internal_count = 3 THEN
+    v_deploy_state := 'replay';
+
+    FOREACH v_internal_signature IN ARRAY ARRAY[
+      'public.lock_actor_can_interact_with_post_locked_impl(uuid,uuid)'::pg_catalog.regprocedure,
+      'public.toggle_comment_reaction_locked_impl(uuid,uuid,uuid,text)'::pg_catalog.regprocedure,
+      'public.update_own_comment_locked_impl(uuid,uuid,uuid,text)'::pg_catalog.regprocedure
+    ]
+    LOOP
+      SELECT
+        pg_catalog.md5(function_row.prosrc),
+        pg_catalog.obj_description(function_row.oid, 'pg_proc')
+      INTO STRICT v_internal_digest, v_internal_comment
+      FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid = v_internal_signature;
+
+      IF v_internal_comment IS DISTINCT FROM
+           'atomic-comment-block-authorization:v1:' || v_internal_digest
+      THEN
+        RAISE EXCEPTION
+          'sealed internal comment implementation has drifted: %',
+          v_internal_signature;
+      END IF;
+    END LOOP;
+  ELSE
+    RAISE EXCEPTION
+      'partial atomic comment authorization state: helpers %, internals %',
+      v_helper_count,
+      v_internal_count;
+  END IF;
+
+  PERFORM pg_catalog.set_config(
+    'app.atomic_comment_block_authorization_state',
+    v_deploy_state,
+    true
+  );
+
   -- 114500 changes the shared post helper from row-first to advisory-first.
   -- Refuse the cutover unless the private-report caller deployed immediately
   -- before it has already stopped holding target rows before entering that
@@ -147,8 +243,27 @@ BEGIN
   INTO STRICT v_report_source
   FROM pg_catalog.pg_proc AS function_row
   WHERE function_row.oid = v_report_function
+    AND function_row.prokind = 'f'
     AND function_row.prosecdef
-    AND function_row.provolatile = 'v';
+    AND function_row.provolatile = 'v'
+    AND function_row.proowner = v_postgres_oid
+    AND function_row.prolang = v_plpgsql_oid
+    AND function_row.prorettype = 'pg_catalog.jsonb'::pg_catalog.regtype
+    AND NOT function_row.proretset
+    AND function_row.proconfig =
+      ARRAY['search_path=pg_catalog, pg_temp']::text[];
+
+  IF pg_catalog.strpos(v_report_source, $marker$WHEN 'post' THEN$marker$) = 0
+     OR pg_catalog.strpos(v_report_source, $marker$WHEN 'comment' THEN$marker$) = 0
+     OR pg_catalog.strpos(v_report_source, $marker$WHEN 'user' THEN$marker$) = 0
+     OR pg_catalog.strpos(v_report_source, $marker$WHEN 'post' THEN$marker$)
+          >= pg_catalog.strpos(v_report_source, $marker$WHEN 'comment' THEN$marker$)
+     OR pg_catalog.strpos(v_report_source, $marker$WHEN 'comment' THEN$marker$)
+          >= pg_catalog.strpos(v_report_source, $marker$WHEN 'user' THEN$marker$)
+  THEN
+    RAISE EXCEPTION
+      '20260716113800 report target authorization cases have drifted';
+  END IF;
 
   v_post_report_case := pg_catalog.substr(
     v_report_source,
@@ -188,6 +303,20 @@ BEGIN
   WHERE attribute.attrelid = 'public.blocked_users'::pg_catalog.regclass
     AND attribute.attname = 'blocked_id';
 
+  SELECT function_row.prosrc
+  INTO STRICT v_block_serializer_source
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid = v_block_serializer
+    AND function_row.prokind = 'f'
+    AND function_row.prosecdef
+    AND function_row.provolatile = 'v'
+    AND function_row.proowner = v_postgres_oid
+    AND function_row.prolang = v_plpgsql_oid
+    AND function_row.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype
+    AND NOT function_row.proretset
+    AND function_row.proconfig =
+      ARRAY['search_path=pg_catalog, pg_temp']::text[];
+
   IF NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_trigger AS trigger_row
@@ -208,28 +337,28 @@ BEGIN
     FROM pg_catalog.pg_trigger AS trigger_row
     WHERE trigger_row.tgfoid = v_block_serializer
       AND NOT trigger_row.tgisinternal
-  ) <> 1 OR NOT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_proc AS function_row
-    WHERE function_row.oid = v_block_serializer
-      AND function_row.prosecdef
-      AND function_row.provolatile = 'v'
-      AND function_row.proconfig =
-        ARRAY['search_path=pg_catalog, pg_temp']::text[]
-      AND pg_catalog.strpos(
-        function_row.prosrc,
+  ) <> 1 OR pg_catalog.strpos(
+        v_block_serializer_source,
         $marker$TG_OP IN ('UPDATE', 'DELETE')$marker$
-      ) > 0
-      AND pg_catalog.strpos(
-        function_row.prosrc,
+      ) = 0
+      OR pg_catalog.strpos(
+        v_block_serializer_source,
         $marker$TG_OP IN ('INSERT', 'UPDATE')$marker$
-      ) > 0
-      AND pg_catalog.strpos(function_row.prosrc, 'ORDER BY affected_pair') > 0
-      AND pg_catalog.strpos(
-        function_row.prosrc,
+      ) = 0
+      OR pg_catalog.strpos(v_block_serializer_source, 'array_append') = 0
+      OR pg_catalog.strpos(v_block_serializer_source, 'unnest') = 0
+      OR pg_catalog.strpos(v_block_serializer_source, 'ORDER BY affected_pair') = 0
+      OR pg_catalog.strpos(v_block_serializer_source, 'pg_advisory_xact_lock') = 0
+      OR pg_catalog.strpos(
+        v_block_serializer_source,
         $marker$'post-audience:block:' || v_pair$marker$
-      ) > 0
-  ) THEN
+      ) = 0
+      OR pg_catalog.strpos(
+        v_block_serializer_source,
+        $marker$RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END$marker$
+      ) = 0
+      OR v_block_serializer_source ~* 'RETURN[[:space:]]+NEW[[:space:]]*;'
+  THEN
     RAISE EXCEPTION
       '20260715224200 block-edge serialization contract has drifted';
   END IF;
@@ -255,6 +384,20 @@ BEGIN
   WHERE attribute.attrelid = 'public.comments'::pg_catalog.regclass
     AND attribute.attname = 'deleted_at';
 
+  SELECT function_row.prosrc
+  INTO STRICT v_comment_validator_source
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid = v_comment_validator
+    AND function_row.prokind = 'f'
+    AND NOT function_row.prosecdef
+    AND function_row.provolatile = 'v'
+    AND function_row.proowner = v_postgres_oid
+    AND function_row.prolang = v_plpgsql_oid
+    AND function_row.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype
+    AND NOT function_row.proretset
+    AND function_row.proconfig =
+      ARRAY['search_path=public, pg_temp']::text[];
+
   IF NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_trigger AS trigger_row
@@ -278,15 +421,17 @@ BEGIN
     FROM pg_catalog.pg_trigger AS trigger_row
     WHERE trigger_row.tgfoid = v_comment_validator
       AND NOT trigger_row.tgisinternal
-  ) <> 1 OR NOT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_proc AS function_row
-    WHERE function_row.oid = v_comment_validator
-      AND pg_catalog.strpos(
-        function_row.prosrc,
+  ) <> 1 OR pg_catalog.strpos(
+        v_comment_validator_source,
         'comment post_id, parent_id, and user_id are immutable'
-      ) > 0
-  ) THEN
+      ) = 0
+      OR pg_catalog.strpos(v_comment_validator_source, 'FROM public.posts') = 0
+      OR pg_catalog.strpos(v_comment_validator_source, 'FOR NO KEY UPDATE') = 0
+      OR pg_catalog.strpos(v_comment_validator_source, 'FROM public.blocked_users') = 0
+      OR pg_catalog.strpos(v_comment_validator_source, 'NEW.parent_id') = 0
+      OR pg_catalog.strpos(v_comment_validator_source, 'NEW.user_id') = 0
+      OR pg_catalog.strpos(v_comment_validator_source, 'RETURN NEW') = 0
+  THEN
     RAISE EXCEPTION 'current comment integrity contract has drifted';
   END IF;
 
@@ -302,6 +447,20 @@ BEGIN
   FROM pg_catalog.pg_attribute AS attribute
   WHERE attribute.attrelid = 'public.comment_likes'::pg_catalog.regclass
     AND attribute.attname = 'reaction_type';
+
+  SELECT function_row.prosrc
+  INTO STRICT v_reaction_validator_source
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid = v_reaction_validator
+    AND function_row.prokind = 'f'
+    AND NOT function_row.prosecdef
+    AND function_row.provolatile = 'v'
+    AND function_row.proowner = v_postgres_oid
+    AND function_row.prolang = v_plpgsql_oid
+    AND function_row.prorettype = 'pg_catalog.trigger'::pg_catalog.regtype
+    AND NOT function_row.proretset
+    AND function_row.proconfig =
+      ARRAY['search_path=public, pg_temp']::text[];
 
   IF NOT EXISTS (
     SELECT 1
@@ -324,31 +483,109 @@ BEGIN
     FROM pg_catalog.pg_trigger AS trigger_row
     WHERE trigger_row.tgfoid = v_reaction_validator
       AND NOT trigger_row.tgisinternal
-  ) <> 1 OR NOT EXISTS (
-    SELECT 1
-    FROM pg_catalog.pg_proc AS function_row
-    WHERE function_row.oid = v_reaction_validator
-      AND pg_catalog.strpos(
-        function_row.prosrc,
+  ) <> 1 OR pg_catalog.strpos(
+        v_reaction_validator_source,
         'comment reaction identity is immutable'
-      ) > 0
-  ) THEN
+      ) = 0
+      OR pg_catalog.strpos(v_reaction_validator_source, 'FROM public.comments') = 0
+      OR pg_catalog.strpos(v_reaction_validator_source, 'FROM public.posts') = 0
+      OR pg_catalog.strpos(v_reaction_validator_source, 'FROM public.blocked_users') = 0
+      OR pg_catalog.strpos(v_reaction_validator_source, 'FOR SHARE') = 0
+      OR pg_catalog.strpos(v_reaction_validator_source, 'FOR NO KEY UPDATE') = 0
+      OR pg_catalog.strpos(v_reaction_validator_source, 'RETURN NEW') = 0
+  THEN
     RAISE EXCEPTION 'current comment reaction integrity contract has drifted';
   END IF;
+
+  SELECT function_row.prosrc INTO STRICT v_lock_source
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid = v_lock_function;
+  SELECT function_row.prosrc INTO STRICT v_toggle_source
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid = v_toggle_function;
+  SELECT function_row.prosrc INTO STRICT v_update_source
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid = v_update_function;
 
   IF NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_proc AS function_row
     WHERE function_row.oid = v_lock_function
+      AND function_row.prokind = 'f'
       AND function_row.prosecdef
-      AND function_row.prorettype = 'boolean'::pg_catalog.regtype
-  ) OR (
-    SELECT pg_catalog.count(*)
+      AND function_row.provolatile = 'v'
+      AND function_row.proowner = v_postgres_oid
+      AND function_row.prolang = v_plpgsql_oid
+      AND function_row.prorettype = 'pg_catalog.bool'::pg_catalog.regtype
+      AND NOT function_row.proretset
+  ) OR NOT EXISTS (
+    SELECT 1
     FROM pg_catalog.pg_proc AS function_row
-    WHERE function_row.oid IN (v_toggle_function, v_update_function)
+    WHERE function_row.oid = v_toggle_function
+      AND function_row.prokind = 'f'
       AND function_row.prosecdef
-  ) <> 2 THEN
+      AND function_row.provolatile = 'v'
+      AND function_row.proowner = v_postgres_oid
+      AND function_row.prolang = v_plpgsql_oid
+      AND function_row.prorettype = 'pg_catalog.jsonb'::pg_catalog.regtype
+      AND NOT function_row.proretset
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.oid = v_update_function
+      AND function_row.prokind = 'f'
+      AND function_row.prosecdef
+      AND function_row.provolatile = 'v'
+      AND function_row.proowner = v_postgres_oid
+      AND function_row.prolang = v_plpgsql_oid
+      AND function_row.prorettype = 'public.comments'::pg_catalog.regtype
+      AND function_row.proretset
+  ) THEN
     RAISE EXCEPTION 'canonical comment function metadata has drifted';
+  END IF;
+
+  IF v_deploy_state = 'fresh' AND (
+    NOT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid = v_lock_function
+        AND function_row.proconfig =
+          ARRAY['search_path=pg_catalog, pg_temp']::text[]
+    )
+    OR NOT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid = v_toggle_function
+        AND function_row.proconfig =
+          ARRAY['search_path=public, pg_temp']::text[]
+    )
+    OR NOT EXISTS (
+      SELECT 1 FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid = v_update_function
+        AND function_row.proconfig =
+          ARRAY['search_path=public, pg_temp']::text[]
+    )
+    OR pg_catalog.strpos(v_lock_source, 'FROM public.posts') = 0
+    OR pg_catalog.strpos(v_lock_source, 'FOR SHARE') = 0
+    OR pg_catalog.strpos(v_lock_source, 'pg_advisory_xact_lock') = 0
+    OR pg_catalog.strpos(v_lock_source, $marker$'post-audience:block:'$marker$) = 0
+    OR pg_catalog.strpos(v_lock_source, 'FOR SHARE') >
+         pg_catalog.strpos(v_lock_source, 'pg_advisory_xact_lock')
+    OR pg_catalog.strpos(v_toggle_source, 'FROM public.posts') = 0
+    OR pg_catalog.strpos(v_toggle_source, 'FROM public.comments') = 0
+    OR pg_catalog.strpos(v_toggle_source, 'FROM public.comment_likes') = 0
+    OR pg_catalog.strpos(v_toggle_source, 'FOR SHARE') = 0
+    OR pg_catalog.strpos(v_toggle_source, 'FOR UPDATE') = 0
+    OR pg_catalog.strpos(v_toggle_source, 'app.comment_reaction_path') = 0
+    OR pg_catalog.strpos(v_toggle_source, 'DELETE FROM public.comment_likes') = 0
+    OR pg_catalog.strpos(v_toggle_source, 'UPDATE public.comment_likes') = 0
+    OR pg_catalog.strpos(v_toggle_source, 'INSERT INTO public.comment_likes') = 0
+    OR pg_catalog.strpos(v_update_source, 'FROM public.posts') = 0
+    OR pg_catalog.strpos(v_update_source, 'FOR NO KEY UPDATE') = 0
+    OR pg_catalog.strpos(v_update_source, 'FROM public.comments') = 0
+    OR pg_catalog.strpos(v_update_source, 'FOR UPDATE') = 0
+    OR pg_catalog.strpos(v_update_source, 'app.comment_mutation_path') = 0
+    OR pg_catalog.strpos(v_update_source, 'UPDATE public.comments') = 0
+  ) THEN
+    RAISE EXCEPTION 'canonical comment function bodies have drifted';
   END IF;
 END
 $preflight$;
@@ -650,27 +887,52 @@ EXECUTE FUNCTION public.serialize_comment_block_authorization();
 -- advisory-first wrappers. The transaction keeps every lock acquired by the
 -- wrapper while the internal implementation takes its canonical row locks.
 DO $internalize_existing_implementations$
+DECLARE
+  v_state text := pg_catalog.current_setting(
+    'app.atomic_comment_block_authorization_state',
+    true
+  );
+  v_signature pg_catalog.regprocedure;
+  v_digest text;
 BEGIN
-  IF pg_catalog.to_regprocedure(
-       'public.lock_actor_can_interact_with_post_locked_impl(uuid,uuid)'
-     ) IS NULL THEN
+  IF v_state = 'fresh' THEN
+    -- Fresh cutover owns these private names. Drop stale same-name residue
+    -- without CASCADE so an unexpected dependent fails closed, then preserve
+    -- the three verified public implementations by rename.
+    DROP FUNCTION IF EXISTS
+      public.lock_actor_can_interact_with_post_locked_impl(uuid, uuid);
+    DROP FUNCTION IF EXISTS
+      public.toggle_comment_reaction_locked_impl(uuid, uuid, uuid, text);
+    DROP FUNCTION IF EXISTS
+      public.update_own_comment_locked_impl(uuid, uuid, uuid, text);
+
     ALTER FUNCTION public.lock_actor_can_interact_with_post(uuid, uuid)
       RENAME TO lock_actor_can_interact_with_post_locked_impl;
-  END IF;
-
-  IF pg_catalog.to_regprocedure(
-       'public.toggle_comment_reaction_locked_impl(uuid,uuid,uuid,text)'
-     ) IS NULL THEN
     ALTER FUNCTION public.toggle_comment_reaction(uuid, uuid, uuid, text)
       RENAME TO toggle_comment_reaction_locked_impl;
-  END IF;
-
-  IF pg_catalog.to_regprocedure(
-       'public.update_own_comment_locked_impl(uuid,uuid,uuid,text)'
-     ) IS NULL THEN
     ALTER FUNCTION public.update_own_comment(uuid, uuid, uuid, text)
       RENAME TO update_own_comment_locked_impl;
+  ELSIF v_state IS DISTINCT FROM 'replay' THEN
+    RAISE EXCEPTION 'atomic comment authorization deployment state is missing';
   END IF;
+
+  FOREACH v_signature IN ARRAY ARRAY[
+    'public.lock_actor_can_interact_with_post_locked_impl(uuid,uuid)'::pg_catalog.regprocedure,
+    'public.toggle_comment_reaction_locked_impl(uuid,uuid,uuid,text)'::pg_catalog.regprocedure,
+    'public.update_own_comment_locked_impl(uuid,uuid,uuid,text)'::pg_catalog.regprocedure
+  ]
+  LOOP
+    SELECT pg_catalog.md5(function_row.prosrc)
+    INTO STRICT v_digest
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.oid = v_signature;
+
+    EXECUTE pg_catalog.format(
+      'COMMENT ON FUNCTION %s IS %L',
+      v_signature,
+      'atomic-comment-block-authorization:v1:' || v_digest
+    );
+  END LOOP;
 END
 $internalize_existing_implementations$;
 
@@ -897,6 +1159,11 @@ GRANT EXECUTE ON FUNCTION public.update_own_comment(
 DO $postflight$
 DECLARE
   v_signature pg_catalog.regprocedure;
+  v_plpgsql_oid oid := (
+    SELECT language_row.oid
+    FROM pg_catalog.pg_language AS language_row
+    WHERE language_row.lanname = 'plpgsql'
+  );
   v_postgres_oid oid := (
     SELECT role_row.oid
     FROM pg_catalog.pg_roles AS role_row
@@ -947,7 +1214,36 @@ BEGIN
       WHERE function_row.oid = v_signature
         AND function_row.prokind = 'f'
         AND function_row.prosecdef
+        AND function_row.provolatile = 'v'
+        AND function_row.prolang = v_plpgsql_oid
         AND function_row.proowner = v_postgres_oid
+        AND function_row.proconfig = CASE
+          WHEN v_signature =
+            'public.lock_actor_can_interact_with_post_locked_impl(uuid,uuid)'::pg_catalog.regprocedure
+          THEN ARRAY['search_path=pg_catalog, pg_temp']::text[]
+          ELSE ARRAY['search_path=public, pg_temp']::text[]
+        END
+        AND pg_catalog.obj_description(function_row.oid, 'pg_proc') =
+          'atomic-comment-block-authorization:v1:'
+            || pg_catalog.md5(function_row.prosrc)
+        AND (
+          (
+            v_signature =
+              'public.lock_actor_can_interact_with_post_locked_impl(uuid,uuid)'::pg_catalog.regprocedure
+            AND function_row.prorettype = 'pg_catalog.bool'::pg_catalog.regtype
+            AND NOT function_row.proretset
+          ) OR (
+            v_signature =
+              'public.toggle_comment_reaction_locked_impl(uuid,uuid,uuid,text)'::pg_catalog.regprocedure
+            AND function_row.prorettype = 'pg_catalog.jsonb'::pg_catalog.regtype
+            AND NOT function_row.proretset
+          ) OR (
+            v_signature =
+              'public.update_own_comment_locked_impl(uuid,uuid,uuid,text)'::pg_catalog.regprocedure
+            AND function_row.prorettype = 'public.comments'::pg_catalog.regtype
+            AND function_row.proretset
+          )
+        )
     ) OR EXISTS (
       SELECT 1
       FROM pg_catalog.pg_proc AS function_row

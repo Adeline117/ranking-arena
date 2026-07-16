@@ -101,7 +101,7 @@ CREATE TABLE public.user_follows (follower_id uuid, following_id uuid);
 CREATE OR REPLACE FUNCTION public.validate_comment_integrity()
 RETURNS trigger
 LANGUAGE plpgsql
-SET search_path = pg_catalog, public
+SET search_path = public, pg_temp
 AS $function$
 DECLARE
   v_post_author_id uuid;
@@ -173,7 +173,7 @@ EXECUTE FUNCTION public.validate_comment_integrity();
 CREATE OR REPLACE FUNCTION public.validate_comment_reaction_integrity()
 RETURNS trigger
 LANGUAGE plpgsql
-SET search_path = pg_catalog, public
+SET search_path = public, pg_temp
 AS $function$
 DECLARE
   v_post_id uuid;
@@ -336,6 +336,11 @@ BEGIN
   PERFORM 1 FROM public.posts WHERE id = p_post_id FOR NO KEY UPDATE;
   PERFORM 1 FROM public.comments
   WHERE id = p_comment_id AND user_id = p_user_id FOR UPDATE;
+  PERFORM pg_catalog.set_config(
+    'app.comment_mutation_path',
+    'update_own_comment',
+    true
+  );
   RETURN QUERY
   UPDATE public.comments AS comment_row
   SET content = p_content
@@ -443,6 +448,47 @@ if [[ "$(psql_cmd -Atqc "SELECT count(*) FROM pg_catalog.pg_proc WHERE pronamesp
   exit 1
 fi
 
+# Core interaction relations must remain durable ordinary tables. Accepting an
+# unlogged or partitioned same-name relation would make trigger attachment and
+# TG_TABLE_NAME behavior diverge from the contract.
+psql_cmd -c "ALTER TABLE public.user_follows SET UNLOGGED" >/dev/null
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/unlogged-relation.log" 2>&1; then
+  echo "Migration unexpectedly accepted an unlogged interaction relation" >&2
+  exit 1
+fi
+grep -Fq 'must be a permanent, non-partition ordinary table' \
+  "$TMP_ROOT/unlogged-relation.log"
+psql_cmd -c "ALTER TABLE public.user_follows SET LOGGED" >/dev/null
+
+psql_cmd <<'SQL'
+ALTER TABLE public.user_follows RENAME TO user_follows_ordinary;
+CREATE TABLE public.user_follows (
+  follower_id uuid,
+  following_id uuid
+) PARTITION BY HASH (follower_id);
+SQL
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/partitioned-relation.log" 2>&1; then
+  echo "Migration unexpectedly accepted a partitioned interaction relation" >&2
+  exit 1
+fi
+grep -Fq 'must be a permanent, non-partition ordinary table' \
+  "$TMP_ROOT/partitioned-relation.log"
+psql_cmd <<'SQL'
+DROP TABLE public.user_follows;
+ALTER TABLE public.user_follows_ordinary RENAME TO user_follows;
+SQL
+
+psql_cmd <<'SQL'
+CREATE RULE user_follows_insert_instead AS
+ON INSERT TO public.user_follows DO INSTEAD NOTHING;
+SQL
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/rewrite-rule.log" 2>&1; then
+  echo "Migration unexpectedly accepted an interaction rewrite rule" >&2
+  exit 1
+fi
+grep -Fq 'must not have rewrite rules' "$TMP_ROOT/rewrite-rule.log"
+psql_cmd -c "DROP RULE user_follows_insert_instead ON public.user_follows" >/dev/null
+
 psql_cmd <<'SQL'
 CREATE OR REPLACE FUNCTION public.serialize_post_audience_block_edge()
 RETURNS trigger
@@ -520,6 +566,70 @@ BEFORE INSERT OR DELETE OR UPDATE OF blocker_id, blocked_id
 ON public.blocked_users
 FOR EACH ROW
 EXECUTE FUNCTION public.serialize_post_audience_block_edge();
+SQL
+
+# Matching trigger metadata is insufficient if the dependency body no longer
+# acquires OLD+NEW block edges.
+psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION public.serialize_post_audience_block_edge()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION public.serialize_post_audience_block_edge() OWNER TO postgres;
+SQL
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/noop-block-serializer.log" 2>&1; then
+  echo "Migration unexpectedly accepted a no-op block serializer" >&2
+  exit 1
+fi
+grep -Fq 'block-edge serialization contract has drifted' \
+  "$TMP_ROOT/noop-block-serializer.log"
+
+psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION public.serialize_post_audience_block_edge()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_pairs text[] := ARRAY[]::text[];
+  v_pair text;
+BEGIN
+  IF TG_OP IN ('UPDATE', 'DELETE') THEN
+    v_pairs := pg_catalog.array_append(
+      v_pairs,
+      LEAST(OLD.blocker_id::text, OLD.blocked_id::text)
+        || ':' || GREATEST(OLD.blocker_id::text, OLD.blocked_id::text)
+    );
+  END IF;
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    v_pairs := pg_catalog.array_append(
+      v_pairs,
+      LEAST(NEW.blocker_id::text, NEW.blocked_id::text)
+        || ':' || GREATEST(NEW.blocker_id::text, NEW.blocked_id::text)
+    );
+  END IF;
+  FOR v_pair IN
+    SELECT DISTINCT affected_pair
+    FROM pg_catalog.unnest(v_pairs) AS affected(affected_pair)
+    ORDER BY affected_pair
+  LOOP
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('post-audience:block:' || v_pair, 0)
+    );
+  END LOOP;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END
+$function$;
+ALTER FUNCTION public.serialize_post_audience_block_edge() OWNER TO postgres;
 SQL
 
 # A report caller that holds target rows before entering the shared helper is a
@@ -610,6 +720,20 @@ ALTER FUNCTION public.submit_content_report(uuid, text, uuid, text, text, text[]
   OWNER TO postgres;
 SQL
 
+# A same-signature private-name residue before first deployment must never make
+# the cutover skip preserving the verified mature public implementation.
+psql_cmd <<'SQL'
+CREATE FUNCTION public.lock_actor_can_interact_with_post_locked_impl(uuid, uuid)
+RETURNS boolean
+LANGUAGE sql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS 'SELECT true';
+ALTER FUNCTION public.lock_actor_can_interact_with_post_locked_impl(uuid, uuid)
+  OWNER TO postgres;
+SQL
+
 psql_cmd -f "$MIGRATION" >/dev/null
 
 psql_cmd <<'SQL'
@@ -627,6 +751,15 @@ BEGIN
        'service_role',
        'public.toggle_comment_reaction(uuid,uuid,uuid,text)',
        'EXECUTE'
+     ) OR NOT EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_proc AS function_row
+       WHERE function_row.oid =
+         'public.lock_actor_can_interact_with_post_locked_impl(uuid,uuid)'::regprocedure
+         AND pg_catalog.strpos(function_row.prosrc, 'pg_advisory_xact_lock') > 0
+         AND pg_catalog.obj_description(function_row.oid, 'pg_proc') =
+           'atomic-comment-block-authorization:v1:'
+             || pg_catalog.md5(function_row.prosrc)
      ) THEN
     RAISE EXCEPTION 'comment authorization ACL convergence failed';
   END IF;
@@ -893,5 +1026,33 @@ BEGIN
 END
 $replay_proof$;
 SQL
+
+# A replay must fail before DDL if one of the sealed mature implementations was
+# replaced after cutover; recreating wrappers around it would preserve the wrong
+# product behavior.
+psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION public.lock_actor_can_interact_with_post_locked_impl(
+  p_post_id uuid,
+  p_actor_id uuid
+)
+RETURNS boolean
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  RETURN true;
+END
+$function$;
+ALTER FUNCTION public.lock_actor_can_interact_with_post_locked_impl(uuid, uuid)
+  OWNER TO postgres;
+SQL
+if psql_cmd -f "$MIGRATION" >"$TMP_ROOT/sealed-implementation-drift.log" 2>&1; then
+  echo "Migration unexpectedly accepted sealed implementation drift" >&2
+  exit 1
+fi
+grep -Fq 'sealed internal comment implementation has drifted' \
+  "$TMP_ROOT/sealed-implementation-drift.log"
 
 echo "atomic comment block authorization PostgreSQL 17 proof passed"
