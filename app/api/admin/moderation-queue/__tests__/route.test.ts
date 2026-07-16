@@ -33,6 +33,7 @@ jest.mock('next/server', () => {
 type QueryResult = { data?: unknown; error?: { code?: string } | null }
 
 const mockModerateCommentWithRollout = jest.fn()
+const mockAutoEscalate = jest.fn()
 const mockFrom = jest.fn()
 const queues = new Map<string, Array<Record<string, unknown>>>()
 
@@ -123,7 +124,9 @@ jest.mock('@/lib/api/errors', () => ({
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: () => ({ info: jest.fn(), error: jest.fn() }),
 }))
-jest.mock('@/lib/services/moderation', () => ({ autoEscalate: jest.fn() }))
+jest.mock('@/lib/services/moderation', () => ({
+  autoEscalate: (...args: unknown[]) => mockAutoEscalate(...args),
+}))
 
 import { NextRequest } from 'next/server'
 import { CommentMutationRolloutError } from '@/lib/data/comment-mutation-rollout'
@@ -133,23 +136,24 @@ const COMMENT_ID = '4d2a4fa2-bf19-4ab4-a740-04ebaa9d636b'
 const REPORT_IDS = ['report-1', 'report-2']
 const BANNED_AT = '2026-07-15T22:00:00.000Z'
 
-function request(action: 'approve' | 'delete' | 'ban') {
+function request(action: 'approve' | 'delete' | 'warn' | 'ban') {
   return new NextRequest('http://localhost/api/admin/moderation-queue', {
     method: 'POST',
     body: {
       content_type: 'comment',
       content_id: COMMENT_ID,
       action,
-      ...(action === 'ban' ? { author_id: 'author-1' } : {}),
+      ...(action === 'warn' || action === 'ban' ? { author_id: 'author-1' } : {}),
     },
   })
 }
 
-function reportAck(status: 'dismissed' | 'actioned', actionTaken: string) {
+function reportAck(status: 'dismissed' | 'resolved', actionTaken: string) {
   return REPORT_IDS.map((id) => ({
     id,
     status,
     resolved_by: 'admin-1',
+    resolved_at: BANNED_AT,
     action_taken: actionTaken,
     content_type: 'comment',
     content_id: COMMENT_ID,
@@ -157,7 +161,7 @@ function reportAck(status: 'dismissed' | 'actioned', actionTaken: string) {
 }
 
 function arrangeAction(
-  status: 'dismissed' | 'actioned',
+  status: 'dismissed' | 'resolved',
   actionTaken: string,
   options: { transition?: QueryResult; ban?: boolean } = {}
 ) {
@@ -206,8 +210,8 @@ describe('POST /api/admin/moderation-queue comment moderation', () => {
       'dismissed',
       'approved_content',
     ],
-    ['delete', 'soft_delete', 'Deleted from moderation queue', 'actioned', 'content_deleted'],
-    ['ban', 'soft_delete', 'Author banned for reported comment', 'actioned', 'user_banned'],
+    ['delete', 'soft_delete', 'Deleted from moderation queue', 'resolved', 'content_deleted'],
+    ['ban', 'soft_delete', 'Author banned for reported comment', 'resolved', 'user_banned'],
   ] as const)(
     '%s uses the expected recoverable moderation action before resolving reports',
     async (action, moderationAction, reason, status, actionTaken) => {
@@ -228,9 +232,35 @@ describe('POST /api/admin/moderation-queue comment moderation', () => {
       expect(transition.eq).toHaveBeenCalledWith('status', 'pending')
       expect(transition.eq).toHaveBeenCalledWith('content_type', 'comment')
       expect(transition.eq).toHaveBeenCalledWith('content_id', COMMENT_ID)
+      expect(transition.update).toHaveBeenCalledWith(
+        expect.objectContaining({ status, resolved_at: BANNED_AT })
+      )
       expect(mockFrom).toHaveBeenCalledWith('admin_logs')
     }
   )
+
+  it('records a warning with the schema-valid resolved status', async () => {
+    const transition = arrangeAction('resolved', 'user_warned')
+    mockAutoEscalate.mockResolvedValue({ id: 'strike-1' })
+
+    const response = await POST(request('warn'))
+
+    expect(response.status).toBe(200)
+    expect(mockAutoEscalate).toHaveBeenCalledWith(
+      expect.objectContaining({ from: expect.any(Function) }),
+      'author-1',
+      `Reported comment (${COMMENT_ID})`,
+      'admin-1'
+    )
+    expect(transition.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        status: 'resolved',
+        resolved_by: 'admin-1',
+        resolved_at: BANNED_AT,
+        action_taken: 'user_warned',
+      })
+    )
+  })
 
   it('does not mark reports complete after comment moderation fails', async () => {
     queue('content_reports', { data: REPORT_IDS.map((id) => ({ id })) })
@@ -258,8 +288,8 @@ describe('POST /api/admin/moderation-queue comment moderation', () => {
   })
 
   it('fails closed when the report transition does not acknowledge every pending report', async () => {
-    arrangeAction('actioned', 'content_deleted', {
-      transition: { data: reportAck('actioned', 'content_deleted').slice(0, 1) },
+    arrangeAction('resolved', 'content_deleted', {
+      transition: { data: reportAck('resolved', 'content_deleted').slice(0, 1) },
     })
 
     const response = await POST(request('delete'))
