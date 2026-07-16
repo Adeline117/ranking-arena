@@ -916,7 +916,7 @@ export type Database = {
           like_count?: number
           parent_id?: string | null
           post_id: string
-          ranking_score?: never
+          ranking_score?: number
           updated_at?: string | null
           user_id: string
         }
@@ -933,7 +933,7 @@ export type Database = {
           like_count?: number
           parent_id?: string | null
           post_id?: string
-          ranking_score?: never
+          ranking_score?: number
           updated_at?: string | null
           user_id?: string
         }
