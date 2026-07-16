@@ -42,6 +42,12 @@ function session(userId: string, accessToken: string) {
   }
 }
 
+function jwt(userId: string): string {
+  const encode = (value: unknown) =>
+    btoa(JSON.stringify(value)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `${encode({ alg: 'none' })}.${encode({ sub: userId })}.signature`
+}
+
 describe('TokenRefreshCoordinator viewer binding', () => {
   beforeEach(async () => {
     await tokenRefreshCoordinator.settleInflightRefreshes()
@@ -107,6 +113,47 @@ describe('TokenRefreshCoordinator viewer binding', () => {
 
     expect(result.status).toBe(401)
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('derives JWT ownership before sending when no caller scope is supplied', async () => {
+    synchronizeViewerScope(true, 'user-b')
+
+    const result = await fetchWithTokenRefresh('/api/private', {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${jwt('user-a')}` },
+    })
+
+    expect(result.status).toBe(401)
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('requires an explicit principal scope for opaque credentials', async () => {
+    synchronizeViewerScope(true, 'user-a')
+
+    const result = await fetchWithTokenRefresh('/api/private', {
+      headers: { Authorization: 'Bearer opaque-token' },
+    })
+
+    expect(result.status).toBe(401)
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('cannot let an older switch completion overwrite a newer logout transition', async () => {
+    synchronizeViewerScope(true, 'user-a')
+    const switchResponse = deferred<{
+      data: { session: ReturnType<typeof session> }
+      error: null
+    }>()
+    mockRefreshSession.mockReturnValueOnce(switchResponse.promise)
+
+    const switching = tokenRefreshCoordinator.switchSession('refresh-user-b', 'user-b')
+    while (mockRefreshSession.mock.calls.length < 1) await Promise.resolve()
+    beginViewerTransition(null)
+    switchResponse.resolve({ data: { session: session('user-b', 'token-b') }, error: null })
+
+    await expect(switching).resolves.toBeNull()
+    expect(getViewerScope().viewerKey).toBe('pending')
+    expect(mockGetSession).not.toHaveBeenCalled()
   })
 
   it('checks scope after refresh resolution and before issuing the retry', async () => {

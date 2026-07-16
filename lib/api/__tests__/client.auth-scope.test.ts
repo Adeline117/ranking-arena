@@ -31,6 +31,12 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+function jwt(userId: string): string {
+  const encode = (value: unknown) =>
+    btoa(JSON.stringify(value)).replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_')
+  return `${encode({ alg: 'none' })}.${encode({ sub: userId })}.signature`
+}
+
 describe('authedFetch viewer-bound retry', () => {
   beforeEach(() => {
     __resetViewerScopeForTests()
@@ -115,6 +121,23 @@ describe('authedFetch viewer-bound retry', () => {
 
     expect(result).toMatchObject({ success: false, error: { code: 'AUTH_PENDING' } })
     expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('apiRequest never sends an A mutation header in the current B scope', async () => {
+    synchronizeViewerScope(true, 'user-b')
+
+    const result = await apiRequest('/api/private', {
+      method: 'POST',
+      body: { value: 'A-only' },
+      headers: { Authorization: `Bearer ${jwt('user-a')}` },
+    })
+
+    expect(result).toMatchObject({
+      success: false,
+      error: { code: 'STALE_AUTH_SCOPE' },
+    })
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(mockForceRefresh).not.toHaveBeenCalled()
   })
 
   it('apiRequest rechecks viewer scope after retry backoff before sending', async () => {

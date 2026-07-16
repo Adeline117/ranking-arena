@@ -18,13 +18,14 @@
 import { logger } from '@/lib/logger'
 import {
   beginViewerTransition,
-  finishViewerTransition,
+  commitViewerTransition,
   getViewerScope,
+  isViewerTransitionCurrent,
   isViewerScopeCurrent,
-  synchronizeViewerScope,
   type ViewerScope,
 } from '@/lib/auth/viewer-scope'
 import type { Session } from '@supabase/supabase-js'
+import { bearerToken, jwtSubject } from '@/lib/auth/token-subject'
 
 type LazySupabaseClient = Awaited<typeof import('@/lib/supabase/client')>['supabase']
 let _supabase: LazySupabaseClient | null = null
@@ -113,8 +114,8 @@ class TokenRefreshCoordinator {
     return this._transitionSetter?.(expectedUserId) ?? beginViewerTransition(expectedUserId)
   }
 
-  completeIdentityTransition(generation: number): void {
-    finishViewerTransition(generation)
+  completeIdentityTransition(generation: number, userId: string | null): boolean {
+    return commitViewerTransition(generation, userId) !== null
   }
 
   async settleInflightRefreshes(): Promise<void> {
@@ -234,7 +235,7 @@ class TokenRefreshCoordinator {
       const { data, error } = await sb.auth.refreshSession({ refresh_token: refreshToken })
       if (error || !data.session || data.session.user.id !== expectedUserId) return null
 
-      synchronizeViewerScope(true, expectedUserId)
+      if (!commitViewerTransition(transitionGeneration, expectedUserId)) return null
       updateAuthState(data.session)
       switchedSession = data.session
       return switchedSession
@@ -242,22 +243,20 @@ class TokenRefreshCoordinator {
       logger.warn('[TokenRefresh] Account switch failed:', error)
       return null
     } finally {
-      finishViewerTransition(transitionGeneration)
-      if (!switchedSession) {
+      if (!switchedSession && isViewerTransitionCurrent(transitionGeneration)) {
         // Never leave consumers permanently in `pending` after a failed swap.
         // Supabase normally retains the prior session on an invalid target
         // refresh token; re-read it and publish whichever principal remains.
         try {
           const sb = await getSupabase()
           const { data } = await sb.auth.getSession()
-          if (data.session) {
-            synchronizeViewerScope(true, data.session.user.id)
+          if (data.session && commitViewerTransition(transitionGeneration, data.session.user.id)) {
             updateAuthState(data.session)
-          } else {
+          } else if (!data.session && commitViewerTransition(transitionGeneration, null)) {
             clearAuthState()
           }
         } catch {
-          clearAuthState()
+          if (commitViewerTransition(transitionGeneration, null)) clearAuthState()
         }
       }
     }
@@ -303,14 +302,32 @@ export const tokenRefreshCoordinator = new TokenRefreshCoordinator()
 export async function fetchWithTokenRefresh(
   input: RequestInfo | URL,
   init?: RequestInit,
-  scope: RefreshScope = {
-    expectedUserId: getViewerScope().userId,
-    sessionGeneration: getViewerScope().sessionGeneration,
-  }
+  scope?: RefreshScope
 ): Promise<Response> {
-  const headers = new Headers(init?.headers)
-  const hadAuth = headers.has('Authorization')
-  const capturedScope = viewerScopeFromRefreshScope(scope)
+  const inputHeaders =
+    typeof Request !== 'undefined' && input instanceof Request ? input.headers : undefined
+  const headers = new Headers(init?.headers ?? inputHeaders)
+  const authorizationToken = bearerToken(headers.get('Authorization'))
+  const hadAuth = authorizationToken !== null
+  const tokenUserId = jwtSubject(authorizationToken)
+  const current = getViewerScope()
+
+  // JWT credentials are self-identifying and must agree with any explicit
+  // caller scope. Opaque credentials cannot be attributed safely, so callers
+  // must bind them to an explicit principal + generation.
+  if (
+    hadAuth &&
+    ((!scope && !tokenUserId) ||
+      (scope && (!scope.expectedUserId || (tokenUserId && tokenUserId !== scope.expectedUserId))))
+  ) {
+    return staleAuthResponse()
+  }
+
+  const refreshScope: RefreshScope = scope ?? {
+    expectedUserId: tokenUserId,
+    sessionGeneration: current.sessionGeneration,
+  }
+  const capturedScope = viewerScopeFromRefreshScope(refreshScope)
 
   // Never send credentials captured for an identity that is already stale.
   if (hadAuth && !isViewerScopeCurrent(capturedScope)) return staleAuthResponse()
@@ -331,7 +348,7 @@ export async function fetchWithTokenRefresh(
   }
 
   // Try to refresh the token
-  const newToken = await tokenRefreshCoordinator.forceRefresh(scope)
+  const newToken = await tokenRefreshCoordinator.forceRefresh(refreshScope)
   if (!newToken) {
     // Refresh failed — return the original 401 response
     return response
