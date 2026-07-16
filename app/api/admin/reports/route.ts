@@ -6,6 +6,7 @@ import { createLogger } from '@/lib/utils/logger'
 import { parseReportEvidenceRef, signReportEvidenceRefs } from '@/lib/reports/evidence'
 
 const _logger = createLogger('api:admin-reports')
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
 export const dynamic = 'force-dynamic'
 
@@ -92,20 +93,39 @@ export async function POST(req: NextRequest) {
       }
       const { reportId, status, action_taken } = reqBody
 
-      if (!reportId || !status || !['reviewed', 'actioned', 'dismissed'].includes(status)) {
+      if (
+        !reportId ||
+        !UUID_PATTERN.test(reportId) ||
+        !status ||
+        !['resolved', 'dismissed'].includes(status) ||
+        (action_taken !== undefined && typeof action_taken !== 'string')
+      ) {
         throw ApiError.validation('Invalid parameters')
       }
 
-      const { error } = await supabase
+      const resolvedAt = new Date().toISOString()
+      const { data, error } = await supabase
         .from('content_reports')
         .update({
           status,
           resolved_by: admin.id,
+          resolved_at: resolvedAt,
           action_taken: action_taken || null,
         })
         .eq('id', reportId)
+        .eq('status', 'pending')
+        .select('id, status, resolved_by, resolved_at, action_taken')
+        .maybeSingle()
 
-      if (error) {
+      if (
+        error ||
+        !data ||
+        data.id !== reportId ||
+        data.status !== status ||
+        data.resolved_by !== admin.id ||
+        data.resolved_at !== resolvedAt ||
+        data.action_taken !== (action_taken || null)
+      ) {
         throw ApiError.database('Database operation failed')
       }
 

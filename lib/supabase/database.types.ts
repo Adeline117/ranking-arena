@@ -9068,6 +9068,28 @@ export type Database = {
           post_id: string
         }[]
       }
+      moderate_report_queue_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_content_id: string
+          p_content_type: string
+        }
+        Returns: {
+          action_taken: string | null
+          applied: boolean
+          author_id: string | null
+          content_affected_count: number
+          content_soft_deleted: boolean | null
+          report_count: number
+          report_status: string | null
+          result_action: string
+          result_content_id: string
+          result_content_type: string
+          strike_id: string | null
+          strike_type: string | null
+        }[]
+      }
       project_stats: {
         Args: never
         Returns: {

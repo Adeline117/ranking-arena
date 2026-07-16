@@ -30,51 +30,9 @@ jest.mock('next/server', () => {
   return { NextRequest: MockNextRequest, NextResponse: MockNextResponse }
 })
 
-type QueryResult = { data?: unknown; error?: { code?: string } | null }
-
-const mockModerateCommentWithRollout = jest.fn()
-const mockAutoEscalate = jest.fn()
-const mockFrom = jest.fn()
-const queues = new Map<string, Array<Record<string, unknown>>>()
-
-function query(result: QueryResult = {}) {
-  const resolved = {
-    data: Object.prototype.hasOwnProperty.call(result, 'data') ? result.data : null,
-    error: result.error ?? null,
-  }
-  const promise = Promise.resolve(resolved)
-  const chain: Record<string, unknown> = {}
-  for (const method of ['select', 'eq', 'in', 'update', 'insert']) {
-    chain[method] = jest.fn(() => chain)
-  }
-  chain.maybeSingle = jest.fn(() => promise)
-  chain.then = promise.then.bind(promise)
-  return chain
-}
-
-function queue(table: string, result: QueryResult = {}) {
-  const builder = query(result)
-  const tableQueue = queues.get(table) ?? []
-  tableQueue.push(builder)
-  queues.set(table, tableQueue)
-  return builder
-}
-
-jest.mock('@/lib/data/comment-mutation-rollout', () => {
-  class MockCommentMutationRolloutError extends Error {
-    constructor(
-      public readonly kind: string,
-      public readonly databaseCode?: string,
-      public readonly stage?: string
-    ) {
-      super(`Comment mutation failed: ${kind}`)
-      this.name = 'CommentMutationRolloutError'
-    }
-  }
-  return {
-    CommentMutationRolloutError: MockCommentMutationRolloutError,
-    moderateCommentWithRollout: (...args: unknown[]) => mockModerateCommentWithRollout(...args),
-  }
+const mockRpc = jest.fn()
+const mockFrom = jest.fn(() => {
+  throw new Error('POST moderation must not use direct table writes')
 })
 
 jest.mock('@/lib/api/with-admin-auth', () => ({
@@ -82,8 +40,11 @@ jest.mock('@/lib/api/with-admin-auth', () => ({
     const { NextResponse } = require('next/server')
     try {
       return await handler({
-        admin: { id: 'admin-1', email: 'admin@example.com' },
-        supabase: { from: mockFrom },
+        admin: {
+          id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+          email: 'admin@example.com',
+        },
+        supabase: { rpc: mockRpc, from: mockFrom },
         request,
       })
     } catch (error) {
@@ -105,12 +66,16 @@ jest.mock('@/lib/api/response', () => ({
 jest.mock('@/lib/api/errors', () => ({
   ApiError: class MockApiError extends Error {
     statusCode: number
-    constructor(message: string, statusCode: number) {
+    constructor(message: string, options: number | { code?: string } = 500) {
       super(message)
-      this.statusCode = statusCode
+      this.statusCode =
+        typeof options === 'number' ? options : options.code === 'DUPLICATE_ACTION' ? 409 : 500
     }
     static validation(message: string) {
       return new this(message, 400)
+    }
+    static forbidden(message: string) {
+      return new this(message, 403)
     }
     static notFound(message: string) {
       return new this(message, 404)
@@ -124,186 +89,256 @@ jest.mock('@/lib/api/errors', () => ({
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: () => ({ info: jest.fn(), error: jest.fn() }),
 }))
-jest.mock('@/lib/services/moderation', () => ({
-  autoEscalate: (...args: unknown[]) => mockAutoEscalate(...args),
-}))
 
 import { NextRequest } from 'next/server'
-import { CommentMutationRolloutError } from '@/lib/data/comment-mutation-rollout'
 import { POST } from '../route'
 
-const COMMENT_ID = '4d2a4fa2-bf19-4ab4-a740-04ebaa9d636b'
-const REPORT_IDS = ['report-1', 'report-2']
-const BANNED_AT = '2026-07-15T22:00:00.000Z'
+const CONTENT_ID = '4d2a4fa2-bf19-4ab4-a740-04ebaa9d636b'
+const AUTHOR_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const STRIKE_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 
-function request(action: 'approve' | 'delete' | 'warn' | 'ban') {
+type QueueAction = 'approve' | 'delete' | 'warn' | 'ban'
+
+function request(action: QueueAction, contentId = CONTENT_ID) {
   return new NextRequest('http://localhost/api/admin/moderation-queue', {
     method: 'POST',
     body: {
       content_type: 'comment',
-      content_id: COMMENT_ID,
+      content_id: contentId,
       action,
-      ...(action === 'warn' || action === 'ban' ? { author_id: 'author-1' } : {}),
+      // A caller-supplied author is deliberately ignored. The atomic RPC binds
+      // the sanction target to the locked post/comment author.
+      author_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
     },
   })
 }
 
-function reportAck(status: 'dismissed' | 'resolved', actionTaken: string) {
-  return REPORT_IDS.map((id) => ({
-    id,
-    status,
-    resolved_by: 'admin-1',
-    resolved_at: BANNED_AT,
+function result(action: QueueAction, overrides: Record<string, unknown> = {}) {
+  const reportStatus = action === 'approve' ? 'dismissed' : 'resolved'
+  const actionTaken = {
+    approve: 'approved_content',
+    delete: 'content_deleted',
+    warn: 'user_warned',
+    ban: 'user_banned',
+  }[action]
+  return {
     action_taken: actionTaken,
-    content_type: 'comment',
-    content_id: COMMENT_ID,
-  }))
-}
-
-function arrangeAction(
-  status: 'dismissed' | 'resolved',
-  actionTaken: string,
-  options: { transition?: QueryResult; ban?: boolean } = {}
-) {
-  queue('content_reports', { data: REPORT_IDS.map((id) => ({ id })) })
-  if (options.ban) {
-    queue('user_profiles', {
-      data: {
-        id: 'author-1',
-        banned_at: BANNED_AT,
-        banned_reason: 'Banned for reported comment',
-        banned_by: 'admin-1',
-      },
-    })
+    applied: true,
+    author_id: AUTHOR_ID,
+    content_affected_count: action === 'delete' || action === 'ban' ? 2 : 0,
+    content_soft_deleted: action === 'delete' || action === 'ban',
+    report_count: 2,
+    report_status: reportStatus,
+    result_action: action,
+    result_content_id: CONTENT_ID,
+    result_content_type: 'comment',
+    strike_id: action === 'warn' ? STRIKE_ID : null,
+    strike_type: action === 'warn' ? 'warning' : null,
+    ...overrides,
   }
-  const transition = queue(
-    'content_reports',
-    options.transition ?? { data: reportAck(status, actionTaken) }
-  )
-  queue('admin_logs', { data: null })
-  return transition
 }
 
-describe('POST /api/admin/moderation-queue comment moderation', () => {
+describe('POST /api/admin/moderation-queue atomic moderation', () => {
   beforeEach(() => {
-    jest.restoreAllMocks()
     jest.clearAllMocks()
-    queues.clear()
-    jest.spyOn(Date.prototype, 'toISOString').mockReturnValue(BANNED_AT)
-    mockFrom.mockImplementation((table: string) => {
-      const builder = queues.get(table)?.shift()
-      if (!builder) throw new Error(`Unexpected query for ${table}`)
-      return builder
+  })
+
+  it.each(['approve', 'delete', 'warn', 'ban'] as const)(
+    '%s delegates all effects to one service-only RPC and accepts a strict acknowledgement',
+    async (action) => {
+      mockRpc.mockResolvedValue({ data: [result(action)], error: null })
+
+      const response = await POST(request(action))
+      const body = await response.json()
+
+      expect(response.status).toBe(200)
+      expect(mockRpc).toHaveBeenCalledWith('moderate_report_queue_atomic', {
+        p_actor_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+        p_content_type: 'comment',
+        p_content_id: CONTENT_ID,
+        p_action: action,
+      })
+      expect(mockFrom).not.toHaveBeenCalled()
+      expect(body.data.result).toMatchObject({
+        applied: true,
+        report_status: action === 'approve' ? 'dismissed' : 'resolved',
+      })
+    }
+  )
+
+  it('approval never restores a legacy auto-hidden comment', async () => {
+    mockRpc.mockResolvedValue({
+      data: [result('approve', { content_soft_deleted: true })],
+      error: null,
     })
-    mockModerateCommentWithRollout.mockResolvedValue({
-      post_id: 'post-1',
-      affected_count: 2,
-      comment_count: 3,
-    })
+
+    const response = await POST(request('approve'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.data.result.content_soft_deleted).toBe(true)
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
   it.each([
     [
-      'approve',
-      'restore_auto_hidden',
-      'Approved in moderation queue',
-      'dismissed',
-      'approved_content',
+      'an already soft-deleted row',
+      {
+        action_taken: 'content_already_absent',
+        author_id: AUTHOR_ID,
+        content_affected_count: 0,
+        content_soft_deleted: true,
+      },
     ],
-    ['delete', 'soft_delete', 'Deleted from moderation queue', 'resolved', 'content_deleted'],
-    ['ban', 'soft_delete', 'Author banned for reported comment', 'resolved', 'user_banned'],
-  ] as const)(
-    '%s uses the expected recoverable moderation action before resolving reports',
-    async (action, moderationAction, reason, status, actionTaken) => {
-      const transition = arrangeAction(status, actionTaken, { ban: action === 'ban' })
+    [
+      'a physically missing row',
+      {
+        action_taken: 'content_already_absent',
+        author_id: null,
+        content_affected_count: 0,
+        content_soft_deleted: null,
+      },
+    ],
+  ])('accepts the exact delete no-op metadata for %s', async (_label, override) => {
+    mockRpc.mockResolvedValue({ data: [result('delete', override)], error: null })
+
+    const response = await POST(request('delete'))
+
+    expect(response.status).toBe(200)
+  })
+
+  it.each(['approve', 'delete', 'warn', 'ban'] as const)(
+    'accepts only canonical latest-batch evidence for an idempotent %s replay',
+    async (action) => {
+      mockRpc.mockResolvedValue({
+        data: [
+          result(action, {
+            applied: false,
+            content_affected_count: 0,
+            strike_id: null,
+            strike_type: null,
+          }),
+        ],
+        error: null,
+      })
 
       const response = await POST(request(action))
+      const body = await response.json()
 
       expect(response.status).toBe(200)
-      expect(mockModerateCommentWithRollout).toHaveBeenCalledWith(
-        expect.objectContaining({ from: expect.any(Function) }),
-        {
-          commentId: COMMENT_ID,
-          actorId: 'admin-1',
-          action: moderationAction,
-          reason,
-        }
-      )
-      expect(transition.eq).toHaveBeenCalledWith('status', 'pending')
-      expect(transition.eq).toHaveBeenCalledWith('content_type', 'comment')
-      expect(transition.eq).toHaveBeenCalledWith('content_id', COMMENT_ID)
-      expect(transition.update).toHaveBeenCalledWith(
-        expect.objectContaining({ status, resolved_at: BANNED_AT })
-      )
-      expect(mockFrom).toHaveBeenCalledWith('admin_logs')
+      expect(body.data.result).toMatchObject({
+        applied: false,
+        report_count: 2,
+        report_status: action === 'approve' ? 'dismissed' : 'resolved',
+      })
+      expect(body.data.message).toContain('already committed')
     }
   )
 
-  it('records a warning with the schema-valid resolved status', async () => {
-    const transition = arrangeAction('resolved', 'user_warned')
-    mockAutoEscalate.mockResolvedValue({ id: 'strike-1' })
+  it('canonicalizes an uppercase UUID before checking the database acknowledgement', async () => {
+    mockRpc.mockResolvedValue({ data: [result('approve')], error: null })
+
+    const response = await POST(request('approve', CONTENT_ID.toUpperCase()))
+
+    expect(response.status).toBe(200)
+    expect(mockRpc).toHaveBeenCalledWith('moderate_report_queue_atomic', {
+      p_actor_id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+      p_content_type: 'comment',
+      p_content_id: CONTENT_ID,
+      p_action: 'approve',
+    })
+  })
+
+  it.each([
+    ['wrong status', 'warn', { report_status: 'actioned' }],
+    ['missing strike evidence', 'warn', { strike_id: null }],
+    ['negative report count', 'warn', { report_count: -1 }],
+    ['warn without bound author', 'warn', { author_id: null }],
+    ['warn with content mutation', 'warn', { content_affected_count: 1 }],
+    [
+      'delete claims mutation without affected rows',
+      'delete',
+      { action_taken: 'content_deleted', content_affected_count: 0 },
+    ],
+    [
+      'delete no-op claims affected rows',
+      'delete',
+      {
+        action_taken: 'content_already_absent',
+        content_affected_count: 1,
+        content_soft_deleted: true,
+      },
+    ],
+    ['unexpected field', 'warn', { unexpected: true }],
+  ] as const)(
+    'fails closed on a malformed RPC acknowledgement: %s',
+    async (_label, action, override) => {
+      mockRpc.mockResolvedValue({ data: [result(action, override)], error: null })
+
+      const response = await POST(request(action))
+
+      expect(response.status).toBe(500)
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each([
+    ['missing replay evidence', { report_count: 0 }],
+    ['missing canonical status', { report_status: null }],
+    ['missing canonical effect', { action_taken: null }],
+    ['wrong latest action', { action_taken: 'user_banned' }],
+    ['repeated strike claim', { strike_id: STRIKE_ID, strike_type: 'warning' }],
+  ])('rejects a malformed idempotent replay acknowledgement: %s', async (_label, override) => {
+    mockRpc.mockResolvedValue({
+      data: [
+        result('warn', {
+          applied: false,
+          content_affected_count: 0,
+          strike_id: null,
+          strike_type: null,
+          ...override,
+        }),
+      ],
+      error: null,
+    })
 
     const response = await POST(request('warn'))
 
-    expect(response.status).toBe(200)
-    expect(mockAutoEscalate).toHaveBeenCalledWith(
-      expect.objectContaining({ from: expect.any(Function) }),
-      'author-1',
-      `Reported comment (${COMMENT_ID})`,
-      'admin-1'
-    )
-    expect(transition.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        status: 'resolved',
-        resolved_by: 'admin-1',
-        resolved_at: BANNED_AT,
-        action_taken: 'user_warned',
-      })
-    )
+    expect(response.status).toBe(500)
   })
 
-  it('does not mark reports complete after comment moderation fails', async () => {
-    queue('content_reports', { data: REPORT_IDS.map((id) => ({ id })) })
-    mockModerateCommentWithRollout.mockRejectedValue(
-      new CommentMutationRolloutError('database', '40P01', 'rpc')
-    )
+  it.each([
+    ['22023', 400],
+    ['42501', 403],
+    ['P0002', 404],
+    ['40001', 409],
+    ['XX000', 500],
+  ])('maps RPC error %s without attempting a table fallback', async (code, status) => {
+    mockRpc.mockResolvedValue({ data: null, error: { code } })
 
     const response = await POST(request('delete'))
 
-    expect(response.status).toBe(500)
-    expect(mockFrom).toHaveBeenCalledTimes(1)
-    expect(mockFrom).not.toHaveBeenCalledWith('admin_logs')
+    expect(response.status).toBe(status)
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 
-  it('maps a missing comment without completing its reports', async () => {
-    queue('content_reports', { data: REPORT_IDS.map((id) => ({ id })) })
-    mockModerateCommentWithRollout.mockRejectedValue(
-      new CommentMutationRolloutError('not_found', 'P0002', 'rpc')
-    )
+  it.each(['approve', 'delete', 'warn', 'ban'] as const)(
+    'maps a conflicting latest action against %s to HTTP 409',
+    async (action) => {
+      mockRpc.mockResolvedValue({ data: null, error: { code: '40001' } })
 
-    const response = await POST(request('approve'))
+      const response = await POST(request(action))
 
-    expect(response.status).toBe(404)
-    expect(mockFrom).toHaveBeenCalledTimes(1)
-  })
+      expect(response.status).toBe(409)
+      expect(mockFrom).not.toHaveBeenCalled()
+    }
+  )
 
-  it('fails closed when the report transition does not acknowledge every pending report', async () => {
-    arrangeAction('resolved', 'content_deleted', {
-      transition: { data: reportAck('resolved', 'content_deleted').slice(0, 1) },
-    })
+  it('rejects a malformed content id before calling the RPC', async () => {
+    const response = await POST(request('delete', 'not-a-uuid'))
 
-    const response = await POST(request('delete'))
-
-    expect(response.status).toBe(500)
-    expect(mockFrom).not.toHaveBeenCalledWith('admin_logs')
-  })
-
-  it('does not moderate content when the pending-report read fails', async () => {
-    queue('content_reports', { error: { code: 'XX601' } })
-
-    const response = await POST(request('delete'))
-
-    expect(response.status).toBe(500)
-    expect(mockModerateCommentWithRollout).not.toHaveBeenCalled()
+    expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 })
