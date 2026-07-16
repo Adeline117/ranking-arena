@@ -21,20 +21,23 @@
  *   node scripts/qa/exhaustive-sweep.mjs --routes=/,/rankings   # subset
  *   node scripts/qa/exhaustive-sweep.mjs --max-per-route=200    # cap (logged, never silent)
  *
- * Safety: destructive/irreversible controls (logout, delete, pay, disconnect,
+ * Safety: every app/Supabase mutation is blocked at the browser network layer
+ * and fails the run. Destructive/irreversible controls (logout, delete, pay, disconnect,
  * dissolve group, remove, unsubscribe…) are matched by DENYLIST and SKIPPED
  * (recorded as `denied`, never clicked). Any confirm() dialog is auto-dismissed
  * (cancel). In --auth mode, WRITE controls (follow/like/bookmark/comment/post/
  * tip/subscribe/vote/claim) are ALSO denied — a real session makes those mutate
  * production + notify real users. Authed write-flow testing must go through
  * auth-button-sweep's scripted self-cleaning flows, NOT this blind clicker.
- * Anon mode clicks writes freely (they only open a login modal — safe + useful).
+ * Anon mode may still click write-shaped UI to cover its login prompt, but any
+ * outgoing product mutation is aborted before it reaches the server.
  */
 import { chromium } from 'playwright'
 import fs from 'node:fs'
 import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import { readEnv, qaAuthStatus } from './qa-auth.mjs'
+import { installReadOnlyNetworkGuard } from './read-only-network-guard.mjs'
 
 // axe-core is already present (transitive dep) — inject its bundle and run ONLY
 // the color-contrast rule. No new devDep = no package.json/lock churn in the
@@ -778,6 +781,7 @@ async function buildAuthContext(browser) {
   const ctx = await browser.newContext({
     viewport: { width: 1280, height: 900 },
     locale: LANG,
+    serviceWorkers: 'block',
     userAgent:
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 ArenaQA',
   })
@@ -829,15 +833,32 @@ async function main() {
         : await browser.newContext({
             viewport: { width: 1280, height: 900 },
             locale: LANG,
+            serviceWorkers: 'block',
             userAgent:
               'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36 ArenaQA',
           })
     )
   let ctx = await buildContext()
 
-  // Auto-cancel every confirm/beforeunload dialog — the destructive backstop.
-  const wireContext = (c) => c.on('page', (p) => p.on('dialog', (d) => d.dismiss().catch(() => {})))
-  wireContext(ctx)
+  const blockedMutations = []
+  let activeRoute = '<startup>'
+  // Network denial is the primary safety boundary; dialog dismissal is a
+  // second backstop for controls that never reach the network.
+  const wireContext = async (c) => {
+    await installReadOnlyNetworkGuard(c, {
+      baseUrl: BASE,
+      supabaseUrl: supaUrl,
+      onBlocked: (violation) => {
+        blockedMutations.push({
+          ...violation,
+          route: activeRoute,
+          ts: new Date().toISOString(),
+        })
+      },
+    })
+    c.on('page', (p) => p.on('dialog', (d) => d.dismiss().catch(() => {})))
+  }
+  await wireContext(ctx)
 
   const counters = {
     clicked: 0,
@@ -852,6 +873,7 @@ async function main() {
     withErrors: 0,
     tainted: 0,
     redirected: 0,
+    blockedMutations: 0,
     _bucket: null,
   }
   // Session-kill signals seen during the CURRENT route (AUTH mode) — presence
@@ -890,7 +912,7 @@ async function main() {
   const refreshAuthedContext = async () => {
     await ctx.close().catch(() => {})
     ctx = await buildContext()
-    wireContext(ctx)
+    await wireContext(ctx)
     page = await newTrackedPage()
   }
 
@@ -939,6 +961,7 @@ async function main() {
   // gate, so a voided attempt never marks its landing page as covered.
   const sweptPaths = new Set()
   for (const route of routes) {
+    activeRoute = route
     if (AUTH && !(await ensureLiveSession())) {
       ledger.push({
         route,
@@ -1008,6 +1031,25 @@ async function main() {
 
   await browser.close()
 
+  const uniqueMutations = new Map()
+  for (const attempt of blockedMutations) {
+    const key = `${attempt.route}|${attempt.method}|${attempt.target}`
+    if (!uniqueMutations.has(key)) uniqueMutations.set(key, attempt)
+  }
+  counters.blockedMutations = uniqueMutations.size
+  for (const attempt of uniqueMutations.values()) {
+    ledger.push({
+      route: attempt.route,
+      idx: -1,
+      ts: attempt.ts,
+      status: 'fail:mutation-blocked',
+      method: attempt.method,
+      target: attempt.target,
+      scope: attempt.scope,
+      errors: [`mutation-blocked: ${attempt.method} ${attempt.target}`],
+    })
+  }
+
   fs.writeFileSync(LEDGER_PATH, ledger.map((r) => JSON.stringify(r)).join('\n') + '\n')
   const errored = ledger.filter((r) => r.errors && r.errors.length)
   console.log('\n=== Ledger summary ===')
@@ -1022,6 +1064,7 @@ async function main() {
   console.log(`  a11y contrast     : ${counters.contrast} (nodes below WCAG contrast, non-gating)`)
   console.log(`  elements w/ errors: ${counters.withErrors}`)
   console.log(`  redirects deduped : ${counters.redirected} (auth-gate → already-swept page)`)
+  console.log(`  mutations blocked : ${counters.blockedMutations} (network-denied; run fails)`)
   console.log(
     `  tainted routes    : ${counters.tainted} (session-kill artifacts voided, not in ledger)`
   )
@@ -1044,6 +1087,12 @@ async function main() {
       `\n☠ ${authTainted.length} route(s) unresolvably tainted by session death — rerun after fixing auth`
     )
     process.exit(3)
+  }
+  if (counters.blockedMutations > 0) {
+    console.error(
+      `\n✗ ${counters.blockedMutations} product mutation(s) were blocked — sweep is not read-only clean`
+    )
+    process.exit(4)
   }
   const realErrors = errored.filter((r) =>
     r.errors.some((e) => e.startsWith('pageerror:') || e.startsWith('http: 5'))
