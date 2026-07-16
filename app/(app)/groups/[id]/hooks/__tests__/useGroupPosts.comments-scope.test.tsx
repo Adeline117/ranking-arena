@@ -68,7 +68,8 @@ function deferred<T>() {
 
 function renderGroupHook(
   initialProps: Props,
-  onRender?: (comments: Record<string, CommentWithAuthor[]>) => void
+  onRender?: (comments: Record<string, CommentWithAuthor[]>) => void,
+  showToast = jest.fn()
 ) {
   return renderHook(
     (props: Props) => {
@@ -77,7 +78,7 @@ function renderGroupHook(
         ...props,
         language: 'en',
         t: (key) => key,
-        showToast: jest.fn(),
+        showToast,
         showDangerConfirm: async () => true,
       })
       onRender?.(value.comments)
@@ -350,5 +351,133 @@ describe('useGroupPosts comment audience and viewer scope', () => {
 
     expect(result.current.likeLoading).toEqual({})
     expect(result.current.posts).toEqual([])
+  })
+
+  it('locks same-frame likes and adopts only the server reaction ACK', async () => {
+    const props = {
+      ...baseProps,
+      accessToken: 'token-a',
+      userId: 'user-a',
+      viewerKey: 'user:user-a',
+      isMember: true,
+    }
+    const request = deferred<unknown>()
+    mockAuthedFetch.mockReturnValue(request.promise)
+    const { result } = renderGroupHook(props)
+    act(() => {
+      result.current.setPosts([
+        {
+          id: 'post-1',
+          group_id: 'group-1',
+          title: 'Post',
+          created_at: '2026-07-15T00:00:00.000Z',
+          like_count: 5,
+          dislike_count: 2,
+          user_liked: false,
+          user_reaction: null,
+        },
+      ])
+    })
+
+    let first!: Promise<void>
+    let duplicate!: Promise<void>
+    act(() => {
+      first = result.current.handleLike('post-1')
+      duplicate = result.current.handleLike('post-1')
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(result.current.likeLoading['post-1']).toBe(true)
+
+    await act(async () => {
+      request.resolve({
+        ok: true,
+        status: 200,
+        data: {
+          success: true,
+          data: {
+            action: 'added',
+            reaction: 'up',
+            like_count: null,
+            dislike_count: 3,
+          },
+        },
+      })
+      await Promise.all([first, duplicate])
+    })
+
+    expect(result.current.posts[0]).toMatchObject({
+      like_count: 5,
+      dislike_count: 3,
+      user_liked: true,
+      user_reaction: 'up',
+    })
+    expect(result.current.likeLoading['post-1']).toBe(false)
+  })
+
+  it('rejects a malformed reaction ACK without changing local state and unlocks retry', async () => {
+    const props = {
+      ...baseProps,
+      accessToken: 'token-a',
+      userId: 'user-a',
+      viewerKey: 'user:user-a',
+      isMember: true,
+    }
+    const showToast = jest.fn()
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: {
+          success: true,
+          data: { reaction: 'up', like_count: 99, dislike_count: 0 },
+        },
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: {
+          success: true,
+          data: {
+            action: 'added',
+            reaction: 'up',
+            like_count: 6,
+            dislike_count: 1,
+          },
+        },
+      })
+    const { result } = renderGroupHook(props, undefined, showToast)
+    act(() => {
+      result.current.setPosts([
+        {
+          id: 'post-1',
+          group_id: 'group-1',
+          title: 'Post',
+          created_at: '2026-07-15T00:00:00.000Z',
+          like_count: 5,
+          dislike_count: 1,
+          user_liked: false,
+          user_reaction: null,
+        },
+      ])
+    })
+
+    await act(async () => result.current.handleLike('post-1'))
+    expect(result.current.posts[0]).toMatchObject({
+      like_count: 5,
+      dislike_count: 1,
+      user_liked: false,
+      user_reaction: null,
+    })
+    expect(showToast).toHaveBeenCalledWith('operationFailed', 'error')
+
+    await act(async () => result.current.handleLike('post-1'))
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+    expect(result.current.posts[0]).toMatchObject({
+      like_count: 6,
+      dislike_count: 1,
+      user_liked: true,
+      user_reaction: 'up',
+    })
   })
 })
