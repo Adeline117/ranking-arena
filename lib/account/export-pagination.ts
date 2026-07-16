@@ -418,7 +418,11 @@ export async function fetchAllExportRowsByCursor(
       if (validated.selectColumns.some((column) => !Object.hasOwn(row, column))) {
         throw new DataExportReadError(validated.name, new Error('Incomplete selected row'))
       }
-      if (validated.textCastColumns.some((column) => typeof row[column] !== 'string')) {
+      if (
+        validated.textCastColumns.some(
+          (column) => row[column] !== null && typeof row[column] !== 'string'
+        )
+      ) {
         throw new DataExportReadError(validated.name, new Error('Inexact text-cast export field'))
       }
 
