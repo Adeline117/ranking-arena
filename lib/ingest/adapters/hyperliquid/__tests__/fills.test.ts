@@ -99,6 +99,39 @@ describe('fillStats', () => {
     expect(s.avgHoldingHours).toBeCloseTo(3, 2)
     expect(s.pnlRatio).toBeCloseTo(2, 2) // avg win 20 / |avg loss| 10
     expect(s.tripsPerWeek).toBeCloseTo(2, 2)
+    expect(s.boundaryComplete).toBe(true)
+  })
+
+  it('reconstructs before slicing so an earlier open and in-window close is retained', () => {
+    const fills = [f('BTC', 0, 'B', 1, 100, 0), f('BTC', 10, 'A', 1, 110, 1, 10)]
+    const s = fillStats(fills, T0 + 5 * H, 7)
+    expect(s.totalPositions).toBe(1)
+    expect(s.trips[0]).toMatchObject({ openedAtMs: T0, closedAtMs: T0 + 10 * H })
+    expect(s.boundaryComplete).toBe(true)
+  })
+
+  it('diagnoses an in-window close whose open predates the fetched prefix', () => {
+    const fills = [
+      f('DOGE', 2, 'A', 5, 0.1, 5, 3),
+      f('DOGE', 3, 'B', 1, 0.1, 0),
+      f('DOGE', 4, 'A', 1, 0.12, 1, 2),
+    ]
+    const s = fillStats(fills, T0, 7)
+    expect(s.totalPositions).toBe(1)
+    expect(s.boundaryComplete).toBe(false)
+    expect(s.boundarySkippedPositions).toBe(1)
+  })
+
+  it('does not poison a shorter window when the unknown boundary closed before it', () => {
+    const fills = [
+      f('DOGE', 2, 'A', 5, 0.1, 5, 3),
+      f('DOGE', 8, 'B', 1, 0.1, 0),
+      f('DOGE', 9, 'A', 1, 0.12, 1, 2),
+    ]
+    const s = fillStats(fills, T0 + 7 * H, 7)
+    expect(s.totalPositions).toBe(1)
+    expect(s.boundaryComplete).toBe(true)
+    expect(s.boundarySkippedPositions).toBe(0)
   })
 
   it('null-collapses on no fills', () => {
@@ -107,5 +140,6 @@ describe('fillStats', () => {
     expect(s.winRate).toBeNull()
     expect(s.avgHoldingHours).toBeNull()
     expect(s.pnlRatio).toBeNull()
+    expect(s.boundaryComplete).toBe(true)
   })
 })
