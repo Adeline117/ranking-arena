@@ -10,7 +10,6 @@ import { ButtonSpinner } from '@/app/components/ui/LoadingSpinner'
 import { useToast } from '@/app/components/ui/Toast'
 import { logger } from '@/lib/logger'
 import { trackEvent } from '@/lib/analytics/track'
-import { supabase } from '@/lib/supabase/client'
 import { apiRequest } from '@/lib/api/client'
 import { type MembershipInfo, type PlanType } from './membership-config'
 import CurrentPlanCard from './CurrentPlanCard'
@@ -26,27 +25,62 @@ export default function MembershipContent() {
   const { t, language } = useLanguage()
   const router = useRouter()
   const { showToast } = useToast()
-  const { getAuthHeadersAsync } = useAuthSession()
+  const auth = useAuthSession()
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  const authScopeRef = useRef({
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
+  })
+  authScopeRef.current = {
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
+  }
   const { isPremium: isPro } = usePremium()
 
-  const [info, setInfo] = useState<MembershipInfo | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [infoState, setInfo] = useState<MembershipInfo | null>(null)
+  const [loadingState, setLoading] = useState(true)
+  const infoOwnerScopeKeyRef = useRef(scopeKey)
+  const info = infoOwnerScopeKeyRef.current === scopeKey ? infoState : null
+  const loading = infoOwnerScopeKeyRef.current === scopeKey ? loadingState : true
   const [selectedPlan, setSelectedPlan] = useState<PlanType>('yearly')
   const [subscribing, setSubscribing] = useState(false)
   const submittingRef = useRef(false)
 
   useEffect(() => {
+    if (!auth.authChecked) return
+    const capturedScope = {
+      viewerKey: auth.viewerKey,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+    }
+    infoOwnerScopeKeyRef.current = scopeKey
+    setInfo(null)
+    setLoading(true)
     const controller = new AbortController()
-    fetchMembershipInfo(controller.signal)
+    fetchMembershipInfo(capturedScope, controller.signal)
     return () => {
       controller.abort()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- run once on mount; fetchMembershipInfo is defined after hook
-  }, [])
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- scope primitives intentionally own this request
+  }, [auth.authChecked, auth.sessionGeneration, auth.userId, auth.viewerKey, scopeKey])
 
-  async function fetchMembershipInfo(signal?: AbortSignal) {
+  async function fetchMembershipInfo(
+    capturedScope: { viewerKey: string; sessionGeneration: number; userId: string | null },
+    signal?: AbortSignal
+  ) {
+    const scopeIsCurrent = () => {
+      const current = authScopeRef.current
+      return (
+        current.viewerKey === capturedScope.viewerKey &&
+        current.sessionGeneration === capturedScope.sessionGeneration &&
+        current.userId === capturedScope.userId
+      )
+    }
     try {
-      const headers = await getAuthHeadersAsync()
+      const headers = await auth.getAuthHeadersAsync()
+      if (!scopeIsCurrent()) return
 
       const [subRes, nftRes, usageRes] = await Promise.all([
         fetch('/api/subscription', { headers, signal }),
@@ -55,7 +89,7 @@ export default function MembershipContent() {
       ])
 
       // If the component unmounted while awaiting, bail out
-      if (signal?.aborted) return
+      if (signal?.aborted || !scopeIsCurrent()) return
 
       const subData = subRes.ok ? await subRes.json() : null
       const nftData = nftRes.ok ? await nftRes.json() : null
@@ -63,7 +97,7 @@ export default function MembershipContent() {
         ? await usageRes.json()
         : { followedTraders: 0, apiCallsToday: 0 }
 
-      if (signal?.aborted) return
+      if (signal?.aborted || !scopeIsCurrent()) return
 
       // Map API response to MembershipInfo shape.
       // The API returns both UserSubscription fields (endDate, autoRenew) and
@@ -97,7 +131,7 @@ export default function MembershipContent() {
         return
       logger.error('Failed to fetch membership info:', err)
     } finally {
-      if (!signal?.aborted) setLoading(false)
+      if (!signal?.aborted && scopeIsCurrent()) setLoading(false)
     }
   }
 
@@ -112,14 +146,22 @@ export default function MembershipContent() {
     // pro_subscribe (the success page) — start_checkout closes that gap.
     trackEvent('start_checkout', { plan: selectedPlan })
     try {
-      let {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session?.access_token) {
-        const { data: refreshed } = await supabase.auth.refreshSession()
-        session = refreshed.session
+      const capturedScope = {
+        viewerKey: auth.viewerKey,
+        sessionGeneration: auth.sessionGeneration,
+        userId: auth.userId,
       }
-      if (!session?.access_token) {
+      const scopeIsCurrent = () => {
+        const current = authScopeRef.current
+        return (
+          current.viewerKey === capturedScope.viewerKey &&
+          current.sessionGeneration === capturedScope.sessionGeneration &&
+          current.userId === capturedScope.userId
+        )
+      }
+      const accessToken = await auth.getToken()
+      if (!scopeIsCurrent()) return
+      if (!accessToken) {
         showToast(t('pleaseLoginAgain'), 'error')
         router.push('/login?redirect=/user-center?tab=membership')
         return
@@ -129,7 +171,7 @@ export default function MembershipContent() {
         '/api/stripe/create-checkout',
         {
           method: 'POST',
-          headers: { Authorization: `Bearer ${session.access_token}` },
+          headers: { Authorization: `Bearer ${accessToken}` },
           body: {
             plan: selectedPlan,
             successUrl: `${window.location.origin}/pricing/success?session_id={CHECKOUT_SESSION_ID}`,
@@ -138,6 +180,7 @@ export default function MembershipContent() {
           timeoutMs: 20_000,
         }
       )
+      if (!scopeIsCurrent()) return
 
       if (!result.success) {
         const errorMsg =
@@ -255,7 +298,7 @@ export default function MembershipContent() {
         <SubscriptionManagement
           info={info}
           cardStyle={cardStyle}
-          getAuthHeadersAsync={getAuthHeadersAsync}
+          getAuthHeadersAsync={auth.getAuthHeadersAsync}
           t={t}
         />
       )}

@@ -1,6 +1,6 @@
 'use client'
 
-import { Suspense, useEffect, useState, useCallback } from 'react'
+import { Suspense, useEffect, useState, useCallback, useRef } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
@@ -13,6 +13,8 @@ import { clearSubscriptionCache } from '@/app/components/home/hooks/useSubscript
 import { getCsrfHeaders } from '@/lib/api/client'
 import { logger } from '@/lib/logger'
 import { trackEvent } from '@/lib/analytics/track'
+import { getAuthSession, refreshAuthToken } from '@/lib/auth'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 // 图标组件
 const CheckCircleIcon = ({ size = 64 }: { size?: number }) => (
@@ -77,60 +79,83 @@ function PaymentSuccessContent() {
   const { language: _language, t } = useLanguage()
   const { showToast } = useToast()
   const { refresh: refreshPremium } = usePremium()
-
-  const [email, setEmail] = useState<string | null>(null)
-  const [verificationStatus, setVerificationStatus] = useState<'verifying' | 'success' | 'error'>(
-    'verifying'
+  const auth = useAuthSession()
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  const authScopeRef = useRef({
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
+  })
+  authScopeRef.current = {
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
+  }
+  const captureRenderedScope = useCallback(
+    () => ({
+      viewerKey: auth.viewerKey,
+      sessionGeneration: auth.sessionGeneration,
+      userId: auth.userId,
+    }),
+    [auth.sessionGeneration, auth.userId, auth.viewerKey]
   )
-  const [hasVerified, setHasVerified] = useState(false)
-  const [retrying, setRetrying] = useState(false)
+  const scopeIsCurrent = useCallback(
+    (scope: { viewerKey: string; sessionGeneration: number; userId: string | null }) => {
+      const current = authScopeRef.current
+      return (
+        current.viewerKey === scope.viewerKey &&
+        current.sessionGeneration === scope.sessionGeneration &&
+        current.userId === scope.userId
+      )
+    },
+    []
+  )
+
+  const stateOwnerScopeKeyRef = useRef(scopeKey)
+  const [emailState, setEmail] = useState<string | null>(null)
+  const [verificationStatusState, setVerificationStatus] = useState<
+    'verifying' | 'success' | 'error'
+  >('verifying')
+  const [hasVerifiedState, setHasVerified] = useState(false)
+  const [retryingState, setRetrying] = useState(false)
+  const stateScopeOwned = stateOwnerScopeKeyRef.current === scopeKey
+  const email = stateScopeOwned ? emailState : null
+  const verificationStatus = stateScopeOwned ? verificationStatusState : 'verifying'
+  const hasVerified = stateScopeOwned ? hasVerifiedState : false
+  const retrying = stateScopeOwned ? retryingState : false
 
   useEffect(() => {
-    supabase.auth
-      .getUser()
-      .then(({ data }) => {
-        setEmail(data.user?.email ?? null)
-      })
-      // eslint-disable-next-line no-restricted-syntax
-      .catch(() => {
-        /* Intentionally swallowed: auth check non-critical for success page */
-      })
-  }, [])
+    if (!auth.authChecked) return
+    stateOwnerScopeKeyRef.current = scopeKey
+    setEmail(auth.email)
+    setVerificationStatus('verifying')
+    setHasVerified(false)
+    setRetrying(false)
+  }, [auth.authChecked, auth.email, scopeKey])
 
   // 直接查询订阅状态（避免 React 状态闭包问题）
   const checkSubscriptionDirect = useCallback(async (): Promise<boolean> => {
+    const capturedScope = captureRenderedScope()
+    if (!auth.authChecked || !scopeIsCurrent(capturedScope)) return false
     try {
       // 获取有效 session（自动刷新过期 token）
-
-      let {
-        data: { session },
-      } = await supabase.auth.getSession()
-
-      // 检查 token 是否过期或即将过期
-      if (session?.expires_at) {
-        const now = Math.floor(Date.now() / 1000)
-        if (session.expires_at - now < 60) {
-          // Token 过期或即将过期，强制刷新
-          const { data: refreshed } = await supabase.auth.refreshSession()
-          session = refreshed.session
-        }
-      } else if (!session?.access_token) {
-        const { data: refreshed } = await supabase.auth.refreshSession()
-        session = refreshed.session
+      const session = await getAuthSession()
+      if (!session || session.userId !== capturedScope.userId || !scopeIsCurrent(capturedScope)) {
+        return false
       }
-
-      if (!session?.access_token || !session?.user?.id) return false
 
       // 优先通过 API 查询（使用 service role，不受 RLS 限制）
       try {
         const response = await fetch('/api/subscription', {
           method: 'GET',
           headers: {
-            Authorization: `Bearer ${session.access_token}`,
+            Authorization: `Bearer ${session.accessToken}`,
           },
         })
+        if (!scopeIsCurrent(capturedScope)) return false
         if (response.ok) {
           const data = await response.json()
+          if (!scopeIsCurrent(capturedScope)) return false
           if (data.subscription?.tier === 'pro') return true
         }
       } catch {
@@ -138,45 +163,45 @@ function PaymentSuccessContent() {
       }
 
       // 降级：直接查 subscriptions 表（需要有效 JWT 才能通过 RLS）
+      if (!scopeIsCurrent(capturedScope)) return false
       const { data: sub } = await supabase
         .from('subscriptions')
         .select('tier, status')
-        .eq('user_id', session.user.id)
+        .eq('user_id', session.userId)
         .in('status', ['active', 'trialing'])
         .maybeSingle()
 
+      if (!scopeIsCurrent(capturedScope)) return false
       if (sub?.tier === 'pro') return true
 
       // 再查 user_profiles
+      if (!scopeIsCurrent(capturedScope)) return false
       const { data: profile } = await supabase
         .from('user_profiles')
         .select('subscription_tier')
-        .eq('id', session.user.id)
+        .eq('id', session.userId)
         .maybeSingle()
 
-      return profile?.subscription_tier === 'pro'
+      return scopeIsCurrent(capturedScope) && profile?.subscription_tier === 'pro'
     } catch {
       return false
     }
-  }, [])
+  }, [auth.authChecked, captureRenderedScope, scopeIsCurrent])
 
   // 获取有效的 access token（自动刷新过期 token）
   const getValidAccessToken = useCallback(async (): Promise<string | null> => {
-    let {
-      data: { session },
-    } = await supabase.auth.getSession()
-
-    if (!session?.access_token) {
-      // 尝试刷新 session（token 可能已过期但 refresh token 仍有效）
-      const { data: refreshed } = await supabase.auth.refreshSession()
-      session = refreshed.session
-    }
-
-    return session?.access_token || null
-  }, [])
+    const capturedScope = captureRenderedScope()
+    if (!auth.authChecked || !scopeIsCurrent(capturedScope)) return null
+    const session = await getAuthSession()
+    return session?.userId === capturedScope.userId && scopeIsCurrent(capturedScope)
+      ? session.accessToken
+      : null
+  }, [auth.authChecked, captureRenderedScope, scopeIsCurrent])
 
   // 验证并同步订阅状态
   const verifyAndRefresh = useCallback(async () => {
+    const capturedScope = captureRenderedScope()
+    if (!auth.authChecked || !scopeIsCurrent(capturedScope)) return
     const sessionId = searchParams.get('session_id')
     if (hasVerified) return
 
@@ -194,6 +219,7 @@ function PaymentSuccessContent() {
     try {
       // 尝试获取 token（但不强制要求，verify-session 通过 Stripe metadata 识别用户）
       const accessToken = await getValidAccessToken()
+      if (!scopeIsCurrent(capturedScope)) return
 
       // 调用验证 API 更新数据库 - 即使没有 token 也尝试调用
       // verify-session 通过 Stripe session metadata 中的 userId 识别用户，不依赖调用者 token
@@ -210,18 +236,22 @@ function PaymentSuccessContent() {
         headers,
         body: JSON.stringify({ sessionId }),
       })
+      if (!scopeIsCurrent(capturedScope)) return
 
       if (response.ok) {
         await response.json()
+        if (!scopeIsCurrent(capturedScope)) return
 
         // 验证成功后，尝试刷新 auth session 以获取最新状态
         if (!accessToken) {
           // token 过期了，尝试刷新
-          await supabase.auth.refreshSession()
+          await refreshAuthToken()
+          if (!scopeIsCurrent(capturedScope)) return
         }
 
         clearSubscriptionCache()
         await refreshPremium()
+        if (!scopeIsCurrent(capturedScope)) return
         setVerificationStatus('success')
         trackEvent('pro_subscribe', { source: 'verify_api' })
         showToast(t('membershipActivated'), 'success')
@@ -239,7 +269,8 @@ function PaymentSuccessContent() {
       // 验证 API 失败，可能 webhook 已经处理了，通过轮询数据库确认
       // 先尝试刷新 session 以确保后续查询有有效 token
       if (!accessToken) {
-        await supabase.auth.refreshSession()
+        await refreshAuthToken()
+        if (!scopeIsCurrent(capturedScope)) return
       }
       clearSubscriptionCache()
 
@@ -247,9 +278,11 @@ function PaymentSuccessContent() {
       const delays = [800, 1200, 1500, 2000]
       for (const delay of delays) {
         await new Promise((resolve) => setTimeout(resolve, delay))
+        if (!scopeIsCurrent(capturedScope)) return
         const isProNow = await checkSubscriptionDirect()
         if (isProNow) {
           await refreshPremium()
+          if (!scopeIsCurrent(capturedScope)) return
           setVerificationStatus('success')
           showToast(t('membershipActivated'), 'success')
           return
@@ -259,14 +292,17 @@ function PaymentSuccessContent() {
       // 所有重试都失败
       setVerificationStatus('error')
     } catch (error) {
+      if (!scopeIsCurrent(capturedScope)) return
       logger.error('Failed to verify subscription:', error)
 
       // 清除缓存，尝试刷新 session 后直接查询确认
-      await supabase.auth.refreshSession()
+      await refreshAuthToken()
+      if (!scopeIsCurrent(capturedScope)) return
       clearSubscriptionCache()
       const isProNow = await checkSubscriptionDirect()
       if (isProNow) {
         await refreshPremium()
+        if (!scopeIsCurrent(capturedScope)) return
         setVerificationStatus('success')
         trackEvent('pro_subscribe', { source: 'verify_api' })
         showToast(t('membershipActivated'), 'success')
@@ -276,6 +312,8 @@ function PaymentSuccessContent() {
     }
   }, [
     searchParams,
+    auth.authChecked,
+    captureRenderedScope,
     hasVerified,
     refreshPremium,
     showToast,
@@ -283,18 +321,22 @@ function PaymentSuccessContent() {
     checkSubscriptionDirect,
     getValidAccessToken,
     router,
+    scopeIsCurrent,
   ])
 
   // 手动重试 - 先刷新 session，再触发重新验证
   const handleRetry = useCallback(async () => {
+    const capturedScope = captureRenderedScope()
+    if (!auth.authChecked || !scopeIsCurrent(capturedScope)) return
     setRetrying(true)
     setVerificationStatus('verifying')
     // 重试前先尝试刷新 session
-    await supabase.auth.refreshSession()
+    await refreshAuthToken()
+    if (!scopeIsCurrent(capturedScope)) return
     clearSubscriptionCache()
     setHasVerified(false)
     // hasVerified 重置后 verifyAndRefresh 的 useEffect 会重新触发
-  }, [])
+  }, [auth.authChecked, captureRenderedScope, scopeIsCurrent])
 
   useEffect(() => {
     if (!hasVerified) {
