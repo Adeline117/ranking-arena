@@ -5,20 +5,27 @@ import { logger } from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
 
+const normalizedText = (maximum: number, minimum = 0, trim = true) =>
+  z
+    .string()
+    .transform((value) => (trim ? value.trim() : value).normalize('NFC'))
+    .refine((value) => Array.from(value).length >= minimum && Array.from(value).length <= maximum)
+
 const localizedRoleNameSchema = z
   .object({
-    zh: z.string().trim().max(50).optional(),
-    en: z.string().trim().max(50).optional(),
+    zh: normalizedText(50).optional(),
+    en: normalizedText(50).optional(),
   })
   .strict()
 
 const groupApplicationInputSchema = z
   .object({
-    name: z.string().trim().min(1).max(50),
-    name_en: z.string().trim().max(50).nullable().optional(),
-    description: z.string().trim().max(500).nullable().optional(),
-    description_en: z.string().trim().max(500).nullable().optional(),
-    avatar_url: z.string().trim().max(2048).nullable().optional(),
+    operation_id: z.string().uuid(),
+    name: normalizedText(50, 1),
+    name_en: normalizedText(50).nullable().optional(),
+    description: normalizedText(500).nullable().optional(),
+    description_en: normalizedText(500).nullable().optional(),
+    avatar_url: normalizedText(2048).nullable().optional(),
     role_names: z
       .object({
         admin: localizedRoleNameSchema.optional(),
@@ -31,15 +38,15 @@ const groupApplicationInputSchema = z
       .array(
         z
           .object({
-            zh: z.string().max(2000),
-            en: z.string().max(2000),
+            zh: normalizedText(2000, 0, false),
+            en: normalizedText(2000, 0, false),
           })
           .strict()
       )
       .max(100)
       .nullable()
       .optional(),
-    rules: z.string().trim().max(10000).nullable().optional(),
+    rules: normalizedText(10000).nullable().optional(),
     is_premium_only: z.boolean().optional().default(false),
   })
   .strict()
@@ -50,11 +57,20 @@ const submitGroupApplicationResultSchema = z.discriminatedUnion('status', [
       status: z.literal('submitted'),
       application_id: z.string().uuid(),
       created_at: z.string().datetime({ offset: true }),
+      operation_id: z.string().uuid(),
+      applied: z.boolean(),
     })
     .strict(),
-  ...(['invalid', 'account_inactive', 'pro_required', 'pending_exists', 'name_taken'] as const).map(
-    (status) => z.object({ status: z.literal(status) }).strict()
-  ),
+  ...(
+    [
+      'invalid',
+      'account_inactive',
+      'pro_required',
+      'pending_exists',
+      'name_taken',
+      'operation_conflict',
+    ] as const
+  ).map((status) => z.object({ status: z.literal(status) }).strict()),
 ])
 
 type SubmitGroupApplicationResult = z.infer<typeof submitGroupApplicationResultSchema>
@@ -86,6 +102,11 @@ function submitFailureResponse(result: SubmitGroupApplicationResult): NextRespon
       )
     case 'name_taken':
       return NextResponse.json({ error: 'This group name is already taken' }, { status: 409 })
+    case 'operation_conflict':
+      return NextResponse.json(
+        { error: 'Operation id conflicts with another request' },
+        { status: 409 }
+      )
     default:
       return NextResponse.json({ error: 'Failed to submit application' }, { status: 500 })
   }
@@ -129,6 +150,7 @@ export const POST = withAuth(
       p_rules: emptyToNull(input.rules),
       p_is_premium_only: input.is_premium_only,
       p_promo_unlocked: PRO_FREE_PROMO,
+      p_operation_id: input.operation_id,
     })
 
     if (error) {
@@ -150,10 +172,18 @@ export const POST = withAuth(
 
     const result = parsedResult.data
     if (result.status !== 'submitted') return submitFailureResponse(result)
+    if (result.operation_id !== input.operation_id) {
+      logger.error('Atomic group application submission returned the wrong operation id', {
+        userId: user.id,
+        groupName: normalizedName,
+      })
+      return NextResponse.json({ error: 'Failed to submit application' }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Application submitted, awaiting admin review',
+      operation_id: result.operation_id,
       application: {
         id: result.application_id,
         applicant_id: user.id,

@@ -78,8 +78,9 @@ const REVIEWER_ID = '11111111-1111-4111-8111-111111111111'
 const APPLICATION_ID = '22222222-2222-4222-8222-222222222222'
 const APPLICANT_ID = '33333333-3333-4333-8333-333333333333'
 const GROUP_ID = '44444444-4444-4444-8444-444444444444'
+const OPERATION_ID = '55555555-5555-4555-8555-555555555555'
 
-function request(body?: unknown): NextRequest {
+function request(body: unknown = { operation_id: OPERATION_ID }): NextRequest {
   return new NextRequest('http://localhost/api/groups/applications/review', {
     method: 'POST',
     headers: { Authorization: 'Bearer admin-token' },
@@ -105,6 +106,8 @@ describe('group application review atomic boundary', () => {
         applicant_id: APPLICANT_ID,
         group_id: GROUP_ID,
         group_name: 'Atomic Group',
+        operation_id: OPERATION_ID,
+        applied: true,
       },
       error: null,
     })
@@ -118,17 +121,10 @@ describe('group application review atomic boundary', () => {
       p_decision: 'approve',
       p_reject_reason: null,
       p_promo_unlocked: PRO_FREE_PROMO,
+      p_operation_id: OPERATION_ID,
     })
     expect(mockFrom).not.toHaveBeenCalled()
-    expect(mockSendNotification).toHaveBeenCalledWith(
-      mockSupabase,
-      expect.objectContaining({
-        user_id: APPLICANT_ID,
-        reference_id: GROUP_ID,
-        link: `/groups/${GROUP_ID}`,
-      }),
-      'group-approved'
-    )
+    expect(mockSendNotification).not.toHaveBeenCalled()
     expect(mockNotifyNewGroup).toHaveBeenCalledWith(null, 'Atomic Group')
   })
 
@@ -140,11 +136,16 @@ describe('group application review atomic boundary', () => {
         applicant_id: APPLICANT_ID,
         group_name: 'Atomic Group',
         reject_reason: 'canonical reason',
+        operation_id: OPERATION_ID,
+        applied: true,
       },
       error: null,
     })
 
-    const response = await reject(request({ reason: '  submitted reason  ' }), context())
+    const response = await reject(
+      request({ operation_id: OPERATION_ID, reason: '  submitted reason  ' }),
+      context()
+    )
 
     expect(response.status).toBe(200)
     expect(mockRpc).toHaveBeenCalledWith('review_group_application_atomic', {
@@ -153,18 +154,45 @@ describe('group application review atomic boundary', () => {
       p_decision: 'reject',
       p_reject_reason: 'submitted reason',
       p_promo_unlocked: PRO_FREE_PROMO,
+      p_operation_id: OPERATION_ID,
     })
     expect(mockFrom).not.toHaveBeenCalled()
-    expect(mockSendNotification).toHaveBeenCalledWith(
-      mockSupabase,
-      expect.objectContaining({
-        user_id: APPLICANT_ID,
-        reference_id: APPLICATION_ID,
-        message: expect.stringContaining('canonical reason'),
-      }),
-      'group-rejected'
-    )
+    expect(mockSendNotification).not.toHaveBeenCalled()
     expect(mockNotifyNewGroup).not.toHaveBeenCalled()
+  })
+
+  it('uses Unicode code-point bounds for historical names and rejection reasons', async () => {
+    const fiftyEmoji = '😀'.repeat(50)
+    const fiveHundredEmoji = '😀'.repeat(500)
+    mockRpc.mockResolvedValue({
+      data: {
+        status: 'rejected',
+        application_id: APPLICATION_ID,
+        applicant_id: APPLICANT_ID,
+        group_name: fiftyEmoji,
+        reject_reason: fiveHundredEmoji,
+        operation_id: OPERATION_ID,
+        applied: true,
+      },
+      error: null,
+    })
+
+    const accepted = await reject(
+      request({ operation_id: OPERATION_ID, reason: fiveHundredEmoji }),
+      context()
+    )
+    const rejected = await reject(
+      request({ operation_id: OPERATION_ID, reason: '😀'.repeat(501) }),
+      context()
+    )
+
+    expect(accepted.status).toBe(200)
+    expect(rejected.status).toBe(400)
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenCalledWith(
+      'review_group_application_atomic',
+      expect.objectContaining({ p_reject_reason: fiveHundredEmoji })
+    )
   })
 
   it.each([
@@ -172,6 +200,7 @@ describe('group application review atomic boundary', () => {
     [{ data: { status: 'already_processed' }, error: null }, 409],
     [{ data: { status: 'name_taken' }, error: null }, 409],
     [{ data: { status: 'pro_required' }, error: null }, 409],
+    [{ data: { status: 'operation_conflict' }, error: null }, 409],
     [{ data: null, error: { code: 'XX000' } }, 500],
     [{ data: null, error: null }, 500],
     [
@@ -181,6 +210,8 @@ describe('group application review atomic boundary', () => {
           application_id: APPLICATION_ID,
           applicant_id: APPLICANT_ID,
           group_id: GROUP_ID,
+          operation_id: OPERATION_ID,
+          applied: true,
         },
         error: null,
       },
@@ -205,14 +236,36 @@ describe('group application review atomic boundary', () => {
         applicant_id: APPLICANT_ID,
         group_id: GROUP_ID,
         group_name: 'Atomic Group',
+        operation_id: OPERATION_ID,
+        applied: true,
       },
       error: null,
     })
 
-    const response = await reject(request({ reason: 'no' }), context())
+    const response = await reject(request({ operation_id: OPERATION_ID, reason: 'no' }), context())
 
     expect(response.status).toBe(500)
     expect(mockSendNotification).not.toHaveBeenCalled()
+    expect(mockNotifyNewGroup).not.toHaveBeenCalled()
+  })
+
+  it('does not repeat the best-effort Telegram alert for a durable replay', async () => {
+    mockRpc.mockResolvedValue({
+      data: {
+        status: 'approved',
+        application_id: APPLICATION_ID,
+        applicant_id: APPLICANT_ID,
+        group_id: GROUP_ID,
+        group_name: 'Atomic Group',
+        operation_id: OPERATION_ID,
+        applied: false,
+      },
+      error: null,
+    })
+
+    const response = await approve(request(), context())
+
+    expect(response.status).toBe(200)
     expect(mockNotifyNewGroup).not.toHaveBeenCalled()
   })
 

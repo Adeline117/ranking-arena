@@ -4,7 +4,6 @@ import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { socialFeatureGuard } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyAdmin } from '@/lib/admin/auth'
-import { sendNotification } from '@/lib/data/notifications'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
 import {
   groupApplicationIdSchema,
@@ -25,6 +24,13 @@ function rejectionFailureResponse(result: ReviewGroupApplicationResult): NextRes
     case 'already_processed':
       return NextResponse.json(
         { error: 'This application has already been processed' },
+        { status: 409 }
+      )
+    case 'account_inactive':
+      return NextResponse.json({ error: 'The applicant account is not active' }, { status: 409 })
+    case 'operation_conflict':
+      return NextResponse.json(
+        { error: 'Operation id conflicts with another request' },
         { status: 409 }
       )
     default:
@@ -71,6 +77,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       p_decision: 'reject',
       p_reject_reason: reason,
       p_promo_unlocked: PRO_FREE_PROMO,
+      p_operation_id: parsedBody.data.operation_id,
     })
 
     if (error) {
@@ -93,24 +100,21 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const result = parsedResult.data
     if (result.status !== 'rejected') return rejectionFailureResponse(result)
-
-    sendNotification(
-      supabase,
-      {
-        user_id: result.applicant_id,
-        type: 'system',
-        title: 'Group application rejected',
-        message: result.reject_reason
-          ? `Your group "${result.group_name}" was not approved: ${result.reject_reason}`
-          : `Your group "${result.group_name}" was not approved`,
-        reference_id: result.application_id,
-      },
-      'group-rejected'
-    )
+    if (
+      result.operation_id !== parsedBody.data.operation_id ||
+      result.application_id !== parsedApplicationId.data
+    ) {
+      logger.error('Atomic group application rejection returned a mismatched acknowledgement', {
+        applicationId: parsedApplicationId.data,
+        reviewerId: admin.id,
+      })
+      return NextResponse.json({ error: 'Rejection failed' }, { status: 500 })
+    }
 
     return NextResponse.json({
       success: true,
       message: 'Group application rejected',
+      operation_id: result.operation_id,
     })
   } catch (error: unknown) {
     logger.error('Error rejecting application:', error)

@@ -64,6 +64,7 @@ import { GET, POST } from '../route'
 
 const ACTOR_ID = '11111111-1111-4111-8111-111111111111'
 const APPLICATION_ID = '22222222-2222-4222-8222-222222222222'
+const OPERATION_ID = '33333333-3333-4333-8333-333333333333'
 const CREATED_AT = '2026-07-15T22:49:00.000Z'
 
 function request(body: unknown): NextRequest {
@@ -75,6 +76,7 @@ function request(body: unknown): NextRequest {
 
 function validBody(overrides: Record<string, unknown> = {}) {
   return {
+    operation_id: OPERATION_ID,
     name: '  Atomic Group  ',
     name_en: ' Atomic Group ',
     description: ' description ',
@@ -95,7 +97,13 @@ describe('POST /api/groups/apply atomic boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockRpc.mockResolvedValue({
-      data: { status: 'submitted', application_id: APPLICATION_ID, created_at: CREATED_AT },
+      data: {
+        status: 'submitted',
+        application_id: APPLICATION_ID,
+        created_at: CREATED_AT,
+        operation_id: OPERATION_ID,
+        applied: true,
+      },
       error: null,
     })
   })
@@ -105,6 +113,7 @@ describe('POST /api/groups/apply atomic boundary', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
+    expect(body.operation_id).toBe(OPERATION_ID)
     expect(body.application).toEqual(
       expect.objectContaining({
         id: APPLICATION_ID,
@@ -130,15 +139,34 @@ describe('POST /api/groups/apply atomic boundary', () => {
       p_rules: 'Be kind',
       p_is_premium_only: true,
       p_promo_unlocked: PRO_FREE_PROMO,
+      p_operation_id: OPERATION_ID,
     })
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
+  it('counts normalized Unicode code points instead of UTF-16 code units', async () => {
+    const fiftyEmoji = '😀'.repeat(50)
+
+    const accepted = await POST(
+      request(validBody({ name: fiftyEmoji, name_en: null, description: null }))
+    )
+    const rejected = await POST(request(validBody({ name: '😀'.repeat(51) })))
+
+    expect(accepted.status).toBe(200)
+    expect(rejected.status).toBe(400)
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenCalledWith(
+      'submit_group_application_atomic',
+      expect.objectContaining({ p_name: fiftyEmoji })
+    )
+  })
+
   it.each([
-    [{ name: '' }, 400],
-    [{ name: 'x', actor_id: ACTOR_ID }, 400],
-    [{ name: 'x', is_premium_only: 'yes' }, 400],
-    [{ name: 'x', rules_json: [{ zh: '只有一种语言' }] }, 400],
+    [{ operation_id: OPERATION_ID, name: '' }, 400],
+    [{ operation_id: OPERATION_ID, name: 'x', actor_id: ACTOR_ID }, 400],
+    [{ operation_id: OPERATION_ID, name: 'x', is_premium_only: 'yes' }, 400],
+    [{ operation_id: OPERATION_ID, name: 'x', rules_json: [{ zh: '只有一种语言' }] }, 400],
+    [{ name: 'x' }, 400],
   ])('rejects malformed or authority-bearing input %#', async (body, status) => {
     const response = await POST(request(body))
 
@@ -152,6 +180,7 @@ describe('POST /api/groups/apply atomic boundary', () => {
     ['pro_required', 403],
     ['account_inactive', 403],
     ['invalid', 400],
+    ['operation_conflict', 409],
   ])('maps canonical %s without a compensating table write', async (status, expectedStatus) => {
     mockRpc.mockResolvedValue({ data: { status }, error: null })
 
@@ -170,6 +199,8 @@ describe('POST /api/groups/apply atomic boundary', () => {
         status: 'submitted',
         application_id: APPLICATION_ID,
         created_at: CREATED_AT,
+        operation_id: OPERATION_ID,
+        applied: true,
         attacker_field: true,
       },
       error: null,

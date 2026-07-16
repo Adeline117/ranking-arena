@@ -5,9 +5,9 @@ import { socialFeatureGuard } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyAdmin } from '@/lib/admin/auth'
 import { notifyNewGroup } from '@/lib/notifications/activity-alerts'
-import { sendNotification } from '@/lib/data/notifications'
 import { PRO_FREE_PROMO } from '@/lib/types/premium'
 import {
+  approveGroupApplicationInputSchema,
   groupApplicationIdSchema,
   reviewGroupApplicationResultSchema,
   type ReviewGroupApplicationResult,
@@ -42,6 +42,11 @@ function approvalFailureResponse(result: ReviewGroupApplicationResult): NextResp
         { error: 'A group with this name already exists', code: 'NAME_TAKEN' },
         { status: 409 }
       )
+    case 'operation_conflict':
+      return NextResponse.json(
+        { error: 'Operation id conflicts with another request' },
+        { status: 409 }
+      )
     default:
       return NextResponse.json({ error: 'Approval failed' }, { status: 500 })
   }
@@ -67,12 +72,24 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
       return NextResponse.json({ error: 'Invalid application id' }, { status: 400 })
     }
 
+    let rawBody: unknown
+    try {
+      rawBody = await request.json()
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
+    }
+    const parsedBody = approveGroupApplicationInputSchema.safeParse(rawBody)
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: 'Invalid approval request' }, { status: 400 })
+    }
+
     const { data, error } = await supabase.rpc('review_group_application_atomic', {
       p_reviewer_id: admin.id,
       p_application_id: parsedApplicationId.data,
       p_decision: 'approve',
       p_reject_reason: null,
       p_promo_unlocked: PRO_FREE_PROMO,
+      p_operation_id: parsedBody.data.operation_id,
     })
 
     if (error) {
@@ -95,24 +112,23 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const result = parsedResult.data
     if (result.status !== 'approved') return approvalFailureResponse(result)
+    if (
+      result.operation_id !== parsedBody.data.operation_id ||
+      result.application_id !== parsedApplicationId.data
+    ) {
+      logger.error('Atomic group application approval returned a mismatched acknowledgement', {
+        applicationId: parsedApplicationId.data,
+        reviewerId: admin.id,
+      })
+      return NextResponse.json({ error: 'Approval failed' }, { status: 500 })
+    }
 
-    sendNotification(
-      supabase,
-      {
-        user_id: result.applicant_id,
-        type: 'system',
-        title: 'Group approved',
-        message: `Your group "${result.group_name}" has been approved`,
-        link: `/groups/${result.group_id}`,
-        reference_id: result.group_id,
-      },
-      'group-approved'
-    )
-    notifyNewGroup(null, result.group_name)
+    if (result.applied) void notifyNewGroup(null, result.group_name)
 
     return NextResponse.json({
       success: true,
       message: 'Group application approved',
+      operation_id: result.operation_id,
       group: { id: result.group_id },
     })
   } catch (error: unknown) {
