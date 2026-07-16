@@ -23,6 +23,7 @@ const ACTOR_A = '11111111-1111-4111-8111-111111111111'
 const ACTOR_B = '22222222-2222-4222-8222-222222222222'
 const APPLICATION_ID = '33333333-3333-4333-8333-333333333333'
 const GROUP_ID = '44444444-4444-4444-8444-444444444444'
+const EDIT_APPLICATION_B_ID = '55555555-5555-4555-8555-555555555555'
 
 function token(subject: string, marker: string): string {
   const payload = btoa(JSON.stringify({ sub: subject, marker }))
@@ -42,6 +43,17 @@ function deferred<T>() {
 
 function operationBody(callIndex = 0): { operation_id: string; reason?: string | null } {
   return mockAuthedFetch.mock.calls[callIndex][3]
+}
+
+function editApplication(id: string, applicantId: string, name: string) {
+  return {
+    id,
+    group_id: GROUP_ID,
+    applicant_id: applicantId,
+    name,
+    status: 'pending',
+    created_at: '2026-07-16T00:00:00.000Z',
+  }
 }
 
 describe('useApplications operation/viewer scope', () => {
@@ -289,5 +301,271 @@ describe('useApplications operation/viewer scope', () => {
       await expect(second).resolves.toBe(true)
     })
     await waitFor(() => expect(hook.result.current.actionLoading[APPLICATION_ID]).toBe(false))
+  })
+
+  it('rejects every edit-application path when the token subject does not own the viewer', async () => {
+    synchronizeViewerScope(true, ACTOR_A)
+    const hook = renderHook(() => useApplications(token(ACTOR_B, 'wrong-edit-actor')))
+
+    await act(async () => {
+      await hook.result.current.loadEditApplications()
+      await expect(hook.result.current.approveEditApplication(APPLICATION_ID)).resolves.toBe(false)
+      await expect(
+        hook.result.current.rejectEditApplication(APPLICATION_ID, 'reason')
+      ).resolves.toBe(false)
+    })
+
+    expect(mockAuthedFetch).not.toHaveBeenCalled()
+  })
+
+  it('keeps a new viewer edit list loading while an old viewer load settles', async () => {
+    const scopeA = synchronizeViewerScope(true, ACTOR_A)
+    const oldResponse = deferred<{
+      ok: boolean
+      status: number
+      data: { applications: ReturnType<typeof editApplication>[] }
+    }>()
+    const currentResponse = deferred<{
+      ok: boolean
+      status: number
+      data: { applications: ReturnType<typeof editApplication>[] }
+    }>()
+    mockAuthedFetch
+      .mockReturnValueOnce(oldResponse.promise)
+      .mockReturnValueOnce(currentResponse.promise)
+    const hook = renderHook(({ accessToken }) => useApplications(accessToken), {
+      initialProps: { accessToken: token(ACTOR_A, 'edit-list-a') },
+    })
+
+    let oldLoad!: Promise<void>
+    act(() => {
+      oldLoad = hook.result.current.loadEditApplications()
+    })
+    await waitFor(() => expect(hook.result.current.editApplicationsLoading).toBe(true))
+
+    const scopeB = synchronizeViewerScope(true, ACTOR_B)
+    hook.rerender({ accessToken: token(ACTOR_B, 'edit-list-b') })
+    expect(hook.result.current.editApplications).toEqual([])
+    expect(hook.result.current.editApplicationsLoading).toBe(false)
+
+    let currentLoad!: Promise<void>
+    act(() => {
+      currentLoad = hook.result.current.loadEditApplications()
+    })
+    await waitFor(() => expect(hook.result.current.editApplicationsLoading).toBe(true))
+    expect(mockAuthedFetch.mock.calls[0][5]).toEqual({
+      expectedUserId: ACTOR_A,
+      expectedSessionGeneration: scopeA.sessionGeneration,
+    })
+    expect(mockAuthedFetch.mock.calls[1][5]).toEqual({
+      expectedUserId: ACTOR_B,
+      expectedSessionGeneration: scopeB.sessionGeneration,
+    })
+
+    await act(async () => {
+      oldResponse.resolve({
+        ok: true,
+        status: 200,
+        data: { applications: [editApplication(APPLICATION_ID, ACTOR_A, 'old viewer edit')] },
+      })
+      await oldLoad
+    })
+    expect(hook.result.current.editApplications).toEqual([])
+    expect(hook.result.current.editApplicationsLoading).toBe(true)
+
+    await act(async () => {
+      currentResponse.resolve({
+        ok: true,
+        status: 200,
+        data: {
+          applications: [editApplication(EDIT_APPLICATION_B_ID, ACTOR_B, 'current viewer edit')],
+        },
+      })
+      await currentLoad
+    })
+    expect(hook.result.current.editApplications.map(({ id }) => id)).toEqual([
+      EDIT_APPLICATION_B_ID,
+    ])
+    expect(hook.result.current.editApplicationsLoading).toBe(false)
+  })
+
+  it('refuses an edit callback captured by an older generation of the same actor', async () => {
+    synchronizeViewerScope(true, ACTOR_A)
+    const hook = renderHook(({ accessToken }) => useApplications(accessToken), {
+      initialProps: { accessToken: token(ACTOR_A, 'old-generation') },
+    })
+    const staleLoad = hook.result.current.loadEditApplications
+    const staleApprove = hook.result.current.approveEditApplication
+
+    const transition = beginViewerTransition(ACTOR_A)
+    const currentScope = commitViewerTransition(transition, ACTOR_A)
+    expect(currentScope).not.toBeNull()
+
+    await act(async () => {
+      await staleLoad()
+      await expect(staleApprove(APPLICATION_ID)).resolves.toBe(false)
+    })
+    expect(mockAuthedFetch).not.toHaveBeenCalled()
+
+    mockAuthedFetch.mockResolvedValue({ ok: true, status: 200, data: { applications: [] } })
+    hook.rerender({ accessToken: token(ACTOR_A, 'current-generation') })
+    await act(async () => {
+      await hook.result.current.loadEditApplications()
+    })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(1)
+    expect(mockAuthedFetch.mock.calls[0][5]).toEqual({
+      expectedUserId: ACTOR_A,
+      expectedSessionGeneration: currentScope?.sessionGeneration,
+    })
+  })
+
+  it('does not let an old viewer edit action mutate, toast, succeed, or clear the new action', async () => {
+    synchronizeViewerScope(true, ACTOR_A)
+    const oldActionResponse = deferred<{ ok: boolean; status: number; data: unknown }>()
+    const oldErrorResponse = deferred<{ ok: boolean; status: number; data: unknown }>()
+    const newActionResponse = deferred<{ ok: boolean; status: number; data: unknown }>()
+    mockAuthedFetch
+      .mockReturnValueOnce(oldActionResponse.promise)
+      .mockReturnValueOnce(oldErrorResponse.promise)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: {
+          applications: [
+            editApplication(APPLICATION_ID, ACTOR_B, 'viewer B edit'),
+            editApplication(EDIT_APPLICATION_B_ID, ACTOR_B, 'viewer B second edit'),
+          ],
+        },
+      })
+      .mockReturnValueOnce(newActionResponse.promise)
+    const showToast = jest.fn()
+    const hook = renderHook(({ accessToken }) => useApplications(accessToken, showToast), {
+      initialProps: { accessToken: token(ACTOR_A, 'edit-action-a') },
+    })
+
+    let oldAction!: Promise<boolean>
+    let oldErrorAction!: Promise<boolean>
+    act(() => {
+      oldAction = hook.result.current.approveEditApplication(APPLICATION_ID)
+      oldErrorAction = hook.result.current.rejectEditApplication(
+        EDIT_APPLICATION_B_ID,
+        'old viewer reason'
+      )
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+
+    const scopeB = synchronizeViewerScope(true, ACTOR_B)
+    hook.rerender({ accessToken: token(ACTOR_B, 'edit-action-b') })
+    await act(async () => {
+      await hook.result.current.loadEditApplications()
+    })
+    expect(hook.result.current.editApplications.map(({ id }) => id)).toEqual([
+      APPLICATION_ID,
+      EDIT_APPLICATION_B_ID,
+    ])
+
+    let newAction!: Promise<boolean>
+    act(() => {
+      newAction = hook.result.current.rejectEditApplication(APPLICATION_ID, 'viewer B reason')
+    })
+    await waitFor(() =>
+      expect(hook.result.current.actionLoading[`edit_${APPLICATION_ID}`]).toBe(true)
+    )
+    expect(mockAuthedFetch.mock.calls[3][3]).toEqual({ reason: 'viewer B reason' })
+    expect(mockAuthedFetch.mock.calls[3][5]).toEqual({
+      expectedUserId: ACTOR_B,
+      expectedSessionGeneration: scopeB.sessionGeneration,
+    })
+
+    await act(async () => {
+      oldActionResponse.resolve({ ok: true, status: 200, data: { success: true } })
+      await expect(oldAction).resolves.toBe(false)
+    })
+    expect(hook.result.current.editApplications.map(({ id }) => id)).toEqual([
+      APPLICATION_ID,
+      EDIT_APPLICATION_B_ID,
+    ])
+    expect(hook.result.current.actionLoading[`edit_${APPLICATION_ID}`]).toBe(true)
+    expect(showToast).not.toHaveBeenCalled()
+
+    await act(async () => {
+      oldErrorResponse.resolve({
+        ok: false,
+        status: 409,
+        data: { error: 'old viewer must stay silent' },
+      })
+      await expect(oldErrorAction).resolves.toBe(false)
+    })
+    expect(showToast).not.toHaveBeenCalled()
+    expect(hook.result.current.editApplications.map(({ id }) => id)).toEqual([
+      APPLICATION_ID,
+      EDIT_APPLICATION_B_ID,
+    ])
+    expect(hook.result.current.actionLoading[`edit_${APPLICATION_ID}`]).toBe(true)
+
+    await act(async () => {
+      newActionResponse.resolve({ ok: false, status: 409, data: { error: 'viewer B failed' } })
+      await expect(newAction).resolves.toBe(false)
+    })
+    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('viewer B failed', 'error')
+    expect(hook.result.current.editApplications.map(({ id }) => id)).toEqual([
+      APPLICATION_ID,
+      EDIT_APPLICATION_B_ID,
+    ])
+    expect(hook.result.current.actionLoading[`edit_${APPLICATION_ID}`]).toBe(false)
+  })
+
+  it('uses request ownership so a replaced edit action cannot clear or commit over the latest one', async () => {
+    const scope = synchronizeViewerScope(true, ACTOR_A)
+    const firstResponse = deferred<{ ok: boolean; status: number; data: unknown }>()
+    const secondResponse = deferred<{ ok: boolean; status: number; data: unknown }>()
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { applications: [editApplication(APPLICATION_ID, ACTOR_A, 'same viewer edit')] },
+      })
+      .mockReturnValueOnce(firstResponse.promise)
+      .mockReturnValueOnce(secondResponse.promise)
+    const showToast = jest.fn()
+    const hook = renderHook(() => useApplications(token(ACTOR_A, 'same-edit-viewer'), showToast))
+
+    await act(async () => {
+      await hook.result.current.loadEditApplications()
+    })
+    expect(hook.result.current.editApplications.map(({ id }) => id)).toEqual([APPLICATION_ID])
+
+    let first!: Promise<boolean>
+    let second!: Promise<boolean>
+    act(() => {
+      first = hook.result.current.approveEditApplication(APPLICATION_ID)
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    act(() => {
+      second = hook.result.current.rejectEditApplication(APPLICATION_ID, 'latest intent')
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(3))
+
+    await act(async () => {
+      firstResponse.resolve({ ok: true, status: 200, data: { success: true } })
+      await expect(first).resolves.toBe(false)
+    })
+    expect(hook.result.current.editApplications.map(({ id }) => id)).toEqual([APPLICATION_ID])
+    expect(hook.result.current.actionLoading[`edit_${APPLICATION_ID}`]).toBe(true)
+    expect(showToast).not.toHaveBeenCalled()
+
+    await act(async () => {
+      secondResponse.resolve({ ok: false, status: 409, data: { error: 'latest intent failed' } })
+      await expect(second).resolves.toBe(false)
+    })
+    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('latest intent failed', 'error')
+    expect(hook.result.current.editApplications.map(({ id }) => id)).toEqual([APPLICATION_ID])
+    expect(hook.result.current.actionLoading[`edit_${APPLICATION_ID}`]).toBe(false)
+    expect(mockAuthedFetch.mock.calls[2][5]).toEqual({
+      expectedUserId: ACTOR_A,
+      expectedSessionGeneration: scope.sessionGeneration,
+    })
   })
 })

@@ -1,7 +1,7 @@
 'use client'
 
 import { useCallback, useRef } from 'react'
-import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import {
@@ -95,6 +95,9 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
     {}
   )
   const actionOperationIdRef = useRef<Record<string, string>>({})
+  const editLoadRequestIdRef = useRef<Record<string, number>>({})
+  const editActionRequestIdRef = useRef<Record<string, number>>({})
+  const editRequestSequenceRef = useRef(0)
 
   const loadApplications = useCallback(async () => {
     const actorId = jwtSubject(accessToken)
@@ -133,23 +136,57 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
   }, [accessToken, stateOwnerKey])
 
   const loadEditApplications = useCallback(async () => {
-    if (!accessToken) return
+    const actorId = jwtSubject(accessToken)
+    const requestScope = getViewerScope()
+    const requestStateOwnerKey = `${requestScope.viewerKey}:${requestScope.sessionGeneration}`
+    if (
+      !accessToken ||
+      !actorId ||
+      requestScope.userId !== actorId ||
+      requestScope.viewerKey !== `user:${actorId}` ||
+      stateOwnerKey !== requestStateOwnerKey ||
+      !isViewerScopeCurrent(requestScope)
+    )
+      return
 
+    const requestId = ++editRequestSequenceRef.current
+    editLoadRequestIdRef.current[stateOwnerKey] = requestId
     setEditApplicationsLoading(true)
 
     try {
-      const res = await fetch('/api/groups/edit-applications?status=pending', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      const data = await res.json()
+      const result = await authedFetch<{ applications?: GroupEditApplication[] }>(
+        '/api/groups/edit-applications?status=pending',
+        'GET',
+        accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: actorId,
+          expectedSessionGeneration: requestScope.sessionGeneration,
+        }
+      )
+      if (
+        result.stale ||
+        !isViewerScopeCurrent(requestScope) ||
+        editLoadRequestIdRef.current[stateOwnerKey] !== requestId
+      )
+        return
 
-      if (data.applications) {
-        setEditApplications(data.applications)
+      if (result.data?.applications) {
+        setEditApplications(result.data.applications)
       }
     } catch (err) {
-      logger.error('Error loading edit applications:', err)
+      if (
+        isViewerScopeCurrent(requestScope) &&
+        editLoadRequestIdRef.current[stateOwnerKey] === requestId
+      ) {
+        logger.error('Error loading edit applications:', err)
+      }
     } finally {
-      setEditApplicationsLoading(false)
+      if (editLoadRequestIdRef.current[stateOwnerKey] === requestId) {
+        delete editLoadRequestIdRef.current[stateOwnerKey]
+        if (isViewerScopeCurrent(requestScope)) setEditApplicationsLoading(false)
+      }
     }
   }, [accessToken, stateOwnerKey])
 
@@ -343,72 +380,86 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
     [accessToken, showToast, stateOwnerKey]
   )
 
-  const approveEditApplication = useCallback(
-    async (applicationId: string) => {
-      if (!accessToken) return false
+  const runEditApplicationAction = useCallback(
+    async (applicationId: string, decision: 'approve' | 'reject', reason?: string) => {
+      const actorId = jwtSubject(accessToken)
+      const requestScope = getViewerScope()
+      const requestStateOwnerKey = `${requestScope.viewerKey}:${requestScope.sessionGeneration}`
+      if (
+        !accessToken ||
+        !actorId ||
+        requestScope.userId !== actorId ||
+        requestScope.viewerKey !== `user:${actorId}` ||
+        stateOwnerKey !== requestStateOwnerKey ||
+        !isViewerScopeCurrent(requestScope)
+      )
+        return false
 
-      setActionLoading((prev) => ({ ...prev, [`edit_${applicationId}`]: true }))
+      const loadingKey = `edit_${applicationId}`
+      const actionOwnerKey = `${stateOwnerKey}:${loadingKey}`
+      const requestId = ++editRequestSequenceRef.current
+      editActionRequestIdRef.current[actionOwnerKey] = requestId
+      setActionLoading((prev) => ({ ...prev, [loadingKey]: true }))
 
       try {
-        const res = await fetch(`/api/groups/edit-applications/${applicationId}/approve`, {
-          method: 'POST',
-          headers: {
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-        })
-        const data = await res.json()
-
-        if (res.ok) {
-          setEditApplications((prev) => prev.filter((a) => a.id !== applicationId))
-          return true
-        } else {
-          showToast?.(data.error || t('adminOperationFailed'), 'error')
+        const result = await authedFetch<{ error?: unknown }>(
+          `/api/groups/edit-applications/${applicationId}/${decision}`,
+          'POST',
+          accessToken,
+          decision === 'reject' ? { reason } : undefined,
+          15_000,
+          {
+            expectedUserId: actorId,
+            expectedSessionGeneration: requestScope.sessionGeneration,
+          }
+        )
+        if (
+          result.stale ||
+          !isViewerScopeCurrent(requestScope) ||
+          editActionRequestIdRef.current[actionOwnerKey] !== requestId
+        )
           return false
+
+        if (result.ok) {
+          setEditApplications((prev) =>
+            prev.filter((application) => application.id !== applicationId)
+          )
+          return true
         }
+
+        const errorMessage =
+          typeof result.data?.error === 'string' ? result.data.error : t('adminOperationFailed')
+        showToast?.(errorMessage, 'error')
+        return false
       } catch (_err) {
-        showToast?.(t('adminNetworkError'), 'error')
+        if (
+          isViewerScopeCurrent(requestScope) &&
+          editActionRequestIdRef.current[actionOwnerKey] === requestId
+        ) {
+          showToast?.(t('adminNetworkError'), 'error')
+        }
         return false
       } finally {
-        setActionLoading((prev) => ({ ...prev, [`edit_${applicationId}`]: false }))
+        if (editActionRequestIdRef.current[actionOwnerKey] === requestId) {
+          delete editActionRequestIdRef.current[actionOwnerKey]
+          if (isViewerScopeCurrent(requestScope)) {
+            setActionLoading((prev) => ({ ...prev, [loadingKey]: false }))
+          }
+        }
       }
     },
-    [accessToken, showToast, stateOwnerKey]
+    [accessToken, showToast, stateOwnerKey, t]
+  )
+
+  const approveEditApplication = useCallback(
+    (applicationId: string) => runEditApplicationAction(applicationId, 'approve'),
+    [runEditApplicationAction]
   )
 
   const rejectEditApplication = useCallback(
-    async (applicationId: string, reason?: string) => {
-      if (!accessToken) return false
-
-      setActionLoading((prev) => ({ ...prev, [`edit_${applicationId}`]: true }))
-
-      try {
-        const res = await fetch(`/api/groups/edit-applications/${applicationId}/reject`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
-            ...getCsrfHeaders(),
-          },
-          body: JSON.stringify({ reason }),
-        })
-        const data = await res.json()
-
-        if (res.ok) {
-          setEditApplications((prev) => prev.filter((a) => a.id !== applicationId))
-          return true
-        } else {
-          showToast?.(data.error || t('adminOperationFailed'), 'error')
-          return false
-        }
-      } catch (_err) {
-        showToast?.(t('adminNetworkError'), 'error')
-        return false
-      } finally {
-        setActionLoading((prev) => ({ ...prev, [`edit_${applicationId}`]: false }))
-      }
-    },
-    [accessToken, showToast, stateOwnerKey]
+    (applicationId: string, reason?: string) =>
+      runEditApplicationAction(applicationId, 'reject', reason),
+    [runEditApplicationAction]
   )
 
   return {
