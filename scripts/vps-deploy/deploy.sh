@@ -8,9 +8,9 @@
 #   ./deploy.sh all          # Deploy to both
 #
 # What it does:
-#   1. scp all scraper/proxy/cron files to /opt/arena-cron/
+#   1. copy the scraper/proxy files under /opt/arena-cron/
 #   2. scp ecosystem.config.js
-#   3. reload only scraper/proxy/cron apps, preserving ingest and unrelated PM2 apps
+#   3. reload only scraper/proxy apps, preserving ingest and unrelated PM2 apps
 #   4. Verify services are running
 
 set -e
@@ -22,13 +22,11 @@ SG_HOST="root@45.76.152.169"
 JP_HOST="root@149.28.27.242"
 REMOTE_DIR="/opt/arena-cron"
 
-# Files to deploy (SG gets everything, JP gets proxy only)
+# Files to deploy (SG gets scraper + proxy, JP gets proxy only)
 SG_FILES=(
   "$SCRIPT_DIR/scraper-v16-parallel.js"
-  "$SCRIPT_DIR/scraper-cron.mjs"
   "$SCRIPT_DIR/arena-proxy.mjs"
   "$SCRIPT_DIR/proxy-key-auth.cjs"
-  "$SCRIPT_DIR/scraper-exchanges.js"
   "$INFRA_DIR/ecosystem.config.js"
 )
 
@@ -61,24 +59,23 @@ deploy_to() {
       echo "  scp $(basename "$f")"
       scp -q "$f" "$HOST:$REMOTE_DIR/"
     else
-      echo "  SKIP $(basename "$f") (not found)"
+      echo "ERROR: required deploy file missing: $f" >&2
+      exit 1
     fi
   done
 
-  # Also copy scraper to /opt/scraper/ if present (SG only)
-  if [ "$VPS_TYPE" = "sg" ] && [ -f "$SCRIPT_DIR/scraper-v16-parallel.js" ]; then
+  # Also copy scraper to /opt/scraper/ (SG only)
+  if [ "$VPS_TYPE" = "sg" ]; then
     echo "  scp scraper-v16-parallel.js -> /opt/scraper/server.js"
     scp -q "$SCRIPT_DIR/scraper-v16-parallel.js" "$HOST:/opt/scraper/server.js"
     scp -q "$SCRIPT_DIR/proxy-key-auth.cjs" "$HOST:/opt/scraper/proxy-key-auth.cjs"
   fi
 
   # Copy arena-proxy.mjs to /opt/arena-proxy/ (both VPS)
-  if [ -f "$SCRIPT_DIR/arena-proxy.mjs" ]; then
-    ssh "$HOST" "mkdir -p /opt/arena-proxy"
-    echo "  scp arena-proxy.mjs -> /opt/arena-proxy/server.mjs"
-    scp -q "$SCRIPT_DIR/arena-proxy.mjs" "$HOST:/opt/arena-proxy/server.mjs"
-    scp -q "$SCRIPT_DIR/proxy-key-auth.cjs" "$HOST:/opt/arena-proxy/proxy-key-auth.cjs"
-  fi
+  ssh "$HOST" "mkdir -p /opt/arena-proxy"
+  echo "  scp arena-proxy.mjs -> /opt/arena-proxy/server.mjs"
+  scp -q "$SCRIPT_DIR/arena-proxy.mjs" "$HOST:/opt/arena-proxy/server.mjs"
+  scp -q "$SCRIPT_DIR/proxy-key-auth.cjs" "$HOST:/opt/arena-proxy/proxy-key-auth.cjs"
 
   # Select ecosystem config and restart PM2
   if [ "$VPS_TYPE" = "jp" ]; then
@@ -104,7 +101,11 @@ cd "$REMOTE_DIR"
 INGEST_PID_BEFORE="0"
 if [ "$VPS_TYPE" = "sg" ]; then
   INGEST_PID_BEFORE="$(pm2 pid arena-ingest-worker-sg 2>/dev/null || echo 0)"
-  APPS=(arena-scraper arena-proxy arena-cron)
+  if [ -z "$INGEST_PID_BEFORE" ] || [ "$INGEST_PID_BEFORE" = "0" ]; then
+    echo "ERROR: arena-ingest-worker-sg must be online before deploy" >&2
+    exit 1
+  fi
+  APPS=(arena-scraper arena-proxy)
 else
   APPS=(arena-proxy)
 fi
@@ -112,15 +113,37 @@ fi
 for app in "${APPS[@]}"; do
   pm2 startOrReload "$ECOSYSTEM" --only "$app" --update-env
 done
-pm2 save
 
-if [ "$VPS_TYPE" = "sg" ] && [ "$INGEST_PID_BEFORE" != "0" ]; then
+pm2 jlist | node -e '
+  let input = ""
+  process.stdin.on("data", (chunk) => { input += chunk })
+  process.stdin.on("end", () => {
+    const type = process.argv[1]
+    const names = JSON.parse(input).map((app) => app.name)
+    if (names.includes("arena-cron")) {
+      throw new Error("retired arena-cron is present in PM2")
+    }
+    if (type === "jp" && names.includes("arena-scraper")) {
+      throw new Error("arena-scraper must not run on JP")
+    }
+  })
+' "$VPS_TYPE"
+
+SYSTEMD_ACTIVE="$(systemctl is-active arena-proxy.service 2>/dev/null || true)"
+SYSTEMD_ENABLED="$(systemctl is-enabled arena-proxy.service 2>/dev/null || true)"
+if [ "$SYSTEMD_ACTIVE" = "active" ] || [ "$SYSTEMD_ENABLED" = "enabled" ]; then
+  echo "ERROR: arena-proxy.service must remain inactive and disabled" >&2
+  exit 1
+fi
+
+if [ "$VPS_TYPE" = "sg" ]; then
   INGEST_PID_AFTER="$(pm2 pid arena-ingest-worker-sg 2>/dev/null || echo 0)"
   if [ "$INGEST_PID_AFTER" != "$INGEST_PID_BEFORE" ]; then
     echo "ERROR: scoped deploy changed arena-ingest-worker-sg PID" >&2
     exit 1
   fi
 fi
+pm2 save
 REMOTE_PM2
 
   # Wait for startup

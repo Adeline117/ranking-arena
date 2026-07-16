@@ -1,6 +1,6 @@
 // JP VPS: HTTP proxy only (lightweight)
 // Handles geo-blocked API forwarding (Binance, CoinEx, etc.)
-// NO scraper, NO cron — those run on SG VPS
+// NO scraper. Legacy data cron is retired globally; unified ingest runs on SG.
 //
 // Deployed to: /opt/arena-cron/ecosystem-jp.config.js
 
@@ -28,7 +28,7 @@ module.exports = {
         ...proxyKeyEnv,
       },
       max_memory_restart: '300M',
-      cron_restart: '0 */12 * * *',  // restart every 12h
+      cron_restart: '0 */12 * * *', // restart every 12h
       restart_delay: 5000,
       max_restarts: 10,
       log_date_format: 'YYYY-MM-DD HH:mm:ss',

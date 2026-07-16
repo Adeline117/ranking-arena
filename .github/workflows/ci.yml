@@ -116,6 +116,8 @@ jobs:
       - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
       - run: npm run lint
       - run: npx tsc --noEmit
+      - name: VPS process topology safety
+        run: npm run qa:vps-topology
 
       # Schema 契约真阻断门(P1)。放在 lint-typecheck(而非 data-consistency)是
       # 因为它只需 node + 生产访问,不依赖 build/unit-tests —— 这样它独立运行,
