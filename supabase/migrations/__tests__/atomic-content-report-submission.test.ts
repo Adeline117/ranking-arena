@@ -164,7 +164,6 @@ describe('atomic content report submission migration', () => {
     expect(reportTableSources).toEqual(
       [
         'app/api/admin/moderation-queue/route.ts',
-        'app/api/admin/reports/[id]/resolve/route.ts',
         'app/api/admin/reports/route.ts',
         'app/api/admin/stats/route.ts',
       ].sort()
@@ -182,10 +181,16 @@ describe('atomic content report submission migration', () => {
     )
 
     const canonicalRoute = readFileSync(join(process.cwd(), 'app/api/reports/route.ts'), 'utf8')
+    const resolutionRoute = readFileSync(
+      join(process.cwd(), 'app/api/admin/reports/[id]/resolve/route.ts'),
+      'utf8'
+    )
     const retiredRoute = readFileSync(join(process.cwd(), 'app/api/report/route.ts'), 'utf8')
     expect(canonicalRoute).toContain("supabase.rpc('submit_content_report'")
     expect(canonicalRoute).not.toMatch(/\.from\(\s*['"]content_reports['"]\s*\)/)
     expect(canonicalRoute).not.toMatch(/PGRST202|42883/)
+    expect(resolutionRoute).toContain("supabase.rpc('resolve_content_report_atomic'")
+    expect(resolutionRoute).not.toMatch(/\.from\(\s*['"]content_reports['"]\s*\)/)
     expect(retiredRoute).toContain('status: 410')
     expect(retiredRoute).not.toContain('content_reports')
   })
