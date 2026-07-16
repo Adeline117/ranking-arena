@@ -1,4 +1,11 @@
-import { decodeBscSwaps, bscQuoteConfig, TRANSFER_TOPIC, type RawLog } from '../bsc-swaps'
+import {
+  decodeBscSwaps,
+  decodeTransfersToSwaps,
+  bscQuoteConfig,
+  TRANSFER_TOPIC,
+  type NormalizedTransfer,
+  type RawLog,
+} from '../bsc-swaps'
 
 const WALLET = '0x1111111111111111111111111111111111111111'
 const POOL = '0x2222222222222222222222222222222222222222'
@@ -74,6 +81,51 @@ describe('decodeBscSwaps', () => {
     expect(swaps[0].usdValue).toBeCloseTo(300, 6)
   })
 
+  it.each([
+    {
+      name: 'incoming airdrop and incoming quote refund',
+      quoteFrom: POOL,
+      quoteTo: WALLET,
+      tokenFrom: POOL,
+      tokenTo: WALLET,
+    },
+    {
+      name: 'outgoing token and outgoing quote transfer',
+      quoteFrom: WALLET,
+      quoteTo: POOL,
+      tokenFrom: WALLET,
+      tokenTo: POOL,
+    },
+  ])('skips same-direction legs: $name', ({ quoteFrom, quoteTo, tokenFrom, tokenTo }) => {
+    const swaps = decodeBscSwaps(
+      [
+        transfer(USDT, quoteFrom, quoteTo, usdt(100), 350, '0xSAME'),
+        transfer(TOKEN, tokenFrom, tokenTo, hex(5000n), 350, '0xSAME'),
+      ],
+      WALLET,
+      cfg
+    )
+
+    expect(swaps).toHaveLength(0)
+  })
+
+  it('uses opposing largest legs in a multi-leg buy with dust refund transfers', () => {
+    const swaps = decodeBscSwaps(
+      [
+        transfer(USDT, WALLET, POOL, usdt(100), 375, '0xMULTI'),
+        transfer(USDT, POOL, WALLET, usdt(1), 375, '0xMULTI'),
+        transfer(TOKEN, POOL, WALLET, hex(5000n), 375, '0xMULTI'),
+        transfer(TOKEN, WALLET, POOL, hex(5n), 375, '0xMULTI'),
+      ],
+      WALLET,
+      cfg
+    )
+
+    expect(swaps).toEqual([
+      expect.objectContaining({ token: TOKEN, side: 'buy', tokenAmount: 5000, usdValue: 100 }),
+    ])
+  })
+
   it('ignores transfers not involving the wallet', () => {
     const swaps = decodeBscSwaps(
       [
@@ -140,5 +192,83 @@ describe('decodeBscSwaps', () => {
     expect(pnl.realizedPnlUsd).toBeCloseTo(80, 6) // 180 − 100
     expect(pnl.winRate).toBe(100)
     expect(pnl.closedPositions).toBe(1)
+  })
+})
+
+describe('decodeTransfersToSwaps', () => {
+  const normalized = (
+    token: string,
+    from: string,
+    to: string,
+    amount: number,
+    tx: string
+  ): NormalizedTransfer => ({
+    token,
+    from,
+    to,
+    amount,
+    tx,
+    ts: '2026-06-15T12:00:00Z',
+  })
+
+  it.each([
+    {
+      name: 'buy',
+      legs: [
+        normalized(USDT, WALLET, POOL, 100, '0xBUY'),
+        normalized(TOKEN, POOL, WALLET, 5000, '0xBUY'),
+      ],
+      side: 'buy',
+      usdValue: 100,
+    },
+    {
+      name: 'sell',
+      legs: [
+        normalized(TOKEN, WALLET, POOL, 5000, '0xSELL'),
+        normalized(USDT, POOL, WALLET, 150, '0xSELL'),
+      ],
+      side: 'sell',
+      usdValue: 150,
+    },
+  ] as const)('decodes a normal $name with opposing legs', ({ legs, side, usdValue }) => {
+    expect(decodeTransfersToSwaps([...legs], WALLET, cfg)).toEqual([
+      expect.objectContaining({ token: TOKEN, side, tokenAmount: 5000, usdValue }),
+    ])
+  })
+
+  it.each([
+    {
+      name: 'incoming airdrop and incoming quote refund',
+      legs: [
+        normalized(USDT, POOL, WALLET, 100, '0xIN'),
+        normalized(TOKEN, POOL, WALLET, 5000, '0xIN'),
+      ],
+    },
+    {
+      name: 'outgoing token and outgoing quote transfer',
+      legs: [
+        normalized(USDT, WALLET, POOL, 100, '0xOUT'),
+        normalized(TOKEN, WALLET, POOL, 5000, '0xOUT'),
+      ],
+    },
+  ] as const)('skips same-direction normalized legs: $name', ({ legs }) => {
+    expect(decodeTransfersToSwaps([...legs], WALLET, cfg)).toHaveLength(0)
+  })
+
+  it('uses opposing largest normalized legs across a multi-leg refund boundary', () => {
+    const swaps = decodeTransfersToSwaps(
+      [
+        normalized(USDT, WALLET, POOL, 100, '0xMULTI'),
+        normalized(USDT, POOL, WALLET, 1, '0xMULTI'),
+        normalized(TOKEN, POOL, WALLET, 5000, '0xMULTI'),
+        normalized(TOKEN, WALLET, POOL, 5, '0xMULTI'),
+      ],
+      WALLET,
+      cfg
+    )
+
+    expect(swaps).toEqual([
+      expect.objectContaining({ token: TOKEN, side: 'buy', tokenAmount: 5000, usdValue: 100 }),
+    ])
   })
 })
