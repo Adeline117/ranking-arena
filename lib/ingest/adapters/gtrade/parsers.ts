@@ -172,7 +172,9 @@ export function parseGtradeProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const windowStart = asOfTimeMs === null ? null : asOfTimeMs - tf * DAY_MS
   const windowCovered =
     windowStart !== null &&
-    (replay.exhausted || (replay.oldestTimeMs !== null && replay.oldestTimeMs < windowStart))
+    replay.exhausted &&
+    replay.startTimeMs !== null &&
+    replay.startTimeMs <= windowStart
 
   let metricsComplete = windowCovered
   let incompleteReason: string | null = null

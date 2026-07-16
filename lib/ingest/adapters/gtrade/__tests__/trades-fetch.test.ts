@@ -29,11 +29,11 @@ function fetcher(responses: unknown[]): GtradeTradesPageFetcher {
 }
 
 describe('fetchGtradeTradesWindow', () => {
-  it('freezes as-of, advances cursors, retains raw pages, and stops after covering 90d', async () => {
+  it('freezes a filtered range, advances cursors, and proves it only by exhaustion', async () => {
     const result = await fetchGtradeTradesWindow(
       fetcher([
         page([trade(10, 1), trade(9, 2), trade(8, 3)], true),
-        page([trade(7, 30), trade(6, 91)], true),
+        page([trade(7, 30), trade(6, 90)], false),
       ]),
       AS_OF,
       { maxPages: 5, pageLimit: 3 }
@@ -41,6 +41,10 @@ describe('fetchGtradeTradesWindow', () => {
 
     expect(result.trades.map((row) => row.id)).toEqual([10, 9, 8, 7, 6])
     expect(result.rawPages.map((raw) => raw.requestCursor)).toEqual([null, 8])
+    expect(result.rawPages.map((raw) => raw.requestStartTimeMs)).toEqual([
+      AS_OF - 90 * DAY,
+      AS_OF - 90 * DAY,
+    ])
     expect(result.rawPages.map((raw) => raw.requestEndTimeMs)).toEqual([AS_OF, AS_OF])
     expect(result.rawPages[1].url).toContain('cursor=8')
     expect(result.meta).toMatchObject({
@@ -48,11 +52,11 @@ describe('fetchGtradeTradesWindow', () => {
       pageCount: 2,
       rawRowCount: 5,
       uniqueRowCount: 5,
-      exhausted: false,
+      exhausted: true,
       horizonCovered: true,
       capHit: false,
       complete: true,
-      stopReason: 'horizon_covered',
+      stopReason: 'exhausted',
     })
   })
 
@@ -64,7 +68,7 @@ describe('fetchGtradeTradesWindow', () => {
     expect(result.trades).toEqual([])
     expect(result.meta).toMatchObject({
       exhausted: true,
-      horizonCovered: false,
+      horizonCovered: true,
       complete: true,
       stopReason: 'exhausted',
     })
@@ -96,7 +100,7 @@ describe('fetchGtradeTradesWindow', () => {
   it('rejects empty hasMore, malformed order, stalled cursor, and conflicting ids', async () => {
     const cases: unknown[] = [
       page([], true, 1),
-      page([trade(10, 2), trade(9, 1)], false),
+      page([trade(9, 2), trade(10, 1)], false),
       page([trade(10, 1)], true, 11),
       page([trade(10, 1), trade(10, 1, { action: 'changed' })], false),
       page([trade(10, 1)], false, 10),
@@ -108,18 +112,22 @@ describe('fetchGtradeTradesWindow', () => {
     }
   })
 
-  it('does not claim coverage from an event exactly on the second-precision boundary', async () => {
+  it('accepts local event-time inversions while preserving id cursor order', async () => {
     const result = await fetchGtradeTradesWindow(
-      fetcher([page([trade(10, 1), trade(9, 90)], true)]),
+      fetcher([page([trade(10, 2), trade(9, 1)], false)]),
       AS_OF,
       { maxPages: 1, pageLimit: 3 }
     )
-    expect(result.meta).toMatchObject({
-      horizonCovered: false,
-      capHit: true,
-      complete: false,
-      stopReason: 'page_cap',
-    })
+    expect(result.meta).toMatchObject({ exhausted: true, complete: true })
+  })
+
+  it('rejects a row outside the frozen startDate filter', async () => {
+    await expect(
+      fetchGtradeTradesWindow(fetcher([page([trade(10, 91)], false)]), AS_OF, {
+        maxPages: 1,
+        pageLimit: 3,
+      })
+    ).rejects.toBeInstanceOf(GtradeTradesFetchError)
   })
 
   it('retains successful page evidence when a later request fails', async () => {
@@ -167,9 +175,9 @@ describe('fetchGtradeTradesWindow', () => {
 
   it('replays raw pages instead of trusting flattened rows or summary flags', async () => {
     const snapshot = await fetchGtradeTradesWindow(
-      fetcher([page([trade(10, 1), trade(9, 2)], true), page([trade(8, 91)], true)]),
+      fetcher([page([trade(10, 1), trade(9, 2)], true), page([trade(8, 89)], true)]),
       AS_OF,
-      { maxPages: 5, pageLimit: 3 }
+      { maxPages: 2, pageLimit: 3 }
     )
     snapshot.trades = [{ id: 999, date: new Date(AS_OF).toISOString() }]
     snapshot.meta.complete = false
@@ -194,6 +202,7 @@ describe('fetchGtradeTradesWindow', () => {
     snapshot.rawPages.push({
       pageIndex: 2,
       requestCursor: 999,
+      requestStartTimeMs: AS_OF - 90 * DAY,
       requestEndTimeMs: AS_OF,
       url: 'https://gtrade.test/history?cursor=999',
       response: page([trade(8, 9)], false),

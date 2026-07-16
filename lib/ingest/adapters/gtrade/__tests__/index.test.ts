@@ -84,8 +84,8 @@ describe('gtrade profile transport', () => {
         })
       }
       return response({
-        data: [{ id: 8, date: new Date(end - 91 * DAY_MS).toISOString() }],
-        pagination: { hasMore: true, nextCursor: 8, limit: 1_000 },
+        data: [{ id: 8, date: new Date(end - 89 * DAY_MS).toISOString() }],
+        pagination: { hasMore: false, nextCursor: null, limit: 1_000 },
       })
     })
     global.fetch = fetchMock as unknown as typeof fetch
@@ -104,19 +104,31 @@ describe('gtrade profile transport', () => {
       expect.any(String),
       new URL(historyUrls[0]).searchParams.get('endDate'),
     ])
+    expect(historyUrls.map((url) => new URL(url).searchParams.get('startDate'))).toEqual([
+      expect.any(String),
+      new URL(historyUrls[0]).searchParams.get('startDate'),
+    ])
     expect(new URL(historyUrls[1]).searchParams.get('cursor')).toBe('9')
 
     for (const bundle of bundles) {
       expect(bundle.pages[0].payload).toMatchObject({
         profileFetchIntent: 'scheduled_full',
         tradesFetchState: 'fetched',
-        tradesFetchReason: 'horizon_covered',
+        tradesFetchReason: 'exhausted',
         trades: { data: expect.any(Array), truncated: false },
         tradesSnapshot: {
-          schemaVersion: 2,
+          schemaVersion: 3,
           rawPages: [
-            expect.objectContaining({ requestCursor: null, requestEndTimeMs: expect.any(Number) }),
-            expect.objectContaining({ requestCursor: 9, requestEndTimeMs: expect.any(Number) }),
+            expect.objectContaining({
+              requestCursor: null,
+              requestStartTimeMs: expect.any(Number),
+              requestEndTimeMs: expect.any(Number),
+            }),
+            expect.objectContaining({
+              requestCursor: 9,
+              requestStartTimeMs: expect.any(Number),
+              requestEndTimeMs: expect.any(Number),
+            }),
           ],
           meta: { pageCount: 2, horizonCovered: true, complete: true },
         },
@@ -164,7 +176,7 @@ describe('gtrade profile transport', () => {
       tradesFetchState: 'failed',
       tradesFetchReason: 'request_failed',
       tradesSnapshot: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         rawPages: [expect.objectContaining({ requestCursor: null })],
         meta: {
           requestCount: 2,
@@ -247,7 +259,7 @@ describe('gtrade profile transport', () => {
         data: [
           {
             id: 9,
-            date: new Date(end - 91 * DAY_MS).toISOString(),
+            date: new Date(end - 89 * DAY_MS).toISOString(),
             action: 'TradeOpenedMarket',
             pair: 'ETH/USD',
             tradeIndex: 7,
@@ -256,7 +268,7 @@ describe('gtrade profile transport', () => {
             long: true,
           },
         ],
-        pagination: { hasMore: true, nextCursor: 9, limit: 1_000 },
+        pagination: { hasMore: false, nextCursor: null, limit: 1_000 },
       })
     })
     global.fetch = fetchMock as unknown as typeof fetch
@@ -298,7 +310,7 @@ describe('gtrade profile transport', () => {
         data: [
           {
             id: 10,
-            date: new Date(end - 91 * DAY_MS).toISOString(),
+            date: new Date(end - 89 * DAY_MS).toISOString(),
             action: 'TradeClosedMarket',
             pair: 'ETH/USD',
             tradeIndex: 7,
@@ -306,7 +318,7 @@ describe('gtrade profile transport', () => {
             collateralPriceUsd: 1,
           },
         ],
-        pagination: { hasMore: true, nextCursor: 10, limit: 1_000 },
+        pagination: { hasMore: false, nextCursor: null, limit: 1_000 },
       })
     })
     global.fetch = fetchMock as unknown as typeof fetch
