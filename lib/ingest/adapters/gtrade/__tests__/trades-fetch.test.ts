@@ -14,7 +14,7 @@ function trade(id: number, daysAgo: number, extra: Record<string, unknown> = {})
 function page(
   data: Array<Record<string, unknown>>,
   hasMore: boolean,
-  nextCursor: number | undefined = data.at(-1)?.id as number | undefined
+  nextCursor: number | null | undefined = hasMore ? (data.at(-1)?.id as number | undefined) : null
 ) {
   return { data, pagination: { hasMore, nextCursor, limit: 3 } }
 }
@@ -40,6 +40,7 @@ describe('fetchGtradeTradesWindow', () => {
 
     expect(result.trades.map((row) => row.id)).toEqual([10, 9, 8, 7, 6])
     expect(result.rawPages.map((raw) => raw.requestCursor)).toEqual([null, 8])
+    expect(result.rawPages.map((raw) => raw.requestEndTimeMs)).toEqual([AS_OF, AS_OF])
     expect(result.rawPages[1].url).toContain('cursor=8')
     expect(result.meta).toMatchObject({
       requestCount: 2,
@@ -82,7 +83,7 @@ describe('fetchGtradeTradesWindow', () => {
     const result = await fetchGtradeTradesWindow(
       fetcher([
         page([trade(10, 1), trade(9, 2), boundary], true),
-        page([boundary, trade(7, 4)], false, 7),
+        page([boundary, trade(7, 4)], false),
       ]),
       AS_OF,
       { maxPages: 5, pageLimit: 3 }
@@ -96,13 +97,28 @@ describe('fetchGtradeTradesWindow', () => {
       page([], true, 1),
       page([trade(10, 2), trade(9, 1)], false),
       page([trade(10, 1)], true, 11),
-      page([trade(10, 1), trade(10, 1, { action: 'changed' })], false, 10),
+      page([trade(10, 1), trade(10, 1, { action: 'changed' })], false),
+      page([trade(10, 1)], false, 10),
     ]
     for (const response of cases) {
       await expect(
         fetchGtradeTradesWindow(fetcher([response]), AS_OF, { maxPages: 1, pageLimit: 3 })
       ).rejects.toBeInstanceOf(GtradeTradesFetchError)
     }
+  })
+
+  it('does not claim coverage from an event exactly on the second-precision boundary', async () => {
+    const result = await fetchGtradeTradesWindow(
+      fetcher([page([trade(10, 1), trade(9, 90)], true)]),
+      AS_OF,
+      { maxPages: 1, pageLimit: 3 }
+    )
+    expect(result.meta).toMatchObject({
+      horizonCovered: false,
+      capHit: true,
+      complete: false,
+      stopReason: 'page_cap',
+    })
   })
 
   it('retains successful page evidence when a later request fails', async () => {
