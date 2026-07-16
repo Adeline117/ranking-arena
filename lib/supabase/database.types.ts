@@ -9171,6 +9171,23 @@ export type Database = {
           trader_type: string
         }[]
       }
+      set_primary_linked_trader: {
+        Args: { p_link_id: string; p_user_id: string }
+        Returns: {
+          created_at: string | null
+          display_order: number | null
+          id: string
+          is_primary: boolean | null
+          label: string | null
+          market_type: string | null
+          source: string
+          trader_id: string
+          updated_at: string | null
+          user_id: string
+          verification_method: string
+          verified_at: string
+        }
+      }
       snapshot_score_backtest: { Args: never; Returns: number }
       text_to_bytea: { Args: { data: string }; Returns: string }
       toggle_comment_reaction: {
@@ -9187,6 +9204,15 @@ export type Database = {
         Returns: Json
       }
       trunc_hour: { Args: { ts: string }; Returns: string }
+      unlink_linked_trader: {
+        Args: { p_link_id: string; p_user_id: string }
+        Returns: {
+          promoted_link_id: string | null
+          remaining_count: number
+          removed_source: string
+          removed_trader_id: string
+        }[]
+      }
       update_own_comment: {
         Args: {
           p_comment_id: string
