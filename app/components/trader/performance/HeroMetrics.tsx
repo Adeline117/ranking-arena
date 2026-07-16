@@ -7,10 +7,14 @@ import { Sparkline } from '@/app/components/ui/Sparkline'
 import Metric from '@/app/components/ui/Metric'
 import InfoTooltip from '../../ui/InfoTooltip'
 import PnlContractNotice from '../serving/PnlContractNotice'
-import type { GmxRealizedNetDisclosure } from '@/lib/data/serving/pnl-contract'
+import type {
+  GmxMaxCapitalRoiDisclosure,
+  GmxRealizedNetDisclosure,
+} from '@/lib/data/serving/pnl-contract'
 
 export interface HeroMetricsProps {
   roi: number | undefined
+  roiDisclosure?: GmxMaxCapitalRoiDisclosure
   pnl: number | undefined
   pnlDisclosure?: GmxRealizedNetDisclosure
   sparklineData: number[]
@@ -19,6 +23,7 @@ export interface HeroMetricsProps {
 
 export function HeroMetrics({
   roi,
+  roiDisclosure,
   pnl,
   pnlDisclosure,
   sparklineData,
@@ -76,11 +81,13 @@ export function HeroMetrics({
             gap: 4,
           }}
         >
-          {t('roi')}
+          {t(roiDisclosure ? 'gmxMaxCapitalRoiLabel' : 'roi')}
           <InfoTooltip
             text={
-              t('roiTooltip').replace('{range}', '') ||
-              "Return on Investment: Total percentage gain or loss on the trader's portfolio."
+              roiDisclosure
+                ? t('gmxMaxCapitalRoiTooltip')
+                : t('roiTooltip').replace('{range}', '') ||
+                  "Return on Investment: Total percentage gain or loss on the trader's portfolio."
             }
             size={11}
           />

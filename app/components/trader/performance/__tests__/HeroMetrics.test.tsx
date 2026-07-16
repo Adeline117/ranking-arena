@@ -13,12 +13,27 @@ describe('HeroMetrics PnL disclosure', () => {
     windowTo: Date.UTC(2026, 6, 15) / 1000,
     windowDurationDays: 30 as const,
   }
+  const roiDisclosure = {
+    kind: 'gmx_realized_net_on_window_max_capital' as const,
+    windowFrom: Date.UTC(2026, 5, 15) / 1000,
+    windowTo: Date.UTC(2026, 6, 15) / 1000,
+    windowDurationDays: 30 as const,
+  }
 
   it('uses the specialized label, tooltip, and cutoff only with a verified contract', () => {
     render(
-      <HeroMetrics roi={12} pnl={345} pnlDisclosure={disclosure} sparklineData={[]} isVisible />
+      <HeroMetrics
+        roi={12}
+        roiDisclosure={roiDisclosure}
+        pnl={345}
+        pnlDisclosure={disclosure}
+        sparklineData={[]}
+        isVisible
+      />
     )
 
+    expect(screen.getByText('gmxMaxCapitalRoiLabel')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'gmxMaxCapitalRoiTooltip' })).toBeInTheDocument()
     expect(screen.getByText('gmxRealizedNetPnlLabel')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'gmxRealizedNetPnlTooltip' })).toBeInTheDocument()
     expect(screen.getByRole('note', { name: 'gmxRealizedNetPnlSummary' })).toBeInTheDocument()
@@ -32,5 +47,17 @@ describe('HeroMetrics PnL disclosure', () => {
     expect(screen.getByRole('button', { name: 'pnlTooltip' })).toBeInTheDocument()
     expect(screen.queryByRole('note')).not.toBeInTheDocument()
     expect(screen.queryByText('gmxRealizedNetPnlLabel')).not.toBeInTheDocument()
+    expect(screen.getByText('roi')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'roiTooltip' })).toBeInTheDocument()
+  })
+
+  it('does not infer the ROI formula from the PnL contract alone', () => {
+    render(
+      <HeroMetrics roi={12} pnl={345} pnlDisclosure={disclosure} sparklineData={[]} isVisible />
+    )
+
+    expect(screen.getByText('roi')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'roiTooltip' })).toBeInTheDocument()
+    expect(screen.queryByText('gmxMaxCapitalRoiLabel')).not.toBeInTheDocument()
   })
 })
