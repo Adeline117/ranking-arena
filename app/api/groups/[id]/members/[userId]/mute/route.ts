@@ -1,194 +1,331 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { SupabaseClient } from '@supabase/supabase-js'
+import { z } from 'zod'
 import { withAuth } from '@/lib/api/middleware'
 import { sendNotification } from '@/lib/data/notifications'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import logger from '@/lib/logger'
-import { fireAndForget } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
 
-// 检查用户是否是小组管理员或组长
-async function getGroupRole(
-  supabase: SupabaseClient,
-  groupId: string,
-  userId: string
-): Promise<'owner' | 'admin' | 'member' | null> {
-  const { data, error } = await supabase
-    .from('group_members')
-    .select('role')
-    .eq('group_id', groupId)
-    .eq('user_id', userId)
-    .maybeSingle()
+type RouteContext = { params: Promise<{ id: string; userId: string }> }
+type MuteAction = 'mute' | 'unmute'
 
-  if (error) {
-    logger.error('[getGroupRole] query failed', { groupId, userId, error: error.message })
+const ModerationIdsSchema = z
+  .object({
+    groupId: z
+      .string()
+      .uuid()
+      .transform((value) => value.toLowerCase()),
+    targetUserId: z
+      .string()
+      .uuid()
+      .transform((value) => value.toLowerCase()),
+  })
+  .strict()
+
+const MuteBodySchema = z
+  .object({
+    muted_until: z.string().datetime({ offset: true }),
+    reason: z
+      .string()
+      .trim()
+      .refine((value) => Array.from(value).length <= 500)
+      .nullable()
+      .optional(),
+  })
+  .strict()
+
+const IdempotencyKeySchema = z
+  .string()
+  .uuid()
+  .transform((value) => value.toLowerCase())
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
+const denialReasons = new Set([
+  'ACTOR_UNAVAILABLE',
+  'TARGET_UNAVAILABLE',
+  'GROUP_NOT_FOUND',
+  'GROUP_DISSOLVED',
+  'ACTOR_NOT_MANAGER',
+  'TARGET_NOT_MEMBER',
+  'SELF_FORBIDDEN',
+  'OWNER_FORBIDDEN',
+  'HIERARCHY_FORBIDDEN',
+])
+
+type AtomicMuteAcknowledgement =
+  | {
+      success: true
+      applied: boolean
+      action: MuteAction
+      operationId: string
+      groupId: string
+      targetId: string
+      groupName: string
+      mutedUntil: string | null
+      muteReason: string | null
+      mutedBy: string | null
+      auditLogId: string | null
+    }
+  | { success: false; reason: string }
+
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const actual = Object.keys(value).sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+}
+
+function readAtomicMuteAcknowledgement(value: unknown): AtomicMuteAcknowledgement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const result = value as Record<string, unknown>
+
+  if (result.success === false) {
+    if (!hasExactKeys(result, ['reason', 'success'])) return null
+    if (typeof result.reason !== 'string' || !denialReasons.has(result.reason)) return null
+    return { success: false, reason: result.reason }
+  }
+
+  if (
+    result.success !== true ||
+    !hasExactKeys(result, [
+      'action',
+      'applied',
+      'audit_log_id',
+      'group_id',
+      'group_name',
+      'mute_reason',
+      'muted_by',
+      'muted_until',
+      'operation_id',
+      'success',
+      'target_id',
+    ]) ||
+    typeof result.applied !== 'boolean' ||
+    !['mute', 'unmute'].includes(result.action as string) ||
+    typeof result.operation_id !== 'string' ||
+    !UUID_PATTERN.test(result.operation_id) ||
+    typeof result.group_id !== 'string' ||
+    !UUID_PATTERN.test(result.group_id) ||
+    typeof result.target_id !== 'string' ||
+    !UUID_PATTERN.test(result.target_id) ||
+    typeof result.group_name !== 'string' ||
+    result.group_name.length === 0 ||
+    (result.muted_until !== null && !isTimestamp(result.muted_until)) ||
+    (result.mute_reason !== null && typeof result.mute_reason !== 'string') ||
+    (result.muted_by !== null &&
+      (typeof result.muted_by !== 'string' || !UUID_PATTERN.test(result.muted_by))) ||
+    (result.audit_log_id !== null &&
+      (typeof result.audit_log_id !== 'string' || !UUID_PATTERN.test(result.audit_log_id))) ||
+    (result.applied ? result.audit_log_id === null : result.audit_log_id !== null)
+  ) {
     return null
   }
 
-  return data?.role as 'owner' | 'admin' | 'member' | null
+  return {
+    success: true,
+    applied: result.applied,
+    action: result.action as MuteAction,
+    operationId: (result.operation_id as string).toLowerCase(),
+    groupId: (result.group_id as string).toLowerCase(),
+    targetId: (result.target_id as string).toLowerCase(),
+    groupName: result.group_name,
+    mutedUntil: result.muted_until as string | null,
+    muteReason: result.mute_reason as string | null,
+    mutedBy: result.muted_by === null ? null : (result.muted_by as string).toLowerCase(),
+    auditLogId: result.audit_log_id === null ? null : (result.audit_log_id as string).toLowerCase(),
+  }
 }
 
-// 禁言成员
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string; userId: string }> }
-) {
-  const { id: groupId, userId: targetUserId } = await params
+function databaseErrorResponse(error: { code?: string } | null) {
+  switch (error?.code) {
+    case '22023':
+      return NextResponse.json({ error: 'Invalid mute request' }, { status: 400 })
+    case '42501':
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+    case 'P0002':
+      return NextResponse.json({ error: 'Group member not found' }, { status: 404 })
+    case '40001':
+    case '40P01':
+    case '55P03':
+      return NextResponse.json({ error: 'Group membership changed; retry' }, { status: 409 })
+    default:
+      return NextResponse.json({ error: 'Mute operation failed' }, { status: 500 })
+  }
+}
+
+function denialResponse(reason: string) {
+  switch (reason) {
+    case 'GROUP_NOT_FOUND':
+      return NextResponse.json({ error: 'Group not found' }, { status: 404 })
+    case 'TARGET_UNAVAILABLE':
+    case 'TARGET_NOT_MEMBER':
+      return NextResponse.json({ error: 'Target user is not a group member' }, { status: 404 })
+    case 'GROUP_DISSOLVED':
+      return NextResponse.json({ error: 'Group has been dissolved' }, { status: 409 })
+    case 'SELF_FORBIDDEN':
+      return NextResponse.json({ error: 'Cannot mute yourself' }, { status: 400 })
+    case 'OWNER_FORBIDDEN':
+    case 'HIERARCHY_FORBIDDEN':
+      return NextResponse.json({ error: 'No permission to mute this user' }, { status: 403 })
+    case 'ACTOR_UNAVAILABLE':
+    case 'ACTOR_NOT_MANAGER':
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+    default:
+      return NextResponse.json({ error: 'Mute operation failed' }, { status: 500 })
+  }
+}
+
+function muteDurationText(mutedUntil: string): string {
+  const diffHours = Math.round((Date.parse(mutedUntil) - Date.now()) / (60 * 60 * 1000))
+  if (diffHours <= 4) return '3 hours'
+  if (diffHours <= 25) return '1 day'
+  if (diffHours <= 170) return '7 days'
+  return 'permanently'
+}
+
+async function moderateMute(input: {
+  actorId: string
+  operationId: string
+  groupId: string
+  targetUserId: string
+  action: MuteAction
+  mutedUntil: string | null
+  reason: string | null
+}): Promise<AtomicMuteAcknowledgement | NextResponse> {
+  const admin = getSupabaseAdmin()
+  const { data, error } = await admin.rpc(
+    'moderate_group_mute_atomic' as never,
+    {
+      p_actor_id: input.actorId,
+      p_operation_id: input.operationId,
+      p_group_id: input.groupId,
+      p_target_id: input.targetUserId,
+      p_action: input.action,
+      p_muted_until: input.mutedUntil,
+      p_reason: input.reason,
+    } as never
+  )
+
+  if (error) {
+    logger.error('Atomic group mute operation failed', {
+      action: input.action,
+      groupId: input.groupId,
+      targetUserId: input.targetUserId,
+      code: error.code,
+    })
+    return databaseErrorResponse(error)
+  }
+
+  const acknowledgement = readAtomicMuteAcknowledgement(data)
+  if (!acknowledgement) {
+    logger.error('Atomic group mute operation returned an invalid acknowledgement', {
+      action: input.action,
+      groupId: input.groupId,
+      targetUserId: input.targetUserId,
+    })
+    return NextResponse.json({ error: 'Mute operation failed' }, { status: 500 })
+  }
+
+  if (!acknowledgement.success) return acknowledgement
+
+  const sameTimestamp =
+    input.mutedUntil === null
+      ? acknowledgement.mutedUntil === null
+      : acknowledgement.mutedUntil !== null &&
+        Date.parse(acknowledgement.mutedUntil) === Date.parse(input.mutedUntil)
+  if (
+    acknowledgement.action !== input.action ||
+    acknowledgement.operationId !== input.operationId ||
+    acknowledgement.groupId !== input.groupId ||
+    acknowledgement.targetId !== input.targetUserId ||
+    !sameTimestamp ||
+    acknowledgement.muteReason !== input.reason ||
+    acknowledgement.mutedBy !== (input.action === 'mute' ? input.actorId : null)
+  ) {
+    logger.error('Atomic group mute acknowledgement did not match its request', {
+      action: input.action,
+      groupId: input.groupId,
+      targetUserId: input.targetUserId,
+    })
+    return NextResponse.json({ error: 'Mute operation failed' }, { status: 500 })
+  }
+
+  return acknowledgement
+}
+
+export async function POST(request: NextRequest, context: RouteContext) {
+  const resolvedParams = await context.params
+  const params = ModerationIdsSchema.safeParse({
+    groupId: resolvedParams.id,
+    targetUserId: resolvedParams.userId,
+  })
 
   const handler = withAuth(
-    async ({ user, supabase, request: req }) => {
+    async ({ user, request: req }) => {
       const guard = socialFeatureGuard()
       if (guard) return guard
 
-      // 检查操作者权限
-      const operatorRole = await getGroupRole(supabase, groupId, user.id)
-      if (!operatorRole || operatorRole === 'member') {
-        return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+      if (!params.success) {
+        return NextResponse.json({ error: 'Invalid group or user ID' }, { status: 400 })
       }
 
-      // 检查目标用户角色
-      const targetRole = await getGroupRole(supabase, groupId, targetUserId)
-      if (!targetRole) {
-        return NextResponse.json({ error: 'Target user is not a group member' }, { status: 404 })
+      const operationId = IdempotencyKeySchema.safeParse(req.headers.get('Idempotency-Key'))
+      if (!operationId.success) {
+        return NextResponse.json({ error: 'Invalid idempotency key' }, { status: 400 })
       }
 
-      // 管理员不能禁言组长或其他管理员
-      if (operatorRole === 'admin' && (targetRole === 'owner' || targetRole === 'admin')) {
-        return NextResponse.json({ error: 'No permission to mute this user' }, { status: 403 })
-      }
-
-      // 组长不能禁言自己
-      if (operatorRole === 'owner' && targetUserId === user.id) {
-        return NextResponse.json({ error: 'Cannot mute yourself' }, { status: 400 })
-      }
-
-      let body: { muted_until?: string | null; reason?: string | null }
+      let body: unknown
       try {
         body = await req.json()
       } catch {
         return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
       }
-      const { muted_until, reason } = body
-
-      // 更新禁言状态
-      const { error: updateError } = await supabase
-        .from('group_members')
-        .update({
-          muted_until,
-          mute_reason: reason || null,
-          muted_by: user.id,
-        })
-        .eq('group_id', groupId)
-        .eq('user_id', targetUserId)
-
-      if (updateError) {
-        logger.error('Mute error:', updateError)
-        return NextResponse.json({ error: 'Mute failed' }, { status: 500 })
+      const parsedBody = MuteBodySchema.safeParse(body)
+      if (!parsedBody.success) {
+        return NextResponse.json({ error: 'Invalid mute request' }, { status: 400 })
       }
 
-      // 发送私信通知给被禁言用户
-      try {
-        // 获取小组名称
-        const { data: groupData } = await supabase
-          .from('groups')
-          .select('name')
-          .eq('id', groupId)
-          .single()
+      const mutedUntil = new Date(parsedBody.data.muted_until).toISOString()
+      const actorId = user.id.toLowerCase()
+      const reason = parsedBody.data.reason || null
+      const result = await moderateMute({
+        actorId,
+        operationId: operationId.data,
+        groupId: params.data.groupId,
+        targetUserId: params.data.targetUserId,
+        action: 'mute',
+        mutedUntil,
+        reason,
+      })
+      if (result instanceof NextResponse) return result
+      if (!result.success) return denialResponse(result.reason)
 
-        const groupName = groupData?.name || 'Group'
-
-        // 格式化禁言时长
-        let durationText = ''
-        if (muted_until) {
-          const mutedDate = new Date(muted_until)
-          const now = new Date()
-          const diffMs = mutedDate.getTime() - now.getTime()
-          const diffHours = Math.round(diffMs / (1000 * 60 * 60))
-          if (diffHours <= 4) durationText = '3 hours'
-          else if (diffHours <= 25) durationText = '1 day'
-          else if (diffHours <= 170) durationText = '7 days'
-          else durationText = 'permanently'
-        }
-
-        const reasonText = reason ? `\nReason: ${reason}` : ''
-        const messageContent = `You have been muted in "${groupName}" for ${durationText}. ${reasonText}`
-
-        // 创建或获取会话并发送私信
-        const orderedUser1 = user.id < targetUserId ? user.id : targetUserId
-        const orderedUser2 = user.id < targetUserId ? targetUserId : user.id
-
-        let conversationId: string | null = null
-        const { data: existingConv } = await supabase
-          .from('conversations')
-          .select('id')
-          .eq('user1_id', orderedUser1)
-          .eq('user2_id', orderedUser2)
-          .maybeSingle()
-
-        if (existingConv) {
-          conversationId = existingConv.id
-        } else {
-          const { data: newConv } = await supabase
-            .from('conversations')
-            .insert({ user1_id: orderedUser1, user2_id: orderedUser2 })
-            .select('id')
-            .single()
-          conversationId = newConv?.id || null
-        }
-
-        if (conversationId) {
-          await supabase.from('direct_messages').insert({
-            conversation_id: conversationId,
-            sender_id: user.id,
-            receiver_id: targetUserId,
-            content: messageContent,
-          })
-
-          // 更新会话最后消息时间
-          await supabase
-            .from('conversations')
-            .update({
-              last_message_at: new Date().toISOString(),
-              last_message_preview: messageContent.slice(0, 100),
-            })
-            .eq('id', conversationId)
-        }
-
-        // 同时创建系统通知（sendNotification 强制 fire-and-forget + 1h dedup）
+      if (result.applied && result.mutedUntil) {
+        const reasonText = result.muteReason ? `\nReason: ${result.muteReason}` : ''
+        const message = `You have been muted in "${result.groupName}" for ${muteDurationText(result.mutedUntil)}. ${reasonText}`
         sendNotification(
-          supabase,
+          getSupabaseAdmin(),
           {
-            user_id: targetUserId,
+            user_id: result.targetId,
             type: 'system',
             title: 'Group mute notification',
-            message: messageContent,
-            link: `/groups/${groupId}`,
-            actor_id: user.id,
-            reference_id: groupId,
+            message,
+            link: `/groups/${result.groupId}`,
+            actor_id: actorId,
+            reference_id: result.groupId,
           },
           'group-mute'
         )
-      } catch (notifyError) {
-        // 通知发送失败不影响禁言操作
-        logger.error('Failed to send mute notification:', notifyError)
       }
 
-      // Audit log (fire-and-forget)
-      const duration = muted_until || 'permanent'
-      fireAndForget(
-        supabase
-          .from('group_audit_log')
-          .insert({
-            group_id: groupId,
-            actor_id: user.id,
-            action: 'mute',
-            target_id: targetUserId,
-            details: { duration, reason: reason || null },
-          })
-          .then(),
-        'Group audit log: mute'
-      )
-
-      return NextResponse.json({ success: true })
+      return NextResponse.json({
+        success: true,
+        operation_id: operationId.data,
+        ...(result.applied ? {} : { already_muted: true }),
+      })
     },
     { name: 'group-member-mute', rateLimit: 'write' }
   )
@@ -196,56 +333,44 @@ export async function POST(
   return handler(request)
 }
 
-// 解除禁言
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ id: string; userId: string }> }
-) {
-  const { id: groupId, userId: targetUserId } = await params
+export async function DELETE(request: NextRequest, context: RouteContext) {
+  const resolvedParams = await context.params
+  const params = ModerationIdsSchema.safeParse({
+    groupId: resolvedParams.id,
+    targetUserId: resolvedParams.userId,
+  })
 
   const handler = withAuth(
-    async ({ user, supabase }) => {
+    async ({ user, request: req }) => {
       const guard = socialFeatureGuard()
       if (guard) return guard
 
-      // 检查操作者权限
-      const operatorRole = await getGroupRole(supabase, groupId, user.id)
-      if (!operatorRole || operatorRole === 'member') {
-        return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+      if (!params.success) {
+        return NextResponse.json({ error: 'Invalid group or user ID' }, { status: 400 })
       }
 
-      // 解除禁言
-      const { error: updateError } = await supabase
-        .from('group_members')
-        .update({
-          muted_until: null,
-          mute_reason: null,
-          muted_by: null,
-        })
-        .eq('group_id', groupId)
-        .eq('user_id', targetUserId)
-
-      if (updateError) {
-        logger.error('Unmute error:', updateError)
-        return NextResponse.json({ error: 'Failed to unmute' }, { status: 500 })
+      const operationId = IdempotencyKeySchema.safeParse(req.headers.get('Idempotency-Key'))
+      if (!operationId.success) {
+        return NextResponse.json({ error: 'Invalid idempotency key' }, { status: 400 })
       }
 
-      // Audit log (fire-and-forget)
-      fireAndForget(
-        supabase
-          .from('group_audit_log')
-          .insert({
-            group_id: groupId,
-            actor_id: user.id,
-            action: 'unmute',
-            target_id: targetUserId,
-            details: {},
-          })
-          .then(),
-        'Group audit log: unmute'
-      )
+      const result = await moderateMute({
+        actorId: user.id.toLowerCase(),
+        operationId: operationId.data,
+        groupId: params.data.groupId,
+        targetUserId: params.data.targetUserId,
+        action: 'unmute',
+        mutedUntil: null,
+        reason: null,
+      })
+      if (result instanceof NextResponse) return result
+      if (!result.success) return denialResponse(result.reason)
 
-      return NextResponse.json({ success: true })
+      return NextResponse.json({
+        success: true,
+        operation_id: operationId.data,
+        ...(result.applied ? {} : { already_unmuted: true }),
+      })
     },
     { name: 'group-member-unmute', rateLimit: 'write' }
   )
