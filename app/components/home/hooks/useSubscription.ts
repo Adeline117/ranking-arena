@@ -86,6 +86,16 @@ export function useSubscription() {
   viewerScopeRef.current = viewerScope
   ownerKeyRef.current = ownerKey
 
+  useEffect(() => {
+    // React StrictMode replays effect setup after cleanup in development.
+    // Re-open this exact mounted lifetime before later effects start work.
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      requestRevisionRef.current += 1
+    }
+  }, [])
+
   const isCurrentScope = useCallback((expected: ViewerScope, expectedOwnerKey: string) => {
     return (
       mountedRef.current &&
@@ -252,14 +262,6 @@ export function useSubscription() {
       authSub?.unsubscribe()
     }
   }, [checkSubscription, isCurrentScope, ownerKey, viewerScope])
-
-  useEffect(
-    () => () => {
-      mountedRef.current = false
-      requestRevisionRef.current += 1
-    },
-    []
-  )
 
   // isFeaturesUnlocked: beta 期间全员解锁；正式收费后等于 isPro
   // During open beta, treat all users as Pro so no UI gates are shown
