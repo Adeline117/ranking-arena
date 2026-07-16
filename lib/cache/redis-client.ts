@@ -53,25 +53,11 @@ export async function getSharedRedis(): Promise<UpstashRedisType | null> {
     // CRITICAL: Upstash SDK defaults to `cache: 'no-store'` on its internal fetch calls.
     // This causes Next.js to treat ANY page that touches Redis as fully dynamic,
     // breaking ISR on /rankings/[exchange], homepage, and all cached pages.
-    // Solution: pass a custom fetch wrapper that replaces 'no-store' with revalidate.
-    const isrSafeFetch: typeof fetch = (input, init) => {
-      // Strip cache: 'no-store' option (Upstash default)
-      const patchedInit = { ...init }
-      if (patchedInit.cache === 'no-store') {
-        delete patchedInit.cache
-        ;(patchedInit as Record<string, unknown>).next = { revalidate: 60 }
-      }
-      // Strip Cache-Control: no-cache header (Upstash sets this on every request)
-      // This header makes Next.js mark the page as dynamic even with revalidate
-      if (patchedInit.headers) {
-        const h = new Headers(patchedInit.headers as HeadersInit)
-        h.delete('Cache-Control')
-        patchedInit.headers = h
-      }
-      return fetch(input, patchedInit)
-    }
-
-    redisClient = new Redis({ url, token, enableAutoPipelining: true, fetch: isrSafeFetch } as any)
+    // Use the SDK's supported cache option. The previous custom `fetch` field is
+    // not part of RedisConfigNodejs, was ignored at runtime, and `as any` hid it.
+    // Redis commands are POST requests, so the browser/HTTP default does not
+    // cache their responses; it only avoids explicitly opting the route out of ISR.
+    redisClient = new Redis({ url, token, enableAutoPipelining: true, cache: 'default' })
     dataLogger.info('[Redis] connected')
     return redisClient
   } catch (error) {
