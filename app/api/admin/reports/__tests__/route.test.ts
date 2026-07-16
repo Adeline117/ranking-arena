@@ -48,8 +48,11 @@ jest.mock('@/lib/api/with-admin-auth', () => ({
           supabase: mockSupabase,
           request,
         })
-      } catch {
-        return NextResponse.json({ success: false, error: 'Database error' }, { status: 500 })
+      } catch (error) {
+        return NextResponse.json(
+          { success: false, error: 'Database error' },
+          { status: (error as { statusCode?: number }).statusCode ?? 500 }
+        )
       }
     },
 }))
@@ -58,7 +61,7 @@ jest.mock('@/lib/utils/logger', () => ({
   createLogger: () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }),
 }))
 
-import { GET } from '../route'
+import { GET, POST } from '../route'
 
 const REPORTER_ID = '11111111-1111-4111-8111-111111111111'
 const EVIDENCE_FILE = '0123456789abcdef.png'
@@ -80,6 +83,15 @@ function profilesQuery(result: { data: unknown; error: unknown }) {
   return chain
 }
 
+function updateReportQuery(result: { data: unknown; error: unknown }) {
+  const chain: Record<string, jest.Mock> = {}
+  chain.update = jest.fn(() => chain)
+  chain.eq = jest.fn(() => chain)
+  chain.select = jest.fn(() => chain)
+  chain.maybeSingle = jest.fn().mockResolvedValue(result)
+  return chain
+}
+
 function request() {
   return {
     url: 'http://localhost/api/admin/reports?status=pending',
@@ -89,6 +101,7 @@ function request() {
 
 describe('GET /api/admin/reports private evidence', () => {
   beforeEach(() => {
+    jest.restoreAllMocks()
     jest.clearAllMocks()
     mockAuthorized = true
   })
@@ -188,5 +201,69 @@ describe('GET /api/admin/reports private evidence', () => {
 
     expect(response.status).toBe(500)
     expect(mockStorageFrom).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST /api/admin/reports canonical status contract', () => {
+  const reportId = '22222222-2222-4222-8222-222222222222'
+  const resolvedAt = '2026-07-16T16:00:00.000Z'
+
+  function postRequest(status: string, actionTaken = 'reviewed_by_admin') {
+    return {
+      method: 'POST',
+      json: jest.fn().mockResolvedValue({ reportId, status, action_taken: actionTaken }),
+    } as never
+  }
+
+  beforeEach(() => {
+    jest.restoreAllMocks()
+    jest.clearAllMocks()
+    mockAuthorized = true
+    jest.spyOn(Date.prototype, 'toISOString').mockReturnValue(resolvedAt)
+  })
+
+  it.each(['reviewed', 'actioned'])('rejects legacy status %s before any write', async (status) => {
+    const response = await POST(postRequest(status))
+
+    expect(response.status).toBe(400)
+    expect(mockFrom).not.toHaveBeenCalled()
+  })
+
+  it.each(['resolved', 'dismissed'] as const)(
+    'writes canonical status %s with an exact pending-row acknowledgement',
+    async (status) => {
+      const query = updateReportQuery({
+        data: {
+          id: reportId,
+          status,
+          resolved_by: 'admin-id',
+          resolved_at: resolvedAt,
+          action_taken: 'reviewed_by_admin',
+        },
+        error: null,
+      })
+      mockFrom.mockReturnValue(query)
+
+      const response = await POST(postRequest(status))
+
+      expect(response.status).toBe(200)
+      expect(query.update).toHaveBeenCalledWith({
+        status,
+        resolved_by: 'admin-id',
+        resolved_at: resolvedAt,
+        action_taken: 'reviewed_by_admin',
+      })
+      expect(query.eq).toHaveBeenCalledWith('id', reportId)
+      expect(query.eq).toHaveBeenCalledWith('status', 'pending')
+      expect(query.maybeSingle).toHaveBeenCalledTimes(1)
+    }
+  )
+
+  it('fails closed when the pending report transition is not acknowledged', async () => {
+    mockFrom.mockReturnValue(updateReportQuery({ data: null, error: null }))
+
+    const response = await POST(postRequest('resolved'))
+
+    expect(response.status).toBe(500)
   })
 })
