@@ -38,8 +38,6 @@ interface BookmarkRepostState {
   showRepostModal: string | null
   setShowRepostModal: (v: string | null) => void
   openRepostModal: (postId: string) => Promise<void>
-  repostComment: string
-  setRepostComment: (v: string) => void
   userBookmarks: Record<string, boolean>
   setUserBookmarks: React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   bookmarkCounts: Record<string, number>
@@ -51,7 +49,7 @@ interface BookmarkRepostState {
   handleBookmark: (postId: string) => Promise<void>
   openBookmarkFolderModal: (postId: string) => void
   handleBookmarkToFolder: (folderId: string) => Promise<void>
-  handleRepost: (postId: string, comment?: string) => Promise<void>
+  handleRepost: (postId: string, comment?: string) => Promise<boolean>
   loadUserBookmarksAndReposts: (postIds: string[]) => Promise<void>
 }
 
@@ -219,7 +217,6 @@ export function usePostActions({
   const [bookmarkLoadingState, setBookmarkLoadingRaw] = useState<Record<string, boolean>>({})
   const [repostLoadingState, setRepostLoadingRaw] = useState<Record<string, boolean>>({})
   const [showRepostModalState, setShowRepostModalRaw] = useState<string | null>(null)
-  const [repostCommentState, setRepostCommentRaw] = useState('')
   const [userBookmarksState, setUserBookmarksRaw] = useState<Record<string, boolean>>({})
   const [bookmarkCountsState, setBookmarkCountsRaw] = useState<Record<string, number>>({})
   const bookmarkOwnerScopeKeyRef = useRef(scopeKey)
@@ -291,7 +288,6 @@ export function usePostActions({
     repostOwnerScopeKeyRef.current = currentScopeKey
     setRepostLoadingRaw({})
     setShowRepostModalRaw(null)
-    setRepostCommentRaw('')
   }, [])
   const setRepostLoading = useCallback<
     React.Dispatch<React.SetStateAction<Record<string, boolean>>>
@@ -309,17 +305,9 @@ export function usePostActions({
     },
     [claimRepostScope]
   )
-  const setRepostComment = useCallback(
-    (value: string) => {
-      claimRepostScope()
-      setRepostCommentRaw(value)
-    },
-    [claimRepostScope]
-  )
   const repostScopeOwned = repostOwnerScopeKeyRef.current === scopeKey
   const repostLoading = repostScopeOwned ? repostLoadingState : {}
   const showRepostModal = repostScopeOwned ? showRepostModalState : null
-  const repostComment = repostScopeOwned ? repostCommentState : ''
 
   // Toggle reaction
   const toggleReaction = useCallback(
@@ -825,21 +813,21 @@ export function usePostActions({
 
   // Repost
   const handleRepost = useCallback(
-    async (postId: string, comment?: string) => {
+    async (postId: string, comment?: string): Promise<boolean> => {
       const capturedScope = captureRenderedScope()
-      if (!scopeIsCurrent(capturedScope)) return
+      if (!scopeIsCurrent(capturedScope)) return false
       if (!accessToken) {
         const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
         if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
-        return
+        return false
       }
       const post = posts.find((p) => p.id === postId) || openPost
       if (post?.author_id === currentUserId) {
         showToast(t('cannotRepostOwn'), 'warning')
-        return
+        return false
       }
       const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000repost-${postId}`
-      if (lockRef.current.has(key)) return
+      if (lockRef.current.has(key)) return false
       lockRef.current.add(key)
       setRepostLoading((prev) => ({ ...prev, [postId]: true }))
       try {
@@ -853,7 +841,7 @@ export function usePostActions({
           body: JSON.stringify({ comment }),
         })
         const result = await response.json()
-        if (!scopeIsCurrent(capturedScope)) return
+        if (!scopeIsCurrent(capturedScope)) return false
         if (response.ok) {
           if (typeof result.repost_count === 'number') {
             const rootPostId =
@@ -868,17 +856,18 @@ export function usePostActions({
               setOpenPost({ ...op, repost_count: result.repost_count })
             }
           }
-          setShowRepostModal(null)
-          setRepostComment('')
           trackEvent('post_repost', { post_id: postId, with_comment: comment ? 1 : 0 })
           showToast(t('reposted'), 'success')
+          return true
         } else {
           showToast(result.error || t('repostFailed'), 'error')
+          return false
         }
       } catch (err) {
-        if (!scopeIsCurrent(capturedScope)) return
+        if (!scopeIsCurrent(capturedScope)) return false
         logger.error('[PostFeed] repost failed:', err)
         showToast(getNetworkErrorMessage(err, t), 'error')
+        return false
       } finally {
         if (scopeIsCurrent(capturedScope)) {
           setRepostLoading((prev) => ({ ...prev, [postId]: false }))
@@ -1089,8 +1078,6 @@ export function usePostActions({
     showRepostModal,
     setShowRepostModal,
     openRepostModal,
-    repostComment,
-    setRepostComment,
     userBookmarks,
     setUserBookmarks,
     bookmarkCounts,
