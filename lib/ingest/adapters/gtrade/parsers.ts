@@ -223,6 +223,7 @@ export function parseGtradeProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       tradingPreferences: null,
       extras: {
         profile_window_metrics_complete: metricsComplete,
+        profile_window_metrics_incomplete_reason: metricsComplete ? null : incompleteReason,
         gtrade_trades_incomplete_reason: metricsComplete ? null : incompleteReason,
         gtrade_trades_fetch_state:
           typeof payload.tradesFetchState === 'string' ? payload.tradesFetchState : null,

@@ -1,0 +1,162 @@
+import type { Job } from 'bullmq'
+import type { ParsedProfile, SourceRow } from '@/lib/ingest/core/types'
+import type { TierCJobData } from '../../queues'
+
+const mockRedisSet = jest.fn()
+const mockGetSourceBySlug = jest.fn()
+const mockGetAdapter = jest.fn()
+const mockGetProfile = jest.fn()
+const mockParseProfile = jest.fn()
+const mockOpenSession = jest.fn()
+const mockSessionClose = jest.fn()
+const mockWriteRawObject = jest.fn()
+const mockResolveTraderId = jest.fn()
+const mockPublishProfile = jest.fn()
+const mockDbQuery = jest.fn()
+
+jest.mock('../../../connection', () => ({
+  getConnection: jest.fn(() => ({ set: (...args: unknown[]) => mockRedisSet(...args) })),
+}))
+jest.mock('@/lib/ingest/sources', () => ({
+  getSourceBySlug: (...args: unknown[]) => mockGetSourceBySlug(...args),
+}))
+jest.mock('@/lib/ingest/core/adapter', () => ({
+  getAdapter: (...args: unknown[]) => mockGetAdapter(...args),
+}))
+jest.mock('@/lib/ingest/core/history-cursor', () => ({ nextHistoryCursor: jest.fn() }))
+jest.mock('@/lib/ingest/fetch/fetcher', () => ({
+  openSession: (...args: unknown[]) => mockOpenSession(...args),
+}))
+jest.mock('@/lib/ingest/raw', () => ({
+  writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
+}))
+jest.mock('@/lib/ingest/serving/publish', () => ({
+  getHistoryCursor: jest.fn(),
+  publishHistoryRows: jest.fn(),
+  publishPositions: jest.fn(),
+  publishProfile: (...args: unknown[]) => mockPublishProfile(...args),
+  resolveTraderId: (...args: unknown[]) => mockResolveTraderId(...args),
+}))
+jest.mock('@/lib/ingest/db', () => ({
+  getIngestPool: jest.fn(() => ({ query: (...args: unknown[]) => mockDbQuery(...args) })),
+}))
+jest.mock('../../queues', () => ({ tierCResultKey: jest.fn(() => 'tier-c:result') }))
+
+import { processTierC } from '../tier-c-profile'
+
+const src = {
+  id: 34,
+  slug: 'gtrade',
+  adapter_slug: 'gtrade',
+  currency: 'USDC',
+  tf_label_map: {},
+  meta: {},
+  profile_cache_ttl_seconds: 3_600,
+} as SourceRow & { profile_cache_ttl_seconds: number }
+
+const bundle = {
+  pages: [
+    {
+      pageIndex: 1,
+      payload: { raw: true },
+      url: 'https://gtrade.test/profile',
+      fetchedAt: '2026-07-15T12:00:00.000Z',
+    },
+  ],
+  fetchedAt: '2026-07-15T12:00:00.000Z',
+}
+
+function parsedProfile(complete: boolean): ParsedProfile {
+  return {
+    nickname: null,
+    avatarUrlOrigin: null,
+    stats: [
+      {
+        timeframe: 30,
+        asOf: '2026-07-15T12:00:00.000Z',
+        roi: null,
+        pnl: complete ? 10 : null,
+        sharpe: null,
+        mdd: null,
+        winRate: null,
+        winPositions: complete ? 0 : null,
+        totalPositions: complete ? 0 : null,
+        copierPnl: null,
+        copierCount: null,
+        aum: null,
+        volume: null,
+        profitShareRate: null,
+        holdingDurationAvgHours: null,
+        tradingPreferences: null,
+        extras: {
+          profile_window_metrics_complete: complete,
+          ...(complete ? {} : { gtrade_trades_incomplete_reason: 'window_prefix_not_covered' }),
+        },
+      },
+    ],
+    series: [],
+  }
+}
+
+const job = {
+  data: {
+    sourceSlug: 'gtrade',
+    exchangeTraderId: '0x0000000000000000000000000000000000000001',
+    timeframe: 30,
+    surface: 'profile',
+  },
+} as Job<TierCJobData>
+
+describe('Tier-C incomplete profile window gate', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetSourceBySlug.mockResolvedValue(src)
+    mockGetAdapter.mockReturnValue({
+      getProfile: mockGetProfile,
+      parseProfile: mockParseProfile,
+    })
+    mockGetProfile.mockResolvedValue(bundle)
+    mockOpenSession.mockResolvedValue({ close: mockSessionClose })
+    mockDbQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+    mockResolveTraderId.mockResolvedValue(42)
+    mockWriteRawObject.mockResolvedValue(undefined)
+    mockPublishProfile.mockResolvedValue(undefined)
+    mockSessionClose.mockResolvedValue(undefined)
+  })
+
+  it('persists RAW evidence but never writes render or profile caches', async () => {
+    mockParseProfile.mockReturnValue(parsedProfile(false))
+
+    await expect(processTierC(job)).rejects.toMatchObject({
+      name: 'IncompleteProfileWindowError',
+      timeframe: 30,
+      reason: 'window_prefix_not_covered',
+    })
+
+    expect(mockRedisSet).not.toHaveBeenCalled()
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({ jobType: 'tier_c', traderId: 42, payload: bundle.pages })
+    )
+    expect(mockPublishProfile).toHaveBeenCalledWith(src, 42, parsedProfile(false), {
+      fullSeries: false,
+    })
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(false)
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('uses the frozen profile as-of for a complete render payload', async () => {
+    mockParseProfile.mockReturnValue(parsedProfile(true))
+
+    await expect(processTierC(job)).resolves.toMatchObject({ traderId: 42, stats: 1, series: 0 })
+
+    expect(mockRedisSet).toHaveBeenCalledTimes(1)
+    const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(renderPayload.asOf).toBe('2026-07-15T12:00:00.000Z')
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(true)
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+})

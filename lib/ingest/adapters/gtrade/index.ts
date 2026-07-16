@@ -47,6 +47,7 @@ import {
 } from './parsers'
 import {
   fetchGtradeTradesWindow,
+  GtradeTradesFetchError,
   GTRADE_TRADES_PAGE_LIMIT,
   type GtradeTradesSnapshot,
 } from './trades-fetch'
@@ -107,17 +108,19 @@ function getBoard(session: FetchSession, src: SourceRow): Promise<BoardFetch> {
 
 // ── Trades crawl, memoized per (session, trader) — 3 TFs share one crawl ──
 
-const tradesCache = new WeakMap<FetchSession, Map<string, Promise<GtradeTradesSnapshot>>>()
+interface TradesOutcome {
+  state: 'fetched' | 'failed'
+  snapshot: GtradeTradesSnapshot
+  reason: string
+}
+
+const tradesCache = new WeakMap<FetchSession, Map<string, Promise<TradesOutcome>>>()
 
 /**
  * Crawl a frozen trades-table snapshot newest→oldest until it strictly
  * covers 90 days, exhausts, or reaches the configured page cap.
  */
-function getTrades(
-  session: FetchSession,
-  src: SourceRow,
-  address: string
-): Promise<GtradeTradesSnapshot> {
+function getTrades(session: FetchSession, src: SourceRow, address: string): Promise<TradesOutcome> {
   let perSession = tradesCache.get(session)
   if (!perSession) {
     perSession = new Map()
@@ -128,20 +131,30 @@ function getTrades(
     const asOfTimeMs = Date.now()
     const base = endpoint(src, 'history', `${API_BASE}/personal-trading-history`)
     const maxPages = Number(src.meta.profile_trades_max_pages ?? DEFAULT_PROFILE_TRADES_MAX_PAGES)
-    cached = fetchGtradeTradesWindow(
-      async (cursor, limit) => {
-        const params = new URLSearchParams({
-          chainId: chainId(src),
-          limit: String(limit),
-          endDate: new Date(asOfTimeMs).toISOString(),
-        })
-        if (cursor !== null) params.set('cursor', String(cursor))
-        const url = `${base}/${address}?${params.toString()}`
-        return { payload: await fetchJson(session, url), url }
-      },
-      asOfTimeMs,
-      { maxPages }
-    )
+    cached = (async () => {
+      try {
+        const snapshot = await fetchGtradeTradesWindow(
+          async (cursor, limit) => {
+            const params = new URLSearchParams({
+              chainId: chainId(src),
+              limit: String(limit),
+              endDate: new Date(asOfTimeMs).toISOString(),
+            })
+            if (cursor !== null) params.set('cursor', String(cursor))
+            const url = `${base}/${address}?${params.toString()}`
+            return { payload: await fetchJson(session, url), url }
+          },
+          asOfTimeMs,
+          { maxPages }
+        )
+        return { state: 'fetched', snapshot, reason: snapshot.meta.stopReason }
+      } catch (error) {
+        if (error instanceof GtradeTradesFetchError) {
+          return { state: 'failed', snapshot: error.partial, reason: error.reason }
+        }
+        throw error
+      }
+    })()
     perSession.set(address, cached)
     cached.catch(() => perSession!.delete(address))
   }
@@ -217,7 +230,7 @@ const gtradeAdapter: SourceAdapter = {
     const base = endpoint(src, 'history', `${API_BASE}/personal-trading-history`)
     const statsUrl = `${base}/${exchangeTraderId}/stats?chainId=${chainId(src)}`
     const stats = await fetchJson(session, statsUrl)
-    const tradesSnapshot = await getTrades(session, src, exchangeTraderId)
+    const trades = await getTrades(session, src, exchangeTraderId)
 
     const fetchedAt = new Date().toISOString()
     return {
@@ -226,17 +239,17 @@ const gtradeAdapter: SourceAdapter = {
           pageIndex: 1,
           payload: {
             stats,
-            // Legacy envelope stays until the pure parser switches to the
-            // replayed snapshot in the next independently deployable step.
+            // Compatibility envelope for older RAW tooling. The canonical
+            // parser ignores it and replays tradesSnapshot.rawPages instead.
             trades: {
-              data: tradesSnapshot.trades,
-              truncated: !tradesSnapshot.meta.complete,
+              data: trades.snapshot.trades,
+              truncated: !trades.snapshot.meta.complete,
             },
             timeframe: tf,
             profileFetchIntent: intent,
-            tradesFetchState: 'fetched',
-            tradesFetchReason: tradesSnapshot.meta.stopReason,
-            tradesSnapshot,
+            tradesFetchState: trades.state,
+            tradesFetchReason: trades.reason,
+            tradesSnapshot: trades.snapshot,
           },
           url: statsUrl,
           fetchedAt,

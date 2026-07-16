@@ -127,4 +127,46 @@ describe('gtrade profile transport', () => {
     )
     expect(fetchMock).not.toHaveBeenCalled()
   })
+
+  it('returns a structured partial snapshot after a later page request fails', async () => {
+    let historyRequests = 0
+    const fetchMock = jest.fn(async (input: string | URL | Request) => {
+      const url = String(input)
+      if (url.includes('/stats?')) return response({ totalTrades: 3 })
+      historyRequests += 1
+      if (historyRequests === 2) throw new Error('network down')
+
+      const endDate = new URL(url).searchParams.get('endDate')
+      if (!endDate) throw new Error('missing endDate')
+      const end = Date.parse(endDate)
+      return response({
+        data: [
+          { id: 10, date: new Date(end - DAY_MS).toISOString() },
+          { id: 9, date: new Date(end - 2 * DAY_MS).toISOString() },
+        ],
+        pagination: { hasMore: true, nextCursor: 9, limit: 1_000 },
+      })
+    })
+    global.fetch = fetchMock as unknown as typeof fetch
+
+    const bundle = await gtradeAdapter.getProfile(session(), src, ADDRESS, 30, undefined, {
+      intent: 'scheduled_full',
+    })
+
+    expect(bundle.pages[0].payload).toMatchObject({
+      tradesFetchState: 'failed',
+      tradesFetchReason: 'request_failed',
+      tradesSnapshot: {
+        schemaVersion: 2,
+        rawPages: [expect.objectContaining({ requestCursor: null })],
+        meta: {
+          requestCount: 2,
+          pageCount: 1,
+          uniqueRowCount: 2,
+          complete: false,
+          stopReason: 'request_failed',
+        },
+      },
+    })
+  })
 })
