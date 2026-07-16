@@ -22,8 +22,14 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useTraderCore } from '@/lib/hooks/useTraderCore'
 import { useBotHeader } from '@/lib/hooks/useBotHeader'
 import { PeriodSelector, type Period } from '@/app/components/trader/performance/PeriodSelector'
-import { promoteExtrasMetrics, EXTRAS_PROMOTABLE_KEYS } from '@/lib/constants/metric-registry'
+import {
+  displayableMetrics,
+  promoteExtrasMetrics,
+  EXTRAS_PROMOTABLE_KEYS,
+} from '@/lib/constants/metric-registry'
+import { readGmxRealizedNetModuleDisclosure } from '@/lib/data/serving/pnl-contract'
 import MetricGrid from './MetricGrid'
+import PnlContractNotice from './PnlContractNotice'
 import SignalChips from './SignalChips'
 import TraderMetaStrip from './TraderMetaStrip'
 import CopyTradingCard from './CopyTradingCard'
@@ -129,6 +135,19 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
     if (!core.modules) return {}
     return promoteExtrasMetrics(core.modules.stats, core.modules.extras)
   }, [core.modules])
+  const gridCapabilityMetrics = [
+    ...(capability?.metrics ?? Object.keys(core.modules?.stats ?? {})),
+    // Extras-sourced metrics aren't in the capability RPC's trader_stats
+    // column scan — allow them when present.
+    ...EXTRAS_PROMOTABLE_KEYS,
+  ]
+  const pnlActuallyVisible = displayableMetrics(gridCapabilityMetrics, gridStats).some(
+    (def) => def.key === 'pnl'
+  )
+  const pnlDisclosure =
+    typeof tf === 'number' && pnlActuallyVisible
+      ? readGmxRealizedNetModuleDisclosure(source, tf, core.modules)
+      : null
 
   // Dormant trader (e.g. Bitget "*不活跃"): every core metric is 0 and the
   // series is flat. Show one honest line instead of a grid of 0.00% that
@@ -220,14 +239,11 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
           )}
           <MetricGrid
             stats={gridStats}
-            capabilityMetrics={[
-              ...(capability?.metrics ?? Object.keys(core.modules.stats)),
-              // Extras-sourced metrics aren't in the capability RPC's
-              // trader_stats column scan — allow them when present.
-              ...EXTRAS_PROMOTABLE_KEYS,
-            ]}
+            capabilityMetrics={gridCapabilityMetrics}
             currency={core.modules.currency}
+            metricLabelKeys={pnlDisclosure ? { pnl: 'gmxRealizedNetPnlLabel' } : undefined}
           />
+          {pnlDisclosure && <PnlContractNotice disclosure={pnlDisclosure} compact />}
           <CoreCharts series={core.modules.series} timeframe={tf} />
           <DrawdownModule series={core.modules.series} />
           <AbilityRadar extras={core.modules.extras} />

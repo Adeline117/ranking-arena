@@ -35,6 +35,9 @@ export interface MetricGridProps {
   stats: Record<string, number | string | null>
   capabilityMetrics: string[]
   currency: ServingCurrency
+  /** Per-cell copy override for a proven source contract. Registry defaults
+   * remain untouched so other sources and similarly named metrics stay safe. */
+  metricLabelKeys?: Readonly<Record<string, string>>
 }
 
 function formatValue(def: MetricDef, value: number | string, currency: ServingCurrency): string {
@@ -82,10 +85,12 @@ function MetricCell({
   def,
   value,
   currency,
+  labelKey,
 }: {
   def: MetricDef
   value: number | string
   currency: ServingCurrency
+  labelKey?: string
 }) {
   const { t } = useLanguage()
   return (
@@ -98,7 +103,7 @@ function MetricCell({
       }}
     >
       <Text size="xs" color="tertiary" style={{ display: 'block', marginBottom: 4 }}>
-        {t(def.i18nKey)}
+        {t(labelKey ?? def.i18nKey)}
       </Text>
       <Text
         size={def.tier === 'hero' ? 'lg' : 'md'}
@@ -111,7 +116,12 @@ function MetricCell({
   )
 }
 
-export default function MetricGrid({ stats, capabilityMetrics, currency }: MetricGridProps) {
+export default function MetricGrid({
+  stats,
+  capabilityMetrics,
+  currency,
+  metricLabelKeys,
+}: MetricGridProps) {
   const { t } = useLanguage()
   const defs = displayableMetrics(capabilityMetrics, stats)
   if (defs.length === 0) return null
@@ -155,7 +165,13 @@ export default function MetricGrid({ stats, capabilityMetrics, currency }: Metri
             }}
           >
             {group.defs.map((def) => (
-              <MetricCell key={def.key} def={def} value={stats[def.key]!} currency={currency} />
+              <MetricCell
+                key={def.key}
+                def={def}
+                value={stats[def.key]!}
+                currency={currency}
+                labelKey={metricLabelKeys?.[def.key]}
+              />
             ))}
           </Box>
         </Box>
