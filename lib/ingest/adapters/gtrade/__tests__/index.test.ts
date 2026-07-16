@@ -169,4 +169,44 @@ describe('gtrade profile transport', () => {
       },
     })
   })
+
+  it.each([
+    ['scheduled_full', 6, 'exhausted'],
+    ['interactive_deferred', 5, 'page_cap'],
+  ] as const)(
+    '%s uses the correct default crawl budget',
+    async (intent, expectedRequests, expectedReason) => {
+      let historyRequests = 0
+      const fetchMock = jest.fn(async (input: string | URL | Request) => {
+        const url = String(input)
+        if (url.includes('/stats?')) return response({ totalTrades: 6 })
+        historyRequests += 1
+        const endDate = new URL(url).searchParams.get('endDate')
+        if (!endDate) throw new Error('missing endDate')
+        const end = Date.parse(endDate)
+        const id = 100 - historyRequests
+        const exhausted = intent === 'scheduled_full' && historyRequests === expectedRequests
+        return response({
+          data: [{ id, date: new Date(end - historyRequests * DAY_MS).toISOString() }],
+          pagination: {
+            hasMore: !exhausted,
+            nextCursor: exhausted ? null : id,
+            limit: 1_000,
+          },
+        })
+      })
+      global.fetch = fetchMock as unknown as typeof fetch
+
+      const defaultSrc = { ...src, meta: {} }
+      const bundle = await gtradeAdapter.getProfile(session(), defaultSrc, ADDRESS, 30, undefined, {
+        intent,
+      })
+
+      expect(historyRequests).toBe(expectedRequests)
+      expect(bundle.pages[0].payload).toMatchObject({
+        tradesFetchMaxPages: intent === 'scheduled_full' ? 25 : 5,
+        tradesFetchReason: expectedReason,
+      })
+    }
+  )
 })

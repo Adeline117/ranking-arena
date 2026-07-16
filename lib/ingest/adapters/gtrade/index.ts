@@ -53,7 +53,8 @@ import {
 } from './trades-fetch'
 
 const API_BASE = 'https://backend-global.gains.trade/api'
-const DEFAULT_PROFILE_TRADES_MAX_PAGES = 5
+const DEFAULT_PROFILE_TRADES_MAX_PAGES = 25
+const INTERACTIVE_PROFILE_TRADES_MAX_PAGES = 5
 
 type Dict = Record<string, unknown>
 
@@ -120,17 +121,22 @@ const tradesCache = new WeakMap<FetchSession, Map<string, Promise<TradesOutcome>
  * Crawl a frozen trades-table snapshot newest→oldest until it strictly
  * covers 90 days, exhausts, or reaches the configured page cap.
  */
-function getTrades(session: FetchSession, src: SourceRow, address: string): Promise<TradesOutcome> {
+function getTrades(
+  session: FetchSession,
+  src: SourceRow,
+  address: string,
+  maxPages: number
+): Promise<TradesOutcome> {
   let perSession = tradesCache.get(session)
   if (!perSession) {
     perSession = new Map()
     tradesCache.set(session, perSession)
   }
-  let cached = perSession.get(address)
+  const cacheKey = `${address}:${maxPages}`
+  let cached = perSession.get(cacheKey)
   if (!cached) {
     const asOfTimeMs = Date.now()
     const base = endpoint(src, 'history', `${API_BASE}/personal-trading-history`)
-    const maxPages = Number(src.meta.profile_trades_max_pages ?? DEFAULT_PROFILE_TRADES_MAX_PAGES)
     cached = (async () => {
       try {
         const snapshot = await fetchGtradeTradesWindow(
@@ -155,8 +161,8 @@ function getTrades(session: FetchSession, src: SourceRow, address: string): Prom
         throw error
       }
     })()
-    perSession.set(address, cached)
-    cached.catch(() => perSession!.delete(address))
+    perSession.set(cacheKey, cached)
+    cached.catch(() => perSession!.delete(cacheKey))
   }
   return cached
 }
@@ -230,7 +236,14 @@ const gtradeAdapter: SourceAdapter = {
     const base = endpoint(src, 'history', `${API_BASE}/personal-trading-history`)
     const statsUrl = `${base}/${exchangeTraderId}/stats?chainId=${chainId(src)}`
     const stats = await fetchJson(session, statsUrl)
-    const trades = await getTrades(session, src, exchangeTraderId)
+    const configuredMaxPages = Number(
+      src.meta.profile_trades_max_pages ?? DEFAULT_PROFILE_TRADES_MAX_PAGES
+    )
+    const maxPages =
+      intent === 'interactive_deferred'
+        ? Math.min(configuredMaxPages, INTERACTIVE_PROFILE_TRADES_MAX_PAGES)
+        : configuredMaxPages
+    const trades = await getTrades(session, src, exchangeTraderId, maxPages)
 
     const fetchedAt = new Date().toISOString()
     return {
@@ -249,6 +262,7 @@ const gtradeAdapter: SourceAdapter = {
             profileFetchIntent: intent,
             tradesFetchState: trades.state,
             tradesFetchReason: trades.reason,
+            tradesFetchMaxPages: maxPages,
             tradesSnapshot: trades.snapshot,
           },
           url: statsUrl,
