@@ -25,7 +25,7 @@ describe('search service audience boundary', () => {
   })
 
   it('re-authorizes unified post results and post-title suggestions on cache hits', () => {
-    expect(route).toContain('search:unified:v3:candidates:')
+    expect(route).toContain('search:unified:v4:candidates:')
     expect(route).toMatch(/const cached = await cacheGet<UnifiedSearchCacheCandidate>\(cacheKey\)/)
     expect(route).toMatch(
       /const result = await materializeUnifiedSearchCandidate\(supabase, cached\)/
@@ -34,15 +34,17 @@ describe('search service audience boundary', () => {
     expect(route).toMatch(
       /const readablePostSuggestions = await filterServiceReadablePostRows\(\s*supabase,\s*hotPostSuggestions,\s*null\s*\)/
     )
-    expect(route).not.toContain('search:unified:v2:')
+    expect(route).not.toContain('search:unified:v3:')
   })
 
   it('rematerializes current discoverable groups and rechecks public profiles after cache hits', () => {
     expect(route.match(/\.is\('dissolved_at', null\)/g)).toHaveLength(3)
     expect(route.match(/\.in\('visibility'/g)).toHaveLength(3)
     expect(route).toContain(".from('public_user_profiles')")
-    expect(route).toContain('readCurrentSearchGroups(supabase, groupIds)')
+    expect(route).toContain('readCurrentSearchGroups(supabase, groupIds, candidate.groupQuery)')
     expect(route).toContain(".select('id, name, description, member_count')")
+    expect(route).toContain(".ilike('name', `%${groupQuery}%`)")
+    expect(route).toContain('groupQuery: sanitizedQuery')
     expect(route).toContain('const group = currentGroups.get(candidateGroup.id)')
     expect(route).toContain('title: group.name')
     expect(route).toContain('subtitle: group.description || undefined')

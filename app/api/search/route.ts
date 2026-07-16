@@ -71,6 +71,8 @@ interface SearchSuggestionCandidateSet {
 
 interface UnifiedSearchCacheCandidate {
   result: Omit<UnifiedSearchResponse, 'suggestions'>
+  /** Escaped DB pattern used to prove group names still match on cache hits. */
+  groupQuery: string
   suggestionCandidates?: SearchSuggestionCandidateSet
 }
 
@@ -97,14 +99,16 @@ interface CurrentSearchGroup {
 
 async function readCurrentSearchGroups(
   supabase: PublicSearchSupabase,
-  groupIds: string[]
+  groupIds: string[],
+  groupQuery: string
 ): Promise<Map<string, CurrentSearchGroup>> {
-  if (groupIds.length === 0) return new Map()
+  if (groupIds.length === 0 || typeof groupQuery !== 'string' || !groupQuery) return new Map()
   try {
     const { data, error } = await supabase
       .from('groups')
       .select('id, name, description, member_count')
       .in('id', groupIds)
+      .ilike('name', `%${groupQuery}%`)
       .is('dissolved_at', null)
       .in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])
     if (error) return new Map()
@@ -177,7 +181,7 @@ async function materializeUnifiedSearchCandidate(
       [...resultPostCandidates, ...suggestionPostCandidates],
       null
     ),
-    readCurrentSearchGroups(supabase, groupIds),
+    readCurrentSearchGroups(supabase, groupIds, candidate.groupQuery),
     readCurrentSearchUserIds(supabase, userIds),
   ])
   const posts = readablePostCandidates
@@ -572,7 +576,7 @@ export const GET = withPublic(
     }
 
     // Cache check
-    const cacheKey = `search:unified:v3:candidates:${query.toLowerCase().slice(0, 50)}:${limitPerCategory}:${platformFilter || ''}`
+    const cacheKey = `search:unified:v4:candidates:${query.toLowerCase().slice(0, 50)}:${limitPerCategory}:${platformFilter || ''}`
     try {
       const cached = await cacheGet<UnifiedSearchCacheCandidate>(cacheKey)
       if (cached) {
@@ -939,6 +943,7 @@ export const GET = withPublic(
 
     const escapedQuery = query.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
     const cacheCandidate: UnifiedSearchCacheCandidate = {
+      groupQuery: sanitizedQuery,
       result: {
         query: escapedQuery,
         results: { traders, posts, users, groups },
