@@ -12,7 +12,7 @@ export interface DexGoldenWalletQueryRow {
   snapshot_actual_count: number
   source_currency: string
   entry_currency: string
-  source_chain_id: string | null
+  source_meta_chain_id: string | null
   is_derived: boolean
   wallet_address: string | null
   exchange_trader_id: string
@@ -118,8 +118,11 @@ export function buildDexGoldenWalletCandidates(
       if (row.source_currency !== pnlCurrency || row.entry_currency !== pnlCurrency) {
         throw new Error(`${source} snapshot PnL currency does not match its source contract`)
       }
-      if (row.source_chain_id !== expectedSourceChainId(source)) {
-        throw new Error(`${source} source chain id does not match its chain contract`)
+      if (
+        row.source_meta_chain_id !== null &&
+        row.source_meta_chain_id !== expectedSourceChainId(source)
+      ) {
+        throw new Error(`${source} optional source chain id conflicts with its chain contract`)
       }
       if (source === 'okx_web3_solana') {
         if (row.raw_chain_id !== '501' || row.period_type !== '5') {
