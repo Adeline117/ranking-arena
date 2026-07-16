@@ -153,6 +153,8 @@ export function decodeBscSwaps(
     if (!Number.isFinite(quoteLeg.usd) || quoteLeg.usd <= 0) continue
     const tokenAmount = hexToRaw(tokenLeg.amountHex)
     if (!Number.isFinite(tokenAmount) || tokenAmount <= 0) continue
+    const quoteIncoming = quoteLeg.to === wallet
+    if (quoteIncoming === tokenLeg.incoming) continue
 
     // Wallet receives the non-quote token ⇒ buy; sends it ⇒ sell.
     const side: 'buy' | 'sell' = tokenLeg.incoming ? 'buy' : 'sell'
@@ -202,7 +204,7 @@ export function decodeTransfersToSwaps(
 
   const swaps: OnchainSwap[] = []
   for (const [, legs] of byTx) {
-    let quote: { usd: number } | null = null
+    let quote: { usd: number; incoming: boolean } | null = null
     let tokenLeg: { token: string; amount: number; incoming: boolean; ts: string } | null = null
     let quoteCount = 0
     let tokenCount = 0
@@ -212,7 +214,7 @@ export function decodeTransfersToSwaps(
       if (q) {
         quoteCount += 1
         const usd = leg.amount * q.usdPerUnit
-        if (!quote || usd > quote.usd) quote = { usd }
+        if (!quote || usd > quote.usd) quote = { usd, incoming }
       } else {
         tokenCount += 1
         if (!tokenLeg || leg.amount > tokenLeg.amount)
@@ -221,6 +223,7 @@ export function decodeTransfersToSwaps(
     }
     if (!quote || !tokenLeg || quoteCount === 0 || tokenCount === 0) continue
     if (!Number.isFinite(quote.usd) || quote.usd <= 0) continue
+    if (quote.incoming === tokenLeg.incoming) continue
     swaps.push({
       token: tokenLeg.token,
       ts: tokenLeg.ts,
