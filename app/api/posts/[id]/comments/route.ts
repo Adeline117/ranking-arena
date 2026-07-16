@@ -20,7 +20,7 @@ import {
 import { sendNotification } from '@/lib/data/notifications'
 import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
-import { getUserHandle } from '@/lib/supabase/server'
+import { getAuthUser, getUserHandle } from '@/lib/supabase/server'
 import logger, { fireAndForget } from '@/lib/logger'
 // sanitizeText is dynamically imported inside POST/PUT only — keeps the
 // sanitize-html parser out of the GET handler's module graph at cold-start.
@@ -207,15 +207,7 @@ export const GET = withPublic(
     const sort: CommentSortMode = sortParam === 'time' ? 'time' : 'best'
 
     // 尝试获取当前用户ID（用于获取点赞状态）
-    let userId: string | undefined
-    const authHeader = request.headers.get('Authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7)
-      const {
-        data: { user },
-      } = await supabase.auth.getUser(token)
-      userId = user?.id
-    }
+    const userId = (await getAuthUser(request))?.id
 
     const comments = await getPostComments(supabase, id, { limit, offset, userId, sort })
 

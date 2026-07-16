@@ -5,7 +5,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { checkRateLimit, RateLimitPresets } from '@/lib/api'
 
 const VALID_TYPES = new Set([
@@ -67,12 +67,7 @@ export async function POST(request: NextRequest) {
 
     // Try to extract user_id from auth header (optional)
     let userId: string | null = null
-    const authHeader = request.headers.get('authorization')
-    if (authHeader?.startsWith('Bearer ')) {
-      const token = authHeader.slice(7)
-      const { data } = await supabase.auth.getUser(token)
-      if (data?.user) userId = data.user.id
-    }
+    userId = (await getAuthUser(request))?.id ?? null
 
     // quiz_results table may not be in generated types yet (migration pending)
     const { error } = await (supabase as any).from('quiz_results').insert({

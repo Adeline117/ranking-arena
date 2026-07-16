@@ -5,12 +5,7 @@
  */
 
 import { NextRequest } from 'next/server'
-import {
-  getSupabaseAdmin,
-  requireAuth,
-  success,
-  handleError,
-} from '@/lib/api'
+import { getSupabaseAdmin, getAuthUser, requireAuth, success, handleError } from '@/lib/api'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import logger from '@/lib/logger'
@@ -29,19 +24,10 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     const { id: postId } = await context.params
     const supabase = getSupabaseAdmin() as SupabaseClient
-    
+
     // 尝试获取用户（可选，未登录也可以查看）
     let userId: string | null = null
-    try {
-      const authHeader = request.headers.get('authorization')
-      if (authHeader?.startsWith('Bearer ')) {
-        const token = authHeader.slice(7)
-        const { data: { user } } = await supabase.auth.getUser(token)
-        userId = user?.id || null
-      }
-    } catch {
-      // Intentionally swallowed: auth token parse failed, continue as anonymous user (userId = null)
-    }
+    userId = (await getAuthUser(request))?.id ?? null
 
     // 获取投票信息
     const { data: poll, error: pollError } = await supabase
@@ -56,7 +42,7 @@ export async function GET(request: NextRequest, context: RouteContext) {
 
     // 检查是否已过期
     const isExpired = poll.end_at ? new Date(poll.end_at) <= new Date() : false
-    
+
     // 获取用户投票（如果已登录）
     let userVotes: number[] = []
     if (userId) {
@@ -65,8 +51,8 @@ export async function GET(request: NextRequest, context: RouteContext) {
         .select('option_index')
         .eq('poll_id', poll.id)
         .eq('user_id', userId)
-      
-      userVotes = votes?.map(v => v.option_index) || []
+
+      userVotes = votes?.map((v) => v.option_index) || []
     }
 
     // 如果未过期且用户未投票，隐藏投票结果
@@ -77,14 +63,14 @@ export async function GET(request: NextRequest, context: RouteContext) {
       poll: {
         id: poll.id,
         question: poll.question,
-        options: showResults 
-          ? poll.options 
+        options: showResults
+          ? poll.options
           : poll.options.map((opt: { text: string }) => ({ text: opt.text, votes: null })),
         type: poll.type,
         endAt: poll.end_at,
         isExpired,
         showResults,
-        totalVotes: showResults 
+        totalVotes: showResults
           ? poll.options.reduce((sum: number, opt: { votes: number }) => sum + opt.votes, 0)
           : null,
       },
@@ -143,22 +129,16 @@ export async function POST(request: NextRequest, context: RouteContext) {
     }
 
     // 删除现有投票
-    await supabase
-      .from('poll_votes')
-      .delete()
-      .eq('poll_id', poll.id)
-      .eq('user_id', user.id)
+    await supabase.from('poll_votes').delete().eq('poll_id', poll.id).eq('user_id', user.id)
 
     // 插入新投票
-    const newVotes = optionIndexes.map(optionIndex => ({
+    const newVotes = optionIndexes.map((optionIndex) => ({
       poll_id: poll.id,
       user_id: user.id,
       option_index: optionIndex,
     }))
 
-    const { error: insertError } = await supabase
-      .from('poll_votes')
-      .insert(newVotes)
+    const { error: insertError } = await supabase.from('poll_votes').insert(newVotes)
 
     if (insertError) {
       throw new Error('Vote failed: ' + insertError.message)
@@ -177,10 +157,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
       countMap[v.option_index] = (countMap[v.option_index] || 0) + 1
     }
 
-    const updatedOptions = poll.options.map((opt: { text: string; votes: number }, idx: number) => ({
-      ...opt,
-      votes: countMap[idx] || 0,
-    }))
+    const updatedOptions = poll.options.map(
+      (opt: { text: string; votes: number }, idx: number) => ({
+        ...opt,
+        votes: countMap[idx] || 0,
+      })
+    )
 
     // Update polls table with recounted values
     const { data: updatedPoll, error: updateError } = await supabase
@@ -196,10 +178,13 @@ export async function POST(request: NextRequest, context: RouteContext) {
         poll: {
           id: poll.id,
           options: updatedOptions,
-          totalVotes: updatedOptions.reduce((sum: number, opt: { votes: number }) => sum + (opt.votes || 0), 0),
+          totalVotes: updatedOptions.reduce(
+            (sum: number, opt: { votes: number }) => sum + (opt.votes || 0),
+            0
+          ),
         },
         userVotes: optionIndexes,
-        warning: 'Vote recorded but count update failed'
+        warning: 'Vote recorded but count update failed',
       })
     }
 
@@ -207,7 +192,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
       poll: {
         id: updatedPoll.id,
         options: updatedPoll.options,
-        totalVotes: updatedPoll.options.reduce((sum: number, opt: { votes: number }) => sum + opt.votes, 0),
+        totalVotes: updatedPoll.options.reduce(
+          (sum: number, opt: { votes: number }) => sum + opt.votes,
+          0
+        ),
       },
       userVotes: optionIndexes,
     })
@@ -215,5 +203,3 @@ export async function POST(request: NextRequest, context: RouteContext) {
     return handleError(error, 'posts/[id]/poll-vote POST')
   }
 }
-
-
