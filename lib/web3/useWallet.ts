@@ -123,7 +123,7 @@ export function useWallet(): WalletState {
   }, [])
 
   const isWalletOperationCurrent = useCallback((operation: WalletViewerOperation): boolean => {
-    return isCanonicalWalletViewerCurrent(operation, authRef.current)
+    return mountedRef.current && isCanonicalWalletViewerCurrent(operation, authRef.current)
   }, [])
 
   const isRequestCurrent = useCallback(
