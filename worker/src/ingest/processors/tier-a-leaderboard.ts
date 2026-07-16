@@ -135,7 +135,18 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
       // chart with no extra fetch — closes the long-tail series gap that
       // otherwise waits on Tier-B topN / on-demand Tier-C.
       if (boardSeries.size > 0) {
-        const seriesOut = await publishBoardSeries(src, boardSeries, result.traderIds)
+        const seriesOut = await publishBoardSeries(src, boardSeries, result.traderIds, {
+          expectedLatestSnapshots: new Map([
+            [
+              timeframe,
+              {
+                id: result.snapshotId,
+                rawObjectId,
+                scrapedAt: new Date(result.scrapedAt).toISOString(),
+              },
+            ],
+          ]),
+        })
         console.log(
           `[tier-a] ${src.slug} ${timeframe}d board series: ` +
             `${seriesOut.points} pts for ${seriesOut.traders} traders`

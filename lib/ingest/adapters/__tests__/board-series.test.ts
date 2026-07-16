@@ -34,7 +34,8 @@ const ctx: ParseCtx = {
 function assertWellFormed(
   map: Map<string, BoardSeriesBlock[]>,
   expectTf: RankingTimeframe,
-  expectMetrics: string[]
+  expectMetrics: string[],
+  replaceSeries = false
 ): void {
   expect(map.size).toBeGreaterThan(0)
   for (const [id, blocks] of map) {
@@ -44,6 +45,7 @@ function assertWellFormed(
       expect(block.timeframe).toBe(expectTf)
       expect(expectMetrics).toContain(block.metric)
       expect(block.points.length).toBeGreaterThan(0)
+      expect(block.replaceSeries).toBe(replaceSeries ? true : undefined)
       // monotonic ISO ascending + finite values
       let prev = ''
       for (const p of block.points) {
@@ -74,11 +76,13 @@ describe('toobit parseLeaderboardSeries (leaderTradeProfit → roi)', () => {
 describe('xt parseLeaderboardSeries (chart → pnl)', () => {
   it('decodes cumulative-income chart, dropping the epoch-0 seed', () => {
     const map = parseXtLeaderboardSeries(fixture('xt', 'leaderboard-fut-30.json'), ctx, 30)
-    assertWellFormed(map, 30, ['pnl'])
+    assertWellFormed(map, 30, ['pnl'], true)
     // epoch-0 placeholder must never leak into points
     for (const blocks of map.values())
       for (const b of blocks)
-        for (const p of b.points) expect(new Date(p.ts).getTime()).toBeGreaterThan(0)
+        for (const p of b.points) {
+          expect(new Date(p.ts).getTime()).toBeGreaterThan(0)
+        }
   })
 })
 

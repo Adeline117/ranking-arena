@@ -192,6 +192,12 @@ export interface BoardSeriesBlock {
   timeframe: Timeframe
   metric: SeriesMetric
   points: SeriesPoint[]
+  /**
+   * This non-empty block is the complete upstream snapshot for its series
+   * key. The board publisher may therefore replace old daily and weekly
+   * points atomically before inserting it. Omitted means append/upsert.
+   */
+  replaceSeries?: boolean
 }
 
 export interface ParsedProfile {
