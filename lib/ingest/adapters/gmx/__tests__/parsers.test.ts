@@ -32,11 +32,29 @@ const ctx: ParseCtx = {
 }
 
 describe('gmxRealizedPnlUsd', () => {
-  it('matches the verified identity (pnl − fees + impact − startUnrealized)', () => {
+  it('nets every realized fee and impact without mixing in window-start unrealized PnL', () => {
     const rows = fixture('period-account-stats.json').rows as Array<Record<string, unknown>>
-    // cross-checked live against accountPnlSummaryStats.realizedPnlUsd
     expect(gmxRealizedPnlUsd(rows[0])).toBeCloseTo(124.189338, 5)
-    expect(gmxRealizedPnlUsd(rows[2])).toBeCloseTo(-142.587463, 5)
+    // No closes and zero realizedPnl: fees stay a loss even though the old
+    // formula's start-unrealized adjustment incorrectly made this positive.
+    expect(gmxRealizedPnlUsd(rows[1])).toBeCloseTo(-24.493454, 5)
+    // Includes non-zero realizedSwapFees + realizedSwapImpact.
+    expect(gmxRealizedPnlUsd(rows[4])).toBeCloseTo(204.553564, 5)
+  })
+
+  it('fails closed when any realized-net component is absent', () => {
+    const complete = {
+      realizedPnl: '10',
+      realizedFees: '1',
+      realizedSwapFees: '2',
+      realizedPriceImpact: '3',
+      realizedSwapImpact: '4',
+    }
+    for (const key of Object.keys(complete)) {
+      const incomplete = { ...complete } as Record<string, unknown>
+      delete incomplete[key]
+      expect(gmxRealizedPnlUsd(incomplete)).toBeNull()
+    }
   })
 })
 
@@ -60,12 +78,12 @@ describe('parseGmxLeaderboardPage', () => {
     })
     expect(page.rows[0].headlineRoi).toBeCloseTo(24.84557, 4)
     expect(page.rows[0].headlinePnl).toBeCloseTo(124.189338, 5)
-    // open-only account: zero closes → null win rate, PnL still computed
+    // open-only account: zero closes → null win rate; realized fees remain loss
     expect(page.rows[1].headlineWinRate).toBeNull()
-    expect(page.rows[1].headlineRoi).toBeCloseTo(20.471309, 5)
+    expect(page.rows[1].headlineRoi).toBeCloseTo(-3.737128, 5)
     // losing account keeps its negative numbers
-    expect(page.rows[2].headlinePnl).toBeCloseTo(-142.587463, 5)
-    expect(page.rows[2].headlineWinRate).toBeCloseTo(63.157895, 5)
+    expect(page.rows[3].headlinePnl).toBeCloseTo(-248.8365, 5)
+    expect(page.rows[3].headlineWinRate).toBeCloseTo(45.454545, 5)
     // raw kept verbatim — 1e30 strings, never thrown away (spec §3)
     expect((page.rows[0].raw as Record<string, unknown>).maxCapital).toBe(
       '499845000000000000000000000000000'

@@ -12,9 +12,8 @@
  * Unit ground truth (verified live 2026-06-12 against the subgraph +
  * accountPnlSummaryStats cross-check):
  *   - ALL USD amounts are fixed-point 1e30 (GMX v2 convention)
- *   - realized-basis window PnL = realizedPnl − realizedFees +
- *     realizedPriceImpact − startUnrealizedPnl + startUnrealizedFees
- *     (matches summary realizedPnlUsd exactly)
+ *   - realized-net window PnL = realizedPnl − realizedFees −
+ *     realizedSwapFees + realizedPriceImpact + realizedSwapImpact
  *   - total window PnL (incl. unrealized) = last cumulativePnl of
  *     accountPnlHistoryStats (matches summary pnlUsd exactly)
  *   - ROI basis = maxCapital (the official pnlBps denominator)
@@ -57,21 +56,22 @@ function clampRoiPct(roi: number | null): number | null {
 }
 
 /**
- * Realized-basis window PnL in USD (verified identity, see header).
- * The board can't see CURRENT unrealized PnL (that would need live mark
- * prices per position), so board ranks/headlines use the realized basis.
+ * Realized-net window PnL in USD (verified identity, see header). All five
+ * components are required: treating a missing fee/impact as zero would make a
+ * schema regression look like profit. Window-start unrealized fields do not
+ * belong in realized PnL.
  */
 export function gmxRealizedPnlUsd(row: Dict): number | null {
   const parts = [
     num(row.realizedPnl),
     num(row.realizedFees),
+    num(row.realizedSwapFees),
     num(row.realizedPriceImpact),
-    num(row.startUnrealizedPnl),
-    num(row.startUnrealizedFees),
+    num(row.realizedSwapImpact),
   ]
-  if (parts[0] === null) return null
-  const [pnl, fees, impact, startUpnl, startUfees] = parts.map((p) => p ?? 0)
-  return (pnl - fees + impact - startUpnl + startUfees) / E30
+  if (parts.some((part) => part === null)) return null
+  const [pnl, fees, swapFees, priceImpact, swapImpact] = parts as number[]
+  return (pnl - fees - swapFees + priceImpact + swapImpact) / E30
 }
 
 function winRatePct(row: Dict): number | null {
