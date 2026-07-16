@@ -58,6 +58,14 @@ function page(comments: CommentWithAuthor[]) {
   return { ok: true, status: 200, comments, commentCount: comments.length, hasMore: false }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
 function renderGroupHook(
   initialProps: Props,
   onRender?: (comments: Record<string, CommentWithAuthor[]>) => void
@@ -298,5 +306,49 @@ describe('useGroupPosts comment audience and viewer scope', () => {
     })
 
     expect(result.current.newComment['post-1']).toBe('same text')
+  })
+
+  it('drops an A interaction response after B becomes the active viewer', async () => {
+    const userA = {
+      ...baseProps,
+      accessToken: 'token-a',
+      userId: 'user-a',
+      viewerKey: 'user:user-a',
+      isMember: true,
+    }
+    const requestA = deferred<unknown>()
+    mockAuthedFetch.mockReturnValueOnce(requestA.promise)
+    const { result, rerender } = renderGroupHook(userA)
+
+    let mutation!: Promise<void>
+    act(() => {
+      mutation = result.current.handleLike('post-1')
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+    expect(mockAuthedFetch).toHaveBeenCalledWith(
+      '/api/posts/post-1/like',
+      'POST',
+      'token-a',
+      { reaction_type: 'up' },
+      15_000,
+      { expectedUserId: 'user-a', expectedSessionGeneration: 1 }
+    )
+
+    rerender({
+      ...userA,
+      accessToken: 'token-b',
+      userId: 'user-b',
+      viewerKey: 'user:user-b',
+      sessionGeneration: 2,
+    })
+    expect(result.current.likeLoading).toEqual({})
+
+    await act(async () => {
+      requestA.resolve({ ok: true, status: 200, data: { success: true } })
+      await mutation
+    })
+
+    expect(result.current.likeLoading).toEqual({})
+    expect(result.current.posts).toEqual([])
   })
 })

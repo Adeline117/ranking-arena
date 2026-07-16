@@ -66,6 +66,10 @@ function persistDraft(viewerKey: string, postId: string, value: string): void {
 export function useCommentDraftPersistence(initialPostId?: string | null, viewerKey = 'anon') {
   const currentPostIdRef = useRef<string | null>(initialPostId || null)
   const currentViewerKeyRef = useRef(viewerKey)
+  const renderedPostIdRef = useRef<string | null>(initialPostId || null)
+  const renderedViewerKeyRef = useRef(viewerKey)
+  renderedPostIdRef.current = initialPostId || currentPostIdRef.current
+  renderedViewerKeyRef.current = viewerKey
   const draftVersionRef = useRef(0)
   const pendingDraftsRef = useRef(new Map<string, PendingDraft>())
   const [draft, setDraftRaw] = useState(() =>
@@ -103,6 +107,22 @@ export function useCommentDraftPersistence(initialPostId?: string | null, viewer
 
   const setDraft = useCallback(
     (value: string) => {
+      const renderedViewerKey = renderedViewerKeyRef.current
+      const renderedPostId = renderedPostIdRef.current
+      // A newly committed render can receive input before passive effects hand
+      // ownership over. Bind that input to the rendered viewer/resource now,
+      // flushing the previous owner's pending value first.
+      if (
+        currentViewerKeyRef.current !== renderedViewerKey ||
+        currentPostIdRef.current !== renderedPostId
+      ) {
+        const previousViewerKey = currentViewerKeyRef.current
+        const previousPostId = currentPostIdRef.current
+        if (previousPostId) flushDraft(previousPostId, previousViewerKey)
+        currentViewerKeyRef.current = renderedViewerKey
+        currentPostIdRef.current = renderedPostId
+      }
+
       draftVersionRef.current += 1
       draftRef.current = value
       setDraftRaw(value)
@@ -125,7 +145,7 @@ export function useCommentDraftPersistence(initialPostId?: string | null, viewer
 
       pendingDraftsRef.current.set(key, { timer, value })
     },
-    [pendingKey]
+    [flushDraft, pendingKey]
   )
 
   const restoreDraft = useCallback(

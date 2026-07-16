@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState, useRef, useCallback, useMemo } from 'react'
-import { useInfiniteQuery, useQueryClient } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
 import { tokens, alpha } from '@/lib/design-tokens'
@@ -22,10 +22,12 @@ import { SortButtons, type SortType, PostDetailView } from './components'
 import { PostListItem } from './PostList'
 import { EditPostModal, RepostModal } from './Modals'
 import { logger } from '@/lib/logger'
+import { authedFetch } from '@/lib/api/client'
 import {
   applyRealtimePostCommentCount,
   parseRealtimePostCommentCount,
 } from '@/lib/realtime/post-comment-count'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 type Post = PostWithUserState
 
@@ -88,46 +90,23 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const authScopeRef = useRef({
     viewerKey: auth.viewerKey,
     sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
   })
   authScopeRef.current = {
     viewerKey: auth.viewerKey,
     sessionGeneration: auth.sessionGeneration,
+    userId: auth.userId,
   }
   const accessTokenRef = useRef(accessToken)
   accessTokenRef.current = accessToken
   const [sortType, setSortType] = useState<SortType>('time')
-  const [openPostState, setOpenPostState] = useState<Post | null>(null)
-  const openPostOwnerScopeKeyRef = useRef(feedScopeKey)
-  const openPost = openPostOwnerScopeKeyRef.current === feedScopeKey ? openPostState : null
-  const setOpenPost = useCallback<React.Dispatch<React.SetStateAction<Post | null>>>((action) => {
-    setOpenPostState((previous) => {
-      const current = authScopeRef.current
-      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-      const ownedPrevious = openPostOwnerScopeKeyRef.current === ownerScopeKey ? previous : null
-      const next = typeof action === 'function' ? action(ownedPrevious) : action
-      openPostOwnerScopeKeyRef.current = ownerScopeKey
-      return next
-    })
-  }, [])
+  const [openPost, setOpenPost] = useViewerOwnedState<Post | null>(null, () => null, feedScopeKey)
   const loadMoreRef = useRef<HTMLDivElement>(null)
   const [mobileViewMode, setMobileViewMode] = useState<'list' | 'masonry'>('list')
   const [refreshing, setRefreshing] = useState(false)
 
   const feedRefreshTrigger = usePostStore((s) => s.feedRefreshTrigger)
-  const [newPostCountState, setNewPostCountState] = useState(0)
-  const newPostCountOwnerScopeKeyRef = useRef(feedScopeKey)
-  const newPostCount = newPostCountOwnerScopeKeyRef.current === feedScopeKey ? newPostCountState : 0
-  const setNewPostCount = useCallback<React.Dispatch<React.SetStateAction<number>>>((action) => {
-    setNewPostCountState((previous) => {
-      const current = authScopeRef.current
-      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-      const ownedPrevious = newPostCountOwnerScopeKeyRef.current === ownerScopeKey ? previous : 0
-      const next = typeof action === 'function' ? action(ownedPrevious) : action
-      newPostCountOwnerScopeKeyRef.current = ownerScopeKey
-      return next
-    })
-  }, [])
-  const queryClient = useQueryClient()
+  const [newPostCount, setNewPostCount] = useViewerOwnedState(0, () => 0, feedScopeKey)
 
   const pageSize = props.limit || 20
 
@@ -230,24 +209,16 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
   // Local posts state — synced from query, mutated by realtime/optimistic updates
   const fetchedPosts = useMemo(() => postPages?.pages.flatMap((p) => p.posts) ?? [], [postPages])
-  const [postsState, setPostsState] = useState<Post[]>((props.initialPosts as Post[]) || [])
-  const postsOwnerScopeKeyRef = useRef(feedScopeKey)
-  const posts = postsOwnerScopeKeyRef.current === feedScopeKey ? postsState : []
-  const setPosts = useCallback<React.Dispatch<React.SetStateAction<Post[]>>>((action) => {
-    setPostsState((previous) => {
-      const current = authScopeRef.current
-      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-      const ownedPrevious = postsOwnerScopeKeyRef.current === ownerScopeKey ? previous : []
-      const next = typeof action === 'function' ? action(ownedPrevious) : action
-      postsOwnerScopeKeyRef.current = ownerScopeKey
-      return next
-    })
-  }, [])
+  const [posts, setPosts] = useViewerOwnedState<Post[]>(
+    (props.initialPosts as Post[]) || [],
+    () => [],
+    feedScopeKey
+  )
   const postsRef = useRef<Post[]>([])
   postsRef.current = posts
   useEffect(() => {
     setPosts(fetchedPosts)
-  }, [fetchedPosts])
+  }, [feedScopeKey, fetchedPosts, setPosts])
 
   const loading = queryLoading && posts.length === 0
   const hasMore = hasNextPage ?? false
@@ -283,6 +254,14 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     },
     [setOpenPost, setPosts]
   )
+  const handleCommentResourceAbsent = useCallback(
+    (postId: string) => {
+      setOpenPost((previous) => (previous?.id === postId ? null : previous))
+      setPosts((previous) => previous.filter((post) => post.id !== postId))
+      usePostStore.getState().removePostResource(postId)
+    },
+    [setOpenPost, setPosts]
+  )
 
   const commentsHook = usePostComments({
     accessToken,
@@ -293,6 +272,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     showToast,
     showDangerConfirm,
     onCommentCountChange: handleCommentCountChange,
+    onResourceAbsent: handleCommentResourceAbsent,
   })
   const { comments, setComments, loadComments } = commentsHook
 
@@ -325,12 +305,15 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     realtimePostIdsRef.current.clear()
   }
   const realtimeScopeKey = `${encodeURIComponent(auth.viewerKey)}:${auth.sessionGeneration}`
+  const capturedRealtimeViewerKey = auth.viewerKey
+  const capturedRealtimeSessionGeneration = auth.sessionGeneration
   const isCapturedRealtimeScopeCurrent = useCallback(() => {
     const current = authScopeRef.current
     return (
-      current.viewerKey === auth.viewerKey && current.sessionGeneration === auth.sessionGeneration
+      current.viewerKey === capturedRealtimeViewerKey &&
+      current.sessionGeneration === capturedRealtimeSessionGeneration
     )
-  }, [auth.viewerKey, auth.sessionGeneration])
+  }, [capturedRealtimeSessionGeneration, capturedRealtimeViewerKey])
   usePostsRealtime(
     {
       onInsert: useCallback(
@@ -368,24 +351,30 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     { scopeKey: realtimeScopeKey, enabled: authInitialized }
   )
 
-  // Realtime: auto-add comments from other users when viewing post detail
+  // Realtime rows are invalidation signals only. Raw rows can be replies and do
+  // not carry the canonical profile/block/audience projection, so coalesce each
+  // burst into a viewer/resource-bound canonical read.
+  const realtimeCommentReconcileRef = useRef<{
+    key: string
+    promise: Promise<void>
+  } | null>(null)
+  const reconcileRealtimeComments = useCallback(() => {
+    if (!isCapturedRealtimeScopeCurrent() || !openPost?.id) return
+    const key = `${realtimeScopeKey}\u0000${openPost.id}`
+    if (realtimeCommentReconcileRef.current?.key === key) return
+    const promise = loadComments(openPost.id).finally(() => {
+      if (realtimeCommentReconcileRef.current?.promise === promise) {
+        realtimeCommentReconcileRef.current = null
+      }
+    })
+    realtimeCommentReconcileRef.current = { key, promise }
+  }, [isCapturedRealtimeScopeCurrent, loadComments, openPost?.id, realtimeScopeKey])
+
   useCommentsRealtime(
     openPost?.id,
     {
-      onInsert: useCallback(
-        (newComment: Record<string, unknown>) => {
-          if (!isCapturedRealtimeScopeCurrent()) return
-          // Only add if not from current user (our own comments are already optimistically added)
-          if (newComment.user_id === currentUserId) return
-          const comment = newComment as unknown as import('./hooks/usePostComments').Comment
-          if (!comment.id) return
-          setComments((prev) => {
-            if (prev.some((c) => c.id === comment.id)) return prev
-            return [...prev, comment]
-          })
-        },
-        [currentUserId, isCapturedRealtimeScopeCurrent, setComments]
-      ),
+      onInsert: reconcileRealtimeComments,
+      onDelete: reconcileRealtimeComments,
     },
     { scopeKey: realtimeScopeKey, enabled: authInitialized }
   )
@@ -468,7 +457,7 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   useEffect(() => {
     if (!authInitialized || !hasLoadedOnceRef.current) return
     refetchPosts()
-  }, [feedRefreshTrigger])
+  }, [authInitialized, feedRefreshTrigger, refetchPosts])
 
   useEffect(() => {
     const el = loadMoreRef.current
@@ -494,7 +483,9 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   }, [posts.length, accessToken]) // eslint-disable-line react-hooks/exhaustive-deps -- actions.loadUserBookmarksAndReposts is a stable ref; only re-run when post count or auth changes
 
   // Handle initialPostId
-  const initialPostIdRef = useRef<string | null>(null)
+  const initialPostLoadKeyRef = useRef<string | null>(null)
+  const renderedInitialPostIdRef = useRef(props.initialPostId)
+  renderedInitialPostIdRef.current = props.initialPostId
   useEffect(() => {
     // Server-prefetched posts are anonymous. Wait until session restoration has
     // finished so follower/group visibility and per-user reactions are not
@@ -502,8 +493,14 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
     if (!authInitialized) return
 
     const initialPostId = props.initialPostId
-    if (initialPostId && initialPostId !== initialPostIdRef.current && !openPost) {
-      initialPostIdRef.current = initialPostId
+    const initialPostLoadKey = initialPostId ? `${feedScopeKey}\u0000${initialPostId}` : null
+    if (initialPostId && initialPostLoadKey !== initialPostLoadKeyRef.current && !openPost) {
+      initialPostLoadKeyRef.current = initialPostLoadKey
+      const capturedScope = {
+        viewerKey: auth.viewerKey,
+        sessionGeneration: auth.sessionGeneration,
+        userId: auth.userId,
+      }
       const postToOpen = posts.find((p) => p.id === initialPostId)
       if (postToOpen) {
         setOpenPost(postToOpen)
@@ -511,15 +508,31 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       } else {
         const loadSinglePost = async () => {
           try {
-            const response = await fetch(`/api/posts/${initialPostId}`)
-            const data = await response.json()
-            if (response.ok && data.success && data.data?.post) {
-              const post = data.data.post
+            const result = await authedFetch<{
+              success?: boolean
+              data?: { post?: Partial<Post> & Pick<Post, 'id' | 'created_at'> }
+            }>(`/api/posts/${initialPostId}`, 'GET', accessTokenRef.current, undefined, 15_000, {
+              expectedUserId: capturedScope.userId,
+              expectedSessionGeneration: capturedScope.sessionGeneration,
+            })
+            const current = authScopeRef.current
+            if (
+              result.stale ||
+              current.viewerKey !== capturedScope.viewerKey ||
+              current.sessionGeneration !== capturedScope.sessionGeneration ||
+              current.userId !== capturedScope.userId ||
+              renderedInitialPostIdRef.current !== initialPostId ||
+              initialPostLoadKeyRef.current !== initialPostLoadKey
+            ) {
+              return
+            }
+            if (result.ok && result.data?.success && result.data.data?.post) {
+              const post = result.data.data.post
               setOpenPost({
                 id: post.id,
                 title: post.title || t('noTitle'),
                 content: post.content || '',
-                author_id: post.author_id,
+                author_id: post.author_id || '',
                 author_handle: post.author_handle || 'user',
                 author_avatar_url: post.author_avatar_url,
                 group_id: post.group_id,
@@ -541,15 +554,37 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
                 user_vote: post.user_vote,
               })
               setComments([])
+            } else if (result.status === 404) {
+              setOpenPost(null)
+              setComments([])
             }
           } catch (err) {
-            logger.error('Failed to load single post:', err)
+            const current = authScopeRef.current
+            if (
+              current.viewerKey === capturedScope.viewerKey &&
+              current.sessionGeneration === capturedScope.sessionGeneration &&
+              current.userId === capturedScope.userId
+            ) {
+              logger.error('Failed to load single post:', err)
+            }
           }
         }
         loadSinglePost()
       }
     }
-  }, [props.initialPostId, posts, openPost, setComments, authInitialized]) // eslint-disable-line react-hooks/exhaustive-deps -- t is excluded; read at call time from closure
+  }, [
+    auth.sessionGeneration,
+    auth.userId,
+    auth.viewerKey,
+    authInitialized,
+    feedScopeKey,
+    openPost,
+    posts,
+    props.initialPostId,
+    setComments,
+    setOpenPost,
+    t,
+  ])
 
   // Keep every modal entry point on the same authenticated comments read. This
   // also rehydrates an already-open post if session restoration finishes after
@@ -612,7 +647,19 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       if (accessToken && !hasTranslatedTitle && needsTitleTranslation)
         translateListPosts([post], translateTarget)
     },
-    [language, isChineseText, translateContent, translatedListPosts, translateListPosts]
+    [
+      accessToken,
+      actions,
+      isChineseText,
+      setComments,
+      setOpenPost,
+      setShowingOriginal,
+      setTranslatedContent,
+      translateContent,
+      translatedListPosts,
+      translateListPosts,
+      translateTarget,
+    ]
   )
 
   if (loading)
@@ -681,7 +728,9 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
       </div>
     )
 
-  if (posts.length === 0)
+  // A deep-linked post is loaded independently from the feed. Keep rendering
+  // the detail surface even when the current viewer's feed is empty.
+  if (posts.length === 0 && !openPost)
     return (
       <div>
         {props.showSortButtons && (

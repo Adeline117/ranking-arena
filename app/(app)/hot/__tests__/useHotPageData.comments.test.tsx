@@ -45,6 +45,14 @@ import type { Comment, Post } from '../types'
 
 const mockUseAuthSession = useAuthSession as jest.Mock
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
+}
+
 function page(comments: Comment[], commentCount: number) {
   return {
     ok: true,
@@ -234,5 +242,62 @@ describe('useHotPageData comment mutation reconciliation', () => {
 
     expect(result.current.comments).toEqual([initialComment])
     expect(mockFetchPostCommentsPage).toHaveBeenCalledTimes(readsBeforeRefresh)
+  })
+
+  it('rejects a late A translation after B opens the same post', async () => {
+    const translations = new Map<string, ReturnType<typeof deferred<unknown>>>()
+    mockFetch.mockImplementation((url: string, options?: RequestInit) => {
+      if (url === '/api/translate' && options?.method === 'POST') {
+        const authorization = (options.headers as Record<string, string>)?.Authorization
+        const request = deferred<unknown>()
+        translations.set(authorization, request)
+        return request.promise
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: { posts: [] } }),
+      })
+    })
+    const translatedPost = { ...post, body: '中文内容' }
+    const { result, rerender } = renderHook(() => useHotPageData())
+
+    act(() => result.current.handleOpenPost(translatedPost))
+    await waitFor(() => expect(translations.has('Bearer token-1')).toBe(true))
+
+    mockUseAuthSession.mockReturnValue({
+      accessToken: 'token-b',
+      authChecked: true,
+      email: 'b@example.com',
+      userId: 'user-b',
+      viewerKey: 'user:user-b',
+      sessionGeneration: 2,
+    })
+    rerender()
+    expect(result.current.translatedContent).toBeNull()
+
+    act(() => result.current.handleOpenPost(translatedPost))
+    await waitFor(() => expect(translations.has('Bearer token-b')).toBe(true))
+
+    await act(async () => {
+      translations.get('Bearer token-1')?.resolve({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({ success: true, data: { translatedText: 'A private translation' } }),
+      })
+      await Promise.resolve()
+    })
+    expect(result.current.translatedContent).toBeNull()
+
+    await act(async () => {
+      translations.get('Bearer token-b')?.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ success: true, data: { translatedText: 'B translation' } }),
+      })
+      await Promise.resolve()
+    })
+    await waitFor(() => expect(result.current.translatedContent).toBe('B translation'))
   })
 })

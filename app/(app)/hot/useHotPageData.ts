@@ -27,6 +27,7 @@ import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 import type { Post, Comment } from './types'
 import { useCommentDraftPersistence } from '@/app/components/post/hooks/useCommentDraftPersistence'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 interface UseHotPageDataOptions {
   initialPosts?: Post[]
@@ -47,32 +48,38 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   activeScopeRef.current = { viewerKey, sessionGeneration, userId: currentUserId }
   const accessTokenRef = useRef(accessToken)
   accessTokenRef.current = accessToken
+  const activeLanguageRef = useRef(language)
+  activeLanguageRef.current = language
   const scopeKey = `${viewerKey}\u0000${sessionGeneration}`
   const previousScopeKeyRef = useRef(scopeKey)
 
   // Translation state
-  const [translatedContent, setTranslatedContent] = useState<string | null>(null)
-  const [showingOriginal, setShowingOriginal] = useState(true)
-  const [translating, setTranslating] = useState(false)
-  const [translationCache, setTranslationCache] = useState<Record<string, string>>({})
-  const [translatedListPosts, setTranslatedListPosts] = useState<
+  const [translatedContent, setTranslatedContent] = useViewerOwnedState<string | null>(
+    null,
+    () => null,
+    scopeKey
+  )
+  const [showingOriginal, setShowingOriginal] = useViewerOwnedState(true, () => true, scopeKey)
+  const [translating, setTranslating] = useViewerOwnedState(false, () => false, scopeKey)
+  const [translationCache, setTranslationCache] = useViewerOwnedState<Record<string, string>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const [translatedListPosts, setTranslatedListPosts] = useViewerOwnedState<
     Record<string, { title?: string; body?: string }>
-  >({})
-  const [translatingList, setTranslatingList] = useState(false)
-  const [expandedPosts, setExpandedPosts] = useState<Record<string, boolean>>({})
-  const [postsState, setPostsState] = useState<Post[]>(options.initialPosts || [])
-  const postsOwnerScopeKeyRef = useRef(scopeKey)
-  const posts = postsOwnerScopeKeyRef.current === scopeKey ? postsState : []
-  const setPosts = useCallback<Dispatch<SetStateAction<Post[]>>>((action) => {
-    setPostsState((previous) => {
-      const current = activeScopeRef.current
-      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-      const ownedPrevious = postsOwnerScopeKeyRef.current === ownerScopeKey ? previous : []
-      const next = typeof action === 'function' ? action(ownedPrevious) : action
-      postsOwnerScopeKeyRef.current = ownerScopeKey
-      return next
-    })
-  }, [])
+  >({}, () => ({}), scopeKey)
+  const [translatingList, setTranslatingList] = useViewerOwnedState(false, () => false, scopeKey)
+  const [expandedPosts, setExpandedPosts] = useViewerOwnedState<Record<string, boolean>>(
+    {},
+    () => ({}),
+    scopeKey
+  )
+  const [posts, setPosts] = useViewerOwnedState<Post[]>(
+    options.initialPosts || [],
+    () => [],
+    scopeKey
+  )
   const [loadingPosts, setLoadingPosts] = useState(
     !options.initialPosts || options.initialPosts.length === 0
   )
@@ -89,42 +96,32 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const latestPostTime = useRef<string>('')
 
   // Post detail modal state
-  const [openPostState, setOpenPostState] = useState<Post | null>(null)
-  const openPostOwnerScopeKeyRef = useRef(scopeKey)
-  const openPost = openPostOwnerScopeKeyRef.current === scopeKey ? openPostState : null
-  const setOpenPost = useCallback<Dispatch<SetStateAction<Post | null>>>((action) => {
-    setOpenPostState((previous) => {
-      const current = activeScopeRef.current
-      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-      const ownedPrevious = openPostOwnerScopeKeyRef.current === ownerScopeKey ? previous : null
-      const next = typeof action === 'function' ? action(ownedPrevious) : action
-      openPostOwnerScopeKeyRef.current = ownerScopeKey
-      return next
-    })
-  }, [])
-  const [commentsState, setCommentsState] = useState<Comment[]>([])
-  const commentsOwnerScopeKeyRef = useRef(scopeKey)
-  const comments = commentsOwnerScopeKeyRef.current === scopeKey ? commentsState : []
-  const commentsRevisionRef = useRef(0)
-  const setComments = useCallback<Dispatch<SetStateAction<Comment[]>>>((action) => {
-    commentsRevisionRef.current += 1
-    setCommentsState((previous) => {
-      const current = activeScopeRef.current
-      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
-      const ownedPrevious = commentsOwnerScopeKeyRef.current === ownerScopeKey ? previous : []
-      const next = typeof action === 'function' ? action(ownedPrevious) : action
-      commentsOwnerScopeKeyRef.current = ownerScopeKey
-      return next
-    })
-  }, [])
-  const [loadingComments, setLoadingComments] = useState(false)
+  const [openPost, setOpenPost] = useViewerOwnedState<Post | null>(null, () => null, scopeKey)
+  const [comments, setCommentsOwned] = useViewerOwnedState<Comment[]>([], () => [], scopeKey)
+  const commentsRevisionRef = useRef(new Map<string, number>())
+  const setComments = useCallback<Dispatch<SetStateAction<Comment[]>>>(
+    (action) => {
+      const invocationScopeKey = `${activeScopeRef.current.viewerKey}\u0000${activeScopeRef.current.sessionGeneration}`
+      commentsRevisionRef.current.set(
+        invocationScopeKey,
+        (commentsRevisionRef.current.get(invocationScopeKey) || 0) + 1
+      )
+      setCommentsOwned(action)
+    },
+    [setCommentsOwned]
+  )
+  const [loadingComments, setLoadingComments] = useViewerOwnedState(false, () => false, scopeKey)
   const {
     draft: newComment,
     setDraft: setNewComment,
     captureDraftSnapshot,
     clearDraftIfUnchanged,
   } = useCommentDraftPersistence(openPost?.id, viewerKey)
-  const [submittingComment, setSubmittingComment] = useState(false)
+  const [submittingComment, setSubmittingComment] = useViewerOwnedState(
+    false,
+    () => false,
+    scopeKey
+  )
   const submittingCommentRef = useRef<symbol | null>(null)
   const openPostIdRef = useRef<string | null>(null)
   const commentLoadGenerationRef = useRef(new Map<string, number>())
@@ -132,9 +129,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
   // Comment pagination
   const COMMENTS_PER_PAGE = 10
-  const [commentsOffset, setCommentsOffset] = useState(0)
-  const [hasMoreComments, setHasMoreComments] = useState(true)
-  const [loadingMoreComments, setLoadingMoreComments] = useState(false)
+  const [commentsOffset, setCommentsOffset] = useViewerOwnedState(0, () => 0, scopeKey)
+  const [hasMoreComments, setHasMoreComments] = useViewerOwnedState(true, () => true, scopeKey)
+  const [loadingMoreComments, setLoadingMoreComments] = useViewerOwnedState(
+    false,
+    () => false,
+    scopeKey
+  )
 
   const scopeIsCurrent = useCallback(
     (scope: { viewerKey: string; sessionGeneration: number; userId: string | null }) => {
@@ -160,9 +161,33 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     setLoadingComments(false)
     setLoadingMoreComments(false)
     setSubmittingComment(false)
+    setTranslatedContent(null)
+    setShowingOriginal(true)
+    setTranslating(false)
+    setTranslationCache({})
+    setTranslatedListPosts({})
+    setTranslatingList(false)
+    setExpandedPosts({})
     setPosts((previous) => previous.map((post) => ({ ...post, user_reaction: null })))
     setOpenPost((previous) => (previous ? { ...previous, user_reaction: null } : null))
-  }, [scopeKey, setComments])
+  }, [
+    scopeKey,
+    setComments,
+    setCommentsOffset,
+    setExpandedPosts,
+    setHasMoreComments,
+    setLoadingComments,
+    setLoadingMoreComments,
+    setOpenPost,
+    setPosts,
+    setShowingOriginal,
+    setSubmittingComment,
+    setTranslatedContent,
+    setTranslatedListPosts,
+    setTranslating,
+    setTranslatingList,
+    setTranslationCache,
+  ])
 
   // AbortController for loadPosts — prevents stale setState after unmount
   // and allows the auto-refresh interval to cancel in-flight requests on cleanup.
@@ -349,9 +374,10 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     ): Promise<boolean> => {
       if (!authChecked || !scopeIsCurrent(capturedScope)) return false
       const generationKey = `${capturedScope.viewerKey}\u0000${postId}`
+      const revisionKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}`
       const generation = (commentLoadGenerationRef.current.get(generationKey) || 0) + 1
       commentLoadGenerationRef.current.set(generationKey, generation)
-      const requestStartRevision = commentsRevisionRef.current
+      const requestStartRevision = commentsRevisionRef.current.get(revisionKey) || 0
       try {
         setLoadingComments(true)
 
@@ -368,7 +394,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           scopeIsCurrent(capturedScope) &&
           commentLoadGenerationRef.current.get(generationKey) === generation
         ) {
-          if (commentsRevisionRef.current !== requestStartRevision) {
+          if (page.resourceAbsent) {
+            setComments([])
+            setPosts((previous) => previous.filter((post) => post.id !== postId))
+            setOpenPost((previous) => (previous?.id === postId ? null : previous))
+            return true
+          }
+          if ((commentsRevisionRef.current.get(revisionKey) || 0) !== requestStartRevision) {
             return retryAfterNewerState && openPostIdRef.current === postId
               ? loadComments(postId, showError, capturedScope, false)
               : false
@@ -416,7 +448,18 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         }
       }
     },
-    [authChecked, scopeIsCurrent, showToast, t]
+    [
+      authChecked,
+      scopeIsCurrent,
+      setComments,
+      setCommentsOffset,
+      setHasMoreComments,
+      setLoadingComments,
+      setOpenPost,
+      setPosts,
+      showToast,
+      t,
+    ]
   )
 
   // Load more comments
@@ -426,9 +469,10 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     const capturedScope = activeScopeRef.current
     const postId = openPost.id
     const generationKey = `${capturedScope.viewerKey}\u0000${postId}`
+    const revisionKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}`
     const generation = (commentLoadMoreGenerationRef.current.get(generationKey) || 0) + 1
     commentLoadMoreGenerationRef.current.set(generationKey, generation)
-    const requestStartRevision = commentsRevisionRef.current
+    const requestStartRevision = commentsRevisionRef.current.get(revisionKey) || 0
     const requestOffset = commentsOffset
 
     try {
@@ -447,7 +491,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         scopeIsCurrent(capturedScope) &&
         commentLoadMoreGenerationRef.current.get(generationKey) === generation
       ) {
-        if (commentsRevisionRef.current !== requestStartRevision) {
+        if (page.resourceAbsent) {
+          setComments([])
+          setPosts((previous) => previous.filter((post) => post.id !== postId))
+          setOpenPost((previous) => (previous?.id === postId ? null : previous))
+          return
+        }
+        if ((commentsRevisionRef.current.get(revisionKey) || 0) !== requestStartRevision) {
           await loadComments(postId, false, capturedScope)
           return
         }
@@ -485,6 +535,11 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     openPost,
     scopeIsCurrent,
     setComments,
+    setCommentsOffset,
+    setHasMoreComments,
+    setLoadingMoreComments,
+    setOpenPost,
+    setPosts,
   ])
 
   // Defer the first read until session restoration is complete, then reload if
@@ -511,6 +566,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       if (translatingList) return
       // /api/translate requires auth (Bearer header) — skip for anonymous visitors
       if (!accessToken) return
+      const capturedScope = activeScopeRef.current
 
       const needsTranslation = postsToTranslate.filter((p) => {
         if (translatedListPosts[p.id]?.title && translatedListPosts[p.id]?.body) return false
@@ -568,7 +624,13 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         })
         const data = await response.json()
 
-        if (response.ok && data.success && data.data?.results) {
+        if (
+          response.ok &&
+          data.success &&
+          data.data?.results &&
+          scopeIsCurrent(capturedScope) &&
+          activeLanguageRef.current === targetLang
+        ) {
           const results = data.data.results as Record<
             string,
             { translatedText: string; cached: boolean }
@@ -593,10 +655,20 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       } catch {
         // Translation failed, silent
       } finally {
-        setTranslatingList(false)
+        if (scopeIsCurrent(capturedScope) && activeLanguageRef.current === targetLang) {
+          setTranslatingList(false)
+        }
       }
     },
-    [translatingList, translatedListPosts, isChineseText, accessToken]
+    [
+      accessToken,
+      isChineseText,
+      scopeIsCurrent,
+      setTranslatedListPosts,
+      setTranslatingList,
+      translatedListPosts,
+      translatingList,
+    ]
   )
 
   // Clear the id-keyed title/body cache when language changes so posts
@@ -608,7 +680,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       return
     }
     setTranslatedListPosts({})
-  }, [language])
+  }, [language, setTranslatedListPosts])
 
   // Translate list when posts load or language changes (requires auth — translation uses OpenAI credits)
   useEffect(() => {
@@ -623,11 +695,18 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     async (postId: string, content: string, targetLang: 'zh' | 'en' | 'ja' | 'ko') => {
       // /api/translate requires auth (Bearer header) — skip silently for anonymous visitors
       if (!email || !accessToken) return
+      const capturedScope = activeScopeRef.current
       const cacheKey = `${postId}-content-${targetLang}`
 
       if (translationCache[cacheKey]) {
-        setTranslatedContent(translationCache[cacheKey])
-        setShowingOriginal(false)
+        if (
+          scopeIsCurrent(capturedScope) &&
+          activeLanguageRef.current === targetLang &&
+          openPostIdRef.current === postId
+        ) {
+          setTranslatedContent(translationCache[cacheKey])
+          setShowingOriginal(false)
+        }
         return
       }
 
@@ -649,22 +728,37 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         })
         const data = await response.json()
 
-        if (response.ok && data.success && data.data?.translatedText) {
+        if (
+          response.ok &&
+          data.success &&
+          data.data?.translatedText &&
+          scopeIsCurrent(capturedScope) &&
+          activeLanguageRef.current === targetLang &&
+          openPostIdRef.current === postId
+        ) {
           const translated = data.data.translatedText
           setTranslatedContent(translated)
           setShowingOriginal(false)
           setTranslationCache((prev) => ({ ...prev, [cacheKey]: translated }))
-        } else {
+        } else if (scopeIsCurrent(capturedScope) && activeLanguageRef.current === targetLang) {
           showToast(data.error || t('translationFailed'), 'error')
         }
       } catch {
-        showToast(t('translationServiceError'), 'error')
+        if (scopeIsCurrent(capturedScope) && activeLanguageRef.current === targetLang) {
+          showToast(t('translationServiceError'), 'error')
+        }
       } finally {
-        setTranslating(false)
+        if (
+          scopeIsCurrent(capturedScope) &&
+          activeLanguageRef.current === targetLang &&
+          openPostIdRef.current === postId
+        ) {
+          setTranslating(false)
+        }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [translationCache, showToast, email, accessToken]
+    [translationCache, showToast, email, accessToken, scopeIsCurrent]
   )
 
   // Track whether this modal was opened via navigation
@@ -708,7 +802,19 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         }
       }
     },
-    [language, isChineseText, translateContent, searchParams, router]
+    [
+      isChineseText,
+      language,
+      router,
+      searchParams,
+      setComments,
+      setCommentsOffset,
+      setHasMoreComments,
+      setOpenPost,
+      setShowingOriginal,
+      setTranslatedContent,
+      translateContent,
+    ]
   )
 
   // Close post detail
@@ -721,7 +827,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     params.delete('post')
     const newUrl = params.toString() ? `/hot?${params.toString()}` : '/hot'
     router.replace(newUrl, { scroll: false })
-  }, [searchParams, router])
+  }, [router, searchParams, setOpenPost])
 
   useModalA11y({ open: !!openPost, onClose: handleClosePost })
 
@@ -754,7 +860,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     return () => {
       window.removeEventListener('popstate', handlePopState)
     }
-  }, [searchParams, posts, openPost, handleOpenPost, handleClosePost])
+  }, [handleClosePost, handleOpenPost, openPost, posts, searchParams, setOpenPost])
 
   // Re-translate when language changes
   useEffect(() => {
@@ -860,6 +966,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       newComment,
       scopeIsCurrent,
       setComments,
+      setSubmittingComment,
       showToast,
       t,
     ]
@@ -930,7 +1037,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         showToast(t('actionFailedRetry'), 'error')
       }
     },
-    [accessToken, authChecked, openPost?.id, scopeIsCurrent, showToast, t]
+    [accessToken, authChecked, openPost?.id, scopeIsCurrent, setOpenPost, setPosts, showToast, t]
   )
 
   return {
