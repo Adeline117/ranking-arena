@@ -10,6 +10,20 @@ import PostCard from '@/app/components/post/components/PostCard'
 import type { PostWithUserState } from '@/lib/types'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+
+function getAccessTokenSubject(token: string): string | null {
+  try {
+    const encodedPayload = token.split('.')[1]
+    if (!encodedPayload) return null
+    const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+    const payload = JSON.parse(atob(padded)) as { sub?: unknown }
+    return typeof payload.sub === 'string' ? payload.sub : null
+  } catch {
+    return null
+  }
+}
 
 /** Score posts by freshness (10h half-life) + engagement */
 function calculateFeedScore(post: PostWithUserState): number {
@@ -58,14 +72,39 @@ export default function FollowingFeed() {
     setLoading(true)
     setError(false)
     try {
-      const response = await fetch('/api/posts?sort_by=following&limit=30', {
-        headers: { Authorization: `Bearer ${requestToken}` },
-        cache: 'no-store',
-        signal: controller.signal,
-      })
+      if (getAccessTokenSubject(requestToken) !== requestOwner) {
+        throw new Error('Following feed token owner mismatch')
+      }
+
+      const requestFeed = (token: string) =>
+        fetch('/api/posts?sort_by=following&limit=30', {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+          signal: controller.signal,
+        })
+
+      let response = await requestFeed(requestToken)
+      if (response.status === 401) {
+        if (
+          requestGeneration !== requestGenerationRef.current ||
+          requestOwner !== viewerScopeRef.current
+        ) return
+
+        const refreshedToken = await tokenRefreshCoordinator.forceRefresh()
+        if (
+          requestGeneration !== requestGenerationRef.current ||
+          requestOwner !== viewerScopeRef.current
+        ) return
+        if (!refreshedToken || getAccessTokenSubject(refreshedToken) !== requestOwner) {
+          throw new Error('Following feed token refresh did not preserve viewer')
+        }
+
+        response = await requestFeed(refreshedToken)
+      }
+
       const body = (await response.json()) as {
         success?: boolean
-        data?: { posts?: PostWithUserState[]; following_count?: number }
+        data?: { posts?: PostWithUserState[]; following_count?: number; viewer_id?: string }
       }
       const responsePosts = body.data?.posts
       const responseFollowingCount = body.data?.following_count
@@ -76,7 +115,8 @@ export default function FollowingFeed() {
         !Array.isArray(responsePosts) ||
         typeof responseFollowingCount !== 'number' ||
         !Number.isSafeInteger(responseFollowingCount) ||
-        responseFollowingCount < 0
+        responseFollowingCount < 0 ||
+        body.data?.viewer_id !== requestOwner
       ) {
         throw new Error(`Following feed request failed (${response.status})`)
       }
