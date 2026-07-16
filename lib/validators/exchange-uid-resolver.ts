@@ -10,6 +10,13 @@
 import { createHmac } from 'crypto'
 import { logger } from '@/lib/logger'
 
+export {
+  EVM_WALLET_PLATFORMS as DEX_WALLET_PLATFORMS,
+  SOLANA_WALLET_PLATFORMS as SOLANA_DEX_PLATFORMS,
+  isDexWalletPlatform,
+  isSolanaPlatform,
+} from '@/lib/constants/wallet-platforms'
+
 export interface ExchangeCredentials {
   apiKey: string
   apiSecret: string
@@ -472,44 +479,9 @@ export const CEX_VERIFIABLE_PLATFORMS = [
 ] as const
 
 /**
- * List of DEX platforms that support wallet signature verification.
- * These traders' source_trader_id IS their wallet address.
- */
-export const DEX_WALLET_PLATFORMS = [
-  'hyperliquid',
-  'gmx',
-  'gains',
-  'aevo',
-  'dydx',
-  // kwenta: dead (Copin API stopped, 2026-03-11)
-  // vertex: never had active connector
-] as const
-
-/**
- * Solana-based DEX platforms (use ed25519 signature verification).
- */
-export const SOLANA_DEX_PLATFORMS = ['jupiter_perps', 'drift'] as const
-
-/**
  * Check if a platform supports CEX API key verification.
  */
 export function isCexVerifiable(platform: string): boolean {
   const p = platform.toLowerCase()
   return CEX_VERIFIABLE_PLATFORMS.some((cp) => p === cp || p.startsWith(cp.split('_')[0]))
-}
-
-/**
- * Check if a platform uses wallet-based verification (EVM or Solana).
- */
-export function isDexWalletPlatform(platform: string): boolean {
-  const p = platform.toLowerCase()
-  return [...DEX_WALLET_PLATFORMS, ...SOLANA_DEX_PLATFORMS].some((dp) => p === dp)
-}
-
-/**
- * Check if a platform is Solana-based.
- */
-export function isSolanaPlatform(platform: string): boolean {
-  const p = platform.toLowerCase()
-  return SOLANA_DEX_PLATFORMS.some((sp) => p === sp)
 }

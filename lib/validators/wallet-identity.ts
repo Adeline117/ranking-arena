@@ -1,4 +1,4 @@
-import { isDexWalletPlatform, isSolanaPlatform } from './exchange-uid-resolver'
+import { isDexWalletPlatform, isSolanaPlatform } from '@/lib/constants/wallet-platforms'
 
 /**
  * Canonical identity rules for wallet-owned trader profiles.
