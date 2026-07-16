@@ -9,9 +9,34 @@ import { usePremium } from '@/lib/premium/hooks'
 import { logger } from '@/lib/logger'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { getViewerScope, isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
 
 const MAX_ACCOUNTS_FREE = 1
 const MAX_ACCOUNTS_PRO = 5
+
+let accountOperationTail: Promise<void> = Promise.resolve()
+let accountOperationSequence = 0
+const accountOperationRevision = new Map<string, number>()
+
+function runAccountOperation<T>(operation: () => Promise<T>): Promise<T> {
+  const result = accountOperationTail.then(operation, operation)
+  accountOperationTail = result.then(
+    () => undefined,
+    () => undefined
+  )
+  return result
+}
+
+function beginAccountOperation(userIds: string[]): { sequence: number; userIds: string[] } {
+  const sequence = ++accountOperationSequence
+  const uniqueUserIds = [...new Set(userIds)]
+  for (const userId of uniqueUserIds) accountOperationRevision.set(userId, sequence)
+  return { sequence, userIds: uniqueUserIds }
+}
+
+function ownsAccountOperation(ticket: { sequence: number; userIds: string[] }): boolean {
+  return ticket.userIds.every((userId) => accountOperationRevision.get(userId) === ticket.sequence)
+}
 
 /**
  * Invalidate a stored refresh token server-side by exchanging it once.
@@ -22,8 +47,8 @@ const MAX_ACCOUNTS_PRO = 5
  * The exchange runs on a non-persistent isolated client. It must never touch
  * the singleton client's storage or auth event stream for the active viewer.
  *
- * Best-effort: network failures / already-expired tokens are swallowed —
- * the local-state cleanup still proceeds.
+ * Best-effort: failures are reported but swallowed so local-state cleanup can
+ * still proceed. A transport failure does not prove that the token was revoked.
  */
 function createRevocationClient(): SupabaseClient<Database> {
   return createClient<Database>(
@@ -44,14 +69,14 @@ export async function invalidateStoredRefreshToken(refreshToken: string): Promis
   const revocationClient = createRevocationClient()
 
   try {
-    // Exchange the stored refresh token. Success rotates it (old token is
-    // invalidated); failure means the token is already dead — either way
-    // the stored value is no longer a valid credential.
+    // Exchange the stored refresh token. Success rotates it and invalidates the
+    // old token. A returned error is not treated as proof of revocation because
+    // it may be a transient transport or service failure.
     const { data, error } = await revocationClient.auth.refreshSession({
       refresh_token: refreshToken,
     })
     if (error) {
-      logger.info('[multi-account] Stored refresh token already invalid, nothing to revoke')
+      logger.warn('[multi-account] Stored refresh token revocation was not confirmed:', error)
       return
     }
 
@@ -69,7 +94,7 @@ export async function invalidateStoredRefreshToken(refreshToken: string): Promis
 export function useMultiAccount() {
   const { isPremium } = usePremium()
   const { signOut } = useAuthSession()
-  const { accounts, addAccount, removeAccount, setActiveAccount, clear } = useMultiAccountStore()
+  const { accounts, addAccount, setActiveAccount } = useMultiAccountStore()
 
   const activeAccount = useMemo(() => accounts.find((a) => a.isActive), [accounts])
   const inactiveAccounts = useMemo(() => accounts.filter((a) => !a.isActive), [accounts])
@@ -77,89 +102,160 @@ export function useMultiAccount() {
   const maxAccounts = isPremium ? MAX_ACCOUNTS_PRO : MAX_ACCOUNTS_FREE
   const canAddAccount = accounts.length < maxAccounts
 
-  const addCurrentAccount = useCallback(async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    if (!session) return false
+  const addCurrentAccount = useCallback(
+    () =>
+      runAccountOperation(async () => {
+        const capturedScope = getViewerScope()
+        if (!capturedScope.userId || !isViewerScopeCurrent(capturedScope)) return false
 
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) return false
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        if (
+          !session ||
+          session.user.id !== capturedScope.userId ||
+          !isViewerScopeCurrent(capturedScope)
+        ) {
+          return false
+        }
 
-    // Fetch user profile for handle/avatar
-    const { data: profile } = await supabase
-      .from('user_profiles')
-      .select('handle, avatar_url')
-      .eq('id', user.id)
-      .maybeSingle()
+        const {
+          data: { user },
+        } = await supabase.auth.getUser()
+        if (
+          !user ||
+          user.id !== capturedScope.userId ||
+          user.id !== session.user.id ||
+          !isViewerScopeCurrent(capturedScope)
+        ) {
+          return false
+        }
 
-    const newAccount: StoredAccount = {
-      userId: user.id,
-      email: user.email || '',
-      handle: profile?.handle || null,
-      avatarUrl: profile?.avatar_url || null,
-      refreshToken: session.refresh_token,
-      lastActiveAt: new Date().toISOString(),
-      isActive: true,
-    }
+        // Fetch user profile for handle/avatar
+        const { data: profile } = await supabase
+          .from('user_profiles')
+          .select('handle, avatar_url')
+          .eq('id', user.id)
+          .maybeSingle()
 
-    // Deactivate all other accounts
-    accounts.forEach((a) => {
-      if (a.isActive && a.userId !== user.id) {
-        addAccount({ ...a, isActive: false })
-      }
-    })
+        // This is the commit CAS: no profile/session result captured for A may
+        // mutate the account store after the process-wide viewer has become B.
+        if (!isViewerScopeCurrent(capturedScope)) return false
 
-    addAccount(newAccount)
-    return true
-  }, [accounts, addAccount])
+        const newAccount: StoredAccount = {
+          userId: user.id,
+          email: user.email || '',
+          handle: profile?.handle || null,
+          avatarUrl: profile?.avatar_url || null,
+          refreshToken: session.refresh_token,
+          lastActiveAt: new Date().toISOString(),
+          isActive: true,
+        }
+
+        // Deactivate all other accounts
+        useMultiAccountStore.getState().accounts.forEach((a) => {
+          if (a.isActive && a.userId !== user.id) {
+            addAccount({ ...a, isActive: false })
+          }
+        })
+
+        addAccount(newAccount)
+        return true
+      }),
+    [addAccount]
+  )
 
   const switchAccount = useCallback(
-    async (userId: string) => {
-      const target = accounts.find((a) => a.userId === userId)
-      if (!target) return { success: false, error: 'Account not found' }
-
-      // Save current session's refresh token first
-      const {
-        data: { session: currentSession },
-      } = await supabase.auth.getSession()
-      if (currentSession) {
-        const currentActive = accounts.find((a) => a.isActive)
-        if (currentActive) {
-          addAccount({
-            ...currentActive,
-            refreshToken: currentSession.refresh_token,
-            isActive: false,
-          })
+    (userId: string) =>
+      runAccountOperation(async () => {
+        const capturedScope = getViewerScope()
+        if (!capturedScope.userId || !isViewerScopeCurrent(capturedScope)) {
+          return { success: false, error: 'stale_session' }
         }
-      }
 
-      // Restore target account session
-      const session = await tokenRefreshCoordinator.switchSession(
-        target.refreshToken,
-        target.userId
-      )
+        const currentAccounts = useMultiAccountStore.getState().accounts
+        const target = currentAccounts.find((a) => a.userId === userId)
+        if (!target) return { success: false, error: 'Account not found' }
 
-      if (!session) {
-        // Token expired — remove stale account from store so user isn't stuck
-        removeAccount(userId)
-        return { success: false, error: 'session_expired', userId }
-      }
+        const currentActive = currentAccounts.find((a) => a.isActive)
+        if (!currentActive || currentActive.userId !== capturedScope.userId) {
+          return { success: false, error: 'stale_session' }
+        }
+        if (target.userId === currentActive.userId) return { success: true }
+        const operationTicket = beginAccountOperation([currentActive.userId, target.userId])
 
-      // Update stored refresh token
-      addAccount({
-        ...target,
-        refreshToken: session.refresh_token,
-        isActive: true,
-        lastActiveAt: new Date().toISOString(),
-      })
-      setActiveAccount(userId)
+        // Save current session's refresh token first
+        const {
+          data: { session: currentSession },
+        } = await supabase.auth.getSession()
 
-      return { success: true }
-    },
-    [accounts, addAccount, removeAccount, setActiveAccount]
+        // A session read is only safe to persist when all three principals agree:
+        // the captured viewer, the active store entry, and Supabase's session.
+        if (
+          !currentSession ||
+          currentSession.user.id !== capturedScope.userId ||
+          currentSession.user.id !== currentActive.userId ||
+          !isViewerScopeCurrent(capturedScope) ||
+          !ownsAccountOperation(operationTicket)
+        ) {
+          return { success: false, error: 'stale_session' }
+        }
+
+        addAccount({
+          ...currentActive,
+          refreshToken: currentSession.refresh_token,
+        })
+
+        // Restore target account session
+        const session = await tokenRefreshCoordinator.switchSession(
+          target.refreshToken,
+          target.userId
+        )
+
+        if (!session) {
+          const restoredScope = getViewerScope()
+          if (
+            restoredScope.userId !== currentActive.userId ||
+            !isViewerScopeCurrent(restoredScope)
+          ) {
+            return { success: false, error: 'stale_session' }
+          }
+          // The coordinator cannot distinguish an expired credential from a
+          // transport/service failure. Preserve both store entries and let the
+          // user explicitly remove the target instead of deleting it on an
+          // unconfirmed failure.
+          return { success: false, error: 'switch_failed' }
+        }
+
+        const switchedScope = getViewerScope()
+        const liveTarget = useMultiAccountStore
+          .getState()
+          .accounts.find((account) => account.userId === userId)
+        if (
+          session.user.id !== target.userId ||
+          switchedScope.userId !== target.userId ||
+          !isViewerScopeCurrent(switchedScope) ||
+          !ownsAccountOperation(operationTicket)
+        ) {
+          return { success: false, error: 'stale_session' }
+        }
+
+        // The identity switch has already committed globally. The store commit is
+        // therefore mandatory: preserve any concurrent metadata update when the
+        // target still exists, or reconstruct the captured target when it was
+        // removed while the switch was in flight. In both cases the returned
+        // session's rotated token is authoritative.
+        addAccount({
+          ...(liveTarget ?? target),
+          refreshToken: session.refresh_token,
+          isActive: true,
+          lastActiveAt: new Date().toISOString(),
+        })
+        setActiveAccount(userId)
+
+        return { success: true }
+      }),
+    [addAccount, setActiveAccount]
   )
 
   // Wrap removeAccount to revoke the stored refresh token server-side before
@@ -167,31 +263,48 @@ export function useMultiAccount() {
   // stolen-localStorage scenario: a leaked refresh token is long-lived and can
   // mint access tokens indefinitely, so "remove" must actually revoke it.
   const removeAccountAndRevoke = useCallback(
-    async (userId: string) => {
-      const target = accounts.find((a) => a.userId === userId)
-      if (target?.refreshToken) {
-        // Best-effort revocation — we still clear local state even if this fails.
-        await invalidateStoredRefreshToken(target.refreshToken)
-      }
-      removeAccount(userId)
-    },
-    [accounts, removeAccount]
+    (userId: string) =>
+      runAccountOperation(async () => {
+        const target = useMultiAccountStore
+          .getState()
+          .accounts.find((account) => account.userId === userId)
+        if (!target) return
+        const operationTicket = beginAccountOperation([userId])
+
+        if (getViewerScope().userId === userId) {
+          // Removing the real active principal is a logout, not a local-store edit.
+          await signOut()
+        } else if (target.refreshToken) {
+          await invalidateStoredRefreshToken(target.refreshToken)
+        }
+        if (ownsAccountOperation(operationTicket)) {
+          useMultiAccountStore.getState().removeAccount(userId)
+        }
+      }),
+    [signOut]
   )
 
-  const signOutAll = useCallback(async () => {
-    // Revoke every stored refresh token before clearing local state, so any
-    // token that may have been exfiltrated via XSS / device compromise is
-    // actually invalidated on the Supabase side.
-    for (const account of accounts) {
-      if (account.refreshToken) {
-        // Serial is fine here — this path is rarely hit and we want to avoid
-        // racing session swaps inside invalidateStoredRefreshToken.
-        await invalidateStoredRefreshToken(account.refreshToken)
-      }
-    }
-    await signOut()
-    clear()
-  }, [accounts, clear, signOut])
+  const signOutAll = useCallback(
+    () =>
+      runAccountOperation(async () => {
+        const liveAccounts = useMultiAccountStore.getState().accounts
+        const operationTicket = beginAccountOperation(liveAccounts.map((account) => account.userId))
+        const activeUserId = getViewerScope().userId
+        // Revoke every stored refresh token before clearing local state, so any
+        // token that may have been exfiltrated via XSS / device compromise is
+        // actually invalidated on the Supabase side.
+        for (const account of liveAccounts) {
+          if (account.refreshToken && account.userId !== activeUserId) {
+            // Serial is fine here — this path is rarely hit and we want to avoid
+            // racing session swaps inside invalidateStoredRefreshToken.
+            await invalidateStoredRefreshToken(account.refreshToken)
+          }
+        }
+        await signOut()
+        if (ownsAccountOperation(operationTicket)) useMultiAccountStore.getState().clear()
+      }),
+    [signOut]
+  )
 
   return {
     accounts,
