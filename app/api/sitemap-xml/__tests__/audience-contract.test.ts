@@ -14,8 +14,20 @@ describe('sitemap public audience boundary', () => {
     expect(route).toContain('activeAuthorIds.has(post.author_id)')
   })
 
-  it('excludes dissolved groups from the dynamic sitemap shard', () => {
+  it('only emits currently discoverable groups from the dynamic sitemap shard', () => {
     expect(route).toContain(".is('dissolved_at', null)")
+    expect(route).toContain("const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply']")
+    expect(route).toContain(".in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])")
+  })
+
+  it('never shares the stateful post/group/profile shard through a stale CDN payload', () => {
+    expect(route).toContain("'Cache-Control': 'private, no-store, max-age=0'")
+    expect(route).toContain("'CDN-Cache-Control': 'no-store'")
+    expect(route).toContain("'Vercel-CDN-Cache-Control': 'no-store'")
+    expect(route).toContain(
+      'return xmlResponse(urlsetXml(entries), STATEFUL_SITEMAP_NO_STORE_HEADERS)'
+    )
+    expect(route).toContain('cacheHeaders: Record<string, string> = CACHEABLE_SITEMAP_HEADERS')
   })
 
   it.each([
