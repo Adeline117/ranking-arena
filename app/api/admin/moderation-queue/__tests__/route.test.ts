@@ -94,21 +94,26 @@ import { NextRequest } from 'next/server'
 import { POST } from '../route'
 
 const CONTENT_ID = '4d2a4fa2-bf19-4ab4-a740-04ebaa9d636b'
+const OPERATION_ID = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
 const AUTHOR_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 const STRIKE_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 
 type QueueAction = 'approve' | 'delete' | 'warn' | 'ban'
 
-function request(action: QueueAction, contentId = CONTENT_ID) {
+function request(
+  action: QueueAction,
+  contentId = CONTENT_ID,
+  operationId = OPERATION_ID,
+  overrides: Record<string, unknown> = {}
+) {
   return new NextRequest('http://localhost/api/admin/moderation-queue', {
     method: 'POST',
     body: {
       content_type: 'comment',
       content_id: contentId,
       action,
-      // A caller-supplied author is deliberately ignored. The atomic RPC binds
-      // the sanction target to the locked post/comment author.
-      author_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      operation_id: operationId,
+      ...overrides,
     },
   })
 }
@@ -132,6 +137,7 @@ function result(action: QueueAction, overrides: Record<string, unknown> = {}) {
     result_action: action,
     result_content_id: CONTENT_ID,
     result_content_type: 'comment',
+    result_operation_id: OPERATION_ID,
     strike_id: action === 'warn' ? STRIKE_ID : null,
     strike_type: action === 'warn' ? 'warning' : null,
     ...overrides,
@@ -157,6 +163,7 @@ describe('POST /api/admin/moderation-queue atomic moderation', () => {
         p_content_type: 'comment',
         p_content_id: CONTENT_ID,
         p_action: action,
+        p_operation_id: OPERATION_ID,
       })
       expect(mockFrom).not.toHaveBeenCalled()
       expect(body.data.result).toMatchObject({
@@ -236,10 +243,12 @@ describe('POST /api/admin/moderation-queue atomic moderation', () => {
     }
   )
 
-  it('canonicalizes an uppercase UUID before checking the database acknowledgement', async () => {
+  it('canonicalizes uppercase content and operation UUIDs before checking the acknowledgement', async () => {
     mockRpc.mockResolvedValue({ data: [result('approve')], error: null })
 
-    const response = await POST(request('approve', CONTENT_ID.toUpperCase()))
+    const response = await POST(
+      request('approve', CONTENT_ID.toUpperCase(), OPERATION_ID.toUpperCase())
+    )
 
     expect(response.status).toBe(200)
     expect(mockRpc).toHaveBeenCalledWith('moderate_report_queue_atomic', {
@@ -247,6 +256,7 @@ describe('POST /api/admin/moderation-queue atomic moderation', () => {
       p_content_type: 'comment',
       p_content_id: CONTENT_ID,
       p_action: 'approve',
+      p_operation_id: OPERATION_ID,
     })
   })
 
@@ -270,7 +280,9 @@ describe('POST /api/admin/moderation-queue atomic moderation', () => {
         content_soft_deleted: true,
       },
     ],
+    ['ban claims no affected content', 'ban', { content_affected_count: 0 }],
     ['unexpected field', 'warn', { unexpected: true }],
+    ['wrong operation acknowledgement', 'warn', { result_operation_id: STRIKE_ID }],
   ] as const)(
     'fails closed on a malformed RPC acknowledgement: %s',
     async (_label, action, override) => {
@@ -340,5 +352,29 @@ describe('POST /api/admin/moderation-queue atomic moderation', () => {
 
     expect(response.status).toBe(400)
     expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['missing', undefined],
+    ['malformed', 'not-a-uuid'],
+  ])('rejects a %s operation_id before calling the RPC', async (_label, operationId) => {
+    const response = await POST(
+      request('delete', CONTENT_ID, OPERATION_ID, { operation_id: operationId })
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('rejects every extra request-body key instead of accepting client-authority data', async () => {
+    const response = await POST(
+      request('warn', CONTENT_ID, OPERATION_ID, {
+        author_id: 'dddddddd-dddd-4ddd-8ddd-dddddddddddd',
+      })
+    )
+
+    expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
   })
 })
