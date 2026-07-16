@@ -11,8 +11,12 @@ const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const SCRAPER = process.env.VPS_SCRAPER_HOST || 'http://45.76.152.169:3457';
-const API_KEY = 'arena-proxy-sg-2026';
+const API_KEY = process.env.VPS_PROXY_KEY?.trim();
 const TIMEOUT = 300000; // 5 minutes
+
+if (!API_KEY) {
+  throw new Error('VPS_PROXY_KEY is required to import platform data');
+}
 
 function parseNumber(str) {
   if (!str) return 0;

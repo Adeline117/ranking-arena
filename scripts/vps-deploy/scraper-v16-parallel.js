@@ -23,13 +23,17 @@ const { chromium } = require('playwright')
 // ---------------------------------------------------------------------------
 
 const PORT = parseInt(process.env.SCRAPER_PORT || '3457', 10)
-const PROXY_KEY = process.env.PROXY_KEY || 'arena-proxy-sg-2026'
+const PROXY_KEY = process.env.PROXY_KEY?.trim()
 const POOL_SIZE = parseInt(process.env.POOL_SIZE || '3', 10)
 const REQUEST_TIMEOUT_MS = parseInt(process.env.REQUEST_TIMEOUT || '120000', 10)
 const VERSION = '16.0.0'
 
 const MAX_QUEUE_SIZE = parseInt(process.env.MAX_QUEUE_SIZE || '50', 10)
 const MEMORY_WARNING_MB = parseInt(process.env.MEMORY_WARNING_MB || '400', 10)
+
+if (!PROXY_KEY) {
+  throw new Error('PROXY_KEY is required; refusing to start an unauthenticated scraper')
+}
 
 const BROWSER_ARGS = [
   '--no-sandbox',

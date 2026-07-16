@@ -4,6 +4,11 @@
 //
 // Deployed to: /opt/arena-cron/ecosystem-jp.config.js
 
+const proxyKey = process.env.PROXY_KEY?.trim()
+if (!proxyKey) {
+  throw new Error('PROXY_KEY is required to start the VPS proxy')
+}
+
 module.exports = {
   apps: [
     // ── HTTP Proxy (port 3456) ──
@@ -14,7 +19,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '3456',
-        PROXY_KEY: 'arena-proxy-sg-2026',
+        PROXY_KEY: proxyKey,
       },
       max_memory_restart: '300M',
       cron_restart: '0 */12 * * *',  // restart every 12h

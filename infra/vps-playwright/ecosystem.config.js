@@ -7,8 +7,12 @@
 //   2. arena-proxy    — HTTP reverse proxy (port 3456)
 //   3. arena-cron     — Periodic data fetch + Supabase write
 //
-// Environment variables are baked in here so PM2 auto-loads them on restart/reboot.
-// To update keys: edit this file, then `pm2 restart all && pm2 save`
+// Secrets must be injected by the host environment. Never bake them into this file.
+
+const proxyKey = process.env.PROXY_KEY?.trim()
+if (!proxyKey) {
+  throw new Error('PROXY_KEY is required to start the VPS scraper services')
+}
 
 module.exports = {
   apps: [
@@ -20,7 +24,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '3457',
-        PROXY_KEY: 'arena-proxy-sg-2026',
+        PROXY_KEY: proxyKey,
         SUPABASE_SERVICE_ROLE_KEY: process.env.SUPABASE_SERVICE_ROLE_KEY || '',
         TELEGRAM_BOT_TOKEN: process.env.TELEGRAM_BOT_TOKEN || '',
         TELEGRAM_ALERT_CHAT_ID: process.env.TELEGRAM_ALERT_CHAT_ID || '',
@@ -43,7 +47,7 @@ module.exports = {
       env: {
         NODE_ENV: 'production',
         PORT: '3456',
-        PROXY_KEY: 'arena-proxy-sg-2026',
+        PROXY_KEY: proxyKey,
       },
       max_memory_restart: '300M',
       cron_restart: '0 */12 * * *',  // restart every 12h

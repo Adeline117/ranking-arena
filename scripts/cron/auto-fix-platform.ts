@@ -26,7 +26,13 @@ const execAsync = promisify(exec);
 const HEALTH_FILE = path.join(__dirname, '../../logs/platform-health-latest.json');
 const VPS_HOST = '45.76.152.169';
 const VPS_PORT = 3456;
-const VPS_KEY = process.env.VPS_PROXY_KEY || 'arena-proxy-sg-2026';
+const VPS_KEY = requireProxyKey();
+
+function requireProxyKey(): string {
+  const value = process.env.VPS_PROXY_KEY?.trim();
+  if (!value) throw new Error('VPS_PROXY_KEY is required to run platform auto-fix');
+  return value;
+}
 
 interface HealthReport {
   timestamp: string;

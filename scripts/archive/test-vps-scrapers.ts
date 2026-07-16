@@ -8,7 +8,13 @@
 import { logger } from '../../lib/logger'
 
 const VPS_SCRAPER_URL = process.env.VPS_SCRAPER_URL || 'http://45.76.152.169:3456'
-const VPS_SCRAPER_KEY = process.env.VPS_PROXY_KEY || 'arena-proxy-sg-2026'
+const VPS_SCRAPER_KEY = requireProxyKey()
+
+function requireProxyKey(): string {
+  const value = process.env.VPS_PROXY_KEY?.trim()
+  if (!value) throw new Error('VPS_PROXY_KEY is required to probe the VPS scraper')
+  return value
+}
 
 interface HealthResponse {
   ok: boolean

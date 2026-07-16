@@ -13,11 +13,16 @@
  */
 
 const SCRAPER_URL = 'http://localhost:3457'
-const SCRAPER_KEY = 'arena-proxy-sg-2026'
+const SCRAPER_KEY = process.env.PROXY_KEY?.trim()
 const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-// ── Startup guard: refuse to run without Supabase key ──
+// ── Startup guards: refuse to run without runtime-injected secrets ──
+if (!SCRAPER_KEY) {
+  console.error('[FATAL] PROXY_KEY is not set. Refusing to run.')
+  process.exit(1)
+}
+
 if (!SUPABASE_KEY || SUPABASE_KEY === 'PASTE_SERVICE_ROLE_KEY_HERE') {
   console.error('[FATAL] SUPABASE_SERVICE_ROLE_KEY is not set. Refusing to run.')
   console.error('Fix: set it in ecosystem.config.js env block, then `pm2 restart arena-cron && pm2 save`')
