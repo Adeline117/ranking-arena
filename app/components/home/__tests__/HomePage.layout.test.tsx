@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import type { ReactNode } from 'react'
 import HomePage from '../HomePage'
 
@@ -70,11 +70,15 @@ describe('HomePage protected information architecture', () => {
   it('keeps discovery left, rankings center, and market context right', async () => {
     render(<HomePage />)
 
-    expect(await screen.findByTestId('three-column-layout')).toBeInTheDocument()
-    expect(await screen.findByTestId('left-discovery')).toBeInTheDocument()
-    expect(screen.getByTestId('ranking-center')).toBeInTheDocument()
-    expect(await screen.findByTestId('right-watchlist')).toBeInTheDocument()
-    expect(await screen.findByTestId('right-trends')).toBeInTheDocument()
-    expect(await screen.findByTestId('right-news')).toBeInTheDocument()
+    const layout = await screen.findByTestId('three-column-layout')
+    const left = within(layout).getByTestId('three-column-left')
+    const center = within(layout).getByTestId('three-column-center')
+    const right = within(layout).getByTestId('three-column-right')
+
+    expect(await within(left).findByTestId('left-discovery')).toBeInTheDocument()
+    expect(within(center).getByTestId('ranking-center')).toBeInTheDocument()
+    expect(await within(right).findByTestId('right-watchlist')).toBeInTheDocument()
+    expect(await within(right).findByTestId('right-trends')).toBeInTheDocument()
+    expect(await within(right).findByTestId('right-news')).toBeInTheDocument()
   })
 })
