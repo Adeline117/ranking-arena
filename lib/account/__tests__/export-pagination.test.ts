@@ -221,6 +221,34 @@ describe('fetchAllExportRowsByCursor', () => {
     expect(calls[1].greaterThan).toEqual({ column: 'id', value: '9223372036854775807' })
   })
 
+  it('casts reviewed numeric payload fields to text and rejects an inexact server response', async () => {
+    const numericDataset = {
+      name: 'subscription-prices',
+      table: 'subscriptions',
+      selectColumns: ['id', 'price_paid'],
+      textCastColumns: ['price_paid'],
+      ownerPredicate: { column: 'user_id', operator: 'eq', valueType: 'uuid' },
+      cursor: {
+        order: 'asc',
+        columns: [{ column: 'id', valueType: 'uuid' }],
+      },
+    } satisfies CursorExportDataset
+    const exact = fakeClient([
+      { data: [{ id: firstUuid, price_paid: '1234567890.123456789' }], error: null },
+      { data: [], error: null },
+    ])
+
+    await expect(
+      fetchAllExportRowsByCursor(exact.client, numericDataset, ownerUuid)
+    ).resolves.toEqual([{ id: firstUuid, price_paid: '1234567890.123456789' }])
+    expect(exact.calls[0].selection).toBe('id,price_paid::text')
+
+    const inexact = fakeClient([{ data: [{ id: firstUuid, price_paid: 123.45 }], error: null }])
+    await expect(
+      fetchAllExportRowsByCursor(inexact.client, numericDataset, ownerUuid)
+    ).rejects.toBeInstanceOf(DataExportReadError)
+  })
+
   it.each([42, Number('9007199254740993')])(
     'rejects bigint cursor number %s because JSON may already have rounded it',
     async (id) => {
@@ -438,6 +466,8 @@ describe('fetchAllExportRowsByCursor', () => {
       'unsafe selected field',
       { ...stringIdDataset, selectColumns: ['id', 'access_token_encrypted'] },
     ],
+    ['text cast field not selected', { ...stringIdDataset, textCastColumns: ['amount_cents'] }],
+    ['duplicate text cast field', { ...stringIdDataset, textCastColumns: ['payload', 'payload'] }],
   ])('rejects malformed descriptor: %s', async (_caseName, malformedDataset) => {
     const { client, calls } = fakeClient([])
 
