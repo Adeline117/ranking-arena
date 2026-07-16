@@ -421,11 +421,12 @@ const RECIPES: Record<string, Recipe> = {
       tradesFetchState: 'fetched',
       tradesFetchReason: 'exhausted',
       tradesSnapshot: {
-        schemaVersion: 2,
+        schemaVersion: 3,
         rawPages: [
           {
             pageIndex: 1,
             requestCursor: null,
+            requestStartTimeMs: asOfTimeMs - 90 * 86_400_000,
             requestEndTimeMs: asOfTimeMs,
             url: 'https://gtrade.test/history',
             response: {
@@ -434,7 +435,7 @@ const RECIPES: Record<string, Recipe> = {
             },
           },
         ],
-        meta: { asOfTimeMs },
+        meta: { asOfTimeMs, horizonStartTimeMs: asOfTimeMs - 90 * 86_400_000 },
       },
     })
     return {

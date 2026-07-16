@@ -1,16 +1,13 @@
 export const GTRADE_TRADES_PAGE_LIMIT = 1_000
 export const GTRADE_TRADES_HORIZON_DAYS = 90
 
-export type GtradeTradesStopReason =
-  | 'horizon_covered'
-  | 'exhausted'
-  | 'page_cap'
-  | 'request_failed'
-  | 'invalid_page'
+export type GtradeTradesStopReason = 'exhausted' | 'page_cap' | 'request_failed' | 'invalid_page'
 
 export interface GtradeTradesRawPage {
   pageIndex: number
   requestCursor: number | null
+  /** Inclusive lower bound shared by every page in this snapshot. */
+  requestStartTimeMs: number
   /** Frozen upper bound shared by every page in this snapshot. */
   requestEndTimeMs: number
   url: string
@@ -34,7 +31,7 @@ export interface GtradeTradesMeta {
 }
 
 export interface GtradeTradesSnapshot {
-  schemaVersion: 2
+  schemaVersion: 3
   rawPages: GtradeTradesRawPage[]
   trades: Array<Record<string, unknown>>
   meta: GtradeTradesMeta
@@ -53,6 +50,7 @@ export type GtradeTradesReplayStopReason =
 
 export interface GtradeTradesReplay {
   asOfTimeMs: number | null
+  startTimeMs: number | null
   trades: Array<Record<string, unknown>>
   validPageCount: number
   rawPageCount: number
@@ -145,7 +143,7 @@ export async function fetchGtradeTradesWindow(
   let capHit = false
 
   const result = (stopReason: GtradeTradesStopReason): GtradeTradesSnapshot => ({
-    schemaVersion: 2,
+    schemaVersion: 3,
     rawPages: [...rawPages],
     trades: [...byId.values()],
     meta: {
@@ -187,6 +185,7 @@ export async function fetchGtradeTradesWindow(
     rawPages.push({
       pageIndex: rawPages.length + 1,
       requestCursor: cursor,
+      requestStartTimeMs: horizonStartTimeMs,
       requestEndTimeMs: asOfTimeMs,
       url,
       response: payload,
@@ -212,12 +211,14 @@ export async function fetchGtradeTradesWindow(
         throw invalidPage('[gtrade] trades page is empty while hasMore is true')
       }
       exhausted = true
+      horizonCovered = true
       return result('exhausted')
     }
 
     const validated = new Map<number, Record<string, unknown>>()
     let previousId = Number.POSITIVE_INFINITY
-    let previousTime = Number.POSITIVE_INFINITY
+    let pageNewestTimeMs = Number.NEGATIVE_INFINITY
+    let pageOldestTimeMs = Number.POSITIVE_INFINITY
     try {
       for (let index = 0; index < rows.length; index += 1) {
         const candidate = rows[index]
@@ -227,11 +228,12 @@ export async function fetchGtradeTradesWindow(
         const row = candidate as Record<string, unknown>
         const id = tradeId(row)
         const time = tradeTime(row, asOfTimeMs)
-        if (id > previousId || time > previousTime || (cursor !== null && id > cursor)) {
-          throw new Error('[gtrade] trades page is out of id/date order or cursor range')
+        if (id > previousId || (cursor !== null && id > cursor) || time < horizonStartTimeMs) {
+          throw new Error('[gtrade] trades page is out of id order, cursor range, or date filter')
         }
         previousId = id
-        previousTime = time
+        pageNewestTimeMs = Math.max(pageNewestTimeMs, time)
+        pageOldestTimeMs = Math.min(pageOldestTimeMs, time)
 
         const existing = validated.get(id) ?? byId.get(id)
         if (existing) {
@@ -246,19 +248,20 @@ export async function fetchGtradeTradesWindow(
       throw invalidPage(error instanceof Error ? error.message : '[gtrade] trade validation failed')
     }
 
-    const firstTime = tradeTime(rows[0] as Record<string, unknown>, asOfTimeMs)
     const lastRow = rows[rows.length - 1] as Record<string, unknown>
     const lastId = tradeId(lastRow)
-    const lastTime = tradeTime(lastRow, asOfTimeMs)
     for (const [id, row] of validated) byId.set(id, row)
-    newestTimeMs = newestTimeMs === null ? firstTime : Math.max(newestTimeMs, firstTime)
-    oldestTimeMs = oldestTimeMs === null ? lastTime : Math.min(oldestTimeMs, lastTime)
+    newestTimeMs =
+      newestTimeMs === null ? pageNewestTimeMs : Math.max(newestTimeMs, pageNewestTimeMs)
+    oldestTimeMs =
+      oldestTimeMs === null ? pageOldestTimeMs : Math.min(oldestTimeMs, pageOldestTimeMs)
 
     if (!response.pagination.hasMore) {
       if (response.pagination.nextCursor !== null) {
         throw invalidPage('[gtrade] exhausted trades page has a non-null nextCursor')
       }
       exhausted = true
+      horizonCovered = true
       return result('exhausted')
     }
     const nextCursor = response.pagination.nextCursor
@@ -270,13 +273,6 @@ export async function fetchGtradeTradesWindow(
       validated.size === 0
     ) {
       throw invalidPage('[gtrade] trades page has an invalid or stalled nextCursor')
-    }
-    // Dates have second-level precision while the id cursor orders events
-    // within a second. Equality does not prove that every lower-id boundary
-    // event was fetched, so coverage requires one event strictly before it.
-    if (oldestTimeMs < horizonStartTimeMs) {
-      horizonCovered = true
-      return result('horizon_covered')
     }
     cursor = nextCursor
   }
@@ -292,6 +288,7 @@ export async function fetchGtradeTradesWindow(
 export function replayGtradeTradesSnapshot(snapshot: unknown): GtradeTradesReplay {
   const invalidSnapshot = (error: string): GtradeTradesReplay => ({
     asOfTimeMs: null,
+    startTimeMs: null,
     trades: [],
     validPageCount: 0,
     rawPageCount: 0,
@@ -308,7 +305,7 @@ export function replayGtradeTradesSnapshot(snapshot: unknown): GtradeTradesRepla
   }
   const envelope = snapshot as { schemaVersion?: unknown; rawPages?: unknown; meta?: unknown }
   if (
-    envelope.schemaVersion !== 2 ||
+    envelope.schemaVersion !== 3 ||
     !Array.isArray(envelope.rawPages) ||
     !envelope.meta ||
     typeof envelope.meta !== 'object' ||
@@ -317,7 +314,14 @@ export function replayGtradeTradesSnapshot(snapshot: unknown): GtradeTradesRepla
     return invalidSnapshot('[gtrade] trades snapshot envelope is invalid')
   }
   const asOfTimeMs = (envelope.meta as { asOfTimeMs?: unknown }).asOfTimeMs
-  if (typeof asOfTimeMs !== 'number' || !Number.isSafeInteger(asOfTimeMs)) {
+  const startTimeMs = (envelope.meta as { horizonStartTimeMs?: unknown }).horizonStartTimeMs
+  if (
+    typeof asOfTimeMs !== 'number' ||
+    !Number.isSafeInteger(asOfTimeMs) ||
+    typeof startTimeMs !== 'number' ||
+    !Number.isSafeInteger(startTimeMs) ||
+    startTimeMs >= asOfTimeMs
+  ) {
     return invalidSnapshot('[gtrade] trades snapshot as-of is invalid')
   }
 
@@ -335,6 +339,7 @@ export function replayGtradeTradesSnapshot(snapshot: unknown): GtradeTradesRepla
     exhausted = false
   ): GtradeTradesReplay => ({
     asOfTimeMs,
+    startTimeMs,
     trades: [...byId.values()],
     validPageCount,
     rawPageCount: rawPages.length,
@@ -356,6 +361,7 @@ export function replayGtradeTradesSnapshot(snapshot: unknown): GtradeTradesRepla
       if (
         page.pageIndex !== pageOffset + 1 ||
         page.requestCursor !== cursor ||
+        page.requestStartTimeMs !== startTimeMs ||
         page.requestEndTimeMs !== asOfTimeMs ||
         !page.response ||
         typeof page.response !== 'object' ||
@@ -387,7 +393,8 @@ export function replayGtradeTradesSnapshot(snapshot: unknown): GtradeTradesRepla
 
       const validated = new Map<number, Record<string, unknown>>()
       let previousId = Number.POSITIVE_INFINITY
-      let previousTime = Number.POSITIVE_INFINITY
+      let pageNewestTimeMs = Number.NEGATIVE_INFINITY
+      let pageOldestTimeMs = Number.POSITIVE_INFINITY
       for (const rowCandidate of response.data) {
         if (!rowCandidate || typeof rowCandidate !== 'object' || Array.isArray(rowCandidate)) {
           throw new Error('[gtrade] raw trades page contains a non-object row')
@@ -395,11 +402,12 @@ export function replayGtradeTradesSnapshot(snapshot: unknown): GtradeTradesRepla
         const row = rowCandidate as Record<string, unknown>
         const id = tradeId(row)
         const time = tradeTime(row, asOfTimeMs)
-        if (id > previousId || time > previousTime || (cursor !== null && id > cursor)) {
-          throw new Error('[gtrade] raw trades page order or cursor range is invalid')
+        if (id > previousId || (cursor !== null && id > cursor) || time < startTimeMs) {
+          throw new Error('[gtrade] raw trades page id, cursor, or date filter is invalid')
         }
         previousId = id
-        previousTime = time
+        pageNewestTimeMs = Math.max(pageNewestTimeMs, time)
+        pageOldestTimeMs = Math.min(pageOldestTimeMs, time)
 
         const existing = validated.get(id) ?? byId.get(id)
         if (existing) {
@@ -412,10 +420,8 @@ export function replayGtradeTradesSnapshot(snapshot: unknown): GtradeTradesRepla
         }
       }
 
-      const firstTime = tradeTime(response.data[0] as Record<string, unknown>, asOfTimeMs)
       const lastRow = response.data[response.data.length - 1] as Record<string, unknown>
       const lastId = tradeId(lastRow)
-      const lastTime = tradeTime(lastRow, asOfTimeMs)
 
       if (!response.pagination.hasMore) {
         if (response.pagination.nextCursor !== null || pageOffset !== rawPages.length - 1) {
@@ -436,8 +442,10 @@ export function replayGtradeTradesSnapshot(snapshot: unknown): GtradeTradesRepla
       }
 
       for (const [id, row] of validated) byId.set(id, row)
-      newestTimeMs = newestTimeMs === null ? firstTime : Math.max(newestTimeMs, firstTime)
-      oldestTimeMs = oldestTimeMs === null ? lastTime : Math.min(oldestTimeMs, lastTime)
+      newestTimeMs =
+        newestTimeMs === null ? pageNewestTimeMs : Math.max(newestTimeMs, pageNewestTimeMs)
+      oldestTimeMs =
+        oldestTimeMs === null ? pageOldestTimeMs : Math.min(oldestTimeMs, pageOldestTimeMs)
       validPageCount += 1
 
       if (!response.pagination.hasMore) return result('exhausted', null, true)

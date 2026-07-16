@@ -49,6 +49,7 @@ import {
 import {
   fetchGtradeTradesWindow,
   GtradeTradesFetchError,
+  GTRADE_TRADES_HORIZON_DAYS,
   type GtradeTradesSnapshot,
 } from './trades-fetch'
 
@@ -144,6 +145,9 @@ function getTrades(
             const params = new URLSearchParams({
               chainId: chainId(src),
               limit: String(limit),
+              startDate: new Date(
+                asOfTimeMs - GTRADE_TRADES_HORIZON_DAYS * 86_400_000
+              ).toISOString(),
               endDate: new Date(asOfTimeMs).toISOString(),
             })
             if (cursor !== null) params.set('cursor', String(cursor))

@@ -42,6 +42,7 @@ function profileRaw(
   options: { asOfTimeMs?: number; exhausted?: boolean } = {}
 ) {
   const asOfTimeMs = options.asOfTimeMs ?? AS_OF
+  const startTimeMs = asOfTimeMs - 90 * DAY_MS
   const exhausted = options.exhausted ?? true
   const lastId = trades.at(-1)?.id
   return {
@@ -50,11 +51,12 @@ function profileRaw(
     tradesFetchState: 'fetched',
     tradesFetchReason: exhausted ? 'exhausted' : 'page_cap',
     tradesSnapshot: {
-      schemaVersion: 2,
+      schemaVersion: 3,
       rawPages: [
         {
           pageIndex: 1,
           requestCursor: null,
+          requestStartTimeMs: startTimeMs,
           requestEndTimeMs: asOfTimeMs,
           url: 'https://gtrade.test/history',
           response: {
@@ -68,7 +70,7 @@ function profileRaw(
         },
       ],
       // Deliberately minimal: the parser must replay rawPages, not trust meta.
-      meta: { asOfTimeMs },
+      meta: { asOfTimeMs, horizonStartTimeMs: startTimeMs },
       trades: [],
     },
   }
@@ -178,7 +180,7 @@ describe('parseGtradeProfile', () => {
     expect(profile.series).toEqual([])
   })
 
-  it('publishes an independently covered 7d prefix but rejects wider windows', () => {
+  it('rejects every timeframe when filtered pagination has not exhausted', () => {
     const rows = [
       { id: 500, date: new Date(AS_OF - DAY_MS).toISOString(), pnl_net: 10, collateralPriceUsd: 2 },
       {
@@ -190,13 +192,8 @@ describe('parseGtradeProfile', () => {
       { id: 498, date: new Date(AS_OF - 8 * DAY_MS).toISOString(), pnl_net: 0 },
     ]
     const seven = parseGtradeProfile(profileRaw(null, rows, 7, { exhausted: false }), ctx)
-    expect(seven.stats[0]).toMatchObject({
-      pnl: 16,
-      winPositions: 1,
-      totalPositions: 2,
-      winRate: 50,
-    })
-    expect(seven.stats[0].extras.profile_window_metrics_complete).toBe(true)
+    expect(seven.stats[0]).toMatchObject({ pnl: null, winPositions: null, totalPositions: null })
+    expect(seven.stats[0].extras.profile_window_metrics_complete).toBe(false)
 
     const thirty = parseGtradeProfile(profileRaw(null, rows, 30, { exhausted: false }), ctx)
     expect(thirty.stats[0]).toMatchObject({ pnl: null, winPositions: null, totalPositions: null })
@@ -213,11 +210,11 @@ describe('parseGtradeProfile', () => {
       { id: 499, date: new Date(AS_OF - 10 * DAY_MS).toISOString(), pnl_net: -4 },
       { id: 498, date: new Date(AS_OF - 31 * DAY_MS).toISOString(), pnl_net: 0 },
     ]
-    const seven = parseGtradeProfile(profileRaw(null, rows, 7, { exhausted: false }), ctx)
+    const seven = parseGtradeProfile(profileRaw(null, rows, 7), ctx)
     expect(seven.stats[0].pnl).toBe(20)
     expect(seven.stats[0].extras.profile_window_metrics_complete).toBe(true)
 
-    const thirty = parseGtradeProfile(profileRaw(null, rows, 30, { exhausted: false }), ctx)
+    const thirty = parseGtradeProfile(profileRaw(null, rows, 30), ctx)
     expect(thirty.stats[0].pnl).toBeNull()
     expect(thirty.stats[0].extras).toMatchObject({
       profile_window_metrics_complete: false,
