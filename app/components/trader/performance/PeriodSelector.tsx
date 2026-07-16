@@ -16,7 +16,6 @@ export const CUMULATIVE_ROI_PLATFORMS = new Set([
   'bybit',
   'bitget_futures',
   'dydx',
-  'gmx',
   'btcc',
 ])
 
