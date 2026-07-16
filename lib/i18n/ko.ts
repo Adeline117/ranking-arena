@@ -5997,6 +5997,9 @@ const ko = {
   metricRoi: 'ROI',
   metricPnl: '손익',
   gmxRealizedNetPnlLabel: '실현 순손익',
+  gmxMaxCapitalRoiLabel: '실현 ROI · 기간 최대 자본',
+  gmxMaxCapitalRoiTooltip:
+    'GMX ROI는 실현 순손익을 선택 기간의 최대 자본으로 나눈 값입니다. 수수료와 가격 영향을 반영하고 현재 미실현 손익은 제외하며, 완료된 UTC 일 단위 기간을 사용하므로 현재 시점 기준보다 최대 24시간 늦습니다.',
   gmxRealizedNetPnlSummary: '수수료·가격 영향 포함 · 미실현 손익 제외',
   gmxRealizedNetPnlTooltip:
     'GMX 실현 순손익은 수수료와 가격 영향을 반영하며 현재 미실현 손익은 포함하지 않습니다. 완료된 UTC 일 단위 기간을 사용하므로 현재 시점 기준보다 최대 24시간 늦습니다.',

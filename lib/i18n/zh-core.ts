@@ -214,6 +214,9 @@ const zhCore = {
   pleaseLoginFirst: '请先登录',
   pnl: '盈亏',
   gmxRealizedNetPnlLabel: '已实现净 PnL',
+  gmxMaxCapitalRoiLabel: '已实现 ROI · 窗口最大资本',
+  gmxMaxCapitalRoiTooltip:
+    'GMX ROI = 已实现净 PnL ÷ 所选窗口内的最大资本。已计入费用与价格影响，不包含当前未实现盈亏；采用完整 UTC 日窗口，相比滚动当前时间最多滞后 24 小时。',
   gmxRealizedNetPnlSummary: '已计入费用与价格影响 · 不含未实现盈亏',
   gmxRealizedNetPnlTooltip:
     'GMX 已实现净 PnL 计入费用与价格影响，不包含当前未实现盈亏；采用完整 UTC 日窗口，相比滚动当前时间最多滞后 24 小时。',

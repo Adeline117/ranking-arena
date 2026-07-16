@@ -1,4 +1,8 @@
-import { readGmxRealizedNetDisclosure, readGmxRealizedNetModuleDisclosure } from '../pnl-contract'
+import {
+  readGmxMaxCapitalRoiModuleDisclosure,
+  readGmxRealizedNetDisclosure,
+  readGmxRealizedNetModuleDisclosure,
+} from '../pnl-contract'
 
 const DAY_SECONDS = 86_400
 const WINDOW_TO = Date.UTC(2026, 6, 15) / 1000
@@ -6,6 +10,7 @@ const WINDOW_TO = Date.UTC(2026, 6, 15) / 1000
 function verifiedExtras(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     pnl_basis: 'gmx_period_realized_net',
+    roi_basis: 'max_capital_usd',
     pnl_includes_unrealized: false,
     pnl_components_complete: true,
     profile_series_contract: 'unavailable_same_basis',
@@ -63,7 +68,7 @@ describe('readGmxRealizedNetModuleDisclosure', () => {
   ) {
     return {
       timeframe: overrides.responseTimeframe ?? timeframe,
-      stats: { pnl: overrides.pnl === undefined ? 100 : overrides.pnl },
+      stats: { pnl: overrides.pnl === undefined ? 100 : overrides.pnl, roi: 20 },
       extras:
         overrides.extras ??
         verifiedExtras({
@@ -93,5 +98,42 @@ describe('readGmxRealizedNetModuleDisclosure', () => {
     expect(
       readGmxRealizedNetModuleDisclosure('gmx', expectedTimeframe as 7 | 30 | 90, candidate)
     ).toBeNull()
+  })
+})
+
+describe('readGmxMaxCapitalRoiModuleDisclosure', () => {
+  const validModule = {
+    timeframe: 30 as const,
+    stats: { pnl: 100, roi: 20 },
+    extras: verifiedExtras({
+      window_from: WINDOW_TO - 30 * DAY_SECONDS,
+      window_duration_days: 30,
+    }),
+    provenance: { source: 'gmx', asOf: '2026-07-15T01:00:00.000Z' },
+  }
+
+  it('accepts only the proven realized-net over window max-capital formula', () => {
+    expect(readGmxMaxCapitalRoiModuleDisclosure('gmx', 30, validModule)).toEqual({
+      kind: 'gmx_realized_net_on_window_max_capital',
+      windowFrom: WINDOW_TO - 30 * DAY_SECONDS,
+      windowTo: WINDOW_TO,
+      windowDurationDays: 30,
+    })
+  })
+
+  it.each([
+    ['generic ROI basis', { ...validModule, extras: { ...validModule.extras, roi_basis: 'roi' } }],
+    ['missing ROI value', { ...validModule, stats: { pnl: 100, roi: null } }],
+    [
+      'legacy PnL numerator',
+      { ...validModule, extras: { ...validModule.extras, pnl_basis: 'total_pnl' } },
+    ],
+    ['wrong response timeframe', { ...validModule, timeframe: 7 as const }],
+    [
+      'wrong provenance',
+      { ...validModule, provenance: { ...validModule.provenance, source: 'dune_gmx' } },
+    ],
+  ])('rejects %s', (_name, candidate) => {
+    expect(readGmxMaxCapitalRoiModuleDisclosure('gmx', 30, candidate)).toBeNull()
   })
 })
