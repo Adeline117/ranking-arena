@@ -18,6 +18,10 @@ import {
   isCreatedCommentAcknowledgement,
   isDefinitiveMutationRejection,
 } from '@/lib/api/comments-client'
+import {
+  parsePostReactionAcknowledgement,
+  type PostReactionAcknowledgement,
+} from '@/lib/api/post-reactions-client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { localizedLabel } from '@/lib/utils/format'
 import { normalizePostTitle } from '@/lib/utils/post-display'
@@ -31,6 +35,23 @@ import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 interface UseHotPageDataOptions {
   initialPosts?: Post[]
+}
+
+function applyReactionAcknowledgement(
+  post: Post,
+  acknowledgement: PostReactionAcknowledgement
+): Post {
+  const likeCount = acknowledgement.like_count ?? post.like_count ?? post.likes
+  const dislikeCount = acknowledgement.dislike_count ?? post.dislike_count ?? post.dislikes ?? 0
+
+  return {
+    ...post,
+    likes: likeCount,
+    like_count: likeCount,
+    dislikes: dislikeCount,
+    dislike_count: dislikeCount,
+    user_reaction: acknowledgement.reaction,
+  }
 }
 
 export function useHotPageData(options: UseHotPageDataOptions = {}) {
@@ -123,6 +144,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     scopeKey
   )
   const submittingCommentRef = useRef<symbol | null>(null)
+  const reactionRequestLocksRef = useRef<Set<string>>(new Set())
   const openPostIdRef = useRef<string | null>(null)
   const commentLoadGenerationRef = useRef(new Map<string, number>())
   const commentLoadMoreGenerationRef = useRef(new Map<string, number>())
@@ -155,6 +177,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     commentLoadGenerationRef.current.clear()
     commentLoadMoreGenerationRef.current.clear()
     submittingCommentRef.current = null
+    reactionRequestLocksRef.current.clear()
     setComments([])
     setCommentsOffset(0)
     setHasMoreComments(true)
@@ -244,6 +267,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
                 Math.log(hours + 2) * 2
               )
             })()
+          const likeCount = (post.like_count as number) || 0
+          const dislikeCount = (post.dislike_count as number) || 0
 
           return {
             id: post.id as string,
@@ -258,8 +283,10 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
             time: timeStr,
             body: (post.content as string) || '',
             comments: (post.comment_count as number) || 0,
-            likes: (post.like_count as number) || 0,
-            dislikes: (post.dislike_count as number) || 0,
+            likes: likeCount,
+            like_count: likeCount,
+            dislikes: dislikeCount,
+            dislike_count: dislikeCount,
             hotScore,
             views: (post.view_count as number) || 0,
             created_at: post.created_at as string,
@@ -982,12 +1009,11 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       }
 
       const capturedScope = activeScopeRef.current
+      const lockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${postId}`
+      if (reactionRequestLocksRef.current.has(lockKey)) return
+      reactionRequestLocksRef.current.add(lockKey)
       try {
-        const response = await authedFetch<{
-          success?: boolean
-          error?: string
-          data?: { like_count: number; dislike_count: number; reaction: 'up' | 'down' | null }
-        }>(
+        const response = await authedFetch<Record<string, unknown>>(
           `/api/posts/${postId}/like`,
           'POST',
           accessToken,
@@ -1000,33 +1026,20 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         )
         if (!scopeIsCurrent(capturedScope) || response.stale) return
         const json = response.data
-        if (response.ok && json?.success && json.data) {
-          const result = json.data
+        const acknowledgement = response.ok
+          ? parsePostReactionAcknowledgement(json, reactionType)
+          : null
+        if (acknowledgement) {
           setPosts((prev) =>
-            prev.map((p) => {
-              if (p.id === postId) {
-                return {
-                  ...p,
-                  likes: result.like_count,
-                  dislikes: result.dislike_count,
-                  user_reaction: result.reaction,
-                }
-              }
-              return p
-            })
-          )
-          if (openPost?.id === postId) {
-            setOpenPost((prev) =>
-              prev
-                ? {
-                    ...prev,
-                    likes: result.like_count,
-                    dislikes: result.dislike_count,
-                    user_reaction: result.reaction,
-                  }
-                : null
+            prev.map((post) =>
+              post.id === postId ? applyReactionAcknowledgement(post, acknowledgement) : post
             )
-          }
+          )
+          setOpenPost((previous) =>
+            previous?.id === postId
+              ? applyReactionAcknowledgement(previous, acknowledgement)
+              : previous
+          )
         } else {
           logger.error('[HotPage] Reaction API error:', json?.error || response.status)
           showToast(t('actionFailedRetry'), 'error')
@@ -1035,9 +1048,11 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         if (!scopeIsCurrent(capturedScope)) return
         logger.error('[HotPage] Reaction failed:', err)
         showToast(t('actionFailedRetry'), 'error')
+      } finally {
+        reactionRequestLocksRef.current.delete(lockKey)
       }
     },
-    [accessToken, authChecked, openPost?.id, scopeIsCurrent, setOpenPost, setPosts, showToast, t]
+    [accessToken, authChecked, scopeIsCurrent, setOpenPost, setPosts, showToast, t]
   )
 
   return {
