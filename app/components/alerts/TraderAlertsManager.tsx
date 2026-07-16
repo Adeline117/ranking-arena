@@ -71,7 +71,27 @@ function traderAlertsScopeKey(
 
 function readAlerts(payload: TraderAlertsPayload | null): TraderAlert[] {
   const candidate = payload?.data?.alerts ?? payload?.alerts
-  return Array.isArray(candidate) ? (candidate as TraderAlert[]) : []
+  return Array.isArray(candidate) ? candidate.filter(isTraderAlert) : []
+}
+
+function isTraderAlert(value: unknown): value is TraderAlert {
+  if (!value || typeof value !== 'object') return false
+  const alert = value as Record<string, unknown>
+  return (
+    typeof alert.id === 'string' &&
+    alert.id.length > 0 &&
+    alert.id.length <= 256 &&
+    typeof alert.trader_id === 'string' &&
+    alert.trader_id.length > 0 &&
+    alert.trader_id.length <= 512 &&
+    (alert.source === null ||
+      (typeof alert.source === 'string' && alert.source.length > 0 && alert.source.length <= 64)) &&
+    typeof alert.alert_roi_change === 'boolean' &&
+    typeof alert.alert_drawdown === 'boolean' &&
+    typeof alert.alert_score_change === 'boolean' &&
+    typeof alert.alert_rank_change === 'boolean' &&
+    typeof alert.enabled === 'boolean'
+  )
 }
 
 function profileHref(alert: TraderAlert): string {
