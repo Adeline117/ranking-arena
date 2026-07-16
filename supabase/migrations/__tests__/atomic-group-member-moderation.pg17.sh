@@ -7,6 +7,7 @@ set -Eeuo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MEMBERSHIP_MIGRATION="$ROOT_DIR/supabase/migrations/20260716113900_atomic_group_membership.sql"
 MODERATION_MIGRATION="$ROOT_DIR/supabase/migrations/20260716114100_atomic_group_member_moderation.sql"
+IDENTITY_MIGRATION="$ROOT_DIR/supabase/migrations/20260716114600_group_membership_identity_guard.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -15,7 +16,7 @@ for executable in initdb pg_ctl psql; do
     exit 1
   fi
 done
-for migration in "$MEMBERSHIP_MIGRATION" "$MODERATION_MIGRATION"; do
+for migration in "$MEMBERSHIP_MIGRATION" "$MODERATION_MIGRATION" "$IDENTITY_MIGRATION"; do
   if [[ ! -f "$migration" ]]; then
     echo "Required group migration is missing: $migration" >&2
     exit 1
@@ -187,11 +188,17 @@ VALUES
   ('22222222-2222-4222-8222-222222222222', 'free', 50, true);
 
 INSERT INTO public.groups(id, created_by, member_count)
-VALUES (
-  '10000000-0000-4000-8000-000000000001',
-  'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-  99
-);
+VALUES
+  (
+    '10000000-0000-4000-8000-000000000001',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    99
+  ),
+  (
+    '20000000-0000-4000-8000-000000000002',
+    'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
+    88
+  );
 INSERT INTO public.group_members(group_id, user_id, role)
 VALUES
   ('10000000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'owner'),
@@ -199,7 +206,8 @@ VALUES
   ('10000000-0000-4000-8000-000000000001', 'cccccccc-cccc-4ccc-8ccc-cccccccccccc', 'member'),
   ('10000000-0000-4000-8000-000000000001', 'dddddddd-dddd-4ddd-8ddd-dddddddddddd', 'member'),
   ('10000000-0000-4000-8000-000000000001', 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee', 'member'),
-  ('10000000-0000-4000-8000-000000000001', 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'member');
+  ('10000000-0000-4000-8000-000000000001', 'ffffffff-ffff-4fff-8fff-ffffffffffff', 'member'),
+  ('20000000-0000-4000-8000-000000000002', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'owner');
 SQL
 
 psql_cmd -f "$MEMBERSHIP_MIGRATION" >"$LOG_DIR/membership.log"
@@ -223,6 +231,10 @@ psql_cmd -c \
   >/dev/null
 
 psql_cmd -f "$MODERATION_MIGRATION" >"$LOG_DIR/first-apply.log"
+psql_cmd -c \
+  "UPDATE public.groups SET member_count = 777 WHERE id = '10000000-0000-4000-8000-000000000001'" \
+  >/dev/null
+psql_cmd -f "$IDENTITY_MIGRATION" >"$LOG_DIR/identity-first-apply.log"
 
 GROUP_ID="'10000000-0000-4000-8000-000000000001'::uuid"
 OWNER_ID="'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'::uuid"
@@ -422,6 +434,127 @@ psql_cmd -c \
   "UPDATE public.group_members SET role = 'member' WHERE group_id = '10000000-0000-4000-8000-000000000001' AND user_id = 'ffffffff-ffff-4fff-8fff-ffffffffffff'" \
   >/dev/null
 
+# Identity moves are never valid membership updates. The AFTER-all-columns
+# guard also catches a BEFORE trigger that smuggles a move into a role update,
+# and rolls back earlier AFTER-trigger side effects with the failed statement.
+psql_cmd <<'SQL'
+CREATE TABLE public.membership_update_side_effect (
+  group_id uuid NOT NULL,
+  user_id uuid NOT NULL
+);
+ALTER TABLE public.membership_update_side_effect OWNER TO postgres;
+
+CREATE OR REPLACE FUNCTION public.log_membership_update_side_effect()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  INSERT INTO public.membership_update_side_effect(group_id, user_id)
+  VALUES (NEW.group_id, NEW.user_id);
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION public.log_membership_update_side_effect() OWNER TO postgres;
+CREATE TRIGGER trg_group_members_50_update_side_effect
+  AFTER UPDATE ON public.group_members
+  FOR EACH ROW EXECUTE FUNCTION public.log_membership_update_side_effect();
+
+GRANT UPDATE ON public.group_members TO service_role;
+SET ROLE service_role;
+UPDATE public.group_members
+SET role = 'admin'
+WHERE group_id = '10000000-0000-4000-8000-000000000001'
+  AND user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+UPDATE public.group_members
+SET role = 'member'
+WHERE group_id = '10000000-0000-4000-8000-000000000001'
+  AND user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+RESET ROLE;
+TRUNCATE public.membership_update_side_effect;
+SQL
+
+if psql_cmd -c \
+  "SET ROLE service_role; UPDATE public.group_members SET group_id = '20000000-0000-4000-8000-000000000002' WHERE group_id = '10000000-0000-4000-8000-000000000001' AND user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'" \
+  >"$LOG_DIR/group-identity-move.log" 2>&1; then
+  echo "Group membership unexpectedly moved to another group" >&2
+  exit 1
+fi
+grep -Fq 'group membership identity is immutable' \
+  "$LOG_DIR/group-identity-move.log"
+
+if psql_cmd -c \
+  "SET ROLE service_role; UPDATE public.group_members SET user_id = '22222222-2222-4222-8222-222222222222' WHERE group_id = '10000000-0000-4000-8000-000000000001' AND user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'" \
+  >"$LOG_DIR/user-identity-move.log" 2>&1; then
+  echo "Group membership unexpectedly moved to another user" >&2
+  exit 1
+fi
+grep -Fq 'group membership identity is immutable' \
+  "$LOG_DIR/user-identity-move.log"
+
+psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION public.redirect_membership_during_role_update()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  IF NEW.user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd' THEN
+    NEW.group_id := '20000000-0000-4000-8000-000000000002';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION public.redirect_membership_during_role_update() OWNER TO postgres;
+CREATE TRIGGER trg_group_members_20_redirect_role_update
+  BEFORE UPDATE OF role ON public.group_members
+  FOR EACH ROW EXECUTE FUNCTION public.redirect_membership_during_role_update();
+SQL
+if psql_cmd -c \
+  "SET ROLE service_role; UPDATE public.group_members SET role = 'admin' WHERE group_id = '10000000-0000-4000-8000-000000000001' AND user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'" \
+  >"$LOG_DIR/smuggled-identity-move.log" 2>&1; then
+  echo "Role-only UPDATE unexpectedly smuggled a membership identity move" >&2
+  exit 1
+fi
+grep -Fq 'group membership identity is immutable' \
+  "$LOG_DIR/smuggled-identity-move.log"
+
+psql_cmd <<'SQL'
+DO $identity_rollback_proof$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.group_members
+    WHERE group_id = '10000000-0000-4000-8000-000000000001'
+      AND user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+      AND role = 'member'
+  ) OR EXISTS (
+    SELECT 1 FROM public.group_members
+    WHERE group_id = '20000000-0000-4000-8000-000000000002'
+      AND user_id = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'
+  ) OR EXISTS (
+    SELECT 1 FROM public.membership_update_side_effect
+  ) OR EXISTS (
+    SELECT 1
+    FROM public.groups AS target_group
+    WHERE target_group.member_count IS DISTINCT FROM (
+      SELECT pg_catalog.count(*)::integer
+      FROM public.group_members AS member
+      WHERE member.group_id = target_group.id
+    )
+  ) THEN
+    RAISE EXCEPTION 'failed identity move left row, trigger or count drift';
+  END IF;
+END
+$identity_rollback_proof$;
+DROP TRIGGER trg_group_members_20_redirect_role_update ON public.group_members;
+DROP FUNCTION public.redirect_membership_during_role_update();
+DROP TRIGGER trg_group_members_50_update_side_effect ON public.group_members;
+DROP FUNCTION public.log_membership_update_side_effect();
+DROP TABLE public.membership_update_side_effect;
+SQL
+
 # Authenticated reads are scoped to group administrators by RLS.
 admin_visible="$(psql_cmd -Atqc "SET request.jwt.claim.sub = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'; SET ROLE authenticated; SELECT count(*) FROM public.group_bans; RESET ROLE;")"
 member_visible="$(psql_cmd -Atqc "SET request.jwt.claim.sub = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd'; SET ROLE authenticated; SELECT count(*) FROM public.group_bans; RESET ROLE;")"
@@ -450,8 +583,13 @@ GRANT EXECUTE ON FUNCTION public.reject_banned_group_membership()
   TO PUBLIC, drifted_moderator;
 GRANT EXECUTE ON FUNCTION public.reject_member_group_ban()
   TO PUBLIC, drifted_moderator;
+GRANT EXECUTE ON FUNCTION public.reject_group_membership_identity_update()
+  TO PUBLIC, drifted_moderator;
+ALTER TABLE public.group_members
+  DISABLE TRIGGER trg_group_members_99_identity_immutable;
 SQL
 psql_cmd -f "$MODERATION_MIGRATION" >"$LOG_DIR/replay.log"
+psql_cmd -f "$IDENTITY_MIGRATION" >"$LOG_DIR/identity-replay.log"
 
 psql_cmd <<'SQL'
 DO $catalog_and_data_contract$
@@ -494,8 +632,23 @@ BEGIN
     'authenticated',
     'public.reject_member_group_ban()',
     'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'drifted_moderator',
+    'public.reject_group_membership_identity_update()',
+    'EXECUTE'
   ) THEN
     RAISE EXCEPTION 'moderation function ACL drifted';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_trigger
+    WHERE tgrelid = 'public.group_members'::regclass
+      AND tgname = 'trg_group_members_99_identity_immutable'
+      AND tgenabled = 'O'
+      AND tgtype = 17
+      AND tgattr = ''::pg_catalog.int2vector
+  ) THEN
+    RAISE EXCEPTION 'membership identity guard drift survived replay';
   END IF;
 
   IF pg_catalog.has_table_privilege(
