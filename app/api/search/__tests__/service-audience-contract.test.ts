@@ -23,4 +23,24 @@ describe('search service audience boundary', () => {
     expect(route).toContain("'CDN-Cache-Control': 'no-store'")
     expect(route).toContain("'Vercel-CDN-Cache-Control': 'no-store'")
   })
+
+  it('re-authorizes unified post results and post-title suggestions on cache hits', () => {
+    expect(route).toContain('search:unified:v3:candidates:')
+    expect(route).toMatch(/const cached = await cacheGet<UnifiedSearchCacheCandidate>\(cacheKey\)/)
+    expect(route).toMatch(
+      /const result = await materializeUnifiedSearchCandidate\(supabase, cached\)/
+    )
+    expect(route).toContain(".select('id, title')")
+    expect(route).toMatch(
+      /const readablePostSuggestions = await filterServiceReadablePostRows\(\s*supabase,\s*hotPostSuggestions,\s*null\s*\)/
+    )
+    expect(route).not.toContain('search:unified:v2:')
+  })
+
+  it('rechecks dissolved groups and deleted public profiles after cache hits', () => {
+    expect(route.match(/\.is\('dissolved_at', null\)/g)).toHaveLength(3)
+    expect(route).toContain(".from('public_user_profiles')")
+    expect(route).toContain('readCurrentSearchGroupIds(supabase, groupIds)')
+    expect(route).toContain('readCurrentSearchUserIds(supabase, userIds)')
+  })
 })

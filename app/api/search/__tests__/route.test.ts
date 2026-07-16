@@ -24,8 +24,10 @@ jest.mock('next/server', () => {
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
 })
 
+const mockCacheGet = jest.fn()
+
 jest.mock('@/lib/cache', () => ({
-  get: jest.fn().mockResolvedValue(null),
+  get: (...args: unknown[]) => mockCacheGet(...args),
   set: jest.fn(),
 }))
 
@@ -34,7 +36,12 @@ function makeChainMock(terminalResult = { data: [], error: null }) {
   const chain: Record<string, jest.Mock> = {}
   const proxy: Record<string, jest.Mock> = new Proxy(chain, {
     get(target, prop) {
-      if (prop === 'then') return undefined // not a thenable unless explicitly resolved
+      if (prop === 'then') {
+        return (
+          resolve: (value: typeof terminalResult) => unknown,
+          reject: (reason: unknown) => unknown
+        ) => Promise.resolve(terminalResult).then(resolve, reject)
+      }
       if (!target[prop as string]) {
         // Terminal methods that resolve
         if (['limit', 'single', 'maybeSingle', 'insert'].includes(prop as string)) {
@@ -73,6 +80,7 @@ import { GET } from '../route'
 describe('GET /api/search', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockCacheGet.mockResolvedValue(null)
     mockFrom.mockImplementation(() => makeChainMock())
     mockRpc.mockResolvedValue({ data: true, error: null })
   })
@@ -128,5 +136,72 @@ describe('GET /api/search', () => {
       p_post_id: 'private-post',
       p_actor_id: null,
     })
+  })
+
+  it('re-authorizes cached unified results and suggestions before returning them', async () => {
+    mockCacheGet.mockResolvedValue({
+      result: {
+        query: 'private',
+        results: {
+          traders: [],
+          posts: [
+            {
+              id: 'private-post',
+              type: 'post',
+              title: 'Private result',
+              href: '/post/private-post',
+            },
+          ],
+          users: [],
+          groups: [],
+        },
+        total: 1,
+      },
+      suggestionCandidates: {
+        traders: [],
+        posts: [{ id: 'private-post', title: 'Private suggestion' }],
+        groups: [],
+      },
+    })
+    mockRpc.mockResolvedValue({ data: false, error: null })
+
+    const req = new NextRequest('http://localhost/api/search?q=private')
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(body.results.posts).toEqual([])
+    expect(body.suggestions).toBeUndefined()
+    expect(body.total).toBe(0)
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed for cached groups and users that are no longer public', async () => {
+    mockCacheGet.mockResolvedValue({
+      result: {
+        query: 'stale',
+        results: {
+          traders: [],
+          posts: [],
+          users: [{ id: 'deleted-user', type: 'user', title: '@gone', href: '/u/gone' }],
+          groups: [{ id: 'dissolved-group', type: 'group', title: 'Gone', href: '/groups/gone' }],
+        },
+        total: 2,
+      },
+      suggestionCandidates: {
+        traders: [],
+        posts: [],
+        groups: [{ id: 'dissolved-group', name: 'Gone group' }],
+      },
+    })
+    mockFrom.mockImplementation(() => makeChainMock({ data: [], error: null }))
+
+    const req = new NextRequest('http://localhost/api/search?q=stale')
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(body.results.users).toEqual([])
+    expect(body.results.groups).toEqual([])
+    expect(body.suggestions).toBeUndefined()
+    expect(body.total).toBe(0)
   })
 })

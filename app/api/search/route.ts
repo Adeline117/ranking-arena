@@ -31,8 +31,8 @@ import { isMaliciousSearchQuery } from '@/lib/utils/search-sanitize'
 import { escapeLikePattern } from '@/lib/sanitize'
 import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
 
-// Removed force-dynamic: search results are cacheable via Redis + HTTP cache headers
-// Previous force-dynamic blocked Vercel CDN caching entirely
+// Redis stores only server-side candidates. Any payload derived from posts is
+// re-authorized for the current anonymous audience and is never CDN-cached.
 
 export interface UnifiedSearchResult {
   id: string
@@ -61,6 +61,135 @@ export interface UnifiedSearchResponse {
   facetDistribution?: Record<string, Record<string, number>>
   /** true when Meilisearch is unavailable and results fell back to Supabase (slower, less fuzzy) */
   degraded?: boolean
+}
+
+interface SearchSuggestionCandidateSet {
+  traders: string[]
+  posts: Array<{ id: string; title: string }>
+  groups: Array<{ id: string; name: string }>
+}
+
+interface UnifiedSearchCacheCandidate {
+  result: Omit<UnifiedSearchResponse, 'suggestions'>
+  suggestionCandidates?: SearchSuggestionCandidateSet
+}
+
+type SearchPostAudienceCandidate =
+  | { id: string; source: 'result'; result: UnifiedSearchResult }
+  | { id: string; source: 'suggestion'; title: string }
+
+const SEARCH_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
+
+type PublicSearchSupabase = Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']
+
+async function readCurrentSearchGroupIds(
+  supabase: PublicSearchSupabase,
+  groupIds: string[]
+): Promise<Set<string>> {
+  if (groupIds.length === 0) return new Set()
+  try {
+    const { data, error } = await supabase
+      .from('groups')
+      .select('id')
+      .in('id', groupIds)
+      .is('dissolved_at', null)
+    if (error) return new Set()
+    return new Set((data ?? []).map((group) => group.id).filter((id): id is string => !!id))
+  } catch {
+    return new Set()
+  }
+}
+
+async function readCurrentSearchUserIds(
+  supabase: PublicSearchSupabase,
+  userIds: string[]
+): Promise<Set<string>> {
+  if (userIds.length === 0) return new Set()
+  try {
+    const { data, error } = await supabase
+      .from('public_user_profiles')
+      .select('id')
+      .in('id', userIds)
+    if (error) return new Set()
+    return new Set((data ?? []).map((user) => user.id).filter((id): id is string => !!id))
+  } catch {
+    return new Set()
+  }
+}
+
+async function materializeUnifiedSearchCandidate(
+  supabase: PublicSearchSupabase,
+  candidate: UnifiedSearchCacheCandidate
+): Promise<UnifiedSearchResponse> {
+  const resultPostCandidates: SearchPostAudienceCandidate[] = candidate.result.results.posts.map(
+    (result) => ({
+      id: result.id,
+      source: 'result',
+      result,
+    })
+  )
+  const suggestionPostCandidates: SearchPostAudienceCandidate[] =
+    candidate.suggestionCandidates?.posts.map((post) => ({
+      id: post.id,
+      source: 'suggestion',
+      title: post.title,
+    })) ?? []
+
+  const groupIds = [
+    ...new Set([
+      ...candidate.result.results.groups.map((group) => group.id),
+      ...(candidate.suggestionCandidates?.groups.map((group) => group.id) ?? []),
+    ]),
+  ]
+  const userIds = [...new Set(candidate.result.results.users.map((user) => user.id))]
+  const [readablePostCandidates, currentGroupIds, currentUserIds] = await Promise.all([
+    filterServiceReadablePostRows(
+      supabase,
+      [...resultPostCandidates, ...suggestionPostCandidates],
+      null
+    ),
+    readCurrentSearchGroupIds(supabase, groupIds),
+    readCurrentSearchUserIds(supabase, userIds),
+  ])
+  const posts = readablePostCandidates
+    .filter(
+      (post): post is Extract<SearchPostAudienceCandidate, { source: 'result' }> =>
+        post.source === 'result'
+    )
+    .map((post) => post.result)
+  const postSuggestions = readablePostCandidates
+    .filter(
+      (post): post is Extract<SearchPostAudienceCandidate, { source: 'suggestion' }> =>
+        post.source === 'suggestion'
+    )
+    .map((post) => post.title)
+  const groups = candidate.result.results.groups.filter((group) => currentGroupIds.has(group.id))
+  const users = candidate.result.results.users.filter((user) => currentUserIds.has(user.id))
+  const groupSuggestions =
+    candidate.suggestionCandidates?.groups
+      .filter((group) => currentGroupIds.has(group.id))
+      .map((group) => group.name) ?? []
+  const suggestions = candidate.suggestionCandidates
+    ? [
+        ...new Set([
+          ...candidate.suggestionCandidates.traders,
+          ...postSuggestions,
+          ...groupSuggestions,
+        ]),
+      ].slice(0, 5)
+    : []
+  const results = { ...candidate.result.results, posts, users, groups }
+
+  return {
+    ...candidate.result,
+    results,
+    total: results.traders.length + posts.length + results.users.length + results.groups.length,
+    ...(suggestions.length > 0 ? { suggestions } : {}),
+  }
 }
 
 // ---------- Exchange name matcher ----------
@@ -402,11 +531,12 @@ export const GET = withPublic(
     }
 
     // Cache check
-    const cacheKey = `search:unified:v2:${query.toLowerCase().slice(0, 50)}:${limitPerCategory}:${platformFilter || ''}`
+    const cacheKey = `search:unified:v3:candidates:${query.toLowerCase().slice(0, 50)}:${limitPerCategory}:${platformFilter || ''}`
     try {
-      const cached = await cacheGet<UnifiedSearchResponse>(cacheKey)
+      const cached = await cacheGet<UnifiedSearchCacheCandidate>(cacheKey)
       if (cached) {
-        return success(cached)
+        const result = await materializeUnifiedSearchCandidate(supabase, cached)
+        return success(result, 200, SEARCH_NO_STORE_HEADERS)
       }
     } catch {
       // Intentionally swallowed: Redis cache miss or unavailable
@@ -521,59 +651,72 @@ export const GET = withPublic(
             })
         : Promise.resolve(null)
 
-    let [meiliResults, supabaseTraders, postsData, usersData, groupsData] = await Promise.all([
-      meiliTraderSearch,
-      // Supabase trader search: only run when Meilisearch is NOT configured.
-      // Previously ran both in parallel and discarded Supabase results ~90% of the time,
-      // wasting a DB connection pool slot per search request.
-      isMeilisearchAvailable()
-        ? Promise.resolve([])
-        : unifiedSearchTraders(supabase, {
-            query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
-            limit: effectiveLimit,
-            platform: effectivePlatform,
-          }).catch((err) => {
-            logger.warn('Supabase trader search failed', {
-              error: err instanceof Error ? err.message : String(err),
-              query: sanitizedQuery,
-            })
-            return []
-          }),
+    const [meiliResults, initialSupabaseTraders, postsData, usersData, groupsData] =
+      await Promise.all([
+        meiliTraderSearch,
+        // Supabase trader search: only run when Meilisearch is NOT configured.
+        // Previously ran both in parallel and discarded Supabase results ~90% of the time,
+        // wasting a DB connection pool slot per search request.
+        isMeilisearchAvailable()
+          ? Promise.resolve([])
+          : unifiedSearchTraders(supabase, {
+              query: matchedExchange && !platformFilter ? '' : sanitizedQuery,
+              limit: effectiveLimit,
+              platform: effectivePlatform,
+            }).catch((err) => {
+              logger.warn('Supabase trader search failed', {
+                error: err instanceof Error ? err.message : String(err),
+                query: sanitizedQuery,
+              })
+              return []
+            }),
 
-      // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
-      features.social
-        ? safeQuery(
-            supabase
-              .from('posts')
-              .select('id, title, author_handle, created_at, view_count')
-              .or(`title.ilike.%${sanitizedQuery}%`)
-              .eq('visibility', 'public')
-              .order('view_count', { ascending: false, nullsFirst: false })
-              .limit(limitPerCategory)
-          )
-        : Promise.resolve([]),
+        // Posts: use ILIKE directly (1K rows, fast) — skip textSearch→ILIKE fallback chain
+        features.social
+          ? safeQuery(
+              supabase
+                .from('posts')
+                .select('id, title, author_handle, created_at, view_count')
+                .or(`title.ilike.%${sanitizedQuery}%`)
+                .eq('visibility', 'public')
+                .order('view_count', { ascending: false, nullsFirst: false })
+                .limit(limitPerCategory)
+            )
+          : Promise.resolve([]),
 
-      features.social
-        ? safeQuery(
-            supabase
-              .from('user_profiles')
-              // user_profiles has no display_name column — selecting/filtering on it 400s with 42703
-              .select('id, handle, avatar_url, bio')
-              .ilike('handle', `%${sanitizedQuery}%`)
-              .limit(limitPerCategory)
-          )
-        : Promise.resolve([]),
+        features.social
+          ? safeQuery(
+              supabase
+                .from('public_user_profiles')
+                // The public projection excludes account-private columns and
+                // deleted profiles before the service client can see them.
+                .select('id, handle, avatar_url, bio')
+                .ilike('handle', `%${sanitizedQuery}%`)
+                .limit(limitPerCategory)
+            )
+          : Promise.resolve([]),
 
-      features.social
-        ? safeQuery(
-            supabase
-              .from('groups')
-              .select('id, name, member_count, description')
-              .ilike('name', `%${sanitizedQuery}%`)
-              .limit(limitPerCategory)
-          )
-        : Promise.resolve([]),
-    ])
+        features.social
+          ? safeQuery(
+              supabase
+                .from('groups')
+                .select('id, name, member_count, description')
+                .ilike('name', `%${sanitizedQuery}%`)
+                .is('dissolved_at', null)
+                .limit(limitPerCategory)
+            )
+          : Promise.resolve([]),
+      ])
+    let supabaseTraders = initialSupabaseTraders
+
+    // The public search route uses a service client. Visibility='public' is
+    // not sufficient for group-paid posts, repost roots, account state, or
+    // block edges, so release only rows approved for the anonymous actor.
+    const readablePostsData = await filterServiceReadablePostRows(
+      supabase,
+      postsData as PostRow[],
+      null
+    )
 
     // If Meilisearch was configured but failed at runtime, run Supabase fallback now
     if (meiliDegraded && supabaseTraders.length === 0) {
@@ -670,7 +813,7 @@ export const GET = withPublic(
       }
     })
 
-    const posts: UnifiedSearchResult[] = (postsData as PostRow[]).map((p) => ({
+    const posts: UnifiedSearchResult[] = readablePostsData.map((p) => ({
       id: p.id,
       type: 'post' as const,
       title: p.title || 'Untitled',
@@ -699,8 +842,9 @@ export const GET = withPublic(
 
     const totalResults = traders.length + posts.length + users.length + groups.length
 
-    // "Did you mean" suggestions — combines trader handles + hot posts + popular groups
-    let suggestions: string[] | undefined
+    // "Did you mean" suggestions — cache source-tagged candidates so post
+    // titles can be re-authorized after every Redis hit before materializing.
+    let suggestionCandidates: SearchSuggestionCandidateSet | undefined
     if (totalResults <= 2 && sanitizedQuery.length >= 3 && !matchedExchange) {
       const [traderSuggestions, hotPostSuggestions, groupSuggestions] = await Promise.all([
         // Trader handle suggestions (weighted by arena_score + followers)
@@ -709,50 +853,68 @@ export const GET = withPublic(
         features.social
           ? supabase
               .from('posts')
-              .select('title')
+              .select('id, title')
               .not('title', 'is', null)
               .or(`title.ilike.%${sanitizedQuery.slice(0, 20)}%`)
               .order('hot_score', { ascending: false, nullsFirst: false })
               .limit(2)
               .then(({ data }) =>
-                (data || []).map((p: { title: string }) => p.title).filter(Boolean)
+                (data || []).filter(
+                  (post): post is { id: string; title: string } =>
+                    typeof post.id === 'string' && typeof post.title === 'string'
+                )
               )
           : Promise.resolve([]),
         // Popular groups with similar names
         features.social
           ? supabase
               .from('groups')
-              .select('name')
+              .select('id, name')
               .ilike('name', `%${sanitizedQuery.slice(0, 20)}%`)
+              .is('dissolved_at', null)
               .order('member_count', { ascending: false, nullsFirst: false })
               .limit(2)
-              .then(({ data }) => (data || []).map((g: { name: string }) => g.name).filter(Boolean))
+              .then(({ data }) =>
+                (data || []).filter(
+                  (group): group is { id: string; name: string } =>
+                    typeof group.id === 'string' && typeof group.name === 'string'
+                )
+              )
           : Promise.resolve([]),
       ])
-      // Merge & dedupe: trader handles first, then hot posts, then groups
-      const allSuggestions = [
-        ...new Set([...traderSuggestions, ...hotPostSuggestions, ...groupSuggestions]),
-      ].slice(0, 5)
-      if (allSuggestions.length > 0) suggestions = allSuggestions
+      const readablePostSuggestions = await filterServiceReadablePostRows(
+        supabase,
+        hotPostSuggestions,
+        null
+      )
+      suggestionCandidates = {
+        traders: traderSuggestions,
+        posts: readablePostSuggestions,
+        groups: groupSuggestions,
+      }
     }
 
     const escapedQuery = query.replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
-    const result: UnifiedSearchResponse = {
-      query: escapedQuery,
-      results: { traders, posts, users, groups },
-      total: totalResults,
-      ...(suggestions ? { suggestions } : {}),
-      ...(matchedExchange && !platformFilter ? { matchedExchange } : {}),
-      ...(meliFacetDistribution ? { facetDistribution: meliFacetDistribution } : {}),
-      ...(meiliDegraded ? { degraded: true } : {}),
+    const cacheCandidate: UnifiedSearchCacheCandidate = {
+      result: {
+        query: escapedQuery,
+        results: { traders, posts, users, groups },
+        total: totalResults,
+        ...(matchedExchange && !platformFilter ? { matchedExchange } : {}),
+        ...(meliFacetDistribution ? { facetDistribution: meliFacetDistribution } : {}),
+        ...(meiliDegraded ? { degraded: true } : {}),
+      },
+      ...(suggestionCandidates ? { suggestionCandidates } : {}),
     }
 
     const cacheTtl = totalResults > 5 ? 600 : 300
     try {
-      await cacheSet(cacheKey, result, { ttl: cacheTtl })
+      await cacheSet(cacheKey, cacheCandidate, { ttl: cacheTtl })
     } catch {
       // Intentionally swallowed: cache write failure is non-critical
     }
+
+    const result = await materializeUnifiedSearchCandidate(supabase, cacheCandidate)
 
     // Search analytics (async) — skip malicious queries to keep analytics clean
     if (!isMaliciousSearchQuery(query)) {
@@ -761,7 +923,7 @@ export const GET = withPublic(
           .from('search_analytics')
           .insert({
             query: query.slice(0, 200),
-            result_count: totalResults,
+            result_count: result.total,
             source: 'unified',
           })
           .then(),
@@ -769,9 +931,7 @@ export const GET = withPublic(
       )
     }
 
-    return success(result, 200, {
-      'Cache-Control': 'public, s-maxage=300, stale-while-revalidate=600',
-    })
+    return success(result, 200, SEARCH_NO_STORE_HEADERS)
   },
   { name: 'unified-search', rateLimit: { requests: 20, window: 60, prefix: 'search' } }
 )
