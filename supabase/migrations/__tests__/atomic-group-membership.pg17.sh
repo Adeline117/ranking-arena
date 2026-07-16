@@ -66,6 +66,49 @@ psql_cmd() {
     "$@"
 }
 
+expect_redemption_authority_replay_failure() {
+  local scenario="$1"
+  local exact_shape
+
+  exact_shape="$(psql_cmd -Atqc "
+    SELECT
+      (SELECT pg_catalog.count(*)
+       FROM pg_catalog.pg_attribute AS attribute
+       WHERE attribute.attrelid =
+           'public.group_invite_redemptions'::pg_catalog.regclass
+         AND attribute.attnum > 0
+         AND NOT attribute.attisdropped),
+      (SELECT pg_catalog.count(*)
+       FROM pg_catalog.pg_attrdef AS default_info
+       WHERE default_info.adrelid =
+           'public.group_invite_redemptions'::pg_catalog.regclass),
+      (SELECT pg_catalog.count(*)
+       FROM pg_catalog.pg_constraint AS constraint_info
+       WHERE constraint_info.conrelid =
+           'public.group_invite_redemptions'::pg_catalog.regclass),
+      (SELECT pg_catalog.count(*)
+       FROM pg_catalog.pg_index AS index_info
+       WHERE index_info.indrelid =
+           'public.group_invite_redemptions'::pg_catalog.regclass),
+      (SELECT pg_catalog.count(*)
+       FROM pg_catalog.pg_trigger AS trigger_info
+       WHERE trigger_info.tgrelid =
+           'public.group_invite_redemptions'::pg_catalog.regclass
+         AND NOT trigger_info.tgisinternal)
+  ")"
+  if [[ "$exact_shape" != "4|1|3|1|0" ]]; then
+    echo "$scenario fixture did not preserve the exact redemption base shape: $exact_shape" >&2
+    exit 1
+  fi
+
+  if psql_cmd -f "$MIGRATION" >"$LOG_DIR/$scenario.log" 2>&1; then
+    echo "Migration replay unexpectedly accepted $scenario redemption authority" >&2
+    exit 1
+  fi
+  grep -Fq 'group_invite_redemptions relation authority is incompatible' \
+    "$LOG_DIR/$scenario.log"
+}
+
 psql_cmd <<'SQL'
 CREATE ROLE postgres NOLOGIN;
 CREATE ROLE anon NOLOGIN;
@@ -406,6 +449,174 @@ grep -Fq 'group_invites_token_hash_unique is a conflicting index' \
 psql_cmd -c 'DROP INDEX public.group_invites_token_hash_unique' >/dev/null
 
 psql_cmd -f "$MIGRATION" >"$LOG_DIR/first-apply.log"
+
+# Relation identity is part of the evidence boundary, not just its columns and
+# keys. Each malicious fixture keeps the exact 4-column/1-default/3-constraint/
+# 1-index/0-user-trigger shape, must fail in the initial read-only preflight,
+# and must survive the rolled-back transaction unchanged.
+psql_cmd <<'SQL'
+DROP TABLE public.group_invite_redemptions;
+CREATE UNLOGGED TABLE public.group_invite_redemptions (
+  invite_id uuid NOT NULL
+    REFERENCES public.group_invites(id) ON DELETE CASCADE,
+  group_id uuid NOT NULL
+    REFERENCES public.groups(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
+  redeemed_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  PRIMARY KEY (invite_id, user_id)
+);
+ALTER TABLE public.group_invite_redemptions OWNER TO postgres;
+SQL
+expect_redemption_authority_replay_failure 'unlogged-redemption-replay'
+if [[ "$(psql_cmd -Atqc "
+  SELECT relation.relkind, relation.relpersistence, relation.relispartition,
+         relation.relrowsecurity, relation.relforcerowsecurity
+  FROM pg_catalog.pg_class AS relation
+  WHERE relation.oid = 'public.group_invite_redemptions'::pg_catalog.regclass
+")" != "r|u|f|f|f" ]]; then
+  echo 'Failed UNLOGGED replay mutated redemption relation authority' >&2
+  exit 1
+fi
+psql_cmd -c 'DROP TABLE public.group_invite_redemptions' >/dev/null
+psql_cmd -f "$MIGRATION" >"$LOG_DIR/unlogged-redemption-recovery.log"
+
+psql_cmd <<'SQL'
+DROP TABLE public.group_invite_redemptions;
+CREATE TABLE public.group_invite_redemptions (
+  invite_id uuid NOT NULL
+    REFERENCES public.group_invites(id) ON DELETE CASCADE,
+  group_id uuid NOT NULL
+    REFERENCES public.groups(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
+  redeemed_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  PRIMARY KEY (invite_id, user_id)
+) PARTITION BY HASH (invite_id);
+ALTER TABLE public.group_invite_redemptions OWNER TO postgres;
+SQL
+expect_redemption_authority_replay_failure 'partitioned-redemption-replay'
+if [[ "$(psql_cmd -Atqc "
+  SELECT relation.relkind, relation.relpersistence, relation.relispartition,
+         relation.relrowsecurity, relation.relforcerowsecurity
+  FROM pg_catalog.pg_class AS relation
+  WHERE relation.oid = 'public.group_invite_redemptions'::pg_catalog.regclass
+")" != "p|p|f|f|f" ]]; then
+  echo 'Failed partitioned replay mutated redemption relation authority' >&2
+  exit 1
+fi
+psql_cmd -c 'DROP TABLE public.group_invite_redemptions' >/dev/null
+psql_cmd -f "$MIGRATION" >"$LOG_DIR/partitioned-redemption-recovery.log"
+
+# A partition leaf reports relkind=r, so relispartition and inheritance must be
+# checked independently from the partitioned-root relkind=p case above.
+psql_cmd <<'SQL'
+DROP TABLE public.group_invite_redemptions;
+CREATE TABLE public.malicious_redemption_partition_root (
+  invite_id uuid NOT NULL
+    REFERENCES public.group_invites(id) ON DELETE CASCADE,
+  group_id uuid NOT NULL
+    REFERENCES public.groups(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
+  redeemed_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp(),
+  PRIMARY KEY (invite_id, user_id)
+) PARTITION BY HASH (invite_id);
+CREATE TABLE public.group_invite_redemptions
+  PARTITION OF public.malicious_redemption_partition_root
+  FOR VALUES WITH (MODULUS 1, REMAINDER 0);
+ALTER TABLE public.malicious_redemption_partition_root OWNER TO postgres;
+ALTER TABLE public.group_invite_redemptions OWNER TO postgres;
+SQL
+expect_redemption_authority_replay_failure 'partition-leaf-redemption-replay'
+if [[ "$(psql_cmd -Atqc "
+  SELECT relation.relkind, relation.relpersistence, relation.relispartition,
+         relation.relrowsecurity, relation.relforcerowsecurity,
+         pg_catalog.count(inheritance_info.inhparent)
+  FROM pg_catalog.pg_class AS relation
+  LEFT JOIN pg_catalog.pg_inherits AS inheritance_info
+    ON inheritance_info.inhrelid = relation.oid
+  WHERE relation.oid = 'public.group_invite_redemptions'::pg_catalog.regclass
+  GROUP BY relation.relkind, relation.relpersistence, relation.relispartition,
+           relation.relrowsecurity, relation.relforcerowsecurity
+")" != "r|p|t|f|f|1" ]]; then
+  echo 'Failed partition-leaf replay mutated redemption relation authority' >&2
+  exit 1
+fi
+psql_cmd -c 'DROP TABLE public.malicious_redemption_partition_root CASCADE' >/dev/null
+psql_cmd -f "$MIGRATION" >"$LOG_DIR/partition-leaf-redemption-recovery.log"
+
+psql_cmd <<'SQL'
+CREATE RULE malicious_redemption_insert_rewrite AS
+  ON INSERT TO public.group_invite_redemptions
+  DO INSTEAD NOTHING;
+SQL
+expect_redemption_authority_replay_failure 'rewrite-redemption-replay'
+if [[ "$(psql_cmd -Atqc "
+  SELECT pg_catalog.count(*)
+  FROM pg_catalog.pg_rewrite AS rewrite_info
+  WHERE rewrite_info.ev_class =
+      'public.group_invite_redemptions'::pg_catalog.regclass
+    AND rewrite_info.rulename = 'malicious_redemption_insert_rewrite'
+")" != "1" ]]; then
+  echo 'Failed rewrite replay removed the malicious redemption rule' >&2
+  exit 1
+fi
+psql_cmd -c \
+  'DROP RULE malicious_redemption_insert_rewrite ON public.group_invite_redemptions' \
+  >/dev/null
+psql_cmd -f "$MIGRATION" >"$LOG_DIR/rewrite-redemption-recovery.log"
+
+# Traditional inheritance is forbidden in both directions. The first fixture
+# makes the evidence relation a child while retaining its exact local keys.
+psql_cmd <<'SQL'
+DROP TABLE public.group_invite_redemptions;
+CREATE TABLE public.malicious_redemption_inheritance_parent (
+  invite_id uuid NOT NULL,
+  group_id uuid NOT NULL,
+  user_id uuid NOT NULL,
+  redeemed_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
+);
+CREATE TABLE public.group_invite_redemptions ()
+  INHERITS (public.malicious_redemption_inheritance_parent);
+ALTER TABLE public.group_invite_redemptions
+  ADD PRIMARY KEY (invite_id, user_id),
+  ADD FOREIGN KEY (invite_id)
+    REFERENCES public.group_invites(id) ON DELETE CASCADE,
+  ADD FOREIGN KEY (group_id)
+    REFERENCES public.groups(id) ON DELETE CASCADE;
+ALTER TABLE public.malicious_redemption_inheritance_parent OWNER TO postgres;
+ALTER TABLE public.group_invite_redemptions OWNER TO postgres;
+SQL
+expect_redemption_authority_replay_failure 'inheritance-child-redemption-replay'
+if [[ "$(psql_cmd -Atqc "
+  SELECT pg_catalog.count(*)
+  FROM pg_catalog.pg_inherits AS inheritance_info
+  WHERE inheritance_info.inhrelid =
+      'public.group_invite_redemptions'::pg_catalog.regclass
+")" != "1" ]]; then
+  echo 'Failed inheritance-child replay detached the malicious parent' >&2
+  exit 1
+fi
+psql_cmd -c 'DROP TABLE public.group_invite_redemptions' >/dev/null
+psql_cmd -c 'DROP TABLE public.malicious_redemption_inheritance_parent' >/dev/null
+psql_cmd -f "$MIGRATION" >"$LOG_DIR/inheritance-child-redemption-recovery.log"
+
+# The inverse case leaves the canonical evidence table as an inheritance parent.
+psql_cmd <<'SQL'
+CREATE TABLE public.malicious_redemption_inheritance_child ()
+  INHERITS (public.group_invite_redemptions);
+ALTER TABLE public.malicious_redemption_inheritance_child OWNER TO postgres;
+SQL
+expect_redemption_authority_replay_failure 'inheritance-parent-redemption-replay'
+if [[ "$(psql_cmd -Atqc "
+  SELECT pg_catalog.count(*)
+  FROM pg_catalog.pg_inherits AS inheritance_info
+  WHERE inheritance_info.inhparent =
+      'public.group_invite_redemptions'::pg_catalog.regclass
+")" != "1" ]]; then
+  echo 'Failed inheritance-parent replay removed the malicious child' >&2
+  exit 1
+fi
+psql_cmd -c 'DROP TABLE public.malicious_redemption_inheritance_child' >/dev/null
+psql_cmd -f "$MIGRATION" >"$LOG_DIR/inheritance-parent-redemption-recovery.log"
 
 # Replay must reject a same-column/same-PK redemption table whose nullable
 # evidence, timestamp default and delete actions violate the durable contract.
