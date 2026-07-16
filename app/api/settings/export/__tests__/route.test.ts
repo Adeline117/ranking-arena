@@ -277,6 +277,42 @@ describe('POST /api/settings/export', () => {
     expect(JSON.stringify(body)).not.toMatch(
       /totp-must-never-escape|cus_must_never_escape|moderator-must-never-escape|internal-role-must-never-escape/
     )
+    expect(body.manifest).toEqual(
+      expect.objectContaining({
+        schema_version: '1',
+        scope: 'supported_portable_datasets',
+        consistency: 'best_effort_keyset',
+        completed_at: body.exportedAt,
+      })
+    )
+    expect(Number.isNaN(Date.parse(body.manifest.started_at))).toBe(false)
+    expect(Date.parse(body.manifest.completed_at)).toBeGreaterThanOrEqual(
+      Date.parse(body.manifest.started_at)
+    )
+    expect(new Set(body.manifest.datasets.map((dataset) => dataset.name)).size).toBe(
+      body.manifest.datasets.length
+    )
+    expect(
+      Object.fromEntries(body.manifest.datasets.map((dataset) => [dataset.name, dataset.row_count]))
+    ).toEqual({
+      profile: 1,
+      posts: 1,
+      comments: 1,
+      'follows.following': 1,
+      'follows.followers': 1,
+      'blocks.outgoing': 1,
+      'tips.sent': 1,
+      'tips.received': 1,
+      'settings.preferences': 1,
+      'account.bindings': 2,
+      'account.login_sessions': 1,
+      'account.api_keys': 1,
+      'account.passkeys': 1,
+      'account.push_subscriptions': 1,
+      'account.backup_codes': 1,
+      'account.recovery_tokens': 1,
+    })
+    expect(body.manifest.datasets.every((dataset) => dataset.status === 'complete')).toBe(true)
     expect(profileStates[0]?.selection).toContain('email')
     expect(profileStates[0]?.selection).toContain('totp_enabled')
     expect(profileStates[0]?.selection).not.toContain('totp_secret')
@@ -509,7 +545,11 @@ describe('POST /api/settings/export', () => {
     const response = await POST(request())
 
     expect(response.status).toBe(200)
-    expect((await response.json()).settings).toEqual({ preferences: null })
+    const body = await response.json()
+    expect(body.settings).toEqual({ preferences: null })
+    expect(
+      body.manifest.datasets.find((dataset) => dataset.name === 'settings.preferences')
+    ).toEqual({ name: 'settings.preferences', status: 'complete', row_count: 0 })
   })
 
   it('fails closed if the preferences singleton invariant is violated', async () => {
