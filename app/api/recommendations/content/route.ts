@@ -19,10 +19,16 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
 
-// 未登录 fallback 对全体匿名用户一致(hot posts),此前每请求裸打 DB(2026-07-11
-// 承载审计)。CDN s-maxage 头 + Redis 缓存双层收敛峰值。
-const ANON_CACHE_HEADER = { 'Cache-Control': 'public, s-maxage=120, stale-while-revalidate=300' }
+// Candidate rows may be cached server-side, but the final audience decision is
+// evaluated on every request. A CDN-cached payload could outlive a group being
+// made private/premium, so recommendation responses themselves are never shared.
+const ANON_CACHE_HEADER = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+}
 
 /**
  * Merge author profiles into post rows. posts.author_id has no FK in prod, so
@@ -30,19 +36,35 @@ const ANON_CACHE_HEADER = { 'Cache-Control': 'public, s-maxage=120, stale-while-
  * has no handle/display_name/avatar_url columns anyway) — two-step lookup via
  * user_profiles instead, keeping the `author` response key shape.
  */
-async function attachAuthors(
+async function authorizePostsAndAttachAuthors(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  posts: Record<string, unknown>[]
+  posts: Record<string, unknown>[],
+  actorId: string | null
 ): Promise<Record<string, unknown>[]> {
   if (posts.length === 0) return posts
-  const authorIds = [...new Set(posts.map((p) => p.author_id as string).filter(Boolean))]
+  // The admin client bypasses posts RLS. Never release a raw recommendation
+  // row: the canonical RPC also checks wrapper/root audience, account health,
+  // block edges, and (when configured) paid-group entitlement. Any missing or
+  // malformed acknowledgement fails closed inside this filter.
+  const postCandidates = posts.filter(
+    (post): post is Record<string, unknown> & { id: string } => typeof post.id === 'string'
+  )
+  const readablePosts = await filterServiceReadablePostRows(supabase, postCandidates, actorId)
+  if (readablePosts.length === 0) return []
+
+  const authorIds = [
+    ...new Set(readablePosts.map((post) => post.author_id as string).filter(Boolean)),
+  ]
   const { data: profiles } = authorIds.length
     ? await supabase.from('user_profiles').select('id, handle, avatar_url').in('id', authorIds)
     : { data: null }
   const profileById = new Map(
     (profiles || []).map((p: Record<string, unknown>) => [p.id as string, p])
   )
-  return posts.map((p) => ({ ...p, author: profileById.get(p.author_id as string) ?? null }))
+  return readablePosts.map((post) => ({
+    ...post,
+    author: profileById.get(post.author_id as string) ?? null,
+  }))
 }
 
 export async function GET(request: NextRequest) {
@@ -60,10 +82,11 @@ export async function GET(request: NextRequest) {
     const user = await getAuthUser(request)
 
     if (!user) {
-      // Unauthenticated: hot posts fallback — 同一结果全体匿名共享,Redis 缓存
-      // 2min + CDN s-maxage,峰值不再每请求打 DB。
-      const recommendations = await tieredGetOrSet(
-        `rec:content:anon:${contentType}:${limit}`,
+      // Cache only service-side candidates. The canonical audience RPC runs
+      // after every cache hit so an audience/entitlement change takes effect
+      // immediately instead of waiting for a payload cache to expire.
+      const candidates = await tieredGetOrSet(
+        `rec:content:v2:candidates:anon:${contentType}:${limit}`,
         async () => {
           const { data: fallbackData } = await supabase
             .from('posts')
@@ -72,10 +95,11 @@ export async function GET(request: NextRequest) {
             )
             .order('hot_score', { ascending: false })
             .limit(limit)
-          return attachAuthors(supabase, (fallbackData as Record<string, unknown>[]) || [])
+          return (fallbackData as Record<string, unknown>[]) || []
         },
         'hot'
       )
+      const recommendations = await authorizePostsAndAttachAuthors(supabase, candidates, null)
       return success(
         { recommendations, type: contentType, personalized: false },
         200,
@@ -97,9 +121,10 @@ export async function GET(request: NextRequest) {
         .limit(limit)
 
       return success({
-        recommendations: await attachAuthors(
+        recommendations: await authorizePostsAndAttachAuthors(
           supabase,
-          (fallbackData as Record<string, unknown>[]) || []
+          (fallbackData as Record<string, unknown>[]) || [],
+          user.id
         ),
         type: contentType,
         personalized: false,
@@ -119,7 +144,11 @@ export async function GET(request: NextRequest) {
       const ordered = itemIds.map((id: string) => postMap.get(id)).filter(Boolean)
 
       return success({
-        recommendations: await attachAuthors(supabase, ordered as Record<string, unknown>[]),
+        recommendations: await authorizePostsAndAttachAuthors(
+          supabase,
+          ordered as Record<string, unknown>[],
+          user.id
+        ),
         type: contentType,
         personalized: true,
       })
