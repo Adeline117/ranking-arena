@@ -423,6 +423,27 @@ export async function publishProfile(
       )
     }
 
+    for (const replacement of profile.replaceSeries ?? []) {
+      if (incompleteTimeframes.has(replacement.timeframe)) continue
+      const metrics = [...new Set(replacement.metrics.map((metric) => metric.trim()))].filter(
+        Boolean
+      )
+      if (metrics.length === 0) continue
+      // A complete rolling-window snapshot owns these series keys. Removing
+      // both stores first makes a confirmed empty window clear stale charts;
+      // any later insert failure rolls the deletes back with the transaction.
+      await client.query(
+        `DELETE FROM arena.trader_series
+          WHERE trader_id = $1 AND timeframe = $2 AND metric = ANY($3::text[])`,
+        [traderId, replacement.timeframe, metrics]
+      )
+      await client.query(
+        `DELETE FROM arena.trader_series_weekly
+          WHERE trader_id = $1 AND timeframe = $2 AND metric = ANY($3::text[])`,
+        [traderId, replacement.timeframe, metrics]
+      )
+    }
+
     for (const series of profile.series) {
       if (incompleteTimeframes.has(series.timeframe)) continue
       const points = opts.fullSeries ? series.points : series.points.slice(-1) // long tail keeps only the latest point

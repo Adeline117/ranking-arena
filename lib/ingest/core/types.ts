@@ -201,6 +201,15 @@ export interface ParsedProfile {
     metric: SeriesMetric
     points: SeriesPoint[]
   }>
+  /**
+   * Series keys for which this profile is a complete replacement snapshot.
+   * The publisher deletes old daily/weekly points for these keys inside the
+   * same transaction before inserting `series`; omitted means append/upsert.
+   */
+  replaceSeries?: Array<{
+    timeframe: Timeframe
+    metrics: SeriesMetric[]
+  }>
   /** Identity refresh fields seen on the profile page. */
   nickname: string | null
   avatarUrlOrigin: string | null

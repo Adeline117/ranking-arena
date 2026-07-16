@@ -256,7 +256,13 @@ export function parseGtradeProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
     })
   }
 
-  return { stats, series, nickname: null, avatarUrlOrigin: null }
+  return {
+    stats,
+    series,
+    replaceSeries: [{ timeframe: tf, metrics: ['pnl'] }],
+    nickname: null,
+    avatarUrlOrigin: null,
+  }
 }
 
 // ── Positions ──
