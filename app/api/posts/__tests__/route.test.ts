@@ -304,7 +304,10 @@ describe('/api/posts', () => {
 
     it('returns an authoritative empty feed when the viewer follows nobody', async () => {
       mockGetAuthUser.mockResolvedValue({ id: 'viewer-1' })
-      mockSupabase.from.mockReturnValueOnce(mockQueryResult([]))
+      mockSupabase.rpc.mockResolvedValueOnce({
+        data: { posts: [], following_count: 0, has_more: false, next_cursor: null },
+        error: null,
+      })
 
       const req = new NextRequest('http://localhost/api/posts?sort_by=following', {
         headers: { authorization: 'Bearer viewer-token' },
@@ -313,39 +316,130 @@ describe('/api/posts', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      expect(body.data).toEqual({ posts: [], following_count: 0, viewer_id: 'viewer-1' })
+      expect(body.data).toEqual({
+        posts: [],
+        following_count: 0,
+        viewer_id: 'viewer-1',
+        next_cursor: null,
+      })
       expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
       expect(mockGetPosts).not.toHaveBeenCalled()
+      expect(mockSupabase.from).not.toHaveBeenCalled()
     })
 
-    it('keeps an empty canonical result empty instead of substituting hot posts', async () => {
+    it('binds filters and a keyset cursor to one atomic RPC page', async () => {
       mockGetAuthUser.mockResolvedValue({ id: 'viewer-1' })
-      mockSupabase.from.mockReturnValueOnce(mockQueryResult([{ following_id: 'followed-1' }]))
-      mockGetPosts.mockResolvedValue([])
-
-      const req = new NextRequest('http://localhost/api/posts?sort_by=following', {
-        headers: { authorization: 'Bearer viewer-token' },
+      const postId = '11111111-1111-4111-8111-111111111111'
+      const rootId = '22222222-2222-4222-8222-222222222222'
+      const groupId = '33333333-3333-4333-8333-333333333333'
+      const cursorId = '44444444-4444-4444-8444-444444444444'
+      const cursorCreatedAt = '2026-07-15T20:00:00.000Z'
+      const nextCursor = {
+        created_at: '2026-07-15T19:00:00.000Z',
+        id: postId,
+      }
+      mockSupabase.rpc.mockResolvedValueOnce({
+        data: {
+          posts: [
+            {
+              id: postId,
+              created_at: nextCursor.created_at,
+              original_post_id: rootId,
+              title: 'Canonical wrapper',
+              content: 'Wrapper body',
+              author_id: '55555555-5555-4555-8555-555555555555',
+              author_handle: 'alice',
+              author_avatar_url: null,
+              author_is_pro: false,
+              author_show_pro_badge: true,
+              group_id: groupId,
+              group_name: 'Group',
+              group_name_en: null,
+              poll_enabled: false,
+              poll_id: null,
+              poll_bull: 0,
+              poll_bear: 0,
+              poll_wait: 0,
+              like_count: 1,
+              dislike_count: 0,
+              comment_count: 2,
+              bookmark_count: 0,
+              repost_count: 0,
+              view_count: 3,
+              hot_score: 1.5,
+              is_pinned: false,
+              images: null,
+              updated_at: '2026-07-15T19:00:00.000Z',
+              original_post: {
+                id: rootId,
+                title: 'Authorized root',
+                content: 'Root body',
+                author_handle: 'bob',
+                author_avatar_url: null,
+                author_is_pro: false,
+                author_show_pro_badge: true,
+                images: null,
+                created_at: '2026-07-15T18:00:00.000Z',
+              },
+              visibility: 'public',
+              is_sensitive: false,
+              content_warning: null,
+              language: 'en',
+            },
+          ],
+          following_count: 7,
+          has_more: true,
+          next_cursor: nextCursor,
+        },
+        error: null,
       })
+      mockGetUserPostReactions.mockResolvedValue(new Map([[postId, 'up']]))
+
+      const req = new NextRequest(
+        'http://localhost/api/posts?sort_by=following&limit=1&group_id=' +
+          groupId +
+          '&author_handle=alice&language=en&before_created_at=' +
+          encodeURIComponent(cursorCreatedAt) +
+          '&before_id=' +
+          cursorId,
+        { headers: { authorization: 'Bearer viewer-token' } }
+      )
       const res = await GET(req)
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      expect(body.data).toEqual({ posts: [], following_count: 1, viewer_id: 'viewer-1' })
-      expect(mockGetPosts).toHaveBeenCalledTimes(1)
-      expect(mockGetPosts).toHaveBeenCalledWith(
-        expect.anything(),
+      expect(mockSupabase.rpc).toHaveBeenCalledWith('get_following_posts_page', {
+        p_viewer_id: 'viewer-1',
+        p_limit: 1,
+        p_before_created_at: cursorCreatedAt,
+        p_before_id: cursorId,
+        p_group_id: groupId,
+        p_group_ids: null,
+        p_author_handle: 'alice',
+        p_language: 'en',
+      })
+      expect(body.data.posts).toEqual([
         expect.objectContaining({
-          author_ids: ['followed-1'],
-          viewer_id: 'viewer-1',
-          sort_by: 'created_at',
-        })
+          id: postId,
+          original_post_id: rootId,
+          user_reaction: 'up',
+        }),
+      ])
+      expect(body.data.following_count).toBe(7)
+      expect(body.data.next_cursor).toEqual(nextCursor)
+      expect(body.meta.pagination).toEqual(
+        expect.objectContaining({ limit: 1, offset: 0, has_more: true })
       )
+      expect(mockGetPosts).not.toHaveBeenCalled()
+      expect(mockSupabase.from).not.toHaveBeenCalled()
     })
 
     it('derives the viewer from the token and ignores a requested user id', async () => {
       mockGetAuthUser.mockResolvedValue({ id: 'verified-viewer' })
-      const followQuery = mockQueryResult([])
-      mockSupabase.from.mockReturnValueOnce(followQuery)
+      mockSupabase.rpc.mockResolvedValueOnce({
+        data: { posts: [], following_count: 0, has_more: false, next_cursor: null },
+        error: null,
+      })
 
       const req = new NextRequest(
         'http://localhost/api/posts?sort_by=following&p_user_id=impersonated-user',
@@ -353,14 +447,18 @@ describe('/api/posts', () => {
       )
       await GET(req)
 
-      expect(followQuery.eq).toHaveBeenCalledWith('follower_id', 'verified-viewer')
+      expect(mockSupabase.rpc).toHaveBeenCalledWith(
+        'get_following_posts_page',
+        expect.objectContaining({ p_viewer_id: 'verified-viewer' })
+      )
     })
 
-    it('fails closed when the following relationship query fails', async () => {
+    it('fails closed when the atomic following page RPC fails', async () => {
       mockGetAuthUser.mockResolvedValue({ id: 'viewer-1' })
-      mockSupabase.from.mockReturnValueOnce(
-        mockQueryResult(null, { code: 'DB_DOWN', message: 'unavailable' })
-      )
+      mockSupabase.rpc.mockResolvedValueOnce({
+        data: null,
+        error: { code: 'DB_DOWN', message: 'unavailable' },
+      })
 
       const req = new NextRequest('http://localhost/api/posts?sort_by=following', {
         headers: { authorization: 'Bearer viewer-token' },
@@ -372,23 +470,53 @@ describe('/api/posts', () => {
       expect(mockGetPosts).not.toHaveBeenCalled()
     })
 
-    it('omits repost wrappers until the same viewer gate has authorized their roots', async () => {
+    it.each([
+      null,
+      [],
+      { posts: [], following_count: 0, has_more: false },
+      { posts: [], following_count: -1, has_more: false, next_cursor: null },
+      {
+        posts: [{ id: 'not-a-uuid', created_at: 'bad', original_post_id: null }],
+        following_count: 1,
+        has_more: false,
+        next_cursor: null,
+      },
+      {
+        posts: [],
+        following_count: 1,
+        has_more: true,
+        next_cursor: { created_at: 'bad', id: 'not-a-uuid' },
+      },
+    ])('fails closed on malformed following RPC data %#', async (data) => {
       mockGetAuthUser.mockResolvedValue({ id: 'viewer-1' })
-      mockSupabase.from.mockReturnValueOnce(mockQueryResult([{ following_id: 'followed-1' }]))
-      mockGetPosts.mockResolvedValue([
-        { id: 'ordinary', original_post_id: null },
-        { id: 'wrapper', original_post_id: 'blocked-root' },
-      ])
+      mockSupabase.rpc.mockResolvedValueOnce({ data, error: null })
 
       const req = new NextRequest('http://localhost/api/posts?sort_by=following', {
         headers: { authorization: 'Bearer viewer-token' },
       })
       const res = await GET(req)
-      const body = await res.json()
 
-      expect(body.data.posts).toEqual([
-        expect.objectContaining({ id: 'ordinary', original_post_id: null }),
-      ])
+      expect(res.status).toBe(500)
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+      expect(mockGetPosts).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      'offset=1',
+      'before_created_at=2026-07-15T20%3A00%3A00.000Z',
+      'before_id=44444444-4444-4444-8444-444444444444',
+      'group_id=not-a-uuid',
+    ])('rejects invalid following page input %s before the RPC', async (query) => {
+      mockGetAuthUser.mockResolvedValue({ id: 'viewer-1' })
+
+      const req = new NextRequest('http://localhost/api/posts?sort_by=following&' + query, {
+        headers: { authorization: 'Bearer viewer-token' },
+      })
+      const res = await GET(req)
+
+      expect(res.status).toBe(400)
+      expect(res.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+      expect(mockSupabase.rpc).not.toHaveBeenCalled()
     })
 
     it('never reads or populates the global hot cache for an authenticated viewer', async () => {

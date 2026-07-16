@@ -57,6 +57,89 @@ const CreatePostSchema = z.object({
   content_warning: z.string().max(200).optional().nullable(),
 })
 
+const FollowingCursorSchema = z
+  .object({
+    created_at: z.string().datetime({ offset: true }),
+    id: z.string().uuid(),
+  })
+  .strict()
+
+const FollowingPostSchema = z
+  .object({
+    id: z.string().uuid(),
+    title: z.string(),
+    content: z.string(),
+    author_id: z.string().uuid(),
+    author_handle: z.string(),
+    author_avatar_url: z.string().nullable(),
+    author_is_pro: z.boolean(),
+    author_show_pro_badge: z.boolean(),
+    group_id: z.string().uuid().nullable(),
+    group_name: z.string().nullable(),
+    group_name_en: z.string().nullable(),
+    poll_enabled: z.boolean(),
+    poll_id: z.string().uuid().nullable(),
+    poll_bull: z.number().int().nonnegative(),
+    poll_bear: z.number().int().nonnegative(),
+    poll_wait: z.number().int().nonnegative(),
+    like_count: z.number().int().nonnegative(),
+    dislike_count: z.number().int().nonnegative(),
+    comment_count: z.number().int().nonnegative(),
+    bookmark_count: z.number().int().nonnegative(),
+    repost_count: z.number().int().nonnegative(),
+    view_count: z.number().int().nonnegative(),
+    hot_score: z.number(),
+    is_pinned: z.boolean(),
+    images: z.array(z.string()).nullable(),
+    created_at: z.string().datetime({ offset: true }),
+    updated_at: z.string().datetime({ offset: true }).nullable(),
+    original_post_id: z.string().uuid().nullable(),
+    original_post: z
+      .object({
+        id: z.string().uuid(),
+        title: z.string().nullable(),
+        content: z.string().nullable(),
+        author_handle: z.string().nullable(),
+        author_avatar_url: z.string().nullable(),
+        author_is_pro: z.boolean(),
+        author_show_pro_badge: z.boolean(),
+        images: z.array(z.string()).nullable(),
+        created_at: z.string().datetime({ offset: true }),
+      })
+      .strict()
+      .nullable(),
+    visibility: z.enum(['public', 'followers', 'group']),
+    is_sensitive: z.boolean(),
+    content_warning: z.string().nullable(),
+    language: z.string(),
+  })
+  .strict()
+
+const FollowingPageSchema = z
+  .object({
+    posts: z.array(FollowingPostSchema).max(100),
+    following_count: z.number().int().nonnegative(),
+    has_more: z.boolean(),
+    next_cursor: FollowingCursorSchema.nullable(),
+  })
+  .strict()
+
+const FollowingRequestSchema = z
+  .object({
+    offset: z.literal(0),
+    group_id: z.string().uuid().nullable(),
+    group_ids: z.array(z.string().uuid()).max(100).nullable(),
+    author_handle: z.string().max(64).nullable(),
+    language: z.string().max(16).nullable(),
+    before_created_at: z.string().datetime({ offset: true }).nullable(),
+    before_id: z.string().uuid().nullable(),
+  })
+  .strict()
+  .refine(
+    (value) => (value.before_created_at === null) === (value.before_id === null),
+    'Following cursor fields must be provided together'
+  )
+
 // 缓存键前缀
 const POSTS_CACHE_PREFIX = 'posts:'
 const PUBLIC_POSTS_CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=120'
@@ -226,12 +309,33 @@ export const GET = withPublic(
         )
       }
 
-      const { data: followData, error: followError } = await supabase
-        .from('user_follows')
-        .select('following_id')
-        .eq('follower_id', user.id)
+      const parsedFollowingRequest = FollowingRequestSchema.safeParse({
+        offset,
+        group_id: group_id ?? null,
+        group_ids: group_ids ?? null,
+        author_handle: author_handle ?? null,
+        language: langFilter ?? null,
+        before_created_at: searchParams.get('before_created_at'),
+        before_id: searchParams.get('before_id'),
+      })
+      if (!parsedFollowingRequest.success) {
+        return setPostsReadCachePolicy(badRequest('Invalid following feed filters or cursor'), true)
+      }
 
-      if (followError) {
+      const followingRequest = parsedFollowingRequest.data
+      const { data: pageData, error: pageError } = await supabase.rpc('get_following_posts_page', {
+        p_viewer_id: user.id,
+        p_limit: limit,
+        p_before_created_at: followingRequest.before_created_at,
+        p_before_id: followingRequest.before_id,
+        p_group_id: followingRequest.group_id,
+        p_group_ids: followingRequest.group_ids,
+        p_author_handle: followingRequest.author_handle,
+        p_language: followingRequest.language,
+      })
+
+      if (pageError) {
+        logRpcError('get_following_posts_page', pageError)
         return setPostsReadCachePolicy(
           handleError(
             new ApiError('Failed to load following feed', {
@@ -243,28 +347,20 @@ export const GET = withPublic(
         )
       }
 
-      const followingIds = (followData || []).map(
-        (follow: { following_id: string }) => follow.following_id
-      )
-
-      if (followingIds.length > 0) {
-        posts = await getPosts(supabase, {
-          limit,
-          offset,
-          sort_by: 'created_at',
-          sort_order: 'desc',
-          viewer_id: user.id,
-          language: langFilter,
-          author_ids: followingIds,
-        })
-      } else {
-        posts = []
+      const parsedPage = FollowingPageSchema.safeParse(pageData)
+      if (!parsedPage.success) {
+        return setPostsReadCachePolicy(
+          handleError(
+            new ApiError('Following feed returned invalid data', {
+              code: ErrorCode.DATABASE_ERROR,
+            }),
+            'posts-list following'
+          ),
+          true
+        )
       }
-
-      // Repost wrappers remain hidden here until their roots are evaluated by
-      // the same canonical audience gate. Otherwise a followed wrapper could
-      // embed content from an author the viewer has blocked.
-      posts = posts.filter((post) => !post.original_post_id)
+      const page = parsedPage.data
+      posts = page.posts as unknown as Awaited<ReturnType<typeof getPosts>>
 
       // Attach user state
       let userReactions: Map<string, 'up' | 'down'> = new Map()
@@ -287,10 +383,11 @@ export const GET = withPublic(
         successWithPagination(
           {
             posts: postsWithUserState,
-            following_count: followingIds.length,
+            following_count: page.following_count,
             viewer_id: user.id,
+            next_cursor: page.next_cursor,
           },
-          { limit, offset, has_more: posts.length === limit }
+          { limit, offset: 0, has_more: page.has_more }
         ),
         true
       )
