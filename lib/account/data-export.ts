@@ -1,7 +1,20 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import {
+  DataExportReadError,
+  fetchAllExportRowsByCursor as fetchCursorRows,
+} from './export-pagination'
 
-export const EXPORT_PAGE_SIZE = 1_000
-export const MAX_EXPORT_ROWS_PER_DATASET = 250_000
+export {
+  DataExportReadError,
+  DataExportTooLargeError,
+  EXPORT_PAGE_SIZE,
+  fetchAllExportRowsByCursor,
+  MAX_EXPORT_ROWS_PER_DATASET,
+  type CursorExportDataset,
+  type ExportCursorColumn,
+  type ExportCursorValueType,
+  type ExportOwnerPredicate,
+} from './export-pagination'
 
 export type ExportDataset = Readonly<{
   name: string
@@ -23,23 +36,6 @@ const FORBIDDEN_EXPORT_COLUMNS = [
   /^(deleted_by|banned_by|muted_by|reviewed_by|resolved_by|issued_by)$/i,
   /^(anonymous_id_hash|session_id_hash|last_error|verification_error|error_message)$/i,
 ]
-
-export class DataExportReadError extends Error {
-  constructor(
-    readonly dataset: string,
-    readonly causeValue: unknown
-  ) {
-    super(`Failed to read export dataset: ${dataset}`)
-    this.name = 'DataExportReadError'
-  }
-}
-
-export class DataExportTooLargeError extends Error {
-  constructor(readonly dataset: string) {
-    super(`Export dataset exceeds the synchronous export limit: ${dataset}`)
-    this.name = 'DataExportTooLargeError'
-  }
-}
 
 function getSelectColumns(
   datasetName: string,
@@ -91,48 +87,22 @@ export async function fetchAllExportRows(
   dataset: ExportDataset,
   userId: string
 ): Promise<Record<string, unknown>[]> {
-  const rows: Record<string, unknown>[] = []
-  let cursor: string | null = null
-  const selectColumns = getSelectColumns(dataset.name, dataset.selectColumns)
-  const selection = selectColumns.join(',')
-
-  for (;;) {
-    let query = supabase
-      .from(dataset.table)
-      .select(selection)
-      .eq(dataset.ownerColumn, userId)
-      .order('id', { ascending: true })
-      .limit(EXPORT_PAGE_SIZE)
-
-    if (cursor !== null) query = query.gt('id', cursor)
-
-    const { data, error } = await query
-    if (error || !Array.isArray(data)) {
-      throw new DataExportReadError(dataset.name, error)
-    }
-    if (data.length === 0) return rows
-    if (rows.length + data.length > MAX_EXPORT_ROWS_PER_DATASET) {
-      throw new DataExportTooLargeError(dataset.name)
-    }
-
-    let nextCursor: string | null = cursor
-    for (const rawRow of data as unknown[]) {
-      // Project again at the trust boundary. Even if a mock, proxy, or future
-      // PostgREST behavior returns extra fields, the export cannot widen beyond
-      // the reviewed allowlist.
-      const row = projectExportRecord(dataset.name, rawRow, selectColumns)
-      const rowId = row.id as string
-      if (nextCursor !== null && rowId <= nextCursor) {
-        throw new DataExportReadError(dataset.name, new Error('Non-monotonic row id'))
-      }
-
-      rows.push(row)
-      nextCursor = rowId
-    }
-
-    if (nextCursor === cursor) {
-      throw new DataExportReadError(dataset.name, new Error('Pagination cursor did not advance'))
-    }
-    cursor = nextCursor
-  }
+  return fetchCursorRows(
+    supabase,
+    {
+      name: dataset.name,
+      table: dataset.table,
+      selectColumns: dataset.selectColumns,
+      ownerPredicate: {
+        column: dataset.ownerColumn,
+        operator: 'eq',
+        valueType: 'string',
+      },
+      cursor: {
+        order: 'asc',
+        columns: [{ column: 'id', valueType: 'string' }],
+      },
+    },
+    userId
+  )
 }
