@@ -13,40 +13,75 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withPublic } from '@/lib/api/middleware'
 import { badRequest, notFound, serverError } from '@/lib/api/response'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import { createLogger } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
+import {
+  isPublicProfileActive,
+  readPublicProfileAudienceByHandle,
+} from '@/lib/profile/public-audience'
 
 const logger = createLogger('users-follow')
 
 export const dynamic = 'force-dynamic'
 
-type ProfileRow = { id: string; handle?: string; bio?: string; avatar_url?: string }
+const NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
+
+function noStore(response: NextResponse): NextResponse {
+  for (const [name, value] of Object.entries(NO_STORE_HEADERS)) {
+    response.headers.set(name, value)
+  }
+  return response
+}
+
+type ProfileRow = {
+  id: string
+  handle: string | null
+  bio: string | null
+  avatar_url: string | null
+  deleted_at: string | null
+  banned_at: string | null
+  is_banned: boolean | null
+  ban_expires_at: string | null
+}
 
 // NOTE: user_follows.follower_id / following_id reference auth.users (not
 // public.user_profiles), so PostgREST embeds of user_profiles fail with
 // PGRST200. Two-step query: fetch follow rows, then look up profiles by id.
 async function fetchProfilesByIds(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   ids: string[]
 ): Promise<Map<string, ProfileRow>> {
   if (ids.length === 0) return new Map()
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('user_profiles')
-    .select('id, handle, bio, avatar_url')
+    .select('id, handle, bio, avatar_url, deleted_at, banned_at, is_banned, ban_expires_at')
     .in('id', ids)
-  return new Map(((data || []) as ProfileRow[]).map((p) => [p.id, p]))
+  if (error) throw error
+
+  const now = Date.now()
+  return new Map(
+    (data || [])
+      .filter((profile) => isPublicProfileActive(profile, now))
+      .map((profile) => [profile.id, profile])
+  )
 }
 
 async function fetchFollowStatus(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   requesterId: string,
   userIds: string[]
 ): Promise<Record<string, boolean>> {
-  const { data: myFollows } = await supabase
+  const { data: myFollows, error } = await supabase
     .from('user_follows')
     .select('following_id')
     .eq('follower_id', requesterId)
     .in('following_id', userIds)
+  if (error) throw error
 
   const status: Record<string, boolean> = {}
   if (myFollows) {
@@ -58,16 +93,19 @@ async function fetchFollowStatus(
 }
 
 async function getFollowersList(
-  supabase: SupabaseClient,
-  targetUser: { id: string; show_followers?: boolean },
+  supabase: SupabaseClient<Database>,
+  targetUser: { id: string; show_followers?: boolean | null },
   requesterId: string | null
 ) {
   if (!targetUser.show_followers && requesterId !== targetUser.id) {
-    return NextResponse.json({
-      followers: [],
-      hidden: true,
-      message: 'This user has hidden their followers list',
-    })
+    return NextResponse.json(
+      {
+        followers: [],
+        hidden: true,
+        message: 'This user has hidden their followers list',
+      },
+      { headers: NO_STORE_HEADERS }
+    )
   }
 
   const { data: followers, error: followersError } = await supabase
@@ -79,7 +117,7 @@ async function getFollowersList(
 
   if (followersError) {
     logger.error('Fetch followers failed', { error: followersError, targetUserId: targetUser.id })
-    return serverError('Failed to fetch followers')
+    return noStore(serverError('Failed to fetch followers'))
   }
 
   const followerRows = (followers || []) as {
@@ -109,23 +147,29 @@ async function getFollowersList(
     })
     .filter((f) => f.id)
 
-  return NextResponse.json({
-    followers: formattedFollowers,
-    count: formattedFollowers.length,
-  })
+  return NextResponse.json(
+    {
+      followers: formattedFollowers,
+      count: formattedFollowers.length,
+    },
+    { headers: NO_STORE_HEADERS }
+  )
 }
 
 async function getFollowingList(
-  supabase: SupabaseClient,
-  targetUser: { id: string; show_following?: boolean },
+  supabase: SupabaseClient<Database>,
+  targetUser: { id: string; show_following?: boolean | null },
   requesterId: string | null
 ) {
   if (!targetUser.show_following && requesterId !== targetUser.id) {
-    return NextResponse.json({
-      following: [],
-      hidden: true,
-      message: 'This user has hidden their following list',
-    })
+    return NextResponse.json(
+      {
+        following: [],
+        hidden: true,
+        message: 'This user has hidden their following list',
+      },
+      { headers: NO_STORE_HEADERS }
+    )
   }
 
   const { data: following, error: followingError } = await supabase
@@ -137,7 +181,7 @@ async function getFollowingList(
 
   if (followingError) {
     logger.error('Fetch following failed', { error: followingError, targetUserId: targetUser.id })
-    return serverError('Failed to fetch following list')
+    return noStore(serverError('Failed to fetch following list'))
   }
 
   const followingRows = (following || []) as {
@@ -167,10 +211,13 @@ async function getFollowingList(
     })
     .filter((f) => f.id)
 
-  return NextResponse.json({
-    following: formattedFollowing,
-    count: formattedFollowing.length,
-  })
+  return NextResponse.json(
+    {
+      following: formattedFollowing,
+      count: formattedFollowing.length,
+    },
+    { headers: NO_STORE_HEADERS }
+  )
 }
 
 export async function GET(
@@ -184,27 +231,44 @@ export async function GET(
   const handle = resolvedParams.handle
 
   if (!handle) {
-    return badRequest('Missing handle')
+    return noStore(badRequest('Missing handle'))
   }
 
   // Delegate to withPublic-wrapped handler with captured handle
   const handler = withPublic(
     async ({ user, supabase: sb }) => {
-      const supabase = sb as SupabaseClient
+      const supabase: SupabaseClient<Database> = sb
       const searchParams = request.nextUrl.searchParams
       const list = searchParams.get('list') // 'followers' | 'following'
       // Derive requesterId from auth token (middleware provides user if auth header present)
       const requesterId = user?.id ?? null
 
-      // Fetch cached follower/following counts directly from user_profiles.
+      let decodedHandle: string
+      try {
+        decodedHandle = decodeURIComponent(handle)
+      } catch {
+        return noStore(badRequest('Invalid handle'))
+      }
+
+      const audience = await readPublicProfileAudienceByHandle(supabase, decodedHandle)
+      if (audience.status !== 'active') {
+        return noStore(notFound('User not found'))
+      }
+
+      // Re-read the exact authorized profile row with its privacy preferences.
+      // Including current account state closes the race between resolving the
+      // handle and materializing profile-owned follow data.
       const { data: targetUser, error: userError } = await supabase
         .from('user_profiles')
-        .select('id, handle, show_followers, show_following, follower_count, following_count')
-        .eq('handle', handle)
+        .select(
+          'id, handle, show_followers, show_following, follower_count, following_count, deleted_at, banned_at, is_banned, ban_expires_at'
+        )
+        .eq('id', audience.profile.id)
         .maybeSingle()
 
-      if (userError || !targetUser) {
-        return notFound('User not found')
+      if (userError) throw userError
+      if (!targetUser || !isPublicProfileActive(targetUser)) {
+        return noStore(notFound('User not found'))
       }
 
       if (list === 'followers') {
@@ -215,10 +279,13 @@ export async function GET(
       }
 
       // Default: return both counts -- served from the cached columns
-      return NextResponse.json({
-        followers_count: targetUser.follower_count ?? 0,
-        following_count: targetUser.following_count ?? 0,
-      })
+      return NextResponse.json(
+        {
+          followers_count: targetUser.follower_count ?? 0,
+          following_count: targetUser.following_count ?? 0,
+        },
+        { headers: NO_STORE_HEADERS }
+      )
     },
     { name: 'users-follow', rateLimit: 'public', readsAuth: true }
   )
