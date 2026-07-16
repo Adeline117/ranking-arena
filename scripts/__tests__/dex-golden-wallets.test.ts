@@ -25,7 +25,7 @@ function candidates(): DexGoldenWalletCandidate[] {
         snapshotScrapedAt: '2026-07-16T17:45:00.000Z',
         snapshotActualCount: 70,
         sourceRank: index + 1,
-        arenaScore: 100 - index,
+        arenaScore: null,
         pnl90d: String(10_000 - index),
         pnlCurrency: sourceSlug === 'binance_web3_bsc' ? 'USDT' : 'USDC',
         activityProxyCount: index + 1,
