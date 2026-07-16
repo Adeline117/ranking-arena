@@ -341,6 +341,20 @@ describe('fetchAllExportRowsByCursor', () => {
     expect(calls[1].greaterThan).toEqual({ column: 'id', value: 'z' })
   })
 
+  it('supports an empty text value when it is a legitimate cursor key', async () => {
+    const { client, calls } = fakeClient([
+      { data: [{ id: '', payload: 1 }], error: null },
+      { data: [{ id: 'a', payload: 2 }], error: null },
+      { data: [], error: null },
+    ])
+
+    await expect(fetchAllExportRowsByCursor(client, stringIdDataset, 'user-a')).resolves.toEqual([
+      { id: '', payload: 1 },
+      { id: 'a', payload: 2 },
+    ])
+    expect(calls[1].greaterThan).toEqual({ column: 'id', value: '""' })
+  })
+
   it('fails closed when a database-collated text cursor tuple repeats', async () => {
     const { client } = fakeClient([
       { data: [{ id: 'ä', payload: 1 }], error: null },
