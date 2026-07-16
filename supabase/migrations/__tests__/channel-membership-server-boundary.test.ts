@@ -20,6 +20,7 @@ describe('channel membership server boundary migration', () => {
     expect(migration).toMatch(/^--[\s\S]*\nBEGIN;/)
     expect(migration).toContain("SET LOCAL lock_timeout = '5s'")
     expect(migration).toContain("SET LOCAL statement_timeout = '2min'")
+    expect(migration).toContain('SET LOCAL search_path = pg_catalog, pg_temp')
     expect(migration).toContain('pg_advisory_xact_lock')
     expect(migration).toContain('Rollout dependency: deploy the current server-admin')
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)
@@ -128,7 +129,7 @@ describe('channel membership server boundary migration', () => {
 
   it('uses only auth.uid identity in the fixed-search-path membership predicate', () => {
     expect(migration).toMatch(
-      /CREATE OR REPLACE FUNCTION public\.is_current_user_channel_member\(\s*p_channel_id uuid\s*\)\s*RETURNS boolean[\s\S]*STABLE[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, public/
+      /CREATE OR REPLACE FUNCTION public\.is_current_user_channel_member\(\s*p_channel_id uuid\s*\)\s*RETURNS boolean[\s\S]*STABLE[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, pg_temp/
     )
     expect(migration).toContain('v_actor_id := auth.uid()')
     expect(migration).toContain("v_actor_role IS DISTINCT FROM 'authenticated'")
@@ -136,6 +137,10 @@ describe('channel membership server boundary migration', () => {
     expect(migration).not.toMatch(
       /is_current_user_channel_member\([\s\S]{0,100}p_(?:user|actor)_id/
     )
+    expect(migration).toContain('JOIN public.user_profiles AS actor_profile')
+    expect(migration).toContain('actor_profile.id = membership.user_id')
+    expect(migration).toContain('actor_profile.deleted_at IS NULL')
+    expect(migration).toContain('actor_profile.banned_at IS NULL')
     expect(migration).toMatch(
       /REVOKE ALL PRIVILEGES\s+ON FUNCTION public\.is_current_user_channel_member\(uuid\)\s+FROM PUBLIC, anon, authenticated, service_role/
     )
@@ -149,7 +154,8 @@ describe('channel membership server boundary migration', () => {
       /CREATE OR REPLACE FUNCTION public\.check_dm_permission\([\s\S]*p_sender_id uuid,[\s\S]*p_receiver_id uuid[\s\S]*\)\s*RETURNS jsonb/
     )
     expect(migration).toContain('SECURITY DEFINER')
-    expect(migration).toContain('SET search_path = pg_catalog, public')
+    expect(migration).toContain('SET search_path = pg_catalog, pg_temp')
+    expect(migration).not.toContain('SET search_path = pg_catalog, public')
     expect(migration).toContain("auth.role() IS DISTINCT FROM 'service_role'")
     expect(migration).toContain("USING ERRCODE = '42501'")
     expect(migration).toContain("USING ERRCODE = '22023'")
@@ -162,6 +168,11 @@ describe('channel membership server boundary migration', () => {
   })
 
   it('implements the active receiver, block, privacy, and exact three-message contract', () => {
+    expect(migration).toContain('FROM public.user_profiles AS sender_profile')
+    expect(migration).toContain('sender_profile.id = p_sender_id')
+    expect(migration).toContain('sender_profile.deleted_at IS NULL')
+    expect(migration).toContain('sender_profile.banned_at IS NULL')
+    expect(migration).toContain("'reason', 'SENDER_UNAVAILABLE'")
     expect(migration).toContain('profile.deleted_at IS NULL')
     expect(migration).toContain('profile.banned_at IS NULL')
     expect(migration).toContain("'reason', 'USER_NOT_FOUND'")
@@ -182,6 +193,9 @@ describe('channel membership server boundary migration', () => {
     expect(migration.indexOf("'reason', 'BLOCKED'")).toBeLessThan(
       migration.indexOf("v_dm_permission = 'all'")
     )
+    expect(migration.indexOf("'reason', 'SENDER_UNAVAILABLE'")).toBeLessThan(
+      migration.indexOf('SELECT profile.dm_permission')
+    )
   })
 
   it('strictly postflights RLS, ACLs, policies, owner, signature, and function grants', () => {
@@ -193,7 +207,11 @@ describe('channel membership server boundary migration', () => {
     expect(migration).toContain('policy.polroles = ARRAY[v_service_role_oid]::oid[]')
     expect(migration).toContain('procedure.prosecdef')
     expect(migration).toContain("procedure.prorettype <> 'jsonb'::regtype")
-    expect(migration).toContain("ARRAY['search_path=pg_catalog, public']::text[]")
+    expect(migration).toContain("ARRAY['search_path=pg_catalog, pg_temp']::text[]")
+    expect(migration).toContain('v_expected_read_expression := CASE v_relation_name')
+    expect(migration).toContain('pg_catalog.regexp_replace(')
+    expect(migration).toContain("'public.is_current_user_channel_member(channel_id)'")
+    expect(migration).not.toContain('AND policy.polqual IS NOT NULL')
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
   })
 

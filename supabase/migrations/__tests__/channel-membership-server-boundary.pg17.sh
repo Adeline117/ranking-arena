@@ -445,6 +445,11 @@ $function$;
 GRANT EXECUTE ON FUNCTION public.assert_insufficient_privilege(text, text)
   TO anon, authenticated, service_role;
 
+-- pg_get_expr() omits schema qualification for objects visible through the
+-- caller's search path. Match the migration's locked search path so this
+-- independent catalog proof compares one deterministic canonical expression.
+SET search_path = pg_catalog, pg_temp;
+
 DO $catalog_proof$
 DECLARE
   v_relation regclass;
@@ -454,6 +459,7 @@ DECLARE
   v_column name;
   v_expected_policy name;
   v_expected_read_policy name;
+  v_expected_read_expression text;
   v_expected_service_policy name;
   v_service_role_oid oid := (
     SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'service_role'
@@ -634,6 +640,14 @@ BEGIN
       WHEN 'channel_messages' THEN 'Authenticated members read channel messages'
       ELSE 'Authenticated members read channel message reactions'
     END;
+    v_expected_read_expression := CASE v_relation_name
+      WHEN 'channel_messages' THEN
+        'public.is_current_user_channel_member(channel_id)'
+      ELSE
+        '(EXISTS ( SELECT 1 FROM public.channel_messages parent_message '
+          || 'WHERE ((parent_message.id = channel_message_reactions.message_id) '
+          || 'AND public.is_current_user_channel_member(parent_message.channel_id))))'
+    END;
     v_expected_service_policy := CASE v_relation_name
       WHEN 'channel_messages' THEN 'Service role manages channel messages'
       ELSE 'Service role manages channel message reactions'
@@ -715,6 +729,12 @@ BEGIN
         AND polroles = ARRAY[
           (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'authenticated')
         ]::oid[]
+        AND pg_catalog.regexp_replace(
+          pg_catalog.pg_get_expr(polqual, polrelid),
+          '[[:space:]]+',
+          ' ',
+          'g'
+        ) = v_expected_read_expression
     ) OR NOT EXISTS (
       SELECT 1
       FROM pg_catalog.pg_policy
@@ -750,10 +770,13 @@ BEGIN
   IF (
     SELECT pg_catalog.strpos(procedure.prosrc, 'auth.uid()') = 0
       OR pg_catalog.strpos(procedure.prosrc, 'p_user') > 0
+      OR pg_catalog.strpos(procedure.prosrc, 'public.user_profiles') = 0
+      OR pg_catalog.strpos(procedure.prosrc, 'actor_profile.deleted_at IS NULL') = 0
+      OR pg_catalog.strpos(procedure.prosrc, 'actor_profile.banned_at IS NULL') = 0
       OR NOT procedure.prosecdef
       OR procedure.provolatile <> 's'
       OR procedure.proconfig IS DISTINCT FROM
-        ARRAY['search_path=pg_catalog, public']::text[]
+        ARRAY['search_path=pg_catalog, pg_temp']::text[]
     FROM pg_catalog.pg_proc AS procedure
     WHERE procedure.oid =
       'public.is_current_user_channel_member(uuid)'::regprocedure
@@ -781,9 +804,11 @@ BEGIN
     SELECT pg_catalog.strpos(procedure.prosrc, 'auth.role()') = 0
       OR pg_catalog.strpos(procedure.prosrc, '''all''') = 0
       OR pg_catalog.strpos(procedure.prosrc, '''everyone''') > 0
+      OR pg_catalog.strpos(procedure.prosrc, 'sender_profile') = 0
+      OR pg_catalog.strpos(procedure.prosrc, '''SENDER_UNAVAILABLE''') = 0
       OR NOT procedure.prosecdef
       OR procedure.proconfig IS DISTINCT FROM
-        ARRAY['search_path=pg_catalog, public']::text[]
+        ARRAY['search_path=pg_catalog, pg_temp']::text[]
     FROM pg_catalog.pg_proc AS procedure
     WHERE procedure.oid =
       'public.check_dm_permission(uuid,uuid)'::regprocedure
@@ -810,7 +835,9 @@ INSERT INTO public.user_profiles (
   ('90000000-0000-0000-0000-000000000009', 'all', NULL, pg_catalog.now()),
   ('a0000000-0000-0000-0000-00000000000a', 'all', NULL, NULL),
   ('b0000000-0000-0000-0000-00000000000b', 'all', NULL, NULL),
-  ('c0000000-0000-0000-0000-00000000000c', NULL, NULL, NULL);
+  ('c0000000-0000-0000-0000-00000000000c', NULL, NULL, NULL),
+  ('d1000000-0000-0000-0000-0000000000d1', 'all', pg_catalog.now(), NULL),
+  ('d2000000-0000-0000-0000-0000000000d2', 'all', NULL, pg_catalog.now());
 
 -- "none" remains disabled even when follows are mutual.
 INSERT INTO public.user_follows(follower_id, following_id) VALUES
@@ -1067,6 +1094,33 @@ DECLARE
   v_result jsonb;
 BEGIN
   v_result := public.check_dm_permission(
+    'd3000000-0000-0000-0000-0000000000d3',
+    'd0000000-0000-0000-0000-00000000000d'
+  );
+  IF v_result IS DISTINCT FROM
+    '{"allowed": false, "reason": "SENDER_UNAVAILABLE"}'::jsonb THEN
+    RAISE EXCEPTION 'missing sender fail-first contract failed: %', v_result;
+  END IF;
+
+  v_result := public.check_dm_permission(
+    'd1000000-0000-0000-0000-0000000000d1',
+    '20000000-0000-0000-0000-000000000002'
+  );
+  IF v_result IS DISTINCT FROM
+    '{"allowed": false, "reason": "SENDER_UNAVAILABLE"}'::jsonb THEN
+    RAISE EXCEPTION 'deleted sender contract failed: %', v_result;
+  END IF;
+
+  v_result := public.check_dm_permission(
+    'd2000000-0000-0000-0000-0000000000d2',
+    '20000000-0000-0000-0000-000000000002'
+  );
+  IF v_result IS DISTINCT FROM
+    '{"allowed": false, "reason": "SENDER_UNAVAILABLE"}'::jsonb THEN
+    RAISE EXCEPTION 'banned sender contract failed: %', v_result;
+  END IF;
+
+  v_result := public.check_dm_permission(
     v_sender,
     'd0000000-0000-0000-0000-00000000000d'
   );
@@ -1221,6 +1275,114 @@ BEGIN
   END IF;
 END
 $member_realtime_read$;
+RESET ROLE;
+
+-- Membership alone must not preserve Realtime visibility for an inactive
+-- account. Banning and soft-deleting the profile each take effect on the next
+-- SELECT, while restoring the same profile restores access without touching
+-- the channel_members row.
+UPDATE public.user_profiles
+SET banned_at = pg_catalog.clock_timestamp()
+WHERE id = '10000000-0000-0000-0000-000000000001';
+
+SET ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '10000000-0000-0000-0000-000000000001',
+  false
+);
+DO $banned_member_realtime_read$
+BEGIN
+  IF public.is_current_user_channel_member(
+       'd0000000-0000-0000-0000-000000000001'
+     ) OR EXISTS (
+       SELECT 1 FROM public.channel_messages
+     ) OR EXISTS (
+       SELECT 1 FROM public.channel_message_reactions
+     ) THEN
+    RAISE EXCEPTION 'banned member retained Realtime SELECT access';
+  END IF;
+END
+$banned_member_realtime_read$;
+RESET ROLE;
+
+UPDATE public.user_profiles
+SET banned_at = NULL
+WHERE id = '10000000-0000-0000-0000-000000000001';
+
+SET ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '10000000-0000-0000-0000-000000000001',
+  false
+);
+DO $restored_after_ban_realtime_read$
+BEGIN
+  IF NOT public.is_current_user_channel_member(
+       'd0000000-0000-0000-0000-000000000001'
+     ) OR (
+       SELECT pg_catalog.count(*) FROM public.channel_messages
+     ) <> 1 OR (
+       SELECT pg_catalog.count(*) FROM public.channel_message_reactions
+     ) <> 1 THEN
+    RAISE EXCEPTION 'member visibility did not recover after ban removal';
+  END IF;
+END
+$restored_after_ban_realtime_read$;
+RESET ROLE;
+
+UPDATE public.user_profiles
+SET deleted_at = pg_catalog.clock_timestamp()
+WHERE id = '10000000-0000-0000-0000-000000000001';
+
+SET ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '10000000-0000-0000-0000-000000000001',
+  false
+);
+DO $deleted_member_realtime_read$
+BEGIN
+  IF public.is_current_user_channel_member(
+       'd0000000-0000-0000-0000-000000000001'
+     ) OR EXISTS (
+       SELECT 1 FROM public.channel_messages
+     ) OR EXISTS (
+       SELECT 1 FROM public.channel_message_reactions
+     ) THEN
+    RAISE EXCEPTION 'deleted member retained Realtime SELECT access';
+  END IF;
+END
+$deleted_member_realtime_read$;
+RESET ROLE;
+
+UPDATE public.user_profiles
+SET deleted_at = NULL
+WHERE id = '10000000-0000-0000-0000-000000000001';
+
+SET ROLE authenticated;
+SELECT pg_catalog.set_config('request.jwt.claim.role', 'authenticated', false);
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.sub',
+  '10000000-0000-0000-0000-000000000001',
+  false
+);
+DO $restored_after_delete_realtime_read$
+BEGIN
+  IF NOT public.is_current_user_channel_member(
+       'd0000000-0000-0000-0000-000000000001'
+     ) OR (
+       SELECT pg_catalog.count(*) FROM public.channel_messages
+     ) <> 1 OR (
+       SELECT pg_catalog.count(*) FROM public.channel_message_reactions
+     ) <> 1 THEN
+    RAISE EXCEPTION 'member visibility did not recover after profile restore';
+  END IF;
+END
+$restored_after_delete_realtime_read$;
 RESET ROLE;
 
 SET ROLE authenticated;
