@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getProvisioningAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import { validateCsrfToken, CSRF_COOKIE_NAME, CSRF_HEADER_NAME } from '@/lib/utils/csrf'
 import logger from '@/lib/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -54,6 +55,8 @@ interface ExportData {
     recovery_tokens: unknown[]
   }
 }
+
+type UserProfileColumn = keyof Database['public']['Tables']['user_profiles']['Row']
 
 const PROFILE_EXPORT_COLUMNS = [
   'id',
@@ -106,7 +109,12 @@ const PROFILE_EXPORT_COLUMNS = [
   'original_email',
   'original_handle',
   'search_history',
-] as const
+] as const satisfies readonly UserProfileColumn[]
+
+const PROFILE_QUERY_COLUMNS = [
+  ...PROFILE_EXPORT_COLUMNS,
+  'last_export_at',
+] as const satisfies readonly UserProfileColumn[]
 
 const EXPORT_DATASETS = {
   posts: {
@@ -381,8 +389,17 @@ function parseStoredTimestamp(value: string, field: string): number {
   return timestamp
 }
 
+function readProfileLastExportAt(profile: unknown): string | null {
+  if (!profile || typeof profile !== 'object' || !Object.hasOwn(profile, 'last_export_at')) {
+    throw new DataExportReadError('profile', new Error('Missing last_export_at value'))
+  }
+  const value = Reflect.get(profile, 'last_export_at')
+  if (value === null || typeof value === 'string') return value
+  throw new DataExportReadError('profile', new Error('Invalid last_export_at value'))
+}
+
 async function claimExportCooldown(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   userId: string,
   claimTime: Date
 ): Promise<{ claimed: true } | { claimed: false; nextAvailable: string }> {
@@ -434,14 +451,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'CSRF validation failed' }, { status: 403 })
     }
 
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSupabaseAdmin()
 
     // Profile provisioning is an authentication invariant. Missing rows fail
     // closed: without one there is no durable tuple on which to serialize the
     // 24-hour cooldown.
     const { data: profile, error: profileError } = await supabase
       .from('user_profiles')
-      .select([...PROFILE_EXPORT_COLUMNS, 'last_export_at'].join(','))
+      .select(PROFILE_QUERY_COLUMNS.join(','))
       .eq('id', user.id)
       .maybeSingle()
 
@@ -450,10 +467,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Profile provisioning is incomplete' }, { status: 503 })
     }
 
-    const lastExportAt = (profile as unknown as Record<string, unknown>).last_export_at
-    if (lastExportAt !== null && typeof lastExportAt !== 'string') {
-      throw new DataExportReadError('profile', new Error('Invalid last_export_at value'))
-    }
+    const lastExportAt = readProfileLastExportAt(profile)
     const typedProfile = projectExportRecord('profile', profile, PROFILE_EXPORT_COLUMNS)
 
     if (lastExportAt) {

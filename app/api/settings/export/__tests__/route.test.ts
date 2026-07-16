@@ -72,6 +72,7 @@ const PROFILE = {
   updated_at: null,
   last_export_at: null,
 }
+type ProfileFixture = Omit<typeof PROFILE, 'last_export_at'> & { last_export_at: unknown }
 
 type QueryState = { operation: 'read' | 'update'; selection: string | null }
 
@@ -83,7 +84,7 @@ function request() {
 }
 
 function installProfileQueries(options: {
-  profile?: typeof PROFILE | null
+  profile?: ProfileFixture | null
   profileError?: unknown
   claim?: 'success' | 'lost' | 'error'
   currentLastExportAt?: string | null
@@ -556,6 +557,17 @@ describe('POST /api/settings/export', () => {
     const response = await POST(request())
 
     expect(response.status).toBe(503)
+    expect(mockFetchAllExportRows).not.toHaveBeenCalled()
+    expect(mockFetchAllExportRowsByCursor).not.toHaveBeenCalled()
+  })
+
+  it('fails closed when the profile cooldown field has an invalid runtime shape', async () => {
+    installProfileQueries({ profile: { ...PROFILE, last_export_at: 42 } })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
     expect(mockFetchAllExportRows).not.toHaveBeenCalled()
     expect(mockFetchAllExportRowsByCursor).not.toHaveBeenCalled()
   })
