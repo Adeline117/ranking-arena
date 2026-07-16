@@ -21,6 +21,7 @@ import { sendNotification } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
 import logger, { fireAndForget } from '@/lib/logger'
+import { canServiceActorReadPost } from '@/lib/data/service-post-audience'
 // sanitizeText is dynamically imported inside POST/PUT only — keeps the
 // sanitize-html parser out of the GET handler's module graph at cold-start.
 
@@ -235,6 +236,10 @@ export const GET = withPublic(
     const sortParam = searchParams.get('sort')
     const sort: CommentSortMode = sortParam === 'time' ? 'time' : 'best'
 
+    if (!(await canServiceActorReadPost(supabase, id, user?.id ?? null))) {
+      throw ApiError.notFound('Post not found')
+    }
+
     // withPublic uses a service-role client, so RLS cannot protect this read.
     // Resolve the parent post first and enforce the same visibility contract as
     // the post itself. Missing and inaccessible posts intentionally look alike.
@@ -344,6 +349,10 @@ export const POST = withAuth(
     const content = sanitizeText(parsed.data.content, { preserveNewlines: true, maxLength: 2000 })
     if (!content.trim()) throw ApiError.validation('Comment content is required')
     const parent_id = parsed.data.parent_id ?? undefined
+
+    if (!(await canServiceActorReadPost(supabase, id, user.id))) {
+      throw ApiError.notFound('Post not found')
+    }
 
     const [postResult, parentResult] = await Promise.all([
       supabase
@@ -533,6 +542,10 @@ export const DELETE = withAuth(
       throw ApiError.validation('Invalid input', { errors: parsed.error.flatten() })
     }
     const commentId = parsed.data.comment_id
+
+    if (!(await canServiceActorReadPost(supabase, postId, user.id))) {
+      throw ApiError.notFound('Post not found')
+    }
 
     let result
     try {

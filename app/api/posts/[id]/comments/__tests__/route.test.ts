@@ -243,6 +243,7 @@ const mockGetPostComments = jest.fn()
 const mockCreateComment = jest.fn()
 const mockUpdateOwnCommentWithRollout = jest.fn()
 const mockDeleteOwnCommentWithRollout = jest.fn()
+const mockCanServiceActorReadPost = jest.fn()
 
 jest.mock('@/lib/data/comments', () => ({
   getPostComments: (...args: unknown[]) => mockGetPostComments(...args),
@@ -260,6 +261,10 @@ jest.mock('@/lib/data/comment-mutation-rollout', () => ({
   },
   updateOwnCommentWithRollout: (...args: unknown[]) => mockUpdateOwnCommentWithRollout(...args),
   deleteOwnCommentWithRollout: (...args: unknown[]) => mockDeleteOwnCommentWithRollout(...args),
+}))
+
+jest.mock('@/lib/data/service-post-audience', () => ({
+  canServiceActorReadPost: (...args: unknown[]) => mockCanServiceActorReadPost(...args),
 }))
 
 jest.mock('@/lib/features', () => ({
@@ -313,6 +318,7 @@ describe('/api/posts/[id]/comments', () => {
     mockTableQueues.clear()
     mockIssuedTableQueries.clear()
     mockRequireAuth.mockResolvedValue(mockUser)
+    mockCanServiceActorReadPost.mockResolvedValue(true)
     mockSupabaseAuth = { data: { user: null }, error: null }
     mockGetPostComments.mockResolvedValue([])
     mockCreateComment.mockResolvedValue({
@@ -395,6 +401,21 @@ describe('/api/posts/[id]/comments', () => {
         TEST_POST_ID,
         expect.objectContaining({ limit: 51, offset: 0, sort: 'best', userId: undefined })
       )
+      expect(mockCanServiceActorReadPost).toHaveBeenCalledWith(
+        expect.anything(),
+        TEST_POST_ID,
+        null
+      )
+    })
+
+    it('fails closed before reading comment children when canonical audience denies', async () => {
+      mockCanServiceActorReadPost.mockResolvedValue(false)
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`)
+
+      await expect(GET(req, createContext())).rejects.toMatchObject({ statusCode: 404 })
+
+      expect(mockSupabaseFrom).not.toHaveBeenCalled()
+      expect(mockGetPostComments).not.toHaveBeenCalled()
     })
 
     it('returns paginated comments', async () => {
@@ -604,6 +625,11 @@ describe('/api/posts/[id]/comments', () => {
       const res = await POST(request({ content: '  <b>Nice post!</b>  ' }), createContext())
 
       expect(res.status).toBe(201)
+      expect(mockCanServiceActorReadPost).toHaveBeenCalledWith(
+        expect.anything(),
+        TEST_POST_ID,
+        mockUser.id
+      )
       expect(mockCreateComment).toHaveBeenCalledWith(expect.anything(), mockUser.id, {
         post_id: TEST_POST_ID,
         content: 'Nice post!',
@@ -999,6 +1025,11 @@ describe('/api/posts/[id]/comments', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
+      expect(mockCanServiceActorReadPost).toHaveBeenCalledWith(
+        expect.anything(),
+        TEST_POST_ID,
+        mockUser.id
+      )
       expect(body.success).toBe(true)
       expect(mockDeleteOwnCommentWithRollout).toHaveBeenCalledWith(expect.anything(), {
         commentId,
@@ -1006,6 +1037,20 @@ describe('/api/posts/[id]/comments', () => {
         userId: mockUser.id,
       })
       expect(body.data).toMatchObject({ deleted_count: 2, comment_count: 7 })
+    })
+
+    it('does not reveal or mutate an owned comment after post access expires', async () => {
+      mockCanServiceActorReadPost.mockResolvedValue(false)
+      const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
+        method: 'DELETE',
+        body: { comment_id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e' },
+      })
+
+      const res = await DELETE(req, createContext())
+
+      expect(res.status).toBe(404)
+      expect(mockDeleteOwnCommentWithRollout).not.toHaveBeenCalled()
+      expect(mockSupabaseFrom).not.toHaveBeenCalled()
     })
 
     it('maps a missing delete target to 404', async () => {
