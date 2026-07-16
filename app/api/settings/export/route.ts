@@ -1,6 +1,6 @@
 /**
  * Data Export API
- * POST: Export all user data as JSON
+ * POST: Export the currently supported portable user datasets as JSON
  * Rate limited to 1 export per 24 hours
  */
 
@@ -14,7 +14,9 @@ import {
   DataExportReadError,
   DataExportTooLargeError,
   fetchAllExportRows,
+  fetchAllExportRowsByCursor,
   projectExportRecord,
+  type CursorExportDataset,
   type ExportDataset,
 } from '@/lib/account/data-export'
 
@@ -35,6 +37,9 @@ interface ExportData {
   tips: {
     sent: unknown[]
     received: unknown[]
+  }
+  settings: {
+    preferences: Record<string, unknown> | null
   }
   account: {
     login_sessions: unknown[]
@@ -252,6 +257,29 @@ const EXPORT_DATASETS = {
   },
 } satisfies Record<string, ExportDataset>
 
+const PREFERENCES_EXPORT_DATASET = {
+  name: 'settings.preferences',
+  table: 'user_preferences',
+  selectColumns: [
+    'user_id',
+    'watched_traders',
+    'email_notifications',
+    'push_notifications',
+    'ranking_change_threshold',
+    'created_at',
+    'updated_at',
+  ],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'user_id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
 function normalizeFollowRows(rows: Record<string, unknown>[], direction: 'following' | 'follower') {
   const otherUserColumn = direction === 'following' ? 'following_id' : 'follower_id'
   return rows.map((row) => ({
@@ -276,6 +304,26 @@ function normalizeTipRows(rows: Record<string, unknown>[], direction: 'sent' | '
     updated_at: row.updated_at,
     completed_at: row.completed_at,
   }))
+}
+
+function normalizePreferences(rows: Record<string, unknown>[]): Record<string, unknown> | null {
+  if (rows.length === 0) return null
+  if (rows.length !== 1) {
+    throw new DataExportReadError(
+      PREFERENCES_EXPORT_DATASET.name,
+      new Error('Expected at most one user preferences row')
+    )
+  }
+
+  const row = rows[0]
+  return {
+    watched_traders: row.watched_traders,
+    email_notifications: row.email_notifications,
+    push_notifications: row.push_notifications,
+    ranking_change_threshold: row.ranking_change_threshold,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }
 }
 
 function parseStoredTimestamp(value: string, field: string): number {
@@ -386,6 +434,7 @@ export async function POST(request: NextRequest) {
       pushSubscriptions,
       backupCodes,
       recoveryTokens,
+      preferences,
     ] = await Promise.all([
       fetchAllExportRows(supabase, EXPORT_DATASETS.posts, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.comments, user.id),
@@ -399,6 +448,7 @@ export async function POST(request: NextRequest) {
       fetchAllExportRows(supabase, EXPORT_DATASETS.pushSubscriptions, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.backupCodes, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.recoveryTokens, user.id),
+      fetchAllExportRowsByCursor(supabase, PREFERENCES_EXPORT_DATASET, user.id),
     ])
 
     const exportData: ExportData = {
@@ -413,6 +463,9 @@ export async function POST(request: NextRequest) {
       tips: {
         sent: normalizeTipRows(tipsSent, 'sent'),
         received: normalizeTipRows(tipsReceived, 'received'),
+      },
+      settings: {
+        preferences: normalizePreferences(preferences),
       },
       account: {
         login_sessions: loginSessions,

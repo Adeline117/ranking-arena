@@ -24,6 +24,7 @@ const mockGetSupabaseAdmin = jest.fn()
 const mockCheckRateLimit = jest.fn()
 const mockValidateCsrfToken = jest.fn()
 const mockFetchAllExportRows = jest.fn()
+const mockFetchAllExportRowsByCursor = jest.fn()
 const mockFrom = jest.fn()
 let profileStates: QueryState[]
 
@@ -48,6 +49,7 @@ jest.mock('@/lib/account/data-export', () => {
   return {
     ...actual,
     fetchAllExportRows: (...args: unknown[]) => mockFetchAllExportRows(...args),
+    fetchAllExportRowsByCursor: (...args: unknown[]) => mockFetchAllExportRowsByCursor(...args),
   }
 })
 
@@ -198,6 +200,18 @@ describe('POST /api/settings/export', () => {
           return [{ id }]
       }
     })
+    mockFetchAllExportRowsByCursor.mockResolvedValue([
+      {
+        user_id: USER_ID,
+        watched_traders: ['trader-1'],
+        email_notifications: true,
+        push_notifications: false,
+        ranking_change_threshold: 5,
+        created_at: '2026-02-05T00:00:00.000Z',
+        updated_at: '2026-02-06T00:00:00.000Z',
+        future_secret: 'must-not-escape-normalization',
+      },
+    ])
     profileStates = installProfileQueries({})
   })
 
@@ -283,6 +297,17 @@ describe('POST /api/settings/export', () => {
         completed_at: '2026-02-04T00:01:00.000Z',
       },
     ])
+    expect(body.settings).toEqual({
+      preferences: {
+        watched_traders: ['trader-1'],
+        email_notifications: true,
+        push_notifications: false,
+        ranking_change_threshold: 5,
+        created_at: '2026-02-05T00:00:00.000Z',
+        updated_at: '2026-02-06T00:00:00.000Z',
+      },
+    })
+    expect(JSON.stringify(body.settings)).not.toContain('must-not-escape-normalization')
     expect(body.account).toEqual({
       login_sessions: [{ id: 'account.login_sessions-1' }],
       api_keys: [{ id: 'account.api_keys-1' }],
@@ -292,6 +317,7 @@ describe('POST /api/settings/export', () => {
       recovery_tokens: [{ id: 'account.recovery_tokens-1' }],
     })
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(1)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -326,6 +352,60 @@ describe('POST /api/settings/export', () => {
     expect(backupDataset.selectColumns).not.toContain('code_hash')
     const recoveryDataset = datasets.find((dataset) => dataset.name === 'account.recovery_tokens')
     expect(recoveryDataset.selectColumns).not.toContain('token_hash')
+
+    const preferencesCall = mockFetchAllExportRowsByCursor.mock.calls[0]
+    expect(preferencesCall[2]).toBe(USER_ID)
+    expect(preferencesCall[1]).toEqual(
+      expect.objectContaining({
+        name: 'settings.preferences',
+        table: 'user_preferences',
+        ownerPredicate: { column: 'user_id', operator: 'eq', valueType: 'uuid' },
+        cursor: {
+          order: 'asc',
+          columns: [{ column: 'user_id', valueType: 'uuid' }],
+        },
+      })
+    )
+    expect(preferencesCall[1].selectColumns).not.toContain('*')
+  })
+
+  it('fails closed without cooldown when preferences cannot be read completely', async () => {
+    mockFetchAllExportRowsByCursor.mockRejectedValueOnce(
+      new DataExportReadError('settings.preferences', { code: 'XX001' })
+    )
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('represents an uncreated preferences row explicitly without widening the export', async () => {
+    mockFetchAllExportRowsByCursor.mockResolvedValueOnce([])
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(200)
+    expect((await response.json()).settings).toEqual({ preferences: null })
+  })
+
+  it('fails closed if the preferences singleton invariant is violated', async () => {
+    const row = {
+      user_id: USER_ID,
+      watched_traders: [],
+      email_notifications: true,
+      push_notifications: false,
+      ranking_change_threshold: 10,
+      created_at: null,
+      updated_at: null,
+    }
+    mockFetchAllExportRowsByCursor.mockResolvedValueOnce([row, row])
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
   })
 
   it('fails closed without consuming cooldown when one dataset page fails', async () => {
@@ -356,6 +436,7 @@ describe('POST /api/settings/export', () => {
 
     expect(response.status).toBe(503)
     expect(mockFetchAllExportRows).not.toHaveBeenCalled()
+    expect(mockFetchAllExportRowsByCursor).not.toHaveBeenCalled()
   })
 
   it('honors an existing durable cooldown before reading export datasets', async () => {
@@ -367,6 +448,7 @@ describe('POST /api/settings/export', () => {
 
     expect(response.status).toBe(429)
     expect(mockFetchAllExportRows).not.toHaveBeenCalled()
+    expect(mockFetchAllExportRowsByCursor).not.toHaveBeenCalled()
   })
 
   it('lets only the conditional-update winner return a concurrent download', async () => {
