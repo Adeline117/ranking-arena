@@ -60,6 +60,15 @@ export interface FillStats {
   pnlRatio: number | null
   tripsPerWeek: number | null
   trips: RoundTrip[]
+  /** False when a position opened before the fetched prefix closed in-window. */
+  boundaryComplete: boolean
+  boundarySkippedPositions: number
+}
+
+export interface RoundTripReplay {
+  trips: RoundTrip[]
+  /** Closes whose opening fill predates the available fill prefix. */
+  boundaryCloseTimesMs: number[]
 }
 
 const EPS = 1e-9
@@ -92,13 +101,13 @@ interface OpenTrip {
   fromFlip: boolean
 }
 
-/** Reconstruct closed round-trips from fills (any order; sorted internally). */
-export function reconstructRoundTrips(fills: HlFill[], windowStartMs = 0): RoundTrip[] {
+/** Reconstruct closed round-trips from the entire available fill prefix. */
+export function reconstructRoundTripsWithDiagnostics(fills: HlFill[]): RoundTripReplay {
   const byCoin = new Map<string, HlFill[]>()
   for (const f of fills) {
     if (typeof f.coin !== 'string' || f.coin.length === 0) continue
     const t = num(f.time)
-    if (t === null || t < windowStartMs) continue
+    if (t === null) continue
     let arr = byCoin.get(f.coin)
     if (!arr) {
       arr = []
@@ -108,6 +117,7 @@ export function reconstructRoundTrips(fills: HlFill[], windowStartMs = 0): Round
   }
 
   const trips: RoundTrip[] = []
+  const boundaryCloseTimesMs: number[] = []
   for (const [coin, arr] of byCoin) {
     arr.sort((a, b) => (num(a.time) ?? 0) - (num(b.time) ?? 0))
     let open: OpenTrip | null = null
@@ -123,6 +133,11 @@ export function reconstructRoundTrips(fills: HlFill[], windowStartMs = 0): Round
       // If our tracked state disagrees with startPosition (missed fills before
       // the window), resync: only track trips we saw open from flat.
       if (open === null) {
+        const boundaryFlip =
+          Math.abs(start) > EPS && Math.abs(end) > EPS && Math.sign(end) !== Math.sign(start)
+        if (Math.abs(start) > EPS && (Math.abs(end) < EPS || boundaryFlip)) {
+          boundaryCloseTimesMs.push(t)
+        }
         if (Math.abs(start) < EPS && Math.abs(end) > EPS) {
           open = {
             side: end > 0 ? 'long' : 'short',
@@ -135,6 +150,21 @@ export function reconstructRoundTrips(fills: HlFill[], windowStartMs = 0): Round
             realized,
             fills: 1,
             fromFlip: false,
+          }
+        } else if (boundaryFlip) {
+          // The old side is unknowable, but the post-flip side starts at this
+          // exact fill and can be followed safely from here onward.
+          open = {
+            side: end > 0 ? 'long' : 'short',
+            openedAtMs: t,
+            entryNotional: Math.abs(end) * px,
+            entrySize: Math.abs(end),
+            exitNotional: 0,
+            exitSize: 0,
+            maxAbs: Math.abs(end),
+            realized: 0,
+            fills: 0,
+            fromFlip: true,
           }
         }
         continue
@@ -184,12 +214,24 @@ export function reconstructRoundTrips(fills: HlFill[], windowStartMs = 0): Round
     }
   }
   trips.sort((a, b) => b.closedAtMs - a.closedAtMs)
-  return trips
+  boundaryCloseTimesMs.sort((a, b) => b - a)
+  return { trips, boundaryCloseTimesMs }
+}
+
+/** Reconstruct first, then slice by close time; never discard opening fills. */
+export function reconstructRoundTrips(fills: HlFill[], windowStartMs = 0): RoundTrip[] {
+  return reconstructRoundTripsWithDiagnostics(fills).trips.filter(
+    (trip) => trip.closedAtMs >= windowStartMs
+  )
 }
 
 /** Aggregate closed trips into the CEX-equivalent per-TF stats. */
 export function fillStats(fills: HlFill[], windowStartMs: number, windowDays: number): FillStats {
-  const trips = reconstructRoundTrips(fills, windowStartMs)
+  const replay = reconstructRoundTripsWithDiagnostics(fills)
+  const trips = replay.trips.filter((trip) => trip.closedAtMs >= windowStartMs)
+  const boundarySkippedPositions = replay.boundaryCloseTimesMs.filter(
+    (closedAtMs) => closedAtMs >= windowStartMs
+  ).length
   const total = trips.length
   const wins = trips.filter((t) => t.realizedPnl > 0)
   const losses = trips.filter((t) => t.realizedPnl < 0)
@@ -213,5 +255,7 @@ export function fillStats(fills: HlFill[], windowStartMs: number, windowDays: nu
         : null,
     tripsPerWeek: windowDays > 0 ? Math.round((total / windowDays) * 7 * 100) / 100 : null,
     trips,
+    boundaryComplete: boundarySkippedPositions === 0,
+    boundarySkippedPositions,
   }
 }
