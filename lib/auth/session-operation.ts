@@ -18,6 +18,16 @@ export type AuthOperationLease = {
   identityTransition: boolean
 }
 
+/**
+ * Tab-local proof that this document's redirect parser, rather than a newer
+ * cross-tab/session operation, acquired the callback principal.
+ */
+export type AuthRedirectAcquisitionReceipt = Readonly<{
+  operationId: string
+  userId: string
+  navigationKey: string
+}>
+
 type StoredSession = {
   access_token?: unknown
   refresh_token?: unknown
@@ -26,7 +36,26 @@ type StoredSession = {
 
 let memoryLease: AuthOperationLease | null = null
 let activeWriter: AuthOperationLease | null = null
+let redirectAcquisitionReceipt: AuthRedirectAcquisitionReceipt | null = null
 let leaseSequence = 0
+
+const TRANSIENT_REDIRECT_PARAMS = new Set([
+  'access_token',
+  'code',
+  'error',
+  'error_code',
+  'error_description',
+  'expires_at',
+  'expires_in',
+  'provider_refresh_token',
+  'provider_token',
+  'refresh_token',
+  'state',
+  'token',
+  'token_hash',
+  'token_type',
+  'type',
+])
 
 function storage(): Storage | null {
   if (typeof window === 'undefined') return null
@@ -44,6 +73,47 @@ function createLeaseId(): string {
   return `${Date.now().toString(36)}-${leaseSequence.toString(36)}-${Math.random()
     .toString(36)
     .slice(2)}`
+}
+
+/**
+ * Stable across Supabase removing a PKCE code or implicit-grant hash, while
+ * retaining product intent such as addAccount and returnUrl.
+ */
+export function getAuthRedirectNavigationKey(): string | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const url = new URL(window.location.href)
+    for (const param of TRANSIENT_REDIRECT_PARAMS) url.searchParams.delete(param)
+    url.searchParams.sort()
+    const query = url.searchParams.toString()
+    return `${url.pathname}${query ? `?${query}` : ''}`
+  } catch {
+    return null
+  }
+}
+
+export function getAuthRedirectAcquisitionReceipt(): AuthRedirectAcquisitionReceipt | null {
+  return redirectAcquisitionReceipt ? { ...redirectAcquisitionReceipt } : null
+}
+
+/**
+ * Compare-and-clear prevents an old callback holding receipt A from clearing a
+ * newer receipt B that was installed while A's async work was still pending.
+ */
+export function clearAuthRedirectAcquisitionReceipt(
+  expected: AuthRedirectAcquisitionReceipt
+): boolean {
+  const current = redirectAcquisitionReceipt
+  if (
+    !current ||
+    current.operationId !== expected.operationId ||
+    current.userId !== expected.userId ||
+    current.navigationKey !== expected.navigationKey
+  ) {
+    return false
+  }
+  redirectAcquisitionReceipt = null
+  return true
 }
 
 export function parseAuthOperationLease(value: string | null): AuthOperationLease | null {
@@ -185,11 +255,13 @@ function sessionUserId(value: string): string | null {
   }
 }
 
+function isOAuthCallbackAcquisition(): boolean {
+  return typeof window !== 'undefined' && window.location.pathname === '/auth/callback'
+}
+
 function isAuthRedirectAcquisition(): boolean {
   if (typeof window === 'undefined') return false
-  return (
-    window.location.pathname === '/auth/callback' || window.location.pathname === '/reset-password'
-  )
+  return isOAuthCallbackAcquisition() || window.location.pathname === '/reset-password'
 }
 
 /**
@@ -238,7 +310,17 @@ export const guardedAuthStorage = {
       authStorage.removeItem(key)
       return
     }
-    if (internalRedirectWriter) completeAuthIdentityOperation(bound, userId)
+    if (internalRedirectWriter) {
+      const completed = completeAuthIdentityOperation(bound, userId)
+      const navigationKey = isOAuthCallbackAcquisition() ? getAuthRedirectNavigationKey() : null
+      if (completed && navigationKey) {
+        redirectAcquisitionReceipt = {
+          operationId: completed.id,
+          userId,
+          navigationKey,
+        }
+      }
+    }
   },
 
   removeItem(key: string): void {
@@ -279,6 +361,7 @@ export function getStoredAuthSession(): StoredSession | null {
 export function __resetAuthOperationsForTests(): void {
   memoryLease = null
   activeWriter = null
+  redirectAcquisitionReceipt = null
   leaseSequence = 0
   const authStorage = storage()
   try {

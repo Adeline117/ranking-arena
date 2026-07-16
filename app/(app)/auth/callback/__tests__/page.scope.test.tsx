@@ -1,8 +1,13 @@
 import { act, render, waitFor } from '@testing-library/react'
 import type { Session, User } from '@supabase/supabase-js'
 import {
+  AUTH_STORAGE_KEY,
   __resetAuthOperationsForTests,
   beginAuthIdentityOperation,
+  getAuthRedirectAcquisitionReceipt,
+  getCurrentAuthOperation,
+  guardedAuthStorage,
+  withAuthSessionWriter,
 } from '@/lib/auth/session-operation'
 import { __resetViewerScopeForTests, synchronizeViewerScope } from '@/lib/auth/viewer-scope'
 
@@ -105,6 +110,7 @@ describe('OAuth callback identity ownership', () => {
     mockSearchParams = new URLSearchParams()
     mockStore.accounts = []
     window.localStorage.clear()
+    window.history.replaceState({}, '', '/')
     __resetAuthOperationsForTests()
     __resetViewerScopeForTests()
     synchronizeViewerScope(true, 'user-a')
@@ -146,6 +152,139 @@ describe('OAuth callback identity ownership', () => {
       })
     )
     expect(mockSignOutIfCurrent).not.toHaveBeenCalled()
+  })
+
+  it('does not let an old A callback adopt B returned by a delayed initial session read', async () => {
+    mockSearchParams = new URLSearchParams('addAccount=true&returnUrl=%2Ffrom-a')
+    window.localStorage.setItem('arena_adding_account', 'true')
+    const sessionRead = deferred<{
+      data: { session: Session }
+      error: null
+    }>()
+    beginAuthIdentityOperation('user-a')
+    mockGetSession.mockReturnValue(sessionRead.promise)
+    mockGetUser.mockResolvedValue({ data: { user: user('user-b') }, error: null })
+    mockMaybeSingle.mockResolvedValue({ data: profile('user-b'), error: null })
+
+    render(<AuthCallbackPage />)
+    await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1))
+
+    beginAuthIdentityOperation('user-b')
+    synchronizeViewerScope(true, 'user-b')
+    await act(async () =>
+      sessionRead.resolve({ data: { session: session('user-b') }, error: null })
+    )
+
+    expect(mockGetUser).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockAddAccount).not.toHaveBeenCalled()
+    expect(mockSignOutIfCurrent).not.toHaveBeenCalled()
+    expect(mockReplace).not.toHaveBeenCalled()
+    expect(window.localStorage.getItem('arena_adding_account')).toBe('true')
+  })
+
+  it('accepts a session acquired by this tab redirect after the initial boundary changes', async () => {
+    mockSearchParams = new URLSearchParams('addAccount=true&returnUrl=%2Ffeed')
+    window.history.replaceState(
+      {},
+      '',
+      '/auth/callback?addAccount=true&returnUrl=%2Ffeed&code=oauth-code'
+    )
+    const sessionRead = deferred<{
+      data: { session: Session }
+      error: null
+    }>()
+    const acquiredSession = session('user-a')
+    mockGetSession.mockReturnValue(sessionRead.promise)
+    mockGetUser.mockResolvedValue({ data: { user: acquiredSession.user }, error: null })
+    mockMaybeSingle.mockResolvedValue({ data: profile('user-a'), error: null })
+
+    render(<AuthCallbackPage />)
+    await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1))
+
+    guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(acquiredSession))
+    expect(getAuthRedirectAcquisitionReceipt()).toMatchObject({
+      userId: 'user-a',
+      navigationKey: '/auth/callback?addAccount=true&returnUrl=%2Ffeed',
+    })
+    await act(async () => sessionRead.resolve({ data: { session: acquiredSession }, error: null }))
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'))
+    expect(mockGetUser).toHaveBeenCalledWith('access-user-a')
+    expect(mockAddAccount).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: 'user-a', refreshToken: 'refresh-user-a' })
+    )
+    expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
+  })
+
+  it('rejects B after B supersedes the operation named by A redirect receipt', async () => {
+    mockSearchParams = new URLSearchParams('addAccount=true')
+    window.history.replaceState({}, '', '/auth/callback?addAccount=true&code=oauth-code-a')
+    const acquiredSessionA = session('user-a')
+    guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(acquiredSessionA))
+    const receiptA = getAuthRedirectAcquisitionReceipt()
+    expect(receiptA).toMatchObject({ userId: 'user-a' })
+
+    const sessionRead = deferred<{
+      data: { session: Session }
+      error: null
+    }>()
+    mockGetSession.mockReturnValue(sessionRead.promise)
+    mockGetUser.mockResolvedValue({ data: { user: user('user-b') }, error: null })
+    mockMaybeSingle.mockResolvedValue({ data: profile('user-b'), error: null })
+
+    render(<AuthCallbackPage />)
+    await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1))
+
+    beginAuthIdentityOperation('user-b')
+    synchronizeViewerScope(true, 'user-b')
+    await act(async () =>
+      sessionRead.resolve({ data: { session: session('user-b') }, error: null })
+    )
+
+    expect(mockGetUser).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockAddAccount).not.toHaveBeenCalled()
+    expect(mockSignOutIfCurrent).not.toHaveBeenCalled()
+    expect(mockReplace).not.toHaveBeenCalled()
+    expect(getAuthRedirectAcquisitionReceipt()).toEqual(receiptA)
+  })
+
+  it('allows token rotation for the receipt principal without changing its operation', async () => {
+    window.history.replaceState({}, '', '/auth/callback?code=oauth-code-a')
+    const acquiredSession = session('user-a')
+    guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(acquiredSession))
+    const receipt = getAuthRedirectAcquisitionReceipt()
+    const operation = getCurrentAuthOperation()
+    expect(receipt?.operationId).toBe(operation?.id)
+
+    const sessionRead = deferred<{
+      data: { session: Session }
+      error: null
+    }>()
+    const rotatedSession = {
+      ...acquiredSession,
+      access_token: 'rotated-access-user-a',
+      refresh_token: 'rotated-refresh-user-a',
+    }
+    mockGetSession.mockReturnValue(sessionRead.promise)
+    mockGetUser.mockResolvedValue({ data: { user: rotatedSession.user }, error: null })
+    mockMaybeSingle.mockResolvedValue({ data: profile('user-a'), error: null })
+
+    render(<AuthCallbackPage />)
+    await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1))
+    await withAuthSessionWriter(operation!, async () => {
+      guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(rotatedSession))
+    })
+    expect(getAuthRedirectAcquisitionReceipt()).toEqual(receipt)
+    expect(getCurrentAuthOperation()?.id).toBe(operation?.id)
+
+    await act(async () => sessionRead.resolve({ data: { session: rotatedSession }, error: null }))
+
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'))
+    expect(mockGetUser).toHaveBeenCalledWith('rotated-access-user-a')
+    expect(mockSignOutIfCurrent).not.toHaveBeenCalled()
+    expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
   })
 
   it('fails closed and rolls back only the exact session when its profile is missing', async () => {
@@ -254,5 +393,25 @@ describe('OAuth callback identity ownership', () => {
       view?.unmount()
       jest.useRealTimers()
     }
+  })
+
+  it('does not rebase direct-session retries when B wins the initial empty read', async () => {
+    const initialRead = deferred<{
+      data: { session: null }
+      error: null
+    }>()
+    beginAuthIdentityOperation('user-a')
+    mockGetSession.mockReturnValue(initialRead.promise)
+
+    render(<AuthCallbackPage />)
+    await waitFor(() => expect(mockGetSession).toHaveBeenCalledTimes(1))
+
+    beginAuthIdentityOperation('user-b')
+    synchronizeViewerScope(true, 'user-b')
+    await act(async () => initialRead.resolve({ data: { session: null }, error: null }))
+
+    expect(mockGetSession).toHaveBeenCalledTimes(1)
+    expect(mockGetUser).not.toHaveBeenCalled()
+    expect(mockReplace).not.toHaveBeenCalled()
   })
 })

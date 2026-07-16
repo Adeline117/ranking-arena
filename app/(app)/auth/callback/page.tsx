@@ -17,8 +17,12 @@ import {
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { getViewerScope, isViewerScopeCurrent } from '@/lib/auth/viewer-scope'
 import {
+  clearAuthRedirectAcquisitionReceipt,
+  getAuthRedirectAcquisitionReceipt,
+  getAuthRedirectNavigationKey,
   getCurrentAuthOperation,
   isAuthOperationCurrent,
+  type AuthRedirectAcquisitionReceipt,
   type AuthOperationLease,
 } from '@/lib/auth/session-operation'
 
@@ -29,7 +33,18 @@ function AuthCallbackContent() {
 
   useEffect(() => {
     let cancelled = false
+    let callbackReceipt: AuthRedirectAcquisitionReceipt | null = null
     const retryTimers = new Set<ReturnType<typeof setTimeout>>()
+
+    const clearCallbackReceipt = () => {
+      if (!callbackReceipt) return
+      clearAuthRedirectAcquisitionReceipt(callbackReceipt)
+      callbackReceipt = null
+    }
+    const replaceFromCallback = (destination: string) => {
+      router.replace(destination)
+      clearCallbackReceipt()
+    }
 
     const assertCallbackCurrent = (snapshot?: VerifiedSessionSnapshot) => {
       if (cancelled) throw new StaleVerifiedSessionError()
@@ -52,6 +67,29 @@ function AuthCallbackContent() {
       assertCallbackCurrent()
       if (!isCallbackBoundaryCurrent(boundary)) throw new StaleVerifiedSessionError()
     }
+    const proveCallbackSessionOwnership = (
+      candidateSession: { user: { id: string } },
+      boundary: CallbackBoundary
+    ): boolean => {
+      assertCallbackCurrent()
+      const receipt = getAuthRedirectAcquisitionReceipt()
+      if (!receipt) return isCallbackBoundaryCurrent(boundary)
+
+      const currentOperation = getCurrentAuthOperation()
+      if (
+        receipt.navigationKey !== getAuthRedirectNavigationKey() ||
+        receipt.userId !== candidateSession.user.id ||
+        !currentOperation ||
+        currentOperation.id !== receipt.operationId ||
+        !currentOperation.targetKnown ||
+        currentOperation.expectedUserId !== receipt.userId
+      ) {
+        return false
+      }
+
+      callbackReceipt = receipt
+      return true
+    }
 
     const waitForRetry = () =>
       new Promise<void>((resolve) => {
@@ -72,7 +110,7 @@ function AuthCallbackContent() {
           error: providerError,
           description: errorDescription,
         })
-        router.replace(`/login?error=${encodeURIComponent(errorMsg)}`)
+        replaceFromCallback(`/login?error=${encodeURIComponent(errorMsg)}`)
         return
       }
 
@@ -84,9 +122,9 @@ function AuthCallbackContent() {
       assertCallbackCurrent()
 
       if (error) {
-        if (!isCallbackBoundaryCurrent(initialBoundary)) return
-        logger.error('Auth callback error:', error)
         if (session) {
+          if (!proveCallbackSessionOwnership(session, initialBoundary)) return
+          logger.error('Auth callback error:', error)
           const rolledBack = await tokenRefreshCoordinator.signOutIfCurrent(
             session.user.id,
             session.access_token
@@ -98,11 +136,13 @@ function AuthCallbackContent() {
               viewer.userId === null &&
               isViewerScopeCurrent(viewer)
             ) {
-              router.replace('/login?error=auth_failed')
+              replaceFromCallback('/login?error=auth_failed')
             }
           }
         } else {
-          router.replace('/login?error=auth_failed')
+          if (!isCallbackBoundaryCurrent(initialBoundary)) return
+          logger.error('Auth callback error:', error)
+          replaceFromCallback('/login?error=auth_failed')
         }
         return
       }
@@ -146,7 +186,7 @@ function AuthCallbackContent() {
         ) {
           return
         }
-        router.replace(`/login?error=${errorCode}`)
+        replaceFromCallback(`/login?error=${errorCode}`)
       }
 
       // Fire-and-forget welcome email for genuinely-new signups (created_at window).
@@ -208,12 +248,12 @@ function AuthCallbackContent() {
 
         sendWelcomeEmailIfNew(snapshot)
         if (isAddAccount) {
-          router.replace('/')
+          replaceFromCallback('/')
         } else if (profile.onboarding_completed !== true) {
           const ru = isSafeReturn ? returnUrl! : '/'
-          router.replace(`/onboarding?returnUrl=${encodeURIComponent(ru)}`)
+          replaceFromCallback(`/onboarding?returnUrl=${encodeURIComponent(ru)}`)
         } else {
-          router.replace(defaultRedirect)
+          replaceFromCallback(defaultRedirect)
         }
       }
 
@@ -300,12 +340,14 @@ function AuthCallbackContent() {
       }
 
       if (session) {
+        if (!proveCallbackSessionOwnership(session, initialBoundary)) return
         await processSession(session)
       } else {
+        if (!isCallbackBoundaryCurrent(initialBoundary)) return
         // With no principal yet, pin all retries to the exact auth operation
         // that owned the initial empty read. A new login/account switch must
         // not be adopted by this older callback just because it appears later.
-        const retryBoundary = captureCallbackBoundary()
+        const retryBoundary = initialBoundary
         // Retry with backoff: supabase may need time to process the hash fragment
         const tryGetSession = async (
           retries = 0
@@ -322,9 +364,10 @@ function AuthCallbackContent() {
 
         const retrySession = await tryGetSession()
         if (retrySession) {
+          if (!proveCallbackSessionOwnership(retrySession, retryBoundary)) return
           await processSession(retrySession)
         } else {
-          router.replace('/login?error=no_session')
+          replaceFromCallback('/login?error=no_session')
         }
       }
     }
@@ -332,13 +375,14 @@ function AuthCallbackContent() {
     void handleCallback().catch((callbackError) => {
       if (cancelled || callbackError instanceof StaleVerifiedSessionError) return
       logger.error('Unhandled auth callback failure', callbackError)
-      router.replace('/login?error=auth_failed')
+      replaceFromCallback('/login?error=auth_failed')
     })
 
     return () => {
       cancelled = true
       retryTimers.forEach((timer) => clearTimeout(timer))
       retryTimers.clear()
+      clearCallbackReceipt()
     }
   }, [router, searchParams])
 
