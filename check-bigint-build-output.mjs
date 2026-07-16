@@ -47,8 +47,8 @@ function run(chunksDirectory) {
     return
   }
 
-  console.log(
-    `BigInt build-output check passed (${javascriptFiles(chunksDirectory).length} chunks)`
+  process.stdout.write(
+    `BigInt build-output check passed (${javascriptFiles(chunksDirectory).length} chunks)\n`
   )
 }
 
