@@ -64,6 +64,10 @@ interface ExportData {
     folders: unknown[]
     posts: unknown[]
   }
+  trading: {
+    copy_configs: unknown[]
+    watchlist: unknown[]
+  }
   settings: {
     preferences: Record<string, unknown> | null
   }
@@ -414,6 +418,42 @@ const POST_BOOKMARKS_EXPORT_DATASET = {
   },
 } satisfies CursorExportDataset
 
+const COPY_TRADE_CONFIGS_EXPORT_DATASET = {
+  name: 'trading.copy_configs',
+  table: 'copy_trade_configs',
+  selectColumns: ['id', 'trader_id', 'exchange', 'settings', 'active', 'created_at', 'updated_at'],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [
+      { column: 'trader_id', valueType: 'string' },
+      { column: 'exchange', valueType: 'string' },
+    ],
+  },
+} satisfies CursorExportDataset
+
+const TRADER_WATCHLIST_EXPORT_DATASET = {
+  name: 'trading.watchlist',
+  table: 'trader_watchlist',
+  selectColumns: ['id', 'source', 'source_trader_id', 'handle', 'created_at'],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [
+      { column: 'source', valueType: 'string' },
+      { column: 'source_trader_id', valueType: 'string' },
+    ],
+  },
+} satisfies CursorExportDataset
+
 function normalizeFollowRows(rows: Record<string, unknown>[], direction: 'following' | 'follower') {
   const otherUserColumn = direction === 'following' ? 'following_id' : 'follower_id'
   return rows.map((row) => ({
@@ -510,6 +550,74 @@ function normalizePostBookmarks(rows: Record<string, unknown>[]) {
     id: row.id,
     post_id: row.post_id,
     folder_id: row.folder_id,
+    created_at: row.created_at,
+  }))
+}
+
+const COPY_TRADE_NUMBER_SETTINGS = [
+  'maxPositionSize',
+  'leverageLimit',
+  'stopLossPercent',
+  'takeProfitPercent',
+  'proportionalSize',
+  'maxDailyLoss',
+  'maxOpenPositions',
+] as const
+
+const COPY_TRADE_PAIR_SETTINGS = ['allowedPairs', 'blockedPairs'] as const
+
+function normalizeCopyTradeSettings(rawSettings: unknown): Record<string, unknown> {
+  if (!rawSettings || typeof rawSettings !== 'object' || Array.isArray(rawSettings)) {
+    throw new DataExportReadError(
+      COPY_TRADE_CONFIGS_EXPORT_DATASET.name,
+      new Error('Invalid copy trade settings shape')
+    )
+  }
+
+  const settings: Record<string, unknown> = {}
+  for (const field of COPY_TRADE_NUMBER_SETTINGS) {
+    const value = Reflect.get(rawSettings, field)
+    if (value === undefined) continue
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      throw new DataExportReadError(
+        COPY_TRADE_CONFIGS_EXPORT_DATASET.name,
+        new Error(`Invalid copy trade setting: ${field}`)
+      )
+    }
+    settings[field] = value
+  }
+  for (const field of COPY_TRADE_PAIR_SETTINGS) {
+    const value = Reflect.get(rawSettings, field)
+    if (value === undefined) continue
+    if (!Array.isArray(value) || value.some((pair) => typeof pair !== 'string')) {
+      throw new DataExportReadError(
+        COPY_TRADE_CONFIGS_EXPORT_DATASET.name,
+        new Error(`Invalid copy trade setting: ${field}`)
+      )
+    }
+    settings[field] = value
+  }
+  return settings
+}
+
+function normalizeCopyTradeConfigs(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    trader_id: row.trader_id,
+    exchange: row.exchange,
+    settings: normalizeCopyTradeSettings(row.settings),
+    active: row.active,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }))
+}
+
+function normalizeTraderWatchlist(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    source: row.source,
+    source_trader_id: row.source_trader_id,
+    handle: row.handle,
     created_at: row.created_at,
   }))
 }
@@ -641,6 +749,8 @@ export async function POST(request: NextRequest) {
       postVotes,
       bookmarkFolders,
       postBookmarks,
+      copyTradeConfigs,
+      traderWatchlist,
     ] = await Promise.all([
       fetchAllExportRows(supabase, EXPORT_DATASETS.posts, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.comments, user.id),
@@ -661,6 +771,8 @@ export async function POST(request: NextRequest) {
       fetchAllExportRowsByCursor(supabase, POST_VOTES_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, BOOKMARK_FOLDERS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, POST_BOOKMARKS_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, COPY_TRADE_CONFIGS_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, TRADER_WATCHLIST_EXPORT_DATASET, user.id),
     ])
 
     const normalizedFollowing = normalizeFollowRows(following, 'following')
@@ -672,6 +784,8 @@ export async function POST(request: NextRequest) {
     const normalizedPostVotes = normalizePostVotes(postVotes)
     const normalizedBookmarkFolders = normalizeBookmarkFolders(bookmarkFolders)
     const normalizedPostBookmarks = normalizePostBookmarks(postBookmarks)
+    const normalizedCopyTradeConfigs = normalizeCopyTradeConfigs(copyTradeConfigs)
+    const normalizedTraderWatchlist = normalizeTraderWatchlist(traderWatchlist)
     const normalizedPreferences = normalizePreferences(preferences)
     const normalizedAccountBindings = normalizeAccountBindings(accountBindings)
     const exportedAt = new Date().toISOString()
@@ -696,6 +810,8 @@ export async function POST(request: NextRequest) {
           completedDataset('interactions.post_votes', postVotes.length),
           completedDataset('bookmarks.folders', bookmarkFolders.length),
           completedDataset('bookmarks.posts', postBookmarks.length),
+          completedDataset('trading.copy_configs', copyTradeConfigs.length),
+          completedDataset('trading.watchlist', traderWatchlist.length),
           completedDataset('settings.preferences', preferences.length),
           completedDataset('account.bindings', accountBindings.length),
           completedDataset('account.login_sessions', loginSessions.length),
@@ -727,6 +843,10 @@ export async function POST(request: NextRequest) {
       bookmarks: {
         folders: normalizedBookmarkFolders,
         posts: normalizedPostBookmarks,
+      },
+      trading: {
+        copy_configs: normalizedCopyTradeConfigs,
+        watchlist: normalizedTraderWatchlist,
       },
       settings: {
         preferences: normalizedPreferences,

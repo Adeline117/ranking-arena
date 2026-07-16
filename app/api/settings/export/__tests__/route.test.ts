@@ -288,6 +288,43 @@ describe('POST /api/settings/export', () => {
           },
         ]
       }
+      if (dataset.name === 'trading.copy_configs') {
+        return [
+          {
+            id: '88888888-8888-4888-8888-888888888888',
+            trader_id: 'trader-alpha',
+            exchange: 'binance',
+            settings: {
+              maxPositionSize: 1000,
+              leverageLimit: 3,
+              stopLossPercent: 5,
+              takeProfitPercent: 10,
+              proportionalSize: 50,
+              maxDailyLoss: 100,
+              maxOpenPositions: 4,
+              allowedPairs: ['BTCUSDT'],
+              blockedPairs: ['DOGEUSDT'],
+              apiSecret: 'must-not-escape-copy-settings',
+            },
+            active: true,
+            created_at: '2026-02-14T00:00:00.000Z',
+            updated_at: '2026-02-15T00:00:00.000Z',
+            user_id: 'must-not-escape-copy-owner',
+          },
+        ]
+      }
+      if (dataset.name === 'trading.watchlist') {
+        return [
+          {
+            id: '99999999-9999-4999-8999-999999999999',
+            source: 'hyperliquid',
+            source_trader_id: '0xtrader',
+            handle: 'alpha',
+            created_at: '2026-02-16T00:00:00.000Z',
+            user_id: 'must-not-escape-watchlist-owner',
+          },
+        ]
+      }
       throw new Error(`Unexpected cursor dataset: ${dataset.name}`)
     })
     profileStates = installProfileQueries({})
@@ -354,6 +391,8 @@ describe('POST /api/settings/export', () => {
       'interactions.post_votes': 1,
       'bookmarks.folders': 1,
       'bookmarks.posts': 1,
+      'trading.copy_configs': 1,
+      'trading.watchlist': 1,
       'settings.preferences': 1,
       'account.bindings': 2,
       'account.login_sessions': 1,
@@ -471,6 +510,41 @@ describe('POST /api/settings/export', () => {
     expect(JSON.stringify(body.bookmarks)).not.toMatch(
       /must-not-escape-folder-owner|must-not-escape-bookmark-owner|user_id/
     )
+    expect(body.trading).toEqual({
+      copy_configs: [
+        {
+          id: '88888888-8888-4888-8888-888888888888',
+          trader_id: 'trader-alpha',
+          exchange: 'binance',
+          settings: {
+            maxPositionSize: 1000,
+            leverageLimit: 3,
+            stopLossPercent: 5,
+            takeProfitPercent: 10,
+            proportionalSize: 50,
+            maxDailyLoss: 100,
+            maxOpenPositions: 4,
+            allowedPairs: ['BTCUSDT'],
+            blockedPairs: ['DOGEUSDT'],
+          },
+          active: true,
+          created_at: '2026-02-14T00:00:00.000Z',
+          updated_at: '2026-02-15T00:00:00.000Z',
+        },
+      ],
+      watchlist: [
+        {
+          id: '99999999-9999-4999-8999-999999999999',
+          source: 'hyperliquid',
+          source_trader_id: '0xtrader',
+          handle: 'alpha',
+          created_at: '2026-02-16T00:00:00.000Z',
+        },
+      ],
+    })
+    expect(JSON.stringify(body.trading)).not.toMatch(
+      /must-not-escape-copy-settings|must-not-escape-copy-owner|must-not-escape-watchlist-owner|apiSecret|user_id/
+    )
     expect(body.settings).toEqual({
       preferences: {
         watched_traders: ['trader-1'],
@@ -502,7 +576,7 @@ describe('POST /api/settings/export', () => {
       'must-not-escape-binding-normalization'
     )
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
-    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(7)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(9)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -630,6 +704,34 @@ describe('POST /api/settings/export', () => {
       expect(bookmarkCall[1].selectColumns).not.toContain('user_id')
       expect(bookmarkCall[1].selectColumns).not.toContain('*')
     }
+
+    const copyConfigsCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+      (call) => call[1].name === 'trading.copy_configs'
+    )
+    expect(copyConfigsCall).toBeDefined()
+    expect(copyConfigsCall[2]).toBe(USER_ID)
+    expect(copyConfigsCall[1].cursor).toEqual({
+      order: 'asc',
+      columns: [
+        { column: 'trader_id', valueType: 'string' },
+        { column: 'exchange', valueType: 'string' },
+      ],
+    })
+    expect(copyConfigsCall[1].selectColumns).not.toContain('user_id')
+
+    const watchlistCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+      (call) => call[1].name === 'trading.watchlist'
+    )
+    expect(watchlistCall).toBeDefined()
+    expect(watchlistCall[2]).toBe(USER_ID)
+    expect(watchlistCall[1].cursor).toEqual({
+      order: 'asc',
+      columns: [
+        { column: 'source', valueType: 'string' },
+        { column: 'source_trader_id', valueType: 'string' },
+      ],
+    })
+    expect(watchlistCall[1].selectColumns).not.toContain('user_id')
   })
 
   it('fails closed without cooldown when preferences cannot be read completely', async () => {
@@ -691,6 +793,31 @@ describe('POST /api/settings/export', () => {
     mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
       if (dataset.name === 'bookmarks.posts') {
         throw new DataExportReadError('bookmarks.posts', { code: 'XX001' })
+      }
+      return []
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed without cooldown when copy settings have an unsafe runtime shape', async () => {
+    mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
+      if (dataset.name === 'trading.copy_configs') {
+        return [
+          {
+            id: '88888888-8888-4888-8888-888888888888',
+            trader_id: 'trader-alpha',
+            exchange: 'binance',
+            settings: { allowedPairs: [42] },
+            active: true,
+            created_at: '2026-02-14T00:00:00.000Z',
+            updated_at: '2026-02-15T00:00:00.000Z',
+          },
+        ]
       }
       return []
     })
