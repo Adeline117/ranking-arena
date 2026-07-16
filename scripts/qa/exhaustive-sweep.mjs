@@ -40,6 +40,7 @@ import { readEnv, qaAuthStatus } from './qa-auth.mjs'
 import { installReadOnlyNetworkGuard } from './read-only-network-guard.mjs'
 import { exerciseFill } from './input-interaction.mjs'
 import { hardSweepFindings } from './sweep-gate.mjs'
+import { clickEffectStatus } from './interaction-effect.mjs'
 
 // axe-core is already present (transitive dep) — inject its bundle and run ONLY
 // the color-contrast rule. No new devDep = no package.json/lock churn in the
@@ -261,6 +262,12 @@ async function injectIndices(page) {
         name: (el.getAttribute('name') || '').slice(0, 40),
         id: (el.id || '').slice(0, 40),
         href: el.getAttribute('href') || '',
+        activeChoice:
+          Boolean(el.closest('[role="group"],[role="tablist"],[role="radiogroup"]')) &&
+          (el.getAttribute('aria-pressed') === 'true' ||
+            el.getAttribute('aria-selected') === 'true' ||
+            el.getAttribute('aria-checked') === 'true' ||
+            el.getAttribute('aria-current') === 'true'),
         disabled: el.disabled === true || el.getAttribute('aria-disabled') === 'true',
         // Standard off-screen a11y pattern (e.g. skip-to-content link:
         // position:absolute left:-9999px, 1x1, moves into viewport onFocus).
@@ -324,7 +331,7 @@ function summarizeClickError(e) {
 // "clicked but nothing happens" bugs survive earlier sweeps.
 async function snapshotEffect(page) {
   try {
-    return await page.evaluate(() => {
+    return await page.evaluate((interactiveSelector) => {
       const text = document.body ? document.body.innerText : ''
       // Order-sensitive content hash: a client-side SORT reorders rows without
       // changing total text LENGTH, so a length-only check false-flags working
@@ -335,32 +342,51 @@ async function snapshotEffect(page) {
       // the safe direction for a non-gating signal.)
       let h = 5381
       for (let i = 0; i < text.length; i++) h = ((h << 5) + h + text.charCodeAt(i)) | 0
+      // Many valid controls change only attributes/classes: segmented choices
+      // update aria-pressed, menus update aria-expanded/data-state, and density
+      // toggles update data-density. Hash those observable states so they are
+      // not mislabelled as dead merely because visible text stayed constant.
+      const state = Array.from(
+        document.querySelectorAll(`${interactiveSelector},[data-state],[data-density]`)
+      )
+        .map((el) => {
+          const input = el
+          return [
+            el.tagName,
+            el.getAttribute('class') || '',
+            el.getAttribute('aria-pressed') || '',
+            el.getAttribute('aria-selected') || '',
+            el.getAttribute('aria-expanded') || '',
+            el.getAttribute('aria-checked') || '',
+            el.getAttribute('aria-current') || '',
+            el.getAttribute('data-state') || '',
+            el.getAttribute('data-density') || '',
+            'checked' in input ? String(input.checked) : '',
+            'selectedIndex' in input ? String(input.selectedIndex) : '',
+            'value' in input ? String(input.value).slice(0, 120) : '',
+          ].join('|')
+        })
+        .join('\n')
+      let stateHash = 5381
+      for (let i = 0; i < state.length; i++) {
+        stateHash = ((stateHash << 5) + stateHash + state.charCodeAt(i)) | 0
+      }
       return {
         url: location.href,
         textLen: text.length,
         textHash: h,
+        stateHash,
         overlays: document.querySelectorAll(
           '[role="dialog"],[aria-modal="true"],[data-state="open"]'
         ).length,
         nodes: document.querySelectorAll('*').length,
       }
-    })
+    }, INTERACTIVE_SELECTOR)
   } catch {
     // Snapshot taken mid-navigation throws; null → treat as "changed" so a
     // navigating click is never mislabelled dead.
     return null
   }
-}
-
-function hasEffect(before, after, reqDelta) {
-  if (!before || !after) return true // couldn't measure → never flag as dead
-  if (reqDelta > 0) return true // click fired a request → had an effect
-  if (before.url !== after.url) return true
-  if (before.textHash !== after.textHash) return true // content changed/reordered (catches client-side sort)
-  if (Math.abs(before.textLen - after.textLen) > 2) return true // >2 tolerates ticking timestamps/counters
-  if (before.overlays !== after.overlays) return true
-  if (Math.abs(before.nodes - after.nodes) > 2) return true
-  return false
 }
 
 // ---------- page-level quality checks (run once per route) ----------
@@ -690,9 +716,13 @@ async function sweepRoute(page, route, ledger, counters, sweptPaths) {
         await page.waitForLoadState('networkidle', { timeout: 1500 }).catch(() => {})
         await page.waitForTimeout(400)
         const after = await snapshotEffect(page)
-        const effective = hasEffect(before, after, bucket.reqCount - reqBefore)
-        record.status = effective ? 'ok:clicked' : 'dead:no-effect'
-        if (!effective) {
+        record.status = clickEffectStatus({
+          before,
+          after,
+          requestDelta: bucket.reqCount - reqBefore,
+          activeChoice: desc.activeChoice,
+        })
+        if (record.status === 'dead:no-effect') {
           counters.dead++
           // Keep the raw before/after so a human can tell a true dead button
           // from a legit no-op (e.g. re-clicking an already-active tab).
