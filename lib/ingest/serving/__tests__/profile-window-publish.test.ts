@@ -170,7 +170,7 @@ describe('publishProfile whole-window coverage gate', () => {
     ])
   })
 
-  it('keeps the narrower Hyperliquid fill-only preservation path unchanged', async () => {
+  it('keeps partial Hyperliquid fills conservative while publishing independent fields', async () => {
     await publishProfile(
       { ...src, slug: 'hyperliquid' },
       42,
@@ -183,6 +183,35 @@ describe('publishProfile whole-window coverage gate', () => {
     )
     expect(statsCall).toBeDefined()
     expect((statsCall?.[1] as unknown[]).at(-1)).toBe(true)
+    expect(String(statsCall?.[0])).toContain('THEN LEAST(arena.trader_stats.as_of, EXCLUDED.as_of)')
+    expect(String(statsCall?.[0])).toContain("'_arena_profile_publication_epoch_ms'")
+    expect(JSON.parse(String((statsCall?.[1] as unknown[])[18]))).toMatchObject({
+      fills_metrics_complete: false,
+      _arena_profile_publication_epoch_ms: Date.parse('2026-07-15T12:00:00.000Z'),
+    })
+  })
+
+  it('rolls back a stale profile before it can replace newer series', async () => {
+    query.mockImplementation(async (statement: string) => {
+      if (statement.includes('INSERT INTO arena.trader_stats')) return { rows: [], rowCount: 0 }
+      return { rows: [], rowCount: 1 }
+    })
+
+    await expect(
+      publishProfile(src, 42, profile({ profile_window_metrics_complete: true }), {
+        fullSeries: true,
+      })
+    ).rejects.toMatchObject({ name: 'StaleProfilePublicationError' })
+
+    const sql = query.mock.calls.map(([statement]) => String(statement))
+    expect(sql.some((statement) => statement.includes('DELETE FROM arena.trader_series'))).toBe(
+      false
+    )
+    expect(sql.some((statement) => statement.includes('INSERT INTO arena.trader_series ('))).toBe(
+      false
+    )
+    expect(sql.map((statement) => statement.trim())).toContain('ROLLBACK')
+    expect(release).toHaveBeenCalledTimes(1)
   })
 
   it('rolls back when the evidence-only update fails', async () => {
