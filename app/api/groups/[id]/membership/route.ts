@@ -21,9 +21,17 @@ type AtomicMembershipResult = {
   status: string
   owner_id?: string
   member_count?: number
-  role?: string
+  role?: 'owner' | 'admin' | 'member'
   request_id?: string
   required_score?: number
+}
+
+function isMemberCount(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0
+}
+
+function isMemberRole(value: unknown): value is 'owner' | 'admin' | 'member' {
+  return value === 'owner' || value === 'admin' || value === 'member'
 }
 
 function readGroupId(url: string): string | null {
@@ -42,12 +50,24 @@ function readAtomicResult(value: unknown): AtomicMembershipResult | null {
 
   const result = value as Record<string, unknown>
   if (typeof result.status !== 'string') return null
+  if (result.owner_id !== undefined && !UuidSchema.safeParse(result.owner_id).success) return null
+  if (result.member_count !== undefined && !isMemberCount(result.member_count)) return null
+  if (result.role !== undefined && !isMemberRole(result.role)) return null
+  if (result.request_id !== undefined && typeof result.request_id !== 'string') return null
+  if (
+    result.required_score !== undefined &&
+    (typeof result.required_score !== 'number' ||
+      !Number.isFinite(result.required_score) ||
+      result.required_score < 0)
+  ) {
+    return null
+  }
 
   return {
     status: result.status,
     ...(typeof result.owner_id === 'string' ? { owner_id: result.owner_id } : {}),
-    ...(typeof result.member_count === 'number' ? { member_count: result.member_count } : {}),
-    ...(typeof result.role === 'string' ? { role: result.role } : {}),
+    ...(isMemberCount(result.member_count) ? { member_count: result.member_count } : {}),
+    ...(isMemberRole(result.role) ? { role: result.role } : {}),
     ...(typeof result.request_id === 'string' ? { request_id: result.request_id } : {}),
     ...(typeof result.required_score === 'number' ? { required_score: result.required_score } : {}),
   }
@@ -168,20 +188,28 @@ function successfulJoinResponse(
   groupId: string
 ) {
   if (result.status === 'joined') {
+    if (!UuidSchema.safeParse(result.owner_id).success || result.member_count === undefined) {
+      logger.error('Atomic group join returned incomplete evidence', { result })
+      return commonFailureResponse(null)
+    }
     notifyOwnerAfterJoin(admin, result, actorId, groupId)
     return NextResponse.json({
       success: true,
       action: 'joined',
-      ...(typeof result.member_count === 'number' ? { member_count: result.member_count } : {}),
+      member_count: result.member_count,
     })
   }
 
   if (result.status === 'already_member') {
+    if (result.member_count === undefined || result.role === undefined) {
+      logger.error('Atomic existing membership returned incomplete evidence', { result })
+      return commonFailureResponse(null)
+    }
     return NextResponse.json({
       success: true,
       action: 'already_member',
-      ...(result.role ? { role: result.role } : {}),
-      ...(typeof result.member_count === 'number' ? { member_count: result.member_count } : {}),
+      role: result.role,
+      member_count: result.member_count,
     })
   }
 
@@ -228,10 +256,14 @@ export const POST = withAuth(
         return commonFailureResponse(null)
       }
       if (result.status === 'left') {
+        if (result.member_count === undefined) {
+          logger.error('Atomic group leave returned incomplete evidence', { result })
+          return commonFailureResponse(null)
+        }
         return NextResponse.json({
           success: true,
           action: 'left',
-          ...(typeof result.member_count === 'number' ? { member_count: result.member_count } : {}),
+          member_count: result.member_count,
         })
       }
       if (result.status === 'not_member') {
@@ -341,7 +373,15 @@ export const POST = withAuth(
     }
 
     if (requestResult.status === 'already_member') {
-      return NextResponse.json({ success: true, action: 'already_member' })
+      const reconciledJoin = await join()
+      if (reconciledJoin.error) return failedRpc('membership reconciliation', reconciledJoin.error)
+      if (!reconciledJoin.result) {
+        logger.error('Atomic membership reconciliation returned an invalid result', {
+          data: reconciledJoin.data,
+        })
+        return commonFailureResponse(null)
+      }
+      return successfulJoinResponse(admin, reconciledJoin.result, user.id, groupId)
     }
 
     return commonFailureResponse(requestResult)
