@@ -150,6 +150,39 @@ describe('parseXtLeaderboardSeries', () => {
     ])
   })
 
+  it('marks only a valid non-empty chart as a complete replacement snapshot', () => {
+    const parsed = parseXtLeaderboardSeries(
+      payload([point('2026-07-16T00:00:00.000Z', 4)]),
+      seriesCtx,
+      7
+    )
+    expect(parsed.get('xt-1')?.[0]).toMatchObject({
+      timeframe: 7,
+      metric: 'pnl',
+      replaceSeries: true,
+    })
+
+    const invalid = parseXtLeaderboardSeries(
+      {
+        result: {
+          items: [
+            {
+              accountId: 'xt-1',
+              chart: [
+                { time: Date.parse('2026-07-16T00:00:00.000Z'), amount: true },
+                { time: Date.parse('2026-07-15T00:00:00.000Z'), amount: [] },
+                { time: Date.parse('2026-07-14T00:00:00.000Z'), amount: '0x10' },
+              ],
+            },
+          ],
+        },
+      },
+      seriesCtx,
+      7
+    )
+    expect(invalid.size).toBe(0)
+  })
+
   it('fails closed when scrapedAt cannot anchor the requested window', () => {
     const invalidCtx = { ...seriesCtx, scrapedAt: 'not-a-date' }
     expect(

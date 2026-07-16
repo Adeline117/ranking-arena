@@ -522,12 +522,12 @@ export async function publishProfile(
       // both stores first makes a confirmed empty window clear stale charts;
       // any later insert failure rolls the deletes back with the transaction.
       await client.query(
-        `DELETE FROM arena.trader_series
+        `DELETE FROM arena.trader_series_weekly
           WHERE trader_id = $1 AND timeframe = $2 AND metric = ANY($3::text[])`,
         [traderId, replacement.timeframe, metrics]
       )
       await client.query(
-        `DELETE FROM arena.trader_series_weekly
+        `DELETE FROM arena.trader_series
           WHERE trader_id = $1 AND timeframe = $2 AND metric = ANY($3::text[])`,
         [traderId, replacement.timeframe, metrics]
       )
@@ -560,11 +560,10 @@ export async function publishProfile(
  * Board-level "free series" publish (spec §13.1): the Tier-A leaderboard row
  * already carries a per-trader sparkline for SOME sources (okx, toobit, xt,
  * blofin, bitunix, binance_web3), so every ranked trader — not just the topN
- * that Tier-B crawls — gets a chart at zero extra fetch cost. Idempotent
- * upsert into the SAME arena.trader_series table the profile crawl writes,
- * so the maintenance downsample/retention (90d native → weekly rollup) and
- * all serving reads apply unchanged. A later Tier-B/C profile crawl with a
- * richer/longer series simply overwrites by (trader,tf,metric,ts) on conflict.
+ * that Tier-B crawls — gets a chart at zero extra fetch cost. Blocks default
+ * to idempotent upsert into the SAME arena.trader_series table the profile
+ * crawl writes. An adapter may explicitly mark a proven non-empty complete
+ * snapshot for atomic daily+weekly replacement; all other blocks append.
  *
  * `seriesByTrader` keys are exchange_trader_ids; `traderIds` is the
  * exchange_trader_id → arena.traders.id map from the snapshot publish.
@@ -578,8 +577,17 @@ export interface PreparedBoardSeriesRow {
   value: number
 }
 
+export interface PreparedBoardSeriesReplacement {
+  trader_id: number
+  timeframe: number
+  metric: string
+}
+
 export interface PublishBoardSeriesOptions {
-  /** Replay-only guard: selected latest-passed snapshot identity per timeframe. */
+  /**
+   * Exact latest-passed snapshot identity per timeframe. Live Tier-A and RAW
+   * replay both pass this so an older crawl cannot publish after a newer one.
+   */
   expectedLatestSnapshots?: ReadonlyMap<
     number,
     { id: number; rawObjectId: number; scrapedAt: string }
@@ -590,41 +598,66 @@ export interface PublishBoardSeriesOptions {
 export function prepareBoardSeriesRows(
   seriesByTrader: Map<string, BoardSeriesBlock[]>,
   traderIds: Map<string, number>
-): { rows: PreparedBoardSeriesRow[]; traders: number } {
+): {
+  rows: PreparedBoardSeriesRow[]
+  replacements: PreparedBoardSeriesReplacement[]
+  traders: number
+} {
   // Flatten to one row-set: {trader_id, timeframe, metric, ts, value},
   // de-duplicated by the (trader_id, timeframe, metric, ts) upsert key —
   // a trader can repeat across board pages, and a sparkline can carry the
   // same date twice; Postgres rejects "ON CONFLICT affecting a row twice"
   // unless we collapse those here first (last value wins).
   const byKey = new Map<string, PreparedBoardSeriesRow>()
+  const replacementsByKey = new Map<string, PreparedBoardSeriesReplacement>()
   const tradersSeen = new Set<number>()
   for (const [exchangeTraderId, blocks] of seriesByTrader) {
     const traderId = traderIds.get(exchangeTraderId)
-    if (traderId === undefined) continue // not in the passed snapshot
+    if (traderId === undefined || !Number.isSafeInteger(traderId) || traderId <= 0) continue
     for (const block of blocks) {
+      const metric = typeof block.metric === 'string' ? block.metric.trim() : ''
+      if (
+        ![7, 30, 90].includes(block.timeframe) ||
+        metric.length === 0 ||
+        !Array.isArray(block.points)
+      ) {
+        continue
+      }
+      let blockHasPublishablePoint = false
       for (const p of block.points) {
         const parsedTs = Date.parse(p.ts)
-        if (
-          ![7, 30, 90].includes(block.timeframe) ||
-          block.metric.trim().length === 0 ||
-          !Number.isFinite(parsedTs) ||
-          !Number.isFinite(p.value)
-        ) {
+        if (!Number.isFinite(parsedTs) || !Number.isFinite(p.value)) {
           continue
         }
         const ts = new Date(parsedTs).toISOString()
-        byKey.set(`${traderId}|${block.timeframe}|${block.metric}|${ts}`, {
+        byKey.set(`${traderId}|${block.timeframe}|${metric}|${ts}`, {
           trader_id: traderId,
           timeframe: block.timeframe,
-          metric: block.metric,
+          metric,
           ts,
           value: p.value,
         })
+        blockHasPublishablePoint = true
         tradersSeen.add(traderId)
+      }
+      // Fail closed: a replacement declaration is actionable only when the
+      // same block contributes at least one valid point. A malformed/empty
+      // adapter result must never erase an existing chart.
+      if (block.replaceSeries && blockHasPublishablePoint) {
+        const key = `${traderId}|${block.timeframe}|${metric}`
+        replacementsByKey.set(key, {
+          trader_id: traderId,
+          timeframe: block.timeframe,
+          metric,
+        })
       }
     }
   }
-  return { rows: [...byKey.values()], traders: tradersSeen.size }
+  return {
+    rows: [...byKey.values()],
+    replacements: [...replacementsByKey.values()],
+    traders: tradersSeen.size,
+  }
 }
 
 export async function publishBoardSeries(
@@ -635,8 +668,22 @@ export async function publishBoardSeries(
 ): Promise<{ traders: number; points: number }> {
   const prepared = prepareBoardSeriesRows(seriesByTrader, traderIds)
   const flat = prepared.rows
+  const replacements = prepared.replacements
   const tradersWithSeries = prepared.traders
   if (flat.length === 0) return { traders: 0, points: 0 }
+
+  const expectedSnapshots = options.expectedLatestSnapshots
+  if (replacements.length > 0) {
+    const missingGuards = [
+      ...new Set(replacements.map((replacement) => replacement.timeframe)),
+    ].filter((timeframe) => !expectedSnapshots?.has(timeframe))
+    if (missingGuards.length > 0) {
+      throw new Error(
+        `[board-series] replacement snapshot guard missing for ${src.slug}: ` +
+          `${missingGuards.sort((a, b) => a - b).join(',')}d`
+      )
+    }
+  }
 
   // Chunk the insert — boards reach thousands of traders × ~30-90 pts each.
   const CHUNK = 5000
@@ -648,7 +695,6 @@ export async function publishBoardSeries(
     // Serialize live Tier-A publication and operator replay for one source.
     // Transaction-scoped lock is safe through PgBouncer transaction mode.
     await lockSourcePublication(client, src.id)
-    const expectedSnapshots = options.expectedLatestSnapshots
     if (expectedSnapshots && expectedSnapshots.size > 0) {
       const timeframes = [...expectedSnapshots.keys()]
       const { rows } = await client.query<{
@@ -674,10 +720,35 @@ export async function publishBoardSeries(
           new Date(latest.scraped_at).toISOString() !== expected.scrapedAt
         ) {
           throw new Error(
-            `[board-series] stale replay snapshot for ${src.slug} ${timeframe}d: expected=${expected.id}, latest=${latest?.id ?? 'missing'}`
+            `[board-series] stale snapshot for ${src.slug} ${timeframe}d: expected=${expected.id}, latest=${latest?.id ?? 'missing'}`
           )
         }
       }
+    }
+    // Only adapters that explicitly prove a non-empty block is a complete
+    // snapshot opt into replacement. Delete both stores inside this same
+    // transaction; any later insert/count failure restores the old chart.
+    for (let i = 0; i < replacements.length; i += CHUNK) {
+      const slice = replacements.slice(i, i + CHUNK)
+      const payload = JSON.stringify(slice)
+      await client.query(
+        `DELETE FROM arena.trader_series_weekly AS series
+          USING jsonb_to_recordset($1::jsonb) AS r(
+            trader_id bigint, timeframe int, metric text)
+          WHERE series.trader_id = r.trader_id
+            AND series.timeframe = r.timeframe
+            AND series.metric = r.metric`,
+        [payload]
+      )
+      await client.query(
+        `DELETE FROM arena.trader_series AS series
+          USING jsonb_to_recordset($1::jsonb) AS r(
+            trader_id bigint, timeframe int, metric text)
+          WHERE series.trader_id = r.trader_id
+            AND series.timeframe = r.timeframe
+            AND series.metric = r.metric`,
+        [payload]
+      )
     }
     for (let i = 0; i < flat.length; i += CHUNK) {
       const slice = flat.slice(i, i + CHUNK)

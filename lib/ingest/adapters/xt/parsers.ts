@@ -42,9 +42,19 @@ import type {
 
 type Dict = Record<string, unknown>
 
+const DECIMAL_NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/
+
 function num(v: unknown): number | null {
-  if (v === null || v === undefined || v === '') return null
-  const n = Number(v)
+  let n: number
+  if (typeof v === 'number') {
+    n = v
+  } else if (typeof v === 'string') {
+    const normalized = v.trim()
+    if (!DECIMAL_NUMBER.test(normalized)) return null
+    n = Number(normalized)
+  } else {
+    return null
+  }
   return Number.isFinite(n) ? n : null
 }
 
@@ -210,7 +220,9 @@ export function parseXtLeaderboardSeries(
     const points = [...byTimestamp]
       .sort(([a], [b]) => a - b)
       .map(([t, value]) => ({ ts: new Date(t).toISOString(), value }))
-    if (points.length > 0) out.set(String(id), [{ timeframe, metric: 'pnl', points }])
+    if (points.length > 0) {
+      out.set(String(id), [{ timeframe, metric: 'pnl', points, replaceSeries: true }])
+    }
   }
   return out
 }
