@@ -203,6 +203,29 @@ describe('useUserProfile viewer and provisioning ownership', () => {
     )
   })
 
+  it('recovers a canonical custom handle after the server profile read times out', async () => {
+    mockProfileMaybeSingle.mockResolvedValue(profileRow('user-a', 'chosen-handle'))
+    const hook = renderHook(() =>
+      useUserProfile({ handle: 'chosen-handle', serverProfile: null, serverTraderData: null })
+    )
+
+    await waitFor(() => expect(hook.result.current.profile?.handle).toBe('chosen-handle'))
+    expect(hook.result.current.profile?.id).toBe('user-a')
+    expect(mockRouter.replace).not.toHaveBeenCalled()
+  })
+
+  it('does not turn an arbitrary missing public route into the viewer own profile', async () => {
+    mockProfileMaybeSingle.mockResolvedValue(profileRow('user-a', 'chosen-handle'))
+    const hook = renderHook(() =>
+      useUserProfile({ handle: 'missing-user', serverProfile: null, serverTraderData: null })
+    )
+
+    await waitFor(() => expect(mockProfileMaybeSingle).toHaveBeenCalledTimes(1))
+    expect(hook.result.current.profile).toBeNull()
+    expect(mockRouter.replace).not.toHaveBeenCalled()
+    expect(mockShowToast).not.toHaveBeenCalled()
+  })
+
   it('hides A synchronously and rejects A after switching the route and viewer to B', async () => {
     const profileA = deferred<ReturnType<typeof profileRow>>()
     mockProfileMaybeSingle

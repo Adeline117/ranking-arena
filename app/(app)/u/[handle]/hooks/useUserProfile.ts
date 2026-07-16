@@ -164,7 +164,7 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     if (serverProfile || !viewer) return
 
     const emailHandle = viewer.email?.split('@')[0]
-    if (handle !== viewer.userId && handle !== emailHandle) return
+    const isOwnProfileAlias = handle === viewer.userId || handle === emailHandle
 
     let cancelled = false
     const abortController = new AbortController()
@@ -193,13 +193,20 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
           typeof existingProfile.handle !== 'string' ||
           !existingProfile.handle
         ) {
-          logger.warn('Own profile lookup failed closed:', profileError)
-          showToast(t('loadUserDataFailed'), 'error')
+          // A missing arbitrary public route is still an ordinary not-found.
+          // Surface provisioning failure only when the route itself identifies
+          // the signed-in user by UUID or the legacy email-prefix alias.
+          if (isOwnProfileAlias) {
+            logger.warn('Own profile lookup failed closed:', profileError)
+            showToast(t('loadUserDataFailed'), 'error')
+          }
           return
         }
 
         if (existingProfile.handle !== handle) {
-          router.replace(`/u/${encodeURIComponent(existingProfile.handle)}`)
+          if (isOwnProfileAlias) {
+            router.replace(`/u/${encodeURIComponent(existingProfile.handle)}`)
+          }
           return
         }
 
