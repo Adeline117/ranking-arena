@@ -45,7 +45,8 @@ import {
   parseGmxProfile,
 } from './parsers'
 
-const SUBGRAPH_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum/graphql'
+/** Official production GraphQL endpoint published by GMX. */
+export const GMX_SUBGRAPH_URL = 'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
 const TOKENS_URL = 'https://arbitrum-api.gmxinfra.io/tokens'
 
 const DEFAULT_BOARD_DEPTH = 60 // survey count (spec §7 #32: 20 × 3 pages)
@@ -87,7 +88,7 @@ async function fetchJson(
 }
 
 async function gql<T>(session: FetchSession, src: SourceRow, query: string): Promise<T> {
-  const url = endpoint(src, 'subgraph', SUBGRAPH_URL)
+  const url = endpoint(src, 'subgraph', GMX_SUBGRAPH_URL)
   const payload = (await fetchJson(session, url, { method: 'POST', body: { query } })) as {
     data?: T
     errors?: Array<{ message?: string }>
@@ -207,7 +208,7 @@ const gmxAdapter: SourceAdapter = {
           reportedTotal: rows.length, // pre-truncation account count
           rows: truncated.slice(i, i + chunkSize),
         },
-        url: endpoint(src, 'subgraph', SUBGRAPH_URL),
+        url: endpoint(src, 'subgraph', GMX_SUBGRAPH_URL),
         fetchedAt,
       }
     }
@@ -250,7 +251,7 @@ const gmxAdapter: SourceAdapter = {
             timeframe: tf,
             from,
           },
-          url: endpoint(src, 'subgraph', SUBGRAPH_URL),
+          url: endpoint(src, 'subgraph', GMX_SUBGRAPH_URL),
           fetchedAt,
         },
       ],
@@ -285,7 +286,7 @@ const gmxAdapter: SourceAdapter = {
             markets: maps.markets,
             tokens: maps.tokens,
           },
-          url: endpoint(src, 'subgraph', SUBGRAPH_URL),
+          url: endpoint(src, 'subgraph', GMX_SUBGRAPH_URL),
           fetchedAt,
         },
       ],

@@ -16,7 +16,7 @@ import {
   parseGmxPositions,
   parseGmxProfile,
 } from '../parsers'
-import { gmxWindowFrom } from '../index'
+import { GMX_SUBGRAPH_URL, gmxWindowFrom } from '../index'
 import type { ParseCtx } from '../../../core/types'
 
 function fixture(name: string): Record<string, unknown> {
@@ -170,6 +170,14 @@ describe('gmxWindowFrom', () => {
     // strictly <90 days even at 23:59
     const lateNow = Date.parse('2026-06-12T23:59:59Z')
     expect((lateNow / 1000 - gmxWindowFrom(90, lateNow)) / 86_400).toBeLessThan(90)
+  })
+})
+
+describe('GMX transport defaults', () => {
+  it('uses the official production Squid GraphQL endpoint', () => {
+    expect(GMX_SUBGRAPH_URL).toBe(
+      'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
+    )
   })
 })
 
