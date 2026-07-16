@@ -11,6 +11,7 @@ import {
 } from '@/lib/utils/arena-score'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
+import { canonicalizeLocalExchangeLogoPath } from '@/lib/utils/exchange-logo-path'
 import { detectTraderType } from './helpers'
 import { markOutliers, applyArenaFollowers } from './scoring-helpers'
 import type { TraderRow } from './trader-row'
@@ -131,7 +132,9 @@ export async function scoreTraders(
       copiers: t.copiers ?? null,
       trades_count: t.trades_count,
       handle: displayHandle,
-      avatar_url: info.avatar_url || getExchangeLogoUrl(t.source),
+      avatar_url: canonicalizeLocalExchangeLogoPath(
+        info.avatar_url || getExchangeLogoUrl(t.source)
+      ),
       profitability_score: Math.round(scoreResult.returnScore * 100) / 100,
       risk_control_score: Math.round(scoreResult.pnlScore * 100) / 100,
       execution_score: null as number | null,
