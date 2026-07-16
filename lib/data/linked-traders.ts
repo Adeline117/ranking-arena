@@ -52,6 +52,14 @@ function aggCacheKey(userId: string): string {
   return `linked-traders-agg:${userId}`
 }
 
+/**
+ * Public aggregate route cache key. Keep this builder beside the mutation
+ * invalidator so the route and every linked-account write cannot drift apart.
+ */
+export function linkedTraderRouteAggregateCacheKey(userId: string): string {
+  return `aggregate:user:${userId}`
+}
+
 // ─── Data Fetching ──────────────────────────────────────────────────────────────
 
 /**
@@ -290,8 +298,11 @@ export async function findUserByTrader(
  */
 export async function invalidateLinkedTraderCache(userId: string): Promise<void> {
   try {
-    await cache.del(linkedCacheKey(userId))
-    await cache.del(aggCacheKey(userId))
+    await Promise.all([
+      cache.del(linkedCacheKey(userId)),
+      cache.del(aggCacheKey(userId)),
+      cache.del(linkedTraderRouteAggregateCacheKey(userId)),
+    ])
   } catch (err) {
     logger.warn('[linked-traders] Cache invalidation failed:', err)
   }
