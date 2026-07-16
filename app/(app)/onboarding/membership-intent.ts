@@ -119,6 +119,16 @@ export class OnboardingMembershipRequestSequencer {
 
     return result
   }
+
+  async drain(): Promise<void> {
+    while (this.tails.size > 0) {
+      const pending = [...this.tails.entries()]
+      await Promise.all(pending.map(([, tail]) => tail))
+      for (const [groupId, tail] of pending) {
+        if (this.tails.get(groupId) === tail) this.tails.delete(groupId)
+      }
+    }
+  }
 }
 
 export function rollbackOnboardingMembershipIntent(
