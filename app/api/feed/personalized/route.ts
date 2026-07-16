@@ -19,6 +19,12 @@ import {
 } from '@/lib/api'
 import { getUserPostReactions, getUserPostVotes } from '@/lib/data/posts'
 import { getOrSet } from '@/lib/cache'
+import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
+
+type PersonalizedFeedCacheEntry = {
+  posts: Record<string, unknown>[]
+  hasMore: boolean
+}
 
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
@@ -32,9 +38,9 @@ export async function GET(request: NextRequest) {
 
     const user = await getAuthUser(request)
     const userId = user?.id ?? 'anon'
-    const cacheKey = `feed:personalized:${userId}:${limit}:${offset}`
+    const cacheKey = `feed:personalized:v2:candidates:${userId}:${limit}:${offset}`
 
-    const { posts, hasMore } = await getOrSet(
+    const { posts, hasMore } = await getOrSet<PersonalizedFeedCacheEntry>(
       cacheKey,
       async () => {
         const supabase = getSupabaseAdmin()
@@ -141,7 +147,26 @@ export async function GET(request: NextRequest) {
       { ttl: 60 }
     )
 
-    return successWithPagination({ posts }, { limit, offset, has_more: hasMore })
+    // Cache entries are only candidates. Re-run the canonical service audience
+    // decision after every hit so blocks, membership, account state, and paid
+    // entitlements cannot remain readable for the cache TTL.
+    const postCandidates = posts.filter(
+      (post): post is Record<string, unknown> & { id: string } => typeof post.id === 'string'
+    )
+    const readablePosts = await filterServiceReadablePostRows(
+      getSupabaseAdmin(),
+      postCandidates,
+      user?.id ?? null
+    )
+
+    const response = successWithPagination(
+      { posts: readablePosts },
+      { limit, offset, has_more: hasMore }
+    )
+    response.headers.set('Cache-Control', 'private, no-store, max-age=0')
+    response.headers.set('CDN-Cache-Control', 'no-store')
+    response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
+    return response
   } catch (error: unknown) {
     return handleError(error, 'personalized feed GET')
   }
