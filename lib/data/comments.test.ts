@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 /**
  * Comments Data Layer Tests
  * 测试评论数据层
@@ -69,7 +70,10 @@ describe('getPostComments', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.range.mockResolvedValueOnce({ data: [], error: null })
 
-    const result = await getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
+    const result = await getPostComments(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'post1'
+    )
     expect(result).toEqual([])
   })
 
@@ -79,7 +83,7 @@ describe('getPostComments', () => {
     mockSupabase.range.mockResolvedValueOnce({ data: null, error: new Error('DB Error') })
 
     await expect(
-      getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
+      getPostComments(mockSupabase as unknown as SupabaseClient<Database>, 'post1')
     ).rejects.toThrow()
   })
 
@@ -87,7 +91,7 @@ describe('getPostComments', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.range.mockResolvedValueOnce({ data: [], error: null })
 
-    await getPostComments(mockSupabase as unknown as SupabaseClient, 'post123')
+    await getPostComments(mockSupabase as unknown as SupabaseClient<Database>, 'post123')
 
     expect(mockSupabase.from).toHaveBeenCalledWith('comments')
     expect(mockSupabase.eq).toHaveBeenCalledWith('post_id', 'post123')
@@ -101,7 +105,7 @@ describe('getPostComments', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.range.mockResolvedValueOnce({ data: [], error: null })
 
-    await getPostComments(mockSupabase as unknown as SupabaseClient, 'post123', {
+    await getPostComments(mockSupabase as unknown as SupabaseClient<Database>, 'post123', {
       sort: 'time',
     })
 
@@ -132,7 +136,7 @@ describe('getPostComments', () => {
       error: null,
     })
 
-    await getPostComments(mockSupabase as unknown as SupabaseClient, 'post1', {
+    await getPostComments(mockSupabase as unknown as SupabaseClient<Database>, 'post1', {
       userId: 'viewer',
     })
 
@@ -151,7 +155,7 @@ describe('getPostComments', () => {
     })
 
     await expect(
-      getPostComments(mockSupabase as unknown as SupabaseClient, 'post1', {
+      getPostComments(mockSupabase as unknown as SupabaseClient<Database>, 'post1', {
         userId: 'viewer',
       })
     ).rejects.toThrow('block lookup failed')
@@ -185,7 +189,10 @@ describe('getPostComments', () => {
     // Promise.all for profiles + likes — both resolve via in()
     mockSupabase.in.mockResolvedValue({ data: null, error: null })
 
-    const result = await getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
+    const result = await getPostComments(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'post1'
+    )
 
     expect(result).toHaveLength(1)
     expect(result[0].id).toBe('c1')
@@ -213,7 +220,7 @@ describe('getPostComments', () => {
     )
 
     await expect(
-      getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
+      getPostComments(mockSupabase as unknown as SupabaseClient<Database>, 'post1')
     ).rejects.toThrow('replies failed')
   })
 
@@ -244,7 +251,7 @@ describe('getPostComments', () => {
     )
 
     await expect(
-      getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
+      getPostComments(mockSupabase as unknown as SupabaseClient<Database>, 'post1')
     ).rejects.toThrow('profiles failed')
   })
 
@@ -278,7 +285,7 @@ describe('getPostComments', () => {
     })
 
     await expect(
-      getPostComments(mockSupabase as unknown as SupabaseClient, 'post1', {
+      getPostComments(mockSupabase as unknown as SupabaseClient<Database>, 'post1', {
         userId: 'viewer',
       })
     ).rejects.toThrow('reactions failed')
@@ -290,7 +297,10 @@ describe('getCommentById', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
 
-    const result = await getCommentById(mockSupabase as unknown as SupabaseClient, 'nonexistent')
+    const result = await getCommentById(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'nonexistent'
+    )
     expect(result).toBeNull()
   })
 
@@ -298,7 +308,7 @@ describe('getCommentById', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: null })
 
-    await getCommentById(mockSupabase as unknown as SupabaseClient, 'comment123')
+    await getCommentById(mockSupabase as unknown as SupabaseClient<Database>, 'comment123')
 
     expect(mockSupabase.from).toHaveBeenCalledWith('comments')
     expect(mockSupabase.eq).toHaveBeenCalledWith('id', 'comment123')
@@ -309,7 +319,10 @@ describe('getCommentById', () => {
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: null, error: new Error('DB Error') })
 
     // getCommentById returns null on error, doesn't throw
-    const result = await getCommentById(mockSupabase as unknown as SupabaseClient, 'comment1')
+    const result = await getCommentById(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'comment1'
+    )
     expect(result).toBeNull()
   })
 })
@@ -330,10 +343,14 @@ describe('createComment', () => {
     // Mock profile lookup
     mockSupabase.maybeSingle.mockResolvedValueOnce({ data: { handle: 'testUser' }, error: null })
 
-    const result = await createComment(mockSupabase as unknown as SupabaseClient, 'user1', {
-      post_id: 'post1',
-      content: 'New comment',
-    })
+    const result = await createComment(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'user1',
+      {
+        post_id: 'post1',
+        content: 'New comment',
+      }
+    )
 
     expect(result.content).toBe('New comment')
     expect(mockSupabase.from).toHaveBeenCalledWith('comments')
@@ -345,7 +362,7 @@ describe('createComment', () => {
     mockSupabase.single.mockResolvedValueOnce({ data: null, error: new Error('DB Error') })
 
     await expect(
-      createComment(mockSupabase as unknown as SupabaseClient, 'user1', {
+      createComment(mockSupabase as unknown as SupabaseClient<Database>, 'user1', {
         post_id: 'post1',
         content: 'Test',
       })
@@ -380,7 +397,7 @@ describe('updateComment', () => {
     mockUpdateOwnCommentWithRollout.mockResolvedValue(updatedComment)
 
     const result = await updateComment(
-      mockSupabase as unknown as SupabaseClient,
+      mockSupabase as unknown as SupabaseClient<Database>,
       'comment1',
       'user1',
       'Updated content'
@@ -405,7 +422,12 @@ describe('updateComment', () => {
     mockUpdateOwnCommentWithRollout.mockRejectedValue(new Error('Update failed'))
 
     await expect(
-      updateComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1', 'Updated')
+      updateComment(
+        mockSupabase as unknown as SupabaseClient<Database>,
+        'comment1',
+        'user1',
+        'Updated'
+      )
     ).rejects.toThrow()
   })
 
@@ -417,7 +439,12 @@ describe('updateComment', () => {
     })
 
     await expect(
-      updateComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1', 'Updated')
+      updateComment(
+        mockSupabase as unknown as SupabaseClient<Database>,
+        'comment1',
+        'user1',
+        'Updated'
+      )
     ).rejects.toMatchObject({ kind: 'forbidden', stage: 'data-layer-ownership' })
     expect(mockUpdateOwnCommentWithRollout).not.toHaveBeenCalled()
   })
@@ -430,7 +457,12 @@ describe('updateComment', () => {
     })
 
     await expect(
-      updateComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1', 'Updated')
+      updateComment(
+        mockSupabase as unknown as SupabaseClient<Database>,
+        'comment1',
+        'user1',
+        'Updated'
+      )
     ).rejects.toMatchObject({
       kind: 'database',
       databaseCode: 'XX701',
@@ -455,7 +487,12 @@ describe('updateComment', () => {
     })
 
     await expect(
-      updateComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1', 'Updated')
+      updateComment(
+        mockSupabase as unknown as SupabaseClient<Database>,
+        'comment1',
+        'user1',
+        'Updated'
+      )
     ).rejects.toMatchObject({ kind: 'database', stage: 'data-layer-ack' })
   })
 })
@@ -473,7 +510,7 @@ describe('deleteComment', () => {
     })
     mockDeleteOwnCommentWithRollout.mockResolvedValue({ deleted_count: 1, comment_count: 2 })
 
-    await deleteComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1')
+    await deleteComment(mockSupabase as unknown as SupabaseClient<Database>, 'comment1', 'user1')
 
     expect(mockSupabase.from).toHaveBeenCalledWith('comments')
     expect(mockSupabase.eq).toHaveBeenCalledWith('id', 'comment1')
@@ -494,7 +531,7 @@ describe('deleteComment', () => {
     mockDeleteOwnCommentWithRollout.mockRejectedValue(new Error('Delete failed'))
 
     await expect(
-      deleteComment(mockSupabase as unknown as SupabaseClient, 'comment1', 'user1')
+      deleteComment(mockSupabase as unknown as SupabaseClient<Database>, 'comment1', 'user1')
     ).rejects.toThrow()
   })
 })
@@ -504,7 +541,10 @@ describe('getCommentCount', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.is.mockResolvedValueOnce({ count: 10, error: null })
 
-    const result = await getCommentCount(mockSupabase as unknown as SupabaseClient, 'post1')
+    const result = await getCommentCount(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'post1'
+    )
     expect(result).toBe(10)
   })
 
@@ -512,7 +552,10 @@ describe('getCommentCount', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.is.mockResolvedValueOnce({ count: null, error: null })
 
-    const result = await getCommentCount(mockSupabase as unknown as SupabaseClient, 'post1')
+    const result = await getCommentCount(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'post1'
+    )
     expect(result).toBe(0)
   })
 
@@ -520,7 +563,10 @@ describe('getCommentCount', () => {
     const mockSupabase = createMockSupabase()
     mockSupabase.is.mockResolvedValueOnce({ count: null, error: new Error('Error') })
 
-    const result = await getCommentCount(mockSupabase as unknown as SupabaseClient, 'post1')
+    const result = await getCommentCount(
+      mockSupabase as unknown as SupabaseClient<Database>,
+      'post1'
+    )
     expect(result).toBe(0)
   })
 })

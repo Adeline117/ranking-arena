@@ -18,7 +18,6 @@
  */
 
 import { NextRequest } from 'next/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { withCron } from '@/lib/api/with-cron'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { logger } from '@/lib/logger'
@@ -40,7 +39,7 @@ export const GET = withCron(
     // whichever season last succeeded, so if only 90D silently stalls while 7D
     // keeps computing, the global-newest stays fresh and the watchdog never
     // fires — the exact silent-stale-flagship failure this net exists to catch.
-    const sb = supabase as SupabaseClient
+    const sb = supabase
     const freshness = await Promise.all(
       SEASONS.map(async (season) => {
         const { data, error } = await sb
