@@ -6,7 +6,8 @@
  *
  * - React Query dedupes concurrent callers (client-side single-flight).
  * - Query key includes the timeframe: only the selected TF is fetched;
- *   placeholderData keeps the previous TF rendered during a switch.
+ *   a cold switch returns a local skeleton instead of mislabelling the prior
+ *   timeframe's metrics under the newly selected period.
  * - cacheState 'pending' (Tier-C in flight or stale-refresh) → poll with
  *   2s/4s/8s exponential backoff capped at 15s, giving up after 90s.
  */
@@ -53,7 +54,6 @@ export function useTraderCore({
     enabled: enabled && Boolean(source) && Boolean(exchangeTraderId),
     staleTime: STALE_SLOW,
     refetchOnWindowFocus: false,
-    placeholderData: (prev) => prev, // TF switch keeps the old chart, no flash
     refetchInterval: (q) => {
       const data = q.state.data
       if (!data || data.cacheState !== 'pending') {
