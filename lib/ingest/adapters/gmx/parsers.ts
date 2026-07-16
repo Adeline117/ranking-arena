@@ -213,12 +213,74 @@ export function parseGmxProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
         closed_count: num(row.closedCount),
       },
     })
+  } else if (points.length === 0) {
+    // Both complete window queries agree that this account had no activity.
+    // Publish an explicit zero so a rolling window that becomes inactive does
+    // not keep stale PnL/trade counts forever. Missing capital means ROI stays
+    // honestly null; the empty replacement below removes any old MTM series.
+    stats.push({
+      timeframe: tf,
+      asOf: ctx.scrapedAt,
+      roi: null,
+      pnl: 0,
+      sharpe: null,
+      mdd: null,
+      winRate: null,
+      winPositions: 0,
+      totalPositions: 0,
+      copierPnl: null,
+      copierCount: null,
+      aum: null,
+      volume: null,
+      profitShareRate: null,
+      holdingDurationAvgHours: null,
+      tradingPreferences: null,
+      extras: {
+        ...realizedPnlBasisExtras(0, num(payload.from)),
+        profile_window_metrics_complete: true,
+        profile_window_empty: true,
+        aum_basis: 'max_capital_proxy',
+        gmx_total_mark_to_market_pnl_usd: null,
+        gmx_total_mark_to_market_source: 'account_pnl_history_cumulative',
+        closed_count: 0,
+      },
+    })
+  } else {
+    // A non-empty history with no period aggregate is internally inconsistent.
+    // Emit audit evidence marked incomplete: publishers preserve the last
+    // proven typed values/series and processors surface a real crawl failure.
+    stats.push({
+      timeframe: tf,
+      asOf: ctx.scrapedAt,
+      roi: null,
+      pnl: null,
+      sharpe: null,
+      mdd: null,
+      winRate: null,
+      winPositions: null,
+      totalPositions: null,
+      copierPnl: null,
+      copierCount: null,
+      aum: null,
+      volume: null,
+      profitShareRate: null,
+      holdingDurationAvgHours: null,
+      tradingPreferences: null,
+      extras: {
+        profile_window_metrics_complete: false,
+        profile_window_metrics_incomplete_reason: 'period_stats_missing_with_history',
+        profile_series_contract: 'unavailable_same_basis',
+        window_from: num(payload.from),
+        gmx_total_mark_to_market_pnl_usd: totalPnl,
+        gmx_total_mark_to_market_source: 'account_pnl_history_cumulative',
+      },
+    })
   }
 
   return {
     stats,
     series: [],
-    ...(stats.length > 0 ? { replaceSeries: [{ timeframe: tf, metrics: ['pnl'] }] } : {}),
+    replaceSeries: [{ timeframe: tf, metrics: ['pnl'] }],
     nickname: null,
     avatarUrlOrigin: null,
   }

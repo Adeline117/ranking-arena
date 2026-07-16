@@ -160,11 +160,51 @@ describe('parseGmxProfile', () => {
     expect(profile.replaceSeries).toEqual([{ timeframe: 7, metrics: ['pnl'] }])
   })
 
-  it('empty payload → no stats, no series (never throws)', () => {
-    const profile = parseGmxProfile({ periodStats: [], pnlHistory: [], timeframe: 30 }, ctx)
-    expect(profile.stats).toHaveLength(0)
+  it('confirmed empty window publishes explicit zero and clears stale series', () => {
+    const profile = parseGmxProfile(
+      { periodStats: [], pnlHistory: [], timeframe: 30, from: 1_765_411_200 },
+      ctx
+    )
+    expect(profile.stats).toHaveLength(1)
+    expect(profile.stats[0]).toMatchObject({
+      timeframe: 30,
+      pnl: 0,
+      roi: null,
+      winRate: null,
+      winPositions: 0,
+      totalPositions: 0,
+    })
+    expect(profile.stats[0].extras).toMatchObject({
+      pnl_basis: 'gmx_period_realized_net',
+      pnl_includes_unrealized: false,
+      pnl_components_complete: true,
+      profile_window_metrics_complete: true,
+      profile_window_empty: true,
+      window_from: 1_765_411_200,
+    })
     expect(profile.series).toHaveLength(0)
-    expect(profile.replaceSeries).toBeUndefined()
+    expect(profile.replaceSeries).toEqual([{ timeframe: 30, metrics: ['pnl'] }])
+  })
+
+  it('preserves serving values when period aggregate is missing but history is non-empty', () => {
+    const profile = parseGmxProfile(
+      {
+        periodStats: [],
+        pnlHistory: [
+          { timestamp: 1_765_411_200, cumulativePnl: '1000000000000000000000000000000' },
+        ],
+        timeframe: 30,
+      },
+      ctx
+    )
+    expect(profile.stats).toHaveLength(1)
+    expect(profile.stats[0]).toMatchObject({ pnl: null, roi: null })
+    expect(profile.stats[0].extras).toMatchObject({
+      profile_window_metrics_complete: false,
+      profile_window_metrics_incomplete_reason: 'period_stats_missing_with_history',
+      gmx_total_mark_to_market_pnl_usd: 1,
+    })
+    expect(profile.replaceSeries).toEqual([{ timeframe: 30, metrics: ['pnl'] }])
   })
 
   it('fails closed without clearing serving data when a realized component is absent', () => {
