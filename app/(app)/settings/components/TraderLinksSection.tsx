@@ -474,7 +474,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
     setDeletingId(ownedTrader.id)
     try {
       const result = await authedFetch<{
-        data?: { remaining_count?: number }
+        data?: { promoted_link_id?: string | null; remaining_count?: number }
         error?: string
       }>(
         '/api/traders/linked',
@@ -489,11 +489,16 @@ export function TraderLinksSection({ userId }: { userId: string }) {
       )
       if (!mutationIsCurrent(operation) || result.stale) return
       if (result.ok) {
+        const promotedLinkId = result.data?.data?.promoted_link_id
         setTraders((prev) => {
           const remaining = prev.filter((candidate) => candidate.id !== ownedTrader.id)
-          // If the primary was deleted and there are remaining, the API auto-promotes
+          // The database chooses the replacement under lock. Reflect that exact row;
+          // local array order is not a concurrency-safe primary selection rule.
           if (ownedTrader.is_primary && remaining.length > 0) {
-            remaining[0] = { ...remaining[0], is_primary: true }
+            return remaining.map((candidate) => ({
+              ...candidate,
+              is_primary: candidate.id === promotedLinkId,
+            }))
           }
           return remaining
         })
