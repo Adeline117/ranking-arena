@@ -48,6 +48,22 @@ describe('非加权路径(直通 getPosts)', () => {
 })
 
 describe('加权重排(修复后的活路径)', () => {
+  it('forwards viewer ownership into the canonical post reader', async () => {
+    mockGetPosts.mockResolvedValue([])
+    const { client } = weightsClient([])
+
+    await getWeightedPosts(client, {
+      enable_weight: true,
+      sort_by: 'hot_score',
+      viewer_id: 'viewer-1',
+    })
+
+    expect(mockGetPosts).toHaveBeenCalledWith(
+      client,
+      expect.objectContaining({ viewer_id: 'viewer-1' })
+    )
+  })
+
   it('高权重作者的帖子被提升:hot 10×(1+0.3×100/100)=13 > hot 12×1', async () => {
     mockGetPosts.mockResolvedValue([
       post('top-by-hot', 12, 'u-normal'),

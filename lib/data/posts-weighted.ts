@@ -41,6 +41,7 @@ export async function getWeightedPosts(
     sort_order = 'desc',
     enable_weight = false,
     weight_factor = 0.3,
+    viewer_id,
   } = options
 
   const { getPosts } = await import('./posts')
@@ -55,6 +56,7 @@ export async function getWeightedPosts(
       author_handle,
       sort_by,
       sort_order,
+      viewer_id,
     })
   }
 
@@ -72,6 +74,7 @@ export async function getWeightedPosts(
     author_handle,
     sort_by: 'hot_score',
     sort_order,
+    viewer_id,
   })
   if (posts.length === 0) return []
 

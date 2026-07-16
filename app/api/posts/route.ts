@@ -34,7 +34,7 @@ import {
   deleteServerCacheByPrefix,
   CacheTTL,
 } from '@/lib/utils/server-cache'
-import { get as cacheGet, set as cacheSet, del as cacheDel } from '@/lib/cache'
+import { del as cacheDel } from '@/lib/cache'
 import { fireAndForget } from '@/lib/utils/logger'
 import { sendNotifications } from '@/lib/data/notifications'
 import { extractAndSyncHashtags } from '@/lib/data/hashtags'
@@ -164,10 +164,6 @@ export const GET = withPublic(
       language: langFilter,
     })
 
-    // For hot posts (first page, no filters), check Redis cache first
-    const isHotQuery = sort_by === 'hot_score' && offset === 0 && !group_id && !author_handle
-    const HOT_POSTS_REDIS_KEY = 'hot_posts:top50'
-
     let posts: Awaited<ReturnType<typeof getPosts>> | null = null
 
     // Personalized feed: call RPC and return early
@@ -265,6 +261,11 @@ export const GET = withPublic(
         posts = []
       }
 
+      // Repost wrappers remain hidden here until their roots are evaluated by
+      // the same canonical audience gate. Otherwise a followed wrapper could
+      // embed content from an author the viewer has blocked.
+      posts = posts.filter((post) => !post.original_post_id)
+
       // Attach user state
       let userReactions: Map<string, 'up' | 'down'> = new Map()
       let userVotes: Map<string, 'bull' | 'bear' | 'wait'> = new Map()
@@ -284,22 +285,15 @@ export const GET = withPublic(
       }))
       return setPostsReadCachePolicy(
         successWithPagination(
-          { posts: postsWithUserState, following_count: followingIds.length },
+          {
+            posts: postsWithUserState,
+            following_count: followingIds.length,
+            viewer_id: user.id,
+          },
           { limit, offset, has_more: posts.length === limit }
         ),
         true
       )
-    }
-
-    if (isHotQuery) {
-      try {
-        const cachedHot = await cacheGet<Awaited<ReturnType<typeof getPosts>>>(HOT_POSTS_REDIS_KEY)
-        if (cachedHot) {
-          posts = cachedHot.slice(0, limit)
-        }
-      } catch {
-        // Intentionally swallowed: Redis cache miss or error, fall through to DB query
-      }
     }
 
     if (!posts) {
@@ -312,7 +306,7 @@ export const GET = withPublic(
       if (enable_weight && sort_by === 'hot_score') {
         // Use weighted posts for enhanced sorting
         posts = await getWeightedPosts(supabase, {
-          limit: isHotQuery ? 50 : limit, // Fetch more for hot posts to populate Redis cache
+          limit,
           offset,
           group_id,
           group_ids,
@@ -321,13 +315,14 @@ export const GET = withPublic(
           sort_order,
           enable_weight,
           weight_factor,
+          viewer_id: user?.id,
         })
       } else {
         // Use standard posts query
         // Note: 'personalized' and 'following' sort_by values return early above,
         // so sort_by is narrowed to the three DB-supported values here.
         posts = await getPosts(supabase, {
-          limit: isHotQuery ? 50 : limit, // Fetch more for hot posts to populate Redis cache
+          limit,
           offset,
           group_id,
           group_ids,
@@ -341,19 +336,6 @@ export const GET = withPublic(
 
       // Cache in server memory (1 minute)
       setServerCache(cacheKey, posts, CacheTTL.SHORT)
-
-      // For hot posts, also cache in Redis (5 minutes, matches cron interval)
-      if (isHotQuery && posts.length > 0) {
-        fireAndForget(
-          cacheSet(HOT_POSTS_REDIS_KEY, posts, { ttl: 300 }),
-          'Cache hot posts to Redis'
-        )
-      }
-
-      // Trim to requested limit if we fetched more for cache
-      if (isHotQuery && posts.length > limit) {
-        posts = posts.slice(0, limit)
-      }
     }
 
     // 如果用户已登录，获取用户的点赞和投票状态（并行获取）
