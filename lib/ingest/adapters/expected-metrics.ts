@@ -201,17 +201,9 @@ export const EXPECTED_METRICS: Record<string, ExpectedMetrics> = {
     'volume',
     'profit_share_rate',
   ],
-  gmx: [
-    'roi',
-    'pnl',
-    'sharpe',
-    'mdd',
-    'win_rate',
-    'win_positions',
-    'total_positions',
-    'aum',
-    'volume',
-  ],
+  // Canonical GMX PnL is realized-net. Its available history is total
+  // mark-to-market, so risk derived from that mixed basis is honest-NULL.
+  gmx: ['roi', 'pnl', 'win_rate', 'win_positions', 'total_positions', 'aum', 'volume'],
   // roi null by design (no capital basis); mdd honest-NULL; Tier-0 risk needs
   // ≥7 daily deltas which the real fixture lacks — see harvest notes.
   gtrade: ['pnl', 'win_rate', 'win_positions', 'total_positions'],
