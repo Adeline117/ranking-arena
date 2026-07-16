@@ -265,7 +265,28 @@ export async function publishLeaderboardSnapshot(
            JOIN arena.traders t
              ON t.source_id = $5 AND t.exchange_trader_id = r.exchange_trader_id
          ON CONFLICT (trader_id, timeframe) DO UPDATE SET
-           as_of           = EXCLUDED.as_of,
+           -- This is a mixed-width row: sparse boards retain richer profile
+           -- values below. Never relabel a retained old value with the new
+           -- board timestamp; row freshness is the oldest surviving fact.
+           as_of           = CASE WHEN
+             (EXCLUDED.roi IS NULL AND arena.trader_stats.roi IS NOT NULL) OR
+             (EXCLUDED.pnl IS NULL AND arena.trader_stats.pnl IS NOT NULL) OR
+             (EXCLUDED.win_rate IS NULL AND arena.trader_stats.win_rate IS NOT NULL) OR
+             (EXCLUDED.mdd IS NULL AND arena.trader_stats.mdd IS NOT NULL) OR
+             (EXCLUDED.sharpe IS NULL AND arena.trader_stats.sharpe IS NOT NULL) OR
+             (EXCLUDED.aum IS NULL AND arena.trader_stats.aum IS NOT NULL) OR
+             (EXCLUDED.copier_count IS NULL AND arena.trader_stats.copier_count IS NOT NULL) OR
+             (EXCLUDED.copier_pnl IS NULL AND arena.trader_stats.copier_pnl IS NOT NULL) OR
+             (EXCLUDED.volume IS NULL AND arena.trader_stats.volume IS NOT NULL) OR
+             (EXCLUDED.win_positions IS NULL AND arena.trader_stats.win_positions IS NOT NULL) OR
+             (EXCLUDED.total_positions IS NULL AND arena.trader_stats.total_positions IS NOT NULL) OR
+             (EXCLUDED.holding_duration_avg IS NULL AND arena.trader_stats.holding_duration_avg IS NOT NULL) OR
+             arena.trader_stats.profit_share_rate IS NOT NULL OR
+             arena.trader_stats.trading_preferences IS NOT NULL OR
+             COALESCE(arena.trader_stats.extras, '{}'::jsonb) <> '{}'::jsonb
+             THEN LEAST(arena.trader_stats.as_of, EXCLUDED.as_of)
+             ELSE EXCLUDED.as_of
+           END,
            currency        = EXCLUDED.currency,
            roi             = COALESCE(EXCLUDED.roi, arena.trader_stats.roi),
            pnl             = COALESCE(EXCLUDED.pnl, arena.trader_stats.pnl),
