@@ -94,6 +94,7 @@ export const PostCard = memo(function PostCard({
   const displayTitle = translatedTitle || post.title
   const displayContent = translatedContent || post.content
   const isTranslated = !!(translatedTitle || translatedContent)
+  const hideCompactSensitiveTitle = Boolean(post.is_sensitive || post.content_warning)
 
   // 计算投票结果
   const pollWinner = post.poll_enabled
@@ -149,8 +150,8 @@ export const PostCard = memo(function PostCard({
             overflow: 'hidden',
           }}
         >
-          {displayTitle}
-          {isTranslated && (
+          {hideCompactSensitiveTitle ? t('sensitiveContent') : displayTitle}
+          {!hideCompactSensitiveTitle && isTranslated && (
             <span
               style={{
                 fontSize: 10,
