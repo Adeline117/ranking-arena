@@ -7,6 +7,8 @@
  * the free tier for the top-N deep-profile scope.
  */
 
+import { hasBase58DecodedByteLength, isBase58String } from '@/lib/utils/base58'
+
 import { decodeSolanaSwaps, type SolTxMeta, type SolTokenBalance } from './solana-swaps'
 import { computeWalletPnl, type WalletPnl } from './pnl-accounting'
 
@@ -226,32 +228,8 @@ export interface SolanaSignatureRecordScan {
   coverage: SolanaSignatureRecordCoverage
 }
 
-const SOLANA_BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/
-const SOLANA_BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
-
-function base58DecodedByteLength(value: string): number {
-  let numericValue = 0n
-  for (const character of value) {
-    const digit = SOLANA_BASE58_ALPHABET.indexOf(character)
-    if (digit < 0) return -1
-    numericValue = numericValue * 58n + BigInt(digit)
-  }
-  let significantBytes = 0
-  for (let remaining = numericValue; remaining > 0n; remaining >>= 8n) significantBytes += 1
-  let leadingZeroBytes = 0
-  while (leadingZeroBytes < value.length && value[leadingZeroBytes] === '1') {
-    leadingZeroBytes += 1
-  }
-  return leadingZeroBytes + significantBytes
-}
-
 function isSolanaSignature(value: string): boolean {
-  return (
-    value.length >= 64 &&
-    value.length <= 100 &&
-    SOLANA_BASE58_RE.test(value) &&
-    base58DecodedByteLength(value) === 64
-  )
+  return value.length >= 64 && value.length <= 100 && hasBase58DecodedByteLength(value, 64)
 }
 
 function normalizeSignatureRecord(
@@ -846,11 +824,7 @@ function byteInteger(value: unknown): number {
 }
 
 function solanaPublicKey(value: unknown): string {
-  if (
-    typeof value !== 'string' ||
-    !SOLANA_BASE58_RE.test(value) ||
-    base58DecodedByteLength(value) !== 32
-  ) {
+  if (!hasBase58DecodedByteLength(value, 32)) {
     return malformedTxEvidence()
   }
   return value
@@ -1036,10 +1010,7 @@ function parseCompiledInstruction(
   }
   const accountIndexes = byteArray(value.accounts)
   if (accountIndexes.some((index) => index >= accountKeys.length)) return malformedTxEvidence()
-  if (
-    typeof value.data !== 'string' ||
-    (value.data.length > 0 && !SOLANA_BASE58_RE.test(value.data))
-  ) {
+  if (typeof value.data !== 'string' || (value.data.length > 0 && !isBase58String(value.data))) {
     return malformedTxEvidence()
   }
   const stackHeight =
