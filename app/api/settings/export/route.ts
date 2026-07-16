@@ -70,6 +70,7 @@ interface ExportData {
   trading: {
     copy_configs: unknown[]
     watchlist: unknown[]
+    alerts: unknown[]
   }
   settings: {
     preferences: Record<string, unknown> | null
@@ -457,6 +458,55 @@ const TRADER_WATCHLIST_EXPORT_DATASET = {
   },
 } satisfies CursorExportDataset
 
+const TRADER_ALERTS_EXPORT_DATASET = {
+  name: 'trading.alerts',
+  table: 'trader_alerts',
+  selectColumns: [
+    'id',
+    'trader_id',
+    'source',
+    'enabled',
+    'alert_roi_change',
+    'roi_change_threshold',
+    'alert_drawdown',
+    'drawdown_threshold',
+    'alert_pnl_change',
+    'pnl_change_threshold',
+    'alert_score_change',
+    'score_change_threshold',
+    'alert_rank_change',
+    'rank_change_threshold',
+    'alert_new_position',
+    'alert_price_above',
+    'price_above_value',
+    'alert_price_below',
+    'price_below_value',
+    'price_symbol',
+    'last_triggered_at',
+    'one_time',
+    'read_at',
+    'created_at',
+    'updated_at',
+  ],
+  textCastColumns: [
+    'roi_change_threshold',
+    'drawdown_threshold',
+    'pnl_change_threshold',
+    'score_change_threshold',
+    'price_above_value',
+    'price_below_value',
+  ],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
 const NOTIFICATIONS_EXPORT_DATASET = {
   name: 'notifications',
   table: 'notifications',
@@ -681,6 +731,36 @@ function normalizeTraderWatchlist(rows: Record<string, unknown>[]) {
   }))
 }
 
+function normalizeTraderAlerts(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    trader_id: row.trader_id,
+    source: row.source,
+    enabled: row.enabled,
+    alert_roi_change: row.alert_roi_change,
+    roi_change_threshold: row.roi_change_threshold,
+    alert_drawdown: row.alert_drawdown,
+    drawdown_threshold: row.drawdown_threshold,
+    alert_pnl_change: row.alert_pnl_change,
+    pnl_change_threshold: row.pnl_change_threshold,
+    alert_score_change: row.alert_score_change,
+    score_change_threshold: row.score_change_threshold,
+    alert_rank_change: row.alert_rank_change,
+    rank_change_threshold: row.rank_change_threshold,
+    alert_new_position: row.alert_new_position,
+    alert_price_above: row.alert_price_above,
+    price_above_value: row.price_above_value,
+    alert_price_below: row.alert_price_below,
+    price_below_value: row.price_below_value,
+    price_symbol: row.price_symbol,
+    last_triggered_at: row.last_triggered_at,
+    one_time: row.one_time,
+    read_at: row.read_at,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+  }))
+}
+
 function normalizeNotifications(rows: Record<string, unknown>[]) {
   return rows.map((row) => ({
     id: row.id,
@@ -843,6 +923,7 @@ export async function POST(request: NextRequest) {
       postBookmarks,
       copyTradeConfigs,
       traderWatchlist,
+      traderAlerts,
       notifications,
       commentLikes,
       postEmojiReactions,
@@ -868,6 +949,7 @@ export async function POST(request: NextRequest) {
       fetchAllExportRowsByCursor(supabase, POST_BOOKMARKS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, COPY_TRADE_CONFIGS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, TRADER_WATCHLIST_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, TRADER_ALERTS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, NOTIFICATIONS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, COMMENT_LIKES_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, POST_EMOJI_REACTIONS_EXPORT_DATASET, user.id),
@@ -884,6 +966,7 @@ export async function POST(request: NextRequest) {
     const normalizedPostBookmarks = normalizePostBookmarks(postBookmarks)
     const normalizedCopyTradeConfigs = normalizeCopyTradeConfigs(copyTradeConfigs)
     const normalizedTraderWatchlist = normalizeTraderWatchlist(traderWatchlist)
+    const normalizedTraderAlerts = normalizeTraderAlerts(traderAlerts)
     const normalizedNotifications = normalizeNotifications(notifications)
     const normalizedCommentLikes = normalizeCommentLikes(commentLikes)
     const normalizedPostEmojiReactions = normalizePostEmojiReactions(postEmojiReactions)
@@ -916,6 +999,7 @@ export async function POST(request: NextRequest) {
           completedDataset('bookmarks.posts', postBookmarks.length),
           completedDataset('trading.copy_configs', copyTradeConfigs.length),
           completedDataset('trading.watchlist', traderWatchlist.length),
+          completedDataset('trading.alerts', traderAlerts.length),
           completedDataset('settings.preferences', preferences.length),
           completedDataset('account.bindings', accountBindings.length),
           completedDataset('account.login_sessions', loginSessions.length),
@@ -954,6 +1038,7 @@ export async function POST(request: NextRequest) {
       trading: {
         copy_configs: normalizedCopyTradeConfigs,
         watchlist: normalizedTraderWatchlist,
+        alerts: normalizedTraderAlerts,
       },
       settings: {
         preferences: normalizedPreferences,
