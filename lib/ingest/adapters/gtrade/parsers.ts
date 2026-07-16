@@ -101,9 +101,47 @@ const DAY_MS = 86_400_000
 /** A trade row's realized USD PnL (0 for non-realizing actions). */
 function realizedUsd(row: TradeRow): number {
   const pnlNet = num(row.pnl_net)
-  if (pnlNet === null || pnlNet === 0) return 0
-  const px = num(row.collateralPriceUsd) ?? 1
+  if (pnlNet === null) throw new Error('[gtrade] history row has an invalid pnl_net')
+  if (pnlNet === 0) return 0
+  const px = num(row.collateralPriceUsd)
+  if (px === null || px <= 0) {
+    throw new Error('[gtrade] history realized PnL is missing collateralPriceUsd')
+  }
   return pnlNet * px
+}
+
+function positionKey(row: TradeRow): string | null {
+  const pair = typeof row.pair === 'string' ? row.pair : null
+  const tradeIndex = num((row as Dict).tradeIndex)
+  return pair === null || tradeIndex === null ? null : `${pair}#${tradeIndex}`
+}
+
+function isTerminalClose(action: unknown): boolean {
+  return action === 'TradeClosedMarket' || action === 'TradeClosedLIQ'
+}
+
+/** Closed positions newer than cursor whose opening event is not in the rows. */
+export function unmatchedGtradeCloseKeys(rows: unknown[], cursor: string | null): string[] {
+  const cursorMs = cursor === null ? Number.NEGATIVE_INFINITY : Date.parse(cursor)
+  if (cursor !== null && !Number.isFinite(cursorMs)) {
+    throw new Error('[gtrade] invalid position history cursor')
+  }
+  const opened = new Set<string>()
+  const closed = new Set<string>()
+  for (const candidate of rows) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue
+    const row = candidate as TradeRow
+    const key = positionKey(row)
+    if (row.action === 'TradeOpenedMarket' && key !== null) opened.add(key)
+    if (!isTerminalClose(row.action)) continue
+    const closedAt = typeof row.date === 'string' ? Date.parse(row.date) : Number.NaN
+    if (!Number.isFinite(closedAt) || key === null) {
+      closed.add('[invalid-close]')
+    } else if (closedAt > cursorMs) {
+      closed.add(key)
+    }
+  }
+  return [...closed].filter((key) => !opened.has(key)).sort()
 }
 
 /**
@@ -325,10 +363,8 @@ function gtradePositionHistory(rows: TradeRow[]): ParsedHistoryRow[] {
   type G = { open?: TradeRow; close?: TradeRow; realized: number; all: TradeRow[] }
   const groups = new Map<string, G>()
   for (const row of rows) {
-    const pair = typeof row.pair === 'string' ? row.pair : null
-    const tradeIndex = num((row as Dict).tradeIndex)
-    if (pair === null || tradeIndex === null) continue
-    const key = `${pair}#${tradeIndex}`
+    const key = positionKey(row)
+    if (key === null) continue
     let g = groups.get(key)
     if (!g) {
       g = { realized: 0, all: [] }
@@ -337,7 +373,7 @@ function gtradePositionHistory(rows: TradeRow[]): ParsedHistoryRow[] {
     g.all.push(row)
     g.realized += realizedUsd(row)
     if (row.action === 'TradeOpenedMarket') g.open = row
-    if (row.action === 'TradeClosedMarket') g.close = row
+    if (isTerminalClose(row.action)) g.close = row
   }
 
   const out: ParsedHistoryRow[] = []

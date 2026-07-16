@@ -14,6 +14,7 @@ import {
   parseGtradeLeaderboardPage,
   parseGtradePositions,
   parseGtradeProfile,
+  unmatchedGtradeCloseKeys,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
 
@@ -280,6 +281,53 @@ describe('parseGtradeHistory (orders = the trades table)', () => {
 describe('parseGtradePositions', () => {
   it('throws — out of v1', () => {
     expect(() => parseGtradePositions({}, ctx)).toThrow('not supported')
+  })
+})
+
+describe('gTrade position-history completeness', () => {
+  const open = {
+    id: 10,
+    date: '2026-06-01T00:00:00.000Z',
+    action: 'TradeOpenedMarket',
+    pair: 'ETH/USD',
+    tradeIndex: 7,
+    pnl_net: 0,
+    price: 2_000,
+  }
+  const close = {
+    id: 11,
+    date: '2026-06-02T00:00:00.000Z',
+    action: 'TradeClosedMarket',
+    pair: 'ETH/USD',
+    tradeIndex: 7,
+    pnl_net: 5,
+    collateralPriceUsd: 1,
+    price: 2_100,
+  }
+
+  it('detects a close whose open fell outside the fetched page prefix', () => {
+    expect(unmatchedGtradeCloseKeys([close], null)).toEqual(['ETH/USD#7'])
+    expect(unmatchedGtradeCloseKeys([close, open], null)).toEqual([])
+  })
+
+  it('ignores old closes at or before the incremental cursor', () => {
+    expect(unmatchedGtradeCloseKeys([close], close.date)).toEqual([])
+  })
+
+  it('accepts liquidation closes as terminal position events', () => {
+    const rows = parseGtradeHistory(
+      { data: [{ ...close, action: 'TradeClosedLIQ' }, open] },
+      'position_history',
+      ctx
+    )
+    expect(rows).toHaveLength(1)
+  })
+
+  it('fails closed when realized collateral cannot be converted to USD', () => {
+    const { collateralPriceUsd: _removed, ...missingPrice } = close
+    expect(() =>
+      parseGtradeHistory({ data: [missingPrice, open] }, 'position_history', ctx)
+    ).toThrow('missing collateralPriceUsd')
   })
 })
 
