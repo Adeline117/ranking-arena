@@ -27,7 +27,10 @@ import {
   promoteExtrasMetrics,
   EXTRAS_PROMOTABLE_KEYS,
 } from '@/lib/constants/metric-registry'
-import { readGmxRealizedNetModuleDisclosure } from '@/lib/data/serving/pnl-contract'
+import {
+  readGmxMaxCapitalRoiModuleDisclosure,
+  readGmxRealizedNetModuleDisclosure,
+} from '@/lib/data/serving/pnl-contract'
 import MetricGrid from './MetricGrid'
 import PnlContractNotice from './PnlContractNotice'
 import SignalChips from './SignalChips'
@@ -148,6 +151,13 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
     typeof tf === 'number' && pnlActuallyVisible
       ? readGmxRealizedNetModuleDisclosure(source, tf, core.modules)
       : null
+  const roiActuallyVisible = displayableMetrics(gridCapabilityMetrics, gridStats).some(
+    (def) => def.key === 'roi'
+  )
+  const roiDisclosure =
+    typeof tf === 'number' && roiActuallyVisible
+      ? readGmxMaxCapitalRoiModuleDisclosure(source, tf, core.modules)
+      : null
 
   // Dormant trader (e.g. Bitget "*不活跃"): every core metric is 0 and the
   // series is flat. Show one honest line instead of a grid of 0.00% that
@@ -241,7 +251,22 @@ export default function ServingProfilePanel({ firstScreen, capability }: Serving
             stats={gridStats}
             capabilityMetrics={gridCapabilityMetrics}
             currency={core.modules.currency}
-            metricLabelKeys={pnlDisclosure ? { pnl: 'gmxRealizedNetPnlLabel' } : undefined}
+            metricLabelKeys={
+              pnlDisclosure || roiDisclosure
+                ? {
+                    ...(pnlDisclosure ? { pnl: 'gmxRealizedNetPnlLabel' } : {}),
+                    ...(roiDisclosure ? { roi: 'gmxMaxCapitalRoiLabel' } : {}),
+                  }
+                : undefined
+            }
+            metricTooltipKeys={
+              pnlDisclosure || roiDisclosure
+                ? {
+                    ...(pnlDisclosure ? { pnl: 'gmxRealizedNetPnlTooltip' } : {}),
+                    ...(roiDisclosure ? { roi: 'gmxMaxCapitalRoiTooltip' } : {}),
+                  }
+                : undefined
+            }
           />
           {pnlDisclosure && <PnlContractNotice disclosure={pnlDisclosure} compact />}
           <CoreCharts series={core.modules.series} timeframe={tf} />

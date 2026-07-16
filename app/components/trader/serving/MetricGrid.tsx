@@ -20,6 +20,7 @@ import {
 import { formatMoney } from '@/lib/utils/money'
 import { formatROI } from '@/lib/utils/format'
 import type { ServingCurrency } from '@/lib/data/serving/types'
+import InfoTooltip from '@/app/components/ui/InfoTooltip'
 
 // Tier-grouped rendering (eToro-style sectioning): the registry `tier` field
 // previously only sized the font, so 40+ co-populated metrics rendered as one
@@ -38,6 +39,8 @@ export interface MetricGridProps {
   /** Per-cell copy override for a proven source contract. Registry defaults
    * remain untouched so other sources and similarly named metrics stay safe. */
   metricLabelKeys?: Readonly<Record<string, string>>
+  /** Optional accessible detail copy for the same explicitly proven cells. */
+  metricTooltipKeys?: Readonly<Record<string, string>>
 }
 
 function formatValue(def: MetricDef, value: number | string, currency: ServingCurrency): string {
@@ -86,11 +89,13 @@ function MetricCell({
   value,
   currency,
   labelKey,
+  tooltipKey,
 }: {
   def: MetricDef
   value: number | string
   currency: ServingCurrency
   labelKey?: string
+  tooltipKey?: string
 }) {
   const { t } = useLanguage()
   return (
@@ -102,8 +107,13 @@ function MetricCell({
         border: '1px solid ' + tokens.colors.border.primary,
       }}
     >
-      <Text size="xs" color="tertiary" style={{ display: 'block', marginBottom: 4 }}>
+      <Text
+        size="xs"
+        color="tertiary"
+        style={{ display: 'flex', alignItems: 'center', gap: 2, marginBottom: 4 }}
+      >
         {t(labelKey ?? def.i18nKey)}
+        {tooltipKey && <InfoTooltip text={t(tooltipKey)} size={11} />}
       </Text>
       <Text
         size={def.tier === 'hero' ? 'lg' : 'md'}
@@ -121,6 +131,7 @@ export default function MetricGrid({
   capabilityMetrics,
   currency,
   metricLabelKeys,
+  metricTooltipKeys,
 }: MetricGridProps) {
   const { t } = useLanguage()
   const defs = displayableMetrics(capabilityMetrics, stats)
@@ -171,6 +182,7 @@ export default function MetricGrid({
                 value={stats[def.key]!}
                 currency={currency}
                 labelKey={metricLabelKeys?.[def.key]}
+                tooltipKey={metricTooltipKeys?.[def.key]}
               />
             ))}
           </Box>
