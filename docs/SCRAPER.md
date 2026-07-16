@@ -181,7 +181,7 @@ node scripts/pipeline-health-check.mjs --fix   # Generate fix script
 
 ```bash
 VPS_SCRAPER_URL=http://45.76.152.169:3456
-VPS_PROXY_KEY=arena-proxy-sg-2026
+VPS_PROXY_KEY=<set-in-secret-manager>
 # Fallback proxies (optional)
 VPS_PROXY_SG=http://45.76.152.169:3457
 VPS_PROXY_JP=http://149.28.27.242:3001

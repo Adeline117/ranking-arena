@@ -1,7 +1,11 @@
 import http from 'node:http'
 
 const PORT = 3456
-const PROXY_KEY = process.env.PROXY_KEY || 'arena-proxy-sg-2026'
+const PROXY_KEY = process.env.PROXY_KEY?.trim()
+
+if (!PROXY_KEY) {
+  throw new Error('PROXY_KEY is required; refusing to start an unauthenticated proxy')
+}
 
 // All exchange hosts that Arena connectors need to reach
 const ALLOWED_HOSTS = new Set([
