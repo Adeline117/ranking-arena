@@ -14,7 +14,9 @@ const translations: Record<string, string> = {
   claimFailed: 'Claim failed',
   confirm: 'Confirm',
   loading: 'Loading',
+  loadMore: 'Load More',
   noClaims: 'No claims found',
+  refresh: 'Refresh',
   reject: 'Reject',
   rejected: 'Rejected',
   retry: 'Retry',
@@ -122,8 +124,11 @@ function claim(
   }
 }
 
-function claimsResponse(claims: ReturnType<typeof claim>[]) {
-  return response({ data: { claims } })
+function claimsResponse(
+  claims: ReturnType<typeof claim>[],
+  { total = claims.length, hasMore = false }: { total?: number; hasMore?: boolean } = {}
+) {
+  return response({ data: { claims, total, has_more: hasMore } })
 }
 
 describe('TraderClaimsTab review UX', () => {
@@ -191,25 +196,55 @@ describe('TraderClaimsTab review UX', () => {
         'X-CSRF-Token': 'csrf-token',
       }),
     })
+    expect(mockFetch.mock.calls[2][0]).toBe('/api/admin/claims?status=reviewable&limit=50&offset=0')
   })
 
-  it('keeps reviewing claims inside the pending filter', async () => {
-    mockFetch.mockResolvedValueOnce(
-      claimsResponse([
-        claim('claim-a', 'pending-trader'),
-        claim('claim-b', 'reviewing-trader', 'reviewing'),
-        claim('claim-c', 'verified-trader', 'verified'),
-      ])
-    )
+  it('defaults to the complete reviewable queue and resets paging when switching status', async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        claimsResponse([
+          claim('claim-a', 'pending-trader'),
+          claim('claim-b', 'reviewing-trader', 'reviewing'),
+        ])
+      )
+      .mockResolvedValueOnce(claimsResponse([claim('claim-c', 'verified-trader', 'verified')]))
 
     render(<TraderClaimsTab accessToken="admin-token" />)
-    await screen.findByText('verified-trader')
-
-    fireEvent.click(screen.getByRole('button', { name: 'Pending (2)' }))
+    await screen.findByText('reviewing-trader')
 
     expect(screen.getByText('pending-trader')).toBeInTheDocument()
     expect(screen.getByText('reviewing-trader')).toBeInTheDocument()
-    expect(screen.queryByText('verified-trader')).not.toBeInTheDocument()
+    expect(mockFetch.mock.calls[0][0]).toBe('/api/admin/claims?status=reviewable&limit=50&offset=0')
+
+    fireEvent.click(screen.getByRole('button', { name: 'All' }))
+
+    expect(await screen.findByText('verified-trader')).toBeInTheDocument()
+    expect(mockFetch.mock.calls[1][0]).toBe('/api/admin/claims?status=all&limit=50&offset=0')
+    expect(screen.queryByText('pending-trader')).not.toBeInTheDocument()
+    expect(screen.queryByText('reviewing-trader')).not.toBeInTheDocument()
+  })
+
+  it('uses the server total and loads claims beyond the first page', async () => {
+    const firstPage = Array.from({ length: 50 }, (_, index) =>
+      claim(`claim-${index}`, `trader-${index}`)
+    )
+    mockFetch
+      .mockResolvedValueOnce(claimsResponse(firstPage, { total: 201, hasMore: true }))
+      .mockResolvedValueOnce(
+        claimsResponse([claim('claim-50', 'trader-after-page-one')], { total: 201 })
+      )
+
+    render(<TraderClaimsTab accessToken="admin-token" />)
+
+    expect(await screen.findByRole('button', { name: 'Pending (201)' })).toBeInTheDocument()
+    expect(screen.queryByText('trader-after-page-one')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Load More' }))
+
+    expect(await screen.findByText('trader-after-page-one')).toBeInTheDocument()
+    expect(mockFetch.mock.calls[1][0]).toBe(
+      '/api/admin/claims?status=reviewable&limit=50&offset=50'
+    )
   })
 
   it('deduplicates rapid review clicks while the first request is in flight', async () => {
