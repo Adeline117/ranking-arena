@@ -35,20 +35,39 @@ export function isQuotaExhausted(msg: string): boolean {
  *  subsequent calls go to Alchemy (identical JSON-RPC). */
 let heliusExhausted = false
 
-/**
- * Prefer Helius when configured (owner-provided 2026-07-09, Phase B full-scale
- * quota), fall back to Alchemy. Both speak identical Solana JSON-RPC — only
- * the URL differs, so provider choice stays a pure env concern.
- */
-function solDefaultUrl(): string {
-  const helius = process.env.HELIUS_API_KEY
-  if (helius && !heliusExhausted) return `https://mainnet.helius-rpc.com/?api-key=${helius}`
-  return alchemySolUrl()
+export type SolanaProviderId = 'helius' | 'alchemy' | 'caller_supplied'
+
+interface SolanaEndpoint {
+  url: string
+  providerId: SolanaProviderId
 }
 
 interface RpcOpts {
   rpcUrl?: string
   timeoutMs?: number
+}
+
+/**
+ * Prefer Helius when configured (owner-provided 2026-07-09, Phase B full-scale
+ * quota), fall back to Alchemy. Both speak identical Solana JSON-RPC — only
+ * the URL differs, so provider choice stays a pure env concern.
+ */
+function solDefaultEndpoint(): SolanaEndpoint {
+  const helius = process.env.HELIUS_API_KEY
+  if (helius && !heliusExhausted) {
+    return {
+      url: `https://mainnet.helius-rpc.com/?api-key=${helius}`,
+      providerId: 'helius',
+    }
+  }
+  return { url: alchemySolUrl(), providerId: 'alchemy' }
+}
+
+function resolveSolEndpoint(opts: RpcOpts): SolanaEndpoint {
+  if (typeof opts.rpcUrl === 'string') {
+    return { url: opts.rpcUrl, providerId: 'caller_supplied' }
+  }
+  return solDefaultEndpoint()
 }
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -69,15 +88,31 @@ function isTransient(msg: string): boolean {
   )
 }
 
-async function solRpc<T>(method: string, params: unknown[], opts: RpcOpts = {}): Promise<T> {
+interface SolanaRpcCall<T> {
+  result: T
+  providerId: SolanaProviderId
+  attemptedProviderIds: SolanaProviderId[]
+}
+
+/** Same transport semantics as solRpc, with stable provider provenance only.
+ * URLs are deliberately excluded because provider URLs may contain API keys. */
+async function solRpcWithProvenance<T>(
+  method: string,
+  params: unknown[],
+  opts: RpcOpts = {}
+): Promise<SolanaRpcCall<T>> {
   const attempts = 5
+  const attemptedProviderIds: SolanaProviderId[] = []
   for (let i = 0; i < attempts; i++) {
     // Re-resolve per attempt — a quota failover mid-loop must take effect.
-    const url = opts.rpcUrl ?? solDefaultUrl()
+    const endpoint = resolveSolEndpoint(opts)
+    if (!attemptedProviderIds.includes(endpoint.providerId)) {
+      attemptedProviderIds.push(endpoint.providerId)
+    }
     const ctrl = new AbortController()
     const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 20_000)
     try {
-      const res = await fetch(url, {
+      const res = await fetch(endpoint.url, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
@@ -86,7 +121,11 @@ async function solRpc<T>(method: string, params: unknown[], opts: RpcOpts = {}):
       const text = await res.text()
       const json = (text ? JSON.parse(text) : {}) as { result?: T; error?: { message?: string } }
       if (json.error) throw new Error(`sol ${method}: ${json.error.message ?? 'error'}`)
-      return json.result as T
+      return {
+        result: json.result as T,
+        providerId: endpoint.providerId,
+        attemptedProviderIds: [...attemptedProviderIds],
+      }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       // Provider quota dead → sticky-switch to Alchemy and retry immediately
@@ -114,6 +153,10 @@ async function solRpc<T>(method: string, params: unknown[], opts: RpcOpts = {}):
   throw new Error(`sol ${method}: exhausted retries`)
 }
 
+async function solRpc<T>(method: string, params: unknown[], opts: RpcOpts = {}): Promise<T> {
+  return (await solRpcWithProvenance<T>(method, params, opts)).result
+}
+
 interface SigInfo {
   signature: string
   blockTime: number | null
@@ -133,6 +176,299 @@ export interface SolanaSignatureCoverage {
 export interface SolanaSignatureScan {
   signatures: string[]
   coverage: SolanaSignatureCoverage
+}
+
+export type SolanaRpcJson =
+  | null
+  | boolean
+  | number
+  | string
+  | SolanaRpcJson[]
+  | { [key: string]: SolanaRpcJson }
+
+export type SolanaTransactionError = string | { [key: string]: SolanaRpcJson }
+
+export interface SolanaSignatureRecord {
+  signature: string
+  slot: number
+  blockTime: number | null
+  memo: string | null
+  confirmationStatus: 'processed' | 'confirmed' | 'finalized' | null
+  executionError: SolanaTransactionError | null
+  providerId: SolanaProviderId
+}
+
+export interface SolanaSignatureRecordCoverage {
+  scanComplete: boolean
+  truncated: boolean
+  stopReason: 'lookback_boundary' | 'history_exhausted' | 'record_cap' | 'page_cap'
+  commitmentRequested: 'finalized'
+  pagesFetched: number
+  recordsSeen: number
+  recordsReturned: number
+  failedRecords: number
+  recordsMissingTimestamp: number
+  recordsNotFinalized: number
+  duplicateRecords: number
+  orderingViolations: number
+  windowBoundaryViolations: number
+  recordsAboveWindow: number
+  sinceMs: number
+  endExclusiveMs: number | null
+  initialBefore: string | null
+  nextBefore: string | null
+  boundaryRecord: SolanaSignatureRecord | null
+  providersAttempted: SolanaProviderId[]
+}
+
+export interface SolanaSignatureRecordScan {
+  records: SolanaSignatureRecord[]
+  coverage: SolanaSignatureRecordCoverage
+}
+
+const SOLANA_BASE58_RE = /^[1-9A-HJ-NP-Za-km-z]+$/
+const SOLANA_BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+function base58DecodedByteLength(value: string): number {
+  let numericValue = 0n
+  for (const character of value) {
+    const digit = SOLANA_BASE58_ALPHABET.indexOf(character)
+    if (digit < 0) return -1
+    numericValue = numericValue * 58n + BigInt(digit)
+  }
+  let significantBytes = 0
+  for (let remaining = numericValue; remaining > 0n; remaining >>= 8n) significantBytes += 1
+  let leadingZeroBytes = 0
+  while (leadingZeroBytes < value.length && value[leadingZeroBytes] === '1') {
+    leadingZeroBytes += 1
+  }
+  return leadingZeroBytes + significantBytes
+}
+
+function isSolanaSignature(value: string): boolean {
+  return (
+    value.length >= 64 &&
+    value.length <= 100 &&
+    SOLANA_BASE58_RE.test(value) &&
+    base58DecodedByteLength(value) === 64
+  )
+}
+
+function normalizeSignatureRecord(
+  value: unknown,
+  providerId: SolanaProviderId
+): SolanaSignatureRecord {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) {
+    throw new Error('sol getSignaturesForAddress: invalid record')
+  }
+  const row = value as Record<string, unknown>
+  if (typeof row.signature !== 'string' || !isSolanaSignature(row.signature)) {
+    throw new Error('sol getSignaturesForAddress: invalid signature')
+  }
+  if (!Number.isSafeInteger(row.slot) || Number(row.slot) < 0) {
+    throw new Error('sol getSignaturesForAddress: invalid slot')
+  }
+
+  const blockTime = row.blockTime ?? null
+  if (blockTime !== null && (!Number.isSafeInteger(blockTime) || Number(blockTime) < 0)) {
+    throw new Error('sol getSignaturesForAddress: invalid blockTime')
+  }
+  const memo = row.memo ?? null
+  if (memo !== null && typeof memo !== 'string') {
+    throw new Error('sol getSignaturesForAddress: invalid memo')
+  }
+  const confirmationStatus = row.confirmationStatus ?? null
+  if (
+    confirmationStatus !== null &&
+    confirmationStatus !== 'processed' &&
+    confirmationStatus !== 'confirmed' &&
+    confirmationStatus !== 'finalized'
+  ) {
+    throw new Error('sol getSignaturesForAddress: invalid confirmationStatus')
+  }
+  if (!Object.hasOwn(row, 'err')) {
+    throw new Error('sol getSignaturesForAddress: missing err')
+  }
+  const executionError = row.err
+  if (
+    executionError !== null &&
+    typeof executionError !== 'string' &&
+    (!executionError || typeof executionError !== 'object' || Array.isArray(executionError))
+  ) {
+    throw new Error('sol getSignaturesForAddress: invalid err')
+  }
+
+  return {
+    signature: row.signature,
+    slot: Number(row.slot),
+    blockTime: blockTime as number | null,
+    memo: memo as string | null,
+    confirmationStatus: confirmationStatus as SolanaSignatureRecord['confirmationStatus'],
+    executionError: executionError as SolanaTransactionError | null,
+    providerId,
+  }
+}
+
+/**
+ * Evidence-only signature scan. Unlike the production PnL scan, this retains
+ * failed transactions and every provider field needed to classify a fixed
+ * finalized window. maxRecords is a raw-record budget, not a success budget.
+ */
+export async function scanSignatureRecords(
+  wallet: string,
+  opts: RpcOpts & {
+    sinceMs?: number
+    endExclusiveMs?: number
+    initialBefore?: string
+    maxRecords?: number
+    maxPages?: number
+  } = {}
+): Promise<SolanaSignatureRecordScan> {
+  const sinceMs = opts.sinceMs ?? 0
+  if (!Number.isSafeInteger(sinceMs) || sinceMs < 0) {
+    throw new RangeError('sinceMs must be a non-negative safe integer')
+  }
+  const sinceSec = sinceMs / 1000
+  const endExclusiveMs = opts.endExclusiveMs ?? 0
+  if (!Number.isSafeInteger(endExclusiveMs) || endExclusiveMs < 0) {
+    throw new RangeError('endExclusiveMs must be a non-negative safe integer')
+  }
+  if (endExclusiveMs > 0 && endExclusiveMs <= sinceMs) {
+    throw new RangeError('endExclusiveMs must be greater than sinceMs')
+  }
+  const endExclusiveSec = endExclusiveMs / 1000
+  if (opts.initialBefore !== undefined && !isSolanaSignature(opts.initialBefore)) {
+    throw new TypeError('initialBefore must be a base58-encoded 64-byte signature')
+  }
+  const maxRecords = opts.maxRecords ?? 1000
+  if (!Number.isSafeInteger(maxRecords) || maxRecords <= 0) {
+    throw new RangeError('maxRecords must be a positive safe integer')
+  }
+  const maxPages = opts.maxPages ?? Math.max(1, Math.ceil(maxRecords / 1000))
+  if (!Number.isSafeInteger(maxPages) || maxPages <= 0) {
+    throw new RangeError('maxPages must be a positive safe integer')
+  }
+
+  const records: SolanaSignatureRecord[] = []
+  const providersAttempted: SolanaProviderId[] = []
+  let before = opts.initialBefore
+  let pagesFetched = 0
+  let recordsSeen = 0
+  let failedRecords = 0
+  let recordsMissingTimestamp = 0
+  let recordsNotFinalized = 0
+  let duplicateRecords = 0
+  let orderingViolations = 0
+  let windowBoundaryViolations = 0
+  let recordsAboveWindow = 0
+  let previousSlot: number | null = null
+  let lastRawRecord: SolanaSignatureRecord | null = null
+  let boundaryRecord: SolanaSignatureRecord | null = null
+  const seenSignatures = new Set<string>()
+
+  const finish = (
+    stopReason: SolanaSignatureRecordCoverage['stopReason']
+  ): SolanaSignatureRecordScan => ({
+    records,
+    coverage: {
+      scanComplete:
+        stopReason !== 'record_cap' &&
+        stopReason !== 'page_cap' &&
+        recordsMissingTimestamp === 0 &&
+        recordsNotFinalized === 0 &&
+        duplicateRecords === 0 &&
+        orderingViolations === 0 &&
+        windowBoundaryViolations === 0,
+      truncated: stopReason === 'record_cap' || stopReason === 'page_cap',
+      stopReason,
+      commitmentRequested: 'finalized',
+      pagesFetched,
+      recordsSeen,
+      recordsReturned: records.length,
+      failedRecords,
+      recordsMissingTimestamp,
+      recordsNotFinalized,
+      duplicateRecords,
+      orderingViolations,
+      windowBoundaryViolations,
+      recordsAboveWindow,
+      sinceMs,
+      endExclusiveMs: endExclusiveMs || null,
+      initialBefore: opts.initialBefore ?? null,
+      nextBefore:
+        stopReason === 'record_cap' || stopReason === 'page_cap'
+          ? (lastRawRecord?.signature ?? null)
+          : null,
+      boundaryRecord,
+      providersAttempted,
+    },
+  })
+
+  while (recordsSeen < maxRecords) {
+    if (pagesFetched >= maxPages) return finish('page_cap')
+    const remaining = maxRecords - recordsSeen
+    const requestLimit = Math.min(1000, remaining)
+    let call: SolanaRpcCall<unknown>
+    try {
+      call = await solRpcWithProvenance<unknown>(
+        'getSignaturesForAddress',
+        [
+          wallet,
+          {
+            commitment: 'finalized',
+            limit: requestLimit,
+            ...(before ? { before } : {}),
+          },
+        ],
+        opts
+      )
+    } catch {
+      throw new Error('sol getSignaturesForAddress: RPC request failed')
+    }
+    pagesFetched += 1
+    for (const providerId of call.attemptedProviderIds) {
+      if (!providersAttempted.includes(providerId)) providersAttempted.push(providerId)
+    }
+    if (!Array.isArray(call.result)) {
+      throw new Error('sol getSignaturesForAddress: invalid result')
+    }
+    if (call.result.length > requestLimit) {
+      throw new Error('sol getSignaturesForAddress: result exceeds requested limit')
+    }
+    if (call.result.length === 0) return finish('history_exhausted')
+    recordsSeen += call.result.length
+
+    for (const raw of call.result) {
+      const record = normalizeSignatureRecord(raw, call.providerId)
+      lastRawRecord = record
+      if (seenSignatures.has(record.signature)) duplicateRecords += 1
+      seenSignatures.add(record.signature)
+      if (previousSlot !== null && record.slot > previousSlot) orderingViolations += 1
+      previousSlot = record.slot
+      if (record.confirmationStatus !== 'finalized') {
+        recordsNotFinalized += 1
+      }
+      if (sinceSec && record.blockTime !== null && record.blockTime < sinceSec) {
+        boundaryRecord ??= record
+        continue
+      }
+      if (boundaryRecord !== null && record.blockTime !== null && record.blockTime >= sinceSec) {
+        windowBoundaryViolations += 1
+      }
+      if (endExclusiveSec && record.blockTime !== null && record.blockTime >= endExclusiveSec) {
+        recordsAboveWindow += 1
+        continue
+      }
+      records.push(record)
+      if (record.executionError !== null) failedRecords += 1
+      if (record.blockTime === null) recordsMissingTimestamp += 1
+    }
+    if (boundaryRecord !== null) return finish('lookback_boundary')
+    if (call.result.length < requestLimit) return finish('history_exhausted')
+    if (recordsSeen >= maxRecords) return finish('record_cap')
+    before = lastRawRecord?.signature
+  }
+  return finish('record_cap')
 }
 
 /**
