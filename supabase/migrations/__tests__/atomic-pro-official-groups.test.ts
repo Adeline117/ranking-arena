@@ -34,6 +34,10 @@ const officialCountTrigger = functionBody(
   'sync_pro_official_member_count',
   'sync_pro_official_member_count()'
 )
+const registryIdentityGuard = functionBody(
+  'reject_pro_official_registry_identity_update',
+  'reject_pro_official_registry_identity_update()'
+)
 
 describe('atomic Pro official groups migration', () => {
   it('is transactional, serialized, bounded and reloads the API schema', () => {
@@ -69,6 +73,13 @@ describe('atomic Pro official groups migration', () => {
     expect(migration).toContain("attribute.attname = 'group_number'")
     expect(migration).toContain('constraint_row.convalidated')
     expect(migration).toContain('NOT constraint_row.condeferrable')
+    expect(migration).toContain('canonical group membership edge primary key is incompatible')
+    expect(migration).toContain('Pro official-group cascade foreign-key authority is incompatible')
+    expect(migration).toContain("constraint_row.confdeltype = 'c'")
+    expect(migration).toContain('Pro official-group relation authority is incompatible')
+    expect(migration).toContain("relation.relpersistence <> 'p'")
+    expect(migration).toContain('pg_catalog.pg_inherits')
+    expect(migration).toContain('pg_catalog.pg_rewrite')
   })
 
   it('reconciles both edge directions and calibrates the two counters independently', () => {
@@ -105,6 +116,17 @@ describe('atomic Pro official groups migration', () => {
     expect(migration).not.toContain('current_user')
   })
 
+  it('makes registry identity immutable so UPDATE cannot bypass either counter', () => {
+    expect(registryIdentityGuard).toContain('NEW.user_id IS DISTINCT FROM OLD.user_id')
+    expect(registryIdentityGuard).toContain('NEW.pro_group_id IS DISTINCT FROM OLD.pro_group_id')
+    expect(registryIdentityGuard).toContain('Pro official registry identity is immutable')
+    expect(migration).toContain('trg_pro_official_members_05_identity_immutable')
+    expect(migration).toContain('trigger_row.tgtype = 19')
+    expect(migration).toContain(
+      "'public.reject_pro_official_registry_identity_update()'::pg_catalog.regprocedure"
+    )
+  })
+
   it('allocates and joins under global, user and generic-edge serialization', () => {
     const globalLock = joinOfficialGroup.indexOf("'pro-official-group-assignment'")
     const userLock = joinOfficialGroup.indexOf("'pro-official-group-user:'")
@@ -126,6 +148,9 @@ describe('atomic Pro official groups migration', () => {
     expect(joinOfficialGroup).toContain("'status', 'account_inactive'")
     expect(joinOfficialGroup).toContain("'status', 'pro_required'")
     expect(joinOfficialGroup).toContain("'status', 'group_full'")
+    expect(joinOfficialGroup.indexOf('INTO v_group_creator, v_group_dissolved_at')).toBeLessThan(
+      joinOfficialGroup.indexOf('INTO v_group_active')
+    )
   })
 
   it('creates group/config/owner and both subscriber edges in one RPC transaction', () => {
