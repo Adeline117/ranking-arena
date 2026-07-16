@@ -1025,11 +1025,6 @@ describe('/api/posts/[id]/comments', () => {
       const body = await res.json()
 
       expect(res.status).toBe(200)
-      expect(mockCanServiceActorReadPost).toHaveBeenCalledWith(
-        expect.anything(),
-        TEST_POST_ID,
-        mockUser.id
-      )
       expect(body.success).toBe(true)
       expect(mockDeleteOwnCommentWithRollout).toHaveBeenCalledWith(expect.anything(), {
         commentId,
@@ -1039,8 +1034,10 @@ describe('/api/posts/[id]/comments', () => {
       expect(body.data).toMatchObject({ deleted_count: 2, comment_count: 7 })
     })
 
-    it('does not reveal or mutate an owned comment after post access expires', async () => {
-      mockCanServiceActorReadPost.mockResolvedValue(false)
+    it('does not reveal or mutate an owned comment when the atomic delete denies access', async () => {
+      mockDeleteOwnCommentWithRollout.mockRejectedValue(
+        new CommentMutationRolloutError('not_found')
+      )
       const req = new NextRequest(`http://localhost/api/posts/${TEST_POST_ID}/comments`, {
         method: 'DELETE',
         body: { comment_id: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e' },
@@ -1049,7 +1046,11 @@ describe('/api/posts/[id]/comments', () => {
       const res = await DELETE(req, createContext())
 
       expect(res.status).toBe(404)
-      expect(mockDeleteOwnCommentWithRollout).not.toHaveBeenCalled()
+      expect(mockDeleteOwnCommentWithRollout).toHaveBeenCalledWith(expect.anything(), {
+        commentId: 'b2c3d4e5-f6a7-4b8c-9d0e-1f2a3b4c5d6e',
+        postId: TEST_POST_ID,
+        userId: mockUser.id,
+      })
       expect(mockSupabaseFrom).not.toHaveBeenCalled()
     })
 
