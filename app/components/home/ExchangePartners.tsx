@@ -1,7 +1,7 @@
 'use client'
 
 import { useQuery } from '@tanstack/react-query'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useSearchParams } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { fetcher } from '@/lib/hooks/fetchers'
 import { REFETCH_RELAXED, STALE_RELAXED } from '@/lib/hooks/cache-presets'
@@ -23,7 +23,6 @@ interface VisibleSourcesPayload {
 }
 
 export default function ExchangePartners() {
-  const router = useRouter()
   const searchParams = useSearchParams()
   const { t } = useLanguage()
   const rawTimeRange = searchParams.get('range')?.toUpperCase()
@@ -191,7 +190,10 @@ export default function ExchangePartners() {
                   params.set('exchange', ex.filterSource)
                   params.delete('ex')
                   params.delete('page')
-                  router.replace(`?${params.toString()}`, { scroll: false })
+                  // The homepage is a static server shell. Next's client router
+                  // can dedupe same-route, search-param-only replace calls to a
+                  // no-op, leaving the filtered data and share URL out of sync.
+                  window.history.replaceState(null, '', `/?${params.toString()}`)
                   trackEvent('ranking_filter', {
                     kind: 'source_marquee',
                     value: ex.filterSource,

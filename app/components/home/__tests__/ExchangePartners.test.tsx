@@ -1,14 +1,12 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { VisibleLeaderboardSource } from '@/lib/data/visible-leaderboard-sources'
 
-const mockReplace = jest.fn()
 const mockRefetch = jest.fn()
 const mockTrackEvent = jest.fn()
 const mockUseQuery = jest.fn()
 let mockSearch = 'range=30D'
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: mockReplace }),
   useSearchParams: () => new URLSearchParams(mockSearch),
 }))
 
@@ -56,6 +54,7 @@ describe('ExchangePartners', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockSearch = 'range=30D'
+    window.history.replaceState(null, '', '/?range=30D')
     mockUseQuery.mockReturnValue({
       data: [source],
       isLoading: false,
@@ -87,7 +86,8 @@ describe('ExchangePartners', () => {
     render(<ExchangePartners />)
     fireEvent.click(screen.getByRole('link'))
 
-    expect(mockReplace).toHaveBeenCalledWith('?range=30D&exchange=bybit', { scroll: false })
+    expect(window.location.pathname).toBe('/')
+    expect(window.location.search).toBe('?range=30D&exchange=bybit')
     expect(mockTrackEvent).toHaveBeenCalledWith('ranking_filter', {
       kind: 'source_marquee',
       value: 'bybit',
