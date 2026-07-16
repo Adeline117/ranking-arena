@@ -47,6 +47,13 @@ export type UpdateUserAttributes = Parameters<AuthClient['updateUser']>[0]
 type PasswordSignInResult = Awaited<ReturnType<AuthClient['signInWithPassword']>>
 type VerifyOtpResult = Awaited<ReturnType<AuthClient['verifyOtp']>>
 type UpdateUserResult = Awaited<ReturnType<AuthClient['updateUser']>>
+export type UpdateUserWithSessionResult = {
+  data: {
+    user: UpdateUserResult['data']['user']
+    session: Session | null
+  }
+  error: UpdateUserResult['error']
+}
 
 class SupersededAuthOperationError extends Error {
   constructor() {
@@ -164,11 +171,11 @@ function staleVerifyOtpResult(): VerifyOtpResult {
   } as VerifyOtpResult
 }
 
-function staleUpdateUserResult(): UpdateUserResult {
+function staleUpdateUserWithSessionResult(): UpdateUserWithSessionResult {
   return {
-    data: { user: null },
+    data: { user: null, session: null },
     error: supersededAuthError(),
-  } as UpdateUserResult
+  }
 }
 
 /**
@@ -562,35 +569,55 @@ class TokenRefreshCoordinator {
     attributes: UpdateUserAttributes,
     scope?: RefreshScope
   ): Promise<UpdateUserResult> {
+    const result = await this.updateUserWithSession(attributes, scope)
+    return {
+      data: { user: result.data.user },
+      error: result.error,
+    } as UpdateUserResult
+  }
+
+  /**
+   * Update auth attributes and return the exact canonical session owned by the
+   * coordinator lease. Login completion must not issue a later singleton
+   * getSession call that could silently adopt another account or token.
+   */
+  async updateUserWithSession(
+    attributes: UpdateUserAttributes,
+    scope?: RefreshScope
+  ): Promise<UpdateUserWithSessionResult> {
     const viewer = this.captureScope(scope)
-    if (!viewer?.userId) return staleUpdateUserResult()
+    if (!viewer?.userId) return staleUpdateUserWithSessionResult()
     const operation = captureAuthOperation(viewer.userId)
-    if (!operation) return staleUpdateUserResult()
+    if (!operation) return staleUpdateUserWithSessionResult()
 
     try {
       const result = await this.runSessionWriter(operation, (client) =>
         client.auth.updateUser(attributes)
       )
-      if (result.error) return result
-      if (!isViewerScopeCurrent(viewer) || !isAuthOperationCurrent(operation)) {
-        return staleUpdateUserResult()
+      if (result.error) {
+        return { data: { user: result.data.user, session: null }, error: result.error }
       }
-      const client = await getSupabase()
-      const { data } = await client.auth.getSession()
+      if (!isViewerScopeCurrent(viewer) || !isAuthOperationCurrent(operation)) {
+        return staleUpdateUserWithSessionResult()
+      }
+      const session = getStoredAuthSession() as Session | null
       if (
-        data.session?.user.id !== viewer.userId ||
+        !session ||
+        typeof session.access_token !== 'string' ||
+        typeof session.refresh_token !== 'string' ||
+        session.user.id !== viewer.userId ||
         !isViewerScopeCurrent(viewer) ||
         !isAuthOperationCurrent(operation)
       ) {
-        return staleUpdateUserResult()
+        return staleUpdateUserWithSessionResult()
       }
-      updateAuthState(data.session)
-      return result
+      updateAuthState(session)
+      return { data: { user: result.data.user, session }, error: null }
     } catch (error) {
       if (!(error instanceof SupersededAuthOperationError)) {
         logger.warn('[TokenRefresh] User update failed:', error)
       }
-      return staleUpdateUserResult()
+      return staleUpdateUserWithSessionResult()
     }
   }
 
