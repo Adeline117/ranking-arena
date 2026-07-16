@@ -63,9 +63,26 @@ function AuthCallbackContent() {
       boundary.authOperation
         ? isAuthOperationCurrent(boundary.authOperation)
         : getCurrentAuthOperation() === null && isViewerScopeCurrent(boundary.viewerScope)
-    const assertCallbackBoundaryCurrent = (boundary: CallbackBoundary) => {
+    const getCurrentCallbackAcquisitionReceipt = () => {
+      const receipt = getAuthRedirectAcquisitionReceipt()
+      const currentOperation = getCurrentAuthOperation()
+      if (
+        !receipt ||
+        receipt.navigationKey !== getAuthRedirectNavigationKey() ||
+        !currentOperation ||
+        currentOperation.id !== receipt.operationId ||
+        !currentOperation.targetKnown ||
+        currentOperation.expectedUserId !== receipt.userId
+      ) {
+        return null
+      }
+      return receipt
+    }
+    const assertCallbackBoundaryOrAcquisitionCurrent = (boundary: CallbackBoundary) => {
       assertCallbackCurrent()
-      if (!isCallbackBoundaryCurrent(boundary)) throw new StaleVerifiedSessionError()
+      if (!isCallbackBoundaryCurrent(boundary) && !getCurrentCallbackAcquisitionReceipt()) {
+        throw new StaleVerifiedSessionError()
+      }
     }
     const proveCallbackSessionOwnership = (
       candidateSession: { user: { id: string } },
@@ -75,14 +92,9 @@ function AuthCallbackContent() {
       const receipt = getAuthRedirectAcquisitionReceipt()
       if (!receipt) return isCallbackBoundaryCurrent(boundary)
 
-      const currentOperation = getCurrentAuthOperation()
       if (
-        receipt.navigationKey !== getAuthRedirectNavigationKey() ||
         receipt.userId !== candidateSession.user.id ||
-        !currentOperation ||
-        currentOperation.id !== receipt.operationId ||
-        !currentOperation.targetKnown ||
-        currentOperation.expectedUserId !== receipt.userId
+        getCurrentCallbackAcquisitionReceipt()?.operationId !== receipt.operationId
       ) {
         return false
       }
@@ -353,9 +365,12 @@ function AuthCallbackContent() {
           retries = 0
         ): Promise<Awaited<ReturnType<typeof supabase.auth.getSession>>['data']['session']> => {
           await waitForRetry()
-          assertCallbackBoundaryCurrent(retryBoundary)
+          // Supabase may finish parsing the redirect while this retry sleeps.
+          // The tab-local receipt proves that boundary change belongs to this
+          // callback; an unrelated login/account switch has no such receipt.
+          assertCallbackBoundaryOrAcquisitionCurrent(retryBoundary)
           const { data, error: retryError } = await supabase.auth.getSession()
-          assertCallbackBoundaryCurrent(retryBoundary)
+          assertCallbackBoundaryOrAcquisitionCurrent(retryBoundary)
           if (retryError) throw retryError
           if (data.session) return data.session
           if (retries < 2) return tryGetSession(retries + 1)
