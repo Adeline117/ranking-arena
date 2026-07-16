@@ -102,6 +102,7 @@ export async function upsertLeaderboard(params: {
         calmar_ratio: t.calmar_ratio ?? null,
         trader_type: t.trader_type || (t.source === 'web3_bot' ? 'bot' : null),
         is_outlier: (t as unknown as Record<string, unknown>).is_outlier === true ? true : false,
+        metrics_estimated: t.metrics_estimated,
       }
     })
 
