@@ -37,6 +37,7 @@ function profile(extras: Record<string, unknown>): ParsedProfile {
         extras,
       },
     ],
+    replaceSeries: [{ timeframe: 30, metrics: ['pnl'] }],
     series: [
       {
         timeframe: 30,
@@ -96,6 +97,26 @@ describe('publishProfile whole-window coverage gate', () => {
     expect(sql.some((statement) => statement.includes('INSERT INTO arena.trader_stats'))).toBe(true)
     expect(sql.some((statement) => statement.includes('INSERT INTO arena.trader_series'))).toBe(
       true
+    )
+    expect(sql.some((statement) => statement.includes('DELETE FROM arena.trader_series\n'))).toBe(
+      true
+    )
+    expect(sql.some((statement) => statement.includes('arena.trader_series_weekly'))).toBe(true)
+    expect(sql.map((statement) => statement.trim())).toContain('COMMIT')
+  })
+
+  it('clears both old series stores for a confirmed empty replacement', async () => {
+    const parsed = profile({ profile_window_metrics_complete: true })
+    parsed.series = []
+
+    await publishProfile(src, 42, parsed, { fullSeries: true })
+
+    const sql = query.mock.calls.map(([statement]) => String(statement))
+    expect(
+      sql.filter((statement) => statement.includes('DELETE FROM arena.trader_series'))
+    ).toHaveLength(2)
+    expect(sql.some((statement) => statement.includes('INSERT INTO arena.trader_series ('))).toBe(
+      false
     )
     expect(sql.map((statement) => statement.trim())).toContain('COMMIT')
   })
