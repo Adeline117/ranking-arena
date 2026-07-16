@@ -23,9 +23,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 
 // Ceiling — the count may only decrease. Lower this after removing casts.
-// 2026-07-15 baseline: 180 typed-client bypasses (the root enabler of the
+// 2026-07-16 baseline: 177 typed-client bypasses (the root enabler of the
 // 2026-07 column-drift class). Drive this down; never let it grow.
-const BASELINE = 180
+const BASELINE = 177
 
 const REPO = path.resolve(new URL('../..', import.meta.url).pathname)
 const DIRS = ['app', 'lib']

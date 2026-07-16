@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import type { CursorExportDataset } from '../export-pagination'
 
 const mockFetchAllExportRowsByCursor = jest.fn()
@@ -29,7 +30,7 @@ const dataset = {
   },
 } satisfies CursorExportDataset
 
-const client = {} as SupabaseClient
+const client = {} as SupabaseClient<Database>
 
 describe('fetchAllExportRowsForUuidParents', () => {
   beforeEach(() => {

@@ -30,6 +30,7 @@ import {
   type UpdateVerifiedTraderInput,
 } from '../trader-claims'
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 
 const CLAIM_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const USER_ID = '11111111-1111-4111-8111-111111111111'
@@ -69,7 +70,7 @@ function activationPayload(overrides: Record<string, unknown> = {}) {
 describe('trader claim review mutations', () => {
   const mockRpc = jest.fn()
   const mockFrom = jest.fn()
-  const client = { rpc: mockRpc, from: mockFrom } as unknown as SupabaseClient
+  const client = { rpc: mockRpc, from: mockFrom } as unknown as SupabaseClient<Database>
 
   beforeEach(() => {
     jest.clearAllMocks()
