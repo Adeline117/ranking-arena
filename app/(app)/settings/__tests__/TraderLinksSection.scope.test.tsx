@@ -139,7 +139,6 @@ function linkedTrader(userId: string, label: string, isPrimary = true) {
     user_id: userId,
     trader_id: `${userId}-trader`,
     source: 'binance_futures',
-    market_type: 'futures',
     label,
     is_primary: isPrimary,
     display_order: 0,
