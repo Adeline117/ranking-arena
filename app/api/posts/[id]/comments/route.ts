@@ -543,10 +543,6 @@ export const DELETE = withAuth(
     }
     const commentId = parsed.data.comment_id
 
-    if (!(await canServiceActorReadPost(supabase, postId, user.id))) {
-      throw ApiError.notFound('Post not found')
-    }
-
     let result
     try {
       result = await deleteOwnCommentWithRollout(supabase, {

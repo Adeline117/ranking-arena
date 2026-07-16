@@ -41,6 +41,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN;
+CREATE ROLE rogue_interaction_writer NOLOGIN;
 CREATE SCHEMA auth;
 
 CREATE FUNCTION auth.role()
@@ -165,6 +166,31 @@ ALTER FUNCTION public.lock_actor_can_interact_with_post(uuid, uuid)
 REVOKE ALL ON FUNCTION public.lock_actor_can_interact_with_post(uuid, uuid)
   FROM PUBLIC, anon, authenticated, service_role;
 
+CREATE FUNCTION public.delete_own_comment(
+  p_comment_id uuid,
+  p_post_id uuid,
+  p_user_id uuid
+)
+RETURNS TABLE (deleted_count integer, comment_count integer)
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+BEGIN
+  DELETE FROM public.comments AS target
+  WHERE target.id = p_comment_id
+    AND target.post_id = p_post_id
+    AND target.user_id = p_user_id;
+  GET DIAGNOSTICS deleted_count = ROW_COUNT;
+  SELECT pg_catalog.count(*)::integer
+  INTO comment_count
+  FROM public.comments AS remaining
+  WHERE remaining.post_id = p_post_id;
+  RETURN NEXT;
+END
+$$;
+ALTER FUNCTION public.delete_own_comment(uuid, uuid, uuid) OWNER TO postgres;
+
 GRANT ALL ON ALL TABLES IN SCHEMA public TO service_role;
 
 INSERT INTO public.posts (id, author_id)
@@ -198,6 +224,7 @@ DO $active_contract$
 DECLARE
   v_result jsonb;
   v_comment_id uuid;
+  v_deleted_count integer;
 BEGIN
   v_result := public.toggle_post_reaction(
     '10000000-0000-4000-8000-000000000001',
@@ -255,13 +282,14 @@ BEGIN
     RAISE EXCEPTION 'active poll vote failed: %', v_result;
   END IF;
 
-  INSERT INTO public.comments (post_id, user_id, content)
+  v_comment_id := '50000000-0000-4000-8000-000000000001';
+  INSERT INTO public.comments (id, post_id, user_id, content)
   VALUES (
+    v_comment_id,
     '10000000-0000-4000-8000-000000000001',
     '40000000-0000-4000-8000-000000000001',
     'active comment'
-  )
-  RETURNING id INTO v_comment_id;
+  );
 
   INSERT INTO public.comment_likes (comment_id, user_id, reaction_type)
   VALUES (
@@ -269,6 +297,24 @@ BEGIN
     '40000000-0000-4000-8000-000000000001',
     'like'
   );
+
+  INSERT INTO public.comments (id, post_id, user_id, content)
+  VALUES (
+    '50000000-0000-4000-8000-000000000002',
+    '10000000-0000-4000-8000-000000000001',
+    '40000000-0000-4000-8000-000000000001',
+    'delete through wrapper'
+  );
+  SELECT result.deleted_count
+  INTO v_deleted_count
+  FROM public.delete_own_comment(
+    '50000000-0000-4000-8000-000000000002',
+    '10000000-0000-4000-8000-000000000001',
+    '40000000-0000-4000-8000-000000000001'
+  ) AS result;
+  IF v_deleted_count <> 1 THEN
+    RAISE EXCEPTION 'active owned-comment delete failed';
+  END IF;
 
   INSERT INTO public.post_reactions (post_id, user_id, reaction_type)
   VALUES (
@@ -370,6 +416,7 @@ expect_denied "UPDATE public.post_votes SET choice='bear' WHERE post_id='1000000
 expect_denied "UPDATE public.post_bookmarks SET folder_id=folder_id WHERE post_id='10000000-0000-4000-8000-000000000001'"
 expect_denied "UPDATE public.post_emoji_reactions SET emoji='🚀' WHERE post_id='10000000-0000-4000-8000-000000000001'"
 expect_denied "INSERT INTO public.comments (post_id,user_id,content) VALUES ('10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','expired comment')"
+expect_denied "SELECT * FROM public.delete_own_comment('50000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001')"
 expect_denied "UPDATE public.comment_likes SET reaction_type='dislike'"
 expect_denied "UPDATE public.poll_votes SET option_index=1"
 expect_denied "INSERT INTO public.post_reactions (post_id,user_id,reaction_type) VALUES ('10000000-0000-4000-8000-000000000001','40000000-0000-4000-8000-000000000001','rocket')"
@@ -381,6 +428,7 @@ DECLARE
   v_signature regprocedure;
 BEGIN
   FOREACH v_signature IN ARRAY ARRAY[
+    'public.delete_own_comment(uuid,uuid,uuid)'::regprocedure,
     'public.toggle_post_reaction(uuid,uuid,text)'::regprocedure,
     'public.toggle_post_vote_atomic(uuid,uuid,text)'::regprocedure,
     'public.toggle_post_bookmark_atomic(uuid,uuid,uuid)'::regprocedure,
@@ -400,8 +448,10 @@ $acl_contract$;
 SQL
 
 # The migration is replay-safe and replay does not mutate retained interaction rows.
+psql_cmd -c "GRANT EXECUTE ON FUNCTION public.toggle_post_reaction(uuid,uuid,text) TO rogue_interaction_writer" >/dev/null
 psql_cmd <"$MIGRATION" >/dev/null
 psql_cmd -Atqc "SELECT count(*) FROM public.post_likes" | grep -qx '1'
 psql_cmd -Atqc "SELECT count(*) FROM public.post_bookmarks" | grep -qx '1'
+psql_cmd -Atqc "SELECT pg_catalog.has_function_privilege('rogue_interaction_writer','public.toggle_post_reaction(uuid,uuid,text)','EXECUTE')" | grep -qx 'f'
 
 echo "atomic post child interaction PostgreSQL 17 checks passed"

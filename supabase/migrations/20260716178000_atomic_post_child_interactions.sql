@@ -12,6 +12,15 @@ BEGIN
   ) IS NULL THEN
     RAISE EXCEPTION 'canonical post interaction lock is missing';
   END IF;
+  IF pg_catalog.to_regprocedure(
+    'public.delete_own_comment(uuid,uuid,uuid)'
+  ) IS NULL
+    AND pg_catalog.to_regprocedure(
+      'public.delete_own_comment_locked_impl(uuid,uuid,uuid)'
+    ) IS NULL
+  THEN
+    RAISE EXCEPTION 'canonical owned-comment delete implementation is missing';
+  END IF;
 
   FOREACH v_table IN ARRAY ARRAY[
     'posts',
@@ -242,6 +251,68 @@ CREATE TRIGGER trg_repost_10_current_interaction
   BEFORE INSERT OR UPDATE OF original_post_id, author_id ON public.posts
   FOR EACH ROW
   EXECUTE FUNCTION public.enforce_current_repost_interaction();
+
+-- The mature owned-comment delete implementation already owns subtree and
+-- counter locks. Preserve it behind a private name, then put the current post
+-- audience/entitlement lock in front of it. This closes the final service-role
+-- race without duplicating the deletion algorithm.
+DO $internalize_owned_comment_delete$
+BEGIN
+  IF pg_catalog.to_regprocedure(
+    'public.delete_own_comment_locked_impl(uuid,uuid,uuid)'
+  ) IS NULL THEN
+    ALTER FUNCTION public.delete_own_comment(uuid, uuid, uuid)
+      RENAME TO delete_own_comment_locked_impl;
+  END IF;
+END
+$internalize_owned_comment_delete$;
+
+ALTER FUNCTION public.delete_own_comment_locked_impl(uuid, uuid, uuid)
+  OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.delete_own_comment_locked_impl(uuid, uuid, uuid)
+  FROM PUBLIC, anon, authenticated, service_role;
+
+CREATE OR REPLACE FUNCTION public.delete_own_comment(
+  p_comment_id uuid,
+  p_post_id uuid,
+  p_user_id uuid
+)
+RETURNS TABLE (
+  deleted_count integer,
+  comment_count integer
+)
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF COALESCE((SELECT auth.role()), '') IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'service role required' USING ERRCODE = '42501';
+  END IF;
+  IF p_comment_id IS NULL OR p_post_id IS NULL OR p_user_id IS NULL THEN
+    RAISE EXCEPTION 'comment_id, post_id, and user_id are required'
+      USING ERRCODE = '22023';
+  END IF;
+  IF NOT public.lock_actor_can_interact_with_post(p_post_id, p_user_id) THEN
+    RAISE EXCEPTION 'active post not found' USING ERRCODE = 'P0002';
+  END IF;
+
+  RETURN QUERY
+  SELECT result.deleted_count, result.comment_count
+  FROM public.delete_own_comment_locked_impl(
+    p_comment_id,
+    p_post_id,
+    p_user_id
+  ) AS result;
+END
+$function$;
+
+ALTER FUNCTION public.delete_own_comment(uuid, uuid, uuid) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.delete_own_comment(uuid, uuid, uuid)
+  FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.delete_own_comment(uuid, uuid, uuid)
+  TO service_role;
 
 CREATE OR REPLACE FUNCTION public.toggle_post_reaction(
   p_post_id uuid,
@@ -780,12 +851,89 @@ REVOKE ALL ON FUNCTION public.cast_post_poll_vote_atomic(uuid, uuid, integer[])
 GRANT EXECUTE ON FUNCTION public.cast_post_poll_vote_atomic(uuid, uuid, integer[])
   TO service_role;
 
+DO $converge_function_authority$
+DECLARE
+  v_signature pg_catalog.regprocedure;
+  v_owner oid;
+  v_grantee record;
+BEGIN
+  FOREACH v_signature IN ARRAY ARRAY[
+    'public.enforce_current_post_child_interaction()'::pg_catalog.regprocedure,
+    'public.enforce_current_comment_interaction()'::pg_catalog.regprocedure,
+    'public.enforce_current_comment_reaction()'::pg_catalog.regprocedure,
+    'public.enforce_current_poll_vote_interaction()'::pg_catalog.regprocedure,
+    'public.enforce_current_repost_interaction()'::pg_catalog.regprocedure,
+    'public.delete_own_comment_locked_impl(uuid,uuid,uuid)'::pg_catalog.regprocedure,
+    'public.delete_own_comment(uuid,uuid,uuid)'::pg_catalog.regprocedure,
+    'public.toggle_post_reaction(uuid,uuid,text)'::pg_catalog.regprocedure,
+    'public.toggle_post_vote_atomic(uuid,uuid,text)'::pg_catalog.regprocedure,
+    'public.toggle_post_bookmark_atomic(uuid,uuid,uuid)'::pg_catalog.regprocedure,
+    'public.toggle_post_emoji_reaction_atomic(uuid,uuid,text)'::pg_catalog.regprocedure,
+    'public.cast_post_poll_vote_atomic(uuid,uuid,integer[])'::pg_catalog.regprocedure
+  ]
+  LOOP
+    SELECT function_row.proowner
+    INTO STRICT v_owner
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.oid = v_signature;
+
+    FOR v_grantee IN
+      SELECT DISTINCT acl_entry.grantee, role_row.rolname
+      FROM pg_catalog.pg_proc AS function_row
+      CROSS JOIN LATERAL pg_catalog.aclexplode(
+        COALESCE(
+          function_row.proacl,
+          pg_catalog.acldefault('f', function_row.proowner)
+        )
+      ) AS acl_entry
+      LEFT JOIN pg_catalog.pg_roles AS role_row
+        ON role_row.oid = acl_entry.grantee
+      WHERE function_row.oid = v_signature
+        AND acl_entry.grantee <> v_owner
+    LOOP
+      IF v_grantee.grantee = 0 THEN
+        EXECUTE pg_catalog.format(
+          'REVOKE ALL ON FUNCTION %s FROM PUBLIC',
+          v_signature
+        );
+      ELSIF v_grantee.rolname IS NOT NULL THEN
+        EXECUTE pg_catalog.format(
+          'REVOKE ALL ON FUNCTION %s FROM %I',
+          v_signature,
+          v_grantee.rolname
+        );
+      END IF;
+    END LOOP;
+  END LOOP;
+END
+$converge_function_authority$;
+
+GRANT EXECUTE ON FUNCTION public.toggle_post_reaction(uuid, uuid, text)
+  TO service_role;
+GRANT EXECUTE ON FUNCTION public.delete_own_comment(uuid, uuid, uuid)
+  TO service_role;
+GRANT EXECUTE ON FUNCTION public.toggle_post_vote_atomic(uuid, uuid, text)
+  TO service_role;
+GRANT EXECUTE ON FUNCTION public.toggle_post_bookmark_atomic(uuid, uuid, uuid)
+  TO service_role;
+GRANT EXECUTE ON FUNCTION public.toggle_post_emoji_reaction_atomic(uuid, uuid, text)
+  TO service_role;
+GRANT EXECUTE ON FUNCTION public.cast_post_poll_vote_atomic(uuid, uuid, integer[])
+  TO service_role;
+
 DO $postflight$
 DECLARE
   v_signature pg_catalog.regprocedure;
   v_trigger text;
+  v_service_oid oid;
 BEGIN
+  SELECT role_row.oid
+  INTO STRICT v_service_oid
+  FROM pg_catalog.pg_roles AS role_row
+  WHERE role_row.rolname = 'service_role';
+
   FOREACH v_signature IN ARRAY ARRAY[
+    'public.delete_own_comment(uuid,uuid,uuid)'::pg_catalog.regprocedure,
     'public.toggle_post_reaction(uuid,uuid,text)'::pg_catalog.regprocedure,
     'public.toggle_post_vote_atomic(uuid,uuid,text)'::pg_catalog.regprocedure,
     'public.toggle_post_bookmark_atomic(uuid,uuid,uuid)'::pg_catalog.regprocedure,
@@ -796,6 +944,19 @@ BEGIN
     IF NOT pg_catalog.has_function_privilege('service_role', v_signature, 'EXECUTE')
       OR pg_catalog.has_function_privilege('anon', v_signature, 'EXECUTE')
       OR pg_catalog.has_function_privilege('authenticated', v_signature, 'EXECUTE')
+      OR EXISTS (
+        SELECT 1
+        FROM pg_catalog.pg_proc AS function_row
+        CROSS JOIN LATERAL pg_catalog.aclexplode(
+          COALESCE(
+            function_row.proacl,
+            pg_catalog.acldefault('f', function_row.proowner)
+          )
+        ) AS acl_entry
+        WHERE function_row.oid = v_signature
+          AND acl_entry.privilege_type = 'EXECUTE'
+          AND acl_entry.grantee NOT IN (function_row.proowner, v_service_oid)
+      )
     THEN
       RAISE EXCEPTION 'post interaction RPC ACL drifted: %', v_signature;
     END IF;

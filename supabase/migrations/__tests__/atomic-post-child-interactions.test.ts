@@ -52,6 +52,19 @@ describe('atomic post child interaction migration', () => {
     )
   })
 
+  it('puts the canonical lock in front of the preserved owned-comment delete', () => {
+    const body = functionBody(
+      'delete_own_comment',
+      'CREATE OR REPLACE FUNCTION public.toggle_post_reaction'
+    )
+    expect(body.indexOf('public.lock_actor_can_interact_with_post')).toBeLessThan(
+      body.indexOf('public.delete_own_comment_locked_impl')
+    )
+    expect(migration).toContain(
+      'ALTER FUNCTION public.delete_own_comment(uuid, uuid, uuid)\n      RENAME TO delete_own_comment_locked_impl'
+    )
+  })
+
   it.each([
     ['toggle_post_reaction', 'CREATE OR REPLACE FUNCTION public.toggle_post_vote_atomic'],
     ['toggle_post_vote_atomic', 'CREATE OR REPLACE FUNCTION public.toggle_post_bookmark_atomic'],
@@ -79,7 +92,10 @@ describe('atomic post child interaction migration', () => {
   })
 
   it('publishes each mutation RPC only to service_role', () => {
+    expect(migration).toContain('DO $converge_function_authority$')
+    expect(migration).toContain('pg_catalog.aclexplode')
     for (const signature of [
+      'public.delete_own_comment(uuid, uuid, uuid)',
       'public.toggle_post_reaction(uuid, uuid, text)',
       'public.toggle_post_vote_atomic(uuid, uuid, text)',
       'public.toggle_post_bookmark_atomic(uuid, uuid, uuid)',
