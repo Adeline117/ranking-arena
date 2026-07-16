@@ -53,6 +53,13 @@ describe('atomic group mute boundary', () => {
     expect(migration).toContain('pg_catalog.pg_rewrite')
   })
 
+  it('attests PostgreSQL 17 automatic role inheritance on every membership edge', () => {
+    expect(migration.match(/membership\.inherit_option/g)).toHaveLength(8)
+    expect(migration).not.toContain('.rolinherit')
+    expect(migration).toContain('service_role has an unsafe effective inheritance edge')
+    expect(migration).toContain('service_role effective inheritance boundary drifted')
+  })
+
   it('publishes the exact service-only mute security-definer RPC', () => {
     expect(migration).toMatch(
       /CREATE OR REPLACE FUNCTION public\.moderate_group_mute_atomic\([\s\S]*p_operation_id uuid,[\s\S]*p_actor_id uuid,[\s\S]*p_group_id uuid,[\s\S]*p_target_id uuid,[\s\S]*p_action text,[\s\S]*p_muted_until timestamptz,[\s\S]*p_reason text[\s\S]*RETURNS jsonb[\s\S]*SECURITY DEFINER[\s\S]*SET search_path = pg_catalog, pg_temp[\s\S]*SET lock_timeout = '5s'/
