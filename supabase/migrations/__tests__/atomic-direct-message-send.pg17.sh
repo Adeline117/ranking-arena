@@ -445,6 +445,14 @@ SQL
 
 psql_cmd -f "$MIGRATION" >/dev/null
 
+# Later DM boundary tests may source this executable fixture after the real
+# 114000 migration has converged. Direct execution keeps running this file's
+# full send test suite; sourcing with the opt-in flag returns the live,
+# isolated PostgreSQL 17 cluster to the caller and preserves the EXIT cleanup.
+if [[ "${ATOMIC_DM_SEND_FIXTURE_ONLY:-0}" == "1" ]]; then
+  return 0
+fi
+
 # A differently named trigger targeting either historical side-effect function
 # would double notifications/previews. Replay must fail before mutating ACLs.
 psql_cmd <<'SQL'
