@@ -18,7 +18,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useAccount, useSignMessage } from 'wagmi'
 import { useConnectModal } from '@rainbow-me/rainbowkit'
-import { supabase } from '@/lib/supabase/client'
 
 // Lazy-load siwe (pulls in ethers ~668KB) — only needed when user triggers
 // Web3 sign-in, not on initial page load.
@@ -28,6 +27,7 @@ async function getSiweMessage() {
 }
 import { useLanguage, type TranslationFunction } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 // ============================================
 // Types
@@ -233,11 +233,14 @@ export function useOneClickSiwe(options: UseOneClickSiweOptions = {}): UseOneCli
 
       // Complete Supabase auth using the verification token
       if (result.verificationToken && result.email) {
-        const { error: otpError } = await supabase.auth.verifyOtp({
-          email: result.email,
-          token: result.verificationToken,
-          type: 'email',
-        })
+        const { error: otpError } = await tokenRefreshCoordinator.verifyOtp(
+          {
+            email: result.email,
+            token: result.verificationToken,
+            type: 'email',
+          },
+          result.userId
+        )
 
         if (otpError) {
           logger.warn('[OneClickSIWE] OTP verification warning:', otpError)

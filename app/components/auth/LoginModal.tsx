@@ -14,6 +14,7 @@ import { tokens } from '@/lib/design-tokens'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import dynamic from 'next/dynamic'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 const OneClickWalletButton = dynamic(
   () => import('@/lib/web3/wallet-components').then((m) => ({ default: m.OneClickWalletButton })),
@@ -164,7 +165,7 @@ export default function LoginModal({ open, onClose, message }: LoginModalProps) 
     setError('')
     setLoading(true)
 
-    const { error: verifyError } = await supabase.auth.verifyOtp({
+    const { error: verifyError } = await tokenRefreshCoordinator.verifyOtp({
       email: email.trim(),
       token: otp.trim(),
       type: 'email',

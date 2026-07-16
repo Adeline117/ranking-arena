@@ -7,6 +7,7 @@ import { tokens } from '@/lib/design-tokens'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getPasswordStrength, validateEmail } from '../login/components/loginHelpers'
+import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 
 // Password floor: minimum 8 chars AND strength at least "fair" (level >= 2),
 // matching the login/register flow. The strength meter is the real gate.
@@ -341,7 +342,7 @@ function ResetPasswordContent() {
     setLoading(true)
 
     try {
-      const { error: updateError } = await supabase.auth.updateUser({
+      const { error: updateError } = await tokenRefreshCoordinator.updateUser({
         password: newPassword,
       })
 

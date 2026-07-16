@@ -28,6 +28,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { useAuthSession } from '../useAuthSession'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
 import { getViewerScope } from '@/lib/auth/viewer-scope'
+import { AUTH_OPERATION_STORAGE_KEY, AUTH_STORAGE_KEY } from '@/lib/auth/session-operation'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -68,9 +69,11 @@ describe('useAuthSession', () => {
         access_token: 'token-b',
         refresh_token: 'refresh-b',
       })
+      // A stale SIGNED_OUT emitted by the superseded A writer must not erase B.
       mockAuthStateCallback?.('SIGNED_OUT', null)
     })
-    await waitFor(() => expect(result.current.viewerKey).toBe('anon'))
+    await waitFor(() => expect(result.current.viewerKey).toBe('user:user-b'))
+    await act(async () => tokenRefreshCoordinator.signOut())
   })
 
   it('starts in loading state', () => {
@@ -78,6 +81,76 @@ describe('useAuthSession', () => {
     // Initially should not be logged in
     expect(result.current.isLoggedIn).toBe(false)
     expect(result.current.userId).toBeNull()
+  })
+
+  it('resolves a cross-tab identity lease only when the matching session storage event arrives', async () => {
+    const { result } = renderHook(() => useAuthSession())
+    await waitFor(() => expect(mockAuthStateCallback).toBeDefined())
+    act(() => {
+      const generation = tokenRefreshCoordinator.beginIdentityTransition('user-a')
+      tokenRefreshCoordinator.completeIdentityTransition(generation, 'user-a')
+      mockAuthStateCallback?.('SIGNED_IN', {
+        user: { id: 'user-a', email: 'a@example.test' },
+        access_token: 'token-a',
+        refresh_token: 'refresh-a',
+      })
+    })
+    await waitFor(() => expect(result.current.userId).toBe('user-a'))
+
+    const operation = {
+      id: 'cross-tab-user-b',
+      expectedUserId: 'user-b',
+      targetKnown: true,
+      identityTransition: true,
+    }
+    window.localStorage.setItem(AUTH_OPERATION_STORAGE_KEY, JSON.stringify(operation))
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: AUTH_OPERATION_STORAGE_KEY,
+          newValue: JSON.stringify(operation),
+        })
+      )
+    })
+    await waitFor(() => expect(result.current.viewerKey).toBe('pending'))
+
+    const sessionB = {
+      user: { id: 'user-b', email: 'b@example.test' },
+      access_token: 'token-b',
+      refresh_token: 'refresh-b',
+    }
+    window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionB))
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: AUTH_STORAGE_KEY,
+          newValue: JSON.stringify(sessionB),
+        })
+      )
+    })
+
+    await waitFor(() => expect(result.current.userId).toBe('user-b'))
+    expect(result.current.accessToken).toBe('token-b')
+
+    // A delayed operation event from an older tab must not move B back to
+    // pending after B already owns the canonical operation key.
+    const staleLogout = {
+      id: 'stale-cross-tab-logout',
+      expectedUserId: null,
+      targetKnown: true,
+      identityTransition: true,
+    }
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: AUTH_OPERATION_STORAGE_KEY,
+          newValue: JSON.stringify(staleLogout),
+        })
+      )
+    })
+    expect(result.current.userId).toBe('user-b')
+    expect(result.current.viewerKey).toBe('user:user-b')
+    await act(async () => tokenRefreshCoordinator.signOut())
   })
 
   describe('categorizeError', () => {
@@ -132,6 +205,8 @@ describe('useAuthSession', () => {
     const { result } = renderHook(() => useAuthSession())
     await waitFor(() => expect(mockAuthStateCallback).toBeDefined())
     act(() => {
+      const generation = tokenRefreshCoordinator.beginIdentityTransition('user-a')
+      tokenRefreshCoordinator.completeIdentityTransition(generation, 'user-a')
       mockAuthStateCallback?.('SIGNED_IN', {
         user: { id: 'user-a', email: 'a@example.test' },
         access_token: 'token-a',
@@ -159,13 +234,16 @@ describe('useAuthSession', () => {
       })
       mockAuthStateCallback?.('SIGNED_OUT', null)
     })
-    await waitFor(() => expect(result.current.viewerKey).toBe('anon'))
+    await waitFor(() => expect(result.current.viewerKey).toBe('user:user-b'))
+    await act(async () => tokenRefreshCoordinator.signOut())
   })
 
   it('commits anonymous state even when the Supabase signOut call throws', async () => {
     const { result } = renderHook(() => useAuthSession())
     await waitFor(() => expect(mockAuthStateCallback).toBeDefined())
     act(() => {
+      const generation = tokenRefreshCoordinator.beginIdentityTransition('user-a')
+      tokenRefreshCoordinator.completeIdentityTransition(generation, 'user-a')
       mockAuthStateCallback?.('SIGNED_IN', {
         user: { id: 'user-a', email: 'a@example.test' },
         access_token: 'token-a',

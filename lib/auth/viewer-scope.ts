@@ -18,7 +18,7 @@ export type ViewerScope = {
 
 type IdentityTransition = {
   generation: number
-  expectedUserId: string | null
+  expectedUserId: string | null | undefined
 }
 
 type ViewerScopeListener = (scope: ViewerScope) => void
@@ -77,7 +77,7 @@ export function synchronizeViewerScope(authChecked: boolean, userId: string | nu
  * Immediately invalidates all outstanding work before a logout/account swap.
  * The returned generation identifies this exact transition.
  */
-export function beginViewerTransition(expectedUserId: string | null): number {
+export function beginViewerTransition(expectedUserId?: string | null): number {
   currentScope = {
     viewerKey: 'pending',
     sessionGeneration: currentScope.sessionGeneration + 1,
@@ -92,7 +92,10 @@ export function beginViewerTransition(expectedUserId: string | null): number {
 }
 
 export function isExpectedTransitionSession(userId: string | null): boolean {
-  return !activeTransition || activeTransition.expectedUserId === userId
+  return (
+    !activeTransition ||
+    (activeTransition.expectedUserId !== undefined && activeTransition.expectedUserId === userId)
+  )
 }
 
 export function finishViewerTransition(generation: number): void {

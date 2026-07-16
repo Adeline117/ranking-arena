@@ -1,6 +1,11 @@
 const mockGetSession = jest.fn()
 const mockRefreshSession = jest.fn()
 const mockSetSession = jest.fn()
+const mockSignOut = jest.fn()
+const mockAdminSignOut = jest.fn()
+const mockSignInWithPassword = jest.fn()
+const mockVerifyOtp = jest.fn()
+const mockUpdateUser = jest.fn()
 
 jest.mock('@/lib/supabase/client', () => ({
   supabase: {
@@ -8,6 +13,11 @@ jest.mock('@/lib/supabase/client', () => ({
       getSession: mockGetSession,
       refreshSession: mockRefreshSession,
       setSession: mockSetSession,
+      signOut: mockSignOut,
+      admin: { signOut: mockAdminSignOut },
+      signInWithPassword: mockSignInWithPassword,
+      verifyOtp: mockVerifyOtp,
+      updateUser: mockUpdateUser,
     },
   },
 }))
@@ -23,6 +33,13 @@ import {
   getViewerScope,
   synchronizeViewerScope,
 } from '../viewer-scope'
+import {
+  AUTH_STORAGE_KEY,
+  __resetAuthOperationsForTests,
+  beginAuthIdentityOperation,
+  guardedAuthStorage,
+  withAuthSessionWriter,
+} from '../session-operation'
 
 function deferred<T>() {
   let resolve!: (value: T) => void
@@ -50,13 +67,27 @@ function jwt(userId: string): string {
   return `${encode({ alg: 'none' })}.${encode({ sub: userId })}.signature`
 }
 
+async function seedStoredSession(userId: string, accessToken: string): Promise<void> {
+  const operation = beginAuthIdentityOperation(userId)
+  await withAuthSessionWriter(operation, async () => {
+    guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(session(userId, accessToken)))
+  })
+}
+
 describe('TokenRefreshCoordinator viewer binding', () => {
   beforeEach(async () => {
     await tokenRefreshCoordinator.settleInflightRefreshes()
+    tokenRefreshCoordinator.observeSession(null)
     __resetViewerScopeForTests()
+    __resetAuthOperationsForTests()
     mockGetSession.mockReset()
     mockRefreshSession.mockReset()
     mockSetSession.mockReset()
+    mockSignOut.mockReset().mockResolvedValue({ error: null })
+    mockAdminSignOut.mockReset().mockResolvedValue({ error: null })
+    mockSignInWithPassword.mockReset()
+    mockVerifyOtp.mockReset()
+    mockUpdateUser.mockReset()
     registerAuthStateSetter(() => {})
     global.fetch = jest.fn()
   })
@@ -83,6 +114,41 @@ describe('TokenRefreshCoordinator viewer binding', () => {
     await expect(second).resolves.toBe('token-a2')
     expect(mockRefreshSession).toHaveBeenCalledTimes(1)
     expect(getViewerScope()).toEqual(scope)
+  })
+
+  it('routes proactive expiry refresh through the leased session writer', async () => {
+    jest.useFakeTimers()
+    try {
+      const scope = synchronizeViewerScope(true, 'user-a')
+      const expiringSession = {
+        ...session('user-a', 'token-a1'),
+        expires_at: Math.floor(Date.now() / 1_000) + 120,
+      }
+      const refreshedSession = {
+        ...session('user-a', 'token-a2'),
+        expires_at: Math.floor(Date.now() / 1_000) + 3_600,
+      }
+      mockRefreshSession.mockImplementationOnce(async () => {
+        guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(refreshedSession))
+        return { data: { session: refreshedSession }, error: null }
+      })
+
+      tokenRefreshCoordinator.observeSession(
+        expiringSession as Parameters<typeof tokenRefreshCoordinator.observeSession>[0]
+      )
+      await jest.advanceTimersByTimeAsync(61_000)
+      await tokenRefreshCoordinator.settleInflightRefreshes()
+
+      expect(mockRefreshSession).toHaveBeenCalledTimes(1)
+      expect(JSON.parse(window.localStorage.getItem(AUTH_STORAGE_KEY) ?? '{}')).toMatchObject({
+        access_token: 'token-a2',
+        user: { id: 'user-a' },
+      })
+      expect(getViewerScope()).toEqual(scope)
+    } finally {
+      tokenRefreshCoordinator.observeSession(null)
+      jest.useRealTimers()
+    }
   })
 
   it('bounds logout waiting when a refresh never settles', async () => {
@@ -129,6 +195,133 @@ describe('TokenRefreshCoordinator viewer binding', () => {
 
     await expect(request).resolves.toBeNull()
     expect(getViewerScope().viewerKey).toBe('pending')
+  })
+
+  it('prevents a real late refresh storage/state side effect from overwriting B', async () => {
+    await seedStoredSession('user-a', 'token-a1')
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const refreshA = deferred<{
+      data: { session: ReturnType<typeof session> }
+      error: null
+    }>()
+    const publishedStates: Array<{ userId: string | null; accessToken: string | null }> = []
+    registerAuthStateSetter((state) => {
+      publishedStates.push({ userId: state.userId, accessToken: state.accessToken })
+    })
+    mockRefreshSession
+      .mockImplementationOnce(async () => {
+        const result = await refreshA.promise
+        guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(result.data.session))
+        return result
+      })
+      .mockImplementationOnce(async () => {
+        const result = { data: { session: session('user-b', 'token-b') }, error: null }
+        guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(result.data.session))
+        return result
+      })
+
+    const refreshing = tokenRefreshCoordinator.forceRefresh({
+      expectedUserId: 'user-a',
+      sessionGeneration: scope.sessionGeneration,
+    })
+    while (mockRefreshSession.mock.calls.length < 1) await Promise.resolve()
+    const switching = tokenRefreshCoordinator.switchSession('refresh-user-b', 'user-b')
+
+    refreshA.resolve({ data: { session: session('user-a', 'late-token-a') }, error: null })
+
+    await expect(refreshing).resolves.toBeNull()
+    await expect(switching).resolves.toMatchObject({ user: { id: 'user-b' } })
+    expect(JSON.parse(window.localStorage.getItem(AUTH_STORAGE_KEY) ?? '{}')).toMatchObject({
+      access_token: 'token-b',
+      user: { id: 'user-b' },
+    })
+    expect(publishedStates).toEqual([{ userId: 'user-b', accessToken: 'token-b' }])
+  })
+
+  it('returns logout before the shared auth lock and rejects the late A write', async () => {
+    await seedStoredSession('user-a', 'token-a1')
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const refreshA = deferred<{
+      data: { session: ReturnType<typeof session> }
+      error: null
+    }>()
+    const lockedSignOut = deferred<{ error: null }>()
+    const publishedStates: Array<{ userId: string | null; accessToken: string | null }> = []
+    registerAuthStateSetter((state) => {
+      publishedStates.push({ userId: state.userId, accessToken: state.accessToken })
+    })
+    mockRefreshSession.mockImplementationOnce(async () => {
+      const result = await refreshA.promise
+      guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(result.data.session))
+      return result
+    })
+    mockSignOut.mockReturnValueOnce(lockedSignOut.promise)
+
+    const refreshing = tokenRefreshCoordinator.forceRefresh({
+      expectedUserId: 'user-a',
+      sessionGeneration: scope.sessionGeneration,
+    })
+    while (mockRefreshSession.mock.calls.length < 1) await Promise.resolve()
+
+    await expect(tokenRefreshCoordinator.signOut()).resolves.toBeUndefined()
+    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+    expect(mockSignOut).not.toHaveBeenCalled()
+    expect(publishedStates).toEqual([{ userId: null, accessToken: null }])
+
+    refreshA.resolve({ data: { session: session('user-a', 'late-token-a') }, error: null })
+    await expect(refreshing).resolves.toBeNull()
+    while (mockSignOut.mock.calls.length < 1) await Promise.resolve()
+    expect(window.localStorage.getItem(AUTH_STORAGE_KEY)).toBeNull()
+    lockedSignOut.resolve({ error: null })
+    await Promise.resolve()
+  })
+
+  it('serializes direct password writers and rejects the superseded login result', async () => {
+    const passwordA = deferred<{
+      data: { session: ReturnType<typeof session>; user: ReturnType<typeof session>['user'] }
+      error: null
+    }>()
+    const publishedStates: Array<{ userId: string | null; accessToken: string | null }> = []
+    registerAuthStateSetter((state) => {
+      publishedStates.push({ userId: state.userId, accessToken: state.accessToken })
+    })
+    mockSignInWithPassword
+      .mockImplementationOnce(async () => {
+        const result = await passwordA.promise
+        guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(result.data.session))
+        return result
+      })
+      .mockImplementationOnce(async () => {
+        const sessionB = session('user-b', 'token-b')
+        guardedAuthStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(sessionB))
+        return { data: { session: sessionB, user: sessionB.user }, error: null }
+      })
+
+    const loginA = tokenRefreshCoordinator.signInWithPassword({
+      email: 'a@example.test',
+      password: 'password-a',
+    })
+    while (mockSignInWithPassword.mock.calls.length < 1) await Promise.resolve()
+    const loginB = tokenRefreshCoordinator.signInWithPassword({
+      email: 'b@example.test',
+      password: 'password-b',
+    })
+    const sessionA = session('user-a', 'late-token-a')
+    passwordA.resolve({ data: { session: sessionA, user: sessionA.user }, error: null })
+
+    await expect(loginA).resolves.toMatchObject({
+      data: { session: null },
+      error: { code: 'auth_operation_superseded' },
+    })
+    await expect(loginB).resolves.toMatchObject({
+      data: { session: { user: { id: 'user-b' } } },
+      error: null,
+    })
+    expect(JSON.parse(window.localStorage.getItem(AUTH_STORAGE_KEY) ?? '{}')).toMatchObject({
+      access_token: 'token-b',
+      user: { id: 'user-b' },
+    })
+    expect(publishedStates).toEqual([{ userId: 'user-b', accessToken: 'token-b' }])
   })
 
   it('does not send an initial request whose captured A scope is already stale', async () => {

@@ -1,6 +1,6 @@
 // Matches `storageKey` in lib/supabase/client.ts. This is only a synchronous
 // best-effort client hint; every server endpoint still validates the token.
-const AUTH_STORAGE_KEY = 'arena-auth'
+import { AUTH_STORAGE_KEY } from '@/lib/auth/session-operation'
 
 export function getLocalAccessToken(): string | null {
   if (typeof window === 'undefined') return null
