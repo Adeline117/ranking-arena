@@ -45,6 +45,7 @@ interface ExportData {
   profile: Record<string, unknown>
   posts: unknown[]
   comments: unknown[]
+  notifications: unknown[]
   follows: {
     following: unknown[]
     followers: unknown[]
@@ -59,6 +60,8 @@ interface ExportData {
   interactions: {
     post_likes: unknown[]
     post_votes: unknown[]
+    comment_likes: unknown[]
+    post_emoji_reactions: unknown[]
   }
   bookmarks: {
     folders: unknown[]
@@ -454,6 +457,62 @@ const TRADER_WATCHLIST_EXPORT_DATASET = {
   },
 } satisfies CursorExportDataset
 
+const NOTIFICATIONS_EXPORT_DATASET = {
+  name: 'notifications',
+  table: 'notifications',
+  selectColumns: [
+    'id',
+    'type',
+    'title',
+    'message',
+    'link',
+    'read',
+    'actor_id',
+    'reference_id',
+    'created_at',
+    'read_at',
+  ],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
+const COMMENT_LIKES_EXPORT_DATASET = {
+  name: 'interactions.comment_likes',
+  table: 'comment_likes',
+  selectColumns: ['id', 'comment_id', 'reaction_type', 'created_at'],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
+const POST_EMOJI_REACTIONS_EXPORT_DATASET = {
+  name: 'interactions.post_emoji_reactions',
+  table: 'post_emoji_reactions',
+  selectColumns: ['id', 'post_id', 'emoji', 'created_at'],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
 function normalizeFollowRows(rows: Record<string, unknown>[], direction: 'following' | 'follower') {
   const otherUserColumn = direction === 'following' ? 'following_id' : 'follower_id'
   return rows.map((row) => ({
@@ -622,6 +681,39 @@ function normalizeTraderWatchlist(rows: Record<string, unknown>[]) {
   }))
 }
 
+function normalizeNotifications(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    type: row.type,
+    title: row.title,
+    message: row.message,
+    link: row.link,
+    read: row.read,
+    actor_id: row.actor_id,
+    reference_id: row.reference_id,
+    created_at: row.created_at,
+    read_at: row.read_at,
+  }))
+}
+
+function normalizeCommentLikes(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    comment_id: row.comment_id,
+    reaction_type: row.reaction_type,
+    created_at: row.created_at,
+  }))
+}
+
+function normalizePostEmojiReactions(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    post_id: row.post_id,
+    emoji: row.emoji,
+    created_at: row.created_at,
+  }))
+}
+
 function completedDataset(name: string, rowCount: number): ExportDatasetManifest {
   return { name, status: 'complete', row_count: rowCount }
 }
@@ -751,6 +843,9 @@ export async function POST(request: NextRequest) {
       postBookmarks,
       copyTradeConfigs,
       traderWatchlist,
+      notifications,
+      commentLikes,
+      postEmojiReactions,
     ] = await Promise.all([
       fetchAllExportRows(supabase, EXPORT_DATASETS.posts, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.comments, user.id),
@@ -773,6 +868,9 @@ export async function POST(request: NextRequest) {
       fetchAllExportRowsByCursor(supabase, POST_BOOKMARKS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, COPY_TRADE_CONFIGS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, TRADER_WATCHLIST_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, NOTIFICATIONS_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, COMMENT_LIKES_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, POST_EMOJI_REACTIONS_EXPORT_DATASET, user.id),
     ])
 
     const normalizedFollowing = normalizeFollowRows(following, 'following')
@@ -786,6 +884,9 @@ export async function POST(request: NextRequest) {
     const normalizedPostBookmarks = normalizePostBookmarks(postBookmarks)
     const normalizedCopyTradeConfigs = normalizeCopyTradeConfigs(copyTradeConfigs)
     const normalizedTraderWatchlist = normalizeTraderWatchlist(traderWatchlist)
+    const normalizedNotifications = normalizeNotifications(notifications)
+    const normalizedCommentLikes = normalizeCommentLikes(commentLikes)
+    const normalizedPostEmojiReactions = normalizePostEmojiReactions(postEmojiReactions)
     const normalizedPreferences = normalizePreferences(preferences)
     const normalizedAccountBindings = normalizeAccountBindings(accountBindings)
     const exportedAt = new Date().toISOString()
@@ -801,6 +902,7 @@ export async function POST(request: NextRequest) {
           completedDataset('profile', 1),
           completedDataset('posts', posts.length),
           completedDataset('comments', comments.length),
+          completedDataset('notifications', notifications.length),
           completedDataset('follows.following', following.length),
           completedDataset('follows.followers', followers.length),
           completedDataset('blocks.outgoing', outgoingBlocks.length),
@@ -808,6 +910,8 @@ export async function POST(request: NextRequest) {
           completedDataset('tips.received', tipsReceived.length),
           completedDataset('interactions.post_likes', postLikes.length),
           completedDataset('interactions.post_votes', postVotes.length),
+          completedDataset('interactions.comment_likes', commentLikes.length),
+          completedDataset('interactions.post_emoji_reactions', postEmojiReactions.length),
           completedDataset('bookmarks.folders', bookmarkFolders.length),
           completedDataset('bookmarks.posts', postBookmarks.length),
           completedDataset('trading.copy_configs', copyTradeConfigs.length),
@@ -825,6 +929,7 @@ export async function POST(request: NextRequest) {
       profile: typedProfile,
       posts,
       comments,
+      notifications: normalizedNotifications,
       follows: {
         following: normalizedFollowing,
         followers: normalizedFollowers,
@@ -839,6 +944,8 @@ export async function POST(request: NextRequest) {
       interactions: {
         post_likes: normalizedPostLikes,
         post_votes: normalizedPostVotes,
+        comment_likes: normalizedCommentLikes,
+        post_emoji_reactions: normalizedPostEmojiReactions,
       },
       bookmarks: {
         folders: normalizedBookmarkFolders,
