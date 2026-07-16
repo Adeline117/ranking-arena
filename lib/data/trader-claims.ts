@@ -5,6 +5,8 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { sendNotification } from '@/lib/data/notifications'
+import { invalidateLinkedTraderCache } from '@/lib/data/linked-traders'
+import { enqueueFirstPartySync } from '@/lib/ingest/first-party/enqueue'
 
 // ============================================
 // 类型定义
@@ -59,6 +61,15 @@ export interface CreateClaimInput {
   verification_data?: Record<string, unknown>
 }
 
+export interface TraderClaimActivation {
+  claim: TraderClaim
+  linked_trader_id: string
+  primary_link_id: string
+  linked_count: number
+  authorization_id: string | null
+  arena_trader_id: number
+}
+
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface UpdateVerifiedTraderInput {
   display_name?: string
@@ -79,6 +90,76 @@ const CLAIM_FIELDS =
   'id, user_id, trader_id, source, verification_method, verification_data, status, reject_reason, reviewed_by, reviewed_at, verified_at, created_at, updated_at'
 const VERIFIED_TRADER_FIELDS =
   'id, user_id, trader_id, source, display_name, bio, avatar_url, twitter_url, telegram_url, discord_url, website_url, verified_at, verification_method, can_pin_posts, can_reply_reviews, can_receive_messages, created_at, updated_at'
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isVerificationMethod(value: unknown): value is VerificationMethod {
+  return ['api_key', 'signature', 'video', 'social'].includes(String(value))
+}
+
+function parseActivation(value: unknown, expectedClaimId: string): TraderClaimActivation {
+  if (!isRecord(value) || !isRecord(value.claim)) {
+    throw new Error('Invalid activate_trader_claim response')
+  }
+
+  const claim = value.claim
+  const method = claim.verification_method
+  const authorizationId = value.authorization_id
+
+  if (
+    claim.id !== expectedClaimId ||
+    claim.status !== 'verified' ||
+    typeof claim.user_id !== 'string' ||
+    typeof claim.trader_id !== 'string' ||
+    typeof claim.source !== 'string' ||
+    !isVerificationMethod(method) ||
+    !(claim.verification_data === null || isRecord(claim.verification_data)) ||
+    !(claim.reject_reason === null || typeof claim.reject_reason === 'string') ||
+    !(claim.reviewed_by === null || typeof claim.reviewed_by === 'string') ||
+    !(claim.reviewed_at === null || typeof claim.reviewed_at === 'string') ||
+    typeof claim.verified_at !== 'string' ||
+    typeof claim.created_at !== 'string' ||
+    typeof claim.updated_at !== 'string' ||
+    typeof value.linked_trader_id !== 'string' ||
+    typeof value.primary_link_id !== 'string' ||
+    typeof value.linked_count !== 'number' ||
+    !Number.isInteger(value.linked_count) ||
+    value.linked_count < 1 ||
+    typeof value.arena_trader_id !== 'number' ||
+    !Number.isSafeInteger(value.arena_trader_id) ||
+    value.arena_trader_id < 1 ||
+    !(authorizationId === null || typeof authorizationId === 'string') ||
+    (method === 'api_key' && (typeof authorizationId !== 'string' || authorizationId.length < 1)) ||
+    (method !== 'api_key' && authorizationId !== null)
+  ) {
+    throw new Error('Invalid activate_trader_claim response')
+  }
+
+  return {
+    claim: {
+      id: claim.id,
+      user_id: claim.user_id,
+      trader_id: claim.trader_id,
+      source: claim.source,
+      verification_method: method,
+      verification_data: claim.verification_data,
+      status: 'verified',
+      reject_reason: claim.reject_reason,
+      reviewed_by: claim.reviewed_by,
+      reviewed_at: claim.reviewed_at,
+      verified_at: claim.verified_at,
+      created_at: claim.created_at,
+      updated_at: claim.updated_at,
+    },
+    linked_trader_id: value.linked_trader_id,
+    primary_link_id: value.primary_link_id,
+    linked_count: value.linked_count,
+    authorization_id: authorizationId,
+    arena_trader_id: value.arena_trader_id,
+  }
+}
 
 // ============================================
 // 查询函数
@@ -270,234 +351,96 @@ export async function reviewClaim(
   approved: boolean,
   rejectReason?: string
 ): Promise<TraderClaim> {
-  const now = new Date().toISOString()
-
-  // 更新申请状态
-  const updateData: Record<string, unknown> = {
-    status: approved ? 'verified' : 'rejected',
-    reviewed_by: reviewerId,
-    reviewed_at: now,
-  }
-
   if (approved) {
-    updateData.verified_at = now
-  } else {
-    updateData.reject_reason = rejectReason || '未提供原因'
-  }
+    const activation = await activateClaim(supabase, claimId, reviewerId)
+    const { claim, authorization_id: authorizationId } = activation
 
-  const { data: claim, error: updateError } = await supabase
-    .from('trader_claims')
-    .update(updateData)
-    .eq('id', claimId)
-    .select()
-    .single()
+    // These effects happen only after the database transaction commits. Cache
+    // invalidation is fail-soft; the periodic worker remains the sync fallback.
+    await invalidateLinkedTraderCache(claim.user_id)
+    if (authorizationId) {
+      const queued = await enqueueFirstPartySync(authorizationId)
+      if (!queued) {
+        logger.warn(
+          '[trader-claims] immediate first-party sync was not queued; scheduler will retry'
+        )
+      }
+    }
 
-  if (updateError) {
-    logger.error('[trader-claims] 更新申请状态失败:', updateError)
-    throw updateError
-  }
-
-  // 如果通过，执行完整激活链（从 claim 路由的旧自动批准块搬迁,2026-07-09）
-  if (approved && claim) {
-    await activateClaim(supabase, claim)
-  } else if (!approved && claim) {
-    // 被拒 → 站内通知申请人（fire-and-forget,主流程不受影响）
     sendNotification(
       supabase,
       {
         user_id: claim.user_id,
         type: 'system',
-        title: 'Claim rejected',
-        message: `Your claim for ${claim.trader_id} (${claim.source}) was not approved${rejectReason ? `: ${rejectReason}` : '.'}`,
+        title: 'Claim approved',
+        message: `Your claim for ${claim.trader_id} (${claim.source}) is approved — your profile is now verified.`,
         reference_id: String(claim.id),
       },
-      'trader-claim-reject'
+      'trader-claim-approve'
     )
+
+    return claim
   }
+
+  const now = new Date().toISOString()
+  const reason = rejectReason || '未提供原因'
+  const { data: claim, error: updateError } = await supabase
+    .from('trader_claims')
+    .update({
+      status: 'rejected',
+      reviewed_by: reviewerId,
+      reviewed_at: now,
+      reject_reason: reason,
+    })
+    .eq('id', claimId)
+    .in('status', ['pending', 'reviewing'])
+    .select()
+    .maybeSingle()
+
+  if (updateError) {
+    logger.error('[trader-claims] 更新申请状态失败:', updateError)
+    throw updateError
+  }
+  if (!claim) {
+    throw Object.assign(new Error('Trader claim is no longer reviewable'), { code: 'P0002' })
+  }
+
+  sendNotification(
+    supabase,
+    {
+      user_id: claim.user_id,
+      type: 'system',
+      title: 'Claim rejected',
+      message: `Your claim for ${claim.trader_id} (${claim.source}) was not approved${rejectReason ? `: ${rejectReason}` : '.'}`,
+      reference_id: String(claim.id),
+    },
+    'trader-claim-reject'
+  )
 
   return claim
 }
 
 /**
- * 激活已批准的认领（2026-07-09 人工审核制）。
- *
- * 从 claim 路由的旧自动批准块整体搬迁：verified_traders / user_linked_traders
- * / user_profiles / trader_authorizations 全部副作用集中于此，只在 owner 在
- * admin 面板批准后执行。幂等：verified_traders 23505 容忍、linked upsert、
- * authorization 先查后插——double-approve 不产生重复行。
- *
- * P1 接线点（认领交易员大特性）：arena.traders 打 claimed 标 + 首个
- * first-party sync job 在此追加（arena_set_trader_claimed RPC 落地后）。
+ * Execute the service-only database transaction for an approved claim.
+ * All user-visible projections are committed together by the RPC; callers may
+ * run cache, queue, and notification effects only after this function returns.
  */
-export async function activateClaim(supabase: SupabaseClient, claim: TraderClaim): Promise<void> {
-  const now = new Date().toISOString()
-  const { user_id, trader_id, source, verification_method } = claim
-
-  // verified_traders（23505 = 已存在，幂等）
-  const { error: verifiedError } = await supabase.from('verified_traders').insert({
-    user_id,
-    trader_id,
-    source,
-    verified_at: now,
-    verification_method,
+export async function activateClaim(
+  supabase: SupabaseClient,
+  claimId: string,
+  reviewerId: string
+): Promise<TraderClaimActivation> {
+  const { data, error } = await supabase.rpc('activate_trader_claim', {
+    p_claim_id: claimId,
+    p_reviewer_id: reviewerId,
   })
-  if (verifiedError && verifiedError.code !== '23505') {
-    logger.error('[trader-claims] activateClaim: verified_traders 写入失败', verifiedError)
-    throw verifiedError
+
+  if (error) {
+    logger.error('[trader-claims] 原子激活认领失败:', error)
+    throw error
   }
 
-  // user_linked_traders（多账号 junction；首个认领为 primary）
-  const { data: existingLinks, error: existingLinksError } = await supabase
-    .from('user_linked_traders')
-    .select('id')
-    .eq('user_id', user_id)
-  if (existingLinksError)
-    logger.warn(
-      '[activateClaim] user_linked_traders query error (drift?):',
-      existingLinksError.message
-    )
-  const isFirstClaim = !existingLinks || existingLinks.length === 0
-  const { error: linkError } = await supabase.from('user_linked_traders').upsert(
-    {
-      user_id,
-      trader_id,
-      source,
-      is_primary: isFirstClaim,
-      display_order: isFirstClaim ? 0 : (existingLinks?.length ?? 0),
-      verified_at: now,
-      verification_method,
-    },
-    { onConflict: 'user_id, trader_id, source' }
-  )
-  if (linkError) {
-    logger.error('[trader-claims] activateClaim: user_linked_traders 写入失败', linkError)
-  }
-
-  // user_profiles 认证态
-  await supabase
-    .from('user_profiles')
-    .update({
-      is_verified_trader: true,
-      verified_trader_id: isFirstClaim ? trader_id : undefined,
-      verified_trader_source: isFirstClaim ? source : undefined,
-      linked_trader_count: (existingLinks?.length ?? 0) + (isFirstClaim ? 1 : 1),
-    })
-    .eq('id', user_id)
-
-  // trader_authorizations（api_key 认领：把加密凭证从 exchange connection 接管）
-  let authorizationId: string | null = null
-  if (verification_method === 'api_key') {
-    const { data: existingAuth, error: existingAuthError } = await supabase
-      .from('trader_authorizations')
-      .select('id, read_only_verified_at')
-      .eq('user_id', user_id)
-      .eq('platform', source)
-      .eq('trader_id', trader_id)
-      .maybeSingle()
-    if (existingAuthError)
-      logger.warn(
-        '[activateClaim] trader_authorizations query error (drift?):',
-        existingAuthError.message
-      )
-
-    authorizationId = existingAuth?.id ?? null
-    const connectionExchange = source.replace(/_(futures|spot)$/, '')
-    const { data: conn, error: connError } = await supabase
-      .from('user_exchange_connections')
-      .select('api_key_encrypted, api_secret_encrypted, passphrase_encrypted, scope_permissions')
-      .eq('user_id', user_id)
-      .eq('exchange', connectionExchange)
-      .eq('is_active', true)
-      .maybeSingle()
-    if (connError)
-      logger.warn(
-        '[activateClaim] user_exchange_connections query error (drift?):',
-        connError.message
-      )
-
-    // `scope_permissions` is written only after the exchange itself proves the
-    // key is read-only. Older connections must be re-verified; never promote a
-    // hard-coded `['read']` claim into a Verified Data authorization.
-    const readOnlyPermissions = Array.isArray(conn?.scope_permissions)
-      ? conn.scope_permissions.map(String)
-      : []
-    if (conn?.api_key_encrypted && readOnlyPermissions.length > 0) {
-      const authorizationInput = {
-        encrypted_api_key: conn.api_key_encrypted,
-        encrypted_api_secret: conn.api_secret_encrypted,
-        encrypted_passphrase: conn.passphrase_encrypted,
-        permissions: readOnlyPermissions,
-        read_only_verified_at: now,
-        status: 'active',
-        last_verified_at: now,
-        last_sync_at: null,
-        last_sync_status: 'pending',
-        consecutive_failures: 0,
-        verification_error: null,
-        sync_frequency: 'realtime',
-      }
-      if (existingAuth) {
-        const { error: updateAuthError } = await supabase
-          .from('trader_authorizations')
-          .update(authorizationInput)
-          .eq('id', existingAuth.id)
-        if (updateAuthError) {
-          logger.error('[activateClaim] trader_authorizations update failed', updateAuthError)
-        }
-      } else {
-        const { data: insertedAuth, error: insertAuthError } = await supabase
-          .from('trader_authorizations')
-          .insert({
-            ...authorizationInput,
-            user_id,
-            platform: source,
-            trader_id,
-          })
-          .select('id')
-          .single()
-        if (insertAuthError) {
-          logger.error('[activateClaim] trader_authorizations insert failed', insertAuthError)
-        } else {
-          authorizationId = insertedAuth?.id ?? null
-        }
-      }
-    }
-  }
-
-  // arena claimed 标（P1 第一方管道）：打上后 worker 的 15min reconcile 会为
-  // active authorization 建 fp: 调度器,首个 first-party sync 随之启动;
-  // score_inputs view 的第一方分支在数据新鲜后自动接管排名输入。
-  // 交易员不存在则 RPC 内部 upsert（多账号小号可能从未上榜）。
-  const { error: claimedError } = await supabase.rpc('arena_set_trader_claimed', {
-    p_platform: source,
-    p_trader_key: trader_id,
-    p_user_id: user_id,
-    p_claimed: true,
-  })
-  if (claimedError) {
-    logger.error('[trader-claims] activateClaim: arena_set_trader_claimed 失败', claimedError)
-  }
-
-  if (!claimedError && authorizationId) {
-    const { enqueueFirstPartySync } = await import('@/lib/ingest/first-party/enqueue')
-    const queued = await enqueueFirstPartySync(authorizationId)
-    if (!queued) {
-      logger.warn('[activateClaim] immediate first-party sync was not queued; scheduler will retry')
-    }
-  }
-
-  // 站内通知申请人（fire-and-forget）
-  sendNotification(
-    supabase,
-    {
-      user_id,
-      type: 'system',
-      title: 'Claim approved',
-      message: `Your claim for ${trader_id} (${source}) is approved — your profile is now verified.`,
-      reference_id: String(claim.id),
-    },
-    'trader-claim-approve'
-  )
+  return parseActivation(data, claimId)
 }
 
 /**

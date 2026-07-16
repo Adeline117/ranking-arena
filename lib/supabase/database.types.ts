@@ -7983,6 +7983,10 @@ export type Database = {
         Args: { p_stripe_customer_id: string; p_user_id: string }
         Returns: undefined
       }
+      activate_trader_claim: {
+        Args: { p_claim_id: string; p_reviewer_id: string }
+        Returns: Json
+      }
       adjust_pro_group_member_count: {
         Args: { p_delta: number; p_group_id: string }
         Returns: undefined
