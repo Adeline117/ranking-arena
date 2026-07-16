@@ -29,11 +29,7 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => mockSupabaseAdmin),
 }))
 
-import {
-  verifyCronSecret,
-  verifyServiceAuth,
-  verifyAdminAuth,
-} from '../verify-service-auth'
+import { verifyCronSecret, verifyServiceAuth, verifyAdminAuth } from '../verify-service-auth'
 
 // Helper to create a Request with specific headers
 function makeRequest(headers: Record<string, string> = {}): Request {
@@ -164,6 +160,21 @@ describe('verifyAdminAuth', () => {
     })
 
     const req = makeRequest({ authorization: 'Bearer valid-user-jwt-token' })
+    expect(await verifyAdminAuth(req)).toBe(false)
+  })
+
+  test.each([
+    [{ role: 'admin', banned_at: '2026-07-15T00:00:00.000Z', deleted_at: null }, null],
+    [{ role: 'admin', banned_at: null, deleted_at: '2026-07-15T00:00:00.000Z' }, null],
+    [null, { message: 'profile lookup failed' }],
+  ])('rejects non-active human admin JWT status', async (profile, profileError) => {
+    mockGetUser.mockResolvedValueOnce({
+      data: { user: { id: 'user-1', email: 'admin@example.com' } },
+      error: null,
+    })
+    mockMaybeSingle.mockResolvedValueOnce({ data: profile, error: profileError })
+
+    const req = makeRequest({ authorization: 'Bearer valid-admin-jwt-token' })
     expect(await verifyAdminAuth(req)).toBe(false)
   })
 
