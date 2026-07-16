@@ -4,7 +4,6 @@ import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
-import { supabase } from '@/lib/supabase/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -12,7 +11,13 @@ import { NULL_DISPLAY } from '@/lib/utils/format'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { logger } from '@/lib/logger'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '../hooks/settings-viewer-scope'
 
 interface LinkedTraderStats {
   arena_score: number | null
@@ -37,6 +42,47 @@ interface LinkedTrader {
   created_at: string
   updated_at: string
   stats: LinkedTraderStats | null
+}
+
+type TraderStateOwner = Pick<
+  SettingsViewerSnapshot,
+  'sessionGeneration' | 'userId' | 'viewerKey'
+> & {
+  loadGeneration: number
+}
+
+type TraderLoadOutcome = 'idle' | 'loading' | 'ready' | 'failed'
+
+function traderOwnerMatches(
+  owner: TraderStateOwner | null,
+  viewer: SettingsViewerSnapshot | null,
+  loadGeneration: number
+): boolean {
+  return (
+    !!owner &&
+    !!viewer &&
+    owner.loadGeneration === loadGeneration &&
+    owner.viewerKey === viewer.viewerKey &&
+    owner.sessionGeneration === viewer.sessionGeneration &&
+    owner.userId === viewer.userId
+  )
+}
+
+function isLinkedTraderForViewer(value: unknown, userId: string): value is LinkedTrader {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false
+  const trader = value as Record<string, unknown>
+  return (
+    typeof trader.id === 'string' &&
+    trader.user_id === userId &&
+    typeof trader.trader_id === 'string' &&
+    typeof trader.source === 'string' &&
+    typeof trader.is_primary === 'boolean' &&
+    typeof trader.display_order === 'number' &&
+    typeof trader.verified_at === 'string' &&
+    typeof trader.verification_method === 'string' &&
+    (trader.label === null || typeof trader.label === 'string') &&
+    (trader.stats === null || (typeof trader.stats === 'object' && !Array.isArray(trader.stats)))
+  )
 }
 
 function getPlatformName(source: string): string {
@@ -130,38 +176,128 @@ export function TraderLinksSection({ userId }: { userId: string }) {
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
   const { t } = useLanguage()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const feedbackRef = useRef({ showToast, t })
+  feedbackRef.current = { showToast, t }
+  const mountedRef = useRef(false)
+  const loadGenerationRef = useRef(0)
+  const ownerRef = useRef<TraderStateOwner | null>(null)
+  const loadOutcomeRef = useRef<TraderLoadOutcome>('idle')
+  const mutationRef = useRef<{ id: number } | null>(null)
+  const nextMutationIdRef = useRef(0)
+  const [stateOwner, setStateOwner] = useState<TraderStateOwner | null>(null)
+  const [loadOutcome, setLoadOutcome] = useState<TraderLoadOutcome>('idle')
 
-  const getAuthHeaders = useCallback(async () => {
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    if (!session?.access_token) return null
-    return { Authorization: `Bearer ${session.access_token}`, 'Content-Type': 'application/json' }
-  }, [])
+  const captureViewer = useCallback(() => {
+    const scope = captureSettingsViewer(authRef.current)
+    return scope?.userId === userId ? scope : null
+  }, [userId])
 
-  const loadLinkedTraders = useCallback(async () => {
-    try {
-      const headers = await getAuthHeaders()
-      if (!headers) return
+  const stateBelongsToViewer = useCallback(
+    (scope: SettingsViewerSnapshot, expectedLoadGeneration?: number) => {
+      const owner = ownerRef.current
+      return (
+        mountedRef.current &&
+        loadOutcomeRef.current === 'ready' &&
+        traderOwnerMatches(owner, scope, loadGenerationRef.current) &&
+        (expectedLoadGeneration === undefined ||
+          owner?.loadGeneration === expectedLoadGeneration) &&
+        isSettingsViewerCurrent(scope, authRef.current)
+      )
+    },
+    []
+  )
 
-      const res = await fetch('/api/traders/linked', { headers })
-      if (res.ok) {
-        const data = await res.json()
-        setTraders(data.data?.linked_traders || [])
-      } else {
-        showToast(t('loadLinkedTradersFailed'), 'error')
+  const loadLinkedTraders = useCallback(
+    async (expectedScope?: SettingsViewerSnapshot) => {
+      const scope = expectedScope ?? captureViewer()
+      if (!scope || !isSettingsViewerCurrent(scope, authRef.current)) return
+      const loadGeneration = ++loadGenerationRef.current
+      const owner: TraderStateOwner = { ...scope, loadGeneration }
+      const loadIsCurrent = () =>
+        mountedRef.current &&
+        loadGenerationRef.current === loadGeneration &&
+        isSettingsViewerCurrent(scope, authRef.current)
+
+      ownerRef.current = owner
+      loadOutcomeRef.current = 'loading'
+      setStateOwner(owner)
+      setLoadOutcome('loading')
+      setTraders([])
+      setLoading(true)
+      try {
+        const result = await authedFetch<{ data?: { linked_traders?: unknown } }>(
+          '/api/traders/linked',
+          'GET',
+          scope.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: scope.userId,
+            expectedSessionGeneration: scope.sessionGeneration,
+          }
+        )
+        if (!loadIsCurrent() || result.stale) return
+        const linkedTraders = result.data?.data?.linked_traders
+        if (
+          result.ok &&
+          Array.isArray(linkedTraders) &&
+          linkedTraders.every((trader) => isLinkedTraderForViewer(trader, scope.userId))
+        ) {
+          setTraders(linkedTraders)
+          loadOutcomeRef.current = 'ready'
+          setLoadOutcome('ready')
+        } else {
+          loadOutcomeRef.current = 'failed'
+          setLoadOutcome('failed')
+          feedbackRef.current.showToast(feedbackRef.current.t('loadLinkedTradersFailed'), 'error')
+        }
+      } catch (error) {
+        if (!loadIsCurrent()) return
+        loadOutcomeRef.current = 'failed'
+        setLoadOutcome('failed')
+        logger.error('[TraderLinks] Load error:', error)
+        feedbackRef.current.showToast(feedbackRef.current.t('loadLinkedTradersFailed'), 'error')
+      } finally {
+        if (loadIsCurrent()) setLoading(false)
       }
-    } catch (error) {
-      logger.error('[TraderLinks] Load error:', error)
-      showToast(t('loadLinkedTradersFailed'), 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [getAuthHeaders, showToast, t])
+    },
+    [captureViewer]
+  )
 
   useEffect(() => {
-    if (userId) loadLinkedTraders()
-  }, [userId, loadLinkedTraders])
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      loadGenerationRef.current += 1
+      mutationRef.current = null
+    }
+  }, [])
+
+  useEffect(() => {
+    loadGenerationRef.current += 1
+    ownerRef.current = null
+    loadOutcomeRef.current = 'idle'
+    mutationRef.current = null
+    setStateOwner(null)
+    setLoadOutcome('idle')
+    setTraders([])
+    setEditingLabelId(null)
+    setEditLabelValue('')
+    setUpdatingId(null)
+    setDeletingId(null)
+    setLoading(auth.loading || !auth.authChecked || Boolean(auth.userId))
+    if (auth.authChecked && !auth.loading && auth.userId === userId) void loadLinkedTraders()
+  }, [
+    auth.authChecked,
+    auth.loading,
+    auth.sessionGeneration,
+    auth.userId,
+    loadLinkedTraders,
+    userId,
+  ])
 
   // Focus label input when editing
   useEffect(() => {
@@ -170,108 +306,220 @@ export function TraderLinksSection({ userId }: { userId: string }) {
     }
   }, [editingLabelId])
 
+  const beginMutation = () => {
+    const scope = captureViewer()
+    const loadGeneration = ownerRef.current?.loadGeneration
+    if (
+      !scope ||
+      loadGeneration === undefined ||
+      mutationRef.current ||
+      !stateBelongsToViewer(scope, loadGeneration)
+    ) {
+      return null
+    }
+    const operation = { id: ++nextMutationIdRef.current, loadGeneration, scope }
+    mutationRef.current = operation
+    return operation
+  }
+
+  const mutationIsCurrent = (operation: {
+    id: number
+    loadGeneration: number
+    scope: SettingsViewerSnapshot
+  }) =>
+    mutationRef.current?.id === operation.id &&
+    stateBelongsToViewer(operation.scope, operation.loadGeneration)
+
+  const finishMutation = (operation: { id: number; scope: SettingsViewerSnapshot }) => {
+    if (mutationRef.current?.id !== operation.id) return
+    mutationRef.current = null
+    if (isSettingsViewerCurrent(operation.scope, authRef.current)) {
+      setUpdatingId(null)
+      setDeletingId(null)
+    }
+  }
+
   const handleUpdateLabel = async (id: string) => {
+    const operation = beginMutation()
+    if (!operation || !traders.some((trader) => trader.id === id)) {
+      if (operation) finishMutation(operation)
+      return
+    }
+    const normalizedLabel = editLabelValue.trim() || null
     setUpdatingId(id)
     try {
-      const headers = await getAuthHeaders()
-      if (!headers) return
-
-      const res = await fetch('/api/traders/linked', {
-        method: 'PATCH',
-        headers: { ...headers, ...getCsrfHeaders() },
-        body: JSON.stringify({ id, label: editLabelValue.trim() || null }),
-      })
-      if (res.ok) {
+      const result = await authedFetch(
+        '/api/traders/linked',
+        'PATCH',
+        operation.scope.accessToken,
+        { id, label: normalizedLabel },
+        15_000,
+        {
+          expectedUserId: operation.scope.userId,
+          expectedSessionGeneration: operation.scope.sessionGeneration,
+        }
+      )
+      if (!mutationIsCurrent(operation) || result.stale) return
+      if (result.ok) {
         setTraders((prev) =>
-          prev.map((t) => (t.id === id ? { ...t, label: editLabelValue.trim() || null } : t))
+          prev.map((trader) => (trader.id === id ? { ...trader, label: normalizedLabel } : trader))
         )
-        showToast(t('labelSaved'), 'success')
+        feedbackRef.current.showToast(feedbackRef.current.t('labelSaved'), 'success')
+      } else {
+        feedbackRef.current.showToast(feedbackRef.current.t('operationFailed'), 'error')
       }
     } catch {
-      showToast(t('operationFailed'), 'error')
+      if (mutationIsCurrent(operation)) {
+        feedbackRef.current.showToast(feedbackRef.current.t('operationFailed'), 'error')
+      }
     } finally {
-      setUpdatingId(null)
-      setEditingLabelId(null)
+      if (mutationIsCurrent(operation)) setEditingLabelId(null)
+      finishMutation(operation)
     }
   }
 
   const handleSetPrimary = async (id: string) => {
+    const operation = beginMutation()
+    if (!operation || !traders.some((trader) => trader.id === id && !trader.is_primary)) {
+      if (operation) finishMutation(operation)
+      return
+    }
     setUpdatingId(id)
     try {
-      const headers = await getAuthHeaders()
-      if (!headers) return
-
-      const res = await fetch('/api/traders/linked', {
-        method: 'PATCH',
-        headers: { ...headers, ...getCsrfHeaders() },
-        body: JSON.stringify({ id, is_primary: true }),
-      })
-      if (res.ok) {
+      const result = await authedFetch(
+        '/api/traders/linked',
+        'PATCH',
+        operation.scope.accessToken,
+        { id, is_primary: true },
+        15_000,
+        {
+          expectedUserId: operation.scope.userId,
+          expectedSessionGeneration: operation.scope.sessionGeneration,
+        }
+      )
+      if (!mutationIsCurrent(operation) || result.stale) return
+      if (result.ok) {
         setTraders((prev) =>
-          prev.map((t) => ({
-            ...t,
-            is_primary: t.id === id,
+          prev.map((trader) => ({
+            ...trader,
+            is_primary: trader.id === id,
           }))
         )
-        showToast(t('primarySet'), 'success')
+        feedbackRef.current.showToast(feedbackRef.current.t('primarySet'), 'success')
+      } else {
+        feedbackRef.current.showToast(feedbackRef.current.t('operationFailed'), 'error')
       }
     } catch {
-      showToast(t('operationFailed'), 'error')
+      if (mutationIsCurrent(operation)) {
+        feedbackRef.current.showToast(feedbackRef.current.t('operationFailed'), 'error')
+      }
     } finally {
-      setUpdatingId(null)
+      finishMutation(operation)
     }
   }
 
   const handleUnlink = async (trader: LinkedTrader) => {
+    const operation = beginMutation()
+    const ownedTrader = traders.find((candidate) => candidate.id === trader.id)
+    if (!operation || !ownedTrader) {
+      if (operation) finishMutation(operation)
+      return
+    }
     // Determine the appropriate warning
     let warningMsg = t('unlinkWarning')
-    if (trader.is_primary && traders.length > 1) {
+    if (ownedTrader.is_primary && traders.length > 1) {
       warningMsg = t('unlinkPrimaryWarning')
     } else if (traders.length === 1) {
       warningMsg = t('unlinkLastWarning')
     }
 
-    const confirmed = await showConfirm(t('confirmUnlink'), warningMsg)
-    if (!confirmed) return
-
-    setDeletingId(trader.id)
+    let confirmed = false
     try {
-      const headers = await getAuthHeaders()
-      if (!headers) return
+      confirmed = await showConfirm(t('confirmUnlink'), warningMsg)
+    } catch {
+      if (mutationIsCurrent(operation)) {
+        feedbackRef.current.showToast(feedbackRef.current.t('operationFailed'), 'error')
+      }
+    }
+    if (!confirmed || !mutationIsCurrent(operation)) {
+      finishMutation(operation)
+      return
+    }
 
-      const res = await fetch('/api/traders/linked', {
-        method: 'DELETE',
-        headers: { ...headers, ...getCsrfHeaders() },
-        body: JSON.stringify({ id: trader.id }),
-      })
-      if (res.ok) {
-        const data = await res.json()
+    setDeletingId(ownedTrader.id)
+    try {
+      const result = await authedFetch<{
+        data?: { remaining_count?: number }
+        error?: string
+      }>(
+        '/api/traders/linked',
+        'DELETE',
+        operation.scope.accessToken,
+        { id: ownedTrader.id },
+        15_000,
+        {
+          expectedUserId: operation.scope.userId,
+          expectedSessionGeneration: operation.scope.sessionGeneration,
+        }
+      )
+      if (!mutationIsCurrent(operation) || result.stale) return
+      if (result.ok) {
         setTraders((prev) => {
-          const remaining = prev.filter((t) => t.id !== trader.id)
+          const remaining = prev.filter((candidate) => candidate.id !== ownedTrader.id)
           // If the primary was deleted and there are remaining, the API auto-promotes
-          if (trader.is_primary && remaining.length > 0) {
+          if (ownedTrader.is_primary && remaining.length > 0) {
             remaining[0] = { ...remaining[0], is_primary: true }
           }
           return remaining
         })
-        showToast(t('traderUnlinked'), 'success')
+        feedbackRef.current.showToast(feedbackRef.current.t('traderUnlinked'), 'success')
 
         // If no remaining accounts, could refresh to reflect verified status change
-        if (data.data?.remaining_count === 0) {
+        if (result.data?.data?.remaining_count === 0 && mutationIsCurrent(operation)) {
           router.refresh()
         }
       } else {
-        const errData = await res.json().catch(() => ({}))
-        showToast(errData.error || t('operationFailed'), 'error')
+        feedbackRef.current.showToast(
+          result.data?.error || feedbackRef.current.t('operationFailed'),
+          'error'
+        )
       }
     } catch {
-      showToast(t('networkError'), 'error')
+      if (mutationIsCurrent(operation)) {
+        feedbackRef.current.showToast(feedbackRef.current.t('networkError'), 'error')
+      }
     } finally {
-      setDeletingId(null)
+      finishMutation(operation)
     }
   }
 
-  if (loading) {
+  const renderScopeCandidate = captureSettingsViewer(auth)
+  const renderScope = renderScopeCandidate?.userId === userId ? renderScopeCandidate : null
+  const stateOwnerIsCurrent = traderOwnerMatches(stateOwner, renderScope, loadGenerationRef.current)
+  const stateReady = stateOwnerIsCurrent && loadOutcome === 'ready'
+  const visibleTraders = stateReady ? traders : []
+  const visibleEditingLabelId = stateReady ? editingLabelId : null
+  const visibleUpdatingId = stateReady ? updatingId : null
+  const visibleDeletingId = stateReady ? deletingId : null
+  const displayLoading =
+    auth.loading ||
+    !auth.authChecked ||
+    loading ||
+    Boolean(
+      auth.userId && (!stateOwnerIsCurrent || loadOutcome === 'idle' || loadOutcome === 'loading')
+    )
+
+  const handleLinkNewAccount = () => {
+    const scope = captureViewer()
+    if (!scope || !stateBelongsToViewer(scope)) return
+    if (traders.length >= 10) {
+      feedbackRef.current.showToast(feedbackRef.current.t('maxLinkedAccounts'), 'error')
+      return
+    }
+    router.push('/claim')
+  }
+
+  if (displayLoading) {
     return (
       <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
         <Text size="sm" color="tertiary">
@@ -282,7 +530,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
   }
 
   // Empty state
-  if (traders.length === 0) {
+  if (visibleTraders.length === 0) {
     return (
       <EmptyState
         variant="compact"
@@ -306,24 +554,24 @@ export function TraderLinksSection({ userId }: { userId: string }) {
         }
         title={t('noLinkedAccounts')}
         description={t('linkAccountDescription')}
-        action={{ label: t('linkNewAccount'), onClick: () => router.push('/claim') }}
+        action={{ label: t('linkNewAccount'), onClick: handleLinkNewAccount }}
       />
     )
   }
 
   // Aggregated stats
-  const totalPnl = traders.reduce((sum, t) => sum + (t.stats?.pnl ?? 0), 0)
-  const bestRoi = Math.max(...traders.map((t) => t.stats?.roi ?? -Infinity))
+  const totalPnl = visibleTraders.reduce((sum, trader) => sum + (trader.stats?.pnl ?? 0), 0)
+  const bestRoi = Math.max(...visibleTraders.map((trader) => trader.stats?.roi ?? -Infinity))
   const avgScore =
-    traders.filter((t) => t.stats?.arena_score != null).length > 0
-      ? traders.reduce((sum, t) => sum + (t.stats?.arena_score ?? 0), 0) /
-        traders.filter((t) => t.stats?.arena_score != null).length
+    visibleTraders.filter((trader) => trader.stats?.arena_score != null).length > 0
+      ? visibleTraders.reduce((sum, trader) => sum + (trader.stats?.arena_score ?? 0), 0) /
+        visibleTraders.filter((trader) => trader.stats?.arena_score != null).length
       : null
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
       {/* Aggregated stats bar */}
-      {traders.length > 1 && (
+      {visibleTraders.length > 1 && (
         <Box
           style={{
             display: 'flex',
@@ -378,7 +626,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
 
       {/* Linked trader cards */}
       <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-        {traders.map((trader) => (
+        {visibleTraders.map((trader) => (
           <Box
             key={trader.id}
             style={{
@@ -441,19 +689,26 @@ export function TraderLinksSection({ userId }: { userId: string }) {
             </Box>
 
             {/* Label edit */}
-            {editingLabelId === trader.id ? (
+            {visibleEditingLabelId === trader.id ? (
               <Box
                 style={{ display: 'flex', gap: tokens.spacing[2], marginBottom: tokens.spacing[3] }}
               >
                 <input
                   ref={labelInputRef}
                   value={editLabelValue}
-                  onChange={(e) => setEditLabelValue(e.target.value)}
+                  onChange={(e) => {
+                    const scope = captureViewer()
+                    if (!scope || !stateBelongsToViewer(scope)) return
+                    setEditLabelValue(e.target.value)
+                  }}
                   placeholder={t('labelPlaceholder')}
                   maxLength={50}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter') handleUpdateLabel(trader.id)
-                    if (e.key === 'Escape') setEditingLabelId(null)
+                    if (e.key === 'Escape') {
+                      const scope = captureViewer()
+                      if (scope && stateBelongsToViewer(scope)) setEditingLabelId(null)
+                    }
                   }}
                   style={{
                     flex: 1,
@@ -471,15 +726,18 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                   variant="primary"
                   size="sm"
                   onClick={() => handleUpdateLabel(trader.id)}
-                  disabled={updatingId === trader.id}
+                  disabled={visibleUpdatingId === trader.id}
                   style={{ minHeight: 36 }}
                 >
-                  {updatingId === trader.id ? '...' : t('save')}
+                  {visibleUpdatingId === trader.id ? '...' : t('save')}
                 </Button>
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => setEditingLabelId(null)}
+                  onClick={() => {
+                    const scope = captureViewer()
+                    if (scope && stateBelongsToViewer(scope)) setEditingLabelId(null)
+                  }}
                   style={{ minHeight: 36 }}
                 >
                   {t('cancel')}
@@ -573,7 +831,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
               {!trader.is_primary && (
                 <button
                   onClick={() => handleSetPrimary(trader.id)}
-                  disabled={!!updatingId}
+                  disabled={!!visibleUpdatingId || !!visibleDeletingId}
                   style={{
                     padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                     borderRadius: tokens.radius.md,
@@ -584,17 +842,20 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                     cursor: 'pointer',
                     minHeight: 32,
                     transition: `all ${tokens.transition.base}`,
-                    opacity: updatingId ? 0.5 : 1,
+                    opacity: visibleUpdatingId || visibleDeletingId ? 0.5 : 1,
                   }}
                 >
-                  {updatingId === trader.id ? '...' : t('setAsPrimary')}
+                  {visibleUpdatingId === trader.id ? '...' : t('setAsPrimary')}
                 </button>
               )}
               <button
                 onClick={() => {
+                  const scope = captureViewer()
+                  if (!scope || !stateBelongsToViewer(scope) || mutationRef.current) return
                   setEditingLabelId(trader.id)
                   setEditLabelValue(trader.label || '')
                 }}
+                disabled={!!visibleUpdatingId || !!visibleDeletingId}
                 style={{
                   padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                   borderRadius: tokens.radius.md,
@@ -611,7 +872,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
               </button>
               <button
                 onClick={() => handleUnlink(trader)}
-                disabled={!!deletingId}
+                disabled={!!visibleDeletingId || !!visibleUpdatingId}
                 style={{
                   padding: `${tokens.spacing[1]} ${tokens.spacing[3]}`,
                   borderRadius: tokens.radius.md,
@@ -622,10 +883,10 @@ export function TraderLinksSection({ userId }: { userId: string }) {
                   cursor: 'pointer',
                   minHeight: 32,
                   transition: `all ${tokens.transition.base}`,
-                  opacity: deletingId ? 0.5 : 1,
+                  opacity: visibleDeletingId || visibleUpdatingId ? 0.5 : 1,
                 }}
               >
-                {deletingId === trader.id ? '...' : t('unlinkAccount')}
+                {visibleDeletingId === trader.id ? '...' : t('unlinkAccount')}
               </button>
             </Box>
           </Box>
@@ -637,21 +898,11 @@ export function TraderLinksSection({ userId }: { userId: string }) {
         role="button"
         tabIndex={0}
         aria-label={t('linkNewAccount')}
-        onClick={() => {
-          if (traders.length >= 10) {
-            showToast(t('maxLinkedAccounts'), 'error')
-            return
-          }
-          router.push('/claim')
-        }}
+        onClick={handleLinkNewAccount}
         onKeyDown={(e) => {
           if (e.key === 'Enter' || e.key === ' ') {
             e.preventDefault()
-            if (traders.length >= 10) {
-              showToast(t('maxLinkedAccounts'), 'error')
-              return
-            }
-            router.push('/claim')
+            handleLinkNewAccount()
           }
         }}
         style={{
