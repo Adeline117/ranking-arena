@@ -1,13 +1,20 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useMemo } from 'react'
+import React, { useEffect, useRef } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { ToggleSwitch } from '@/app/(app)/settings/components/shared'
 import { logger } from '@/lib/logger'
-import { getCsrfHeaders } from '@/lib/api/client'
-import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { authedFetch } from '@/lib/api/client'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
+import { isPushSubscriptionOwnedBy, setPushSubscriptionOwner } from './push-subscription-owners'
 
 type PushStatus = 'loading' | 'unsupported' | 'denied' | 'subscribed' | 'unsubscribed'
 
@@ -26,134 +33,298 @@ interface PushNotificationToggleProps {
   onToast?: (message: string, type: 'success' | 'error') => void
 }
 
+type PushUiState = {
+  status: PushStatus
+  busy: boolean
+}
+
+type PushOperation = {
+  id: number
+  viewer: SettingsViewerSnapshot
+}
+
+const emptyPushUiState = (): PushUiState => ({ status: 'loading', busy: false })
+
+function pushScopeKey(
+  viewer: SettingsViewerSnapshot | null,
+  fallback: { viewerKey: string; sessionGeneration: number }
+): string {
+  return viewer
+    ? `${viewer.viewerKey}\u0000${viewer.sessionGeneration}`
+    : `invalid:${fallback.viewerKey}\u0000${fallback.sessionGeneration}`
+}
+
+function pushIsSupported(): boolean {
+  return (
+    typeof window !== 'undefined' &&
+    'Notification' in window &&
+    'serviceWorker' in navigator &&
+    'PushManager' in window
+  )
+}
+
 export function PushNotificationToggle({ onToast }: PushNotificationToggleProps) {
   const { t } = useLanguage()
-  const [status, setStatus] = useState<PushStatus>('loading')
-  const [busy, setBusy] = useState(false)
+  const tRef = useRef(t)
+  tRef.current = t
+  const toastRef = useRef(onToast || ((message: string) => logger.warn(message)))
+  toastRef.current = onToast || ((message: string) => logger.warn(message))
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const currentViewer = captureSettingsViewer(auth)
+  const scopeKey = pushScopeKey(currentViewer, auth)
+  const [ui, setUi] = useViewerOwnedState<PushUiState>(emptyPushUiState, emptyPushUiState, scopeKey)
+  const uiRef = useRef(ui)
+  uiRef.current = ui
+  const mountedRef = useRef(false)
+  const nextOperationIdRef = useRef(0)
+  const loadOperationRef = useRef<PushOperation | null>(null)
+  const actionOperationRef = useRef<PushOperation | null>(null)
 
-  const toast = useMemo(() => onToast || ((msg: string) => logger.warn(msg)), [onToast])
+  const viewerIsCurrent = (viewer: SettingsViewerSnapshot): boolean =>
+    mountedRef.current && isSettingsViewerCurrent(viewer, authRef.current)
 
-  // Check current status on mount
+  const operationIsCurrent = (
+    operation: PushOperation,
+    operationRef: { current: PushOperation | null }
+  ): boolean => operationRef.current?.id === operation.id && viewerIsCurrent(operation.viewer)
+
   useEffect(() => {
-    if (
-      typeof window === 'undefined' ||
-      !('serviceWorker' in navigator) ||
-      !('PushManager' in window)
-    ) {
-      setStatus('unsupported')
-      return
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      loadOperationRef.current = null
+      actionOperationRef.current = null
     }
-    if (Notification.permission === 'denied') {
-      setStatus('denied')
-      return
-    }
-    navigator.serviceWorker.ready
-      .then(async (reg) => {
-        const sub = await reg.pushManager.getSubscription()
-        setStatus(sub ? 'subscribed' : 'unsubscribed')
-      })
-      .catch(() => setStatus('unsupported'))
   }, [])
 
-  const subscribe = useCallback(async () => {
-    setBusy(true)
-    try {
-      const permission = await Notification.requestPermission()
-      if (permission !== 'granted') {
-        setStatus('denied')
-        toast(t('allowNotificationPermission'), 'error')
+  useEffect(() => {
+    if (!currentViewer) return
+    const operation: PushOperation = {
+      id: ++nextOperationIdRef.current,
+      viewer: currentViewer,
+    }
+    loadOperationRef.current = operation
+    setUi(emptyPushUiState())
+
+    void (async () => {
+      if (!pushIsSupported()) {
+        if (operationIsCurrent(operation, loadOperationRef)) {
+          setUi({ status: 'unsupported', busy: false })
+          loadOperationRef.current = null
+        }
+        return
+      }
+      if (Notification.permission === 'denied') {
+        if (operationIsCurrent(operation, loadOperationRef)) {
+          setUi({ status: 'denied', busy: false })
+          loadOperationRef.current = null
+        }
         return
       }
 
+      try {
+        const registration = await navigator.serviceWorker.ready
+        if (!operationIsCurrent(operation, loadOperationRef)) return
+        const subscription = await registration.pushManager.getSubscription()
+        if (!operationIsCurrent(operation, loadOperationRef)) return
+        const subscribed =
+          subscription !== null &&
+          isPushSubscriptionOwnedBy(
+            window.localStorage,
+            subscription.endpoint,
+            operation.viewer.userId
+          )
+        setUi({ status: subscribed ? 'subscribed' : 'unsubscribed', busy: false })
+      } catch {
+        if (operationIsCurrent(operation, loadOperationRef)) {
+          setUi({ status: 'unsupported', busy: false })
+        }
+      } finally {
+        if (operationIsCurrent(operation, loadOperationRef)) loadOperationRef.current = null
+      }
+    })()
+
+    return () => {
+      if (loadOperationRef.current?.id === operation.id) loadOperationRef.current = null
+    }
+    // Access-token rotation does not change the viewer-owned browser resource.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey])
+
+  const subscribe = async () => {
+    const viewer = captureSettingsViewer(authRef.current)
+    const activeOperation = actionOperationRef.current
+    if (
+      !viewer ||
+      uiRef.current.busy ||
+      (activeOperation && viewerIsCurrent(activeOperation.viewer)) ||
+      !pushIsSupported()
+    ) {
+      return
+    }
+    const operation: PushOperation = {
+      id: ++nextOperationIdRef.current,
+      viewer,
+    }
+    actionOperationRef.current = operation
+    setUi((current) => ({ ...current, busy: true }))
+    try {
       const vapidKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY
       if (!vapidKey) {
-        toast(t('pushNotificationError'), 'error')
+        toastRef.current(tRef.current('pushNotificationError'), 'error')
         return
       }
 
-      const reg = await navigator.serviceWorker.ready
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
-      })
-
-      // /api/push/subscribe is withAuth (Bearer header only) — 401'd without the token
-      const accessToken = await tokenRefreshCoordinator.getValidToken()
-      if (!accessToken) {
-        toast(t('pushNotificationError'), 'error')
+      const permission = await Notification.requestPermission()
+      if (!operationIsCurrent(operation, actionOperationRef)) return
+      if (permission !== 'granted') {
+        setUi((current) => ({
+          ...current,
+          status: permission === 'denied' ? 'denied' : 'unsubscribed',
+        }))
+        toastRef.current(tRef.current('allowNotificationPermission'), 'error')
         return
       }
 
-      const json = sub.toJSON()
-      await fetch('/api/push/subscribe', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({
-          token: sub.endpoint,
+      const registration = await navigator.serviceWorker.ready
+      if (!operationIsCurrent(operation, actionOperationRef)) return
+      let subscription = await registration.pushManager.getSubscription()
+      if (!operationIsCurrent(operation, actionOperationRef)) return
+      if (!subscription) {
+        subscription = await registration.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(vapidKey) as BufferSource,
+        })
+        if (!operationIsCurrent(operation, actionOperationRef)) return
+      }
+
+      const json = subscription.toJSON()
+      const result = await authedFetch<{ success?: boolean }>(
+        '/api/push/subscribe',
+        'POST',
+        operation.viewer.accessToken,
+        {
+          token: subscription.endpoint,
           provider: 'web',
           platform: 'web',
-          endpoint: sub.endpoint,
+          endpoint: subscription.endpoint,
           p256dh: json.keys?.p256dh,
           auth: json.keys?.auth,
-        }),
-      })
+        },
+        15_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+        }
+      )
+      if (!operationIsCurrent(operation, actionOperationRef) || result.stale) return
+      if (!result.ok) throw new Error('Failed to register push subscription')
 
-      setStatus('subscribed')
-      toast(t('pushNotificationsEnabled'), 'success')
+      setPushSubscriptionOwner(
+        window.localStorage,
+        subscription.endpoint,
+        operation.viewer.userId,
+        true
+      )
+      setUi((current) => ({ ...current, status: 'subscribed' }))
+      toastRef.current(tRef.current('pushNotificationsEnabled'), 'success')
     } catch (err) {
-      logger.error('[PushToggle] subscribe error:', err)
-      toast(t('pushNotificationError'), 'error')
+      if (operationIsCurrent(operation, actionOperationRef)) {
+        logger.error('[PushToggle] subscribe error:', err)
+        toastRef.current(tRef.current('pushNotificationError'), 'error')
+      }
     } finally {
-      setBusy(false)
+      if (operationIsCurrent(operation, actionOperationRef)) {
+        setUi((current) => ({ ...current, busy: false }))
+        actionOperationRef.current = null
+      }
     }
-  }, [t, toast])
+  }
 
-  const unsubscribe = useCallback(async () => {
-    setBusy(true)
+  const unsubscribe = async () => {
+    const viewer = captureSettingsViewer(authRef.current)
+    const activeOperation = actionOperationRef.current
+    if (
+      !viewer ||
+      uiRef.current.busy ||
+      uiRef.current.status !== 'subscribed' ||
+      (activeOperation && viewerIsCurrent(activeOperation.viewer)) ||
+      !pushIsSupported()
+    ) {
+      return
+    }
+    const operation: PushOperation = {
+      id: ++nextOperationIdRef.current,
+      viewer,
+    }
+    actionOperationRef.current = operation
+    setUi((current) => ({ ...current, busy: true }))
     try {
-      const reg = await navigator.serviceWorker.ready
-      const sub = await reg.pushManager.getSubscription()
-      if (sub) {
-        // /api/push/subscribe is withAuth (Bearer header only)
-        const accessToken = await tokenRefreshCoordinator.getValidToken()
-        await fetch(`/api/push/subscribe?token=${encodeURIComponent(sub.endpoint)}`, {
-          method: 'DELETE',
-          headers: {
-            ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-            ...getCsrfHeaders(),
-          },
-        })
-        await sub.unsubscribe()
+      const registration = await navigator.serviceWorker.ready
+      if (!operationIsCurrent(operation, actionOperationRef)) return
+      const subscription = await registration.pushManager.getSubscription()
+      if (!operationIsCurrent(operation, actionOperationRef)) return
+      if (
+        !subscription ||
+        !isPushSubscriptionOwnedBy(
+          window.localStorage,
+          subscription.endpoint,
+          operation.viewer.userId
+        )
+      ) {
+        setUi((current) => ({ ...current, status: 'unsubscribed' }))
+        return
       }
-      setStatus('unsubscribed')
+
+      const result = await authedFetch<{ success?: boolean }>(
+        `/api/push/subscribe?token=${encodeURIComponent(subscription.endpoint)}`,
+        'DELETE',
+        operation.viewer.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+        }
+      )
+      if (!operationIsCurrent(operation, actionOperationRef) || result.stale) return
+      if (!result.ok) throw new Error('Failed to unregister push subscription')
+
+      setPushSubscriptionOwner(
+        window.localStorage,
+        subscription.endpoint,
+        operation.viewer.userId,
+        false
+      )
+      // Do not call subscription.unsubscribe(): the same origin endpoint can
+      // still be registered to another local account. The authenticated DELETE
+      // above disables delivery only for the current viewer.
+      setUi((current) => ({ ...current, status: 'unsubscribed' }))
     } catch (err) {
-      logger.error('[PushToggle] unsubscribe error:', err)
-      toast(t('pushNotificationError'), 'error')
-    } finally {
-      setBusy(false)
-    }
-  }, [t, toast])
-
-  const handleToggle = useCallback(
-    async (enabled: boolean) => {
-      if (enabled) {
-        await subscribe()
-      } else {
-        await unsubscribe()
+      if (operationIsCurrent(operation, actionOperationRef)) {
+        logger.error('[PushToggle] unsubscribe error:', err)
+        toastRef.current(tRef.current('pushNotificationError'), 'error')
       }
-    },
-    [subscribe, unsubscribe]
-  )
+    } finally {
+      if (operationIsCurrent(operation, actionOperationRef)) {
+        setUi((current) => ({ ...current, busy: false }))
+        actionOperationRef.current = null
+      }
+    }
+  }
 
-  if (status === 'unsupported') return null
+  const handleToggle = async (enabled: boolean) => {
+    if (enabled) await subscribe()
+    else await unsubscribe()
+  }
 
-  const isOn = status === 'subscribed'
-  const isDenied = status === 'denied'
-  const isLoading = status === 'loading' || busy
+  if (!currentViewer || ui.status === 'unsupported') return null
+
+  const isOn = ui.status === 'subscribed'
+  const isDenied = ui.status === 'denied'
+  const isLoading = ui.status === 'loading' || ui.busy
 
   return (
     <Box
