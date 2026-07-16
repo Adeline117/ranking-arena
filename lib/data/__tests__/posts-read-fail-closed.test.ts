@@ -2,6 +2,8 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { filterServiceReadablePostRows, getPosts } from '../posts'
 
 type QueryResult = { data: unknown; error: Error | null }
+type PostsClient = Parameters<typeof getPosts>[0]
+type ServiceAudienceClient = Parameters<typeof filterServiceReadablePostRows>[0]
 
 function query(result: QueryResult) {
   const builder: Record<string, unknown> = {}
@@ -79,7 +81,7 @@ describe('getPosts service-role fail-closed boundary', () => {
     )
 
     await expect(
-      filterServiceReadablePostRows({ rpc } as unknown as SupabaseClient, rows, 'viewer-1')
+      filterServiceReadablePostRows({ rpc } as unknown as ServiceAudienceClient, rows, 'viewer-1')
     ).resolves.toEqual([rows[1]])
     expect(rpc).toHaveBeenNthCalledWith(1, 'can_service_actor_read_post', {
       p_actor_id: 'viewer-1',
@@ -107,7 +109,7 @@ describe('getPosts service-role fail-closed boundary', () => {
 
     await expect(
       filterServiceReadablePostRows(
-        { rpc } as unknown as SupabaseClient,
+        { rpc } as unknown as ServiceAudienceClient,
         [
           publicPost,
           {
@@ -135,7 +137,7 @@ describe('getPosts service-role fail-closed boundary', () => {
 
     await expect(
       filterServiceReadablePostRows(
-        { rpc } as unknown as SupabaseClient,
+        { rpc } as unknown as ServiceAudienceClient,
         [
           {
             id: 'public-post-by-blocked-author',
@@ -163,7 +165,7 @@ describe('getPosts service-role fail-closed boundary', () => {
     })
 
     await expect(
-      filterServiceReadablePostRows({ rpc } as unknown as SupabaseClient, rows, 'viewer-1')
+      filterServiceReadablePostRows({ rpc } as unknown as ServiceAudienceClient, rows, 'viewer-1')
     ).resolves.toEqual([rows[0]])
   })
 
@@ -175,7 +177,7 @@ describe('getPosts service-role fail-closed boundary', () => {
 
     await expect(
       filterServiceReadablePostRows(
-        { rpc } as unknown as SupabaseClient,
+        { rpc } as unknown as ServiceAudienceClient,
         [
           {
             id: 'public-wrapper',
@@ -237,7 +239,7 @@ describe('getPosts service-role fail-closed boundary', () => {
         if (table === 'user_profiles') return profileQuery
         throw new Error(`unexpected table ${table}`)
       }),
-    } as unknown as SupabaseClient
+    } as unknown as PostsClient
 
     const [result] = await getPosts(client)
 
@@ -275,7 +277,7 @@ describe('getPosts service-role fail-closed boundary', () => {
         if (table === 'user_profiles') return profileQuery
         throw new Error(`unexpected table ${table}`)
       }),
-    } as unknown as SupabaseClient
+    } as unknown as PostsClient
 
     const result = await getPosts(client, {
       group_ids: [groupPost.group_id],
@@ -314,7 +316,7 @@ describe('getPosts service-role fail-closed boundary', () => {
         if (table === 'user_profiles') return profileQuery
         throw new Error(`unexpected table ${table}`)
       }),
-    } as unknown as SupabaseClient
+    } as unknown as PostsClient
 
     const result = await getPosts(client, { sort_by: 'hot_score', limit: 1 })
 
