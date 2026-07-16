@@ -34,6 +34,9 @@ interface ExportData {
     following: unknown[]
     followers: unknown[]
   }
+  blocks: {
+    outgoing: unknown[]
+  }
   tips: {
     sent: unknown[]
     received: unknown[]
@@ -296,6 +299,21 @@ const ACCOUNT_BINDINGS_EXPORT_DATASET = {
   },
 } satisfies CursorExportDataset
 
+const OUTGOING_BLOCKS_EXPORT_DATASET = {
+  name: 'blocks.outgoing',
+  table: 'blocked_users',
+  selectColumns: ['blocked_id', 'created_at'],
+  ownerPredicate: {
+    column: 'blocker_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'blocked_id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
 function normalizeFollowRows(rows: Record<string, unknown>[], direction: 'following' | 'follower') {
   const otherUserColumn = direction === 'following' ? 'following_id' : 'follower_id'
   return rows.map((row) => ({
@@ -346,6 +364,13 @@ function normalizeAccountBindings(rows: Record<string, unknown>[]) {
   return rows.map((row) => ({
     platform: row.platform,
     account_id: row.account_id,
+    created_at: row.created_at,
+  }))
+}
+
+function normalizeOutgoingBlocks(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    blocked_user_id: row.blocked_id,
     created_at: row.created_at,
   }))
 }
@@ -460,6 +485,7 @@ export async function POST(request: NextRequest) {
       recoveryTokens,
       preferences,
       accountBindings,
+      outgoingBlocks,
     ] = await Promise.all([
       fetchAllExportRows(supabase, EXPORT_DATASETS.posts, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.comments, user.id),
@@ -475,6 +501,7 @@ export async function POST(request: NextRequest) {
       fetchAllExportRows(supabase, EXPORT_DATASETS.recoveryTokens, user.id),
       fetchAllExportRowsByCursor(supabase, PREFERENCES_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, ACCOUNT_BINDINGS_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, OUTGOING_BLOCKS_EXPORT_DATASET, user.id),
     ])
 
     const exportData: ExportData = {
@@ -485,6 +512,9 @@ export async function POST(request: NextRequest) {
       follows: {
         following: normalizeFollowRows(following, 'following'),
         followers: normalizeFollowRows(followers, 'follower'),
+      },
+      blocks: {
+        outgoing: normalizeOutgoingBlocks(outgoingBlocks),
       },
       tips: {
         sent: normalizeTipRows(tipsSent, 'sent'),
