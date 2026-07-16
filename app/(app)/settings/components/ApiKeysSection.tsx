@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useCallback, useEffect, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useToast } from '@/app/components/ui/Toast'
@@ -10,6 +10,11 @@ import { authedFetch } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatDateLocalized } from '@/lib/utils/format'
 import { SectionCard, getInputStyle } from './shared'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '../hooks/settings-viewer-scope'
 
 interface ApiKey {
   id: string
@@ -22,6 +27,31 @@ interface ApiKey {
   last_used_at: string | null
   created_at: string
   revoked_at: string | null
+}
+
+type ApiKeyStateOwner = Pick<SettingsViewerSnapshot, 'viewerKey' | 'sessionGeneration' | 'userId'>
+
+type ApiKeyLoadOutcome = 'idle' | 'loading' | 'ready' | 'failed'
+
+function apiKeyStateOwnerFor(viewer: SettingsViewerSnapshot): ApiKeyStateOwner {
+  return {
+    viewerKey: viewer.viewerKey,
+    sessionGeneration: viewer.sessionGeneration,
+    userId: viewer.userId,
+  }
+}
+
+function apiKeyStateOwnerMatches(
+  owner: ApiKeyStateOwner | null,
+  viewer: SettingsViewerSnapshot | null
+): boolean {
+  return (
+    owner !== null &&
+    viewer !== null &&
+    owner.viewerKey === viewer.viewerKey &&
+    owner.sessionGeneration === viewer.sessionGeneration &&
+    owner.userId === viewer.userId
+  )
 }
 
 const TIER_LABELS: Record<string, { labelKey: string; color: string; limitKey: string }> = {
@@ -39,7 +69,9 @@ export function ApiKeysSection() {
   const { showToast } = useToast()
   // /api/user/api-keys is wrapped in withAuth, which only reads the
   // Authorization Bearer header — these calls 401'd without it.
-  const { accessToken, authChecked } = useAuthSession()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
   const {
     checkout: apiCheckout,
     isLoading: checkoutLoading,
@@ -50,49 +82,130 @@ export function ApiKeysSection() {
   const [creating, setCreating] = useState(false)
   const [newKeyName, setNewKeyName] = useState('')
   const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null)
+  const [stateOwner, setStateOwner] = useState<ApiKeyStateOwner | null>(null)
+  const [loadOutcome, setLoadOutcome] = useState<ApiKeyLoadOutcome>('idle')
+  const stateOwnerRef = useRef<ApiKeyStateOwner | null>(null)
+  const loadOutcomeRef = useRef<ApiKeyLoadOutcome>('idle')
+  const keysLoadGenerationRef = useRef(0)
 
-  const fetchKeys = useCallback(async () => {
-    if (!accessToken) {
-      if (authChecked) setLoading(false)
+  const fetchKeys = useCallback(async (expectedScope?: SettingsViewerSnapshot) => {
+    const scope = expectedScope ?? captureSettingsViewer(authRef.current)
+    if (!scope) {
+      if (authRef.current.authChecked && !authRef.current.loading) setLoading(false)
       return
     }
+    if (!isSettingsViewerCurrent(scope, authRef.current)) return
+    const loadGeneration = ++keysLoadGenerationRef.current
+    const loadIsCurrent = () =>
+      keysLoadGenerationRef.current === loadGeneration &&
+      isSettingsViewerCurrent(scope, authRef.current)
+
+    const owner = apiKeyStateOwnerFor(scope)
+    stateOwnerRef.current = owner
+    loadOutcomeRef.current = 'loading'
+    setStateOwner(owner)
+    setLoadOutcome('loading')
+    setKeys([])
+    setLoading(true)
+
     try {
-      const res = await authedFetch<{ data?: ApiKey[] }>('/api/user/api-keys', 'GET', accessToken)
-      if (!res.ok) return
+      const res = await authedFetch<{ data?: ApiKey[] }>(
+        '/api/user/api-keys',
+        'GET',
+        scope.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
+      )
+      if (!loadIsCurrent() || res.stale) return
+      if (!res.ok) {
+        setKeys([])
+        loadOutcomeRef.current = 'failed'
+        setLoadOutcome('failed')
+        return
+      }
       setKeys(res.data?.data ?? [])
+      loadOutcomeRef.current = 'ready'
+      setLoadOutcome('ready')
+    } catch {
+      if (!loadIsCurrent()) return
+      setKeys([])
+      loadOutcomeRef.current = 'failed'
+      setLoadOutcome('failed')
     } finally {
-      setLoading(false)
+      if (loadIsCurrent()) setLoading(false)
     }
-  }, [accessToken, authChecked])
+  }, [])
 
   useEffect(() => {
-    fetchKeys()
-  }, [fetchKeys])
+    keysLoadGenerationRef.current += 1
+    stateOwnerRef.current = null
+    loadOutcomeRef.current = 'idle'
+    setStateOwner(null)
+    setLoadOutcome('idle')
+    setKeys([])
+    setLoading(auth.loading || !auth.authChecked || Boolean(auth.userId))
+    setCreating(false)
+    setNewKeyName('')
+    setJustCreatedKey(null)
+    if (auth.authChecked && !auth.loading && auth.userId) void fetchKeys()
+  }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId, fetchKeys])
+
+  const stateBelongsToViewer = (scope: SettingsViewerSnapshot): boolean =>
+    loadOutcomeRef.current === 'ready' &&
+    apiKeyStateOwnerMatches(stateOwnerRef.current, scope) &&
+    isSettingsViewerCurrent(scope, authRef.current)
 
   const createKey = async () => {
+    const scope = captureSettingsViewer(authRef.current)
+    if (!scope || !stateBelongsToViewer(scope) || creating) return
     setCreating(true)
     try {
       const res = await authedFetch<{ data?: { key: string }; error?: string }>(
         '/api/user/api-keys',
         'POST',
-        accessToken,
-        { name: newKeyName || 'Default' }
+        scope.accessToken,
+        { name: newKeyName || 'Default' },
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
       )
+      if (!stateBelongsToViewer(scope) || res.stale) return
       if (!res.ok || !res.data?.data) {
         showToast(res.data?.error || t('apiKeyCreateFailed'), 'error')
         return
       }
       setJustCreatedKey(res.data.data.key)
       setNewKeyName('')
-      await fetchKeys()
+      await fetchKeys(scope)
+      if (!isSettingsViewerCurrent(scope, authRef.current)) return
       showToast(t('apiKeyCreatedToast'), 'success')
     } finally {
-      setCreating(false)
+      if (isSettingsViewerCurrent(scope, authRef.current)) setCreating(false)
     }
   }
 
   const revokeKey = async (id: string) => {
-    const res = await authedFetch('/api/user/api-keys', 'PATCH', accessToken, { id })
+    const scope = captureSettingsViewer(authRef.current)
+    if (!scope || !stateBelongsToViewer(scope) || !keys.some((key) => key.id === id && key.active))
+      return
+    const res = await authedFetch(
+      '/api/user/api-keys',
+      'PATCH',
+      scope.accessToken,
+      { id },
+      15_000,
+      {
+        expectedUserId: scope.userId,
+        expectedSessionGeneration: scope.sessionGeneration,
+      }
+    )
+    if (!stateBelongsToViewer(scope) || res.stale) return
     if (!res.ok) {
       showToast(t('apiKeyRevokeFailed'), 'error')
       return
@@ -105,18 +218,59 @@ export function ApiKeysSection() {
     showToast(t('apiKeyRevokedToast'), 'success')
   }
 
-  const copyKey = (key: string) => {
-    navigator.clipboard.writeText(key)
-    showToast(t('copiedToClipboard'), 'success')
+  const copyKey = async (key: string) => {
+    const scope = captureSettingsViewer(authRef.current)
+    if (
+      !scope ||
+      !stateBelongsToViewer(scope) ||
+      (justCreatedKey !== key &&
+        !keys.some((candidate) => candidate.active && candidate.key === key))
+    ) {
+      return
+    }
+
+    try {
+      if (!navigator.clipboard?.writeText) throw new Error('Clipboard unavailable')
+      await navigator.clipboard.writeText(key)
+      if (!stateBelongsToViewer(scope)) return
+      showToast(t('copiedToClipboard'), 'success')
+    } catch {
+      if (!stateBelongsToViewer(scope)) return
+      showToast(t('copyFailed'), 'error')
+    }
   }
 
-  const activeKeys = keys.filter((k) => k.active)
-  const revokedKeys = keys.filter((k) => !k.active)
+  const renderScope = captureSettingsViewer(auth)
+  const stateOwnerIsCurrent = apiKeyStateOwnerMatches(stateOwner, renderScope)
+  const stateReady = stateOwnerIsCurrent && loadOutcome === 'ready'
+  const visibleKeys = stateReady ? keys : []
+  const visibleNewKeyName = stateReady ? newKeyName : ''
+  const visibleJustCreatedKey = stateReady ? justCreatedKey : null
+  const visibleCreating = stateReady && creating
+  const activeKeys = visibleKeys.filter((k) => k.active)
+  const revokedKeys = visibleKeys.filter((k) => !k.active)
+  const displayLoading =
+    auth.loading ||
+    !auth.authChecked ||
+    loading ||
+    Boolean(auth.userId && (!stateOwnerIsCurrent || loadOutcome === 'loading'))
+
+  const handleUpgrade = (plan: 'starter' | 'pro') => {
+    const scope = captureSettingsViewer(authRef.current)
+    if (!scope || !stateBelongsToViewer(scope)) return
+    void apiCheckout(plan)
+  }
+
+  const dismissCreatedKey = () => {
+    const scope = captureSettingsViewer(authRef.current)
+    if (!scope || !stateBelongsToViewer(scope)) return
+    setJustCreatedKey(null)
+  }
 
   return (
     <SectionCard id="api-keys" title={t('apiKeysSection')} description={t('apiKeysDesc')}>
       {/* Just-created key banner */}
-      {justCreatedKey && (
+      {visibleJustCreatedKey && (
         <Box
           style={{
             padding: tokens.spacing[4],
@@ -145,14 +299,14 @@ export function ApiKeysSection() {
                 wordBreak: 'break-all',
               }}
             >
-              {justCreatedKey}
+              {visibleJustCreatedKey}
             </code>
-            <Button size="sm" onClick={() => copyKey(justCreatedKey)}>
+            <Button size="sm" onClick={() => void copyKey(visibleJustCreatedKey)}>
               {t('copy')}
             </Button>
           </div>
           <button
-            onClick={() => setJustCreatedKey(null)}
+            onClick={dismissCreatedKey}
             style={{
               marginTop: tokens.spacing[2],
               background: 'none',
@@ -171,8 +325,8 @@ export function ApiKeysSection() {
       {/* Current tier + upgrade */}
       <ApiTierBanner
         currentTier={activeKeys[0]?.tier || 'free'}
-        onUpgrade={apiCheckout}
-        isLoading={checkoutLoading}
+        onUpgrade={handleUpgrade}
+        isLoading={checkoutLoading || !stateReady}
         error={checkoutError}
       />
 
@@ -181,8 +335,13 @@ export function ApiKeysSection() {
         <input
           type="text"
           placeholder={t('apiKeyNamePlaceholder')}
-          value={newKeyName}
-          onChange={(e) => setNewKeyName(e.target.value)}
+          value={visibleNewKeyName}
+          onChange={(e) => {
+            const scope = captureSettingsViewer(authRef.current)
+            if (!scope || !stateBelongsToViewer(scope)) return
+            setNewKeyName(e.target.value)
+          }}
+          disabled={!stateReady}
           maxLength={50}
           style={{
             ...getInputStyle(),
@@ -191,11 +350,11 @@ export function ApiKeysSection() {
         />
         <Button
           onClick={createKey}
-          disabled={creating || activeKeys.length >= 5}
+          disabled={!stateReady || visibleCreating || activeKeys.length >= 5}
           size="sm"
           variant="primary"
         >
-          {creating ? t('apiKeyCreating') : t('apiKeyCreate')}
+          {visibleCreating ? t('apiKeyCreating') : t('apiKeyCreate')}
         </Button>
       </Box>
 
@@ -209,7 +368,7 @@ export function ApiKeysSection() {
       )}
 
       {/* Key list */}
-      {loading ? (
+      {displayLoading ? (
         <Text size="sm" style={{ color: 'var(--color-text-tertiary)' }}>
           {t('loading')}
         </Text>
@@ -273,16 +432,42 @@ type UsageData = {
 
 function UsageChart() {
   const { t } = useLanguage()
-  const { accessToken } = useAuthSession()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
   const [usage, setUsage] = useState<UsageData | null>(null)
 
   useEffect(() => {
-    if (!accessToken) return
-    // withAuth route — requires Authorization Bearer header
-    authedFetch<{ data?: UsageData }>('/api/user/api-keys/usage?days=30', 'GET', accessToken)
-      .then((res) => setUsage(res.data?.data ?? null))
-      .catch(() => {})
-  }, [accessToken])
+    setUsage(null)
+    const scope = captureSettingsViewer(authRef.current)
+    if (!scope) return
+    let cancelled = false
+
+    void (async () => {
+      try {
+        const res = await authedFetch<{ data?: UsageData }>(
+          '/api/user/api-keys/usage?days=30',
+          'GET',
+          scope.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: scope.userId,
+            expectedSessionGeneration: scope.sessionGeneration,
+          }
+        )
+        if (cancelled || res.stale || !isSettingsViewerCurrent(scope, authRef.current) || !res.ok)
+          return
+        setUsage(res.data?.data ?? null)
+      } catch {
+        // Usage history is supplementary; identity-bound failure stays empty.
+      }
+    })()
+
+    return () => {
+      cancelled = true
+    }
+  }, [auth.authChecked, auth.loading, auth.sessionGeneration, auth.userId])
 
   if (!usage || usage.daily.length === 0) {
     return (
