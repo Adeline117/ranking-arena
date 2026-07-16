@@ -117,8 +117,23 @@ describe('group detail resource and viewer ownership', () => {
       ownerScope(ACTOR_A, 7, { resourceGeneration: 2 }),
     ]
     for (const variant of variants) {
-      expect(groupDetailOwnerKey(variant)).not.toBe(groupDetailOwnerKey(base))
+      expect(groupDetailOwnerKey(variant, token(variant.userId || ACTOR_A, 'variant'))).not.toBe(
+        groupDetailOwnerKey(base, token(ACTOR_A, 'base'))
+      )
     }
+  })
+
+  it('keys access-token subjects without remounting for a same-subject refresh', () => {
+    const base = ownerScope(ACTOR_A, 7)
+    expect(groupDetailOwnerKey(base, token(ACTOR_A, 'old'))).toBe(
+      groupDetailOwnerKey(base, token(ACTOR_A, 'refreshed'))
+    )
+    expect(groupDetailOwnerKey(base, token(ACTOR_B, 'wrong-subject'))).not.toBe(
+      groupDetailOwnerKey(base, token(ACTOR_A, 'old'))
+    )
+    expect(groupDetailOwnerKey(base, null)).not.toBe(
+      groupDetailOwnerKey(base, token(ACTOR_A, 'old'))
+    )
   })
 
   it('rejects A-to-B, A-to-A, pending, G1-to-G2, and same-id params late work', () => {

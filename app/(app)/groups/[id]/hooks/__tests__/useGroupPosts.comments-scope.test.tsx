@@ -1,8 +1,11 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 
 const mockFetchPostCommentsPage = jest.fn()
+const mockSupabaseFrom = jest.fn()
 
-jest.mock('@/lib/supabase/client', () => ({ supabase: {} }))
+jest.mock('@/lib/supabase/client', () => ({
+  supabase: { from: (...args: unknown[]) => mockSupabaseFrom(...args) },
+}))
 jest.mock('@/lib/api/client', () => ({
   authedFetch: jest.fn(),
   getCsrfHeaders: () => ({}),
@@ -66,6 +69,19 @@ function deferred<T>() {
   return { promise, resolve }
 }
 
+function postsQuery(response: Promise<{ data: unknown[] | null; error: unknown }>) {
+  const query: Record<string, jest.Mock | ((...args: unknown[]) => Promise<unknown>)> = {}
+  for (const method of ['select', 'eq', 'is', 'order', 'limit', 'lt']) {
+    query[method] = jest.fn(() => query)
+  }
+  query.then = (resolve: unknown, reject: unknown) =>
+    response.then(
+      resolve as (value: { data: unknown[] | null; error: unknown }) => unknown,
+      reject as (reason: unknown) => unknown
+    )
+  return query
+}
+
 function renderGroupHook(
   initialProps: Props,
   onRender?: (comments: Record<string, CommentWithAuthor[]>) => void,
@@ -92,6 +108,66 @@ describe('useGroupPosts comment audience and viewer scope', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     localStorage.clear()
+  })
+
+  it('stops a posts request at unmount before enrichment, state, or toast work', async () => {
+    const postsResponse = deferred<{ data: unknown[]; error: null }>()
+    mockSupabaseFrom.mockReturnValue(postsQuery(postsResponse.promise))
+    const showToast = jest.fn()
+    const { result, unmount } = renderGroupHook(baseProps, undefined, showToast)
+    let request!: Promise<void>
+
+    act(() => {
+      request = result.current.loadPosts()
+    })
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(1)
+    unmount()
+    await act(async () => {
+      postsResponse.resolve({
+        data: [
+          {
+            id: 'late-post',
+            group_id: 'group-1',
+            title: 'late',
+            created_at: '2026-07-16T00:00:00.000Z',
+            author_id: 'late-author',
+          },
+        ],
+        error: null,
+      })
+      await request
+    })
+
+    expect(mockSupabaseFrom).toHaveBeenCalledTimes(1)
+    expect(showToast).not.toHaveBeenCalled()
+  })
+
+  it('does not toast an older posts failure after a newer request owns the slot', async () => {
+    const older = deferred<{ data: null; error: Error }>()
+    const newer = deferred<{ data: unknown[]; error: null }>()
+    mockSupabaseFrom
+      .mockReturnValueOnce(postsQuery(older.promise))
+      .mockReturnValueOnce(postsQuery(newer.promise))
+    const showToast = jest.fn()
+    const { result } = renderGroupHook(baseProps, undefined, showToast)
+    let olderRequest!: Promise<void>
+    let newerRequest!: Promise<void>
+
+    act(() => {
+      olderRequest = result.current.loadPosts()
+      newerRequest = result.current.loadPosts()
+    })
+    await act(async () => {
+      newer.resolve({ data: [], error: null })
+      await newerRequest
+    })
+    await act(async () => {
+      older.resolve({ data: null, error: new Error('superseded failure') })
+      await olderRequest
+    })
+
+    expect(showToast).not.toHaveBeenCalled()
+    expect(result.current.posts).toEqual([])
   })
 
   it('loads an open group thread anonymously after auth and audience resolve', async () => {

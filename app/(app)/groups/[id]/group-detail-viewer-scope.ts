@@ -76,8 +76,13 @@ function canonicalOwner(scope: GroupDetailOwnerScope): string {
   ])
 }
 
-export function groupDetailOwnerKey(scope: GroupDetailOwnerScope): string {
-  return `group-detail:${canonicalOwner(scope)}`
+export function groupDetailOwnerKey(
+  scope: GroupDetailOwnerScope,
+  accessToken: string | null
+): string {
+  const accessSubject =
+    accessToken === null ? null : jwtSubject(accessToken)?.toLowerCase() || 'invalid'
+  return `group-detail:${canonicalOwner(scope)}:${JSON.stringify(accessSubject)}`
 }
 
 export function isSameGroupDetailOwner(

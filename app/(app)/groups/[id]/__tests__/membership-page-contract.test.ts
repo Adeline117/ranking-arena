@@ -1,9 +1,19 @@
 import { readFileSync } from 'node:fs'
+import { createHash } from 'node:crypto'
 import { join } from 'node:path'
 
 const pageSource = readFileSync(join(process.cwd(), 'app/(app)/groups/[id]/page.tsx'), 'utf8')
 
 describe('group page membership acknowledgement contract', () => {
+  it('keeps the rendered loading/error/content suffix byte-identical', () => {
+    const marker = '  // Loading state\n'
+    const markerIndex = pageSource.indexOf(marker)
+    expect(markerIndex).toBeGreaterThan(-1)
+    expect(createHash('sha256').update(pageSource.slice(markerIndex)).digest('hex')).toBe(
+      'a0bf7b5ace4397ea9a0aaea030902afe8b29f33c38f398f3caa978fb46d60d2e'
+    )
+  })
+
   it('redeems invites in one membership POST with the exact token', () => {
     expect(pageSource).not.toContain('/invite?verify=')
     expect(pageSource).toContain('void handleJoin(inviteToken)')
