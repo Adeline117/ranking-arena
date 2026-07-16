@@ -3,7 +3,7 @@
 import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { useEffect, useState, useCallback, useRef } from 'react'
+import { useEffect, useState, useCallback, useMemo, useRef, useLayoutEffect } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens, alpha } from '@/lib/design-tokens'
@@ -27,13 +27,21 @@ import GroupPostList from './ui/GroupPostList'
 import { GroupInfoModal, MembersListModal } from './ui/GroupMembersSection'
 import { useGroupPosts, Post } from './hooks/useGroupPosts'
 import PullToRefreshWrapper from '@/app/components/ui/PullToRefreshWrapper'
-import { useAuthSession } from '@/lib/hooks/useAuthSession'
+import { useAuthSession, type AuthSessionReturn } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
 import { trackInteraction } from '@/lib/tracking'
 import { trackEvent } from '@/lib/analytics/track'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import dynamic from 'next/dynamic'
 import { buildJoinMembershipBody, parseMembershipAck } from './membership-client'
+import {
+  advanceGroupDetailResourceScope,
+  canonicalGroupDetailId,
+  GroupDetailParamsSourceLedger,
+  groupDetailOwnerKey,
+  isGroupDetailOwnerCurrent,
+  type GroupDetailOwnerScope,
+} from './group-detail-viewer-scope'
 
 const ProUpsellModal = dynamic(
   () => import('@/app/components/ui/ProGate').then((m) => ({ default: m.ProUpsellModal })),
@@ -66,6 +74,11 @@ interface GroupMember {
   avatar_url?: string | null
   joined_at?: string | null
 }
+
+type GroupDetailAuth = Pick<
+  AuthSessionReturn,
+  'accessToken' | 'authChecked' | 'email' | 'sessionGeneration' | 'userId' | 'viewerKey'
+>
 
 // Inline bilingual text helper (for one-off strings not in the i18n dictionary)
 function _bilingualText(zh: string, en: string, language: string): string {
@@ -101,46 +114,177 @@ function PageWrapper({ email, children }: PageWrapperProps): React.ReactElement 
 export default function GroupDetailPage({ params }: { params: Promise<{ id: string }> }) {
   if (!features.social) redirect('/')
 
-  const [groupId, setGroupId] = useState<string>('')
+  const paramsSourceLedgerRef = useRef(new GroupDetailParamsSourceLedger())
+  const paramsSourceScope = paramsSourceLedgerRef.current.capture(params)
+  const [resolvedParams, setResolvedParams] = useState({ paramsRevision: 0, groupId: '' })
+  const groupId =
+    resolvedParams.paramsRevision === paramsSourceScope.paramsRevision
+      ? canonicalGroupDetailId(resolvedParams.groupId) || ''
+      : ''
+  useEffect(() => {
+    const expectedSource = paramsSourceScope
+    Promise.resolve(params as Promise<{ id: string }> | { id: string })
+      .then((resolved) => {
+        if (!paramsSourceLedgerRef.current.isCurrent(expectedSource)) return
+        setResolvedParams({
+          paramsRevision: expectedSource.paramsRevision,
+          groupId: String(resolved?.id ?? ''),
+        })
+      })
+      .catch(() => {
+        if (!paramsSourceLedgerRef.current.isCurrent(expectedSource)) return
+        setResolvedParams({ paramsRevision: expectedSource.paramsRevision, groupId: '' })
+      })
+  }, [params, paramsSourceScope])
+
+  const auth = useAuthSession()
+  const resourceScopeRef = useRef({
+    paramsRevision: 0,
+    groupId: null as string | null,
+    resourceGeneration: 0,
+  })
+  resourceScopeRef.current = advanceGroupDetailResourceScope(
+    resourceScopeRef.current,
+    paramsSourceScope.paramsRevision,
+    groupId
+  )
+  const scopedParamsRevision = resourceScopeRef.current.paramsRevision
+  const scopedGroupId = resourceScopeRef.current.groupId
+  const scopedResourceGeneration = resourceScopeRef.current.resourceGeneration
+  const ownerScope: GroupDetailOwnerScope = useMemo(
+    () => ({
+      userId: auth.userId,
+      viewerKey: auth.viewerKey,
+      sessionGeneration: auth.sessionGeneration,
+      paramsRevision: scopedParamsRevision,
+      groupId: scopedGroupId,
+      resourceGeneration: scopedResourceGeneration,
+    }),
+    [
+      auth.sessionGeneration,
+      auth.userId,
+      auth.viewerKey,
+      scopedGroupId,
+      scopedParamsRevision,
+      scopedResourceGeneration,
+    ]
+  )
+  const currentOwnerScopeRef = useRef(ownerScope)
+  const currentAccessTokenRef = useRef(auth.accessToken)
+  currentOwnerScopeRef.current = ownerScope
+  currentAccessTokenRef.current = auth.accessToken
+  const ownerKey = groupDetailOwnerKey(ownerScope, auth.accessToken)
+  return (
+    <GroupDetailScopedPage
+      key={ownerKey}
+      groupId={groupId}
+      ownerScope={ownerScope}
+      auth={auth}
+      currentOwnerScopeRef={currentOwnerScopeRef}
+      currentAccessTokenRef={currentAccessTokenRef}
+    />
+  )
+}
+
+function GroupDetailScopedPage({
+  groupId,
+  ownerScope,
+  auth,
+  currentOwnerScopeRef,
+  currentAccessTokenRef,
+}: {
+  groupId: string
+  ownerScope: GroupDetailOwnerScope
+  auth: GroupDetailAuth
+  currentOwnerScopeRef: React.MutableRefObject<GroupDetailOwnerScope>
+  currentAccessTokenRef: React.MutableRefObject<string | null>
+}) {
   const abortControllerRef = useRef<AbortController | null>(null)
 
-  useEffect(() => {
-    if (params && typeof params === 'object' && 'then' in params) {
-      ;(params as Promise<{ id: string }>)
-        .then((resolved) => {
-          setGroupId(resolved.id)
-        })
-        // eslint-disable-next-line no-restricted-syntax
-        .catch(() => {
-          /* Intentionally swallowed: params resolution should not fail */
-        })
-    } else {
-      setGroupId(String((params as { id: string })?.id ?? ''))
-    }
-  }, [params])
-
-  useEffect(() => {
-    if (groupId && groupId !== 'loading') {
-      trackInteraction({ action: 'view', target_type: 'group', target_id: groupId })
-    }
-  }, [groupId])
-
   const { language, t } = useLanguage()
-  const { showToast } = useToast()
-  const { showDangerConfirm } = useDialog()
+  const { showToast: unsafeShowToast } = useToast()
+  const { showDangerConfirm: unsafeShowDangerConfirm } = useDialog()
   const { isFeaturesUnlocked: isPro } = useSubscription()
   const searchParams = useSearchParams()
-  const auth = useAuthSession()
   const { accessToken, email, userId } = auth
+  const mountedRef = useRef(true)
+  const renderedOwnerScopeRef = useRef<GroupDetailOwnerScope>(ownerScope)
+  const renderedAccessTokenRef = useRef(accessToken)
+  renderedOwnerScopeRef.current = {
+    ...ownerScope,
+    userId: auth.userId,
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+  }
+  renderedAccessTokenRef.current = accessToken
+  const isCurrent = useCallback(
+    (expected: GroupDetailOwnerScope) => {
+      return (
+        mountedRef.current &&
+        isGroupDetailOwnerCurrent(
+          expected,
+          currentOwnerScopeRef.current,
+          currentAccessTokenRef.current
+        ) &&
+        isGroupDetailOwnerCurrent(
+          expected,
+          renderedOwnerScopeRef.current,
+          renderedAccessTokenRef.current
+        )
+      )
+    },
+    [currentAccessTokenRef, currentOwnerScopeRef]
+  )
+  const ownerReady =
+    isGroupDetailOwnerCurrent(
+      ownerScope,
+      currentOwnerScopeRef.current,
+      currentAccessTokenRef.current
+    ) &&
+    isGroupDetailOwnerCurrent(
+      ownerScope,
+      renderedOwnerScopeRef.current,
+      renderedAccessTokenRef.current
+    )
+  useLayoutEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      abortControllerRef.current?.abort()
+    }
+  }, [])
+  const showToast = useCallback(
+    (...args: Parameters<typeof unsafeShowToast>) => {
+      if (isCurrent(ownerScope)) unsafeShowToast(...args)
+    },
+    [isCurrent, ownerScope, unsafeShowToast]
+  )
+  const showDangerConfirm = useCallback(
+    async (...args: Parameters<typeof unsafeShowDangerConfirm>) => {
+      const requestScope = ownerScope
+      if (!isCurrent(requestScope)) return false
+      const confirmed = await unsafeShowDangerConfirm(...args)
+      return isCurrent(requestScope) ? confirmed : false
+    },
+    [isCurrent, ownerScope, unsafeShowDangerConfirm]
+  )
+
+  useEffect(() => {
+    const expectedScope = ownerScope
+    if (!isCurrent(expectedScope)) return
+    trackInteraction({ action: 'view', target_type: 'group', target_id: groupId })
+  }, [groupId, isCurrent, ownerReady, ownerScope])
 
   // Group state
   const [group, setGroup] = useState<Group | null>(null)
   const [isMember, setIsMember] = useState(false)
   const [userRole, setUserRole] = useState<'owner' | 'admin' | 'member' | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [rawLoading, setLoading] = useState(true)
+  const loading = rawLoading || !ownerReady
   const [error, setError] = useState<string | null>(null)
   const [joining, setJoining] = useState(false)
-  const [proUpsellOpen, setProUpsellOpen] = useState(false)
+  const [proUpsellOpen, unsafeSetProUpsellOpen] = useState(false)
+  const membershipOperationRef = useRef<symbol | null>(null)
 
   // Member preview (avatar stack)
   const [memberPreviews, setMemberPreviews] = useState<
@@ -148,10 +292,30 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
   >([])
 
   // Modals
-  const [showGroupInfo, setShowGroupInfo] = useState(false)
-  const [showMembersList, setShowMembersList] = useState(false)
+  const [showGroupInfo, unsafeSetShowGroupInfo] = useState(false)
+  const [showMembersList, unsafeSetShowMembersList] = useState(false)
   const [members, setMembers] = useState<GroupMember[]>([])
   const [loadingMembers, setLoadingMembers] = useState(false)
+  const membersOperationRef = useRef<symbol | null>(null)
+
+  const setProUpsellOpen = useCallback(
+    (value: boolean) => {
+      if (isCurrent(ownerScope)) unsafeSetProUpsellOpen(value)
+    },
+    [isCurrent, ownerScope]
+  )
+  const setShowGroupInfo = useCallback(
+    (value: boolean) => {
+      if (isCurrent(ownerScope)) unsafeSetShowGroupInfo(value)
+    },
+    [isCurrent, ownerScope]
+  )
+  const setShowMembersList = useCallback(
+    (value: boolean) => {
+      if (isCurrent(ownerScope)) unsafeSetShowMembersList(value)
+    },
+    [isCurrent, ownerScope]
+  )
 
   // Translation
   const [translatedPosts, setTranslatedPosts] = useState<
@@ -204,6 +368,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
 
   const setTranslationCache = useCallback(
     (postId: string, lang: string, value: { title?: string; content?: string }) => {
+      if (!isCurrent(ownerScope)) return
       try {
         const key = `trans:${postId}:${lang}`
         sessionStorage.setItem(key, JSON.stringify(value))
@@ -211,49 +376,44 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         /* storage full, ignore */
       }
     },
-    []
+    [isCurrent, ownerScope]
   )
 
   // Batch translate posts (with sessionStorage cache)
   const translatePosts = useCallback(
     async (postsToTranslate: Post[], targetLang: 'zh' | 'en') => {
-      if (translatingPosts) return
+      const requestScope = ownerScope
+      const requestToken = accessToken
+      const requestIsCurrent = () => isCurrent(requestScope)
+      if (translatingPosts || !requestIsCurrent()) return
       setTranslatingPosts(true)
 
-      // Check cache first
-      const cachedResults: Record<string, { title?: string; content?: string }> = {}
-      const needsTranslation = postsToTranslate.filter((p) => {
-        if (translatedPosts[p.id]?.title) return false
-        if (!p.title) return false
-        const titleIsChinese = isChineseText(p.title)
-        const needsIt = targetLang === 'en' ? titleIsChinese : !titleIsChinese
-        if (!needsIt) return false
-        // Check sessionStorage cache
-        const cached = getTranslationCache(p.id, targetLang)
-        if (cached) {
-          cachedResults[p.id] = cached
-          return false
-        }
-        return true
-      })
-
-      // Apply cached results
-      if (Object.keys(cachedResults).length > 0) {
-        setTranslatedPosts((prev) => ({ ...prev, ...cachedResults }))
-      }
-
-      if (needsTranslation.length === 0) {
-        setTranslatingPosts(false)
-        return
-      }
-
-      // /api/translate requires auth — skip silently for anonymous visitors
-      if (!accessToken) {
-        setTranslatingPosts(false)
-        return
-      }
-
       try {
+        // Check cache first
+        const cachedResults: Record<string, { title?: string; content?: string }> = {}
+        const needsTranslation = postsToTranslate.filter((p) => {
+          if (translatedPosts[p.id]?.title) return false
+          if (!p.title) return false
+          const titleIsChinese = isChineseText(p.title)
+          const needsIt = targetLang === 'en' ? titleIsChinese : !titleIsChinese
+          if (!needsIt) return false
+          const cached = getTranslationCache(p.id, targetLang)
+          if (cached) {
+            cachedResults[p.id] = cached
+            return false
+          }
+          return true
+        })
+
+        if (!requestIsCurrent()) return
+        if (Object.keys(cachedResults).length > 0) {
+          setTranslatedPosts((prev) => ({ ...prev, ...cachedResults }))
+        }
+
+        if (needsTranslation.length === 0) return
+        // /api/translate requires auth — skip silently for anonymous visitors
+        if (!requestToken || !requestIsCurrent()) return
+
         const items: Array<{
           id: string
           text: string
@@ -277,112 +437,137 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             })
         })
 
-        if (items.length === 0) {
-          setTranslatingPosts(false)
-          return
-        }
+        if (items.length === 0 || !requestIsCurrent()) return
 
         const response = await fetch('/api/translate', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${requestToken}`,
             ...getCsrfHeaders(),
           },
           body: JSON.stringify({ items, targetLang }),
         })
+        if (!requestIsCurrent()) return
 
         if (!response.ok) {
-          logger.warn('Translation API failed:', response.status)
-          setTranslatingPosts(false)
+          if (requestIsCurrent()) logger.warn('Translation API failed:', response.status)
           return
         }
 
         const data = await response.json()
+        if (!requestIsCurrent()) return
         if (data.success && data.data?.results) {
           const results = data.data.results as Record<
             string,
             { translatedText: string; cached: boolean }
           >
-          setTranslatedPosts((prev) => {
-            const updated = { ...prev }
-            needsTranslation.forEach((post) => {
-              const translated = {
-                title: results[`${post.id}-title`]?.translatedText || post.title || '',
-                content: results[`${post.id}-content`]?.translatedText || post.content || '',
-              }
-              updated[post.id] = translated
-              // Cache in sessionStorage
-              setTranslationCache(post.id, targetLang, translated)
-            })
-            return updated
+          const translatedResults: Record<string, { title?: string; content?: string }> = {}
+          needsTranslation.forEach((post) => {
+            translatedResults[post.id] = {
+              title: results[`${post.id}-title`]?.translatedText || post.title || '',
+              content: results[`${post.id}-content`]?.translatedText || post.content || '',
+            }
           })
+          if (!requestIsCurrent()) return
+          for (const [postId, translated] of Object.entries(translatedResults)) {
+            setTranslationCache(postId, targetLang, translated)
+          }
+          setTranslatedPosts((prev) => ({ ...prev, ...translatedResults }))
         }
       } catch (error) {
-        logger.warn('Translation failed:', error)
+        if (requestIsCurrent()) logger.warn('Translation failed:', error)
       } finally {
-        setTranslatingPosts(false)
+        if (requestIsCurrent()) setTranslatingPosts(false)
       }
     },
-    [translatingPosts, translatedPosts, getTranslationCache, setTranslationCache, accessToken]
+    [
+      accessToken,
+      getTranslationCache,
+      isCurrent,
+      ownerScope,
+      setTranslationCache,
+      translatedPosts,
+      translatingPosts,
+    ]
   )
 
   // Trigger translation when posts change
   useEffect(() => {
-    if (postsHook.posts.length > 0 && !translatingPosts) {
+    const expectedScope = ownerScope
+    if (isCurrent(expectedScope) && postsHook.posts.length > 0 && !translatingPosts) {
       // en/ja/ko → English (API only supports en/zh); zh → Chinese
       translatePosts(postsHook.posts, language === 'zh' ? 'zh' : 'en')
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- translatePosts excluded to avoid infinite loop; only trigger on posts/language change
-  }, [postsHook.posts, language])
+  }, [postsHook.posts, language, ownerReady])
 
   // Related groups
   useEffect(() => {
-    if (!groupId || groupId === 'loading') return
+    const expectedScope = ownerScope
+    const requestGroupId = expectedScope.groupId
+    if (!requestGroupId || !isCurrent(expectedScope)) return
+    let active = true
+    const requestIsCurrent = () => active && isCurrent(expectedScope)
 
     const fetchRelatedGroups = async () => {
+      if (!requestIsCurrent()) return
       setLoadingRelatedGroups(true)
 
       try {
         const { data, error } = await supabase.rpc('get_related_groups', {
-          p_group_id: groupId,
+          p_group_id: requestGroupId,
           p_limit: 5,
         })
+        if (!requestIsCurrent()) return
 
         if (error || !data || data.length === 0) {
           // Fallback to hot groups
-          const { data: fallback } = await supabase
+          const { data: fallback, error: fallbackError } = await supabase
             .from('groups')
             .select('id, name, name_en, avatar_url, member_count')
-            .neq('id', groupId)
+            .neq('id', requestGroupId)
             .order('member_count', { ascending: false, nullsFirst: false })
             .limit(5)
+          if (!requestIsCurrent()) return
+          if (fallbackError) throw fallbackError
           setRelatedGroups(fallback || [])
         } else {
           setRelatedGroups(data)
         }
       } catch (err) {
-        logger.error('Error fetching related groups:', err)
-        setRelatedGroups([])
+        if (requestIsCurrent()) {
+          logger.error('Error fetching related groups:', err)
+          setRelatedGroups([])
+        }
       } finally {
-        setLoadingRelatedGroups(false)
+        if (requestIsCurrent()) setLoadingRelatedGroups(false)
       }
     }
 
-    fetchRelatedGroups()
-  }, [groupId])
+    void fetchRelatedGroups()
+    return () => {
+      active = false
+    }
+  }, [groupId, isCurrent, ownerReady, ownerScope])
 
   // Load group data + initial posts
   useEffect(() => {
-    if (!groupId || groupId === 'loading') return
+    const expectedScope = ownerScope
+    const requestGroupId = expectedScope.groupId
+    const requestUserId = expectedScope.userId
+    if (!requestGroupId || !isCurrent(expectedScope)) return
 
     if (abortControllerRef.current) {
       abortControllerRef.current.abort()
     }
     const controller = new AbortController()
     abortControllerRef.current = controller
+    let active = true
+    const requestIsCurrent = () => active && isCurrent(expectedScope)
 
     const load = async () => {
+      if (!requestIsCurrent()) return
       setLoading(true)
       setError(null)
 
@@ -395,7 +580,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             .select(
               'id, name, name_en, description, description_en, avatar_url, member_count, created_at, created_by, rules, rules_json, is_premium_only, visibility, dissolved_at'
             )
-            .eq('id', groupId)
+            .eq('id', requestGroupId)
             .maybeSingle(),
           // 2. Member avatar previews (5 most recent)
           // NOTE: no FK from group_members.user_id → user_profiles (it references
@@ -403,19 +588,20 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           supabase
             .from('group_member_directory')
             .select('user_id')
-            .eq('group_id', groupId)
+            .eq('group_id', requestGroupId)
             .order('joined_at', { ascending: false })
             .limit(5),
           // 3. Membership check (if logged in)
-          userId
+          requestUserId
             ? supabase
                 .from('own_group_memberships')
                 .select('role')
-                .eq('group_id', groupId)
-                .eq('user_id', userId)
+                .eq('group_id', requestGroupId)
+                .eq('user_id', requestUserId)
                 .maybeSingle()
-            : Promise.resolve({ data: null }),
+            : Promise.resolve({ data: null, error: null }),
         ])
+        if (!requestIsCurrent()) return
 
         const { data: groupData, error: groupErr } = groupResult
 
@@ -423,100 +609,126 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           const isInvalidId =
             groupErr.code === '22P02' || groupErr.message?.includes('invalid input syntax')
           setError(isInvalidId ? t('groupNotFound') : t('loadFailed'))
-          setLoading(false)
           return
         }
-
-        // Owner handle lookup (depends on groupData.created_by)
-        let ownerHandle = null
-        if (groupData?.created_by) {
-          const { data: ownerData } = await supabase
-            .from('user_profiles')
-            .select('handle')
-            .eq('id', groupData.created_by)
-            .maybeSingle()
-          ownerHandle = ownerData?.handle
+        if (previewResult.error) throw previewResult.error
+        if ('error' in membershipResult && membershipResult.error) throw membershipResult.error
+        if (groupData && canonicalGroupDetailId(groupData.id) !== requestGroupId) {
+          throw new Error('Group response did not match the requested resource')
         }
 
-        setGroup(groupData ? ({ ...groupData, owner_handle: ownerHandle } as Group) : null)
-
-        // Process member previews (step 2: fetch profiles by id)
-        if (previewResult.data && previewResult.data.length > 0) {
-          const previewIds = previewResult.data.map((m) => m.user_id).filter(Boolean)
-          const { data: previewProfiles } = previewIds.length
-            ? await supabase
+        const previewRows = previewResult.data || []
+        const previewIds = previewRows.map((member) => member.user_id).filter(Boolean)
+        if (!requestIsCurrent()) return
+        const [ownerResult, previewProfilesResult] = await Promise.all([
+          groupData?.created_by
+            ? supabase
                 .from('user_profiles')
-                .select('id, handle, avatar_url')
-                .in('id', previewIds)
-            : { data: null }
-          const profileById = new Map((previewProfiles || []).map((p) => [p.id, p]))
-          setMemberPreviews(
-            previewResult.data
-              .map((m) => {
-                const p = profileById.get(m.user_id)
-                return {
-                  avatar_url: p?.avatar_url,
-                  handle: p?.handle,
-                }
-              })
-              .filter((m) => m.avatar_url || m.handle)
-          )
-        }
+                .select('handle')
+                .eq('id', groupData.created_by)
+                .maybeSingle()
+            : Promise.resolve({ data: null, error: null }),
+          previewIds.length
+            ? supabase.from('user_profiles').select('id, handle, avatar_url').in('id', previewIds)
+            : Promise.resolve({ data: null, error: null }),
+        ])
+        if (!requestIsCurrent()) return
+        if (ownerResult.error) throw ownerResult.error
+        if (previewProfilesResult.error) throw previewProfilesResult.error
 
-        // Process membership
-        let _membershipConfirmed = false
-        if (userId && membershipResult.data) {
-          setIsMember(true)
-          setUserRole(membershipResult.data.role as 'owner' | 'admin' | 'member' | null)
-          _membershipConfirmed = true
-        } else if (userId) {
-          setIsMember(false)
-          setUserRole(null)
-        }
+        const ownerHandle = ownerResult.data?.handle ?? null
+        const profileById = new Map(
+          (previewProfilesResult.data || []).map((profile) => [profile.id, profile])
+        )
+        const loadedMemberPreviews = previewRows
+          .map((member) => {
+            const profile = profileById.get(member.user_id)
+            return {
+              avatar_url: profile?.avatar_url,
+              handle: profile?.handle,
+            }
+          })
+          .filter((member) => member.avatar_url || member.handle)
+
+        if (!requestIsCurrent()) return
+        const loadedRole =
+          requestUserId && membershipResult.data
+            ? (membershipResult.data.role as 'owner' | 'admin' | 'member' | null)
+            : null
+        setGroup(groupData ? ({ ...groupData, owner_handle: ownerHandle } as Group) : null)
+        setMemberPreviews(loadedMemberPreviews)
+        setIsMember(Boolean(requestUserId && membershipResult.data))
+        setUserRole(loadedRole)
 
         // Load posts for all visitors (non-members can browse read-only)
-        postsHook.loadPosts(true)
-      } catch (_err) {
-        if (controller.signal.aborted) return
+        if (!requestIsCurrent()) return
+        await postsHook.loadPosts(true)
+        if (!requestIsCurrent()) return
+      } catch (err) {
+        if (!requestIsCurrent()) return
+        logger.error('Error loading group detail:', err)
         setError(t('loadFailed'))
         showToast(t('loadFailed'), 'error')
       } finally {
-        if (!controller.signal.aborted) {
-          setLoading(false)
-        }
+        if (requestIsCurrent()) setLoading(false)
       }
     }
 
-    load()
+    void load()
     return () => {
+      active = false
       controller.abort()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- supabase/postsHook/showToast/t are stable; load group data on mount or when userId changes
-  }, [groupId, userId])
+  }, [groupId, isCurrent, ownerReady, ownerScope, userId])
 
   // Fallback: Load posts when membership state changes (for non-cold-start cases)
   useEffect(() => {
-    if (groupId && !loading && postsHook.posts.length === 0 && !postsHook.loadingMore) {
-      postsHook.loadPosts(true)
+    const expectedScope = ownerScope
+    if (
+      !isCurrent(expectedScope) ||
+      !groupId ||
+      loading ||
+      postsHook.posts.length > 0 ||
+      postsHook.loadingMore
+    )
+      return
+    let active = true
+    const trigger = async () => {
+      if (!active || !isCurrent(expectedScope)) return
+      await postsHook.loadPosts(true)
+      if (!active || !isCurrent(expectedScope)) return
+    }
+    void trigger()
+    return () => {
+      active = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- postsHook.loadPosts/posts/loadingMore excluded to avoid infinite loop; fallback trigger only
-  }, [isMember, groupId, loading])
+  }, [isMember, groupId, loading, ownerReady])
 
   // Invite auto-join
   useEffect(() => {
+    const expectedScope = ownerScope
     const inviteToken = searchParams.get('invite')
-    if (!inviteToken || !userId || !groupId || isMember || loading) return
+    if (!isCurrent(expectedScope) || !inviteToken || !userId || !groupId || isMember || loading)
+      return
 
     // Redemption is one write: the membership API verifies and consumes this
     // exact token atomically. A separate GET must never pre-consume capacity.
     void handleJoin(inviteToken)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- handleJoin excluded; only re-run when invite params or auth state change
-  }, [searchParams, userId, groupId, isMember, loading])
+  }, [searchParams, userId, groupId, isMember, loading, ownerReady])
 
   // Join group (via API)
   const handleJoin = useCallback(
     async (inviteToken?: string) => {
-      if (!userId) {
+      const requestScope = ownerScope
+      const requestUserId = requestScope.userId
+      const requestGroupId = requestScope.groupId
+      const requestToken = accessToken
+      const requestIsCurrent = () => isCurrent(requestScope)
+      if (!requestIsCurrent()) return
+      if (!requestUserId) {
         showToast(t('pleaseLogin'), 'warning')
         return
       }
@@ -527,20 +739,26 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         setProUpsellOpen(true)
         return
       }
+      if (!requestGroupId || !requestToken || membershipOperationRef.current) return
 
+      const operation = Symbol('group-membership-join')
+      membershipOperationRef.current = operation
       setJoining(true)
       try {
-        const res = await fetch(`/api/groups/${groupId}/membership`, {
+        if (!requestIsCurrent()) return
+        const res = await fetch(`/api/groups/${requestGroupId}/membership`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${accessToken}`,
+            Authorization: `Bearer ${requestToken}`,
             ...getCsrfHeaders(),
           },
           body: JSON.stringify(buildJoinMembershipBody(inviteToken)),
         })
+        if (!requestIsCurrent()) return
 
         const data: unknown = await res.json().catch(() => null)
+        if (!requestIsCurrent()) return
         if (!res.ok) {
           const errorMessage =
             data && typeof data === 'object' && !Array.isArray(data)
@@ -555,51 +773,74 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
         }
 
         if (ack.action === 'requested') {
+          if (!requestIsCurrent()) return
           showToast(t('joinRequestSubmitted'), 'success')
           return
         }
 
+        if (!requestIsCurrent()) return
         if (ack.member_count !== undefined) {
           setGroup((prev) => (prev ? { ...prev, member_count: ack.member_count } : prev))
         }
         setIsMember(true)
         setUserRole(ack.action === 'already_member' ? (ack.role ?? 'member') : 'member')
         if (ack.action === 'joined') {
-          trackEvent('group_join', { group_id: groupId })
+          trackEvent('group_join', { group_id: requestGroupId })
         }
         showToast(t('joinSuccess'), 'success')
       } catch (err) {
-        logger.error('Join error:', err)
-        showToast(t(inviteToken ? 'inviteInvalidOrExpired' : 'joinFailed'), 'error')
+        if (requestIsCurrent()) {
+          logger.error('Join error:', err)
+          showToast(t(inviteToken ? 'inviteInvalidOrExpired' : 'joinFailed'), 'error')
+        }
       } finally {
-        setJoining(false)
+        if (membershipOperationRef.current === operation) {
+          membershipOperationRef.current = null
+          if (requestIsCurrent()) setJoining(false)
+        }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userId, group, isPro, groupId, accessToken, showToast]
+    [userId, group, isPro, groupId, accessToken, showToast, ownerScope, isCurrent]
   )
 
   // Leave group (with confirmation)
   const handleLeave = useCallback(async () => {
-    if (!userId) return
-    if (!(await showDangerConfirm(t('leaveGroup'), t('leaveGroupConfirm')))) return
+    const requestScope = ownerScope
+    const requestUserId = requestScope.userId
+    const requestGroupId = requestScope.groupId
+    const requestToken = accessToken
+    const requestIsCurrent = () => isCurrent(requestScope)
+    if (!requestUserId || !requestGroupId || !requestToken || !requestIsCurrent()) return
+    const confirmed = await showDangerConfirm(t('leaveGroup'), t('leaveGroupConfirm'))
+    if (!confirmed || !requestIsCurrent() || membershipOperationRef.current) return
+    const operation = Symbol('group-membership-leave')
+    membershipOperationRef.current = operation
     setJoining(true)
     try {
-      const res = await fetch(`/api/groups/${groupId}/membership`, {
+      if (!requestIsCurrent()) return
+      const res = await fetch(`/api/groups/${requestGroupId}/membership`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${requestToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({ action: 'leave' }),
       })
+      if (!requestIsCurrent()) return
 
       if (!res.ok) {
         const data = await res.json().catch(() => ({}))
-        throw new Error(data.error || t('leaveFailed'))
+        if (!requestIsCurrent()) return
+        const errorMessage =
+          data && typeof data === 'object' && 'error' in data
+            ? (data as { error?: unknown }).error
+            : null
+        throw new Error(typeof errorMessage === 'string' ? errorMessage : t('leaveFailed'))
       }
 
+      if (!requestIsCurrent()) return
       setGroup((prev) =>
         prev ? { ...prev, member_count: Math.max(0, (prev.member_count || 1) - 1) } : prev
       )
@@ -607,60 +848,89 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       setUserRole(null)
       showToast(t('leftGroup'), 'success')
     } catch (err) {
-      logger.error('Leave error:', err)
-      showToast(t('leaveFailed'), 'error')
+      if (requestIsCurrent()) {
+        logger.error('Leave error:', err)
+        showToast(t('leaveFailed'), 'error')
+      }
     } finally {
-      setJoining(false)
+      if (membershipOperationRef.current === operation) {
+        membershipOperationRef.current = null
+        if (requestIsCurrent()) setJoining(false)
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- t is a stable ref; getCsrfHeaders is a pure utility
-  }, [userId, groupId, accessToken, showToast, showDangerConfirm])
+  }, [userId, groupId, accessToken, showToast, showDangerConfirm, ownerScope, isCurrent])
 
   // Load members
   const loadMembers = async () => {
-    if (loadingMembers || !groupId) return
+    const requestScope = ownerScope
+    const requestGroupId = requestScope.groupId
+    const requestIsCurrent = () => isCurrent(requestScope)
+    if (loadingMembers || !requestGroupId || !requestIsCurrent() || membersOperationRef.current)
+      return
+    const operation = Symbol('group-members-load')
+    membersOperationRef.current = operation
     setLoadingMembers(true)
     try {
       // Two-step query: group_members has no FK to user_profiles (user_id references
       // auth.users), so a PostgREST embed 400s with PGRST200. Fetch members, then profiles.
-      const { data: membersData } = await supabase
+      const membersResult = await supabase
         .from('group_member_directory')
         .select('user_id, role, joined_at')
-        .eq('group_id', groupId)
+        .eq('group_id', requestGroupId)
         .order('role', { ascending: true })
         .order('joined_at', { ascending: true })
+      if (!requestIsCurrent()) return
+      if (membersResult.error) throw membersResult.error
 
-      if (membersData && membersData.length > 0) {
+      const membersData = membersResult.data || []
+      let memberProfiles: Array<{
+        id: string
+        handle?: string | null
+        avatar_url?: string | null
+      }> = []
+      if (membersData.length > 0) {
         const memberIds = membersData.map((m) => m.user_id).filter(Boolean)
-        const { data: memberProfiles } = memberIds.length
-          ? await supabase
-              .from('user_profiles')
-              .select('id, handle, avatar_url')
-              .in('id', memberIds)
-          : { data: null }
-        const profileById = new Map((memberProfiles || []).map((p) => [p.id, p]))
-        const sortedMembers = membersData
-          .map((m) => {
-            const profile = profileById.get(m.user_id)
-            return {
-              user_id: m.user_id,
-              role: m.role,
-              joined_at: m.joined_at,
-              handle: profile?.handle,
-              avatar_url: profile?.avatar_url,
-            }
-          })
-          .sort((a, b) => {
-            const roleOrder: Record<string, number> = { owner: 0, admin: 1, member: 2 }
-            return (roleOrder[a.role] || 2) - (roleOrder[b.role] || 2)
-          })
-
-        setMembers(sortedMembers)
+        if (memberIds.length > 0) {
+          const profilesResult = await supabase
+            .from('user_profiles')
+            .select('id, handle, avatar_url')
+            .in('id', memberIds)
+          if (!requestIsCurrent()) return
+          if (profilesResult.error) throw profilesResult.error
+          memberProfiles = profilesResult.data || []
+        }
       }
+
+      if (!requestIsCurrent()) return
+      const profileById = new Map(memberProfiles.map((p) => [p.id, p]))
+      const sortedMembers = membersData
+        .map((m) => {
+          const profile = profileById.get(m.user_id)
+          return {
+            user_id: m.user_id,
+            role: m.role,
+            joined_at: m.joined_at,
+            handle: profile?.handle,
+            avatar_url: profile?.avatar_url,
+          }
+        })
+        .sort((a, b) => {
+          const roleOrder: Record<string, number> = { owner: 0, admin: 1, member: 2 }
+          return (roleOrder[a.role] || 2) - (roleOrder[b.role] || 2)
+        })
+
+      setMembers(sortedMembers)
     } catch (err) {
-      logger.error('Load members error:', err)
-      showToast(t('loadMembersFailed'), 'error')
+      if (requestIsCurrent()) {
+        logger.error('Load members error:', err)
+        showToast(t('loadMembersFailed'), 'error')
+      }
     } finally {
-      setLoadingMembers(false)
+      if (membersOperationRef.current === operation) {
+        membersOperationRef.current = null
+        if (requestIsCurrent()) setLoadingMembers(false)
+      }
     }
   }
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef, useEffect, useMemo } from 'react'
+import { useState, useCallback, useRef, useEffect, useMemo, useLayoutEffect } from 'react'
 import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
 const supabase = _supabase as SupabaseClient
@@ -193,6 +193,13 @@ export function useGroupPosts({
   showToast,
   showDangerConfirm,
 }: UseGroupPostsOptions) {
+  const mountedRef = useRef(true)
+  useLayoutEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
   const activeScopeRef = useRef({ viewerKey, sessionGeneration, userId })
   activeScopeRef.current = { viewerKey, sessionGeneration, userId }
   const accessTokenRef = useRef(accessToken)
@@ -205,6 +212,7 @@ export function useGroupPosts({
     (scope: { viewerKey: string; sessionGeneration: number; userId: string | null }) => {
       const current = activeScopeRef.current
       return (
+        mountedRef.current &&
         current.viewerKey === scope.viewerKey &&
         current.sessionGeneration === scope.sessionGeneration &&
         current.userId === scope.userId
@@ -571,16 +579,23 @@ export function useGroupPosts({
   // Load initial posts
   const loadPosts = useCallback(
     async (_forceLoad = false) => {
+      const capturedScope = activeScopeRef.current
+      if (!scopeIsCurrent(capturedScope)) return
       if (!groupId) {
         setPosts([])
         setHasMorePosts(false)
         return
       }
 
-      const capturedScope = activeScopeRef.current
       const requestGeneration = ++postsRequestGenerationRef.current
       try {
         const postsList = await fetchPosts()
+        if (
+          !scopeIsCurrent(capturedScope) ||
+          requestGeneration !== postsRequestGenerationRef.current
+        ) {
+          return
+        }
         await enrichPosts(postsList)
         if (
           !scopeIsCurrent(capturedScope) ||
@@ -591,7 +606,12 @@ export function useGroupPosts({
         setPosts(postsList)
         setHasMorePosts(postsList.length === POST_PAGE_SIZE)
       } catch (err) {
-        if (!scopeIsCurrent(capturedScope)) return
+        if (
+          !scopeIsCurrent(capturedScope) ||
+          requestGeneration !== postsRequestGenerationRef.current
+        ) {
+          return
+        }
         const error = err instanceof Error ? err.message : 'Failed to load posts'
         showToast(error, 'error')
       }
@@ -601,14 +621,19 @@ export function useGroupPosts({
 
   // Infinite scroll: load more
   const loadMorePosts = useCallback(async () => {
-    if (loadingMore || !hasMorePosts || posts.length === 0) return
-
     const capturedScope = activeScopeRef.current
+    if (!scopeIsCurrent(capturedScope) || loadingMore || !hasMorePosts || posts.length === 0) return
     const requestGeneration = ++postsRequestGenerationRef.current
     setLoadingMore(true)
     try {
       const lastPost = posts[posts.length - 1]
       const postsList = await fetchPosts(lastPost.created_at)
+      if (
+        !scopeIsCurrent(capturedScope) ||
+        requestGeneration !== postsRequestGenerationRef.current
+      ) {
+        return
+      }
 
       if (postsList.length > 0) {
         await enrichPosts(postsList)
@@ -624,7 +649,8 @@ export function useGroupPosts({
         setHasMorePosts(false)
       }
     } catch (err) {
-      if (!scopeIsCurrent(capturedScope)) return
+      if (!scopeIsCurrent(capturedScope) || requestGeneration !== postsRequestGenerationRef.current)
+        return
       logger.error('Load more posts error:', err)
     } finally {
       if (
