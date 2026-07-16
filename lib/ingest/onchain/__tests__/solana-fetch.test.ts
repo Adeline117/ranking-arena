@@ -1,6 +1,7 @@
 import {
   computeSolanaWalletOnchain,
   fetchSignatures,
+  fetchTxEvidence,
   scanSignatureRecords,
   scanSignatures,
 } from '../solana-fetch'
@@ -808,5 +809,783 @@ describe('scanSignatureRecords', () => {
       })
     ).rejects.toThrow('endExclusiveMs must be greater than sinceMs')
     expect(requests).toHaveLength(0)
+  })
+})
+
+describe('fetchTxEvidence', () => {
+  const originalFetch = global.fetch
+  const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
+
+  interface EvidenceRpcRequest {
+    method: string
+    params: [
+      string,
+      {
+        commitment: 'finalized'
+        encoding: 'json'
+        maxSupportedTransactionVersion: 0
+      },
+    ]
+  }
+
+  function encodeBase58(bytes: Uint8Array): string {
+    const digits = [0]
+    for (const byte of bytes) {
+      let carry = byte
+      for (let index = 0; index < digits.length; index += 1) {
+        const value = digits[index] * 256 + carry
+        digits[index] = value % 58
+        carry = Math.floor(value / 58)
+      }
+      while (carry > 0) {
+        digits.push(carry % 58)
+        carry = Math.floor(carry / 58)
+      }
+    }
+    let result = ''
+    for (let index = 0; index < bytes.length - 1 && bytes[index] === 0; index += 1) {
+      result += '1'
+    }
+    return (
+      result +
+      digits
+        .reverse()
+        .map((digit) => BASE58_ALPHABET[digit])
+        .join('')
+    )
+  }
+
+  function syntheticBase58(label: string, byteLength: 32 | 64): string {
+    const bytes = new Uint8Array(byteLength)
+    bytes[0] = 1
+    for (const [index, character] of [...label].entries()) {
+      if (index + 1 >= bytes.length) break
+      bytes[index + 1] = character.charCodeAt(0)
+    }
+    return encodeBase58(bytes)
+  }
+
+  const SIGNATURE = syntheticBase58('transaction', 64)
+  const WALLET = syntheticBase58('wallet', 32)
+  const TOKEN_ACCOUNT = syntheticBase58('token-account', 32)
+  const ROUTER_PROGRAM = syntheticBase58('router-program', 32)
+  const POOL_PROGRAM = syntheticBase58('pool-program', 32)
+  const TOKEN_PROGRAM = syntheticBase58('token-program', 32)
+  const TOKEN_MINT = syntheticBase58('token-mint', 32)
+  const LOOKUP_TABLE = syntheticBase58('lookup-table', 32)
+  const SPL_TOKEN_PROGRAM = 'TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA'
+  const TOKEN_2022_PROGRAM = 'TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb'
+
+  function legacyFixture() {
+    return {
+      slot: 123,
+      blockTime: 1_800_000_000,
+      version: 'legacy',
+      transaction: {
+        signatures: [SIGNATURE],
+        message: {
+          accountKeys: [WALLET, TOKEN_ACCOUNT, ROUTER_PROGRAM],
+          header: {
+            numRequiredSignatures: 1,
+            numReadonlySignedAccounts: 0,
+            numReadonlyUnsignedAccounts: 1,
+          },
+          instructions: [
+            {
+              programIdIndex: 2,
+              accounts: [0, 1],
+              data: '3',
+              stackHeight: 1,
+            },
+          ],
+        },
+      },
+      meta: {
+        err: null,
+        fee: 5000,
+        computeUnitsConsumed: 999,
+        preBalances: [1_000_000, 2_000_000, 0],
+        postBalances: [995_000, 2_000_000, 0],
+        preTokenBalances: [
+          {
+            accountIndex: 1,
+            mint: TOKEN_MINT,
+            owner: WALLET,
+            programId: TOKEN_PROGRAM,
+            uiTokenAmount: {
+              amount: '9007199254740993123',
+              decimals: 6,
+              uiAmount: null,
+            },
+          },
+        ],
+        postTokenBalances: [
+          {
+            accountIndex: 1,
+            mint: TOKEN_MINT,
+            owner: WALLET,
+            programId: TOKEN_PROGRAM,
+            uiTokenAmount: {
+              amount: '9007199254741993123',
+              decimals: 6,
+              uiAmount: null,
+            },
+          },
+        ],
+        innerInstructions: [],
+        logMessages: ['synthetic legacy log'],
+        loadedAddresses: { writable: [], readonly: [] },
+      },
+    }
+  }
+
+  function v0Fixture() {
+    return {
+      slot: 456,
+      blockTime: 1_800_000_100,
+      version: 0,
+      transaction: {
+        signatures: [SIGNATURE],
+        message: {
+          accountKeys: [WALLET, ROUTER_PROGRAM],
+          header: {
+            numRequiredSignatures: 1,
+            numReadonlySignedAccounts: 0,
+            numReadonlyUnsignedAccounts: 1,
+          },
+          addressTableLookups: [
+            {
+              accountKey: LOOKUP_TABLE,
+              writableIndexes: [2],
+              readonlyIndexes: [3, 4],
+            },
+          ],
+          instructions: [
+            {
+              programIdIndex: 1,
+              accounts: [0, 2, 4],
+              data: '4',
+              stackHeight: 1,
+            },
+          ],
+        },
+      },
+      meta: {
+        err: { InstructionError: [0, { Custom: 7 }] },
+        fee: 7000,
+        computeUnitsConsumed: 1234,
+        preBalances: [1_000_000, 0, 2_000_000, 0, 0],
+        postBalances: [993_000, 0, 2_000_000, 0, 0],
+        preTokenBalances: [
+          {
+            accountIndex: 2,
+            mint: TOKEN_MINT,
+            owner: WALLET,
+            programId: TOKEN_PROGRAM,
+            uiTokenAmount: { amount: '1000000', decimals: 6, uiAmount: 1 },
+          },
+        ],
+        postTokenBalances: [
+          {
+            accountIndex: 2,
+            mint: TOKEN_MINT,
+            owner: WALLET,
+            programId: TOKEN_PROGRAM,
+            uiTokenAmount: { amount: '1000000', decimals: 6, uiAmount: 1 },
+          },
+        ],
+        loadedAddresses: {
+          writable: [TOKEN_ACCOUNT],
+          readonly: [TOKEN_PROGRAM, POOL_PROGRAM],
+        },
+        innerInstructions: [
+          {
+            index: 0,
+            instructions: [
+              {
+                programIdIndex: 3,
+                accounts: [2, 0],
+                data: '5',
+                stackHeight: 2,
+              },
+              {
+                programIdIndex: 4,
+                accounts: [0, 2],
+                data: '6',
+                stackHeight: 2,
+              },
+            ],
+          },
+        ],
+        logMessages: ['synthetic v0 log'],
+      },
+    }
+  }
+
+  function mockEvidencePayload(payload: unknown, status = 200): EvidenceRpcRequest[] {
+    const requests: EvidenceRpcRequest[] = []
+    global.fetch = jest.fn(async (_input, init) => {
+      requests.push(JSON.parse(String(init?.body)) as EvidenceRpcRequest)
+      const envelope =
+        payload &&
+        typeof payload === 'object' &&
+        !Array.isArray(payload) &&
+        !Object.hasOwn(payload, 'jsonrpc') &&
+        (Object.hasOwn(payload, 'result') || Object.hasOwn(payload, 'error'))
+          ? { jsonrpc: '2.0', id: 1, ...payload }
+          : payload
+      return {
+        status,
+        text: async () => JSON.stringify(envelope),
+      } as Response
+    }) as jest.MockedFunction<typeof fetch>
+    return requests
+  }
+
+  afterEach(() => {
+    if (originalFetch) global.fetch = originalFetch
+    else delete (global as typeof global & { fetch?: typeof fetch }).fetch
+  })
+
+  it('maps exact legacy evidence without using floating token amounts', async () => {
+    const requests = mockEvidencePayload({ result: legacyFixture() })
+
+    const evidence = await fetchTxEvidence(SIGNATURE, {
+      rpcUrl: 'https://rpc.invalid/private-query-value',
+    })
+
+    expect(requests).toHaveLength(1)
+    expect(requests[0]).toEqual({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getTransaction',
+      params: [
+        SIGNATURE,
+        {
+          commitment: 'finalized',
+          encoding: 'json',
+          maxSupportedTransactionVersion: 0,
+        },
+      ],
+    })
+    expect(evidence).toMatchObject({
+      status: 'available',
+      signature: SIGNATURE,
+      provider: { servedBy: 'caller_supplied', attempted: ['caller_supplied'] },
+      commitmentRequested: 'finalized',
+      encoding: 'json',
+      maxSupportedTransactionVersion: 0,
+      version: 'legacy',
+      executionStatus: 'succeeded',
+      executionError: null,
+      innerInstructionsStatus: 'verified_empty',
+      staticAccountKeys: [WALLET, TOKEN_ACCOUNT, ROUTER_PROGRAM],
+      loadedAddresses: { writable: [], readonly: [] },
+      accountKeys: [
+        { index: 0, pubkey: WALLET, source: 'transaction', signer: true, writable: true },
+        {
+          index: 1,
+          pubkey: TOKEN_ACCOUNT,
+          source: 'transaction',
+          signer: false,
+          writable: true,
+        },
+        {
+          index: 2,
+          pubkey: ROUTER_PROGRAM,
+          source: 'transaction',
+          signer: false,
+          writable: false,
+        },
+      ],
+      preTokenBalances: [
+        {
+          accountIndex: 1,
+          account: TOKEN_ACCOUNT,
+          mint: TOKEN_MINT,
+          owner: WALLET,
+          tokenProgram: TOKEN_PROGRAM,
+          rawAmount: '9007199254740993123',
+          decimals: 6,
+        },
+      ],
+      instructions: [
+        {
+          path: { kind: 'outer', outerIndex: 0 },
+          programIdIndex: 2,
+          programId: ROUTER_PROGRAM,
+          accountIndexes: [0, 1],
+          accounts: [WALLET, TOKEN_ACCOUNT],
+          dataBase58: '3',
+          stackHeight: 1,
+        },
+      ],
+    })
+    expect(JSON.stringify(evidence)).not.toContain('rpc.invalid')
+    expect(JSON.stringify(evidence)).not.toContain('private-query-value')
+    expect(JSON.stringify(evidence)).not.toContain('uiAmount')
+  })
+
+  it('resolves v0 lookup origins and retains failed outer/inner evidence as available', async () => {
+    mockEvidencePayload({ result: v0Fixture() })
+
+    const evidence = await fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+
+    expect(evidence).toMatchObject({
+      status: 'available',
+      version: 0,
+      executionStatus: 'failed',
+      executionError: { InstructionError: [0, { Custom: 7 }] },
+      innerInstructionsStatus: 'present',
+      addressTableLookups: [
+        { tableAccount: LOOKUP_TABLE, writableIndexes: [2], readonlyIndexes: [3, 4] },
+      ],
+      loadedAddresses: {
+        writable: [TOKEN_ACCOUNT],
+        readonly: [TOKEN_PROGRAM, POOL_PROGRAM],
+      },
+      accountKeys: [
+        { index: 0, pubkey: WALLET, source: 'transaction', lookup: null },
+        { index: 1, pubkey: ROUTER_PROGRAM, source: 'transaction', lookup: null },
+        {
+          index: 2,
+          pubkey: TOKEN_ACCOUNT,
+          source: 'lookupTable',
+          writable: true,
+          lookup: { tableAccount: LOOKUP_TABLE, tableIndex: 2 },
+        },
+        {
+          index: 3,
+          pubkey: TOKEN_PROGRAM,
+          source: 'lookupTable',
+          writable: false,
+          lookup: { tableAccount: LOOKUP_TABLE, tableIndex: 3 },
+        },
+        {
+          index: 4,
+          pubkey: POOL_PROGRAM,
+          source: 'lookupTable',
+          writable: false,
+          lookup: { tableAccount: LOOKUP_TABLE, tableIndex: 4 },
+        },
+      ],
+      postTokenBalances: [
+        {
+          accountIndex: 2,
+          account: TOKEN_ACCOUNT,
+          tokenProgram: TOKEN_PROGRAM,
+          rawAmount: '1000000',
+          decimals: 6,
+        },
+      ],
+      instructions: [
+        {
+          path: { kind: 'outer', outerIndex: 0 },
+          programId: ROUTER_PROGRAM,
+          accounts: [WALLET, TOKEN_ACCOUNT, POOL_PROGRAM],
+        },
+        {
+          path: { kind: 'inner', outerIndex: 0, innerIndex: 0 },
+          programId: TOKEN_PROGRAM,
+          accounts: [TOKEN_ACCOUNT, WALLET],
+          stackHeight: 2,
+        },
+        {
+          path: { kind: 'inner', outerIndex: 0, innerIndex: 1 },
+          programId: POOL_PROGRAM,
+          accounts: [WALLET, TOKEN_ACCOUNT],
+          stackHeight: 2,
+        },
+      ],
+    })
+  })
+
+  it('distinguishes not-found from explicitly unavailable metadata', async () => {
+    mockEvidencePayload({ result: null })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({
+      status: 'unavailable',
+      reason: 'not_found',
+      provider: { servedBy: 'caller_supplied', attempted: ['caller_supplied'] },
+      rpcCode: null,
+      httpStatus: 200,
+    })
+
+    const missingMeta = legacyFixture()
+    missingMeta.meta = null as never
+    mockEvidencePayload({ result: missingMeta })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({
+      status: 'unavailable',
+      reason: 'metadata_unavailable',
+      provider: { servedBy: 'caller_supplied' },
+    })
+  })
+
+  it('classifies unsupported versions from RPC errors or successful future payloads', async () => {
+    const secret = 'private-version-message'
+    mockEvidencePayload({ error: { code: -32015, message: secret } })
+    const rpcUnsupported = await fetchTxEvidence(SIGNATURE, {
+      rpcUrl: `https://rpc.invalid/?key=${secret}`,
+    })
+    expect(rpcUnsupported).toMatchObject({
+      status: 'unavailable',
+      reason: 'unsupported_transaction_version',
+      rpcCode: -32015,
+      httpStatus: 200,
+    })
+    expect(JSON.stringify(rpcUnsupported)).not.toContain(secret)
+
+    const future = legacyFixture()
+    future.version = 1 as never
+    mockEvidencePayload({ result: future })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({
+      status: 'unavailable',
+      reason: 'unsupported_transaction_version',
+      rpcCode: null,
+    })
+  })
+
+  it.each([
+    [429, 'rate_limited'],
+    [402, 'quota_exhausted'],
+  ] as const)(
+    'classifies HTTP %s as %s without returning response text',
+    async (status, reason) => {
+      const secret = `private-http-${status}`
+      mockEvidencePayload({ error: { code: -32000, message: secret } }, status)
+
+      const evidence = await fetchTxEvidence(SIGNATURE, {
+        rpcUrl: `https://rpc.invalid/?key=${secret}`,
+      })
+
+      expect(evidence).toMatchObject({
+        status: 'unavailable',
+        reason,
+        rpcCode: null,
+        httpStatus: status,
+        provider: { servedBy: null, attempted: ['caller_supplied'] },
+      })
+      expect(JSON.stringify(evidence)).not.toContain(secret)
+    }
+  )
+
+  it.each([
+    ['AbortError', 'timeout'],
+    ['TypeError', 'transport_error'],
+  ] as const)('classifies %s without returning exception text', async (name, reason) => {
+    const error = new Error('private-transport-message')
+    error.name = name
+    global.fetch = jest.fn(async () => {
+      throw error
+    }) as jest.MockedFunction<typeof fetch>
+
+    const evidence = await fetchTxEvidence(SIGNATURE, {
+      rpcUrl: 'https://rpc.invalid/?key=private-url-value',
+    })
+
+    expect(evidence).toMatchObject({
+      status: 'unavailable',
+      reason,
+      rpcCode: null,
+      httpStatus: null,
+      provider: { servedBy: null, attempted: ['caller_supplied'] },
+    })
+    expect(JSON.stringify(evidence)).not.toContain('private-transport-message')
+    expect(JSON.stringify(evidence)).not.toContain('private-url-value')
+  })
+
+  it('distinguishes generic RPC errors and never returns their raw message', async () => {
+    const secret = 'private-rpc-message'
+    mockEvidencePayload({ error: { code: -32000, message: secret } })
+
+    const evidence = await fetchTxEvidence(SIGNATURE, {
+      rpcUrl: `https://rpc.invalid/?key=${secret}`,
+    })
+
+    expect(evidence).toMatchObject({
+      status: 'unavailable',
+      reason: 'rpc_error',
+      rpcCode: -32000,
+      httpStatus: 200,
+    })
+    expect(JSON.stringify(evidence)).not.toContain(secret)
+  })
+
+  it('fails malformed JSON and malformed result envelopes closed', async () => {
+    global.fetch = jest.fn(async () => ({
+      status: 200,
+      text: async () => '{private-malformed-body',
+    })) as jest.MockedFunction<typeof fetch>
+    const malformedJson = await fetchTxEvidence(SIGNATURE, {
+      rpcUrl: 'https://rpc.invalid/?key=private-url-value',
+    })
+    expect(malformedJson).toMatchObject({
+      status: 'unavailable',
+      reason: 'malformed_response',
+    })
+    expect(JSON.stringify(malformedJson)).not.toContain('private-malformed-body')
+    expect(JSON.stringify(malformedJson)).not.toContain('private-url-value')
+
+    mockEvidencePayload({ jsonrpc: '2.0', id: 1 })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+  })
+
+  it('fails unsafe integers and out-of-range instruction indexes closed', async () => {
+    const unsafe = legacyFixture()
+    unsafe.slot = Number.MAX_SAFE_INTEGER + 1
+    mockEvidencePayload({ result: unsafe })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const outOfRange = legacyFixture()
+    outOfRange.transaction.message.instructions[0].programIdIndex = 9
+    mockEvidencePayload({ result: outOfRange })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+  })
+
+  it('fails signature/header count and duplicate token balance identities closed', async () => {
+    const signatureMismatch = legacyFixture()
+    signatureMismatch.transaction.message.header.numRequiredSignatures = 2
+    mockEvidencePayload({ result: signatureMismatch })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const readonlyFeePayer = legacyFixture()
+    readonlyFeePayer.transaction.message.header.numReadonlySignedAccounts = 1
+    mockEvidencePayload({ result: readonlyFeePayer })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const duplicateBalance = legacyFixture()
+    duplicateBalance.meta.preTokenBalances.push({
+      ...duplicateBalance.meta.preTokenBalances[0],
+      uiTokenAmount: { ...duplicateBalance.meta.preTokenBalances[0].uiTokenAmount },
+    })
+    mockEvidencePayload({ result: duplicateBalance })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+  })
+
+  it('fails invalid transaction errors and JSON-RPC envelopes closed', async () => {
+    const invalidError = v0Fixture()
+    invalidError.meta.err = { InstructionError: [Number.MAX_SAFE_INTEGER + 1] }
+    mockEvidencePayload({ result: invalidError })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const multipleErrorVariants = v0Fixture()
+    multipleErrorVariants.meta.err = {
+      InstructionError: [0, { Custom: 7 }],
+      BlockhashNotFound: null,
+    }
+    mockEvidencePayload({ result: multipleErrorVariants })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    mockEvidencePayload({ jsonrpc: '2.0', id: 2, result: legacyFixture() })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    mockEvidencePayload({ jsonrpc: '2.0', id: 1, result: legacyFixture(), error: null })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+  })
+
+  it('fails v0 evidence without loaded addresses or with inconsistent lookup counts', async () => {
+    const missingLoaded = v0Fixture()
+    delete (missingLoaded.meta as { loadedAddresses?: unknown }).loadedAddresses
+    mockEvidencePayload({ result: missingLoaded })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const inconsistent = v0Fixture()
+    inconsistent.meta.loadedAddresses.readonly.pop()
+    mockEvidencePayload({ result: inconsistent })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const emptyLookup = v0Fixture()
+    emptyLookup.transaction.message.addressTableLookups[0].writableIndexes = []
+    emptyLookup.transaction.message.addressTableLookups[0].readonlyIndexes = []
+    mockEvidencePayload({ result: emptyLookup })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+  })
+
+  it('accepts repeated lookup indexes but restricts outer program IDs to non-payer static keys', async () => {
+    const repeatedLookupIndex = v0Fixture()
+    repeatedLookupIndex.transaction.message.addressTableLookups[0].writableIndexes = [2, 2]
+    repeatedLookupIndex.meta.loadedAddresses.writable = [TOKEN_ACCOUNT, TOKEN_ACCOUNT]
+    repeatedLookupIndex.meta.preBalances.push(0)
+    repeatedLookupIndex.meta.postBalances.push(0)
+    mockEvidencePayload({ result: repeatedLookupIndex })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'available' })
+
+    const payerProgram = legacyFixture()
+    payerProgram.transaction.message.instructions[0].programIdIndex = 0
+    mockEvidencePayload({ result: payerProgram })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const loadedOuterProgram = v0Fixture()
+    loadedOuterProgram.transaction.message.instructions[0].programIdIndex = 4
+    mockEvidencePayload({ result: loadedOuterProgram })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+  })
+
+  it('retains whether inner-instruction metadata is unavailable', async () => {
+    const unavailableInnerInstructions = legacyFixture()
+    unavailableInnerInstructions.meta.innerInstructions = null as never
+    mockEvidencePayload({ result: unavailableInnerInstructions })
+
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({
+      status: 'available',
+      innerInstructionsStatus: 'unavailable',
+      instructions: [{ path: { kind: 'outer', outerIndex: 0 } }],
+    })
+  })
+
+  it.each([SPL_TOKEN_PROGRAM, TOKEN_2022_PROGRAM])(
+    'retains balances owned by the real token program %s',
+    async (tokenProgram) => {
+      const fixture = legacyFixture()
+      fixture.meta.preTokenBalances[0].programId = tokenProgram
+      fixture.meta.postTokenBalances[0].programId = tokenProgram
+      mockEvidencePayload({ result: fixture })
+
+      await expect(
+        fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+      ).resolves.toMatchObject({
+        status: 'available',
+        preTokenBalances: [{ tokenProgram }],
+        postTokenBalances: [{ tokenProgram }],
+      })
+    }
+  )
+
+  it('fails invalid raw token amounts, decimals, or account indexes closed', async () => {
+    const invalidAmount = legacyFixture()
+    invalidAmount.meta.preTokenBalances[0].uiTokenAmount.amount = '1.5'
+    mockEvidencePayload({ result: invalidAmount })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const u64Overflow = legacyFixture()
+    u64Overflow.meta.preTokenBalances[0].uiTokenAmount.amount = '18446744073709551616'
+    mockEvidencePayload({ result: u64Overflow })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const invalidDecimals = legacyFixture()
+    invalidDecimals.meta.preTokenBalances[0].uiTokenAmount.decimals = 256
+    mockEvidencePayload({ result: invalidDecimals })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const invalidAccount = legacyFixture()
+    invalidAccount.meta.preTokenBalances[0].accountIndex = 9
+    mockEvidencePayload({ result: invalidAccount })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+  })
+
+  it('returns provider_unconfigured before network access', async () => {
+    const originalHeliusKey = process.env.HELIUS_API_KEY
+    const originalAlchemyKey = process.env.ALCHEMY_API_KEY
+    try {
+      delete process.env.HELIUS_API_KEY
+      delete process.env.ALCHEMY_API_KEY
+      global.fetch = jest.fn()
+
+      const evidence = await fetchTxEvidence(SIGNATURE)
+
+      expect(evidence).toMatchObject({
+        status: 'unavailable',
+        reason: 'provider_unconfigured',
+        provider: { servedBy: null, attempted: [] },
+      })
+      expect(global.fetch).not.toHaveBeenCalled()
+    } finally {
+      if (originalHeliusKey === undefined) delete process.env.HELIUS_API_KEY
+      else process.env.HELIUS_API_KEY = originalHeliusKey
+      if (originalAlchemyKey === undefined) delete process.env.ALCHEMY_API_KEY
+      else process.env.ALCHEMY_API_KEY = originalAlchemyKey
+    }
+  })
+
+  it('records secret-safe Helius-to-Alchemy quota failover provenance', async () => {
+    const originalHeliusKey = process.env.HELIUS_API_KEY
+    const originalAlchemyKey = process.env.ALCHEMY_API_KEY
+    const providerCalls: Array<'helius' | 'alchemy'> = []
+    try {
+      process.env.HELIUS_API_KEY = 'synthetic-helius-key'
+      process.env.ALCHEMY_API_KEY = 'synthetic-alchemy-key'
+      jest.resetModules()
+      global.fetch = jest.fn(async (input) => {
+        const provider = String(input).includes('helius-rpc.com') ? 'helius' : 'alchemy'
+        providerCalls.push(provider)
+        return {
+          status: 200,
+          text: async () =>
+            JSON.stringify(
+              provider === 'helius'
+                ? {
+                    jsonrpc: '2.0',
+                    id: 1,
+                    error: { code: -32000, message: 'quota exhausted' },
+                  }
+                : { jsonrpc: '2.0', id: 1, result: legacyFixture() }
+            ),
+        } as Response
+      }) as jest.MockedFunction<typeof fetch>
+      const freshModule = await import('../solana-fetch')
+
+      const evidence = await freshModule.fetchTxEvidence(SIGNATURE)
+
+      expect(providerCalls).toEqual(['helius', 'alchemy'])
+      expect(evidence).toMatchObject({
+        status: 'available',
+        provider: { servedBy: 'alchemy', attempted: ['helius', 'alchemy'] },
+      })
+      expect(JSON.stringify(evidence)).not.toContain('synthetic-helius-key')
+      expect(JSON.stringify(evidence)).not.toContain('synthetic-alchemy-key')
+    } finally {
+      if (originalHeliusKey === undefined) delete process.env.HELIUS_API_KEY
+      else process.env.HELIUS_API_KEY = originalHeliusKey
+      if (originalAlchemyKey === undefined) delete process.env.ALCHEMY_API_KEY
+      else process.env.ALCHEMY_API_KEY = originalAlchemyKey
+      jest.resetModules()
+    }
   })
 })

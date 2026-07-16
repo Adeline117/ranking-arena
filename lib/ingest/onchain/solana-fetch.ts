@@ -555,6 +555,787 @@ export async function fetchSignatures(
   return (await scanSignatures(wallet, opts)).signatures
 }
 
+export interface SolanaProviderEvidence {
+  servedBy: SolanaProviderId | null
+  attempted: SolanaProviderId[]
+}
+
+export type SolanaTxUnavailableReason =
+  | 'provider_unconfigured'
+  | 'not_found'
+  | 'metadata_unavailable'
+  | 'unsupported_transaction_version'
+  | 'quota_exhausted'
+  | 'rate_limited'
+  | 'timeout'
+  | 'transport_error'
+  | 'rpc_error'
+  | 'malformed_response'
+
+export interface SolanaAddressTableLookupEvidence {
+  tableAccount: string
+  writableIndexes: number[]
+  readonlyIndexes: number[]
+}
+
+export interface SolanaResolvedAccountKey {
+  index: number
+  pubkey: string
+  source: 'transaction' | 'lookupTable'
+  signer: boolean
+  writable: boolean
+  lookup: { tableAccount: string; tableIndex: number } | null
+}
+
+export type SolanaInstructionPath =
+  | { kind: 'outer'; outerIndex: number }
+  | { kind: 'inner'; outerIndex: number; innerIndex: number }
+
+export interface SolanaInstructionEvidence {
+  path: SolanaInstructionPath
+  programIdIndex: number
+  programId: string
+  accountIndexes: number[]
+  accounts: string[]
+  dataBase58: string
+  stackHeight: number | null
+}
+
+export interface SolanaTokenBalanceEvidence {
+  accountIndex: number
+  account: string
+  mint: string
+  owner: string | null
+  tokenProgram: string | null
+  rawAmount: string
+  decimals: number
+}
+
+export interface SolanaTxEvidenceAvailable {
+  status: 'available'
+  signature: string
+  provider: SolanaProviderEvidence
+  commitmentRequested: 'finalized'
+  encoding: 'json'
+  maxSupportedTransactionVersion: 0
+  slot: number
+  blockTime: number | null
+  version: 'legacy' | 0
+  executionStatus: 'succeeded' | 'failed'
+  executionError: SolanaTransactionError | null
+  feeLamports: number
+  computeUnitsConsumed: number | null
+  staticAccountKeys: string[]
+  addressTableLookups: SolanaAddressTableLookupEvidence[]
+  loadedAddresses: { writable: string[]; readonly: string[] }
+  accountKeys: SolanaResolvedAccountKey[]
+  preBalancesLamports: number[]
+  postBalancesLamports: number[]
+  preTokenBalances: SolanaTokenBalanceEvidence[] | null
+  postTokenBalances: SolanaTokenBalanceEvidence[] | null
+  innerInstructionsStatus: 'present' | 'verified_empty' | 'unavailable'
+  instructions: SolanaInstructionEvidence[]
+  logMessages: string[] | null
+}
+
+export interface SolanaTxEvidenceUnavailable {
+  status: 'unavailable'
+  signature: string
+  provider: SolanaProviderEvidence
+  reason: SolanaTxUnavailableReason
+  rpcCode: number | null
+  httpStatus: number | null
+}
+
+export type SolanaTxEvidence = SolanaTxEvidenceAvailable | SolanaTxEvidenceUnavailable
+
+interface SolanaEvidenceRpcSuccess {
+  ok: true
+  result: unknown
+  provider: SolanaProviderEvidence
+  httpStatus: number | null
+}
+
+interface SolanaEvidenceRpcFailure {
+  ok: false
+  provider: SolanaProviderEvidence
+  reason: Exclude<SolanaTxUnavailableReason, 'not_found' | 'metadata_unavailable'>
+  rpcCode: number | null
+  httpStatus: number | null
+}
+
+type SolanaEvidenceRpcResult = SolanaEvidenceRpcSuccess | SolanaEvidenceRpcFailure
+
+function isJsonObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+function evidenceProvider(
+  servedBy: SolanaProviderId | null,
+  attempted: SolanaProviderId[]
+): SolanaProviderEvidence {
+  return { servedBy, attempted: [...attempted] }
+}
+
+function evidenceRpcFailure(
+  attempted: SolanaProviderId[],
+  reason: SolanaEvidenceRpcFailure['reason'],
+  rpcCode: number | null = null,
+  httpStatus: number | null = null
+): SolanaEvidenceRpcFailure {
+  return {
+    ok: false,
+    provider: evidenceProvider(null, attempted),
+    reason,
+    rpcCode,
+    httpStatus,
+  }
+}
+
+function normalizedHttpStatus(response: Response): number | null {
+  return Number.isSafeInteger(response.status) && response.status >= 0 ? response.status : null
+}
+
+function rateLimitedMessage(message: string): boolean {
+  const normalized = message.toLowerCase()
+  return (
+    normalized.includes('429') ||
+    normalized.includes('rate limit') ||
+    normalized.includes('throughput') ||
+    normalized.includes('compute unit')
+  )
+}
+
+function timeoutError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  const normalized = error.message.toLowerCase()
+  return (
+    error.name === 'AbortError' || normalized.includes('aborted') || normalized.includes('timeout')
+  )
+}
+
+/**
+ * Evidence-only RPC transport. Unlike the production helper, failures become
+ * fixed enums and numeric codes; URLs and raw provider text never leave here.
+ * The sole automatic retry is sticky Helius quota failover to Alchemy.
+ */
+async function solEvidenceRpc(
+  method: string,
+  params: unknown[],
+  opts: RpcOpts
+): Promise<SolanaEvidenceRpcResult> {
+  const attempted: SolanaProviderId[] = []
+
+  while (true) {
+    let endpoint: SolanaEndpoint
+    try {
+      endpoint = resolveSolEndpoint(opts)
+    } catch {
+      return evidenceRpcFailure(attempted, 'provider_unconfigured')
+    }
+    if (!attempted.includes(endpoint.providerId)) attempted.push(endpoint.providerId)
+
+    const ctrl = new AbortController()
+    const timer = setTimeout(() => ctrl.abort(), opts.timeoutMs ?? 20_000)
+    try {
+      const response = await fetch(endpoint.url, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }),
+        signal: ctrl.signal,
+      })
+      const httpStatus = normalizedHttpStatus(response)
+      if (httpStatus === 429) {
+        return evidenceRpcFailure(attempted, 'rate_limited', null, httpStatus)
+      }
+      if (httpStatus === 402) {
+        if (
+          typeof opts.rpcUrl !== 'string' &&
+          endpoint.providerId === 'helius' &&
+          Boolean(process.env.ALCHEMY_API_KEY)
+        ) {
+          heliusExhausted = true
+          continue
+        }
+        return evidenceRpcFailure(attempted, 'quota_exhausted', null, httpStatus)
+      }
+      if (httpStatus !== null && (httpStatus < 200 || httpStatus >= 300)) {
+        return evidenceRpcFailure(attempted, 'rpc_error', null, httpStatus)
+      }
+
+      const text = await response.text()
+
+      let payload: unknown
+      try {
+        payload = text ? JSON.parse(text) : null
+      } catch {
+        return evidenceRpcFailure(attempted, 'malformed_response', null, httpStatus)
+      }
+      if (!isJsonObject(payload)) {
+        return evidenceRpcFailure(attempted, 'malformed_response', null, httpStatus)
+      }
+
+      const hasError = Object.hasOwn(payload, 'error')
+      const hasResult = Object.hasOwn(payload, 'result')
+      if (payload.jsonrpc !== '2.0' || payload.id !== 1 || hasError === hasResult) {
+        return evidenceRpcFailure(attempted, 'malformed_response', null, httpStatus)
+      }
+
+      if (hasError) {
+        if (!isJsonObject(payload.error) || !Number.isSafeInteger(payload.error.code)) {
+          return evidenceRpcFailure(attempted, 'malformed_response', null, httpStatus)
+        }
+        const rpcCode = Number(payload.error.code)
+        const message = typeof payload.error.message === 'string' ? payload.error.message : ''
+        if (rpcCode === -32015) {
+          return evidenceRpcFailure(
+            attempted,
+            'unsupported_transaction_version',
+            rpcCode,
+            httpStatus
+          )
+        }
+        if (isQuotaExhausted(message)) {
+          if (
+            typeof opts.rpcUrl !== 'string' &&
+            endpoint.providerId === 'helius' &&
+            Boolean(process.env.ALCHEMY_API_KEY)
+          ) {
+            heliusExhausted = true
+            continue
+          }
+          return evidenceRpcFailure(attempted, 'quota_exhausted', rpcCode, httpStatus)
+        }
+        if (rateLimitedMessage(message)) {
+          return evidenceRpcFailure(attempted, 'rate_limited', rpcCode, httpStatus)
+        }
+        return evidenceRpcFailure(attempted, 'rpc_error', rpcCode, httpStatus)
+      }
+      return {
+        ok: true,
+        result: payload.result,
+        provider: evidenceProvider(endpoint.providerId, attempted),
+        httpStatus,
+      }
+    } catch (error) {
+      return evidenceRpcFailure(attempted, timeoutError(error) ? 'timeout' : 'transport_error')
+    } finally {
+      clearTimeout(timer)
+    }
+  }
+}
+
+class MalformedSolanaTxEvidenceError extends Error {}
+class UnsupportedSolanaTxVersionError extends Error {}
+
+function malformedTxEvidence(): never {
+  throw new MalformedSolanaTxEvidenceError('malformed Solana transaction evidence')
+}
+
+function nonNegativeSafeInteger(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+    return malformedTxEvidence()
+  }
+  return value
+}
+
+function byteInteger(value: unknown): number {
+  const parsed = nonNegativeSafeInteger(value)
+  if (parsed > 255) return malformedTxEvidence()
+  return parsed
+}
+
+function solanaPublicKey(value: unknown): string {
+  if (
+    typeof value !== 'string' ||
+    !SOLANA_BASE58_RE.test(value) ||
+    base58DecodedByteLength(value) !== 32
+  ) {
+    return malformedTxEvidence()
+  }
+  return value
+}
+
+function rawStringArray(value: unknown): string[] {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+    return malformedTxEvidence()
+  }
+  return [...value] as string[]
+}
+
+function publicKeyArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return malformedTxEvidence()
+  return value.map(solanaPublicKey)
+}
+
+function byteArray(value: unknown): number[] {
+  if (!Array.isArray(value)) return malformedTxEvidence()
+  return value.map(byteInteger)
+}
+
+function transactionVersion(value: unknown): 'legacy' | 0 {
+  if (value === 'legacy' || value === 0) return value
+  if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
+    throw new UnsupportedSolanaTxVersionError('unsupported Solana transaction version')
+  }
+  return malformedTxEvidence()
+}
+
+function isSolanaRpcJson(value: unknown): value is SolanaRpcJson {
+  if (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'boolean' ||
+    (typeof value === 'number' && Number.isSafeInteger(value))
+  ) {
+    return true
+  }
+  if (Array.isArray(value)) return value.every(isSolanaRpcJson)
+  return (
+    isJsonObject(value) &&
+    Object.getPrototypeOf(value) === Object.prototype &&
+    Object.values(value).every(isSolanaRpcJson)
+  )
+}
+
+function transactionError(value: unknown): SolanaTransactionError | null {
+  if (value === null) return null
+  if (typeof value === 'string') return value
+  if (!isJsonObject(value) || Object.keys(value).length !== 1 || !isSolanaRpcJson(value)) {
+    return malformedTxEvidence()
+  }
+  return value as { [key: string]: SolanaRpcJson }
+}
+
+function parseAddressTableLookups(value: unknown): SolanaAddressTableLookupEvidence[] {
+  if (value === undefined || value === null) return []
+  if (!Array.isArray(value)) return malformedTxEvidence()
+  return value.map((raw) => {
+    if (!isJsonObject(raw)) return malformedTxEvidence()
+    const writableIndexes = byteArray(raw.writableIndexes)
+    const readonlyIndexes = byteArray(raw.readonlyIndexes)
+    if (writableIndexes.length + readonlyIndexes.length === 0) {
+      return malformedTxEvidence()
+    }
+    return {
+      tableAccount: solanaPublicKey(raw.accountKey),
+      writableIndexes,
+      readonlyIndexes,
+    }
+  })
+}
+
+function parseResolvedAccountKeys(
+  version: 'legacy' | 0,
+  staticAccountKeys: string[],
+  headerValue: unknown,
+  lookups: SolanaAddressTableLookupEvidence[],
+  loadedValue: unknown
+): {
+  loadedAddresses: { writable: string[]; readonly: string[] }
+  accountKeys: SolanaResolvedAccountKey[]
+} {
+  if (!isJsonObject(headerValue)) return malformedTxEvidence()
+  const requiredSignatures = byteInteger(headerValue.numRequiredSignatures)
+  const readonlySigned = byteInteger(headerValue.numReadonlySignedAccounts)
+  const readonlyUnsigned = byteInteger(headerValue.numReadonlyUnsignedAccounts)
+  if (
+    requiredSignatures === 0 ||
+    requiredSignatures > staticAccountKeys.length ||
+    readonlySigned >= requiredSignatures ||
+    readonlyUnsigned > staticAccountKeys.length - requiredSignatures
+  ) {
+    return malformedTxEvidence()
+  }
+  if (version === 'legacy' && lookups.length > 0) return malformedTxEvidence()
+
+  let loadedAddresses: { writable: string[]; readonly: string[] }
+  if (loadedValue === undefined || loadedValue === null) {
+    if (version === 0) return malformedTxEvidence()
+    loadedAddresses = { writable: [], readonly: [] }
+  } else {
+    if (!isJsonObject(loadedValue)) return malformedTxEvidence()
+    loadedAddresses = {
+      writable: publicKeyArray(loadedValue.writable),
+      readonly: publicKeyArray(loadedValue.readonly),
+    }
+  }
+
+  const writableOrigins = lookups.flatMap((lookup) =>
+    lookup.writableIndexes.map((tableIndex) => ({
+      tableAccount: lookup.tableAccount,
+      tableIndex,
+    }))
+  )
+  const readonlyOrigins = lookups.flatMap((lookup) =>
+    lookup.readonlyIndexes.map((tableIndex) => ({
+      tableAccount: lookup.tableAccount,
+      tableIndex,
+    }))
+  )
+  if (
+    loadedAddresses.writable.length !== writableOrigins.length ||
+    loadedAddresses.readonly.length !== readonlyOrigins.length
+  ) {
+    return malformedTxEvidence()
+  }
+  if (
+    version === 'legacy' &&
+    (loadedAddresses.writable.length > 0 || loadedAddresses.readonly.length > 0)
+  ) {
+    return malformedTxEvidence()
+  }
+
+  const writableSigned = requiredSignatures - readonlySigned
+  const writableUnsignedEnd = staticAccountKeys.length - readonlyUnsigned
+  const accountKeys: SolanaResolvedAccountKey[] = staticAccountKeys.map((pubkey, index) => ({
+    index,
+    pubkey,
+    source: 'transaction',
+    signer: index < requiredSignatures,
+    writable: index < requiredSignatures ? index < writableSigned : index < writableUnsignedEnd,
+    lookup: null,
+  }))
+  for (const [loadedIndex, pubkey] of loadedAddresses.writable.entries()) {
+    accountKeys.push({
+      index: accountKeys.length,
+      pubkey,
+      source: 'lookupTable',
+      signer: false,
+      writable: true,
+      lookup: writableOrigins[loadedIndex],
+    })
+  }
+  for (const [loadedIndex, pubkey] of loadedAddresses.readonly.entries()) {
+    accountKeys.push({
+      index: accountKeys.length,
+      pubkey,
+      source: 'lookupTable',
+      signer: false,
+      writable: false,
+      lookup: readonlyOrigins[loadedIndex],
+    })
+  }
+  if (accountKeys.length > 256) return malformedTxEvidence()
+  return { loadedAddresses, accountKeys }
+}
+
+function parseCompiledInstruction(
+  value: unknown,
+  path: SolanaInstructionPath,
+  accountKeys: SolanaResolvedAccountKey[],
+  staticAccountKeyCount: number
+): SolanaInstructionEvidence {
+  if (!isJsonObject(value)) return malformedTxEvidence()
+  const programIdIndex = byteInteger(value.programIdIndex)
+  if (
+    programIdIndex >= accountKeys.length ||
+    (path.kind === 'outer' && (programIdIndex === 0 || programIdIndex >= staticAccountKeyCount))
+  ) {
+    return malformedTxEvidence()
+  }
+  const accountIndexes = byteArray(value.accounts)
+  if (accountIndexes.some((index) => index >= accountKeys.length)) return malformedTxEvidence()
+  if (
+    typeof value.data !== 'string' ||
+    (value.data.length > 0 && !SOLANA_BASE58_RE.test(value.data))
+  ) {
+    return malformedTxEvidence()
+  }
+  const stackHeight =
+    value.stackHeight === undefined || value.stackHeight === null
+      ? null
+      : nonNegativeSafeInteger(value.stackHeight)
+  return {
+    path,
+    programIdIndex,
+    programId: accountKeys[programIdIndex].pubkey,
+    accountIndexes,
+    accounts: accountIndexes.map((index) => accountKeys[index].pubkey),
+    dataBase58: value.data,
+    stackHeight,
+  }
+}
+
+function parseInstructions(
+  outerValue: unknown,
+  innerValue: unknown,
+  accountKeys: SolanaResolvedAccountKey[],
+  staticAccountKeyCount: number
+): {
+  innerInstructionsStatus: SolanaTxEvidenceAvailable['innerInstructionsStatus']
+  instructions: SolanaInstructionEvidence[]
+} {
+  if (!Array.isArray(outerValue)) return malformedTxEvidence()
+  const innerByOuter = new Map<number, unknown[]>()
+  const innerInstructionsStatus =
+    innerValue === undefined || innerValue === null
+      ? 'unavailable'
+      : Array.isArray(innerValue) && innerValue.length === 0
+        ? 'verified_empty'
+        : 'present'
+  if (innerValue !== undefined && innerValue !== null) {
+    if (!Array.isArray(innerValue)) return malformedTxEvidence()
+    for (const group of innerValue) {
+      if (!isJsonObject(group)) return malformedTxEvidence()
+      const outerIndex = byteInteger(group.index)
+      if (outerIndex >= outerValue.length || innerByOuter.has(outerIndex)) {
+        return malformedTxEvidence()
+      }
+      if (!Array.isArray(group.instructions)) return malformedTxEvidence()
+      innerByOuter.set(outerIndex, group.instructions)
+    }
+  }
+
+  const instructions: SolanaInstructionEvidence[] = []
+  for (const [outerIndex, rawOuter] of outerValue.entries()) {
+    instructions.push(
+      parseCompiledInstruction(
+        rawOuter,
+        { kind: 'outer', outerIndex },
+        accountKeys,
+        staticAccountKeyCount
+      )
+    )
+    const inner = innerByOuter.get(outerIndex) ?? []
+    for (const [innerIndex, rawInner] of inner.entries()) {
+      instructions.push(
+        parseCompiledInstruction(
+          rawInner,
+          { kind: 'inner', outerIndex, innerIndex },
+          accountKeys,
+          staticAccountKeyCount
+        )
+      )
+    }
+  }
+  return { innerInstructionsStatus, instructions }
+}
+
+function parseLamportBalances(value: unknown, accountCount: number): number[] {
+  if (!Array.isArray(value) || value.length !== accountCount) return malformedTxEvidence()
+  return value.map(nonNegativeSafeInteger)
+}
+
+function optionalPublicKey(value: unknown): string | null {
+  if (value === undefined || value === null) return null
+  return solanaPublicKey(value)
+}
+
+function parseTokenBalances(
+  value: unknown,
+  accountKeys: SolanaResolvedAccountKey[]
+): SolanaTokenBalanceEvidence[] | null {
+  if (value === undefined || value === null) return null
+  if (!Array.isArray(value)) return malformedTxEvidence()
+  const balances = value.map((raw) => {
+    if (!isJsonObject(raw) || !isJsonObject(raw.uiTokenAmount)) {
+      return malformedTxEvidence()
+    }
+    const accountIndex = byteInteger(raw.accountIndex)
+    if (accountIndex >= accountKeys.length) return malformedTxEvidence()
+    const rawAmount = raw.uiTokenAmount.amount
+    if (
+      typeof rawAmount !== 'string' ||
+      !/^(0|[1-9]\d*)$/.test(rawAmount) ||
+      rawAmount.length > 20 ||
+      BigInt(rawAmount) > 18_446_744_073_709_551_615n
+    ) {
+      return malformedTxEvidence()
+    }
+    return {
+      accountIndex,
+      account: accountKeys[accountIndex].pubkey,
+      mint: solanaPublicKey(raw.mint),
+      owner: optionalPublicKey(raw.owner),
+      tokenProgram: optionalPublicKey(raw.programId),
+      rawAmount,
+      decimals: byteInteger(raw.uiTokenAmount.decimals),
+    }
+  })
+  if (new Set(balances.map((balance) => balance.accountIndex)).size !== balances.length) {
+    return malformedTxEvidence()
+  }
+  return balances
+}
+
+function parseLogMessages(value: unknown): string[] | null {
+  if (value === undefined || value === null) return null
+  return rawStringArray(value)
+}
+
+function normalizeSolanaTxEvidence(
+  signature: string,
+  value: unknown,
+  provider: SolanaProviderEvidence
+): SolanaTxEvidenceAvailable {
+  if (!isJsonObject(value)) return malformedTxEvidence()
+  const version = transactionVersion(value.version)
+  const slot = nonNegativeSafeInteger(value.slot)
+  const blockTime =
+    value.blockTime === undefined || value.blockTime === null
+      ? null
+      : nonNegativeSafeInteger(value.blockTime)
+  if (!isJsonObject(value.transaction) || !isJsonObject(value.transaction.message)) {
+    return malformedTxEvidence()
+  }
+  const transactionSignatures = rawStringArray(value.transaction.signatures)
+  if (
+    transactionSignatures.length === 0 ||
+    transactionSignatures.some((candidate) => !isSolanaSignature(candidate)) ||
+    transactionSignatures[0] !== signature
+  ) {
+    return malformedTxEvidence()
+  }
+  const message = value.transaction.message
+  const staticAccountKeys = publicKeyArray(message.accountKeys)
+  const addressTableLookups = parseAddressTableLookups(message.addressTableLookups)
+  if (!isJsonObject(value.meta) || !Object.hasOwn(value.meta, 'err')) {
+    return malformedTxEvidence()
+  }
+  const meta = value.meta
+  const { loadedAddresses, accountKeys } = parseResolvedAccountKeys(
+    version,
+    staticAccountKeys,
+    message.header,
+    addressTableLookups,
+    meta.loadedAddresses
+  )
+  if (accountKeys.filter((account) => account.signer).length !== transactionSignatures.length) {
+    return malformedTxEvidence()
+  }
+  const executionError = transactionError(meta.err)
+  const feeLamports = nonNegativeSafeInteger(meta.fee)
+  const computeUnitsConsumed =
+    meta.computeUnitsConsumed === undefined || meta.computeUnitsConsumed === null
+      ? null
+      : nonNegativeSafeInteger(meta.computeUnitsConsumed)
+  const { innerInstructionsStatus, instructions } = parseInstructions(
+    message.instructions,
+    meta.innerInstructions,
+    accountKeys,
+    staticAccountKeys.length
+  )
+
+  return {
+    status: 'available',
+    signature,
+    provider,
+    commitmentRequested: 'finalized',
+    encoding: 'json',
+    maxSupportedTransactionVersion: 0,
+    slot,
+    blockTime,
+    version,
+    executionStatus: executionError === null ? 'succeeded' : 'failed',
+    executionError,
+    feeLamports,
+    computeUnitsConsumed,
+    staticAccountKeys,
+    addressTableLookups,
+    loadedAddresses,
+    accountKeys,
+    preBalancesLamports: parseLamportBalances(meta.preBalances, accountKeys.length),
+    postBalancesLamports: parseLamportBalances(meta.postBalances, accountKeys.length),
+    preTokenBalances: parseTokenBalances(meta.preTokenBalances, accountKeys),
+    postTokenBalances: parseTokenBalances(meta.postTokenBalances, accountKeys),
+    innerInstructionsStatus,
+    instructions,
+    logMessages: parseLogMessages(meta.logMessages),
+  }
+}
+
+function unavailableTxEvidence(
+  signature: string,
+  provider: SolanaProviderEvidence,
+  reason: SolanaTxUnavailableReason,
+  rpcCode: number | null = null,
+  httpStatus: number | null = null
+): SolanaTxEvidenceUnavailable {
+  return { status: 'unavailable', signature, provider, reason, rpcCode, httpStatus }
+}
+
+/**
+ * Fetch one finalized transaction as immutable decoder evidence. This is a
+ * shadow-only path and intentionally does not feed the existing PnL decoder.
+ */
+export async function fetchTxEvidence(
+  signature: string,
+  opts: RpcOpts = {}
+): Promise<SolanaTxEvidence> {
+  if (!isSolanaSignature(signature)) {
+    throw new TypeError('signature must be a base58-encoded 64-byte signature')
+  }
+  const call = await solEvidenceRpc(
+    'getTransaction',
+    [
+      signature,
+      {
+        commitment: 'finalized',
+        encoding: 'json',
+        maxSupportedTransactionVersion: 0,
+      },
+    ],
+    opts
+  )
+  if (!call.ok) {
+    return unavailableTxEvidence(
+      signature,
+      call.provider,
+      call.reason,
+      call.rpcCode,
+      call.httpStatus
+    )
+  }
+  if (call.result === null) {
+    return unavailableTxEvidence(signature, call.provider, 'not_found', null, call.httpStatus)
+  }
+  if (!isJsonObject(call.result)) {
+    return unavailableTxEvidence(
+      signature,
+      call.provider,
+      'malformed_response',
+      null,
+      call.httpStatus
+    )
+  }
+  if (
+    typeof call.result.version === 'number' &&
+    Number.isSafeInteger(call.result.version) &&
+    call.result.version !== 0
+  ) {
+    return unavailableTxEvidence(
+      signature,
+      call.provider,
+      'unsupported_transaction_version',
+      null,
+      call.httpStatus
+    )
+  }
+  if (call.result.meta === null) {
+    return unavailableTxEvidence(
+      signature,
+      call.provider,
+      'metadata_unavailable',
+      null,
+      call.httpStatus
+    )
+  }
+  try {
+    return normalizeSolanaTxEvidence(signature, call.result, call.provider)
+  } catch (error) {
+    return unavailableTxEvidence(
+      signature,
+      call.provider,
+      error instanceof UnsupportedSolanaTxVersionError
+        ? 'unsupported_transaction_version'
+        : 'malformed_response',
+      null,
+      call.httpStatus
+    )
+  }
+}
+
 interface RawTx {
   blockTime: number | null
   transaction: { message: { accountKeys: Array<string | { pubkey: string }> } }
