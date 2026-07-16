@@ -12,6 +12,8 @@ import {
 import GroupManagePage from '../page'
 
 const mockAuthedFetch = jest.fn()
+const mockFetch = jest.fn()
+const mockShowDangerConfirm = jest.fn()
 const mockUseAuthSession = jest.fn()
 const mockSupabaseFrom = jest.fn()
 const showToast = jest.fn()
@@ -40,7 +42,7 @@ jest.mock('@/app/components/home/hooks/useSubscription', () => ({
 }))
 jest.mock('@/app/components/ui/Toast', () => ({ useToast: () => ({ showToast }) }))
 jest.mock('@/app/components/ui/Dialog', () => ({
-  useDialog: () => ({ showDangerConfirm: jest.fn().mockResolvedValue(false) }),
+  useDialog: () => ({ showDangerConfirm: mockShowDangerConfirm }),
 }))
 jest.mock('@/lib/api/client', () => ({
   authedFetch: (...args: unknown[]) => mockAuthedFetch(...args),
@@ -51,7 +53,30 @@ jest.mock('@/lib/supabase/client', () => ({
   supabase: { from: (...args: unknown[]) => mockSupabaseFrom(...args) },
 }))
 jest.mock('../components/MemberList', () => ({ __esModule: true, default: () => null }))
-jest.mock('../components/ContentManagement', () => ({ __esModule: true, default: () => null }))
+jest.mock('../components/ContentManagement', () => ({
+  __esModule: true,
+  default: (props: {
+    onDeletePost(postId: string): void
+    onPinPost(postId: string): void
+    pinningPost: string | null
+  }) => (
+    <div>
+      <button
+        data-testid="content-delete-post"
+        onClick={() => props.onDeletePost('66666666-6666-4666-8666-666666666666')}
+      >
+        delete
+      </button>
+      <button
+        data-testid="content-pin-post"
+        onClick={() => props.onPinPost('66666666-6666-4666-8666-666666666666')}
+      >
+        pin
+      </button>
+      <span data-testid="content-pin-state">{props.pinningPost ? 'loading' : 'idle'}</span>
+    </div>
+  ),
+}))
 jest.mock('../components/ManageModals', () => ({
   MuteModal: () => null,
   NotifyModal: () => null,
@@ -211,6 +236,12 @@ async function openSettings() {
   fireEvent.click(screen.getByTestId('profile-edit-open'))
 }
 
+async function openContent() {
+  await waitFor(() => expect(screen.queryByText('loading')).not.toBeInTheDocument())
+  fireEvent.click(screen.getByRole('button', { name: 'contentManagement' }))
+  await screen.findByTestId('content-pin-post')
+}
+
 describe('group profile edit submit operation', () => {
   let currentAuth: ReturnType<typeof authFor>
 
@@ -220,11 +251,14 @@ describe('group profile edit submit operation', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockFetch.mockReset()
     window.localStorage.clear()
     __resetViewerScopeForTests()
     __resetGroupApplicationOperationsForTests()
     mockIsPro = true
     mockGroupPremium = false
+    mockShowDangerConfirm.mockResolvedValue(false)
+    Object.defineProperty(globalThis, 'fetch', { configurable: true, value: mockFetch })
     installSupabaseMock()
     const scope = synchronizeViewerScope(true, ACTOR_A)
     currentAuth = authFor(ACTOR_A, scope.sessionGeneration, 'a')
@@ -332,6 +366,72 @@ describe('group profile edit submit operation', () => {
     await waitFor(() => expect(screen.queryByText('loading')).not.toBeInTheDocument())
     expect(screen.getByText('noManagePermission')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'groupSettings' })).not.toBeInTheDocument()
+  })
+
+  it('re-checks the resource after a danger confirmation before sending the mutation', async () => {
+    const confirmation = deferred<boolean>()
+    const nextParams = deferred<{ id: string }>()
+    mockShowDangerConfirm.mockReturnValue(confirmation.promise)
+    const view = render(<GroupManagePage params={Promise.resolve({ id: GROUP_ID })} />)
+    await openContent()
+
+    fireEvent.click(screen.getByTestId('content-delete-post'))
+    await waitFor(() => expect(mockShowDangerConfirm).toHaveBeenCalledTimes(1))
+    view.rerender(<GroupManagePage params={nextParams.promise} />)
+    await act(async () => confirmation.resolve(true))
+
+    expect(mockFetch).not.toHaveBeenCalled()
+    expect(showToast).not.toHaveBeenCalled()
+  })
+
+  it('cannot let a G1 mutation response toast or clear G2 mutation ownership', async () => {
+    const responseA = deferred<{
+      ok: boolean
+      headers: Headers
+      json(): Promise<{ is_pinned: boolean }>
+    }>()
+    const responseB = deferred<{
+      ok: boolean
+      headers: Headers
+      json(): Promise<{ is_pinned: boolean }>
+    }>()
+    mockFetch.mockReturnValueOnce(responseA.promise).mockReturnValueOnce(responseB.promise)
+    const paramsA = Promise.resolve({ id: GROUP_ID })
+    const paramsB = Promise.resolve({ id: OTHER_GROUP_ID })
+    const view = render(<GroupManagePage params={paramsA} />)
+    await openContent()
+
+    fireEvent.click(screen.getByTestId('content-pin-post'))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(screen.getByTestId('content-pin-state')).toHaveTextContent('loading')
+
+    view.rerender(<GroupManagePage params={paramsB} />)
+    await openContent()
+    expect(screen.getByTestId('content-pin-state')).toHaveTextContent('idle')
+    fireEvent.click(screen.getByTestId('content-pin-post'))
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(2))
+    expect(screen.getByTestId('content-pin-state')).toHaveTextContent('loading')
+
+    await act(async () =>
+      responseA.resolve({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ is_pinned: true }),
+      })
+    )
+    expect(screen.getByTestId('content-pin-state')).toHaveTextContent('loading')
+    expect(showToast).not.toHaveBeenCalled()
+
+    await act(async () =>
+      responseB.resolve({
+        ok: true,
+        headers: new Headers({ 'content-type': 'application/json' }),
+        json: async () => ({ is_pinned: true }),
+      })
+    )
+    await waitFor(() => expect(screen.getByTestId('content-pin-state')).toHaveTextContent('idle'))
+    expect(showToast).toHaveBeenCalledTimes(1)
+    expect(showToast).toHaveBeenCalledWith('pinned', 'success')
   })
 
   it('cannot let an A acknowledgement mutate, toast, or clear B submission ownership', async () => {
