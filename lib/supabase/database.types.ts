@@ -1504,6 +1504,33 @@ export type Database = {
           },
         ]
       }
+      group_application_operation_results: {
+        Row: {
+          actor_id: string
+          created_at: string
+          intent_fingerprint: string
+          operation_id: string
+          operation_kind: string
+          result: Json
+        }
+        Insert: {
+          actor_id: string
+          created_at?: string
+          intent_fingerprint: string
+          operation_id: string
+          operation_kind: string
+          result: Json
+        }
+        Update: {
+          actor_id?: string
+          created_at?: string
+          intent_fingerprint?: string
+          operation_id?: string
+          operation_kind?: string
+          result?: Json
+        }
+        Relationships: []
+      }
       group_applications: {
         Row: {
           applicant_id: string
@@ -9258,6 +9285,7 @@ export type Database = {
         Args: {
           p_application_id: string
           p_decision: string
+          p_operation_id?: string | null
           p_promo_unlocked?: boolean
           p_reject_reason?: string | null
           p_reviewer_id: string
@@ -9381,6 +9409,7 @@ export type Database = {
           p_is_premium_only?: boolean
           p_name: string
           p_name_en?: string | null
+          p_operation_id?: string | null
           p_promo_unlocked?: boolean
           p_role_names?: Json | null
           p_rules?: string | null

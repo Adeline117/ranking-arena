@@ -12,7 +12,7 @@ import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useUnsavedChangesGuard } from '@/lib/hooks/useUnsavedChangesGuard'
 import { logger } from '@/lib/logger'
@@ -21,6 +21,16 @@ import { ProGroupOption } from './components/ProGroupOption'
 import { RoleNameSettings } from './components/RoleNameSettings'
 import type { RoleNames, Rule } from './types'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { jwtSubject } from '@/lib/auth/token-subject'
+import { isViewerScopeCurrent, type ViewerScope } from '@/lib/auth/viewer-scope'
+import {
+  acquireGroupApplicationOperation,
+  completeGroupApplicationOperation,
+  isCurrentGroupApplicationOperation,
+  isExactSubmitGroupApplicationAck,
+  runGroupApplicationSingleFlight,
+} from '@/lib/groups/application-operation'
+import { useViewerSlotState } from '@/lib/groups/use-viewer-slot-state'
 
 export default function ApplyGroupPage() {
   if (!features.social) redirect('/')
@@ -30,10 +40,12 @@ export default function ApplyGroupPage() {
   const { isPro } = useSubscription()
   const { showToast } = useToast()
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const { accessToken, email, userId } = useAuthSession()
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState(false)
+  const submitOperationIdRef = useRef<Record<string, string>>({})
+  const { accessToken, email, userId, viewerKey, sessionGeneration } = useAuthSession()
+  const stateOwnerKey = `${viewerKey}:${sessionGeneration}`
+  const [loading, setLoading] = useViewerSlotState(stateOwnerKey, false)
+  const [error, setError] = useViewerSlotState<string | null>(stateOwnerKey, null)
+  const [success, setSuccess] = useViewerSlotState(stateOwnerKey, false)
   const [uploading, setUploading] = useState(false)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
 
@@ -74,7 +86,10 @@ export default function ApplyGroupPage() {
   const [isPremiumOnly, setIsPremiumOnly] = useState(false)
 
   // 用户已有的申请
-  const [existingApplications, setExistingApplications] = useState<any[]>([])
+  const [existingApplications, setExistingApplications] = useViewerSlotState<any[]>(
+    stateOwnerKey,
+    []
+  )
 
   useEffect(() => {
     if (accessToken) {
@@ -97,20 +112,36 @@ export default function ApplyGroupPage() {
     setFieldErrors(newErrors)
   }
 
-  const fetchMyApplications = async (token: string) => {
+  const fetchMyApplications = async (token: string, requestScope?: ViewerScope) => {
+    const scope = requestScope ?? { viewerKey, sessionGeneration, userId }
+    if (
+      !scope.userId ||
+      scope.viewerKey !== `user:${scope.userId}` ||
+      jwtSubject(token) !== scope.userId ||
+      !isViewerScopeCurrent(scope)
+    )
+      return
     try {
-      const res = await fetch('/api/groups/apply', {
-        headers: { Authorization: `Bearer ${token}` },
-      })
+      const result = await authedFetch<{ applications?: unknown[] }>(
+        '/api/groups/apply',
+        'GET',
+        token,
+        undefined,
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
+      )
 
-      if (!res.ok) {
-        logger.warn('Failed to fetch applications:', res.status)
+      if (result.stale || !isViewerScopeCurrent(scope)) return
+      if (!result.ok) {
+        logger.warn('Failed to fetch applications:', result.status)
         return
       }
 
-      const data = await res.json()
-      if (data.applications) {
-        setExistingApplications(data.applications)
+      if (result.data?.applications) {
+        setExistingApplications(result.data.applications)
       }
     } catch (err) {
       logger.error('Error fetching applications:', err)
@@ -204,7 +235,14 @@ export default function ApplyGroupPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
 
-    if (!accessToken) {
+    const requestScope: ViewerScope = { viewerKey, sessionGeneration, userId }
+    if (
+      !accessToken ||
+      !userId ||
+      jwtSubject(accessToken) !== userId ||
+      requestScope.viewerKey !== `user:${userId}` ||
+      !isViewerScopeCurrent(requestScope)
+    ) {
       setError(t('pleaseLoginFirst'))
       return
     }
@@ -221,67 +259,93 @@ export default function ApplyGroupPage() {
       return
     }
 
-    setLoading(true)
-    setError(null)
-
+    let activeOperationId: string | null = null
     try {
-      const res = await fetch('/api/groups/apply', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({
-          name: nameZh.trim() || nameEn.trim(),
-          name_en: nameEn.trim() || null,
-          description: descriptionZh.trim() || null,
-          description_en: descriptionEn.trim() || null,
-          avatar_url: avatarUrl.trim() || null,
-          role_names: roleNames,
-          rules_json: rules.length > 0 ? rules : null,
-          rules:
-            rules
-              .map((r) => r.zh)
-              .filter(Boolean)
-              .join('\n') || null,
-          is_premium_only: isPro && isPremiumOnly,
-        }),
-      })
+      const intent = {
+        name: nameZh.trim() || nameEn.trim(),
+        name_en: nameEn.trim() || null,
+        description: descriptionZh.trim() || null,
+        description_en: descriptionEn.trim() || null,
+        avatar_url: avatarUrl.trim() || null,
+        role_names: roleNames,
+        rules_json: rules.length > 0 ? rules : null,
+        rules:
+          rules
+            .map((r) => r.zh)
+            .filter(Boolean)
+            .join('\n') || null,
+        is_premium_only: isPro && isPremiumOnly,
+      }
+      const operation = await acquireGroupApplicationOperation(`submit:${userId}`, userId, intent)
+      if (!isViewerScopeCurrent(requestScope)) return
+      activeOperationId = operation.operationId
+      submitOperationIdRef.current[stateOwnerKey] = activeOperationId
+      setLoading(true)
+      setError(null)
 
-      if (!res.ok) {
+      const result = await runGroupApplicationSingleFlight(operation, () =>
+        authedFetch<unknown>(
+          '/api/groups/apply',
+          'POST',
+          accessToken,
+          { ...intent, operation_id: operation.operationId },
+          15_000,
+          {
+            expectedUserId: userId,
+            expectedSessionGeneration: sessionGeneration,
+          }
+        )
+      )
+      if (result.stale || !isViewerScopeCurrent(requestScope)) return
+      const ownsActiveIntent = submitOperationIdRef.current[stateOwnerKey] === operation.operationId
+      const data = result.data
+
+      if (!result.ok) {
+        if (!ownsActiveIntent) return
         let errorMessage = t('submissionFailed')
 
-        try {
-          const data = await res.json()
-          if (data.error) {
-            errorMessage = data.error
-          } else if (data.message) {
-            errorMessage = data.message
+        if (typeof data === 'object' && data !== null) {
+          const errorData = data as { error?: unknown; message?: unknown }
+          if (typeof errorData.error === 'string') {
+            errorMessage = errorData.error
+          } else if (typeof errorData.message === 'string') {
+            errorMessage = errorData.message
           }
-        } catch (_parseError) {
-          if (res.status === 401) {
+        } else {
+          if (result.status === 401) {
             errorMessage = t('authenticationFailed')
-          } else if (res.status === 403) {
+          } else if (result.status === 403) {
             errorMessage = t('permissionDenied')
-          } else if (res.status === 400) {
+          } else if (result.status === 400) {
             errorMessage = t('invalidRequestParams')
-          } else if (res.status === 500) {
+          } else if (result.status === 500) {
             errorMessage = t('serverError')
           }
         }
-
         setError(errorMessage)
         return
       }
 
-      const _data = await res.json()
+      if (!isExactSubmitGroupApplicationAck(data, operation)) {
+        if (ownsActiveIntent) setError(t('submissionFailed'))
+        return
+      }
 
-      setSuccess(true)
-      if (accessToken) {
-        fetchMyApplications(accessToken)
+      void fetchMyApplications(accessToken, requestScope)
+      if (ownsActiveIntent) {
+        if (isCurrentGroupApplicationOperation(operation)) {
+          completeGroupApplicationOperation(operation)
+        }
+        setSuccess(true)
       }
     } catch (err) {
+      if (
+        !isViewerScopeCurrent(requestScope) ||
+        (activeOperationId !== null &&
+          submitOperationIdRef.current[stateOwnerKey] !== activeOperationId)
+      ) {
+        return
+      }
       logger.error('Submit error:', err)
       let errorMessage = t('networkErrorCheckConnection')
 
@@ -291,7 +355,17 @@ export default function ApplyGroupPage() {
 
       setError(errorMessage)
     } finally {
-      setLoading(false)
+      const completedOperationId = activeOperationId
+      if (completedOperationId !== null)
+        queueMicrotask(() => {
+          if (
+            submitOperationIdRef.current[stateOwnerKey] === completedOperationId &&
+            isViewerScopeCurrent(requestScope)
+          ) {
+            delete submitOperationIdRef.current[stateOwnerKey]
+            setLoading(false)
+          }
+        })
     }
   }
 
