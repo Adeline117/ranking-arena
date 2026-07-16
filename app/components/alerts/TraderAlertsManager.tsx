@@ -9,15 +9,21 @@
  * manufactures local-only alert state.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { Box, Text, Button } from '@/app/components/base'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import EmptyState from '@/app/components/ui/EmptyState'
+import {
+  captureSettingsViewer,
+  isSettingsViewerCurrent,
+  type SettingsViewerSnapshot,
+} from '@/app/(app)/settings/hooks/settings-viewer-scope'
+import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
 
 interface TraderAlert {
   id: string
@@ -30,6 +36,44 @@ interface TraderAlert {
   enabled: boolean
 }
 
+type TraderAlertsPayload = {
+  data?: { alerts?: unknown }
+  alerts?: unknown
+}
+
+type TraderAlertsUiState = {
+  alerts: TraderAlert[]
+  loading: boolean
+  forbidden: boolean
+  removing: string | null
+}
+
+type TraderAlertsOperation = {
+  id: number
+  viewer: SettingsViewerSnapshot
+}
+
+const emptyTraderAlertsUiState = (): TraderAlertsUiState => ({
+  alerts: [],
+  loading: true,
+  forbidden: false,
+  removing: null,
+})
+
+function traderAlertsScopeKey(
+  viewer: SettingsViewerSnapshot | null,
+  fallback: { viewerKey: string; sessionGeneration: number }
+): string {
+  return viewer
+    ? `${viewer.viewerKey}\u0000${viewer.sessionGeneration}`
+    : `invalid:${fallback.viewerKey}\u0000${fallback.sessionGeneration}`
+}
+
+function readAlerts(payload: TraderAlertsPayload | null): TraderAlert[] {
+  const candidate = payload?.data?.alerts ?? payload?.alerts
+  return Array.isArray(candidate) ? (candidate as TraderAlert[]) : []
+}
+
 function profileHref(alert: TraderAlert): string {
   const params = new URLSearchParams()
   if (alert.source) params.set('platform', alert.source)
@@ -38,66 +82,151 @@ function profileHref(alert: TraderAlert): string {
 }
 
 export default function TraderAlertsManager() {
-  const { accessToken, authChecked } = useAuthSession()
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
   const { t } = useLanguage()
+  const tRef = useRef(t)
+  tRef.current = t
   const { showToast } = useToast()
-  const [alerts, setAlerts] = useState<TraderAlert[]>([])
-  const [loading, setLoading] = useState(true)
-  const [forbidden, setForbidden] = useState(false)
-  const [removing, setRemoving] = useState<string | null>(null)
+  const showToastRef = useRef(showToast)
+  showToastRef.current = showToast
+  const currentViewer = captureSettingsViewer(auth)
+  const scopeKey = traderAlertsScopeKey(currentViewer, auth)
+  const [ui, setUi] = useViewerOwnedState<TraderAlertsUiState>(
+    emptyTraderAlertsUiState,
+    emptyTraderAlertsUiState,
+    scopeKey
+  )
+  const uiRef = useRef(ui)
+  uiRef.current = ui
+  const mountedRef = useRef(false)
+  const nextOperationIdRef = useRef(0)
+  const loadOperationRef = useRef<TraderAlertsOperation | null>(null)
+  const removeOperationRef = useRef<TraderAlertsOperation | null>(null)
 
-  const load = useCallback(async () => {
-    if (!accessToken) return
-    setLoading(true)
-    try {
-      const response = await fetch('/api/trader-alerts', {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      })
-      if (response.status === 403) {
-        setForbidden(true)
-        setAlerts([])
-        return
-      }
-      if (!response.ok) throw new Error('Failed to load trader alerts')
-      const payload = await response.json()
-      const next = payload?.data?.alerts ?? payload?.alerts ?? []
-      setAlerts(Array.isArray(next) ? next : [])
-      setForbidden(false)
-    } catch {
-      showToast(t('traderAlertsLoadFailed'), 'error')
-    } finally {
-      setLoading(false)
-    }
-  }, [accessToken, showToast, t])
+  const viewerIsCurrent = (viewer: SettingsViewerSnapshot): boolean =>
+    mountedRef.current && isSettingsViewerCurrent(viewer, authRef.current)
+
+  const operationIsCurrent = (
+    operation: TraderAlertsOperation,
+    operationRef: { current: TraderAlertsOperation | null }
+  ): boolean => operationRef.current?.id === operation.id && viewerIsCurrent(operation.viewer)
 
   useEffect(() => {
-    if (!authChecked) return
-    if (!accessToken) {
-      setLoading(false)
-      return
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      loadOperationRef.current = null
+      removeOperationRef.current = null
     }
-    void load()
-  }, [accessToken, authChecked, load])
+  }, [])
+
+  useEffect(() => {
+    if (!currentViewer) return
+    const operation: TraderAlertsOperation = {
+      id: ++nextOperationIdRef.current,
+      viewer: currentViewer,
+    }
+    const controller = new AbortController()
+    loadOperationRef.current = operation
+    setUi(emptyTraderAlertsUiState())
+
+    void (async () => {
+      try {
+        const result = await authedFetch<TraderAlertsPayload>(
+          '/api/trader-alerts',
+          'GET',
+          operation.viewer.accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: controller.signal,
+          }
+        )
+        if (!operationIsCurrent(operation, loadOperationRef) || result.stale) return
+        if (result.status === 403) {
+          setUi((current) => ({ ...current, alerts: [], forbidden: true }))
+          return
+        }
+        if (!result.ok) throw new Error('Failed to load trader alerts')
+        setUi((current) => ({
+          ...current,
+          alerts: readAlerts(result.data),
+          forbidden: false,
+        }))
+      } catch {
+        if (operationIsCurrent(operation, loadOperationRef)) {
+          showToastRef.current(tRef.current('traderAlertsLoadFailed'), 'error')
+        }
+      } finally {
+        if (operationIsCurrent(operation, loadOperationRef)) {
+          setUi((current) => ({ ...current, loading: false }))
+          loadOperationRef.current = null
+        }
+      }
+    })()
+
+    return () => {
+      controller.abort()
+      if (loadOperationRef.current?.id === operation.id) loadOperationRef.current = null
+    }
+    // Access-token rotation does not change the viewer-owned resource identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scopeKey])
 
   const remove = async (alert: TraderAlert) => {
+    const viewer = captureSettingsViewer(authRef.current)
+    if (
+      !viewer ||
+      uiRef.current.removing !== null ||
+      !uiRef.current.alerts.some((current) => current.id === alert.id)
+    ) {
+      return
+    }
     if (!window.confirm(t('traderAlertsRemoveConfirm'))) return
-    setRemoving(alert.id)
+    if (!viewerIsCurrent(viewer)) return
+    const operation: TraderAlertsOperation = {
+      id: ++nextOperationIdRef.current,
+      viewer,
+    }
+    removeOperationRef.current = operation
+    setUi((current) => ({ ...current, removing: alert.id }))
     try {
-      const response = await fetch(`/api/trader-alerts?id=${encodeURIComponent(alert.id)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
-      })
-      if (!response.ok) throw new Error('Failed to delete trader alert')
-      setAlerts((current) => current.filter((item) => item.id !== alert.id))
-      showToast(t('alertDisabled'), 'success')
+      const result = await authedFetch<{ deleted?: boolean }>(
+        `/api/trader-alerts?id=${encodeURIComponent(alert.id)}`,
+        'DELETE',
+        operation.viewer.accessToken,
+        undefined,
+        15_000,
+        {
+          expectedUserId: operation.viewer.userId,
+          expectedSessionGeneration: operation.viewer.sessionGeneration,
+        }
+      )
+      if (!operationIsCurrent(operation, removeOperationRef) || result.stale) return
+      if (!result.ok) throw new Error('Failed to delete trader alert')
+      setUi((current) => ({
+        ...current,
+        alerts: current.alerts.filter((item) => item.id !== alert.id),
+      }))
+      showToastRef.current(tRef.current('alertDisabled'), 'success')
     } catch {
-      showToast(t('traderAlertsRemoveFailed'), 'error')
+      if (operationIsCurrent(operation, removeOperationRef)) {
+        showToastRef.current(tRef.current('traderAlertsRemoveFailed'), 'error')
+      }
     } finally {
-      setRemoving(null)
+      if (operationIsCurrent(operation, removeOperationRef)) {
+        setUi((current) => ({ ...current, removing: null }))
+        removeOperationRef.current = null
+      }
     }
   }
 
-  if (loading) {
+  const signedOut = auth.authChecked && !auth.loading && !auth.userId
+  if (!currentViewer && !signedOut) {
     return (
       <Text size="sm" color="tertiary">
         {t('loading')}
@@ -105,7 +234,15 @@ export default function TraderAlertsManager() {
     )
   }
 
-  if (!accessToken) {
+  if (currentViewer && ui.loading) {
+    return (
+      <Text size="sm" color="tertiary">
+        {t('loading')}
+      </Text>
+    )
+  }
+
+  if (signedOut) {
     return (
       <EmptyState
         variant="card"
@@ -123,7 +260,7 @@ export default function TraderAlertsManager() {
     )
   }
 
-  if (forbidden) {
+  if (ui.forbidden) {
     return (
       <EmptyState
         variant="card"
@@ -138,7 +275,7 @@ export default function TraderAlertsManager() {
     )
   }
 
-  if (alerts.length === 0) {
+  if (ui.alerts.length === 0) {
     return (
       <EmptyState
         variant="card"
@@ -155,7 +292,7 @@ export default function TraderAlertsManager() {
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[2] }}>
-      {alerts.map((alert) => {
+      {ui.alerts.map((alert) => {
         const conditions = [
           alert.alert_roi_change && t('alertRoiChangeLabel'),
           alert.alert_drawdown && t('alertDrawdownLabel'),
@@ -200,10 +337,10 @@ export default function TraderAlertsManager() {
               variant="ghost"
               size="sm"
               onClick={() => void remove(alert)}
-              disabled={removing === alert.id}
+              disabled={ui.removing === alert.id}
               aria-label={t('traderAlertsRemove')}
             >
-              {removing === alert.id ? t('loading') : t('traderAlertsRemove')}
+              {ui.removing === alert.id ? t('loading') : t('traderAlertsRemove')}
             </Button>
           </Box>
         )
