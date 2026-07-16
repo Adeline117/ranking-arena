@@ -103,22 +103,34 @@ export default function OverviewPerformanceCard({
   const [mounted, setMounted] = useState(false)
   const [isVisible, setIsVisible] = useState(false)
   const cardRef = useRef<HTMLDivElement>(null)
+  const selectedPeriodRef = useRef(period)
+  const animationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  selectedPeriodRef.current = period
 
   useEffect(() => {
     setMounted(true)
     // Small delay to trigger bar animation after mount
     const timer = setTimeout(() => setIsVisible(true), 150)
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      if (animationTimerRef.current) clearTimeout(animationTimerRef.current)
+    }
   }, [])
 
   const handlePeriodChange = (newPeriod: Period) => {
-    if (newPeriod !== period) {
-      setIsAnimating(true)
-      setTimeout(() => {
-        setStorePeriod(newPeriod)
-        setIsAnimating(false)
-      }, 150)
-    }
+    if (newPeriod === selectedPeriodRef.current) return
+
+    // The user's latest selection is authoritative immediately. Delaying the
+    // store update made a fast 90D→30D→90D sequence ignore the final click and
+    // land on 30D when the first timer fired.
+    selectedPeriodRef.current = newPeriod
+    setStorePeriod(newPeriod)
+    setIsAnimating(true)
+    if (animationTimerRef.current) clearTimeout(animationTimerRef.current)
+    animationTimerRef.current = setTimeout(() => {
+      animationTimerRef.current = null
+      setIsAnimating(false)
+    }, 150)
   }
 
   const getData = () => {
