@@ -22,6 +22,7 @@ import {
   commitViewerTransition,
   getViewerScope,
   isExpectedTransitionSession,
+  isViewerScopeCurrent,
   synchronizeViewerScope,
   type ViewerKey,
 } from '@/lib/auth/viewer-scope'
@@ -257,11 +258,7 @@ function initializeAuth() {
           // A refresh that began for A may finish after a completed A -> B
           // account switch. Supabase emits that result independently of the
           // awaiting coordinator, so reject it at the event boundary too.
-          if (
-            event === 'TOKEN_REFRESHED' &&
-            getViewerScope().userId !== null &&
-            session?.user.id !== getViewerScope().userId
-          ) {
+          if (event === 'TOKEN_REFRESHED' && session?.user.id !== getViewerScope().userId) {
             return
           }
           updateFromSession(session)
@@ -420,8 +417,9 @@ export function useAuthSession(): AuthSessionReturn {
   const signOut = useCallback(async () => {
     const sb = await getSupabase()
     const transitionGeneration = tokenRefreshCoordinator.beginIdentityTransition(null)
+    let refreshesSettled = true
     try {
-      await tokenRefreshCoordinator.settleInflightRefreshes()
+      refreshesSettled = await tokenRefreshCoordinator.settleInflightRefreshes(3_000)
       await sb.auth.signOut()
     } catch (error) {
       logger.warn('[useAuthSession] Sign out failed:', error)
@@ -436,6 +434,27 @@ export function useAuthSession(): AuthSessionReturn {
       loading: false,
       authChecked: true,
     })
+
+    // A refresh that outlived the bounded wait may have written its session to
+    // Supabase storage after the first signOut. Clear it again, but only if the
+    // user has not started another login/switch since this anon epoch began.
+    if (!refreshesSettled) {
+      const committedAnonScope = getViewerScope()
+      void tokenRefreshCoordinator.settleInflightRefreshes().then(async () => {
+        if (
+          committedAnonScope.viewerKey !== 'anon' ||
+          getViewerScope().viewerKey !== committedAnonScope.viewerKey ||
+          getViewerScope().sessionGeneration !== committedAnonScope.sessionGeneration
+        ) {
+          return
+        }
+        try {
+          await sb.auth.signOut()
+        } catch {
+          logger.warn('[useAuthSession] Could not clear a late refresh after sign out')
+        }
+      })
+    }
     // Explicitly broadcast logout to all other tabs via BroadcastChannel.
     // Supabase's storage-event listener can miss this when tabs are inactive.
     try {
@@ -476,6 +495,16 @@ export function useAuthSession(): AuthSessionReturn {
   )
 }
 
+function staleAuthFetchResponse(): Response {
+  return new Response(JSON.stringify({ error: 'stale_auth_scope' }), {
+    status: 401,
+    headers: {
+      'content-type': 'application/json',
+      'x-arena-stale-auth': '1',
+    },
+  })
+}
+
 /**
  * Utility: Make an authenticated API request with proper error handling.
  *
@@ -492,10 +521,19 @@ export async function authFetch(
 
   // Get a valid token (proactively refreshes if near expiry)
   const scope = getViewerScope()
+  const requestScope = {
+    viewerKey: scope.viewerKey,
+    sessionGeneration: scope.sessionGeneration,
+    userId: scope.userId,
+  }
+  const browserBound = typeof window !== 'undefined'
+  if (browserBound && requestScope.viewerKey === 'pending') return staleAuthFetchResponse()
   const token = await tokenRefreshCoordinator.getValidToken({
     expectedUserId: scope.userId,
     sessionGeneration: scope.sessionGeneration,
   })
+
+  if (browserBound && !isViewerScopeCurrent(requestScope)) return staleAuthFetchResponse()
 
   if (needsAuth && !token) {
     throw Object.assign(new Error('Not authenticated'), {
@@ -508,7 +546,9 @@ export async function authFetch(
     headers.set('Authorization', `Bearer ${token}`)
   }
 
+  if (browserBound && !isViewerScopeCurrent(requestScope)) return staleAuthFetchResponse()
   const response = await fetch(url, { ...fetchOptions, headers })
+  if (browserBound && !isViewerScopeCurrent(requestScope)) return staleAuthFetchResponse()
 
   // Handle 401: refresh via coordinator (queues concurrent requests) and retry once
   if (response.status === 401 && token) {
@@ -517,8 +557,12 @@ export async function authFetch(
       sessionGeneration: scope.sessionGeneration,
     })
     if (newToken) {
+      if (browserBound && !isViewerScopeCurrent(requestScope)) return staleAuthFetchResponse()
       headers.set('Authorization', `Bearer ${newToken}`)
-      return fetch(url, { ...fetchOptions, headers })
+      const retryResponse = await fetch(url, { ...fetchOptions, headers })
+      return browserBound && !isViewerScopeCurrent(requestScope)
+        ? staleAuthFetchResponse()
+        : retryResponse
     }
     // Refresh failed — coordinator already cleared auth state
   }

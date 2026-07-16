@@ -118,9 +118,20 @@ class TokenRefreshCoordinator {
     return commitViewerTransition(generation, userId) !== null
   }
 
-  async settleInflightRefreshes(): Promise<void> {
+  async settleInflightRefreshes(timeoutMs?: number): Promise<boolean> {
     const requests = [...this._inflightRefresh.values()]
-    if (requests.length > 0) await Promise.allSettled(requests)
+    if (requests.length === 0) return true
+
+    const settlement = Promise.allSettled(requests).then(() => true)
+    if (timeoutMs === undefined) return settlement
+
+    return Promise.race([
+      settlement,
+      new Promise<false>((resolve) => {
+        const timer = setTimeout(() => resolve(false), timeoutMs)
+        settlement.finally(() => clearTimeout(timer)).catch(() => {})
+      }),
+    ])
   }
 
   private captureScope(options?: RefreshScope): ViewerScope | null {
