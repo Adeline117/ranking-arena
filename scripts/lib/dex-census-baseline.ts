@@ -473,7 +473,11 @@ export async function collectGmxCensus(
   pageSize: number,
   maxPages: number
 ): Promise<CollectedSource> {
-  if (source.protocol !== 'gmx' || source.scope !== 'active_period_stats_offset_scan') {
+  if (
+    source.protocol !== 'gmx' ||
+    (source.scope !== 'active_period_stats_offset_scan' &&
+      source.scope !== 'legacy_period_stats_offset_scan')
+  ) {
     throw new Error('collectGmxCensus requires a GMX offset-scan source')
   }
   const observations: DexCensusObservationInput[] = []

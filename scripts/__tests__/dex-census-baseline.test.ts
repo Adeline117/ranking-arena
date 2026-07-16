@@ -161,7 +161,7 @@ describe('DEX census baseline collector', () => {
     })
   })
 
-  it('double-scans every page on all four GMX chains while preserving chain identity', async () => {
+  it('double-scans all GMX endpoints while excluding legacy Botanix from coverage', async () => {
     const sources = DEX_CENSUS_SOURCES.filter((candidate) => candidate.protocol === 'gmx')
     const calls = new Map<string, number>()
     const fetch: CensusFetch = jest.fn(async (url, init) => {
@@ -196,15 +196,19 @@ describe('DEX census baseline collector', () => {
     expect(report.snapshot.stages.by_source).toHaveLength(4)
     expect(report.coverage_denominator).toMatchObject({
       discovered: 0,
-      provisional_discovered: 12,
-      excluded_discovered: 0,
+      provisional_discovered: 9,
+      excluded_discovered: 3,
     })
     expect(report.source_evidence).toHaveLength(4)
     for (const evidence of report.source_evidence) {
       expect(evidence).toMatchObject({
         observed_unique_addresses: 3,
         completeness_status: 'provisional',
-        coverage_denominator: 'provisional',
+        coverage_denominator: evidence.chain_id === 3_637 ? 'excluded' : 'provisional',
+        scope:
+          evidence.chain_id === 3_637
+            ? 'legacy_period_stats_offset_scan'
+            : 'active_period_stats_offset_scan',
       })
       expect(evidence.windows).toHaveLength(3)
       for (const window of evidence.windows) {

@@ -27,7 +27,16 @@ describe('DEX census contract', () => {
       coverage_denominator: 'eligible',
     })
     expect(gmx).toHaveLength(4)
-    expect(gmx.every((source) => source.coverage_denominator === 'provisional')).toBe(true)
+    const activeGmx = gmx.filter((source) => source.scope === 'active_period_stats_offset_scan')
+    expect(activeGmx.map((source) => source.chain_id).sort((a, b) => a - b)).toEqual([
+      4_326, 42_161, 43_114,
+    ])
+    expect(activeGmx.every((source) => source.coverage_denominator === 'provisional')).toBe(true)
+    expect(gmx.find((source) => source.chain_id === 3_637)).toMatchObject({
+      scope: 'legacy_period_stats_offset_scan',
+      coverage_denominator: 'excluded',
+      universe_complete: false,
+    })
     expect(gmx.every((source) => source.universe_complete === false)).toBe(true)
     expect(gtrade).toHaveLength(5)
     expect(gtrade.every((source) => source.scope === 'public_top25_board')).toBe(true)
@@ -39,6 +48,15 @@ describe('DEX census contract', () => {
     expect(() =>
       assertDexCensusSources([{ ...bounded, coverage_denominator: 'eligible' }])
     ).toThrow('bounded sample cannot enter coverage denominator')
+  })
+
+  it('rejects a legacy network entering a coverage denominator', () => {
+    const legacy = DEX_CENSUS_SOURCES.find(
+      (source) => source.scope === 'legacy_period_stats_offset_scan'
+    )!
+    expect(() =>
+      assertDexCensusSources([{ ...legacy, coverage_denominator: 'provisional' }])
+    ).toThrow('legacy source cannot enter coverage denominator')
   })
 
   it('normalizes case without merging the same address across chains or protocols', () => {
