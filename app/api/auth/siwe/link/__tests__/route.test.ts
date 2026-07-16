@@ -66,7 +66,7 @@ jest.mock('@/lib/supabase/server', () => ({
       update: mockUpdate,
     }),
   }),
-  getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
+  getProvisioningAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
 }))
 
 import { POST } from '../route'
@@ -77,8 +77,8 @@ import { POST } from '../route'
 function makeRequest(body: Record<string, unknown>, token?: string) {
   const headers: Record<string, string> = {
     'content-type': 'application/json',
-    'host': 'www.arenafi.org',
-    'origin': 'https://www.arenafi.org',
+    host: 'www.arenafi.org',
+    origin: 'https://www.arenafi.org',
   }
   if (token) headers['authorization'] = `Bearer ${token}`
   return {
@@ -134,7 +134,12 @@ describe('POST /api/auth/siwe/link', () => {
     mockGetAuthUser.mockResolvedValue(MOCK_USER)
     mockVerify.mockResolvedValue({
       success: true,
-      data: { address: 'not-an-address', domain: 'www.arenafi.org', uri: 'https://www.arenafi.org', chainId: 8453 },
+      data: {
+        address: 'not-an-address',
+        domain: 'www.arenafi.org',
+        uri: 'https://www.arenafi.org',
+        chainId: 8453,
+      },
     })
     mockIsAddress.mockReturnValueOnce(false)
 
@@ -148,7 +153,12 @@ describe('POST /api/auth/siwe/link', () => {
     mockGetAuthUser.mockResolvedValue(MOCK_USER)
     mockVerify.mockResolvedValue({
       success: true,
-      data: { address: VALID_ADDRESS, domain: 'www.arenafi.org', uri: 'https://www.arenafi.org', chainId: 8453 },
+      data: {
+        address: VALID_ADDRESS,
+        domain: 'www.arenafi.org',
+        uri: 'https://www.arenafi.org',
+        chainId: 8453,
+      },
     })
     mockMaybeSingle.mockResolvedValue({ data: { id: 'other-user' }, error: null })
 
@@ -162,7 +172,12 @@ describe('POST /api/auth/siwe/link', () => {
     mockGetAuthUser.mockResolvedValue(MOCK_USER)
     mockVerify.mockResolvedValue({
       success: true,
-      data: { address: VALID_ADDRESS, domain: 'www.arenafi.org', uri: 'https://www.arenafi.org', chainId: 8453 },
+      data: {
+        address: VALID_ADDRESS,
+        domain: 'www.arenafi.org',
+        uri: 'https://www.arenafi.org',
+        chainId: 8453,
+      },
     })
     mockMaybeSingle.mockResolvedValue({ data: null, error: null })
 

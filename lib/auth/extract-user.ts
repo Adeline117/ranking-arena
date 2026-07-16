@@ -5,7 +5,7 @@
  * Consolidates the pattern duplicated across 9+ API routes.
  */
 
-import { getSupabaseAdmin } from '@/lib/supabase/server'
+import { getSupabaseAdmin, getUserAccountStatus } from '@/lib/supabase/server'
 import { createClient } from '@supabase/supabase-js'
 import type { User } from '@supabase/supabase-js'
 import { authLogger } from '@/lib/utils/logger'
@@ -105,6 +105,22 @@ export function getAuthFailureStats(): Record<
   return out
 }
 
+async function requireActiveAppProfile(user: User): Promise<{
+  user: User | null
+  error: string | null
+}> {
+  const status = await getUserAccountStatus(user.id)
+  if (status === 'active') return { user, error: null }
+  if (status === 'suspended') return { user: null, error: 'Account suspended' }
+
+  const message =
+    status === 'missing'
+      ? 'Application profile is not provisioned'
+      : 'Account status verification unavailable'
+  recordAuthFailure('supabase_error', message)
+  return { user: null, error: message }
+}
+
 export async function extractUserFromRequest(request: Request): Promise<{
   user: User | null
   error: string | null
@@ -118,16 +134,7 @@ export async function extractUserFromRequest(request: Request): Promise<{
       const { data, error } = await admin.auth.getUser(token)
       if (error) recordAuthFailure(classifyAuthError(error.message), error.message)
       if (error || !data?.user) return { user: null, error: error?.message ?? null }
-      // Check ban/deletion status — prevent banned users from performing sensitive ops
-      const { data: profile } = await admin
-        .from('user_profiles')
-        .select('banned_at, deleted_at')
-        .eq('id', data.user.id)
-        .maybeSingle()
-      if (profile?.banned_at || profile?.deleted_at) {
-        return { user: null, error: 'Account suspended' }
-      }
-      return { user: data.user, error: null }
+      return requireActiveAppProfile(data.user)
     } catch (err) {
       // Network error / unexpected exception talking to Supabase Auth.
       const message = err instanceof Error ? err.message : String(err)
@@ -155,7 +162,8 @@ export async function extractUserFromRequest(request: Request): Promise<{
     // cookie, no bearer) returns user=null without an error — that's normal
     // user-signed-out traffic and would drown out the signal if we counted it.
     if (error) recordAuthFailure(classifyAuthError(error.message), error.message)
-    return { user: data?.user ?? null, error: error?.message ?? null }
+    if (error || !data?.user) return { user: null, error: error?.message ?? null }
+    return requireActiveAppProfile(data.user)
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err)
     recordAuthFailure('supabase_error', message)
