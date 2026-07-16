@@ -12,17 +12,16 @@
  * Crontab: 0 0,3,6,9,12,15,18,21 * * * node /opt/arena-cron/scraper-cron.mjs
  */
 
+import proxyKeyAuth from './proxy-key-auth.cjs'
+
+const { loadProxyKeyConfig } = proxyKeyAuth
+
 const SCRAPER_URL = 'http://localhost:3457'
-const SCRAPER_KEY = process.env.PROXY_KEY?.trim()
+const SCRAPER_KEY = loadProxyKeyConfig().preferred
 const SUPABASE_URL = 'https://iknktzifjdyujdccyhsv.supabase.co'
 const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-// ── Startup guards: refuse to run without runtime-injected secrets ──
-if (!SCRAPER_KEY) {
-  console.error('[FATAL] PROXY_KEY is not set. Refusing to run.')
-  process.exit(1)
-}
-
+// ── Startup guard: refuse to run without the Supabase secret ──
 if (!SUPABASE_KEY || SUPABASE_KEY === 'PASTE_SERVICE_ROLE_KEY_HERE') {
   console.error('[FATAL] SUPABASE_SERVICE_ROLE_KEY is not set. Refusing to run.')
   console.error('Fix: set it in ecosystem.config.js env block, then `pm2 restart arena-cron && pm2 save`')
