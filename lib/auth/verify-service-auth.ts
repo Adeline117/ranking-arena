@@ -68,11 +68,12 @@ export async function verifyAdminAuth(request: Request): Promise<boolean> {
         error,
       } = await getSupabaseAdmin().auth.getUser(token)
       if (error || !user) return false
-      const { data: profile } = await getSupabaseAdmin()
+      const { data: profile, error: profileError } = await getSupabaseAdmin()
         .from('user_profiles')
-        .select('role')
+        .select('role, banned_at, deleted_at')
         .eq('id', user.id)
         .maybeSingle()
+      if (profileError || !profile || profile.banned_at || profile.deleted_at) return false
       const isAdminByRole = profile?.role === 'admin'
       if (!isAdminByRole) return false
 

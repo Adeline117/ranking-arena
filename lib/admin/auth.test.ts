@@ -1,4 +1,4 @@
-import type { SupabaseClient } from "@supabase/supabase-js"
+import type { SupabaseClient } from '@supabase/supabase-js'
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
  * Admin Auth Tests
@@ -10,7 +10,9 @@ import type { SupabaseClient } from "@supabase/supabase-js"
 // This lets tests verify createClient is called with expected args and
 // lets the "throw when missing" test work correctly.
 jest.mock('@/lib/supabase/server', () => {
-  const { createClient: mockCreate } = jest.requireMock('@supabase/supabase-js') as { createClient: jest.Mock }
+  const { createClient: mockCreate } = jest.requireMock('@supabase/supabase-js') as {
+    createClient: jest.Mock
+  }
   return {
     getSupabaseAdmin: jest.fn(() => {
       const url = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || ''
@@ -36,7 +38,7 @@ jest.mock('@supabase/supabase-js', () => ({
   })),
 }))
 
-import { verifyAdmin, getSupabaseAdmin } from './auth'
+import { verifyAdmin, verifyModeratorOrAdmin, getSupabaseAdmin } from './auth'
 import { createClient } from '@supabase/supabase-js'
 
 // Mock environment variables
@@ -84,11 +86,9 @@ describe('getAdminEmails', () => {
 describe('getSupabaseAdmin', () => {
   test('should create admin client with env vars', () => {
     getSupabaseAdmin()
-    expect(createClient).toHaveBeenCalledWith(
-      'https://test.supabase.co',
-      'test-service-key',
-      { auth: { persistSession: false } }
-    )
+    expect(createClient).toHaveBeenCalledWith('https://test.supabase.co', 'test-service-key', {
+      auth: { persistSession: false },
+    })
   })
 
   test('should throw when env vars missing', () => {
@@ -176,7 +176,10 @@ describe('verifyAdmin', () => {
       maybeSingle: jest.fn().mockResolvedValue({ data: { role: 'user' }, error: null }),
     }
 
-    const result = await freshVerifyAdmin(mockSupabase as unknown as SupabaseClient, 'Bearer validtoken')
+    const result = await freshVerifyAdmin(
+      mockSupabase as unknown as SupabaseClient,
+      'Bearer validtoken'
+    )
     expect(result).toEqual({ id: 'user123', email: 'admin@example.com' })
   })
 
@@ -238,5 +241,54 @@ describe('verifyAdmin', () => {
 
     const result = await verifyAdmin(mockSupabase as unknown as SupabaseClient, 'Bearer validtoken')
     expect(result).toEqual({ id: 'user123', email: '' })
+  })
+
+  test.each([
+    [{ role: 'admin', banned_at: '2026-07-15T00:00:00.000Z', deleted_at: null }, null],
+    [{ role: 'admin', banned_at: null, deleted_at: '2026-07-15T00:00:00.000Z' }, null],
+    [null, { message: 'profile lookup failed' }],
+  ])('fails closed when privileged account status is not active', async (profile, profileError) => {
+    const mockSupabase = {
+      auth: {
+        getUser: jest.fn().mockResolvedValue({
+          data: { user: { id: 'admin-user', email: 'admin@example.com' } },
+          error: null,
+        }),
+      },
+      from: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({ data: profile, error: profileError }),
+    }
+
+    await expect(
+      verifyAdmin(mockSupabase as unknown as SupabaseClient, 'Bearer validtoken')
+    ).resolves.toBeNull()
+  })
+
+  test('rejects a suspended moderator before applying role authorization', async () => {
+    const mockSupabase = {
+      auth: {
+        getUser: jest.fn().mockResolvedValue({
+          data: { user: { id: 'moderator-user', email: 'mod@example.com' } },
+          error: null,
+        }),
+      },
+      from: jest.fn().mockReturnThis(),
+      select: jest.fn().mockReturnThis(),
+      eq: jest.fn().mockReturnThis(),
+      maybeSingle: jest.fn().mockResolvedValue({
+        data: {
+          role: 'moderator',
+          banned_at: '2026-07-15T00:00:00.000Z',
+          deleted_at: null,
+        },
+        error: null,
+      }),
+    }
+
+    await expect(
+      verifyModeratorOrAdmin(mockSupabase as unknown as SupabaseClient, 'Bearer validtoken')
+    ).resolves.toBeNull()
   })
 })

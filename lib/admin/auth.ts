@@ -12,7 +12,9 @@ const logger = createLogger('admin-auth')
 // 管理员邮箱白名单（与前端 useAdminAuth 保持一致）
 // 必须通过环境变量 ADMIN_EMAILS 配置，生产环境不能为空
 const ADMIN_EMAILS: string[] = process.env.ADMIN_EMAILS
-  ? process.env.ADMIN_EMAILS.split(',').map(e => e.trim()).filter(e => e.length > 0)
+  ? process.env.ADMIN_EMAILS.split(',')
+      .map((e) => e.trim())
+      .filter((e) => e.length > 0)
   : [] // 安全默认值：空数组，不允许任何未配置的管理员
 
 // SECURITY: Warn if no admin emails configured in production
@@ -37,7 +39,10 @@ export async function verifyAdmin(
   }
 
   const token = authHeader.slice(7)
-  const { data: { user }, error } = await supabase.auth.getUser(token)
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(token)
 
   if (error || !user) {
     return null
@@ -47,11 +52,18 @@ export async function verifyAdmin(
   const isAdminByEmail = user.email && ADMIN_EMAILS.includes(user.email)
 
   // 方法2: 数据库角色（仅 dev/staging 可作为备用）
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('role')
+    .select('role, banned_at, deleted_at')
     .eq('id', user.id)
     .maybeSingle()
+
+  // Human admin JWTs remain subject to the same account lifecycle as every
+  // other user. The profile lookup is deliberately uncached and fail-closed so
+  // a new suspension takes effect immediately for privileged operations.
+  if (profileError || !profile || profile.banned_at || profile.deleted_at) {
+    return null
+  }
 
   const isAdminByRole = profile?.role === 'admin'
 
@@ -79,7 +91,10 @@ export async function verifyModeratorOrAdmin(
   }
 
   const token = authHeader.slice(7)
-  const { data: { user }, error } = await supabase.auth.getUser(token)
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser(token)
 
   if (error || !user) {
     return null
@@ -89,11 +104,15 @@ export async function verifyModeratorOrAdmin(
   const isAdminByEmail = user.email && ADMIN_EMAILS.includes(user.email)
 
   // 方法2: 数据库角色
-  const { data: profile } = await supabase
+  const { data: profile, error: profileError } = await supabase
     .from('user_profiles')
-    .select('role')
+    .select('role, banned_at, deleted_at')
     .eq('id', user.id)
     .maybeSingle()
+
+  if (profileError || !profile || profile.banned_at || profile.deleted_at) {
+    return null
+  }
 
   const isAdminByRole = profile?.role === 'admin'
   const isModeratorByRole = profile?.role === 'moderator'
