@@ -261,6 +261,33 @@ describe('POST /api/settings/export', () => {
           },
         ]
       }
+      if (dataset.name === 'bookmarks.folders') {
+        return [
+          {
+            id: '55555555-5555-4555-8555-555555555555',
+            name: 'Research',
+            description: 'Saved research posts',
+            avatar_url: null,
+            is_default: false,
+            is_public: false,
+            post_count: 1,
+            created_at: '2026-02-11T00:00:00.000Z',
+            updated_at: '2026-02-12T00:00:00.000Z',
+            user_id: 'must-not-escape-folder-owner',
+          },
+        ]
+      }
+      if (dataset.name === 'bookmarks.posts') {
+        return [
+          {
+            id: '66666666-6666-4666-8666-666666666666',
+            post_id: '77777777-7777-4777-8777-777777777777',
+            folder_id: '55555555-5555-4555-8555-555555555555',
+            created_at: '2026-02-13T00:00:00.000Z',
+            user_id: 'must-not-escape-bookmark-owner',
+          },
+        ]
+      }
       throw new Error(`Unexpected cursor dataset: ${dataset.name}`)
     })
     profileStates = installProfileQueries({})
@@ -325,6 +352,8 @@ describe('POST /api/settings/export', () => {
       'tips.received': 1,
       'interactions.post_likes': 1,
       'interactions.post_votes': 1,
+      'bookmarks.folders': 1,
+      'bookmarks.posts': 1,
       'settings.preferences': 1,
       'account.bindings': 2,
       'account.login_sessions': 1,
@@ -416,6 +445,32 @@ describe('POST /api/settings/export', () => {
     expect(JSON.stringify(body.interactions)).not.toMatch(
       /must-not-escape-like-owner|must-not-escape-vote-owner|user_id/
     )
+    expect(body.bookmarks).toEqual({
+      folders: [
+        {
+          id: '55555555-5555-4555-8555-555555555555',
+          name: 'Research',
+          description: 'Saved research posts',
+          avatar_url: null,
+          is_default: false,
+          is_public: false,
+          post_count: 1,
+          created_at: '2026-02-11T00:00:00.000Z',
+          updated_at: '2026-02-12T00:00:00.000Z',
+        },
+      ],
+      posts: [
+        {
+          id: '66666666-6666-4666-8666-666666666666',
+          post_id: '77777777-7777-4777-8777-777777777777',
+          folder_id: '55555555-5555-4555-8555-555555555555',
+          created_at: '2026-02-13T00:00:00.000Z',
+        },
+      ],
+    })
+    expect(JSON.stringify(body.bookmarks)).not.toMatch(
+      /must-not-escape-folder-owner|must-not-escape-bookmark-owner|user_id/
+    )
     expect(body.settings).toEqual({
       preferences: {
         watched_traders: ['trader-1'],
@@ -447,7 +502,7 @@ describe('POST /api/settings/export', () => {
       'must-not-escape-binding-normalization'
     )
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
-    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(5)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(7)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -556,6 +611,25 @@ describe('POST /api/settings/export', () => {
       })
       expect(interactionCall[1].selectColumns).not.toContain('user_id')
     }
+
+    for (const bookmarkName of ['bookmarks.folders', 'bookmarks.posts']) {
+      const bookmarkCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+        (call) => call[1].name === bookmarkName
+      )
+      expect(bookmarkCall).toBeDefined()
+      expect(bookmarkCall[2]).toBe(USER_ID)
+      expect(bookmarkCall[1].ownerPredicate).toEqual({
+        column: 'user_id',
+        operator: 'eq',
+        valueType: 'uuid',
+      })
+      expect(bookmarkCall[1].cursor).toEqual({
+        order: 'asc',
+        columns: [{ column: 'id', valueType: 'uuid' }],
+      })
+      expect(bookmarkCall[1].selectColumns).not.toContain('user_id')
+      expect(bookmarkCall[1].selectColumns).not.toContain('*')
+    }
   })
 
   it('fails closed without cooldown when preferences cannot be read completely', async () => {
@@ -602,6 +676,21 @@ describe('POST /api/settings/export', () => {
     mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
       if (dataset.name === 'interactions.post_likes') {
         throw new DataExportReadError('interactions.post_likes', { code: 'XX001' })
+      }
+      return []
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed without cooldown when bookmarks cannot be read completely', async () => {
+    mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
+      if (dataset.name === 'bookmarks.posts') {
+        throw new DataExportReadError('bookmarks.posts', { code: 'XX001' })
       }
       return []
     })
