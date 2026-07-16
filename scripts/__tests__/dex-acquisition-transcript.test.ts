@@ -852,6 +852,29 @@ describe('DEX acquisition transcript contract', () => {
     expect(() => parseDexAcquisitionTranscript(zeroRequestBatch, fixtureJson)).toThrow(
       /telemetry total does not match phase counters/
     )
+
+    const unattemptedWithDiscoveryCost = validTranscript()
+    for (const lane of unattemptedWithDiscoveryCost.query_lanes) {
+      lane.query_state = 'not_attempted'
+      lane.completion_reason = 'not_started'
+      lane.attempt_count = 0
+      lane.page_count = 0
+      lane.page_chain_sha256 = null
+      lane.checkpoint_sha256 = null
+    }
+    unattemptedWithDiscoveryCost.query_totals = {
+      lane_count: 50,
+      exhausted_lane_count: 0,
+      partial_lane_count: 0,
+      failed_lane_count: 0,
+      not_attempted_lane_count: 50,
+      attempt_count: 0,
+      page_count: 0,
+    }
+    unattemptedWithDiscoveryCost.structural_state = 'partial'
+    expect(() => parseDexAcquisitionTranscript(unattemptedWithDiscoveryCost, fixtureJson)).toThrow(
+      /unattempted discovery lanes/
+    )
   })
 
   it('keeps all publication and population-denominator claims closed', () => {
