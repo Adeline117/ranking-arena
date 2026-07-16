@@ -27,7 +27,6 @@ const AUTH_PATTERNS = [
   /\bwithAdminAuth\b/, // lib/api/with-admin-auth.ts
   /\bverifyAdmin\b/,
   /\bverifyServiceAuth\b/, // lib/auth/verify-service-auth.ts
-  /\bauth\.getUser\(/, // 手写 supabase 鉴权（存量，逐步收敛到 wrapper）
   /\bgetAuthenticatedUser\b/,
   /\bget(?:Active|Provisioning)?AuthUser\b/, // strict auth + explicitly scoped provisioning/recovery auth
   /\bverifyAdminAuth\b/, // lib/auth/verify-service-auth.ts
@@ -137,11 +136,13 @@ function walk(dir, out = []) {
 
 const routes = walk(API_DIR)
 const unauthenticated = []
+const directAuthGetUser = []
 for (const file of routes) {
   const src = readFileSync(file, 'utf8')
   const hasAuth = AUTH_PATTERNS.some((re) => re.test(src))
   const rel = relative(join(ROOT, 'app', 'api'), file).replace(/\/route\.tsx?$/, '')
   if (!hasAuth && !PUBLIC_API_ROUTES.has(rel)) unauthenticated.push(rel)
+  if (/\.auth\s*\.\s*getUser\s*\(/.test(src)) directAuthGetUser.push(rel)
 }
 
 if (process.argv.includes('--list')) {
@@ -157,6 +158,17 @@ if (unauthenticated.length > 0) {
   console.error(
     '\n处理：该保护 → 加 withAuth/withCron/withAdminAuth 等 wrapper；' +
       '\n确属公开只读 → 在 scripts/qa/api-auth-coverage-check.mjs 的 PUBLIC_API_ROUTES 登记并注明理由。'
+  )
+  process.exit(1)
+}
+if (directAuthGetUser.length > 0) {
+  console.error(
+    `❌ ${directAuthGetUser.length} 个 API route 直接调用 auth.getUser()，绕过应用账号状态门：\n`
+  )
+  for (const r of directAuthGetUser) console.error(`  - app/api/${r}/route.ts`)
+  console.error(
+    '\n请使用 getAuthUser/requireAuth/withAuth；只有明确的建档或恢复端点可使用 ' +
+      'getProvisioningAuthUser。'
   )
   process.exit(1)
 }
