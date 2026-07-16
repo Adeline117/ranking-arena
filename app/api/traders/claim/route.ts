@@ -25,6 +25,7 @@ import { getUserClaim, getUserVerifiedTrader, isTraderClaimed } from '@/lib/data
 import { notifyTraderClaim } from '@/lib/notifications/activity-alerts'
 import { sendNotification } from '@/lib/data/notifications'
 import { verifyWalletOwnership } from '@/lib/services/wallet-verification'
+import { hasVerifiedClaimConnection } from '@/lib/services/claim-connection-proof'
 import { logger } from '@/lib/logger'
 
 /**
@@ -89,7 +90,8 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
 
     const trader_id = validateString(body.trader_id, { required: true, fieldName: 'trader_id' })
-    const source = validateString(body.source, { required: true, fieldName: 'source' })
+    const rawSource = validateString(body.source, { required: true, fieldName: 'source' })
+    const source = rawSource?.toLowerCase()
     const verification_method = validateEnum(body.verification_method, [
       'api_key',
       'signature',
@@ -115,16 +117,16 @@ export async function POST(request: NextRequest) {
         )
       }
 
-      // Double-check: the verified_uid in the exchange connection must match trader_id
-      const { data: connection } = await supabase
-        .from('user_exchange_connections')
-        .select('verified_uid')
-        .eq('user_id', user.id)
-        .eq('exchange', source)
-        .eq('is_active', true)
-        .maybeSingle()
+      // Re-check the server-stored proof. Futures/spot leaderboard sources map
+      // to the base exchange connection written by verify-ownership.
+      const connectionIsVerified = await hasVerifiedClaimConnection(
+        supabase,
+        user.id,
+        source,
+        trader_id
+      )
 
-      if (!connection?.verified_uid || String(connection.verified_uid) !== String(trader_id)) {
+      if (!connectionIsVerified) {
         logger.warn('[trader-claim] UID mismatch in claim submission', {
           userId: user.id,
           platform: source,
