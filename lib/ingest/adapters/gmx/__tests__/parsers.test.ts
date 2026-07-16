@@ -173,6 +173,7 @@ describe('parseGmxProfile', () => {
       winRate: null,
       winPositions: 0,
       totalPositions: 0,
+      volume: 0,
     })
     expect(profile.stats[0].extras).toMatchObject({
       pnl_basis: 'gmx_period_realized_net',
@@ -180,6 +181,7 @@ describe('parseGmxProfile', () => {
       pnl_components_complete: true,
       profile_window_metrics_complete: true,
       profile_window_empty: true,
+      empty_window_evidence: 'explicit_empty_period_stats_and_history',
       window_from: 1_765_411_200,
     })
     expect(profile.series).toHaveLength(0)
@@ -205,6 +207,27 @@ describe('parseGmxProfile', () => {
       gmx_total_mark_to_market_pnl_usd: 1,
     })
     expect(profile.replaceSeries).toEqual([{ timeframe: 30, metrics: ['pnl'] }])
+  })
+
+  it('does not mistake missing arrays or invalid history rows for a confirmed empty window', () => {
+    expect(() => parseGmxProfile({ periodStats: [], timeframe: 30 }, ctx)).toThrow(
+      '[gmx] invalid profile bundle arrays'
+    )
+    const profile = parseGmxProfile(
+      { periodStats: [], pnlHistory: [{ unexpected: true }], timeframe: 30 },
+      ctx
+    )
+    expect(profile.stats[0].extras).toMatchObject({
+      profile_window_metrics_complete: false,
+      profile_window_metrics_incomplete_reason: 'period_stats_missing_with_history',
+    })
+  })
+
+  it('fails closed when id_eq unexpectedly returns duplicate period aggregates', () => {
+    const row = (bundle.periodStats as Array<Record<string, unknown>>)[0]
+    expect(() =>
+      parseGmxProfile({ periodStats: [row, row], pnlHistory: [], timeframe: 7 }, ctx)
+    ).toThrow('[gmx] duplicate period aggregates for profile window')
   })
 
   it('fails closed without clearing serving data when a realized component is absent', () => {
