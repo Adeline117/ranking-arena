@@ -78,6 +78,8 @@ export interface PostActionsReturn
 export function usePostActions({
   accessToken,
   currentUserId,
+  viewerKey: suppliedViewerKey,
+  sessionGeneration = 0,
   posts,
   setPosts,
   openPost,
@@ -89,6 +91,8 @@ export function usePostActions({
 }: {
   accessToken: string | null
   currentUserId: string | null
+  viewerKey?: string
+  sessionGeneration?: number
   posts: Post[]
   setPosts: React.Dispatch<React.SetStateAction<Post[]>>
   openPost: Post | null
@@ -104,6 +108,25 @@ export function usePostActions({
   t: (key: string) => string
 }): PostActionsReturn {
   const router = useRouter()
+  const viewerKey = suppliedViewerKey ?? (currentUserId ? `user:${currentUserId}` : 'anon')
+  const scopeKey = `${viewerKey}\u0000${sessionGeneration}`
+  const activeScopeRef = useRef({ viewerKey, sessionGeneration, userId: currentUserId })
+  activeScopeRef.current = { viewerKey, sessionGeneration, userId: currentUserId }
+  const captureRenderedScope = useCallback(
+    () => ({ viewerKey, sessionGeneration, userId: currentUserId }),
+    [currentUserId, sessionGeneration, viewerKey]
+  )
+  const scopeIsCurrent = useCallback(
+    (scope: { viewerKey: string; sessionGeneration: number; userId: string | null }) => {
+      const current = activeScopeRef.current
+      return (
+        current.viewerKey === scope.viewerKey &&
+        current.sessionGeneration === scope.sessionGeneration &&
+        current.userId === scope.userId
+      )
+    },
+    []
+  )
   const lockRef = useRef<Set<string>>(new Set())
   const bookmarkLockRef = useRef<Set<string>>(new Set())
   const postsRef = useRef(posts)
@@ -117,37 +140,198 @@ export function usePostActions({
   openPostRef.current = openPost
 
   // Edit state
-  const [editingPost, setEditingPost] = useState<Post | null>(null)
-  const [editTitle, setEditTitle] = useState('')
-  const [editContent, setEditContent] = useState('')
-  const [savingEdit, setSavingEdit] = useState(false)
+  const [editingPostState, setEditingPostRaw] = useState<Post | null>(null)
+  const [editTitleState, setEditTitleRaw] = useState('')
+  const [editContentState, setEditContentRaw] = useState('')
+  const [savingEditState, setSavingEditRaw] = useState(false)
+  const editOwnerScopeKeyRef = useRef(scopeKey)
+  const claimEditScope = useCallback(() => {
+    const current = activeScopeRef.current
+    const currentScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+    if (editOwnerScopeKeyRef.current === currentScopeKey) return
+    editOwnerScopeKeyRef.current = currentScopeKey
+    setEditingPostRaw(null)
+    setEditTitleRaw('')
+    setEditContentRaw('')
+    setSavingEditRaw(false)
+  }, [])
+  const setEditingPost = useCallback(
+    (value: Post | null) => {
+      claimEditScope()
+      setEditingPostRaw(value)
+    },
+    [claimEditScope]
+  )
+  const setEditTitle = useCallback(
+    (value: string) => {
+      claimEditScope()
+      setEditTitleRaw(value)
+    },
+    [claimEditScope]
+  )
+  const setEditContent = useCallback(
+    (value: string) => {
+      claimEditScope()
+      setEditContentRaw(value)
+    },
+    [claimEditScope]
+  )
+  const setSavingEdit = useCallback(
+    (value: boolean) => {
+      claimEditScope()
+      setSavingEditRaw(value)
+    },
+    [claimEditScope]
+  )
+  const editScopeOwned = editOwnerScopeKeyRef.current === scopeKey
+  const editingPost = editScopeOwned ? editingPostState : null
+  const editTitle = editScopeOwned ? editTitleState : ''
+  const editContent = editScopeOwned ? editContentState : ''
+  const savingEdit = editScopeOwned ? savingEditState : false
 
   // Custom poll state
   const [customPoll, setCustomPoll] = useState<CustomPollState['customPoll']>(null)
   const [customPollUserVotes, setCustomPollUserVotes] = useState<number[]>([])
   const [loadingCustomPoll, setLoadingCustomPoll] = useState(false)
   const [votingCustomPoll, setVotingCustomPoll] = useState(false)
-  const [selectedPollOptions, setSelectedPollOptions] = useState<number[]>([])
+  const [selectedPollOptions, setSelectedPollOptionsRaw] = useState<number[]>([])
+  const pollOwnerScopeKeyRef = useRef(scopeKey)
+  const claimPollScope = useCallback(() => {
+    const current = activeScopeRef.current
+    const currentScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+    if (pollOwnerScopeKeyRef.current === currentScopeKey) return
+    pollOwnerScopeKeyRef.current = currentScopeKey
+    setCustomPoll(null)
+    setCustomPollUserVotes([])
+    setLoadingCustomPoll(false)
+    setVotingCustomPoll(false)
+    setSelectedPollOptionsRaw([])
+  }, [])
+  const setSelectedPollOptions = useCallback<React.Dispatch<React.SetStateAction<number[]>>>(
+    (action) => {
+      claimPollScope()
+      setSelectedPollOptionsRaw(action)
+    },
+    [claimPollScope]
+  )
 
   // Bookmark/repost state
-  const [bookmarkLoading, setBookmarkLoading] = useState<Record<string, boolean>>({})
-  const [repostLoading, setRepostLoading] = useState<Record<string, boolean>>({})
-  const [showRepostModal, setShowRepostModal] = useState<string | null>(null)
-  const [repostComment, setRepostComment] = useState('')
-  const [userBookmarks, setUserBookmarks] = useState<Record<string, boolean>>({})
-  const [bookmarkCounts, setBookmarkCounts] = useState<Record<string, number>>({})
-  const [showBookmarkModal, setShowBookmarkModal] = useState(false)
-  const [bookmarkingPostId, setBookmarkingPostId] = useState<string | null>(null)
+  const [bookmarkLoadingState, setBookmarkLoadingRaw] = useState<Record<string, boolean>>({})
+  const [repostLoadingState, setRepostLoadingRaw] = useState<Record<string, boolean>>({})
+  const [showRepostModalState, setShowRepostModalRaw] = useState<string | null>(null)
+  const [repostCommentState, setRepostCommentRaw] = useState('')
+  const [userBookmarksState, setUserBookmarksRaw] = useState<Record<string, boolean>>({})
+  const [bookmarkCountsState, setBookmarkCountsRaw] = useState<Record<string, number>>({})
+  const bookmarkOwnerScopeKeyRef = useRef(scopeKey)
+  const [showBookmarkModalState, setShowBookmarkModalRaw] = useState(false)
+  const [bookmarkingPostIdState, setBookmarkingPostIdRaw] = useState<string | null>(null)
+  const claimBookmarkScope = useCallback(() => {
+    const current = activeScopeRef.current
+    const currentScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+    if (bookmarkOwnerScopeKeyRef.current === currentScopeKey) return
+    bookmarkOwnerScopeKeyRef.current = currentScopeKey
+    setBookmarkLoadingRaw({})
+    setUserBookmarksRaw({})
+    setBookmarkCountsRaw({})
+    setShowBookmarkModalRaw(false)
+    setBookmarkingPostIdRaw(null)
+  }, [])
+  const setBookmarkLoading = useCallback<
+    React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  >(
+    (action) => {
+      claimBookmarkScope()
+      setBookmarkLoadingRaw(action)
+    },
+    [claimBookmarkScope]
+  )
+  const userBookmarks = bookmarkOwnerScopeKeyRef.current === scopeKey ? userBookmarksState : {}
+  const setUserBookmarks = useCallback<
+    React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  >(
+    (action) => {
+      claimBookmarkScope()
+      setUserBookmarksRaw(action)
+    },
+    [claimBookmarkScope]
+  )
+  const setBookmarkCounts = useCallback<
+    React.Dispatch<React.SetStateAction<Record<string, number>>>
+  >(
+    (action) => {
+      claimBookmarkScope()
+      setBookmarkCountsRaw(action)
+    },
+    [claimBookmarkScope]
+  )
+  const setShowBookmarkModal = useCallback(
+    (value: boolean) => {
+      claimBookmarkScope()
+      setShowBookmarkModalRaw(value)
+    },
+    [claimBookmarkScope]
+  )
+  const setBookmarkingPostId = useCallback(
+    (value: string | null) => {
+      claimBookmarkScope()
+      setBookmarkingPostIdRaw(value)
+    },
+    [claimBookmarkScope]
+  )
+  const bookmarkScopeOwned = bookmarkOwnerScopeKeyRef.current === scopeKey
+  const bookmarkLoading = bookmarkScopeOwned ? bookmarkLoadingState : {}
+  const bookmarkCounts = bookmarkScopeOwned ? bookmarkCountsState : {}
+  const showBookmarkModal = bookmarkScopeOwned ? showBookmarkModalState : false
+  const bookmarkingPostId = bookmarkScopeOwned ? bookmarkingPostIdState : null
+  const repostOwnerScopeKeyRef = useRef(scopeKey)
+  const claimRepostScope = useCallback(() => {
+    const current = activeScopeRef.current
+    const currentScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+    if (repostOwnerScopeKeyRef.current === currentScopeKey) return
+    repostOwnerScopeKeyRef.current = currentScopeKey
+    setRepostLoadingRaw({})
+    setShowRepostModalRaw(null)
+    setRepostCommentRaw('')
+  }, [])
+  const setRepostLoading = useCallback<
+    React.Dispatch<React.SetStateAction<Record<string, boolean>>>
+  >(
+    (action) => {
+      claimRepostScope()
+      setRepostLoadingRaw(action)
+    },
+    [claimRepostScope]
+  )
+  const setShowRepostModal = useCallback(
+    (value: string | null) => {
+      claimRepostScope()
+      setShowRepostModalRaw(value)
+    },
+    [claimRepostScope]
+  )
+  const setRepostComment = useCallback(
+    (value: string) => {
+      claimRepostScope()
+      setRepostCommentRaw(value)
+    },
+    [claimRepostScope]
+  )
+  const repostScopeOwned = repostOwnerScopeKeyRef.current === scopeKey
+  const repostLoading = repostScopeOwned ? repostLoadingState : {}
+  const showRepostModal = repostScopeOwned ? showRepostModalState : null
+  const repostComment = repostScopeOwned ? repostCommentState : ''
 
   // Toggle reaction
   const toggleReaction = useCallback(
     async (postId: string, reactionType: 'up' | 'down') => {
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
       if (!accessToken) {
         const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
-        useLoginModal.getState().openLoginModal()
+        if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
         return
       }
-      const key = `react-${postId}`
+      const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000react-${postId}`
       if (lockRef.current.has(key)) return
       lockRef.current.add(key)
 
@@ -215,6 +399,7 @@ export function usePostActions({
           body: JSON.stringify({ reaction_type: reactionType }),
         })
         const json = await response.json()
+        if (!scopeIsCurrent(capturedScope)) return
         if (response.ok && json.success) {
           // Reconcile with server truth (overwrites optimistic)
           const result = json.data
@@ -279,6 +464,7 @@ export function usePostActions({
           showToast(json.error || json.message || t('operationFailed'), 'error')
         }
       } catch (err) {
+        if (!scopeIsCurrent(capturedScope)) return
         // Rollback — reverse delta from current state
         setPosts((prev) =>
           prev.map((p) =>
@@ -310,18 +496,27 @@ export function usePostActions({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, openPost?.id, openPostAliasesPosts, showToast]
+    [
+      accessToken,
+      captureRenderedScope,
+      openPost?.id,
+      openPostAliasesPosts,
+      scopeIsCurrent,
+      showToast,
+    ]
   )
 
   // Built-in poll voting
   const _toggleVote = useCallback(
     async (postId: string, choice: PollChoice) => {
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
       if (!accessToken) {
         const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
-        useLoginModal.getState().openLoginModal()
+        if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
         return
       }
-      const key = `vote-${postId}-${choice}`
+      const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000vote-${postId}-${choice}`
       if (lockRef.current.has(key)) return
       lockRef.current.add(key)
       try {
@@ -335,6 +530,7 @@ export function usePostActions({
           body: JSON.stringify({ choice }),
         })
         const json = await response.json()
+        if (!scopeIsCurrent(capturedScope)) return
         if (response.ok && json.success) {
           const result = json.data
           setPosts((prev) =>
@@ -362,6 +558,7 @@ export function usePostActions({
           showToast(json.error || json.message || t('voteFailed'), 'error')
         }
       } catch (err) {
+        if (!scopeIsCurrent(capturedScope)) return
         logger.error('[PostFeed] toggleVote error:', err)
         showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
@@ -369,12 +566,22 @@ export function usePostActions({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, openPost?.id, openPostAliasesPosts, showToast]
+    [
+      accessToken,
+      captureRenderedScope,
+      openPost?.id,
+      openPostAliasesPosts,
+      scopeIsCurrent,
+      showToast,
+    ]
   )
 
   // Custom poll
   const loadCustomPoll = useCallback(
     async (postId: string) => {
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
+      claimPollScope()
       setLoadingCustomPoll(true)
       setCustomPoll(null)
       setCustomPollUserVotes([])
@@ -384,6 +591,7 @@ export function usePostActions({
         if (accessToken) headers['Authorization'] = `Bearer ${accessToken}`
         const response = await fetch(`/api/posts/${postId}/poll-vote`, { headers })
         const data = await response.json()
+        if (!scopeIsCurrent(capturedScope)) return
         if (response.ok && data.success && data.data?.poll) {
           setCustomPoll(data.data.poll)
           setCustomPollUserVotes(data.data.userVotes || [])
@@ -392,23 +600,26 @@ export function usePostActions({
       } catch {
         /* silent */
       } finally {
-        setLoadingCustomPoll(false)
+        if (scopeIsCurrent(capturedScope)) setLoadingCustomPoll(false)
       }
     },
-    [accessToken]
+    [accessToken, captureRenderedScope, claimPollScope, scopeIsCurrent, setSelectedPollOptions]
   )
 
   const submitCustomPollVote = useCallback(
     async (postId: string) => {
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
       if (!accessToken) {
         const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
-        useLoginModal.getState().openLoginModal()
+        if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
         return
       }
       if (selectedPollOptions.length === 0) {
         showToast(t('selectAtLeastOneOption'), 'warning')
         return
       }
+      claimPollScope()
       setVotingCustomPoll(true)
       try {
         const response = await fetch(`/api/posts/${postId}/poll-vote`, {
@@ -421,6 +632,7 @@ export function usePostActions({
           body: JSON.stringify({ optionIndexes: selectedPollOptions }),
         })
         const data = await response.json()
+        if (!scopeIsCurrent(capturedScope)) return
         if (response.ok && data.success) {
           setCustomPoll((prev) =>
             prev
@@ -438,14 +650,15 @@ export function usePostActions({
           showToast(data.error || t('voteFailed'), 'error')
         }
       } catch (err) {
+        if (!scopeIsCurrent(capturedScope)) return
         logger.error('[PostFeed] custom poll vote failed:', err)
         showToast(t('voteFailed'), 'error')
       } finally {
-        setVotingCustomPoll(false)
+        if (scopeIsCurrent(capturedScope)) setVotingCustomPoll(false)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, selectedPollOptions]
+    [accessToken, captureRenderedScope, claimPollScope, scopeIsCurrent, selectedPollOptions]
   )
 
   // Bookmark (with optimistic update, matching toggleReaction pattern)
@@ -453,13 +666,16 @@ export function usePostActions({
   // guards have a tiny race window because React batches setState calls.
   const handleBookmark = useCallback(
     async (postId: string) => {
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
       if (!accessToken) {
         const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
-        useLoginModal.getState().openLoginModal()
+        if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
         return
       }
-      if (bookmarkLockRef.current.has(postId)) return
-      bookmarkLockRef.current.add(postId)
+      const lockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${postId}`
+      if (bookmarkLockRef.current.has(lockKey)) return
+      bookmarkLockRef.current.add(lockKey)
       setBookmarkLoading((prev) => ({ ...prev, [postId]: true }))
 
       // Save previous state for rollback
@@ -484,6 +700,7 @@ export function usePostActions({
           },
         })
         const result = await response.json()
+        if (!scopeIsCurrent(capturedScope)) return
         if (response.ok) {
           // Reconcile with server state
           setUserBookmarks((prev) => ({ ...prev, [postId]: result.bookmarked }))
@@ -507,13 +724,16 @@ export function usePostActions({
           showToast(result.error || t('operationFailed'), 'error')
         }
       } catch (err) {
+        if (!scopeIsCurrent(capturedScope)) return
         // Rollback on network error
         setUserBookmarks((prev) => ({ ...prev, [postId]: prevBookmarked }))
         setBookmarkCounts((prev) => ({ ...prev, [postId]: prevCount }))
         showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
-        bookmarkLockRef.current.delete(postId)
-        setBookmarkLoading((prev) => ({ ...prev, [postId]: false }))
+        bookmarkLockRef.current.delete(lockKey)
+        if (scopeIsCurrent(capturedScope)) {
+          setBookmarkLoading((prev) => ({ ...prev, [postId]: false }))
+        }
       }
     },
     [
@@ -522,32 +742,39 @@ export function usePostActions({
       t,
       userBookmarks,
       bookmarkCounts,
+      captureRenderedScope,
       openPostAliasesPosts,
       setOpenPost,
       setPosts,
+      scopeIsCurrent,
     ]
   )
 
   const openBookmarkFolderModal = useCallback(
     (postId: string) => {
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
       if (!accessToken) {
         import('@/lib/hooks/useLoginModal').then(({ useLoginModal }) =>
-          useLoginModal.getState().openLoginModal()
+          scopeIsCurrent(capturedScope) ? useLoginModal.getState().openLoginModal() : undefined
         )
         return
       }
       setBookmarkingPostId(postId)
       setShowBookmarkModal(true)
     },
-    [accessToken]
+    [accessToken, captureRenderedScope, scopeIsCurrent, setBookmarkingPostId, setShowBookmarkModal]
   )
 
   const handleBookmarkToFolder = useCallback(
     async (folderId: string) => {
       if (!accessToken || !bookmarkingPostId) return
-      setBookmarkLoading((prev) => ({ ...prev, [bookmarkingPostId]: true }))
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
+      const capturedPostId = bookmarkingPostId
+      setBookmarkLoading((prev) => ({ ...prev, [capturedPostId]: true }))
       try {
-        const response = await fetch(`/api/posts/${bookmarkingPostId}/bookmark`, {
+        const response = await fetch(`/api/posts/${capturedPostId}/bookmark`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -557,45 +784,53 @@ export function usePostActions({
           body: JSON.stringify({ folder_id: folderId }),
         })
         const result = await response.json()
+        if (!scopeIsCurrent(capturedScope)) return
         if (response.ok) {
-          setUserBookmarks((prev) => ({ ...prev, [bookmarkingPostId]: result.bookmarked }))
-          setBookmarkCounts((prev) => ({ ...prev, [bookmarkingPostId]: result.bookmark_count }))
+          setUserBookmarks((prev) => ({ ...prev, [capturedPostId]: result.bookmarked }))
+          setBookmarkCounts((prev) => ({ ...prev, [capturedPostId]: result.bookmark_count }))
           showToast(t('bookmarked'), 'success')
         } else {
           showToast(result.error || t('operationFailed'), 'error')
         }
       } catch (err) {
+        if (!scopeIsCurrent(capturedScope)) return
         showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
-        setBookmarkLoading((prev) => ({ ...prev, [bookmarkingPostId]: false }))
-        setShowBookmarkModal(false)
-        setBookmarkingPostId(null)
+        if (scopeIsCurrent(capturedScope)) {
+          setBookmarkLoading((prev) => ({ ...prev, [capturedPostId]: false }))
+          setShowBookmarkModal(false)
+          setBookmarkingPostId(null)
+        }
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, bookmarkingPostId, showToast]
+    [accessToken, bookmarkingPostId, captureRenderedScope, scopeIsCurrent, showToast]
   )
 
   // Open repost editor — auth-gated so anonymous users get the login modal
   // immediately instead of after composing a repost comment.
   const openRepostModal = useCallback(
     async (postId: string) => {
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
       if (!accessToken) {
         const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
-        useLoginModal.getState().openLoginModal()
+        if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
         return
       }
       setShowRepostModal(postId)
     },
-    [accessToken]
+    [accessToken, captureRenderedScope, scopeIsCurrent, setShowRepostModal]
   )
 
   // Repost
   const handleRepost = useCallback(
     async (postId: string, comment?: string) => {
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
       if (!accessToken) {
         const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
-        useLoginModal.getState().openLoginModal()
+        if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
         return
       }
       const post = posts.find((p) => p.id === postId) || openPost
@@ -603,7 +838,7 @@ export function usePostActions({
         showToast(t('cannotRepostOwn'), 'warning')
         return
       }
-      const key = `repost-${postId}`
+      const key = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000repost-${postId}`
       if (lockRef.current.has(key)) return
       lockRef.current.add(key)
       setRepostLoading((prev) => ({ ...prev, [postId]: true }))
@@ -618,6 +853,7 @@ export function usePostActions({
           body: JSON.stringify({ comment }),
         })
         const result = await response.json()
+        if (!scopeIsCurrent(capturedScope)) return
         if (response.ok) {
           if (typeof result.repost_count === 'number') {
             const rootPostId =
@@ -640,21 +876,35 @@ export function usePostActions({
           showToast(result.error || t('repostFailed'), 'error')
         }
       } catch (err) {
+        if (!scopeIsCurrent(capturedScope)) return
         logger.error('[PostFeed] repost failed:', err)
         showToast(getNetworkErrorMessage(err, t), 'error')
       } finally {
-        setRepostLoading((prev) => ({ ...prev, [postId]: false }))
+        if (scopeIsCurrent(capturedScope)) {
+          setRepostLoading((prev) => ({ ...prev, [postId]: false }))
+        }
         lockRef.current.delete(key)
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accessToken, posts, openPost, currentUserId, showToast, openPostAliasesPosts]
+    [
+      accessToken,
+      captureRenderedScope,
+      posts,
+      openPost,
+      currentUserId,
+      scopeIsCurrent,
+      showToast,
+      openPostAliasesPosts,
+    ]
   )
 
   // Load user bookmarks
   const loadUserBookmarksAndReposts = useCallback(
     async (postIds: string[]) => {
       if (!accessToken || postIds.length === 0) return
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
       try {
         const res = await fetch('/api/posts/bookmarks/status', {
           method: 'POST',
@@ -666,12 +916,13 @@ export function usePostActions({
           body: JSON.stringify({ postIds }),
         })
         const data = await res.json()
+        if (!scopeIsCurrent(capturedScope)) return
         setUserBookmarks((prev) => ({ ...prev, ...(data.bookmarks || {}) }))
       } catch {
         // Bookmark status fetch is non-critical — silently ignore
       }
     },
-    [accessToken]
+    [accessToken, captureRenderedScope, scopeIsCurrent, setUserBookmarks]
   )
 
   // Edit
@@ -684,53 +935,60 @@ export function usePostActions({
   )
 
   const handleSaveEdit = useCallback(async () => {
+    const capturedScope = captureRenderedScope()
+    if (!scopeIsCurrent(capturedScope)) return
     if (!editingPost || !accessToken) return
     if (!editTitle.trim()) {
       showToast(t('titleRequired'), 'warning')
       return
     }
+    const capturedPost = editingPost
+    const capturedTitle = editTitle.trim()
+    const capturedContent = editContent.trim()
     setSavingEdit(true)
     try {
-      const response = await fetch(`/api/posts/${editingPost.id}/edit`, {
+      const response = await fetch(`/api/posts/${capturedPost.id}/edit`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${accessToken}`,
           ...getCsrfHeaders(),
         },
-        body: JSON.stringify({ title: editTitle.trim(), content: editContent.trim() }),
+        body: JSON.stringify({ title: capturedTitle, content: capturedContent }),
       })
       const data = await response.json()
+      if (!scopeIsCurrent(capturedScope)) return
       if (response.ok) {
         setPosts((prev) =>
           prev.map((p) =>
-            p.id === editingPost.id
-              ? { ...p, title: editTitle.trim(), content: editContent.trim() }
-              : p
+            p.id === capturedPost.id ? { ...p, title: capturedTitle, content: capturedContent } : p
           )
         )
         const op = openPostRef.current
-        if (!openPostAliasesPosts && op?.id === editingPost.id)
-          setOpenPost({ ...op, title: editTitle.trim(), content: editContent.trim() })
+        if (!openPostAliasesPosts && op?.id === capturedPost.id)
+          setOpenPost({ ...op, title: capturedTitle, content: capturedContent })
         setEditingPost(null)
         showToast(t('editSaved'), 'success')
       } else {
         showToast(data.error || t('editFailed'), 'error')
       }
     } catch (err) {
+      if (!scopeIsCurrent(capturedScope)) return
       logger.error('[PostFeed] edit failed:', err)
       showToast(t('editFailed'), 'error')
     } finally {
-      setSavingEdit(false)
+      if (scopeIsCurrent(capturedScope)) setSavingEdit(false)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- stable refs t, setPosts, setOpenPost excluded to avoid re-creating callback
   }, [
     editingPost,
     accessToken,
+    captureRenderedScope,
     editTitle,
     editContent,
     openPost?.id,
     openPostAliasesPosts,
+    scopeIsCurrent,
     showToast,
   ])
 
@@ -738,17 +996,21 @@ export function usePostActions({
   const handleDeletePost = useCallback(
     async (post: Post, e: React.MouseEvent) => {
       e.stopPropagation()
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
       if (!accessToken) {
         showToast(t('pleaseLogin'), 'warning')
         return
       }
       if (!(await showDangerConfirm(t('deletePost'), t('deletePostConfirm')))) return
+      if (!scopeIsCurrent(capturedScope)) return
       try {
         const response = await fetch(`/api/posts/${post.id}/delete`, {
           method: 'DELETE',
           headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
         })
         const data = await response.json()
+        if (!scopeIsCurrent(capturedScope)) return
         if (response.ok) {
           setPosts((prev) => prev.filter((p) => p.id !== post.id))
           if (openPost?.id === post.id) setOpenPost(null)
@@ -757,16 +1019,29 @@ export function usePostActions({
           showToast(data.error || t('deleteFailed'), 'error')
         }
       } catch {
+        if (!scopeIsCurrent(capturedScope)) return
         showToast(t('deleteFailed'), 'error')
       }
     },
-    [accessToken, openPost?.id, setOpenPost, setPosts, showDangerConfirm, showToast, t]
+    [
+      accessToken,
+      captureRenderedScope,
+      openPost?.id,
+      scopeIsCurrent,
+      setOpenPost,
+      setPosts,
+      showDangerConfirm,
+      showToast,
+      t,
+    ]
   )
 
   // Pin
   const handleTogglePin = useCallback(
     async (post: Post, e: React.MouseEvent) => {
       e.stopPropagation()
+      const capturedScope = captureRenderedScope()
+      if (!scopeIsCurrent(capturedScope)) return
       if (!accessToken) {
         showToast(t('pleaseLogin'), 'warning')
         return
@@ -777,6 +1052,7 @@ export function usePostActions({
           headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
         })
         const data = await response.json()
+        if (!scopeIsCurrent(capturedScope)) return
         if (response.ok && data.success) {
           setPosts((prev) =>
             prev.map((p) => {
@@ -790,20 +1066,21 @@ export function usePostActions({
           showToast(data.error || t('operationFailed'), 'error')
         }
       } catch {
+        if (!scopeIsCurrent(capturedScope)) return
         showToast(t('operationFailed'), 'error')
       }
     },
-    [accessToken, setPosts, showToast, t]
+    [accessToken, captureRenderedScope, scopeIsCurrent, setPosts, showToast, t]
   )
 
   return {
     toggleReaction,
     _toggleVote,
-    customPoll,
-    customPollUserVotes,
-    loadingCustomPoll,
-    votingCustomPoll,
-    selectedPollOptions,
+    customPoll: pollOwnerScopeKeyRef.current === scopeKey ? customPoll : null,
+    customPollUserVotes: pollOwnerScopeKeyRef.current === scopeKey ? customPollUserVotes : [],
+    loadingCustomPoll: pollOwnerScopeKeyRef.current === scopeKey ? loadingCustomPoll : false,
+    votingCustomPoll: pollOwnerScopeKeyRef.current === scopeKey ? votingCustomPoll : false,
+    selectedPollOptions: pollOwnerScopeKeyRef.current === scopeKey ? selectedPollOptions : [],
     setSelectedPollOptions,
     loadCustomPoll,
     submitCustomPollVote,

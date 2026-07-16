@@ -64,9 +64,58 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
   const auth = useAuthSession()
   const accessToken = auth.accessToken
   const currentUserId = auth.userId
+  const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
+  const authScopeRef = useRef({
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+  })
+  authScopeRef.current = {
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+  }
 
   // Single post state, seeded from the server-rendered prop (no flash).
-  const [post, setPost] = useState<Post>(() => toUserStatePost(initialPost))
+  const [postState, setPostState] = useState<Post>(() => toUserStatePost(initialPost))
+  const postOwnerScopeKeyRef = useRef<string | null>(null)
+  const postFieldRevisionRef = useRef({
+    like: 0,
+    comment: 0,
+    bookmark: 0,
+    vote: 0,
+  })
+  const post =
+    postOwnerScopeKeyRef.current === null || postOwnerScopeKeyRef.current === scopeKey
+      ? postState
+      : { ...postState, user_reaction: null, user_vote: null }
+  const setPost = useCallback<React.Dispatch<React.SetStateAction<Post>>>((action) => {
+    setPostState((previous) => {
+      const current = authScopeRef.current
+      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+      const ownedPrevious =
+        postOwnerScopeKeyRef.current === null || postOwnerScopeKeyRef.current === ownerScopeKey
+          ? previous
+          : { ...previous, user_reaction: null, user_vote: null }
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      if (
+        next.like_count !== ownedPrevious.like_count ||
+        next.dislike_count !== ownedPrevious.dislike_count ||
+        next.user_reaction !== ownedPrevious.user_reaction
+      ) {
+        postFieldRevisionRef.current.like += 1
+      }
+      if (next.comment_count !== ownedPrevious.comment_count) {
+        postFieldRevisionRef.current.comment += 1
+      }
+      if (next.bookmark_count !== ownedPrevious.bookmark_count) {
+        postFieldRevisionRef.current.bookmark += 1
+      }
+      if (next.user_vote !== ownedPrevious.user_vote) {
+        postFieldRevisionRef.current.vote += 1
+      }
+      postOwnerScopeKeyRef.current = ownerScopeKey
+      return next
+    })
+  }, [])
 
   // View-count tracking (client-side; do NOT rely on a server increment under ISR).
   useEffect(() => {
@@ -94,16 +143,8 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
     [router]
   )
 
-  // Comments hook (single post)
-  const commentsHook = usePostComments({
-    accessToken,
-    currentUserId,
-    authChecked: auth.authChecked,
-    viewerKey: auth.viewerKey,
-    sessionGeneration: auth.sessionGeneration,
-    showToast,
-    showDangerConfirm,
-    onCommentCountChange: (postId, delta, absoluteCount) => {
+  const handleCommentCountChange = useCallback(
+    (postId: string, delta: number, absoluteCount?: number) => {
       setPost((prev) =>
         prev.id === postId
           ? {
@@ -113,6 +154,19 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
           : prev
       )
     },
+    [setPost]
+  )
+
+  // Comments hook (single post)
+  const commentsHook = usePostComments({
+    accessToken,
+    currentUserId,
+    authChecked: auth.authChecked,
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
+    showToast,
+    showDangerConfirm,
+    onCommentCountChange: handleCommentCountChange,
     t,
   })
   const { comments, loadComments } = commentsHook
@@ -133,6 +187,8 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
   const actions = usePostActions({
     accessToken,
     currentUserId,
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
     posts: [post],
     setPosts,
     openPost: post,
@@ -147,20 +203,13 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
   // has no viewer state), comments, bookmarks, and any custom poll — after mount.
   const hydratedScopeKeyRef = useRef<string | null>(null)
   const hydrationGenerationRef = useRef(0)
-  const authScopeRef = useRef({
-    viewerKey: auth.viewerKey,
-    sessionGeneration: auth.sessionGeneration,
-  })
-  authScopeRef.current = {
-    viewerKey: auth.viewerKey,
-    sessionGeneration: auth.sessionGeneration,
-  }
   useEffect(() => {
     if (!auth.authChecked) return
     const scopeKey = `${auth.viewerKey}\u0000${auth.sessionGeneration}`
     if (hydratedScopeKeyRef.current === scopeKey) return
     hydratedScopeKeyRef.current = scopeKey
     const generation = ++hydrationGenerationRef.current
+    const hydrationRevision = { ...postFieldRevisionRef.current }
 
     loadComments(initialPost.id)
     if (post.poll_id) actions.loadCustomPoll(initialPost.id)
@@ -190,16 +239,28 @@ export default function PostDetailPageBody({ post: initialPost }: { post: PostWi
         const data = result.data
         if (data?.success && data.data?.post) {
           const p = data.data.post
+          const applyBookmarkHydration =
+            postFieldRevisionRef.current.bookmark === hydrationRevision.bookmark
           setPost((prev) => ({
             ...prev,
-            like_count: p.like_count ?? prev.like_count,
-            dislike_count: p.dislike_count ?? prev.dislike_count,
-            comment_count: p.comment_count ?? prev.comment_count,
-            bookmark_count: p.bookmark_count ?? prev.bookmark_count,
-            user_reaction: p.user_reaction,
-            user_vote: p.user_vote,
+            ...(postFieldRevisionRef.current.like === hydrationRevision.like
+              ? {
+                  like_count: p.like_count ?? prev.like_count,
+                  dislike_count: p.dislike_count ?? prev.dislike_count,
+                  user_reaction: p.user_reaction,
+                }
+              : {}),
+            ...(postFieldRevisionRef.current.comment === hydrationRevision.comment
+              ? { comment_count: p.comment_count ?? prev.comment_count }
+              : {}),
+            ...(postFieldRevisionRef.current.bookmark === hydrationRevision.bookmark
+              ? { bookmark_count: p.bookmark_count ?? prev.bookmark_count }
+              : {}),
+            ...(postFieldRevisionRef.current.vote === hydrationRevision.vote
+              ? { user_vote: p.user_vote }
+              : {}),
           }))
-          if (typeof p.bookmark_count === 'number') {
+          if (applyBookmarkHydration && typeof p.bookmark_count === 'number') {
             actions.setBookmarkCounts((prev) => ({ ...prev, [initialPost.id]: p.bookmark_count }))
           }
         }
