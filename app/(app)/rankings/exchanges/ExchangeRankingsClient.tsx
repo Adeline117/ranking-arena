@@ -24,6 +24,11 @@ import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import DerivedBoardBadge from '@/app/components/common/DerivedBoardBadge'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
 import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
+import {
+  formatExchangeMoney,
+  formatExchangePercent,
+  formatExchangeTraderCount,
+} from '@/lib/rankings/exchange-format'
 import type {
   ExchangeRankingRow,
   ExchangeRankings,
@@ -38,21 +43,6 @@ const PRODUCT_I18N = {
   cfd: 'exchangeRankingsProductCfd',
   onchain: 'exchangeRankingsProductOnchain',
 } as const
-
-function fmtPct(v: number | null, signed = false): string {
-  if (v === null) return '—'
-  const sign = signed && v > 0 ? '+' : ''
-  return `${sign}${v.toLocaleString(undefined, { maximumFractionDigits: 1 })}%`
-}
-
-function fmtMoney(value: number, currency: string): string {
-  const sign = value > 0 ? '+' : ''
-  const compact = new Intl.NumberFormat('en', {
-    notation: 'compact',
-    maximumFractionDigits: 1,
-  }).format(value)
-  return `${sign}${compact} ${currency}`
-}
 
 const TH_STYLE: React.CSSProperties = {
   padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -417,12 +407,12 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
                         {row.provenance.derived && <DerivedBoardBadge />}
                       </Box>
                     </td>
-                    <td style={TD_STYLE}>{row.rankedTraders.toLocaleString()}</td>
+                    <td style={TD_STYLE}>{formatExchangeTraderCount(row.rankedTraders)}</td>
                     <td style={TD_STYLE}>
                       <Metric
                         value={row.medianRoi}
                         format="roi"
-                        display={fmtPct(row.medianRoi, true)}
+                        display={formatExchangePercent(row.medianRoi, true)}
                         showArrow
                         size="sm"
                         as="span"
@@ -432,19 +422,19 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
                       <Metric
                         value={row.topDecileRoi}
                         format="roi"
-                        display={fmtPct(row.topDecileRoi, true)}
+                        display={formatExchangePercent(row.topDecileRoi, true)}
                         showArrow
                         size="sm"
                         as="span"
                       />
                     </td>
-                    <td style={TD_STYLE}>{fmtPct(row.pctProfitable)}</td>
+                    <td style={TD_STYLE}>{formatExchangePercent(row.pctProfitable)}</td>
                     <td style={TD_STYLE}>
                       {row.copierPnl ? (
                         <Metric
                           value={row.copierPnl.value}
                           format="pnl"
-                          display={fmtMoney(row.copierPnl.value, row.copierPnl.currency)}
+                          display={formatExchangeMoney(row.copierPnl.value, row.copierPnl.currency)}
                           showArrow
                           size="sm"
                           as="span"
@@ -453,7 +443,7 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
                         '—'
                       )}
                     </td>
-                    <td style={TD_STYLE}>{fmtPct(row.botShare)}</td>
+                    <td style={TD_STYLE}>{formatExchangePercent(row.botShare)}</td>
                     <td style={{ ...TD_STYLE, color: 'var(--color-text-tertiary)' }}>
                       <time
                         dateTime={row.provenance.asOf}
