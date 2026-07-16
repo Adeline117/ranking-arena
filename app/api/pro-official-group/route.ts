@@ -1,139 +1,337 @@
 /**
  * Pro 会员官方群 API
- * 自动加入/查询官方群
+ * 自动加入、查询和退出官方群。
  *
- * 历史：本路由曾调用 RPC get_user_pro_official_group / join_pro_official_group /
- * leave_pro_official_group，但这些函数从未存在过（仓库无迁移，prod 也没有）——
- * 实际一直走的是 TS fallback 路径。2026-06-12 起表由迁移
- * 20260612144445_create_pro_official_groups_tables.sql 正式创建，
- * fallback 转正为唯一实现，RPC 调用全部移除。
+ * 官方 registry、普通 group_members、容量分配与两个计数器都由数据库
+ * 原子 RPC 维护。本文件只验证严格 acknowledgement 并映射既有 HTTP 响应。
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { verifyAuth } from '@/lib/api/auth'
-import { hasFeatureAccess } from '@/lib/premium'
+import { sendNotification } from '@/lib/data/notifications'
+import { socialFeatureGuard } from '@/lib/features'
+import type { Database } from '@/lib/supabase/database.types'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
-import { socialFeatureGuard } from '@/lib/features'
-import { sendNotification } from '@/lib/data/notifications'
 
 const logger = createLogger('pro-official-group')
-
-// 群主邮箱
 const OWNER_EMAIL = 'adelinewen1107@outlook.com'
-const MAX_MEMBERS_PER_GROUP = 500
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
-function admin(): SupabaseClient {
-  return getSupabaseAdmin() as SupabaseClient
+type GetOfficialGroupAcknowledgement =
+  | { status: 'invalid' | 'pro_required' | 'not_member' }
+  | {
+      status: 'found'
+      proGroupId: string
+      groupId: string
+      groupNumber: number
+      currentMemberCount: number
+      isActive: boolean
+      joinedAt: string
+    }
+
+type JoinOfficialGroupFailureStatus =
+  | 'invalid'
+  | 'account_inactive'
+  | 'pro_required'
+  | 'owner_not_found'
+  | 'group_unavailable'
+  | 'group_full'
+  | 'banned'
+
+type JoinOfficialGroupAcknowledgement =
+  | { status: JoinOfficialGroupFailureStatus }
+  | {
+      status: 'joined' | 'already_member'
+      proGroupId: string
+      groupId: string
+      groupNumber: number
+      officialMemberCount: number
+      registryMemberCount: number
+      groupMemberCount: number
+    }
+
+type LeaveOfficialGroupAcknowledgement =
+  | { status: 'invalid' | 'not_member' }
+  | {
+      status: 'left'
+      proGroupId: string
+      groupId: string
+      officialMemberCount: number
+      registryMemberCount: number
+      groupMemberCount: number
+    }
+
+const joinFailureStatuses = new Set<JoinOfficialGroupFailureStatus>([
+  'invalid',
+  'account_inactive',
+  'pro_required',
+  'owner_not_found',
+  'group_unavailable',
+  'group_full',
+  'banned',
+])
+
+function admin(): SupabaseClient<Database> {
+  return getSupabaseAdmin()
 }
 
-/**
- * 原子维护 pro_official_groups.current_member_count。
- *
- * 首选：adjust_pro_group_member_count(p_group_id, p_delta) RPC —— 单条
- * UPDATE ... SET current_member_count = GREATEST(current_member_count + delta, 0)，
- * SQL 层原子（迁移 20260612154954_adjust_pro_group_member_count_rpc.sql）。
- *
- * 兜底：迁移未应用时（PGRST202/42883），降级为 recount —— SELECT count(*) 后
- * UPDATE 为精确值。非原子，但官方群 ≤500 人、写入仅来自 Stripe webhook 与
- * 本路由（低频低竞争），且 recount 写入的是绝对值而非增量，并发下最多短暂
- * 偏差、下次调用即自愈 —— 最终一致可接受。
- */
-async function adjustMemberCount(proGroupId: string, delta: number): Promise<void> {
-  const { error } = await admin().rpc('adjust_pro_group_member_count', {
-    p_group_id: proGroupId,
-    p_delta: delta,
-  })
-  if (!error) return
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const actual = Object.keys(value).sort()
+  const canonicalExpected = [...expected].sort()
+  return (
+    actual.length === canonicalExpected.length &&
+    actual.every((key, index) => key === canonicalExpected[index])
+  )
+}
 
-  const missingFn =
-    error.code === 'PGRST202' || error.code === '42883' || /function/i.test(error.message || '')
-  if (!missingFn) {
-    logger.warn('adjust_pro_group_member_count RPC 失败，降级 recount', { error, proGroupId })
+function readUuid(value: unknown): string | null {
+  return typeof value === 'string' && UUID_PATTERN.test(value) ? value.toLowerCase() : null
+}
+
+function isTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+}
+
+function isIntegerBetween(value: unknown, minimum: number, maximum: number): value is number {
+  return Number.isSafeInteger(value) && (value as number) >= minimum && (value as number) <= maximum
+}
+
+function readGetOfficialGroupAcknowledgement(
+  value: unknown
+): GetOfficialGroupAcknowledgement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const result = value as Record<string, unknown>
+
+  if (
+    (result.status === 'invalid' ||
+      result.status === 'pro_required' ||
+      result.status === 'not_member') &&
+    hasExactKeys(result, ['status'])
+  ) {
+    return { status: result.status }
   }
 
-  // recount 兜底
-  const { count, error: countError } = await admin()
-    .from('pro_official_group_members')
-    .select('id', { count: 'exact', head: true })
-    .eq('pro_group_id', proGroupId)
-
-  if (countError || count === null || count === undefined) {
-    logger.error('member recount 失败，计数未更新', { error: countError, proGroupId })
-    return
+  if (
+    result.status !== 'found' ||
+    !hasExactKeys(result, [
+      'current_member_count',
+      'group_id',
+      'group_number',
+      'is_active',
+      'joined_at',
+      'pro_group_id',
+      'status',
+    ])
+  ) {
+    return null
   }
 
-  const { error: updateError } = await admin()
-    .from('pro_official_groups')
-    .update({ current_member_count: count })
-    .eq('id', proGroupId)
+  const proGroupId = readUuid(result.pro_group_id)
+  const groupId = readUuid(result.group_id)
+  if (
+    !proGroupId ||
+    !groupId ||
+    !isIntegerBetween(result.group_number, 1, Number.MAX_SAFE_INTEGER) ||
+    !isIntegerBetween(result.current_member_count, 0, 500) ||
+    typeof result.is_active !== 'boolean' ||
+    !isTimestamp(result.joined_at)
+  ) {
+    return null
+  }
 
-  if (updateError) {
-    logger.error('current_member_count 更新失败', { error: updateError, proGroupId })
+  return {
+    status: 'found',
+    proGroupId,
+    groupId,
+    groupNumber: result.group_number,
+    currentMemberCount: result.current_member_count,
+    isActive: result.is_active,
+    joinedAt: result.joined_at,
   }
 }
 
-/**
- * GET - 获取当前用户的官方群信息
- */
+function readJoinOfficialGroupAcknowledgement(
+  value: unknown
+): JoinOfficialGroupAcknowledgement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const result = value as Record<string, unknown>
+
+  if (
+    typeof result.status === 'string' &&
+    joinFailureStatuses.has(result.status as JoinOfficialGroupFailureStatus) &&
+    hasExactKeys(result, ['status'])
+  ) {
+    return { status: result.status as JoinOfficialGroupFailureStatus }
+  }
+
+  if (
+    (result.status !== 'joined' && result.status !== 'already_member') ||
+    !hasExactKeys(result, [
+      'group_id',
+      'group_member_count',
+      'group_number',
+      'official_member_count',
+      'pro_group_id',
+      'registry_member_count',
+      'status',
+    ])
+  ) {
+    return null
+  }
+
+  const proGroupId = readUuid(result.pro_group_id)
+  const groupId = readUuid(result.group_id)
+  if (
+    !proGroupId ||
+    !groupId ||
+    !isIntegerBetween(result.group_number, 1, Number.MAX_SAFE_INTEGER) ||
+    !isIntegerBetween(result.official_member_count, 0, 500) ||
+    !isIntegerBetween(result.registry_member_count, 0, 500) ||
+    !isIntegerBetween(result.group_member_count, 1, 501) ||
+    result.official_member_count !== result.registry_member_count ||
+    result.group_member_count !== (result.official_member_count as number) + 1
+  ) {
+    return null
+  }
+
+  return {
+    status: result.status,
+    proGroupId,
+    groupId,
+    groupNumber: result.group_number,
+    officialMemberCount: result.official_member_count,
+    registryMemberCount: result.registry_member_count,
+    groupMemberCount: result.group_member_count,
+  }
+}
+
+function readLeaveOfficialGroupAcknowledgement(
+  value: unknown
+): LeaveOfficialGroupAcknowledgement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const result = value as Record<string, unknown>
+
+  if (
+    (result.status === 'invalid' || result.status === 'not_member') &&
+    hasExactKeys(result, ['status'])
+  ) {
+    return { status: result.status }
+  }
+
+  if (
+    result.status !== 'left' ||
+    !hasExactKeys(result, [
+      'group_id',
+      'group_member_count',
+      'official_member_count',
+      'pro_group_id',
+      'registry_member_count',
+      'status',
+    ])
+  ) {
+    return null
+  }
+
+  const proGroupId = readUuid(result.pro_group_id)
+  const groupId = readUuid(result.group_id)
+  if (
+    !proGroupId ||
+    !groupId ||
+    !isIntegerBetween(result.official_member_count, 0, 500) ||
+    !isIntegerBetween(result.registry_member_count, 0, 500) ||
+    !isIntegerBetween(result.group_member_count, 1, 501) ||
+    result.official_member_count !== result.registry_member_count ||
+    result.group_member_count !== (result.official_member_count as number) + 1
+  ) {
+    return null
+  }
+
+  return {
+    status: 'left',
+    proGroupId,
+    groupId,
+    officialMemberCount: result.official_member_count,
+    registryMemberCount: result.registry_member_count,
+    groupMemberCount: result.group_member_count,
+  }
+}
+
+async function getOfficialOwnerId(): Promise<string | null> {
+  const { data, error } = await admin()
+    .from('user_profiles')
+    .select('id')
+    .eq('email', OWNER_EMAIL)
+    .maybeSingle()
+
+  if (error) {
+    logger.error('官方群群主账号查询失败', { code: error.code })
+    throw new Error('official_owner_lookup_failed')
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null
+
+  if (!hasExactKeys(data, ['id'])) return null
+  return readUuid(data.id)
+}
+
+/** GET - 获取当前用户的官方群信息。 */
 export async function GET(request: NextRequest) {
   const guard = socialFeatureGuard()
   if (guard) return guard
 
   try {
-    // 验证用户
     const authResult = await verifyAuth(request)
     if ('error' in authResult) {
       return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
 
-    const { user, tier } = authResult
+    const { data, error } = await admin().rpc('get_pro_official_group_atomic', {
+      p_actor_id: authResult.user.id,
+    })
+    if (error) {
+      logger.error('Failed to fetch group info', {
+        code: error.code,
+        userId: authResult.user.id,
+      })
+      return NextResponse.json({ error: 'Failed to fetch group info' }, { status: 500 })
+    }
 
-    // 检查是否为 Pro 会员
-    if (!hasFeatureAccess(tier, 'premium_groups')) {
+    const acknowledgement = readGetOfficialGroupAcknowledgement(data)
+    if (!acknowledgement) {
+      logger.error('Atomic official-group GET returned an invalid acknowledgement', {
+        userId: authResult.user.id,
+      })
+      return NextResponse.json({ error: 'Failed to fetch group info' }, { status: 500 })
+    }
+
+    if (acknowledgement.status === 'pro_required') {
       return NextResponse.json(
         { error: 'Pro membership required', code: 'PRO_REQUIRED' },
         { status: 403 }
       )
     }
-
-    // 查询用户的官方群成员记录（每用户至多一条，UNIQUE(user_id)）
-    const { data: membership, error: membershipError } = await admin()
-      .from('pro_official_group_members')
-      .select('pro_group_id, created_at')
-      .eq('user_id', user.id)
-      .maybeSingle()
-
-    if (membershipError) {
-      logger.error('Failed to fetch group info', { error: membershipError, userId: user.id })
+    if (acknowledgement.status === 'invalid') {
+      logger.error('Atomic official-group GET rejected an authenticated actor id')
       return NextResponse.json({ error: 'Failed to fetch group info' }, { status: 500 })
     }
-
-    if (!membership) {
+    if (acknowledgement.status === 'not_member') {
       return NextResponse.json({ success: true, data: null })
     }
-
-    const { data: proGroup, error: groupError } = await admin()
-      .from('pro_official_groups')
-      .select('group_id, group_number, current_member_count, is_active')
-      .eq('id', membership.pro_group_id)
-      .single()
-
-    if (groupError) {
-      logger.error('Failed to fetch group info', { error: groupError, userId: user.id })
+    if (acknowledgement.status !== 'found') {
+      logger.error('Atomic official-group GET returned an unknown status')
       return NextResponse.json({ error: 'Failed to fetch group info' }, { status: 500 })
     }
 
     return NextResponse.json({
       success: true,
       data: {
-        group_id: proGroup.group_id,
-        group_number: proGroup.group_number,
-        current_member_count: proGroup.current_member_count,
-        is_active: proGroup.is_active,
-        joined_at: membership.created_at,
+        group_id: acknowledgement.groupId,
+        group_number: acknowledgement.groupNumber,
+        current_member_count: acknowledgement.currentMemberCount,
+        is_active: acknowledgement.isActive,
+        joined_at: acknowledgement.joinedAt,
       },
     })
   } catch (error: unknown) {
@@ -142,9 +340,7 @@ export async function GET(request: NextRequest) {
   }
 }
 
-/**
- * POST - 加入官方群（成为 Pro 会员时调用）
- */
+/** POST - 加入官方群（成为 Pro 会员时调用）。 */
 export async function POST(request: NextRequest) {
   const guard = socialFeatureGuard()
   if (guard) return guard
@@ -153,26 +349,25 @@ export async function POST(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    // 验证用户
     const authResult = await verifyAuth(request)
     if ('error' in authResult) {
       return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
 
-    const { user, tier } = authResult
-
-    // 检查是否为 Pro 会员
-    if (!hasFeatureAccess(tier, 'premium_groups')) {
-      return NextResponse.json(
-        { error: 'Pro membership required', code: 'PRO_REQUIRED' },
-        { status: 403 }
-      )
-    }
-
-    const result = await joinProOfficialGroup(user.id)
-
+    const result = await joinProOfficialGroup(authResult.user.id)
     if (!result.success) {
-      return NextResponse.json({ error: result.message || 'Failed to join group' }, { status: 500 })
+      if (result.message === 'pro_required') {
+        return NextResponse.json(
+          { error: 'Pro membership required', code: 'PRO_REQUIRED' },
+          { status: 403 }
+        )
+      }
+
+      const denied = result.message === 'account_inactive' || result.message === 'banned'
+      return NextResponse.json(
+        { error: result.message || 'Failed to join group' },
+        { status: denied ? 403 : 500 }
+      )
     }
 
     return NextResponse.json({
@@ -189,9 +384,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-/**
- * DELETE - 离开官方群（取消订阅时调用）
- */
+/** DELETE - 离开官方群（取消订阅时调用）。 */
 export async function DELETE(request: NextRequest) {
   const guard = socialFeatureGuard()
   if (guard) return guard
@@ -200,16 +393,12 @@ export async function DELETE(request: NextRequest) {
   if (rateLimitResp) return rateLimitResp
 
   try {
-    // 验证用户
     const authResult = await verifyAuth(request)
     if ('error' in authResult) {
       return NextResponse.json({ error: authResult.error }, { status: authResult.status })
     }
 
-    const { user } = authResult
-
-    const left = await leaveProOfficialGroup(user.id)
-
+    const left = await leaveProOfficialGroup(authResult.user.id)
     return NextResponse.json({
       success: true,
       message: left ? 'Left Pro official group' : 'You are not in the Pro official group',
@@ -220,197 +409,52 @@ export async function DELETE(request: NextRequest) {
   }
 }
 
-/**
- * 服务端函数：自动加入官方群（供 webhook 调用）
- */
+/** 服务端函数：自动加入官方群（供 webhook 调用）。 */
 export async function joinProOfficialGroup(userId: string): Promise<{
   success: boolean
   message: string
   groupId?: string
 }> {
+  const actorId = readUuid(userId)
+  if (!actorId) return { success: false, message: 'invalid' }
+
   try {
-    // 检查用户是否已在官方群
-    const { data: existingMembership } = await admin()
-      .from('pro_official_group_members')
-      .select('pro_group_id')
-      .eq('user_id', userId)
-      .maybeSingle()
+    const ownerId = await getOfficialOwnerId()
+    if (!ownerId) return { success: false, message: 'owner_not_found' }
 
-    if (existingMembership) {
-      const { data: groupInfo } = await admin()
-        .from('pro_official_groups')
-        .select('group_id')
-        .eq('id', existingMembership.pro_group_id)
-        .maybeSingle()
-
-      return {
-        success: true,
-        message: 'already_member',
-        groupId: groupInfo?.group_id,
-      }
+    const { data, error } = await admin().rpc('join_pro_official_group_atomic', {
+      p_actor_id: actorId,
+      p_owner_id: ownerId,
+    })
+    if (error) {
+      logger.error('官方群原子加入失败', { code: error.code, userId: actorId })
+      return { success: false, message: 'atomic_join_failed' }
     }
 
-    // 获取可用的群（is_active 且未满 500 人，序号最小优先）
-    const { data: availableGroup } = await admin()
-      .from('pro_official_groups')
-      .select('id, group_id')
-      .eq('is_active', true)
-      .lt('current_member_count', MAX_MEMBERS_PER_GROUP)
-      .order('group_number', { ascending: true })
-      .limit(1)
-      .maybeSingle()
-
-    let proGroupId: string
-    let groupId: string
-
-    if (availableGroup) {
-      proGroupId = availableGroup.id
-      groupId = availableGroup.group_id
-    } else {
-      // 需要创建新群
-      const result = await createNewProOfficialGroup()
-      if (!result.success || !result.proGroupId || !result.groupId) {
-        return { success: false, message: 'failed_to_create_group' }
-      }
-      proGroupId = result.proGroupId
-      groupId = result.groupId
+    const acknowledgement = readJoinOfficialGroupAcknowledgement(data)
+    if (!acknowledgement) {
+      logger.error('官方群原子加入返回无效 acknowledgement', { userId: actorId })
+      return { success: false, message: 'malformed_result' }
+    }
+    if (acknowledgement.status !== 'joined' && acknowledgement.status !== 'already_member') {
+      return { success: false, message: acknowledgement.status }
     }
 
-    // 加入官方群记录（UNIQUE(user_id) — 并发重复加入时 23505 优雅降级为重查）
-    const { error: memberError } = await admin()
-      .from('pro_official_group_members')
-      .insert({ user_id: userId, pro_group_id: proGroupId })
-
-    if (memberError) {
-      if (memberError.code === '23505') {
-        const { data: raced } = await admin()
-          .from('pro_official_group_members')
-          .select('pro_group_id')
-          .eq('user_id', userId)
-          .maybeSingle()
-        const { data: racedGroup } = raced
-          ? await admin()
-              .from('pro_official_groups')
-              .select('group_id')
-              .eq('id', raced.pro_group_id)
-              .maybeSingle()
-          : { data: null }
-        return { success: true, message: 'already_member', groupId: racedGroup?.group_id }
-      }
-      logger.error('加入记录失败', { error: memberError, userId })
-      return { success: false, message: memberError.message }
+    if (acknowledgement.status === 'joined') {
+      sendWelcomeNotification(actorId, acknowledgement.groupId)
     }
-
-    // 维护成员计数（原子 RPC + recount 兜底）
-    await adjustMemberCount(proGroupId, 1)
-
-    // 加入 group_members（使用 upsert 处理冲突）
-    await admin().from('group_members').upsert(
-      { group_id: groupId, user_id: userId, role: 'member' },
-      {
-        onConflict: 'group_id,user_id',
-      }
-    )
-
-    // 发送欢迎通知
-    sendWelcomeNotification(userId, groupId)
-
-    return { success: true, message: 'joined', groupId }
+    return {
+      success: true,
+      message: acknowledgement.status,
+      groupId: acknowledgement.groupId,
+    }
   } catch (error: unknown) {
-    logger.error('joinProOfficialGroup error', { error, userId })
+    logger.error('joinProOfficialGroup error', { error, userId: actorId })
     return { success: false, message: 'server_error' }
   }
 }
 
-/**
- * 创建新的官方群
- */
-async function createNewProOfficialGroup(): Promise<{
-  success: boolean
-  proGroupId?: string
-  groupId?: string
-}> {
-  try {
-    // 获取群主 ID
-    const { data: owner } = await admin()
-      .from('user_profiles')
-      .select('id')
-      .eq('email', OWNER_EMAIL)
-      .single()
-
-    if (!owner) {
-      logger.error('群主账号不存在', { email: OWNER_EMAIL })
-      return { success: false }
-    }
-
-    // 获取下一个群序号
-    const { data: maxNumber } = await admin()
-      .from('pro_official_groups')
-      .select('group_number')
-      .order('group_number', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-
-    const nextNumber = (maxNumber?.group_number || 0) + 1
-
-    // 创建群组
-    const { data: newGroup, error: groupError } = await admin()
-      .from('groups')
-      .insert({
-        name: `Arena Pro 会员群 #${nextNumber}`,
-        name_en: `Arena Pro Member Group #${nextNumber}`,
-        description:
-          '欢迎加入 Arena Pro 会员专属群！在这里可以与其他 Pro 会员交流心得、获取官方支持。有问题可以直接在群里提问，我们会尽快回复。',
-        description_en:
-          'Welcome to the Arena Pro Member exclusive group! Chat with other Pro members, share tips, and get official support.',
-        created_by: owner.id,
-        visibility: 'private',
-        is_premium_only: true,
-      })
-      .select('id')
-      .single()
-
-    if (groupError || !newGroup) {
-      logger.error('创建群组失败', { error: groupError })
-      return { success: false }
-    }
-
-    // 创建官方群配置
-    const { data: proGroup, error: proGroupError } = await admin()
-      .from('pro_official_groups')
-      .insert({
-        group_id: newGroup.id,
-        group_number: nextNumber,
-      })
-      .select('id')
-      .single()
-
-    if (proGroupError || !proGroup) {
-      logger.error('创建官方群配置失败', { error: proGroupError, groupId: newGroup.id })
-      return { success: false }
-    }
-
-    // 将群主加入群成员
-    await admin()
-      .from('group_members')
-      .insert({ group_id: newGroup.id, user_id: owner.id, role: 'owner' })
-
-    logger.info('创建新群成功', { groupNumber: nextNumber, groupId: newGroup.id })
-
-    return {
-      success: true,
-      proGroupId: proGroup.id,
-      groupId: newGroup.id,
-    }
-  } catch (error: unknown) {
-    logger.error('createNewProOfficialGroup error', { error })
-    return { success: false }
-  }
-}
-
-/**
- * 发送欢迎通知（fire-and-forget + dedup，经由 lib/data/notifications 强制规范）
- */
+/** 发送欢迎通知（fire-and-forget + dedup）。 */
 function sendWelcomeNotification(userId: string, groupId: string) {
   sendNotification(
     admin(),
@@ -427,49 +471,32 @@ function sendWelcomeNotification(userId: string, groupId: string) {
   )
 }
 
-/**
- * 服务端函数：离开官方群（供 webhook 调用）
- */
+/** 服务端函数：离开官方群（供 webhook 调用）。 */
 export async function leaveProOfficialGroup(userId: string): Promise<boolean> {
+  const actorId = readUuid(userId)
+  if (!actorId) throw new Error('invalid_official_group_actor')
+
   try {
-    const { data: membership } = await admin()
-      .from('pro_official_group_members')
-      .select('pro_group_id')
-      .eq('user_id', userId)
-      .maybeSingle()
-
-    if (!membership) return false
-
-    const { data: proGroup } = await admin()
-      .from('pro_official_groups')
-      .select('group_id')
-      .eq('id', membership.pro_group_id)
-      .maybeSingle()
-
-    if (proGroup) {
-      await admin()
-        .from('group_members')
-        .delete()
-        .eq('group_id', proGroup.group_id)
-        .eq('user_id', userId)
+    const { data, error } = await admin().rpc('leave_pro_official_group_atomic', {
+      p_actor_id: actorId,
+    })
+    if (error) {
+      logger.error('官方群原子退出失败', { code: error.code, userId: actorId })
+      throw new Error('atomic_leave_failed')
     }
 
-    const { error: deleteError } = await admin()
-      .from('pro_official_group_members')
-      .delete()
-      .eq('user_id', userId)
-
-    if (deleteError) {
-      logger.error('离开官方群删除记录失败', { error: deleteError, userId })
-      return false
+    const acknowledgement = readLeaveOfficialGroupAcknowledgement(data)
+    if (!acknowledgement) {
+      logger.error('官方群原子退出返回无效 acknowledgement', { userId: actorId })
+      throw new Error('malformed_atomic_leave_result')
     }
+    if (acknowledgement.status === 'left') return true
+    if (acknowledgement.status === 'not_member') return false
 
-    // 维护成员计数（原子 RPC + recount 兜底）
-    await adjustMemberCount(membership.pro_group_id, -1)
-
-    return true
+    logger.error('官方群原子退出拒绝已认证用户 id', { userId: actorId })
+    throw new Error('invalid_atomic_leave_actor')
   } catch (error: unknown) {
-    logger.error('leaveProOfficialGroup error', { error, userId })
-    return false
+    logger.error('leaveProOfficialGroup error', { error, userId: actorId })
+    throw error
   }
 }

@@ -8137,10 +8137,6 @@ export type Database = {
         }
         Returns: Json
       }
-      adjust_pro_group_member_count: {
-        Args: { p_delta: number; p_group_id: string }
-        Returns: undefined
-      }
       archive_old_notifications: { Args: never; Returns: undefined }
       arena_apply_onchain_enrichment: {
         Args: {
@@ -8897,6 +8893,10 @@ export type Database = {
           wallet_address: string
         }[]
       }
+      get_pro_official_group_atomic: {
+        Args: { p_actor_id: string }
+        Returns: Json
+      }
       get_pending_critical_anomalies_count: { Args: never; Returns: number }
       get_personalized_feed: {
         Args: { p_limit?: number; p_offset?: number; p_user_id: string }
@@ -9219,6 +9219,14 @@ export type Database = {
       }
       increment_view_count: { Args: { post_id: string }; Returns: undefined }
       is_group_admin: { Args: { gid: string; uid: string }; Returns: boolean }
+      join_pro_official_group_atomic: {
+        Args: { p_actor_id: string; p_owner_id: string }
+        Returns: Json
+      }
+      leave_pro_official_group_atomic: {
+        Args: { p_actor_id: string }
+        Returns: Json
+      }
       lock_actor_can_interact_with_post: {
         Args: { p_actor_id: string; p_post_id: string }
         Returns: boolean
