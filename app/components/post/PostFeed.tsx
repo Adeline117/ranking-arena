@@ -114,7 +114,19 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
   const [refreshing, setRefreshing] = useState(false)
 
   const feedRefreshTrigger = usePostStore((s) => s.feedRefreshTrigger)
-  const [newPostCount, setNewPostCount] = useState(0)
+  const [newPostCountState, setNewPostCountState] = useState(0)
+  const newPostCountOwnerScopeKeyRef = useRef(feedScopeKey)
+  const newPostCount = newPostCountOwnerScopeKeyRef.current === feedScopeKey ? newPostCountState : 0
+  const setNewPostCount = useCallback<React.Dispatch<React.SetStateAction<number>>>((action) => {
+    setNewPostCountState((previous) => {
+      const current = authScopeRef.current
+      const ownerScopeKey = `${current.viewerKey}\u0000${current.sessionGeneration}`
+      const ownedPrevious = newPostCountOwnerScopeKeyRef.current === ownerScopeKey ? previous : 0
+      const next = typeof action === 'function' ? action(ownedPrevious) : action
+      newPostCountOwnerScopeKeyRef.current = ownerScopeKey
+      return next
+    })
+  }, [])
   const queryClient = useQueryClient()
 
   const pageSize = props.limit || 20
@@ -307,53 +319,83 @@ export default function PostFeed(props: PostFeedProps = {}): React.ReactNode {
 
   // Realtime: listen for new posts and show a "new posts" banner
   const realtimePostIdsRef = useRef(new Set<string>())
-  usePostsRealtime({
-    onInsert: useCallback((newPost: Record<string, unknown>) => {
-      // Only count posts not already in the feed
-      const postId = newPost.id as string
-      if (postId && !realtimePostIdsRef.current.has(postId)) {
-        realtimePostIdsRef.current.add(postId)
-        setNewPostCount((prev) => prev + 1)
-      }
-    }, []),
-    onUpdate: useCallback((payload: { new: Record<string, unknown> }) => {
-      const update = parseRealtimePostCommentCount(payload.new)
-      if (!update) return
+  const realtimePostIdsOwnerScopeKeyRef = useRef(feedScopeKey)
+  if (realtimePostIdsOwnerScopeKeyRef.current !== feedScopeKey) {
+    realtimePostIdsOwnerScopeKeyRef.current = feedScopeKey
+    realtimePostIdsRef.current.clear()
+  }
+  const realtimeScopeKey = `${encodeURIComponent(auth.viewerKey)}:${auth.sessionGeneration}`
+  const isCapturedRealtimeScopeCurrent = useCallback(() => {
+    const current = authScopeRef.current
+    return (
+      current.viewerKey === auth.viewerKey && current.sessionGeneration === auth.sessionGeneration
+    )
+  }, [auth.viewerKey, auth.sessionGeneration])
+  usePostsRealtime(
+    {
+      onInsert: useCallback(
+        (newPost: Record<string, unknown>) => {
+          if (!isCapturedRealtimeScopeCurrent()) return
+          // Only count posts not already in the feed
+          const postId = newPost.id as string
+          if (postId && !realtimePostIdsRef.current.has(postId)) {
+            realtimePostIdsRef.current.add(postId)
+            setNewPostCount((prev) => prev + 1)
+          }
+        },
+        [isCapturedRealtimeScopeCurrent, setNewPostCount]
+      ),
+      onUpdate: useCallback(
+        (payload: { new: Record<string, unknown> }) => {
+          if (!isCapturedRealtimeScopeCurrent()) return
+          const update = parseRealtimePostCommentCount(payload.new)
+          if (!update) return
 
-      // Comment row events do not carry a canonical post count. The posts
-      // UPDATE does, so every surface converges by absolute replacement.
-      setPosts((prev) => applyRealtimePostCommentCount(prev, update))
-      setOpenPost((prev) => {
-        if (!prev || prev.id !== update.postId || prev.comment_count === update.commentCount) {
-          return prev
-        }
-        return { ...prev, comment_count: update.commentCount }
-      })
-      usePostStore.getState().updatePostCommentCount(update.postId, update.commentCount)
-    }, []),
-  })
+          // Comment row events do not carry a canonical post count. The posts
+          // UPDATE does, so every surface converges by absolute replacement.
+          setPosts((prev) => applyRealtimePostCommentCount(prev, update))
+          setOpenPost((prev) => {
+            if (!prev || prev.id !== update.postId || prev.comment_count === update.commentCount) {
+              return prev
+            }
+            return { ...prev, comment_count: update.commentCount }
+          })
+          usePostStore.getState().updatePostCommentCount(update.postId, update.commentCount)
+        },
+        [isCapturedRealtimeScopeCurrent, setOpenPost, setPosts]
+      ),
+    },
+    { scopeKey: realtimeScopeKey, enabled: authInitialized }
+  )
 
   // Realtime: auto-add comments from other users when viewing post detail
-  useCommentsRealtime(openPost?.id, {
-    onInsert: useCallback(
-      (newComment: Record<string, unknown>) => {
-        // Only add if not from current user (our own comments are already optimistically added)
-        if (newComment.user_id === currentUserId) return
-        const comment = newComment as unknown as import('./hooks/usePostComments').Comment
-        if (!comment.id) return
-        setComments((prev) => {
-          if (prev.some((c) => c.id === comment.id)) return prev
-          return [...prev, comment]
-        })
-      },
-      [currentUserId, setComments]
-    ),
-  })
+  useCommentsRealtime(
+    openPost?.id,
+    {
+      onInsert: useCallback(
+        (newComment: Record<string, unknown>) => {
+          if (!isCapturedRealtimeScopeCurrent()) return
+          // Only add if not from current user (our own comments are already optimistically added)
+          if (newComment.user_id === currentUserId) return
+          const comment = newComment as unknown as import('./hooks/usePostComments').Comment
+          if (!comment.id) return
+          setComments((prev) => {
+            if (prev.some((c) => c.id === comment.id)) return prev
+            return [...prev, comment]
+          })
+        },
+        [currentUserId, isCapturedRealtimeScopeCurrent, setComments]
+      ),
+    },
+    { scopeKey: realtimeScopeKey, enabled: authInitialized }
+  )
 
   // Actions hook
   const actions = usePostActions({
     accessToken,
     currentUserId,
+    viewerKey: auth.viewerKey,
+    sessionGeneration: auth.sessionGeneration,
     posts,
     setPosts,
     openPost,

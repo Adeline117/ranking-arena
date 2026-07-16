@@ -25,9 +25,9 @@ type PostgresChangeEvent = 'INSERT' | 'UPDATE' | 'DELETE' | '*'
 // Map our event types to Supabase's enum
 const eventToSupabaseEvent = {
   '*': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.ALL,
-  'INSERT': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.INSERT,
-  'UPDATE': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.UPDATE,
-  'DELETE': REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.DELETE,
+  INSERT: REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.INSERT,
+  UPDATE: REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.UPDATE,
+  DELETE: REALTIME_POSTGRES_CHANGES_LISTEN_EVENT.DELETE,
 } as const
 
 export interface ChannelSubscription {
@@ -80,9 +80,11 @@ class RealtimeChannelPool {
     schema: string,
     table: string,
     event: PostgresChangeEvent,
-    filter?: string
+    filter?: string,
+    scopeKey?: string
   ): string {
-    return `${schema}:${table}:${event}:${filter || 'all'}`
+    const scope = scopeKey === undefined ? 'shared' : `scoped:${encodeURIComponent(scopeKey)}`
+    return `${scope}:${schema}:${table}:${event}:${filter || 'all'}`
   }
 
   /**
@@ -95,11 +97,13 @@ class RealtimeChannelPool {
       table: string
       event?: PostgresChangeEvent
       filter?: string
+      /** Logical viewer/session owner. Scoped subscriptions never share a channel across viewers. */
+      scopeKey?: string
     },
     callbacks: ChannelSubscription
   ): () => void {
-    const { schema = 'public', table, event = '*', filter } = config
-    const key = this.getChannelKey(schema, table, event, filter)
+    const { schema = 'public', table, event = '*', filter, scopeKey } = config
+    const key = this.getChannelKey(schema, table, event, filter, scopeKey)
     const subscriptionId = `sub_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
 
     let pooledChannel = this.channels.get(key)
@@ -317,9 +321,10 @@ class RealtimeChannelPool {
     schema: string,
     table: string,
     event: PostgresChangeEvent,
-    filter?: string
+    filter?: string,
+    scopeKey?: string
   ): boolean {
-    const key = this.getChannelKey(schema, table, event, filter)
+    const key = this.getChannelKey(schema, table, event, filter, scopeKey)
     return this.channels.has(key)
   }
 
@@ -330,9 +335,10 @@ class RealtimeChannelPool {
     schema: string,
     table: string,
     event: PostgresChangeEvent,
-    filter?: string
+    filter?: string,
+    scopeKey?: string
   ): number {
-    const key = this.getChannelKey(schema, table, event, filter)
+    const key = this.getChannelKey(schema, table, event, filter, scopeKey)
     const pooledChannel = this.channels.get(key)
     return pooledChannel?.refCount || 0
   }

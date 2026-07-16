@@ -29,6 +29,8 @@ interface RealtimeConfig<T> {
   schema?: string
   /** 过滤条件 */
   filter?: string
+  /** Viewer/session owner used to prevent cross-account channel reuse. */
+  scopeKey?: string
   /** 变化回调 */
   onInsert?: (payload: T) => void
   onUpdate?: (payload: { old: T; new: T }) => void
@@ -98,6 +100,7 @@ function useRealtimePooled<T extends Record<string, unknown>>(
     event = '*',
     schema = 'public',
     filter,
+    scopeKey,
     onInsert,
     onUpdate,
     onDelete,
@@ -128,7 +131,7 @@ function useRealtimePooled<T extends Record<string, unknown>>(
     setStatus('connecting')
 
     unsubscribeRef.current = channelPool.subscribe(
-      { schema, table, event, filter },
+      { schema, table, event, filter, scopeKey },
       {
         onInsert: onInsert as ((payload: Record<string, unknown>) => void) | undefined,
         onUpdate: onUpdate as
@@ -140,7 +143,7 @@ function useRealtimePooled<T extends Record<string, unknown>>(
 
     // Check connection after a short delay (cleanup on unmount)
     const statusTimer = setTimeout(() => {
-      if (channelPool.hasChannel(schema, table, event, filter)) {
+      if (channelPool.hasChannel(schema, table, event, filter, scopeKey)) {
         setStatus('connected')
         onConnect?.()
       }
@@ -160,6 +163,7 @@ function useRealtimePooled<T extends Record<string, unknown>>(
     event,
     schema,
     filter,
+    scopeKey,
     onInsert,
     onUpdate,
     onDelete,
@@ -207,6 +211,7 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     event = '*',
     schema = 'public',
     filter,
+    scopeKey,
     onInsert,
     onUpdate,
     onDelete,
@@ -313,7 +318,8 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     setError(null)
 
     // Use a stable channel name (no Date.now())
-    const channelName = `direct:${schema}:${table}:${filter || 'all'}`
+    const scope = scopeKey === undefined ? 'shared' : `scoped:${encodeURIComponent(scopeKey)}`
+    const channelName = `direct:${scope}:${schema}:${table}:${filter || 'all'}`
     const channel = supabase.channel(channelName)
 
     channel
@@ -356,6 +362,7 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     event,
     schema,
     filter,
+    scopeKey,
     handleChange,
     autoReconnect,
     setStatus,
@@ -461,14 +468,19 @@ export function useRealtime<T extends Record<string, unknown>>(
 /**
  * 订阅帖子更新
  */
-export function usePostsRealtime(callbacks: {
-  onInsert?: (post: Record<string, unknown>) => void
-  onUpdate?: (payload: { old: Record<string, unknown>; new: Record<string, unknown> }) => void
-  onDelete?: (post: Record<string, unknown>) => void
-}) {
+export function usePostsRealtime(
+  callbacks: {
+    onInsert?: (post: Record<string, unknown>) => void
+    onUpdate?: (payload: { old: Record<string, unknown>; new: Record<string, unknown> }) => void
+    onDelete?: (post: Record<string, unknown>) => void
+  },
+  options?: { scopeKey?: string; enabled?: boolean }
+) {
   return useRealtime({
     table: 'posts',
     event: '*',
+    scopeKey: options?.scopeKey,
+    enabled: options?.enabled,
     ...callbacks,
   })
 }
@@ -531,7 +543,8 @@ export function useCommentsRealtime(
   callbacks?: {
     onInsert?: (comment: Record<string, unknown>) => void
     onDelete?: (comment: Record<string, unknown>) => void
-  }
+  },
+  options?: { scopeKey?: string; enabled?: boolean }
 ) {
   return useRealtime({
     table: 'comments',
@@ -539,7 +552,8 @@ export function useCommentsRealtime(
     filter: postId ? `post_id=eq.${postId}` : undefined,
     onInsert: callbacks?.onInsert,
     onDelete: callbacks?.onDelete,
-    enabled: !!postId,
+    scopeKey: options?.scopeKey,
+    enabled: !!postId && (options?.enabled ?? true),
   })
 }
 
