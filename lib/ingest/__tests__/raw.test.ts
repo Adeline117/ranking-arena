@@ -1,12 +1,14 @@
-import { gunzipSync } from 'node:zlib'
+import { createHash } from 'node:crypto'
+import { gzipSync, gunzipSync } from 'node:zlib'
 
 const mockUpload = jest.fn()
+const mockDownload = jest.fn()
 const mockQuery = jest.fn()
 
 jest.mock('@supabase/supabase-js', () => ({
   createClient: jest.fn(() => ({
     storage: {
-      from: jest.fn(() => ({ upload: mockUpload })),
+      from: jest.fn(() => ({ upload: mockUpload, download: mockDownload })),
     },
   })),
 }))
@@ -15,7 +17,7 @@ jest.mock('@/lib/ingest/db', () => ({
   getIngestPool: jest.fn(() => ({ query: mockQuery })),
 }))
 
-import { writeRawObject } from '@/lib/ingest/raw'
+import { readRawObject, writeRawObject } from '@/lib/ingest/raw'
 
 const input = {
   sourceId: 7,
@@ -119,5 +121,166 @@ describe('writeRawObject storage retries', () => {
         uncompressed_bytes: Buffer.byteLength(expectedJson, 'utf8'),
       },
     })
+  })
+})
+
+function asDownloadBody(payload: Buffer) {
+  return {
+    arrayBuffer: async () =>
+      payload.buffer.slice(payload.byteOffset, payload.byteOffset + payload.byteLength),
+  }
+}
+
+function fullHash(payload: Buffer): string {
+  return createHash('sha256').update(payload).digest('hex')
+}
+
+function integrityMetadata(jsonBytes: Buffer, gz: Buffer, overrides: Record<string, unknown> = {}) {
+  return {
+    version: 1,
+    content_type: 'application/json',
+    encoding: 'utf-8',
+    compression: 'gzip',
+    hash_algorithm: 'sha256',
+    hash_scope: 'json_utf8',
+    compressed_bytes: gz.byteLength,
+    uncompressed_bytes: jsonBytes.byteLength,
+    ...overrides,
+  }
+}
+
+function mockRawPointer({
+  json = '{"roi":12.5}',
+  contentHash,
+  bytes,
+  meta = {},
+  compressed,
+}: {
+  json?: string
+  contentHash?: string
+  bytes?: number
+  meta?: unknown
+  compressed?: Buffer
+} = {}) {
+  const jsonBytes = Buffer.from(json, 'utf8')
+  const gz = compressed ?? gzipSync(jsonBytes)
+  mockQuery.mockResolvedValueOnce({
+    rows: [
+      {
+        storage_path: 'test_source/tier_b/raw.json.gz',
+        bytes: bytes ?? gz.byteLength,
+        content_hash: contentHash ?? fullHash(jsonBytes),
+        meta,
+      },
+    ],
+  })
+  mockDownload.mockResolvedValueOnce({ data: asDownloadBody(gz), error: null })
+  return { gz, jsonBytes }
+}
+
+describe('readRawObject integrity verification', () => {
+  beforeAll(() => {
+    process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://example.supabase.co'
+    process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-role-key'
+  })
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it('accepts a fully verified 64-character SHA-256 payload', async () => {
+    const json = '{"roi":12.5}'
+    const jsonBytes = Buffer.from(json, 'utf8')
+    const gz = gzipSync(jsonBytes)
+    mockRawPointer({
+      json,
+      compressed: gz,
+      meta: {
+        surface: 'board',
+        raw_integrity: integrityMetadata(jsonBytes, gz),
+      },
+    })
+
+    await expect(readRawObject(42)).resolves.toEqual({ roi: 12.5 })
+  })
+
+  it('accepts the historical 32-character SHA-256 prefix', async () => {
+    const jsonBytes = Buffer.from('{"roi":12.5}', 'utf8')
+    mockRawPointer({ contentHash: fullHash(jsonBytes).slice(0, 32) })
+
+    await expect(readRawObject(42)).resolves.toEqual({ roi: 12.5 })
+  })
+
+  it('rejects a compressed byte-count mismatch before decompression', async () => {
+    const { gz } = mockRawPointer({ bytes: 1 })
+
+    await expect(readRawObject(42)).rejects.toThrow(
+      `compressed byte count mismatch (expected 1, received ${gz.byteLength})`
+    )
+  })
+
+  it('rejects a non-gzip object even when its stored size matches', async () => {
+    mockRawPointer({ compressed: Buffer.from('not gzip') })
+
+    await expect(readRawObject(42)).rejects.toThrow('invalid gzip header')
+  })
+
+  it('rejects a corrupted gzip trailer', async () => {
+    const gz = gzipSync(Buffer.from('{"roi":12.5}', 'utf8'))
+    gz[gz.length - 1] ^= 0xff
+    mockRawPointer({ compressed: gz })
+
+    await expect(readRawObject(42)).rejects.toThrow('gzip payload or trailer is corrupt')
+  })
+
+  it('rejects integrity metadata with a wrong uncompressed size', async () => {
+    const json = '{"roi":12.5}'
+    const jsonBytes = Buffer.from(json, 'utf8')
+    const gz = gzipSync(jsonBytes)
+    mockRawPointer({
+      json,
+      compressed: gz,
+      meta: {
+        raw_integrity: integrityMetadata(jsonBytes, gz, { uncompressed_bytes: 99 }),
+      },
+    })
+
+    await expect(readRawObject(42)).rejects.toThrow('raw_integrity.uncompressed_bytes mismatch')
+  })
+
+  it.each([
+    ['full SHA-256', '0'.repeat(64)],
+    ['legacy SHA-256 prefix', '0'.repeat(32)],
+  ])('rejects a mismatched %s', async (_label, contentHash) => {
+    mockRawPointer({ contentHash })
+
+    await expect(readRawObject(42)).rejects.toThrow('SHA-256 checksum mismatch')
+  })
+
+  it.each(['abc', 'A'.repeat(64), '0'.repeat(48), 'g'.repeat(64)])(
+    'rejects malformed stored checksum %s',
+    async (contentHash) => {
+      mockRawPointer({ contentHash })
+
+      await expect(readRawObject(42)).rejects.toThrow('stored SHA-256 format is invalid')
+    }
+  )
+
+  it('does not parse JSON until every integrity check passes', async () => {
+    const json = 'not-json'
+    const jsonBytes = Buffer.from(json, 'utf8')
+    mockRawPointer({ json, contentHash: fullHash(jsonBytes) })
+
+    await expect(readRawObject(42)).rejects.toThrow('payload is not valid JSON')
+  })
+
+  it('rejects non-UTF-8 bytes after their checksum is verified', async () => {
+    const invalidUtf8 = Buffer.from([0xff, 0xfe, 0xfd])
+    mockRawPointer({
+      compressed: gzipSync(invalidUtf8),
+      contentHash: fullHash(invalidUtf8),
+    })
+
+    await expect(readRawObject(42)).rejects.toThrow('payload is not valid UTF-8')
   })
 })

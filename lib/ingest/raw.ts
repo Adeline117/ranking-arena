@@ -8,6 +8,7 @@
  */
 
 import { createHash } from 'node:crypto'
+import { TextDecoder } from 'node:util'
 import { gzipSync, gunzipSync } from 'node:zlib'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { getIngestPool } from './db'
@@ -92,6 +93,55 @@ export interface WriteRawInput {
   meta?: Record<string, unknown>
 }
 
+interface RawObjectPointer {
+  storage_path: string
+  bytes: number
+  content_hash: string
+  meta: unknown
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function rawIntegrityError(rawObjectId: number, storagePath: string, detail: string): Error {
+  return new Error(
+    `[ingest] RAW integrity failed (id=${rawObjectId}, path=${JSON.stringify(storagePath)}): ${detail}`
+  )
+}
+
+function verifyRawIntegrityMetadata(
+  rawObjectId: number,
+  storagePath: string,
+  meta: unknown,
+  compressedBytes: number,
+  uncompressedBytes: number
+): void {
+  if (!isRecord(meta) || !Object.hasOwn(meta, 'raw_integrity')) return
+
+  const integrity = meta.raw_integrity
+  if (!isRecord(integrity)) {
+    throw rawIntegrityError(rawObjectId, storagePath, 'raw_integrity metadata is malformed')
+  }
+
+  const requiredValues: Record<string, string | number> = {
+    version: 1,
+    content_type: 'application/json',
+    encoding: 'utf-8',
+    compression: 'gzip',
+    hash_algorithm: 'sha256',
+    hash_scope: 'json_utf8',
+    compressed_bytes: compressedBytes,
+    uncompressed_bytes: uncompressedBytes,
+  }
+
+  for (const [field, expected] of Object.entries(requiredValues)) {
+    if (integrity[field] !== expected) {
+      throw rawIntegrityError(rawObjectId, storagePath, `raw_integrity.${field} mismatch`)
+    }
+  }
+}
+
 /** Write one raw payload; returns the arena.raw_objects id. */
 export async function writeRawObject(input: WriteRawInput): Promise<number> {
   const json = JSON.stringify(input.payload)
@@ -145,21 +195,87 @@ export async function writeRawObject(input: WriteRawInput): Promise<number> {
 
 /** Re-read a stored raw payload (re-parse path, spec §5.5). */
 export async function readRawObject(rawObjectId: number): Promise<unknown> {
-  const { rows } = await getIngestPool().query<{ storage_path: string }>(
-    `SELECT storage_path FROM arena.raw_objects WHERE id = $1`,
+  const { rows } = await getIngestPool().query<RawObjectPointer>(
+    `SELECT storage_path, bytes, content_hash, meta
+     FROM arena.raw_objects
+     WHERE id = $1`,
     [rawObjectId]
   )
   if (rows.length === 0) {
     throw new Error(`[ingest] raw object ${rawObjectId} not found`)
   }
+  const pointer = rows[0]
   const { data, error } = await getStorageClient()
     .storage.from(RAW_BUCKET)
-    .download(rows[0].storage_path)
+    .download(pointer.storage_path)
   if (error || !data) {
-    throw new Error(`[ingest] RAW download failed (${rows[0].storage_path}): ${error?.message}`)
+    throw new Error(`[ingest] RAW download failed (${pointer.storage_path}): ${error?.message}`)
   }
-  const gz = Buffer.from(await data.arrayBuffer())
-  return JSON.parse(gunzipSync(gz).toString('utf8'))
+
+  let gz: Buffer
+  try {
+    gz = Buffer.from(await data.arrayBuffer())
+  } catch (downloadError) {
+    throw new Error(
+      `[ingest] RAW download body failed (${pointer.storage_path}): ${downloadError instanceof Error ? downloadError.message : String(downloadError)}`
+    )
+  }
+
+  if (!Number.isSafeInteger(pointer.bytes) || pointer.bytes < 0) {
+    throw rawIntegrityError(
+      rawObjectId,
+      pointer.storage_path,
+      'stored compressed byte count is invalid'
+    )
+  }
+  if (gz.byteLength !== pointer.bytes) {
+    throw rawIntegrityError(
+      rawObjectId,
+      pointer.storage_path,
+      `compressed byte count mismatch (expected ${pointer.bytes}, received ${gz.byteLength})`
+    )
+  }
+  if (gz.byteLength < 3 || gz[0] !== 0x1f || gz[1] !== 0x8b || gz[2] !== 0x08) {
+    throw rawIntegrityError(rawObjectId, pointer.storage_path, 'invalid gzip header')
+  }
+
+  let jsonBytes: Buffer
+  try {
+    // gunzip validates the gzip trailer CRC32 and original-size fields.
+    jsonBytes = gunzipSync(gz)
+  } catch {
+    throw rawIntegrityError(rawObjectId, pointer.storage_path, 'gzip payload or trailer is corrupt')
+  }
+
+  verifyRawIntegrityMetadata(
+    rawObjectId,
+    pointer.storage_path,
+    pointer.meta,
+    gz.byteLength,
+    jsonBytes.byteLength
+  )
+
+  if (!/^(?:[0-9a-f]{32}|[0-9a-f]{64})$/.test(pointer.content_hash)) {
+    throw rawIntegrityError(rawObjectId, pointer.storage_path, 'stored SHA-256 format is invalid')
+  }
+  const fullHash = createHash('sha256').update(jsonBytes).digest('hex')
+  const expectedHash = pointer.content_hash.length === 32 ? fullHash.slice(0, 32) : fullHash
+  if (pointer.content_hash !== expectedHash) {
+    throw rawIntegrityError(rawObjectId, pointer.storage_path, 'SHA-256 checksum mismatch')
+  }
+
+  let json: string
+  try {
+    json = new TextDecoder('utf-8', { fatal: true }).decode(jsonBytes)
+  } catch {
+    throw rawIntegrityError(rawObjectId, pointer.storage_path, 'payload is not valid UTF-8')
+  }
+
+  try {
+    return JSON.parse(json)
+  } catch {
+    throw rawIntegrityError(rawObjectId, pointer.storage_path, 'payload is not valid JSON')
+  }
 }
 
 /** Delete raw objects older than the retention window (skips quarantined).
