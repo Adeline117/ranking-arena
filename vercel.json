@@ -174,15 +174,6 @@
   ],
   "headers": [
     {
-      "source": "/api/posts",
-      "headers": [
-        {
-          "key": "Cache-Control",
-          "value": "s-maxage=30, stale-while-revalidate=120"
-        }
-      ]
-    },
-    {
       "source": "/api/rankings",
       "headers": [
         {

@@ -13,8 +13,10 @@ export const runtime = 'nodejs'
 import { z } from 'zod'
 import {
   getUserHandle,
+  handleError,
   success,
   successWithPagination,
+  unauthorized,
   validateString,
   validateNumber,
   validateEnum,
@@ -57,6 +59,33 @@ const CreatePostSchema = z.object({
 
 // 缓存键前缀
 const POSTS_CACHE_PREFIX = 'posts:'
+const PUBLIC_POSTS_CACHE_CONTROL = 'public, s-maxage=30, stale-while-revalidate=120'
+const PRIVATE_POSTS_CACHE_CONTROL = 'private, no-store, max-age=0'
+
+function setPostsReadCachePolicy<T extends Response>(response: T, isViewerOwned: boolean): T {
+  response.headers.set(
+    'Cache-Control',
+    isViewerOwned ? PRIVATE_POSTS_CACHE_CONTROL : PUBLIC_POSTS_CACHE_CONTROL
+  )
+  if (isViewerOwned) {
+    // Target both Vercel and any upstream/shared CDN explicitly. These headers
+    // outrank the browser-facing Cache-Control header at their respective CDN.
+    response.headers.set('CDN-Cache-Control', 'no-store')
+    response.headers.set('Vercel-CDN-Cache-Control', 'no-store')
+  }
+
+  const vary = response.headers.get('Vary')
+  const varyFields = (vary || '')
+    .split(',')
+    .map((field) => field.trim())
+    .filter(Boolean)
+  if (!varyFields.some((field) => field.toLowerCase() === 'authorization')) {
+    varyFields.push('Authorization')
+  }
+  response.headers.set('Vary', varyFields.join(', '))
+
+  return response
+}
 
 // 生成缓存键
 //
@@ -93,6 +122,7 @@ export const GET = withPublic(
     if (guard) return guard
 
     const { searchParams } = new URL(request.url)
+    const isViewerOwnedRequest = Boolean(user || request.headers.get('authorization'))
 
     const limit = validateNumber(searchParams.get('limit'), { min: 1, max: 100 }) ?? 20
     const offset = validateNumber(searchParams.get('offset'), { min: 0 }) ?? 0
@@ -194,7 +224,10 @@ export const GET = withPublic(
       // viewer-owned resource.  Never accept a caller-supplied viewer ID and
       // never substitute the anonymous/hot feed when authentication fails.
       if (!user) {
-        throw ApiError.unauthorized('Authentication required for following feed')
+        return setPostsReadCachePolicy(
+          unauthorized('Authentication required for following feed'),
+          true
+        )
       }
 
       const { data: followData, error: followError } = await supabase
@@ -203,9 +236,15 @@ export const GET = withPublic(
         .eq('follower_id', user.id)
 
       if (followError) {
-        throw new ApiError('Failed to load following feed', {
-          code: ErrorCode.DATABASE_ERROR,
-        })
+        return setPostsReadCachePolicy(
+          handleError(
+            new ApiError('Failed to load following feed', {
+              code: ErrorCode.DATABASE_ERROR,
+            }),
+            'posts-list following'
+          ),
+          true
+        )
       }
 
       const followingIds = (followData || []).map(
@@ -243,9 +282,12 @@ export const GET = withPublic(
         user_reaction: userReactions.get(post.id) || null,
         user_vote: userVotes.get(post.id) || null,
       }))
-      return successWithPagination(
-        { posts: postsWithUserState, following_count: followingIds.length },
-        { limit, offset, has_more: posts.length === limit }
+      return setPostsReadCachePolicy(
+        successWithPagination(
+          { posts: postsWithUserState, following_count: followingIds.length },
+          { limit, offset, has_more: posts.length === limit }
+        ),
+        true
       )
     }
 
@@ -338,9 +380,12 @@ export const GET = withPublic(
       user_vote: userVotes.get(post.id) || null,
     }))
 
-    return successWithPagination(
-      { posts: postsWithUserState },
-      { limit, offset, has_more: posts.length === limit }
+    return setPostsReadCachePolicy(
+      successWithPagination(
+        { posts: postsWithUserState },
+        { limit, offset, has_more: posts.length === limit }
+      ),
+      isViewerOwnedRequest
     )
   },
   { name: 'posts-list', rateLimit: 'public', readsAuth: true }
