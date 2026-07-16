@@ -25,6 +25,17 @@ export const maxDuration = 60
 
 const BASE_URL = 'https://www.arenafi.org'
 const TRADERS_PER_SHARD = 5000
+const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply'] as const
+
+const CACHEABLE_SITEMAP_HEADERS = {
+  'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+} as const
+
+const STATEFUL_SITEMAP_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
 
 type SitemapProfileState = {
   id?: string | null
@@ -44,11 +55,14 @@ export function isSitemapProfileActive(profile: SitemapProfileState, now = Date.
   return Number.isFinite(banExpiresAt) && banExpiresAt <= now
 }
 
-function xmlResponse(xml: string): NextResponse {
+function xmlResponse(
+  xml: string,
+  cacheHeaders: Record<string, string> = CACHEABLE_SITEMAP_HEADERS
+): NextResponse {
   return new NextResponse(xml, {
     headers: {
       'Content-Type': 'application/xml',
-      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+      ...cacheHeaders,
     },
   })
 }
@@ -148,6 +162,7 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
         .from('groups')
         .select('id, created_at')
         .is('dissolved_at', null)
+        .in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])
         .order('member_count', { ascending: false })
         .limit(500),
       supabase
@@ -207,7 +222,10 @@ ${shards.map((id) => `  <sitemap><loc>${BASE_URL}/api/sitemap-xml?shard=${id}</l
           priority: 0.5,
         })),
     ]
-    return xmlResponse(urlsetXml(entries))
+    // This shard contains mutable public resources. Never let a shared cache
+    // keep a dissolved/private/deleted URL discoverable after the database has
+    // revoked it; static and trader-only shards retain their long-lived cache.
+    return xmlResponse(urlsetXml(entries), STATEFUL_SITEMAP_NO_STORE_HEADERS)
   }
 
   // Shard 1..N: trader pages
