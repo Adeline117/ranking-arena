@@ -5,6 +5,32 @@ import { socialFeatureGuard } from '@/lib/features'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { verifyAdmin } from '@/lib/admin/auth'
 import { sendNotification } from '@/lib/data/notifications'
+import { PRO_FREE_PROMO } from '@/lib/types/premium'
+import {
+  groupApplicationIdSchema,
+  rejectGroupApplicationInputSchema,
+  reviewGroupApplicationResultSchema,
+  type ReviewGroupApplicationResult,
+} from '../../contracts'
+
+function rejectionFailureResponse(result: ReviewGroupApplicationResult): NextResponse {
+  switch (result.status) {
+    case 'invalid':
+      return NextResponse.json({ error: 'Invalid rejection request' }, { status: 400 })
+    case 'reviewer_inactive':
+    case 'reviewer_unauthorized':
+      return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
+    case 'not_found':
+      return NextResponse.json({ error: 'Application not found' }, { status: 404 })
+    case 'already_processed':
+      return NextResponse.json(
+        { error: 'This application has already been processed' },
+        { status: 409 }
+      )
+    default:
+      return NextResponse.json({ error: 'Rejection failed' }, { status: 500 })
+  }
+}
 
 // 拒绝小组申请
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,77 +41,69 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   if (rateLimitResp) return rateLimitResp
 
   try {
-    const { id } = await params
-
     const supabase = getSupabaseAdmin()
-
-    // SECURITY: use verifyAdmin so ADMIN_EMAILS env allowlist is enforced in
-    // production (matches /api/admin/* gating). Replaces a DB-only role check
-    // that would have bypassed the operational whitelist.
     const admin = await verifyAdmin(supabase, request.headers.get('Authorization'))
     if (!admin) {
       return NextResponse.json({ error: 'Permission denied' }, { status: 403 })
     }
-    const user = { id: admin.id }
 
-    // 解析请求体获取拒绝原因
-    const body = await request.json().catch(() => ({}))
-    const { reason } = body
-
-    // 获取申请信息（含 applicant_id 用于通知）
-    const { data: application, error: fetchError } = await supabase
-      .from('group_applications')
-      .select('id, status, applicant_id, name')
-      .eq('id', id)
-      .single()
-
-    if (fetchError || !application) {
-      return NextResponse.json({ error: 'Application not found' }, { status: 404 })
+    const parsedApplicationId = groupApplicationIdSchema.safeParse((await params).id)
+    if (!parsedApplicationId.success) {
+      return NextResponse.json({ error: 'Invalid application id' }, { status: 400 })
     }
 
-    if (application.status !== 'pending') {
-      return NextResponse.json(
-        { error: 'This application has already been processed' },
-        { status: 400 }
-      )
+    let rawBody: unknown = {}
+    try {
+      const rawText = await request.text()
+      if (rawText.trim()) rawBody = JSON.parse(rawText)
+    } catch {
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
+    const parsedBody = rejectGroupApplicationInputSchema.safeParse(rawBody)
+    if (!parsedBody.success) {
+      return NextResponse.json({ error: 'Invalid rejection request' }, { status: 400 })
+    }
+    const reason = parsedBody.data.reason || null
 
-    // 更新申请状态为 rejected（不建群）。条件 UPDATE .eq('status','pending') 作为竞态门:
-    // 只有一个并发请求命中 → 幂等,重复拒绝拿 0 行返回"已处理"。
-    const { data: rejected, error: updateError } = await supabase
-      .from('group_applications')
-      .update({
-        status: 'rejected',
-        reject_reason: reason || null,
-        reviewed_at: new Date().toISOString(),
-        reviewed_by: user.id,
+    const { data, error } = await supabase.rpc('review_group_application_atomic', {
+      p_reviewer_id: admin.id,
+      p_application_id: parsedApplicationId.data,
+      p_decision: 'reject',
+      p_reject_reason: reason,
+      p_promo_unlocked: PRO_FREE_PROMO,
+    })
+
+    if (error) {
+      logger.error('Atomic group application rejection failed', {
+        error,
+        applicationId: parsedApplicationId.data,
+        reviewerId: admin.id,
       })
-      .eq('id', id)
-      .eq('status', 'pending')
-      .select('id')
-
-    if (updateError) {
-      logger.error('Error rejecting application:', updateError)
       return NextResponse.json({ error: 'Rejection failed' }, { status: 500 })
     }
-    if (!rejected || rejected.length === 0) {
-      return NextResponse.json(
-        { error: 'This application has already been processed' },
-        { status: 400 }
-      )
+
+    const parsedResult = reviewGroupApplicationResultSchema.safeParse(data)
+    if (!parsedResult.success) {
+      logger.error('Atomic group application rejection returned an invalid result', {
+        applicationId: parsedApplicationId.data,
+        reviewerId: admin.id,
+      })
+      return NextResponse.json({ error: 'Rejection failed' }, { status: 500 })
     }
 
-    // 通知申请人本人:你的建群申请被拒(含原因)。sendNotification 铁律。
+    const result = parsedResult.data
+    if (result.status !== 'rejected') return rejectionFailureResponse(result)
+
     sendNotification(
       supabase,
       {
-        user_id: application.applicant_id,
+        user_id: result.applicant_id,
         type: 'system',
         title: 'Group application rejected',
-        message: reason
-          ? `Your group "${application.name}" was not approved: ${reason}`
-          : `Your group "${application.name}" was not approved`,
-        reference_id: application.id,
+        message: result.reject_reason
+          ? `Your group "${result.group_name}" was not approved: ${result.reject_reason}`
+          : `Your group "${result.group_name}" was not approved`,
+        reference_id: result.application_id,
       },
       'group-rejected'
     )
