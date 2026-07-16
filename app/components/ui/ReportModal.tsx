@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Image from 'next/image'
 import { tokens } from '@/lib/design-tokens'
 import ModalOverlay from '@/app/components/ui/ModalOverlay'
@@ -9,6 +9,7 @@ import { useToast } from './Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
+import { parseReportEvidenceRef } from '@/lib/reports/evidence'
 
 export type ReportContentType = 'post' | 'comment' | 'message' | 'user'
 export type ReportReason =
@@ -46,6 +47,11 @@ const CONTENT_TYPE_KEYS: Record<ReportContentType, string> = {
   user: 'reportContentUser',
 }
 
+interface ReportEvidenceUpload {
+  previewUrl: string
+  evidenceRef: string
+}
+
 export default function ReportModal({
   isOpen,
   onClose,
@@ -58,9 +64,45 @@ export default function ReportModal({
   const { showToast } = useToast()
   const [reason, setReason] = useState<ReportReason | null>(null)
   const [description, setDescription] = useState('')
-  const [images, setImages] = useState<string[]>([])
+  const [images, setImages] = useState<ReportEvidenceUpload[]>([])
   const [uploading, setUploading] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const closingRef = useRef(false)
+
+  useEffect(() => {
+    if (isOpen) closingRef.current = false
+  }, [isOpen])
+
+  const cleanupEvidence = useCallback(
+    async (evidenceRef: string) => {
+      try {
+        const response = await fetch('/api/upload', {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${accessToken}`,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ evidence_ref: evidenceRef }),
+        })
+        if (!response.ok && response.status !== 404) {
+          logger.warn('Report evidence cleanup failed:', { status: response.status })
+        }
+      } catch (error) {
+        // TTL cleanup is authoritative; this request only shortens orphan life.
+        logger.warn('Report evidence cleanup failed:', error)
+      }
+    },
+    [accessToken]
+  )
+
+  const closeAndCleanup = useCallback(() => {
+    closingRef.current = true
+    const pendingEvidence = images
+    setImages([])
+    void Promise.allSettled(pendingEvidence.map((image) => cleanupEvidence(image.evidenceRef)))
+    onClose()
+  }, [cleanupEvidence, images, onClose])
 
   const MIN_DESC_LENGTH = 15
   const MAX_IMAGES = 4
@@ -99,7 +141,7 @@ export default function ReportModal({
           content_id: contentId,
           reason,
           description: description.trim() || null,
-          images,
+          images: images.map((image) => image.evidenceRef),
         }),
       })
 
@@ -111,6 +153,7 @@ export default function ReportModal({
       }
 
       showToast(t('reportSubmitted'), 'success')
+      closingRef.current = true
       onClose()
       // Reset form
       setReason(null)
@@ -127,7 +170,7 @@ export default function ReportModal({
   return (
     <ModalOverlay
       open={isOpen}
-      onClose={onClose}
+      onClose={closeAndCleanup}
       label={t('reportTitle').replace('{type}', contentTypeLabel)}
     >
       <div
@@ -168,7 +211,7 @@ export default function ReportModal({
             </Text>
           </Box>
           <button
-            onClick={onClose}
+            onClick={closeAndCleanup}
             aria-label={t('cancel')}
             style={{
               width: tokens.spacing[8],
@@ -354,9 +397,9 @@ export default function ReportModal({
             </Text>
 
             <Box style={{ display: 'flex', gap: tokens.spacing[2], flexWrap: 'wrap' }}>
-              {images.map((img, i) => (
+              {images.map((image, i) => (
                 <Box
-                  key={i}
+                  key={image.evidenceRef}
                   style={{
                     position: 'relative',
                     width: 72,
@@ -367,15 +410,21 @@ export default function ReportModal({
                   }}
                 >
                   <Image
-                    src={img}
+                    src={image.previewUrl}
                     alt="Report evidence"
                     fill
                     sizes="80px"
                     loading="lazy"
+                    unoptimized
+                    referrerPolicy="no-referrer"
                     style={{ objectFit: 'cover' }}
                   />
                   <button
-                    onClick={() => setImages((prev) => prev.filter((_, j) => j !== i))}
+                    onClick={() => {
+                      const removed = images[i]
+                      setImages((prev) => prev.filter((_, j) => j !== i))
+                      if (removed) void cleanupEvidence(removed.evidenceRef)
+                    }}
                     aria-label={`Remove image ${i + 1}`}
                     style={{
                       position: 'absolute',
@@ -448,6 +497,7 @@ export default function ReportModal({
                         return
                       }
                       setUploading(true)
+                      let uploadedEvidenceRef: string | null = null
                       try {
                         const formData = new FormData()
                         formData.append('file', file)
@@ -463,14 +513,24 @@ export default function ReportModal({
 
                         if (!res.ok) throw new Error(`Evidence upload failed (${res.status})`)
 
-                        const payload = (await res.json()) as { url?: unknown }
-                        if (typeof payload.url !== 'string') {
-                          throw new Error('Evidence upload returned an invalid URL')
+                        const payload = (await res.json()) as {
+                          preview_url?: unknown
+                          evidence_ref?: unknown
                         }
+                        const previewUrl = payload.preview_url
+                        const evidenceRef = payload.evidence_ref
+                        if (
+                          typeof previewUrl !== 'string' ||
+                          typeof evidenceRef !== 'string' ||
+                          !parseReportEvidenceRef(evidenceRef)
+                        ) {
+                          throw new Error('Evidence upload returned an invalid reference')
+                        }
+                        uploadedEvidenceRef = evidenceRef
 
                         let evidenceUrl: URL
                         try {
-                          evidenceUrl = new URL(payload.url)
+                          evidenceUrl = new URL(previewUrl)
                         } catch {
                           throw new Error('Evidence upload returned an invalid URL')
                         }
@@ -478,8 +538,19 @@ export default function ReportModal({
                           throw new Error('Evidence upload returned an insecure URL')
                         }
 
-                        setImages((prev) => [...prev, payload.url as string])
+                        if (closingRef.current) {
+                          void cleanupEvidence(evidenceRef)
+                        } else {
+                          setImages((prev) => [
+                            ...prev,
+                            {
+                              previewUrl,
+                              evidenceRef,
+                            },
+                          ])
+                        }
                       } catch (error) {
+                        if (uploadedEvidenceRef) void cleanupEvidence(uploadedEvidenceRef)
                         logger.error('Report evidence upload failed:', error)
                         showToast(t('uploadFailedRetry'), 'error')
                       } finally {
@@ -510,7 +581,7 @@ export default function ReportModal({
           {/* Actions */}
           <Box style={{ display: 'flex', gap: tokens.spacing[3] }}>
             <button
-              onClick={onClose}
+              onClick={closeAndCleanup}
               style={{
                 flex: 1,
                 padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,

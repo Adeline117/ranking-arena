@@ -1,24 +1,20 @@
-/**
- * /api/upload route tests
- *
- * Tests authentication, rate limiting, file validation,
- * magic-byte sniffing, and Supabase storage upload for the upload API.
- */
-
-// --- Mocks (must be before imports) ---
-
 jest.mock('next/server', () => {
   class MockNextResponse {
     _body: unknown
     status: number
     headers: Map<string, string>
-    constructor(body?: unknown, init: { status?: number } = {}) {
+
+    constructor(body?: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
       this._body = body
-      this.status = init.status || 200
-      this.headers = new Map()
+      this.status = init.status ?? 200
+      this.headers = new Map(Object.entries(init.headers ?? {}))
     }
-    async json() { return this._body }
-    static json(data: unknown, init?: { status?: number }) {
+
+    async json() {
+      return this._body
+    }
+
+    static json(data: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(data, init)
     }
   }
@@ -28,57 +24,57 @@ jest.mock('next/server', () => {
     nextUrl: URL
     headers: Map<string, string>
     method: string
-    _body: unknown
-    constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
+    private readonly body: unknown
+
+    constructor(
+      url: string,
+      opts?: { headers?: Record<string, string>; method?: string; body?: unknown }
+    ) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Jest Test Runner)', ...opts?.headers }))
-      this.method = opts?.method || 'POST'
-      this._body = opts?.body
+      this.headers = new Map(Object.entries(opts?.headers ?? {}))
+      this.method = opts?.method ?? 'POST'
+      this.body = opts?.body
     }
-    async json() { return this._body }
-    async formData() { return this._body }
+
+    async json() {
+      return this.body
+    }
+
+    async formData() {
+      return this.body
+    }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
 })
 
-jest.mock('@/lib/utils/rate-limit', () => ({
-  checkRateLimit: jest.fn().mockResolvedValue(null),
-  checkRateLimitFull: jest.fn().mockResolvedValue({ response: null, meta: null }),
-  addRateLimitHeaders: jest.fn(),
-  RateLimitPresets: { read: {}, write: {}, public: {}, sensitive: {}, authenticated: {} },
-}))
-
 const mockGetAuthUser = jest.fn()
+const mockRpc = jest.fn()
 const mockUpload = jest.fn()
 const mockGetPublicUrl = jest.fn()
-
+const mockCreateSignedUrl = jest.fn()
+const mockRemove = jest.fn()
 const mockStorageFrom = jest.fn(() => ({
   upload: mockUpload,
   getPublicUrl: mockGetPublicUrl,
+  createSignedUrl: mockCreateSignedUrl,
+  remove: mockRemove,
 }))
-
 const mockSupabase = {
-  from: jest.fn(),
+  rpc: mockRpc,
   storage: { from: mockStorageFrom },
 }
 
 jest.mock('@/lib/api/middleware', () => ({
-  withAuth: (handler: Function, _opts?: unknown) => async (req: unknown) => {
-    const user = await mockGetAuthUser(req)
+  withAuth: (handler: Function) => async (request: unknown) => {
+    const user = await mockGetAuthUser(request)
     if (!user) {
-      const { NextResponse: NR } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
-      return NR.json({ success: false, error: 'Unauthorized' }, { status: 401 })
+      const { NextResponse } = require('next/server') // eslint-disable-line @typescript-eslint/no-require-imports
+      return NextResponse.json({ success: false, error: 'Unauthorized' }, { status: 401 })
     }
-    return handler({ user, supabase: mockSupabase, request: req, version: { current: 'v1' } })
+    return handler({ user, supabase: mockSupabase, request })
   },
-  withPublic: (handler: Function) => handler,
-}))
-
-jest.mock('@/lib/supabase/server', () => ({
-  getSupabaseAdmin: jest.fn(() => mockSupabase),
-  getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
 }))
 
 const mockSniffImageFile = jest.fn()
@@ -87,242 +83,279 @@ jest.mock('@/lib/utils/image-magic-bytes', () => ({
 }))
 
 jest.mock('@/lib/utils/logger', () => ({
-  createLogger: jest.fn(() => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() })),
-  fireAndForget: jest.fn(),
-}))
-
-jest.mock('@/lib/api/versioning', () => ({
-  parseApiVersion: jest.fn().mockReturnValue({ version: 'v1', deprecated: false }),
-  addVersionHeaders: jest.fn(),
-  addDeprecationHeaders: jest.fn(),
-}))
-
-jest.mock('@/lib/api/correlation', () => ({
-  getOrCreateCorrelationId: jest.fn().mockReturnValue('test-cid'),
-  runWithCorrelationId: jest.fn((_id: string, fn: () => unknown) => fn()),
-}))
-
-jest.mock('@/lib/utils/csrf', () => ({
-  validateCsrfToken: jest.fn().mockReturnValue(true),
-  CSRF_COOKIE_NAME: 'csrf',
-  CSRF_HEADER_NAME: 'x-csrf-token',
+  createLogger: () => ({ info: jest.fn(), warn: jest.fn(), error: jest.fn() }),
 }))
 
 import { NextRequest } from 'next/server'
-import { POST } from '../route'
+import { DELETE, POST } from '../route'
 
-// Helper: create a mock File-like object with arrayBuffer support
-function createMockFile(
-  content: Uint8Array,
-  name: string,
-  type: string,
-  size?: number
-) {
+const USER_ID = '11111111-1111-4111-8111-111111111111'
+const OBJECT_NAME = `${USER_ID}/0123456789abcdef.jpg`
+const EVIDENCE_REF = `reports/${OBJECT_NAME}`
+const LEASE_TOKEN = '33333333-3333-4333-8333-333333333333'
+const EXPIRES_AT = '2026-07-16T13:00:00.000Z'
+const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])
+
+function createMockFile(size = jpegBytes.byteLength) {
   return {
-    name,
-    type,
-    size: size ?? content.byteLength,
-    arrayBuffer: jest.fn().mockResolvedValue(content.buffer),
-    slice: jest.fn(),
+    name: 'screenshot.png',
+    type: 'image/png',
+    size,
+    arrayBuffer: jest.fn().mockResolvedValue(jpegBytes.buffer),
   }
 }
 
-// Helper: create a mock FormData with a file
-function createMockFormData(file: ReturnType<typeof createMockFile> | null, bucket?: string) {
-  const map = new Map<string, unknown>()
-  if (file) map.set('file', file)
-  if (bucket) map.set('bucket', bucket)
-  return {
-    get: (key: string) => map.get(key) ?? null,
+function formData(file: ReturnType<typeof createMockFile> | null, bucket?: string) {
+  const values = new Map<string, unknown>()
+  if (file) values.set('file', file)
+  if (bucket) values.set('bucket', bucket)
+  return { get: (key: string) => values.get(key) ?? null }
+}
+
+function postRequest(file: ReturnType<typeof createMockFile> | null, bucket?: string) {
+  return new NextRequest('http://localhost/api/upload', {
+    method: 'POST',
+    body: formData(file, bucket) as unknown,
+  })
+}
+
+function deleteRequest(evidenceRef: unknown = EVIDENCE_REF) {
+  return new NextRequest('http://localhost/api/upload', {
+    method: 'DELETE',
+    body: { evidence_ref: evidenceRef },
+  })
+}
+
+function rpcResult(name: string) {
+  switch (name) {
+    case 'reserve_report_evidence_upload':
+      return {
+        data: {
+          reserved: true,
+          evidence_ref: EVIDENCE_REF,
+          object_name: OBJECT_NAME,
+          expires_at: EXPIRES_AT,
+        },
+        error: null,
+      }
+    case 'finalize_report_evidence_upload':
+      return {
+        data: {
+          finalized: true,
+          evidence_ref: EVIDENCE_REF,
+          status: 'uploaded',
+          expires_at: EXPIRES_AT,
+        },
+        error: null,
+      }
+    case 'lease_report_evidence_cleanup':
+      return {
+        data: {
+          acquired: true,
+          evidence_ref: EVIDENCE_REF,
+          object_name: OBJECT_NAME,
+          lease_token: LEASE_TOKEN,
+          lease_expires_at: EXPIRES_AT,
+        },
+        error: null,
+      }
+    case 'ack_report_evidence_cleanup':
+    case 'release_report_evidence_cleanup':
+      return { data: true, error: null }
+    default:
+      throw new Error(`Unexpected RPC ${name}`)
   }
 }
 
-describe('POST /api/upload', () => {
-  const mockUser = { id: 'user-123', email: 'test@test.com' }
-
-  // JPEG magic bytes: FF D8 FF E0
-  const jpegBytes = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-  const jpegSniffResult = { kind: 'jpeg', mime: 'image/jpeg', extension: 'jpg' }
-
+describe('/api/upload report evidence lifecycle', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockGetAuthUser.mockResolvedValue(mockUser)
-    mockSniffImageFile.mockResolvedValue(jpegSniffResult)
+    mockGetAuthUser.mockResolvedValue({ id: USER_ID })
+    mockSniffImageFile.mockResolvedValue({
+      kind: 'jpeg',
+      mime: 'image/jpeg',
+      extension: 'jpg',
+    })
+    mockRpc.mockImplementation(async (name: string) => rpcResult(name))
     mockUpload.mockResolvedValue({ error: null })
-    mockGetPublicUrl.mockReturnValue({ data: { publicUrl: 'https://storage.test/reports/user-123/abc123.jpg' } })
+    mockCreateSignedUrl.mockResolvedValue({
+      data: { signedUrl: 'https://storage.test/signed/report-evidence' },
+      error: null,
+    })
+    mockRemove.mockResolvedValue({ error: null })
+    mockGetPublicUrl.mockReturnValue({ data: { publicUrl: 'https://storage.test/public.jpg' } })
   })
 
-  // --- Authentication ---
-
-  it('returns 401 when not authenticated', async () => {
+  it('requires authentication', async () => {
     mockGetAuthUser.mockResolvedValue(null)
-
-    const file = createMockFile(jpegBytes, 'test.jpg', 'image/jpeg')
-    const formData = createMockFormData(file)
-
-    const req = new NextRequest('http://localhost/api/upload', {
-      method: 'POST',
-      body: formData as unknown,
-    })
-    const res = await POST(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(401)
-    expect(body.error).toBeDefined()
+    const response = await POST(postRequest(createMockFile()))
+    expect(response.status).toBe(401)
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  // --- Input Validation ---
-
-  it('returns 400 when no file is provided', async () => {
-    const formData = createMockFormData(null)
-
-    const req = new NextRequest('http://localhost/api/upload', {
-      method: 'POST',
-      body: formData as unknown,
-    })
-    const res = await POST(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(400)
-    expect(body.error?.message ?? body.error).toMatch(/No file/i)
+  it.each([
+    ['missing file', null, undefined, /No file/i],
+    ['oversized file', createMockFile(3 * 1024 * 1024), undefined, /too large|2MB/i],
+    ['invalid bucket', createMockFile(), 'malicious', /Invalid bucket/i],
+  ])('rejects %s before reserving', async (_label, file, bucket, message) => {
+    const response = await POST(postRequest(file, bucket))
+    const body = await response.json()
+    expect(response.status).toBe(400)
+    expect(body.error?.message ?? body.error).toMatch(message)
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  it('returns 400 when file exceeds 2MB', async () => {
-    const file = createMockFile(jpegBytes, 'big.jpg', 'image/jpeg', 3 * 1024 * 1024)
-    const formData = createMockFormData(file)
-
-    const req = new NextRequest('http://localhost/api/upload', {
-      method: 'POST',
-      body: formData as unknown,
-    })
-    const res = await POST(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(400)
-    expect(body.error?.message ?? body.error).toMatch(/too large|2MB/i)
-  })
-
-  it('returns 400 when bucket is invalid', async () => {
-    const file = createMockFile(jpegBytes, 'test.jpg', 'image/jpeg')
-    const formData = createMockFormData(file, 'malicious-bucket')
-
-    const req = new NextRequest('http://localhost/api/upload', {
-      method: 'POST',
-      body: formData as unknown,
-    })
-    const res = await POST(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(400)
-    expect(body.error?.message ?? body.error).toMatch(/Invalid bucket/i)
-  })
-
-  it('returns 400 when file type is not allowed (magic byte sniff fails)', async () => {
+  it('rejects invalid magic bytes before reserving', async () => {
     mockSniffImageFile.mockResolvedValue(null)
-
-    const badBytes = new Uint8Array([0x25, 0x50, 0x44, 0x46, 0, 0, 0, 0, 0, 0, 0, 0]) // PDF signature
-    const file = createMockFile(badBytes, 'evil.pdf', 'application/pdf')
-    const formData = createMockFormData(file)
-
-    const req = new NextRequest('http://localhost/api/upload', {
-      method: 'POST',
-      body: formData as unknown,
-    })
-    const res = await POST(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(400)
-    expect(body.error?.message ?? body.error).toMatch(/Invalid file type/i)
+    const response = await POST(postRequest(createMockFile()))
+    expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 
-  // --- Success Cases ---
+  it('reserves before upload, disables storage caching, signs, then finalizes', async () => {
+    const response = await POST(postRequest(createMockFile()))
+    const body = await response.json()
 
-  it('uploads file successfully to default reports bucket', async () => {
-    const file = createMockFile(jpegBytes, 'screenshot.jpg', 'image/jpeg')
-    const formData = createMockFormData(file)
-
-    const req = new NextRequest('http://localhost/api/upload', {
-      method: 'POST',
-      body: formData as unknown,
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(body).toEqual({
+      url: 'https://storage.test/signed/report-evidence',
+      preview_url: 'https://storage.test/signed/report-evidence',
+      evidence_ref: EVIDENCE_REF,
     })
-    const res = await POST(req)
-    const body = await res.json()
-
-    expect(res.status).toBe(200)
-    expect(body.url).toBe('https://storage.test/reports/user-123/abc123.jpg')
-    expect(mockStorageFrom).toHaveBeenCalledWith('reports')
-    expect(mockUpload).toHaveBeenCalledWith(
-      expect.stringContaining('user-123/'),
-      expect.any(Buffer),
-      expect.objectContaining({ contentType: 'image/jpeg', upsert: false })
+    expect(mockRpc).toHaveBeenNthCalledWith(1, 'reserve_report_evidence_upload', {
+      p_reporter_id: USER_ID,
+      p_mime_type: 'image/jpeg',
+      p_extension: 'jpg',
+    })
+    expect(mockUpload).toHaveBeenCalledWith(OBJECT_NAME, expect.any(Buffer), {
+      contentType: 'image/jpeg',
+      upsert: false,
+      cacheControl: '0',
+    })
+    expect(mockCreateSignedUrl).toHaveBeenCalledWith(OBJECT_NAME, 300)
+    expect(mockRpc).toHaveBeenCalledWith('finalize_report_evidence_upload', {
+      p_reporter_id: USER_ID,
+      p_evidence_ref: EVIDENCE_REF,
+    })
+    expect(mockRpc.mock.invocationCallOrder[0]).toBeLessThan(mockUpload.mock.invocationCallOrder[0])
+    expect(mockUpload.mock.invocationCallOrder[0]).toBeLessThan(
+      mockCreateSignedUrl.mock.invocationCallOrder[0]
     )
   })
 
-  it('uploads file to avatars bucket when specified', async () => {
-    const file = createMockFile(jpegBytes, 'avatar.jpg', 'image/jpeg')
-    const formData = createMockFormData(file, 'avatars')
-
-    const req = new NextRequest('http://localhost/api/upload', {
-      method: 'POST',
-      body: formData as unknown,
-    })
-    const res = await POST(req)
-
-    expect(res.status).toBe(200)
-    expect(mockStorageFrom).toHaveBeenCalledWith('avatars')
-  })
-
-  it('uploads file to posts bucket when specified', async () => {
-    const file = createMockFile(jpegBytes, 'post-image.jpg', 'image/jpeg')
-    const formData = createMockFormData(file, 'posts')
-
-    const req = new NextRequest('http://localhost/api/upload', {
-      method: 'POST',
-      body: formData as unknown,
-    })
-    const res = await POST(req)
-
-    expect(res.status).toBe(200)
-    expect(mockStorageFrom).toHaveBeenCalledWith('posts')
-  })
-
-  it('uses sniffed extension (not client filename) for uploaded file path', async () => {
-    // Client says PNG but magic bytes say JPEG
-    mockSniffImageFile.mockResolvedValue({ kind: 'jpeg', mime: 'image/jpeg', extension: 'jpg' })
-
-    const file = createMockFile(jpegBytes, 'image.png', 'image/png')
-    const formData = createMockFormData(file)
-
-    const req = new NextRequest('http://localhost/api/upload', {
-      method: 'POST',
-      body: formData as unknown,
-    })
-    const res = await POST(req)
-
-    expect(res.status).toBe(200)
+  it('keeps avatars on the public non-registry path', async () => {
+    const response = await POST(postRequest(createMockFile(), 'avatars'))
+    expect(response.status).toBe(200)
+    expect(mockRpc).not.toHaveBeenCalled()
     expect(mockUpload).toHaveBeenCalledWith(
-      expect.stringMatching(/\.jpg$/),
+      expect.stringMatching(new RegExp(`^${USER_ID}/[0-9a-f]{16}\\.jpg$`)),
       expect.any(Buffer),
-      expect.objectContaining({ contentType: 'image/jpeg' })
+      { contentType: 'image/jpeg', upsert: false }
     )
+    expect(mockGetPublicUrl).toHaveBeenCalled()
   })
 
-  // --- Storage Error ---
+  it.each(['upload', 'sign', 'finalize'])(
+    'removes storage and acknowledges the reservation when %s fails',
+    async (stage) => {
+      if (stage === 'upload') mockUpload.mockResolvedValue({ error: { message: 'upload failed' } })
+      if (stage === 'sign') {
+        mockCreateSignedUrl.mockResolvedValue({ data: null, error: { message: 'sign failed' } })
+      }
+      if (stage === 'finalize') {
+        mockRpc.mockImplementation(async (name: string) =>
+          name === 'finalize_report_evidence_upload'
+            ? { data: null, error: { code: 'XX000' } }
+            : rpcResult(name)
+        )
+      }
 
-  it('returns 500 when Supabase storage upload fails', async () => {
-    mockUpload.mockResolvedValue({ error: { message: 'Storage quota exceeded' } })
+      const response = await POST(postRequest(createMockFile()))
+      expect(response.status).toBe(500)
+      expect(mockRpc).toHaveBeenCalledWith('lease_report_evidence_cleanup', {
+        p_reporter_id: USER_ID,
+        p_evidence_ref: EVIDENCE_REF,
+      })
+      expect(mockRemove).toHaveBeenCalledWith([OBJECT_NAME])
+      expect(mockRpc).toHaveBeenCalledWith('ack_report_evidence_cleanup', {
+        p_reporter_id: USER_ID,
+        p_evidence_ref: EVIDENCE_REF,
+        p_lease_token: LEASE_TOKEN,
+      })
+    }
+  )
 
-    const file = createMockFile(jpegBytes, 'test.jpg', 'image/jpeg')
-    const formData = createMockFormData(file)
-
-    const req = new NextRequest('http://localhost/api/upload', {
-      method: 'POST',
-      body: formData as unknown,
+  it('compensates a reservation when reading the upload body fails', async () => {
+    const file = createMockFile()
+    file.arrayBuffer.mockRejectedValue(new Error('body read failed'))
+    const response = await POST(postRequest(file))
+    expect(response.status).toBe(500)
+    expect(mockRemove).toHaveBeenCalledWith([OBJECT_NAME])
+    expect(mockRpc).toHaveBeenCalledWith('ack_report_evidence_cleanup', {
+      p_reporter_id: USER_ID,
+      p_evidence_ref: EVIDENCE_REF,
+      p_lease_token: LEASE_TOKEN,
     })
-    const res = await POST(req)
-    const body = await res.json()
+  })
 
-    expect(res.status).toBe(500)
-    expect(body.error?.message ?? body.error).toMatch(/Upload failed/i)
+  it('compensates a syntactically owned reservation with an invalid RPC shape', async () => {
+    mockRpc.mockImplementation(async (name: string) =>
+      name === 'reserve_report_evidence_upload'
+        ? {
+            data: {
+              ...rpcResult(name).data,
+              unexpected: true,
+            },
+            error: null,
+          }
+        : rpcResult(name)
+    )
+    const response = await POST(postRequest(createMockFile()))
+    expect(response.status).toBe(500)
+    expect(mockUpload).not.toHaveBeenCalled()
+    expect(mockRemove).toHaveBeenCalledWith([OBJECT_NAME])
+  })
+
+  it('deletes only an owned unclaimed reference through a cleanup lease', async () => {
+    const response = await DELETE(deleteRequest())
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store')
+    expect(mockRemove).toHaveBeenCalledWith([OBJECT_NAME])
+    expect(mockRpc).toHaveBeenCalledWith('ack_report_evidence_cleanup', {
+      p_reporter_id: USER_ID,
+      p_evidence_ref: EVIDENCE_REF,
+      p_lease_token: LEASE_TOKEN,
+    })
+  })
+
+  it('rejects another reporter reference before cleanup RPC', async () => {
+    const foreignRef = 'reports/22222222-2222-4222-8222-222222222222/0123456789abcdef.jpg'
+    const response = await DELETE(deleteRequest(foreignRef))
+    expect(response.status).toBe(400)
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('rejects cleanup of claimed evidence', async () => {
+    mockRpc.mockImplementation(async (name: string) =>
+      name === 'lease_report_evidence_cleanup'
+        ? { data: { acquired: false, reason: 'CLAIMED' }, error: null }
+        : rpcResult(name)
+    )
+    const response = await DELETE(deleteRequest())
+    expect(response.status).toBe(409)
+    expect(mockRemove).not.toHaveBeenCalled()
+  })
+
+  it('releases the lease when Storage removal fails so the worker can retry', async () => {
+    mockRemove.mockResolvedValue({ error: { message: 'temporary failure' } })
+    const response = await DELETE(deleteRequest())
+    expect(response.status).toBe(500)
+    expect(mockRpc).toHaveBeenCalledWith('release_report_evidence_cleanup', {
+      p_reporter_id: USER_ID,
+      p_evidence_ref: EVIDENCE_REF,
+      p_lease_token: LEASE_TOKEN,
+    })
+    expect(mockRpc).not.toHaveBeenCalledWith('ack_report_evidence_cleanup', expect.anything())
   })
 })
