@@ -843,6 +843,12 @@ function assertTelemetry(transcript: DexAcquisitionTranscript): void {
 
   const discoveryPhase = telemetry.phases.discovery
   if (
+    transcript.query_totals.attempt_count === 0 &&
+    phaseFields.some((field) => discoveryPhase[field] !== 0)
+  ) {
+    throw new Error('unattempted discovery lanes cannot contain discovery telemetry')
+  }
+  if (
     discoveryPhase.request_count < transcript.query_totals.page_count ||
     discoveryPhase.request_count < transcript.query_totals.attempt_count
   ) {
