@@ -4927,7 +4927,6 @@ const ko = {
   // Claim - Methods
   claimVerifyMethodApi: 'API 키',
   claimVerifyMethodWallet: '지갑 서명',
-  claimVerifiedAutoApproved: '인증이 확인되어 자동 승인되었습니다!',
   claimVerifyAndClaim: '인증하고 소유권 주장',
   claimFormSafeNote:
     '읽기 전용 API 키(거래 또는 출금 권한 없음)만 필요합니다. 키는 AES-256-GCM으로 암호화되며 로그에 기록되지 않습니다.',

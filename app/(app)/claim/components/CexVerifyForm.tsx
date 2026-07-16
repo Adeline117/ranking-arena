@@ -85,7 +85,7 @@ export function CexVerifyForm({
         setVerifiedUid(uid)
       }
 
-      // Step 2: Submit claim (auto-approved after verification)
+      // Step 2: Submit the verified claim for owner review
       const claimRes = await fetch('/api/traders/claim', {
         method: 'POST',
         headers: {
@@ -111,7 +111,7 @@ export function CexVerifyForm({
       }
 
       trackEvent('claim_trader', { method: 'cex_api_key' })
-      showToast(t('claimVerifiedAutoApproved'), 'success')
+      showToast(t('claimSubmitted'), 'success')
       onSuccess()
     } catch (_error) {
       showToast(t('claimFailed'), 'error')
