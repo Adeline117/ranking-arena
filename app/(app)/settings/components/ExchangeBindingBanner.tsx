@@ -1,28 +1,120 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase/client'
+import { useEffect, useRef, useState } from 'react'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Link from 'next/link'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
+
+type ViewerSnapshot = {
+  viewerKey: string | null
+  accessToken: string | null
+  generation: number
+}
+
+type BannerState = {
+  viewerKey: string | null
+  generation: number
+  show: boolean | null
+}
+
+function getAccessTokenSubject(token: string): string | null {
+  try {
+    const encodedPayload = token.split('.')[1]
+    if (!encodedPayload) return null
+    const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+    const payload = JSON.parse(atob(padded)) as { sub?: unknown }
+    return typeof payload.sub === 'string' ? payload.sub : null
+  } catch {
+    return null
+  }
+}
 
 export function ExchangeBindingBanner({ userId }: { userId: string | null }) {
   const { t } = useLanguage()
-  const [show, setShow] = useState<boolean | null>(null)
+  const auth = useAuthSession()
+  const tokenSubject = auth.accessToken ? getAccessTokenSubject(auth.accessToken) : null
+  const viewerKey =
+    auth.userId && auth.userId === userId && tokenSubject === auth.userId ? auth.userId : null
+  const validAccessToken = viewerKey ? auth.accessToken : null
+  const scopeRef = useRef<ViewerSnapshot>({
+    viewerKey,
+    accessToken: validAccessToken,
+    generation: 0,
+  })
+
+  // Invalidate viewer-owned state during render so account B can never display
+  // a late banner decision computed for account A.
+  if (
+    scopeRef.current.viewerKey !== viewerKey ||
+    scopeRef.current.accessToken !== validAccessToken
+  ) {
+    scopeRef.current = {
+      viewerKey,
+      accessToken: validAccessToken,
+      generation: scopeRef.current.generation + 1,
+    }
+  }
+  const renderedScope = scopeRef.current
+  const [bannerState, setBannerState] = useState<BannerState>({
+    viewerKey: null,
+    generation: -1,
+    show: null,
+  })
 
   useEffect(() => {
-    if (!userId) return
-    Promise.resolve(
-      supabase.from('user_exchange_connections').select('id').eq('user_id', userId).limit(1)
-    )
-      .then(({ data }) => {
-        setShow(!data || data.length === 0)
-      })
-      .catch(() => {
+    const snapshot = renderedScope
+    if (!snapshot.viewerKey || !snapshot.accessToken) return
+
+    const isCurrent = () => {
+      const current = scopeRef.current
+      return (
+        current.viewerKey === snapshot.viewerKey &&
+        current.accessToken === snapshot.accessToken &&
+        current.generation === snapshot.generation
+      )
+    }
+
+    const loadBindingState = async () => {
+      try {
+        const response = await fetch('/api/exchange/connections', {
+          headers: { Authorization: `Bearer ${snapshot.accessToken}` },
+          cache: 'no-store',
+        })
+        if (!isCurrent() || !response.ok) return
+
+        const payload = (await response.json()) as {
+          data?: { connections?: Array<{ id: string; user_id: string }> }
+        }
+        if (!isCurrent()) return
+
+        const connections = payload.data?.connections
+        if (
+          !Array.isArray(connections) ||
+          connections.some((connection) => connection.user_id !== snapshot.viewerKey)
+        )
+          return
+
+        setBannerState({
+          viewerKey: snapshot.viewerKey,
+          generation: snapshot.generation,
+          show: connections.length === 0,
+        })
+      } catch {
         /* Exchange connection check non-critical */
-      })
-  }, [userId])
+      }
+    }
+
+    void loadBindingState()
+  }, [renderedScope])
+
+  const show =
+    bannerState.viewerKey === renderedScope.viewerKey &&
+    bannerState.generation === renderedScope.generation
+      ? bannerState.show
+      : null
 
   if (!show) return null
 

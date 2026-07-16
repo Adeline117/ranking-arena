@@ -1,9 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase as _supabase } from '@/lib/supabase/client'
-import type { SupabaseClient } from '@supabase/supabase-js'
-const supabase = _supabase as SupabaseClient
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Box, Text, Button } from '@/app/components/base'
 import { tokens, alpha } from '@/lib/design-tokens'
 import type { ExchangeConnection } from '@/lib/exchange'
@@ -13,6 +10,7 @@ import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { EXCHANGE_BIND_LIST } from '@/app/(app)/exchange/auth/api-key/exchange-configs'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 interface ExchangeConnectionProps {
   userId: string
@@ -21,70 +19,170 @@ interface ExchangeConnectionProps {
 // Single source of truth: exchange list + display names live in exchange-configs.
 const EXCHANGES = EXCHANGE_BIND_LIST
 
+type ViewerSnapshot = {
+  viewerKey: string | null
+  accessToken: string | null
+  generation: number
+}
+
+type ConnectionState = {
+  viewerKey: string | null
+  generation: number
+  connections: ExchangeConnection[]
+  loading: boolean
+  error: string | null
+}
+
+type SyncState = {
+  viewerKey: string
+  generation: number
+  exchange: string
+} | null
+
+function getAccessTokenSubject(token: string): string | null {
+  try {
+    const encodedPayload = token.split('.')[1]
+    if (!encodedPayload) return null
+    const base64 = encodedPayload.replace(/-/g, '+').replace(/_/g, '/')
+    const padded = base64.padEnd(Math.ceil(base64.length / 4) * 4, '=')
+    const payload = JSON.parse(atob(padded)) as { sub?: unknown }
+    return typeof payload.sub === 'string' ? payload.sub : null
+  } catch {
+    return null
+  }
+}
+
 export default function ExchangeConnectionManager({ userId }: ExchangeConnectionProps) {
   const { t } = useLanguage()
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
-  const [connections, setConnections] = useState<ExchangeConnection[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [syncing, setSyncing] = useState<string | null>(null)
+  const auth = useAuthSession()
+  const tokenSubject = auth.accessToken ? getAccessTokenSubject(auth.accessToken) : null
+  const viewerKey =
+    auth.userId && auth.userId === userId && tokenSubject === auth.userId ? auth.userId : null
+  const validAccessToken = viewerKey ? auth.accessToken : null
+  const scopeRef = useRef<ViewerSnapshot>({
+    viewerKey,
+    accessToken: validAccessToken,
+    generation: 0,
+  })
+
+  // Advance ownership during render, before effects. A late viewer-A request is
+  // therefore unable to commit state after the first render for viewer B.
+  if (
+    scopeRef.current.viewerKey !== viewerKey ||
+    scopeRef.current.accessToken !== validAccessToken
+  ) {
+    scopeRef.current = {
+      viewerKey,
+      accessToken: validAccessToken,
+      generation: scopeRef.current.generation + 1,
+    }
+  }
+  const renderedScope = scopeRef.current
+
+  const [connectionState, setConnectionState] = useState<ConnectionState>({
+    viewerKey: null,
+    generation: -1,
+    connections: [],
+    loading: true,
+    error: null,
+  })
+  const [syncState, setSyncState] = useState<SyncState>(null)
+
+  const isCurrentSnapshot = useCallback((snapshot: ViewerSnapshot) => {
+    const current = scopeRef.current
+    return (
+      snapshot.viewerKey !== null &&
+      snapshot.accessToken !== null &&
+      current.viewerKey === snapshot.viewerKey &&
+      current.accessToken === snapshot.accessToken &&
+      current.generation === snapshot.generation
+    )
+  }, [])
+
+  const captureSnapshot = useCallback((): ViewerSnapshot | null => {
+    const snapshot = scopeRef.current
+    if (!snapshot.viewerKey || !snapshot.accessToken) return null
+    return { ...snapshot }
+  }, [])
+
+  const loadConnections = useCallback(
+    async (snapshot: ViewerSnapshot, toastOnFailure = true) => {
+      if (!isCurrentSnapshot(snapshot)) return
+
+      setConnectionState({
+        viewerKey: snapshot.viewerKey,
+        generation: snapshot.generation,
+        connections: [],
+        loading: true,
+        error: null,
+      })
+
+      const failureMessage = t('loadConnectionsFailed')
+      let nextError: string | null = null
+
+      try {
+        const response = await fetch('/api/exchange/connections', {
+          headers: { Authorization: `Bearer ${snapshot.accessToken}` },
+          cache: 'no-store',
+        })
+        if (!isCurrentSnapshot(snapshot)) return
+
+        const payload = (await response.json()) as {
+          data?: { connections?: ExchangeConnection[] }
+        }
+        if (!isCurrentSnapshot(snapshot)) return
+
+        const nextConnections = payload.data?.connections
+        if (
+          !response.ok ||
+          !Array.isArray(nextConnections) ||
+          nextConnections.some((connection) => connection.user_id !== snapshot.viewerKey)
+        ) {
+          throw new Error(failureMessage)
+        }
+
+        setConnectionState({
+          viewerKey: snapshot.viewerKey,
+          generation: snapshot.generation,
+          connections: nextConnections,
+          loading: false,
+          error: null,
+        })
+      } catch {
+        if (!isCurrentSnapshot(snapshot)) return
+        nextError = failureMessage
+        setConnectionState({
+          viewerKey: snapshot.viewerKey,
+          generation: snapshot.generation,
+          connections: [],
+          loading: false,
+          error: failureMessage,
+        })
+        if (toastOnFailure) showToast(failureMessage, 'error')
+      } finally {
+        if (!isCurrentSnapshot(snapshot) || nextError) return
+        setConnectionState((current) =>
+          current.viewerKey === snapshot.viewerKey &&
+          current.generation === snapshot.generation &&
+          current.loading
+            ? { ...current, loading: false }
+            : current
+        )
+      }
+    },
+    [isCurrentSnapshot, showToast, t]
+  )
 
   useEffect(() => {
-    loadConnections()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- loadConnections is defined in closure, not a stable ref
-  }, [userId])
+    if (!renderedScope.viewerKey || !renderedScope.accessToken) return
+    void loadConnections(renderedScope)
+  }, [loadConnections, renderedScope])
 
-  const loadConnections = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      // 检查用户是否已登录
-
-      const {
-        data: { user },
-      } = await supabase.auth.getUser()
-      if (!user) {
-        setError(t('pleaseLogin'))
-        setConnections([])
-        return
-      }
-
-      // 确保使用正确的用户ID
-      const actualUserId = user.id
-      if (userId !== actualUserId) {
-        // intentionally empty
-      }
-
-      const { data, error: fetchError } = await supabase
-        .from('user_exchange_connections')
-        .select(
-          'id, user_id, exchange, is_active, last_sync_at, last_sync_status, last_sync_error, created_at, updated_at'
-        )
-        .eq('user_id', actualUserId)
-        .order('created_at', { ascending: false })
-
-      if (fetchError) {
-        const errorMsg =
-          fetchError.code === 'PGRST301'
-            ? t('serviceTemporarilyUnavailable')
-            : t('loadConnectionsFailed')
-        setError(errorMsg)
-        setConnections([])
-        showToast(errorMsg, 'error')
-        return
-      }
-
-      setConnections(data || [])
-      setError(null)
-    } catch (_err) {
-      setError(t('loadConnectionsFailed'))
-      setConnections([])
-      showToast(t('loadConnectionsFailed'), 'error')
-    } finally {
-      setLoading(false)
-    }
+  const handleRetry = () => {
+    const snapshot = captureSnapshot()
+    if (snapshot) void loadConnections(snapshot)
   }
 
   const handleStartAuth = (exchange: string) => {
@@ -93,85 +191,122 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
   }
 
   const handleSync = async (exchange: string) => {
-    setSyncing(exchange)
+    const snapshot = captureSnapshot()
+    if (!snapshot?.viewerKey) {
+      showToast(t('pleaseLogin'), 'warning')
+      return
+    }
+
+    setSyncState({
+      viewerKey: snapshot.viewerKey,
+      generation: snapshot.generation,
+      exchange,
+    })
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) {
-        showToast(t('pleaseLogin'), 'warning')
-        return
-      }
-
       const response = await fetch('/api/exchange/sync', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${snapshot.accessToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({ exchange }),
       })
+      if (!isCurrentSnapshot(snapshot)) return
 
-      const result = await response.json()
+      const result = (await response.json()) as { error?: unknown }
+      if (!isCurrentSnapshot(snapshot)) return
 
       if (!response.ok) {
-        showToast(result.error || t('syncError'), 'error')
+        showToast(typeof result.error === 'string' ? result.error : t('syncError'), 'error')
         return
       }
 
       showToast(t('syncSuccess'), 'success')
-      await loadConnections()
+      await loadConnections(snapshot)
+      if (!isCurrentSnapshot(snapshot)) return
     } catch (err: unknown) {
+      if (!isCurrentSnapshot(snapshot)) return
       showToast(err instanceof Error ? err.message : t('syncError'), 'error')
     } finally {
-      setSyncing(null)
+      if (!isCurrentSnapshot(snapshot)) return
+      setSyncState((current) =>
+        current?.viewerKey === snapshot.viewerKey &&
+        current.generation === snapshot.generation &&
+        current.exchange === exchange
+          ? null
+          : current
+      )
     }
   }
 
   const handleDisconnect = async (exchange: string) => {
+    // Capture both the viewer and credential before the confirmation dialog.
+    // Never re-read global auth after the user has had time to switch accounts.
+    const snapshot = captureSnapshot()
+    if (!snapshot) {
+      showToast(t('pleaseLogin'), 'warning')
+      return
+    }
+
     const confirmed = await showConfirm(
       t('disconnect'),
       t('confirmDisconnect').replace('{exchange}', exchange)
     )
+    if (!isCurrentSnapshot(snapshot)) return
     if (!confirmed) {
       return
     }
 
     try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) {
-        showToast(t('pleaseLogin'), 'warning')
-        return
-      }
-
       const response = await fetch('/api/exchange/disconnect', {
         method: 'DELETE',
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
+          Authorization: `Bearer ${snapshot.accessToken}`,
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({ exchange }),
       })
+      if (!isCurrentSnapshot(snapshot)) return
 
-      const result = await response.json()
+      const result = (await response.json()) as { error?: unknown }
+      if (!isCurrentSnapshot(snapshot)) return
 
       if (!response.ok) {
-        showToast(result.error || t('disconnectFailed'), 'error')
+        showToast(typeof result.error === 'string' ? result.error : t('disconnectFailed'), 'error')
         return
       }
 
       showToast(t('disconnected'), 'success')
-      await loadConnections()
+      await loadConnections(snapshot)
+      if (!isCurrentSnapshot(snapshot)) return
     } catch (err) {
+      if (!isCurrentSnapshot(snapshot)) return
       const errorMessage = err instanceof Error ? err.message : t('disconnectFailed')
       showToast(errorMessage, 'error')
     }
   }
+
+  const stateIsCurrent =
+    connectionState.viewerKey === renderedScope.viewerKey &&
+    connectionState.generation === renderedScope.generation
+  const connections = stateIsCurrent ? connectionState.connections : []
+  const loading =
+    auth.loading ||
+    !auth.authChecked ||
+    (!!renderedScope.viewerKey && (!stateIsCurrent || connectionState.loading))
+  const error = stateIsCurrent
+    ? connectionState.error
+    : auth.authChecked && !auth.loading && !renderedScope.viewerKey
+      ? t('pleaseLogin')
+      : null
+  const syncing =
+    syncState?.viewerKey === renderedScope.viewerKey &&
+    syncState.generation === renderedScope.generation
+      ? syncState.exchange
+      : null
 
   if (loading) {
     return (
@@ -193,7 +328,7 @@ export default function ExchangeConnectionManager({ userId }: ExchangeConnection
         }}
       >
         <Text style={{ textAlign: 'center', color: tokens.colors.accent.error }}>{error}</Text>
-        <Button onClick={loadConnections} size="sm" style={{ marginTop: tokens.spacing[2] }}>
+        <Button onClick={handleRetry} size="sm" style={{ marginTop: tokens.spacing[2] }}>
           {t('retry')}
         </Button>
       </Box>
