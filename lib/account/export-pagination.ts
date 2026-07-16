@@ -21,6 +21,7 @@ export type CursorExportDataset = Readonly<{
   name: string
   table: string
   selectColumns: readonly string[]
+  textCastColumns?: readonly string[]
   ownerPredicate: ExportOwnerPredicate
   cursor: Readonly<{
     order: 'asc'
@@ -67,6 +68,7 @@ type ValidatedDataset = Readonly<{
   table: string
   selectColumns: readonly string[]
   selection: string
+  textCastColumns: readonly string[]
   ownerPredicate: ExportOwnerPredicate
   cursorColumns: readonly ExportCursorColumn[]
 }>
@@ -110,6 +112,20 @@ function validateDataset(dataset: CursorExportDataset): ValidatedDataset {
     selectColumns = validateExportColumns(candidate.selectColumns)
   } catch {
     invalidConfiguration(name, 'Unsafe export column configuration')
+  }
+
+  const textCastCandidate = candidate.textCastColumns ?? []
+  if (!Array.isArray(textCastCandidate)) {
+    invalidConfiguration(name, 'Export text casts must be an explicit column array')
+  }
+  const textCastColumns = textCastCandidate.map((column) =>
+    validateColumnName(name, column, 'text cast')
+  )
+  if (
+    new Set(textCastColumns).size !== textCastColumns.length ||
+    textCastColumns.some((column) => !selectColumns.includes(column))
+  ) {
+    invalidConfiguration(name, 'Every unique text cast column must be explicitly selected')
   }
 
   const ownerCandidate = candidate.ownerPredicate as Partial<ExportOwnerPredicate> | undefined
@@ -157,8 +173,9 @@ function validateDataset(dataset: CursorExportDataset): ValidatedDataset {
   const bigintCursorColumns = new Set(
     cursorColumns.filter(({ valueType }) => valueType === 'bigint').map(({ column }) => column)
   )
+  const textSelectionColumns = new Set([...bigintCursorColumns, ...textCastColumns])
   const selection = selectColumns
-    .map((column) => (bigintCursorColumns.has(column) ? `${column}::text` : column))
+    .map((column) => (textSelectionColumns.has(column) ? `${column}::text` : column))
     .join(',')
 
   return {
@@ -166,6 +183,7 @@ function validateDataset(dataset: CursorExportDataset): ValidatedDataset {
     table: candidate.table,
     selectColumns,
     selection,
+    textCastColumns,
     ownerPredicate,
     cursorColumns,
   }
@@ -399,6 +417,9 @@ export async function fetchAllExportRowsByCursor(
       const row = rawRow as Record<string, unknown>
       if (validated.selectColumns.some((column) => !Object.hasOwn(row, column))) {
         throw new DataExportReadError(validated.name, new Error('Incomplete selected row'))
+      }
+      if (validated.textCastColumns.some((column) => typeof row[column] !== 'string')) {
+        throw new DataExportReadError(validated.name, new Error('Inexact text-cast export field'))
       }
 
       let rowCursor: NormalizedCursorValue[]
