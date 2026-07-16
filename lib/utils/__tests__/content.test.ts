@@ -5,6 +5,7 @@ import {
   isChineseText,
   isEmailLike,
   generateSummary,
+  isAllowedContentImageUrl,
   parseContent,
 } from '../content'
 
@@ -92,5 +93,53 @@ describe('parseContent', () => {
     expect(() => parseContent('hello #btc and @alice see https://x.com')).not.toThrow()
     expect(parseContent('').length).toBeGreaterThanOrEqual(0)
     expect(parseContent('plain text only').length).toBeGreaterThan(0)
+  })
+
+  it('creates image parts only for absolute http and https URLs', () => {
+    const parts = parseContent(
+      '![http](http://example.com/a.png) ![https](https://example.com/b.png)'
+    )
+
+    expect(parts.filter((part) => part.type === 'image')).toEqual([
+      { type: 'image', content: 'http', url: 'http://example.com/a.png' },
+      { type: 'image', content: 'https', url: 'https://example.com/b.png' },
+    ])
+  })
+
+  it.each([
+    'javascript:alert(1)',
+    'data:image/svg+xml,<svg onload=alert(1)>',
+    'blob:https://example.com/1234',
+    'file:///etc/passwd',
+    '//example.com/protocol-relative.png',
+    'not-a-url',
+  ])('preserves a rejected markdown image as ordinary text: %s', (url) => {
+    const markdown = `before ![unsafe](${url}) after`
+    const parts = parseContent(markdown)
+
+    expect(parts).not.toEqual(expect.arrayContaining([expect.objectContaining({ type: 'image' })]))
+    expect(parts.map((part) => part.content).join('')).toBe(markdown)
+  })
+})
+
+describe('isAllowedContentImageUrl', () => {
+  it.each([
+    'http://example.com/image.png',
+    'https://example.com/image.png',
+    'HTTPS://EXAMPLE.COM/image.png',
+  ])('allows an absolute network image URL: %s', (url) => {
+    expect(isAllowedContentImageUrl(url)).toBe(true)
+  })
+
+  it.each([
+    'javascript:alert(1)',
+    'data:image/png;base64,AAAA',
+    'blob:https://example.com/id',
+    'file:///tmp/image.png',
+    '//example.com/image.png',
+    'https://',
+    '',
+  ])('rejects a non-http(s) or malformed image URL: %s', (url) => {
+    expect(isAllowedContentImageUrl(url)).toBe(false)
   })
 })

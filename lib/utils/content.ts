@@ -26,6 +26,22 @@ interface ContentPart {
 }
 
 /**
+ * Remote post images must use a network URL.  URL parsing (instead of a
+ * startsWith check) rejects malformed, encoded, protocol-relative, and
+ * executable schemes before they ever reach an img src or window.open.
+ */
+export function isAllowedContentImageUrl(value: string | null | undefined): value is string {
+  if (!value) return false
+
+  try {
+    const parsed = new URL(value)
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:'
+  } catch {
+    return false
+  }
+}
+
+/**
  * 解析视频链接，返回嵌入信息
  * 支持 YouTube、Bilibili 和直接视频URL
  */
@@ -98,7 +114,7 @@ export function parseContent(text: string): ContentPart[] {
   const parts: ContentPart[] = []
 
   // 先找出所有图片
-  const imageMatches: { start: number; end: number; alt: string; url: string }[] = []
+  const imageMatches: { start: number; end: number; alt: string; url: string; raw: string }[] = []
   let match
   while ((match = imageRegex.exec(text)) !== null) {
     imageMatches.push({
@@ -106,6 +122,7 @@ export function parseContent(text: string): ContentPart[] {
       end: match.index + match[0].length,
       alt: match[1],
       url: match[2],
+      raw: match[0],
     })
   }
 
@@ -135,8 +152,14 @@ export function parseContent(text: string): ContentPart[] {
     if (img.start > currentIndex) {
       processTextWithLinks(text.slice(currentIndex, img.start))
     }
-    // 图片
-    parts.push({ type: 'image', content: img.alt, url: img.url })
+    // Only http(s) markdown images become media. Preserve every rejected
+    // markdown token verbatim as ordinary text rather than partially linking
+    // or silently discarding attacker-controlled content.
+    if (isAllowedContentImageUrl(img.url)) {
+      parts.push({ type: 'image', content: img.alt, url: img.url })
+    } else {
+      parts.push({ type: 'text', content: img.raw })
+    }
     currentIndex = img.end
   }
 
@@ -162,6 +185,13 @@ export function parseContent(text: string): ContentPart[] {
 export function renderContentParts(parts: ContentPart[]): ReactNode[] {
   return parts.map((part, index) => {
     if (part.type === 'image') {
+      // Defense in depth for callers that construct ContentPart objects
+      // directly instead of going through parseContent.
+      if (!isAllowedContentImageUrl(part.url)) {
+        const markdown = part.url ? `![${part.content}](${part.url})` : part.content
+        return createElement('span', { key: index }, markdown)
+      }
+
       // 使用带错误处理的图片容器
       return createElement(
         'span',
@@ -182,7 +212,8 @@ export function renderContentParts(parts: ContentPart[]): ReactNode[] {
           decoding: 'async',
           onClick: (e: React.MouseEvent) => {
             e.stopPropagation()
-            window.open(part.url, '_blank')
+            const openedWindow = window.open(part.url, '_blank', 'noopener,noreferrer')
+            if (openedWindow) openedWindow.opener = null
           },
           onError: (e: React.SyntheticEvent<HTMLImageElement>) => {
             const img = e.currentTarget
