@@ -22,12 +22,14 @@ docs/
 *.md
 !README.md
 
-# 脚本（除非需要）
+# 脚本（只上传 build lifecycle 直接依赖的文件）
 # ⚠️ 目录级排除无法被子文件 ! 负向穿透（gitignore 语义，2026-07-02 实测：
 # !scripts/xxx.sh 无效仍 ENOENT）——ignoreCommand 因此内联在 vercel.json，
 # 不要再让它依赖 scripts/ 下的文件
-scripts/
-!scripts/**/*.mjs
+scripts/*
+!scripts/qa/
+scripts/qa/*
+!scripts/qa/check-bigint-build-output.mjs
 
 # 构建工具
 .storybook/
