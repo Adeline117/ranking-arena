@@ -7,16 +7,17 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { getSupabaseAdmin, handleError, checkRateLimit, RateLimitPresets } from '@/lib/api'
-import { getAggregatedStats, findUserByTrader } from '@/lib/data/linked-traders'
+import {
+  getAggregatedStats,
+  findUserByTrader,
+  linkedTraderRouteAggregateCacheKey,
+} from '@/lib/data/linked-traders'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
 
 // Shape is inferred from buildResponse so we don't duplicate getAggregatedStats's types.
 type AggregatedResponse = Awaited<ReturnType<typeof buildResponse>>
 
-async function buildResponse(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
-  userId: string,
-) {
+async function buildResponse(supabase: ReturnType<typeof getSupabaseAdmin>, userId: string) {
   const stats = await getAggregatedStats(supabase, userId)
   if (!stats) {
     return {
@@ -80,25 +81,19 @@ export async function GET(request: NextRequest) {
     }
 
     if (!userId) {
-      return NextResponse.json(
-        { success: true, data: EMPTY_RESPONSE },
-        { headers: CACHE_HEADERS },
-      )
+      return NextResponse.json({ success: true, data: EMPTY_RESPONSE }, { headers: CACHE_HEADERS })
     }
 
     // Redis-cached: stampede-protected, warm tier (15min Redis, 2min memory)
-    const cacheKey = `aggregate:user:${userId}`
+    const cacheKey = linkedTraderRouteAggregateCacheKey(userId)
     const data = await tieredGetOrSet<AggregatedResponse>(
       cacheKey,
       () => buildResponse(supabase, userId!),
       'warm',
-      ['aggregate', `user:${userId}`],
+      ['aggregate', `user:${userId}`]
     )
 
-    return NextResponse.json(
-      { success: true, data },
-      { headers: CACHE_HEADERS },
-    )
+    return NextResponse.json({ success: true, data }, { headers: CACHE_HEADERS })
   } catch (error: unknown) {
     return handleError(error, 'traders/aggregate GET')
   }

@@ -190,9 +190,10 @@ describe('findUserByTrader + 缓存失效', () => {
     expect(await findUserByTrader(none.client, 'bybit', 't1')).toBeNull()
   })
 
-  it('invalidateLinkedTraderCache 清两个 key', async () => {
+  it('invalidateLinkedTraderCache 清理账号、聚合与路由三层 key', async () => {
     mockCacheStore.set('linked-traders:u1', ['x'])
     mockCacheStore.set('linked-traders-agg:u1', { y: 1 })
+    mockCacheStore.set('aggregate:user:u1', { z: 1 })
     await invalidateLinkedTraderCache('u1')
     expect(mockCacheStore.size).toBe(0)
   })
