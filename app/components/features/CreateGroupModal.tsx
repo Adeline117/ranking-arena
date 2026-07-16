@@ -27,7 +27,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
-  const { accessToken } = useAuthSession()
+  const { accessToken, userId } = useAuthSession()
   const [step, setStep] = useState<'members' | 'details'>('members')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResults, setSearchResults] = useState<UserResult[]>([])
@@ -37,7 +37,13 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const [searching, setSearching] = useState(false)
   const [creating, setCreating] = useState(false)
   const submittingRef = useRef(false)
+  const creationIntentIdRef = useRef<string | null>(null)
+  const creationIntentActorIdRef = useRef<string | null>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout>>(null)
+
+  const handleClose = useCallback(() => {
+    onClose()
+  }, [onClose])
 
   const debouncedSearch = useCallback((query: string) => {
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
@@ -73,12 +79,14 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   const toggleMember = (user: UserResult) => {
     setSelectedMembers((prev) => {
       if (prev.some((m) => m.id === user.id)) {
+        creationIntentIdRef.current = null
         return prev.filter((m) => m.id !== user.id)
       }
       if (prev.length >= 49) {
         showToast(t('maxGroupMembers'), 'warning')
         return prev
       }
+      creationIntentIdRef.current = null
       return [...prev, user]
     })
   }
@@ -99,9 +107,21 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
       submittingRef.current = false
       return
     }
+    if (!accessToken || !userId) {
+      showToast(t('createGroupFailed'), 'error')
+      submittingRef.current = false
+      return
+    }
 
     setCreating(true)
     try {
+      const actorScope = userId.toLowerCase()
+      if (creationIntentActorIdRef.current !== actorScope) {
+        creationIntentIdRef.current = null
+        creationIntentActorIdRef.current = actorScope
+      }
+      const channelId = creationIntentIdRef.current ?? globalThis.crypto.randomUUID()
+      creationIntentIdRef.current = channelId
       const res = await globalThis.fetch('/api/channels', {
         method: 'POST',
         headers: {
@@ -110,15 +130,17 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
           ...getCsrfHeaders(),
         },
         body: JSON.stringify({
+          channelId,
           name: groupName.trim(),
           description: description.trim() || undefined,
           memberIds: selectedMembers.map((m) => m.id),
         }),
       })
       const data = await res.json()
-      if (res.ok && data.channel) {
+      if (res.ok && data.channel?.id === channelId && data.channel?.type === 'group') {
+        creationIntentIdRef.current = null
         showToast(t('groupCreated'), 'success')
-        onClose()
+        handleClose()
         router.push(`/channels/${data.channel.id}`)
       } else {
         showToast(data.error || 'Failed', 'error')
@@ -132,7 +154,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
   }
 
   return (
-    <ModalOverlay open={isOpen} onClose={onClose} label={t('createGroupChat')}>
+    <ModalOverlay open={isOpen} onClose={handleClose} label={t('createGroupChat')}>
       <div
         style={{
           display: 'flex',
@@ -155,7 +177,7 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
           </Text>
           <button
             aria-label="Close"
-            onClick={onClose}
+            onClick={handleClose}
             style={{
               width: 32,
               height: 32,
@@ -340,7 +362,10 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                 <input
                   type="text"
                   value={groupName}
-                  onChange={(e) => setGroupName(e.target.value)}
+                  onChange={(e) => {
+                    creationIntentIdRef.current = null
+                    setGroupName(e.target.value)
+                  }}
                   placeholder={t('groupNamePlaceholder')}
                   maxLength={50}
                   aria-label={t('groupName')}
@@ -365,7 +390,10 @@ export default function CreateGroupModal({ isOpen, onClose }: CreateGroupModalPr
                 </Text>
                 <textarea
                   value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  onChange={(e) => {
+                    creationIntentIdRef.current = null
+                    setDescription(e.target.value)
+                  }}
                   placeholder="..."
                   maxLength={200}
                   rows={3}

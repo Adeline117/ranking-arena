@@ -10,8 +10,60 @@ import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
+import { channelIdSchema } from '../contracts'
 
 const logger = createLogger('api:channels:channelId')
+
+const dissolveFailureReasons = new Set(['CHANNEL_NOT_GROUP', 'PERMISSION_DENIED'])
+
+type DissolveChannelAcknowledgement =
+  | { success: true; channelId: string; applied: boolean; deleted: number }
+  | { success: false; channelId: string; reason: string }
+
+function hasExactKeys(value: Record<string, unknown>, expected: string[]): boolean {
+  const actual = Object.keys(value).sort()
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index])
+}
+
+function readDissolveChannelAcknowledgement(value: unknown): DissolveChannelAcknowledgement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+
+  const result = value as Record<string, unknown>
+  if (result.success === true) {
+    if (!hasExactKeys(result, ['applied', 'channel_id', 'deleted', 'success'])) return null
+    const parsedChannelId = channelIdSchema.safeParse(result.channel_id)
+    if (
+      !parsedChannelId.success ||
+      typeof result.applied !== 'boolean' ||
+      !Number.isSafeInteger(result.deleted) ||
+      (result.applied && result.deleted !== 1) ||
+      (!result.applied && result.deleted !== 0)
+    ) {
+      return null
+    }
+    return {
+      success: true,
+      channelId: parsedChannelId.data,
+      applied: result.applied,
+      deleted: result.deleted as number,
+    }
+  }
+
+  if (result.success === false) {
+    if (!hasExactKeys(result, ['channel_id', 'reason', 'success'])) return null
+    const parsedChannelId = channelIdSchema.safeParse(result.channel_id)
+    if (
+      !parsedChannelId.success ||
+      typeof result.reason !== 'string' ||
+      !dissolveFailureReasons.has(result.reason)
+    ) {
+      return null
+    }
+    return { success: false, channelId: parsedChannelId.data, reason: result.reason }
+  }
+
+  return null
+}
 
 export const dynamic = 'force-dynamic'
 
@@ -221,22 +273,39 @@ export async function DELETE(
     const user = await getAuthUser(request)
     if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-    const { channelId } = await params
-    const supabase = getSupabaseAdmin()
+    const parsedChannelId = channelIdSchema.safeParse((await params).channelId)
+    if (!parsedChannelId.success) {
+      return NextResponse.json({ error: 'Invalid channel id' }, { status: 400 })
+    }
+    const channelId = parsedChannelId.data
+    const actorId = user.id.toLowerCase()
 
-    // Owner only
-    const { data: membership } = await supabase
-      .from('channel_members')
-      .select('role')
-      .eq('channel_id', channelId)
-      .eq('user_id', user.id)
-      .maybeSingle()
+    const { data, error } = await getSupabaseAdmin().rpc('dissolve_group_channel_atomic', {
+      p_channel_id: channelId,
+      p_actor_id: actorId,
+    })
 
-    if (!membership || membership.role !== 'owner') {
-      return NextResponse.json({ error: 'Only owner can dissolve' }, { status: 403 })
+    if (error) {
+      logger.error('Atomic group channel dissolution failed', { error: error.message })
+      return NextResponse.json({ error: 'Failed to dissolve channel' }, { status: 500 })
     }
 
-    await supabase.from('chat_channels').delete().eq('id', channelId)
+    const acknowledgement = readDissolveChannelAcknowledgement(data)
+    if (!acknowledgement || acknowledgement.channelId !== channelId) {
+      logger.error('Atomic group channel dissolution returned an invalid acknowledgement')
+      return NextResponse.json({ error: 'Failed to dissolve channel' }, { status: 500 })
+    }
+
+    if (!acknowledgement.success) {
+      if (acknowledgement.reason === 'PERMISSION_DENIED') {
+        return NextResponse.json({ error: 'Only owner can dissolve' }, { status: 403 })
+      }
+      if (acknowledgement.reason === 'CHANNEL_NOT_GROUP') {
+        return NextResponse.json({ error: 'Channel cannot be dissolved' }, { status: 400 })
+      }
+      logger.error('Atomic group channel dissolution returned an unknown denial')
+      return NextResponse.json({ error: 'Failed to dissolve channel' }, { status: 500 })
+    }
 
     return NextResponse.json({ ok: true })
   } catch (error) {

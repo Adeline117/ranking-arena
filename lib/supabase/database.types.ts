@@ -8044,6 +8044,14 @@ export type Database = {
         Args: { p_claim_id: string; p_reviewer_id: string }
         Returns: Json
       }
+      add_channel_members_atomic: {
+        Args: {
+          p_actor_id: string
+          p_candidate_ids: string[]
+          p_channel_id: string
+        }
+        Returns: Json
+      }
       adjust_pro_group_member_count: {
         Args: { p_delta: number; p_group_id: string }
         Returns: undefined
@@ -8396,6 +8404,16 @@ export type Database = {
           trader_id: string
         }[]
       }
+      create_group_channel_atomic: {
+        Args: {
+          p_actor_id: string
+          p_candidate_ids: string[]
+          p_channel_id: string
+          p_description: string | null
+          p_name: string
+        }
+        Returns: Json
+      }
       create_monthly_partition: {
         Args: { p_table_name?: string; p_target_date?: string }
         Returns: string
@@ -8444,6 +8462,10 @@ export type Database = {
           comment_count: number
           deleted_count: number
         }[]
+      }
+      dissolve_group_channel_atomic: {
+        Args: { p_actor_id: string; p_channel_id: string }
+        Returns: Json
       }
       ensure_default_bookmark_folder: {
         Args: { p_user_id: string }

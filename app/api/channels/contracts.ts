@@ -12,11 +12,14 @@ const userIdSchema = z
 
 export const createGroupChannelInputSchema = z
   .object({
+    channelId: channelIdSchema.optional(),
     name: z.string().trim().min(1).max(100),
     description: z.string().trim().max(2_000).nullable().optional(),
     // A group has one owner, so at most 49 additional members fit the
     // product's 50-member cap.
-    memberIds: z.array(userIdSchema).min(1).max(49),
+    // The raw request may include the actor once. The route removes the actor
+    // and duplicates, then enforces at most 49 additional members.
+    memberIds: z.array(userIdSchema).min(1).max(50),
   })
   .strict()
 
