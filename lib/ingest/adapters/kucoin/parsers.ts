@@ -262,7 +262,7 @@ export function parseKucoinProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   const summary = data(bundle.summary) as Dict | null
   const overview = data(bundle.overview) as Dict | null
   const prefs = data(bundle.currencyPreference)
-  const { points } = parseKucoinChart(bundle.pnlHistory)
+  const { points, evidence: chartEvidence } = parseKucoinChart(bundle.pnlHistory)
   const last = points.length > 0 ? points[points.length - 1] : null
 
   const stats: ParsedStats[] = []
@@ -332,6 +332,14 @@ export function parseKucoinProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   return {
     stats,
     series,
+    replaceSeries:
+      chartEvidence.payload_valid &&
+      chartEvidence.row_count > 0 &&
+      chartEvidence.invalid_row_count === 0 &&
+      pnlPoints.length > 0 &&
+      roiPoints.length > 0
+        ? [{ timeframe: tf, metrics: ['pnl', 'roi'] }]
+        : [],
     nickname: summary ? ((summary.nickName as string) ?? null) : null,
     avatarUrlOrigin: summary ? ((summary.avatar as string) ?? null) : null,
   }

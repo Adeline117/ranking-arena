@@ -1,3 +1,4 @@
+/* eslint-disable no-console -- operator CLI intentionally prints crawl progress */
 /**
  * One-off Phase-0 driver: exercise the Bitget profile/positions/history
  * surfaces end-to-end (fetch → RAW → parse → publish) for the top-N traders
@@ -19,6 +20,7 @@ async function main() {
   const { getSourceBySlug, nativeRankingTimeframes } = await import('@/lib/ingest/sources')
   const { openSession } = await import('@/lib/ingest/fetch/fetcher')
   const { writeRawObject } = await import('@/lib/ingest/raw')
+  const { recordStagingRejects } = await import('@/lib/ingest/staging/rejects')
   const { validateStats } = await import('@/lib/ingest/staging/validate')
   const { publishProfile, publishPositions, publishHistoryRows, getHistoryCursor } =
     await import('@/lib/ingest/serving/publish')
@@ -69,7 +71,7 @@ async function main() {
           trader.meta,
           { intent: 'scheduled_full' }
         )
-        await writeRawObject({
+        const rawObjectId = await writeRawObject({
           sourceId: src.id,
           sourceSlug: src.slug,
           jobType: 'tier_b',
@@ -77,8 +79,48 @@ async function main() {
           timeframe: tf,
           payload: bundle.pages,
         })
-        for (const page of bundle.pages) {
-          const profile = adapter.parseProfile(page.payload, ctxOf())
+        const ctx = ctxOf()
+        const parsedPages = bundle.pages.map((page) => ({
+          page,
+          profile: adapter.parseProfile(page.payload, ctx),
+        }))
+        const qualityRejects =
+          parsedPages.length === 0
+            ? [
+                {
+                  reason: 'profile_payload_missing',
+                  payload: {
+                    source_slug: src.slug,
+                    trader_id: trader.id,
+                    exchange_trader_id: trader.exchange_trader_id,
+                    timeframe: tf,
+                    scraped_at: ctx.scrapedAt,
+                    page_count: 0,
+                  },
+                },
+              ]
+            : parsedPages.flatMap(({ page, profile }) =>
+                (adapter.validateProfile?.(profile, ctx, tf, page.payload) ?? []).map((reject) => ({
+                  reason: reject.reason,
+                  payload: {
+                    ...reject.payload,
+                    source_slug: src.slug,
+                    trader_id: trader.id,
+                    exchange_trader_id: trader.exchange_trader_id,
+                    timeframe: tf,
+                    scraped_at: ctx.scrapedAt,
+                    page_index: page.pageIndex,
+                  },
+                }))
+              )
+        if (qualityRejects.length > 0) {
+          await recordStagingRejects(src.id, rawObjectId, qualityRejects)
+          throw new Error(
+            `[profile] ${trader.exchange_trader_id} ${tf}d quality rejected: ` +
+              qualityRejects.map((reject) => reject.reason).join(',')
+          )
+        }
+        for (const { profile } of parsedPages) {
           const { valid, rejects } = validateStats(profile.stats, [])
           await publishProfile(src, trader.id, { ...profile, stats: valid }, { fullSeries: true })
           console.log(
