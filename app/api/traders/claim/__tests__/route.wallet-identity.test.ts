@@ -1,16 +1,11 @@
 const mockIsTraderClaimed = jest.fn()
+const mockSubmitClaim = jest.fn()
 const mockVerifyWalletOwnership = jest.fn()
-const mockInsert = jest.fn()
-const mockSelect = jest.fn()
-const mockSingle = jest.fn()
 const mockSendNotification = jest.fn()
 const mockNotifyTraderClaim = jest.fn()
 
 const mockSupabase = {
-  from: jest.fn((table: string) => {
-    if (table !== 'trader_claims') throw new Error(`Unexpected table: ${table}`)
-    return { insert: mockInsert }
-  }),
+  from: jest.fn(),
 }
 
 function mockResponse(status: number, body: unknown) {
@@ -53,6 +48,7 @@ jest.mock('@/lib/api', () => ({
 
 jest.mock('@/lib/data/trader-claims', () => ({
   isTraderClaimed: (...args: unknown[]) => mockIsTraderClaimed(...args),
+  submitClaim: (...args: unknown[]) => mockSubmitClaim(...args),
   getUserClaim: jest.fn(),
   getUserVerifiedTrader: jest.fn(),
 }))
@@ -112,11 +108,20 @@ describe('POST /api/traders/claim wallet identity boundary', () => {
       chain: 'evm',
       message: 'verified',
     })
-    mockInsert.mockReturnValue({ select: mockSelect })
-    mockSelect.mockReturnValue({ single: mockSingle })
-    mockSingle.mockResolvedValue({
-      data: { id: 'claim-1', trader_id: canonicalEvm },
-      error: null,
+    mockSubmitClaim.mockResolvedValue({
+      id: 'claim-1',
+      user_id: 'user-1',
+      trader_id: canonicalEvm,
+      source: 'hyperliquid',
+      verification_method: 'signature',
+      verification_data: { wallet_address: canonicalEvm },
+      status: 'reviewing',
+      reject_reason: null,
+      reviewed_by: null,
+      reviewed_at: null,
+      verified_at: null,
+      created_at: '2026-07-16T00:00:00.000Z',
+      updated_at: '2026-07-16T00:00:00.000Z',
     })
   })
 
@@ -133,7 +138,9 @@ describe('POST /api/traders/claim wallet identity boundary', () => {
         trader_key: canonicalEvm,
       })
     )
-    expect(mockInsert).toHaveBeenCalledWith(
+    expect(mockSubmitClaim).toHaveBeenCalledWith(
+      mockSupabase,
+      'user-1',
       expect.objectContaining({
         trader_id: canonicalEvm,
         source: 'hyperliquid',
@@ -150,7 +157,7 @@ describe('POST /api/traders/claim wallet identity boundary', () => {
     expect(response.status).toBe(400)
     expect(mockIsTraderClaimed).toHaveBeenCalledWith(mockSupabase, canonicalEvm, 'hyperliquid')
     expect(mockVerifyWalletOwnership).not.toHaveBeenCalled()
-    expect(mockInsert).not.toHaveBeenCalled()
+    expect(mockSubmitClaim).not.toHaveBeenCalled()
   })
 
   it('rejects a Solana key that matches only after lowercasing', async () => {
@@ -160,7 +167,7 @@ describe('POST /api/traders/claim wallet identity boundary', () => {
 
     expect(response.status).toBe(400)
     expect(mockVerifyWalletOwnership).not.toHaveBeenCalled()
-    expect(mockInsert).not.toHaveBeenCalled()
+    expect(mockSubmitClaim).not.toHaveBeenCalled()
   })
 
   it('rejects non-string nested wallet fields as validation errors', async () => {
@@ -168,6 +175,16 @@ describe('POST /api/traders/claim wallet identity boundary', () => {
 
     expect(response.status).toBe(400)
     expect(mockVerifyWalletOwnership).not.toHaveBeenCalled()
-    expect(mockInsert).not.toHaveBeenCalled()
+    expect(mockSubmitClaim).not.toHaveBeenCalled()
+  })
+
+  it('maps the database race winner to a stable validation response', async () => {
+    mockSubmitClaim.mockRejectedValue({ code: '23505', message: 'active identity conflict' })
+
+    const response = await POST(request(walletClaim(canonicalEvm, canonicalEvm)))
+
+    expect(response.status).toBe(400)
+    expect(mockSubmitClaim).toHaveBeenCalledTimes(1)
+    expect(mockSendNotification).not.toHaveBeenCalled()
   })
 })

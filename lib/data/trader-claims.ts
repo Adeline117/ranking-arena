@@ -13,7 +13,7 @@ import { enqueueFirstPartySync } from '@/lib/ingest/first-party/enqueue'
 // ============================================
 
 export type VerificationMethod = 'api_key' | 'signature' | 'video' | 'social'
-export type ClaimStatus = 'pending' | 'reviewing' | 'verified' | 'rejected'
+export type ClaimStatus = 'pending' | 'reviewing' | 'verified' | 'rejected' | 'expired'
 
 /** @deprecated Use UnifiedTrader from '@/lib/types/unified-trader' for application code */
 export interface TraderClaim {
@@ -61,6 +61,13 @@ export interface CreateClaimInput {
   verification_data?: Record<string, unknown>
 }
 
+export interface SubmitClaimInput {
+  trader_id: string
+  source: string
+  verification_method: Extract<VerificationMethod, 'api_key' | 'signature'>
+  verification_data: Record<string, unknown>
+}
+
 export interface TraderClaimActivation {
   claim: TraderClaim
   linked_trader_id: string
@@ -97,6 +104,53 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function isVerificationMethod(value: unknown): value is VerificationMethod {
   return ['api_key', 'signature', 'video', 'social'].includes(String(value))
+}
+
+function parseSubmittedClaim(
+  value: unknown,
+  expected: { userId: string; traderId: string; source: string }
+): TraderClaim {
+  const candidate = Array.isArray(value) && value.length === 1 ? value[0] : value
+
+  if (!isRecord(candidate)) {
+    throw new Error('Invalid submit_trader_claim response')
+  }
+
+  const method = candidate.verification_method
+  if (
+    typeof candidate.id !== 'string' ||
+    candidate.user_id !== expected.userId ||
+    candidate.trader_id !== expected.traderId ||
+    candidate.source !== expected.source ||
+    candidate.status !== 'reviewing' ||
+    !isVerificationMethod(method) ||
+    !['api_key', 'signature'].includes(method) ||
+    !isRecord(candidate.verification_data) ||
+    !(candidate.reject_reason === null || typeof candidate.reject_reason === 'string') ||
+    !(candidate.reviewed_by === null || typeof candidate.reviewed_by === 'string') ||
+    !(candidate.reviewed_at === null || typeof candidate.reviewed_at === 'string') ||
+    candidate.verified_at !== null ||
+    typeof candidate.created_at !== 'string' ||
+    typeof candidate.updated_at !== 'string'
+  ) {
+    throw new Error('Invalid submit_trader_claim response')
+  }
+
+  return {
+    id: candidate.id,
+    user_id: expected.userId,
+    trader_id: expected.traderId,
+    source: expected.source,
+    verification_method: method,
+    verification_data: candidate.verification_data,
+    status: 'reviewing',
+    reject_reason: candidate.reject_reason,
+    reviewed_by: candidate.reviewed_by,
+    reviewed_at: candidate.reviewed_at,
+    verified_at: null,
+    created_at: candidate.created_at,
+    updated_at: candidate.updated_at,
+  }
 }
 
 function parseActivation(value: unknown, expectedClaimId: string): TraderClaimActivation {
@@ -340,6 +394,35 @@ export async function getPendingClaims(
 // ============================================
 // 写入函数
 // ============================================
+
+/**
+ * Atomically retire a stale attempt and create a distinct reviewing claim.
+ * The database owns active-identity uniqueness and EVM/Solana canonicalization.
+ */
+export async function submitClaim(
+  supabase: SupabaseClient,
+  userId: string,
+  input: SubmitClaimInput
+): Promise<TraderClaim> {
+  const { data, error } = await supabase.rpc('submit_trader_claim', {
+    p_user_id: userId,
+    p_trader_id: input.trader_id,
+    p_source: input.source,
+    p_verification_method: input.verification_method,
+    p_verification_data: input.verification_data,
+  })
+
+  if (error) {
+    logger.error('[trader-claims] 原子提交认领失败:', error)
+    throw error
+  }
+
+  return parseSubmittedClaim(data, {
+    userId,
+    traderId: input.trader_id,
+    source: input.source,
+  })
+}
 
 /**
  * 审核认领申请（管理员）
