@@ -414,11 +414,31 @@ const RECIPES: Record<string, Recipe> = {
       stats: Record<string, unknown>
       trades: { data: Array<Record<string, unknown>> }
     }
+    const asOfTimeMs = Date.parse(g.scrapedAt)
+    const versionedRaw = (tf: number) => ({
+      stats: bundle.stats,
+      timeframe: tf,
+      tradesFetchState: 'fetched',
+      tradesFetchReason: 'exhausted',
+      tradesSnapshot: {
+        schemaVersion: 2,
+        rawPages: [
+          {
+            pageIndex: 1,
+            requestCursor: null,
+            requestEndTimeMs: asOfTimeMs,
+            url: 'https://gtrade.test/history',
+            response: {
+              data: bundle.trades.data,
+              pagination: { hasMore: false, nextCursor: null, limit: 1_000 },
+            },
+          },
+        ],
+        meta: { asOfTimeMs },
+      },
+    })
     return {
-      stats: [7, 30].flatMap(
-        (tf) =>
-          parseGtradeProfile({ stats: bundle.stats, trades: bundle.trades, timeframe: tf }, g).stats
-      ),
+      stats: [7, 30].flatMap((tf) => parseGtradeProfile(versionedRaw(tf), g).stats),
       rows: parseGtradeLeaderboardPage({ timeframe: 7, rows: byTf['7'], reportedTotal: 25 }, g)
         .rows,
     }
