@@ -2,7 +2,10 @@ import {
   AUTH_STORAGE_KEY,
   __resetAuthOperationsForTests,
   beginAuthIdentityOperation,
+  clearAuthRedirectAcquisitionReceipt,
   clearAuthStorage,
+  getAuthRedirectAcquisitionReceipt,
+  getAuthRedirectNavigationKey,
   getCurrentAuthOperation,
   guardedAuthStorage,
   withAuthSessionWriter,
@@ -77,14 +80,55 @@ describe('guarded auth session storage', () => {
   })
 
   it('binds an internal OAuth acquisition to its resolved principal', () => {
-    window.history.pushState({}, '', '/auth/callback?code=oauth-code')
+    window.history.pushState({}, '', '/auth/callback?returnUrl=%2Ffeed&code=oauth-code')
     guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('oauth-user', 'oauth-token'))
 
-    expect(getCurrentAuthOperation()).toMatchObject({
+    const operation = getCurrentAuthOperation()
+    expect(operation).toMatchObject({
       expectedUserId: 'oauth-user',
       targetKnown: true,
       identityTransition: false,
     })
+    expect(getAuthRedirectNavigationKey()).toBe('/auth/callback?returnUrl=%2Ffeed')
+    expect(getAuthRedirectAcquisitionReceipt()).toEqual({
+      operationId: operation?.id,
+      userId: 'oauth-user',
+      navigationKey: '/auth/callback?returnUrl=%2Ffeed',
+    })
+    window.history.pushState({}, '', '/')
+  })
+
+  it('does not issue a redirect receipt for a coordinator-owned session writer', async () => {
+    window.history.pushState({}, '', '/auth/callback?code=oauth-code')
+    const operation = beginAuthIdentityOperation('oauth-user')
+
+    await withAuthSessionWriter(operation, async () => {
+      guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('oauth-user', 'coordinator-token'))
+    })
+
+    expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
+    window.history.pushState({}, '', '/')
+  })
+
+  it('does not let an A receipt clear a newer B redirect receipt', () => {
+    window.history.pushState({}, '', '/auth/callback?addAccount=true&code=code-a')
+    guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('user-a', 'token-a'))
+    const receiptA = getAuthRedirectAcquisitionReceipt()
+    expect(receiptA).not.toBeNull()
+
+    window.history.pushState({}, '', '/auth/callback?addAccount=true&code=code-b')
+    guardedAuthStorage.setItem(AUTH_STORAGE_KEY, storedSession('user-b', 'token-b'))
+    const receiptB = getAuthRedirectAcquisitionReceipt()
+    expect(receiptB).toMatchObject({
+      userId: 'user-b',
+      navigationKey: '/auth/callback?addAccount=true',
+    })
+    expect(receiptB?.operationId).not.toBe(receiptA?.operationId)
+
+    expect(clearAuthRedirectAcquisitionReceipt(receiptA!)).toBe(false)
+    expect(getAuthRedirectAcquisitionReceipt()).toEqual(receiptB)
+    expect(clearAuthRedirectAcquisitionReceipt(receiptB!)).toBe(true)
+    expect(getAuthRedirectAcquisitionReceipt()).toBeNull()
     window.history.pushState({}, '', '/')
   })
 })
