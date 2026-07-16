@@ -15,6 +15,26 @@ describe('atomic group membership migration contract', () => {
     expect(migration).toContain('NEW.created_at')
   })
 
+  it('preflights exact edge and redemption evidence constraints', () => {
+    const edgePreflight = migration.indexOf('membership edge primary keys are incompatible')
+    const firstTableLock = migration.indexOf('LOCK TABLE')
+
+    expect(edgePreflight).toBeGreaterThan(0)
+    expect(firstTableLock).toBeGreaterThan(edgePreflight)
+    expect(migration).toContain("'public.group_members'::pg_catalog.regclass")
+    expect(migration).toContain("'public.group_bans'::pg_catalog.regclass")
+    expect(migration).toContain('AND NOT constraint_info.condeferrable')
+    expect(migration).toContain('AND NOT constraint_info.condeferred')
+
+    expect(migration).toContain('AND attribute.attnotnull')
+    expect(migration).toContain('JOIN pg_catalog.pg_attrdef AS default_info')
+    expect(migration).toContain("= 'clock_timestamp()'")
+    expect(migration).toContain("'public.group_invites'::pg_catalog.regclass")
+    expect(migration).toContain("'public.groups'::pg_catalog.regclass")
+    expect(migration.match(/constraint_info\.confdeltype = 'c'/g)).toHaveLength(2)
+    expect(migration).toContain('group_invite_redemptions has an incompatible shape')
+  })
+
   it('fails closed on deploy-time invite and approval ambiguity without deleting evidence', () => {
     expect(migration).toContain('DO $locked_data_preflight$')
     expect(migration).toContain('duplicate group invite token hashes require explicit review')

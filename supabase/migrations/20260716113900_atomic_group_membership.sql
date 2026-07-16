@@ -160,6 +160,58 @@ BEGIN
     END IF;
   END LOOP;
 
+  -- Membership and ban serialization assumes one canonical row per edge.
+  -- Check the exact primary-key authority before any DDL/data calibration so a
+  -- later moderation migration cannot be the first place malformed edges fail.
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_members'::pg_catalog.regclass
+      AND constraint_info.contype = 'p'
+      AND constraint_info.convalidated
+      AND NOT constraint_info.condeferrable
+      AND NOT constraint_info.condeferred
+      AND constraint_info.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.conrelid
+            AND attribute.attname = 'group_id'
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.conrelid
+            AND attribute.attname = 'user_id'
+        )
+      ]::smallint[]
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid = 'public.group_bans'::pg_catalog.regclass
+      AND constraint_info.contype = 'p'
+      AND constraint_info.convalidated
+      AND NOT constraint_info.condeferrable
+      AND NOT constraint_info.condeferred
+      AND constraint_info.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.conrelid
+            AND attribute.attname = 'group_id'
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.conrelid
+            AND attribute.attname = 'user_id'
+        )
+      ]::smallint[]
+  ) THEN
+    RAISE EXCEPTION 'membership edge primary keys are incompatible';
+  END IF;
+
   IF NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_enum AS enum_value
@@ -467,15 +519,35 @@ BEGIN
           'public.group_invite_redemptions'::pg_catalog.regclass
         AND attribute.attname = required_column.column_name
         AND attribute.atttypid = required_column.type_oid
+        AND attribute.attnotnull
         AND attribute.attnum > 0
         AND NOT attribute.attisdropped
     )
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    JOIN pg_catalog.pg_attrdef AS default_info
+      ON default_info.adrelid = attribute.attrelid
+     AND default_info.adnum = attribute.attnum
+    WHERE attribute.attrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      AND attribute.attname = 'redeemed_at'
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND pg_catalog.pg_get_expr(
+        default_info.adbin,
+        default_info.adrelid,
+        true
+      ) = 'clock_timestamp()'
   ) OR NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_constraint AS constraint_info
     WHERE constraint_info.conrelid =
         'public.group_invite_redemptions'::pg_catalog.regclass
       AND constraint_info.contype = 'p'
+      AND constraint_info.convalidated
+      AND NOT constraint_info.condeferrable
+      AND NOT constraint_info.condeferred
       AND constraint_info.conkey = ARRAY[
         (
           SELECT attribute.attnum
@@ -490,6 +562,65 @@ BEGIN
             AND attribute.attname = 'user_id'
         )
       ]::smallint[]
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      AND constraint_info.contype = 'f'
+      AND constraint_info.convalidated
+      AND NOT constraint_info.condeferrable
+      AND NOT constraint_info.condeferred
+      AND constraint_info.confrelid =
+        'public.group_invites'::pg_catalog.regclass
+      AND constraint_info.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.conrelid
+            AND attribute.attname = 'invite_id'
+        )
+      ]::smallint[]
+      AND constraint_info.confkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.confrelid
+            AND attribute.attname = 'id'
+        )
+      ]::smallint[]
+      AND constraint_info.confupdtype = 'a'
+      AND constraint_info.confdeltype = 'c'
+      AND constraint_info.confmatchtype = 's'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_invite_redemptions'::pg_catalog.regclass
+      AND constraint_info.contype = 'f'
+      AND constraint_info.convalidated
+      AND NOT constraint_info.condeferrable
+      AND NOT constraint_info.condeferred
+      AND constraint_info.confrelid = 'public.groups'::pg_catalog.regclass
+      AND constraint_info.conkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.conrelid
+            AND attribute.attname = 'group_id'
+        )
+      ]::smallint[]
+      AND constraint_info.confkey = ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = constraint_info.confrelid
+            AND attribute.attname = 'id'
+        )
+      ]::smallint[]
+      AND constraint_info.confupdtype = 'a'
+      AND constraint_info.confdeltype = 'c'
+      AND constraint_info.confmatchtype = 's'
   ) THEN
     RAISE EXCEPTION 'group_invite_redemptions has an incompatible shape';
   END IF;
