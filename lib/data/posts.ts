@@ -769,6 +769,19 @@ export async function getUserPostReaction(
  * The RPC uses SELECT FOR UPDATE to serialize concurrent toggles for the same
  * (post_id, user_id) pair and maintains like_count/dislike_count atomically.
  */
+export class PostInteractionMutationError extends Error {
+  constructor(public readonly kind: 'not_found' | 'invalid' | 'invalid_ack') {
+    super(
+      kind === 'not_found'
+        ? 'Post is not currently interactable'
+        : kind === 'invalid'
+          ? 'Invalid post interaction'
+          : 'Post interaction RPC returned an invalid acknowledgement'
+    )
+    this.name = 'PostInteractionMutationError'
+  }
+}
+
 export async function togglePostReaction(
   supabase: SupabaseClient,
   postId: string,
@@ -789,9 +802,11 @@ export async function togglePostReaction(
   if (error) throw error
 
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new Error('Post reaction RPC returned an invalid acknowledgement')
+    throw new PostInteractionMutationError('invalid_ack')
   }
   const result = data as Record<string, unknown>
+  if (result.status === 'not_found') throw new PostInteractionMutationError('not_found')
+  if (result.status === 'invalid') throw new PostInteractionMutationError('invalid')
   const action = result.action
   const reaction = result.reaction
   const validAction = action === 'added' || action === 'removed' || action === 'changed'
@@ -807,7 +822,7 @@ export async function togglePostReaction(
     !Number.isSafeInteger(result.dislike_count) ||
     (result.dislike_count as number) < 0
   ) {
-    throw new Error('Post reaction RPC returned an invalid acknowledgement')
+    throw new PostInteractionMutationError('invalid_ack')
   }
 
   return {
@@ -858,10 +873,12 @@ export async function togglePostVote(
 
   if (error) throw error
   if (!data || typeof data !== 'object' || Array.isArray(data)) {
-    throw new Error('Post vote RPC returned an invalid acknowledgement')
+    throw new PostInteractionMutationError('invalid_ack')
   }
 
   const result = data as Record<string, unknown>
+  if (result.status === 'not_found') throw new PostInteractionMutationError('not_found')
+  if (result.status === 'invalid') throw new PostInteractionMutationError('invalid')
   const action = result.action
   const vote = result.vote
   const poll = result.poll
@@ -877,7 +894,7 @@ export async function togglePostVote(
     typeof poll !== 'object' ||
     Array.isArray(poll)
   ) {
-    throw new Error('Post vote RPC returned an invalid acknowledgement')
+    throw new PostInteractionMutationError('invalid_ack')
   }
 
   const counts = poll as Record<string, unknown>
@@ -889,7 +906,7 @@ export async function togglePostVote(
     !Number.isSafeInteger(counts.wait) ||
     (counts.wait as number) < 0
   ) {
-    throw new Error('Post vote RPC returned an invalid acknowledgement')
+    throw new PostInteractionMutationError('invalid_ack')
   }
 
   return {
