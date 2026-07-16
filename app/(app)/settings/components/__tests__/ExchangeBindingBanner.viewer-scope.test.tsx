@@ -2,10 +2,15 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ReactNode } from 'react'
+import { __resetViewerScopeForTests, synchronizeViewerScope } from '@/lib/auth/viewer-scope'
 
 type MockAuthState = {
   userId: string | null
   accessToken: string | null
+  authChecked: boolean
+  loading: boolean
+  viewerKey: `user:${string}`
+  sessionGeneration: number
 }
 
 let mockAuthState: MockAuthState
@@ -58,6 +63,18 @@ function accessTokenFor(viewerId: string) {
   return `eyJhbGciOiJub25lIn0.${payload}.signature`
 }
 
+function setMockViewer(viewerId: string, tokenSubject = viewerId) {
+  const scope = synchronizeViewerScope(true, viewerId)
+  mockAuthState = {
+    userId: viewerId,
+    accessToken: accessTokenFor(tokenSubject),
+    authChecked: true,
+    loading: false,
+    viewerKey: `user:${viewerId}`,
+    sessionGeneration: scope.sessionGeneration,
+  }
+}
+
 function responseFor(viewerId: string, hasConnection: boolean) {
   return {
     ok: true,
@@ -71,10 +88,8 @@ function responseFor(viewerId: string, hasConnection: boolean) {
 
 describe('ExchangeBindingBanner viewer ownership', () => {
   beforeEach(() => {
-    mockAuthState = {
-      userId: 'viewer-a',
-      accessToken: accessTokenFor('viewer-a'),
-    }
+    __resetViewerScopeForTests()
+    setMockViewer('viewer-a')
   })
 
   afterAll(() => {
@@ -103,10 +118,7 @@ describe('ExchangeBindingBanner viewer ownership', () => {
     const { rerender } = render(<ExchangeBindingBanner userId="viewer-a" />)
     expect(await screen.findByText('bindExchangeBannerTitle')).toBeInTheDocument()
 
-    mockAuthState = {
-      userId: 'viewer-b',
-      accessToken: accessTokenFor('viewer-b'),
-    }
+    setMockViewer('viewer-b')
     rerender(<ExchangeBindingBanner userId="viewer-b" />)
     expect(screen.queryByText('bindExchangeBannerTitle')).not.toBeInTheDocument()
 
@@ -128,10 +140,7 @@ describe('ExchangeBindingBanner viewer ownership', () => {
     const { rerender } = render(<ExchangeBindingBanner userId="viewer-a" />)
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
 
-    mockAuthState = {
-      userId: 'viewer-b',
-      accessToken: accessTokenFor('viewer-b'),
-    }
+    setMockViewer('viewer-b')
     rerender(<ExchangeBindingBanner userId="viewer-b" />)
     expect(await screen.findByText('bindExchangeBannerTitle')).toBeInTheDocument()
 
@@ -143,10 +152,7 @@ describe('ExchangeBindingBanner viewer ownership', () => {
   })
 
   it('fails closed when the bearer subject does not own the rendered viewer', () => {
-    mockAuthState = {
-      userId: 'viewer-a',
-      accessToken: accessTokenFor('viewer-b'),
-    }
+    setMockViewer('viewer-a', 'viewer-b')
     const fetchMock = jest.fn()
     global.fetch = fetchMock as typeof fetch
 

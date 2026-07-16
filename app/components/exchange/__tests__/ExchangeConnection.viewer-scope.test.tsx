@@ -2,12 +2,19 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { ReactNode } from 'react'
+import {
+  __resetViewerScopeForTests,
+  beginViewerTransition,
+  synchronizeViewerScope,
+} from '@/lib/auth/viewer-scope'
 
 type MockAuthState = {
   userId: string | null
   accessToken: string | null
   loading: boolean
   authChecked: boolean
+  viewerKey: `user:${string}`
+  sessionGeneration: number
 }
 
 let mockAuthState: MockAuthState
@@ -94,6 +101,18 @@ function accessTokenFor(viewerId: string) {
   return `eyJhbGciOiJub25lIn0.${payload}.signature`
 }
 
+function setMockViewer(viewerId: string, tokenSubject = viewerId) {
+  const scope = synchronizeViewerScope(true, viewerId)
+  mockAuthState = {
+    userId: viewerId,
+    accessToken: accessTokenFor(tokenSubject),
+    loading: false,
+    authChecked: true,
+    viewerKey: `user:${viewerId}`,
+    sessionGeneration: scope.sessionGeneration,
+  }
+}
+
 function connectionResponse(viewerId: string, marker: string) {
   return {
     ok: true,
@@ -124,12 +143,8 @@ function successResponse() {
 describe('ExchangeConnectionManager viewer ownership', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    mockAuthState = {
-      userId: 'viewer-a',
-      accessToken: accessTokenFor('viewer-a'),
-      loading: false,
-      authChecked: true,
-    }
+    __resetViewerScopeForTests()
+    setMockViewer('viewer-a')
   })
 
   afterAll(() => {
@@ -160,12 +175,7 @@ describe('ExchangeConnectionManager viewer ownership', () => {
     const { rerender } = render(<ExchangeConnectionManager userId="viewer-a" />)
     expect(await screen.findByText(/viewer-a-secret/)).toBeInTheDocument()
 
-    mockAuthState = {
-      userId: 'viewer-b',
-      accessToken: accessTokenFor('viewer-b'),
-      loading: false,
-      authChecked: true,
-    }
+    setMockViewer('viewer-b')
     rerender(<ExchangeConnectionManager userId="viewer-b" />)
 
     expect(screen.queryByText(/viewer-a-secret/)).not.toBeInTheDocument()
@@ -189,12 +199,7 @@ describe('ExchangeConnectionManager viewer ownership', () => {
     const { rerender } = render(<ExchangeConnectionManager userId="viewer-a" />)
     await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1))
 
-    mockAuthState = {
-      userId: 'viewer-b',
-      accessToken: accessTokenFor('viewer-b'),
-      loading: false,
-      authChecked: true,
-    }
+    setMockViewer('viewer-b')
     rerender(<ExchangeConnectionManager userId="viewer-b" />)
     expect(await screen.findByText(/viewer-b-secret/)).toBeInTheDocument()
 
@@ -224,12 +229,7 @@ describe('ExchangeConnectionManager viewer ownership', () => {
     fireEvent.click(screen.getByRole('button', { name: 'disconnect' }))
     expect(mockShowConfirm).toHaveBeenCalledTimes(1)
 
-    mockAuthState = {
-      userId: 'viewer-b',
-      accessToken: accessTokenFor('viewer-b'),
-      loading: false,
-      authChecked: true,
-    }
+    setMockViewer('viewer-b')
     rerender(<ExchangeConnectionManager userId="viewer-b" />)
     expect(await screen.findByText(/viewer-b-secret/)).toBeInTheDocument()
 
@@ -245,6 +245,64 @@ describe('ExchangeConnectionManager viewer ownership', () => {
           (options as RequestInit | undefined)?.method === 'DELETE'
       )
     ).toBe(false)
+  })
+
+  it('honors process-wide pending invalidation before React rerenders', async () => {
+    const confirmation = deferred<boolean>()
+    mockShowConfirm.mockReturnValue(confirmation.promise)
+    const fetchMock = jest.fn((url: string) => {
+      if (url === '/api/exchange/connections') {
+        return Promise.resolve(connectionResponse('viewer-a', 'viewer-a-secret'))
+      }
+      return Promise.resolve(successResponse())
+    })
+    global.fetch = fetchMock as typeof fetch
+
+    render(<ExchangeConnectionManager userId="viewer-a" />)
+    expect(await screen.findByText(/viewer-a-secret/)).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'disconnect' }))
+
+    beginViewerTransition('viewer-a')
+    await act(async () => {
+      confirmation.resolve(true)
+      await confirmation.promise
+    })
+
+    expect(fetchMock.mock.calls.some(([url]) => url === '/api/exchange/disconnect')).toBe(false)
+  })
+
+  it('keeps the last-started same-viewer reload authoritative', async () => {
+    const olderRetry = deferred<ReturnType<typeof connectionResponse>>()
+    const newerRetry = deferred<ReturnType<typeof connectionResponse>>()
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) })
+      .mockReturnValueOnce(olderRetry.promise)
+      .mockReturnValueOnce(newerRetry.promise)
+    global.fetch = fetchMock as typeof fetch
+
+    const view = render(<ExchangeConnectionManager userId="viewer-a" />)
+    const retry = await screen.findByRole('button', { name: 'retry' })
+    fireEvent.click(retry)
+    mockAuthState = {
+      ...mockAuthState,
+      accessToken: `${accessTokenFor('viewer-a')}-rotated`,
+    }
+    view.rerender(<ExchangeConnectionManager userId="viewer-a" />)
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(3))
+
+    await act(async () => {
+      newerRetry.resolve(connectionResponse('viewer-a', 'newer-state'))
+      await newerRetry.promise
+    })
+    expect(await screen.findByText(/newer-state/)).toBeInTheDocument()
+
+    await act(async () => {
+      olderRetry.resolve(connectionResponse('viewer-a', 'older-state'))
+      await olderRetry.promise
+    })
+    expect(screen.queryByText(/older-state/)).not.toBeInTheDocument()
+    expect(screen.getByText(/newer-state/)).toBeInTheDocument()
   })
 
   it('keeps B syncing when A finishes late and reloads B with B token only', async () => {
@@ -272,12 +330,7 @@ describe('ExchangeConnectionManager viewer ownership', () => {
     fireEvent.click(screen.getByRole('button', { name: 'refreshData' }))
     expect(screen.getByRole('button', { name: 'syncing' })).toBeDisabled()
 
-    mockAuthState = {
-      userId: 'viewer-b',
-      accessToken: accessTokenFor('viewer-b'),
-      loading: false,
-      authChecked: true,
-    }
+    setMockViewer('viewer-b')
     rerender(<ExchangeConnectionManager userId="viewer-b" />)
     expect(await screen.findByText(/viewer-b-secret/)).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: 'refreshData' }))
@@ -299,12 +352,7 @@ describe('ExchangeConnectionManager viewer ownership', () => {
   })
 
   it('fails closed when the prop, canonical viewer and bearer subject disagree', async () => {
-    mockAuthState = {
-      userId: 'viewer-a',
-      accessToken: accessTokenFor('viewer-b'),
-      loading: false,
-      authChecked: true,
-    }
+    setMockViewer('viewer-a', 'viewer-b')
     const fetchMock = jest.fn()
     global.fetch = fetchMock as typeof fetch
 
