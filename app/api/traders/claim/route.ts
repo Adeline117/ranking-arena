@@ -27,6 +27,17 @@ import { sendNotification } from '@/lib/data/notifications'
 import { verifyWalletOwnership } from '@/lib/services/wallet-verification'
 import { hasVerifiedClaimConnection } from '@/lib/services/claim-connection-proof'
 import { logger } from '@/lib/logger'
+import { canonicalizeWalletIdentity, walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
+
+function requireProofString(value: unknown, field: string, maxLength: number): string {
+  if (typeof value !== 'string' || value.length === 0) {
+    throw ApiError.validation(`${field} must be a non-empty string`)
+  }
+  if (value.length > maxLength) {
+    throw ApiError.validation(`${field} is too long`)
+  }
+  return value
+}
 
 /**
  * GET /api/traders/claim
@@ -89,7 +100,11 @@ export async function POST(request: NextRequest) {
     const supabase = getSupabaseAdmin()
     const body = await request.json()
 
-    const trader_id = validateString(body.trader_id, { required: true, fieldName: 'trader_id' })
+    const rawTraderId = validateString(body.trader_id, {
+      required: true,
+      maxLength: 512,
+      fieldName: 'trader_id',
+    })
     const rawSource = validateString(body.source, { required: true, fieldName: 'source' })
     const source = rawSource?.toLowerCase()
     const verification_method = validateEnum(body.verification_method, [
@@ -97,8 +112,19 @@ export async function POST(request: NextRequest) {
       'signature',
     ] as const)
 
-    if (!trader_id || !source || !verification_method) {
+    if (!rawTraderId || !source || !verification_method) {
       throw ApiError.validation('Missing required parameters')
+    }
+
+    let trader_id = rawTraderId
+    if (verification_method === 'signature') {
+      try {
+        trader_id = canonicalizeWalletIdentity(rawTraderId, source)
+      } catch (error) {
+        throw ApiError.validation(
+          error instanceof Error ? error.message : 'Invalid wallet identity'
+        )
+      }
     }
 
     // Early check if already claimed (optimization — DB unique constraint is the real guard against race conditions)
@@ -139,28 +165,35 @@ export async function POST(request: NextRequest) {
 
     // For wallet signature verification, verify the signature server-side
     if (verification_method === 'signature') {
-      const { wallet_address, signature, message } = body.verification_data || {}
-
-      if (!wallet_address || !signature || !message) {
-        throw ApiError.validation(
-          'Wallet signature verification requires wallet_address, signature, and message'
-        )
+      const proof = body.verification_data
+      if (!proof || typeof proof !== 'object' || Array.isArray(proof)) {
+        throw ApiError.validation('Wallet signature verification data must be an object')
       }
 
+      const proofRecord = proof as Record<string, unknown>
+      const walletAddress = requireProofString(proofRecord.wallet_address, 'wallet_address', 512)
+      const signature = requireProofString(proofRecord.signature, 'signature', 2048)
+      const message = requireProofString(proofRecord.message, 'message', 2048)
+
       // Verify that wallet_address matches trader_id
-      if (wallet_address.toLowerCase() !== trader_id.toLowerCase()) {
+      if (!walletIdentitiesMatch(walletAddress, trader_id, source)) {
         throw ApiError.validation('Wallet address does not match trader account')
       }
 
       // Verify wallet ownership directly (no HTTP self-fetch)
       try {
-        await verifyWalletOwnership(supabase, user.id, {
-          wallet_address,
+        const verification = await verifyWalletOwnership(supabase, user.id, {
+          wallet_address: walletAddress,
           signature,
           message,
           platform: source,
           trader_key: trader_id,
         })
+        body.verification_data = {
+          wallet_address: verification.wallet_address,
+          signature,
+          message,
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'Wallet signature verification failed'
         throw ApiError.validation(msg)

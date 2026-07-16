@@ -37,7 +37,11 @@ jest.mock('@/lib/cache/redis-client', () => ({
   getSharedRedis: jest.fn().mockResolvedValue(null),
 }))
 
-import { parseClaimMessage } from '../wallet-verification'
+import { resolveTrader } from '@/lib/data/unified'
+import { parseClaimMessage, verifyWalletOwnership } from '../wallet-verification'
+
+const mockedResolveTrader = jest.mocked(resolveTrader)
+const mockSupabase = {} as Parameters<typeof verifyWalletOwnership>[0]
 
 // ═══════════════════════════════════════════════════════
 // parseClaimMessage
@@ -76,7 +80,9 @@ describe('parseClaimMessage', () => {
     const msg = `I am claiming trader profile  on Arena. Timestamp: ${Date.now()}`
     // The regex requires at least one character for the trader key (.+)
     // An empty-ish space won't match the pattern correctly - let's test explicit empty
-    expect(parseClaimMessage(`I am claiming trader profile on Arena. Timestamp: ${Date.now()}`)).toBeNull()
+    expect(
+      parseClaimMessage(`I am claiming trader profile on Arena. Timestamp: ${Date.now()}`)
+    ).toBeNull()
   })
 
   test('handles trader keys with special characters', () => {
@@ -154,5 +160,116 @@ describe('message freshness', () => {
     const age = Date.now() - messageTimestamp
     // age is ~-120000, which is < -60000
     expect(age).toBeLessThan(-60000)
+  })
+})
+
+describe('chain-specific wallet identity verification', () => {
+  const solanaTrader = '7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
+  const caseCollidingSolanaWallet = '7XKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
+  const checksumEvm = '0xAbCdEf0123456789aBCdEf0123456789AbCdEf01'
+  const canonicalEvm = checksumEvm.toLowerCase()
+
+  function claimMessage(traderKey: string): string {
+    return `I am claiming trader profile ${traderKey} on Arena. Timestamp: ${Date.now()}`
+  }
+
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  test('rejects a different valid-looking Solana key that collides only after lowercasing', async () => {
+    mockedResolveTrader.mockResolvedValue({
+      platform: 'drift',
+      traderKey: solanaTrader,
+      handle: null,
+      avatarUrl: null,
+    })
+
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-1', {
+        wallet_address: caseCollidingSolanaWallet,
+        signature: 'c2lnbmF0dXJl',
+        message: claimMessage(solanaTrader),
+        platform: 'drift',
+        trader_key: solanaTrader,
+      })
+    ).rejects.toThrow('does not match this trader account')
+  })
+
+  test('accepts an exact Solana identity without changing its case', async () => {
+    mockedResolveTrader.mockResolvedValue({
+      platform: 'drift',
+      traderKey: solanaTrader,
+      handle: null,
+      avatarUrl: null,
+    })
+
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-1', {
+        wallet_address: solanaTrader,
+        signature: 'c2lnbmF0dXJl',
+        message: claimMessage(solanaTrader),
+        platform: 'drift',
+        trader_key: solanaTrader,
+      })
+    ).resolves.toMatchObject({
+      verified: true,
+      wallet_address: solanaTrader,
+      chain: 'solana',
+    })
+  })
+
+  test('canonicalizes EVM checksum case for lookup and storage', async () => {
+    mockedResolveTrader.mockResolvedValue({
+      platform: 'hyperliquid',
+      traderKey: canonicalEvm,
+      handle: null,
+      avatarUrl: null,
+    })
+
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-1', {
+        wallet_address: checksumEvm,
+        signature: '0xsigned',
+        message: claimMessage(checksumEvm),
+        platform: 'hyperliquid',
+        trader_key: canonicalEvm,
+      })
+    ).resolves.toMatchObject({
+      verified: true,
+      wallet_address: canonicalEvm,
+      chain: 'evm',
+    })
+    expect(mockedResolveTrader).toHaveBeenCalledWith(mockSupabase, {
+      handle: canonicalEvm,
+      platform: 'hyperliquid',
+    })
+  })
+
+  test('fails closed when the claimed wallet is not an Arena trader', async () => {
+    mockedResolveTrader.mockResolvedValue(null)
+
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-1', {
+        wallet_address: canonicalEvm,
+        signature: '0xsigned',
+        message: claimMessage(canonicalEvm),
+        platform: 'hyperliquid',
+        trader_key: canonicalEvm,
+      })
+    ).rejects.toThrow('Trader account was not found in Arena')
+  })
+
+  test('rejects non-string nested wallet input before crypto or lookup', async () => {
+    await expect(
+      verifyWalletOwnership(mockSupabase, 'user-1', {
+        wallet_address: { value: canonicalEvm } as unknown as string,
+        signature: '0xsigned',
+        message: claimMessage(canonicalEvm),
+        platform: 'hyperliquid',
+        trader_key: canonicalEvm,
+      })
+    ).rejects.toThrow('wallet_address must be a non-empty string')
+    expect(mockedResolveTrader).not.toHaveBeenCalled()
   })
 })
