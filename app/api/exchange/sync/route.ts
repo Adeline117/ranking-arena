@@ -9,6 +9,7 @@ import { badRequest, notFound } from '@/lib/api/response'
 import { validateEnum } from '@/lib/api/validation'
 import { decrypt } from '@/lib/exchange/encryption'
 import { type Exchange, SUPPORTED_EXCHANGES } from '@/lib/exchange'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 
 // 导入各交易所客户端
@@ -33,7 +34,7 @@ import {
 const logger = createLogger('exchange-sync')
 
 export const POST = withAuth(
-  async ({ user, supabase, request }) => {
+  async ({ user, request }) => {
     let body: Record<string, unknown>
     try {
       body = await request.json()
@@ -47,7 +48,8 @@ export const POST = withAuth(
     })!
 
     // 获取用户连接信息
-    const { data: connection, error: connError } = await supabase
+    const adminSupabase = getSupabaseAdmin()
+    const { data: connection, error: connError } = await adminSupabase
       .from('user_exchange_connections')
       .select(
         'id, api_key_encrypted, api_secret_encrypted, access_token_encrypted, passphrase_encrypted'
@@ -139,7 +141,7 @@ export const POST = withAuth(
       logger.error(`${exchange} sync failed`, { error: errorMessage })
 
       // 更新连接状态为失败
-      await supabase
+      await adminSupabase
         .from('user_exchange_connections')
         .update({
           last_sync_at: new Date().toISOString(),
@@ -147,6 +149,7 @@ export const POST = withAuth(
           last_sync_error: errorMessage,
         })
         .eq('id', connection.id)
+        .eq('user_id', user.id)
 
       throw err
     }
@@ -156,7 +159,7 @@ export const POST = withAuth(
     // still computed live and returned in the response below.
 
     // 更新连接状态为成功
-    await supabase
+    await adminSupabase
       .from('user_exchange_connections')
       .update({
         last_sync_at: new Date().toISOString(),
@@ -164,6 +167,7 @@ export const POST = withAuth(
         last_sync_error: null,
       })
       .eq('id', connection.id)
+      .eq('user_id', user.id)
 
     return NextResponse.json({
       success: true,

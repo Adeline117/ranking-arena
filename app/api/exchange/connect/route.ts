@@ -9,24 +9,23 @@ import { withAuth } from '@/lib/api/middleware'
 import { badRequest } from '@/lib/api/response'
 import { validateExchangeCredentials, SUPPORTED_EXCHANGES, type Exchange } from '@/lib/exchange'
 import { encrypt } from '@/lib/exchange/encryption'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('exchange-connect')
 
 // Zod schema for POST /api/exchange/connect
 const ConnectExchangeSchema = z.object({
-  exchange: z
-    .string()
-    .refine((val) => SUPPORTED_EXCHANGES.includes(val as Exchange), {
-      message: `exchange must be one of: ${SUPPORTED_EXCHANGES.join(', ')}`,
-    }),
+  exchange: z.string().refine((val) => SUPPORTED_EXCHANGES.includes(val as Exchange), {
+    message: `exchange must be one of: ${SUPPORTED_EXCHANGES.join(', ')}`,
+  }),
   apiKey: z.string().min(10, 'API Key must be at least 10 characters'),
   apiSecret: z.string().min(10, 'API Secret must be at least 10 characters'),
   passphrase: z.string().optional().nullable(),
 })
 
 export const POST = withAuth(
-  async ({ user, supabase, request }) => {
+  async ({ user, request }) => {
     let body: Record<string, unknown>
     try {
       body = await request.json()
@@ -71,9 +70,10 @@ export const POST = withAuth(
     const encryptedApiKey = encrypt(apiKey)
     const encryptedSecret = encrypt(apiSecret)
     const encryptedPassphrase = passphrase ? encrypt(passphrase) : null
+    const adminSupabase = getSupabaseAdmin()
 
     // 保存或更新连接
-    const { data: existing } = await supabase
+    const { data: existing } = await adminSupabase
       .from('user_exchange_connections')
       .select('id')
       .eq('user_id', user.id)
@@ -90,16 +90,17 @@ export const POST = withAuth(
     }
 
     if (existing) {
-      const { error: updateError } = await supabase
+      const { error: updateError } = await adminSupabase
         .from('user_exchange_connections')
         .update(connectionData)
         .eq('id', existing.id)
+        .eq('user_id', user.id)
 
       if (updateError) {
         throw new Error('Failed to update connection')
       }
     } else {
-      const { error: insertError } = await supabase.from('user_exchange_connections').insert({
+      const { error: insertError } = await adminSupabase.from('user_exchange_connections').insert({
         user_id: user.id,
         exchange,
         ...connectionData,

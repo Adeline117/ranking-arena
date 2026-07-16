@@ -9,6 +9,7 @@
  */
 
 import { withApiMiddleware, createErrorResponse } from '@/lib/api/middleware'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { createLogger } from '@/lib/utils/logger'
 
 const logger = createLogger('exchange-disconnect')
@@ -20,7 +21,7 @@ export const dynamic = 'force-dynamic'
  * 断开用户与交易所的连接（软删除）
  */
 export const DELETE = withApiMiddleware(
-  async ({ user, supabase, request }) => {
+  async ({ user, request }) => {
     // 需要认证
     if (!user) {
       return createErrorResponse('Unauthorized', 401)
@@ -41,7 +42,7 @@ export const DELETE = withApiMiddleware(
     }
 
     // 软删除：设置为非活跃
-    const { error: updateError } = await supabase
+    const { error: updateError } = await getSupabaseAdmin()
       .from('user_exchange_connections')
       .update({
         is_active: false,
