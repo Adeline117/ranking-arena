@@ -11,6 +11,11 @@ import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
+import {
+  captureProfileViewer,
+  isProfileViewerCurrent,
+  type ProfileViewerSnapshot,
+} from './profile-viewer-scope'
 
 import type { ServerProfile, ProfileTabKey, TraderPageData } from '../components/types'
 
@@ -22,25 +27,82 @@ interface UseUserProfileProps {
   serverTraderData?: TraderPageData | null
 }
 
+type ProfileStateOwner = Pick<
+  ProfileViewerSnapshot,
+  'sessionGeneration' | 'userId' | 'viewerKey'
+> & {
+  handle: string
+}
+
+type RecoveredProfileState = ProfileStateOwner & {
+  profile: ServerProfile
+}
+
+type BlockState = ProfileStateOwner & {
+  profileId: string
+  blocked: boolean
+}
+
+function sameProfileOwner(
+  state: ProfileStateOwner | null,
+  viewer: ProfileViewerSnapshot | null,
+  handle: string
+): boolean {
+  return (
+    state !== null &&
+    viewer !== null &&
+    state.handle === handle &&
+    state.viewerKey === viewer.viewerKey &&
+    state.sessionGeneration === viewer.sessionGeneration &&
+    state.userId === viewer.userId
+  )
+}
+
 export function useUserProfile({ handle, serverProfile, serverTraderData }: UseUserProfileProps) {
   const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
   const { isPro } = useSubscription()
 
-  const { userId: authUserId, email: authEmail } = useAuthSession()
-  const [email, setEmail] = useState<string | null>(null)
-  const [currentUserId, setCurrentUserId] = useState<string | null>(null)
-  const [profile, setProfile] = useState<ServerProfile | null>(serverProfile)
+  const auth = useAuthSession()
+  const authRef = useRef(auth)
+  authRef.current = auth
+  const currentViewer = captureProfileViewer(auth)
+  const email = currentViewer?.email ?? null
+  const currentUserId = currentViewer?.userId ?? null
+
+  const [recoveredProfileState, setRecoveredProfileState] = useState<RecoveredProfileState | null>(
+    null
+  )
+  const recoveredProfileBelongsToRender = sameProfileOwner(
+    recoveredProfileState,
+    currentViewer,
+    handle
+  )
+  const profile =
+    serverProfile ??
+    (recoveredProfileBelongsToRender ? (recoveredProfileState?.profile ?? null) : null)
   const [modalType, setModalType] = useState<'followers' | 'following' | null>(null)
   const [followersCount, setFollowersCount] = useState(serverProfile?.followers || 0)
   const [mounted, setMounted] = useState(false)
-  const profileCreationRef = useRef(false)
+  const mountedRef = useRef(false)
+  const profileOperationRef = useRef(0)
+  const blockOperationRef = useRef(0)
+  const routeRef = useRef({ handle, hasServerProfile: serverProfile !== null })
+  routeRef.current = { handle, hasServerProfile: serverProfile !== null }
+  const profileIdRef = useRef(profile?.id ?? null)
+  profileIdRef.current = profile?.id ?? null
   const searchParams = useSearchParams()
   const pathname = usePathname()
 
   useEffect(() => {
+    mountedRef.current = true
     setMounted(true)
+    return () => {
+      mountedRef.current = false
+      profileOperationRef.current += 1
+      blockOperationRef.current += 1
+    }
   }, [])
 
   // Trader data - React Query with server fallback
@@ -93,92 +155,99 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
     [updateUrl]
   )
 
-  // Sync auth state from useAuthSession (no network call)
+  // SSR can time out and return no profile for the signed-in user's own route.
+  // Recover by reading the trigger-provisioned row only. The browser must never
+  // manufacture identity rows after the database revoked authenticated INSERT.
   useEffect(() => {
-    setEmail(authEmail)
-    setCurrentUserId(authUserId)
+    const operationId = ++profileOperationRef.current
+    const viewer = captureProfileViewer(authRef.current)
+    if (serverProfile || !viewer) return
 
-    if (!serverProfile && authUserId) {
-      const emailHandle = authEmail?.split('@')[0]
-      const isOwnProfile = handle === authUserId || handle === emailHandle
-      if (isOwnProfile) {
-        handleOwnProfileCreation(authUserId, emailHandle)
-      }
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handle/serverProfile are initial props
-  }, [authUserId, authEmail])
+    const emailHandle = viewer.email?.split('@')[0]
+    if (handle !== viewer.userId && handle !== emailHandle) return
 
-  async function handleOwnProfileCreation(userId: string, emailHandle?: string) {
-    if (profileCreationRef.current) return
-    profileCreationRef.current = true
+    let cancelled = false
+    const abortController = new AbortController()
+    const operationIsCurrent = () =>
+      !cancelled &&
+      mountedRef.current &&
+      profileOperationRef.current === operationId &&
+      routeRef.current.handle === handle &&
+      !routeRef.current.hasServerProfile &&
+      isProfileViewerCurrent(viewer, authRef.current)
 
-    try {
-      const { data: existingProfile } = await supabase
-        .from('user_profiles')
-        .select(
-          'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, role'
-        )
-        .eq('id', userId)
-        .maybeSingle()
+    void (async () => {
+      try {
+        const { data: existingProfile, error: profileError } = await supabase
+          .from('user_profiles')
+          .select('id, handle, bio, avatar_url, cover_url, show_followers, show_following, role')
+          .eq('id', viewer.userId)
+          .abortSignal(abortController.signal)
+          .maybeSingle()
 
-      if (existingProfile) {
-        if (existingProfile.handle && existingProfile.handle !== handle) {
+        if (!operationIsCurrent()) return
+        if (
+          profileError ||
+          !existingProfile ||
+          existingProfile.id !== viewer.userId ||
+          typeof existingProfile.handle !== 'string' ||
+          !existingProfile.handle
+        ) {
+          logger.warn('Own profile lookup failed closed:', profileError)
+          showToast(t('loadUserDataFailed'), 'error')
+          return
+        }
+
+        if (existingProfile.handle !== handle) {
           router.replace(`/u/${encodeURIComponent(existingProfile.handle)}`)
           return
         }
-        setProfile({
-          id: existingProfile.id,
-          handle: existingProfile.handle || handle,
-          bio: existingProfile.bio || undefined,
-          avatar_url: existingProfile.avatar_url || undefined,
-          cover_url: existingProfile.cover_url || undefined,
-          followers: 0,
-          following: 0,
-          followingTraders: 0,
-          isRegistered: true,
-          proBadgeTier: null,
-          role: existingProfile.role || undefined,
-        })
-      } else {
-        const defaultHandle = emailHandle || userId.slice(0, 8)
-        const { error: insertError } = await supabase
-          .from('user_profiles')
-          .insert({ id: userId, handle: defaultHandle })
 
-        if (insertError && insertError.code !== '23505') {
-          logger.warn('Profile insert failed (non-conflict):', insertError)
-        }
-
-        const { data: newProfile, error: createError } = await supabase
-          .from('user_profiles')
-          .select('id, handle, bio, avatar_url, cover_url')
-          .eq('id', userId)
-          .maybeSingle()
-
-        if (newProfile && !createError) {
-          if (newProfile.handle && newProfile.handle !== handle) {
-            router.replace(`/u/${encodeURIComponent(newProfile.handle)}`)
-            return
-          }
-          setProfile({
-            id: newProfile.id,
-            handle: newProfile.handle || handle,
-            bio: newProfile.bio || undefined,
-            avatar_url: newProfile.avatar_url || undefined,
-            cover_url: newProfile.cover_url || undefined,
+        setRecoveredProfileState({
+          handle,
+          viewerKey: viewer.viewerKey,
+          sessionGeneration: viewer.sessionGeneration,
+          userId: viewer.userId,
+          profile: {
+            id: existingProfile.id,
+            handle: existingProfile.handle,
+            bio: existingProfile.bio || undefined,
+            avatar_url: existingProfile.avatar_url || undefined,
+            cover_url: existingProfile.cover_url || undefined,
+            show_followers: existingProfile.show_followers ?? undefined,
+            show_following: existingProfile.show_following ?? undefined,
             followers: 0,
             following: 0,
             followingTraders: 0,
             isRegistered: true,
             proBadgeTier: null,
-          })
-        }
+            role: existingProfile.role || undefined,
+          },
+        })
+      } catch (error) {
+        if (!operationIsCurrent()) return
+        logger.error('Own profile lookup threw:', error)
+        showToast(t('loadUserDataFailed'), 'error')
       }
-    } catch (error) {
-      logger.error('Error creating own profile:', error)
-      showToast(t('loadUserDataFailed'), 'error')
+    })()
+
+    return () => {
+      cancelled = true
+      abortController.abort()
     }
-  }
+  }, [
+    auth.accessToken,
+    auth.authChecked,
+    auth.loading,
+    auth.sessionGeneration,
+    auth.userId,
+    auth.viewerKey,
+    handle,
+    router,
+    serverProfile,
+    showToast,
+    t,
+  ])
 
   const isOwnProfile = currentUserId === profile?.id
   const followingCount = (profile?.following || 0) + (profile?.followingTraders || 0)
@@ -188,20 +257,71 @@ export function useUserProfile({ handle, serverProfile, serverTraderData }: UseU
   const isTraderDataError = isTrader && traderError && !traderData
 
   // Block check: bidirectional
-  const [isBlocked, setIsBlocked] = useState(false)
+  const [blockState, setBlockState] = useState<BlockState | null>(null)
+  const blockStateBelongsToRender =
+    sameProfileOwner(blockState, currentViewer, handle) && blockState?.profileId === profile?.id
+  const isBlocked = blockStateBelongsToRender ? blockState?.blocked === true : false
+
   useEffect(() => {
-    if (!currentUserId || !profile?.id || isOwnProfile) return
-    supabase
-      .from('blocked_users')
-      .select('blocker_id')
-      .or(
-        `and(blocker_id.eq.${currentUserId},blocked_id.eq.${profile.id}),and(blocker_id.eq.${profile.id},blocked_id.eq.${currentUserId})`
-      )
-      .limit(1)
-      .then(({ data }) => {
-        if (data && data.length > 0) setIsBlocked(true)
-      })
-  }, [currentUserId, profile?.id, isOwnProfile])
+    const operationId = ++blockOperationRef.current
+    const viewer = captureProfileViewer(authRef.current)
+    const profileId = profile?.id
+    if (!viewer || !profileId || viewer.userId === profileId) return
+
+    let cancelled = false
+    const abortController = new AbortController()
+    const operationIsCurrent = () =>
+      !cancelled &&
+      mountedRef.current &&
+      blockOperationRef.current === operationId &&
+      profileIdRef.current === profileId &&
+      routeRef.current.handle === handle &&
+      isProfileViewerCurrent(viewer, authRef.current)
+
+    void (async () => {
+      try {
+        const { data, error } = await supabase
+          .from('blocked_users')
+          .select('blocker_id')
+          .or(
+            `and(blocker_id.eq.${viewer.userId},blocked_id.eq.${profileId}),and(blocker_id.eq.${profileId},blocked_id.eq.${viewer.userId})`
+          )
+          .limit(1)
+          .abortSignal(abortController.signal)
+
+        if (!operationIsCurrent()) return
+        if (error) {
+          logger.warn('Profile block lookup failed:', error)
+          return
+        }
+
+        setBlockState({
+          handle,
+          viewerKey: viewer.viewerKey,
+          sessionGeneration: viewer.sessionGeneration,
+          userId: viewer.userId,
+          profileId,
+          blocked: Array.isArray(data) && data.length > 0,
+        })
+      } catch (error) {
+        if (operationIsCurrent()) logger.warn('Profile block lookup threw:', error)
+      }
+    })()
+
+    return () => {
+      cancelled = true
+      abortController.abort()
+    }
+  }, [
+    auth.accessToken,
+    auth.authChecked,
+    auth.loading,
+    auth.sessionGeneration,
+    auth.userId,
+    auth.viewerKey,
+    handle,
+    profile?.id,
+  ])
 
   return {
     // Core state
