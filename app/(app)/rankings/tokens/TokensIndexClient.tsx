@@ -87,6 +87,7 @@ const TOKENS_INDEX_CSS = `
   color:var(--color-text-primary);
 }
 .tk-sort-btn:focus-visible{outline:2px solid var(--color-accent-primary);outline-offset:2px;}
+.tk-search-input:disabled,.tk-sort-btn:disabled{cursor:wait;opacity:.65;}
 `
 
 interface TokensIndexClientProps {
@@ -99,6 +100,14 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
   const [loading, setLoading] = useState(!initialTokens || initialTokens.length === 0)
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('traders')
+  // SSR controls must not advertise interactivity before React owns their
+  // events. On slower mobile hydration, users could type into the search box
+  // and then watch their text disappear when hydration reset the DOM value.
+  const [interactive, setInteractive] = useState(false)
+
+  useEffect(() => {
+    setInteractive(true)
+  }, [])
 
   useEffect(() => {
     // SSR already provided fresh popular tokens (same 1h cache window). Skip the
@@ -185,6 +194,8 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('tokenRankingsSearchPlaceholder')}
           aria-label={t('tokenRankingsSearchPlaceholder')}
+          aria-busy={!interactive}
+          disabled={!interactive}
           style={{
             flex: '1 1 240px',
             maxWidth: 400,
@@ -208,6 +219,7 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
               type="button"
               className="tk-sort-btn"
               aria-pressed={sortKey === opt.key}
+              disabled={!interactive}
               onClick={() => setSortKey(opt.key)}
             >
               {opt.label}
