@@ -17,7 +17,10 @@ import { test, expect } from '@playwright/test'
 import { dismissOverlays } from './helpers'
 
 test.describe('交易员详情页 - SSR fallback', () => {
-  test('cold visit returns trader content in SSR HTML (no skeleton flash)', async ({ page, request }) => {
+  test('cold visit returns trader content in SSR HTML (no skeleton flash)', async ({
+    page,
+    request,
+  }) => {
     // Find a valid trader handle from the homepage. Use SSR row links here
     // because we're calling request.get() not page.click() — visibility
     // doesn't matter for raw HTTP fetches.
@@ -26,8 +29,11 @@ test.describe('交易员详情页 - SSR fallback', () => {
     await page.waitForLoadState('domcontentloaded')
 
     const traderLinks = page.locator('a[href*="/trader/"]')
-    await traderLinks.first().waitFor({ state: 'attached', timeout: 30_000 }).catch(() => {})
-    if (await traderLinks.count() === 0) {
+    await traderLinks
+      .first()
+      .waitFor({ state: 'attached', timeout: 30_000 })
+      .catch(() => {})
+    if ((await traderLinks.count()) === 0) {
       test.skip()
       return
     }
@@ -45,8 +51,7 @@ test.describe('交易员详情页 - SSR fallback', () => {
 
     // SSR HTML should contain trader content, not just a skeleton.
     const hasTraderMarkers =
-      /trader|arena[\s-]?score|ROI|win rate|rank/i.test(html) &&
-      html.length > 5000
+      /trader|arena[\s-]?score|ROI|win rate|rank/i.test(html) && html.length > 5000
     expect(hasTraderMarkers).toBeTruthy()
 
     // Should NOT be a stripped-down loading skeleton
@@ -55,17 +60,21 @@ test.describe('交易员详情页 - SSR fallback', () => {
   })
 
   test('SSR HTML contains structured data (JSON-LD) for SEO', async ({ request }) => {
-    // Discover a valid trader handle from the homepage HTML
-    const homeResp = await request.get('/')
-    const homeHtml = await homeResp.text()
-    const hrefMatch = homeHtml.match(/href="(\/trader\/[^"]+)"/)
-    if (!hrefMatch) {
-      test.skip()
-      return
+    // The homepage's interactive trader links mount after hydration, so raw
+    // HTML discovery silently skipped this assertion. Resolve one public row
+    // from the read-only API instead and fail hard if the contract regresses.
+    const tradersResp = await request.get('/api/traders?limit=1&range=90D')
+    expect(tradersResp.ok()).toBeTruthy()
+    const payload = (await tradersResp.json()) as {
+      traders?: Array<{ id?: unknown; source?: unknown }>
     }
+    const trader = payload.traders?.[0]
+    expect(typeof trader?.id).toBe('string')
+    expect(typeof trader?.source).toBe('string')
 
-    const traderHref = hrefMatch[1]
+    const traderHref = `/trader/${encodeURIComponent(String(trader?.id))}?platform=${encodeURIComponent(String(trader?.source))}`
     const traderResp = await request.get(traderHref)
+    expect(traderResp.ok()).toBeTruthy()
     const traderHtml = await traderResp.text()
 
     // Assert that the trader-specific JSON-LD is present in the SSR output.
@@ -80,9 +89,9 @@ test.describe('交易员详情页 - SSR fallback', () => {
     // placeholders. Fixed in commits e189c823a (4s SSR detail timeout) +
     // 9e094253b (lowercase ETH addresses) + the resolveTrader timeout.
     // Tightened back to require ProfilePage|Person|BreadcrumbList.
-    const schemaBlocks = [...traderHtml.matchAll(
-      /<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g
-    )]
+    const schemaBlocks = [
+      ...traderHtml.matchAll(/<script[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/g),
+    ]
     expect(schemaBlocks.length).toBeGreaterThan(0)
 
     const allSchemas = schemaBlocks.map((m) => m[1]).join('\n')
