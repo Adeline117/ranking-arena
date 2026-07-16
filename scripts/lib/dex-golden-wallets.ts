@@ -197,6 +197,23 @@ const goldenSnapshotSchema = z
   })
   .strict()
 
+export const dexGoldenWalletChainSubsetSchema = z
+  .object({
+    data_contract: z.literal(DEX_GOLDEN_WALLET_SUBSET_CONTRACT),
+    parent_snapshot_sha256: z
+      .string()
+      .regex(/^[0-9a-f]{64}$/)
+      .refine((value) => !/^0{64}$/.test(value), 'parent snapshot SHA must be nonzero'),
+    source_slug: z.enum(['binance_web3_bsc', 'okx_web3_solana']),
+    chain: z.union([
+      z.object({ namespace: z.literal('eip155'), reference: z.literal('56') }).strict(),
+      z.object({ namespace: z.literal('solana'), reference: z.literal('mainnet-beta') }).strict(),
+    ]),
+    wallet_count: z.literal(50),
+    wallets: z.array(goldenWalletSchema).length(50),
+  })
+  .strict()
+
 function isCanonicalTimestamp(value: string): boolean {
   const parsed = Date.parse(value)
   return Number.isFinite(parsed) && new Date(parsed).toISOString() === value
@@ -522,6 +539,72 @@ function assertParsedSnapshotInvariants(snapshot: DexGoldenWalletSnapshot): void
   }
 }
 
+function assertParsedChainSubsetInvariants(subset: DexGoldenWalletChainSubset): void {
+  const source = subset.source_slug
+  const contract = SOURCE_CONTRACT[source]
+  if (
+    subset.chain.namespace !== contract.namespace ||
+    subset.chain.reference !== contract.reference
+  ) {
+    throw new Error(`${source} chain subset conflicts with its source contract`)
+  }
+  assertUnique(
+    subset.wallets.map((wallet) => wallet.wallet),
+    `${source} chain subset wallet identity`
+  )
+  assertUnique(
+    subset.wallets.map((wallet) => String(wallet.source_rank)),
+    `${source} chain subset source rank`
+  )
+  if (new Set(subset.wallets.map((wallet) => wallet.source_snapshot_id)).size !== 1) {
+    throw new Error(`${source} chain subset must use one source snapshot`)
+  }
+  if (new Set(subset.wallets.map((wallet) => wallet.source_snapshot_scraped_at)).size !== 1) {
+    throw new Error(`${source} chain subset must use one snapshot timestamp`)
+  }
+
+  const expectedCohorts: Record<DexGoldenCohort, number> = {
+    top: 20,
+    deterministic_random: 20,
+    high_frequency: 10,
+  }
+  for (const [cohort, expectedCount] of Object.entries(expectedCohorts) as Array<
+    [DexGoldenCohort, number]
+  >) {
+    if (subset.wallets.filter((wallet) => wallet.cohort === cohort).length !== expectedCount) {
+      throw new Error(`${source} chain subset has an invalid ${cohort} cohort size`)
+    }
+  }
+
+  for (const wallet of subset.wallets) {
+    if (wallet.source_slug !== source) {
+      throw new Error(`${source} chain subset contains a foreign source wallet`)
+    }
+    if (
+      wallet.chain.namespace !== contract.namespace ||
+      wallet.chain.reference !== contract.reference
+    ) {
+      throw new Error(`${source} chain subset contains a foreign chain wallet`)
+    }
+    if (canonicalWallet(source, wallet.wallet) !== wallet.wallet) {
+      throw new Error(`${source} chain subset wallet is not canonical`)
+    }
+    if (wallet.pnl_currency !== contract.pnlCurrency) {
+      throw new Error(`${source} chain subset wallet has an invalid PnL currency`)
+    }
+    if (wallet.cohort === 'high_frequency' && wallet.activity_proxy_count === 0) {
+      throw new Error(`${source} chain subset high-frequency wallet requires positive activity`)
+    }
+  }
+
+  const expectedOrder = [...subset.wallets].sort(
+    (a, b) => COHORT_ORDER[a.cohort] - COHORT_ORDER[b.cohort] || a.wallet.localeCompare(b.wallet)
+  )
+  if (expectedOrder.some((wallet, index) => wallet !== subset.wallets[index])) {
+    throw new Error(`${source} chain subset wallets must use canonical cohort/wallet order`)
+  }
+}
+
 export function parseDexGoldenWalletSnapshot(input: unknown): DexGoldenWalletSnapshot {
   const snapshot = goldenSnapshotSchema.parse(input) as DexGoldenWalletSnapshot
   assertParsedSnapshotInvariants(snapshot)
@@ -530,6 +613,16 @@ export function parseDexGoldenWalletSnapshot(input: unknown): DexGoldenWalletSna
 
 export function dexGoldenWalletSnapshotSha256(input: unknown): string {
   return canonicalSha256(parseDexGoldenWalletSnapshot(input))
+}
+
+export function parseDexGoldenWalletChainSubset(input: unknown): DexGoldenWalletChainSubset {
+  const subset = dexGoldenWalletChainSubsetSchema.parse(input) as DexGoldenWalletChainSubset
+  assertParsedChainSubsetInvariants(subset)
+  return subset
+}
+
+export function dexGoldenWalletChainSubsetSha256(input: unknown): string {
+  return canonicalSha256(parseDexGoldenWalletChainSubset(input))
 }
 
 export function buildDexGoldenWalletChainSubset(
@@ -548,5 +641,6 @@ export function buildDexGoldenWalletChainSubset(
     wallet_count: 50,
     wallets,
   }
-  return { subset, sha256: canonicalSha256(subset) }
+  const parsedSubset = parseDexGoldenWalletChainSubset(subset)
+  return { subset: parsedSubset, sha256: canonicalSha256(parsedSubset) }
 }

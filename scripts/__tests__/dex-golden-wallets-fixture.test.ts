@@ -1,7 +1,9 @@
 import fixtureJson from '../fixtures/dex-golden-wallets.v1.json'
 import {
   buildDexGoldenWalletChainSubset,
+  dexGoldenWalletChainSubsetSha256,
   dexGoldenWalletSnapshotSha256,
+  parseDexGoldenWalletChainSubset,
   parseDexGoldenWalletSnapshot,
 } from '../lib/dex-golden-wallets'
 
@@ -93,7 +95,25 @@ describe('DEX golden-wallet production fixture', () => {
       expect(subset.wallet_count).toBe(50)
       expect(subset.wallets).toHaveLength(50)
       expect(sha256).toBe(expectedSubsetHashes[source])
+      expect(parseDexGoldenWalletChainSubset(subset)).toEqual(subset)
+      expect(dexGoldenWalletChainSubsetSha256(subset)).toBe(expectedSubsetHashes[source])
     }
+  })
+
+  it('rejects a chain subset with a foreign, duplicate, or reordered wallet', () => {
+    const { subset } = buildDexGoldenWalletChainSubset(fixtureJson, 'binance_web3_bsc')
+
+    const foreign = JSON.parse(JSON.stringify(subset)) as typeof subset
+    foreign.wallets[0].source_slug = 'okx_web3_solana'
+    expect(() => parseDexGoldenWalletChainSubset(foreign)).toThrow(/foreign source wallet/)
+
+    const duplicate = JSON.parse(JSON.stringify(subset)) as typeof subset
+    duplicate.wallets[1].wallet = duplicate.wallets[0].wallet
+    expect(() => parseDexGoldenWalletChainSubset(duplicate)).toThrow(/wallet identity/)
+
+    const reordered = JSON.parse(JSON.stringify(subset)) as typeof subset
+    ;[reordered.wallets[0], reordered.wallets[1]] = [reordered.wallets[1], reordered.wallets[0]]
+    expect(() => parseDexGoldenWalletChainSubset(reordered)).toThrow(/canonical cohort\/wallet/)
   })
 
   it('fails closed on authorization, unknown fields, or duplicate wallets', () => {
