@@ -6119,6 +6119,11 @@ const en = {
   dataDelayedNote: 'This exchange publishes this data with a delay.',
   metricRoi: 'ROI',
   metricPnl: 'PnL',
+  gmxRealizedNetPnlLabel: 'Realized Net PnL',
+  gmxRealizedNetPnlSummary: 'Fees and price impact included · unrealized PnL excluded',
+  gmxRealizedNetPnlTooltip:
+    'GMX realized net PnL includes fees and price impact and excludes current unrealized PnL. It uses complete UTC-day windows, up to 24 hours behind rolling now.',
+  gmxCompletedWindowEnded: 'Complete UTC-day window ended',
   metricWinRate: 'Win Rate',
   metricMdd: 'Max Drawdown',
   metricCopierPnl: "Copiers' PnL",

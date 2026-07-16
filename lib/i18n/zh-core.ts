@@ -213,6 +213,11 @@ const zhCore = {
   pleaseLogin: '请先登录',
   pleaseLoginFirst: '请先登录',
   pnl: '盈亏',
+  gmxRealizedNetPnlLabel: '已实现净 PnL',
+  gmxRealizedNetPnlSummary: '已计入费用与价格影响 · 不含未实现盈亏',
+  gmxRealizedNetPnlTooltip:
+    'GMX 已实现净 PnL 计入费用与价格影响，不包含当前未实现盈亏；采用完整 UTC 日窗口，相比滚动当前时间最多滞后 24 小时。',
+  gmxCompletedWindowEnded: '完整 UTC 日窗口截止于',
   pnlTooltip: '盈亏：以美元计的总利润或亏损。\n部分平台显示的是跟单者盈亏而非交易员自身。',
   portfolio: '持仓',
   posts: '动态',

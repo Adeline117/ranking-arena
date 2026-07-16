@@ -175,6 +175,11 @@ const enCore = {
   roi: 'ROI',
   winRate: 'Win Rate',
   pnl: 'PnL',
+  gmxRealizedNetPnlLabel: 'Realized Net PnL',
+  gmxRealizedNetPnlSummary: 'Fees and price impact included · unrealized PnL excluded',
+  gmxRealizedNetPnlTooltip:
+    'GMX realized net PnL includes fees and price impact and excludes current unrealized PnL. It uses complete UTC-day windows, up to 24 hours behind rolling now.',
+  gmxCompletedWindowEnded: 'Complete UTC-day window ended',
   arenaScore: 'Arena Score',
   arenaScoreLabel: 'Arena Score',
   maxDrawdown: 'Max Drawdown',

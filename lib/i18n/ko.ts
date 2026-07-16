@@ -5996,6 +5996,11 @@ const ko = {
   dataDelayedNote: '이 거래소의 데이터 공개에는 지연이 있습니다.',
   metricRoi: 'ROI',
   metricPnl: '손익',
+  gmxRealizedNetPnlLabel: '실현 순손익',
+  gmxRealizedNetPnlSummary: '수수료·가격 영향 포함 · 미실현 손익 제외',
+  gmxRealizedNetPnlTooltip:
+    'GMX 실현 순손익은 수수료와 가격 영향을 반영하며 현재 미실현 손익은 포함하지 않습니다. 완료된 UTC 일 단위 기간을 사용하므로 현재 시점 기준보다 최대 24시간 늦습니다.',
+  gmxCompletedWindowEnded: '완료된 UTC 일 단위 기간 종료',
   metricWinRate: '승률',
   metricMdd: '최대 낙폭',
   metricCopierPnl: '카피어 손익',
