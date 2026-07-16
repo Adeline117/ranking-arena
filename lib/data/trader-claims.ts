@@ -302,16 +302,20 @@ export async function getVerifiedTrader(
 }
 
 /**
- * 获取用户的认领申请
+ * 获取用户对指定交易员身份的最新认领申请
  */
-export async function getUserClaim(
+export async function getUserClaimForTrader(
   supabase: SupabaseClient,
-  userId: string
+  userId: string,
+  traderId: string,
+  source: string
 ): Promise<TraderClaim | null> {
   const { data, error } = await supabase
     .from('trader_claims')
     .select(CLAIM_FIELDS)
     .eq('user_id', userId)
+    .eq('trader_id', traderId)
+    .eq('source', source)
     .order('created_at', { ascending: false })
     .limit(1)
     .maybeSingle()

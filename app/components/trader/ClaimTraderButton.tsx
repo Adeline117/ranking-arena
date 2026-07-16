@@ -8,6 +8,8 @@ import { useToast } from '../ui/Toast'
 import { useDialog } from '../ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
+import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
+import { walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
 
 interface ClaimTraderButtonProps {
   traderId: string
@@ -62,30 +64,49 @@ export default function ClaimTraderButton({
         } = await supabase.auth.getSession()
         if (!alive || !session) return
 
-        const res = await fetch('/api/traders/claim', {
+        const normalizedSource = source.toLowerCase()
+        const matchesCurrentTrader = (candidate: { trader_id: string; source: string }): boolean =>
+          candidate.source === normalizedSource &&
+          (isDexWalletPlatform(normalizedSource)
+            ? walletIdentitiesMatch(candidate.trader_id, traderId, normalizedSource)
+            : candidate.trader_id === traderId)
+        const query = new URLSearchParams({
+          trader_id: traderId,
+          source: normalizedSource,
+        })
+        const res = await fetch(`/api/traders/claim?${query.toString()}`, {
           headers: { Authorization: `Bearer ${session.access_token}` },
         })
 
         if (res.ok) {
-          const data = await res.json()
+          const payload = await res.json()
+          const data = payload?.data
+          if (!data || typeof data !== 'object') {
+            throw new Error('Invalid claim status response')
+          }
           if (alive) {
-            const linked = data.linked_traders || data.data?.linked_traders || []
+            const linked = Array.isArray(data.linked_traders) ? data.linked_traders : []
             const linkedCount = linked.length
-            setHasVerifiedAccounts(linkedCount > 0 || data.is_verified)
+            setHasVerifiedAccounts(linkedCount > 0 || data.is_verified === true)
 
             // Check if this specific trader is already linked
-            const isLinked = linked.some(
-              (lt: { trader_id: string; source: string }) =>
-                lt.trader_id === traderId && lt.source === source
-            )
+            const isLinked = linked.some(matchesCurrentTrader)
             setThisTraderLinked(isLinked)
 
             if (isLinked) {
               setClaimStatus('verified')
-            } else if (data.claim?.status) {
+            } else if (
+              data.claim &&
+              matchesCurrentTrader(data.claim) &&
+              typeof data.claim?.status === 'string'
+            ) {
               setClaimStatus(data.claim.status)
+            } else {
+              setClaimStatus(null)
             }
           }
+        } else {
+          throw new Error(`Claim status request failed (${res.status})`)
         }
       } catch (err: unknown) {
         if (err instanceof Error) {
