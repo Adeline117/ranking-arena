@@ -355,6 +355,29 @@ describe('TokenRefreshCoordinator viewer binding', () => {
     expect(publishedStates).toEqual([{ userId: 'user-b', accessToken: 'token-b' }])
   })
 
+  it('returns the exact leased session after an auth user update without reacquiring it', async () => {
+    await seedStoredSession('user-a', 'token-a1')
+    const scope = synchronizeViewerScope(true, 'user-a')
+    mockUpdateUser.mockResolvedValueOnce({
+      data: { user: { id: 'user-a', email: 'user-a@example.test' } },
+      error: null,
+    })
+
+    await expect(
+      tokenRefreshCoordinator.updateUserWithSession(
+        { password: 'correct-horse-battery-staple' },
+        { expectedUserId: 'user-a', sessionGeneration: scope.sessionGeneration }
+      )
+    ).resolves.toMatchObject({
+      data: {
+        user: { id: 'user-a' },
+        session: { access_token: 'token-a1', user: { id: 'user-a' } },
+      },
+      error: null,
+    })
+    expect(mockGetSession).not.toHaveBeenCalled()
+  })
+
   it('does not send an initial request whose captured A scope is already stale', async () => {
     const scope = synchronizeViewerScope(true, 'user-a')
     beginViewerTransition('user-b')
