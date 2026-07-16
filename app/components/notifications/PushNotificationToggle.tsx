@@ -14,7 +14,6 @@ import {
   type SettingsViewerSnapshot,
 } from '@/app/(app)/settings/hooks/settings-viewer-scope'
 import { useViewerOwnedState } from '@/lib/state/viewer-owned-state'
-import { isPushSubscriptionOwnedBy, setPushSubscriptionOwner } from './push-subscription-owners'
 
 type PushStatus = 'loading' | 'unsupported' | 'denied' | 'subscribed' | 'unsubscribed'
 
@@ -43,6 +42,10 @@ type PushOperation = {
   viewer: SettingsViewerSnapshot
 }
 
+type PushSubscriptionStatusPayload = {
+  data?: { subscribed?: unknown }
+}
+
 const emptyPushUiState = (): PushUiState => ({ status: 'loading', busy: false })
 
 function pushScopeKey(
@@ -61,6 +64,10 @@ function pushIsSupported(): boolean {
     'serviceWorker' in navigator &&
     'PushManager' in window
   )
+}
+
+function readSubscribed(payload: PushSubscriptionStatusPayload | null): boolean | null {
+  return typeof payload?.data?.subscribed === 'boolean' ? payload.data.subscribed : null
 }
 
 export function PushNotificationToggle({ onToast }: PushNotificationToggleProps) {
@@ -105,6 +112,7 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       id: ++nextOperationIdRef.current,
       viewer: currentViewer,
     }
+    const controller = new AbortController()
     loadOperationRef.current = operation
     setUi(emptyPushUiState())
 
@@ -129,13 +137,28 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
         if (!operationIsCurrent(operation, loadOperationRef)) return
         const subscription = await registration.pushManager.getSubscription()
         if (!operationIsCurrent(operation, loadOperationRef)) return
-        const subscribed =
-          subscription !== null &&
-          isPushSubscriptionOwnedBy(
-            window.localStorage,
-            subscription.endpoint,
-            operation.viewer.userId
-          )
+        if (!subscription) {
+          setUi({ status: 'unsubscribed', busy: false })
+          return
+        }
+
+        const result = await authedFetch<PushSubscriptionStatusPayload>(
+          '/api/push/subscribe/status',
+          'POST',
+          operation.viewer.accessToken,
+          { token: subscription.endpoint },
+          15_000,
+          {
+            expectedUserId: operation.viewer.userId,
+            expectedSessionGeneration: operation.viewer.sessionGeneration,
+            signal: controller.signal,
+          }
+        )
+        if (!operationIsCurrent(operation, loadOperationRef) || result.stale) return
+        const subscribed = readSubscribed(result.data)
+        if (!result.ok || subscribed === null) {
+          throw new Error('Failed to read push subscription status')
+        }
         setUi({ status: subscribed ? 'subscribed' : 'unsubscribed', busy: false })
       } catch {
         if (operationIsCurrent(operation, loadOperationRef)) {
@@ -147,6 +170,7 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
     })()
 
     return () => {
+      controller.abort()
       if (loadOperationRef.current?.id === operation.id) loadOperationRef.current = null
     }
     // Access-token rotation does not change the viewer-owned browser resource.
@@ -222,12 +246,6 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       if (!operationIsCurrent(operation, actionOperationRef) || result.stale) return
       if (!result.ok) throw new Error('Failed to register push subscription')
 
-      setPushSubscriptionOwner(
-        window.localStorage,
-        subscription.endpoint,
-        operation.viewer.userId,
-        true
-      )
       setUi((current) => ({ ...current, status: 'subscribed' }))
       toastRef.current(tRef.current('pushNotificationsEnabled'), 'success')
     } catch (err) {
@@ -266,23 +284,16 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       if (!operationIsCurrent(operation, actionOperationRef)) return
       const subscription = await registration.pushManager.getSubscription()
       if (!operationIsCurrent(operation, actionOperationRef)) return
-      if (
-        !subscription ||
-        !isPushSubscriptionOwnedBy(
-          window.localStorage,
-          subscription.endpoint,
-          operation.viewer.userId
-        )
-      ) {
+      if (!subscription) {
         setUi((current) => ({ ...current, status: 'unsubscribed' }))
         return
       }
 
       const result = await authedFetch<{ success?: boolean }>(
-        `/api/push/subscribe?token=${encodeURIComponent(subscription.endpoint)}`,
+        '/api/push/subscribe',
         'DELETE',
         operation.viewer.accessToken,
-        undefined,
+        { token: subscription.endpoint },
         15_000,
         {
           expectedUserId: operation.viewer.userId,
@@ -292,12 +303,6 @@ export function PushNotificationToggle({ onToast }: PushNotificationToggleProps)
       if (!operationIsCurrent(operation, actionOperationRef) || result.stale) return
       if (!result.ok) throw new Error('Failed to unregister push subscription')
 
-      setPushSubscriptionOwner(
-        window.localStorage,
-        subscription.endpoint,
-        operation.viewer.userId,
-        false
-      )
       // Do not call subscription.unsubscribe(): the same origin endpoint can
       // still be registered to another local account. The authenticated DELETE
       // above disables delivery only for the current viewer.

@@ -23,7 +23,6 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { authedFetch } from '@/lib/api/client'
 import { __resetViewerScopeForTests, synchronizeViewerScope } from '@/lib/auth/viewer-scope'
 import { PushNotificationToggle } from '../PushNotificationToggle'
-import { isPushSubscriptionOwnedBy, setPushSubscriptionOwner } from '../push-subscription-owners'
 
 const mockUseAuthSession = useAuthSession as jest.Mock
 const mockAuthedFetch = authedFetch as jest.Mock
@@ -58,6 +57,10 @@ function ok<T>(data: T) {
   return { ok: true, status: 200, data }
 }
 
+function subscriptionStatus(subscribed: boolean) {
+  return ok({ success: true, data: { subscribed } })
+}
+
 describe('PushNotificationToggle viewer ownership', () => {
   const endpoint = 'https://push.test/subscription'
   const unsubscribeBrowser = jest.fn()
@@ -75,12 +78,15 @@ describe('PushNotificationToggle viewer ownership', () => {
 
   beforeEach(() => {
     jest.clearAllMocks()
-    window.localStorage.clear()
     __resetViewerScopeForTests()
     const scope = synchronizeViewerScope(true, 'user-a')
     currentAuth = authFor('user-a', scope.sessionGeneration)
     mockUseAuthSession.mockImplementation(() => currentAuth)
-    mockAuthedFetch.mockResolvedValue(ok({ success: true }))
+    mockAuthedFetch.mockImplementation((url: string) =>
+      Promise.resolve(
+        url === '/api/push/subscribe/status' ? subscriptionStatus(false) : ok({ success: true })
+      )
+    )
     getSubscription.mockResolvedValue(subscription)
     subscribeBrowser.mockResolvedValue(subscription)
     requestPermission.mockResolvedValue('granted')
@@ -99,8 +105,23 @@ describe('PushNotificationToggle viewer ownership', () => {
     process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY = 'AQ'
   })
 
-  it('fails off on the first B render instead of showing A ownership', async () => {
-    setPushSubscriptionOwner(localStorage, endpoint, 'user-a', true)
+  it('uses the server as truth and hides A state on the first B render', async () => {
+    mockAuthedFetch.mockImplementation(
+      (
+        url: string,
+        _method: string,
+        _token: string,
+        _body: unknown,
+        _timeout: number,
+        scope: { expectedUserId: string }
+      ) =>
+        Promise.resolve(
+          url === '/api/push/subscribe/status'
+            ? subscriptionStatus(scope.expectedUserId === 'user-a')
+            : ok({ success: true })
+        )
+    )
+
     const view = render(<PushNotificationToggle onToast={onToast} />)
     await waitFor(() => expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true'))
 
@@ -110,6 +131,36 @@ describe('PushNotificationToggle viewer ownership', () => {
 
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
     await waitFor(() => expect(getSubscription).toHaveBeenCalledTimes(2))
+    expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
+  })
+
+  it('discards a delayed A status after B becomes current', async () => {
+    const userAStatus = deferred<ReturnType<typeof subscriptionStatus>>()
+    mockAuthedFetch.mockImplementation(
+      (
+        url: string,
+        _method: string,
+        _token: string,
+        _body: unknown,
+        _timeout: number,
+        scope: { expectedUserId: string }
+      ) => {
+        if (url !== '/api/push/subscribe/status') return Promise.resolve(ok({ success: true }))
+        return scope.expectedUserId === 'user-a'
+          ? userAStatus.promise
+          : Promise.resolve(subscriptionStatus(false))
+      }
+    )
+
+    const view = render(<PushNotificationToggle onToast={onToast} />)
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(1))
+
+    const scopeB = synchronizeViewerScope(true, 'user-b')
+    currentAuth = authFor('user-b', scopeB.sessionGeneration)
+    view.rerender(<PushNotificationToggle onToast={onToast} />)
+    await waitFor(() => expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false'))
+
+    await act(async () => userAStatus.resolve(subscriptionStatus(true)))
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
   })
 
@@ -130,13 +181,23 @@ describe('PushNotificationToggle viewer ownership', () => {
     await act(async () => permission.resolve('granted'))
 
     expect(subscribeBrowser).not.toHaveBeenCalled()
-    expect(mockAuthedFetch).not.toHaveBeenCalled()
+    expect(
+      mockAuthedFetch.mock.calls.filter(
+        ([url, method]) => url === '/api/push/subscribe' && method === 'POST'
+      )
+    ).toHaveLength(0)
     expect(onToast).not.toHaveBeenCalled()
   })
 
   it('does not record or toast an A server completion under B', async () => {
     const server = deferred<ReturnType<typeof ok>>()
-    mockAuthedFetch.mockReturnValue(server.promise)
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url === '/api/push/subscribe/status') {
+        return Promise.resolve(subscriptionStatus(false))
+      }
+      if (url === '/api/push/subscribe' && method === 'POST') return server.promise
+      return Promise.resolve(ok({ success: true }))
+    })
     const view = render(<PushNotificationToggle onToast={onToast} />)
     await waitFor(() => expect(getSubscription).toHaveBeenCalledTimes(1))
     await waitFor(() => expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false'))
@@ -158,16 +219,18 @@ describe('PushNotificationToggle viewer ownership', () => {
     view.rerender(<PushNotificationToggle onToast={onToast} />)
     await act(async () => server.resolve(ok({ success: true })))
 
-    expect(isPushSubscriptionOwnedBy(localStorage, endpoint, 'user-a')).toBe(false)
     expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false')
     expect(onToast).not.toHaveBeenCalled()
   })
 
-  it('removes only B server ownership and never destroys A browser subscription', async () => {
+  it('removes B server ownership without local registry and never destroys the browser subscription', async () => {
     const scopeB = synchronizeViewerScope(true, 'user-b')
     currentAuth = authFor('user-b', scopeB.sessionGeneration)
-    setPushSubscriptionOwner(localStorage, endpoint, 'user-a', true)
-    setPushSubscriptionOwner(localStorage, endpoint, 'user-b', true)
+    mockAuthedFetch.mockImplementation((url: string) =>
+      Promise.resolve(
+        url === '/api/push/subscribe/status' ? subscriptionStatus(true) : ok({ success: true })
+      )
+    )
 
     render(<PushNotificationToggle onToast={onToast} />)
     await waitFor(() => expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'true'))
@@ -175,16 +238,22 @@ describe('PushNotificationToggle viewer ownership', () => {
 
     await waitFor(() => expect(screen.getByRole('switch')).toHaveAttribute('aria-checked', 'false'))
     expect(mockAuthedFetch).toHaveBeenCalledWith(
-      `/api/push/subscribe?token=${encodeURIComponent(endpoint)}`,
+      '/api/push/subscribe',
       'DELETE',
       jwt('user-b'),
-      undefined,
+      { token: endpoint },
       15_000,
       expect.objectContaining({ expectedUserId: 'user-b' })
     )
     expect(unsubscribeBrowser).not.toHaveBeenCalled()
-    expect(isPushSubscriptionOwnedBy(localStorage, endpoint, 'user-a')).toBe(true)
-    expect(isPushSubscriptionOwnedBy(localStorage, endpoint, 'user-b')).toBe(false)
+  })
+
+  it('keeps an unknown server status disabled instead of presenting a false off state', async () => {
+    mockAuthedFetch.mockResolvedValue({ ok: false, status: 503, data: null })
+
+    const view = render(<PushNotificationToggle onToast={onToast} />)
+
+    await waitFor(() => expect(view.container).toBeEmptyDOMElement())
   })
 
   it('renders nothing for a mismatched JWT subject', () => {

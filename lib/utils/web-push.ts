@@ -27,6 +27,8 @@ export interface PushPayload {
   type: PushPayloadType
   title: string
   body: string
+  /** Used by the service worker to suppress another local account's content. */
+  recipientUserId?: string
   url?: string
   icon?: string
   data?: Record<string, string>
