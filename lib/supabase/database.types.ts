@@ -8314,17 +8314,6 @@ export type Database = {
           total_sybils: number
         }[]
       }
-      delete_own_comment: {
-        Args: {
-          p_comment_id: string
-          p_post_id: string
-          p_user_id: string
-        }
-        Returns: {
-          comment_count: number
-          deleted_count: number
-        }[]
-      }
       decrement_bookmark_count: {
         Args: { post_id: string }
         Returns: {
@@ -8351,6 +8340,13 @@ export type Database = {
         Args: { group_id: string }
         Returns: {
           member_count: number
+        }[]
+      }
+      delete_own_comment: {
+        Args: { p_comment_id: string; p_post_id: string; p_user_id: string }
+        Returns: {
+          comment_count: number
+          deleted_count: number
         }[]
       }
       ensure_default_bookmark_folder: {
@@ -8821,12 +8817,12 @@ export type Database = {
           user_id: string
         }[]
       }
-      has_valid_group_subscription: {
-        Args: { p_group_id: string; p_user_id: string }
-        Returns: boolean
-      }
       has_block_with_current_user: {
         Args: { p_other_user_id: string }
+        Returns: boolean
+      }
+      has_valid_group_subscription: {
+        Args: { p_group_id: string; p_user_id: string }
         Returns: boolean
       }
       http: {
@@ -9006,9 +9002,9 @@ export type Database = {
       moderate_comment: {
         Args: {
           p_action: string
-          p_actor_id: string | null
+          p_actor_id: string
           p_comment_id: string
-          p_reason?: string | null
+          p_reason?: string
         }
         Returns: {
           affected_count: number
@@ -9202,6 +9198,12 @@ export type Database = {
           updated_at: string | null
           user_id: string
         }[]
+        SetofOptions: {
+          from: '*'
+          to: 'comments'
+          isOneToOne: false
+          isSetofReturn: true
+        }
       }
       update_post_report_counts: { Args: never; Returns: number }
       update_post_velocity: { Args: never; Returns: number }
