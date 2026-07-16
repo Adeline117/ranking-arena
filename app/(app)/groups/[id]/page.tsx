@@ -33,6 +33,7 @@ import { trackInteraction } from '@/lib/tracking'
 import { trackEvent } from '@/lib/analytics/track'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import dynamic from 'next/dynamic'
+import { buildJoinMembershipBody, parseMembershipAck } from './membership-client'
 
 const ProUpsellModal = dynamic(
   () => import('@/app/components/ui/ProGate').then((m) => ({ default: m.ProUpsellModal })),
@@ -506,32 +507,20 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
     const inviteToken = searchParams.get('invite')
     if (!inviteToken || !userId || !groupId || isMember || loading) return
 
-    const handleInvite = async () => {
-      try {
-        const res = await fetch(
-          `/api/groups/${groupId}/invite?verify=${encodeURIComponent(inviteToken)}`
-        )
-        if (res.ok) {
-          await handleJoin(true)
-        } else {
-          showToast(t('inviteInvalidOrExpired'), 'error')
-        }
-      } catch {
-        // Intentionally swallowed: invite code verification failed, user sees invalid invite toast
-      }
-    }
-    handleInvite()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleJoin/showToast/t excluded; only re-run when invite params or auth state change
+    // Redemption is one write: the membership API verifies and consumes this
+    // exact token atomically. A separate GET must never pre-consume capacity.
+    void handleJoin(inviteToken)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleJoin excluded; only re-run when invite params or auth state change
   }, [searchParams, userId, groupId, isMember, loading])
 
   // Join group (via API)
   const handleJoin = useCallback(
-    async (bypassPro = false) => {
+    async (inviteToken?: string) => {
       if (!userId) {
         showToast(t('pleaseLogin'), 'warning')
         return
       }
-      if (!bypassPro && group?.is_premium_only && !isPro) {
+      if (!inviteToken && group?.is_premium_only && !isPro) {
         // Upsell modal instead of a dead-end toast (API still enforces
         // premium membership server-side — this is the UX layer only).
         trackEvent('paywall_blocked', { source: 'premium_group_join' })
@@ -548,22 +537,40 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
             Authorization: `Bearer ${accessToken}`,
             ...getCsrfHeaders(),
           },
-          body: JSON.stringify({ action: 'join' }),
+          body: JSON.stringify(buildJoinMembershipBody(inviteToken)),
         })
 
+        const data: unknown = await res.json().catch(() => null)
         if (!res.ok) {
-          const data = await res.json().catch(() => ({}))
-          throw new Error(data.error || t('joinFailed'))
+          const errorMessage =
+            data && typeof data === 'object' && !Array.isArray(data)
+              ? (data as { error?: unknown }).error
+              : null
+          throw new Error(typeof errorMessage === 'string' ? errorMessage : t('joinFailed'))
         }
 
-        setGroup((prev) => (prev ? { ...prev, member_count: (prev.member_count || 0) + 1 } : prev))
+        const ack = parseMembershipAck(data)
+        if (!ack) {
+          throw new Error('Invalid membership acknowledgement')
+        }
+
+        if (ack.action === 'requested') {
+          showToast(t('joinRequestSubmitted'), 'success')
+          return
+        }
+
+        if (ack.member_count !== undefined) {
+          setGroup((prev) => (prev ? { ...prev, member_count: ack.member_count } : prev))
+        }
         setIsMember(true)
-        setUserRole('member')
-        trackEvent('group_join', { group_id: groupId })
+        setUserRole(ack.action === 'already_member' ? (ack.role ?? 'member') : 'member')
+        if (ack.action === 'joined') {
+          trackEvent('group_join', { group_id: groupId })
+        }
         showToast(t('joinSuccess'), 'success')
       } catch (err) {
         logger.error('Join error:', err)
-        showToast(t('joinFailed'), 'error')
+        showToast(t(inviteToken ? 'inviteInvalidOrExpired' : 'joinFailed'), 'error')
       } finally {
         setJoining(false)
       }

@@ -2644,6 +2644,7 @@ const ja = {
   inviteInvalidOrExpired: '招待リンクが無効または期限切れです',
   proMembersOnly: 'このグループはProメンバー限定です',
   joinSuccess: '参加しました',
+  joinRequestSubmitted: '参加リクエストを送信しました',
   newMemberJoined: '新メンバーが参加',
   newMemberJoinedMsg: '新しいメンバーがグループに参加しました',
   joinFailed: '参加に失敗しました',
