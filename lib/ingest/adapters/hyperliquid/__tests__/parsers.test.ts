@@ -17,6 +17,7 @@ import {
   parseHyperliquidProfile,
 } from '../parsers'
 import type { ParseCtx } from '../../../core/types'
+import type { HyperliquidFillsMeta } from '../fills-fetch'
 
 function fixture(name: string): unknown {
   return JSON.parse(readFileSync(join(__dirname, 'fixtures', name), 'utf8'))
@@ -30,6 +31,49 @@ const ctx: ParseCtx = {
   tfLabelMap: {},
   scrapedAt: new Date(1781214420993).toISOString(),
   meta: {},
+}
+
+const DAY_MS = 86_400_000
+
+function fillSnapshot(
+  fills: Array<Record<string, unknown>>,
+  metaOverrides: Partial<HyperliquidFillsMeta> = {}
+): Record<string, unknown> {
+  const requestedEndTimeMs = Date.parse(ctx.scrapedAt)
+  const requestedStartTimeMs = requestedEndTimeMs - 90 * DAY_MS
+  const normalized = fills.map((row, index) => ({ tid: index + 1, ...row }))
+  const limitHit = metaOverrides.limitHit ?? false
+  const meta: HyperliquidFillsMeta = {
+    requestedStartTimeMs,
+    requestedEndTimeMs,
+    coveredStartTimeMs: normalized.length > 0 ? Number(normalized[0].time) : null,
+    coveredEndTimeMs: normalized.length > 0 ? Number(normalized[normalized.length - 1].time) : null,
+    requestCount: 1,
+    pageCount: 1,
+    fillCount: normalized.length,
+    exhausted: true,
+    limitHit,
+    stalled: false,
+    completeThroughEnd: true,
+    failureReason: null,
+    complete: !limitHit,
+    ...metaOverrides,
+  }
+  return {
+    fillsFetchState: 'fetched',
+    fillsSnapshot: {
+      schemaVersion: 2,
+      rawPages: [
+        {
+          requestStartTimeMs: meta.requestedStartTimeMs,
+          requestEndTimeMs: meta.requestedEndTimeMs,
+          response: normalized,
+        },
+      ],
+      fills: normalized,
+      meta,
+    },
+  }
 }
 
 describe('parseHyperliquidLeaderboardPage', () => {
@@ -201,13 +245,17 @@ describe('parseHyperliquidProfile', () => {
         fee: '0',
       },
     ]
-    const profile = parseHyperliquidProfile({ ...bundle, fills, timeframe: 30 }, ctx)
+    const profile = parseHyperliquidProfile(
+      { ...bundle, ...fillSnapshot(fills), timeframe: 30 },
+      ctx
+    )
     const st = profile.stats[0]
     expect(st.winRate).toBe(50)
     expect(st.winPositions).toBe(1)
     expect(st.totalPositions).toBe(2)
     expect(st.holdingDurationAvgHours).toBeCloseTo(3, 1)
-    expect(st.extras.fills_derivation).toBe('fills-replay')
+    expect(st.extras.fills_derivation).toBe('fills-replay-v2')
+    expect(st.extras.fills_metrics_complete).toBe(true)
     expect(st.extras.pnl_ratio).toBeCloseTo(2, 2)
   })
 
@@ -216,13 +264,14 @@ describe('parseHyperliquidProfile', () => {
     // fills fetch SUCCEEDED with [] (zero trades in 90d), but the parser
     // treated [] like a failed fetch and null-collapsed, so the product
     // couldn't tell "Holder" (legit zero) from "unknown" (fetch failed).
-    const profile = parseHyperliquidProfile({ ...bundle, fills: [], timeframe: 30 }, ctx)
+    const profile = parseHyperliquidProfile({ ...bundle, ...fillSnapshot([]), timeframe: 30 }, ctx)
     const st = profile.stats[0]
     expect(st.totalPositions).toBe(0) // confirmed zero-activity window
     expect(st.winPositions).toBe(0)
     expect(st.winRate).toBeNull() // 0/0 is undefined — never fabricate
     expect(st.holdingDurationAvgHours).toBeNull()
-    expect(st.extras.fills_derivation).toBe('fills-replay') // derivation DID run
+    expect(st.extras.fills_derivation).toBe('fills-replay-v2') // derivation DID run
+    expect(st.extras.fills_metrics_complete).toBe(true)
   })
 
   it('fills fetch FAILED (undefined) → positions stay null (unknown ≠ zero)', () => {
@@ -231,6 +280,111 @@ describe('parseHyperliquidProfile', () => {
     expect(st.totalPositions).toBeNull()
     expect(st.winPositions).toBeNull()
     expect(st.extras.fills_derivation).toBeUndefined()
+    expect(st.extras.fills_metrics_complete).toBe(false)
+    expect(st.extras.fills_incomplete_reason).toBe('missing_snapshot')
+  })
+
+  it('legacy fills arrays, including empty, are unverified and never write zero', () => {
+    for (const fills of [[], [{ coin: 'BTC', time: Date.parse(ctx.scrapedAt) }]]) {
+      const st = parseHyperliquidProfile({ ...bundle, fills, timeframe: 30 }, ctx).stats[0]
+      expect(st.totalPositions).toBeNull()
+      expect(st.winPositions).toBeNull()
+      expect(st.extras).toMatchObject({
+        fills_metrics_complete: false,
+        fills_incomplete_reason: 'legacy_unverified',
+      })
+    }
+  })
+
+  it('requires limit-hit coverage to start strictly before the timeframe boundary', () => {
+    const end = Date.parse(ctx.scrapedAt)
+    const start30 = end - 30 * DAY_MS
+    const T = end - DAY_MS
+    const fills = [
+      { coin: 'BTC', time: T, side: 'B', sz: '1', px: '100', startPosition: '0' },
+      {
+        coin: 'BTC',
+        time: T + 1,
+        side: 'A',
+        sz: '1',
+        px: '110',
+        startPosition: '1',
+        closedPnl: '10',
+      },
+    ]
+    const atBoundary = parseHyperliquidProfile(
+      {
+        ...bundle,
+        ...fillSnapshot([{ time: start30 }, ...fills], {
+          limitHit: true,
+          complete: false,
+        }),
+        timeframe: 30,
+      },
+      ctx
+    ).stats[0]
+    expect(atBoundary.totalPositions).toBeNull()
+    expect(atBoundary.extras.fills_incomplete_reason).toBe('accessible_limit_before_window')
+
+    const beforeBoundary = parseHyperliquidProfile(
+      {
+        ...bundle,
+        ...fillSnapshot([{ time: start30 - 1 }, ...fills], {
+          limitHit: true,
+          complete: false,
+        }),
+        timeframe: 30,
+      },
+      ctx
+    ).stats[0]
+    expect(beforeBoundary.totalPositions).toBe(1)
+    expect(beforeBoundary.extras.fills_metrics_complete).toBe(true)
+  })
+
+  it('anchors the metric window and provenance to the frozen fills end time', () => {
+    const T = Date.parse(ctx.scrapedAt) - DAY_MS
+    const fills = [
+      { coin: 'BTC', time: T, side: 'B', sz: '1', px: '100', startPosition: '0' },
+      { coin: 'BTC', time: T + 1, side: 'A', sz: '1', px: '110', startPosition: '1' },
+    ]
+    const lateCtx = {
+      ...ctx,
+      scrapedAt: new Date(Date.parse(ctx.scrapedAt) + 40 * DAY_MS).toISOString(),
+    }
+    const st = parseHyperliquidProfile(
+      { ...bundle, ...fillSnapshot(fills), timeframe: 30 },
+      lateCtx
+    ).stats[0]
+    expect(st.totalPositions).toBe(1)
+    expect(st.extras.fills_metrics_as_of).toBe(ctx.scrapedAt)
+  })
+
+  it('rejects fill metrics when an unknown prefix position closes in-window', () => {
+    const T = Date.parse(ctx.scrapedAt) - DAY_MS
+    const st = parseHyperliquidProfile(
+      {
+        ...bundle,
+        ...fillSnapshot([
+          {
+            coin: 'BTC',
+            time: T,
+            side: 'A',
+            sz: '1',
+            px: '110',
+            startPosition: '1',
+            closedPnl: '10',
+          },
+        ]),
+        timeframe: 30,
+      },
+      ctx
+    ).stats[0]
+    expect(st.totalPositions).toBeNull()
+    expect(st.extras).toMatchObject({
+      fills_metrics_complete: false,
+      fills_incomplete_reason: 'position_open_before_prefix',
+      fills_boundary_skipped_positions: 1,
+    })
   })
 
   it('position_history: round-trips from fills (M3-3a)', () => {
@@ -257,7 +411,7 @@ describe('parseHyperliquidProfile', () => {
         fee: '1',
       },
     ]
-    const rows = parseHyperliquidHistory({ fills }, 'position_history', ctx)
+    const rows = parseHyperliquidHistory(fillSnapshot(fills), 'position_history', ctx)
     expect(rows).toHaveLength(1)
     const p = rows[0]
     if (p.kind !== 'position_history') throw new Error('wrong kind')
@@ -315,5 +469,16 @@ describe('lerpAt', () => {
 describe('parseHyperliquidHistory', () => {
   it('throws — no history surfaces in v1', () => {
     expect(() => parseHyperliquidHistory({}, 'orders', ctx)).toThrow(/not supported/)
+  })
+
+  it('rejects legacy and incomplete fill evidence', () => {
+    expect(() => parseHyperliquidHistory({ fills: [] }, 'position_history', ctx)).toThrow(
+      /incomplete/
+    )
+    const partial = fillSnapshot([], {
+      limitHit: true,
+      complete: false,
+    })
+    expect(() => parseHyperliquidHistory(partial, 'position_history', ctx)).toThrow(/incomplete/)
   })
 })

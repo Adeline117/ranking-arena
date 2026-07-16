@@ -29,6 +29,7 @@ import type {
 } from '../../core/types'
 import { riskFromEquitySeries } from '../../core/series-risk'
 import { fillStats, reconstructRoundTrips, type HlFill } from './fills'
+import type { HyperliquidFillsFetch } from './fills-fetch'
 import { createHash } from 'crypto'
 
 type Dict = Record<string, unknown>
@@ -195,6 +196,152 @@ const EMPTY_STATS: Omit<
   tradingPreferences: null,
 }
 
+interface FillMetricEvidence {
+  stats: ReturnType<typeof fillStats> | null
+  extras: Record<string, unknown>
+}
+
+function isoOrNull(ms: number | null): string | null {
+  return ms === null || !Number.isSafeInteger(ms) ? null : isoMs(ms)
+}
+
+/** Only versioned pagination evidence can prove a timeframe complete. */
+function fillMetricEvidence(
+  payload: Dict & {
+    fills?: unknown
+    fillsSnapshot?: unknown
+    fillsFetchState?: unknown
+    fillsFetchReason?: unknown
+  },
+  timeframe: RankingTimeframe
+): FillMetricEvidence {
+  const state = typeof payload.fillsFetchState === 'string' ? payload.fillsFetchState : 'unknown'
+  const baseExtras: Record<string, unknown> = {
+    fills_fetch_state: state,
+    fills_metrics_complete: false,
+  }
+  const incomplete = (
+    reason: string,
+    extras: Record<string, unknown> = {}
+  ): FillMetricEvidence => ({
+    stats: null,
+    extras: { ...baseExtras, ...extras, fills_incomplete_reason: reason },
+  })
+
+  if (state === 'deferred') return incomplete('deferred')
+
+  const snapshot = payload.fillsSnapshot as Partial<HyperliquidFillsFetch> | null | undefined
+  if (!snapshot) {
+    return incomplete(
+      state === 'failed'
+        ? typeof payload.fillsFetchReason === 'string'
+          ? payload.fillsFetchReason
+          : 'fetch_failed'
+        : Array.isArray(payload.fills)
+          ? 'legacy_unverified'
+          : 'missing_snapshot'
+    )
+  }
+  if (
+    snapshot.schemaVersion !== 2 ||
+    !Array.isArray(snapshot.rawPages) ||
+    !Array.isArray(snapshot.fills) ||
+    !snapshot.meta
+  ) {
+    return incomplete('invalid_snapshot')
+  }
+
+  const meta = snapshot.meta
+  const requestedStart =
+    typeof meta.requestedStartTimeMs === 'number' ? meta.requestedStartTimeMs : Number.NaN
+  const requestedEnd =
+    typeof meta.requestedEndTimeMs === 'number' ? meta.requestedEndTimeMs : Number.NaN
+  const coveredStart = meta.coveredStartTimeMs
+  const coverageExtras: Record<string, unknown> = {
+    fills_schema_version: 2,
+    fills_page_count: meta.pageCount,
+    fills_request_count: meta.requestCount,
+    fills_fill_count: meta.fillCount,
+    fills_limit_hit: meta.limitHit,
+    fills_requested_start_at: isoOrNull(requestedStart),
+    fills_requested_end_at: isoOrNull(requestedEnd),
+    fills_covered_start_at: isoOrNull(coveredStart),
+    fills_covered_end_at: isoOrNull(meta.coveredEndTimeMs),
+  }
+  if (state === 'failed') {
+    return incomplete(
+      typeof payload.fillsFetchReason === 'string' ? payload.fillsFetchReason : 'fetch_failed',
+      coverageExtras
+    )
+  }
+
+  const fillTimes = snapshot.fills.map((fill) => Number((fill as HlFill).time))
+  const timesValid = fillTimes.every(
+    (time, index) =>
+      Number.isSafeInteger(time) && (index === 0 || time >= (fillTimes[index - 1] ?? -Infinity))
+  )
+  const coveredTimesMatch =
+    fillTimes.length === 0
+      ? meta.coveredStartTimeMs === null && meta.coveredEndTimeMs === null
+      : meta.coveredStartTimeMs === fillTimes[0] && meta.coveredEndTimeMs === fillTimes.at(-1)
+  const completeFlagMatches = meta.complete === (meta.completeThroughEnd && !meta.limitHit)
+  if (
+    state !== 'fetched' ||
+    !Number.isSafeInteger(requestedStart) ||
+    !Number.isSafeInteger(requestedEnd) ||
+    requestedStart > requestedEnd ||
+    !Number.isSafeInteger(meta.requestCount) ||
+    !Number.isSafeInteger(meta.pageCount) ||
+    meta.pageCount !== snapshot.rawPages.length ||
+    meta.requestCount < meta.pageCount ||
+    meta.fillCount !== snapshot.fills.length ||
+    !timesValid ||
+    !coveredTimesMatch ||
+    !completeFlagMatches
+  ) {
+    return incomplete('invalid_snapshot', coverageExtras)
+  }
+  if (!meta.completeThroughEnd || !meta.exhausted || meta.stalled || meta.failureReason !== null) {
+    return incomplete(meta.failureReason ?? 'end_not_covered', coverageExtras)
+  }
+
+  const windowStart = requestedEnd - timeframe * DAY_MS
+  if (requestedStart > windowStart) {
+    return incomplete('window_prefix_not_requested', coverageExtras)
+  }
+  if (
+    meta.limitHit &&
+    (coveredStart === null || !Number.isSafeInteger(coveredStart) || coveredStart >= windowStart)
+  ) {
+    return incomplete('accessible_limit_before_window', coverageExtras)
+  }
+  if (!meta.limitHit && meta.complete !== true) {
+    return incomplete('window_not_complete', coverageExtras)
+  }
+
+  const stats = fillStats(snapshot.fills as HlFill[], windowStart, timeframe)
+  if (!stats.boundaryComplete) {
+    return incomplete('position_open_before_prefix', {
+      ...coverageExtras,
+      fills_boundary_skipped_positions: stats.boundarySkippedPositions,
+    })
+  }
+
+  const extras: Record<string, unknown> = {
+    ...baseExtras,
+    ...coverageExtras,
+    fills_metrics_complete: true,
+    fills_metrics_as_of: isoMs(requestedEnd),
+    fills_boundary_skipped_positions: 0,
+    fills_derivation: 'fills-replay-v2',
+  }
+  if (stats.totalPositions > 0) {
+    if (stats.pnlRatio !== null) extras.pnl_ratio = stats.pnlRatio
+    if (stats.tripsPerWeek !== null) extras.trades_per_week = stats.tripsPerWeek
+  }
+  return { stats, extras }
+}
+
 /**
  * Profile = portfolio + clearinghouseState (spike §2-3).
  *   7/30: native window — pnl is the window's cumulative end value, ROI on a
@@ -208,6 +355,9 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
     portfolio?: unknown
     clearinghouse?: unknown
     fills?: unknown
+    fillsSnapshot?: unknown
+    fillsFetchState?: unknown
+    fillsFetchReason?: unknown
     timeframe?: unknown
   }
   const tfNum = num(payload.timeframe) ?? 30
@@ -217,28 +367,13 @@ export function parseHyperliquidProfile(raw: unknown, ctx: ParseCtx): ParsedProf
   const marginSummary = (ch?.marginSummary ?? null) as Dict | null
   const aum = num(marginSummary?.accountValue)
 
-  // M3-3a fills replay: round-trip reconstruction over the TF window gives the
-  // CEX-equivalent winRate / positions / holding-time / 盈亏比 that HL never
-  // hands over ("needs fills replay — spike §8.3", now in).
-  //
-  // Present-but-empty ≠ failed (2026-07-04 homepage-dash root fix): a fills
-  // fetch that SUCCEEDED with zero fills is a confirmed zero-activity window
-  // (rank-1 was a $48M spot holder — 0 trades in 90d) and must write explicit
-  // totalPositions/winPositions = 0 so the product can tell "Holder" apart
-  // from "unknown". Only a FAILED fetch (payload.fills undefined/null)
-  // NULL-collapses. winRate stays null at 0 trips (0/0 is undefined).
-  const fillsPresent = Array.isArray(payload.fills)
-  const fillsArr = fillsPresent ? (payload.fills as HlFill[]) : []
-  const fstats = fillsPresent
-    ? fillStats(fillsArr, Date.parse(ctx.scrapedAt) - tf * DAY_MS, tf)
-    : null
+  // M3-3a: publish fills-derived metrics only when the versioned pagination
+  // snapshot proves this exact timeframe complete. Empty + complete writes 0;
+  // failed/deferred/legacy evidence writes null plus a preservation marker.
+  const fillEvidence = fillMetricEvidence(payload, tf)
+  const fstats = fillEvidence.stats
   const hasTrips = fstats !== null && fstats.totalPositions > 0
-  const fillsExtras: Record<string, unknown> = {}
-  if (fillsPresent) fillsExtras.fills_derivation = 'fills-replay'
-  if (hasTrips) {
-    if (fstats.pnlRatio !== null) fillsExtras.pnl_ratio = fstats.pnlRatio
-    if (fstats.tripsPerWeek !== null) fillsExtras.trades_per_week = fstats.tripsPerWeek
-  }
+  const fillsExtras = fillEvidence.extras
 
   const stats: ParsedStats[] = []
   const series: ParsedProfile['series'] = []
@@ -412,8 +547,13 @@ export function parseHyperliquidHistory(
   if (kind !== 'position_history') {
     throw new Error(`[hyperliquid] history surface ${kind} not supported`)
   }
-  const fills = (raw as Dict)?.fills
-  const arr = Array.isArray(fills) ? (fills as HlFill[]) : []
+  const payload = (raw ?? {}) as Dict
+  const snapshot = payload.fillsSnapshot as Partial<HyperliquidFillsFetch> | undefined
+  const evidence = fillMetricEvidence(payload, 90)
+  if (!evidence.stats || snapshot?.schemaVersion !== 2 || !Array.isArray(snapshot.fills)) {
+    throw new Error('[hyperliquid] position history fill window is incomplete')
+  }
+  const arr = snapshot.fills as HlFill[]
   return reconstructRoundTrips(arr).map((t) => ({
     kind: 'position_history' as const,
     openedAt: isoMs(t.openedAtMs),
