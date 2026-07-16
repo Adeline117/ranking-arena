@@ -190,6 +190,99 @@ describe('getPostComments', () => {
     expect(result).toHaveLength(1)
     expect(result[0].id).toBe('c1')
   })
+
+  test('fails closed when the replies query fails', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.range.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'c1',
+          post_id: 'post1',
+          user_id: 'u1',
+          content: 'Comment',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+      error: null,
+    })
+    mockSupabase.order.mockImplementation((field, options) =>
+      field === 'id' && options?.ascending === true
+        ? Promise.resolve({ data: null, error: new Error('replies failed') })
+        : mockSupabase
+    )
+
+    await expect(
+      getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
+    ).rejects.toThrow('replies failed')
+  })
+
+  test('fails closed when author profile hydration fails', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.range.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'c1',
+          post_id: 'post1',
+          user_id: 'u1',
+          content: 'Comment',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+      error: null,
+    })
+    mockSupabase.order.mockImplementation((field, options) =>
+      field === 'id' && options?.ascending === true
+        ? Promise.resolve({ data: [], error: null })
+        : mockSupabase
+    )
+    mockSupabase.in.mockImplementation((field) =>
+      field === 'id'
+        ? Promise.resolve({ data: null, error: new Error('profiles failed') })
+        : mockSupabase
+    )
+
+    await expect(
+      getPostComments(mockSupabase as unknown as SupabaseClient, 'post1')
+    ).rejects.toThrow('profiles failed')
+  })
+
+  test('fails closed when viewer reaction hydration fails', async () => {
+    const mockSupabase = createMockSupabase()
+    mockSupabase.or.mockResolvedValueOnce({ data: [], error: null })
+    mockSupabase.range.mockResolvedValueOnce({
+      data: [
+        {
+          id: 'c1',
+          post_id: 'post1',
+          user_id: 'u1',
+          content: 'Comment',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+      error: null,
+    })
+    mockSupabase.order.mockImplementation((field, options) =>
+      field === 'id' && options?.ascending === true
+        ? Promise.resolve({ data: [], error: null })
+        : mockSupabase
+    )
+    mockSupabase.in.mockImplementation((field) => {
+      if (field === 'id') return Promise.resolve({ data: [], error: null })
+      if (field === 'comment_id') {
+        return Promise.resolve({ data: null, error: new Error('reactions failed') })
+      }
+      return mockSupabase
+    })
+
+    await expect(
+      getPostComments(mockSupabase as unknown as SupabaseClient, 'post1', {
+        userId: 'viewer',
+      })
+    ).rejects.toThrow('reactions failed')
+  })
 })
 
 describe('getCommentById', () => {
