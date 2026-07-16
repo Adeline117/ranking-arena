@@ -21,177 +21,173 @@ jest.mock('next/server', () => {
   return { NextResponse: MockNextResponse }
 })
 
-const mockFrom = jest.fn()
-const mockBanInsert = jest.fn()
-const mockMemberDelete = jest.fn()
-const mockAuditInsert = jest.fn()
-const mockFireAndForget = jest.fn()
+const mockRpc = jest.fn()
+const mockAdmin = { rpc: mockRpc }
+const mockGetSupabaseAdmin = jest.fn(() => mockAdmin)
 
 jest.mock('@/lib/api/middleware', () => ({
   withAuth:
     (
       handler: (context: {
         user: { id: string }
-        supabase: { from: typeof mockFrom }
-        request: unknown
+        request: { json: () => Promise<unknown> }
       }) => unknown
     ) =>
-    async (request: unknown) => {
-      try {
-        return await handler({
-          user: { id: 'group-admin' },
-          supabase: { from: (...args: unknown[]) => mockFrom(...args) },
-          request,
-        })
-      } catch {
-        return {
-          status: 500,
-          _body: { error: 'Internal server error' },
-          async json() {
-            return this._body
-          },
-          headers: new Map(),
-        }
-      }
-    },
+    async (request: { json: () => Promise<unknown> }) =>
+      handler({ user: { id: 'group-admin' }, request }),
 }))
-
 jest.mock('@/lib/features', () => ({ socialFeatureGuard: () => null }))
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn() },
 }))
-jest.mock('@/lib/utils/logger', () => ({
-  fireAndForget: (...args: unknown[]) => mockFireAndForget(...args),
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: () => mockGetSupabaseAdmin(),
 }))
 
-import { POST } from '../route'
+import { DELETE, POST } from '../route'
 
-type DbError = { code: string; message: string }
-type DbResult = { data: unknown; error: DbError | null }
+const DB_ERROR = { code: 'XX001', message: 'database failed' }
+const GROUP_ID = '10000000-0000-4000-8000-000000000001'
+const TARGET_ID = '20000000-0000-4000-8000-000000000002'
 
-const DB_ERROR: DbError = { code: 'XX001', message: 'database failed' }
-const GROUP_ID = 'group-1'
-const TARGET_ID = 'target-1'
-
-let tableQueues: Record<string, unknown[]>
-
-function queueTable(table: string, ...queries: unknown[]) {
-  tableQueues[table] = queries
-}
-
-function rowQuery(data: unknown, error: DbError | null = null) {
-  const result = { data, error }
-  const chain: Record<string, jest.Mock> = {
-    select: jest.fn(),
-    eq: jest.fn(),
-    maybeSingle: jest.fn().mockResolvedValue(result),
-  }
-  chain.select.mockReturnValue(chain)
-  chain.eq.mockReturnValue(chain)
-  return chain
-}
-
-function mutationQuery(operation: 'insert' | 'delete', operationSpy: jest.Mock, result: DbResult) {
-  const chain: Record<string, jest.Mock> & {
-    then?: (
-      onFulfilled?: (value: DbResult) => unknown,
-      onRejected?: (reason: unknown) => unknown
-    ) => Promise<unknown>
-  } = {
-    eq: jest.fn(),
-    select: jest.fn(),
-  }
-  chain.eq.mockReturnValue(chain)
-  chain.select.mockReturnValue(chain)
-  chain.then = (onFulfilled, onRejected) => Promise.resolve(result).then(onFulfilled, onRejected)
-  operationSpy.mockReturnValue(chain)
-  return { [operation]: operationSpy }
-}
-
-function request() {
-  return { json: jest.fn().mockResolvedValue({ reason: 'abuse' }) }
+function request(body: unknown = { reason: 'abuse' }) {
+  return { json: jest.fn().mockResolvedValue(body) }
 }
 
 function context() {
   return { params: Promise.resolve({ id: GROUP_ID, userId: TARGET_ID }) }
 }
 
-describe('POST group member ban', () => {
+function resolveStatus(status: string) {
+  mockRpc.mockResolvedValueOnce({ data: { status }, error: null })
+}
+
+describe('group member ban atomic route', () => {
   beforeEach(() => {
     jest.clearAllMocks()
-    tableQueues = {}
-    mockFrom.mockImplementation((table: string) => {
-      const queue = tableQueues[table]
-      if (!queue || queue.length === 0) throw new Error(`Unexpected table access: ${table}`)
-      return queue.shift()
-    })
   })
 
-  it('returns 500 when the actor role lookup fails and performs no writes', async () => {
-    queueTable('group_members', rowQuery(null, DB_ERROR))
-
-    const response = await POST(request() as never, context())
-
-    expect(response.status).toBe(500)
-    expect(mockFrom).toHaveBeenCalledTimes(1)
-    expect(mockBanInsert).not.toHaveBeenCalled()
-    expect(mockMemberDelete).not.toHaveBeenCalled()
-    expect(mockAuditInsert).not.toHaveBeenCalled()
-    expect(mockFireAndForget).not.toHaveBeenCalled()
-  })
-
-  it('returns 500 when the target role lookup fails and performs no writes', async () => {
-    queueTable('group_members', rowQuery({ role: 'admin' }), rowQuery(null, DB_ERROR))
-
-    const response = await POST(request() as never, context())
-
-    expect(response.status).toBe(500)
-    expect(mockFrom).toHaveBeenCalledTimes(2)
-    expect(mockBanInsert).not.toHaveBeenCalled()
-    expect(mockMemberDelete).not.toHaveBeenCalled()
-    expect(mockAuditInsert).not.toHaveBeenCalled()
-    expect(mockFireAndForget).not.toHaveBeenCalled()
-  })
-
-  it('does not delete or audit after a ban insert error', async () => {
-    queueTable('group_members', rowQuery({ role: 'owner' }), rowQuery({ role: 'member' }))
-    queueTable(
-      'group_bans',
-      mutationQuery('insert', mockBanInsert, { data: null, error: DB_ERROR })
-    )
-
-    const response = await POST(request() as never, context())
-
-    expect(response.status).toBe(500)
-    expect(mockBanInsert).toHaveBeenCalledTimes(1)
-    expect(mockMemberDelete).not.toHaveBeenCalled()
-    expect(mockAuditInsert).not.toHaveBeenCalled()
-    expect(mockFireAndForget).not.toHaveBeenCalled()
-  })
-
-  it('bans and removes a member without a manual member-count mutation', async () => {
-    queueTable(
-      'group_members',
-      rowQuery({ role: 'owner' }),
-      rowQuery({ role: 'member' }),
-      mutationQuery('delete', mockMemberDelete, {
-        data: [{ user_id: TARGET_ID }],
-        error: null,
-      })
-    )
-    queueTable('group_bans', mutationQuery('insert', mockBanInsert, { data: null, error: null }))
-    queueTable(
-      'group_audit_log',
-      mutationQuery('insert', mockAuditInsert, { data: null, error: null })
-    )
+  it('calls the service-only RPC with server-authenticated actor identity', async () => {
+    resolveStatus('banned')
 
     const response = await POST(request() as never, context())
 
     expect(response.status).toBe(200)
-    expect(mockBanInsert).toHaveBeenCalledTimes(1)
-    expect(mockMemberDelete).toHaveBeenCalledTimes(1)
-    expect(mockAuditInsert).toHaveBeenCalledTimes(1)
-    expect(mockFireAndForget).toHaveBeenCalledTimes(1)
+    expect(await response.json()).toEqual({ success: true })
+    expect(mockGetSupabaseAdmin).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenCalledWith('moderate_group_member_atomic', {
+      p_actor_id: 'group-admin',
+      p_group_id: GROUP_ID,
+      p_target_id: TARGET_ID,
+      p_action: 'ban',
+      p_reason: 'abuse',
+    })
+  })
+
+  it('keeps repeated bans idempotent without inventing another audit event', async () => {
+    resolveStatus('already_banned')
+
+    const response = await POST(request() as never, context())
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({ success: true, already_banned: true })
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a non-string reason before invoking service authority', async () => {
+    const response = await POST(request({ reason: { unexpected: true } }) as never, context())
+
+    expect(response.status).toBe(400)
+    expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('rejects malformed route IDs before invoking service authority', async () => {
+    const response = await POST(request() as never, {
+      params: Promise.resolve({ id: 'not-a-uuid', userId: TARGET_ID }),
+    })
+
+    expect(response.status).toBe(400)
+    expect(mockGetSupabaseAdmin).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['invalid_reason', 400],
+    ['self_forbidden', 400],
+    ['target_not_found', 404],
+    ['not_found', 404],
+    ['dissolved', 409],
+    ['owner_forbidden', 403],
+    ['hierarchy_forbidden', 403],
+    ['forbidden', 403],
+    ['account_inactive', 403],
+  ])('maps atomic ban status %s to HTTP %i', async (status, expectedStatus) => {
+    resolveStatus(status)
+
+    const response = await POST(request() as never, context())
+
+    expect(response.status).toBe(expectedStatus)
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed on RPC errors or malformed RPC data', async () => {
+    mockRpc
+      .mockResolvedValueOnce({ data: null, error: DB_ERROR })
+      .mockResolvedValueOnce({ data: [], error: null })
+
+    const failed = await POST(request() as never, context())
+    const malformed = await POST(request() as never, context())
+
+    expect(failed.status).toBe(500)
+    expect(malformed.status).toBe(500)
+  })
+})
+
+describe('group member unban atomic route', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+  })
+
+  it.each([
+    ['unbanned', { success: true }],
+    ['already_unbanned', { success: true, already_unbanned: true }],
+  ])('treats %s as an idempotent success', async (status, expectedBody) => {
+    resolveStatus(status)
+
+    const response = await DELETE(request() as never, context())
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual(expectedBody)
+    expect(mockRpc).toHaveBeenCalledWith('moderate_group_member_atomic', {
+      p_actor_id: 'group-admin',
+      p_group_id: GROUP_ID,
+      p_target_id: TARGET_ID,
+      p_action: 'unban',
+      p_reason: null,
+    })
+  })
+
+  it.each([
+    ['invalid', 400],
+    ['not_found', 404],
+    ['dissolved', 409],
+    ['forbidden', 403],
+    ['account_inactive', 403],
+  ])('maps atomic unban status %s to HTTP %i', async (status, expectedStatus) => {
+    resolveStatus(status)
+
+    const response = await DELETE(request() as never, context())
+
+    expect(response.status).toBe(expectedStatus)
+  })
+
+  it('fails closed when the unban RPC errors', async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: DB_ERROR })
+
+    const response = await DELETE(request() as never, context())
+
+    expect(response.status).toBe(500)
   })
 })
