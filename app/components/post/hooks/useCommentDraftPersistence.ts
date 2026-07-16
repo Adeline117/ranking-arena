@@ -24,7 +24,7 @@ function getLegacyDraftKey(postId: string): string {
   return `comment-draft-${postId}`
 }
 
-function readDraft(viewerKey: string, postId: string): string {
+function readDraft(viewerKey: string, postId: string, fallbackDraft = ''): string {
   try {
     const scopedKey = getDraftKey(viewerKey, postId)
     const scopedDraft = localStorage.getItem(scopedKey)
@@ -35,14 +35,14 @@ function readDraft(viewerKey: string, postId: string): string {
     // The v1 key had no owner. Defer migration while auth is unresolved, then
     // atomically assign it to the first resolved viewer and remove the source
     // so it can never be copied into another account.
-    if (viewerKey === 'pending') return ''
+    if (viewerKey === 'pending') return fallbackDraft
     const legacyKey = getLegacyDraftKey(postId)
     const legacyDraft = localStorage.getItem(legacyKey) || ''
     if (legacyDraft) localStorage.setItem(scopedKey, legacyDraft)
     localStorage.removeItem(legacyKey)
-    return legacyDraft
+    return legacyDraft || fallbackDraft
   } catch {
-    return ''
+    return fallbackDraft
   }
 }
 
@@ -63,17 +63,23 @@ function persistDraft(viewerKey: string, postId: string, value: string): void {
  * Pending writes are flushed before a post switch and on unmount so another post's
  * keystroke can never cancel an unsaved draft.
  */
-export function useCommentDraftPersistence(initialPostId?: string | null, viewerKey = 'anon') {
+export function useCommentDraftPersistence(
+  initialPostId?: string | null,
+  viewerKey = 'anon',
+  fallbackDraft = ''
+) {
   const currentPostIdRef = useRef<string | null>(initialPostId || null)
   const currentViewerKeyRef = useRef(viewerKey)
   const renderedPostIdRef = useRef<string | null>(initialPostId || null)
   const renderedViewerKeyRef = useRef(viewerKey)
+  const fallbackDraftRef = useRef(fallbackDraft)
   renderedPostIdRef.current = initialPostId || currentPostIdRef.current
   renderedViewerKeyRef.current = viewerKey
+  fallbackDraftRef.current = fallbackDraft
   const draftVersionRef = useRef(0)
   const pendingDraftsRef = useRef(new Map<string, PendingDraft>())
   const [draft, setDraftRaw] = useState(() =>
-    initialPostId ? readDraft(viewerKey, initialPostId) : ''
+    initialPostId ? readDraft(viewerKey, initialPostId, fallbackDraft) : fallbackDraft
   )
   const draftRef = useRef(draft)
 
@@ -156,7 +162,7 @@ export function useCommentDraftPersistence(initialPostId?: string | null, viewer
       }
 
       currentPostIdRef.current = postId
-      const restored = readDraft(currentViewerKeyRef.current, postId)
+      const restored = readDraft(currentViewerKeyRef.current, postId, fallbackDraftRef.current)
       draftVersionRef.current += 1
       draftRef.current = restored
       setDraftRaw(restored)
@@ -234,7 +240,7 @@ export function useCommentDraftPersistence(initialPostId?: string | null, viewer
     const postId = currentPostIdRef.current
     if (postId) flushDraft(postId, previousViewerKey)
     currentViewerKeyRef.current = viewerKey
-    const restored = postId ? readDraft(viewerKey, postId) : ''
+    const restored = postId ? readDraft(viewerKey, postId, fallbackDraftRef.current) : ''
     draftVersionRef.current += 1
     draftRef.current = restored
     setDraftRaw(restored)
