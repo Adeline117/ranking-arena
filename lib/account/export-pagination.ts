@@ -249,7 +249,8 @@ function normalizeTimestamp(value: unknown): NormalizedCursorValue {
 
 function normalizeCursorValue(
   value: unknown,
-  valueType: ExportCursorValueType
+  valueType: ExportCursorValueType,
+  allowEmptyString = false
 ): NormalizedCursorValue {
   if (valueType === 'timestamp') return normalizeTimestamp(value)
 
@@ -270,8 +271,12 @@ function normalizeCursorValue(
     return { wireValue, comparable, projectedValue: wireValue, valueType }
   }
 
-  if (typeof value !== 'string' || value.length === 0 || CONTROL_CHARACTER.test(value)) {
-    throw new Error(`${valueType} cursor value must be a non-empty safe string`)
+  if (
+    typeof value !== 'string' ||
+    CONTROL_CHARACTER.test(value) ||
+    (valueType === 'string' && value.length === 0 && !allowEmptyString)
+  ) {
+    throw new Error(`${valueType} cursor value must be a safe string`)
   }
   if (valueType === 'uuid' && !UUID.test(value)) {
     throw new Error('UUID cursor value is malformed')
@@ -416,7 +421,7 @@ export async function fetchAllExportRowsByCursor(
       let rowCursor: NormalizedCursorValue[]
       try {
         rowCursor = validated.cursorColumns.map(({ column, valueType }) =>
-          normalizeCursorValue(row[column], valueType)
+          normalizeCursorValue(row[column], valueType, valueType === 'string')
         )
         if (
           !usesDatabaseTextOrdering &&
