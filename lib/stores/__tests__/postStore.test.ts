@@ -11,10 +11,8 @@ jest.mock('@/lib/api/client', () => ({
 }))
 jest.mock('@/lib/api/comments-client', () => ({
   fetchPostCommentsPage: (...args: unknown[]) => mockFetchPostCommentsPage(...args),
-  isCreatedCommentAcknowledgement: (
-    value: Record<string, unknown>,
-    expected: { postId: string; content: string }
-  ) => value?.post_id === expected.postId && typeof value?.id === 'string',
+  isCreatedCommentAcknowledgement: (value: Record<string, unknown>, expected: { postId: string }) =>
+    value?.post_id === expected.postId && typeof value?.id === 'string',
   isDefinitiveMutationRejection: ({ ok, status }: { ok: boolean; status: number }) =>
     !ok && status >= 400 && status < 500 && status !== 408,
 }))
@@ -22,6 +20,7 @@ jest.mock('@/lib/logger', () => ({ logger: { error: jest.fn(), warn: jest.fn() }
 
 import {
   usePostStore,
+  loadPostForViewer,
   loadPostComments,
   loadMorePostComments,
   submitPostComment,
@@ -48,6 +47,14 @@ function post(id: string, overrides: Partial<PostData> = {}): PostData {
 
 function comment(id: string, overrides: Partial<CommentData> = {}): CommentData {
   return { id, content: 'c', author_handle: 'h', created_at: '2026-07-03T00:00:00Z', ...overrides }
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  const promise = new Promise<T>((done) => {
+    resolve = done
+  })
+  return { promise, resolve }
 }
 
 beforeEach(() => {
@@ -156,6 +163,7 @@ describe('viewer-scoped cache ownership', () => {
       viewerKey: scopeB.viewerKey,
       sessionGeneration: scopeB.sessionGeneration,
       posts: {},
+      postsRevision: {},
       comments: {},
       commentsPagination: {},
       commentsRevision: {},
@@ -193,6 +201,48 @@ describe('viewer-scoped cache ownership', () => {
     await loadA
 
     expect(usePostStore.getState().comments.p1.map((item) => item.id)).toEqual(['comment-b'])
+  })
+
+  it('rehydrates the same post ID after a scope clear', async () => {
+    usePostStore.getState().setViewerScope(scopeB.viewerKey, scopeB.sessionGeneration)
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        data: { post: post('p1', { title: 'B post', user_reaction: 'down' }) },
+      },
+    })
+
+    await expect(loadPostForViewer('p1', 'token-b', scopeB)).resolves.toBe(true)
+
+    expect(usePostStore.getState().posts.p1).toMatchObject({
+      title: 'B post',
+      user_reaction: 'down',
+    })
+  })
+
+  it('does not let an older post hydration overwrite a newer mutation revision', async () => {
+    usePostStore.getState().setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    const hydration = deferred<unknown>()
+    mockAuthedFetch.mockReturnValueOnce(hydration.promise)
+    const loading = loadPostForViewer('p1', 'token-a', scopeA)
+
+    usePostStore.getState().setPost(post('p1', { like_count: 9, user_reaction: 'up' }))
+    hydration.resolve({
+      ok: true,
+      status: 200,
+      data: {
+        success: true,
+        data: { post: post('p1', { like_count: 1, user_reaction: null }) },
+      },
+    })
+
+    await expect(loading).resolves.toBe(false)
+    expect(usePostStore.getState().posts.p1).toMatchObject({
+      like_count: 9,
+      user_reaction: 'up',
+    })
   })
 
   it('preserves the same-A tree when a refreshed-token read fails', async () => {
@@ -238,6 +288,47 @@ describe('viewer-scoped cache ownership', () => {
 
     await expect(submission).resolves.toEqual({ error: 'STALE_AUTH_SCOPE' })
     expect(usePostStore.getState().comments).toEqual({})
+  })
+
+  it('does not append an ACK when a newer tree revision wins reconciliation', async () => {
+    usePostStore.getState().setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    usePostStore.getState().setComments('p1', [comment('before')])
+    mockAuthedFetch.mockResolvedValue({
+      ok: true,
+      status: 201,
+      data: {
+        success: true,
+        data: {
+          comment: {
+            ...comment('created', { user_id: 'user-a' }),
+            post_id: 'p1',
+          },
+        },
+      },
+    })
+    const firstCanonical = deferred<unknown>()
+    mockFetchPostCommentsPage.mockReturnValueOnce(firstCanonical.promise).mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      comments: [comment('newer-realtime')],
+      commentCount: 1,
+      hasMore: false,
+    })
+
+    const submission = submitPostComment('p1', 'hello', 'token-a', scopeA)
+    while (mockFetchPostCommentsPage.mock.calls.length < 1) await Promise.resolve()
+    usePostStore.getState().setComments('p1', [comment('newer-realtime')])
+    firstCanonical.resolve({
+      ok: true,
+      status: 200,
+      comments: [comment('created')],
+      commentCount: 1,
+      hasMore: false,
+    })
+
+    await submission
+
+    expect(usePostStore.getState().comments.p1.map((item) => item.id)).toEqual(['newer-realtime'])
   })
 })
 

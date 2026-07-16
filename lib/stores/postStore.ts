@@ -68,6 +68,8 @@ type PostStoreState = {
   sessionGeneration: number
   /** Canonical post cache: postId → PostData */
   posts: Record<string, PostData>
+  /** Local monotonic post revision used to reject older hydration reads. */
+  postsRevision: Record<string, number>
   /** Canonical comment cache: postId → CommentData[] */
   comments: Record<string, CommentData[]>
   /** Comment pagination state per post */
@@ -131,6 +133,7 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
   viewerKey: 'pending',
   sessionGeneration: 0,
   posts: {},
+  postsRevision: {},
   comments: {},
   commentsPagination: {},
   commentsRevision: {},
@@ -144,6 +147,7 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
         viewerKey,
         sessionGeneration,
         posts: {},
+        postsRevision: {},
         comments: {},
         commentsPagination: {},
         commentsRevision: {},
@@ -151,9 +155,19 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
     }),
 
   setPost: (post) =>
-    set((state) => ({
-      posts: evictOldest({ ...state.posts, [post.id]: post }, MAX_CACHED_POSTS),
-    })),
+    set((state) => {
+      const posts = evictOldest({ ...state.posts, [post.id]: post }, MAX_CACHED_POSTS)
+      const revision = {
+        ...state.postsRevision,
+        [post.id]: (state.postsRevision[post.id] || 0) + 1,
+      }
+      return {
+        posts,
+        postsRevision: Object.fromEntries(
+          Object.keys(posts).map((postId) => [postId, revision[postId]])
+        ),
+      }
+    }),
 
   setPosts: (posts) =>
     set((state) => {
@@ -161,7 +175,17 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
       for (const post of posts) {
         updated[post.id] = post
       }
-      return { posts: evictOldest(updated, MAX_CACHED_POSTS) }
+      const postsRevision = { ...state.postsRevision }
+      for (const post of posts) {
+        postsRevision[post.id] = (postsRevision[post.id] || 0) + 1
+      }
+      const evictedPosts = evictOldest(updated, MAX_CACHED_POSTS)
+      return {
+        posts: evictedPosts,
+        postsRevision: Object.fromEntries(
+          Object.keys(evictedPosts).map((postId) => [postId, postsRevision[postId]])
+        ),
+      }
     }),
 
   updatePostReaction: (postId, data) =>
@@ -177,6 +201,10 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
             dislike_count: data.dislike_count,
             user_reaction: data.reaction,
           },
+        },
+        postsRevision: {
+          ...state.postsRevision,
+          [postId]: (state.postsRevision[postId] || 0) + 1,
         },
       }
     }),
@@ -197,6 +225,10 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
         posts: {
           ...state.posts,
           [postId]: { ...existing, comment_count: commentCount },
+        },
+        postsRevision: {
+          ...state.postsRevision,
+          [postId]: (state.postsRevision[postId] || 0) + 1,
         },
       }
     }),
@@ -258,6 +290,7 @@ export const usePostStore = create<PostStoreState & PostStoreActions>((set) => (
   clear: () =>
     set({
       posts: {},
+      postsRevision: {},
       comments: {},
       commentsPagination: {},
       commentsRevision: {},
@@ -279,6 +312,7 @@ export type PostStoreViewerScope = {
 
 const commentLoadGeneration = new Map<string, number>()
 const commentLoadMoreGeneration = new Map<string, number>()
+const postLoadGeneration = new Map<string, number>()
 
 function captureStoreScope(scope?: PostStoreViewerScope): PostStoreViewerScope {
   if (scope) return scope
@@ -303,6 +337,75 @@ function viewerReadOptions(scope: PostStoreViewerScope) {
   return {
     expectedUserId: scope.userId,
     expectedSessionGeneration: scope.sessionGeneration,
+  }
+}
+
+function parsePostData(value: unknown, expectedPostId: string): PostData | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+  const post = value as Record<string, unknown>
+  if (post.id !== expectedPostId || typeof post.created_at !== 'string') return null
+  return {
+    id: expectedPostId,
+    title: typeof post.title === 'string' ? post.title : '',
+    content: typeof post.content === 'string' ? post.content : '',
+    author_handle: typeof post.author_handle === 'string' ? post.author_handle : 'user',
+    group_id: typeof post.group_id === 'string' ? post.group_id : undefined,
+    group_name: typeof post.group_name === 'string' ? post.group_name : undefined,
+    created_at: post.created_at,
+    like_count: Number.isSafeInteger(post.like_count) ? (post.like_count as number) : 0,
+    dislike_count: Number.isSafeInteger(post.dislike_count) ? (post.dislike_count as number) : 0,
+    comment_count: Number.isSafeInteger(post.comment_count) ? (post.comment_count as number) : 0,
+    view_count: Number.isSafeInteger(post.view_count) ? (post.view_count as number) : 0,
+    hot_score:
+      typeof post.hot_score === 'number' && Number.isFinite(post.hot_score) ? post.hot_score : 0,
+    user_reaction:
+      post.user_reaction === 'up' || post.user_reaction === 'down' ? post.user_reaction : null,
+    author_avatar_url:
+      typeof post.author_avatar_url === 'string' ? post.author_avatar_url : undefined,
+  }
+}
+
+/** Rehydrate a post after a viewer-scope clear without overwriting newer mutations. */
+export async function loadPostForViewer(
+  postId: string,
+  accessToken: string | null = null,
+  scope?: PostStoreViewerScope
+): Promise<boolean> {
+  const capturedScope = captureStoreScope(scope)
+  if (!storeScopeIsCurrent(capturedScope)) return false
+  const key = requestKey(capturedScope, postId)
+  const generation = (postLoadGeneration.get(key) || 0) + 1
+  postLoadGeneration.set(key, generation)
+  const requestStartRevision = usePostStore.getState().postsRevision[postId] || 0
+
+  try {
+    const result = await authedFetch<{
+      success?: boolean
+      data?: { post?: unknown }
+    }>(`/api/posts/${encodeURIComponent(postId)}`, 'GET', accessToken, undefined, 15_000, {
+      expectedUserId: capturedScope.userId,
+      expectedSessionGeneration: capturedScope.sessionGeneration,
+    })
+    if (
+      !result.ok ||
+      result.stale ||
+      result.data?.success !== true ||
+      !storeScopeIsCurrent(capturedScope) ||
+      postLoadGeneration.get(key) !== generation
+    ) {
+      return false
+    }
+
+    const store = usePostStore.getState()
+    if ((store.postsRevision[postId] || 0) !== requestStartRevision) return false
+    const post = parsePostData(result.data.data?.post, postId)
+    if (!post) return false
+    store.setPost(post)
+    return true
+  } catch {
+    return false
+  } finally {
+    if (postLoadGeneration.get(key) === generation) postLoadGeneration.delete(key)
   }
 }
 
@@ -361,6 +464,8 @@ export async function loadPostComments(
     if (storeScopeIsCurrent(capturedScope) && commentLoadGeneration.get(key) === generation) {
       usePostStore.getState().setCommentsPagination(postId, { loading: false })
     }
+  } finally {
+    if (commentLoadGeneration.get(key) === generation) commentLoadGeneration.delete(key)
   }
 }
 
@@ -420,15 +525,21 @@ export async function loadMorePostComments(
     if (storeScopeIsCurrent(capturedScope) && commentLoadMoreGeneration.get(key) === generation) {
       usePostStore.getState().setCommentsPagination(postId, { loadingMore: false })
     }
+  } finally {
+    if (commentLoadMoreGeneration.get(key) === generation) {
+      commentLoadMoreGeneration.delete(key)
+    }
   }
 }
+
+type ReconcilePostStoreCommentsResult = 'reconciled' | 'revision-conflict' | 'unavailable' | 'stale'
 
 async function reconcilePostStoreComments(
   postId: string,
   accessToken: string,
   scope: PostStoreViewerScope
-): Promise<boolean> {
-  if (!storeScopeIsCurrent(scope)) return false
+): Promise<ReconcilePostStoreCommentsResult> {
+  if (!storeScopeIsCurrent(scope)) return 'stale'
   const requestStartRevision = usePostStore.getState().commentsRevision[postId] || 0
   try {
     const page = await fetchPostCommentsPage<CommentData>(postId, accessToken, {
@@ -436,10 +547,13 @@ async function reconcilePostStoreComments(
       offset: 0,
       viewerScope: viewerReadOptions(scope),
     })
-    if (!page.ok || !storeScopeIsCurrent(scope)) return false
+    if (!page.ok) return 'unavailable'
+    if (!storeScopeIsCurrent(scope)) return 'stale'
 
     const store = usePostStore.getState()
-    if ((store.commentsRevision[postId] || 0) !== requestStartRevision) return false
+    if ((store.commentsRevision[postId] || 0) !== requestStartRevision) {
+      return 'revision-conflict'
+    }
     store.setComments(postId, page.comments)
     store.updatePostCommentCount(postId, page.commentCount)
     store.setCommentsPagination(postId, {
@@ -447,9 +561,9 @@ async function reconcilePostStoreComments(
       offset: page.comments.length,
       hasMore: page.hasMore,
     })
-    return true
+    return 'reconciled'
   } catch {
-    return false
+    return 'unavailable'
   }
 }
 
@@ -497,9 +611,15 @@ export async function submitPostComment(
       // The ACK proves the row committed, while the follow-up authenticated
       // read supplies the absolute post count. Keep the ACK visible even when
       // it falls outside the first canonical page or that read is unavailable.
-      await reconcilePostStoreComments(postId, accessToken, capturedScope)
+      const reconciliation = await reconcilePostStoreComments(postId, accessToken, capturedScope)
       if (!storeScopeIsCurrent(capturedScope)) return { error: 'STALE_AUTH_SCOPE' }
-      usePostStore.getState().addComment(postId, comment)
+      if (reconciliation === 'revision-conflict') {
+        // A newer realtime/local tree landed while canonical hydration was in
+        // flight. Refresh again, but never append this older ACK onto it.
+        await loadPostComments(postId, accessToken, capturedScope)
+      } else {
+        usePostStore.getState().addComment(postId, comment)
+      }
       return { comment }
     }
 
