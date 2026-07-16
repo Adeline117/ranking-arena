@@ -14,9 +14,9 @@ SET search_path = public, pg_temp
 SET statement_timeout = '10s'
 AS $$
 BEGIN
-  -- Serialize cron/manual rebuilds so concurrent callers cannot interleave
-  -- their DELETE/INSERT generations.
-  PERFORM pg_advisory_xact_lock(hashtext('refresh_leaderboard_count_cache'));
+  -- Serialize cron/manual rebuilds with the same lock already used by the GMX
+  -- cutover. SELECT readers remain allowed and see one complete MVCC generation.
+  LOCK TABLE public.leaderboard_count_cache IN SHARE ROW EXCLUSIVE MODE;
 
   DELETE FROM public.leaderboard_count_cache;
 
