@@ -2013,7 +2013,8 @@ const ja = {
 
   // 取引所ランディングページ (/exchange/[slug])
   exchangePageTitle: '{name} トップトレーダーとランキング',
-  exchangePageSubtitle: '{name}（{type}）のランク付けされたトレーダー {count} 名。30分ごとに更新。',
+  exchangePageSubtitle:
+    '{name}（{type}）のランク付けされたトレーダー {count} 名。ランキングは2時間ごとに再計算されます。',
   exchangePageTop10: 'Arenaスコア別トップ10トレーダー',
   exchangePageColRank: 'ランク',
   exchangePageColTrader: 'トレーダー',
@@ -2023,7 +2024,7 @@ const ja = {
   exchangePageCta: '{name} の完全なランキングを見る',
   exchangePageAboutTitle: '{name} トレーダーランキングについて',
   exchangePageAboutBody:
-    'Arenaは{name}上の{count}名のアクティブなトレーダーを追跡し、ROI・損益・リスク管理・7日/30日/90日の一貫性を組み合わせた総合指標であるArenaスコアでランク付けしています。{name}は{type}取引プラットフォームです。すべてのパフォーマンスデータは取引所のライブAPIから30分ごとに更新されます。',
+    'Arenaは{name}上の{count}名のアクティブなトレーダーを追跡し、ROI・損益・リスク管理・7日/30日/90日の一貫性を組み合わせた総合指標であるArenaスコアでランク付けしています。{name}は{type}取引プラットフォームです。上流ソースのデータは通常3〜6時間ごとに更新され、ランキングは2時間ごとに再計算されます。',
   exchangePageTypeFutures: '先物',
   exchangePageTypeSpot: '現物',
   exchangePageTypeDefi: 'DeFi / オンチェーン',
