@@ -1,7 +1,9 @@
 import { cache } from 'react'
 import type { Metadata } from 'next'
+import { cookies } from 'next/headers'
 import { notFound, redirect } from 'next/navigation'
 import { features } from '@/lib/features'
+import { createClient } from '@/lib/db'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getPostById } from '@/lib/data/posts'
 import PostDetailPageBody from './PostDetailPageBody'
@@ -9,12 +11,17 @@ import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { generatePostArticleSchema } from '@/lib/seo/structured-data'
 import { BASE_URL as APP_URL } from '@/lib/constants/urls'
 
-export const revalidate = 60
+// The page body is viewer-scoped: group/paid visibility cannot be shared in
+// ISR by post id. Metadata below still uses anonymous audience semantics.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
-// Single fetch shared between generateMetadata and the page (request-deduped).
-const getPost = cache(async (id: string) => {
+const getPublicPost = cache(async (id: string) => {
   try {
-    return await getPostById(getSupabaseAdmin(), id)
+    // This response is publicly cached by post id, so it must use anonymous
+    // audience semantics. Viewer-specific group posts are loaded via APIs that
+    // pass the authenticated actor instead of entering this shared cache.
+    return await getPostById(getSupabaseAdmin(), id, null)
   } catch {
     return null
   }
@@ -28,7 +35,7 @@ export async function generateMetadata({
   const { id } = await params
 
   try {
-    const data = await getPost(id)
+    const data = await getPublicPost(id)
 
     if (!data) {
       return { title: 'Post Not Found' }
@@ -78,8 +85,17 @@ export default async function PostDetailPage({ params }: { params: Promise<{ id:
     notFound()
   }
 
-  // Reuses cached result from generateMetadata — no extra DB query
-  const post = await getPost(id)
+  // Never put viewer-specific results in the anonymous metadata cache. The
+  // RSC auth client reads the refreshed Supabase cookie for this request, then
+  // the canonical database predicate decides the post audience/paywall.
+  const cookieStore = await cookies()
+  const authClient = createClient(cookieStore)
+  const {
+    data: { user },
+  } = await authClient.auth.getUser()
+  const post = user
+    ? await getPostById(getSupabaseAdmin(), id, user.id).catch(() => null)
+    : await getPublicPost(id)
   if (!post) {
     notFound()
   }

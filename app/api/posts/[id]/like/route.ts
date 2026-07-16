@@ -53,7 +53,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       let post: Awaited<ReturnType<typeof getPostById>> = null
 
       try {
-        post = await getPostById(supabase, id)
+        post = await getPostById(supabase, id, user.id)
         likeCount = post?.like_count || 0
         dislikeCount = post?.dislike_count || 0
       } catch (fetchError) {

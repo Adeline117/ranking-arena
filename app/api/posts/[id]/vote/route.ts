@@ -26,20 +26,14 @@ export const POST = withAuth(
     const id = pathParts[postsIdx + 1]
 
     if (!id) {
-      return NextResponse.json(
-        { error: 'Missing post ID' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Missing post ID' }, { status: 400 })
     }
 
     let body: Record<string, unknown>
     try {
       body = await request.json()
     } catch {
-      return NextResponse.json(
-        { error: 'Invalid JSON body' },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: 'Invalid JSON body' }, { status: 400 })
     }
 
     const parsed = PostVoteSchema.safeParse(body)
@@ -55,7 +49,7 @@ export const POST = withAuth(
     const result = await togglePostVote(supabase, id, user.id, choice)
 
     // 获取更新后的帖子信息
-    const post = await getPostById(supabase, id)
+    const post = await getPostById(supabase, id, user.id)
 
     return NextResponse.json({
       success: true,

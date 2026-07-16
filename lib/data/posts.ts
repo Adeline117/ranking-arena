@@ -6,6 +6,11 @@ import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { delByPattern } from '@/lib/cache'
 import { CachePattern } from '@/lib/cache/keys'
+import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
+export {
+  canServiceActorReadPost,
+  filterServiceReadablePostRows,
+} from '@/lib/data/service-post-audience'
 // Dynamic import: sanitize.ts pulls in the sanitize-html parser, only needed
 // for write operations — keep it out of read-path cold starts.
 const loadSanitize = () => import('@/lib/utils/sanitize').then((m) => m.sanitizeText)
@@ -26,6 +31,10 @@ async function invalidatePostListCache(): Promise<void> {
 // lifts genuinely trending content. Additive (not multiplicative) form avoids
 // float underflow-to-zero for old posts, keeping the order total & stable.
 const HOT_POOL_SIZE = 300
+// Authorize hot candidates progressively so the common first page does not
+// fan out into 300 service-role audience checks. We keep walking the ranked
+// pool until the requested page is full, preserving readable-row pagination.
+const HOT_AUDIENCE_CHUNK_SIZE = 40
 // Seconds of freshness worth one decade (10x) of engagement. One full unit of
 // log10(hot_score) ≈ 1 day of recency, so a hot_score-10 post ranks like a
 // day-newer hot_score-1 post.
@@ -163,6 +172,8 @@ interface PostRow {
   is_sensitive?: boolean
   content_warning?: string | null
   language?: string
+  status?: string | null
+  deleted_at?: string | null
 }
 
 interface AuthorProfile {
@@ -264,6 +275,7 @@ const POST_SELECT_FIELDS = `
   repost_count, view_count, hot_score, is_pinned, images,
   created_at, updated_at, original_post_id,
   visibility, is_sensitive, content_warning, language,
+  status, deleted_at,
   groups(name, name_en)
 `
 
@@ -380,18 +392,30 @@ export async function getPosts(
   if (error) throw error
   if (!rawData || rawData.length === 0) return []
 
-  // Hot feed: re-rank the candidate pool by decayed hot score, then slice the
-  // requested page. Pool is fetched from offset 0, so JS pagination is stable
-  // up to HOT_POOL_SIZE (hot feeds are consumed shallow-first + cached).
-  let data = rawData
+  let data: PostRow[]
   if (isHotSort) {
-    const ranked = [...rawData].sort(
+    // Hot feed: re-rank the candidate pool, then authorize it in small chunks.
+    // Pool is fetched from offset 0, so readable-row pagination stays stable
+    // up to HOT_POOL_SIZE without issuing 300 RPCs for the usual first page.
+    const ranked = [...(rawData as PostRow[])].sort(
       (a, b) => hotRankScore(b.hot_score, b.created_at) - hotRankScore(a.hot_score, a.created_at)
     )
     if (sort_order === 'asc') ranked.reverse()
-    data = ranked.slice(offset, offset + limit)
-    if (data.length === 0) return []
+
+    const readableRanked: PostRow[] = []
+    for (
+      let index = 0;
+      index < ranked.length && readableRanked.length < offset + limit;
+      index += HOT_AUDIENCE_CHUNK_SIZE
+    ) {
+      const chunk = ranked.slice(index, index + HOT_AUDIENCE_CHUNK_SIZE)
+      readableRanked.push(...(await filterServiceReadablePostRows(supabase, chunk, viewer_id)))
+    }
+    data = readableRanked.slice(offset, offset + limit)
+  } else {
+    data = await filterServiceReadablePostRows(supabase, rawData as PostRow[], viewer_id)
   }
+  if (data.length === 0) return []
 
   const authorIds = [...new Set(data.map((p) => p.author_id).filter(Boolean))]
   const originalPostIds = [
@@ -405,17 +429,25 @@ export async function getPosts(
     originalPostIds.length > 0
       ? await supabase
           .from('posts')
-          .select('id, title, content, author_id, author_handle, images, created_at')
+          .select(
+            'id, title, content, author_id, author_handle, images, created_at, group_id, visibility, status, deleted_at'
+          )
           .in('id', originalPostIds)
+          .neq('status', 'deleted')
           .is('deleted_at', null)
           .eq('visibility', 'public')
           .is('group_id', null)
-      : { data: null }
+      : { data: null, error: null }
+
+  if (originalPostsResult.error) throw originalPostsResult.error
+  const readableOriginalPosts = originalPostsResult.data
+    ? await filterServiceReadablePostRows(supabase, originalPostsResult.data, viewer_id)
+    : []
 
   // Combine post author IDs + original post author IDs into one batch
-  const originalAuthorIds = originalPostsResult.data
-    ? originalPostsResult.data.map((p: { author_id: string }) => p.author_id).filter(Boolean)
-    : []
+  const originalAuthorIds = readableOriginalPosts
+    .map((p: { author_id: string }) => p.author_id)
+    .filter(Boolean)
   const allAuthorIds = [...new Set([...authorIds, ...originalAuthorIds])]
 
   const profilesResult =
@@ -431,8 +463,8 @@ export async function getPosts(
     : new Map()
 
   const originalPostMap = new Map<string, OriginalPost>()
-  if (originalPostsResult.data && originalPostsResult.data.length > 0) {
-    for (const op of originalPostsResult.data) {
+  if (readableOriginalPosts.length > 0) {
+    for (const op of readableOriginalPosts) {
       const opProfile = authorProfileMap.get(op.author_id)
       originalPostMap.set(op.id, {
         id: op.id,
@@ -449,7 +481,7 @@ export async function getPosts(
   let filteredData = data as PostRow[]
 
   // Post-fetch visibility filtering for "followers" posts
-  if (!group_id && viewer_id) {
+  if (!group_id && !group_ids && viewer_id) {
     const followersPostAuthors = [
       ...new Set(filteredData.filter((p) => p.visibility === 'followers').map((p) => p.author_id)),
     ]
@@ -492,19 +524,25 @@ export async function getPosts(
  */
 export async function getPostById(
   supabase: SupabaseClient,
-  postId: string
+  postId: string,
+  viewerId?: string | null
 ): Promise<PostWithAuthor | null> {
   const { data, error } = await supabase
     .from('posts')
     .select(POST_SELECT_FIELDS)
     .eq('id', postId)
+    .neq('status', 'deleted')
+    .is('deleted_at', null)
     .maybeSingle()
 
   if (error) throw error
   if (!data) return null
 
-  const authorIds = [data.author_id].filter(Boolean)
-  const originalPostId = data.original_post_id
+  const [readablePost] = await filterServiceReadablePostRows(supabase, [data as PostRow], viewerId)
+  if (!readablePost) return null
+
+  const authorIds = [readablePost.author_id].filter(Boolean)
+  const originalPostId = readablePost.original_post_id
 
   const [profileResult, originalPostResult] = await Promise.all([
     authorIds.length > 0
@@ -516,22 +554,30 @@ export async function getPostById(
     originalPostId
       ? supabase
           .from('posts')
-          .select('id, title, content, author_id, author_handle, images, created_at')
+          .select(
+            'id, title, content, author_id, author_handle, images, created_at, group_id, visibility, status, deleted_at'
+          )
           .eq('id', originalPostId)
+          .neq('status', 'deleted')
           .is('deleted_at', null)
           .eq('visibility', 'public')
           .is('group_id', null)
           .maybeSingle()
-      : Promise.resolve({ data: null }),
+      : Promise.resolve({ data: null, error: null }),
   ])
+
+  if (originalPostResult.error) throw originalPostResult.error
+  const [readableOriginalPost] = originalPostResult.data
+    ? await filterServiceReadablePostRows(supabase, [originalPostResult.data], viewerId)
+    : []
 
   const authorProfileMap = profileResult.data
     ? buildAuthorProfileMap(profileResult.data)
     : new Map()
 
   let originalPost: OriginalPost | null = null
-  if (originalPostResult.data) {
-    const op = originalPostResult.data
+  if (readableOriginalPost) {
+    const op = readableOriginalPost
     let opProfile = authorProfileMap.get(op.author_id)
 
     if (!opProfile && op.author_id) {
@@ -567,7 +613,7 @@ export async function getPostById(
     }
   }
 
-  return toPostWithAuthor(data as PostRow, authorProfileMap.get(data.author_id), originalPost)
+  return toPostWithAuthor(readablePost, authorProfileMap.get(readablePost.author_id), originalPost)
 }
 
 /**
