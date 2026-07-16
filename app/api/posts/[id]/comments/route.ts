@@ -225,7 +225,7 @@ export const GET = withPublic(
 
     // Validate UUID format to prevent PostgreSQL cast errors
     if (!id || !UUID_RE.test(id)) {
-      return successWithPagination({ comments: [] }, { limit: 50, offset: 0, has_more: false })
+      throw ApiError.notFound('Post not found')
     }
 
     const { searchParams } = new URL(request.url)
@@ -251,7 +251,7 @@ export const GET = withPublic(
     }
 
     if (post && user && (await hasBidirectionalBlock(supabase, user.id, post.author_id, 'GET'))) {
-      return successWithPagination({ comments: [] }, { limit, offset, has_more: false })
+      throw ApiError.notFound('Post not found')
     }
 
     let canRead = !!post && post.status !== 'deleted' && post.visibility === 'public'
@@ -292,7 +292,7 @@ export const GET = withPublic(
     }
 
     if (!post || !canRead) {
-      return successWithPagination({ comments: [] }, { limit, offset, has_more: false })
+      throw ApiError.notFound('Post not found')
     }
 
     // Fetch one look-ahead row so a full final page does not falsely claim

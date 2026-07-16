@@ -28,6 +28,11 @@ import {
   type PostData,
   type CommentData,
 } from '../postStore'
+import {
+  __resetViewerScopeForTests,
+  beginViewerTransition,
+  synchronizeViewerScope,
+} from '@/lib/auth/viewer-scope'
 
 function post(id: string, overrides: Partial<PostData> = {}): PostData {
   return {
@@ -58,7 +63,7 @@ function deferred<T>() {
 }
 
 beforeEach(() => {
-  usePostStore.getState().setViewerScope('pending', 0)
+  __resetViewerScopeForTests()
   usePostStore.getState().clear()
   mockAuthedFetch.mockReset()
   mockFetchPostCommentsPage.mockReset()
@@ -150,14 +155,38 @@ describe('viewer-scoped cache ownership', () => {
     userId: 'user-b',
   }
 
+  const activateA = () => synchronizeViewerScope(true, 'user-a')
+  const activateBFromPending = () => {
+    synchronizeViewerScope(true, null)
+    return synchronizeViewerScope(true, 'user-b')
+  }
+
+  it('inherits the live viewer when the store module is imported after authentication', () => {
+    jest.isolateModules(() => {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const isolatedViewerScope =
+        require('@/lib/auth/viewer-scope') as typeof import('@/lib/auth/viewer-scope')
+      isolatedViewerScope.__resetViewerScopeForTests()
+      const liveScope = isolatedViewerScope.synchronizeViewerScope(true, 'late-user')
+
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const isolatedPostStore = require('../postStore') as typeof import('../postStore')
+
+      expect(isolatedPostStore.usePostStore.getState()).toMatchObject({
+        viewerKey: liveScope.viewerKey,
+        sessionGeneration: liveScope.sessionGeneration,
+      })
+    })
+  })
+
   it('atomically clears posts, comments, and pagination when A changes to B', () => {
     const store = usePostStore.getState()
-    store.setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    activateA()
     store.setPost(post('p1', { user_reaction: 'up' }))
     store.setComments('p1', [comment('a-private', { user_liked: true })])
     store.setCommentsPagination('p1', { offset: 1 })
 
-    store.setViewerScope(scopeB.viewerKey, scopeB.sessionGeneration)
+    synchronizeViewerScope(true, 'user-b')
 
     expect(usePostStore.getState()).toMatchObject({
       viewerKey: scopeB.viewerKey,
@@ -178,10 +207,10 @@ describe('viewer-scoped cache ownership', () => {
           requests.set(token, resolve)
         })
     )
-    usePostStore.getState().setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    activateA()
     const loadA = loadPostComments('p1', 'token-a', scopeA)
 
-    usePostStore.getState().setViewerScope(scopeB.viewerKey, scopeB.sessionGeneration)
+    synchronizeViewerScope(true, 'user-b')
     const loadB = loadPostComments('p1', 'token-b', scopeB)
     requests.get('token-b')?.({
       ok: true,
@@ -203,8 +232,33 @@ describe('viewer-scoped cache ownership', () => {
     expect(usePostStore.getState().comments.p1.map((item) => item.id)).toEqual(['comment-b'])
   })
 
+  it('clears A synchronously at transition start and rejects its pre-effect response', async () => {
+    activateA()
+    usePostStore.getState().setComments('p1', [comment('a-private')])
+    const response = deferred<unknown>()
+    mockFetchPostCommentsPage.mockReturnValue(response.promise)
+    const loading = loadPostComments('p1', 'token-a', scopeA)
+
+    beginViewerTransition('user-b')
+
+    expect(usePostStore.getState()).toMatchObject({
+      viewerKey: 'pending',
+      comments: {},
+      posts: {},
+    })
+    response.resolve({
+      ok: true,
+      status: 200,
+      comments: [comment('late-a')],
+      commentCount: 1,
+      hasMore: false,
+    })
+    await loading
+    expect(usePostStore.getState().comments).toEqual({})
+  })
+
   it('rehydrates the same post ID after a scope clear', async () => {
-    usePostStore.getState().setViewerScope(scopeB.viewerKey, scopeB.sessionGeneration)
+    activateBFromPending()
     mockAuthedFetch.mockResolvedValue({
       ok: true,
       status: 200,
@@ -223,7 +277,7 @@ describe('viewer-scoped cache ownership', () => {
   })
 
   it('does not let an older post hydration overwrite a newer mutation revision', async () => {
-    usePostStore.getState().setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    activateA()
     const hydration = deferred<unknown>()
     mockAuthedFetch.mockReturnValueOnce(hydration.promise)
     const loading = loadPostForViewer('p1', 'token-a', scopeA)
@@ -246,7 +300,7 @@ describe('viewer-scoped cache ownership', () => {
   })
 
   it('preserves the same-A tree when a refreshed-token read fails', async () => {
-    usePostStore.getState().setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    activateA()
     usePostStore.getState().setComments('p1', [comment('existing-a')])
     mockFetchPostCommentsPage.mockResolvedValue({
       ok: false,
@@ -262,7 +316,7 @@ describe('viewer-scoped cache ownership', () => {
   })
 
   it('ignores an A create ACK after logout clears the store', async () => {
-    usePostStore.getState().setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    activateA()
     let resolveSubmit!: (value: unknown) => void
     mockAuthedFetch.mockReturnValue(
       new Promise((resolve) => {
@@ -271,7 +325,7 @@ describe('viewer-scoped cache ownership', () => {
     )
     const submission = submitPostComment('p1', 'hello', 'token-a', scopeA)
 
-    usePostStore.getState().setViewerScope('anon', 2)
+    synchronizeViewerScope(true, null)
     resolveSubmit({
       ok: true,
       status: 201,
@@ -291,7 +345,7 @@ describe('viewer-scoped cache ownership', () => {
   })
 
   it('does not append an ACK when a newer tree revision wins reconciliation', async () => {
-    usePostStore.getState().setViewerScope(scopeA.viewerKey, scopeA.sessionGeneration)
+    activateA()
     usePostStore.getState().setComments('p1', [comment('before')])
     mockAuthedFetch.mockResolvedValue({
       ok: true,
@@ -376,6 +430,27 @@ describe('loadPostComments', () => {
     await expect(loadPostComments('p1')).resolves.toBeUndefined()
     expect(usePostStore.getState().commentsPagination['p1'].hasMore).toBe(true)
     expect(usePostStore.getState().commentsPagination['p1'].loading).toBe(false)
+  })
+
+  it('bounds repeated revision conflicts to the initial read plus one retry', async () => {
+    let mutation = 0
+    mockFetchPostCommentsPage.mockImplementation(async () => {
+      mutation += 1
+      usePostStore.getState().setComments('p1', [comment(`newer-${mutation}`)])
+      return {
+        ok: true,
+        status: 200,
+        comments: [comment(`stale-${mutation}`)],
+        commentCount: mutation,
+        hasMore: false,
+      }
+    })
+
+    await loadPostComments('p1')
+
+    expect(mockFetchPostCommentsPage).toHaveBeenCalledTimes(2)
+    expect(usePostStore.getState().comments.p1.map((item) => item.id)).toEqual(['newer-2'])
+    expect(usePostStore.getState().commentsPagination.p1.loading).toBe(false)
   })
 })
 

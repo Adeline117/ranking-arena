@@ -18,6 +18,8 @@ export type PostCommentsPage<T> = {
   comments: T[]
   commentCount: number
   hasMore: boolean
+  /** Authoritative 403/404: the viewer may no longer retain this resource. */
+  resourceAbsent?: true
   error?: unknown
 }
 
@@ -107,6 +109,21 @@ export async function fetchPostCommentsPage<T>(
     : await authedFetch<CommentsEnvelope<T>>(url, 'GET', accessToken)
   const comments = data?.data?.comments
   const commentCount = data?.data?.post?.comment_count
+
+  // Missing and access-revoked resources are authoritative clears, not read
+  // failures. Transport/5xx and malformed 2xx responses remain unavailable so
+  // callers can preserve a known-good tree during a transient outage.
+  if (!ok && (status === 403 || status === 404)) {
+    return {
+      ok: true,
+      status,
+      comments: [],
+      commentCount: 0,
+      hasMore: false,
+      resourceAbsent: true,
+      error: data?.error,
+    }
+  }
 
   if (
     !ok ||
