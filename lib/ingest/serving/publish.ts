@@ -333,6 +333,15 @@ export async function publishProfile(
       )
     }
 
+    // A parser may prove a short timeframe while a wider one remains partial.
+    // Treat each incomplete window as immutable serving state: keep every old
+    // typed value/as-of/series and merge only the newest audit evidence.
+    const incompleteTimeframes = new Set(
+      profile.stats
+        .filter((s) => s.extras.profile_window_metrics_complete === false)
+        .map((s) => s.timeframe)
+    )
+
     // Self-derived risk ratios are only legitimate for PURE-DEX sources whose
     // data has no exchange-provided value to harvest (spec §31/32/34: HL/GMX/
     // gTrade "所有数据要靠我们链上算"). For CEX the exchange provides the real
@@ -340,10 +349,28 @@ export async function publishProfile(
     // INACCURATE and must NOT masquerade as the exchange value. Harvest real or
     // leave honest NULL. (User directive 2026-07-02.)
     if (SELF_DERIVE_RISK_SOURCES.has(src.slug)) {
-      deriveMissingRatios(profile.stats, profile.series)
+      deriveMissingRatios(
+        profile.stats.filter((s) => !incompleteTimeframes.has(s.timeframe)),
+        profile.series.filter((s) => !incompleteTimeframes.has(s.timeframe))
+      )
     }
 
     for (const s of profile.stats) {
+      if (incompleteTimeframes.has(s.timeframe)) {
+        // UPDATE-only is intentional: a cold trader gets no fresh-looking
+        // empty row, while a previously proven row keeps every typed column.
+        // The as-of predicate prevents an older failed job from overwriting
+        // failure evidence produced after a newer successful publication.
+        await client.query(
+          `UPDATE arena.trader_stats
+              SET extras = COALESCE(extras, '{}'::jsonb) || $3::jsonb
+            WHERE trader_id = $1 AND timeframe = $2
+              AND as_of <= $4::timestamptz`,
+          [traderId, s.timeframe, JSON.stringify(s.extras), s.asOf]
+        )
+        continue
+      }
+
       // A deep-enrichment failure/defer must not erase the last proven fill
       // metrics while the independent portfolio/risk fields keep refreshing.
       // Complete empty activity sets this flag true and intentionally writes 0.
@@ -397,6 +424,7 @@ export async function publishProfile(
     }
 
     for (const series of profile.series) {
+      if (incompleteTimeframes.has(series.timeframe)) continue
       const points = opts.fullSeries ? series.points : series.points.slice(-1) // long tail keeps only the latest point
       if (points.length === 0) continue
       await client.query(

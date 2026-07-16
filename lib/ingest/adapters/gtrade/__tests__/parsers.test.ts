@@ -31,6 +31,48 @@ const ctx: ParseCtx = {
   meta: {},
 }
 
+const AS_OF = Date.parse(ctx.scrapedAt)
+const DAY_MS = 86_400_000
+
+function profileRaw(
+  stats: unknown,
+  trades: Array<Record<string, unknown>>,
+  timeframe: number,
+  options: { asOfTimeMs?: number; exhausted?: boolean } = {}
+) {
+  const asOfTimeMs = options.asOfTimeMs ?? AS_OF
+  const exhausted = options.exhausted ?? true
+  const lastId = trades.at(-1)?.id
+  return {
+    stats,
+    timeframe,
+    tradesFetchState: 'fetched',
+    tradesFetchReason: exhausted ? 'exhausted' : 'page_cap',
+    tradesSnapshot: {
+      schemaVersion: 2,
+      rawPages: [
+        {
+          pageIndex: 1,
+          requestCursor: null,
+          requestEndTimeMs: asOfTimeMs,
+          url: 'https://gtrade.test/history',
+          response: {
+            data: trades,
+            pagination: {
+              hasMore: !exhausted,
+              nextCursor: exhausted ? null : lastId,
+              limit: 1_000,
+            },
+          },
+        },
+      ],
+      // Deliberately minimal: the parser must replay rawPages, not trust meta.
+      meta: { asOfTimeMs },
+      trades: [],
+    },
+  }
+}
+
 describe('parseGtradeLeaderboardPage', () => {
   const byTf = fixture('leaderboard-all.json') as Record<string, Array<Record<string, unknown>>>
 
@@ -71,10 +113,7 @@ describe('parseGtradeProfile', () => {
   }
 
   it('7d aggregation reconciles EXACTLY with the board row', () => {
-    const profile = parseGtradeProfile(
-      { stats: bundle.stats, trades: bundle.trades, timeframe: 7 },
-      ctx
-    )
+    const profile = parseGtradeProfile(profileRaw(bundle.stats, bundle.trades.data, 7), ctx)
     expect(profile.stats).toHaveLength(1)
     const s = profile.stats[0]
     expect(s.timeframe).toBe(7)
@@ -87,14 +126,11 @@ describe('parseGtradeProfile', () => {
     expect(s.copierPnl).toBeNull() // DEX — no copy trading
     expect(s.extras.lifetime_volume as number).toBeCloseTo(900405265.67, 1)
     expect(s.extras.lifetime_trades).toBe(3164)
-    expect(s.extras.trades_truncated).toBe(false)
+    expect(s.extras.profile_window_metrics_complete).toBe(true)
   })
 
   it('series: daily-bucketed cumulative USD PnL, ascending', () => {
-    const profile = parseGtradeProfile(
-      { stats: bundle.stats, trades: bundle.trades, timeframe: 7 },
-      ctx
-    )
+    const profile = parseGtradeProfile(profileRaw(bundle.stats, bundle.trades.data, 7), ctx)
     expect(profile.series).toHaveLength(1)
     const pts = profile.series[0].points
     expect(profile.series[0].metric).toBe('pnl')
@@ -107,28 +143,97 @@ describe('parseGtradeProfile', () => {
   it('narrow window excludes older trades', () => {
     // 1-day-ago window start: only the 2026-06-11 trades remain
     const narrowCtx = { ...ctx, scrapedAt: '2026-06-12T00:00:00.000Z' }
-    const profile = parseGtradeProfile(
-      { stats: bundle.stats, trades: bundle.trades, timeframe: 7 },
-      narrowCtx
-    )
+    const profile = parseGtradeProfile(profileRaw(bundle.stats, bundle.trades.data, 7), narrowCtx)
     const wide = profile.stats[0].pnl as number
     const profile30 = parseGtradeProfile(
-      { stats: bundle.stats, trades: bundle.trades, timeframe: 30 },
+      profileRaw(bundle.stats, bundle.trades.data, 30),
       narrowCtx
     )
     // 30d ⊇ 7d on this fixture (all trades within 7d) → identical totals
     expect(profile30.stats[0].pnl).toBeCloseTo(wide, 6)
   })
 
-  it('empty trades → stats from lifetime only, no series, never throws', () => {
+  it('confirmed empty history writes explicit zero window metrics and no series', () => {
+    const profile = parseGtradeProfile(profileRaw(bundle.stats, [], 30), ctx)
+    expect(profile.stats).toHaveLength(1)
+    expect(profile.stats[0].pnl).toBe(0)
+    expect(profile.stats[0].winRate).toBeNull()
+    expect(profile.stats[0].winPositions).toBe(0)
+    expect(profile.stats[0].totalPositions).toBe(0)
+    expect(profile.stats[0].extras.profile_window_metrics_complete).toBe(true)
+    expect(profile.series).toHaveLength(0)
+  })
+
+  it('rejects legacy flattened trades even when they claim not to be truncated', () => {
     const profile = parseGtradeProfile(
-      { stats: bundle.stats, trades: { data: [] }, timeframe: 30 },
+      { stats: bundle.stats, trades: { data: bundle.trades.data, truncated: false }, timeframe: 7 },
       ctx
     )
-    expect(profile.stats).toHaveLength(1)
-    expect(profile.stats[0].pnl).toBeNull()
-    expect(profile.stats[0].winRate).toBeNull()
-    expect(profile.series).toHaveLength(0)
+    expect(profile.stats[0]).toMatchObject({ pnl: null, sharpe: null })
+    expect(profile.stats[0].extras).toMatchObject({
+      profile_window_metrics_complete: false,
+      gtrade_trades_incomplete_reason: 'legacy_unverified',
+    })
+    expect(profile.series).toEqual([])
+  })
+
+  it('publishes an independently covered 7d prefix but rejects wider windows', () => {
+    const rows = [
+      { id: 500, date: new Date(AS_OF - DAY_MS).toISOString(), pnl_net: 10, collateralPriceUsd: 2 },
+      {
+        id: 499,
+        date: new Date(AS_OF - 5 * DAY_MS).toISOString(),
+        pnl_net: -4,
+        collateralPriceUsd: 1,
+      },
+      { id: 498, date: new Date(AS_OF - 8 * DAY_MS).toISOString(), pnl_net: 0 },
+    ]
+    const seven = parseGtradeProfile(profileRaw(null, rows, 7, { exhausted: false }), ctx)
+    expect(seven.stats[0]).toMatchObject({
+      pnl: 16,
+      winPositions: 1,
+      totalPositions: 2,
+      winRate: 50,
+    })
+    expect(seven.stats[0].extras.profile_window_metrics_complete).toBe(true)
+
+    const thirty = parseGtradeProfile(profileRaw(null, rows, 30, { exhausted: false }), ctx)
+    expect(thirty.stats[0]).toMatchObject({ pnl: null, winPositions: null, totalPositions: null })
+    expect(thirty.stats[0].extras).toMatchObject({
+      profile_window_metrics_complete: false,
+      gtrade_trades_incomplete_reason: 'window_prefix_not_covered',
+    })
+    expect(thirty.series).toEqual([])
+  })
+
+  it('fails only windows containing a realized row without a USD collateral price', () => {
+    const rows = [
+      { id: 500, date: new Date(AS_OF - DAY_MS).toISOString(), pnl_net: 10, collateralPriceUsd: 2 },
+      { id: 499, date: new Date(AS_OF - 10 * DAY_MS).toISOString(), pnl_net: -4 },
+      { id: 498, date: new Date(AS_OF - 31 * DAY_MS).toISOString(), pnl_net: 0 },
+    ]
+    const seven = parseGtradeProfile(profileRaw(null, rows, 7, { exhausted: false }), ctx)
+    expect(seven.stats[0].pnl).toBe(20)
+    expect(seven.stats[0].extras.profile_window_metrics_complete).toBe(true)
+
+    const thirty = parseGtradeProfile(profileRaw(null, rows, 30, { exhausted: false }), ctx)
+    expect(thirty.stats[0].pnl).toBeNull()
+    expect(thirty.stats[0].extras).toMatchObject({
+      profile_window_metrics_complete: false,
+      gtrade_trades_incomplete_reason: 'missing_collateral_price_usd',
+    })
+  })
+
+  it('does not treat an open prefix ending exactly on the window boundary as complete', () => {
+    const rows = [
+      { id: 500, date: new Date(AS_OF - DAY_MS).toISOString(), pnl_net: 0 },
+      { id: 499, date: new Date(AS_OF - 7 * DAY_MS).toISOString(), pnl_net: 0 },
+    ]
+    const profile = parseGtradeProfile(profileRaw(null, rows, 7, { exhausted: false }), ctx)
+    expect(profile.stats[0].extras).toMatchObject({
+      profile_window_metrics_complete: false,
+      gtrade_trades_incomplete_reason: 'window_prefix_not_covered',
+    })
   })
 })
 
@@ -193,8 +298,7 @@ describe('parseGtradeProfile — Tier-0 base-free risk', () => {
       pnl: d,
       pnl_net: d,
     }))
-    const s = parseGtradeProfile({ stats: null, trades: { data: trades }, timeframe: 30 }, ctx)
-      .stats[0]
+    const s = parseGtradeProfile(profileRaw(null, [...trades].reverse(), 30), ctx).stats[0]
     expect(typeof s.sharpe).toBe('number')
     expect(s.mdd).toBeNull() // base-dependent → honest NULL for gTrade
     expect(typeof s.extras.sortino).toBe('number')

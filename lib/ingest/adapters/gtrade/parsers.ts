@@ -4,9 +4,9 @@
  * Inputs are the composite RAW payloads the adapter stores:
  *   leaderboard page: { timeframe, rows, reportedTotal } — rows are the TF
  *     key ("7"/"30"/"90") of backend-global /api/leaderboard/all
- *   profile bundle:   { stats, trades, timeframe } — lifetime stats endpoint
- *     + the trades table pages (newest→oldest), from which ALL per-TF
- *     aggregation is computed by us (spec §11.20)
+ *   profile bundle:   { stats, timeframe, tradesSnapshot } — lifetime stats
+ *     + replayable trades-table pages (newest→oldest), from which ALL per-TF
+ *     aggregation is computed after proving that window complete
  *   history (orders): one trades-table page verbatim
  *
  * Unit ground truth (verified live 2026-06-12):
@@ -33,6 +33,7 @@ import type {
 } from '../../core/types'
 import { ratiosFromCumulativePnl } from '../../core/series-risk'
 import { createHash } from 'crypto'
+import { replayGtradeTradesSnapshot } from './trades-fetch'
 
 function dedupeHash(...fields: unknown[]): string {
   return createHash('sha1')
@@ -111,37 +112,77 @@ function realizedUsd(row: TradeRow): number {
  * cumulative PnL series comes from the same rows.
  */
 export function parseGtradeProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
-  const payload = (raw ?? {}) as { stats?: unknown; trades?: unknown; timeframe?: unknown }
+  const payload = (raw ?? {}) as {
+    stats?: unknown
+    trades?: unknown
+    tradesSnapshot?: unknown
+    tradesFetchState?: unknown
+    tradesFetchReason?: unknown
+    timeframe?: unknown
+  }
   const tfNum = num(payload.timeframe) ?? 30
-  const tf = (tfNum === 0 ? 90 : tfNum) as RankingTimeframe
+  const normalizedTf = tfNum === 0 ? 90 : tfNum
+  if (normalizedTf !== 7 && normalizedTf !== 30 && normalizedTf !== 90) {
+    throw new Error('[gtrade] invalid profile timeframe')
+  }
+  const tf = normalizedTf as RankingTimeframe
   const lifetime = (payload.stats ?? null) as Dict | null
-  const tradesWrap = (payload.trades ?? {}) as { data?: unknown; truncated?: unknown }
-  const trades = Array.isArray(tradesWrap.data) ? (tradesWrap.data as TradeRow[]) : []
+  const replay = replayGtradeTradesSnapshot(payload.tradesSnapshot)
+  const hasSnapshot = payload.tradesSnapshot !== undefined && payload.tradesSnapshot !== null
+  const asOfTimeMs = replay.asOfTimeMs
+  const asOf = asOfTimeMs === null ? ctx.scrapedAt : new Date(asOfTimeMs).toISOString()
+  const windowStart = asOfTimeMs === null ? null : asOfTimeMs - tf * DAY_MS
+  const windowCovered =
+    windowStart !== null &&
+    (replay.exhausted || (replay.oldestTimeMs !== null && replay.oldestTimeMs < windowStart))
 
-  const windowStart = Date.parse(ctx.scrapedAt) - tf * DAY_MS
+  let metricsComplete = windowCovered
+  let incompleteReason: string | null = null
+  if (!hasSnapshot) {
+    incompleteReason = payload.trades !== undefined ? 'legacy_unverified' : 'missing_snapshot'
+    metricsComplete = false
+  } else if (replay.stopReason === 'invalid_snapshot') {
+    incompleteReason = 'invalid_snapshot'
+    metricsComplete = false
+  } else if (!windowCovered) {
+    incompleteReason = 'window_prefix_not_covered'
+    metricsComplete = false
+  }
 
   let pnl = 0
   let wins = 0
   let closes = 0
-  let sawAny = false
   const daily = new Map<string, number>()
-  for (const row of trades) {
-    const ts = typeof row.date === 'string' ? Date.parse(row.date) : NaN
-    if (!Number.isFinite(ts) || ts < windowStart) continue
-    sawAny = true
-    const usd = realizedUsd(row)
-    if (usd === 0 && num(row.pnl_net) === 0) continue // non-realizing action
-    pnl += usd
-    closes += 1
-    if (usd > 0) wins += 1
-    const day = new Date(ts).toISOString().slice(0, 10)
-    daily.set(day, (daily.get(day) ?? 0) + usd)
+  if (metricsComplete && windowStart !== null) {
+    for (const row of replay.trades as TradeRow[]) {
+      const ts = typeof row.date === 'string' ? Date.parse(row.date) : NaN
+      if (!Number.isFinite(ts) || ts < windowStart) continue
+      const pnlNet = num(row.pnl_net)
+      if (pnlNet === null) {
+        metricsComplete = false
+        incompleteReason = 'invalid_pnl_net'
+        break
+      }
+      if (pnlNet === 0) continue
+      const collateralPriceUsd = num(row.collateralPriceUsd)
+      if (collateralPriceUsd === null || collateralPriceUsd <= 0) {
+        metricsComplete = false
+        incompleteReason = 'missing_collateral_price_usd'
+        break
+      }
+      const usd = pnlNet * collateralPriceUsd
+      pnl += usd
+      closes += 1
+      if (usd > 0) wins += 1
+      const day = new Date(ts).toISOString().slice(0, 10)
+      daily.set(day, (daily.get(day) ?? 0) + usd)
+    }
   }
 
   // Daily-bucketed cumulative realized-PnL curve (shared by the series block
   // and Tier-0 risk derivation below).
   const cumPoints: Array<{ ts: string; value: number }> = []
-  {
+  if (metricsComplete) {
     const days = [...daily.entries()].sort(([a], [b]) => a.localeCompare(b))
     let cum = 0
     for (const [day, value] of days) {
@@ -154,24 +195,25 @@ export function parseGtradeProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
   // a percentage MDD isn't honestly derivable — but Sharpe/Sortino are, because
   // the constant-capital base cancels out of mean/std (see series-risk.ts). MDD
   // stays NULL. daily-approx provenance.
-  const ratios = ratiosFromCumulativePnl(cumPoints)
+  const ratios = metricsComplete
+    ? ratiosFromCumulativePnl(cumPoints)
+    : { sharpe: null, sortino: null, samples: 0 }
   const riskExtras: Record<string, unknown> =
     ratios.sharpe !== null || ratios.sortino !== null
       ? { risk_derivation: 'daily-approx', risk_samples: ratios.samples, sortino: ratios.sortino }
       : {}
 
-  const stats: ParsedProfile['stats'] = []
-  if (sawAny || lifetime) {
-    stats.push({
+  const stats: ParsedProfile['stats'] = [
+    {
       timeframe: tf,
-      asOf: ctx.scrapedAt,
+      asOf,
       roi: null, // no capital basis exposed → NULL
-      pnl: sawAny || closes > 0 ? pnl : null,
-      sharpe: ratios.sharpe, // Tier-0 base-free daily-approx (base cancels)
+      pnl: metricsComplete ? pnl : null,
+      sharpe: metricsComplete ? ratios.sharpe : null,
       mdd: null, // needs a real equity base gTrade doesn't expose → honest NULL
-      winRate: closes > 0 ? (wins / closes) * 100 : null,
-      winPositions: closes > 0 ? wins : null,
-      totalPositions: closes > 0 ? closes : null,
+      winRate: metricsComplete && closes > 0 ? (wins / closes) * 100 : null,
+      winPositions: metricsComplete ? wins : null,
+      totalPositions: metricsComplete ? closes : null,
       copierPnl: null, // DEX — no copy trading
       copierCount: null,
       aum: null,
@@ -180,20 +222,32 @@ export function parseGtradeProfile(raw: unknown, ctx: ParseCtx): ParsedProfile {
       holdingDurationAvgHours: null,
       tradingPreferences: null,
       extras: {
-        pnl_basis: 'sum_pnl_net_usd', // verified board identity
+        profile_window_metrics_complete: metricsComplete,
+        gtrade_trades_incomplete_reason: metricsComplete ? null : incompleteReason,
+        gtrade_trades_fetch_state:
+          typeof payload.tradesFetchState === 'string' ? payload.tradesFetchState : null,
+        gtrade_trades_fetch_reason:
+          typeof payload.tradesFetchReason === 'string' ? payload.tradesFetchReason : null,
+        gtrade_trades_replay_stop_reason: replay.stopReason,
+        gtrade_trades_valid_pages: replay.validPageCount,
+        gtrade_trades_raw_pages: replay.rawPageCount,
+        gtrade_trades_duplicate_rows: replay.duplicateRowCount,
+        gtrade_trades_exhausted: replay.exhausted,
+        gtrade_trades_window_start:
+          windowStart === null ? null : new Date(windowStart).toISOString(),
+        gtrade_trades_oldest_event:
+          replay.oldestTimeMs === null ? null : new Date(replay.oldestTimeMs).toISOString(),
+        ...(metricsComplete ? { pnl_basis: 'sum_pnl_net_usd', ...riskExtras } : {}),
         lifetime_volume: lifetime ? num(lifetime.totalVolume) : null,
         lifetime_trades: lifetime ? num(lifetime.totalTrades) : null,
         lifetime_win_rate: lifetime ? num(lifetime.winRate) : null,
         thirty_day_volume: lifetime ? num(lifetime.thirtyDayVolume) : null,
-        // pages capped before reaching the window start → under-coverage
-        trades_truncated: tradesWrap.truncated === true,
-        ...riskExtras,
       },
-    })
-  }
+    },
+  ]
 
   const series: ParsedProfile['series'] = []
-  if (cumPoints.length > 0) {
+  if (metricsComplete && cumPoints.length > 0) {
     series.push({
       timeframe: tf,
       metric: 'pnl', // window-cumulative realized PnL, daily buckets
