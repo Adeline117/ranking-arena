@@ -27,6 +27,7 @@ interface PostDetailViewProps {
   asPage?: boolean
   language: string
   currentUserId: string | null
+  viewerKey: string
   accessToken: string | null
   // Translation
   showingOriginal: boolean
@@ -64,10 +65,8 @@ interface PostDetailViewProps {
   // Comments
   comments: Comment[]
   loadingComments: boolean
-  newComment: string
-  setNewComment: (v: string) => void
   submittingComment: boolean
-  onSubmitComment: (postId: string) => Promise<void>
+  onSubmitComment: (postId: string, content: string) => Promise<boolean>
   replyingTo: { commentId: string; handle: string } | null
   setReplyingTo: (v: { commentId: string; handle: string } | null) => void
   replyContent: string
@@ -99,6 +98,7 @@ export default function PostDetailView({
   asPage = false,
   language,
   currentUserId,
+  viewerKey,
   accessToken,
   showingOriginal,
   setShowingOriginal,
@@ -122,8 +122,6 @@ export default function PostDetailView({
   showToast,
   comments,
   loadingComments,
-  newComment,
-  setNewComment,
   submittingComment,
   onSubmitComment,
   replyingTo,
@@ -420,11 +418,10 @@ export default function PostDetailView({
       >
         <CommentsModal
           postId={openPost.id}
+          viewerKey={viewerKey}
           comments={comments}
           loadingComments={loadingComments}
           currentUserId={currentUserId}
-          newComment={newComment}
-          setNewComment={setNewComment}
           submittingComment={submittingComment}
           onSubmitComment={onSubmitComment}
           replyingTo={replyingTo}

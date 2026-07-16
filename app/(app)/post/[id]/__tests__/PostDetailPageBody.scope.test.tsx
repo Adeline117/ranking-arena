@@ -97,8 +97,6 @@ describe('PostDetailPageBody scoped hydration', () => {
         comments: [],
         loadComments: jest.fn(),
         loadingComments: false,
-        newComment: '',
-        setNewComment: jest.fn(),
         submittingComment: false,
         submitComment: jest.fn(),
         replyingTo: null,

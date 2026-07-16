@@ -32,11 +32,10 @@ function comment(id: string, createdAt: string, likeCount: number): Comment {
 function props(comments: Comment[]) {
   return {
     postId: 'post-1',
+    viewerKey: 'user:viewer-1',
     comments,
     loadingComments: false,
     currentUserId: 'viewer-1',
-    newComment: '',
-    setNewComment: jest.fn(),
     submittingComment: false,
     onSubmitComment: jest.fn(),
     replyingTo: null,
