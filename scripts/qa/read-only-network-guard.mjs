@@ -1,4 +1,28 @@
 const READ_ONLY_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+// These endpoints use POST only because their bounded lookup keys live in the
+// request body. They do not mutate product data and are required to render the
+// leaderboard's rank/equity series during a read-only sweep.
+const APP_READ_ONLY_POST_PATHS = new Set([
+  '/api/posts/bookmarks/status',
+  '/api/profile/handle-availability',
+  '/api/rankings/rank-history',
+  '/api/traders/sparklines',
+])
+
+// QA interactions must not contaminate production analytics, but aborting
+// these requests emits ERR_BLOCKED_BY_CLIENT and creates a fake UI failure.
+// Fulfil them locally with the same success class instead.
+const APP_TELEMETRY_STUBS = new Map([
+  [
+    '/api/analytics/events',
+    {
+      status: 202,
+      contentType: 'application/json',
+      body: JSON.stringify({ success: true, data: { accepted: true } }),
+    },
+  ],
+  ['/cdn-cgi/rum', { status: 204, body: '' }],
+])
 const SUPABASE_MUTATION_PATHS = [
   '/auth/v1/',
   '/functions/v1/',
@@ -31,6 +55,14 @@ function isRefreshTokenRequest(target) {
   )
 }
 
+export function telemetryStubFor({ method, url, baseUrl }) {
+  if (String(method).toUpperCase() !== 'POST') return null
+  const target = parseUrl(url)
+  const app = parseUrl(baseUrl)
+  if (!target || !app || target.origin !== app.origin) return null
+  return APP_TELEMETRY_STUBS.get(target.pathname) ?? null
+}
+
 export function readOnlyViolation({ method, url, baseUrl, supabaseUrl }) {
   const normalizedMethod = String(method).toUpperCase()
   if (READ_ONLY_METHODS.has(normalizedMethod)) return null
@@ -40,6 +72,8 @@ export function readOnlyViolation({ method, url, baseUrl, supabaseUrl }) {
   if (!target || !app) return null
 
   if (target.origin === app.origin) {
+    if (normalizedMethod === 'POST' && APP_READ_ONLY_POST_PATHS.has(target.pathname)) return null
+    if (telemetryStubFor({ method: normalizedMethod, url, baseUrl })) return null
     return {
       method: normalizedMethod,
       scope: 'app',
@@ -68,6 +102,13 @@ export function readOnlyViolation({ method, url, baseUrl, supabaseUrl }) {
 export async function installReadOnlyNetworkGuard(context, { baseUrl, supabaseUrl, onBlocked }) {
   await context.route('**/*', async (route) => {
     const request = route.request()
+    const telemetryStub = telemetryStubFor({
+      method: request.method(),
+      url: request.url(),
+      baseUrl,
+    })
+    if (telemetryStub) return route.fulfill(telemetryStub)
+
     const violation = readOnlyViolation({
       method: request.method(),
       url: request.url(),
