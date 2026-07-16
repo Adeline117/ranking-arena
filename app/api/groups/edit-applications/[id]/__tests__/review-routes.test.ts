@@ -291,9 +291,14 @@ describe('group edit application review atomic boundary', () => {
       approve(request({ operation_id: OPERATION_ID, reviewer_id: REVIEWER_ID }), context()),
       reject(request({ operation_id: OPERATION_ID, decision: 'approve' }), context()),
       reject(request({ operation_id: OPERATION_ID, reason: '😀'.repeat(501) }), context()),
+      reject(request({ operation_id: OPERATION_ID, reason: 'nul\u0000byte' }), context()),
+      reject(request({ operation_id: OPERATION_ID, reason: '\ud800' }), context()),
+      reject(request({ operation_id: OPERATION_ID, reason: '\udc00' }), context()),
     ])
 
-    expect(responses.map((response) => response.status)).toEqual([400, 400, 400, 400, 400, 400])
+    expect(responses.map((response) => response.status)).toEqual([
+      400, 400, 400, 400, 400, 400, 400, 400, 400,
+    ])
     expect(mockRpc).not.toHaveBeenCalled()
     expect(mockFrom).not.toHaveBeenCalled()
   })
