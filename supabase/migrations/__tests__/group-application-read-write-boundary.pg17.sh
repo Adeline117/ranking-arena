@@ -73,6 +73,7 @@ CREATE ROLE postgres NOLOGIN SUPERUSER;
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN;
+CREATE ROLE legacy_app_role NOLOGIN;
 
 CREATE SCHEMA auth;
 CREATE FUNCTION auth.uid()
@@ -136,9 +137,11 @@ CREATE TABLE public.groups (
   updated_at timestamptz NOT NULL DEFAULT pg_catalog.clock_timestamp()
 );
 CREATE UNIQUE INDEX groups_name_lower_unique
-  ON public.groups (pg_catalog.lower(name));
+  ON public.groups (pg_catalog.lower(name))
+  WHERE name IS NOT NULL;
 CREATE UNIQUE INDEX groups_slug_key
-  ON public.groups (slug);
+  ON public.groups (slug)
+  WHERE slug IS NOT NULL;
 
 CREATE TABLE public.group_members (
   group_id uuid NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
@@ -234,9 +237,238 @@ INSERT INTO public.group_applications (
 );
 SQL
 
-"${PSQL[@]}" -f "$ATOMIC_MIGRATION" >"$LOG_DIR/atomic.log"
-"${PSQL[@]}" -f "$ACL_MIGRATION" >"$LOG_DIR/first-replay.log"
-"${PSQL[@]}" -f "$ACL_MIGRATION" >"$LOG_DIR/second-replay.log"
+# A missing uniqueness backstop must abort before any function/authority change.
+"${PSQL[@]}" -c 'DROP INDEX public.groups_slug_key' >/dev/null
+if "${PSQL[@]}" -f "$ATOMIC_MIGRATION" >"$LOG_DIR/missing-index.log" 2>&1; then
+  echo "Atomic migration unexpectedly accepted a missing slug index" >&2
+  exit 1
+fi
+if ! grep -q 'required unique group-name/slug index definitions are invalid' \
+  "$LOG_DIR/missing-index.log"; then
+  echo "Missing-index failure did not come from the catalog preflight" >&2
+  exit 1
+fi
+"${PSQL[@]}" <<'SQL'
+DO $missing_index_rollback$
+BEGIN
+  IF pg_catalog.to_regprocedure(
+    'public.has_current_global_pro_entitlement(uuid)'
+  ) IS NOT NULL OR pg_catalog.to_regprocedure(
+    'public.submit_group_application_atomic(uuid,text,text,text,text,text,jsonb,jsonb,text,boolean,boolean)'
+  ) IS NOT NULL OR pg_catalog.to_regprocedure(
+    'public.review_group_application_atomic(uuid,uuid,text,text,boolean)'
+  ) IS NOT NULL OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_policy AS policy
+    WHERE policy.polrelid = 'public.group_applications'::regclass
+  ) <> 4 OR NOT pg_catalog.has_table_privilege(
+    'authenticated',
+    'public.group_applications',
+    'INSERT'
+  ) THEN
+    RAISE EXCEPTION 'missing-index preflight did not roll back completely';
+  END IF;
+END
+$missing_index_rollback$;
+
+CREATE UNIQUE INDEX groups_slug_key
+  ON public.groups (slug)
+  WHERE slug IS NOT NULL;
+SQL
+
+# A same-named, non-unique index on the wrong relation is not a backstop.
+"${PSQL[@]}" <<'SQL'
+DROP INDEX public.groups_name_lower_unique;
+CREATE INDEX groups_name_lower_unique
+  ON public.group_applications (name);
+SQL
+if "${PSQL[@]}" -f "$ATOMIC_MIGRATION" >"$LOG_DIR/fake-index.log" 2>&1; then
+  echo "Atomic migration unexpectedly accepted a same-named fake index" >&2
+  exit 1
+fi
+if ! grep -q 'required unique group-name/slug index definitions are invalid' \
+  "$LOG_DIR/fake-index.log"; then
+  echo "Fake-index failure did not come from the catalog preflight" >&2
+  exit 1
+fi
+"${PSQL[@]}" <<'SQL'
+DO $fake_index_rollback$
+BEGIN
+  IF pg_catalog.to_regprocedure(
+    'public.has_current_global_pro_entitlement(uuid)'
+  ) IS NOT NULL OR pg_catalog.to_regprocedure(
+    'public.submit_group_application_atomic(uuid,text,text,text,text,text,jsonb,jsonb,text,boolean,boolean)'
+  ) IS NOT NULL OR pg_catalog.to_regprocedure(
+    'public.review_group_application_atomic(uuid,uuid,text,text,boolean)'
+  ) IS NOT NULL OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_policy AS policy
+    WHERE policy.polrelid = 'public.group_applications'::regclass
+  ) <> 4 OR NOT pg_catalog.has_table_privilege(
+    'authenticated',
+    'public.group_applications',
+    'INSERT'
+  ) THEN
+    RAISE EXCEPTION 'fake-index preflight did not roll back completely';
+  END IF;
+END
+$fake_index_rollback$;
+
+DROP INDEX public.groups_name_lower_unique;
+CREATE UNIQUE INDEX groups_name_lower_unique
+  ON public.groups (pg_catalog.lower(name))
+  WHERE name IS NOT NULL;
+
+-- Reproduce the two pre-promotion SECURITY DEFINER overloads.
+CREATE FUNCTION public.submit_group_application_atomic(
+  uuid, text, text, text, text, text, jsonb, jsonb, text, boolean
+)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+AS $function$ SELECT '{}'::jsonb $function$;
+CREATE FUNCTION public.review_group_application_atomic(uuid, uuid, text, text)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+AS $function$ SELECT '{}'::jsonb $function$;
+CREATE FUNCTION public.submit_group_application_atomic(uuid, text)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+AS $function$ SELECT '{}'::jsonb $function$;
+CREATE FUNCTION public.review_group_application_atomic(uuid, uuid, text)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+AS $function$ SELECT '{}'::jsonb $function$;
+GRANT EXECUTE ON FUNCTION public.submit_group_application_atomic(
+  uuid, text, text, text, text, text, jsonb, jsonb, text, boolean
+) TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION public.review_group_application_atomic(uuid, uuid, text, text)
+  TO anon, authenticated, service_role;
+SQL
+
+"${PSQL[@]}" -f "$ATOMIC_MIGRATION" >"$LOG_DIR/atomic-first.log"
+"${PSQL[@]}" -f "$ACL_MIGRATION" >"$LOG_DIR/acl-first.log"
+
+# Inject every drift class the second replay must converge.
+"${PSQL[@]}" <<'SQL'
+CREATE FUNCTION public.submit_group_application_atomic(
+  uuid, text, text, text, text, text, jsonb, jsonb, text, boolean
+)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+AS $function$ SELECT '{}'::jsonb $function$;
+CREATE FUNCTION public.review_group_application_atomic(uuid, uuid, text, text)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+AS $function$ SELECT '{}'::jsonb $function$;
+CREATE FUNCTION public.submit_group_application_atomic(uuid, text)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+AS $function$ SELECT '{}'::jsonb $function$;
+CREATE FUNCTION public.review_group_application_atomic(uuid, uuid, text)
+RETURNS jsonb
+LANGUAGE sql
+SECURITY DEFINER
+AS $function$ SELECT '{}'::jsonb $function$;
+GRANT EXECUTE ON FUNCTION public.submit_group_application_atomic(
+  uuid, text, text, text, text, text, jsonb, jsonb, text, boolean
+) TO PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.review_group_application_atomic(uuid, uuid, text, text)
+  TO PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.submit_group_application_atomic(uuid, text)
+  TO PUBLIC, authenticated;
+GRANT EXECUTE ON FUNCTION public.review_group_application_atomic(uuid, uuid, text)
+  TO PUBLIC, authenticated;
+GRANT EXECUTE ON FUNCTION public.has_current_global_pro_entitlement(uuid)
+  TO legacy_app_role, service_role;
+GRANT EXECUTE ON FUNCTION public.submit_group_application_atomic(
+  uuid, text, text, text, text, text, jsonb, jsonb, text, boolean, boolean
+) TO legacy_app_role;
+GRANT EXECUTE ON FUNCTION public.review_group_application_atomic(
+  uuid, uuid, text, text, boolean
+) TO legacy_app_role;
+
+CREATE POLICY unexpected_application_policy
+  ON public.group_applications
+  FOR SELECT
+  TO authenticated
+  USING (true);
+
+GRANT TRUNCATE, REFERENCES, TRIGGER
+  ON public.group_applications TO service_role;
+GRANT SELECT (reviewed_by), UPDATE (status)
+  ON public.group_applications TO service_role;
+GRANT SELECT (status)
+  ON public.group_applications TO authenticated;
+GRANT SELECT (reviewed_at)
+  ON public.group_applications TO PUBLIC;
+GRANT UPDATE ON public.group_applications TO legacy_app_role;
+GRANT SELECT (reviewed_by)
+  ON public.group_applications TO legacy_app_role;
+
+DO $injected_drift_exists$
+BEGIN
+  IF pg_catalog.to_regprocedure(
+    'public.submit_group_application_atomic(uuid,text)'
+  ) IS NULL OR pg_catalog.to_regprocedure(
+    'public.review_group_application_atomic(uuid,uuid,text)'
+  ) IS NULL OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_policy AS policy
+    WHERE policy.polrelid = 'public.group_applications'::regclass
+      AND policy.polname = 'unexpected_application_policy'
+  ) OR NOT pg_catalog.has_table_privilege(
+    'service_role',
+    'public.group_applications',
+    'TRUNCATE,REFERENCES,TRIGGER'
+  ) OR NOT pg_catalog.has_table_privilege(
+    'legacy_app_role',
+    'public.group_applications',
+    'UPDATE'
+  ) OR NOT pg_catalog.has_column_privilege(
+    'legacy_app_role',
+    'public.group_applications',
+    'reviewed_by',
+    'SELECT'
+  ) OR NOT pg_catalog.has_function_privilege(
+    'legacy_app_role',
+    'public.has_current_global_pro_entitlement(uuid)',
+    'EXECUTE'
+  ) OR NOT pg_catalog.has_function_privilege(
+    'legacy_app_role',
+    'public.submit_group_application_atomic(uuid,text,text,text,text,text,jsonb,jsonb,text,boolean,boolean)',
+    'EXECUTE'
+  ) OR NOT pg_catalog.has_function_privilege(
+    'legacy_app_role',
+    'public.review_group_application_atomic(uuid,uuid,text,text,boolean)',
+    'EXECUTE'
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl
+    WHERE attribute.attrelid = 'public.group_applications'::regclass
+      AND attribute.attname IN ('reviewed_by', 'status')
+      AND acl.grantee IN (
+        0,
+        (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'authenticated'),
+        (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'service_role'),
+        (SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'legacy_app_role')
+      )
+  ) THEN
+    RAISE EXCEPTION 'drift injection fixture did not take effect';
+  END IF;
+END
+$injected_drift_exists$;
+SQL
+
+"${PSQL[@]}" -f "$ATOMIC_MIGRATION" >"$LOG_DIR/atomic-second.log"
+"${PSQL[@]}" -f "$ACL_MIGRATION" >"$LOG_DIR/acl-second.log"
 
 "${PSQL[@]}" <<'SQL'
 CREATE OR REPLACE FUNCTION public.expect_denied(p_statement text)
@@ -380,6 +612,26 @@ BEGIN
     RAISE EXCEPTION 'active non-admin reviewer crossed the RPC boundary: %', result;
   END IF;
 
+  result := public.review_group_application_atomic(
+    '33333333-3333-4333-8333-333333333333',
+    unauthorized_application_id,
+    NULL,
+    NULL
+  );
+  IF result ->> 'status' <> 'invalid'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.group_applications
+      WHERE id = unauthorized_application_id
+        AND status = 'pending'
+        AND reviewed_at IS NULL
+        AND reviewed_by IS NULL
+        AND group_id IS NULL
+    )
+  THEN
+    RAISE EXCEPTION 'NULL review decision was not rejected without writes: %', result;
+  END IF;
+
   result := public.submit_group_application_atomic(
     p_actor_id => '66666666-6666-4666-8666-666666666666',
     p_name => 'Promotion-controlled premium group',
@@ -502,6 +754,10 @@ $controlled_application_contract$;
 RESET ROLE;
 
 DO $catalog_contract$
+DECLARE
+  service_role_oid oid := (
+    SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'service_role'
+  );
 BEGIN
   IF pg_catalog.has_table_privilege(
     'anon',
@@ -515,6 +771,87 @@ BEGIN
     'authenticated',
     'public.group_applications',
     'SELECT,INSERT,UPDATE,REFERENCES'
+  ) OR pg_catalog.has_table_privilege(
+    'legacy_app_role',
+    'public.group_applications',
+    'SELECT,INSERT,UPDATE,DELETE,TRUNCATE,REFERENCES,TRIGGER'
+  ) OR pg_catalog.has_any_column_privilege(
+    'legacy_app_role',
+    'public.group_applications',
+    'SELECT,INSERT,UPDATE,REFERENCES'
+  ) OR pg_catalog.has_function_privilege(
+    'legacy_app_role',
+    'public.has_current_global_pro_entitlement(uuid)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'legacy_app_role',
+    'public.submit_group_application_atomic(uuid,text,text,text,text,text,jsonb,jsonb,text,boolean,boolean)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'legacy_app_role',
+    'public.review_group_application_atomic(uuid,uuid,text,text,boolean)',
+    'EXECUTE'
+  ) OR pg_catalog.has_function_privilege(
+    'service_role',
+    'public.has_current_global_pro_entitlement(uuid)',
+    'EXECUTE'
+  ) OR NOT pg_catalog.has_table_privilege(
+    'service_role',
+    'public.group_applications',
+    'SELECT,INSERT,UPDATE,DELETE'
+  ) OR pg_catalog.has_table_privilege(
+    'service_role',
+    'public.group_applications',
+    'TRUNCATE,REFERENCES,TRIGGER'
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_class AS relation
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(
+        relation.relacl,
+        pg_catalog.acldefault('r', relation.relowner)
+      )
+    ) AS acl
+    WHERE relation.oid = 'public.group_applications'::regclass
+      AND acl.grantee NOT IN (relation.relowner, service_role_oid)
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    JOIN pg_catalog.pg_class AS relation
+      ON relation.oid = attribute.attrelid
+    CROSS JOIN LATERAL pg_catalog.aclexplode(attribute.attacl) AS acl
+    WHERE attribute.attrelid = 'public.group_applications'::regclass
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND acl.grantee <> relation.relowner
+  ) OR pg_catalog.to_regprocedure(
+    'public.submit_group_application_atomic(uuid,text,text,text,text,text,jsonb,jsonb,text,boolean)'
+  ) IS NOT NULL OR pg_catalog.to_regprocedure(
+    'public.review_group_application_atomic(uuid,uuid,text,text)'
+  ) IS NOT NULL OR pg_catalog.to_regprocedure(
+    'public.submit_group_application_atomic(uuid,text)'
+  ) IS NOT NULL OR pg_catalog.to_regprocedure(
+    'public.review_group_application_atomic(uuid,uuid,text)'
+  ) IS NOT NULL OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_proc AS procedure
+    JOIN pg_catalog.pg_namespace AS function_namespace
+      ON function_namespace.oid = procedure.pronamespace
+    WHERE function_namespace.nspname = 'public'
+      AND procedure.proname IN (
+        'submit_group_application_atomic',
+        'review_group_application_atomic'
+      )
+  ) <> 2 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_policy AS policy
+    WHERE policy.polrelid = 'public.group_applications'::regclass
+      AND policy.polname = 'server_role_mutation'
+      AND policy.polcmd = '*'
+      AND policy.polpermissive
+      AND policy.polroles = ARRAY[service_role_oid]::oid[]
+      AND pg_catalog.pg_get_expr(policy.polqual, policy.polrelid, true) = 'true'
+      AND pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid, true) = 'true'
   ) OR (
     SELECT pg_catalog.count(*)
     FROM pg_catalog.pg_policy AS policy
