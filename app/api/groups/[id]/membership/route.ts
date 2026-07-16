@@ -3,7 +3,6 @@ import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { withAuth } from '@/lib/api/middleware'
 import { sendNotification } from '@/lib/data/notifications'
-import { updateCount } from '@/lib/services/counters'
 import { socialFeatureGuard } from '@/lib/features'
 
 /** Extract group id from URL path */
@@ -40,7 +39,11 @@ export const POST = withAuth(
       .eq('id', groupId)
       .maybeSingle()
 
-    if (groupErr || !group) {
+    if (groupErr) {
+      logger.error('Group membership lookup failed:', groupErr)
+      return NextResponse.json({ error: 'Failed to load group' }, { status: 500 })
+    }
+    if (!group) {
       return NextResponse.json({ error: 'Group not found' }, { status: 404 })
     }
 
@@ -51,12 +54,16 @@ export const POST = withAuth(
 
     if (action === 'join') {
       // Check if user is banned from this group
-      const { data: ban } = await sb
+      const { data: ban, error: banError } = await sb
         .from('group_bans')
         .select('user_id') // group_bans 无 id(复合主键)——旧 select('id') 400→封禁检查永远失效
         .eq('group_id', groupId)
         .eq('user_id', user.id)
         .maybeSingle()
+      if (banError) {
+        logger.error('Group ban lookup failed:', banError)
+        return NextResponse.json({ error: 'Failed to verify group access' }, { status: 500 })
+      }
       if (ban) {
         return NextResponse.json(
           { error: 'You are banned from this group', code: 'BANNED' },
@@ -66,11 +73,16 @@ export const POST = withAuth(
 
       // Check score gate and verified-only restrictions
       if (group.min_arena_score > 0 || group.is_verified_only) {
-        const { data: profile } = await sb
+        const { data: profile, error: profileError } = await sb
           .from('user_profiles')
           .select('reputation_score, is_verified_trader')
           .eq('id', user.id)
           .maybeSingle()
+
+        if (profileError) {
+          logger.error('Group eligibility profile lookup failed:', profileError)
+          return NextResponse.json({ error: 'Failed to verify group eligibility' }, { status: 500 })
+        }
 
         if (group.is_verified_only && !profile?.is_verified_trader) {
           return NextResponse.json(
@@ -95,12 +107,17 @@ export const POST = withAuth(
       }
 
       // Check if already a member
-      const { data: existing } = await sb
+      const { data: existing, error: existingError } = await sb
         .from('group_members')
         .select('user_id')
         .eq('group_id', groupId)
         .eq('user_id', user.id)
         .maybeSingle()
+
+      if (existingError) {
+        logger.error('Existing group membership lookup failed:', existingError)
+        return NextResponse.json({ error: 'Failed to verify membership' }, { status: 500 })
+      }
 
       if (existing) {
         return NextResponse.json({ error: 'Already a member' }, { status: 409 })
@@ -114,14 +131,6 @@ export const POST = withAuth(
         logger.error('Join group error:', insertErr)
         return NextResponse.json({ error: 'Failed to join' }, { status: 500 })
       }
-
-      // Increment count (fire-and-forget)
-      updateCount(
-        sb,
-        'increment_member_count',
-        { p_group_id: groupId, p_delta: 1 },
-        'Increment member count'
-      )
 
       if (group.created_by && group.created_by !== user.id) {
         sendNotification(
@@ -158,18 +167,6 @@ export const POST = withAuth(
       if (deleteErr) {
         logger.error('Leave group error:', deleteErr)
         return NextResponse.json({ error: 'Failed to leave' }, { status: 500 })
-      }
-
-      // Only decrement when a membership row was ACTUALLY removed. Without this,
-      // a non-member (or a repeated leave call) drives member_count down — a
-      // public metric feeding the Hot "groups" tab — while real members remain.
-      if (deleted && deleted.length > 0) {
-        updateCount(
-          sb,
-          'increment_member_count',
-          { p_group_id: groupId, p_delta: -1 },
-          'Decrement member count'
-        )
       }
 
       return NextResponse.json({

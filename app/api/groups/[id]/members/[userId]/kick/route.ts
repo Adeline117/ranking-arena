@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from 'next/server'
 import { withAuth } from '@/lib/api/middleware'
 import logger from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
-import { updateCount } from '@/lib/services/counters'
 import { sendNotification } from '@/lib/data/notifications'
 import { socialFeatureGuard } from '@/lib/features'
 
@@ -22,12 +21,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       // Check requester's role
-      const { data: requesterMembership } = await supabase
+      const { data: requesterMembership, error: requesterError } = await supabase
         .from('group_members')
         .select('role')
         .eq('group_id', groupId)
         .eq('user_id', user.id)
         .maybeSingle()
+
+      if (requesterError) {
+        logger.error('Requester membership lookup failed:', requesterError)
+        return NextResponse.json({ error: 'Operation failed' }, { status: 500 })
+      }
 
       if (
         !requesterMembership ||
@@ -37,12 +41,17 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       // Check target's role
-      const { data: targetMembership } = await supabase
+      const { data: targetMembership, error: targetError } = await supabase
         .from('group_members')
         .select('role')
         .eq('group_id', groupId)
         .eq('user_id', targetUserId)
         .maybeSingle()
+
+      if (targetError) {
+        logger.error('Target membership lookup failed:', targetError)
+        return NextResponse.json({ error: 'Operation failed' }, { status: 500 })
+      }
 
       if (!targetMembership) {
         return NextResponse.json({ error: 'User is not a group member' }, { status: 404 })
@@ -59,24 +68,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
 
       // Remove from group_members
-      const { error: deleteError } = await supabase
+      const { data: deleted, error: deleteError } = await supabase
         .from('group_members')
         .delete()
         .eq('group_id', groupId)
         .eq('user_id', targetUserId)
+        .select('user_id')
 
       if (deleteError) {
         logger.error('Kick member error:', deleteError)
         return NextResponse.json({ error: 'Operation failed' }, { status: 500 })
       }
 
-      // Decrement member count (fire-and-forget)
-      updateCount(
-        supabase,
-        'increment_member_count',
-        { p_group_id: groupId, p_delta: -1 },
-        'Kick: decrement member count'
-      )
+      if (!deleted || deleted.length === 0) {
+        return NextResponse.json({ error: 'User is no longer a group member' }, { status: 409 })
+      }
 
       // Send notification to kicked user
       sendNotification(
