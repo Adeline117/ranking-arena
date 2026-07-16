@@ -230,6 +230,16 @@ describe('POST /api/settings/export', () => {
           },
         ]
       }
+      if (dataset.name === 'blocks.outgoing') {
+        return [
+          {
+            blocked_id: '22222222-2222-4222-8222-222222222222',
+            created_at: '2026-02-08T00:00:00.000Z',
+            blocker_id: 'must-not-escape-block-owner',
+            future_secret: 'must-not-escape-block-normalization',
+          },
+        ]
+      }
       throw new Error(`Unexpected cursor dataset: ${dataset.name}`)
     })
     profileStates = installProfileQueries({})
@@ -289,6 +299,17 @@ describe('POST /api/settings/export', () => {
         created_at: '2026-02-02T00:00:00.000Z',
       },
     ])
+    expect(body.blocks).toEqual({
+      outgoing: [
+        {
+          blocked_user_id: '22222222-2222-4222-8222-222222222222',
+          created_at: '2026-02-08T00:00:00.000Z',
+        },
+      ],
+    })
+    expect(JSON.stringify(body.blocks)).not.toMatch(
+      /must-not-escape-block-owner|must-not-escape-block-normalization|blocker_id/
+    )
     expect(body.tips.sent).toEqual([
       {
         id: 'tips.sent-1',
@@ -348,7 +369,7 @@ describe('POST /api/settings/export', () => {
       'must-not-escape-binding-normalization'
     )
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
-    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(2)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(3)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -420,6 +441,25 @@ describe('POST /api/settings/export', () => {
       })
     )
     expect(bindingsCall[1].selectColumns).not.toContain('user_id')
+
+    const outgoingBlocksCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+      (call) => call[1].name === 'blocks.outgoing'
+    )
+    expect(outgoingBlocksCall).toBeDefined()
+    expect(outgoingBlocksCall[2]).toBe(USER_ID)
+    expect(outgoingBlocksCall[1]).toEqual(
+      expect.objectContaining({
+        name: 'blocks.outgoing',
+        table: 'blocked_users',
+        selectColumns: ['blocked_id', 'created_at'],
+        ownerPredicate: { column: 'blocker_id', operator: 'eq', valueType: 'uuid' },
+        cursor: {
+          order: 'asc',
+          columns: [{ column: 'blocked_id', valueType: 'uuid' }],
+        },
+      })
+    )
+    expect(outgoingBlocksCall[1].selectColumns).not.toContain('blocker_id')
   })
 
   it('fails closed without cooldown when preferences cannot be read completely', async () => {
@@ -438,6 +478,21 @@ describe('POST /api/settings/export', () => {
     mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
       if (dataset.name === 'settings.preferences') return []
       throw new DataExportReadError('account.bindings', { code: 'XX001' })
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed without cooldown when outgoing blocks cannot be read completely', async () => {
+    mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
+      if (dataset.name === 'blocks.outgoing') {
+        throw new DataExportReadError('blocks.outgoing', { code: 'XX001' })
+      }
+      return []
     })
 
     const response = await POST(request())
