@@ -23,7 +23,6 @@ const CORE_ROUTES = [
   '/',
   '/rankings',
   '/rankings/tokens',
-  '/rankings/bots',
   '/rankings/exchanges',
   '/rankings/weekly',
   '/trader/soul',
@@ -104,8 +103,6 @@ async function main() {
     if (post) routes.push(`/post/${post}`)
     const group = (await jget('/api/groups?limit=1'))?.data?.groups?.[0]?.id
     if (group) routes.push(`/groups/${group}`)
-    const bot = (await jget('/api/bots?limit=1'))?.bots?.[0]?.id
-    if (bot) routes.push(`/bot/${bot}`)
   }
 
   const browser = await chromium.launch({ headless: true })
