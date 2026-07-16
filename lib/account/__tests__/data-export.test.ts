@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import {
   DataExportReadError,
   DataExportTooLargeError,
@@ -43,7 +44,7 @@ function fakeClient(pages: Page[]) {
       }
       return query
     },
-  } as unknown as SupabaseClient
+  } as unknown as SupabaseClient<Database>
 
   return { client, calls }
 }

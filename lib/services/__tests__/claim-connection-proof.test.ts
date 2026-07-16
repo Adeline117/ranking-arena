@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import { claimConnectionExchange, hasVerifiedClaimConnection } from '../claim-connection-proof'
 
 function clientResult(data: unknown, error: unknown = null) {
@@ -7,7 +8,7 @@ function clientResult(data: unknown, error: unknown = null) {
   builder.eq = jest.fn(() => builder)
   builder.maybeSingle = jest.fn().mockResolvedValue({ data, error })
   const from = jest.fn(() => builder)
-  return { client: { from } as unknown as SupabaseClient, from, builder }
+  return { client: { from } as unknown as SupabaseClient<Database>, from, builder }
 }
 
 describe('claim connection proof', () => {

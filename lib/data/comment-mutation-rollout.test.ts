@@ -1,4 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import {
   CommentMutationRolloutError,
   deleteOwnCommentWithRollout,
@@ -9,7 +10,9 @@ import {
 } from './comment-mutation-rollout'
 
 const mockRpc = jest.fn()
-const supabase = { rpc: (...args: unknown[]) => mockRpc(...args) } as unknown as SupabaseClient
+const supabase = {
+  rpc: (...args: unknown[]) => mockRpc(...args),
+} as unknown as SupabaseClient<Database>
 
 const updatedComment = {
   id: 'comment-1',
