@@ -10,7 +10,7 @@
 # What it does:
 #   1. scp all scraper/proxy/cron files to /opt/arena-cron/
 #   2. scp ecosystem.config.js
-#   3. pm2 restart all && pm2 save (on VPS)
+#   3. reload only scraper/proxy/cron apps, preserving ingest and unrelated PM2 apps
 #   4. Verify services are running
 
 set -e
@@ -87,8 +87,37 @@ deploy_to() {
     local ECOSYSTEM="ecosystem.config.js"
   fi
 
-  echo "  Restarting PM2 services ($ECOSYSTEM)..."
-  ssh "$HOST" "source /etc/environment 2>/dev/null && cd $REMOTE_DIR && pm2 delete all 2>/dev/null; pm2 start $ECOSYSTEM && pm2 save"
+  echo "  Reloading scoped PM2 services ($ECOSYSTEM)..."
+  ssh "$HOST" bash -s -- "$REMOTE_DIR" "$ECOSYSTEM" "$VPS_TYPE" <<'REMOTE_PM2'
+set -euo pipefail
+REMOTE_DIR="$1"
+ECOSYSTEM="$2"
+VPS_TYPE="$3"
+
+source /etc/environment 2>/dev/null || true
+cd "$REMOTE_DIR"
+
+INGEST_PID_BEFORE="0"
+if [ "$VPS_TYPE" = "sg" ]; then
+  INGEST_PID_BEFORE="$(pm2 pid arena-ingest-worker-sg 2>/dev/null || echo 0)"
+  APPS=(arena-scraper arena-proxy arena-cron)
+else
+  APPS=(arena-proxy)
+fi
+
+for app in "${APPS[@]}"; do
+  pm2 startOrReload "$ECOSYSTEM" --only "$app" --update-env
+done
+pm2 save
+
+if [ "$VPS_TYPE" = "sg" ] && [ "$INGEST_PID_BEFORE" != "0" ]; then
+  INGEST_PID_AFTER="$(pm2 pid arena-ingest-worker-sg 2>/dev/null || echo 0)"
+  if [ "$INGEST_PID_AFTER" != "$INGEST_PID_BEFORE" ]; then
+    echo "ERROR: scoped deploy changed arena-ingest-worker-sg PID" >&2
+    exit 1
+  fi
+fi
+REMOTE_PM2
 
   # Wait for startup
   sleep 3
