@@ -5,12 +5,11 @@
  * Single-flight comes from the deterministic BullMQ jobId; priority 1 puts
  * these ahead of bulk Tier-B work.
  *
- * RENDER-BEFORE-PERSIST: the parsed payload is written to a short-lived
- * Redis result key FIRST (the Vercel route is polling it) and only then
- * persisted to profile_cache / trader_stats / trader_series — DB write
- * latency never sits in the user's critical path. Unproven metric windows are
- * the exception: their RAW evidence is persisted, but they never enter either
- * render cache and the job fails so stale proven data remains authoritative.
+ * RAW-BEFORE-RENDER: immutable evidence is persisted before parsing or any
+ * source-specific quality gate. Proven payloads are then written to the
+ * short-lived Redis result key before serving persistence. Quality rejects
+ * write a terminal, non-renderable Redis marker so pollers stop promptly, but
+ * never enter profile_cache / trader_stats / trader_series.
  */
 
 import type { Job } from 'bullmq'
@@ -22,9 +21,11 @@ import {
   findIncompleteProfileWindow,
   IncompleteProfileWindowError,
 } from '@/lib/ingest/core/profile-coverage'
+import type { ProfileQualityReject } from '@/lib/ingest/core/profile-quality'
 import type { ParseCtx } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
+import { recordStagingRejects } from '@/lib/ingest/staging/rejects'
 import {
   getHistoryCursor,
   publishHistoryRows,
@@ -50,19 +51,21 @@ export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
 
   // UTA portfolio traders route profile calls by traders.meta (portfolio_id)
   // — load it so long-tail UTA profiles fetch correctly instead of empty.
-  const { rows: metaRows } = await getIngestPool().query<{
-    meta: Record<string, unknown>
+  const { rows: traderRows } = await getIngestPool().query<{
+    id: number
+    meta: Record<string, unknown> | null
   }>(
-    `SELECT t.meta FROM arena.traders t
+    `SELECT t.id, t.meta FROM arena.traders t
       WHERE t.source_id = $1 AND t.exchange_trader_id = $2`,
     [src.id, exchangeTraderId]
   )
-  const traderMeta = metaRows[0]?.meta ?? null
+  const existingTraderId = traderRows[0]?.id ?? null
+  const traderMeta = traderRows[0]?.meta ?? null
 
   // 认领交易员停抓(P3-P2): 第一方 sync 才是权威数据源;按需抓取直接跳过
   // (/trader/ 页对 claimed 已重定向到 /u/,这里几乎不会被触发,兜底而已)。
   if (traderMeta && (traderMeta as { claimed?: unknown }).claimed === true) {
-    console.log(`[tier-c] skip claimed trader ${src.slug}/${exchangeTraderId}`)
+    console.warn(`[tier-c] skip claimed trader ${src.slug}/${exchangeTraderId}`)
     return { surfacesFetched: 0, skipped: 'claimed' }
   }
 
@@ -73,6 +76,17 @@ export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
       intent: 'interactive_deferred',
     })
 
+    // Evidence is durable before a parser or quality gate can fail. Reuse this
+    // pointer for every outcome; a Tier-C profile fetch writes RAW exactly once.
+    const rawObjectId = await writeRawObject({
+      sourceId: src.id,
+      sourceSlug: src.slug,
+      jobType: 'tier_c',
+      traderId: existingTraderId,
+      timeframe,
+      payload: bundle.pages,
+    })
+
     const ctx: ParseCtx = {
       sourceSlug: src.slug,
       currency: src.currency,
@@ -80,19 +94,54 @@ export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
       scrapedAt,
       meta: src.meta,
     }
-    const profile = adapter.parseProfile(bundle.pages[0]?.payload, ctx)
+    const firstPage = bundle.pages[0]
+    const qualityRejects: ProfileQualityReject[] = []
+    const profile = firstPage ? adapter.parseProfile(firstPage.payload, ctx) : null
+
+    if (profile && adapter.validateProfile) {
+      qualityRejects.push(...adapter.validateProfile(profile, ctx, timeframe, firstPage.payload))
+    } else if (!firstPage) {
+      // An empty bundle must never look like a successful profile fetch simply
+      // because there was nothing to parse or validate.
+      qualityRejects.push({
+        reason: 'profile_payload_missing',
+        payload: {
+          source_slug: src.slug,
+          exchange_trader_id: exchangeTraderId,
+          requested_timeframe: timeframe,
+          scraped_at: scrapedAt,
+          page_count: 0,
+        },
+      })
+    }
+
+    if (qualityRejects.length > 0) {
+      // The audit is part of the terminal contract: if it fails, fail the job
+      // and leave no Redis marker that could hide the missing evidence trail.
+      await recordStagingRejects(src.id, rawObjectId, qualityRejects)
+      const terminalPayload = {
+        completed: true,
+        qualityRejected: true,
+        reason: qualityRejects[0].reason,
+        timeframe,
+        asOf: scrapedAt,
+      }
+      await redis.set(resultKey, JSON.stringify(terminalPayload), 'EX', RESULT_TTL_SECONDS)
+      return {
+        traderId: existingTraderId,
+        qualityRejected: true,
+        reason: qualityRejects[0].reason,
+        rejects: qualityRejects.length,
+      }
+    }
+
+    // `profile === null` implies an empty bundle, which is always rejected
+    // above. Keep the invariant explicit for type narrowing and future edits.
+    if (!profile) throw new Error('[tier-c] profile payload missing after quality gate')
     const incomplete = findIncompleteProfileWindow(profile)
 
     if (incomplete) {
       const traderId = await resolveTraderId(src, exchangeTraderId)
-      await writeRawObject({
-        sourceId: src.id,
-        sourceSlug: src.slug,
-        jobType: 'tier_c',
-        traderId,
-        timeframe,
-        payload: bundle.pages,
-      })
       await publishProfile(src, traderId, profile, { fullSeries: false })
       throw new IncompleteProfileWindowError(incomplete.timeframe, incomplete.reason)
     }
@@ -110,16 +159,9 @@ export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
     await redis.set(resultKey, JSON.stringify(payload), 'EX', RESULT_TTL_SECONDS)
 
     // 2. Persist path (async from the user's perspective — they already
-    //    have the payload): RAW + identity + stats/series + profile_cache.
+    //    have the payload): identity + stats/series + profile_cache. RAW was
+    //    written before parsing and is deliberately not duplicated here.
     const traderId = await resolveTraderId(src, exchangeTraderId)
-    await writeRawObject({
-      sourceId: src.id,
-      sourceSlug: src.slug,
-      jobType: 'tier_c',
-      traderId,
-      timeframe,
-      payload: bundle.pages,
-    })
     await publishProfile(src, traderId, profile, { fullSeries: false }) // long tail (spec §13.1)
     await getIngestPool().query(
       `INSERT INTO arena.profile_cache

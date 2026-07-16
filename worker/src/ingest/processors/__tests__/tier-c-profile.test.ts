@@ -7,9 +7,11 @@ const mockGetSourceBySlug = jest.fn()
 const mockGetAdapter = jest.fn()
 const mockGetProfile = jest.fn()
 const mockParseProfile = jest.fn()
+const mockValidateProfile = jest.fn()
 const mockOpenSession = jest.fn()
 const mockSessionClose = jest.fn()
 const mockWriteRawObject = jest.fn()
+const mockRecordStagingRejects = jest.fn()
 const mockResolveTraderId = jest.fn()
 const mockPublishProfile = jest.fn()
 const mockDbQuery = jest.fn()
@@ -29,6 +31,9 @@ jest.mock('@/lib/ingest/fetch/fetcher', () => ({
 }))
 jest.mock('@/lib/ingest/raw', () => ({
   writeRawObject: (...args: unknown[]) => mockWriteRawObject(...args),
+}))
+jest.mock('@/lib/ingest/staging/rejects', () => ({
+  recordStagingRejects: (...args: unknown[]) => mockRecordStagingRejects(...args),
 }))
 jest.mock('@/lib/ingest/serving/publish', () => ({
   getHistoryCursor: jest.fn(),
@@ -114,12 +119,21 @@ describe('Tier-C incomplete profile window gate', () => {
     mockGetAdapter.mockReturnValue({
       getProfile: mockGetProfile,
       parseProfile: mockParseProfile,
+      validateProfile: mockValidateProfile,
     })
     mockGetProfile.mockResolvedValue(bundle)
     mockOpenSession.mockResolvedValue({ close: mockSessionClose })
-    mockDbQuery.mockResolvedValue({ rows: [], rowCount: 0 })
+    mockDbQuery.mockImplementation(async (sql: string) => {
+      if (sql.includes('SELECT t.id, t.meta')) {
+        return { rows: [{ id: 42, meta: null }], rowCount: 1 }
+      }
+      return { rows: [], rowCount: 0 }
+    })
     mockResolveTraderId.mockResolvedValue(42)
-    mockWriteRawObject.mockResolvedValue(undefined)
+    mockWriteRawObject.mockResolvedValue(2_081_896)
+    mockRecordStagingRejects.mockResolvedValue(undefined)
+    mockValidateProfile.mockReturnValue([])
+    mockRedisSet.mockResolvedValue('OK')
     mockPublishProfile.mockResolvedValue(undefined)
     mockSessionClose.mockResolvedValue(undefined)
   })
@@ -137,6 +151,10 @@ describe('Tier-C incomplete profile window gate', () => {
     expect(mockWriteRawObject).toHaveBeenCalledWith(
       expect.objectContaining({ jobType: 'tier_c', traderId: 42, payload: bundle.pages })
     )
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockWriteRawObject.mock.invocationCallOrder[0]).toBeLessThan(
+      mockParseProfile.mock.invocationCallOrder[0]
+    )
     expect(mockPublishProfile).toHaveBeenCalledWith(src, 42, parsedProfile(false), {
       fullSeries: false,
     })
@@ -152,8 +170,25 @@ describe('Tier-C incomplete profile window gate', () => {
     await expect(processTierC(job)).resolves.toMatchObject({ traderId: 42, stats: 1, series: 0 })
 
     expect(mockRedisSet).toHaveBeenCalledTimes(1)
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
     const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
     expect(renderPayload.asOf).toBe('2026-07-15T12:00:00.000Z')
+    expect(renderPayload.qualityRejected).toBeUndefined()
+    expect(mockWriteRawObject.mock.invocationCallOrder[0]).toBeLessThan(
+      mockParseProfile.mock.invocationCallOrder[0]
+    )
+    expect(mockParseProfile.mock.invocationCallOrder[0]).toBeLessThan(
+      mockValidateProfile.mock.invocationCallOrder[0]
+    )
+    expect(mockValidateProfile).toHaveBeenCalledWith(
+      parsedProfile(true),
+      expect.objectContaining({ sourceSlug: src.slug }),
+      30,
+      bundle.pages[0].payload
+    )
+    expect(mockValidateProfile.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRedisSet.mock.invocationCallOrder[0]
+    )
     expect(
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
     ).toBe(true)
@@ -187,5 +222,112 @@ describe('Tier-C incomplete profile window gate', () => {
     const cachePayload = JSON.parse(String((cacheCall?.[1] as unknown[])[4]))
     expect(cachePayload.series).toEqual(parsed.series)
     expect(mockPublishProfile).toHaveBeenCalledWith(src, 42, parsed, { fullSeries: false })
+  })
+
+  it('audits a quality reject and completes polling without publishing it', async () => {
+    const parsed = parsedProfile(true)
+    const reject = {
+      reason: 'profile_series_tail_stale',
+      payload: {
+        requested_timeframe: 30,
+        metrics: { pnl: { tail_at: '2026-05-21T00:00:00.000Z' } },
+      },
+    }
+    mockParseProfile.mockReturnValue(parsed)
+    mockValidateProfile.mockReturnValue([reject])
+
+    await expect(processTierC(job)).resolves.toMatchObject({
+      traderId: 42,
+      qualityRejected: true,
+      reason: 'profile_series_tail_stale',
+      rejects: 1,
+    })
+
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockRecordStagingRejects).toHaveBeenCalledWith(34, 2_081_896, [reject])
+    expect(mockRedisSet).toHaveBeenCalledWith('tier-c:result', expect.any(String), 'EX', 120)
+    const terminalPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(terminalPayload).toMatchObject({
+      completed: true,
+      qualityRejected: true,
+      reason: 'profile_series_tail_stale',
+      timeframe: 30,
+      asOf: expect.any(String),
+    })
+    expect(terminalPayload.stats).toBeUndefined()
+    expect(terminalPayload.series).toBeUndefined()
+    expect(mockResolveTraderId).not.toHaveBeenCalled()
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(false)
+    expect(mockWriteRawObject.mock.invocationCallOrder[0]).toBeLessThan(
+      mockParseProfile.mock.invocationCallOrder[0]
+    )
+    expect(mockParseProfile.mock.invocationCallOrder[0]).toBeLessThan(
+      mockValidateProfile.mock.invocationCallOrder[0]
+    )
+    expect(mockValidateProfile.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRecordStagingRejects.mock.invocationCallOrder[0]
+    )
+    expect(mockRecordStagingRejects.mock.invocationCallOrder[0]).toBeLessThan(
+      mockRedisSet.mock.invocationCallOrder[0]
+    )
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails an empty profile bundle closed after preserving RAW', async () => {
+    mockGetProfile.mockResolvedValue({ ...bundle, pages: [] })
+
+    await expect(processTierC(job)).resolves.toMatchObject({
+      traderId: 42,
+      qualityRejected: true,
+      reason: 'profile_payload_missing',
+      rejects: 1,
+    })
+
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({ jobType: 'tier_c', traderId: 42, payload: [] })
+    )
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockParseProfile).not.toHaveBeenCalled()
+    expect(mockValidateProfile).not.toHaveBeenCalled()
+    expect(mockRecordStagingRejects).toHaveBeenCalledWith(34, 2_081_896, [
+      expect.objectContaining({
+        reason: 'profile_payload_missing',
+        payload: expect.objectContaining({ page_count: 0, requested_timeframe: 30 }),
+      }),
+    ])
+    const terminalPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
+    expect(terminalPayload).toMatchObject({
+      completed: true,
+      qualityRejected: true,
+      reason: 'profile_payload_missing',
+      timeframe: 30,
+    })
+    expect(mockResolveTraderId).not.toHaveBeenCalled()
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(false)
+  })
+
+  it('does not publish a terminal marker when reject auditing fails', async () => {
+    mockParseProfile.mockReturnValue(parsedProfile(true))
+    mockValidateProfile.mockReturnValue([
+      { reason: 'profile_series_tail_stale', payload: { requested_timeframe: 30 } },
+    ])
+    mockRecordStagingRejects.mockRejectedValue(new Error('staging audit unavailable'))
+
+    await expect(processTierC(job)).rejects.toThrow('staging audit unavailable')
+
+    expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
+    expect(mockRedisSet).not.toHaveBeenCalled()
+    expect(mockResolveTraderId).not.toHaveBeenCalled()
+    expect(mockPublishProfile).not.toHaveBeenCalled()
+    expect(
+      mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
+    ).toBe(false)
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
   })
 })
