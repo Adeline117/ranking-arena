@@ -292,6 +292,29 @@ INSERT INTO public.group_join_requests (
   ('51000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb', 'approved', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', pg_catalog.clock_timestamp());
 SQL
 
+# A trigger column with a plausible name but incompatible type must fail before
+# the migration installs any authority or mutates deployment evidence.
+psql_cmd <<'SQL'
+ALTER TABLE public.group_join_requests
+  ALTER COLUMN created_at DROP DEFAULT,
+  ALTER COLUMN created_at TYPE text USING created_at::text;
+SQL
+if psql_cmd -f "$MIGRATION" >"$LOG_DIR/request-created-at-type.log" 2>&1; then
+  echo "Migration unexpectedly accepted incompatible join-request created_at" >&2
+  exit 1
+fi
+grep -Fq 'membership authorization column types are incompatible' \
+  "$LOG_DIR/request-created-at-type.log"
+if [[ "$(psql_cmd -Atqc "SELECT pg_catalog.to_regprocedure('public.mutate_group_membership_atomic(uuid,uuid,text,boolean)') IS NULL")" != "t" ]]; then
+  echo "Failed created_at preflight installed membership authority" >&2
+  exit 1
+fi
+psql_cmd <<'SQL'
+ALTER TABLE public.group_join_requests
+  ALTER COLUMN created_at TYPE timestamptz USING created_at::timestamptz,
+  ALTER COLUMN created_at SET DEFAULT pg_catalog.clock_timestamp();
+SQL
+
 # Duplicate invite evidence must abort and survive the rolled-back migration.
 if psql_cmd -f "$MIGRATION" >"$LOG_DIR/duplicate-invite.log" 2>&1; then
   echo "Migration unexpectedly deleted or accepted duplicate invite hashes" >&2
