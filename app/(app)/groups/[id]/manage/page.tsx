@@ -3,7 +3,7 @@
 import { features } from '@/lib/features'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase as _supabase } from '@/lib/supabase/client'
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -24,6 +24,14 @@ import MemberList from './components/MemberList'
 import ContentManagement from './components/ContentManagement'
 import GroupSettings from './components/GroupSettings'
 import { MuteModal, NotifyModal } from './components/ManageModals'
+import {
+  GroupMemberModerationOperationLedger,
+  GroupMemberModerationRequestSingleFlight,
+  isGroupMemberModerationViewerCurrent,
+  runGroupMemberModerationRequest,
+  type GroupMemberModerationOperation,
+  type GroupMemberModerationViewerScope,
+} from './member-moderation-operation'
 
 type GroupMember = {
   user_id: string
@@ -70,6 +78,13 @@ type Group = {
 }
 
 type Rule = { zh: string; en: string }
+
+const MUTE_DURATION_MS = {
+  '3h': 3 * 60 * 60 * 1000,
+  '1d': 24 * 60 * 60 * 1000,
+  '7d': 7 * 24 * 60 * 60 * 1000,
+  permanent: 100 * 365 * 24 * 60 * 60 * 1000,
+} as const
 
 function ActivityLogSection({ groupId }: { groupId: string }) {
   const { language, t } = useLanguage()
@@ -165,7 +180,7 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const { isPro } = useSubscription()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
-  const { accessToken, email, userId } = useAuthSession()
+  const { accessToken, email, userId, viewerKey, sessionGeneration } = useAuthSession()
   const router = useRouter()
   const [group, setGroup] = useState<Group | null>(null)
   const [members, setMembers] = useState<GroupMember[]>([])
@@ -212,7 +227,30 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [notifyTitle, setNotifyTitle] = useState('')
   const [notifyMessage, setNotifyMessage] = useState('')
   const [notifySending, setNotifySending] = useState(false)
+  const moderationOperationsRef = useRef(new GroupMemberModerationOperationLedger())
+  const moderationRequestsRef = useRef(new GroupMemberModerationRequestSingleFlight())
+  const moderationAccessTokenRef = useRef(accessToken)
+  const moderationViewerScope: GroupMemberModerationViewerScope = {
+    actorId: userId,
+    viewerKey,
+    sessionGeneration,
+  }
+  const moderationViewerScopeRef = useRef(moderationViewerScope)
+  moderationAccessTokenRef.current = accessToken
+  moderationViewerScopeRef.current = moderationViewerScope
+  moderationOperationsRef.current.scope(moderationViewerScope)
   const POSTS_PER_PAGE = 20
+
+  const isModerationViewerScopeCurrent = useCallback(
+    (expected: GroupMemberModerationViewerScope) => {
+      return isGroupMemberModerationViewerCurrent(
+        expected,
+        moderationViewerScopeRef.current,
+        moderationAccessTokenRef.current
+      )
+    },
+    []
+  )
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -350,81 +388,156 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const canManage = userRole === 'owner' || userRole === 'admin'
   const isOwner = userRole === 'owner' || (userRole === 'admin' && group?.created_by === userId)
 
+  const reconcileMemberModeration = useCallback(
+    async (targetUserId: string, expectedScope: GroupMemberModerationViewerScope) => {
+      if (!isModerationViewerScopeCurrent(expectedScope)) return
+      const { data, error } = await supabase
+        .from('group_members')
+        .select('user_id, muted_until, mute_reason')
+        .eq('group_id', groupId)
+        .eq('user_id', targetUserId)
+        .maybeSingle()
+      if (error) throw error
+      if (!isModerationViewerScopeCurrent(expectedScope)) return
+
+      setMembers((previous) => {
+        if (!isModerationViewerScopeCurrent(expectedScope)) return previous
+        if (!data) return previous.filter((member) => member.user_id !== targetUserId)
+        return previous.map((member) =>
+          member.user_id === targetUserId
+            ? {
+                ...member,
+                muted_until: data.muted_until,
+                mute_reason: data.mute_reason,
+              }
+            : member
+        )
+      })
+    },
+    [groupId, isModerationViewerScopeCurrent]
+  )
+
   // Handlers
   const handleMute = async (targetUserId: string) => {
-    if (!accessToken || !canManage) return
+    if (!accessToken || !userId || !canManage) return
+    const requestScope: GroupMemberModerationViewerScope = {
+      actorId: userId,
+      viewerKey,
+      sessionGeneration,
+    }
+    if (!isModerationViewerScopeCurrent(requestScope)) return
+    let operation: GroupMemberModerationOperation | null = null
     try {
-      let muteUntil: string | null = null
-      const now = new Date()
-      switch (muteDuration) {
-        case '3h':
-          muteUntil = new Date(now.getTime() + 3 * 3600000).toISOString()
-          break
-        case '1d':
-          muteUntil = new Date(now.getTime() + 86400000).toISOString()
-          break
-        case '7d':
-          muteUntil = new Date(now.getTime() + 7 * 86400000).toISOString()
-          break
-        case 'permanent':
-          muteUntil = new Date(now.getTime() + 100 * 365 * 86400000).toISOString()
-          break
-      }
-      const res = await fetch(`/api/groups/${groupId}/members/${targetUserId}/mute`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({ muted_until: muteUntil, reason: muteReason }),
+      const requestedOperation = moderationOperationsRef.current.acquire({
+        actorId: userId,
+        viewerKey,
+        sessionGeneration,
+        action: 'mute',
+        groupId,
+        targetUserId,
+        durationMs: MUTE_DURATION_MS[muteDuration],
+        reason: muteReason,
+        nowMs: Date.now(),
       })
-      if (res.ok) {
-        setMembers((prev) =>
-          prev.map((m) =>
-            m.user_id === targetUserId
-              ? { ...m, muted_until: muteUntil, mute_reason: muteReason }
-              : m
-          )
-        )
-        setShowMuteModal(null)
-        setMuteReason('')
-        showToast(t('mutedSuccessfully'), 'success')
-      } else {
-        const data = res.headers.get('content-type')?.includes('application/json')
-          ? await res.json()
-          : null
-        showToast(data?.error || t('operationFailed'), 'error')
+      operation = requestedOperation
+      const request = moderationRequestsRef.current.run(requestedOperation.operationId, () =>
+        runGroupMemberModerationRequest({
+          operation: requestedOperation,
+          ledger: moderationOperationsRef.current,
+          accessToken,
+          csrfHeaders: getCsrfHeaders(),
+          isViewerCurrent: () => isModerationViewerScopeCurrent(requestScope),
+          onAcknowledged: () => {
+            setShowMuteModal(null)
+            setMuteReason('')
+          },
+          reconcileTarget: (target) => reconcileMemberModeration(target, requestScope),
+          onReconcileError: (error) => logger.error('Mute reconciliation error:', error),
+        })
+      )
+      const result = await request.promise
+      if (!request.started) return
+      if (result.ok) {
+        if (result.completedCurrentIntent && isModerationViewerScopeCurrent(requestScope)) {
+          showToast(t('mutedSuccessfully'), 'success')
+        }
+      } else if (
+        isModerationViewerScopeCurrent(requestScope) &&
+        moderationOperationsRef.current.isCurrent(operation)
+      ) {
+        if (result.kind === 'network') {
+          logger.error('Mute error:', result.error)
+          showToast(t('networkErrorRetry'), 'error')
+        } else {
+          showToast((result.kind === 'http' && result.error) || t('operationFailed'), 'error')
+        }
       }
     } catch (err) {
       logger.error('Mute error:', err)
-      showToast(t('networkErrorRetry'), 'error')
+      if (
+        isModerationViewerScopeCurrent(requestScope) &&
+        (!operation || moderationOperationsRef.current.isCurrent(operation))
+      ) {
+        showToast(t('networkErrorRetry'), 'error')
+      }
     }
   }
 
   const handleUnmute = async (targetUserId: string) => {
-    if (!accessToken || !canManage) return
+    if (!accessToken || !userId || !canManage) return
+    const requestScope: GroupMemberModerationViewerScope = {
+      actorId: userId,
+      viewerKey,
+      sessionGeneration,
+    }
+    if (!isModerationViewerScopeCurrent(requestScope)) return
+    let operation: GroupMemberModerationOperation | null = null
     try {
-      const res = await fetch(`/api/groups/${groupId}/members/${targetUserId}/mute`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${accessToken}`, ...getCsrfHeaders() },
+      const requestedOperation = moderationOperationsRef.current.acquire({
+        actorId: userId,
+        viewerKey,
+        sessionGeneration,
+        action: 'unmute',
+        groupId,
+        targetUserId,
       })
-      if (res.ok) {
-        setMembers((prev) =>
-          prev.map((m) =>
-            m.user_id === targetUserId ? { ...m, muted_until: null, mute_reason: null } : m
-          )
-        )
-        showToast(t('unmutedSuccessfully'), 'success')
-      } else {
-        const data = res.headers.get('content-type')?.includes('application/json')
-          ? await res.json()
-          : null
-        showToast(data?.error || t('operationFailed'), 'error')
+      operation = requestedOperation
+      const request = moderationRequestsRef.current.run(requestedOperation.operationId, () =>
+        runGroupMemberModerationRequest({
+          operation: requestedOperation,
+          ledger: moderationOperationsRef.current,
+          accessToken,
+          csrfHeaders: getCsrfHeaders(),
+          isViewerCurrent: () => isModerationViewerScopeCurrent(requestScope),
+          reconcileTarget: (target) => reconcileMemberModeration(target, requestScope),
+          onReconcileError: (error) => logger.error('Unmute reconciliation error:', error),
+        })
+      )
+      const result = await request.promise
+      if (!request.started) return
+      if (result.ok) {
+        if (result.completedCurrentIntent && isModerationViewerScopeCurrent(requestScope)) {
+          showToast(t('unmutedSuccessfully'), 'success')
+        }
+      } else if (
+        isModerationViewerScopeCurrent(requestScope) &&
+        moderationOperationsRef.current.isCurrent(operation)
+      ) {
+        if (result.kind === 'network') {
+          logger.error('Unmute error:', result.error)
+          showToast(t('networkErrorRetry'), 'error')
+        } else {
+          showToast((result.kind === 'http' && result.error) || t('operationFailed'), 'error')
+        }
       }
     } catch (err) {
       logger.error('Unmute error:', err)
-      showToast(t('networkErrorRetry'), 'error')
+      if (
+        isModerationViewerScopeCurrent(requestScope) &&
+        (!operation || moderationOperationsRef.current.isCurrent(operation))
+      ) {
+        showToast(t('networkErrorRetry'), 'error')
+      }
     }
   }
 
