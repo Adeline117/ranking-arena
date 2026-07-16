@@ -18,6 +18,7 @@ import {
   isCreatedCommentAcknowledgement,
   isDefinitiveMutationRejection,
 } from '@/lib/api/comments-client'
+import { parsePostReactionAcknowledgement } from '@/lib/api/post-reactions-client'
 import { logger } from '@/lib/logger'
 import { getViewerScope, subscribeViewerScope } from '@/lib/auth/viewer-scope'
 
@@ -700,31 +701,42 @@ export async function togglePostReaction(
     return { success: false, error: 'STALE_AUTH_SCOPE' }
   }
   try {
-    const response = await authedFetch<{
-      success?: boolean
-      error?: string
-      data?: { like_count: number; dislike_count: number; reaction: 'up' | 'down' | null }
-    }>(`/api/posts/${postId}/like`, 'POST', accessToken, { reaction_type: reactionType }, 15_000, {
-      expectedUserId: capturedScope.userId,
-      expectedSessionGeneration: capturedScope.sessionGeneration,
-    })
+    const response = await authedFetch<Record<string, unknown>>(
+      `/api/posts/${postId}/like`,
+      'POST',
+      accessToken,
+      { reaction_type: reactionType },
+      15_000,
+      {
+        expectedUserId: capturedScope.userId,
+        expectedSessionGeneration: capturedScope.sessionGeneration,
+      }
+    )
 
     if (!storeScopeIsCurrent(capturedScope) || response.stale) {
       return { success: false, error: 'STALE_AUTH_SCOPE' }
     }
     const json = response.data
+    const acknowledgement = response.ok
+      ? parsePostReactionAcknowledgement(json, reactionType)
+      : null
 
-    if (response.ok && json?.success && json.data) {
-      const result = json.data
-      // Update store with server-confirmed data
-      usePostStore.getState().updatePostReaction(postId, {
-        like_count: result.like_count,
-        dislike_count: result.dislike_count,
-        reaction: result.reaction,
-      })
+    if (acknowledgement) {
+      const store = usePostStore.getState()
+      const existing = store.posts[postId]
+      if (existing) {
+        store.updatePostReaction(postId, {
+          like_count: acknowledgement.like_count ?? existing.like_count,
+          dislike_count: acknowledgement.dislike_count ?? existing.dislike_count,
+          reaction: acknowledgement.reaction,
+        })
+      }
       return { success: true }
-    } else {
-      return { success: false, error: json?.error || '操作失败' }
+    }
+
+    return {
+      success: false,
+      error: typeof json?.error === 'string' ? json.error : '操作失败',
     }
   } catch (err) {
     logger.error('[postStore] togglePostReaction failed:', err)
