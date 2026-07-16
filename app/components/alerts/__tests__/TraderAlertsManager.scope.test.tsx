@@ -186,4 +186,31 @@ describe('TraderAlertsManager viewer ownership', () => {
     expect(screen.getByText('loading')).toBeInTheDocument()
     expect(mockAuthedFetch).not.toHaveBeenCalled()
   })
+
+  it('rejects malformed server rows instead of rendering detached alert actions', async () => {
+    mockAuthedFetch.mockResolvedValue(
+      ok({
+        data: {
+          alerts: [
+            {
+              id: 'malformed-alert',
+              trader_id: 'trader-user-a',
+              source: 'binance',
+              alert_roi_change: true,
+              alert_drawdown: false,
+              alert_score_change: false,
+              alert_rank_change: false,
+              enabled: 'yes',
+            },
+          ],
+        },
+      })
+    )
+
+    render(<TraderAlertsManager />)
+
+    await screen.findByText('traderAlertsNone')
+    expect(screen.queryByText('trader-user-a')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'traderAlertsRemove' })).not.toBeInTheDocument()
+  })
 })
