@@ -16,6 +16,7 @@ describe('unsafe following feed RPC retirement', () => {
 
   it('revokes every production overload from every application role', () => {
     expect(migration).toMatch(/procedure\.proname = 'get_following_feed'/)
+    expect(migration).toMatch(/procedure\.prokind = 'f'/)
     expect(migration).toMatch(/procedure\.oid::regprocedure AS signature/)
     expect(migration).toMatch(
       /REVOKE ALL ON FUNCTION %s FROM PUBLIC, anon, authenticated, service_role/
@@ -23,6 +24,9 @@ describe('unsafe following feed RPC retirement', () => {
   })
 
   it('fails closed if inherited or direct execute privilege remains', () => {
+    expect(migration).toMatch(/pg_catalog\.aclexplode\(/)
+    expect(migration).toMatch(/privilege\.grantee = 0/)
+    expect(migration).toMatch(/privilege\.privilege_type = 'EXECUTE'/)
     expect(migration).toMatch(/pg_catalog\.has_function_privilege\(/)
     for (const role of ['anon', 'authenticated', 'service_role']) {
       expect(migration).toContain(`('${role}'::name)`)
