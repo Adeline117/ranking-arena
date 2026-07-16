@@ -27,8 +27,8 @@ function candidates(): DexGoldenWalletCandidate[] {
         sourceRank: index + 1,
         arenaScore: 100 - index,
         pnl90d: 10_000 - index,
+        pnlCurrency: sourceSlug === 'binance_web3_bsc' ? 'USDT' : 'USDC',
         activityProxyCount: index + 1,
-        metricAsOf: '2026-07-16T17:45:00.000Z',
       })
     }
   }
@@ -70,6 +70,12 @@ describe('DEX golden-wallet selection contract', () => {
         okx_web3_solana: 'arena.leaderboard_entries.raw.tx',
       },
     })
+    expect(snapshot.populations).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ source_slug: 'binance_web3_bsc', pnl_currency: 'USDT' }),
+        expect.objectContaining({ source_slug: 'okx_web3_solana', pnl_currency: 'USDC' }),
+      ])
+    )
   })
 
   it('is invariant to candidate input order and emits a deterministic hash', () => {
@@ -151,10 +157,10 @@ describe('DEX golden-wallet selection contract', () => {
       /one passed source snapshot/
     )
 
-    const staleMetrics = candidates()
-    staleMetrics[0].metricAsOf = '2026-07-16T17:44:59.000Z'
-    expect(() => buildDexGoldenWalletSnapshot({ candidates: staleMetrics, ...METADATA })).toThrow(
-      /same source snapshot/
+    const wrongCurrency = candidates()
+    wrongCurrency[0].pnlCurrency = 'USDC'
+    expect(() => buildDexGoldenWalletSnapshot({ candidates: wrongCurrency, ...METADATA })).toThrow(
+      /unexpected PnL currency/
     )
 
     const mixedCounts = candidates()

@@ -7,6 +7,7 @@ export const DEX_GOLDEN_WALLET_CONTRACT = 'arena.dex.golden-wallets@1' as const
 
 export type DexGoldenSource = 'binance_web3_bsc' | 'okx_web3_solana'
 export type DexGoldenCohort = 'top' | 'deterministic_random' | 'high_frequency'
+export type DexGoldenPnlCurrency = 'USDT' | 'USDC'
 
 export interface DexGoldenWalletCandidate {
   sourceSlug: DexGoldenSource
@@ -17,8 +18,8 @@ export interface DexGoldenWalletCandidate {
   sourceRank: number | null
   arenaScore: number | null
   pnl90d: number
+  pnlCurrency: DexGoldenPnlCurrency
   activityProxyCount: number
-  metricAsOf: string
 }
 
 export interface DexGoldenWallet {
@@ -31,8 +32,8 @@ export interface DexGoldenWallet {
   source_rank: number | null
   arena_score: number | null
   pnl_90d: number
+  pnl_currency: DexGoldenPnlCurrency
   activity_proxy_count: number
-  metric_as_of: string
 }
 
 export interface DexGoldenWalletSnapshot {
@@ -63,26 +64,28 @@ export interface DexGoldenWalletSnapshot {
     snapshot_id: string
     snapshot_scraped_at: string
     snapshot_actual_count: number
+    pnl_currency: DexGoldenPnlCurrency
     eligible_candidates_with_non_null_pnl: number
     candidates_with_positive_activity_proxy: number
-    max_metric_as_of: string
   }>
   wallets: DexGoldenWallet[]
 }
 
 const SOURCE_CONTRACT: Record<
   DexGoldenSource,
-  DexGoldenWallet['chain'] & { walletPattern: RegExp }
+  DexGoldenWallet['chain'] & { walletPattern: RegExp; pnlCurrency: DexGoldenPnlCurrency }
 > = {
   binance_web3_bsc: {
     namespace: 'eip155',
     reference: '56',
     walletPattern: /^0x[0-9a-fA-F]{40}$/,
+    pnlCurrency: 'USDT',
   },
   okx_web3_solana: {
     namespace: 'solana',
     reference: 'mainnet-beta',
     walletPattern: /^[1-9A-HJ-NP-Za-km-z]{32,44}$/,
+    pnlCurrency: 'USDC',
   },
 }
 
@@ -164,12 +167,11 @@ function validateAndCanonicalize(
     }
     assertFiniteNullable(candidate.arenaScore, `arenaScore for ${identity}`)
     if (!Number.isFinite(candidate.pnl90d)) throw new Error(`pnl90d must be finite: ${identity}`)
+    if (candidate.pnlCurrency !== SOURCE_CONTRACT[candidate.sourceSlug].pnlCurrency) {
+      throw new Error(`unexpected PnL currency for ${identity}: ${candidate.pnlCurrency}`)
+    }
     if (!Number.isSafeInteger(candidate.activityProxyCount) || candidate.activityProxyCount < 0) {
       throw new Error(`activityProxyCount must be a non-negative safe integer: ${identity}`)
-    }
-    assertCanonicalTimestamp(candidate.metricAsOf, `metricAsOf for ${identity}`)
-    if (candidate.metricAsOf !== candidate.snapshotScrapedAt) {
-      throw new Error(`metrics must come from the same source snapshot: ${identity}`)
     }
     return { ...candidate, wallet }
   })
@@ -190,8 +192,8 @@ function selectedWallet(
     source_rank: candidate.sourceRank,
     arena_score: candidate.arenaScore,
     pnl_90d: candidate.pnl90d,
+    pnl_currency: candidate.pnlCurrency,
     activity_proxy_count: candidate.activityProxyCount,
-    metric_as_of: candidate.metricAsOf,
   }
 }
 
@@ -272,14 +274,11 @@ export function buildDexGoldenWalletSnapshot(input: {
       snapshot_id: sourceCandidates[0].snapshotId,
       snapshot_scraped_at: sourceCandidates[0].snapshotScrapedAt,
       snapshot_actual_count: snapshotActualCount,
+      pnl_currency: SOURCE_CONTRACT[source].pnlCurrency,
       eligible_candidates_with_non_null_pnl: sourceCandidates.length,
       candidates_with_positive_activity_proxy: sourceCandidates.filter(
         (candidate) => candidate.activityProxyCount > 0
       ).length,
-      max_metric_as_of: sourceCandidates
-        .map((candidate) => candidate.metricAsOf)
-        .sort()
-        .at(-1)!,
     })
   }
 
