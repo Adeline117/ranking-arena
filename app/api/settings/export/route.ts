@@ -72,6 +72,9 @@ interface ExportData {
     watchlist: unknown[]
     alerts: unknown[]
   }
+  groups: {
+    applications: unknown[]
+  }
   settings: {
     preferences: Record<string, unknown> | null
   }
@@ -507,6 +510,37 @@ const TRADER_ALERTS_EXPORT_DATASET = {
   },
 } satisfies CursorExportDataset
 
+const GROUP_APPLICATIONS_EXPORT_DATASET = {
+  name: 'groups.applications',
+  table: 'group_applications',
+  selectColumns: [
+    'id',
+    'name',
+    'name_en',
+    'description',
+    'description_en',
+    'avatar_url',
+    'role_names',
+    'rules',
+    'rules_json',
+    'is_premium_only',
+    'status',
+    'reject_reason',
+    'group_id',
+    'reviewed_at',
+    'created_at',
+  ],
+  ownerPredicate: {
+    column: 'applicant_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'id', valueType: 'uuid' }],
+  },
+} satisfies CursorExportDataset
+
 const NOTIFICATIONS_EXPORT_DATASET = {
   name: 'notifications',
   table: 'notifications',
@@ -761,6 +795,26 @@ function normalizeTraderAlerts(rows: Record<string, unknown>[]) {
   }))
 }
 
+function normalizeGroupApplications(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    id: row.id,
+    name: row.name,
+    name_en: row.name_en,
+    description: row.description,
+    description_en: row.description_en,
+    avatar_url: row.avatar_url,
+    role_names: row.role_names,
+    rules: row.rules,
+    rules_json: row.rules_json,
+    is_premium_only: row.is_premium_only,
+    status: row.status,
+    reject_reason: row.reject_reason,
+    group_id: row.group_id,
+    reviewed_at: row.reviewed_at,
+    created_at: row.created_at,
+  }))
+}
+
 function normalizeNotifications(rows: Record<string, unknown>[]) {
   return rows.map((row) => ({
     id: row.id,
@@ -924,6 +978,7 @@ export async function POST(request: NextRequest) {
       copyTradeConfigs,
       traderWatchlist,
       traderAlerts,
+      groupApplications,
       notifications,
       commentLikes,
       postEmojiReactions,
@@ -950,6 +1005,7 @@ export async function POST(request: NextRequest) {
       fetchAllExportRowsByCursor(supabase, COPY_TRADE_CONFIGS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, TRADER_WATCHLIST_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, TRADER_ALERTS_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, GROUP_APPLICATIONS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, NOTIFICATIONS_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, COMMENT_LIKES_EXPORT_DATASET, user.id),
       fetchAllExportRowsByCursor(supabase, POST_EMOJI_REACTIONS_EXPORT_DATASET, user.id),
@@ -967,6 +1023,7 @@ export async function POST(request: NextRequest) {
     const normalizedCopyTradeConfigs = normalizeCopyTradeConfigs(copyTradeConfigs)
     const normalizedTraderWatchlist = normalizeTraderWatchlist(traderWatchlist)
     const normalizedTraderAlerts = normalizeTraderAlerts(traderAlerts)
+    const normalizedGroupApplications = normalizeGroupApplications(groupApplications)
     const normalizedNotifications = normalizeNotifications(notifications)
     const normalizedCommentLikes = normalizeCommentLikes(commentLikes)
     const normalizedPostEmojiReactions = normalizePostEmojiReactions(postEmojiReactions)
@@ -1000,6 +1057,7 @@ export async function POST(request: NextRequest) {
           completedDataset('trading.copy_configs', copyTradeConfigs.length),
           completedDataset('trading.watchlist', traderWatchlist.length),
           completedDataset('trading.alerts', traderAlerts.length),
+          completedDataset('groups.applications', groupApplications.length),
           completedDataset('settings.preferences', preferences.length),
           completedDataset('account.bindings', accountBindings.length),
           completedDataset('account.login_sessions', loginSessions.length),
@@ -1039,6 +1097,9 @@ export async function POST(request: NextRequest) {
         copy_configs: normalizedCopyTradeConfigs,
         watchlist: normalizedTraderWatchlist,
         alerts: normalizedTraderAlerts,
+      },
+      groups: {
+        applications: normalizedGroupApplications,
       },
       settings: {
         preferences: normalizedPreferences,

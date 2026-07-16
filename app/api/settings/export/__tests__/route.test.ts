@@ -358,6 +358,30 @@ describe('POST /api/settings/export', () => {
           },
         ]
       }
+      if (dataset.name === 'groups.applications') {
+        return [
+          {
+            id: '13131313-1313-4313-8313-131313131313',
+            name: 'Quant Research',
+            name_en: 'Quant Research',
+            description: 'A research group',
+            description_en: null,
+            avatar_url: 'https://cdn.example.test/group.png',
+            role_names: { admin: { en: 'Lead' }, member: { en: 'Researcher' } },
+            rules: 'Be rigorous',
+            rules_json: [{ zh: '引用来源', en: 'Cite sources' }],
+            is_premium_only: true,
+            status: 'rejected',
+            reject_reason: 'Please provide more detail',
+            group_id: null,
+            reviewed_at: '2026-02-16T02:00:00.000Z',
+            created_at: '2026-02-16T01:30:00.000Z',
+            applicant_id: 'must-not-escape-application-owner',
+            reviewed_by: 'must-not-escape-application-reviewer',
+            future_secret: 'must-not-escape-application-normalization',
+          },
+        ]
+      }
       if (dataset.name === 'notifications') {
         return [
           {
@@ -470,6 +494,7 @@ describe('POST /api/settings/export', () => {
       'trading.copy_configs': 1,
       'trading.watchlist': 1,
       'trading.alerts': 1,
+      'groups.applications': 1,
       'settings.preferences': 1,
       'account.bindings': 2,
       'account.login_sessions': 1,
@@ -684,6 +709,30 @@ describe('POST /api/settings/export', () => {
     expect(JSON.stringify(body.trading)).not.toMatch(
       /must-not-escape-copy-settings|must-not-escape-copy-owner|must-not-escape-watchlist-owner|must-not-escape-alert-owner|must-not-escape-alert-normalization|apiSecret|future_secret|user_id/
     )
+    expect(body.groups).toEqual({
+      applications: [
+        {
+          id: '13131313-1313-4313-8313-131313131313',
+          name: 'Quant Research',
+          name_en: 'Quant Research',
+          description: 'A research group',
+          description_en: null,
+          avatar_url: 'https://cdn.example.test/group.png',
+          role_names: { admin: { en: 'Lead' }, member: { en: 'Researcher' } },
+          rules: 'Be rigorous',
+          rules_json: [{ zh: '引用来源', en: 'Cite sources' }],
+          is_premium_only: true,
+          status: 'rejected',
+          reject_reason: 'Please provide more detail',
+          group_id: null,
+          reviewed_at: '2026-02-16T02:00:00.000Z',
+          created_at: '2026-02-16T01:30:00.000Z',
+        },
+      ],
+    })
+    expect(JSON.stringify(body.groups)).not.toMatch(
+      /must-not-escape-application-owner|must-not-escape-application-reviewer|must-not-escape-application-normalization|applicant_id|reviewed_by|future_secret/
+    )
     expect(body.settings).toEqual({
       preferences: {
         watched_traders: ['trader-1'],
@@ -715,7 +764,7 @@ describe('POST /api/settings/export', () => {
       'must-not-escape-binding-normalization'
     )
     expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
-    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(13)
+    expect(mockFetchAllExportRowsByCursor).toHaveBeenCalledTimes(14)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -898,6 +947,25 @@ describe('POST /api/settings/export', () => {
     expect(alertsCall[1].selectColumns).not.toContain('user_id')
     expect(alertsCall[1].selectColumns).not.toContain('*')
 
+    const groupApplicationsCall = mockFetchAllExportRowsByCursor.mock.calls.find(
+      (call) => call[1].name === 'groups.applications'
+    )
+    expect(groupApplicationsCall).toBeDefined()
+    expect(groupApplicationsCall[2]).toBe(USER_ID)
+    expect(groupApplicationsCall[1]).toEqual(
+      expect.objectContaining({
+        table: 'group_applications',
+        ownerPredicate: { column: 'applicant_id', operator: 'eq', valueType: 'uuid' },
+        cursor: {
+          order: 'asc',
+          columns: [{ column: 'id', valueType: 'uuid' }],
+        },
+      })
+    )
+    expect(groupApplicationsCall[1].selectColumns).not.toContain('applicant_id')
+    expect(groupApplicationsCall[1].selectColumns).not.toContain('reviewed_by')
+    expect(groupApplicationsCall[1].selectColumns).not.toContain('*')
+
     for (const ownerIdDatasetName of [
       'notifications',
       'interactions.comment_likes',
@@ -1036,6 +1104,21 @@ describe('POST /api/settings/export', () => {
     mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
       if (dataset.name === 'trading.alerts') {
         throw new DataExportReadError('trading.alerts', { code: 'XX001' })
+      }
+      return []
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({ error: 'Failed to prepare a complete export' })
+    expect(mockFrom).toHaveBeenCalledTimes(1)
+  })
+
+  it('fails closed without cooldown when group applications cannot be read completely', async () => {
+    mockFetchAllExportRowsByCursor.mockImplementation(async (_client, dataset) => {
+      if (dataset.name === 'groups.applications') {
+        throw new DataExportReadError('groups.applications', { code: 'XX001' })
       }
       return []
     })
