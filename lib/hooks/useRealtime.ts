@@ -232,33 +232,51 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
   const channelRef = useRef<RealtimeChannel | null>(null)
   const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const isReconnectingRef = useRef(false)
+  const retryCountRef = useRef(0)
+  retryCountRef.current = retryCount
+  const connectionGenerationRef = useRef(0)
+  const connectRef = useRef<() => void>(() => {})
   // Guard against state updates after unmount (subscribe callback can fire after disconnect)
   const mountedRef = useRef(true)
+  const callbacksRef = useRef({
+    onInsert,
+    onUpdate,
+    onDelete,
+    onStatusChange,
+    onConnect,
+    onDisconnect,
+    onError,
+  })
+  callbacksRef.current = {
+    onInsert,
+    onUpdate,
+    onDelete,
+    onStatusChange,
+    onConnect,
+    onDisconnect,
+    onError,
+  }
+  const reconnectConfigRef = useRef({ autoReconnect, maxRetries, retryBaseDelay })
+  reconnectConfigRef.current = { autoReconnect, maxRetries, retryBaseDelay }
 
-  const setStatus = useCallback(
-    (newStatus: ConnectionStatus) => {
-      setStatusInternal(newStatus)
-      onStatusChange?.(newStatus)
-    },
-    [onStatusChange]
-  )
+  const setStatus = useCallback((newStatus: ConnectionStatus) => {
+    setStatusInternal(newStatus)
+    callbacksRef.current.onStatusChange?.(newStatus)
+  }, [])
 
-  const handleChange = useCallback(
-    (payload: { eventType: string; new: unknown; old: unknown }) => {
-      switch (payload.eventType) {
-        case 'INSERT':
-          onInsert?.(payload.new as T)
-          break
-        case 'UPDATE':
-          onUpdate?.({ old: payload.old as T, new: payload.new as T })
-          break
-        case 'DELETE':
-          onDelete?.(payload.old as T)
-          break
-      }
-    },
-    [onInsert, onUpdate, onDelete]
-  )
+  const handleChange = useCallback((payload: { eventType: string; new: unknown; old: unknown }) => {
+    switch (payload.eventType) {
+      case 'INSERT':
+        callbacksRef.current.onInsert?.(payload.new as T)
+        break
+      case 'UPDATE':
+        callbacksRef.current.onUpdate?.({ old: payload.old as T, new: payload.new as T })
+        break
+      case 'DELETE':
+        callbacksRef.current.onDelete?.(payload.old as T)
+        break
+    }
+  }, [])
 
   const clearRetryTimeout = useCallback(() => {
     if (retryTimeoutRef.current) {
@@ -268,6 +286,7 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
   }, [])
 
   const disconnect = useCallback(() => {
+    connectionGenerationRef.current += 1
     mountedRef.current = false // prevent subscribe callback from firing after cleanup
     clearRetryTimeout()
     isReconnectingRef.current = false
@@ -278,35 +297,49 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     }
 
     setStatus('disconnected')
+    retryCountRef.current = 0
     setRetryCount(0)
-    onDisconnect?.()
-  }, [clearRetryTimeout, setStatus, onDisconnect])
+    callbacksRef.current.onDisconnect?.()
+  }, [clearRetryTimeout, setStatus])
 
-  const scheduleReconnect = useCallback(() => {
-    if (!autoReconnect || retryCount >= maxRetries) {
-      setStatus('error')
-      setError(`重连失败，已达到最大重试次数 (${maxRetries})`)
-      onError?.(`重连失败，已达到最大重试次数 (${maxRetries})`)
-      isReconnectingRef.current = false
-      return
-    }
+  const scheduleReconnect = useCallback(
+    (connectionGeneration: number) => {
+      if (!mountedRef.current || connectionGenerationRef.current !== connectionGeneration) {
+        return
+      }
+      const { autoReconnect, maxRetries, retryBaseDelay } = reconnectConfigRef.current
+      const currentRetryCount = retryCountRef.current
+      if (!autoReconnect || currentRetryCount >= maxRetries) {
+        setStatus('error')
+        setError(`重连失败，已达到最大重试次数 (${maxRetries})`)
+        callbacksRef.current.onError?.(`重连失败，已达到最大重试次数 (${maxRetries})`)
+        isReconnectingRef.current = false
+        return
+      }
 
-    const delay = calculateBackoffDelay(retryCount, retryBaseDelay)
-    realtimeLogger.info(`将在 ${delay}ms 后重连 (尝试 ${retryCount + 1}/${maxRetries})`)
+      const delay = calculateBackoffDelay(currentRetryCount, retryBaseDelay)
+      realtimeLogger.info(`将在 ${delay}ms 后重连 (尝试 ${currentRetryCount + 1}/${maxRetries})`)
 
-    setStatus('reconnecting')
-    isReconnectingRef.current = true
+      setStatus('reconnecting')
+      isReconnectingRef.current = true
 
-    retryTimeoutRef.current = setTimeout(() => {
-      setRetryCount((prev) => prev + 1)
-      connect()
-    }, delay)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- connect excluded to break circular dependency with scheduleReconnect
-  }, [autoReconnect, retryCount, maxRetries, retryBaseDelay, setStatus, onError])
+      retryTimeoutRef.current = setTimeout(() => {
+        if (!mountedRef.current || connectionGenerationRef.current !== connectionGeneration) {
+          return
+        }
+        retryCountRef.current += 1
+        setRetryCount(retryCountRef.current)
+        connectRef.current()
+      }, delay)
+    },
+    [setStatus]
+  )
 
   const connect = useCallback(() => {
     if (!enabled) return
 
+    const connectionGeneration = connectionGenerationRef.current + 1
+    connectionGenerationRef.current = connectionGeneration
     mountedRef.current = true // re-arm for reconnect scenarios
 
     if (channelRef.current) {
@@ -321,55 +354,64 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     const scope = scopeKey === undefined ? 'shared' : `scoped:${encodeURIComponent(scopeKey)}`
     const channelName = `direct:${scope}:${schema}:${table}:${filter || 'all'}`
     const channel = supabase.channel(channelName)
+    const handleScopedChange = (payload: { eventType: string; new: unknown; old: unknown }) => {
+      if (
+        !mountedRef.current ||
+        connectionGenerationRef.current !== connectionGeneration ||
+        channelRef.current !== channel
+      ) {
+        return
+      }
+      handleChange(payload)
+    }
 
     channel
-      .on('postgres_changes', { event, schema, table, ...(filter ? { filter } : {}) }, handleChange)
+      .on(
+        'postgres_changes',
+        { event, schema, table, ...(filter ? { filter } : {}) },
+        handleScopedChange
+      )
       .subscribe((subscribeStatus: string) => {
         // Guard: if component unmounted while subscribe was in-flight, bail out.
         // Without this, the callback would call setState on an unmounted component
         // and potentially scheduleReconnect, leaking a new channel.
-        if (!mountedRef.current) return
+        if (
+          !mountedRef.current ||
+          connectionGenerationRef.current !== connectionGeneration ||
+          channelRef.current !== channel
+        ) {
+          return
+        }
 
         if (subscribeStatus === 'SUBSCRIBED') {
           setStatus('connected')
+          retryCountRef.current = 0
           setRetryCount(0)
           isReconnectingRef.current = false
-          onConnect?.()
+          callbacksRef.current.onConnect?.()
         } else if (subscribeStatus === 'CHANNEL_ERROR') {
           const errorMsg = '频道连接失败'
           setStatus('error')
           setError(errorMsg)
-          onError?.(errorMsg)
-          if (autoReconnect) scheduleReconnect()
+          callbacksRef.current.onError?.(errorMsg)
+          if (reconnectConfigRef.current.autoReconnect) scheduleReconnect(connectionGeneration)
         } else if (subscribeStatus === 'TIMED_OUT') {
           const errorMsg = '连接超时'
           setStatus('error')
           setError(errorMsg)
-          onError?.(errorMsg)
-          if (autoReconnect) scheduleReconnect()
+          callbacksRef.current.onError?.(errorMsg)
+          if (reconnectConfigRef.current.autoReconnect) scheduleReconnect(connectionGeneration)
         } else if (subscribeStatus === 'CLOSED') {
           setStatus('disconnected')
-          if (enabled && autoReconnect && !isReconnectingRef.current) {
-            scheduleReconnect()
+          if (enabled && reconnectConfigRef.current.autoReconnect && !isReconnectingRef.current) {
+            scheduleReconnect(connectionGeneration)
           }
         }
       })
 
     channelRef.current = channel
-  }, [
-    enabled,
-    table,
-    event,
-    schema,
-    filter,
-    scopeKey,
-    handleChange,
-    autoReconnect,
-    setStatus,
-    onConnect,
-    onError,
-    scheduleReconnect,
-  ])
+  }, [enabled, table, event, schema, filter, scopeKey, handleChange, setStatus, scheduleReconnect])
+  connectRef.current = connect
 
   const reconnect = useCallback(() => {
     clearRetryTimeout()
@@ -382,8 +424,7 @@ function useRealtimeDirect<T extends Record<string, unknown>>(
     if (!enabled) return
     connect()
     return () => disconnect()
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- connect/disconnect are stable refs; enabled guards initial connect
-  }, [enabled])
+  }, [connect, disconnect, enabled])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
