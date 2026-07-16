@@ -54,6 +54,24 @@ function attachErrorCollectors(page: Page): ErrorLog {
   return log
 }
 
+function criticalSameHostBundleFailures(page: Page, log: ErrorLog): string[] {
+  const host = new URL(page.url()).host
+  return log.failedRequests.filter((entry) => {
+    // A reload legitimately cancels unfinished chunks from the old document.
+    if (entry.endsWith(' - cancelled')) return false
+    try {
+      const failedUrl = new URL(entry.split(' - ')[0])
+      return (
+        failedUrl.host === host &&
+        failedUrl.pathname.startsWith('/_next/') &&
+        /\.(?:js|css)$/.test(failedUrl.pathname)
+      )
+    } catch {
+      return false
+    }
+  })
+}
+
 /** Best-effort Phase 2 activation. Returns true if interactive mode mounted. */
 async function tryActivatePhase2(page: Page, timeout = 15000): Promise<boolean> {
   await page.mouse.move(200, 200)
@@ -256,39 +274,81 @@ test.describe('Homepage & Rankings E2E', () => {
 
   // ── 6. Exchange filter bar ─────────────────────────────────────────────────
 
-  test('6 - Exchange filter bar interaction', async ({ page }) => {
-    await page.goto('/', { waitUntil: 'domcontentloaded', timeout: 60000 })
+  test('6 - Exchange filter bar interaction', async ({ page, request }) => {
+    await page.route('**/api/analytics/events', async (route) => {
+      await route.fulfill({ status: 202, contentType: 'application/json', body: '{"ok":true}' })
+    })
+    const sourceResponse = await request.get('/api/sources/visible?timeRange=90D')
+    expect(sourceResponse.ok()).toBe(true)
+    const sourceBody = (await sourceResponse.json()) as {
+      data: { sources: Array<{ filterSource: string; traderCount: number }> }
+    }
+    expect(sourceBody.data.sources.length).toBeGreaterThan(0)
+    expect(sourceBody.data.sources.every(({ traderCount }) => traderCount > 0)).toBe(true)
+
+    await page.goto('/?range=90D', { waitUntil: 'domcontentloaded', timeout: 60000 })
     await dismissOverlays(page)
-    await tryActivatePhase2(page, 10000)
-    await page.waitForTimeout(2000)
+    expect(await tryActivatePhase2(page, 30000)).toBe(true)
+    await expect(page.locator('.home-ranking-section')).toBeVisible({ timeout: 30000 })
+    await dismissOverlays(page)
+    expect(criticalSameHostBundleFailures(page, errorLog)).toEqual([])
 
-    const items = page.locator('a.exchange-item')
-    const count = await items.count()
-    if (count === 0) {
-      console.log('[Test 6] SKIP — No exchange items')
-      test.skip()
-      return
-    }
-    console.log(`[Test 6] ${count} exchange items`)
-
-    // Pause CSS animation by stopping it via JS (hover is unstable due to animation)
+    // Keep the moving marquee in a deterministic, user-supported state before
+    // selecting a target. This also verifies the reduced-motion interaction path.
+    await page.emulateMedia({ reducedMotion: 'reduce' })
     const track = page.locator('.exchange-scroll-track')
-    if (await track.isVisible({ timeout: 3000 }).catch(() => false)) {
-      await page.evaluate(() => {
-        const el = document.querySelector('.exchange-scroll-track') as HTMLElement
-        if (el) el.style.animationPlayState = 'paused'
-      })
-      await page.waitForTimeout(500)
-    }
+    await expect(track).toHaveCSS('animation-name', 'none')
+
+    const items = page.locator('a.exchange-item:not([aria-hidden="true"])')
+    await expect(items.first()).toBeVisible({ timeout: 30000 })
+    expect(await items.count()).toBe(sourceBody.data.sources.length)
+    const duplicateItems = page.locator('a.exchange-item[aria-hidden="true"]')
+    expect(await duplicateItems.count()).toBe(sourceBody.data.sources.length)
+    await expect(duplicateItems.first()).toHaveAttribute('tabindex', '-1')
 
     const first = items.first()
-    const name = await first.textContent()
-    console.log(`[Test 6] Clicking: "${name?.trim()}"`)
-    await first.click({ force: true })
-    await page.waitForTimeout(1500)
+    const href = await first.getAttribute('href')
+    expect(href).toBeTruthy()
+    const filterSource = new URL(href!, page.url()).searchParams.get('exchange')
+    expect(filterSource).toBeTruthy()
+
+    const filteredResponsePromise = page.waitForResponse((response) => {
+      if (!response.url().includes('/api/traders?') || response.status() !== 200) return false
+      return new URL(response.url()).searchParams.get('exchange') === filterSource
+    })
+    await first.click()
+    const filteredResponse = await filteredResponsePromise
+    await expect(page).toHaveURL(new RegExp(`exchange=${encodeURIComponent(filterSource!)}`))
+    const filteredBody = (await filteredResponse.json()) as {
+      traders: Array<{ source: string }>
+      totalCount: number
+    }
+    expect(filteredBody.totalCount).toBeGreaterThan(0)
+    expect(filteredBody.traders.length).toBeGreaterThan(0)
+    expect(filteredBody.traders.every(({ source }) => source === filterSource)).toBe(true)
 
     const ranking = page.locator('.home-ranking-section')
-    console.log(`[Test 6] Ranking visible: ${await ranking.isVisible().catch(() => false)}`)
+    await expect(ranking).toBeVisible()
+
+    // A copied/bookmarked URL must restore the same server-side source filter.
+    const reloadedResponsePromise = page.waitForResponse((response) => {
+      if (!response.url().includes('/api/traders?') || response.status() !== 200) return false
+      return new URL(response.url()).searchParams.get('exchange') === filterSource
+    })
+    await page.reload({ waitUntil: 'domcontentloaded' })
+    await dismissOverlays(page)
+    expect(await tryActivatePhase2(page, 30000)).toBe(true)
+    const reloadedResponse = await reloadedResponsePromise
+    const reloadedBody = (await reloadedResponse.json()) as {
+      traders: Array<{ source: string }>
+      totalCount: number
+    }
+    expect(page.url()).toContain(`exchange=${encodeURIComponent(filterSource!)}`)
+    expect(reloadedBody.totalCount).toBeGreaterThan(0)
+    expect(reloadedBody.traders.length).toBeGreaterThan(0)
+    expect(reloadedBody.traders.every(({ source }) => source === filterSource)).toBe(true)
+    expect(criticalSameHostBundleFailures(page, errorLog)).toEqual([])
+
     await page.screenshot({ path: '/tmp/e2e-06-exchange-filter.png', fullPage: false })
     console.log('[Test 6] PASS')
   })
@@ -305,11 +365,11 @@ test.describe('Homepage & Rankings E2E', () => {
     expect(body).not.toContain('Something went wrong')
     await expect(page.getByRole('navigation').first()).toBeVisible({ timeout: 10000 })
 
-    // Bottom nav
+    expect(await tryActivatePhase2(page, 30000)).toBe(true)
+
+    // Bottom nav is a required mobile interaction surface, not an advisory log.
     const bottomNav = page.locator('nav.mobile-bottom-nav')
-    console.log(
-      `[Test 7] Bottom nav: ${await bottomNav.isVisible({ timeout: 5000 }).catch(() => false)}`
-    )
+    await expect(bottomNav).toBeVisible({ timeout: 10000 })
 
     // SSR ranking rows should be visible even without Phase 2
     const ssrRows = page.locator('.ssr-row')
@@ -318,10 +378,6 @@ test.describe('Homepage & Rankings E2E', () => {
       await expect(ssrRows.first()).toBeVisible({ timeout: 10000 })
       console.log(`[Test 7] SSR rows: ${ssrCount}`)
     }
-
-    // Try Phase 2 briefly
-    await page.mouse.move(50, 50)
-    await page.waitForTimeout(5000)
 
     const ranking = page.locator('.home-ranking-section')
     if (await ranking.isVisible({ timeout: 5000 }).catch(() => false)) {
@@ -335,7 +391,8 @@ test.describe('Homepage & Rankings E2E', () => {
     const overflow = await page.evaluate(
       () => document.documentElement.scrollWidth > document.documentElement.clientWidth
     )
-    if (overflow) console.log('[Test 7] WARNING: Horizontal overflow')
+    expect(overflow).toBe(false)
+    expect(criticalSameHostBundleFailures(page, errorLog)).toEqual([])
 
     await page.screenshot({ path: '/tmp/e2e-07-mobile.png', fullPage: true })
     console.log('[Test 7] PASS')
