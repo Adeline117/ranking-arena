@@ -880,7 +880,11 @@ export async function publishHistoryRows(
         `INSERT INTO arena.ingest_cursors (trader_id, kind, cursor_value, updated_at)
          VALUES ($1, $2, $3, now())
          ON CONFLICT (trader_id, kind)
-         DO UPDATE SET cursor_value = EXCLUDED.cursor_value, updated_at = now()`,
+         DO UPDATE SET cursor_value = EXCLUDED.cursor_value, updated_at = now()
+         -- Caller checks are not enough: Tier-B and Tier-C can commit out of
+         -- order. The database is the final monotonic checkpoint authority.
+         WHERE EXCLUDED.cursor_value::timestamptz
+               > arena.ingest_cursors.cursor_value::timestamptz`,
         [traderId, kind, newCursor]
       )
     }
