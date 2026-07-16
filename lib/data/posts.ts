@@ -774,7 +774,12 @@ export async function togglePostReaction(
   postId: string,
   userId: string,
   reactionType: 'up' | 'down'
-): Promise<{ action: 'added' | 'removed' | 'changed'; reaction: 'up' | 'down' | null }> {
+): Promise<{
+  action: 'added' | 'removed' | 'changed'
+  reaction: 'up' | 'down' | null
+  like_count: number
+  dislike_count: number
+}> {
   const { data, error } = await supabase.rpc('toggle_post_reaction', {
     p_post_id: postId,
     p_user_id: userId,
@@ -783,9 +788,33 @@ export async function togglePostReaction(
 
   if (error) throw error
 
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Post reaction RPC returned an invalid acknowledgement')
+  }
+  const result = data as Record<string, unknown>
+  const action = result.action
+  const reaction = result.reaction
+  const validAction = action === 'added' || action === 'removed' || action === 'changed'
+  const validReaction =
+    (action === 'removed' && reaction === null) ||
+    ((action === 'added' || action === 'changed') && reaction === reactionType)
+  if (
+    result.status !== action ||
+    !validAction ||
+    !validReaction ||
+    !Number.isSafeInteger(result.like_count) ||
+    (result.like_count as number) < 0 ||
+    !Number.isSafeInteger(result.dislike_count) ||
+    (result.dislike_count as number) < 0
+  ) {
+    throw new Error('Post reaction RPC returned an invalid acknowledgement')
+  }
+
   return {
-    action: data.action as 'added' | 'removed' | 'changed',
-    reaction: (data.reaction as 'up' | 'down') ?? null,
+    action,
+    reaction: reaction as 'up' | 'down' | null,
+    like_count: result.like_count as number,
+    dislike_count: result.dislike_count as number,
   }
 }
 
@@ -816,53 +845,61 @@ export async function togglePostVote(
   postId: string,
   userId: string,
   choice: 'bull' | 'bear' | 'wait'
-): Promise<{ action: 'added' | 'removed' | 'changed'; vote: 'bull' | 'bear' | 'wait' | null }> {
-  // 检查是否已有投票
-  const { data: existing, error: existingError } = await supabase
-    .from('post_votes')
-    .select('id, choice')
-    .eq('post_id', postId)
-    .eq('user_id', userId)
-    .maybeSingle()
-  if (existingError)
-    logger.warn('[togglePostVote] post_votes lookup error (drift?):', existingError.message)
+): Promise<{
+  action: 'added' | 'removed' | 'changed'
+  vote: 'bull' | 'bear' | 'wait' | null
+  poll: { bull: number; bear: number; wait: number }
+}> {
+  const { data, error } = await supabase.rpc('toggle_post_vote_atomic', {
+    p_actor_id: userId,
+    p_post_id: postId,
+    p_choice: choice,
+  })
 
-  if (existing) {
-    if (existing.choice === choice) {
-      // 取消投票 - use compound match for race safety.
-      // Must check the error: a swallowed failure returns action:'removed' while
-      // the vote persists, desyncing the UI. Throw so the route surfaces it.
-      const { error } = await supabase
-        .from('post_votes')
-        .delete()
-        .eq('post_id', postId)
-        .eq('user_id', userId)
-      if (error) throw error
-      return { action: 'removed', vote: null }
-    } else {
-      // 改变投票
-      const { error } = await supabase
-        .from('post_votes')
-        .update({ choice })
-        .eq('post_id', postId)
-        .eq('user_id', userId)
-      if (error) throw error
-      return { action: 'changed', vote: choice }
-    }
-  } else {
-    // 新增投票 - use upsert to handle concurrent inserts
-    const { error } = await supabase.from('post_votes').upsert(
-      {
-        post_id: postId,
-        user_id: userId,
-        choice,
-      },
-      { onConflict: 'post_id,user_id' }
-    )
-    if (error) {
-      throw error
-    }
-    return { action: 'added', vote: choice }
+  if (error) throw error
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Post vote RPC returned an invalid acknowledgement')
+  }
+
+  const result = data as Record<string, unknown>
+  const action = result.action
+  const vote = result.vote
+  const poll = result.poll
+  const validAction = action === 'added' || action === 'removed' || action === 'changed'
+  const validVote =
+    (action === 'removed' && vote === null) ||
+    ((action === 'added' || action === 'changed') && vote === choice)
+  if (
+    result.status !== action ||
+    !validAction ||
+    !validVote ||
+    !poll ||
+    typeof poll !== 'object' ||
+    Array.isArray(poll)
+  ) {
+    throw new Error('Post vote RPC returned an invalid acknowledgement')
+  }
+
+  const counts = poll as Record<string, unknown>
+  if (
+    !Number.isSafeInteger(counts.bull) ||
+    (counts.bull as number) < 0 ||
+    !Number.isSafeInteger(counts.bear) ||
+    (counts.bear as number) < 0 ||
+    !Number.isSafeInteger(counts.wait) ||
+    (counts.wait as number) < 0
+  ) {
+    throw new Error('Post vote RPC returned an invalid acknowledgement')
+  }
+
+  return {
+    action,
+    vote: vote as 'bull' | 'bear' | 'wait' | null,
+    poll: {
+      bull: counts.bull as number,
+      bear: counts.bear as number,
+      wait: counts.wait as number,
+    },
   }
 }
 

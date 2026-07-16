@@ -14,6 +14,7 @@ import logger from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
 import { socialFeatureGuard } from '@/lib/features'
 import { getUserHandle } from '@/lib/supabase/server'
+import { z } from 'zod'
 
 type RouteContext = { params: Promise<{ id: string }> }
 
@@ -26,6 +27,10 @@ export async function POST(request: NextRequest, context: RouteContext) {
   if (rl) return rl
 
   const { id } = await context.params
+  const parsedPostId = z.string().uuid().safeParse(id)
+  if (!parsedPostId.success) {
+    return NextResponse.json({ success: false, error: 'Invalid post ID' }, { status: 400 })
+  }
 
   const handler = withAuth(
     async ({ user, supabase, request: req }) => {
@@ -42,26 +47,21 @@ export async function POST(request: NextRequest, context: RouteContext) {
         }) ?? 'up'
 
       // 执行点赞/踩操作
-      const result = await togglePostReaction(supabase, id, user.id, reactionType)
+      const result = await togglePostReaction(supabase, parsedPostId.data, user.id, reactionType)
 
       // 清除帖子列表缓存
       deleteServerCacheByPrefix('posts:')
 
-      // 获取更新后的帖子信息（一次查询，同时用于计数和通知）
-      let likeCount: number | null = 0
-      let dislikeCount: number | null = 0
+      // Fetch payload only when a notification may be emitted. The atomic RPC
+      // already returned source-of-truth counters in its strict acknowledgement.
       let post: Awaited<ReturnType<typeof getPostById>> = null
 
-      try {
-        post = await getPostById(supabase, id, user.id)
-        likeCount = post?.like_count || 0
-        dislikeCount = post?.dislike_count || 0
-      } catch (fetchError) {
-        // Reaction saved but couldn't fetch actual counts.
-        // Return null so client keeps its optimistic count instead of wrong "1".
-        logger.warn('[posts/[id]/like] Failed to fetch updated counts:', fetchError)
-        likeCount = null
-        dislikeCount = null
+      if (result.action === 'added' && reactionType === 'up') {
+        try {
+          post = await getPostById(supabase, parsedPostId.data, user.id)
+        } catch (fetchError) {
+          logger.warn('[posts/[id]/like] Failed to fetch notification post:', fetchError)
+        }
       }
 
       // Send like notification (fire-and-forget, deduped — same actor+post within 1h won't send again)
@@ -81,8 +81,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
                 title: `${userHandle} liked your post`,
                 message: (post!.title || '').slice(0, 100) || 'your post',
                 actor_id: user.id,
-                link: `/post/${id}`,
-                reference_id: id,
+                link: `/post/${parsedPostId.data}`,
+                reference_id: parsedPostId.data,
                 read: false,
               },
               'Like notification'
@@ -95,8 +95,8 @@ export async function POST(request: NextRequest, context: RouteContext) {
       return success({
         action: result.action,
         reaction: result.reaction,
-        like_count: likeCount,
-        dislike_count: dislikeCount,
+        like_count: result.like_count,
+        dislike_count: result.dislike_count,
       })
     },
     { name: 'posts-like', rateLimit: 'write' }
