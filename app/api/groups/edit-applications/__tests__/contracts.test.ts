@@ -117,6 +117,57 @@ describe('group edit application contracts', () => {
     ).toBe(false)
   })
 
+  it.each(['nul\u0000byte', '\ud800', '\udc00'])(
+    'rejects PostgreSQL-incompatible text input and result data %#',
+    (invalidText) => {
+      expect(
+        groupEditApplicationInputSchema.safeParse(validInput({ name: invalidText })).success
+      ).toBe(false)
+      expect(
+        groupEditApplicationInputSchema.safeParse(
+          validInput({ rules_json: [{ zh: invalidText, en: 'valid' }] })
+        ).success
+      ).toBe(false)
+      expect(
+        rejectGroupEditApplicationInputSchema.safeParse({
+          operation_id: OPERATION_ID,
+          reason: invalidText,
+        }).success
+      ).toBe(false)
+      expect(
+        submitGroupEditApplicationResultSchema.safeParse({
+          status: 'submitted',
+          operation_id: OPERATION_ID,
+          application: validSnapshot({ description: invalidText }),
+          applied: true,
+        }).success
+      ).toBe(false)
+      expect(
+        reviewGroupEditApplicationResultSchema.safeParse({
+          status: 'approved',
+          operation_id: OPERATION_ID,
+          application_id: APPLICATION_ID,
+          applicant_id: ACTOR_ID,
+          group_id: GROUP_ID,
+          group_name: invalidText,
+          reviewed_at: CREATED_AT,
+          applied: true,
+        }).success
+      ).toBe(false)
+    }
+  )
+
+  it('still accepts well-formed astral Unicode by code point rather than UTF-16 unit', () => {
+    const fiftyAstralCharacters = '😀'.repeat(50)
+
+    const parsed = groupEditApplicationInputSchema.safeParse(
+      validInput({ name: fiftyAstralCharacters })
+    )
+
+    expect(parsed.success).toBe(true)
+    if (parsed.success) expect(parsed.data.name).toBe(fiftyAstralCharacters)
+  })
+
   it.each([
     validInput({ actor_id: ACTOR_ID }),
     validInput({ group_id: GROUP_ID }),

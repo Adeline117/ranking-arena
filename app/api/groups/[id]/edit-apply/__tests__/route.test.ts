@@ -318,6 +318,34 @@ describe('POST /api/groups/[id]/edit-apply atomic boundary', () => {
     expect(mockFrom).not.toHaveBeenCalled()
   })
 
+  it('rejects NUL/lone surrogates before RPC while accepting 50 astral code points', async () => {
+    const fiftyEmoji = '😀'.repeat(50)
+    mockRpc.mockResolvedValue({
+      data: {
+        status: 'submitted',
+        operation_id: OPERATION_ID,
+        application: application({ name: fiftyEmoji }),
+        applied: true,
+      },
+      error: null,
+    })
+
+    const accepted = await POST(request(validBody({ name: fiftyEmoji })))
+    const rejected = await Promise.all([
+      POST(request(validBody({ name: 'nul\u0000byte' }))),
+      POST(request(validBody({ description: '\ud800' }))),
+      POST(request(validBody({ rules_json: [{ zh: 'valid', en: '\udc00' }] }))),
+    ])
+
+    expect(accepted.status).toBe(200)
+    expect(rejected.map((response) => response.status)).toEqual([400, 400, 400])
+    expect(mockRpc).toHaveBeenCalledTimes(1)
+    expect(mockRpc).toHaveBeenCalledWith(
+      'submit_group_edit_application_atomic',
+      expect.objectContaining({ p_name: fiftyEmoji })
+    )
+  })
+
   it('keeps the POST write boundary RPC-only', () => {
     const source = readFileSync(
       join(process.cwd(), 'app/api/groups/[id]/edit-apply/route.ts'),
