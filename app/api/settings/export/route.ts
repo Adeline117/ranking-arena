@@ -42,6 +42,7 @@ interface ExportData {
     preferences: Record<string, unknown> | null
   }
   account: {
+    bindings: unknown[]
     login_sessions: unknown[]
     api_keys: unknown[]
     passkeys: unknown[]
@@ -280,6 +281,21 @@ const PREFERENCES_EXPORT_DATASET = {
   },
 } satisfies CursorExportDataset
 
+const ACCOUNT_BINDINGS_EXPORT_DATASET = {
+  name: 'account.bindings',
+  table: 'account_bindings',
+  selectColumns: ['platform', 'account_id', 'created_at'],
+  ownerPredicate: {
+    column: 'user_id',
+    operator: 'eq',
+    valueType: 'uuid',
+  },
+  cursor: {
+    order: 'asc',
+    columns: [{ column: 'platform', valueType: 'string' }],
+  },
+} satisfies CursorExportDataset
+
 function normalizeFollowRows(rows: Record<string, unknown>[], direction: 'following' | 'follower') {
   const otherUserColumn = direction === 'following' ? 'following_id' : 'follower_id'
   return rows.map((row) => ({
@@ -324,6 +340,14 @@ function normalizePreferences(rows: Record<string, unknown>[]): Record<string, u
     created_at: row.created_at,
     updated_at: row.updated_at,
   }
+}
+
+function normalizeAccountBindings(rows: Record<string, unknown>[]) {
+  return rows.map((row) => ({
+    platform: row.platform,
+    account_id: row.account_id,
+    created_at: row.created_at,
+  }))
 }
 
 function parseStoredTimestamp(value: string, field: string): number {
@@ -435,6 +459,7 @@ export async function POST(request: NextRequest) {
       backupCodes,
       recoveryTokens,
       preferences,
+      accountBindings,
     ] = await Promise.all([
       fetchAllExportRows(supabase, EXPORT_DATASETS.posts, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.comments, user.id),
@@ -449,6 +474,7 @@ export async function POST(request: NextRequest) {
       fetchAllExportRows(supabase, EXPORT_DATASETS.backupCodes, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.recoveryTokens, user.id),
       fetchAllExportRowsByCursor(supabase, PREFERENCES_EXPORT_DATASET, user.id),
+      fetchAllExportRowsByCursor(supabase, ACCOUNT_BINDINGS_EXPORT_DATASET, user.id),
     ])
 
     const exportData: ExportData = {
@@ -468,6 +494,7 @@ export async function POST(request: NextRequest) {
         preferences: normalizePreferences(preferences),
       },
       account: {
+        bindings: normalizeAccountBindings(accountBindings),
         login_sessions: loginSessions,
         api_keys: apiKeys,
         passkeys,
