@@ -201,6 +201,8 @@ describe('group-application client operation ledger', () => {
     expect(groupProfileEditReviewScope(ACTOR_A, APPLICATION_ID)).not.toBe(
       `review:${ACTOR_A}:${APPLICATION_ID}`
     )
+    expect(() => groupProfileEditSubmitScope(ACTOR_A, 'not-a-uuid')).toThrow(TypeError)
+    expect(() => groupProfileEditReviewScope('not-a-uuid', APPLICATION_ID)).toThrow(TypeError)
   })
 
   it('trims and NFC-normalizes the complete profile-edit snapshot by code point', () => {
@@ -244,7 +246,7 @@ describe('group-application client operation ledger', () => {
         description_en: null,
         is_premium_only: false,
         name: null,
-        name_en: ' English fallback ',
+        name_en: ' English-only edit ',
         role_names: null,
         rules_json: null,
       })
@@ -253,8 +255,8 @@ describe('group-application client operation ledger', () => {
       description: null,
       description_en: null,
       is_premium_only: false,
-      name: 'English fallback',
-      name_en: 'English fallback',
+      name: '',
+      name_en: 'English-only edit',
       role_names: null,
       rules: null,
       rules_json: null,
@@ -369,6 +371,7 @@ describe('group-application client operation ledger', () => {
       ],
       [{ rules: '😀'.repeat(10_001) }, { rules: '😀'.repeat(10_001) }],
       [{ created_at: '2026-07-16 12:00:00' }, {}],
+      [{ created_at: '2026-02-30T12:00:00.000Z' }, {}],
       [
         { role_names: { ...payload.role_names!, extra: true } },
         { role_names: { ...payload.role_names!, extra: true } },

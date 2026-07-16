@@ -7,10 +7,14 @@ import { logger } from '@/lib/logger'
 import {
   acquireGroupApplicationOperation,
   completeGroupApplicationOperation,
+  groupProfileEditReviewScope,
   isCurrentGroupApplicationOperation,
   isExactApproveGroupApplicationAck,
+  isExactApproveGroupProfileEditAck,
   isExactRejectGroupApplicationAck,
+  isExactRejectGroupProfileEditAck,
   runGroupApplicationSingleFlight,
+  startGroupApplicationSingleFlight,
   type GroupApplicationOperation,
 } from '@/lib/groups/application-operation'
 import { jwtSubject } from '@/lib/auth/token-subject'
@@ -95,8 +99,8 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
     {}
   )
   const actionOperationIdRef = useRef<Record<string, string>>({})
+  const editActionOperationIdRef = useRef<Record<string, string>>({})
   const editLoadRequestIdRef = useRef<Record<string, number>>({})
-  const editActionRequestIdRef = useRef<Record<string, number>>({})
   const editRequestSequenceRef = useRef(0)
 
   const loadApplications = useCallback(async () => {
@@ -135,60 +139,70 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
     }
   }, [accessToken, stateOwnerKey])
 
-  const loadEditApplications = useCallback(async () => {
-    const actorId = jwtSubject(accessToken)
-    const requestScope = getViewerScope()
-    const requestStateOwnerKey = `${requestScope.viewerKey}:${requestScope.sessionGeneration}`
-    if (
-      !accessToken ||
-      !actorId ||
-      requestScope.userId !== actorId ||
-      requestScope.viewerKey !== `user:${actorId}` ||
-      stateOwnerKey !== requestStateOwnerKey ||
-      !isViewerScopeCurrent(requestScope)
-    )
-      return
-
-    const requestId = ++editRequestSequenceRef.current
-    editLoadRequestIdRef.current[stateOwnerKey] = requestId
-    setEditApplicationsLoading(true)
-
-    try {
-      const result = await authedFetch<{ applications?: GroupEditApplication[] }>(
-        '/api/groups/edit-applications?status=pending',
-        'GET',
-        accessToken,
-        undefined,
-        15_000,
-        {
-          expectedUserId: actorId,
-          expectedSessionGeneration: requestScope.sessionGeneration,
-        }
-      )
+  const loadEditApplicationsGuarded = useCallback(
+    async (commitGuard?: () => boolean) => {
+      const actorId = jwtSubject(accessToken)
+      const requestScope = getViewerScope()
+      const requestStateOwnerKey = `${requestScope.viewerKey}:${requestScope.sessionGeneration}`
       if (
-        result.stale ||
+        !accessToken ||
+        !actorId ||
+        requestScope.userId !== actorId ||
+        requestScope.viewerKey !== `user:${actorId}` ||
+        stateOwnerKey !== requestStateOwnerKey ||
         !isViewerScopeCurrent(requestScope) ||
-        editLoadRequestIdRef.current[stateOwnerKey] !== requestId
+        (commitGuard && !commitGuard())
       )
         return
 
-      if (result.data?.applications) {
-        setEditApplications(result.data.applications)
+      const requestId = ++editRequestSequenceRef.current
+      editLoadRequestIdRef.current[stateOwnerKey] = requestId
+      setEditApplicationsLoading(true)
+
+      try {
+        const result = await authedFetch<{ applications?: GroupEditApplication[] }>(
+          '/api/groups/edit-applications?status=pending',
+          'GET',
+          accessToken,
+          undefined,
+          15_000,
+          {
+            expectedUserId: actorId,
+            expectedSessionGeneration: requestScope.sessionGeneration,
+          }
+        )
+        if (
+          result.stale ||
+          !isViewerScopeCurrent(requestScope) ||
+          editLoadRequestIdRef.current[stateOwnerKey] !== requestId ||
+          (commitGuard && !commitGuard())
+        )
+          return
+
+        if (result.data?.applications) {
+          setEditApplications(result.data.applications)
+        }
+      } catch (err) {
+        if (
+          isViewerScopeCurrent(requestScope) &&
+          editLoadRequestIdRef.current[stateOwnerKey] === requestId
+        ) {
+          logger.error('Error loading edit applications:', err)
+        }
+      } finally {
+        if (editLoadRequestIdRef.current[stateOwnerKey] === requestId) {
+          delete editLoadRequestIdRef.current[stateOwnerKey]
+          if (isViewerScopeCurrent(requestScope)) setEditApplicationsLoading(false)
+        }
       }
-    } catch (err) {
-      if (
-        isViewerScopeCurrent(requestScope) &&
-        editLoadRequestIdRef.current[stateOwnerKey] === requestId
-      ) {
-        logger.error('Error loading edit applications:', err)
-      }
-    } finally {
-      if (editLoadRequestIdRef.current[stateOwnerKey] === requestId) {
-        delete editLoadRequestIdRef.current[stateOwnerKey]
-        if (isViewerScopeCurrent(requestScope)) setEditApplicationsLoading(false)
-      }
-    }
-  }, [accessToken, stateOwnerKey])
+    },
+    [accessToken, stateOwnerKey]
+  )
+
+  const loadEditApplications = useCallback(
+    () => loadEditApplicationsGuarded(),
+    [loadEditApplicationsGuarded]
+  )
 
   const approveApplication = useCallback(
     async (applicationId: string) => {
@@ -385,9 +399,13 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
       const actorId = jwtSubject(accessToken)
       const requestScope = getViewerScope()
       const requestStateOwnerKey = `${requestScope.viewerKey}:${requestScope.sessionGeneration}`
+      const expectedApplication = editApplications.find(
+        (application) => application.id === applicationId
+      )
       if (
         !accessToken ||
         !actorId ||
+        !expectedApplication ||
         requestScope.userId !== actorId ||
         requestScope.viewerKey !== `user:${actorId}` ||
         stateOwnerKey !== requestStateOwnerKey ||
@@ -397,58 +415,118 @@ export function useApplications(accessToken: string | null, showToast?: ToastFn)
 
       const loadingKey = `edit_${applicationId}`
       const actionOwnerKey = `${stateOwnerKey}:${loadingKey}`
-      const requestId = ++editRequestSequenceRef.current
-      editActionRequestIdRef.current[actionOwnerKey] = requestId
-      setActionLoading((prev) => ({ ...prev, [loadingKey]: true }))
+      const expectedGroupId = expectedApplication.group_id
+      const normalizedReason = reason?.trim().normalize('NFC') || null
+      let operation: GroupApplicationOperation | null = null
+      let ownsPhysicalRequest = false
 
       try {
-        const result = await authedFetch<{ error?: unknown }>(
-          `/api/groups/edit-applications/${applicationId}/${decision}`,
-          'POST',
-          accessToken,
-          decision === 'reject' ? { reason } : undefined,
-          15_000,
+        operation = await acquireGroupApplicationOperation(
+          groupProfileEditReviewScope(actorId, applicationId),
+          actorId,
           {
-            expectedUserId: actorId,
-            expectedSessionGeneration: requestScope.sessionGeneration,
+            application_id: applicationId,
+            decision,
+            reason: decision === 'reject' ? normalizedReason : null,
           }
         )
-        if (
-          result.stale ||
-          !isViewerScopeCurrent(requestScope) ||
-          editActionRequestIdRef.current[actionOwnerKey] !== requestId
-        )
-          return false
+        if (!isViewerScopeCurrent(requestScope)) return false
 
-        if (result.ok) {
-          setEditApplications((prev) =>
-            prev.filter((application) => application.id !== applicationId)
+        const flight = startGroupApplicationSingleFlight(operation, () =>
+          authedFetch<unknown>(
+            `/api/groups/edit-applications/${applicationId}/${decision}`,
+            'POST',
+            accessToken,
+            decision === 'reject'
+              ? { operation_id: operation!.operationId, reason: normalizedReason }
+              : { operation_id: operation!.operationId },
+            15_000,
+            {
+              expectedUserId: actorId,
+              expectedSessionGeneration: requestScope.sessionGeneration,
+            }
           )
-          return true
+        )
+        if (!flight.started) {
+          await flight.promise.catch(() => undefined)
+          return false
         }
 
+        ownsPhysicalRequest = true
+        editActionOperationIdRef.current[actionOwnerKey] = operation.operationId
+        setActionLoading((prev) => ({ ...prev, [loadingKey]: true }))
+
+        const result = await flight.promise
+        if (result.stale || !isViewerScopeCurrent(requestScope)) return false
+        const ownsActiveIntent = () =>
+          editActionOperationIdRef.current[actionOwnerKey] === operation!.operationId &&
+          isCurrentGroupApplicationOperation(operation!)
+        if (!ownsActiveIntent()) return false
+
+        const exactAcknowledgement =
+          decision === 'approve'
+            ? isExactApproveGroupProfileEditAck(
+                result.data,
+                operation,
+                applicationId,
+                expectedGroupId
+              )
+            : isExactRejectGroupProfileEditAck(
+                result.data,
+                operation,
+                applicationId,
+                expectedGroupId,
+                normalizedReason
+              )
+        const terminalConflict = !result.ok && result.status === 409
+
+        if (result.ok && exactAcknowledgement) {
+          await loadEditApplicationsGuarded(ownsActiveIntent)
+          if (!isViewerScopeCurrent(requestScope) || !ownsActiveIntent()) return false
+          return completeGroupApplicationOperation(operation)
+        }
+
+        if (terminalConflict) {
+          await loadEditApplicationsGuarded(ownsActiveIntent)
+          if (!isViewerScopeCurrent(requestScope) || !ownsActiveIntent()) return false
+        }
+
+        if (!result.ok && result.status >= 400 && result.status < 500) {
+          if (!completeGroupApplicationOperation(operation)) return false
+        }
         const errorMessage =
-          typeof result.data?.error === 'string' ? result.data.error : t('adminOperationFailed')
+          typeof result.data === 'object' &&
+          result.data !== null &&
+          'error' in result.data &&
+          typeof (result.data as { error?: unknown }).error === 'string'
+            ? (result.data as { error: string }).error
+            : t('adminOperationFailed')
         showToast?.(errorMessage, 'error')
         return false
       } catch (_err) {
         if (
           isViewerScopeCurrent(requestScope) &&
-          editActionRequestIdRef.current[actionOwnerKey] === requestId
+          (!operation || editActionOperationIdRef.current[actionOwnerKey] === operation.operationId)
         ) {
           showToast?.(t('adminNetworkError'), 'error')
         }
         return false
       } finally {
-        if (editActionRequestIdRef.current[actionOwnerKey] === requestId) {
-          delete editActionRequestIdRef.current[actionOwnerKey]
-          if (isViewerScopeCurrent(requestScope)) {
-            setActionLoading((prev) => ({ ...prev, [loadingKey]: false }))
-          }
-        }
+        const completedOperation = operation
+        if (ownsPhysicalRequest && completedOperation)
+          queueMicrotask(() => {
+            if (
+              editActionOperationIdRef.current[actionOwnerKey] === completedOperation.operationId
+            ) {
+              delete editActionOperationIdRef.current[actionOwnerKey]
+              if (isViewerScopeCurrent(requestScope)) {
+                setActionLoading((prev) => ({ ...prev, [loadingKey]: false }))
+              }
+            }
+          })
       }
     },
-    [accessToken, showToast, stateOwnerKey, t]
+    [accessToken, editApplications, loadEditApplicationsGuarded, showToast, stateOwnerKey, t]
   )
 
   const approveEditApplication = useCallback(

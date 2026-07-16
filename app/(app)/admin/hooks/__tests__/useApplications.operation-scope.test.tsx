@@ -56,6 +56,29 @@ function editApplication(id: string, applicantId: string, name: string) {
   }
 }
 
+function editReviewAck(
+  callIndex: number,
+  decision: 'approve' | 'reject',
+  reason: string | null = null
+) {
+  const application = {
+    id: APPLICATION_ID,
+    group_id: GROUP_ID,
+    status: decision === 'approve' ? 'approved' : 'rejected',
+    ...(decision === 'reject' ? { reject_reason: reason } : {}),
+  }
+  return {
+    ok: true,
+    status: 200,
+    data: {
+      success: true,
+      message: decision === 'approve' ? 'approved' : 'rejected',
+      operation_id: operationBody(callIndex).operation_id,
+      application,
+    },
+  }
+}
+
 describe('useApplications operation/viewer scope', () => {
   beforeAll(() => {
     Object.defineProperty(globalThis, 'crypto', { configurable: true, value: webcrypto })
@@ -425,6 +448,16 @@ describe('useApplications operation/viewer scope', () => {
     const oldErrorResponse = deferred<{ ok: boolean; status: number; data: unknown }>()
     const newActionResponse = deferred<{ ok: boolean; status: number; data: unknown }>()
     mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: {
+          applications: [
+            editApplication(APPLICATION_ID, ACTOR_A, 'viewer A edit'),
+            editApplication(EDIT_APPLICATION_B_ID, ACTOR_A, 'viewer A second edit'),
+          ],
+        },
+      })
       .mockReturnValueOnce(oldActionResponse.promise)
       .mockReturnValueOnce(oldErrorResponse.promise)
       .mockResolvedValueOnce({
@@ -438,9 +471,23 @@ describe('useApplications operation/viewer scope', () => {
         },
       })
       .mockReturnValueOnce(newActionResponse.promise)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: {
+          applications: [
+            editApplication(APPLICATION_ID, ACTOR_B, 'viewer B edit'),
+            editApplication(EDIT_APPLICATION_B_ID, ACTOR_B, 'viewer B second edit'),
+          ],
+        },
+      })
     const showToast = jest.fn()
     const hook = renderHook(({ accessToken }) => useApplications(accessToken, showToast), {
       initialProps: { accessToken: token(ACTOR_A, 'edit-action-a') },
+    })
+
+    await act(async () => {
+      await hook.result.current.loadEditApplications()
     })
 
     let oldAction!: Promise<boolean>
@@ -452,7 +499,7 @@ describe('useApplications operation/viewer scope', () => {
         'old viewer reason'
       )
     })
-    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(3))
 
     const scopeB = synchronizeViewerScope(true, ACTOR_B)
     hook.rerender({ accessToken: token(ACTOR_B, 'edit-action-b') })
@@ -471,8 +518,11 @@ describe('useApplications operation/viewer scope', () => {
     await waitFor(() =>
       expect(hook.result.current.actionLoading[`edit_${APPLICATION_ID}`]).toBe(true)
     )
-    expect(mockAuthedFetch.mock.calls[3][3]).toEqual({ reason: 'viewer B reason' })
-    expect(mockAuthedFetch.mock.calls[3][5]).toEqual({
+    expect(mockAuthedFetch.mock.calls[4][3]).toEqual({
+      operation_id: expect.any(String),
+      reason: 'viewer B reason',
+    })
+    expect(mockAuthedFetch.mock.calls[4][5]).toEqual({
       expectedUserId: ACTOR_B,
       expectedSessionGeneration: scopeB.sessionGeneration,
     })
@@ -507,6 +557,7 @@ describe('useApplications operation/viewer scope', () => {
       newActionResponse.resolve({ ok: false, status: 409, data: { error: 'viewer B failed' } })
       await expect(newAction).resolves.toBe(false)
     })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(6)
     expect(showToast).toHaveBeenCalledTimes(1)
     expect(showToast).toHaveBeenCalledWith('viewer B failed', 'error')
     expect(hook.result.current.editApplications.map(({ id }) => id)).toEqual([
@@ -528,6 +579,11 @@ describe('useApplications operation/viewer scope', () => {
       })
       .mockReturnValueOnce(firstResponse.promise)
       .mockReturnValueOnce(secondResponse.promise)
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { applications: [editApplication(APPLICATION_ID, ACTOR_A, 'authoritative edit')] },
+      })
     const showToast = jest.fn()
     const hook = renderHook(() => useApplications(token(ACTOR_A, 'same-edit-viewer'), showToast))
 
@@ -546,6 +602,13 @@ describe('useApplications operation/viewer scope', () => {
       second = hook.result.current.rejectEditApplication(APPLICATION_ID, 'latest intent')
     })
     await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(3))
+    const firstOperationId = operationBody(1).operation_id
+    const secondOperationId = operationBody(2).operation_id
+    expect(secondOperationId).not.toBe(firstOperationId)
+    expect(mockAuthedFetch.mock.calls[2][3]).toEqual({
+      operation_id: secondOperationId,
+      reason: 'latest intent',
+    })
 
     await act(async () => {
       firstResponse.resolve({ ok: true, status: 200, data: { success: true } })
@@ -559,6 +622,7 @@ describe('useApplications operation/viewer scope', () => {
       secondResponse.resolve({ ok: false, status: 409, data: { error: 'latest intent failed' } })
       await expect(second).resolves.toBe(false)
     })
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(4)
     expect(showToast).toHaveBeenCalledTimes(1)
     expect(showToast).toHaveBeenCalledWith('latest intent failed', 'error')
     expect(hook.result.current.editApplications.map(({ id }) => id)).toEqual([APPLICATION_ID])
@@ -567,5 +631,92 @@ describe('useApplications operation/viewer scope', () => {
       expectedUserId: ACTOR_A,
       expectedSessionGeneration: scope.sessionGeneration,
     })
+  })
+
+  it('single-flights one exact edit review and reconciles the pending list once', async () => {
+    synchronizeViewerScope(true, ACTOR_A)
+    const reviewResponse = deferred<{ ok: boolean; status: number; data: unknown }>()
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { applications: [editApplication(APPLICATION_ID, ACTOR_A, 'pending edit')] },
+      })
+      .mockReturnValueOnce(reviewResponse.promise)
+      .mockResolvedValueOnce({ ok: true, status: 200, data: { applications: [] } })
+    const hook = renderHook(() => useApplications(token(ACTOR_A, 'double-edit-review')))
+
+    await act(async () => {
+      await hook.result.current.loadEditApplications()
+    })
+
+    let first!: Promise<boolean>
+    let second!: Promise<boolean>
+    act(() => {
+      first = hook.result.current.approveEditApplication(APPLICATION_ID)
+      second = hook.result.current.approveEditApplication(APPLICATION_ID)
+    })
+    await waitFor(() => expect(mockAuthedFetch).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      reviewResponse.resolve(editReviewAck(1, 'approve'))
+      await expect(Promise.all([first, second])).resolves.toEqual([true, false])
+    })
+
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(3)
+    expect(mockAuthedFetch.mock.calls[1][3]).toEqual({
+      operation_id: expect.any(String),
+    })
+    expect(hook.result.current.editApplications).toEqual([])
+    expect(hook.result.current.actionLoading[`edit_${APPLICATION_ID}`]).toBe(false)
+  })
+
+  it('retains an invalid-ACK operation across NFC-equivalent retry and rotates on decision', async () => {
+    synchronizeViewerScope(true, ACTOR_A)
+    mockAuthedFetch
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { applications: [editApplication(APPLICATION_ID, ACTOR_A, 'pending edit')] },
+      })
+      .mockResolvedValueOnce({ ok: true, status: 200, data: { success: true } })
+      .mockResolvedValueOnce({ ok: false, status: 503, data: { error: 'retry later' } })
+      .mockResolvedValueOnce({ ok: false, status: 503, data: { error: 'approve later' } })
+    const showToast = jest.fn()
+    const hook = renderHook(() =>
+      useApplications(token(ACTOR_A, 'canonical-edit-review'), showToast)
+    )
+
+    await act(async () => {
+      await hook.result.current.loadEditApplications()
+    })
+    await act(async () => {
+      await expect(
+        hook.result.current.rejectEditApplication(APPLICATION_ID, ' Re\u0301ason 😀 ')
+      ).resolves.toBe(false)
+    })
+    await act(async () => {
+      await expect(
+        hook.result.current.rejectEditApplication(APPLICATION_ID, 'Réason 😀')
+      ).resolves.toBe(false)
+    })
+    await act(async () => {
+      await expect(hook.result.current.approveEditApplication(APPLICATION_ID)).resolves.toBe(false)
+    })
+
+    const firstReject = operationBody(1).operation_id
+    const canonicalRetry = operationBody(2).operation_id
+    const oppositeDecision = operationBody(3).operation_id
+    expect(canonicalRetry).toBe(firstReject)
+    expect(oppositeDecision).not.toBe(firstReject)
+    expect(mockAuthedFetch.mock.calls[1][3]).toEqual({
+      operation_id: firstReject,
+      reason: 'Réason 😀',
+    })
+    expect(mockAuthedFetch.mock.calls[2][3]).toEqual({
+      operation_id: firstReject,
+      reason: 'Réason 😀',
+    })
+    expect(showToast).toHaveBeenCalledTimes(3)
   })
 })

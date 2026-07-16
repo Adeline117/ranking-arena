@@ -16,9 +16,22 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useSubscription } from '@/app/components/home/hooks/useSubscription'
 import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
-import { getCsrfHeaders } from '@/lib/api/client'
+import { authedFetch, getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
+import { jwtSubject } from '@/lib/auth/token-subject'
+import { isViewerScopeCurrent, type ViewerScope } from '@/lib/auth/viewer-scope'
+import {
+  acquireGroupApplicationOperation,
+  canonicalizeGroupProfileEditPayload,
+  completeGroupApplicationOperation,
+  groupProfileEditSubmitScope,
+  isCurrentGroupApplicationOperation,
+  isExactSubmitGroupProfileEditAck,
+  startGroupApplicationSingleFlight,
+  type GroupApplicationOperation,
+} from '@/lib/groups/application-operation'
+import { useViewerSlotState } from '@/lib/groups/use-viewer-slot-state'
 
 import MemberList from './components/MemberList'
 import ContentManagement from './components/ContentManagement'
@@ -199,7 +212,8 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [editRules, setEditRules] = useState<Rule[]>([])
   const [newRuleZh, setNewRuleZh] = useState('')
   const [newRuleEn, setNewRuleEn] = useState('')
-  const [submitting, setSubmitting] = useState(false)
+  const profileEditStateOwnerKey = `${viewerKey}:${sessionGeneration}:${groupId}`
+  const [submitting, setSubmitting] = useViewerSlotState(profileEditStateOwnerKey, false)
   const [langTab, setLangTab] = useState<'zh' | 'en'>('zh')
   const [showMultiLang, setShowMultiLang] = useState(false)
   const [editAvatarUrl, setEditAvatarUrl] = useState('')
@@ -227,6 +241,21 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   const [notifyTitle, setNotifyTitle] = useState('')
   const [notifyMessage, setNotifyMessage] = useState('')
   const [notifySending, setNotifySending] = useState(false)
+  const profileEditSubmitOperationIdRef = useRef<Record<string, string>>({})
+  const profileEditContextRef = useRef({
+    accessToken,
+    groupId,
+    sessionGeneration,
+    userId,
+    viewerKey,
+  })
+  profileEditContextRef.current = {
+    accessToken,
+    groupId,
+    sessionGeneration,
+    userId,
+    viewerKey,
+  }
   const moderationOperationsRef = useRef(new GroupMemberModerationOperationLedger())
   const moderationRequestsRef = useRef(new GroupMemberModerationRequestSingleFlight())
   const moderationAccessTokenRef = useRef(accessToken)
@@ -711,48 +740,130 @@ export default function GroupManagePage({ params }: { params: Promise<{ id: stri
   }
 
   const handleSubmitEdit = async () => {
-    if (!accessToken || !isOwner) return
+    const requestScope: ViewerScope = { viewerKey, sessionGeneration, userId }
+    const requestToken = accessToken
+    if (
+      !requestToken ||
+      !userId ||
+      !isOwner ||
+      jwtSubject(requestToken) !== userId ||
+      requestScope.viewerKey !== `user:${userId}` ||
+      !isViewerScopeCurrent(requestScope)
+    )
+      return
     if (!editName.trim() && !editNameEn.trim()) {
       showToast(t('pleaseEnterGroupName'), 'warning')
       return
     }
-    setSubmitting(true)
+
+    const requestGroupId = groupId
+    const requestOwnerKey = `${requestScope.viewerKey}:${requestScope.sessionGeneration}:${requestGroupId}`
+    const requestIsCurrent = () => {
+      const current = profileEditContextRef.current
+      return (
+        current.userId === userId &&
+        current.viewerKey === requestScope.viewerKey &&
+        current.sessionGeneration === requestScope.sessionGeneration &&
+        current.groupId === requestGroupId &&
+        jwtSubject(current.accessToken) === userId &&
+        isViewerScopeCurrent(requestScope)
+      )
+    }
+    const payload = canonicalizeGroupProfileEditPayload({
+      name: editName.trim() || group?.name || '',
+      name_en: editNameEn,
+      description: editDescription,
+      description_en: editDescriptionEn,
+      avatar_url: editAvatarUrl,
+      role_names: editRoleNames,
+      rules_json: editRules,
+      // A lapsed Pro owner may still edit ordinary fields on an existing
+      // premium group; preserve that flag instead of silently downgrading it.
+      is_premium_only: isPro ? isPremiumOnly : Boolean(group?.is_premium_only),
+    })
+
+    let operation: GroupApplicationOperation | null = null
+    let ownsPhysicalRequest = false
     try {
-      const res = await fetch(`/api/groups/${groupId}/edit-apply`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${accessToken}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({
-          name: editName.trim() || null,
-          name_en: editNameEn.trim() || null,
-          description: editDescription.trim() || null,
-          description_en: editDescriptionEn.trim() || null,
-          avatar_url: editAvatarUrl.trim() || null,
-          role_names: editRoleNames,
-          rules_json: editRules.length > 0 ? editRules : null,
-          rules:
-            editRules
-              .map((r) => r.zh)
-              .filter(Boolean)
-              .join('\n') || null,
-          is_premium_only: isPro && isPremiumOnly,
-        }),
-      })
-      const data = await res.json()
-      if (res.ok) {
+      operation = await acquireGroupApplicationOperation(
+        groupProfileEditSubmitScope(userId, requestGroupId),
+        userId,
+        { group_id: requestGroupId, ...payload }
+      )
+      if (!requestIsCurrent()) return
+
+      const flight = startGroupApplicationSingleFlight(operation, () =>
+        authedFetch<unknown>(
+          `/api/groups/${requestGroupId}/edit-apply`,
+          'POST',
+          requestToken,
+          { ...payload, operation_id: operation!.operationId },
+          15_000,
+          {
+            expectedUserId: userId,
+            expectedSessionGeneration: requestScope.sessionGeneration,
+          }
+        )
+      )
+      if (!flight.started) {
+        await flight.promise.catch(() => undefined)
+        return
+      }
+
+      ownsPhysicalRequest = true
+      profileEditSubmitOperationIdRef.current[requestOwnerKey] = operation.operationId
+      setSubmitting(true)
+
+      const result = await flight.promise
+      if (result.stale || !requestIsCurrent()) return
+      const ownsActiveIntent =
+        profileEditSubmitOperationIdRef.current[requestOwnerKey] === operation.operationId &&
+        isCurrentGroupApplicationOperation(operation)
+      if (!ownsActiveIntent) return
+
+      if (
+        result.ok &&
+        isExactSubmitGroupProfileEditAck(result.data, operation, requestGroupId, payload)
+      ) {
+        if (!completeGroupApplicationOperation(operation)) return
         showToast(t('editRequestSubmitted'), 'success')
         setEditMode(false)
-      } else {
-        showToast(data.error || t('submissionFailed'), 'error')
+        return
       }
+
+      if (!result.ok && result.status >= 400 && result.status < 500) {
+        if (!completeGroupApplicationOperation(operation)) return
+      }
+      const data = result.data
+      const errorMessage =
+        typeof data === 'object' &&
+        data !== null &&
+        'error' in data &&
+        typeof (data as { error?: unknown }).error === 'string'
+          ? (data as { error: string }).error
+          : t('submissionFailed')
+      showToast(errorMessage, 'error')
     } catch (err) {
+      if (
+        !requestIsCurrent() ||
+        (operation &&
+          profileEditSubmitOperationIdRef.current[requestOwnerKey] !== operation.operationId)
+      )
+        return
       logger.error('Submit edit error:', err)
       showToast(t('networkErrorRetry'), 'error')
     } finally {
-      setSubmitting(false)
+      const completedOperation = operation
+      if (ownsPhysicalRequest && completedOperation)
+        queueMicrotask(() => {
+          if (
+            profileEditSubmitOperationIdRef.current[requestOwnerKey] ===
+            completedOperation.operationId
+          ) {
+            delete profileEditSubmitOperationIdRef.current[requestOwnerKey]
+            if (requestIsCurrent()) setSubmitting(false)
+          }
+        })
     }
   }
 
