@@ -401,7 +401,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           // NOTE: no FK from group_members.user_id → user_profiles (it references
           // auth.users), so PostgREST embeds 400 with PGRST200. Two-step fetch below.
           supabase
-            .from('group_members')
+            .from('group_member_directory')
             .select('user_id')
             .eq('group_id', groupId)
             .order('joined_at', { ascending: false })
@@ -409,7 +409,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
           // 3. Membership check (if logged in)
           userId
             ? supabase
-                .from('group_members')
+                .from('own_group_memberships')
                 .select('role')
                 .eq('group_id', groupId)
                 .eq('user_id', userId)
@@ -623,7 +623,7 @@ export default function GroupDetailPage({ params }: { params: Promise<{ id: stri
       // Two-step query: group_members has no FK to user_profiles (user_id references
       // auth.users), so a PostgREST embed 400s with PGRST200. Fetch members, then profiles.
       const { data: membersData } = await supabase
-        .from('group_members')
+        .from('group_member_directory')
         .select('user_id, role, joined_at')
         .eq('group_id', groupId)
         .order('role', { ascending: true })

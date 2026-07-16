@@ -173,13 +173,13 @@ function installSupabaseMock() {
     builder.maybeSingle = jest
       .fn()
       .mockResolvedValue(
-        table === 'group_members'
+        table === 'own_group_memberships'
           ? { data: { role: 'owner' } }
           : { data: { id: ACTOR_A, handle: 'owner', avatar_url: null } }
       )
     builder.then = (resolve: (value: unknown) => void) =>
       Promise.resolve(
-        table === 'group_members'
+        table === 'group_member_moderation_directory'
           ? {
               data: [
                 {

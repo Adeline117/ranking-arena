@@ -9,6 +9,7 @@ type OperationBase = {
   actorId: string
   viewerKey: ViewerKey
   sessionGeneration: number
+  resourceGeneration: number
   action: GroupMemberModerationAction
   groupId: string
   targetUserId: string
@@ -33,6 +34,7 @@ type MuteIntent = {
   actorId: string
   viewerKey?: ViewerKey
   sessionGeneration?: number
+  resourceGeneration?: number
   action: 'mute'
   groupId: string
   targetUserId: string
@@ -45,6 +47,7 @@ type UnmuteIntent = {
   actorId: string
   viewerKey?: ViewerKey
   sessionGeneration?: number
+  resourceGeneration?: number
   action: 'unmute'
   groupId: string
   targetUserId: string
@@ -58,6 +61,30 @@ export type GroupMemberModerationViewerScope = {
   actorId: string | null
   viewerKey: ViewerKey
   sessionGeneration: number
+  groupId: string | null
+  resourceGeneration: number
+}
+
+export type GroupMemberModerationResourceScope = Pick<
+  GroupMemberModerationViewerScope,
+  'groupId' | 'resourceGeneration'
+>
+
+function canonicalGroupId(groupId: string | null): string | null {
+  const canonical = groupId?.trim().toLowerCase() ?? ''
+  return canonical || null
+}
+
+export function advanceGroupMemberModerationResourceScope(
+  current: GroupMemberModerationResourceScope,
+  groupId: string | null
+): GroupMemberModerationResourceScope {
+  const nextGroupId = canonicalGroupId(groupId)
+  if (current.groupId === nextGroupId) return current
+  return {
+    groupId: nextGroupId,
+    resourceGeneration: current.resourceGeneration + 1,
+  }
 }
 
 export function isGroupMemberModerationViewerCurrent(
@@ -66,12 +93,14 @@ export function isGroupMemberModerationViewerCurrent(
   accessToken: string | null
 ): boolean {
   const actorId = expected.actorId?.toLowerCase() ?? null
+  const groupId = canonicalGroupId(expected.groupId)
   return (
     actorId !== null &&
+    groupId !== null &&
+    Number.isSafeInteger(expected.resourceGeneration) &&
+    expected.resourceGeneration >= 0 &&
     expected.viewerKey === `user:${actorId}` &&
-    rendered.actorId?.toLowerCase() === actorId &&
-    rendered.viewerKey === expected.viewerKey &&
-    rendered.sessionGeneration === expected.sessionGeneration &&
+    canonicalViewerScope(rendered) === canonicalViewerScope(expected) &&
     jwtSubject(accessToken) === actorId &&
     isViewerScopeCurrent({
       userId: actorId,
@@ -117,6 +146,8 @@ function canonicalViewerScope(scope: GroupMemberModerationViewerScope): string {
     scope.actorId?.toLowerCase() ?? null,
     scope.viewerKey,
     scope.sessionGeneration,
+    canonicalGroupId(scope.groupId),
+    scope.resourceGeneration,
   ])
 }
 
@@ -146,7 +177,14 @@ export class GroupMemberModerationOperationLedger {
     const actorId = intent.actorId.toLowerCase()
     const viewerKey: ViewerKey = intent.viewerKey ?? `user:${actorId}`
     const sessionGeneration = intent.sessionGeneration ?? 0
-    this.scope({ actorId, viewerKey, sessionGeneration })
+    const resourceGeneration = intent.resourceGeneration ?? 0
+    this.scope({
+      actorId,
+      viewerKey,
+      sessionGeneration,
+      groupId: intent.groupId,
+      resourceGeneration,
+    })
     const key = operationKey(actorId, intent.groupId, intent.targetUserId)
     const fingerprint = intentFingerprint(intent)
     const existing = this.operations.get(key)
@@ -156,6 +194,7 @@ export class GroupMemberModerationOperationLedger {
       actorId,
       viewerKey,
       sessionGeneration,
+      resourceGeneration,
       action: intent.action,
       groupId: intent.groupId.toLowerCase(),
       targetUserId: intent.targetUserId.toLowerCase(),
@@ -192,6 +231,8 @@ export class GroupMemberModerationOperationLedger {
         actorId: operation.actorId,
         viewerKey: operation.viewerKey,
         sessionGeneration: operation.sessionGeneration,
+        groupId: operation.groupId,
+        resourceGeneration: operation.resourceGeneration,
       })
     ) {
       return false
@@ -209,6 +250,8 @@ export class GroupMemberModerationOperationLedger {
         actorId: operation.actorId,
         viewerKey: operation.viewerKey,
         sessionGeneration: operation.sessionGeneration,
+        groupId: operation.groupId,
+        resourceGeneration: operation.resourceGeneration,
       })
     ) {
       return false
