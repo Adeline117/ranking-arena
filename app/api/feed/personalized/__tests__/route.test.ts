@@ -17,7 +17,9 @@ jest.mock('next/server', () => {
       this.status = init.status || 200
       this.headers = new Map()
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -89,6 +91,12 @@ describe('GET /api/feed/personalized', () => {
     mockGetAuthUser.mockResolvedValue(null)
     mockGetUserPostReactions.mockResolvedValue(new Map())
     mockGetUserPostVotes.mockResolvedValue(new Map())
+    mockRpc.mockImplementation(async (functionName: string) => {
+      if (functionName === 'can_service_actor_read_post') {
+        return { data: true, error: null }
+      }
+      return { data: [], error: null }
+    })
 
     // Default supabase from chain for fallback queries
     mockSupabaseFrom.mockReturnValue({
@@ -100,9 +108,7 @@ describe('GET /api/feed/personalized', () => {
   })
 
   it('returns hot posts for unauthenticated users', async () => {
-    const mockPosts = [
-      { id: 'p1', title: 'Hot Post', hot_score: 100 },
-    ]
+    const mockPosts = [{ id: 'p1', title: 'Hot Post', hot_score: 100 }]
     mockSupabaseFrom.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
@@ -123,9 +129,14 @@ describe('GET /api/feed/personalized', () => {
     mockGetAuthUser.mockResolvedValue(mockUser)
 
     // RPC returns post IDs
-    mockRpc.mockResolvedValue({
-      data: [{ post_id: 'p1' }, { post_id: 'p2' }],
-      error: null,
+    mockRpc.mockImplementation(async (functionName: string) => {
+      if (functionName === 'can_service_actor_read_post') {
+        return { data: true, error: null }
+      }
+      return {
+        data: [{ post_id: 'p1' }, { post_id: 'p2' }],
+        error: null,
+      }
     })
 
     // Full post fetch
@@ -155,7 +166,12 @@ describe('GET /api/feed/personalized', () => {
     const mockUser = { id: 'user-1' }
     mockGetAuthUser.mockResolvedValue(mockUser)
 
-    mockRpc.mockResolvedValue({ data: null, error: { message: 'RPC error' } })
+    mockRpc.mockImplementation(async (functionName: string) => {
+      if (functionName === 'can_service_actor_read_post') {
+        return { data: true, error: null }
+      }
+      return { data: null, error: { message: 'RPC error' } }
+    })
     mockSupabaseFrom.mockReturnValue({
       select: jest.fn().mockReturnThis(),
       order: jest.fn().mockReturnThis(),
@@ -194,9 +210,14 @@ describe('GET /api/feed/personalized', () => {
     const mockUser = { id: 'user-1' }
     mockGetAuthUser.mockResolvedValue(mockUser)
 
-    mockRpc.mockResolvedValue({
-      data: [{ post_id: 'p1' }],
-      error: null,
+    mockRpc.mockImplementation(async (functionName: string) => {
+      if (functionName === 'can_service_actor_read_post') {
+        return { data: true, error: null }
+      }
+      return {
+        data: [{ post_id: 'p1' }],
+        error: null,
+      }
     })
     mockSupabaseFrom.mockReturnValue({
       select: jest.fn().mockReturnThis(),
@@ -233,5 +254,28 @@ describe('GET /api/feed/personalized', () => {
     expect(res.status).toBe(200)
     expect(body.data.posts).toEqual([])
     expect(body.meta.pagination.has_more).toBe(false)
+  })
+
+  it('fails closed when the canonical audience decision denies a candidate', async () => {
+    mockRpc.mockResolvedValue({ data: false, error: null })
+    mockSupabaseFrom.mockReturnValue({
+      select: jest.fn().mockReturnThis(),
+      order: jest.fn().mockReturnThis(),
+      range: jest.fn().mockResolvedValue({
+        data: [{ id: 'private-1', title: 'Private' }],
+        error: null,
+      }),
+      in: jest.fn().mockResolvedValue({ data: [], error: null }),
+    })
+
+    const req = new NextRequest('http://localhost/api/feed/personalized')
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(body.data.posts).toEqual([])
+    expect(mockRpc).toHaveBeenCalledWith('can_service_actor_read_post', {
+      p_post_id: 'private-1',
+      p_actor_id: null,
+    })
   })
 })
