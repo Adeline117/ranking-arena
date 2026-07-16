@@ -526,6 +526,34 @@ describe('usePostComments deletion counts', () => {
     expect(onCommentCountChange).toHaveBeenCalledWith('post-1', -1, 4)
   })
 
+  it('accepts a delete 404 only after canonical reconciliation proves the comment absent', async () => {
+    mockAuthedFetch.mockImplementation((_url: string, method: string) =>
+      method === 'DELETE'
+        ? Promise.resolve({
+            ok: false,
+            status: 404,
+            data: { success: false, error: 'already hidden' },
+          })
+        : Promise.resolve({
+            ok: true,
+            status: 200,
+            data: {
+              success: true,
+              data: { comments: [], post: { comment_count: 0 } },
+            },
+          })
+    )
+    const onCommentCountChange = jest.fn()
+    const { result, showToast } = renderCommentsHook({ onCommentCountChange })
+    act(() => result.current.setComments([makeComment()]))
+
+    await act(async () => result.current.deleteComment('post-1', 'comment-1'))
+
+    expect(result.current.comments).toEqual([])
+    expect(onCommentCountChange).toHaveBeenCalledWith('post-1', 0, 0)
+    expect(showToast).toHaveBeenCalledWith('deleted', 'success')
+  })
+
   it.each([
     undefined,
     { deleted_count: 0, comment_count: 4 },

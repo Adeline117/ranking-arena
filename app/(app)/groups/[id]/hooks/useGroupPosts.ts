@@ -840,6 +840,7 @@ export function useGroupPosts({
             if (commentLoadPromisesRef.current.get(scopedPostKey) === request) {
               commentLoadPromisesRef.current.delete(scopedPostKey)
             }
+            commentLoadGenerationRef.current.delete(scopedPostKey)
             if (retryAfterNewerState) {
               queueMicrotask(() => {
                 if (scopeIsCurrent(capturedScope)) void loadComments(postId, false)
@@ -987,7 +988,6 @@ export function useGroupPosts({
           data?.success === true &&
           isCreatedCommentAcknowledgement(rawComment, {
             postId,
-            content,
             userId: capturedScope.userId,
           })
         ) {
@@ -1095,7 +1095,6 @@ export function useGroupPosts({
           data?.success === true &&
           isCreatedCommentAcknowledgement(rawComment, {
             postId,
-            content,
             parentId: commentId,
             userId: capturedScope.userId,
           })

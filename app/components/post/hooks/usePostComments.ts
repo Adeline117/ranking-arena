@@ -347,8 +347,8 @@ export function usePostComments({
       sort: 'best' | 'time' = 'best',
       capturedScope: CommentViewerScope = activeScopeRef.current,
       retryAfterNewerState = true
-    ): Promise<boolean> => {
-      if (!scopeIsCurrent(capturedScope)) return false
+    ): Promise<Comment[] | null> => {
+      if (!scopeIsCurrent(capturedScope)) return null
       const generationKey = `${capturedScope.viewerKey}\u0000${postId}`
       const generation = (canonicalReadGenerationRef.current.get(generationKey) || 0) + 1
       canonicalReadGenerationRef.current.set(generationKey, generation)
@@ -367,14 +367,14 @@ export function usePostComments({
           !scopeIsCurrent(capturedScope) ||
           canonicalReadGenerationRef.current.get(generationKey) !== generation
         ) {
-          return false
+          return null
         }
 
         if (stateRevisionRef.current !== requestStartRevision) {
           return retryAfterNewerState &&
             (currentPostIdRef.current === null || currentPostIdRef.current === postId)
             ? reconcileCanonicalComments(postId, sort, capturedScope, false)
-            : false
+            : null
         }
 
         const store = usePostStore.getState()
@@ -388,9 +388,13 @@ export function usePostComments({
         ) {
           setComments(page.comments)
         }
-        return true
+        return page.comments
       } catch {
-        return false
+        return null
+      } finally {
+        if (canonicalReadGenerationRef.current.get(generationKey) === generation) {
+          canonicalReadGenerationRef.current.delete(generationKey)
+        }
       }
     },
     [accessToken, onCommentCountChange, scopeIsCurrent, setComments]
@@ -491,7 +495,6 @@ export function usePostComments({
           result.data?.success &&
           isCreatedCommentAcknowledgement(result.data.data?.comment, {
             postId,
-            content: savedContent,
             userId: capturedScope.userId,
           })
         ) {
@@ -795,7 +798,6 @@ export function usePostComments({
           result.data?.success &&
           isCreatedCommentAcknowledgement(result.data.data?.comment, {
             postId,
-            content: savedContent,
             parentId,
             userId: capturedScope.userId,
           })
@@ -1078,6 +1080,20 @@ export function usePostComments({
             usePostStore.getState().updatePostCommentCount(postId, acknowledgement.comment_count)
           }
           if (scopeIsCurrent(capturedScope)) showToast(t('deleted'), 'success')
+        } else if (result.status === 404) {
+          // A comment may be auto-moderated/soft-deleted after it was rendered
+          // but before this DELETE reaches the route. Treat the 404 as an
+          // idempotent success only when a fresh canonical read proves the
+          // target is now absent; the visible tree/count come from that read.
+          const canonical = await reconcileCanonicalComments(postId, 'best', capturedScope)
+          if (canonical && !findComment(canonical, commentId)) {
+            if (scopeIsCurrent(capturedScope)) showToast(t('deleted'), 'success')
+          } else if (scopeIsCurrent(capturedScope)) {
+            showToast(
+              getHttpErrorMessage(result.status, result.data?.error || t('operationFailed')),
+              'error'
+            )
+          }
         } else if (isDefinitiveMutationRejection(result)) {
           if (scopeIsCurrent(capturedScope)) {
             showToast(
