@@ -40,6 +40,11 @@ import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { withPublic } from '@/lib/api/middleware'
 import { parseLimit, parseOffset } from '@/lib/utils/safe-parse'
 import { createLogger } from '@/lib/utils/logger'
+import {
+  currentScoredCount,
+  currentScoredSources,
+  type LeaderboardCountCacheRow,
+} from '@/lib/data/leaderboard-count-cache'
 
 const logger = createLogger('rankings-api')
 
@@ -60,22 +65,14 @@ async function getAvailableSources(
   seasonId: string
 ): Promise<string[]> {
   return tieredGetOrSet<string[]>(
-    `rankings:available-sources:${seasonId}`,
+    `rankings:available-sources:v2:${seasonId}`,
     async (): Promise<string[]> => {
       const { data: sourceRows } = await supabase
         .from('leaderboard_count_cache')
-        .select('source')
+        .select('source,total_count,updated_at')
         .eq('season_id', seasonId)
-        .gt('total_count', 0)
-        .not('source', 'eq', '_all')
-        .not('source', 'like', '%_gt0')
-      return [
-        ...new Set(
-          (sourceRows || [])
-            .map((r: { source: string }) => r.source)
-            .filter((s): s is string => typeof s === 'string' && !!s)
-        ),
-      ].sort()
+        .like('source', '%_gt0')
+      return currentScoredSources((sourceRows || []) as LeaderboardCountCacheRow[])
     },
     'warm', // 2min memory / 15min Redis — shared across instances
     ['rankings', 'available-sources']
@@ -150,7 +147,7 @@ export const GET = withPublic(
       !cursor &&
       offset === 0
     const cacheKey = isDefaultQuery
-      ? `api:rankings:${normalizedWindow}:${category || 'all'}:${limit}`
+      ? `api:rankings:v2:${normalizedWindow}:${category || 'all'}:${limit}`
       : null // skip cache for filtered queries
 
     let result: unknown
@@ -374,20 +371,22 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     // real 9587) → the "N traders" figure was low AND `hasMore` truncated the
     // board ~776 rows early, hiding the lowest-ranked traders from themselves.
     const cacheCountKey = `${platformFilter || '_all'}_gt0`
+    const countKeys = cacheCountKey === '_all_gt0' ? [cacheCountKey] : [cacheCountKey, '_all_gt0']
     const [result, countResult] = await Promise.all([
       buildBaseQuery().range(offset, offset + safeLimit - 1),
       supabase
         .from('leaderboard_count_cache')
-        .select('total_count')
+        .select('source,total_count,updated_at')
         .eq('season_id', seasonId)
-        .eq('source', cacheCountKey)
-        .maybeSingle(),
+        .in('source', countKeys),
     ])
     rows = (result.data || []) as Record<string, unknown>[]
     error = result.error
-    // Use cached total. Fallback to offset + rows.length if cache is empty
-    // (first deploy / cron hasn't run yet).
-    totalCount = countResult.data?.total_count ?? offset + rows.length
+    // A retired source's old key must never claim rows. If the current cache
+    // generation is unavailable, fall back to the rows we actually observed.
+    totalCount =
+      currentScoredCount((countResult.data || []) as LeaderboardCountCacheRow[], cacheCountKey) ??
+      offset + rows.length
   } else {
     // Chunked fetch: first chunk, no count
     const firstResult = await buildBaseQuery().range(offset, offset + CHUNK_SIZE - 1)
