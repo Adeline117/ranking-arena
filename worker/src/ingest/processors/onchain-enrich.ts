@@ -23,6 +23,11 @@ import {
 import { scanBscInternalBnb } from '@/lib/ingest/onchain/dune-bsc-internal'
 import type { NormalizedTransfer } from '@/lib/ingest/onchain/bsc-swaps'
 import { logger } from '@/lib/logger'
+import {
+  ONCHAIN_METHODOLOGY,
+  ONCHAIN_METHODOLOGY_VERSION,
+  ONCHAIN_QUALITY_SCHEMA_VERSION,
+} from '@/lib/onchain-quality'
 
 const WEB3_SOURCES = ['okx_web3_solana', 'binance_web3_bsc'] as const
 /** Per-source batch cap per run. Coverage grows across runs via the two-tier
@@ -43,10 +48,9 @@ export async function processOnchainEnrich(
     const chain = chainForSource(slug)
     if (!chain) continue
     // Two-tier selection so BOTH initial coverage AND ongoing freshness work:
-    //   HOT  (½ budget): highest-PnL wallets that are never-enriched OR stale
-    //        beyond HOT_TTL — keeps the most-viewed/active traders fresh.
-    //   TAIL (½ budget): globally oldest-enriched — rotates the long tail so it
-    //        eventually refreshes too (dormant wallets rarely change/are viewed).
+    //   HOT  (½ budget): highest-PnL wallets with missing/legacy quality,
+    //        never-enriched, or stale beyond HOT_TTL.
+    //   TAIL (½ budget): missing/legacy quality first, then globally oldest.
     // During initial coverage both return un-enriched wallets; after full
     // coverage HOT re-does top traders ≤HOT_TTL while TAIL rolls the rest.
     const half = Math.max(1, Math.floor(TOP_N / 2))
@@ -57,23 +61,45 @@ export async function processOnchainEnrich(
            JOIN arena.traders t ON t.id = ts.trader_id
            JOIN arena.sources s ON s.id = t.source_id
           WHERE s.slug = $1 AND ts.timeframe = 90 AND ts.pnl IS NOT NULL
-            AND (NOT (ts.extras ? 'onchain_enriched_at')
+            AND (((ts.extras #>> '{onchain_quality,schema_version}') IS DISTINCT FROM $4
+                  OR (ts.extras #>> '{onchain_quality,methodology}') IS DISTINCT FROM $5
+                  OR (ts.extras #>> '{onchain_quality,methodology_version}') IS DISTINCT FROM $6)
+                 OR NOT (ts.extras ? 'onchain_enriched_at')
                  OR (ts.extras->>'onchain_enriched_at')::timestamptz < now() - ($3 || ' hours')::interval)
-          ORDER BY ts.pnl DESC
+          ORDER BY ((ts.extras #>> '{onchain_quality,schema_version}') IS DISTINCT FROM $4
+                    OR (ts.extras #>> '{onchain_quality,methodology}') IS DISTINCT FROM $5
+                    OR (ts.extras #>> '{onchain_quality,methodology_version}') IS DISTINCT FROM $6) DESC,
+                   ts.pnl DESC
           LIMIT $2`,
-        [slug, half, String(HOT_TTL_HOURS)]
+        [
+          slug,
+          half,
+          String(HOT_TTL_HOURS),
+          String(ONCHAIN_QUALITY_SCHEMA_VERSION),
+          ONCHAIN_METHODOLOGY,
+          ONCHAIN_METHODOLOGY_VERSION,
+        ]
       ),
       pool.query<{ wallet: string }>(
         `SELECT t.exchange_trader_id AS wallet
            FROM arena.trader_stats ts
            JOIN arena.traders t ON t.id = ts.trader_id
-           JOIN arena.sources s ON s.id = t.source_id
+          JOIN arena.sources s ON s.id = t.source_id
           WHERE s.slug = $1 AND ts.timeframe = 90 AND ts.pnl IS NOT NULL
-          ORDER BY (ts.extras ? 'onchain_enriched_at') ASC,
+          ORDER BY ((ts.extras #>> '{onchain_quality,schema_version}') IS DISTINCT FROM $3
+                    OR (ts.extras #>> '{onchain_quality,methodology}') IS DISTINCT FROM $4
+                    OR (ts.extras #>> '{onchain_quality,methodology_version}') IS DISTINCT FROM $5) DESC,
+                   (ts.extras ? 'onchain_enriched_at') ASC,
                    (ts.extras->>'onchain_enriched_at') ASC NULLS FIRST,
                    ts.pnl DESC
           LIMIT $2`,
-        [slug, TOP_N - half]
+        [
+          slug,
+          TOP_N - half,
+          String(ONCHAIN_QUALITY_SCHEMA_VERSION),
+          ONCHAIN_METHODOLOGY,
+          ONCHAIN_METHODOLOGY_VERSION,
+        ]
       ),
     ])
     // Merge + dedup (a wallet can appear in both tiers).

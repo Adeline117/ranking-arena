@@ -27,6 +27,7 @@ import type { NormalizedTransfer } from './bsc-swaps'
 import {
   ONCHAIN_METHODOLOGY,
   ONCHAIN_METHODOLOGY_VERSION,
+  ONCHAIN_QUALITY_SCHEMA_VERSION,
   isOnchainQualityCanonical,
   type OnchainQuality,
   type OnchainQualityReason,
@@ -302,7 +303,7 @@ function normalize(
     topEarningTokens: topEarningTokens(pnl.perToken, info, chain),
     provenance: 'onchain-computed',
     quality: {
-      schemaVersion: 1,
+      schemaVersion: ONCHAIN_QUALITY_SCHEMA_VERSION,
       methodology: ONCHAIN_METHODOLOGY,
       methodologyVersion: ONCHAIN_METHODOLOGY_VERSION,
       completeness: 'partial',
