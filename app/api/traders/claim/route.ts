@@ -22,7 +22,7 @@ import {
 } from '@/lib/api'
 import { ApiError } from '@/lib/api/errors'
 import {
-  getUserClaim,
+  getUserClaimForTrader,
   getUserVerifiedTrader,
   isTraderClaimed,
   submitClaim,
@@ -33,6 +33,7 @@ import { verifyWalletOwnership } from '@/lib/services/wallet-verification'
 import { hasVerifiedClaimConnection } from '@/lib/services/claim-connection-proof'
 import { logger } from '@/lib/logger'
 import { canonicalizeWalletIdentity, walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
+import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 
 function requireProofString(value: unknown, field: string, maxLength: number): string {
   if (typeof value !== 'string' || value.length === 0) {
@@ -55,9 +56,28 @@ export async function GET(request: NextRequest) {
   try {
     const user = await requireAuth(request)
     const supabase = getSupabaseAdmin()
+    const rawTraderId = validateString(request.nextUrl.searchParams.get('trader_id'), {
+      required: true,
+      maxLength: 512,
+      fieldName: 'trader_id',
+    })
+    const rawSource = validateString(request.nextUrl.searchParams.get('source'), {
+      required: true,
+      maxLength: 100,
+      fieldName: 'source',
+    })
+
+    if (!rawTraderId || !rawSource) {
+      throw ApiError.validation('trader_id and source are required')
+    }
+
+    const source = rawSource.toLowerCase()
+    const traderId = isDexWalletPlatform(source)
+      ? canonicalizeWalletIdentity(rawTraderId, source)
+      : rawTraderId
 
     const [claim, verified, linkedResult] = await Promise.all([
-      getUserClaim(supabase, user.id),
+      getUserClaimForTrader(supabase, user.id, traderId, source),
       getUserVerifiedTrader(supabase, user.id),
       supabase
         .from('user_linked_traders')

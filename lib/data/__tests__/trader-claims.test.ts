@@ -24,6 +24,7 @@ jest.mock('@/lib/logger', () => ({
 
 import {
   activateClaim,
+  getUserClaimForTrader,
   reviewClaim,
   submitClaim,
   type TraderClaim,
@@ -67,6 +68,48 @@ function activationPayload(overrides: Record<string, unknown> = {}) {
     ...overrides,
   }
 }
+
+describe('trader claim identity scope', () => {
+  function scopedClient(data: TraderClaim | null) {
+    const builder: Record<string, jest.Mock> = {}
+    builder.select = jest.fn(() => builder)
+    builder.eq = jest.fn(() => builder)
+    builder.order = jest.fn(() => builder)
+    builder.limit = jest.fn(() => builder)
+    builder.maybeSingle = jest.fn().mockResolvedValue({ data, error: null })
+    const from = jest.fn(() => builder)
+    const client = { from } as unknown as SupabaseClient<Database>
+    return { client, from, builder }
+  }
+
+  it('queries the exact user, trader, and source instead of the user latest claim', async () => {
+    const { client, from, builder } = scopedClient(null)
+
+    await expect(
+      getUserClaimForTrader(client, USER_ID, 'trader-a', 'hyperliquid')
+    ).resolves.toBeNull()
+
+    expect(from).toHaveBeenCalledWith('trader_claims')
+    expect(builder.eq.mock.calls).toEqual([
+      ['user_id', USER_ID],
+      ['trader_id', 'trader-a'],
+      ['source', 'hyperliquid'],
+    ])
+  })
+
+  it('returns the matching identity history when it exists', async () => {
+    const traderBClaim = claim({
+      trader_id: 'trader-b',
+      source: 'drift',
+      status: 'reviewing',
+    })
+    const { client } = scopedClient(traderBClaim)
+
+    await expect(getUserClaimForTrader(client, USER_ID, 'trader-b', 'drift')).resolves.toEqual(
+      traderBClaim
+    )
+  })
+})
 
 describe('trader claim atomic mutations', () => {
   const mockRpc = jest.fn()

@@ -1,11 +1,19 @@
 const mockIsTraderClaimed = jest.fn()
 const mockSubmitClaim = jest.fn()
+const mockGetUserClaimForTrader = jest.fn()
+const mockGetUserVerifiedTrader = jest.fn()
 const mockVerifyWalletOwnership = jest.fn()
 const mockSendNotification = jest.fn()
 const mockNotifyTraderClaim = jest.fn()
 
+const mockLinkedOrder = jest.fn()
+const mockLinkedEq = jest.fn(() => ({ order: mockLinkedOrder }))
+const mockLinkedSelect = jest.fn(() => ({ eq: mockLinkedEq }))
 const mockSupabase = {
-  from: jest.fn(),
+  from: jest.fn((table: string) => {
+    if (table !== 'user_linked_traders') throw new Error(`Unexpected table: ${table}`)
+    return { select: mockLinkedSelect }
+  }),
 }
 
 function mockResponse(status: number, body: unknown) {
@@ -31,7 +39,11 @@ jest.mock('@/lib/api', () => ({
     options: { required?: boolean; maxLength?: number; fieldName?: string } = {}
   ) => {
     if (value === undefined || value === null || value === '') {
-      if (options.required) throw new Error(`${options.fieldName ?? 'field'} is required`)
+      if (options.required) {
+        throw Object.assign(new Error(`${options.fieldName ?? 'field'} is required`), {
+          statusCode: 400,
+        })
+      }
       return null
     }
     const result = String(value).trim()
@@ -49,8 +61,8 @@ jest.mock('@/lib/api', () => ({
 jest.mock('@/lib/data/trader-claims', () => ({
   isTraderClaimed: (...args: unknown[]) => mockIsTraderClaimed(...args),
   submitClaim: (...args: unknown[]) => mockSubmitClaim(...args),
-  getUserClaim: jest.fn(),
-  getUserVerifiedTrader: jest.fn(),
+  getUserClaimForTrader: (...args: unknown[]) => mockGetUserClaimForTrader(...args),
+  getUserVerifiedTrader: (...args: unknown[]) => mockGetUserVerifiedTrader(...args),
 }))
 
 jest.mock('@/lib/services/wallet-verification', () => ({
@@ -74,7 +86,7 @@ jest.mock('@/lib/logger', () => ({
 }))
 
 import type { NextRequest } from 'next/server'
-import { POST } from '../route'
+import { GET, POST } from '../route'
 
 const checksumEvm = '0xAbCdEf0123456789aBCdEf0123456789AbCdEf01'
 const canonicalEvm = checksumEvm.toLowerCase()
@@ -83,6 +95,10 @@ const caseCollidingSolanaWallet = '7XKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU'
 
 function request(body: unknown): NextRequest {
   return { json: jest.fn().mockResolvedValue(body) } as unknown as NextRequest
+}
+
+function getRequest(url: string): NextRequest {
+  return { nextUrl: new URL(url) } as unknown as NextRequest
 }
 
 function walletClaim(traderId: string, walletAddress: unknown, source = 'hyperliquid') {
@@ -97,6 +113,51 @@ function walletClaim(traderId: string, walletAddress: unknown, source = 'hyperli
     },
   }
 }
+
+describe('GET /api/traders/claim identity scope', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetUserClaimForTrader.mockResolvedValue(null)
+    mockGetUserVerifiedTrader.mockResolvedValue(null)
+    mockLinkedOrder.mockResolvedValue({ data: [], error: null })
+  })
+
+  it('canonicalizes EVM query identity before the scoped lookup', async () => {
+    const response = await GET(
+      getRequest(`http://localhost/api/traders/claim?trader_id=${checksumEvm}&source=HYPERLIQUID`)
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockGetUserClaimForTrader).toHaveBeenCalledWith(
+      mockSupabase,
+      'user-1',
+      canonicalEvm,
+      'hyperliquid'
+    )
+  })
+
+  it('preserves exact Solana Base58 case in the scoped lookup', async () => {
+    const response = await GET(
+      getRequest(`http://localhost/api/traders/claim?trader_id=${solanaTrader}&source=drift`)
+    )
+
+    expect(response.status).toBe(200)
+    expect(mockGetUserClaimForTrader).toHaveBeenCalledWith(
+      mockSupabase,
+      'user-1',
+      solanaTrader,
+      'drift'
+    )
+  })
+
+  it('requires both identity parameters before querying claim history', async () => {
+    const response = await GET(getRequest('http://localhost/api/traders/claim?trader_id=trader-a'))
+
+    expect(response.status).toBe(400)
+    expect(mockGetUserClaimForTrader).not.toHaveBeenCalled()
+    expect(mockSupabase.from).not.toHaveBeenCalled()
+  })
+})
 
 describe('POST /api/traders/claim wallet identity boundary', () => {
   beforeEach(() => {
