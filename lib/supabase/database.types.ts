@@ -9246,7 +9246,28 @@ export type Database = {
           p_verification_data: Json
           p_verification_method: string
         }
-        Returns: Database['public']['Tables']['trader_claims']['Row']
+        Returns: {
+          created_at: string
+          handle: string | null
+          id: string
+          reject_reason: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          source: string
+          status: string
+          trader_id: string
+          updated_at: string | null
+          user_id: string
+          verification_data: Json | null
+          verification_method: string
+          verified_at: string | null
+        }
+        SetofOptions: {
+          from: '*'
+          to: 'trader_claims'
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       text_to_bytea: { Args: { data: string }; Returns: string }
       toggle_comment_reaction: {
