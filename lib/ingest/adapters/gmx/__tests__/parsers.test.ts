@@ -16,7 +16,7 @@ import {
   parseGmxPositions,
   parseGmxProfile,
 } from '../parsers'
-import { GMX_SUBGRAPH_URL, gmxWindowFrom } from '../index'
+import { GMX_SUBGRAPH_URL, gmxWindowFrom, sortGmxLeaderboardRows } from '../index'
 import type { ParseCtx } from '../../../core/types'
 
 function fixture(name: string): Record<string, unknown> {
@@ -223,6 +223,24 @@ describe('GMX transport defaults', () => {
   it('uses the official production Squid GraphQL endpoint', () => {
     expect(GMX_SUBGRAPH_URL).toBe(
       'https://gmx.squids.live/gmx-synthetics-arbitrum:prod/api/graphql'
+    )
+  })
+})
+
+describe('sortGmxLeaderboardRows', () => {
+  const rows = fixture('period-account-stats.json').rows as Array<Record<string, unknown>>
+
+  it('sorts the full candidate set by validated realized-net pnl', () => {
+    const sorted = sortGmxLeaderboardRows(rows)
+    const pnls = sorted.map((row) => gmxRealizedPnlUsd(row)!)
+    expect(pnls).toEqual([...pnls].sort((a, b) => b - a))
+  })
+
+  it('rejects a schema regression instead of sorting the row as zero', () => {
+    const incomplete = { ...rows[0] }
+    delete incomplete.realizedSwapFees
+    expect(() => sortGmxLeaderboardRows([incomplete])).toThrow(
+      'incomplete realized-net leaderboard components'
     )
   })
 })
