@@ -272,6 +272,43 @@ class TokenRefreshCoordinator {
       }
     }
   }
+
+  /** Establish a server-issued session without exposing a pending login to stale refresh work. */
+  async establishSession(
+    credentials: { access_token: string; refresh_token: string },
+    expectedUserId: string
+  ): Promise<Session | null> {
+    const transitionGeneration = this.beginIdentityTransition(expectedUserId)
+    let establishedSession: Session | null = null
+    try {
+      await this.settleInflightRefreshes()
+      const sb = await getSupabase()
+      const { data, error } = await sb.auth.setSession(credentials)
+      if (error || !data.session || data.session.user.id !== expectedUserId) return null
+
+      if (!commitViewerTransition(transitionGeneration, expectedUserId)) return null
+      updateAuthState(data.session)
+      establishedSession = data.session
+      return establishedSession
+    } catch (error) {
+      logger.warn('[TokenRefresh] Session establishment failed:', error)
+      return null
+    } finally {
+      if (!establishedSession && isViewerTransitionCurrent(transitionGeneration)) {
+        try {
+          const sb = await getSupabase()
+          const { data } = await sb.auth.getSession()
+          if (data.session && commitViewerTransition(transitionGeneration, data.session.user.id)) {
+            updateAuthState(data.session)
+          } else if (!data.session && commitViewerTransition(transitionGeneration, null)) {
+            clearAuthState()
+          }
+        } catch {
+          if (commitViewerTransition(transitionGeneration, null)) clearAuthState()
+        }
+      }
+    }
+  }
 }
 
 export type RefreshScope = {
