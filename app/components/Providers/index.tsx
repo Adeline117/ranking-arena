@@ -15,6 +15,7 @@ import { createQueryClient, setupQueryErrorLogging } from '@/lib/hooks/queryClie
 import { initializeErrorInterceptors } from '@/lib/middleware/error-interceptor'
 import dynamic from 'next/dynamic'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
+import { PushViewerSync } from '@/app/components/notifications/PushViewerSync'
 const PrivyClientProvider = dynamic(() => import('./PrivyClientProvider'))
 const LoginModal = dynamic(() => import('../auth/LoginModal'), { ssr: false })
 
@@ -104,6 +105,7 @@ export default function Providers({ children }: { children: ReactNode }) {
                 <ErrorInterceptorInitializer>
                   <DialogProvider>
                     {children}
+                    <PushViewerSync />
                     <GlobalLoginModal />
                   </DialogProvider>
                 </ErrorInterceptorInitializer>

@@ -1,6 +1,6 @@
 /**
  * 推送通知服务
- * 
+ *
  * 支持 FCM (Android) 和 APNs (iOS) 推送通知
  * 用于交易员变动提醒等功能
  */
@@ -114,24 +114,26 @@ export class PushNotificationService {
       auth?: string
     }
   ): Promise<PushSubscription> {
-     
     const { data, error } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
-      .upsert({
-        user_id: userId,
-        token,
-        provider,
-        device_id: options?.deviceId,
-        device_name: options?.deviceName,
-        platform: options?.platform,
-        endpoint: options?.endpoint,
-        p256dh: options?.p256dh,
-        auth: options?.auth,
-        enabled: true,
-        updated_at: new Date().toISOString(),
-      }, {
-        onConflict: 'user_id,token',
-      })
+      .upsert(
+        {
+          user_id: userId,
+          token,
+          provider,
+          device_id: options?.deviceId,
+          device_name: options?.deviceName,
+          platform: options?.platform,
+          endpoint: options?.endpoint,
+          p256dh: options?.p256dh,
+          auth: options?.auth,
+          enabled: true,
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: 'user_id,token',
+        }
+      )
       .select()
       .single()
 
@@ -147,7 +149,6 @@ export class PushNotificationService {
    * 取消推送订阅
    */
   async unregisterSubscription(userId: string, token: string): Promise<void> {
-     
     const { error } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
       .delete()
@@ -161,10 +162,32 @@ export class PushNotificationService {
   }
 
   /**
+   * Check one authenticated user's ownership of a currently enabled token.
+   * Tokens may be shared by multiple local accounts, so both predicates are
+   * mandatory; token-only lookups are not an ownership check.
+   */
+  async hasActiveSubscription(userId: string, token: string): Promise<boolean> {
+    const { data, error } = await (this.supabase as UntypedSupabaseClient)
+      .from('push_subscriptions')
+      .select('id')
+      .eq('user_id', userId)
+      .eq('token', token)
+      .eq('enabled', true)
+      .limit(1)
+      .maybeSingle()
+
+    if (error) {
+      logger.error('[PushNotification] 查询订阅状态失败:', error)
+      throw error
+    }
+
+    return Boolean(data?.id)
+  }
+
+  /**
    * 禁用推送订阅（保留记录）
    */
   async disableSubscription(userId: string, token: string): Promise<void> {
-     
     const { error } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
       .update({ enabled: false, updated_at: new Date().toISOString() })
@@ -181,10 +204,11 @@ export class PushNotificationService {
    * 获取用户的所有推送订阅
    */
   async getUserSubscriptions(userId: string): Promise<PushSubscription[]> {
-     
     const { data, error } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
-      .select('id, user_id, token, provider, device_id, device_name, platform, enabled, created_at, updated_at')
+      .select(
+        'id, user_id, token, provider, device_id, device_name, platform, enabled, created_at, updated_at'
+      )
       .eq('user_id', userId)
       .eq('enabled', true)
 
@@ -199,12 +223,9 @@ export class PushNotificationService {
   /**
    * 发送推送通知给单个用户
    */
-  async sendToUser(
-    userId: string,
-    notification: PushNotification
-  ): Promise<SendResult[]> {
+  async sendToUser(userId: string, notification: PushNotification): Promise<SendResult[]> {
     const subscriptions = await this.getUserSubscriptions(userId)
-    
+
     if (subscriptions.length === 0) {
       return [{ success: false, error: '用户没有有效的推送订阅' }]
     }
@@ -212,11 +233,22 @@ export class PushNotificationService {
     const results: SendResult[] = []
 
     for (const subscription of subscriptions) {
-      const result = await this.sendToToken(subscription.token, subscription.provider, notification)
+      const result = await this.sendToToken(
+        subscription.token,
+        subscription.provider,
+        notification,
+        userId
+      )
       results.push(result)
 
-      // 如果 token 无效，禁用订阅
-      if (!result.success && result.error?.includes('InvalidRegistration')) {
+      // Disable only this user's row when the provider confirms that the
+      // browser/native subscription is terminal. A shared token belonging to
+      // another local account must remain untouched.
+      if (
+        !result.success &&
+        (result.error?.includes('InvalidRegistration') ||
+          result.error?.includes('Subscription expired'))
+      ) {
         await this.disableSubscription(userId, subscription.token)
       }
     }
@@ -230,14 +262,18 @@ export class PushNotificationService {
   async sendToToken(
     token: string,
     provider: PushProvider,
-    notification: PushNotification
+    notification: PushNotification,
+    expectedUserId?: string
   ): Promise<SendResult> {
     if (provider === 'fcm' || provider === 'apns') {
       return this.sendViaFCM(token, notification)
     }
 
     if (provider === 'web') {
-      return this.sendViaWebPush(token, notification)
+      if (!expectedUserId) {
+        return { success: false, error: 'Web Push requires an owner scope' }
+      }
+      return this.sendViaWebPush(expectedUserId, token, notification)
     }
 
     return { success: false, error: 'Unknown provider' }
@@ -247,16 +283,25 @@ export class PushNotificationService {
    * 通过 Web Push (VAPID) 发送推送
    */
   private async sendViaWebPush(
+    userId: string,
     token: string,
     notification: PushNotification
   ): Promise<SendResult> {
-    // Look up the subscription keys from DB
-    const { data: sub } = await (this.supabase as UntypedSupabaseClient)
+    // A browser endpoint can be registered by more than one local account.
+    // Querying by token alone makes `.single()` ambiguous and can also select
+    // another user's key material.
+    const { data: sub, error } = await (this.supabase as UntypedSupabaseClient)
       .from('push_subscriptions')
       .select('endpoint, p256dh, auth')
+      .eq('user_id', userId)
       .eq('token', token)
       .eq('enabled', true)
-      .single()
+      .maybeSingle()
+
+    if (error) {
+      logger.error('[PushNotification] 查询 Web Push 订阅失败:', error)
+      return { success: false, error: 'Web Push subscription lookup failed' }
+    }
 
     if (!sub?.endpoint || !sub?.p256dh || !sub?.auth) {
       return { success: false, error: 'Web Push subscription keys not found' }
@@ -268,6 +313,7 @@ export class PushNotificationService {
       body: notification.body,
       url: notification.data?.url,
       icon: notification.imageUrl,
+      recipientUserId: userId,
     }
 
     try {
@@ -284,10 +330,7 @@ export class PushNotificationService {
   /**
    * 通过 FCM 发送推送
    */
-  private async sendViaFCM(
-    token: string,
-    notification: PushNotification
-  ): Promise<SendResult> {
+  private async sendViaFCM(token: string, notification: PushNotification): Promise<SendResult> {
     if (!this.fcmServerKey) {
       logger.warn('[PushNotification] FCM_SERVER_KEY 未配置')
       return { success: false, error: 'FCM 未配置' }
@@ -330,7 +373,7 @@ export class PushNotificationService {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${this.fcmServerKey}`,
+            Authorization: `Bearer ${this.fcmServerKey}`,
           },
           body: JSON.stringify(message),
         }

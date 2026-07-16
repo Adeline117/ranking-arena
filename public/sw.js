@@ -1,13 +1,45 @@
 /**
- * Service Worker — v4
+ * Service Worker — v5
  * Push notifications + offline fallback only.
  * NO aggressive caching of HTML or static assets.
  * Previous versions cached HTML pages and returned empty 503 responses
  * for failed static asset fetches, causing white screens on mobile.
  */
 
-const CACHE_NAME = 'ranking-arena-v4'
+const CACHE_NAME = 'ranking-arena-v5'
 const OFFLINE_URL = '/offline'
+const PUSH_VIEWER_CACHE_NAME = 'ranking-arena-push-viewer-v1'
+const PUSH_VIEWER_CACHE_KEY = '/__arena/push-viewer'
+
+function validPushViewerId(value) {
+  return typeof value === 'string' && value.length > 0 && value.length <= 128 && !/\s/.test(value)
+}
+
+async function writeActivePushViewer(userId) {
+  const cache = await caches.open(PUSH_VIEWER_CACHE_NAME)
+  if (!validPushViewerId(userId)) {
+    await cache.delete(PUSH_VIEWER_CACHE_KEY)
+    return
+  }
+  await cache.put(
+    PUSH_VIEWER_CACHE_KEY,
+    new Response(JSON.stringify({ userId }), {
+      headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+    })
+  )
+}
+
+async function readActivePushViewer() {
+  try {
+    const cache = await caches.open(PUSH_VIEWER_CACHE_NAME)
+    const response = await cache.match(PUSH_VIEWER_CACHE_KEY)
+    if (!response) return null
+    const stored = await response.json()
+    return validPushViewerId(stored && stored.userId) ? stored.userId : null
+  } catch (_error) {
+    return null
+  }
+}
 
 // Install: only cache the offline fallback page
 self.addEventListener('install', (event) => {
@@ -25,7 +57,11 @@ self.addEventListener('activate', (event) => {
     caches
       .keys()
       .then((names) =>
-        Promise.all(names.filter((name) => name !== CACHE_NAME).map((name) => caches.delete(name)))
+        Promise.all(
+          names
+            .filter((name) => name !== CACHE_NAME && name !== PUSH_VIEWER_CACHE_NAME)
+            .map((name) => caches.delete(name))
+        )
       )
       .then(() => self.clients.claim())
   )
@@ -54,6 +90,10 @@ self.addEventListener('fetch', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting()
+    return
+  }
+  if (event.data && event.data.type === 'SET_ACTIVE_PUSH_VIEWER') {
+    event.waitUntil(writeActivePushViewer(event.data.userId))
   }
 })
 
@@ -78,18 +118,26 @@ self.addEventListener('push', (event) => {
   const url = data.url || typeUrlMap[data.type] || '/'
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Arena', {
-      body: data.body,
-      icon: data.icon || '/icons/icon-192x192.png',
-      badge: '/icons/icon-192x192.png',
-      vibrate: [100, 50, 100],
-      tag: data.type || 'arena',
-      data: { url, type: data.type, ...data.data },
-      actions: [
-        { action: 'open', title: 'View' },
-        { action: 'close', title: 'Close' },
-      ],
-    })
+    (async () => {
+      if (data.recipientUserId) {
+        if (!validPushViewerId(data.recipientUserId)) return
+        const activeUserId = await readActivePushViewer()
+        if (activeUserId !== data.recipientUserId) return
+      }
+
+      await self.registration.showNotification(data.title || 'Arena', {
+        body: data.body,
+        icon: data.icon || '/icons/icon-192x192.png',
+        badge: '/icons/icon-192x192.png',
+        vibrate: [100, 50, 100],
+        tag: data.type || 'arena',
+        data: { url, type: data.type, ...data.data },
+        actions: [
+          { action: 'open', title: 'View' },
+          { action: 'close', title: 'Close' },
+        ],
+      })
+    })()
   )
 })
 
