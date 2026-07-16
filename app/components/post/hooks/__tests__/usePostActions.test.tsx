@@ -42,7 +42,21 @@ const initialPost: PostWithUserState = {
   user_vote: null,
 }
 
-function useAliasedPostActions() {
+type ViewerProps = {
+  accessToken: string
+  currentUserId: string
+  viewerKey: string
+  sessionGeneration: number
+}
+
+const viewerA: ViewerProps = {
+  accessToken: 'token-a',
+  currentUserId: 'viewer-a',
+  viewerKey: 'user:viewer-a',
+  sessionGeneration: 1,
+}
+
+function useAliasedPostActions(viewer: ViewerProps = viewerA) {
   const [post, setPost] = useState(initialPost)
   const setPosts = useCallback<React.Dispatch<React.SetStateAction<PostWithUserState[]>>>(
     (action) => {
@@ -58,8 +72,7 @@ function useAliasedPostActions() {
   )
 
   const actions = usePostActions({
-    accessToken: 'token',
-    currentUserId: 'viewer-1',
+    ...viewer,
     posts: [post],
     setPosts,
     openPost: post,
@@ -236,5 +249,118 @@ describe('usePostActions aliased detail state', () => {
       )
       await Promise.all([firstRequest!, duplicateRequest!])
     })
+  })
+
+  it('fails empty for A poll state on the first B render', async () => {
+    ;(global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({
+        success: true,
+        data: {
+          poll: {
+            id: 'poll-a',
+            question: 'A private vote state',
+            options: [],
+            type: 'single',
+            endAt: null,
+            isExpired: false,
+            showResults: true,
+            totalVotes: 1,
+          },
+          userVotes: [0],
+        },
+      })
+    )
+    const { result, rerender } = renderHook(
+      (viewer: ViewerProps) => useAliasedPostActions(viewer),
+      { initialProps: viewerA }
+    )
+    await act(async () => result.current.actions.loadCustomPoll('post-1'))
+    expect(result.current.actions.customPoll?.id).toBe('poll-a')
+
+    rerender({
+      accessToken: 'token-b',
+      currentUserId: 'viewer-b',
+      viewerKey: 'user:viewer-b',
+      sessionGeneration: 2,
+    })
+
+    expect(result.current.actions.customPoll).toBeNull()
+    expect(result.current.actions.customPollUserVotes).toEqual([])
+    expect(result.current.actions.selectedPollOptions).toEqual([])
+  })
+
+  it('discards a late A bookmark hydration after B becomes active', async () => {
+    let resolveBookmarks!: (response: Response) => void
+    ;(global.fetch as jest.Mock).mockReturnValueOnce(
+      new Promise<Response>((resolve) => {
+        resolveBookmarks = resolve
+      })
+    )
+    const { result, rerender } = renderHook(
+      (viewer: ViewerProps) => useAliasedPostActions(viewer),
+      { initialProps: viewerA }
+    )
+    let hydration!: Promise<void>
+    act(() => {
+      hydration = result.current.actions.loadUserBookmarksAndReposts(['post-1'])
+    })
+
+    rerender({
+      accessToken: 'token-b',
+      currentUserId: 'viewer-b',
+      viewerKey: 'user:viewer-b',
+      sessionGeneration: 2,
+    })
+    await act(async () => {
+      resolveBookmarks(jsonResponse({ bookmarks: { 'post-1': true } }))
+      await hydration
+    })
+
+    expect(result.current.actions.userBookmarks).toEqual({})
+  })
+
+  it('rejects an A-rendered action callback and masks A interaction drafts on B first render', async () => {
+    const { result, rerender } = renderHook(
+      (viewer: ViewerProps) => useAliasedPostActions(viewer),
+      { initialProps: viewerA }
+    )
+    act(() => {
+      result.current.actions.setShowRepostModal('post-1')
+      result.current.actions.setRepostComment('A private repost draft')
+      result.current.actions.setShowBookmarkModal(true)
+      result.current.actions.setBookmarkingPostId('post-1')
+      result.current.actions.setUserBookmarks({ 'post-1': true })
+      result.current.actions.setEditingPost(initialPost)
+      result.current.actions.setEditTitle('A private edit title')
+    })
+    const oldToggleReaction = result.current.actions.toggleReaction
+
+    rerender({
+      accessToken: 'token-b',
+      currentUserId: 'viewer-b',
+      viewerKey: 'user:viewer-b',
+      sessionGeneration: 2,
+    })
+
+    expect(result.current.actions.showRepostModal).toBeNull()
+    expect(result.current.actions.repostComment).toBe('')
+    expect(result.current.actions.showBookmarkModal).toBe(false)
+    expect(result.current.actions.bookmarkingPostId).toBeNull()
+    expect(result.current.actions.userBookmarks).toEqual({})
+    expect(result.current.actions.editingPost).toBeNull()
+    expect(result.current.actions.editTitle).toBe('')
+
+    await act(async () => oldToggleReaction('post-1', 'up'))
+
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(result.current.post.user_reaction).toBeNull()
+
+    act(() => {
+      result.current.actions.setUserBookmarks((previous) => ({
+        ...previous,
+        'post-b': true,
+      }))
+    })
+    expect(result.current.actions.userBookmarks).toEqual({ 'post-b': true })
   })
 })
