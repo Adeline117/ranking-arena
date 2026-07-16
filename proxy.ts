@@ -8,6 +8,11 @@ import { createServerClient as _createServerClient } from '@supabase/ssr'
 import { Ratelimit } from '@upstash/ratelimit'
 import { Redis } from '@upstash/redis'
 import { generateRequestId } from '@/lib/utils/logger'
+import {
+  PROXY_STRICT_RATE_LIMITS,
+  classifyProxyStrictRateLimit,
+  type ProxyStrictRateLimitTier,
+} from '@/lib/security/proxy-rate-limit'
 
 // Page routes requiring Supabase auth redirect
 const _AUTH_PROTECTED_PAGES = ['/settings', '/favorites', '/user-center', '/inbox', '/my-posts']
@@ -74,31 +79,16 @@ const SKIP_ROUTES = ['/_next', '/favicon.ico', '/api/health', '/api/cron']
 // Rate Limiting
 // ============================================
 
-// Tiered rate limiting: different limits for different route categories
-type RateLimitTier = 'health' | 'admin' | 'auth' | 'upload' | 'read' | 'write'
+const tierLimiters = new Map<ProxyStrictRateLimitTier, Ratelimit>()
 
-const TIER_CONFIG: Record<
-  RateLimitTier,
-  { requests: number; window: `${number} s`; prefix: string }
-> = {
-  health: { requests: 200, window: '60 s', prefix: 'mw:rl:health' },
-  admin: { requests: 60, window: '60 s', prefix: 'mw:rl:admin' },
-  auth: { requests: 10, window: '60 s', prefix: 'mw:rl:auth' },
-  upload: { requests: 20, window: '60 s', prefix: 'mw:rl:upload' },
-  read: { requests: 120, window: '60 s', prefix: 'mw:rl:read' },
-  write: { requests: 30, window: '60 s', prefix: 'mw:rl:write' },
-}
-
-const tierLimiters = new Map<RateLimitTier, Ratelimit>()
-
-function getTieredLimiter(tier: RateLimitTier): Ratelimit | null {
+function getTieredLimiter(tier: ProxyStrictRateLimitTier): Ratelimit | null {
   const cached = tierLimiters.get(tier)
   if (cached) return cached
   const url = process.env.UPSTASH_REDIS_REST_URL
   const token = process.env.UPSTASH_REDIS_REST_TOKEN
   if (!url || !token) return null
   try {
-    const cfg = TIER_CONFIG[tier]
+    const cfg = PROXY_STRICT_RATE_LIMITS[tier]
     const limiter = new Ratelimit({
       redis: new Redis({ url, token }),
       limiter: Ratelimit.slidingWindow(cfg.requests, cfg.window),
@@ -110,23 +100,6 @@ function getTieredLimiter(tier: RateLimitTier): Ratelimit | null {
   } catch {
     return null
   }
-}
-
-function classifyRoute(pathname: string, method: string): RateLimitTier | null {
-  // Skip internal routes
-  if (
-    pathname.startsWith('/api/cron/') ||
-    pathname.startsWith('/api/webhook/') ||
-    pathname.startsWith('/api/stripe/')
-  ) {
-    return null
-  }
-  if (pathname.startsWith('/api/health')) return 'health'
-  if (pathname.startsWith('/api/admin/')) return 'admin'
-  if (pathname.startsWith('/api/auth/') || pathname.startsWith('/api/settings/2fa/')) return 'auth'
-  if (pathname.includes('/upload') || pathname.startsWith('/api/avatar')) return 'upload'
-  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) return 'write'
-  return 'read'
 }
 
 // 允许的 CORS 源
@@ -537,7 +510,7 @@ export async function proxy(request: NextRequest) {
 
   // API 路由分层限流检查
   if (pathname.startsWith('/api/')) {
-    const tier = classifyRoute(pathname, method)
+    const tier = classifyProxyStrictRateLimit(pathname, method)
     if (tier) {
       const limiter = getTieredLimiter(tier)
       if (limiter) {
