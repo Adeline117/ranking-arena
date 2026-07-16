@@ -283,7 +283,15 @@ describe('POST /api/settings/export', () => {
         completed_at: '2026-02-04T00:01:00.000Z',
       },
     ])
-    expect(mockFetchAllExportRows).toHaveBeenCalledTimes(6)
+    expect(body.account).toEqual({
+      login_sessions: [{ id: 'account.login_sessions-1' }],
+      api_keys: [{ id: 'account.api_keys-1' }],
+      passkeys: [{ id: 'account.passkeys-1' }],
+      push_subscriptions: [{ id: 'account.push_subscriptions-1' }],
+      backup_codes: [{ id: 'account.backup_codes-1' }],
+      recovery_tokens: [{ id: 'account.recovery_tokens-1' }],
+    })
+    expect(mockFetchAllExportRows).toHaveBeenCalledTimes(12)
     expect(mockFrom).toHaveBeenCalledTimes(2)
     expect(response.headers.get('Content-Disposition')).not.toContain(USER_ID)
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
@@ -291,7 +299,8 @@ describe('POST /api/settings/export', () => {
     expect(response.headers.get('X-Content-Type-Options')).toBe('nosniff')
 
     const datasets = mockFetchAllExportRows.mock.calls.map((call) => call[1])
-    expect(datasets).toHaveLength(6)
+    expect(datasets).toHaveLength(12)
+    expect(mockFetchAllExportRows.mock.calls.every((call) => call[2] === USER_ID)).toBe(true)
     for (const dataset of datasets) {
       expect(dataset.selectColumns).toContain('id')
       expect(dataset.selectColumns).not.toContain('*')
@@ -302,6 +311,21 @@ describe('POST /api/settings/export', () => {
     const commentsDataset = datasets.find((dataset) => dataset.name === 'comments')
     expect(commentsDataset.selectColumns).not.toContain('author_id')
     expect(commentsDataset.selectColumns).not.toContain('author_handle')
+
+    const apiKeysDataset = datasets.find((dataset) => dataset.name === 'account.api_keys')
+    expect(apiKeysDataset.selectColumns).not.toContain('key')
+    const passkeysDataset = datasets.find((dataset) => dataset.name === 'account.passkeys')
+    for (const forbiddenField of ['credential_id', 'public_key', 'counter']) {
+      expect(passkeysDataset.selectColumns).not.toContain(forbiddenField)
+    }
+    const pushDataset = datasets.find((dataset) => dataset.name === 'account.push_subscriptions')
+    for (const forbiddenField of ['token', 'endpoint', 'auth', 'p256dh', 'device_id']) {
+      expect(pushDataset.selectColumns).not.toContain(forbiddenField)
+    }
+    const backupDataset = datasets.find((dataset) => dataset.name === 'account.backup_codes')
+    expect(backupDataset.selectColumns).not.toContain('code_hash')
+    const recoveryDataset = datasets.find((dataset) => dataset.name === 'account.recovery_tokens')
+    expect(recoveryDataset.selectColumns).not.toContain('token_hash')
   })
 
   it('fails closed without consuming cooldown when one dataset page fails', async () => {

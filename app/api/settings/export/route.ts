@@ -36,6 +36,14 @@ interface ExportData {
     sent: unknown[]
     received: unknown[]
   }
+  account: {
+    login_sessions: unknown[]
+    api_keys: unknown[]
+    passkeys: unknown[]
+    push_subscriptions: unknown[]
+    backup_codes: unknown[]
+    recovery_tokens: unknown[]
+  }
 }
 
 const PROFILE_EXPORT_COLUMNS = [
@@ -179,6 +187,69 @@ const EXPORT_DATASETS = {
       'completed_at',
     ],
   },
+  loginSessions: {
+    name: 'account.login_sessions',
+    table: 'login_sessions',
+    ownerColumn: 'user_id',
+    selectColumns: [
+      'id',
+      'device_info',
+      'is_current',
+      'revoked',
+      'last_active_at',
+      'user_agent',
+      'ip_address',
+      'created_at',
+    ],
+  },
+  apiKeys: {
+    name: 'account.api_keys',
+    table: 'api_keys',
+    ownerColumn: 'user_id',
+    selectColumns: [
+      'id',
+      'name',
+      'active',
+      'tier',
+      'daily_limit',
+      'request_count_today',
+      'created_at',
+      'last_used_at',
+      'revoked_at',
+    ],
+  },
+  passkeys: {
+    name: 'account.passkeys',
+    table: 'user_passkeys',
+    ownerColumn: 'user_id',
+    selectColumns: ['id', 'device_name', 'transports', 'created_at', 'last_used_at'],
+  },
+  pushSubscriptions: {
+    name: 'account.push_subscriptions',
+    table: 'push_subscriptions',
+    ownerColumn: 'user_id',
+    selectColumns: [
+      'id',
+      'platform',
+      'provider',
+      'device_name',
+      'enabled',
+      'created_at',
+      'updated_at',
+    ],
+  },
+  backupCodes: {
+    name: 'account.backup_codes',
+    table: 'backup_codes',
+    ownerColumn: 'user_id',
+    selectColumns: ['id', 'used', 'used_at', 'created_at'],
+  },
+  recoveryTokens: {
+    name: 'account.recovery_tokens',
+    table: 'account_recovery_tokens',
+    ownerColumn: 'user_id',
+    selectColumns: ['id', 'created_at', 'expires_at', 'used_at'],
+  },
 } satisfies Record<string, ExportDataset>
 
 function normalizeFollowRows(rows: Record<string, unknown>[], direction: 'following' | 'follower') {
@@ -302,13 +373,32 @@ export async function POST(request: NextRequest) {
 
     // Collect complete datasets in parallel. Every table is keyset-paginated;
     // any page error aborts the whole export instead of returning partial JSON.
-    const [posts, comments, following, followers, tipsSent, tipsReceived] = await Promise.all([
+    const [
+      posts,
+      comments,
+      following,
+      followers,
+      tipsSent,
+      tipsReceived,
+      loginSessions,
+      apiKeys,
+      passkeys,
+      pushSubscriptions,
+      backupCodes,
+      recoveryTokens,
+    ] = await Promise.all([
       fetchAllExportRows(supabase, EXPORT_DATASETS.posts, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.comments, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.following, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.followers, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.tipsSent, user.id),
       fetchAllExportRows(supabase, EXPORT_DATASETS.tipsReceived, user.id),
+      fetchAllExportRows(supabase, EXPORT_DATASETS.loginSessions, user.id),
+      fetchAllExportRows(supabase, EXPORT_DATASETS.apiKeys, user.id),
+      fetchAllExportRows(supabase, EXPORT_DATASETS.passkeys, user.id),
+      fetchAllExportRows(supabase, EXPORT_DATASETS.pushSubscriptions, user.id),
+      fetchAllExportRows(supabase, EXPORT_DATASETS.backupCodes, user.id),
+      fetchAllExportRows(supabase, EXPORT_DATASETS.recoveryTokens, user.id),
     ])
 
     const exportData: ExportData = {
@@ -323,6 +413,14 @@ export async function POST(request: NextRequest) {
       tips: {
         sent: normalizeTipRows(tipsSent, 'sent'),
         received: normalizeTipRows(tipsReceived, 'received'),
+      },
+      account: {
+        login_sessions: loginSessions,
+        api_keys: apiKeys,
+        passkeys,
+        push_subscriptions: pushSubscriptions,
+        backup_codes: backupCodes,
+        recovery_tokens: recoveryTokens,
       },
     }
 
