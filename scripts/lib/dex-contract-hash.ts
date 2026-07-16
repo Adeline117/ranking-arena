@@ -72,6 +72,7 @@ function canonicalValue(value: unknown, ancestors: Set<object>): string {
   }
   if (typeof value === 'number') {
     if (!Number.isFinite(value)) reject('non-finite numbers')
+    if (Object.is(value, -0)) reject('negative zero')
     return JSON.stringify(value)
   }
   if (typeof value !== 'object') reject(typeof value)

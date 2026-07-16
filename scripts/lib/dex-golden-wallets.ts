@@ -125,7 +125,10 @@ const safeNonNegativeIntegerSchema = z
   .number()
   .int()
   .nonnegative()
-  .refine(Number.isSafeInteger, 'integer must be safe')
+  .refine(
+    (value) => Number.isSafeInteger(value) && !Object.is(value, -0),
+    'integer must be safe and must not be negative zero'
+  )
 const canonicalDecimalSchema = z
   .string()
   .regex(CANONICAL_DECIMAL)
@@ -307,7 +310,11 @@ function validateAndCanonicalize(
     if (candidate.pnlCurrency !== SOURCE_CONTRACT[candidate.sourceSlug].pnlCurrency) {
       throw new Error(`unexpected PnL currency for ${label}: ${candidate.pnlCurrency}`)
     }
-    if (!Number.isSafeInteger(candidate.activityProxyCount) || candidate.activityProxyCount < 0) {
+    if (
+      !Number.isSafeInteger(candidate.activityProxyCount) ||
+      candidate.activityProxyCount < 0 ||
+      Object.is(candidate.activityProxyCount, -0)
+    ) {
       throw new Error(`activityProxyCount must be a non-negative safe integer: ${label}`)
     }
     return { ...candidate, wallet }
