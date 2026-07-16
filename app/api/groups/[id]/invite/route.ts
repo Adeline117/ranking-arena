@@ -23,16 +23,32 @@ type AtomicInviteResult = {
   required_score?: number
 }
 
+function isTimestamp(value: unknown): value is string {
+  return typeof value === 'string' && Number.isFinite(Date.parse(value))
+}
+
 function readAtomicInviteResult(value: unknown): AtomicInviteResult | null {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return null
 
   const result = value as Record<string, unknown>
   if (typeof result.status !== 'string') return null
+  if (result.invite_id !== undefined && !GroupIdSchema.safeParse(result.invite_id).success) {
+    return null
+  }
+  if (result.expires_at !== undefined && !isTimestamp(result.expires_at)) return null
+  if (
+    result.required_score !== undefined &&
+    (typeof result.required_score !== 'number' ||
+      !Number.isFinite(result.required_score) ||
+      result.required_score < 0)
+  ) {
+    return null
+  }
 
   return {
     status: result.status,
     ...(typeof result.invite_id === 'string' ? { invite_id: result.invite_id } : {}),
-    ...(typeof result.expires_at === 'string' ? { expires_at: result.expires_at } : {}),
+    ...(isTimestamp(result.expires_at) ? { expires_at: result.expires_at } : {}),
     ...(typeof result.required_score === 'number' ? { required_score: result.required_score } : {}),
   }
 }
@@ -218,13 +234,25 @@ export const POST = withAuth(
       }
 
       const result = readAtomicInviteResult(data)
-      if (result?.status === 'token_conflict') continue
-      if (result?.status !== 'created') return creationFailureResponse(result)
+      if (!result) {
+        log.error('Atomic invite creation returned an invalid result', { data })
+        return creationFailureResponse(null)
+      }
+      if (result.status === 'token_conflict') continue
+      if (result.status !== 'created') return creationFailureResponse(result)
+      if (
+        result.invite_id === undefined ||
+        result.expires_at === undefined ||
+        Date.parse(result.expires_at) !== expiresAt
+      ) {
+        log.error('Atomic invite creation returned incomplete evidence', { result })
+        return creationFailureResponse(null)
+      }
 
       return NextResponse.json({
         success: true,
         invite_url: `/groups/${groupId}?invite=${inviteToken}`,
-        expires_at: new Date(expiresAt).toISOString(),
+        expires_at: result.expires_at,
       })
     }
 
