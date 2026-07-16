@@ -3,6 +3,10 @@ import { validateExportColumns } from './export-safety'
 
 export const EXPORT_PAGE_SIZE = 1_000
 export const MAX_EXPORT_ROWS_PER_DATASET = 250_000
+// One hundred canonical UUIDs occupy about 3.7 KiB before URL encoding. Keep
+// owner filters comfortably below common proxy/request-line limits while still
+// eliminating per-parent query fan-out.
+export const EXPORT_UUID_OWNER_BATCH_SIZE = 100
 
 export type ExportCursorValueType = 'string' | 'uuid' | 'bigint' | 'timestamp'
 
@@ -307,6 +311,30 @@ function compareCursorTuples(
   return 0
 }
 
+/**
+ * Compare every database-independent prefix component. Distinct text values
+ * return null because PostgreSQL collation, not JavaScript UTF-16 ordering,
+ * decides their order. Equal text components can still be skipped so a later
+ * UUID/timestamp/bigint component remains locally verifiable.
+ */
+function compareCursorTuplesWhereOrderIsKnown(
+  left: readonly NormalizedCursorValue[],
+  right: readonly NormalizedCursorValue[]
+): number | null {
+  if (left.length !== right.length) throw new Error('Cursor tuple shape changed while paging')
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index].valueType !== right[index].valueType) {
+      throw new Error('Cursor value types changed while paging')
+    }
+    if (left[index].valueType === 'string' && left[index].wireValue !== right[index].wireValue) {
+      return null
+    }
+    const comparison = compareCursorValues(left[index], right[index])
+    if (comparison !== 0) return comparison
+  }
+  return 0
+}
+
 function cursorTupleKey(cursor: readonly NormalizedCursorValue[]): string {
   return cursor
     .map(({ valueType, wireValue }) => `${valueType}:${wireValue.length}:${wireValue}`)
@@ -472,6 +500,178 @@ export async function fetchAllExportRowsByCursor(
           : compareCursorTuples(nextCursor, cursor) <= 0))
     ) {
       throw new DataExportReadError(validated.name, new Error('Pagination cursor did not advance'))
+    }
+    cursor = nextCursor
+  }
+}
+
+/**
+ * Fetch one bounded batch of UUID-owned child rows. Unlike the single-owner
+ * reader, the owner column is the first keyset component so every page can
+ * safely span multiple parents without offsets or per-parent queries.
+ *
+ * This is intentionally not re-exported from data-export.ts: callers should
+ * use fetchAllExportRowsForUuidParents, which validates/sorts the complete
+ * parent set and enforces one row budget across every batch.
+ */
+export async function fetchExportRowsForUuidOwnerBatch(
+  supabase: SupabaseClient,
+  dataset: CursorExportDataset,
+  ownerValues: readonly string[],
+  maximumRows: number
+): Promise<Record<string, unknown>[]> {
+  const validated = validateDataset(dataset)
+  const ownerColumn = validated.ownerPredicate.column
+
+  if (
+    validated.ownerPredicate.operator !== 'eq' ||
+    validated.ownerPredicate.valueType !== 'uuid' ||
+    !validated.selectColumns.includes(ownerColumn) ||
+    validated.cursorColumns.some(({ column }) => column === ownerColumn)
+  ) {
+    invalidConfiguration(
+      validated.name,
+      'Batched child exports require a selected, distinct UUID owner column'
+    )
+  }
+  if (
+    !Number.isSafeInteger(maximumRows) ||
+    maximumRows < 0 ||
+    maximumRows > MAX_EXPORT_ROWS_PER_DATASET
+  ) {
+    invalidConfiguration(validated.name, 'Invalid batched child export row budget')
+  }
+  if (
+    !Array.isArray(ownerValues) ||
+    ownerValues.length === 0 ||
+    ownerValues.length > EXPORT_UUID_OWNER_BATCH_SIZE
+  ) {
+    invalidConfiguration(validated.name, 'Invalid UUID owner batch size')
+  }
+
+  let normalizedOwners: readonly NormalizedCursorValue[]
+  try {
+    normalizedOwners = ownerValues.map((value) => normalizeCursorValue(value, 'uuid'))
+  } catch (error) {
+    throw new DataExportReadError(validated.name, error)
+  }
+  const ownerKeys = normalizedOwners.map(({ wireValue }) => wireValue)
+  const allowedOwners = new Set(ownerKeys)
+  if (allowedOwners.size !== ownerKeys.length) {
+    invalidConfiguration(validated.name, 'Duplicate UUID owner in batch')
+  }
+
+  const orderingColumns: readonly ExportCursorColumn[] = [
+    { column: ownerColumn, valueType: 'uuid' },
+    ...validated.cursorColumns,
+  ]
+  const rows: Record<string, unknown>[] = []
+  let cursor: readonly NormalizedCursorValue[] | null = null
+  const seenCursorTuples = new Set<string>()
+
+  for (;;) {
+    let query = supabase
+      .from(validated.table)
+      .select(validated.selection)
+      .in(ownerColumn, ownerKeys)
+
+    for (const cursorColumn of orderingColumns) {
+      query = query.order(cursorColumn.column, { ascending: true })
+    }
+
+    // At the exact cap, one final row is enough to prove the dataset is too
+    // large; an empty response proves completion without loading another page.
+    query = query.limit(Math.min(EXPORT_PAGE_SIZE, maximumRows - rows.length + 1))
+    if (cursor !== null) {
+      query = query.or(buildLexicographicFilter(orderingColumns, cursor))
+    }
+
+    let data: unknown
+    let error: unknown
+    try {
+      const result = await query
+      data = result.data
+      error = result.error
+    } catch (queryError) {
+      throw new DataExportReadError(validated.name, queryError)
+    }
+
+    if (error || !Array.isArray(data)) {
+      throw new DataExportReadError(validated.name, error)
+    }
+    if (data.length === 0) return rows
+    if (rows.length + data.length > maximumRows) {
+      throw new DataExportTooLargeError(validated.name)
+    }
+
+    let nextCursor: readonly NormalizedCursorValue[] | null = cursor
+    for (const rawRow of data) {
+      if (!rawRow || typeof rawRow !== 'object' || Array.isArray(rawRow)) {
+        throw new DataExportReadError(validated.name, new Error('Invalid row shape'))
+      }
+      const row = rawRow as Record<string, unknown>
+      if (validated.selectColumns.some((column) => !Object.hasOwn(row, column))) {
+        throw new DataExportReadError(validated.name, new Error('Incomplete selected row'))
+      }
+      if (
+        validated.textCastColumns.some(
+          (column) => row[column] !== null && typeof row[column] !== 'string'
+        )
+      ) {
+        throw new DataExportReadError(validated.name, new Error('Inexact text-cast export field'))
+      }
+
+      let rowCursor: NormalizedCursorValue[]
+      try {
+        rowCursor = orderingColumns.map(({ column, valueType }) =>
+          normalizeCursorValue(row[column], valueType, valueType === 'string')
+        )
+        if (!allowedOwners.has(rowCursor[0].wireValue)) {
+          throw new Error('Child row escaped its verified UUID owner batch')
+        }
+        if (nextCursor !== null) {
+          const comparison = compareCursorTuplesWhereOrderIsKnown(rowCursor, nextCursor)
+          if (comparison !== null && comparison <= 0) {
+            throw new Error('Batched pagination cursor did not advance monotonically')
+          }
+        }
+        const tupleKey = cursorTupleKey(rowCursor)
+        if (seenCursorTuples.has(tupleKey)) {
+          throw new Error('Batched pagination cursor tuple repeated')
+        }
+        seenCursorTuples.add(tupleKey)
+      } catch (cursorError) {
+        throw new DataExportReadError(validated.name, cursorError)
+      }
+
+      const normalizedCursorFields = new Map(
+        orderingColumns.map(({ column }, index) => [column, rowCursor[index].projectedValue])
+      )
+      rows.push(
+        Object.fromEntries(
+          validated.selectColumns.map((column) => [
+            column,
+            normalizedCursorFields.has(column) ? normalizedCursorFields.get(column) : row[column],
+          ])
+        ) as Record<string, unknown>
+      )
+      nextCursor = rowCursor
+    }
+
+    const pageComparison =
+      cursor !== null && nextCursor !== null
+        ? compareCursorTuplesWhereOrderIsKnown(nextCursor, cursor)
+        : null
+    if (
+      nextCursor === null ||
+      (cursor !== null &&
+        ((pageComparison !== null && pageComparison <= 0) ||
+          cursorTupleKey(nextCursor) === cursorTupleKey(cursor)))
+    ) {
+      throw new DataExportReadError(
+        validated.name,
+        new Error('Batched pagination cursor did not advance')
+      )
     }
     cursor = nextCursor
   }
