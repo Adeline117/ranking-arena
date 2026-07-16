@@ -37,10 +37,17 @@ describe('search service audience boundary', () => {
     expect(route).not.toContain('search:unified:v2:')
   })
 
-  it('rechecks dissolved groups and deleted public profiles after cache hits', () => {
+  it('rematerializes current discoverable groups and rechecks public profiles after cache hits', () => {
     expect(route.match(/\.is\('dissolved_at', null\)/g)).toHaveLength(3)
+    expect(route.match(/\.in\('visibility'/g)).toHaveLength(3)
     expect(route).toContain(".from('public_user_profiles')")
-    expect(route).toContain('readCurrentSearchGroupIds(supabase, groupIds)')
+    expect(route).toContain('readCurrentSearchGroups(supabase, groupIds)')
+    expect(route).toContain(".select('id, name, description, member_count')")
+    expect(route).toContain('const group = currentGroups.get(candidateGroup.id)')
+    expect(route).toContain('title: group.name')
+    expect(route).toContain('subtitle: group.description || undefined')
+    expect(route).toContain('meta: { member_count: group.member_count }')
+    expect(route).toContain('.map((group) => currentGroups.get(group.id)?.name)')
     expect(route).toContain('readCurrentSearchUserIds(supabase, userIds)')
   })
 })

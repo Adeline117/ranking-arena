@@ -84,23 +84,46 @@ const SEARCH_NO_STORE_HEADERS = {
   'Vercel-CDN-Cache-Control': 'no-store',
 } as const
 
+const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply'] as const
+
 type PublicSearchSupabase = Parameters<Parameters<typeof withPublic>[0]>[0]['supabase']
 
-async function readCurrentSearchGroupIds(
+interface CurrentSearchGroup {
+  id: string
+  name: string
+  description: string | null
+  member_count: number | null
+}
+
+async function readCurrentSearchGroups(
   supabase: PublicSearchSupabase,
   groupIds: string[]
-): Promise<Set<string>> {
-  if (groupIds.length === 0) return new Set()
+): Promise<Map<string, CurrentSearchGroup>> {
+  if (groupIds.length === 0) return new Map()
   try {
     const { data, error } = await supabase
       .from('groups')
-      .select('id')
+      .select('id, name, description, member_count')
       .in('id', groupIds)
       .is('dissolved_at', null)
-    if (error) return new Set()
-    return new Set((data ?? []).map((group) => group.id).filter((id): id is string => !!id))
+      .in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])
+    if (error) return new Map()
+
+    const currentGroups = new Map<string, CurrentSearchGroup>()
+    for (const group of data ?? []) {
+      if (
+        typeof group.id !== 'string' ||
+        typeof group.name !== 'string' ||
+        (group.description !== null && typeof group.description !== 'string') ||
+        (group.member_count !== null && typeof group.member_count !== 'number')
+      ) {
+        continue
+      }
+      currentGroups.set(group.id, group)
+    }
+    return currentGroups
   } catch {
-    return new Set()
+    return new Map()
   }
 }
 
@@ -140,19 +163,21 @@ async function materializeUnifiedSearchCandidate(
     })) ?? []
 
   const groupIds = [
-    ...new Set([
-      ...candidate.result.results.groups.map((group) => group.id),
-      ...(candidate.suggestionCandidates?.groups.map((group) => group.id) ?? []),
-    ]),
+    ...new Set(
+      [
+        ...candidate.result.results.groups.map((group) => group.id),
+        ...(candidate.suggestionCandidates?.groups.map((group) => group.id) ?? []),
+      ].filter((groupId): groupId is string => typeof groupId === 'string' && !!groupId)
+    ),
   ]
   const userIds = [...new Set(candidate.result.results.users.map((user) => user.id))]
-  const [readablePostCandidates, currentGroupIds, currentUserIds] = await Promise.all([
+  const [readablePostCandidates, currentGroups, currentUserIds] = await Promise.all([
     filterServiceReadablePostRows(
       supabase,
       [...resultPostCandidates, ...suggestionPostCandidates],
       null
     ),
-    readCurrentSearchGroupIds(supabase, groupIds),
+    readCurrentSearchGroups(supabase, groupIds),
     readCurrentSearchUserIds(supabase, userIds),
   ])
   const posts = readablePostCandidates
@@ -167,12 +192,28 @@ async function materializeUnifiedSearchCandidate(
         post.source === 'suggestion'
     )
     .map((post) => post.title)
-  const groups = candidate.result.results.groups.filter((group) => currentGroupIds.has(group.id))
+  // Never return mutable fields from the Redis candidate. Rebuild every group
+  // result from its current discoverable row so edits/removals take effect on
+  // the very next cache hit.
+  const groups = candidate.result.results.groups
+    .map((candidateGroup): UnifiedSearchResult | null => {
+      const group = currentGroups.get(candidateGroup.id)
+      if (!group) return null
+      return {
+        id: group.id,
+        type: 'group',
+        title: group.name,
+        subtitle: group.description || undefined,
+        href: `/groups/${encodeURIComponent(group.id)}`,
+        meta: { member_count: group.member_count },
+      }
+    })
+    .filter((group): group is UnifiedSearchResult => group !== null)
   const users = candidate.result.results.users.filter((user) => currentUserIds.has(user.id))
   const groupSuggestions =
     candidate.suggestionCandidates?.groups
-      .filter((group) => currentGroupIds.has(group.id))
-      .map((group) => group.name) ?? []
+      .map((group) => currentGroups.get(group.id)?.name)
+      .filter((name): name is string => typeof name === 'string') ?? []
   const suggestions = candidate.suggestionCandidates
     ? [
         ...new Set([
@@ -703,6 +744,7 @@ export const GET = withPublic(
                 .select('id, name, member_count, description')
                 .ilike('name', `%${sanitizedQuery}%`)
                 .is('dissolved_at', null)
+                .in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])
                 .limit(limitPerCategory)
             )
           : Promise.resolve([]),
@@ -872,6 +914,7 @@ export const GET = withPublic(
               .select('id, name')
               .ilike('name', `%${sanitizedQuery.slice(0, 20)}%`)
               .is('dissolved_at', null)
+              .in('visibility', [...DISCOVERABLE_GROUP_VISIBILITIES])
               .order('member_count', { ascending: false, nullsFirst: false })
               .limit(2)
               .then(({ data }) =>
