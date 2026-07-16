@@ -21,6 +21,8 @@ function candidates(): DexGoldenWalletCandidate[] {
           sourceSlug === 'binance_web3_bsc'
             ? `0x${(index + 1).toString(16).padStart(40, '0')}`
             : solanaWallet(index),
+        snapshotId: sourceSlug === 'binance_web3_bsc' ? '101' : '202',
+        snapshotScrapedAt: '2026-07-16T17:45:00.000Z',
         sourceRank: index + 1,
         arenaScore: 100 - index,
         pnl90d: 10_000 - index,
@@ -128,5 +130,11 @@ describe('DEX golden-wallet selection contract', () => {
     expect(() =>
       buildDexGoldenWalletSnapshot({ candidates: invalidActivity, ...METADATA })
     ).toThrow(/activityProxyCount/)
+
+    const mixedSnapshots = candidates()
+    mixedSnapshots[0].snapshotId = '999'
+    expect(() => buildDexGoldenWalletSnapshot({ candidates: mixedSnapshots, ...METADATA })).toThrow(
+      /one passed source snapshot/
+    )
   })
 })

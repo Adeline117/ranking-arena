@@ -11,6 +11,8 @@ export type DexGoldenCohort = 'top' | 'deterministic_random' | 'high_frequency'
 export interface DexGoldenWalletCandidate {
   sourceSlug: DexGoldenSource
   wallet: string
+  snapshotId: string
+  snapshotScrapedAt: string
   sourceRank: number | null
   arenaScore: number | null
   pnl90d: number
@@ -23,6 +25,8 @@ export interface DexGoldenWallet {
   chain: { namespace: 'eip155' | 'solana'; reference: '56' | 'mainnet-beta' }
   wallet: string
   cohort: DexGoldenCohort
+  source_snapshot_id: string
+  source_snapshot_scraped_at: string
   source_rank: number | null
   arena_score: number | null
   pnl_90d: number
@@ -47,6 +51,8 @@ export interface DexGoldenWalletSnapshot {
   }
   populations: Array<{
     source_slug: DexGoldenSource
+    snapshot_id: string
+    snapshot_scraped_at: string
     eligible_candidates: number
     candidates_with_activity_proxy: number
     max_stats_as_of: string
@@ -136,6 +142,10 @@ function validateAndCanonicalize(
     ) {
       throw new Error(`sourceRank must be a positive safe integer or null: ${identity}`)
     }
+    if (!/^[1-9]\d*$/.test(candidate.snapshotId)) {
+      throw new Error(`snapshotId must be a positive decimal string: ${identity}`)
+    }
+    assertCanonicalTimestamp(candidate.snapshotScrapedAt, `snapshotScrapedAt for ${identity}`)
     assertFiniteNullable(candidate.arenaScore, `arenaScore for ${identity}`)
     if (!Number.isFinite(candidate.pnl90d)) throw new Error(`pnl90d must be finite: ${identity}`)
     if (!Number.isSafeInteger(candidate.activityProxyCount) || candidate.activityProxyCount < 0) {
@@ -156,6 +166,8 @@ function selectedWallet(
     chain: { namespace, reference },
     wallet: candidate.wallet,
     cohort,
+    source_snapshot_id: candidate.snapshotId,
+    source_snapshot_scraped_at: candidate.snapshotScrapedAt,
     source_rank: candidate.sourceRank,
     arena_score: candidate.arenaScore,
     pnl_90d: candidate.pnl90d,
@@ -184,6 +196,11 @@ export function buildDexGoldenWalletSnapshot(input: {
     const sourceCandidates = candidates.filter((candidate) => candidate.sourceSlug === source)
     if (sourceCandidates.length < 50) {
       throw new Error(`${source} requires at least 50 eligible candidates`)
+    }
+    const snapshotIds = new Set(sourceCandidates.map((candidate) => candidate.snapshotId))
+    const snapshotTimes = new Set(sourceCandidates.map((candidate) => candidate.snapshotScrapedAt))
+    if (snapshotIds.size !== 1 || snapshotTimes.size !== 1) {
+      throw new Error(`${source} candidates must come from one passed source snapshot`)
     }
     const selected = new Set<string>()
 
@@ -223,6 +240,8 @@ export function buildDexGoldenWalletSnapshot(input: {
 
     populations.push({
       source_slug: source,
+      snapshot_id: sourceCandidates[0].snapshotId,
+      snapshot_scraped_at: sourceCandidates[0].snapshotScrapedAt,
       eligible_candidates: sourceCandidates.length,
       candidates_with_activity_proxy: sourceCandidates.filter(
         (candidate) => candidate.activityProxyCount > 0
