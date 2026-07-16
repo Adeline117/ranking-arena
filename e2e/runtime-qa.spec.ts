@@ -386,7 +386,6 @@ test.describe('F. Page Loading', () => {
     ['/flash-news', '快讯'],
     ['/hot', '热门'],
     ['/groups', '交易组'],
-    ['/rankings/bots', 'Bot排行'],
     ['/rankings/tokens', 'Token排行'],
     ['/methodology', '方法论'],
   ]

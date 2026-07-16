@@ -20,7 +20,6 @@ const PAGES = [
   '/hot',
   '/login',
   '/pricing',
-  '/rankings/bots',
   '/rankings/tokens',
   '/search?q=btc',
   '/methodology',
@@ -47,22 +46,29 @@ interface PageAuditResult {
 // ── shared collector ────────────────────────────────────────────
 const results: PageAuditResult[] = []
 
-async function auditPage(page: Page, path: string, screenshotDir: string): Promise<PageAuditResult> {
+async function auditPage(
+  page: Page,
+  path: string,
+  screenshotDir: string
+): Promise<PageAuditResult> {
   const consoleErrors: string[] = []
   const failedRequests: { url: string; status: number }[] = []
 
   // Listen for console errors
-  page.on('console', msg => {
+  page.on('console', (msg) => {
     if (msg.type() === 'error') {
       consoleErrors.push(msg.text().slice(0, 200))
     }
   })
 
   // Listen for failed network requests
-  page.on('response', response => {
+  page.on('response', (response) => {
     if (response.status() >= 400) {
       failedRequests.push({
-        url: response.url().replace(/^https?:\/\/[^/]+/, '').slice(0, 120),
+        url: response
+          .url()
+          .replace(/^https?:\/\/[^/]+/, '')
+          .slice(0, 120),
         status: response.status(),
       })
     }
@@ -83,7 +89,9 @@ async function auditPage(page: Page, path: string, screenshotDir: string): Promi
 
   // Get performance timing
   const timing = await page.evaluate(() => {
-    const perf = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined
+    const perf = performance.getEntriesByType('navigation')[0] as
+      | PerformanceNavigationTiming
+      | undefined
     if (perf) {
       return {
         domContentLoaded: Math.round(perf.domContentLoadedEventEnd - perf.startTime),
@@ -105,13 +113,14 @@ async function auditPage(page: Page, path: string, screenshotDir: string): Promi
   await page.waitForTimeout(1500)
 
   // Check for error text
-  const bodyText = await page.textContent('body').catch(() => '') ?? ''
-  const hasErrorText =
-    bodyText.includes('Something went wrong') ||
-    bodyText.includes('出了点问题')
+  const bodyText = (await page.textContent('body').catch(() => '')) ?? ''
+  const hasErrorText = bodyText.includes('Something went wrong') || bodyText.includes('出了点问题')
 
   // Check for error boundary elements
-  const hasErrorBoundary = await page.locator('[data-error-boundary], .error-boundary, [class*="error-boundary"]').count() > 0
+  const hasErrorBoundary =
+    (await page
+      .locator('[data-error-boundary], .error-boundary, [class*="error-boundary"]')
+      .count()) > 0
 
   const flagged =
     loadTime > LOAD_TIME_THRESHOLD_MS ||
@@ -170,7 +179,7 @@ test.describe('Page Performance & Error Audit', () => {
       }
 
       // But do fail on 500-level errors from same-origin requests
-      const server500s = result.failedRequests.filter(r => r.status >= 500)
+      const server500s = result.failedRequests.filter((r) => r.status >= 500)
       if (server500s.length > 0) {
         console.error(`  [500 ERRORS] ${pagePath}:`, server500s)
       }
@@ -182,7 +191,7 @@ test.describe('Page Performance & Error Audit', () => {
     const failures: { href: string; status: number }[] = []
 
     // Collect internal links from a few pages
-    const sourcePaths = ['/', '/market', '/hot', '/rankings/bots', '/groups']
+    const sourcePaths = ['/', '/market', '/hot', '/rankings/tokens', '/groups']
     const allLinks: string[] = []
 
     for (const sp of sourcePaths) {
@@ -192,13 +201,14 @@ test.describe('Page Performance & Error Audit', () => {
       const links = await page.evaluate(() => {
         const anchors = Array.from(document.querySelectorAll('a[href]'))
         return anchors
-          .map(a => (a as HTMLAnchorElement).getAttribute('href') || '')
-          .filter(href =>
-            href.startsWith('/') &&
-            !href.startsWith('//') &&
-            !href.includes('logout') &&
-            !href.includes('/api/') &&
-            !href.includes('_next')
+          .map((a) => (a as HTMLAnchorElement).getAttribute('href') || '')
+          .filter(
+            (href) =>
+              href.startsWith('/') &&
+              !href.startsWith('//') &&
+              !href.includes('logout') &&
+              !href.includes('/api/') &&
+              !href.includes('_next')
           )
       })
       allLinks.push(...links)
@@ -253,14 +263,30 @@ test.describe('Page Performance & Error Audit', () => {
     console.log('='.repeat(120))
     console.log(
       '| Page'.padEnd(30) +
-      '| DOMContentLoaded'.padEnd(20) +
-      '| Load Time'.padEnd(14) +
-      '| Console Errors'.padEnd(18) +
-      '| Failed Requests'.padEnd(19) +
-      '| Error Text'.padEnd(14) +
-      '| Flagged |'
+        '| DOMContentLoaded'.padEnd(20) +
+        '| Load Time'.padEnd(14) +
+        '| Console Errors'.padEnd(18) +
+        '| Failed Requests'.padEnd(19) +
+        '| Error Text'.padEnd(14) +
+        '| Flagged |'
     )
-    console.log('|' + '-'.repeat(29) + '|' + '-'.repeat(19) + '|' + '-'.repeat(13) + '|' + '-'.repeat(17) + '|' + '-'.repeat(18) + '|' + '-'.repeat(13) + '|' + '-'.repeat(9) + '|')
+    console.log(
+      '|' +
+        '-'.repeat(29) +
+        '|' +
+        '-'.repeat(19) +
+        '|' +
+        '-'.repeat(13) +
+        '|' +
+        '-'.repeat(17) +
+        '|' +
+        '-'.repeat(18) +
+        '|' +
+        '-'.repeat(13) +
+        '|' +
+        '-'.repeat(9) +
+        '|'
+    )
 
     for (const r of results) {
       const loadFlag = r.loadTime > LOAD_TIME_THRESHOLD_MS ? ' !!!' : ''
@@ -268,19 +294,20 @@ test.describe('Page Performance & Error Audit', () => {
       const reqFlag = r.failedRequests.length > 0 ? ' !!!' : ''
       console.log(
         `| ${r.page}`.padEnd(30) +
-        `| ${r.domContentLoaded}ms`.padEnd(20) +
-        `| ${r.loadTime}ms${loadFlag}`.padEnd(14) +
-        `| ${r.consoleErrors.length}${errFlag}`.padEnd(18) +
-        `| ${r.failedRequests.length}${reqFlag}`.padEnd(19) +
-        `| ${r.hasErrorText ? 'YES !!!' : 'no'}`.padEnd(14) +
-        `| ${r.flagged ? 'YES' : 'ok'}`.padEnd(9) + '|'
+          `| ${r.domContentLoaded}ms`.padEnd(20) +
+          `| ${r.loadTime}ms${loadFlag}`.padEnd(14) +
+          `| ${r.consoleErrors.length}${errFlag}`.padEnd(18) +
+          `| ${r.failedRequests.length}${reqFlag}`.padEnd(19) +
+          `| ${r.hasErrorText ? 'YES !!!' : 'no'}`.padEnd(14) +
+          `| ${r.flagged ? 'YES' : 'ok'}`.padEnd(9) +
+          '|'
       )
     }
 
     console.log('='.repeat(120))
 
     // Detailed errors
-    const flaggedPages = results.filter(r => r.flagged)
+    const flaggedPages = results.filter((r) => r.flagged)
     if (flaggedPages.length > 0) {
       console.log('\n--- FLAGGED PAGES DETAILS ---')
       for (const r of flaggedPages) {
