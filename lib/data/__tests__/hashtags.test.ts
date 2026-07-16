@@ -44,7 +44,12 @@ describe('extractHashtags', () => {
 function queueClient(
   queues: Record<string, Array<{ data?: unknown; error?: unknown; count?: number }>>
 ) {
-  const rpc = jest.fn(() => Promise.resolve({ data: null, error: null }))
+  const rpc = jest.fn((functionName: string) =>
+    Promise.resolve({
+      data: functionName === 'can_service_actor_read_post' ? true : null,
+      error: null,
+    })
+  )
   const from = jest.fn((table: string) => {
     const q = queues[table] ?? []
     const resp = q.length > 1 ? q.shift()! : (q[0] ?? { data: [] })
@@ -99,5 +104,23 @@ describe('getPostsByHashtag', () => {
     })
     const r = await getPostsByHashtag(client, 'btc')
     expect((r.posts[0] as { author: unknown }).author).toBeNull()
+  })
+
+  it('service audience 拒绝时不返回帖子或查询作者资料', async () => {
+    const queued = queueClient({
+      hashtags: [{ data: { id: 'h1' } }],
+      post_hashtags: [{ data: [{ post_id: 'private-post' }], count: 1 }],
+      posts: [{ data: [{ id: 'private-post', author_id: 'private-author' }] }],
+    })
+    queued.rpc.mockResolvedValue({ data: false, error: null })
+
+    const result = await getPostsByHashtag(queued.client, 'btc')
+
+    expect(result.posts).toEqual([])
+    expect(queued.from).not.toHaveBeenCalledWith('user_profiles')
+    expect(queued.rpc).toHaveBeenCalledWith('can_service_actor_read_post', {
+      p_post_id: 'private-post',
+      p_actor_id: null,
+    })
   })
 })
