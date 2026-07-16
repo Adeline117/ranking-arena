@@ -135,6 +135,7 @@ let initialized = false
 function initializeAuth() {
   if (initialized) return
   initialized = true
+  const initializationScope = getViewerScope()
 
   // Register setGlobalAuthState with the centralized token refresh coordinator
   // so it can update auth state when tokens are refreshed or sessions expire.
@@ -184,6 +185,12 @@ function initializeAuth() {
           setGlobalAuthState({ loading: false, authChecked: true })
         })
         .catch((err) => {
+          if (
+            getViewerScope().sessionGeneration !== initialScope.sessionGeneration ||
+            !isExpectedTransitionSession(null)
+          ) {
+            return
+          }
           logger.error('[useAuthSession] Failed to get initial session:', err)
           setGlobalAuthState({ loading: false, authChecked: true })
         })
@@ -282,6 +289,12 @@ function initializeAuth() {
       })
     })
     .catch((err) => {
+      if (
+        getViewerScope().sessionGeneration !== initializationScope.sessionGeneration ||
+        !isExpectedTransitionSession(null)
+      ) {
+        return
+      }
       logger.error('[useAuthSession] Failed to load Supabase:', err)
       setGlobalAuthState({ loading: false, authChecked: true })
     })
@@ -321,11 +334,15 @@ export function useAuthSession(): AuthSessionReturn {
 
     // Subscribe to global state changes
     const listener = (newState: AuthState) => {
+      // Synchronous getters close over stateRef. Update it before scheduling a
+      // React render so an identity transition fails closed in the same tick.
+      stateRef.current = newState
       setState(newState)
     }
     listeners.add(listener)
 
     // Sync with current global state
+    stateRef.current = globalAuthState
     setState(globalAuthState)
 
     return () => {

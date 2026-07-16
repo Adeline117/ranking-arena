@@ -21,6 +21,8 @@ type IdentityTransition = {
   expectedUserId: string | null
 }
 
+type ViewerScopeListener = (scope: ViewerScope) => void
+
 let currentScope: ViewerScope = {
   viewerKey: 'pending',
   sessionGeneration: 0,
@@ -28,6 +30,22 @@ let currentScope: ViewerScope = {
 }
 
 let activeTransition: IdentityTransition | null = null
+const scopeListeners = new Set<ViewerScopeListener>()
+
+function publishViewerScope(): void {
+  for (const listener of scopeListeners) {
+    try {
+      listener(currentScope)
+    } catch {
+      // Identity transitions must not be blocked by a cache listener failure.
+    }
+  }
+}
+
+export function subscribeViewerScope(listener: ViewerScopeListener): () => void {
+  scopeListeners.add(listener)
+  return () => scopeListeners.delete(listener)
+}
 
 function viewerKeyFor(authChecked: boolean, userId: string | null): ViewerKey {
   if (!authChecked) return 'pending'
@@ -48,7 +66,10 @@ export function synchronizeViewerScope(authChecked: boolean, userId: string | nu
     }
   } else if (currentScope.userId !== userId) {
     currentScope = { ...currentScope, userId }
+  } else {
+    return currentScope
   }
+  publishViewerScope()
   return currentScope
 }
 
@@ -66,6 +87,7 @@ export function beginViewerTransition(expectedUserId: string | null): number {
     generation: currentScope.sessionGeneration,
     expectedUserId,
   }
+  publishViewerScope()
   return currentScope.sessionGeneration
 }
 
@@ -111,6 +133,7 @@ export function commitViewerTransition(
     sessionGeneration: currentScope.sessionGeneration + 1,
     userId,
   }
+  publishViewerScope()
   return currentScope
 }
 
@@ -126,4 +149,5 @@ export function isViewerScopeCurrent(scope: ViewerScope): boolean {
 export function __resetViewerScopeForTests(): void {
   currentScope = { viewerKey: 'pending', sessionGeneration: 0, userId: null }
   activeTransition = null
+  publishViewerScope()
 }
