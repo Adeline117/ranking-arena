@@ -4,6 +4,7 @@ import { canonicalSha256 } from './dex-census'
 
 export const DEX_GOLDEN_WALLET_SCHEMA_VERSION = 1 as const
 export const DEX_GOLDEN_WALLET_CONTRACT = 'arena.dex.golden-wallets@1' as const
+export const DEX_GOLDEN_SNAPSHOT_MAX_AGE_HOURS = 24 as const
 
 export type DexGoldenSource = 'binance_web3_bsc' | 'okx_web3_solana'
 export type DexGoldenCohort = 'top' | 'deterministic_random' | 'high_frequency'
@@ -17,7 +18,7 @@ export interface DexGoldenWalletCandidate {
   snapshotActualCount: number
   sourceRank: number | null
   arenaScore: number | null
-  pnl90d: number
+  pnl90d: string
   pnlCurrency: DexGoldenPnlCurrency
   activityProxyCount: number
 }
@@ -31,7 +32,7 @@ export interface DexGoldenWallet {
   source_snapshot_scraped_at: string
   source_rank: number | null
   arena_score: number | null
-  pnl_90d: number
+  pnl_90d: string
   pnl_currency: DexGoldenPnlCurrency
   activity_proxy_count: number
 }
@@ -50,6 +51,7 @@ export interface DexGoldenWalletSnapshot {
   score_eligible: false
   selection: {
     snapshot_gate: 'latest_count_check_passed_snapshot'
+    snapshot_freshness_max_hours: 24
     candidate_eligibility: 'snapshot_membership_and_non_null_headline_pnl'
     top_per_source: 20
     deterministic_random_per_source: 20
@@ -114,6 +116,12 @@ function assertFiniteNullable(value: number | null, label: string): void {
   if (value !== null && !Number.isFinite(value)) throw new Error(`${label} must be finite or null`)
 }
 
+function assertCanonicalDecimal(value: string, label: string): void {
+  if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value))) {
+    throw new Error(`${label} must be a finite canonical decimal string`)
+  }
+}
+
 function randomKey(seed: string, source: DexGoldenSource, wallet: string): string {
   return createHash('sha256').update(`${seed}:${source}:${wallet}`).digest('hex')
 }
@@ -125,7 +133,9 @@ function byRank(a: DexGoldenWalletCandidate, b: DexGoldenWalletCandidate): numbe
   const aScore = a.arenaScore ?? Number.NEGATIVE_INFINITY
   const bScore = b.arenaScore ?? Number.NEGATIVE_INFINITY
   if (aScore !== bScore) return bScore - aScore
-  if (a.pnl90d !== b.pnl90d) return b.pnl90d - a.pnl90d
+  const aPnl = Number(a.pnl90d)
+  const bPnl = Number(b.pnl90d)
+  if (aPnl !== bPnl) return bPnl - aPnl
   return a.wallet.localeCompare(b.wallet)
 }
 
@@ -166,7 +176,7 @@ function validateAndCanonicalize(
       throw new Error(`snapshotActualCount must be a positive safe integer: ${identity}`)
     }
     assertFiniteNullable(candidate.arenaScore, `arenaScore for ${identity}`)
-    if (!Number.isFinite(candidate.pnl90d)) throw new Error(`pnl90d must be finite: ${identity}`)
+    assertCanonicalDecimal(candidate.pnl90d, `pnl90d for ${identity}`)
     if (candidate.pnlCurrency !== SOURCE_CONTRACT[candidate.sourceSlug].pnlCurrency) {
       throw new Error(`unexpected PnL currency for ${identity}: ${candidate.pnlCurrency}`)
     }
@@ -222,6 +232,12 @@ export function buildDexGoldenWalletSnapshot(input: {
     const snapshotTimes = new Set(sourceCandidates.map((candidate) => candidate.snapshotScrapedAt))
     if (snapshotIds.size !== 1 || snapshotTimes.size !== 1) {
       throw new Error(`${source} candidates must come from one passed source snapshot`)
+    }
+    const snapshotAgeMs =
+      Date.parse(input.generatedAt) - Date.parse(sourceCandidates[0].snapshotScrapedAt)
+    const maxSnapshotAgeMs = DEX_GOLDEN_SNAPSHOT_MAX_AGE_HOURS * 60 * 60 * 1000
+    if (snapshotAgeMs < 0 || snapshotAgeMs > maxSnapshotAgeMs) {
+      throw new Error(`${source} passed source snapshot is outside the freshness gate`)
     }
     const snapshotActualCounts = new Set(
       sourceCandidates.map((candidate) => candidate.snapshotActualCount)
@@ -306,6 +322,7 @@ export function buildDexGoldenWalletSnapshot(input: {
     score_eligible: false,
     selection: {
       snapshot_gate: 'latest_count_check_passed_snapshot',
+      snapshot_freshness_max_hours: DEX_GOLDEN_SNAPSHOT_MAX_AGE_HOURS,
       candidate_eligibility: 'snapshot_membership_and_non_null_headline_pnl',
       top_per_source: 20,
       deterministic_random_per_source: 20,

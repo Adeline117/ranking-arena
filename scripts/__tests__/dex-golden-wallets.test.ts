@@ -26,7 +26,7 @@ function candidates(): DexGoldenWalletCandidate[] {
         snapshotActualCount: 70,
         sourceRank: index + 1,
         arenaScore: 100 - index,
-        pnl90d: 10_000 - index,
+        pnl90d: String(10_000 - index),
         pnlCurrency: sourceSlug === 'binance_web3_bsc' ? 'USDT' : 'USDC',
         activityProxyCount: index + 1,
       })
@@ -62,6 +62,7 @@ describe('DEX golden-wallet selection contract', () => {
     expect(snapshot.planned_hit_window_days).toBe(7)
     expect(snapshot.selection).toMatchObject({
       snapshot_gate: 'latest_count_check_passed_snapshot',
+      snapshot_freshness_max_hours: 24,
       candidate_eligibility: 'snapshot_membership_and_non_null_headline_pnl',
       source_rank_field: 'arena.leaderboard_entries.rank',
       pnl_90d_field: 'arena.leaderboard_entries.headline_pnl',
@@ -151,6 +152,12 @@ describe('DEX golden-wallet selection contract', () => {
       buildDexGoldenWalletSnapshot({ candidates: invalidActivity, ...METADATA })
     ).toThrow(/activityProxyCount/)
 
+    const invalidPnl = candidates()
+    invalidPnl[0].pnl90d = '1e3'
+    expect(() => buildDexGoldenWalletSnapshot({ candidates: invalidPnl, ...METADATA })).toThrow(
+      /canonical decimal string/
+    )
+
     const mixedSnapshots = candidates()
     mixedSnapshots[0].snapshotId = '999'
     expect(() => buildDexGoldenWalletSnapshot({ candidates: mixedSnapshots, ...METADATA })).toThrow(
@@ -168,5 +175,13 @@ describe('DEX golden-wallet selection contract', () => {
     expect(() => buildDexGoldenWalletSnapshot({ candidates: mixedCounts, ...METADATA })).toThrow(
       /snapshot actual count/
     )
+
+    expect(() =>
+      buildDexGoldenWalletSnapshot({
+        candidates: candidates(),
+        ...METADATA,
+        generatedAt: '2026-07-18T17:45:00.001Z',
+      })
+    ).toThrow(/freshness gate/)
   })
 })

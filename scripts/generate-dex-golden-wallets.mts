@@ -11,13 +11,13 @@
  */
 
 import { execFileSync } from 'node:child_process'
-import { writeFileSync } from 'node:fs'
+import { closeSync, fsyncSync, openSync, renameSync, unlinkSync, writeFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 
 import { config } from 'dotenv'
+import { Client } from 'pg'
 import { format } from 'prettier'
 
-import { closeIngestPool, ingestClientConnect } from '../lib/ingest/db'
 import {
   buildDexGoldenWalletCandidates,
   DEX_GOLDEN_SOURCES,
@@ -106,9 +106,23 @@ function cleanGitSha(): string {
 }
 
 async function collectSnapshotRows(): Promise<DexGoldenWalletQueryRow[]> {
-  const client = await ingestClientConnect()
+  const databaseUrl = process.env.INGEST_DATABASE_URL ?? process.env.DATABASE_URL
+  if (!databaseUrl) throw new Error('Production database URL is not configured')
+  const isLocal = databaseUrl.includes('127.0.0.1') || databaseUrl.includes('localhost')
+  const client = new Client({
+    connectionString: databaseUrl,
+    application_name: 'ranking-arena-golden-wallet-readonly',
+    ssl: isLocal ? undefined : { rejectUnauthorized: false },
+  })
+  const suppressUnstructuredClientError = () => {
+    // The query rejection is sanitized by the CLI boundary below.
+  }
+  client.on('error', suppressUnstructuredClientError)
+  let connected = false
   let transactionOpen = false
   try {
+    await client.connect()
+    connected = true
     await client.query('BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY')
     transactionOpen = true
     await client.query("SET LOCAL statement_timeout = '45s'")
@@ -129,7 +143,35 @@ async function collectSnapshotRows(): Promise<DexGoldenWalletQueryRow[]> {
     }
     throw error
   } finally {
-    client.release()
+    if (connected) await client.end().catch(() => undefined)
+    client.removeListener('error', suppressUnstructuredClientError)
+  }
+}
+
+function writeFixtureAtomically(path: string, contents: string): void {
+  const temporaryPath = `${path}.${process.pid}.${Date.now()}.tmp`
+  let fileDescriptor: number | null = null
+  try {
+    fileDescriptor = openSync(temporaryPath, 'wx', 0o644)
+    writeFileSync(fileDescriptor, contents, 'utf8')
+    fsyncSync(fileDescriptor)
+    closeSync(fileDescriptor)
+    fileDescriptor = null
+    renameSync(temporaryPath, path)
+  } catch (error) {
+    if (fileDescriptor !== null) {
+      try {
+        closeSync(fileDescriptor)
+      } catch {
+        // Best-effort cleanup; preserve the original write error.
+      }
+    }
+    try {
+      unlinkSync(temporaryPath)
+    } catch {
+      // The temporary file may not have been created or may already be renamed.
+    }
+    throw error
   }
 }
 
@@ -143,32 +185,28 @@ function safeErrorMessage(error: unknown): string {
 
 async function main(): Promise<void> {
   const gitSha = cleanGitSha()
-  try {
-    const rows = await collectSnapshotRows()
-    const candidates = buildDexGoldenWalletCandidates(rows)
-    const { snapshot, sha256 } = buildDexGoldenWalletSnapshot({
-      candidates,
-      generatedAt: new Date().toISOString(),
-      generatorGitSha: gitSha,
-      sampleSeed: SAMPLE_SEED,
-    })
-    const output = await format(JSON.stringify(snapshot), { parser: 'json' })
-    writeFileSync(OUTPUT_PATH, output, 'utf8')
+  const rows = await collectSnapshotRows()
+  const candidates = buildDexGoldenWalletCandidates(rows)
+  const { snapshot, sha256 } = buildDexGoldenWalletSnapshot({
+    candidates,
+    generatedAt: new Date().toISOString(),
+    generatorGitSha: gitSha,
+    sampleSeed: SAMPLE_SEED,
+  })
+  const output = await format(JSON.stringify(snapshot), { parser: 'json' })
+  writeFixtureAtomically(OUTPUT_PATH, output)
 
-    const counts = Object.fromEntries(
-      DEX_GOLDEN_SOURCES.map((source) => [
-        source,
-        snapshot.wallets.filter((wallet) => wallet.source_slug === source).length,
-      ])
-    )
-    process.stdout.write(
-      `wrote golden-wallet fixture: total=${snapshot.wallets.length}, ` +
-        `bsc=${counts.binance_web3_bsc}, solana=${counts.okx_web3_solana}, ` +
-        `sha256=${sha256}\n`
-    )
-  } finally {
-    await closeIngestPool()
-  }
+  const counts = Object.fromEntries(
+    DEX_GOLDEN_SOURCES.map((source) => [
+      source,
+      snapshot.wallets.filter((wallet) => wallet.source_slug === source).length,
+    ])
+  )
+  process.stdout.write(
+    `wrote golden-wallet fixture: total=${snapshot.wallets.length}, ` +
+      `bsc=${counts.binance_web3_bsc}, solana=${counts.okx_web3_solana}, ` +
+      `sha256=${sha256}\n`
+  )
 }
 
 main().catch((error: unknown) => {
