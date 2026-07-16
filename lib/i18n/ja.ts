@@ -1389,9 +1389,10 @@ const ja = {
   switchToEnglish: 'Englishに切り替え',
   switchToChinese: '中文に切り替え',
 
-  validationHandleMinLength: 'ユーザー名は2文字以上である必要があります',
+  validationHandleMinLength: 'ユーザー名は1文字以上である必要があります',
   validationHandleMaxLength: 'ユーザー名は{max}文字以下である必要があります',
-  validationHandleInvalidChars: 'ユーザー名には英数字、アンダースコア、漢字のみ使用できます',
+  validationHandleInvalidChars:
+    'ユーザー名には半角英数字、アンダースコア、中国語・日本語・韓国語の文字のみ使用できます',
   validationInvalidEmail: '有効なメールアドレスを入力してください',
   validationPasswordMinLength: 'パスワードは6文字以上である必要があります',
   validationPasswordMismatch: 'パスワードが一致しません',
@@ -1878,7 +1879,8 @@ const ja = {
   loginPasswordTooShort: 'パスワードは8文字以上である必要があります',
   loginHandleTooShort: 'ユーザー名は1文字以上である必要があります',
   loginHandleTooLong: 'ユーザー名は30文字以内にしてください',
-  loginHandleInvalidChars: '英数字、アンダースコア、漢字のみ使用できます',
+  loginHandleInvalidChars:
+    '半角英数字、アンダースコア、中国語・日本語・韓国語の文字のみ使用できます',
   loginPasswordWeak: '弱い',
   loginPasswordFair: '普通',
   loginPasswordGood: '良い',

@@ -1501,9 +1501,9 @@ const zh = {
   switchToChinese: '切换到中文',
 
   // Validation (settings)
-  validationHandleMinLength: '用户名至少需要2个字符',
+  validationHandleMinLength: '用户名至少需要1个字符',
   validationHandleMaxLength: '用户名不能超过{max}个字符',
-  validationHandleInvalidChars: '用户名只能包含字母、数字、下划线和中文',
+  validationHandleInvalidChars: '用户名只能包含英文字母、数字、下划线及中日韩文字',
   validationInvalidEmail: '请输入有效的邮箱地址',
   validationPasswordMinLength: '密码至少需要6个字符',
   validationPasswordMismatch: '两次输入的密码不一致',
@@ -2014,7 +2014,7 @@ const zh = {
   loginPasswordTooShort: '密码至少需要8个字符',
   loginHandleTooShort: '用户名至少需要1个字符',
   loginHandleTooLong: '用户名不能超过30个字符',
-  loginHandleInvalidChars: '用户名只能包含字母、数字、下划线和中文',
+  loginHandleInvalidChars: '用户名只能包含英文字母、数字、下划线及中日韩文字',
   loginPasswordWeak: '弱',
   loginPasswordFair: '一般',
   loginPasswordGood: '中等',

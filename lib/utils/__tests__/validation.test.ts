@@ -82,6 +82,34 @@ describe('validateHandle', () => {
     expect(result.valid).toBe(false)
     expect(result.message).toBe('用户名至少需要3个字符')
   })
+
+  it.each(['交易员甲', 'ひらがな', 'カタカナ', '거래자'])(
+    'accepts the exact database language ranges: %s',
+    (handle) => {
+      expect(validateHandle(handle).valid).toBe(true)
+    }
+  )
+
+  it.each([
+    'new.dotted.name',
+    'bad/name',
+    'bad?query',
+    'bad#fragment',
+    'bad%2Fescape',
+    'safe\u202Eeman',
+    'safe\u200Bname',
+    '\u306F\u3099',
+    'emoji😀',
+    '___',
+  ])('rejects a non-canonical or URL-unsafe handle: %s', (handle) => {
+    expect(validateHandle(handle).valid).toBe(false)
+  })
+
+  it('uses the database code-point maximum and reserved-name policy', () => {
+    expect(validateHandle('界'.repeat(30)).valid).toBe(true)
+    expect(validateHandle('界'.repeat(31)).valid).toBe(false)
+    expect(validateHandle('Administrator').valid).toBe(false)
+  })
 })
 
 describe('getPasswordStrength', () => {

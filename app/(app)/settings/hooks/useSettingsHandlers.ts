@@ -314,7 +314,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     newEmail: boolean
   }>({ handle: false, newPassword: false, confirmPassword: false, newEmail: false })
 
-  const handleValidation = validateHandle(handle, t)
+  const handleValidation = validateHandle(handle, t, initialValuesRef.current?.handle ?? null)
 
   const markTouched = useCallback((field: keyof typeof touchedFields) => {
     setTouchedFields((prev) => ({ ...prev, [field]: true }))
@@ -325,7 +325,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
     const generation = ++handleCheckGenerationRef.current
     if (handleCheckTimeoutRef.current) clearTimeout(handleCheckTimeoutRef.current)
 
-    if (!handle || handle.length < 2 || !validateHandle(handle, t).valid) {
+    if (!validateHandle(handle, t, initialValuesRef.current?.handle ?? null).valid) {
       setHandleAvailable(null)
       setCheckingHandle(false)
       return
@@ -800,7 +800,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
       showToast(t('saveFailedRetry'), 'error')
       return
     }
-    if (handle && !handleValidation.valid) {
+    if (!handleValidation.valid) {
       showToast(handleValidation.message, 'error')
       return
     }
@@ -890,7 +890,7 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
         dm_permission: dmPermission,
         show_pro_badge: showProBadge,
       }
-      if (handle !== initialValuesRef.current?.handle) profileUpdates.handle = handle || null
+      if (handle !== initialValuesRef.current?.handle) profileUpdates.handle = handle
 
       const { data: savedProfile, error: saveError } = await supabase
         .from('user_profiles')
@@ -913,6 +913,8 @@ export function useSettingsHandlers({ auth, showToast, showConfirm, t }: UseSett
           saveError?.message?.includes('duplicate')
         ) {
           showToast(t('usernameInUse'), 'error')
+        } else if (saveError?.code === '23514') {
+          showToast(t('validationHandleInvalidChars'), 'error')
         } else {
           showToast(
             t('saveFailedWithMsg').replace(

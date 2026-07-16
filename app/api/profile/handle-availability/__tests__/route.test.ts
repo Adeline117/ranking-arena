@@ -76,8 +76,8 @@ describe('POST /api/profile/handle-availability', () => {
     mockQueryOne.mockResolvedValue({ taken: false })
   })
 
-  it.each(['a*b', 'a%b', 'a_b', 'a\\b'])(
-    'checks the literal handle %s without a pattern operator',
+  it.each(['a', 'alice_1', '交易员甲', 'ひらがな', 'カタカナ', '거래자'])(
+    'checks the canonical handle %s with exact equality',
     async (handle) => {
       const response = await POST(request({ handle }))
 
@@ -135,6 +135,15 @@ describe('POST /api/profile/handle-availability', () => {
     [{ handle: 'alice\n' }, 'control character'],
     [{ handle: 'a'.repeat(31) }, 'too long'],
     [{ handle: 'Administrator' }, 'reserved'],
+    [{ handle: 'new.dotted.name' }, 'new dotted handle'],
+    [{ handle: 'bad/name' }, 'path separator'],
+    [{ handle: 'bad\\name' }, 'backslash separator'],
+    [{ handle: 'bad?query#fragment%2F' }, 'URL delimiters'],
+    [{ handle: 'safe\u202Eeman' }, 'bidirectional format mark'],
+    [{ handle: 'safe\u200Bname' }, 'invisible format mark'],
+    [{ handle: '\u306F\u3099' }, 'non-NFC handle'],
+    [{ handle: '___' }, 'missing name character'],
+    [{ handle: 'emoji😀' }, 'outside the database alphabet'],
     [{ handle: 'alice', userId: USER_ID }, 'unknown field'],
   ])('rejects %s (%s) before querying the database', async (body) => {
     const response = await POST(request(body))
