@@ -1,5 +1,7 @@
 import { createHash } from 'node:crypto'
 
+import { z } from 'zod'
+
 import { canonicalSha256 } from './dex-census'
 
 export const DEX_GOLDEN_WALLET_SCHEMA_VERSION = 1 as const
@@ -16,8 +18,8 @@ export interface DexGoldenWalletCandidate {
   snapshotId: string
   snapshotScrapedAt: string
   snapshotActualCount: number
-  sourceRank: number | null
-  arenaScore: number | null
+  sourceRank: number
+  arenaScore: null
   pnl90d: string
   pnlCurrency: DexGoldenPnlCurrency
   activityProxyCount: number
@@ -30,8 +32,8 @@ export interface DexGoldenWallet {
   cohort: DexGoldenCohort
   source_snapshot_id: string
   source_snapshot_scraped_at: string
-  source_rank: number | null
-  arena_score: number | null
+  source_rank: number
+  arena_score: null
   pnl_90d: string
   pnl_currency: DexGoldenPnlCurrency
   activity_proxy_count: number
@@ -97,9 +99,101 @@ const COHORT_ORDER: Record<DexGoldenCohort, number> = {
   high_frequency: 2,
 }
 
-function assertCanonicalTimestamp(value: string, label: string): void {
+const FULL_GIT_SHA = /^[0-9a-f]{40}$/
+const CANONICAL_DECIMAL = /^-?(?:0|[1-9]\d*)(?:\.\d+)?$/
+const canonicalTimestampSchema = z
+  .string()
+  .refine(isCanonicalTimestamp, 'timestamp must be canonical ISO')
+const safePositiveIntegerSchema = z
+  .number()
+  .int()
+  .positive()
+  .refine(Number.isSafeInteger, 'integer must be safe')
+const safeNonNegativeIntegerSchema = z
+  .number()
+  .int()
+  .nonnegative()
+  .refine(Number.isSafeInteger, 'integer must be safe')
+const canonicalDecimalSchema = z
+  .string()
+  .regex(CANONICAL_DECIMAL)
+  .refine((value) => Number.isFinite(Number(value)), 'decimal must be finite')
+
+const goldenWalletSchema = z
+  .object({
+    source_slug: z.enum(['binance_web3_bsc', 'okx_web3_solana']),
+    chain: z.union([
+      z.object({ namespace: z.literal('eip155'), reference: z.literal('56') }).strict(),
+      z.object({ namespace: z.literal('solana'), reference: z.literal('mainnet-beta') }).strict(),
+    ]),
+    wallet: z.string().min(1),
+    cohort: z.enum(['top', 'deterministic_random', 'high_frequency']),
+    source_snapshot_id: z.string().regex(/^[1-9]\d*$/),
+    source_snapshot_scraped_at: canonicalTimestampSchema,
+    source_rank: safePositiveIntegerSchema,
+    arena_score: z.null(),
+    pnl_90d: canonicalDecimalSchema,
+    pnl_currency: z.enum(['USDT', 'USDC']),
+    activity_proxy_count: safeNonNegativeIntegerSchema,
+  })
+  .strict()
+
+const goldenPopulationSchema = z
+  .object({
+    source_slug: z.enum(['binance_web3_bsc', 'okx_web3_solana']),
+    snapshot_id: z.string().regex(/^[1-9]\d*$/),
+    snapshot_scraped_at: canonicalTimestampSchema,
+    snapshot_actual_count: safePositiveIntegerSchema,
+    pnl_currency: z.enum(['USDT', 'USDC']),
+    eligible_candidates_with_non_null_pnl: safePositiveIntegerSchema,
+    candidates_with_positive_activity_proxy: safeNonNegativeIntegerSchema,
+  })
+  .strict()
+
+const goldenSnapshotSchema = z
+  .object({
+    schema_version: z.literal(DEX_GOLDEN_WALLET_SCHEMA_VERSION),
+    data_contract: z.literal(DEX_GOLDEN_WALLET_CONTRACT),
+    purpose: z.literal('phase0_shadow_sampling_only'),
+    generated_at: canonicalTimestampSchema,
+    generator_git_sha: z.string().regex(FULL_GIT_SHA),
+    sample_seed: z.string().min(1),
+    candidate_timeframe_days: z.literal(90),
+    planned_hit_window_days: z.literal(7),
+    serving_authorized: z.literal(false),
+    rank_eligible: z.literal(false),
+    score_eligible: z.literal(false),
+    selection: z
+      .object({
+        snapshot_gate: z.literal('latest_count_check_passed_snapshot'),
+        snapshot_freshness_max_hours: z.literal(DEX_GOLDEN_SNAPSHOT_MAX_AGE_HOURS),
+        candidate_eligibility: z.literal('snapshot_membership_and_non_null_headline_pnl'),
+        top_per_source: z.literal(20),
+        deterministic_random_per_source: z.literal(20),
+        high_frequency_per_source: z.literal(10),
+        source_rank_field: z.literal('arena.leaderboard_entries.rank'),
+        pnl_90d_field: z.literal('arena.leaderboard_entries.headline_pnl'),
+        activity_metric: z.literal('latest_passed_90d_snapshot_source_reported_tx_count_proxy'),
+        activity_fields: z
+          .object({
+            binance_web3_bsc: z.literal('arena.leaderboard_entries.raw.totalTxCnt'),
+            okx_web3_solana: z.literal('arena.leaderboard_entries.raw.tx'),
+          })
+          .strict(),
+      })
+      .strict(),
+    populations: z.array(goldenPopulationSchema).length(2),
+    wallets: z.array(goldenWalletSchema).length(100),
+  })
+  .strict()
+
+function isCanonicalTimestamp(value: string): boolean {
   const parsed = Date.parse(value)
-  if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== value) {
+  return Number.isFinite(parsed) && new Date(parsed).toISOString() === value
+}
+
+function assertCanonicalTimestamp(value: string, label: string): void {
+  if (!isCanonicalTimestamp(value)) {
     throw new Error(`${label} must be a canonical ISO timestamp: ${value}`)
   }
 }
@@ -107,17 +201,13 @@ function assertCanonicalTimestamp(value: string, label: string): void {
 function canonicalWallet(source: DexGoldenSource, wallet: string): string {
   const trimmed = wallet.trim()
   if (!SOURCE_CONTRACT[source].walletPattern.test(trimmed)) {
-    throw new Error(`invalid ${source} wallet: ${wallet}`)
+    throw new Error(`invalid ${source} wallet`)
   }
   return source === 'binance_web3_bsc' ? trimmed.toLowerCase() : trimmed
 }
 
-function assertFiniteNullable(value: number | null, label: string): void {
-  if (value !== null && !Number.isFinite(value)) throw new Error(`${label} must be finite or null`)
-}
-
 function assertCanonicalDecimal(value: string, label: string): void {
-  if (!/^-?(?:0|[1-9]\d*)(?:\.\d+)?$/.test(value) || !Number.isFinite(Number(value))) {
+  if (!CANONICAL_DECIMAL.test(value) || !Number.isFinite(Number(value))) {
     throw new Error(`${label} must be a finite canonical decimal string`)
   }
 }
@@ -127,12 +217,7 @@ function randomKey(seed: string, source: DexGoldenSource, wallet: string): strin
 }
 
 function byRank(a: DexGoldenWalletCandidate, b: DexGoldenWalletCandidate): number {
-  const aRank = a.sourceRank ?? Number.POSITIVE_INFINITY
-  const bRank = b.sourceRank ?? Number.POSITIVE_INFINITY
-  if (aRank !== bRank) return aRank - bRank
-  const aScore = a.arenaScore ?? Number.NEGATIVE_INFINITY
-  const bScore = b.arenaScore ?? Number.NEGATIVE_INFINITY
-  if (aScore !== bScore) return bScore - aScore
+  if (a.sourceRank !== b.sourceRank) return a.sourceRank - b.sourceRank
   const aPnl = Number(a.pnl90d)
   const bPnl = Number(b.pnl90d)
   if (aPnl !== bPnl) return bPnl - aPnl
@@ -155,33 +240,31 @@ function validateAndCanonicalize(
       throw new Error(`unsupported golden-wallet source: ${candidate.sourceSlug}`)
     }
     const wallet = canonicalWallet(candidate.sourceSlug, candidate.wallet)
-    const identity = `${candidate.sourceSlug}:${wallet}`
-    if (identities.has(identity)) throw new Error(`duplicate golden-wallet candidate: ${identity}`)
-    identities.add(identity)
+    const identityKey = `${candidate.sourceSlug}:${wallet}`
+    const label = candidate.sourceSlug
+    if (identities.has(identityKey)) throw new Error(`duplicate golden-wallet candidate: ${label}`)
+    identities.add(identityKey)
 
-    if (
-      candidate.sourceRank !== null &&
-      (!Number.isSafeInteger(candidate.sourceRank) || candidate.sourceRank <= 0)
-    ) {
-      throw new Error(`sourceRank must be a positive safe integer or null: ${identity}`)
+    if (!Number.isSafeInteger(candidate.sourceRank) || candidate.sourceRank <= 0) {
+      throw new Error(`sourceRank must be a positive safe integer: ${label}`)
     }
     if (!/^[1-9]\d*$/.test(candidate.snapshotId)) {
-      throw new Error(`snapshotId must be a positive decimal string: ${identity}`)
+      throw new Error(`snapshotId must be a positive decimal string: ${label}`)
     }
-    assertCanonicalTimestamp(candidate.snapshotScrapedAt, `snapshotScrapedAt for ${identity}`)
+    assertCanonicalTimestamp(candidate.snapshotScrapedAt, `snapshotScrapedAt for ${label}`)
     if (
       !Number.isSafeInteger(candidate.snapshotActualCount) ||
       candidate.snapshotActualCount <= 0
     ) {
-      throw new Error(`snapshotActualCount must be a positive safe integer: ${identity}`)
+      throw new Error(`snapshotActualCount must be a positive safe integer: ${label}`)
     }
-    assertFiniteNullable(candidate.arenaScore, `arenaScore for ${identity}`)
-    assertCanonicalDecimal(candidate.pnl90d, `pnl90d for ${identity}`)
+    if (candidate.arenaScore !== null) throw new Error(`arenaScore must remain null: ${label}`)
+    assertCanonicalDecimal(candidate.pnl90d, `pnl90d for ${label}`)
     if (candidate.pnlCurrency !== SOURCE_CONTRACT[candidate.sourceSlug].pnlCurrency) {
-      throw new Error(`unexpected PnL currency for ${identity}: ${candidate.pnlCurrency}`)
+      throw new Error(`unexpected PnL currency for ${label}: ${candidate.pnlCurrency}`)
     }
     if (!Number.isSafeInteger(candidate.activityProxyCount) || candidate.activityProxyCount < 0) {
-      throw new Error(`activityProxyCount must be a non-negative safe integer: ${identity}`)
+      throw new Error(`activityProxyCount must be a non-negative safe integer: ${label}`)
     }
     return { ...candidate, wallet }
   })
@@ -339,4 +422,102 @@ export function buildDexGoldenWalletSnapshot(input: {
     wallets,
   }
   return { snapshot, sha256: canonicalSha256(snapshot) }
+}
+
+function assertUnique(values: readonly string[], label: string): void {
+  if (new Set(values).size !== values.length) throw new Error(`duplicate ${label}`)
+}
+
+function assertParsedSnapshotInvariants(snapshot: DexGoldenWalletSnapshot): void {
+  const expectedSources = Object.keys(SOURCE_CONTRACT).sort() as DexGoldenSource[]
+  if (
+    snapshot.populations.map((population) => population.source_slug).join(',') !==
+    expectedSources.join(',')
+  ) {
+    throw new Error('golden-wallet populations must use canonical source order')
+  }
+
+  assertUnique(
+    snapshot.wallets.map((wallet) => wallet.wallet),
+    'global wallet identity'
+  )
+  const expectedWalletOrder = [...snapshot.wallets].sort(
+    (a, b) =>
+      a.source_slug.localeCompare(b.source_slug) ||
+      COHORT_ORDER[a.cohort] - COHORT_ORDER[b.cohort] ||
+      a.wallet.localeCompare(b.wallet)
+  )
+  if (expectedWalletOrder.some((wallet, index) => wallet !== snapshot.wallets[index])) {
+    throw new Error('golden-wallet rows must use canonical source/cohort/wallet order')
+  }
+
+  for (const source of expectedSources) {
+    const population = snapshot.populations.find((item) => item.source_slug === source)!
+    if (
+      population.eligible_candidates_with_non_null_pnl > population.snapshot_actual_count ||
+      population.candidates_with_positive_activity_proxy >
+        population.eligible_candidates_with_non_null_pnl
+    ) {
+      throw new Error(`${source} population denominators are inconsistent`)
+    }
+    if (population.pnl_currency !== SOURCE_CONTRACT[source].pnlCurrency) {
+      throw new Error(`${source} population currency conflicts with its source contract`)
+    }
+    const ageMs = Date.parse(snapshot.generated_at) - Date.parse(population.snapshot_scraped_at)
+    const maxAgeMs = snapshot.selection.snapshot_freshness_max_hours * 60 * 60 * 1000
+    if (ageMs < 0 || ageMs > maxAgeMs) {
+      throw new Error(`${source} parsed snapshot is outside the freshness gate`)
+    }
+
+    const sourceWallets = snapshot.wallets.filter((wallet) => wallet.source_slug === source)
+    if (sourceWallets.length !== 50) throw new Error(`${source} must contain exactly 50 wallets`)
+    assertUnique(
+      sourceWallets.map((wallet) => String(wallet.source_rank)),
+      `${source} source rank`
+    )
+    const expectedCohorts: Record<DexGoldenCohort, number> = {
+      top: 20,
+      deterministic_random: 20,
+      high_frequency: 10,
+    }
+    for (const [cohort, expectedCount] of Object.entries(expectedCohorts) as Array<
+      [DexGoldenCohort, number]
+    >) {
+      if (sourceWallets.filter((wallet) => wallet.cohort === cohort).length !== expectedCount) {
+        throw new Error(`${source} has an invalid ${cohort} cohort size`)
+      }
+    }
+
+    for (const wallet of sourceWallets) {
+      if (canonicalWallet(source, wallet.wallet) !== wallet.wallet) {
+        throw new Error(`${source} wallet is not canonical`)
+      }
+      const { namespace, reference, pnlCurrency } = SOURCE_CONTRACT[source]
+      if (wallet.chain.namespace !== namespace || wallet.chain.reference !== reference) {
+        throw new Error(`${source} wallet chain conflicts with its source contract`)
+      }
+      if (wallet.pnl_currency !== pnlCurrency) {
+        throw new Error(`${source} wallet currency conflicts with its source contract`)
+      }
+      if (
+        wallet.source_snapshot_id !== population.snapshot_id ||
+        wallet.source_snapshot_scraped_at !== population.snapshot_scraped_at
+      ) {
+        throw new Error(`${source} wallet provenance conflicts with its source population`)
+      }
+      if (wallet.cohort === 'high_frequency' && wallet.activity_proxy_count === 0) {
+        throw new Error(`${source} high-frequency wallet requires positive activity`)
+      }
+    }
+  }
+}
+
+export function parseDexGoldenWalletSnapshot(input: unknown): DexGoldenWalletSnapshot {
+  const snapshot = goldenSnapshotSchema.parse(input) as DexGoldenWalletSnapshot
+  assertParsedSnapshotInvariants(snapshot)
+  return snapshot
+}
+
+export function dexGoldenWalletSnapshotSha256(input: unknown): string {
+  return canonicalSha256(parseDexGoldenWalletSnapshot(input))
 }

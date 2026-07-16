@@ -192,7 +192,7 @@ export function buildDexGoldenWalletCandidates(
   return candidates.sort(
     (a, b) =>
       a.sourceSlug.localeCompare(b.sourceSlug) ||
-      (a.sourceRank ?? Number.POSITIVE_INFINITY) - (b.sourceRank ?? Number.POSITIVE_INFINITY) ||
+      a.sourceRank - b.sourceRank ||
       a.wallet.localeCompare(b.wallet)
   )
 }

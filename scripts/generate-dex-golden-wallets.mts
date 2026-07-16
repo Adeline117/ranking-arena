@@ -179,6 +179,8 @@ function safeErrorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : 'Unknown golden-wallet generator error'
   return message
     .replace(/postgres(?:ql)?:\/\/\S+/gi, '[redacted-database-url]')
+    .replace(/0x[0-9a-f]{40}/gi, '[redacted-wallet]')
+    .replace(/\b[1-9A-HJ-NP-Za-km-z]{32,44}\b/g, '[redacted-wallet]')
     .split(/\r?\n/, 1)[0]
     .slice(0, 500)
 }
