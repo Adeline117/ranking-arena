@@ -25,6 +25,7 @@ const mockCheckRateLimit = jest.fn()
 const mockValidateCsrfToken = jest.fn()
 const mockFetchAllExportRows = jest.fn()
 const mockFrom = jest.fn()
+let profileStates: QueryState[]
 
 jest.mock('@/lib/supabase/server', () => ({
   getProvisioningAuthUser: (...args: unknown[]) => mockGetProvisioningAuthUser(...args),
@@ -118,8 +119,30 @@ function installProfileQueries(options: {
             error: null,
           }
         }
+        const sourceProfile = options.profile === undefined ? PROFILE : options.profile
+        if (sourceProfile === null) {
+          return { data: null, error: options.profileError ?? null }
+        }
+        const selectedProfile = Object.fromEntries(
+          (state.selection ?? '')
+            .split(',')
+            .filter(Boolean)
+            .map((column) => [
+              column,
+              Object.hasOwn(sourceProfile, column)
+                ? sourceProfile[column as keyof typeof sourceProfile]
+                : null,
+            ])
+        )
         return {
-          data: options.profile === undefined ? PROFILE : options.profile,
+          data: {
+            ...selectedProfile,
+            totp_secret: 'totp-must-never-escape',
+            stripe_customer_id: 'cus_must_never_escape',
+            banned_by: 'moderator-must-never-escape',
+            role: 'internal-role-must-never-escape',
+            weight: 999,
+          },
           error: options.profileError ?? null,
         }
       }),
@@ -175,7 +198,7 @@ describe('POST /api/settings/export', () => {
           return [{ id }]
       }
     })
-    installProfileQueries({})
+    profileStates = installProfileQueries({})
   })
 
   it('returns only after every complete dataset is assembled and the cooldown is claimed', async () => {
@@ -183,14 +206,37 @@ describe('POST /api/settings/export', () => {
     const body = await response.json()
 
     expect(response.status).toBe(200)
-    expect(body.profile).toEqual({
-      id: USER_ID,
-      handle: 'viewer',
-      avatar_url: null,
-      bio: null,
-      created_at: '2026-01-01T00:00:00.000Z',
-      updated_at: null,
-    })
+    expect(body.profile).toEqual(
+      expect.objectContaining({
+        id: USER_ID,
+        handle: 'viewer',
+        avatar_url: null,
+        bio: null,
+        created_at: '2026-01-01T00:00:00.000Z',
+        updated_at: null,
+        totp_enabled: null,
+        notify_trader_events: null,
+        deletion_scheduled_at: null,
+      })
+    )
+    for (const forbiddenField of [
+      'last_export_at',
+      'totp_secret',
+      'stripe_customer_id',
+      'banned_by',
+      'role',
+      'weight',
+    ]) {
+      expect(body.profile).not.toHaveProperty(forbiddenField)
+    }
+    expect(JSON.stringify(body)).not.toMatch(
+      /totp-must-never-escape|cus_must_never_escape|moderator-must-never-escape|internal-role-must-never-escape/
+    )
+    expect(profileStates[0]?.selection).toContain('email')
+    expect(profileStates[0]?.selection).toContain('totp_enabled')
+    expect(profileStates[0]?.selection).not.toContain('totp_secret')
+    expect(profileStates[0]?.selection).not.toContain('stripe_customer_id')
+    expect(profileStates[0]?.selection).not.toContain('banned_by')
     expect(body.posts).toEqual([{ id: 'posts-1' }])
     expect(body.comments).toEqual([{ id: 'comments-1' }])
     expect(body.follows.following).toEqual([
