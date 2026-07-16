@@ -1317,6 +1317,7 @@ const ja = {
   adminReportEvidence: 'スクリーンショット証拠',
   reportSubmitted: '報告が送信されました。早急に審査いたします',
   reportFailed: '報告に失敗しました',
+  reportEvidenceTooLarge: '証拠画像は2MB以下にしてください',
 
   requestTimeoutShort: 'リクエストがタイムアウトしました。後ほどお試しください',
   networkConnectionFailed: 'ネットワーク接続に失敗しました。設定を確認してください',
