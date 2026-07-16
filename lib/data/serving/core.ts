@@ -27,6 +27,19 @@ export function isFresh(asOf: string | null | undefined, ttlSeconds: number): bo
   return Date.now() - t < ttlSeconds * 1000
 }
 
+/** A warm profile normally requires a chart. Some sources can prove a typed
+ * metric while their only upstream history uses a different basis. Accept an
+ * honest no-series contract only when the corresponding typed components are
+ * explicitly complete; quarantined/legacy rows must keep self-healing. */
+export function hasRequiredProfileSeries(core: TraderCoreModules): boolean {
+  if (Object.values(core.series ?? {}).some((points) => points.length > 0)) return true
+  return (
+    core.extras.profile_series_contract === 'unavailable_same_basis' &&
+    core.extras.pnl_basis === 'gmx_period_realized_net' &&
+    core.extras.pnl_components_complete === true
+  )
+}
+
 export async function getCoreModules(
   supabase: SupabaseClient,
   source: string,

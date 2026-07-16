@@ -19,7 +19,7 @@ import { withPublic } from '@/lib/api/middleware'
 import { ApiError } from '@/lib/api/errors'
 import { success as apiSuccess, withCache } from '@/lib/api/response'
 import { resolveServingTrader } from '@/lib/data/serving/resolve'
-import { getCoreModules, isFresh, tfToInt } from '@/lib/data/serving/core'
+import { getCoreModules, hasRequiredProfileSeries, isFresh, tfToInt } from '@/lib/data/serving/core'
 import { requestTierC, coreModulesFromTierC } from '@/lib/data/serving/tier-c'
 import type { ServingTimeframe, TraderCoreResponse } from '@/lib/data/serving/types'
 
@@ -60,10 +60,10 @@ export async function GET(
       // chart that never self-healed (the cold path never fired). So a warm
       // answer must ALSO have chart series; otherwise it's stale → trigger a
       // background Tier-C deep fetch while serving what we have.
-      const hasSeries = !!warm && Object.values(warm.series ?? {}).some((pts) => pts.length > 0)
+      const hasRequiredSeries = !!warm && hasRequiredProfileSeries(warm)
 
       // Warm hit — the only edge-cacheable answer.
-      if (warm && hasSeries && isFresh(warm.provenance.asOf, CORE_FRESH_TTL_SECONDS)) {
+      if (warm && hasRequiredSeries && isFresh(warm.provenance.asOf, CORE_FRESH_TTL_SECONDS)) {
         return withCache(apiSuccess<TraderCoreResponse>(warm), {
           maxAge: 30,
           staleWhileRevalidate: 120,

@@ -5,7 +5,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { projectBoardExtras } from '../board-extras'
 import { getFirstScreen } from '../first-screen'
-import { getCoreModules, isFresh, tfToInt } from '../core'
+import { getCoreModules, hasRequiredProfileSeries, isFresh, tfToInt } from '../core'
 import { getSourceCapabilities } from '../capabilities'
 
 function rpcClient(data: unknown, error: unknown = null): SupabaseClient {
@@ -146,6 +146,41 @@ describe('getCoreModules', () => {
     expect(isFresh(new Date(Date.now() - 90_000).toISOString(), 60)).toBe(false)
     expect(isFresh(null, 60)).toBe(false)
     expect(isFresh('garbage', 60)).toBe(false)
+  })
+
+  it('accepts honest no-series only for complete same-basis metrics', () => {
+    const base = {
+      timeframe: 7 as const,
+      stats: {},
+      currency: 'USDC' as const,
+      series: {},
+      provenance: { source: 'gmx', asOf: '2026-06-10T12:00:00Z' },
+      cacheState: 'warm' as const,
+    }
+    expect(
+      hasRequiredProfileSeries({
+        ...base,
+        extras: {
+          profile_series_contract: 'unavailable_same_basis',
+          pnl_basis: 'gmx_period_realized_net',
+          pnl_components_complete: true,
+        },
+      })
+    ).toBe(true)
+    expect(
+      hasRequiredProfileSeries({
+        ...base,
+        extras: { gmx_pnl_contract_version: 2 },
+      })
+    ).toBe(false)
+    expect(hasRequiredProfileSeries({ ...base, extras: {}, series: { pnl: [] } })).toBe(false)
+    expect(
+      hasRequiredProfileSeries({
+        ...base,
+        extras: {},
+        series: { pnl: [{ ts: '2026-06-10T00:00:00Z', value: 1 }] },
+      })
+    ).toBe(true)
   })
 })
 

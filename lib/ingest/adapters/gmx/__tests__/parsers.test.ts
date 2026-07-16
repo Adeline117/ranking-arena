@@ -83,6 +83,7 @@ describe('parseGmxLeaderboardPage', () => {
       roi_basis: 'max_capital_usd',
       pnl_includes_unrealized: false,
       pnl_components_complete: true,
+      profile_series_contract: 'unavailable_same_basis',
       window_from: fx.from,
     })
     // open-only account: zero closes → null win rate; realized fees remain loss
