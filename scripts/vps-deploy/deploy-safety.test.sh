@@ -13,5 +13,7 @@ grep -Fq 'pm2 startOrReload "$ECOSYSTEM" --only "$app" --update-env' "$DEPLOY"
 grep -Fq 'INGEST_PID_BEFORE=' "$DEPLOY"
 grep -Fq 'INGEST_PID_AFTER=' "$DEPLOY"
 grep -Fq 'arena-ingest-worker-sg PID' "$DEPLOY"
+grep -Fq 'source /etc/arena-proxy.env' "$DEPLOY"
+grep -Fq 'set -a' "$DEPLOY"
 
 echo "VPS deploy scope safety passed"
