@@ -1532,10 +1532,10 @@ const en = {
   switchToChinese: 'Switch to Chinese',
 
   // Validation (settings)
-  validationHandleMinLength: 'Username must be at least 2 characters',
+  validationHandleMinLength: 'Username must be at least 1 character',
   validationHandleMaxLength: 'Username cannot exceed {max} characters',
   validationHandleInvalidChars:
-    'Username can only contain letters, numbers, underscores, and Chinese characters',
+    'Username can only contain English letters, numbers, underscores, and Chinese, Japanese, or Korean characters',
   validationInvalidEmail: 'Please enter a valid email address',
   validationPasswordMinLength: 'Password must be at least 6 characters',
   validationPasswordMismatch: 'Passwords do not match',
@@ -2053,7 +2053,8 @@ const en = {
   loginPasswordTooShort: 'Password must be at least 8 characters',
   loginHandleTooShort: 'Username must be at least 1 character',
   loginHandleTooLong: 'Username must be 30 characters or fewer',
-  loginHandleInvalidChars: 'Only letters, numbers, underscores and Chinese',
+  loginHandleInvalidChars:
+    'Only English letters, numbers, underscores, and Chinese, Japanese, or Korean characters are allowed',
   loginPasswordWeak: 'Weak',
   loginPasswordFair: 'Fair',
   loginPasswordGood: 'Good',

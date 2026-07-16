@@ -5,6 +5,7 @@ import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text } from '@/app/components/base'
 import Avatar from '@/app/components/ui/Avatar'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { getHandleCodePointLength, truncateHandle } from '@/lib/identity/handle-policy'
 import { SectionCard, getInputStyle } from './shared'
 import { validateHandle, MAX_BIO_LENGTH, MAX_HANDLE_LENGTH } from '../validation'
 
@@ -48,7 +49,7 @@ export const ProfileSection = React.memo(function ProfileSection({
   onRemoveCover,
 }: ProfileSectionProps) {
   const { t } = useLanguage()
-  const handleValidation = validateHandle(handle, t)
+  const handleValidation = validateHandle(handle, t, initialHandle)
 
   return (
     <SectionCard id="profile" title={t('profileSection')} description={t('profileDescription')}>
@@ -224,7 +225,7 @@ export const ProfileSection = React.memo(function ProfileSection({
         <input
           type="text"
           value={handle}
-          onChange={(e) => setHandle(e.target.value.slice(0, MAX_HANDLE_LENGTH))}
+          onChange={(e) => setHandle(truncateHandle(e.target.value))}
           onBlur={markTouched}
           placeholder={t('setUsername')}
           autoComplete="username"
@@ -235,7 +236,7 @@ export const ProfileSection = React.memo(function ProfileSection({
           style={{ display: 'flex', justifyContent: 'space-between', marginTop: tokens.spacing[1] }}
         >
           <Box>
-            {touchedHandle && handle && !handleValidation.valid && (
+            {touchedHandle && !handleValidation.valid && (
               <Text size="xs" style={{ color: tokens.colors.accent.error }}>
                 {handleValidation.message}
               </Text>
@@ -265,7 +266,7 @@ export const ProfileSection = React.memo(function ProfileSection({
               )}
           </Box>
           <Text size="xs" color="tertiary">
-            {handle.length}/{MAX_HANDLE_LENGTH}
+            {getHandleCodePointLength(handle)}/{MAX_HANDLE_LENGTH}
           </Text>
         </Box>
       </Box>

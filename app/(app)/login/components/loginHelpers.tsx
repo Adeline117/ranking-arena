@@ -1,4 +1,9 @@
 import { tokens } from '@/lib/design-tokens'
+import {
+  getHandleShapeError,
+  isReservedHandle,
+  MAX_HANDLE_LENGTH,
+} from '@/lib/identity/handle-policy'
 
 // 密码强度计算函数
 export function getPasswordStrength(password: string): {
@@ -43,18 +48,23 @@ export function validatePassword(password: string): { valid: boolean; messageKey
 }
 
 export function validateHandle(handle: string): { valid: boolean; messageKey: string } {
-  if (!handle) return { valid: true, messageKey: '' }
-  if (handle.length < 1) {
+  const shapeError = getHandleShapeError(handle)
+  if (shapeError === 'required') {
     return { valid: false, messageKey: 'loginHandleTooShort' }
   }
-  if (handle.length > 30) {
+  if (shapeError === 'too_long') {
     return { valid: false, messageKey: 'loginHandleTooLong' }
   }
-  if (!/^[a-zA-Z0-9_\u4e00-\u9fa5\u3040-\u309F\u30A0-\u30FF\uAC00-\uD7AF]+$/.test(handle)) {
+  if (shapeError !== null) {
     return { valid: false, messageKey: 'loginHandleInvalidChars' }
+  }
+  if (isReservedHandle(handle)) {
+    return { valid: false, messageKey: 'usernameInUse' }
   }
   return { valid: true, messageKey: '' }
 }
+
+export { MAX_HANDLE_LENGTH }
 
 // CSS keyframe animations
 export const injectStyles = () => {

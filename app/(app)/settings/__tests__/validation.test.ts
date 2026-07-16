@@ -13,8 +13,8 @@ import {
 
 describe('validateHandle', () => {
   describe('valid usernames', () => {
-    it('should accept empty username (optional field)', () => {
-      expect(validateHandle('')).toEqual({ valid: true, message: '' })
+    it('should accept a single-character username', () => {
+      expect(validateHandle('a')).toEqual({ valid: true, message: '' })
     })
 
     it('should accept 2-character username', () => {
@@ -41,17 +41,38 @@ describe('validateHandle', () => {
       expect(validateHandle('test用户123')).toEqual({ valid: true, message: '' })
     })
 
+    it('accepts the exact Japanese and Korean ranges allowed by the database', () => {
+      expect(validateHandle('ひらがな')).toEqual({ valid: true, message: '' })
+      expect(validateHandle('カタカナ')).toEqual({ valid: true, message: '' })
+      expect(validateHandle('거래자')).toEqual({ valid: true, message: '' })
+      expect(validateHandle('\u4E00\u9FAF\u3041\u309F\u30A0\u30FF\uAC00\uD7A3')).toEqual({
+        valid: true,
+        message: '',
+      })
+    })
+
     it('should accept max length username', () => {
       const maxLengthHandle = 'a'.repeat(MAX_HANDLE_LENGTH)
       expect(validateHandle(maxLengthHandle)).toEqual({ valid: true, message: '' })
     })
+
+    it('keeps an exactly unchanged safe legacy dotted username valid', () => {
+      expect(validateHandle('legacy.user', undefined, 'legacy.user')).toEqual({
+        valid: true,
+        message: '',
+      })
+    })
+
+    it('keeps an exactly unchanged reserved legacy username valid', () => {
+      expect(validateHandle('Admin', undefined, 'Admin')).toEqual({ valid: true, message: '' })
+    })
   })
 
   describe('invalid usernames', () => {
-    it('should reject single character username', () => {
-      const result = validateHandle('a')
+    it('should reject an empty username', () => {
+      const result = validateHandle('')
       expect(result.valid).toBe(false)
-      expect(result.message).toContain('2')
+      expect(result.message).toContain('1')
     })
 
     it('should reject username exceeding max length', () => {
@@ -61,25 +82,52 @@ describe('validateHandle', () => {
       expect(result.message).toContain(String(MAX_HANDLE_LENGTH))
     })
 
-    it('should reject username with special characters', () => {
-      const result = validateHandle('test@user')
+    it.each([
+      'test@user',
+      'test user',
+      'test-user',
+      'test.user',
+      'bad/name',
+      'bad\\name',
+      'bad?query',
+      'bad#fragment',
+      'bad%2Fescape',
+      'safe\u202Eeman',
+      'safe\u200Bname',
+      'emoji😀',
+      'é',
+      '___',
+    ])('should reject a new username outside the database alphabet: %s', (handle) => {
+      const result = validateHandle(handle)
       expect(result.valid).toBe(false)
       expect(result.message).toContain('letters')
     })
 
-    it('should reject username with spaces', () => {
-      const result = validateHandle('test user')
-      expect(result.valid).toBe(false)
+    it('rejects non-NFC input instead of diverging from the database', () => {
+      expect(validateHandle('\u306F\u3099').valid).toBe(false)
+      expect(validateHandle('\u3070').valid).toBe(true)
     })
 
-    it('should reject username with hyphens', () => {
-      const result = validateHandle('test-user')
-      expect(result.valid).toBe(false)
+    it('does not extend legacy-dot compatibility to a renamed handle', () => {
+      expect(validateHandle('new.name', undefined, 'old.name').valid).toBe(false)
+      expect(validateHandle('legacy/name', undefined, 'legacy/name').valid).toBe(false)
     })
 
-    it('should reject username with dots', () => {
-      const result = validateHandle('test.user')
-      expect(result.valid).toBe(false)
+    it.each([
+      'admin',
+      'Administrator',
+      'ARENA',
+      'moderator',
+      'official',
+      'root',
+      'support',
+      'system',
+    ])('should reject a new or changed reserved username: %s', (reserved) => {
+      expect(validateHandle(reserved, undefined, 'ordinary_user').valid).toBe(false)
+    })
+
+    it('rejects changing only the case of a reserved legacy username', () => {
+      expect(validateHandle('ADMIN', undefined, 'Admin').valid).toBe(false)
     })
   })
 })

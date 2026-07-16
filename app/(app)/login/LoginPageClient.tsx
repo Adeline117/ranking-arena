@@ -10,7 +10,12 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens } from '@/lib/design-tokens'
 import { logger } from '@/lib/logger'
 import { useMultiAccountStore } from '@/lib/stores/multiAccountStore'
-import { injectStyles, validateEmail, getPasswordStrength } from './components/loginHelpers'
+import {
+  injectStyles,
+  validateEmail,
+  getPasswordStrength,
+  validateHandle,
+} from './components/loginHelpers'
 import { trackEvent } from '@/lib/analytics/track'
 import { authedFetch } from '@/lib/api/client'
 import { peekPendingReferral } from '@/lib/referral/pending'
@@ -21,6 +26,7 @@ import { formatRankedTraderCount } from '@/lib/config/product-facts'
 import { useProductFacts } from '@/lib/hooks/useProductFacts'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import { normalizeHandle } from '@/lib/identity/handle-policy'
 
 export default function LoginPageClient() {
   const { language: lang, t } = useLanguage()
@@ -400,7 +406,7 @@ export default function LoginPageClient() {
       if (data.user) {
         if (isRegister) {
           setCodeVerified(true)
-          await createUserProfile(data.user.id, email)
+          await synchronizeUserProfile(data.user.id)
           showToast(t('loginCodeVerified'), 'success')
         } else {
           trackEvent('login')
@@ -429,20 +435,30 @@ export default function LoginPageClient() {
     }
   }
 
-  const createUserProfile = async (userId: string, userEmail: string, userHandle?: string) => {
+  const synchronizeUserProfile = async (userId: string, userHandle?: string) => {
     try {
-      const finalHandle = userHandle || userEmail.split('@')[0]
-      const updateData: Record<string, string> = { id: userId, email: userEmail }
-      if (userHandle) {
-        updateData.handle = finalHandle
-      } else {
-        const { data: existingProfile } = await supabase
-          .from('user_profiles')
-          .select('handle')
-          .eq('id', userId)
-          .maybeSingle()
-        if (!existingProfile || !existingProfile.handle) updateData.handle = finalHandle
+      const normalizedUserHandle = userHandle ? normalizeHandle(userHandle) : undefined
+      if (normalizedUserHandle && !validateHandle(normalizedUserHandle).valid) {
+        throw new Error('Invalid profile handle')
       }
+
+      // handle_new_user owns profile creation and its safe fallback handle.
+      // Authenticated browser clients may update only explicitly granted profile
+      // columns, so never retry provisioning with an INSERT/upsert here.
+      const { data: existingProfile, error: profileReadError } = await supabase
+        .from('user_profiles')
+        .select('id, handle, avatar_url')
+        .eq('id', userId)
+        .maybeSingle()
+      if (profileReadError || !existingProfile) {
+        throw profileReadError || new Error('Profile provisioning is incomplete')
+      }
+
+      const updateData: Record<string, string> = {}
+      if (normalizedUserHandle && existingProfile.handle !== normalizedUserHandle) {
+        updateData.handle = normalizedUserHandle
+      }
+
       // Sync OAuth avatar if available and not already set
       try {
         const {
@@ -450,27 +466,54 @@ export default function LoginPageClient() {
         } = await supabase.auth.getUser()
         const meta = user?.user_metadata
         const oauthAvatar = meta?.avatar_url || meta?.picture || null
-        if (oauthAvatar) {
-          const { data: existing } = await supabase
-            .from('user_profiles')
-            .select('avatar_url')
-            .eq('id', userId)
-            .maybeSingle()
-          if (!existing?.avatar_url) {
-            updateData.avatar_url = oauthAvatar
-          }
+        if (oauthAvatar && !existingProfile.avatar_url) {
+          updateData.avatar_url = oauthAvatar
         }
       } catch {
         /* avatar sync is best-effort */
       }
-      // Capture UTM parameters for attribution
+
+      if (Object.keys(updateData).length > 0) {
+        const { data: updatedProfile, error: profileUpdateError } = await supabase
+          .from('user_profiles')
+          .update(updateData)
+          .eq('id', userId)
+          .select('id')
+          .maybeSingle()
+        if (profileUpdateError || !updatedProfile) {
+          throw profileUpdateError || new Error('Profile update did not match the signed-in user')
+        }
+      }
+
+      // Attribution fields are privileged and first-touch-only; preserve them
+      // through the authenticated API instead of a direct profile mutation.
       const utmSource = searchParams.get('utm_source')
       const utmMedium = searchParams.get('utm_medium')
       const utmCampaign = searchParams.get('utm_campaign')
-      if (utmSource) updateData.utm_source = utmSource
-      if (utmMedium) updateData.utm_medium = utmMedium
-      if (utmCampaign) updateData.utm_campaign = utmCampaign
-      await supabase.from('user_profiles').upsert(updateData, { onConflict: 'id' })
+      if (utmSource || utmMedium || utmCampaign) {
+        try {
+          const {
+            data: { session },
+          } = await supabase.auth.getSession()
+          if (session?.access_token) {
+            const attribution = await authedFetch<{ success?: unknown }>(
+              '/api/profile/attribution',
+              'POST',
+              session.access_token,
+              {
+                ...(utmSource ? { utmSource } : {}),
+                ...(utmMedium ? { utmMedium } : {}),
+                ...(utmCampaign ? { utmCampaign } : {}),
+              }
+            )
+            if (!attribution.ok || attribution.data?.success !== true) {
+              logger.warn('Profile attribution failed (non-fatal)')
+            }
+          }
+        } catch (attributionError) {
+          logger.warn('Profile attribution failed (non-fatal):', attributionError)
+        }
+      }
 
       // Referral attribution + reward are handled server-side by
       // /api/referral/apply (sets referred_by, counts toward the threshold,
@@ -498,7 +541,8 @@ export default function LoginPageClient() {
         }
       }
     } catch (err) {
-      logger.error('Error creating profile:', err)
+      logger.error('Error synchronizing profile:', err)
+      throw err
     }
   }
 
@@ -510,10 +554,13 @@ export default function LoginPageClient() {
       setError(t('loginPasswordMinLength'))
       return
     }
-    if (!handle || handle.length < 1) {
-      setError(t('loginHandleMinLength'))
+    const normalizedHandle = normalizeHandle(handle)
+    const handleValidation = validateHandle(normalizedHandle)
+    if (!handleValidation.valid) {
+      setError(t(handleValidation.messageKey))
       return
     }
+    if (normalizedHandle !== handle) setHandle(normalizedHandle)
     submittingRef.current = true
     setError(null)
     setLoading(true)
@@ -528,19 +575,7 @@ export default function LoginPageClient() {
         return
       }
       if (user) {
-        const { data: existingProfile } = await supabase
-          .from('user_profiles')
-          .select('handle')
-          .eq('id', user.id)
-          .maybeSingle()
-        if (existingProfile && existingProfile.handle !== handle) {
-          const { error: updateError } = await supabase
-            .from('user_profiles')
-            .update({ handle })
-            .eq('id', user.id)
-          if (updateError) logger.error('Error updating handle:', updateError)
-        }
-        await createUserProfile(user.id, email, handle)
+        await synchronizeUserProfile(user.id, normalizedHandle)
         // Count signup only after the profile/handle step is complete. OTP
         // verification alone can still be abandoned before onboarding.
         trackEvent('signup')
@@ -565,13 +600,20 @@ export default function LoginPageClient() {
         // Brand-new email signup → route through the full /onboarding activation
         // flow (onboarding_completed is still false). The original destination is
         // preserved as returnUrl so onboarding (or Skip) lands them back there.
-        const dest = getRedirectUrl(handle, email)
+        const dest = getRedirectUrl(normalizedHandle, email)
         router.push(`/onboarding?returnUrl=${encodeURIComponent(dest)}`)
       } else {
         router.push(getRedirectUrl())
       }
     } catch (err: unknown) {
-      setError((err instanceof Error ? err.message : undefined) || t('loginSetupFailed'))
+      const profileError = err as { code?: string; message?: string }
+      if (profileError?.code === '23505') {
+        setError(t('usernameInUse'))
+      } else if (profileError?.code === '23514') {
+        setError(t('loginHandleInvalidChars'))
+      } else {
+        setError(profileError?.message || t('loginSetupFailed'))
+      }
     } finally {
       setLoading(false)
       submittingRef.current = false

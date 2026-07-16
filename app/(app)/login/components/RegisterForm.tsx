@@ -1,6 +1,7 @@
 'use client'
 
 import { tokens } from '@/lib/design-tokens'
+import { truncateHandle } from '@/lib/identity/handle-policy'
 import { getPasswordStrength, validateHandle, Spinner } from './loginHelpers'
 import OTPVerification from './OTPVerification'
 
@@ -140,18 +141,15 @@ export default function RegisterForm({
           }}
           placeholder={t('loginUsernamePlaceholder')}
           value={handle}
-          onChange={(e) => setHandle(e.target.value)}
+          onChange={(e) => setHandle(truncateHandle(e.target.value))}
           onBlur={() => markTouched('handle')}
-          maxLength={30}
           autoComplete="username"
-          aria-invalid={touchedFields.handle && handle ? !handleValidation.valid : undefined}
+          aria-invalid={touchedFields.handle ? !handleValidation.valid : undefined}
           aria-describedby={
-            touchedFields.handle && handle && !handleValidation.valid
-              ? 'register-handle-error'
-              : undefined
+            touchedFields.handle && !handleValidation.valid ? 'register-handle-error' : undefined
           }
         />
-        {touchedFields.handle && handle && !handleValidation.valid && (
+        {touchedFields.handle && !handleValidation.valid && (
           <div id="register-handle-error" style={{ marginTop: 6, fontSize: 12 }}>
             <span style={{ color: 'var(--color-accent-error)' }}>
               X - {t(handleValidation.messageKey)}
@@ -262,7 +260,7 @@ export default function RegisterForm({
 
       <button
         onClick={onSetPassword}
-        disabled={loading || !passwordMeetsFloor || !handle || handle.length < 1}
+        disabled={loading || !passwordMeetsFloor || !handleValidation.valid}
         className="login-button"
         style={{
           width: '100%',
@@ -270,16 +268,14 @@ export default function RegisterForm({
           borderRadius: tokens.radius.lg,
           border: 'none',
           background:
-            loading || !passwordMeetsFloor || !handle || handle.length < 1
+            loading || !passwordMeetsFloor || !handleValidation.valid
               ? 'var(--color-accent-primary-20)'
               : 'linear-gradient(135deg, var(--color-brand) 0%, var(--color-brand-deep) 100%)',
           color: tokens.colors.white,
           fontWeight: 700,
           fontSize: 16,
           cursor:
-            loading || !passwordMeetsFloor || !handle || handle.length < 1
-              ? 'not-allowed'
-              : 'pointer',
+            loading || !passwordMeetsFloor || !handleValidation.valid ? 'not-allowed' : 'pointer',
           marginBottom: 16,
           display: 'flex',
           alignItems: 'center',

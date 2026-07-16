@@ -28,7 +28,7 @@ jest.mock('@/lib/supabase/client', () => {
         signOut: jest.fn(),
       },
     },
-    __settingsMocks: { publicMaybeSingle, sensitiveMaybeSingle },
+    __settingsMocks: { publicMaybeSingle, sensitiveMaybeSingle, publicQuery },
   }
 })
 
@@ -54,11 +54,15 @@ jest.mock('@/lib/auth/token-refresh', () => ({
 
 import { useSettingsHandlers } from '../hooks/useSettingsHandlers'
 
-const { publicMaybeSingle: mockPublicMaybeSingle, sensitiveMaybeSingle: mockSensitiveMaybeSingle } =
-  jest.requireMock('@/lib/supabase/client').__settingsMocks as {
-    publicMaybeSingle: jest.Mock
-    sensitiveMaybeSingle: jest.Mock
-  }
+const {
+  publicMaybeSingle: mockPublicMaybeSingle,
+  sensitiveMaybeSingle: mockSensitiveMaybeSingle,
+  publicQuery: mockPublicQuery,
+} = jest.requireMock('@/lib/supabase/client').__settingsMocks as {
+  publicMaybeSingle: jest.Mock
+  sensitiveMaybeSingle: jest.Mock
+  publicQuery: Record<string, jest.Mock>
+}
 const { authedFetch: mockAuthedFetch } = jest.requireMock('@/lib/api/client').__settingsMocks as {
   authedFetch: jest.Mock
 }
@@ -138,11 +142,19 @@ describe('useSettingsHandlers viewer ownership', () => {
   const showToast = jest.fn()
   const showConfirm = jest.fn()
   const t = (key: string) => key
+  const originalFetch = global.fetch
 
   beforeEach(() => {
     jest.clearAllMocks()
+    mockPublicMaybeSingle.mockReset()
+    mockSensitiveMaybeSingle.mockReset()
     __resetViewerScopeForTests()
     mockAuthedFetch.mockResolvedValue({ ok: true, status: 200, data: { success: true } })
+    global.fetch = jest.fn().mockResolvedValue({ ok: true }) as unknown as typeof fetch
+  })
+
+  afterAll(() => {
+    global.fetch = originalFetch
   })
 
   it('never lets a late A profile completion overwrite B', async () => {
@@ -243,5 +255,141 @@ describe('useSettingsHandlers viewer ownership', () => {
       sensitiveB.resolve(sensitiveProfile())
     })
     await waitFor(() => expect(hook.result.current.handle).toBe('bravo'))
+  })
+
+  it('checks availability for a valid one-character changed handle', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    mockAuthedFetch.mockResolvedValue({ ok: true, status: 200, data: { available: true } })
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+
+    act(() => hook.result.current.setHandle('界'))
+
+    await waitFor(
+      () =>
+        expect(mockAuthedFetch).toHaveBeenCalledWith(
+          '/api/profile/handle-availability',
+          'POST',
+          expect.any(String),
+          { handle: '界' },
+          15_000,
+          expect.objectContaining({ expectedUserId: 'user-a' })
+        ),
+      { timeout: 1_500 }
+    )
+    await waitFor(() => expect(hook.result.current.handleAvailable).toBe(true))
+  })
+
+  it('blocks an empty handle before any profile write', async () => {
+    mockPublicMaybeSingle.mockResolvedValue(publicProfile('alpha'))
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.loading).toBe(false))
+
+    act(() => hook.result.current.setHandle(''))
+    await act(async () => {
+      await hook.result.current.handleSaveProfile()
+    })
+
+    expect(mockPublicMaybeSingle).toHaveBeenCalledTimes(1)
+    expect(mockPublicQuery.update).not.toHaveBeenCalled()
+    expect(showToast).toHaveBeenCalledWith('validationHandleMinLength', 'error')
+  })
+
+  it('preserves an exactly unchanged legacy dotted handle while saving other fields', async () => {
+    mockPublicMaybeSingle
+      .mockResolvedValueOnce(publicProfile('legacy.user'))
+      .mockResolvedValueOnce({ data: { avatar_url: null, cover_url: null }, error: null })
+      .mockResolvedValueOnce({ data: { id: 'user-a' }, error: null })
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.handle).toBe('legacy.user'))
+
+    act(() => hook.result.current.setBio('updated bio'))
+    await act(async () => {
+      await hook.result.current.handleSaveProfile()
+    })
+
+    expect(mockPublicQuery.update).toHaveBeenCalledWith(
+      expect.not.objectContaining({ handle: expect.anything() })
+    )
+    expect(showToast).toHaveBeenCalledWith('settingsSaved', 'success')
+  })
+
+  it('writes a changed canonical CJK handle as a non-null string', async () => {
+    mockPublicMaybeSingle
+      .mockResolvedValueOnce(publicProfile('alpha'))
+      .mockResolvedValueOnce({ data: { avatar_url: null, cover_url: null }, error: null })
+      .mockResolvedValueOnce({ data: { id: 'user-a' }, error: null })
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.handle).toBe('alpha'))
+
+    act(() => hook.result.current.setHandle('交易员甲'))
+    await act(async () => {
+      await hook.result.current.handleSaveProfile()
+    })
+
+    expect(mockPublicQuery.update).toHaveBeenCalledWith(
+      expect.objectContaining({ handle: '交易员甲' })
+    )
+  })
+
+  it('maps a database handle check violation to the handle validation error', async () => {
+    mockPublicMaybeSingle
+      .mockResolvedValueOnce(publicProfile('alpha'))
+      .mockResolvedValueOnce({ data: { avatar_url: null, cover_url: null }, error: null })
+      .mockResolvedValueOnce({ data: null, error: { code: '23514', message: 'check violation' } })
+    mockSensitiveMaybeSingle.mockResolvedValue(sensitiveProfile())
+    const scope = synchronizeViewerScope(true, 'user-a')
+    const hook = renderHook(() =>
+      useSettingsHandlers({
+        auth: authFor('user-a', scope.sessionGeneration),
+        showToast,
+        showConfirm,
+        t,
+      })
+    )
+    await waitFor(() => expect(hook.result.current.handle).toBe('alpha'))
+
+    act(() => hook.result.current.setHandle('bravo'))
+    await act(async () => {
+      await hook.result.current.handleSaveProfile()
+    })
+
+    expect(showToast).toHaveBeenCalledWith('validationHandleInvalidChars', 'error')
   })
 })

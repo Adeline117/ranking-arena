@@ -1456,9 +1456,10 @@ const ko = {
   switchToChinese: '중국어로 전환',
 
   // Validation (settings)
-  validationHandleMinLength: '사용자 이름은 최소 2자 이상이어야 합니다',
+  validationHandleMinLength: '사용자 이름은 최소 1자 이상이어야 합니다',
   validationHandleMaxLength: '사용자 이름은 {max}자를 초과할 수 없습니다',
-  validationHandleInvalidChars: '사용자 이름은 영문, 숫자, 밑줄, 한자만 포함할 수 있습니다',
+  validationHandleInvalidChars:
+    '사용자 이름에는 영문자, 숫자, 밑줄 및 중국어·일본어·한국어 문자만 사용할 수 있습니다',
   validationInvalidEmail: '유효한 이메일 주소를 입력해 주세요',
   validationPasswordMinLength: '비밀번호는 최소 6자 이상이어야 합니다',
   validationPasswordMismatch: '비밀번호가 일치하지 않습니다',
@@ -1971,7 +1972,7 @@ const ko = {
   loginPasswordTooShort: '비밀번호는 최소 8자 이상이어야 합니다',
   loginHandleTooShort: '사용자 이름은 최소 1자 이상이어야 합니다',
   loginHandleTooLong: '사용자 이름은 30자 이하여야 합니다',
-  loginHandleInvalidChars: '영문, 숫자, 밑줄, 한자만 사용할 수 있습니다',
+  loginHandleInvalidChars: '영문자, 숫자, 밑줄 및 중국어·일본어·한국어 문자만 사용할 수 있습니다',
   loginPasswordWeak: '약함',
   loginPasswordFair: '보통',
   loginPasswordGood: '양호',

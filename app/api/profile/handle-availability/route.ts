@@ -54,8 +54,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    // PostgREST pattern filters treat `*` as another wildcard, so legal
-    // literal handles cannot be checked reliably with ILIKE escaping.
+    // Equality keeps the availability check identical to the database's
+    // case-insensitive unique index without introducing pattern semantics.
     const result = await queryOne<{ taken: boolean }>(
       `SELECT EXISTS (
          SELECT 1
