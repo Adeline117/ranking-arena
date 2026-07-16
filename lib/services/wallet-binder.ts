@@ -17,10 +17,7 @@ import { verifyMessage } from 'viem'
 import { PublicKey } from '@solana/web3.js'
 import nacl from 'tweetnacl'
 import { logger } from '@/lib/logger'
-import {
-  isDexWalletPlatform,
-  isSolanaPlatform,
-} from '@/lib/validators/exchange-uid-resolver'
+import { isDexWalletPlatform, isSolanaPlatform } from '@/lib/constants/wallet-platforms'
 
 // ============================================
 // Types
@@ -257,21 +254,13 @@ async function verifyEvmSignature(
   }
 }
 
-function verifySolanaSignature(
-  address: string,
-  message: string,
-  signature: string
-): boolean {
+function verifySolanaSignature(address: string, message: string, signature: string): boolean {
   try {
     const publicKey = new PublicKey(address)
     const messageBytes = new TextEncoder().encode(message)
     const signatureBytes = Buffer.from(signature, 'base64')
 
-    return nacl.sign.detached.verify(
-      messageBytes,
-      signatureBytes,
-      publicKey.toBytes()
-    )
+    return nacl.sign.detached.verify(messageBytes, signatureBytes, publicKey.toBytes())
   } catch (error) {
     logger.error('[wallet-binder] Solana verification error', {}, error as Error)
     return false
@@ -283,9 +272,7 @@ function verifySolanaSignature(
 // ============================================
 
 function parseClaimMessage(message: string): { traderKey: string; timestamp: number } | null {
-  const match = message.match(
-    /^I am claiming trader profile (.+) on Arena\. Timestamp: (\d+)$/
-  )
+  const match = message.match(/^I am claiming trader profile (.+) on Arena\. Timestamp: (\d+)$/)
   if (!match) return null
 
   return {

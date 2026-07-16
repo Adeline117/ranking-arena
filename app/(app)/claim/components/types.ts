@@ -1,3 +1,7 @@
+import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
+import { SOLANA_WALLET_PLATFORMS } from '@/lib/constants/wallet-platforms'
+import { walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
+
 export interface SearchResult {
   handle: string
   source: string
@@ -26,9 +30,6 @@ export interface LinkedTrader {
   } | null
 }
 
-import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
-import { walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
-
 // Derive CEX platforms from EXCHANGE_CONFIG so adding a new exchange with
 // requiresPassphrase: true automatically shows the passphrase field in the claim form.
 export const CEX_PLATFORMS = (
@@ -56,7 +57,7 @@ export const DEX_PLATFORMS = [
   'drift',
 ]
 
-export const SOLANA_PLATFORMS = ['jupiter_perps', 'drift']
+export const SOLANA_PLATFORMS = [...SOLANA_WALLET_PLATFORMS]
 
 export function isDex(source: string): boolean {
   return DEX_PLATFORMS.some((p) => source.toLowerCase() === p)

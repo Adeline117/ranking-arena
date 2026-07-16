@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { DEX_WALLET_PLATFORMS, SOLANA_DEX_PLATFORMS } from '@/lib/validators/exchange-uid-resolver'
+import { EVM_WALLET_PLATFORMS, SOLANA_WALLET_PLATFORMS } from '@/lib/constants/wallet-platforms'
 
 const migration = readFileSync(
   join(process.cwd(), 'supabase/migrations/20260716113000_expirable_trader_claim_submissions.sql'),
@@ -101,8 +101,8 @@ describe('expirable trader-claim submission migration', () => {
     const parseSqlList = (value: string | undefined) =>
       Array.from(value?.matchAll(/'([^']+)'/g) ?? [], (match) => match[1])
 
-    expect(parseSqlList(solanaList)).toEqual([...SOLANA_DEX_PLATFORMS])
-    expect(parseSqlList(evmList)).toEqual([...DEX_WALLET_PLATFORMS])
+    expect(parseSqlList(solanaList)).toEqual([...SOLANA_WALLET_PLATFORMS])
+    expect(parseSqlList(evmList)).toEqual([...EVM_WALLET_PLATFORMS])
   })
 
   it('fails stale or terminal approval closed at the final status boundary', () => {

@@ -24,11 +24,6 @@ jest.mock('tweetnacl', () => ({
   },
 }))
 
-jest.mock('@/lib/validators/exchange-uid-resolver', () => ({
-  isSolanaPlatform: jest.fn((p: string) => p === 'drift' || p === 'jupiter-perps'),
-  isDexWalletPlatform: jest.fn(() => true),
-}))
-
 jest.mock('@/lib/data/unified', () => ({
   resolveTrader: jest.fn().mockResolvedValue(null),
 }))
