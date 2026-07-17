@@ -28,7 +28,9 @@ jest.mock('next/server', () => {
       }
     }
 
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -43,7 +45,9 @@ jest.mock('next/server', () => {
     constructor(url: string, opts?: { headers?: Record<string, string> }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this._headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) }))
+      this._headers = new Map(
+        Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) })
+      )
       this.method = 'GET'
       this.cookies = { get: () => undefined }
     }
@@ -78,13 +82,16 @@ jest.mock('@/lib/api/versioning', () => ({
 const mockGetAuthUser = jest.fn()
 
 // Supabase query chain proxy
-let supabaseQueryResult: { data: unknown; error: unknown } = { data: [], error: null }
+type QueryResult = { data: unknown; error: unknown }
+let mockDefaultQueryResult: QueryResult = { data: [], error: null }
+let mockQueryResults = new Map<string, QueryResult>()
 
-function buildChainMock(): unknown {
+function buildChainMock(table: string): unknown {
   const handler: ProxyHandler<object> = {
     get(_target, prop) {
       if (prop === 'then') {
-        return (resolve: (v: unknown) => void) => resolve(supabaseQueryResult)
+        return (resolve: (v: unknown) => void) =>
+          resolve(mockQueryResults.get(table) ?? mockDefaultQueryResult)
       }
       if (prop === 'catch' || prop === 'finally') return undefined
       return jest.fn(() => new Proxy({}, handler))
@@ -93,10 +100,12 @@ function buildChainMock(): unknown {
   return new Proxy({}, handler)
 }
 
+const mockSupabaseFrom = jest.fn((table: string) => buildChainMock(table))
+
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   getSupabaseAdmin: jest.fn(() => ({
-    from: jest.fn(() => buildChainMock()),
+    from: (table: string) => mockSupabaseFrom(table),
   })),
 }))
 
@@ -104,11 +113,21 @@ jest.mock('@/lib/utils/rate-limit', () => ({
   checkRateLimit: jest.fn().mockResolvedValue({ response: null, meta: null }),
   checkRateLimitFull: jest.fn().mockResolvedValue({ response: null, meta: null }),
   addRateLimitHeaders: jest.fn(),
-  RateLimitPresets: { authenticated: { limit: 60, window: 60 }, public: { limit: 100, window: 60 } },
+  RateLimitPresets: {
+    authenticated: { limit: 60, window: 60 },
+    public: { limit: 100, window: 60 },
+  },
 }))
 
 jest.mock('@/lib/utils/logger', () => {
-  const inst = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() }
+  const inst = {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  }
   return {
     createLogger: jest.fn(() => inst),
     logger: inst,
@@ -132,7 +151,7 @@ jest.mock('@/lib/features', () => ({
 }))
 
 import { NextRequest } from 'next/server'
-import { GET } from '../route'
+import { GET, invalidateFollowingCache } from '../route'
 
 describe('GET /api/following', () => {
   const mockUser = { id: 'user-123', email: 'test@example.com' }
@@ -142,7 +161,8 @@ describe('GET /api/following', () => {
     mockGetAuthUser.mockResolvedValue(null)
     mockTieredGet.mockResolvedValue({ data: null })
     mockTieredSet.mockResolvedValue(undefined)
-    supabaseQueryResult = { data: [], error: null }
+    mockDefaultQueryResult = { data: [], error: null }
+    mockQueryResults = new Map()
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
   })
@@ -204,16 +224,111 @@ describe('GET /api/following', () => {
     expect(body.userCount).toBe(0)
   })
 
-  it('returns cached following list when available', async () => {
+  it('caches only edge candidates and excludes mutable profile fields', async () => {
     mockGetAuthUser.mockResolvedValue(mockUser)
-    const cachedResult = {
-      items: [
-        { id: 'trader1', handle: 'TopTrader', type: 'trader', roi: 42.5 },
+    mockQueryResults.set('trader_follows', {
+      data: [
+        {
+          trader_id: 'trader-1',
+          source: 'bybit',
+          created_at: '2026-07-16T00:00:00.000Z',
+        },
       ],
-      traderCount: 1,
-      userCount: 0,
-    }
-    mockTieredGet.mockResolvedValue({ data: cachedResult })
+      error: null,
+    })
+    mockQueryResults.set('user_follows', {
+      data: [
+        {
+          following_id: 'user-2',
+          created_at: '2026-07-16T00:01:00.000Z',
+        },
+      ],
+      error: null,
+    })
+    mockQueryResults.set('user_profiles', {
+      data: [
+        {
+          id: 'user-2',
+          handle: 'Current user',
+          bio: 'Mutable bio',
+          avatar_url: 'https://example.com/current.png',
+          deleted_at: null,
+          banned_at: null,
+          is_banned: false,
+          ban_expires_at: null,
+        },
+      ],
+      error: null,
+    })
+    mockQueryResults.set('leaderboard_ranks', {
+      data: [
+        {
+          source_trader_id: 'trader-1',
+          source: 'bybit',
+          handle: 'Current trader',
+          avatar_url: null,
+          roi: 10,
+          pnl: null,
+          win_rate: null,
+          followers: null,
+          arena_score: 60,
+        },
+      ],
+      error: null,
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+
+    expect(response.status).toBe(200)
+    expect(mockTieredSet).toHaveBeenCalledWith(
+      'following:v2:candidates:user-123',
+      {
+        traders: [
+          {
+            traderId: 'trader-1',
+            source: 'bybit',
+            followedAt: '2026-07-16T00:00:00.000Z',
+          },
+        ],
+        users: [{ userId: 'user-2', followedAt: '2026-07-16T00:01:00.000Z' }],
+      },
+      'hot',
+      ['following']
+    )
+    expect(JSON.stringify(mockTieredSet.mock.calls)).not.toContain('Mutable bio')
+    expect(JSON.stringify(mockTieredSet.mock.calls)).not.toContain('Current trader')
+  })
+
+  it('uses cached edges but re-materializes current trader fields', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    mockTieredGet.mockResolvedValue({
+      data: {
+        traders: [
+          {
+            traderId: 'trader1',
+            source: 'bybit',
+            followedAt: '2026-07-16T00:00:00.000Z',
+          },
+        ],
+        users: [],
+      },
+    })
+    mockQueryResults.set('leaderboard_ranks', {
+      data: [
+        {
+          source_trader_id: 'trader1',
+          source: 'bybit',
+          handle: 'Current handle',
+          avatar_url: null,
+          roi: 42.5,
+          pnl: 10,
+          win_rate: 60,
+          followers: 4,
+          arena_score: 80,
+        },
+      ],
+      error: null,
+    })
 
     const req = new NextRequest('http://localhost/api/following?userId=user-123')
     const res = await GET(req)
@@ -221,21 +336,35 @@ describe('GET /api/following', () => {
 
     expect(res.status).toBe(200)
     expect(body.items).toHaveLength(1)
-    expect(body.items[0].handle).toBe('TopTrader')
+    expect(body.items[0].handle).toBe('Current handle')
     expect(body.count).toBe(1)
     expect(body.traderCount).toBe(1)
+    expect(mockSupabaseFrom).toHaveBeenCalledWith('leaderboard_ranks')
   })
 
   it('applies pagination with limit and offset', async () => {
     mockGetAuthUser.mockResolvedValue(mockUser)
-    const items = Array.from({ length: 10 }, (_, i) => ({
-      id: `t${i}`,
-      handle: `Trader${i}`,
-      type: 'trader' as const,
-      roi: i * 10,
+    const traders = Array.from({ length: 10 }, (_, i) => ({
+      traderId: `t${i}`,
+      source: 'bybit',
+      followedAt: new Date(Date.UTC(2026, 6, 16, 0, 0, 10 - i)).toISOString(),
     }))
     mockTieredGet.mockResolvedValue({
-      data: { items, traderCount: 10, userCount: 0 },
+      data: { traders, users: [] },
+    })
+    mockQueryResults.set('leaderboard_ranks', {
+      data: traders.map((candidate, i) => ({
+        source_trader_id: candidate.traderId,
+        source: candidate.source,
+        handle: `Trader${i}`,
+        avatar_url: null,
+        roi: i * 10,
+        pnl: null,
+        win_rate: null,
+        followers: null,
+        arena_score: 50 + i,
+      })),
+      error: null,
     })
 
     const req = new NextRequest('http://localhost/api/following?userId=user-123&limit=3&offset=2')
@@ -253,7 +382,7 @@ describe('GET /api/following', () => {
   it('clamps limit to max 200', async () => {
     mockGetAuthUser.mockResolvedValue(mockUser)
     mockTieredGet.mockResolvedValue({
-      data: { items: [], traderCount: 0, userCount: 0 },
+      data: { traders: [], users: [] },
     })
 
     const req = new NextRequest('http://localhost/api/following?userId=user-123&limit=500')
@@ -262,6 +391,115 @@ describe('GET /api/following', () => {
 
     expect(res.status).toBe(200)
     expect(body.limit).toBe(200)
+  })
+
+  it('drops a cached user edge when the current profile is inactive', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    mockTieredGet.mockResolvedValue({
+      data: {
+        traders: [],
+        users: [{ userId: 'inactive-user', followedAt: '2026-07-16T00:00:00.000Z' }],
+      },
+    })
+    mockQueryResults.set('user_profiles', {
+      data: [
+        {
+          id: 'inactive-user',
+          handle: 'cached-name-must-not-escape',
+          bio: null,
+          avatar_url: null,
+          deleted_at: '2026-07-16T01:00:00.000Z',
+          banned_at: null,
+          is_banned: false,
+          ban_expires_at: null,
+        },
+      ],
+      error: null,
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.items).toEqual([])
+    expect(body.userCount).toBe(0)
+    expect(JSON.stringify(body)).not.toContain('cached-name-must-not-escape')
+  })
+
+  it('binds reused trader IDs to their exact source', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    mockTieredGet.mockResolvedValue({
+      data: {
+        traders: [
+          { traderId: 'shared-id', source: 'bybit' },
+          { traderId: 'shared-id', source: 'binance_futures' },
+        ],
+        users: [],
+      },
+    })
+    mockQueryResults.set('leaderboard_ranks', {
+      data: [
+        {
+          source_trader_id: 'shared-id',
+          source: 'binance_futures',
+          handle: 'Binance trader',
+          avatar_url: null,
+          roi: 20,
+          pnl: null,
+          win_rate: null,
+          followers: null,
+          arena_score: 70,
+        },
+        {
+          source_trader_id: 'shared-id',
+          source: 'bybit',
+          handle: 'Bybit trader',
+          avatar_url: null,
+          roi: 10,
+          pnl: null,
+          win_rate: null,
+          followers: null,
+          arena_score: 60,
+        },
+      ],
+      error: null,
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
+
+    expect(body.items).toEqual([
+      expect.objectContaining({ id: 'shared-id', source: 'bybit', handle: 'Bybit trader' }),
+      expect.objectContaining({
+        id: 'shared-id',
+        source: 'binance_futures',
+        handle: 'Binance trader',
+      }),
+    ])
+  })
+
+  it('fails closed when current profile materialization fails', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    mockTieredGet.mockResolvedValue({
+      data: { traders: [], users: [{ userId: 'user-2' }] },
+    })
+    mockQueryResults.set('user_profiles', {
+      data: null,
+      error: new Error('profiles unavailable'),
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+
+    expect(response.status).toBe(500)
+  })
+
+  it('invalidates both candidate and legacy payload namespaces', async () => {
+    mockTieredDel.mockResolvedValue(undefined)
+
+    await invalidateFollowingCache('user-123')
+
+    expect(mockTieredDel).toHaveBeenCalledWith('following:v2:candidates:user-123')
+    expect(mockTieredDel).toHaveBeenCalledWith('following:user-123')
   })
 
   // --- Error Handling ---
