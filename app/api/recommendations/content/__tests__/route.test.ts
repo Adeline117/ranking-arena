@@ -39,7 +39,7 @@ type QueryChain = Record<string, jest.Mock> & { then: Promise<QueryResult>['then
 
 function makeQuery(result: QueryResult): QueryChain {
   const chain = {} as QueryChain
-  for (const method of ['select', 'in', 'is', 'order']) {
+  for (const method of ['select', 'in', 'is', 'eq', 'gt', 'or', 'order']) {
     chain[method] = jest.fn(() => chain)
   }
   chain.limit = jest.fn(async () => result)
@@ -201,5 +201,124 @@ describe('GET /api/recommendations/content group discovery boundary', () => {
     expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
     expect(response.headers.get('CDN-Cache-Control')).toBe('no-store')
     expect(response.headers.get('Vercel-CDN-Cache-Control')).toBe('no-store')
+  })
+})
+
+describe('GET /api/recommendations/content trader identity boundary', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockGetAuthUser.mockResolvedValue(null)
+    mockRpc.mockResolvedValue({ data: [], error: null })
+  })
+
+  it('serves anonymous traders from current rank rows, never from the post cache', async () => {
+    const trader = {
+      source: 'binance_futures',
+      source_trader_id: 'current-trader',
+      handle: 'Current trader',
+      arena_score: 88,
+    }
+    const topQuery = makeQuery({ data: [trader], error: null })
+    mockFrom.mockReturnValueOnce(topQuery)
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/recommendations/content?type=trader&limit=1')
+    )
+    const body = await response.json()
+
+    expect(mockTieredGetOrSet).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockFrom).toHaveBeenCalledWith('leaderboard_ranks')
+    expect(topQuery.eq).toHaveBeenCalledWith('season_id', '90D')
+    expect(topQuery.gt).toHaveBeenCalledWith('arena_score', 0)
+    expect(topQuery.or).toHaveBeenCalledWith('is_outlier.is.null,is_outlier.eq.false')
+    expect(body).toEqual({
+      success: true,
+      data: {
+        recommendations: [{ ...trader, recommendation_reason: 'top_performer' }],
+        type: 'trader',
+        personalized: false,
+      },
+    })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
+  })
+
+  it('materializes composite RPC identities against current trader rows', async () => {
+    mockGetAuthUser.mockResolvedValue({ id: '20000000-0000-4000-8000-000000000001' })
+    mockRpc.mockResolvedValue({
+      data: [
+        { target_id: 'bybit:key:with-colon', score: 9 },
+        { target_id: 'binance_futures:missing', score: 8 },
+        { target_id: 'malformed', score: 7 },
+      ],
+      error: null,
+    })
+    const currentQuery = makeQuery({
+      data: [
+        {
+          source: 'bybit',
+          source_trader_id: 'key:with-colon',
+          handle: 'Current DB handle',
+          arena_score: 70,
+        },
+        {
+          source: 'wrong_source',
+          source_trader_id: 'missing',
+          handle: 'Wrong composite identity',
+          arena_score: 60,
+        },
+      ],
+      error: null,
+    })
+    const topQuery = makeQuery({ data: [], error: null })
+    mockFrom.mockReturnValueOnce(currentQuery).mockReturnValueOnce(topQuery)
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/recommendations/content?type=trader&limit=2')
+    )
+    const body = await response.json()
+
+    expect(mockRpc).toHaveBeenCalledWith('recommend_by_collaborative_filtering', {
+      p_user_id: '20000000-0000-4000-8000-000000000001',
+      p_target_type: 'trader',
+      p_limit: 2,
+    })
+    expect(currentQuery.in).toHaveBeenCalledWith('source_trader_id', ['key:with-colon', 'missing'])
+    expect(body.data).toEqual({
+      recommendations: [
+        {
+          source: 'bybit',
+          source_trader_id: 'key:with-colon',
+          handle: 'Current DB handle',
+          arena_score: 70,
+          recommendation_score: 9,
+        },
+      ],
+      type: 'trader',
+      personalized: true,
+    })
+    expect(JSON.stringify(body)).not.toContain('Wrong composite identity')
+    expect(JSON.stringify(body)).not.toContain('binance_futures:missing')
+    expect(JSON.stringify(body)).not.toContain('target_id')
+  })
+
+  it('fails closed when current trader materialization fails', async () => {
+    mockGetAuthUser.mockResolvedValue({ id: '20000000-0000-4000-8000-000000000001' })
+    mockRpc.mockResolvedValue({
+      data: [{ target_id: 'bybit:trader-1', score: 1 }],
+      error: null,
+    })
+    mockFrom.mockReturnValueOnce(
+      makeQuery({ data: null, error: new Error('current traders unavailable') })
+    )
+
+    const response = await GET(
+      new NextRequest('http://localhost/api/recommendations/content?type=trader&limit=1')
+    )
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body).toEqual({ success: false, error: 'current traders unavailable' })
+    expect(response.headers.get('Cache-Control')).toBe('private, no-store, max-age=0')
   })
 })
