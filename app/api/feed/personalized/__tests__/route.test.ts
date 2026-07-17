@@ -413,6 +413,37 @@ describe('GET /api/feed/personalized', () => {
     )
   })
 
+  it('applies readable offset across ID batches without losing ranking order', async () => {
+    const firstBatch = Array.from({ length: 40 }, (_, index) => postId(index + 1))
+    const secondBatch = [postId(41), postId(42)]
+    mockGetAuthUser.mockResolvedValue({ id: USER_A })
+    mockGetOrSet.mockImplementation(async (key: string) =>
+      key.endsWith(':0') ? firstBatch : secondBatch
+    )
+    queueTableResult(
+      'posts',
+      { data: [...firstBatch].reverse().map((id) => currentPost(id)), error: null },
+      { data: [...secondBatch].reverse().map((id) => currentPost(id)), error: null }
+    )
+    queueTableResult(
+      'user_profiles',
+      { data: [currentProfile()], error: null },
+      { data: [currentProfile()], error: null }
+    )
+
+    const res = await GET(
+      new NextRequest('http://localhost/api/feed/personalized?offset=40&limit=1')
+    )
+    const body = await res.json()
+
+    expect(body.data.posts.map((post: { id: string }) => post.id)).toEqual([postId(41)])
+    expect(body.meta.pagination.has_more).toBe(true)
+    expect(mockGetOrSet.mock.calls.map((call) => call[0])).toEqual([
+      `feed:personalized:v3:ids:${USER_A}:0`,
+      `feed:personalized:v3:ids:${USER_A}:40`,
+    ])
+  })
+
   it('uses one current look-ahead row for exact has_more', async () => {
     const ids = Array.from({ length: 21 }, (_, index) => postId(index + 1))
     mockGetOrSet.mockResolvedValue(ids)
