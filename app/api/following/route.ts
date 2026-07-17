@@ -12,19 +12,19 @@
 
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger, fireAndForget } from '@/lib/utils/logger'
 import { safeParseInt } from '@/lib/utils/safe-parse'
 import { withAuth } from '@/lib/api/middleware'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { features } from '@/lib/features'
+import { isPublicProfileActive } from '@/lib/profile/public-audience'
 
 export const dynamic = 'force-dynamic'
 
 const logger = createLogger('following-api')
 
-function followingCacheKey(userId: string): string {
-  return `following:${userId}`
+function followingCandidateCacheKey(userId: string): string {
+  return `following:v2:candidates:${userId}`
 }
 
 // 统一的关注项类型
@@ -48,99 +48,156 @@ type FollowItem = {
 /** Invalidate the following cache for a user. Called from follow/unfollow API. */
 export async function invalidateFollowingCache(userId: string): Promise<void> {
   try {
-    await tieredDel(followingCacheKey(userId))
+    await Promise.all([
+      tieredDel(followingCandidateCacheKey(userId)),
+      // Remove payloads written by the pre-v2 route as well. They contained
+      // mutable profile fields and must never be replayed after deployment.
+      tieredDel(`following:${userId}`),
+    ])
   } catch {
-    // Intentionally swallowed: cache invalidation is best-effort, stale following data is acceptable
+    // Mutation routes still succeed if Redis is unavailable. The v2 cache has
+    // a distinct namespace, and every candidate is re-materialized below.
   }
+}
+
+type TraderFollowCandidate = {
+  traderId: string
+  source: string
+  followedAt?: string
+}
+
+type UserFollowCandidate = {
+  userId: string
+  followedAt?: string
+}
+
+type FollowingCandidates = {
+  traders: TraderFollowCandidate[]
+  users: UserFollowCandidate[]
 }
 
 type FollowingResult = { items: FollowItem[]; traderCount: number; userCount: number }
 
-async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+async function fetchFollowingCandidates(userId: string): Promise<FollowingCandidates> {
+  const supabase = getSupabaseAdmin()
 
   const QUERY_TIMEOUT_MS = 15000
 
-  // 并行获取关注的交易员和用户 (with 15s timeout + limit 500)
-  const [traderFollowsResult, userFollowsResult] = await Promise.race([
-    Promise.all([
-      supabase
-        .from('trader_follows')
-        .select('trader_id, source, created_at')
-        .eq('user_id', userId)
-        .limit(500),
-      // NOTE: user_follows.following_id references auth.users (not
-      // public.user_profiles), so a PostgREST embed fails with PGRST200.
-      // Two-step query: fetch follow rows here, then look up profiles below.
-      supabase
-        .from('user_follows')
-        .select('created_at, following_id')
-        .eq('follower_id', userId)
-        .limit(500),
-    ]),
-    new Promise<never>((_, reject) =>
-      setTimeout(() => reject(new Error('Following queries timed out after 5s')), QUERY_TIMEOUT_MS)
-    ),
+  // Abort the underlying PostgREST requests as well as bounding the handler.
+  // A Promise.race timeout alone leaves both network requests running.
+  const [traderFollowsResult, userFollowsResult] = await Promise.all([
+    supabase
+      .from('trader_follows')
+      .select('trader_id, source, created_at')
+      .eq('user_id', userId)
+      .limit(500)
+      .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS)),
+    // NOTE: user_follows.following_id references auth.users (not
+    // public.user_profiles), so a PostgREST embed fails with PGRST200.
+    // Two-step query: fetch follow rows here, then look up profiles below.
+    supabase
+      .from('user_follows')
+      .select('created_at, following_id')
+      .eq('follower_id', userId)
+      .limit(500)
+      .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS)),
   ])
 
   const traderFollows = traderFollowsResult.data || []
   const userFollows = userFollowsResult.data || []
+  if (traderFollowsResult.error) throw traderFollowsResult.error
+  if (userFollowsResult.error) throw userFollowsResult.error
 
+  return {
+    traders: traderFollows.flatMap((follow) => {
+      if (
+        typeof follow.trader_id !== 'string' ||
+        follow.trader_id.length === 0 ||
+        typeof follow.source !== 'string' ||
+        follow.source.length === 0
+      ) {
+        return []
+      }
+      return [
+        {
+          traderId: follow.trader_id,
+          source: follow.source,
+          followedAt: follow.created_at ?? undefined,
+        },
+      ]
+    }),
+    users: userFollows
+      .filter((follow) => typeof follow.following_id === 'string' && follow.following_id.length > 0)
+      .map((follow) => ({
+        userId: follow.following_id,
+        followedAt: follow.created_at ?? undefined,
+      })),
+  }
+}
+
+function traderCandidateIdentity(candidate: TraderFollowCandidate): string {
+  return `${candidate.source}:${candidate.traderId}`
+}
+
+function traderRowIdentity(row: { source: string; source_trader_id: string }): string {
+  return `${row.source}:${row.source_trader_id}`
+}
+
+async function materializeFollowingItems(
+  candidates: FollowingCandidates
+): Promise<FollowingResult> {
+  const supabase = getSupabaseAdmin()
   const items: FollowItem[] = []
 
-  // 处理关注的用户（step 2: 按 id 批量取 user_profiles 再合并）
-  const followingIds = (userFollows as { following_id: string }[])
-    .map((f) => f.following_id)
-    .filter(Boolean)
-  const { data: followingProfiles } = followingIds.length
+  // Redis stores only edge candidates. Mutable account fields and moderation
+  // state are read on every request before a service-role row is released.
+  const followingIds = [...new Set(candidates.users.map((candidate) => candidate.userId))]
+  const { data: followingProfiles, error: followingProfilesError } = followingIds.length
     ? await supabase
         .from('user_profiles')
-        .select('id, handle, bio, avatar_url')
+        .select('id, handle, bio, avatar_url, deleted_at, banned_at, is_banned, ban_expires_at')
         .in('id', followingIds)
-    : { data: null }
+        .abortSignal(AbortSignal.timeout(15000))
+    : { data: null, error: null }
+  if (followingProfilesError) throw followingProfilesError
+
+  const now = Date.now()
   const userProfileById = new Map(
-    (
-      (followingProfiles || []) as {
-        id: string
-        handle?: string
-        bio?: string
-        avatar_url?: string
-      }[]
-    ).map((p) => [p.id, p])
+    (followingProfiles || [])
+      .filter((profile) => isPublicProfileActive(profile, now))
+      .map((profile) => [profile.id, profile])
   )
 
-  for (const follow of userFollows as { created_at?: string; following_id: string }[]) {
-    const userObj = userProfileById.get(follow.following_id)
+  for (const candidate of candidates.users) {
+    const userObj = userProfileById.get(candidate.userId)
     if (userObj) {
       items.push({
         id: userObj.id,
         handle: userObj.handle || '未命名用户',
         type: 'user',
-        avatar_url: userObj.avatar_url,
-        bio: userObj.bio,
-        followed_at: follow.created_at,
+        avatar_url: userObj.avatar_url ?? undefined,
+        bio: userObj.bio ?? undefined,
+        followed_at: candidate.followedAt,
       })
     }
   }
 
-  // 处理关注的交易员
-  if (traderFollows.length > 0) {
-    const traderIds = traderFollows.map((f) => f.trader_id)
-    const followedAtMap = new Map(traderFollows.map((f) => [f.trader_id, f.created_at]))
-
-    // Use leaderboard_ranks as the single source of truth (unified data layer)
-    // instead of separate trader_snapshots v1 + trader_sources + leaderboard_ranks queries.
-    // leaderboard_ranks already has handle, avatar_url, roi, pnl, win_rate, followers, arena_score.
-    const { data: lrData } = await supabase
+  if (candidates.traders.length > 0) {
+    const traderIds = [...new Set(candidates.traders.map((candidate) => candidate.traderId))]
+    const { data: lrData, error: lrError } = await supabase
       .from('leaderboard_ranks')
       .select(
         'source_trader_id, handle, source, avatar_url, roi, pnl, win_rate, followers, arena_score, rank'
       )
       .in('source_trader_id', traderIds)
       .eq('season_id', '90D')
-      .not('arena_score', 'is', null)
+      .gt('arena_score', 0)
+      .or('is_outlier.is.null,is_outlier.eq.false')
+      .abortSignal(AbortSignal.timeout(15000))
+    if (lrError) throw lrError
 
-    // Build map: best arena_score row per trader
+    // A trader identity is composite. Matching only source_trader_id can attach
+    // another exchange's handle and performance when platforms reuse an ID.
     const traderDataMap = new Map<
       string,
       {
@@ -156,9 +213,9 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
     >()
 
     for (const row of lrData || []) {
-      const existing = traderDataMap.get(row.source_trader_id)
-      if (!existing || (row.arena_score || 0) > (existing.arena_score || 0)) {
-        traderDataMap.set(row.source_trader_id, {
+      const identity = traderRowIdentity(row)
+      if (!traderDataMap.has(identity)) {
+        traderDataMap.set(identity, {
           handle: row.handle || row.source_trader_id,
           source: row.source,
           avatar_url: row.avatar_url || undefined,
@@ -171,18 +228,19 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
       }
     }
 
-    // 添加交易员到列表
-    for (const traderId of traderIds) {
-      const data = traderDataMap.get(traderId)
+    for (const candidate of candidates.traders) {
+      const data = traderDataMap.get(traderCandidateIdentity(candidate))
 
       if (!data) {
-        logger.warn(`Trader not found in leaderboard_ranks: ${traderId}`)
+        logger.warn(
+          `Trader not found in current leaderboard_ranks: ${traderCandidateIdentity(candidate)}`
+        )
         continue
       }
 
       items.push({
-        id: traderId,
-        handle: data.handle || traderId,
+        id: candidate.traderId,
+        handle: data.handle || candidate.traderId,
         type: 'trader',
         avatar_url: data.avatar_url,
         roi: data.roi,
@@ -191,7 +249,7 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
         followers: data.followers,
         source: data.source || 'binance_futures',
         arena_score: data.arena_score,
-        followed_at: followedAtMap.get(traderId),
+        followed_at: candidate.followedAt,
       })
     }
   }
@@ -203,7 +261,11 @@ async function fetchFollowingItems(userId: string): Promise<FollowingResult> {
     return timeB - timeA
   })
 
-  return { items, traderCount: traderFollows.length, userCount: userFollows.length }
+  return {
+    items,
+    traderCount: items.filter((item) => item.type === 'trader').length,
+    userCount: items.filter((item) => item.type === 'user').length,
+  }
 }
 
 export const GET = withAuth(
@@ -229,16 +291,21 @@ export const GET = withAuth(
     }
 
     // Try cache first (hot tier: 1min memory, 5min redis)
-    const cacheKey = followingCacheKey(userId)
-    const cached = await tieredGet<FollowingResult>(cacheKey, 'hot')
+    const cacheKey = followingCandidateCacheKey(userId)
+    const cached = await tieredGet<FollowingCandidates>(cacheKey, 'hot')
 
-    let result: FollowingResult
+    let candidates: FollowingCandidates
     if (cached.data) {
-      result = cached.data
+      candidates = cached.data
     } else {
-      result = await fetchFollowingItems(userId)
-      fireAndForget(tieredSet(cacheKey, result, 'hot', ['following']), 'Cache following list')
+      candidates = await fetchFollowingCandidates(userId)
+      fireAndForget(
+        tieredSet(cacheKey, candidates, 'hot', ['following']),
+        'Cache following candidates'
+      )
     }
+
+    const result = await materializeFollowingItems(candidates)
 
     let { items, userCount } = result
     const { traderCount } = result
