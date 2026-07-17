@@ -28,12 +28,21 @@ import {
   type AvoidReasonType,
 } from '@/lib/data/avoid-list'
 
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+} as const
+
 // Zod schema for POST /api/avoid-list
 const AvoidVoteSchema = z.object({
   trader_id: z.string().min(1, 'trader_id is required'),
   source: z.string().min(1, 'source is required'),
   reason: z.string().max(1000).optional().nullable(),
-  reason_type: z.enum(['high_drawdown', 'fake_data', 'inconsistent', 'poor_communication', 'other']).optional().nullable(),
+  reason_type: z
+    .enum(['high_drawdown', 'fake_data', 'inconsistent', 'poor_communication', 'other'])
+    .optional()
+    .nullable(),
   loss_amount: z.number().min(0).optional().nullable(),
   loss_percent: z.number().optional().nullable(),
   follow_duration_days: z.number().min(0).optional().nullable(),
@@ -76,7 +85,13 @@ export async function GET(request: NextRequest) {
         },
         { limit, offset, has_more: votes.length === limit }
       )
-      response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+      if (user) {
+        for (const [name, value] of Object.entries(PRIVATE_NO_STORE_HEADERS)) {
+          response.headers.set(name, value)
+        }
+      } else {
+        response.headers.set('Cache-Control', 'public, s-maxage=120, stale-while-revalidate=300')
+      }
       return response
     } else {
       // 获取避雷榜
@@ -97,7 +112,9 @@ export async function GET(request: NextRequest) {
       msg.includes('trader_avoid_votes') ||
       msg.includes('avoid_votes') ||
       msg.includes('does not exist') ||
-      msg.includes('42P01') || msg.includes('PGRST205') || msg.includes('could not find')
+      msg.includes('42P01') ||
+      msg.includes('PGRST205') ||
+      msg.includes('could not find')
     ) {
       return success({ avoid_list: [], message: 'Feature coming soon' })
     }
@@ -130,7 +147,10 @@ export async function POST(request: NextRequest) {
     // 检查是否已投票
     const alreadyVoted = await hasUserVoted(supabase, user.id, trader_id, source)
     if (alreadyVoted) {
-      return handleError(new Error('You have already voted to avoid this trader'), 'avoid-list POST')
+      return handleError(
+        new Error('You have already voted to avoid this trader'),
+        'avoid-list POST'
+      )
     }
 
     const vote = await createAvoidVote(supabase, user.id, {
