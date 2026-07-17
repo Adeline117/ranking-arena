@@ -33,6 +33,8 @@ const NO_STORE_HEADERS = {
 const DISCOVERABLE_GROUP_VISIBILITIES = ['open', 'apply'] as const
 const GROUP_DISCOVERY_SELECT =
   'id, name, name_en, description, description_en, avatar_url, member_count'
+const TRADER_RECOMMENDATION_SELECT =
+  'source_trader_id, handle, roi, pnl, win_rate, max_drawdown, trades_count, followers, copiers, source, source_type, avatar_url, arena_score, rank, rank_change, is_new, profitability_score, risk_control_score, execution_score, score_completeness, trading_style, avg_holding_hours, computed_at, season_id, sharpe_ratio, sortino_ratio, profit_factor, calmar_ratio, trader_type, is_outlier'
 
 /**
  * Merge author profiles into post rows. posts.author_id has no FK in prod, so
@@ -150,6 +152,114 @@ async function getCurrentGroupRecommendations(
   return { recommendations, personalized }
 }
 
+type CurrentTraderCandidate = {
+  targetId: string
+  source: string
+  traderKey: string
+  score: unknown
+}
+
+function parseTraderCandidate(row: Record<string, unknown>): CurrentTraderCandidate | null {
+  if (typeof row.target_id !== 'string') return null
+  const separator = row.target_id.indexOf(':')
+  if (separator <= 0 || separator >= row.target_id.length - 1) return null
+
+  return {
+    targetId: row.target_id,
+    source: row.target_id.slice(0, separator),
+    traderKey: row.target_id.slice(separator + 1),
+    score: row.score ?? null,
+  }
+}
+
+function traderIdentity(row: Record<string, unknown>): string | null {
+  if (typeof row.source !== 'string' || typeof row.source_trader_id !== 'string') return null
+  if (!row.source || !row.source_trader_id) return null
+  return `${row.source}:${row.source_trader_id}`
+}
+
+async function getCurrentTraderRecommendations(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  actorId: string | null,
+  limit: number
+): Promise<{ recommendations: Record<string, unknown>[]; personalized: boolean }> {
+  const recommendations: Record<string, unknown>[] = []
+  let personalized = false
+
+  if (actorId) {
+    const { data: rpcData, error: rpcError } = await supabase.rpc(
+      'recommend_by_collaborative_filtering',
+      { p_user_id: actorId, p_target_type: 'trader', p_limit: limit }
+    )
+
+    if (!rpcError && Array.isArray(rpcData)) {
+      const seenTargets = new Set<string>()
+      const rankedCandidates = rpcData
+        .map((row) => parseTraderCandidate(row as Record<string, unknown>))
+        .filter((candidate): candidate is CurrentTraderCandidate => {
+          if (!candidate || seenTargets.has(candidate.targetId)) return false
+          seenTargets.add(candidate.targetId)
+          return true
+        })
+        .slice(0, limit)
+      const traderKeys = [...new Set(rankedCandidates.map((candidate) => candidate.traderKey))]
+
+      if (traderKeys.length > 0) {
+        const { data: currentTraders, error: currentTradersError } = await supabase
+          .from('leaderboard_ranks')
+          .select(TRADER_RECOMMENDATION_SELECT)
+          .eq('season_id', '90D')
+          .in('source_trader_id', traderKeys)
+          .gt('arena_score', 0)
+          .or('is_outlier.is.null,is_outlier.eq.false')
+        if (currentTradersError) throw currentTradersError
+
+        const currentByIdentity = new Map<string, Record<string, unknown>>()
+        for (const row of (currentTraders as Record<string, unknown>[] | null) ?? []) {
+          const identity = traderIdentity(row)
+          if (identity && !currentByIdentity.has(identity)) currentByIdentity.set(identity, row)
+        }
+
+        for (const candidate of rankedCandidates) {
+          const current = currentByIdentity.get(candidate.targetId)
+          if (!current || recommendations.length >= limit) continue
+          recommendations.push({ ...current, recommendation_score: candidate.score })
+        }
+        personalized = recommendations.length > 0
+      }
+    }
+  }
+
+  if (recommendations.length < limit) {
+    const existingIds = new Set(
+      recommendations
+        .map((trader) => traderIdentity(trader))
+        .filter((identity): identity is string => identity !== null)
+    )
+    const { data: topTraders, error: topTradersError } = await supabase
+      .from('leaderboard_ranks')
+      .select(TRADER_RECOMMENDATION_SELECT)
+      .eq('season_id', '90D')
+      .gt('arena_score', 0)
+      .or('is_outlier.is.null,is_outlier.eq.false')
+      .order('arena_score', { ascending: false, nullsFirst: false })
+      .order('source', { ascending: true })
+      .order('source_trader_id', { ascending: true })
+      .limit(Math.min(100, limit + existingIds.size))
+    if (topTradersError) throw topTradersError
+
+    for (const trader of (topTraders as Record<string, unknown>[] | null) ?? []) {
+      if (recommendations.length >= limit) break
+      const identity = traderIdentity(trader)
+      if (!identity || existingIds.has(identity)) continue
+      recommendations.push({ ...trader, recommendation_reason: 'top_performer' })
+      existingIds.add(identity)
+    }
+  }
+
+  return { recommendations, personalized }
+}
+
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
   if (rateLimitResponse) return rateLimitResponse
@@ -171,6 +281,19 @@ export async function GET(request: NextRequest) {
           recommendations: groupResult.recommendations,
           type: contentType,
           personalized: groupResult.personalized,
+        },
+        200,
+        NO_STORE_HEADERS
+      )
+    }
+
+    if (contentType === 'trader') {
+      const traderResult = await getCurrentTraderRecommendations(supabase, user?.id ?? null, limit)
+      return success(
+        {
+          recommendations: traderResult.recommendations,
+          type: contentType,
+          personalized: traderResult.personalized,
         },
         200,
         NO_STORE_HEADERS
@@ -267,13 +390,10 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // For other types, return raw RPC data
+    // The group and trader branches return above. No recommendation type may
+    // fall through to raw collaborative-filtering rows.
     return success(
-      {
-        recommendations: rpcData,
-        type: contentType,
-        personalized: true,
-      },
+      { recommendations: [], type: contentType, personalized: false },
       200,
       NO_STORE_HEADERS
     )
