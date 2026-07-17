@@ -14,7 +14,7 @@ export const RESERVED_HANDLE_VALUES = [
 export const RESERVED_HANDLES = new Set<string>(RESERVED_HANDLE_VALUES)
 
 // This alphabet mirrors the database trigger in
-// 20260715224600_lock_down_direct_identity_and_membership_writes.sql.
+// 20260716179000_user_profile_handle_contract.sql.
 // New handles are URL-segment safe. A dot is accepted only when Settings keeps
 // one already-persisted legacy handle byte-for-byte unchanged.
 export const NEW_HANDLE_PATTERN =
