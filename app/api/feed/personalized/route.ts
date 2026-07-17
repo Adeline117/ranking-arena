@@ -24,11 +24,13 @@ import { getOrSet } from '@/lib/cache'
 import { filterServiceReadablePostRows } from '@/lib/data/service-post-audience'
 import { logRpcError } from '@/lib/data/serving/log-rpc-error'
 
-const CANDIDATE_BATCH_SIZE = 100
+// Match the existing post-list audience walk: the default 20-row page needs at
+// most two small authorization waves, while larger pages continue in batches.
+const CANDIDATE_BATCH_SIZE = 40
 const MAX_PAGE_OFFSET = 10_000
 // Include the largest page plus its look-ahead batch. Access filtering may
 // consume the remainder; the bound still prevents an unbounded service scan.
-const MAX_RAW_CANDIDATES = MAX_PAGE_OFFSET + CANDIDATE_BATCH_SIZE * 2
+const MAX_RAW_CANDIDATES = MAX_PAGE_OFFSET + CANDIDATE_BATCH_SIZE * 3
 const CANDIDATE_CACHE_TTL_SECONDS = 60
 
 // Redis is allowed to remember ranking only. Runtime validation prevents an

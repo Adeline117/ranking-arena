@@ -385,8 +385,8 @@ describe('GET /api/feed/personalized', () => {
   })
 
   it('backfills from the next cached ID batch when the first batch is unreadable', async () => {
-    const hiddenIds = Array.from({ length: 100 }, (_, index) => postId(index + 1))
-    const visibleId = postId(101)
+    const hiddenIds = Array.from({ length: 40 }, (_, index) => postId(index + 1))
+    const visibleId = postId(41)
     mockGetAuthUser.mockResolvedValue({ id: USER_A })
     mockGetOrSet.mockImplementation(async (key: string) =>
       key.endsWith(':0') ? hiddenIds : [visibleId]
@@ -407,7 +407,7 @@ describe('GET /api/feed/personalized', () => {
     expect(body.data.posts.map((post: { id: string }) => post.id)).toEqual([visibleId])
     expect(mockGetOrSet).toHaveBeenNthCalledWith(
       2,
-      `feed:personalized:v3:ids:${USER_A}:100`,
+      `feed:personalized:v3:ids:${USER_A}:40`,
       expect.any(Function),
       expect.any(Object)
     )
