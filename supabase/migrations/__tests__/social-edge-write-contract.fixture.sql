@@ -1,0 +1,165 @@
+CREATE ROLE postgres NOLOGIN;
+CREATE ROLE anon NOLOGIN;
+CREATE ROLE authenticated NOLOGIN;
+CREATE ROLE service_role NOLOGIN BYPASSRLS;
+
+CREATE SCHEMA auth AUTHORIZATION postgres;
+CREATE FUNCTION auth.role()
+RETURNS text
+LANGUAGE sql
+STABLE
+SET search_path = pg_catalog
+AS $function$
+  SELECT NULLIF(pg_catalog.current_setting('request.jwt.claim.role', true), '')
+$function$;
+ALTER FUNCTION auth.role() OWNER TO postgres;
+GRANT USAGE ON SCHEMA public, auth TO anon, authenticated, service_role;
+GRANT EXECUTE ON FUNCTION auth.role() TO anon, authenticated, service_role;
+
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+CREATE TABLE auth.users (id uuid PRIMARY KEY);
+CREATE TABLE public.user_profiles (
+  id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  handle text,
+  deleted_at timestamptz,
+  banned_at timestamptz,
+  is_banned boolean DEFAULT false,
+  ban_expires_at timestamptz,
+  follower_count integer DEFAULT 0,
+  following_count integer DEFAULT 0
+);
+CREATE TABLE public.user_follows (
+  id uuid PRIMARY KEY DEFAULT pg_catalog.gen_random_uuid(),
+  follower_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  following_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at timestamptz DEFAULT pg_catalog.clock_timestamp(),
+  UNIQUE (follower_id, following_id)
+);
+CREATE TABLE public.blocked_users (
+  blocker_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  blocked_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  created_at timestamptz DEFAULT pg_catalog.clock_timestamp(),
+  PRIMARY KEY (blocker_id, blocked_id)
+);
+ALTER TABLE auth.users OWNER TO postgres;
+ALTER TABLE public.user_profiles OWNER TO postgres;
+ALTER TABLE public.user_follows OWNER TO postgres;
+ALTER TABLE public.blocked_users OWNER TO postgres;
+
+ALTER TABLE public.user_follows ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.blocked_users ENABLE ROW LEVEL SECURITY;
+CREATE POLICY follow_public_read ON public.user_follows
+  FOR SELECT TO anon, authenticated USING (true);
+CREATE POLICY follow_authenticated_insert ON public.user_follows
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY follow_authenticated_delete ON public.user_follows
+  FOR DELETE TO authenticated USING (true);
+CREATE POLICY follow_service_all ON public.user_follows
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+CREATE POLICY block_authenticated_read ON public.blocked_users
+  FOR SELECT TO authenticated USING (true);
+CREATE POLICY block_authenticated_insert ON public.blocked_users
+  FOR INSERT TO authenticated WITH CHECK (true);
+CREATE POLICY block_authenticated_delete ON public.blocked_users
+  FOR DELETE TO authenticated USING (true);
+CREATE POLICY block_service_all ON public.blocked_users
+  FOR ALL TO service_role USING (true) WITH CHECK (true);
+
+GRANT SELECT, INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
+  ON public.user_follows, public.blocked_users
+  TO service_role, authenticated;
+GRANT SELECT ON public.user_follows TO anon;
+GRANT SELECT ON public.blocked_users TO authenticated;
+GRANT INSERT (follower_id, following_id),
+  UPDATE (follower_id, following_id),
+  REFERENCES (follower_id, following_id)
+  ON public.user_follows TO PUBLIC, anon, authenticated, service_role;
+GRANT INSERT (blocker_id, blocked_id),
+  UPDATE (blocker_id, blocked_id),
+  REFERENCES (blocker_id, blocked_id)
+  ON public.blocked_users TO PUBLIC, anon, authenticated, service_role;
+GRANT SELECT, UPDATE ON public.user_profiles TO service_role;
+
+CREATE FUNCTION public.serialize_direct_message_pair_edge()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_pairs text[] := ARRAY[]::text[];
+  v_pair text;
+  v_old_left uuid;
+  v_old_right uuid;
+  v_new_left uuid;
+  v_new_right uuid;
+BEGIN
+  CASE TG_TABLE_NAME
+    WHEN 'blocked_users' THEN
+      IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        v_old_left := OLD.blocker_id;
+        v_old_right := OLD.blocked_id;
+      END IF;
+      IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        v_new_left := NEW.blocker_id;
+        v_new_right := NEW.blocked_id;
+      END IF;
+    WHEN 'user_follows' THEN
+      IF TG_OP IN ('UPDATE', 'DELETE') THEN
+        v_old_left := OLD.follower_id;
+        v_old_right := OLD.following_id;
+      END IF;
+      IF TG_OP IN ('INSERT', 'UPDATE') THEN
+        v_new_left := NEW.follower_id;
+        v_new_right := NEW.following_id;
+      END IF;
+    ELSE
+      RAISE EXCEPTION 'unsupported table';
+  END CASE;
+  IF v_old_left IS NOT NULL AND v_old_right IS NOT NULL THEN
+    v_pairs := pg_catalog.array_append(
+      v_pairs,
+      LEAST(v_old_left::text, v_old_right::text)
+        || ':' || GREATEST(v_old_left::text, v_old_right::text)
+    );
+  END IF;
+  IF v_new_left IS NOT NULL AND v_new_right IS NOT NULL THEN
+    v_pairs := pg_catalog.array_append(
+      v_pairs,
+      LEAST(v_new_left::text, v_new_right::text)
+        || ':' || GREATEST(v_new_left::text, v_new_right::text)
+    );
+  END IF;
+  FOR v_pair IN
+    SELECT DISTINCT affected_pair
+    FROM pg_catalog.unnest(v_pairs) AS affected(affected_pair)
+    ORDER BY affected_pair
+  LOOP
+    PERFORM pg_catalog.pg_advisory_xact_lock(
+      pg_catalog.hashtextextended('direct-message:pair:' || v_pair, 0)
+    );
+  END LOOP;
+  RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+END
+$function$;
+ALTER FUNCTION public.serialize_direct_message_pair_edge() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.serialize_direct_message_pair_edge()
+  FROM PUBLIC, anon, authenticated, service_role;
+CREATE TRIGGER trg_serialize_dm_block_pair
+BEFORE INSERT OR DELETE OR UPDATE OF blocker_id, blocked_id
+ON public.blocked_users
+FOR EACH ROW EXECUTE FUNCTION public.serialize_direct_message_pair_edge();
+CREATE TRIGGER trg_serialize_dm_follow_pair
+BEFORE INSERT OR DELETE OR UPDATE OF follower_id, following_id
+ON public.user_follows
+FOR EACH ROW EXECUTE FUNCTION public.serialize_direct_message_pair_edge();
+
+INSERT INTO auth.users(id) VALUES
+  ('11111111-1111-4111-8111-111111111111'),
+  ('22222222-2222-4222-8222-222222222222'),
+  ('33333333-3333-4333-8333-333333333333');
+INSERT INTO public.user_profiles(id, handle) VALUES
+  ('11111111-1111-4111-8111-111111111111', 'actor'),
+  ('22222222-2222-4222-8222-222222222222', 'target'),
+  ('33333333-3333-4333-8333-333333333333', 'third');
