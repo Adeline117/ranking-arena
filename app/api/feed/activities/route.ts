@@ -25,6 +25,96 @@ import {
   RateLimitPresets,
 } from '@/lib/api'
 
+const ACTIVITY_SELECT =
+  'id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at'
+const MAX_FOLLOWED_SOURCES = 50
+
+const PRIVATE_NO_STORE_HEADERS = {
+  'Cache-Control': 'private, no-store, max-age=0',
+  'CDN-Cache-Control': 'no-store',
+  'Vercel-CDN-Cache-Control': 'no-store',
+}
+
+type ActivityRow = {
+  id: string
+  source: string
+  source_trader_id: string
+  handle: string | null
+  avatar_url: string | null
+  activity_type: string
+  activity_text: string
+  metric_value: number | null
+  metric_label: string | null
+  occurred_at: string
+}
+
+function followedIdentity(source: string, traderId: string): string {
+  return `${source}:${traderId}`
+}
+
+async function readFollowedActivities(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  followedBySource: Map<string, Set<string>>,
+  options: {
+    limit: number
+    platform: string | null
+    handle: string | null
+    cursor: string | null
+  }
+): Promise<ActivityRow[]> {
+  const sources = options.platform
+    ? followedBySource.has(options.platform)
+      ? [options.platform]
+      : []
+    : [...followedBySource.keys()]
+
+  const sourceResults = await Promise.all(
+    sources.map(async (source) => {
+      const traderIds = [...(followedBySource.get(source) ?? [])]
+      let query = supabase
+        .from('trader_activities')
+        .select(ACTIVITY_SELECT)
+        .eq('source', source)
+        .in('source_trader_id', traderIds)
+        .order('occurred_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(options.limit + 1)
+
+      if (options.handle) query = query.eq('handle', options.handle)
+      if (options.cursor) query = query.lt('occurred_at', options.cursor)
+
+      return {
+        source,
+        allowedIdentities: new Set(traderIds.map((traderId) => followedIdentity(source, traderId))),
+        result: await query,
+      }
+    })
+  )
+
+  const activities: ActivityRow[] = []
+  for (const { source, allowedIdentities, result } of sourceResults) {
+    if (result.error) throw result.error
+    for (const activity of result.data ?? []) {
+      // Keep the composite check at the release boundary even though each DB
+      // query is already source-scoped. A test double or future query rewrite
+      // must not be able to widen a user's followed identities.
+      if (
+        activity.source !== source ||
+        !allowedIdentities.has(followedIdentity(activity.source, activity.source_trader_id))
+      ) {
+        continue
+      }
+      activities.push(activity)
+    }
+  }
+
+  activities.sort((left, right) => {
+    const occurredDifference = Date.parse(right.occurred_at) - Date.parse(left.occurred_at)
+    return occurredDifference || right.id.localeCompare(left.id)
+  })
+  return activities.slice(0, options.limit + 1)
+}
+
 export async function GET(request: NextRequest) {
   const rateLimitResponse = await checkRateLimit(request, RateLimitPresets.public)
   if (rateLimitResponse) return rateLimitResponse
@@ -44,51 +134,75 @@ export async function GET(request: NextRequest) {
     const followingOnly =
       searchParams.get('following') === '1' || searchParams.get('following') === 'true'
 
-    let followedTraderIds: string[] | null = null
+    let followedBySource: Map<string, Set<string>> | null = null
     if (followingOnly) {
       const user = await getAuthUser(request)
       if (!user) {
-        return success({ activities: [], pagination: { limit, hasMore: false, nextCursor: null } })
+        return success(
+          { activities: [], pagination: { limit, hasMore: false, nextCursor: null } },
+          200,
+          PRIVATE_NO_STORE_HEADERS
+        )
       }
       const { data: follows, error: followErr } = await supabase
         .from('trader_follows')
-        .select('trader_id')
+        .select('trader_id, source')
         .eq('user_id', user.id)
+        .limit(500)
       if (followErr) {
         return handleError(followErr)
       }
-      followedTraderIds = [...new Set((follows ?? []).map((f) => f.trader_id).filter(Boolean))]
-      if (followedTraderIds.length === 0) {
-        return success({ activities: [], pagination: { limit, hasMore: false, nextCursor: null } })
+      followedBySource = new Map()
+      for (const follow of follows ?? []) {
+        if (
+          typeof follow.source !== 'string' ||
+          !follow.source ||
+          typeof follow.trader_id !== 'string' ||
+          !follow.trader_id
+        ) {
+          continue
+        }
+        const ids = followedBySource.get(follow.source) ?? new Set<string>()
+        ids.add(follow.trader_id)
+        followedBySource.set(follow.source, ids)
+      }
+      if (followedBySource.size > MAX_FOLLOWED_SOURCES) {
+        throw new Error('Following activity source set exceeds the bounded query window')
+      }
+      if (followedBySource.size === 0) {
+        return success(
+          { activities: [], pagination: { limit, hasMore: false, nextCursor: null } },
+          200,
+          PRIVATE_NO_STORE_HEADERS
+        )
       }
     }
 
-    let query = supabase
-      .from('trader_activities')
-      .select(
-        'id, source, source_trader_id, handle, avatar_url, activity_type, activity_text, metric_value, metric_label, occurred_at'
-      )
-      .order('occurred_at', { ascending: false })
-      .limit(limit + 1) // fetch one extra to determine hasMore
+    let data: ActivityRow[] | null
+    let error: { code?: string; message?: string } | null = null
+    if (followedBySource) {
+      data = await readFollowedActivities(supabase, followedBySource, {
+        limit,
+        platform,
+        handle,
+        cursor,
+      })
+    } else {
+      let query = supabase
+        .from('trader_activities')
+        .select(ACTIVITY_SELECT)
+        .order('occurred_at', { ascending: false })
+        .order('id', { ascending: false })
+        .limit(limit + 1) // fetch one extra to determine hasMore
 
-    if (followedTraderIds) {
-      query = query.in('source_trader_id', followedTraderIds)
+      if (platform) query = query.eq('source', platform)
+      if (handle) query = query.eq('handle', handle)
+      if (cursor) query = query.lt('occurred_at', cursor)
+
+      const result = await query
+      data = result.data
+      error = result.error
     }
-
-    if (platform) {
-      query = query.eq('source', platform)
-    }
-
-    if (handle) {
-      query = query.eq('handle', handle)
-    }
-
-    if (cursor) {
-      // Return items strictly older than the cursor timestamp
-      query = query.lt('occurred_at', cursor)
-    }
-
-    const { data, error } = await query
 
     if (error) {
       // Table may not exist yet — return empty feed gracefully
@@ -112,7 +226,7 @@ export async function GET(request: NextRequest) {
     // NOT be shared-cached. The default (no `following`) path is identical public
     // data to /api/feed, so it gets the same brief edge cache.
     const cacheHeaders = followingOnly
-      ? undefined
+      ? PRIVATE_NO_STORE_HEADERS
       : { 'Cache-Control': 'public, s-maxage=60, stale-while-revalidate=300' }
 
     return success(
