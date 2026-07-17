@@ -2,7 +2,6 @@ import type { Metadata } from 'next'
 import { Suspense } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { getReadReplica } from '@/lib/supabase/read-replica'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import UserProfileClient from './UserProfileClient'
 import { logger } from '@/lib/logger'
 import { BASE_URL } from '@/lib/constants/urls'
@@ -19,8 +18,12 @@ import { getTraderAvatarSrc } from '@/lib/utils/avatar'
 import type { TraderFirstScreen } from '@/lib/data/serving/types'
 import { ErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
+import { isPublicProfileActive } from '@/lib/profile/public-audience'
 
-export const revalidate = 60
+// Account moderation/deletion state is a request-time public audience boundary.
+// Do not let an ISR payload keep serving a profile after that state changes.
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 
 // SSR timeout: during cron contention, Supabase queries can block on row locks
 // for 30+ seconds. Race against this timeout so users see a fast fallback.
@@ -38,27 +41,30 @@ export async function generateMetadata({
   let avatarUrl: string | null = null
   let traderMeta: { roi?: number; score?: number; platform?: string } | null = null
   try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSupabaseAdmin()
     const { data } = await Promise.race([
       supabase
         .from('user_profiles')
-        .select('avatar_url, bio, verified_trader_source, verified_trader_id')
+        .select(
+          'id, handle, avatar_url, bio, verified_trader_source, verified_trader_id, deleted_at, banned_at, is_banned, ban_expires_at'
+        )
         .eq('handle', decoded)
         .maybeSingle(),
       new Promise<{ data: null }>((resolve) =>
         setTimeout(() => resolve({ data: null }), SSR_TIMEOUT_MS)
       ),
     ])
-    avatarUrl = data?.avatar_url || null
+    const publicData = data && isPublicProfileActive(data) ? data : null
+    avatarUrl = publicData?.avatar_url || null
 
     // If user claimed a trader, fetch their trading stats for meta description
-    if (data?.verified_trader_source && data?.verified_trader_id) {
+    if (publicData?.verified_trader_source && publicData?.verified_trader_id) {
       const { data: lr } = await Promise.race([
         supabase
           .from('leaderboard_ranks')
           .select('roi, arena_score, source')
-          .eq('source', data.verified_trader_source)
-          .eq('source_trader_id', data.verified_trader_id)
+          .eq('source', publicData.verified_trader_source)
+          .eq('source_trader_id', publicData.verified_trader_id)
           .eq('season_id', '90D')
           .maybeSingle(),
         new Promise<{ data: null }>((resolve) =>
@@ -66,7 +72,11 @@ export async function generateMetadata({
         ),
       ])
       if (lr) {
-        traderMeta = { roi: lr.roi, score: lr.arena_score, platform: lr.source }
+        traderMeta = {
+          roi: lr.roi ?? undefined,
+          score: lr.arena_score ?? undefined,
+          platform: lr.source,
+        }
       }
     }
   } catch {
@@ -118,17 +128,20 @@ export async function generateStaticParams() {
   if (process.env.NEXT_PHASE === 'phase-production-build') return []
 
   try {
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSupabaseAdmin()
     const { data } = await supabase
       .from('user_profiles')
-      .select('handle')
+      .select('id, handle, deleted_at, banned_at, is_banned, ban_expires_at')
       .not('handle', 'is', null)
       .order('created_at', { ascending: true })
       .limit(30)
 
     return (data || [])
-      .filter((u: { handle: string | null }) => u.handle)
-      .map((u: { handle: string }) => ({ handle: u.handle }))
+      .filter(
+        (u): u is typeof u & { handle: string } =>
+          typeof u.handle === 'string' && isPublicProfileActive(u)
+      )
+      .map((u) => ({ handle: u.handle }))
   } catch {
     return []
   }
@@ -158,7 +171,7 @@ interface UserProfileData {
 }
 
 async function fetchUserProfile(handle: string): Promise<UserProfileData | null> {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const decodedHandle = decodeURIComponent(handle)
 
   // Parallel lookup: by handle + by UUID (if applicable)
@@ -166,7 +179,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
   // Only select columns that actually exist in user_profiles table
   // follower_count / following_count are cached columns — avoid re-counting.
   const selectFields =
-    'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role, follower_count, following_count, created_at'
+    'id, handle, bio, avatar_url, cover_url, show_followers, show_following, subscription_tier, show_pro_badge, role, follower_count, following_count, created_at, deleted_at, banned_at, is_banned, ban_expires_at'
 
   const [handleResult, handleIlikeResult, uuidResult] = await Promise.race([
     Promise.all([
@@ -188,7 +201,7 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
 
   const userProfile = handleResult.data || handleIlikeResult.data || uuidResult.data
 
-  if (!userProfile) return null
+  if (!userProfile || !isPublicProfileActive(userProfile)) return null
 
   // Parallel: fetch counts + pro badge
   let followers = 0
@@ -286,8 +299,8 @@ async function fetchUserProfile(handle: string): Promise<UserProfileData | null>
     bio: userProfile.bio || undefined,
     avatar_url: userProfile.avatar_url || undefined,
     cover_url: userProfile.cover_url || undefined,
-    show_followers: userProfile.show_followers,
-    show_following: userProfile.show_following,
+    show_followers: userProfile.show_followers ?? undefined,
+    show_following: userProfile.show_following ?? undefined,
     followers,
     following,
     followingTraders: tradersCount,
