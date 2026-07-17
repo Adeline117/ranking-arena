@@ -1,4 +1,4 @@
--- Make service-role post child writes cross the canonical post audience and
+-- Atomically make service-role post child writes cross the canonical post audience and
 -- current-entitlement decision in the same transaction as their mutation.
 
 BEGIN;
