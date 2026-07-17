@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-MIGRATION="$ROOT_DIR/supabase/migrations/20260716178000_atomic_post_child_interactions.sql"
+MIGRATION="$ROOT_DIR/supabase/migrations/20260716178100_atomic_post_child_interactions.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/arena-post-child.XXXXXX")"
 PG_DATA="$TMP_ROOT/data"

@@ -2,7 +2,7 @@ import fs from 'fs'
 import path from 'path'
 
 const migration = fs.readFileSync(
-  path.join(__dirname, '..', '20260716178000_atomic_post_child_interactions.sql'),
+  path.join(__dirname, '..', '20260716178100_atomic_post_child_interactions.sql'),
   'utf8'
 )
 const canonicalInteraction = fs.readFileSync(
