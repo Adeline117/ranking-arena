@@ -9357,6 +9357,14 @@ export type Database = {
           strike_type: string | null
         }[]
       }
+      mutate_user_block_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_target_id: string
+        }
+        Returns: Json
+      }
       mutate_user_follow_atomic: {
         Args: {
           p_action: string
