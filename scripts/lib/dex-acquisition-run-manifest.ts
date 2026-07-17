@@ -155,15 +155,15 @@ const endpointProfileCoreSchema = connectionDescriptorSchema
   })
   .strict()
 
-const endpointProfileSchema = endpointProfileCoreSchema
+export const dexAcquisitionEndpointProfileStructuralSchema = endpointProfileCoreSchema
   .extend({ endpoint_identity_sha256: sha256Schema })
   .strict()
 
-const endpointBindingsSchema = z
+export const dexAcquisitionEndpointBindingsStructuralSchema = z
   .object({
     registry_contract: z.literal(DEX_ACQUISITION_ENDPOINT_REGISTRY_CONTRACT),
     registry_sha256: sha256Schema,
-    profiles: z.array(endpointProfileSchema).min(1).max(5),
+    profiles: z.array(dexAcquisitionEndpointProfileStructuralSchema).min(1).max(5),
     phases: z
       .object({
         boundary_resolution: logicalIdSchema,
@@ -180,6 +180,11 @@ const endpointBindingsSchema = z
   })
   .strict()
 
+export const dexAcquisitionObservedEndpointBindingsStructuralSchema =
+  dexAcquisitionEndpointBindingsStructuralSchema
+    .extend({ provider_failover_observed: z.literal(false) })
+    .strict()
+
 const acquisitionModeSchema = z.enum([
   'bsc_provider_address_index',
   'solana_rpc_signatures_for_address',
@@ -188,7 +193,7 @@ const acquisitionModeSchema = z.enum([
   'manifest_protocol_event_sqd_finalized_stream',
 ])
 
-const sourceSchema = z
+export const dexAcquisitionSourceStructuralSchema = z
   .object({
     acquisition_mode: acquisitionModeSchema,
     query_shape: z.enum([
@@ -215,6 +220,17 @@ const sourceSchema = z
     independence_claim: z.literal('not_asserted'),
     endpoint_binding_scope: z.literal('exact_profile_per_phase_and_lane'),
     mixed_provider_pages: z.literal(false),
+  })
+  .strict()
+
+const endpointBindingContextSchema = z
+  .object({
+    chain: z.union([bscChainSchema, solanaChainSchema]),
+    source: dexAcquisitionSourceStructuralSchema,
+    endpoint_bindings: z.union([
+      dexAcquisitionEndpointBindingsStructuralSchema,
+      dexAcquisitionObservedEndpointBindingsStructuralSchema,
+    ]),
   })
   .strict()
 
@@ -252,9 +268,9 @@ const queryPolicySchema = z
     schema_version: z.literal(DEX_ACQUISITION_QUERY_POLICY_SCHEMA_VERSION),
     data_contract: z.literal(DEX_ACQUISITION_QUERY_POLICY_CONTRACT),
     acquisition_mode: acquisitionModeSchema,
-    query_shape: sourceSchema.shape.query_shape,
-    completeness_scope: sourceSchema.shape.completeness_scope,
-    finality_claim: sourceSchema.shape.finality_claim,
+    query_shape: dexAcquisitionSourceStructuralSchema.shape.query_shape,
+    completeness_scope: dexAcquisitionSourceStructuralSchema.shape.completeness_scope,
+    finality_claim: dexAcquisitionSourceStructuralSchema.shape.finality_claim,
     adapter_id: z.enum([
       'bsc_provider_address_index_v1',
       'solana_get_signatures_for_address_v1',
@@ -465,8 +481,8 @@ const runManifestSchema = z
     chain: z.union([bscChainSchema, solanaChainSchema]),
     golden_sample: goldenSampleSchema,
     window: z.union([bscWindowSchema, solanaWindowSchema]),
-    source: sourceSchema,
-    endpoint_bindings: endpointBindingsSchema,
+    source: dexAcquisitionSourceStructuralSchema,
+    endpoint_bindings: dexAcquisitionEndpointBindingsStructuralSchema,
     query_policy: queryPolicySchema,
     query_policy_sha256: sha256Schema,
     protocol_manifest: protocolManifestSchema,
@@ -479,9 +495,16 @@ const runManifestSchema = z
 
 export type DexAcquisitionConnectionDescriptor = z.infer<typeof connectionDescriptorSchema>
 export type DexAcquisitionEndpointProfileCore = z.infer<typeof endpointProfileCoreSchema>
-export type DexAcquisitionEndpointProfile = z.infer<typeof endpointProfileSchema>
+export type DexAcquisitionEndpointProfile = z.infer<
+  typeof dexAcquisitionEndpointProfileStructuralSchema
+>
+export type DexAcquisitionEndpointBindings = z.infer<
+  typeof dexAcquisitionEndpointBindingsStructuralSchema
+>
+export type DexAcquisitionSource = z.infer<typeof dexAcquisitionSourceStructuralSchema>
 export type DexAcquisitionQueryPolicy = z.infer<typeof queryPolicySchema>
 export type DexAcquisitionRunManifest = z.infer<typeof runManifestSchema>
+export type DexAcquisitionEndpointBindingContext = z.infer<typeof endpointBindingContextSchema>
 
 function isCanonicalTimestamp(value: string): boolean {
   const parsed = Date.parse(value)
@@ -790,13 +813,13 @@ function assertGoldenSample(
 }
 
 function chainRpcTransport(
-  manifest: DexAcquisitionRunManifest
+  manifest: DexAcquisitionEndpointBindingContext
 ): DexAcquisitionEndpointProfile['transport_kind'] {
   return manifest.chain.namespace === 'eip155' ? 'evm_json_rpc' : 'solana_json_rpc'
 }
 
 function chainSqdTransport(
-  manifest: DexAcquisitionRunManifest
+  manifest: DexAcquisitionEndpointBindingContext
 ): DexAcquisitionEndpointProfile['transport_kind'] {
   return manifest.chain.namespace === 'eip155'
     ? 'sqd_portal_evm_finalized_stream'
@@ -804,7 +827,7 @@ function chainSqdTransport(
 }
 
 function discoveryTransport(
-  manifest: DexAcquisitionRunManifest
+  manifest: DexAcquisitionEndpointBindingContext
 ): DexAcquisitionEndpointProfile['transport_kind'] {
   const mode = manifest.source.acquisition_mode
   if (mode === 'bsc_provider_address_index') return 'evm_provider_address_index'
@@ -818,7 +841,7 @@ function discoveryTransport(
   return chainRpcTransport(manifest)
 }
 
-function assertEndpointBindings(manifest: DexAcquisitionRunManifest): void {
+function assertEndpointBindingInvariants(manifest: DexAcquisitionEndpointBindingContext): void {
   const bindings = manifest.endpoint_bindings
   const profileIds = bindings.profiles.map((profile) => profile.profile_id)
   if (new Set(profileIds).size !== profileIds.length) {
@@ -848,9 +871,7 @@ function assertEndpointBindings(manifest: DexAcquisitionRunManifest): void {
     throw new Error('run manifest cannot alias one connection through multiple endpoint profiles')
   }
   const physicalEndpointAliases = bindings.profiles.map((profile) =>
-    [profile.provider_id, profile.data_source_id, profile.endpoint_id, profile.transport_kind].join(
-      '\u0000'
-    )
+    [profile.provider_id, profile.data_source_id, profile.endpoint_id].join('\u0000')
   )
   if (new Set(physicalEndpointAliases).size !== physicalEndpointAliases.length) {
     throw new Error('run manifest cannot relabel one physical endpoint as multiple profiles')
@@ -927,6 +948,19 @@ function assertEndpointBindings(manifest: DexAcquisitionRunManifest): void {
       )
     }
   }
+}
+
+/**
+ * Strictly parse and semantically validate the endpoint-binding projection
+ * shared by resolved run manifests and acquisition transcripts. This validates
+ * aliases and commitments, but does not verify the referenced registry artifact.
+ */
+export function parseDexAcquisitionEndpointBindingContext(
+  input: unknown
+): DexAcquisitionEndpointBindingContext {
+  const context = endpointBindingContextSchema.parse(input)
+  assertEndpointBindingInvariants(context)
+  return context
 }
 
 function assertSourceAndPolicy(manifest: DexAcquisitionRunManifest): void {
@@ -1070,7 +1104,11 @@ function assertRunManifestInvariants(
 ): void {
   assertWindow(manifest)
   assertGoldenSample(manifest, parentSnapshot)
-  assertEndpointBindings(manifest)
+  parseDexAcquisitionEndpointBindingContext({
+    chain: manifest.chain,
+    source: manifest.source,
+    endpoint_bindings: manifest.endpoint_bindings,
+  })
   assertSourceAndPolicy(manifest)
   assertChainPolicies(manifest)
   assertRuntime(manifest)
