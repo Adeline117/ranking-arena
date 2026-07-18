@@ -57,6 +57,15 @@ export const NULLABLE_RPC_ARGS = {
     p_payment_intent_id: { type: 'string', optional: false },
     p_payment_provider: { type: 'string', optional: false },
   },
+  activate_lifetime_membership_with_identity_atomic: {
+    p_reservation_id: { type: 'string', optional: false },
+  },
+  activate_recurring_entitlement_payment_atomic: {
+    p_stripe_payment_intent_id: { type: 'string', optional: false },
+  },
+  bind_stripe_customer_owner_atomic: {
+    p_expected_previous_stripe_customer_id: { type: 'string', optional: false },
+  },
   can_actor_read_activity_id: {
     p_actor_id: { type: 'string', optional: true },
   },
@@ -65,6 +74,11 @@ export const NULLABLE_RPC_ARGS = {
   },
   create_group_channel_atomic: {
     p_description: { type: 'string', optional: false },
+  },
+  finish_stripe_entitlement_effect_atomic: {
+    p_error: { type: 'string', optional: false },
+    p_external_ref: { type: 'string', optional: false },
+    p_retry_after_seconds: { type: 'number', optional: false },
   },
   mutate_collection_item_atomic: {
     p_note: { type: 'string', optional: true },
@@ -75,8 +89,37 @@ export const NULLABLE_RPC_ARGS = {
     p_is_public: { type: 'boolean', optional: false },
     p_name: { type: 'string', optional: false },
   },
+  reconcile_due_pro_entitlement_projections_atomic: {
+    p_after_user_id: { type: 'string', optional: false },
+  },
+  reconcile_recurring_subscription_state_atomic: {
+    p_canceled_at: { type: 'string', optional: false },
+    p_current_invoice_id: { type: 'string', optional: false },
+    p_grace_expires_at: { type: 'string', optional: false },
+  },
+  reconcile_stripe_entitlement_refund_atomic: {
+    p_checkout_session_id: { type: 'string', optional: false },
+    p_period_end: { type: 'string', optional: false },
+    p_stripe_invoice_id: { type: 'string', optional: false },
+    p_stripe_payment_intent_id: { type: 'string', optional: false },
+    p_stripe_subscription_id: { type: 'string', optional: false },
+    p_stripe_subscription_status: { type: 'string', optional: false },
+    p_user_id: { type: 'string', optional: false },
+  },
+  record_charge_refund_tombstone_atomic: {
+    p_stripe_payment_intent_id: { type: 'string', optional: false },
+    p_user_id: { type: 'string', optional: false },
+  },
+  record_stripe_manual_review_atomic: {
+    p_user_id: { type: 'string', optional: false },
+  },
   resolve_content_report_atomic: {
     p_reason: { type: 'string', optional: false },
+  },
+  release_lifetime_membership_reservation_atomic: {
+    p_checkout_session_id: { type: 'string', optional: false },
+    p_event_created_at: { type: 'string', optional: false },
+    p_event_id: { type: 'string', optional: false },
   },
   review_group_application_atomic: {
     p_operation_id: { type: 'string', optional: true },
@@ -106,6 +149,9 @@ export const NULLABLE_RPC_ARGS = {
   },
   toggle_post_bookmark_atomic: {
     p_folder_id: { type: 'string', optional: true },
+  },
+  upsert_pro_entitlement_grant_atomic: {
+    p_expires_at: { type: 'string', optional: false },
   },
 }
 

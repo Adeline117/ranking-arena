@@ -4449,6 +4449,76 @@ export type Database = {
           },
         ]
       }
+      pro_entitlement_grants: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          grant_kind: string
+          granted_at: string | null
+          granted_days: number | null
+          id: string
+          metadata: Json
+          revoked_at: string | null
+          source: string
+          source_key: string
+          starts_at: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          grant_kind?: string
+          granted_at?: string | null
+          granted_days?: number | null
+          id?: string
+          metadata?: Json
+          revoked_at?: string | null
+          source: string
+          source_key: string
+          starts_at: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          grant_kind?: string
+          granted_at?: string | null
+          granted_days?: number | null
+          id?: string
+          metadata?: Json
+          revoked_at?: string | null
+          source?: string
+          source_key?: string
+          starts_at?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'pro_entitlement_grants_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'pro_entitlement_grants_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'pro_entitlement_grants_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       pro_official_group_members: {
         Row: {
           created_at: string
@@ -5540,6 +5610,369 @@ export type Database = {
           },
         ]
       }
+      stripe_charge_refund_tombstone_events: {
+        Row: {
+          event_created_at: string
+          event_id: string
+          observations: Json
+          observed_at: string
+          refund_state: string
+          refund_succeeded_amount: number
+          stripe_charge_id: string
+        }
+        Insert: {
+          event_created_at: string
+          event_id: string
+          observations?: Json
+          observed_at?: string
+          refund_state: string
+          refund_succeeded_amount: number
+          stripe_charge_id: string
+        }
+        Update: {
+          event_created_at?: string
+          event_id?: string
+          observations?: Json
+          observed_at?: string
+          refund_state?: string
+          refund_succeeded_amount?: number
+          stripe_charge_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_charge_refund_tombstone_events_stripe_charge_id_fkey'
+            columns: ['stripe_charge_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_charge_refund_tombstones'
+            referencedColumns: ['stripe_charge_id']
+          },
+        ]
+      }
+      stripe_charge_refund_tombstones: {
+        Row: {
+          amount_paid: number
+          captured: boolean
+          created_at: string
+          currency: string
+          latest_refund_event_created_at: string
+          latest_refund_event_id: string
+          merged_payment_id: string | null
+          refund_snapshot_event_created_at: string
+          refund_snapshot_event_id: string
+          refund_state: string
+          refund_succeeded_amount: number
+          resolution_kind: string
+          resolution_reference: string | null
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_payment_intent_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          amount_paid: number
+          captured: boolean
+          created_at?: string
+          currency: string
+          latest_refund_event_created_at: string
+          latest_refund_event_id: string
+          merged_payment_id?: string | null
+          refund_snapshot_event_created_at: string
+          refund_snapshot_event_id: string
+          refund_state: string
+          refund_succeeded_amount: number
+          resolution_kind?: string
+          resolution_reference?: string | null
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          amount_paid?: number
+          captured?: boolean
+          created_at?: string
+          currency?: string
+          latest_refund_event_created_at?: string
+          latest_refund_event_id?: string
+          merged_payment_id?: string | null
+          refund_snapshot_event_created_at?: string
+          refund_snapshot_event_id?: string
+          refund_state?: string
+          refund_succeeded_amount?: number
+          resolution_kind?: string
+          resolution_reference?: string | null
+          stripe_charge_id?: string
+          stripe_customer_id?: string
+          stripe_payment_intent_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_charge_refund_tombstones_merged_payment_id_fkey'
+            columns: ['merged_payment_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_entitlement_payments'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      stripe_entitlement_effects: {
+        Row: {
+          attempt_count: number
+          available_at: string
+          completed_at: string | null
+          created_at: string
+          effect_type: string
+          entitlement_payment_id: string | null
+          external_ref: string | null
+          id: string
+          last_error: string | null
+          lease_expires_at: string | null
+          lease_token: string | null
+          operation_key: string
+          payload: Json
+          source_key: string
+          source_kind: string
+          status: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          attempt_count?: number
+          available_at?: string
+          completed_at?: string | null
+          created_at?: string
+          effect_type: string
+          entitlement_payment_id?: string | null
+          external_ref?: string | null
+          id?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          operation_key: string
+          payload?: Json
+          source_key: string
+          source_kind: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          attempt_count?: number
+          available_at?: string
+          completed_at?: string | null
+          created_at?: string
+          effect_type?: string
+          entitlement_payment_id?: string | null
+          external_ref?: string | null
+          id?: string
+          last_error?: string | null
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          operation_key?: string
+          payload?: Json
+          source_key?: string
+          source_kind?: string
+          status?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_entitlement_effects_entitlement_payment_id_fkey'
+            columns: ['entitlement_payment_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_entitlement_payments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_entitlement_effects_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_entitlement_effects_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_entitlement_effects_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      stripe_entitlement_payments: {
+        Row: {
+          amount_paid: number
+          checkout_session_id: string | null
+          created_at: string
+          currency: string
+          id: string
+          latest_refund_event_created_at: string | null
+          latest_refund_event_id: string | null
+          payment_kind: string
+          payment_status: string
+          period_end: string | null
+          period_start: string
+          plan: string
+          refund_snapshot_event_created_at: string | null
+          refund_snapshot_event_id: string | null
+          refund_state: string
+          refund_succeeded_amount: number
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_invoice_id: string | null
+          stripe_payment_intent_id: string | null
+          stripe_subscription_id: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          amount_paid: number
+          checkout_session_id?: string | null
+          created_at?: string
+          currency: string
+          id?: string
+          latest_refund_event_created_at?: string | null
+          latest_refund_event_id?: string | null
+          payment_kind: string
+          payment_status: string
+          period_end?: string | null
+          period_start: string
+          plan: string
+          refund_snapshot_event_created_at?: string | null
+          refund_snapshot_event_id?: string | null
+          refund_state?: string
+          refund_succeeded_amount?: number
+          stripe_charge_id: string
+          stripe_customer_id: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          amount_paid?: number
+          checkout_session_id?: string | null
+          created_at?: string
+          currency?: string
+          id?: string
+          latest_refund_event_created_at?: string | null
+          latest_refund_event_id?: string | null
+          payment_kind?: string
+          payment_status?: string
+          period_end?: string | null
+          period_start?: string
+          plan?: string
+          refund_snapshot_event_created_at?: string | null
+          refund_snapshot_event_id?: string | null
+          refund_state?: string
+          refund_succeeded_amount?: number
+          stripe_charge_id?: string
+          stripe_customer_id?: string
+          stripe_invoice_id?: string | null
+          stripe_payment_intent_id?: string | null
+          stripe_subscription_id?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_entitlement_payments_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_entitlement_payments_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_entitlement_payments_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      stripe_entitlement_refund_events: {
+        Row: {
+          entitlement_payment_id: string
+          event_created_at: string
+          event_id: string
+          observations: Json
+          observed_at: string
+          refund_state: string
+          refund_succeeded_amount: number
+          stripe_subscription_status: string | null
+          user_id: string | null
+        }
+        Insert: {
+          entitlement_payment_id: string
+          event_created_at: string
+          event_id: string
+          observations?: Json
+          observed_at?: string
+          refund_state: string
+          refund_succeeded_amount: number
+          stripe_subscription_status?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          entitlement_payment_id?: string
+          event_created_at?: string
+          event_id?: string
+          observations?: Json
+          observed_at?: string
+          refund_state?: string
+          refund_succeeded_amount?: number
+          stripe_subscription_status?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_entitlement_refund_events_entitlement_payment_id_fkey'
+            columns: ['entitlement_payment_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_entitlement_payments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_entitlement_refund_events_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_entitlement_refund_events_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_entitlement_refund_events_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       stripe_events: {
         Row: {
           attempts: number
@@ -5579,6 +6012,314 @@ export type Database = {
         }
         Relationships: []
       }
+      stripe_legacy_lifetime_seat_claims: {
+        Row: {
+          created_at: string
+          id: string
+          legacy_subscription_id: string
+          release_reference: string | null
+          released_at: string | null
+          status: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          legacy_subscription_id: string
+          release_reference?: string | null
+          released_at?: string | null
+          status?: string
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          legacy_subscription_id?: string
+          release_reference?: string | null
+          released_at?: string | null
+          status?: string
+          stripe_customer_id?: string
+          stripe_subscription_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      stripe_lifetime_seat_reservations: {
+        Row: {
+          checkout_expires_at: string
+          checkout_session_id: string | null
+          converted_payment_id: string | null
+          created_at: string
+          expires_at: string
+          id: string
+          release_event_created_at: string | null
+          release_event_id: string | null
+          release_reason: string | null
+          released_at: string | null
+          request_nonce: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          checkout_expires_at: string
+          checkout_session_id?: string | null
+          converted_payment_id?: string | null
+          created_at?: string
+          expires_at: string
+          id?: string
+          release_event_created_at?: string | null
+          release_event_id?: string | null
+          release_reason?: string | null
+          released_at?: string | null
+          request_nonce: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          checkout_expires_at?: string
+          checkout_session_id?: string | null
+          converted_payment_id?: string | null
+          created_at?: string
+          expires_at?: string
+          id?: string
+          release_event_created_at?: string | null
+          release_event_id?: string | null
+          release_reason?: string | null
+          released_at?: string | null
+          request_nonce?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_lifetime_seat_reservations_converted_payment_id_fkey'
+            columns: ['converted_payment_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_entitlement_payments'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      stripe_manual_reviews: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          metadata: Json
+          object_id: string
+          object_type: string
+          reason: string
+          reason_key: string
+          resolved_at: string | null
+          state: string
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          action?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          object_id: string
+          object_type: string
+          reason: string
+          reason_key: string
+          resolved_at?: string | null
+          state?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          metadata?: Json
+          object_id?: string
+          object_type?: string
+          reason?: string
+          reason_key?: string
+          resolved_at?: string | null
+          state?: string
+          updated_at?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_manual_reviews_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_manual_reviews_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_manual_reviews_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      stripe_subscription_state_events: {
+        Row: {
+          cancel_at_period_end: boolean
+          canceled_at: string | null
+          current_invoice_id: string | null
+          event_created_at: string
+          event_id: string
+          observed_at: string
+          outcome: string
+          period_end: string
+          period_start: string
+          plan: string
+          requested_grace_expires_at: string | null
+          stripe_customer_id: string
+          stripe_status: string
+          stripe_subscription_id: string
+          user_id: string | null
+        }
+        Insert: {
+          cancel_at_period_end: boolean
+          canceled_at?: string | null
+          current_invoice_id?: string | null
+          event_created_at: string
+          event_id: string
+          observed_at?: string
+          outcome?: string
+          period_end: string
+          period_start: string
+          plan: string
+          requested_grace_expires_at?: string | null
+          stripe_customer_id: string
+          stripe_status: string
+          stripe_subscription_id: string
+          user_id?: string | null
+        }
+        Update: {
+          cancel_at_period_end?: boolean
+          canceled_at?: string | null
+          current_invoice_id?: string | null
+          event_created_at?: string
+          event_id?: string
+          observed_at?: string
+          outcome?: string
+          period_end?: string
+          period_start?: string
+          plan?: string
+          requested_grace_expires_at?: string | null
+          stripe_customer_id?: string
+          stripe_status?: string
+          stripe_subscription_id?: string
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_subscription_state_events_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_subscription_state_events_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_subscription_state_events_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
+      stripe_trial_entitlements: {
+        Row: {
+          created_at: string
+          id: string
+          period_end: string
+          period_start: string
+          plan: string
+          revoke_reason: string | null
+          revoked_at: string | null
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          updated_at: string
+          user_id: string
+          verified_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          period_end: string
+          period_start: string
+          plan: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          stripe_customer_id: string
+          stripe_subscription_id: string
+          updated_at?: string
+          user_id: string
+          verified_at: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          period_end?: string
+          period_start?: string
+          plan?: string
+          revoke_reason?: string | null
+          revoked_at?: string | null
+          stripe_customer_id?: string
+          stripe_subscription_id?: string
+          updated_at?: string
+          user_id?: string
+          verified_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'stripe_trial_entitlements_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'public_user_profiles'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_trial_entitlements_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_follow_counts'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'stripe_trial_entitlements_user_id_fkey'
+            columns: ['user_id']
+            isOneToOne: false
+            referencedRelation: 'user_profiles'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           api_calls_reset_at: string | null
@@ -5589,6 +6330,9 @@ export type Database = {
           created_at: string
           current_period_end: string | null
           current_period_start: string | null
+          entitlement_payment_id: string | null
+          entitlement_trial_id: string | null
+          entitlement_trial_verified_at: string | null
           exports_this_month: number
           id: string
           plan: string | null
@@ -5609,6 +6353,9 @@ export type Database = {
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
+          entitlement_payment_id?: string | null
+          entitlement_trial_id?: string | null
+          entitlement_trial_verified_at?: string | null
           exports_this_month?: number
           id?: string
           plan?: string | null
@@ -5629,6 +6376,9 @@ export type Database = {
           created_at?: string
           current_period_end?: string | null
           current_period_start?: string | null
+          entitlement_payment_id?: string | null
+          entitlement_trial_id?: string | null
+          entitlement_trial_verified_at?: string | null
           exports_this_month?: number
           id?: string
           plan?: string | null
@@ -5640,7 +6390,22 @@ export type Database = {
           usage_reset_at?: string | null
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: 'subscriptions_entitlement_payment_fkey'
+            columns: ['entitlement_payment_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_entitlement_payments'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'subscriptions_entitlement_trial_fkey'
+            columns: ['entitlement_trial_id']
+            isOneToOne: false
+            referencedRelation: 'stripe_trial_entitlements'
+            referencedColumns: ['id']
+          },
+        ]
       }
       tips: {
         Row: {
@@ -8426,6 +9191,51 @@ export type Database = {
         Args: { p_stripe_customer_id: string; p_user_id: string }
         Returns: undefined
       }
+      activate_lifetime_membership_with_identity_atomic: {
+        Args: {
+          p_amount_paid: number
+          p_checkout_session_id: string
+          p_currency: string
+          p_paid_at: string
+          p_payment_status: string
+          p_reservation_id: string | null
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_payment_intent_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      activate_recurring_entitlement_payment_atomic: {
+        Args: {
+          p_amount_paid: number
+          p_currency: string
+          p_payment_status: string
+          p_period_end: string
+          p_period_start: string
+          p_plan: string
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_invoice_id: string
+          p_stripe_payment_intent_id: string | null
+          p_stripe_subscription_id: string
+          p_stripe_subscription_status: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      activate_recurring_trial_entitlement_atomic: {
+        Args: {
+          p_period_end: string
+          p_period_start: string
+          p_plan: string
+          p_stripe_customer_id: string
+          p_stripe_subscription_id: string
+          p_stripe_subscription_status: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       activate_trader_claim: {
         Args: { p_claim_id: string; p_reviewer_id: string }
         Returns: Json
@@ -8598,6 +9408,24 @@ export type Database = {
       }
       arena_weekly_leaders: { Args: { p_limit?: number }; Returns: Json }
       b2c_product_metrics: { Args: { p_window_days?: number }; Returns: Json }
+      bind_lifetime_membership_reservation_session_atomic: {
+        Args: {
+          p_checkout_session_id: string
+          p_request_nonce: string
+          p_reservation_id: string
+          p_session_expires_at: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      bind_stripe_customer_owner_atomic: {
+        Args: {
+          p_expected_previous_stripe_customer_id: string | null
+          p_new_stripe_customer_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       bulk_enrich_sync_v2: { Args: { updates: Json }; Returns: number }
       bulk_update_snapshot_metrics: { Args: { updates: Json }; Returns: number }
       bytea_to_text: { Args: { data: string }; Returns: string }
@@ -8966,6 +9794,17 @@ export type Database = {
           source: string
           source_trader_id: string
         }[]
+      }
+      finish_stripe_entitlement_effect_atomic: {
+        Args: {
+          p_effect_id: string
+          p_error: string | null
+          p_external_ref: string | null
+          p_lease_token: string
+          p_retry_after_seconds: number | null
+          p_succeeded: boolean
+        }
+        Returns: Json
       }
       finish_stripe_event: {
         Args: { p_error?: string; p_event_id: string; p_succeeded: boolean }
@@ -9416,6 +10255,17 @@ export type Database = {
           user_id: string
         }[]
       }
+      grant_pro_entitlement_days_atomic: {
+        Args: {
+          p_days: number
+          p_granted_at: string
+          p_metadata: Json
+          p_source: string
+          p_source_key: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       has_block_with_current_user: {
         Args: { p_other_user_id: string }
         Returns: boolean
@@ -9635,6 +10485,35 @@ export type Database = {
         Args: { p_limit?: number }
         Returns: Json
       }
+      lease_stripe_entitlement_effects_atomic: {
+        Args: { p_lease_seconds: number; p_limit: number }
+        Returns: {
+          attempt_count: number
+          available_at: string
+          completed_at: string | null
+          created_at: string
+          effect_type: string
+          entitlement_payment_id: string | null
+          external_ref: string | null
+          id: string
+          last_error: string | null
+          lease_expires_at: string | null
+          lease_token: string | null
+          operation_key: string
+          payload: Json
+          source_key: string
+          source_kind: string
+          status: string
+          updated_at: string
+          user_id: string | null
+        }[]
+        SetofOptions: {
+          from: '*'
+          to: 'stripe_entitlement_effects'
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       leave_pro_official_group_atomic: {
         Args: { p_actor_id: string }
         Returns: Json
@@ -9831,11 +10710,84 @@ export type Database = {
           score: number
         }[]
       }
+      reconcile_due_pro_entitlement_projections_atomic: {
+        Args: { p_after_user_id: string | null; p_limit: number }
+        Returns: Json
+      }
+      reconcile_recurring_subscription_state_atomic: {
+        Args: {
+          p_cancel_at_period_end: boolean
+          p_canceled_at: string | null
+          p_current_invoice_id: string | null
+          p_event_created_at: string
+          p_event_id: string
+          p_grace_expires_at: string | null
+          p_period_end: string
+          p_period_start: string
+          p_plan: string
+          p_stripe_customer_id: string
+          p_stripe_status: string
+          p_stripe_subscription_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
+      reconcile_stripe_entitlement_refund_atomic: {
+        Args: {
+          p_amount_paid: number
+          p_checkout_session_id: string | null
+          p_currency: string
+          p_payment_kind: string
+          p_payment_status: string
+          p_period_end: string | null
+          p_period_start: string
+          p_plan: string
+          p_refund_event_created_at: string
+          p_refund_event_id: string
+          p_refund_state: string
+          p_refund_succeeded_amount: number
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_invoice_id: string | null
+          p_stripe_payment_intent_id: string | null
+          p_stripe_subscription_id: string | null
+          p_stripe_subscription_status: string | null
+          p_user_id: string | null
+        }
+        Returns: Json
+      }
+      record_charge_refund_tombstone_atomic: {
+        Args: {
+          p_amount_paid: number
+          p_captured: boolean
+          p_currency: string
+          p_refund_event_created_at: string
+          p_refund_event_id: string
+          p_refund_state: string
+          p_refund_succeeded_amount: number
+          p_stripe_charge_id: string
+          p_stripe_customer_id: string
+          p_stripe_payment_intent_id: string | null
+          p_user_id: string | null
+        }
+        Returns: Json
+      }
       record_post_impression: {
         Args: { p_metadata?: Json | null; p_post_id: string; p_user_id: string }
         Returns: boolean
       }
       record_rejected_writes: { Args: { p_rows: Json }; Returns: undefined }
+      record_stripe_manual_review_atomic: {
+        Args: {
+          p_context: Json
+          p_object_id: string
+          p_object_type: string
+          p_reason: string
+          p_reason_key: string
+          p_user_id: string | null
+        }
+        Returns: Json
+      }
       record_user_activity: {
         Args: { p_seen_at?: string; p_user_id: string }
         Returns: undefined
@@ -9866,6 +10818,18 @@ export type Database = {
       refresh_popular_tokens_mv: { Args: never; Returns: undefined }
       refresh_source_capabilities_mv: { Args: never; Returns: undefined }
       release_leaderboard_lock: { Args: { season: string }; Returns: boolean }
+      release_lifetime_membership_reservation_atomic: {
+        Args: {
+          p_checkout_session_id: string | null
+          p_event_created_at: string | null
+          p_event_id: string | null
+          p_release_reason: string
+          p_request_nonce: string
+          p_reservation_id: string
+          p_user_id: string
+        }
+        Returns: Json
+      }
       release_report_evidence_cleanup: {
         Args: {
           p_evidence_ref: string
@@ -9876,6 +10840,14 @@ export type Database = {
       }
       release_stale_locks: { Args: never; Returns: number }
       rerank_leaderboard: { Args: { p_season_id: string }; Returns: number }
+      reserve_lifetime_membership_spot_atomic: {
+        Args: {
+          p_request_nonce: string
+          p_ttl_seconds: number
+          p_user_id: string
+        }
+        Returns: Json
+      }
       reserve_report_evidence_upload: {
         Args: {
           p_extension: string
@@ -9939,6 +10911,15 @@ export type Database = {
       }
       revoke_group_invite_atomic: {
         Args: { p_actor_id: string; p_group_id: string; p_invite_id: string }
+        Returns: Json
+      }
+      revoke_pro_entitlement_grant_atomic: {
+        Args: {
+          p_revoked_at: string
+          p_source: string
+          p_source_key: string
+          p_user_id: string
+        }
         Returns: Json
       }
       rollup_api_key_usage: { Args: never; Returns: undefined }
@@ -10069,6 +11050,32 @@ export type Database = {
         }
       }
       snapshot_score_backtest: { Args: never; Returns: number }
+      stripe_entitlement_effect_is_current_v2: {
+        Args: { p_effect_id: string }
+        Returns: boolean
+      }
+      stripe_has_current_pro_authority_v2: {
+        Args: { p_actor_id: string }
+        Returns: boolean
+      }
+      stripe_legacy_snapshot_grant_is_exact_v2: {
+        Args: { p_grant_id: string }
+        Returns: boolean
+      }
+      stripe_lifetime_claimed_seat_count_v2: { Args: never; Returns: number }
+      stripe_merge_charge_refund_tombstone_v2: {
+        Args: { p_payment_id: string }
+        Returns: Json
+      }
+      stripe_paid_launch_readiness_v2: { Args: never; Returns: Json }
+      stripe_subscription_has_exact_payment_binding_v2: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
+      stripe_subscription_has_exact_trial_binding_v2: {
+        Args: { p_user_id: string }
+        Returns: boolean
+      }
       submit_content_report: {
         Args: {
           p_content_id: string
@@ -10144,6 +11151,10 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      sync_current_pro_projection_atomic: {
+        Args: { p_user_id: string }
+        Returns: boolean
       }
       text_to_bytea: { Args: { data: string }; Returns: string }
       toggle_comment_reaction: {
@@ -10276,6 +11287,17 @@ export type Database = {
           p_user_id: string
         }
         Returns: undefined
+      }
+      upsert_pro_entitlement_grant_atomic: {
+        Args: {
+          p_expires_at: string | null
+          p_metadata: Json
+          p_source: string
+          p_source_key: string
+          p_starts_at: string
+          p_user_id: string
+        }
+        Returns: Json
       }
       urlencode:
         | { Args: { data: Json }; Returns: string }
