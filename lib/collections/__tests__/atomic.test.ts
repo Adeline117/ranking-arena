@@ -110,8 +110,9 @@ describe('collection atomic acknowledgements', () => {
 
   it.each([
     ['add', 'already_exists'],
-    ['add', 'not_found'],
+    ['add', 'collection_not_found'],
     ['add', 'resource_not_found'],
+    ['remove', 'collection_not_found'],
     ['remove', 'not_found'],
     ['remove', 'inactive_actor'],
   ] as const)(
@@ -258,6 +259,7 @@ describe('collection atomic acknowledgements', () => {
 
   it.each([
     ['add', 'removed'],
+    ['add', 'not_found'],
     ['remove', 'inserted'],
     ['remove', 'already_exists'],
     ['remove', 'resource_not_found'],

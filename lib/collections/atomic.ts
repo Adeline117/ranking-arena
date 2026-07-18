@@ -33,6 +33,7 @@ export type CollectionItemMutationResultCode =
   | 'inserted'
   | 'removed'
   | 'already_exists'
+  | 'collection_not_found'
   | 'not_found'
   | 'resource_not_found'
   | 'inactive_actor'
@@ -44,8 +45,14 @@ const COLLECTION_RESULT_CODES_BY_ACTION = {
 } as const satisfies Record<CollectionMutationAction, readonly CollectionMutationResultCode[]>
 
 const ITEM_RESULT_CODES_BY_ACTION = {
-  add: ['inserted', 'already_exists', 'not_found', 'resource_not_found', 'inactive_actor'],
-  remove: ['removed', 'not_found', 'inactive_actor'],
+  add: [
+    'inserted',
+    'already_exists',
+    'collection_not_found',
+    'resource_not_found',
+    'inactive_actor',
+  ],
+  remove: ['removed', 'collection_not_found', 'not_found', 'inactive_actor'],
 } as const satisfies Record<
   CollectionItemMutationAction,
   readonly CollectionItemMutationResultCode[]
