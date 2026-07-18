@@ -6,7 +6,12 @@ import {
   fetchSolanaChainAnchorEvidence,
   requireSolanaVerifiedChainAnchor,
 } from '../solana-evidence'
-import { parseOptsOrThrow, resolveEndpoint, solanaEvidenceRpc } from '../solana-evidence-core'
+import {
+  disposeSolanaRawRpcEvidenceExchanges,
+  parseOptsOrThrow,
+  resolveEndpoint,
+  solanaEvidenceRpc,
+} from '../solana-evidence-core'
 
 interface RpcRequest {
   jsonrpc: string
@@ -57,6 +62,19 @@ const PUBLICNODE_SOLANA_CONNECTION_HASH = createHash('sha256')
   )
   .digest('hex')
 const FIXED_NOW = '2026-07-16T21:00:41.000Z'
+const JUPITER_PROGRAM_ID = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4'
+const JUPITER_PROGRAMDATA_ADDRESS = '4Ec7ZxZS6Sbdg5UGSLHbAnM7GQHp2eFd4KYWRexAipQT'
+
+function programAccountsParams() {
+  return [
+    [JUPITER_PROGRAM_ID, JUPITER_PROGRAMDATA_ADDRESS],
+    {
+      commitment: 'finalized',
+      encoding: 'base64',
+      minContextSlot: SLOT,
+    },
+  ]
+}
 
 function finalizedBlock(overrides: Record<string, unknown> = {}) {
   return {
@@ -990,6 +1008,232 @@ describe('fetchSolanaChainAnchorEvidence', () => {
       solanaEvidenceRpc(endpoint!, 'getSlot', [], 20_000, proxy as never)
     ).rejects.toThrow('invalid Solana raw RPC evidence capture')
     expect(calls).toHaveLength(0)
+  })
+
+  it('pins the program-accounts lane to one exact finalized base64 request shape', async () => {
+    const calls = mockRpc(() => ({
+      stream: byteStream(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: { context: { slot: SLOT }, value: [null, null] },
+        })
+      ),
+    }))
+    const endpoint = resolveEndpoint(
+      parseOptsOrThrow({ rpcUrl: TEST_RPC_URL, endpointId: TEST_ENDPOINT_ID })
+    )
+    expect(endpoint).not.toBeNull()
+
+    const result = await solanaEvidenceRpc(
+      endpoint!,
+      'getMultipleAccounts',
+      programAccountsParams(),
+      20_000,
+      { lane: 'program_accounts' }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(calls).toHaveLength(1)
+    expect(calls[0].request).toEqual({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getMultipleAccounts',
+      params: programAccountsParams(),
+    })
+    if (!result.ok || !result.rawExchange) throw new Error('missing raw program-account exchange')
+    expect(result.rawExchange).toMatchObject({
+      lane: 'program_accounts',
+      method: 'getMultipleAccounts',
+      endpoint: {
+        providerId: 'local',
+        endpointId: TEST_ENDPOINT_ID,
+        connectionHash: TEST_CONNECTION_HASH,
+      },
+    })
+    disposeSolanaRawRpcEvidenceExchanges([result.rawExchange])
+    expect(result.rawExchange.request.bytes.every((byte) => byte === 0)).toBe(true)
+    expect(result.rawExchange.response.bytes.every((byte) => byte === 0)).toBe(true)
+  })
+
+  it.each([
+    ['wrong method', 'getAccountInfo', programAccountsParams()],
+    [
+      'one address',
+      'getMultipleAccounts',
+      [[JUPITER_PROGRAM_ID], { commitment: 'finalized', encoding: 'base64', minContextSlot: SLOT }],
+    ],
+    [
+      'duplicate address',
+      'getMultipleAccounts',
+      [
+        [JUPITER_PROGRAM_ID, JUPITER_PROGRAM_ID],
+        { commitment: 'finalized', encoding: 'base64', minContextSlot: SLOT },
+      ],
+    ],
+    [
+      'non-finalized commitment',
+      'getMultipleAccounts',
+      [
+        [JUPITER_PROGRAM_ID, JUPITER_PROGRAMDATA_ADDRESS],
+        { commitment: 'confirmed', encoding: 'base64', minContextSlot: SLOT },
+      ],
+    ],
+    [
+      'non-base64 encoding',
+      'getMultipleAccounts',
+      [
+        [JUPITER_PROGRAM_ID, JUPITER_PROGRAMDATA_ADDRESS],
+        { commitment: 'finalized', encoding: 'base64+zstd', minContextSlot: SLOT },
+      ],
+    ],
+    [
+      'zero context slot',
+      'getMultipleAccounts',
+      [
+        [JUPITER_PROGRAM_ID, JUPITER_PROGRAMDATA_ADDRESS],
+        { commitment: 'finalized', encoding: 'base64', minContextSlot: 0 },
+      ],
+    ],
+    [
+      'extra config field',
+      'getMultipleAccounts',
+      [
+        [JUPITER_PROGRAM_ID, JUPITER_PROGRAMDATA_ADDRESS],
+        {
+          commitment: 'finalized',
+          encoding: 'base64',
+          minContextSlot: SLOT,
+          dataSlice: { offset: 0, length: 45 },
+        },
+      ],
+    ],
+  ])(
+    'rejects a program-accounts capture with %s before network I/O',
+    async (_label, method, params) => {
+      const calls = mockRpc(() => ({}))
+      const endpoint = resolveEndpoint(
+        parseOptsOrThrow({ rpcUrl: TEST_RPC_URL, endpointId: TEST_ENDPOINT_ID })
+      )
+      await expect(
+        solanaEvidenceRpc(endpoint!, method, params as unknown[], 20_000, {
+          lane: 'program_accounts',
+        })
+      ).rejects.toThrow('invalid Solana raw RPC evidence capture')
+      expect(calls).toHaveLength(0)
+    }
+  )
+
+  it('gives only program-accounts capture a 16 MiB response budget and clears owned bytes', async () => {
+    const bodyBase = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      result: { context: { slot: SLOT }, value: [null, null] },
+    })
+    const body = `${bodyBase}${' '.repeat(2 * 1024 * 1024 + 1 - Buffer.byteLength(bodyBase))}`
+    const sourceBytes = new TextEncoder().encode(body)
+    const calls = mockRpc(() => ({
+      contentLength: String(sourceBytes.byteLength),
+      stream: {
+        getReader: () => {
+          let emitted = false
+          return {
+            read: jest.fn(async () => {
+              if (emitted) return { done: true, value: undefined }
+              emitted = true
+              return { done: false, value: sourceBytes }
+            }),
+            cancel: jest.fn(async () => undefined),
+          }
+        },
+      } as never,
+    }))
+    const endpoint = resolveEndpoint(
+      parseOptsOrThrow({ rpcUrl: TEST_RPC_URL, endpointId: TEST_ENDPOINT_ID })
+    )
+    const result = await solanaEvidenceRpc(
+      endpoint!,
+      'getMultipleAccounts',
+      programAccountsParams(),
+      20_000,
+      { lane: 'program_accounts' }
+    )
+
+    expect(result.ok).toBe(true)
+    expect(calls).toHaveLength(1)
+    expect(sourceBytes.every((byte) => byte === 0)).toBe(true)
+    if (!result.ok || !result.rawExchange) throw new Error('missing raw program-account exchange')
+    expect(result.rawExchange.response.byteLength).toBe(2 * 1024 * 1024 + 1)
+    disposeSolanaRawRpcEvidenceExchanges([result.rawExchange])
+    expect(result.rawExchange.request.bytes.every((byte) => byte === 0)).toBe(true)
+    expect(result.rawExchange.response.bytes.every((byte) => byte === 0)).toBe(true)
+
+    const exactLimitBase = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      result: { context: { slot: SLOT }, value: [null, null] },
+    })
+    const exactLimitBytes = 16 * 1024 * 1024
+    const exactLimitBody = `${exactLimitBase}${' '.repeat(
+      exactLimitBytes - Buffer.byteLength(exactLimitBase)
+    )}`
+    const exactLimitSourceBytes = new TextEncoder().encode(exactLimitBody)
+    mockRpc(() => ({
+      contentLength: String(exactLimitBytes),
+      stream: {
+        getReader: () => {
+          let emitted = false
+          return {
+            read: jest.fn(async () => {
+              if (emitted) return { done: true, value: undefined }
+              emitted = true
+              return { done: false, value: exactLimitSourceBytes }
+            }),
+            cancel: jest.fn(async () => undefined),
+          }
+        },
+      } as never,
+    }))
+    const exactLimit = await solanaEvidenceRpc(
+      endpoint!,
+      'getMultipleAccounts',
+      programAccountsParams(),
+      20_000,
+      { lane: 'program_accounts' }
+    )
+    expect(exactLimit.ok).toBe(true)
+    if (!exactLimit.ok || !exactLimit.rawExchange) {
+      throw new Error('missing exact-limit raw program-account exchange')
+    }
+    expect(exactLimit.rawExchange.response.byteLength).toBe(exactLimitBytes)
+    expect(exactLimitSourceBytes.every((byte) => byte === 0)).toBe(true)
+    disposeSolanaRawRpcEvidenceExchanges([exactLimit.rawExchange])
+
+    const cancel = jest.fn(async () => undefined)
+    mockRpc(() => ({ contentLength: String(16 * 1024 * 1024 + 1), cancel }))
+    const oversized = await solanaEvidenceRpc(
+      endpoint!,
+      'getMultipleAccounts',
+      programAccountsParams(),
+      20_000,
+      { lane: 'program_accounts' }
+    )
+    expect(oversized).toMatchObject({ ok: false, reason: 'response_too_large' })
+    expect(cancel).toHaveBeenCalledTimes(1)
+
+    const transactionCancel = jest.fn(async () => undefined)
+    mockRpc(() => ({
+      contentLength: String(2 * 1024 * 1024 + 1),
+      cancel: transactionCancel,
+    }))
+    const oversizedTransaction = await solanaEvidenceRpc(endpoint!, 'getTransaction', [], 20_000, {
+      lane: 'transaction',
+    })
+    expect(oversizedTransaction).toMatchObject({
+      ok: false,
+      reason: 'response_too_large',
+    })
+    expect(transactionCancel).toHaveBeenCalledTimes(1)
   })
 
   it.each([0, -1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 120_001])(

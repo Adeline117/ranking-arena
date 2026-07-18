@@ -6,6 +6,8 @@
 
 import { createHash } from 'node:crypto'
 
+import { hasBase58DecodedByteLength } from '@/lib/utils/base58'
+
 import { parseStrictJson } from './strict-json'
 import {
   RAW_RPC_REQUEST_HASH_BASIS,
@@ -19,6 +21,7 @@ import {
 
 const RPC_REQUEST_ID = 1
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
+const PROGRAM_ACCOUNTS_MAX_RESPONSE_BYTES = 16 * 1024 * 1024
 const MAX_TIMEOUT_MS = 120_000
 export const DEFAULT_SOLANA_EVIDENCE_TIMEOUT_MS = 20_000
 const PUBLICNODE_SOLANA_HISTORY_SETTLE_MS = 20_000
@@ -156,6 +159,7 @@ export const SOLANA_RAW_RPC_EVIDENCE_LANES = [
   'transaction',
   'signature_status',
   'membership_block',
+  'program_accounts',
 ] as const
 
 export type SolanaRawRpcEvidenceLane = (typeof SOLANA_RAW_RPC_EVIDENCE_LANES)[number]
@@ -168,6 +172,7 @@ const SOLANA_RAW_RPC_LANE_METHODS: Record<SolanaRawRpcEvidenceLane, string> = {
   transaction: 'getTransaction',
   signature_status: 'getSignatureStatuses',
   membership_block: 'getBlock',
+  program_accounts: 'getMultipleAccounts',
 }
 
 export function disposeSolanaRawRpcEvidenceExchanges(
@@ -205,6 +210,15 @@ export interface SolanaRawRpcEvidenceExchange {
 export interface SolanaRawRpcCapture {
   lane: SolanaRawRpcEvidenceLane
 }
+
+type SolanaProgramAccountsRpcParams = [
+  [programId: string, programDataAddress: string],
+  {
+    commitment: 'finalized'
+    encoding: 'base64'
+    minContextSlot: number
+  },
+]
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -466,6 +480,41 @@ function parseRawCapture(value: unknown): SolanaRawRpcCapture | undefined {
   return { lane: laneDescriptor.value as SolanaRawRpcEvidenceLane }
 }
 
+function parseProgramAccountsRpcParams(value: unknown): SolanaProgramAccountsRpcParams | null {
+  try {
+    const params = exactDenseArray(value)
+    if (!params || params.length !== 2) return null
+    const addresses = exactDenseArray(params[0])
+    const config = exactDataRecord(params[1], ['commitment', 'encoding', 'minContextSlot'])
+    if (
+      !addresses ||
+      addresses.length !== 2 ||
+      !hasBase58DecodedByteLength(addresses[0], 32) ||
+      !hasBase58DecodedByteLength(addresses[1], 32) ||
+      addresses[0] === addresses[1] ||
+      !config ||
+      config.commitment !== 'finalized' ||
+      config.encoding !== 'base64' ||
+      typeof config.minContextSlot !== 'number' ||
+      !Number.isSafeInteger(config.minContextSlot) ||
+      config.minContextSlot <= 0 ||
+      Object.is(config.minContextSlot, -0)
+    ) {
+      return null
+    }
+    return [
+      [addresses[0], addresses[1]],
+      {
+        commitment: 'finalized',
+        encoding: 'base64',
+        minContextSlot: config.minContextSlot,
+      },
+    ]
+  } catch {
+    return null
+  }
+}
+
 function rpcFailure(
   endpoint: SolanaEvidenceEndpointIdentity,
   reason: SolanaRpcFailure['reason'],
@@ -489,6 +538,7 @@ export async function solanaEvidenceRpc(
   rawCapture?: SolanaRawRpcCapture
 ): Promise<SolanaRpcResult> {
   let parsedRawCapture: SolanaRawRpcCapture | undefined
+  let requestParams = params
   try {
     parsedRawCapture = parseRawCapture(rawCapture)
   } catch {
@@ -496,6 +546,11 @@ export async function solanaEvidenceRpc(
   }
   if (parsedRawCapture && SOLANA_RAW_RPC_LANE_METHODS[parsedRawCapture.lane] !== method) {
     throw new TypeError('invalid Solana raw RPC evidence capture')
+  }
+  if (parsedRawCapture?.lane === 'program_accounts') {
+    const parsedParams = parseProgramAccountsRpcParams(params)
+    if (!parsedParams) throw new TypeError('invalid Solana raw RPC evidence capture')
+    requestParams = parsedParams
   }
   if (endpoint.identity.endpointId === 'publicnode_solana_mainnet' && method === 'getBlocks') {
     // PublicNode can expose a finalized getSlot context before its getBlocks
@@ -511,7 +566,7 @@ export async function solanaEvidenceRpc(
   let responseBytes: Uint8Array | null = null
   let rawExchangeOwnershipTransferred = false
   try {
-    const requestBody = encodeJsonRpcRequestBody(RPC_REQUEST_ID, method, params)
+    const requestBody = encodeJsonRpcRequestBody(RPC_REQUEST_ID, method, requestParams)
     requestBytes = requestBody.evidence.bytes
     const response = await fetch(endpoint.url, {
       method: 'POST',
@@ -535,7 +590,9 @@ export async function solanaEvidenceRpc(
     }
     const responseText = await readBoundedRpcResponse(
       response,
-      MAX_RESPONSE_BYTES,
+      parsedRawCapture?.lane === 'program_accounts'
+        ? PROGRAM_ACCOUNTS_MAX_RESPONSE_BYTES
+        : MAX_RESPONSE_BYTES,
       parsedRawCapture !== undefined
     )
     if (!responseText.ok) {
