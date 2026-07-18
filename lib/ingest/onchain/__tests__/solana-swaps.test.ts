@@ -154,6 +154,7 @@ describe('isQuotaExhausted (provider failover trigger, 2026-07-11 事故)', () =
   it('matches Helius quota-dead messages', () => {
     expect(isQuotaExhausted('sol getSignaturesForAddress: max usage reached')).toBe(true)
     expect(isQuotaExhausted('Monthly quota exceeded')).toBe(true)
+    expect(isQuotaExhausted('Monthly capacity limit exceeded')).toBe(true)
     expect(isQuotaExhausted('HTTP 402 Payment Required')).toBe(true)
   })
   it('does not match transient throughput errors (those retry same provider)', () => {

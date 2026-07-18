@@ -105,4 +105,12 @@ describe('OnchainInsights quality disclosure', () => {
     expect(screen.getByText('$1.23K USD')).toBeInTheDocument()
     expect(screen.queryByText('+999.0%')).not.toBeInTheDocument()
   })
+
+  it('shows optional enrichment degradation without requiring insight data', () => {
+    render(<OnchainInsights currency="USD" extras={{}} enrichmentState="unavailable" />)
+
+    expect(screen.getByRole('status', { name: 'onchainEstimatedData' })).toHaveTextContent(
+      'onchainEstimatedData · serviceTemporarilyUnavailable'
+    )
+  })
 })

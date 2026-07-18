@@ -15,6 +15,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { formatMoney } from '@/lib/utils/money'
 import { PnlCalendarHeatmap } from '@/app/components/trader/charts/PnlCalendarHeatmap'
 import type { ServingCurrency } from '@/lib/data/serving/types'
+import type { OnchainEnrichmentState } from '@/app/(app)/trader/[handle]/hooks/useOnchainEnrichTrigger'
 import {
   shapeTokenDistribution,
   shapeTopTokens,
@@ -67,22 +68,45 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
 export interface OnchainInsightsProps {
   extras: Record<string, unknown>
   currency: ServingCurrency
+  enrichmentState?: OnchainEnrichmentState
 }
 
-export default function OnchainInsights({ extras, currency }: OnchainInsightsProps) {
+export default function OnchainInsights({
+  extras,
+  currency,
+  enrichmentState = 'idle',
+}: OnchainInsightsProps) {
   const { t } = useLanguage()
   const dist = shapeTokenDistribution(extras)
   const tokensTop = shapeTopTokens(extras)
   const calendar = shapePnlCalendar(extras)
   const pnl = shapeOnchainPnl(extras)
   const quality = shapeOnchainQuality(extras)
+  const enrichmentUnavailable = enrichmentState === 'unavailable' || enrichmentState === 'failed'
 
-  if (!dist && !tokensTop && !calendar && !pnl) return null
+  if (!dist && !tokensTop && !calendar && !pnl && !enrichmentUnavailable) return null
 
   const distTotal = dist ? dist.buckets.reduce((sum, bucket) => sum + bucket.count, 0) : 0
 
   return (
     <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[4] }}>
+      {enrichmentUnavailable && (
+        <Box
+          role="status"
+          aria-label={t('onchainEstimatedData')}
+          style={{
+            padding: tokens.spacing[3],
+            borderRadius: tokens.radius.lg,
+            background: alpha(tokens.colors.accent.warning, 8),
+            border: `1px dashed ${alpha(tokens.colors.accent.warning, 30)}`,
+          }}
+        >
+          <Text size="sm" weight="semibold" style={{ color: tokens.colors.accent.warning }}>
+            {t('onchainEstimatedData')} · {t('serviceTemporarilyUnavailable')}
+          </Text>
+        </Box>
+      )}
+
       {quality && !quality.canonical && (
         <Box
           role="note"
