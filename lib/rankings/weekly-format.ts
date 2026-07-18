@@ -2,6 +2,11 @@ import { getLocaleFromLanguage } from '@/lib/utils/format'
 
 const WEEK_WINDOW_DAYS = 7
 
+/** Weekly rows pool many exchanges, so the trader id is never a complete route identity. */
+export function weeklyTraderHref(exchangeTraderId: string, source: string): string {
+  return `/trader/${encodeURIComponent(exchangeTraderId)}?platform=${encodeURIComponent(source)}`
+}
+
 export function formatWeeklyRoi(value: number): string {
   const sign = value > 0 ? '+' : ''
   if (Math.abs(value) >= 10_000) {
