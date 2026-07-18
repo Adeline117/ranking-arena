@@ -12,9 +12,14 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { t as staticT } from '@/lib/i18n'
 import { EXCHANGE_BIND_LIST } from './api-key/exchange-configs'
+import { readCurrentOAuthAccessToken, requestExchangeOAuthUrl } from './oauth-client'
 
 // Single source of truth: display names + OAuth capability live in exchange-configs.
 const EXCHANGES = EXCHANGE_BIND_LIST
+
+interface ExchangeAuthScope {
+  userId: string
+}
 
 function ExchangeAuthContent() {
   const searchParams = useSearchParams()
@@ -23,13 +28,14 @@ function ExchangeAuthContent() {
   const { showToast } = useToast()
   const { t } = useLanguage()
   const exchangeParam = searchParams.get('exchange')
-  const [userId, setUserId] = useState<string | null>(null)
+  const [authScope, setAuthScope] = useState<ExchangeAuthScope | null>(null)
   const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const loadAuth = useCallback(async () => {
     setAuthStatus('loading')
+    setAuthScope(null)
     const result = await bootstrapClientAuth(supabase.auth)
 
     if (result.status === 'signed-out') {
@@ -41,7 +47,12 @@ function ExchangeAuthContent() {
       return
     }
 
-    setUserId(result.user.id)
+    if (!result.session?.access_token) {
+      setAuthStatus('error')
+      return
+    }
+
+    setAuthScope({ userId: result.user.id })
     setAuthStatus('ready')
   }, [push])
 
@@ -50,7 +61,7 @@ function ExchangeAuthContent() {
   }, [loadAuth])
 
   const handleOAuth = async (exchange: string) => {
-    if (!userId) {
+    if (!authScope) {
       showToast(t('pleaseLogin'), 'warning')
       router.push('/login?redirect=/exchange')
       return
@@ -60,18 +71,12 @@ function ExchangeAuthContent() {
     setError(null)
 
     try {
-      // 获取 OAuth 授权 URL
-      const response = await fetch(
-        `/api/exchange/oauth/authorize?exchange=${exchange}&userId=${userId}`
+      const accessToken = await readCurrentOAuthAccessToken(
+        () => supabase.auth.getSession(),
+        authScope.userId
       )
-      const data = await response.json()
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to get OAuth URL')
-      }
-
       // 重定向到交易所 OAuth 页面
-      window.location.href = data.authUrl
+      window.location.href = await requestExchangeOAuthUrl(exchange, accessToken)
     } catch (_err: unknown) {
       setError(t('authorizationFailed'))
       setLoading(false)
@@ -103,7 +108,7 @@ function ExchangeAuthContent() {
     )
   }
 
-  if (authStatus === 'loading' || !userId) {
+  if (authStatus === 'loading' || !authScope) {
     return (
       <Box
         style={{
