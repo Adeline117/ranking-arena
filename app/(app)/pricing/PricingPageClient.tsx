@@ -119,21 +119,38 @@ interface PricingPageClientProps {
   lifetimeCount?: number
 }
 
+type BillingPeriod = 'monthly' | 'yearly'
+
+function readStoredBilling(): BillingPeriod | null {
+  if (typeof window === 'undefined') return null
+  try {
+    const saved = window.sessionStorage.getItem('pricing-billing')
+    return saved === 'monthly' || saved === 'yearly' ? saved : null
+  } catch {
+    return null
+  }
+}
+
+function persistBilling(billing: BillingPeriod): void {
+  try {
+    window.sessionStorage.setItem('pricing-billing', billing)
+  } catch {
+    // Storage can be denied in private/embedded contexts. The URL and current
+    // component state remain the authority for this visit.
+  }
+}
+
 export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClientProps) {
   const { email } = useAuthSession()
   const { t } = useLanguage()
   const productFacts = useProductFacts()
   const { showToast } = useToast()
-  const [billing, setBillingRaw] = useState<'monthly' | 'yearly'>(() => {
+  const [billing, setBillingRaw] = useState<BillingPeriod>(() => {
     // Persist billing selection across React re-mounts caused by Suspense/streaming
-    if (typeof window !== 'undefined') {
-      const saved = sessionStorage.getItem('pricing-billing')
-      if (saved === 'monthly' || saved === 'yearly') return saved
-    }
-    return 'yearly'
+    return readStoredBilling() ?? 'yearly'
   })
-  const setBilling = (b: 'monthly' | 'yearly') => {
-    sessionStorage.setItem('pricing-billing', b)
+  const setBilling = (b: BillingPeriod) => {
+    persistBilling(b)
     setBillingRaw(b)
   }
   const [openFaqs, setOpenFaqs] = useState<Set<number>>(new Set())
@@ -148,7 +165,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
     )
     if (!requestedBilling) return
 
-    sessionStorage.setItem('pricing-billing', requestedBilling)
+    persistBilling(requestedBilling)
     setBillingRaw(requestedBilling)
   }, [])
 
