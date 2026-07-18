@@ -67,12 +67,35 @@ jobs:
 
       - name: Alert on red gate (deploy withheld)
         if: steps.gate.outputs.pass != 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: |
-          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-              -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
-              -d "text=🛑 Deploy Gate：CI 门禁作业未全绿，已扣留生产部署%0ACommit: ${HEAD_SHA:0:8}%0A修复后 push 即重新排队；紧急可用 [deploy-force]" || true
-          fi
+          send_telegram_alert() {
+            local message="$1"
+            if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_ALERT_CHAT_ID:-}" ]; then
+              echo "::warning title=Telegram alert delivery failed::required secret is missing"
+              echo "### Telegram alert delivery failed — required secret is missing" >> "$GITHUB_STEP_SUMMARY"
+              return 0
+            fi
+            local curl_rc=0
+            local http
+            http=$(curl --silent --show-error \
+              --connect-timeout 5 --max-time 10 \
+              --output /dev/null --write-out '%{http_code}' \
+              -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_ALERT_CHAT_ID}" \
+              --data-urlencode "text=${message}") || curl_rc=$?
+            if [ "$curl_rc" -ne 0 ] || [[ "${http:-000}" != 2* ]]; then
+              echo "::warning title=Telegram alert delivery failed::curl=$curl_rc HTTP=${http:-000}"
+              echo "### Telegram alert delivery failed — curl=$curl_rc HTTP=${http:-000}" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Telegram alert delivered HTTP $http"
+            fi
+            return 0
+          }
+          MESSAGE=$(printf '🛑 Deploy Gate：CI 门禁作业未全绿，已扣留生产部署\nCommit: %.8s\n修复后 push 即重新排队；紧急可用 [deploy-force]' "$HEAD_SHA")
+          send_telegram_alert "$MESSAGE"
           echo "::error::CI gate jobs not green — production deploy withheld for ${HEAD_SHA:0:8}"
           exit 1
 
@@ -209,7 +232,33 @@ jobs:
 
       - name: Smoke test + auto-rollback
         if: steps.promote_candidate.outputs.promoted == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: |
+          send_telegram_alert() {
+            local message="$1"
+            if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_ALERT_CHAT_ID:-}" ]; then
+              echo "::warning title=Telegram alert delivery failed::required secret is missing"
+              echo "### Telegram alert delivery failed — required secret is missing" >> "$GITHUB_STEP_SUMMARY"
+              return 0
+            fi
+            local curl_rc=0
+            local http
+            http=$(curl --silent --show-error \
+              --connect-timeout 5 --max-time 10 \
+              --output /dev/null --write-out '%{http_code}' \
+              -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_ALERT_CHAT_ID}" \
+              --data-urlencode "text=${message}") || curl_rc=$?
+            if [ "$curl_rc" -ne 0 ] || [[ "${http:-000}" != 2* ]]; then
+              echo "::warning title=Telegram alert delivery failed::curl=$curl_rc HTTP=${http:-000}"
+              echo "### Telegram alert delivery failed — curl=$curl_rc HTTP=${http:-000}" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Telegram alert delivered HTTP $http"
+            fi
+            return 0
+          }
           sleep 45
           BASE="https://www.arenafi.org"
           if ! scripts/post-deploy-check.sh "$BASE" "$HEAD_SHA"; then
@@ -226,11 +275,8 @@ jobs:
             else
               ROLLED="⚠️ 发布前未捕获回滚部署，需人工处理"
             fi
-            if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
-              curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-                -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
-                -d "text=🚨 Deploy Gate 业务/SHA smoke 失败%0ACommit: ${HEAD_SHA:0:8}%0A${ROLLED}" || true
-            fi
+            MESSAGE=$(printf '🚨 Deploy Gate 业务/SHA smoke 失败\nCommit: %.8s\n%s' "$HEAD_SHA" "$ROLLED")
+            send_telegram_alert "$MESSAGE"
             exit 1
           fi
           echo "✅ deploy + smoke green for ${HEAD_SHA:0:8}"
@@ -245,9 +291,32 @@ jobs:
       # 且无告警。job 级 failure() 兜底，任何非 CI-red 的失败也发声。
       - name: Alert on deploy/smoke step failure
         if: failure() && steps.gate.outputs.pass == 'true'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: |
-          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-              -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
-              -d "text=🚨 Deploy Gate 部署步骤失败（非 CI-red）%0ACommit: ${HEAD_SHA:0:8}%0A生产停在旧部署，未更新。优先查 Actions annotation、Vercel Inspect 与 build system report；仅项目检索失败时优先怀疑 token。" || true
-          fi
+          send_telegram_alert() {
+            local message="$1"
+            if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_ALERT_CHAT_ID:-}" ]; then
+              echo "::warning title=Telegram alert delivery failed::required secret is missing"
+              echo "### Telegram alert delivery failed — required secret is missing" >> "$GITHUB_STEP_SUMMARY"
+              return 0
+            fi
+            local curl_rc=0
+            local http
+            http=$(curl --silent --show-error \
+              --connect-timeout 5 --max-time 10 \
+              --output /dev/null --write-out '%{http_code}' \
+              -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_ALERT_CHAT_ID}" \
+              --data-urlencode "text=${message}") || curl_rc=$?
+            if [ "$curl_rc" -ne 0 ] || [[ "${http:-000}" != 2* ]]; then
+              echo "::warning title=Telegram alert delivery failed::curl=$curl_rc HTTP=${http:-000}"
+              echo "### Telegram alert delivery failed — curl=$curl_rc HTTP=${http:-000}" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Telegram alert delivered HTTP $http"
+            fi
+            return 0
+          }
+          MESSAGE=$(printf '🚨 Deploy Gate 部署步骤失败（非 CI-red）\nCommit: %.8s\n生产停在旧部署，未更新。优先查 Actions annotation、Vercel Inspect 与 build system report；仅项目检索失败时优先怀疑 token。' "$HEAD_SHA")
+          send_telegram_alert "$MESSAGE"
