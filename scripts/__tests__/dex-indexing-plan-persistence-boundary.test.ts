@@ -32,6 +32,9 @@ describe('DEX indexing plan persistence boundary', () => {
     expect(plan).toContain(
       '[x] 固定 metadata-only `acquisition-run-manifest@3` / `acquisition-query-policy@2`'
     )
+    expect(plan).toContain('[x] 固定首个真实 Solana 双源 metadata-only finality/membership witness')
+    expect(plan).toContain('223babd47d32242e49e594286cc20a7cd5471aa9ab8e85bdeee5c3d96390b2a9')
+    expect(plan).toContain('不证明 Jupiter invocation、decoder facts、来源')
   })
 
   it('records the resolved v2 raw-archive conflict without opening runtime authorization', () => {

@@ -794,7 +794,15 @@ Arena 规范事实/账本 → 官方 API/托管 indexer 对账。任何第三方
       不得把既有 `raw-snapshots` 行为扩展到 DEX event/golden/acquisition artifact。
 - [x] 固定 100 个 golden wallets：每链 top 20、随机 20、异常/高频 10；保存全局快照与每链 50
       钱包 subset 的 canonical SHA，严格拒绝缺行、重排、跨链或 cohort 漂移。
-- [ ] 固定 BSC/Solana golden tx 清单，并绑定 transaction/receipt/meta/finality evidence SHA。
+- [x] 固定首个真实 Solana 双源 metadata-only finality/membership witness：
+      `j79F…KDpef` 的 `golden-rpc-transaction-evidence@3` canonical SHA 为
+      `223babd47d32242e49e594286cc20a7cd5471aa9ab8e85bdeee5c3d96390b2a9`，两源 stable facts SHA
+      同为 `d29905e525cd5f0c7aa97fcfe033f5a5b1862111dfa2a3f71020401fc51f7803`。静态 fixture 不含
+      body/locator，保持 `declared_not_replayed`，不证明 Jupiter invocation、decoder facts、来源
+      独立性或可发布性。
+- [ ] 固定 BSC 真实双源 metadata witness，并补齐 BSC/Solana protocol-hit、复杂场景与 decoder
+      golden tx 矩阵；单个 finality/membership witness 不得关闭协议部署/code epoch/child set/legal
+      blocker。
 - [ ] 用 SQD 拉同一 7 天 BSC 与 Solana 样本，记录完整性、延迟、bytes、费用投影。
 - [ ] 建本地/隔离 ClickHouse batch/page/event/block observation DDL 与 dbt skeleton，不连接生产
       serving。
