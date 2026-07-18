@@ -15,6 +15,11 @@ SELECT pg_catalog.pg_advisory_xact_lock(
 DO $required_objects$
 DECLARE
   v_role text;
+  v_auth_owner text;
+  v_current_super boolean;
+  v_current_bypassrls boolean;
+  v_owner_auth_mode boolean;
+  v_managed_auth_mode boolean;
 BEGIN
   FOREACH v_role IN ARRAY ARRAY[
     'postgres',
@@ -41,6 +46,65 @@ BEGIN
     RAISE EXCEPTION 'auth.users must be an ordinary table';
   END IF;
 
+  SELECT owner_role.rolname
+  INTO STRICT v_auth_owner
+  FROM pg_catalog.pg_class AS relation
+  JOIN pg_catalog.pg_roles AS owner_role
+    ON owner_role.oid = relation.relowner
+  WHERE relation.oid = 'auth.users'::pg_catalog.regclass;
+
+  SELECT role_row.rolsuper, role_row.rolbypassrls
+  INTO STRICT v_current_super, v_current_bypassrls
+  FROM pg_catalog.pg_roles AS role_row
+  WHERE role_row.rolname = CURRENT_USER;
+
+  v_owner_auth_mode := v_current_super OR v_auth_owner = CURRENT_USER;
+  v_managed_auth_mode :=
+    CURRENT_USER = 'postgres'
+    AND NOT v_current_super
+    AND v_current_bypassrls
+    AND v_auth_owner = 'supabase_auth_admin';
+
+  IF NOT v_owner_auth_mode AND NOT v_managed_auth_mode THEN
+    RAISE EXCEPTION
+      'auth.users authority is incompatible (current_user=%, owner=%)',
+      CURRENT_USER,
+      v_auth_owner;
+  END IF;
+
+  IF v_managed_auth_mode AND (
+    NOT pg_catalog.has_schema_privilege(
+      CURRENT_USER,
+      'auth',
+      'USAGE'
+    )
+    OR NOT pg_catalog.has_table_privilege(
+      CURRENT_USER,
+      'auth.users',
+      'SELECT'
+    )
+    OR NOT (
+      pg_catalog.has_table_privilege(
+        CURRENT_USER,
+        'auth.users',
+        'UPDATE'
+      )
+      OR pg_catalog.has_table_privilege(
+        CURRENT_USER,
+        'auth.users',
+        'DELETE'
+      )
+      OR pg_catalog.has_table_privilege(
+        CURRENT_USER,
+        'auth.users',
+        'TRUNCATE'
+      )
+    )
+  ) THEN
+    RAISE EXCEPTION
+      'managed auth.users privileges are insufficient for locked profile convergence';
+  END IF;
+
   IF pg_catalog.to_regclass('public.user_profiles') IS NULL OR NOT EXISTS (
     SELECT 1
     FROM pg_catalog.pg_class AS relation
@@ -54,6 +118,48 @@ BEGIN
   ) THEN
     RAISE EXCEPTION 'public.user_profiles must be an ordinary postgres-owned table';
   END IF;
+
+  -- Hosted Supabase keeps auth.users under supabase_auth_admin.  The postgres
+  -- migration role can lock/read that table but cannot perform trigger DDL.
+  -- Fail before any repair unless its existing provisioner trigger is already
+  -- the one exact shape that CREATE OR REPLACE FUNCTION can safely preserve.
+  IF v_managed_auth_mode AND (
+    NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_trigger AS trigger_row
+      WHERE trigger_row.tgrelid = 'auth.users'::pg_catalog.regclass
+        AND trigger_row.tgname = 'on_auth_user_created'
+        AND trigger_row.tgfoid =
+          pg_catalog.to_regprocedure('public.handle_new_user()')
+        AND trigger_row.tgenabled = 'O'
+        AND NOT trigger_row.tgisinternal
+        AND trigger_row.tgtype = 5
+        AND trigger_row.tgattr = ''::pg_catalog.int2vector
+        AND trigger_row.tgqual IS NULL
+        AND trigger_row.tgconstraint = 0
+        AND NOT trigger_row.tgdeferrable
+        AND NOT trigger_row.tginitdeferred
+        AND trigger_row.tgnargs = 0
+        AND pg_catalog.octet_length(trigger_row.tgargs) = 0
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM pg_catalog.pg_trigger AS trigger_row
+      WHERE trigger_row.tgrelid = 'auth.users'::pg_catalog.regclass
+        AND trigger_row.tgfoid =
+          pg_catalog.to_regprocedure('public.handle_new_user()')
+        AND NOT trigger_row.tgisinternal
+    ) <> 1
+  ) THEN
+    RAISE EXCEPTION
+      'managed auth profile provisioning trigger is incompatible';
+  END IF;
+
+  PERFORM pg_catalog.set_config(
+    'arena.user_profile_managed_auth',
+    v_managed_auth_mode::text,
+    true
+  );
 END
 $required_objects$;
 
@@ -624,12 +730,24 @@ ALTER FUNCTION public.handle_new_user() OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.handle_new_user()
   FROM PUBLIC, anon, authenticated, service_role;
 
--- Retire every historical trigger name that still invokes this provisioner;
--- otherwise one auth INSERT could execute the same side effect twice.
+-- Retire every historical trigger name that still invokes this provisioner in
+-- owner-capable environments; otherwise one auth INSERT could execute the same
+-- side effect twice.  Hosted Supabase's managed-auth mode deliberately performs
+-- no trigger DDL: the exact trigger was attested before any mutation and the
+-- ACCESS EXCLUSIVE lock prevents it from changing before postflight.
 DO $replace_auth_profile_triggers$
 DECLARE
   v_trigger record;
+  v_managed_auth_mode boolean :=
+    pg_catalog.current_setting(
+      'arena.user_profile_managed_auth',
+      false
+    )::boolean;
 BEGIN
+  IF v_managed_auth_mode THEN
+    RETURN;
+  END IF;
+
   FOR v_trigger IN
     SELECT trigger_row.tgname
     FROM pg_catalog.pg_trigger AS trigger_row
@@ -653,14 +771,16 @@ BEGIN
   ) THEN
     EXECUTE 'DROP TRIGGER on_auth_user_created ON auth.users';
   END IF;
+
+  EXECUTE $trigger$
+    CREATE TRIGGER on_auth_user_created
+    AFTER INSERT
+    ON auth.users
+    FOR EACH ROW
+    EXECUTE FUNCTION public.handle_new_user()
+  $trigger$;
 END
 $replace_auth_profile_triggers$;
-
-CREATE TRIGGER on_auth_user_created
-AFTER INSERT
-ON auth.users
-FOR EACH ROW
-EXECUTE FUNCTION public.handle_new_user();
 
 DO $postflight$
 DECLARE
@@ -833,6 +953,11 @@ BEGIN
       AND trigger_row.tgtype = 5
       AND trigger_row.tgattr = ''::pg_catalog.int2vector
       AND trigger_row.tgqual IS NULL
+      AND trigger_row.tgconstraint = 0
+      AND NOT trigger_row.tgdeferrable
+      AND NOT trigger_row.tginitdeferred
+      AND trigger_row.tgnargs = 0
+      AND pg_catalog.octet_length(trigger_row.tgargs) = 0
   ) OR (
     SELECT pg_catalog.count(*)
     FROM pg_catalog.pg_trigger AS trigger_row
