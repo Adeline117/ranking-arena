@@ -112,7 +112,7 @@ BEGIN
       ('user_profiles', 1, 'id', 'uuid', true),
       ('user_profiles', 2, 'deleted_at', 'timestamp with time zone', false),
       ('user_profiles', 3, 'banned_at', 'timestamp with time zone', false),
-      ('user_profiles', 4, 'is_banned', 'boolean', true),
+      ('user_profiles', 4, 'is_banned', 'boolean', false),
       ('user_profiles', 5, 'ban_expires_at', 'timestamp with time zone', false),
       ('user_profiles', 6, 'role', 'text', false),
       ('groups', 1, 'id', 'uuid', true),
@@ -166,6 +166,29 @@ BEGIN
   IF v_invalid_columns IS NOT NULL THEN
     RAISE EXCEPTION 'group-application operation schema is incompatible: %',
       v_invalid_columns;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    JOIN pg_catalog.pg_attrdef AS column_default
+      ON column_default.adrelid = attribute.attrelid
+     AND column_default.adnum = attribute.attnum
+    WHERE attribute.attrelid = 'public.user_profiles'::regclass
+      AND attribute.attname = 'is_banned'
+      AND attribute.atttypid = 'boolean'::regtype
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND attribute.attidentity = ''
+      AND attribute.attgenerated = ''
+      AND pg_catalog.pg_get_expr(
+        column_default.adbin,
+        column_default.adrelid,
+        true
+      ) = 'false'
+  ) THEN
+    RAISE EXCEPTION
+      'user profile ban flag must have the canonical false default';
   END IF;
 
   IF pg_catalog.to_regtype('public.member_role') IS NULL OR NOT EXISTS (
@@ -380,8 +403,11 @@ BEGIN
       LOCK TABLE public.group_application_operation_results
         IN ACCESS EXCLUSIVE MODE NOWAIT;
       LOCK TABLE auth.users IN SHARE ROW EXCLUSIVE MODE NOWAIT;
-      LOCK TABLE public.user_profiles,
-        public.subscriptions,
+      -- SET NOT NULL below requires ACCESS EXCLUSIVE. Acquire it as part of
+      -- this all-or-nothing NOWAIT set instead of upgrading while holding a
+      -- partial dependency prefix.
+      LOCK TABLE public.user_profiles IN ACCESS EXCLUSIVE MODE NOWAIT;
+      LOCK TABLE public.subscriptions,
         public.groups,
         public.group_members,
         public.group_applications,
@@ -405,6 +431,64 @@ $acquire_complete_ddl_lock_set$;
 -- Relation mutations happen only after the complete lock set is held. This is
 -- essential on replay: none of these statements may leave an early relation
 -- lock behind when a later dependency is busy.
+DO $locked_profile_ban_flag_preflight$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    JOIN pg_catalog.pg_attrdef AS column_default
+      ON column_default.adrelid = attribute.attrelid
+     AND column_default.adnum = attribute.attnum
+    WHERE attribute.attrelid = 'public.user_profiles'::regclass
+      AND attribute.attname = 'is_banned'
+      AND attribute.atttypid = 'boolean'::regtype
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+      AND attribute.attidentity = ''
+      AND attribute.attgenerated = ''
+      AND pg_catalog.pg_get_expr(
+        column_default.adbin,
+        column_default.adrelid,
+        true
+      ) = 'false'
+  ) THEN
+    RAISE EXCEPTION
+      'locked user profile ban flag contract is incompatible';
+  END IF;
+END
+$locked_profile_ban_flag_preflight$;
+
+-- Every runtime already interprets NULL as false via COALESCE. Converge that
+-- legacy representation under the frozen table, then make the invariant a
+-- database contract so later operation preflights cannot drift again.
+UPDATE public.user_profiles
+SET is_banned = false
+WHERE is_banned IS NULL;
+
+ALTER TABLE public.user_profiles
+  ALTER COLUMN is_banned SET NOT NULL;
+
+DO $locked_profile_ban_flag_postflight$
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM public.user_profiles AS profile
+    WHERE profile.is_banned IS NULL
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_attribute AS attribute
+    WHERE attribute.attrelid = 'public.user_profiles'::regclass
+      AND attribute.attname = 'is_banned'
+      AND attribute.atttypid = 'boolean'::regtype
+      AND attribute.attnotnull
+      AND attribute.attnum > 0
+      AND NOT attribute.attisdropped
+  ) THEN
+    RAISE EXCEPTION 'user profile ban flag convergence was incomplete';
+  END IF;
+END
+$locked_profile_ban_flag_postflight$;
+
 ALTER TABLE public.group_application_operation_results OWNER TO postgres;
 ALTER TABLE public.group_application_operation_results ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.group_application_operation_results FORCE ROW LEVEL SECURITY;

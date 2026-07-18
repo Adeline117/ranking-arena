@@ -90,7 +90,7 @@ CREATE TABLE public.user_profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   deleted_at timestamptz,
   banned_at timestamptz,
-  is_banned boolean NOT NULL DEFAULT false,
+  is_banned boolean DEFAULT false,
   ban_expires_at timestamptz,
   role text,
   subscription_tier text NOT NULL DEFAULT 'free',
@@ -199,12 +199,20 @@ INSERT INTO public.user_profiles (id, role) VALUES
   ('66666666-6666-4666-8666-666666666666', 'member'),
   ('77777777-7777-4777-8777-777777777777', 'member'),
   ('88888888-8888-4888-8888-888888888888', 'member');
+UPDATE public.user_profiles
+SET is_banned = NULL
+WHERE id = '88888888-8888-4888-8888-888888888888';
 SQL
 
 "${PSQL[@]}" -f "$ATOMIC_MIGRATION" >/dev/null
 "${PSQL[@]}" -f "$ACL_MIGRATION" >/dev/null
 "${PSQL[@]}" -f "$REPLAY_MIGRATION" >/dev/null
 "${PSQL[@]}" -f "$REPLAY_MIGRATION" >/dev/null
+
+if [[ "$("${PSQL[@]}" -Atqc "SELECT attribute.attnotnull AND NOT EXISTS (SELECT 1 FROM public.user_profiles WHERE is_banned IS NULL) FROM pg_catalog.pg_attribute AS attribute WHERE attribute.attrelid='public.user_profiles'::regclass AND attribute.attname='is_banned'")" != "t" ]]; then
+  echo "Replay migration did not converge the nullable ban flag" >&2
+  exit 1
+fi
 
 "${PSQL[@]}" <<'SQL'
 SET ROLE service_role;
