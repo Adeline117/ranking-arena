@@ -16,6 +16,12 @@ import TradersStep from './components/TradersStep'
 import GroupsStep from './components/GroupsStep'
 import CompleteStep from './components/CompleteStep'
 import {
+  OnboardingFollowIntentLedger,
+  OnboardingFollowRequestSequencer,
+  sendOnboardingFollowIntent,
+  type OnboardingFollowIntent,
+} from './follow-intent'
+import {
   OnboardingMembershipIntentLedger,
   OnboardingMembershipRequestSequencer,
   rollbackOnboardingMembershipIntent,
@@ -54,6 +60,7 @@ export default function OnboardingPage() {
   const [loadingTraders, setLoadingTraders] = useState(false)
   const [loadingGroups, setLoadingGroups] = useState(false)
   const startedRef = useRef(false)
+  const followedTradersRef = useRef(followedTraders)
   const joinedGroupsRef = useRef(joinedGroups)
   const languageRef = useRef(language)
   const showToastRef = useRef(showToast)
@@ -62,11 +69,19 @@ export default function OnboardingPage() {
     revision: 0,
     viewerId: null,
   })
+  const followIntentLedgerRef = useRef(new OnboardingFollowIntentLedger())
+  const followRequestSequencerRef = useRef(new OnboardingFollowRequestSequencer())
+  const failedFollowIntentsRef = useRef<Map<string, OnboardingFollowIntent>>(new Map())
+  const followSettlingRef = useRef(false)
   const membershipIntentLedgerRef = useRef(new OnboardingMembershipIntentLedger())
   const membershipRequestSequencerRef = useRef(new OnboardingMembershipRequestSequencer())
   const membershipSettlingRef = useRef(false)
 
   const tr = (key: string) => translations[language][key] || translations.en[key] || key
+
+  useEffect(() => {
+    followedTradersRef.current = followedTraders
+  }, [followedTraders])
 
   useEffect(() => {
     joinedGroupsRef.current = joinedGroups
@@ -238,37 +253,101 @@ export default function OnboardingPage() {
   }
 
   // Batch follow/join: queue actions and flush in parallel after a debounce
-  const followQueueRef = useRef<
-    Map<string, { traderId: string; source: string; action: 'follow' | 'unfollow' }>
-  >(new Map())
+  const followQueueRef = useRef<Map<string, OnboardingFollowIntent>>(new Map())
   const joinQueueRef = useRef<Map<string, OnboardingMembershipIntent>>(new Map())
   const followFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const joinFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const flushFollowQueue = useCallback(async () => {
+  const flushFollowQueue = useCallback(async (notifyFailure = true) => {
     const queue = new Map(followQueueRef.current)
     followQueueRef.current.clear()
     if (queue.size === 0) return
-    // /api/follow is withAuth (Bearer header only) — calls 401'd without the token
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    if (!session?.access_token) return
-    const promises = Array.from(queue.values()).map(({ traderId, source, action }) =>
-      fetch('/api/follow', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${session.access_token}`,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({ traderId, source, action }),
-      }).catch(() => {
-        /* swallow individual failures; UI already updated optimistically */
-      })
+
+    // Share one auth lookup across this batch while keeping each exchange
+    // account in its own serialized request lane.
+    const sessionRequest = Promise.resolve().then(() => supabase.auth.getSession())
+    const failures = await Promise.all(
+      Array.from(queue.values()).map((intent) =>
+        followRequestSequencerRef.current.run(intent.accountKey, async () => {
+          if (!followIntentLedgerRef.current.belongsToScope(intent, membershipScopeRef.current)) {
+            return null
+          }
+
+          try {
+            const {
+              data: { session },
+            } = await sessionRequest
+
+            if (!followIntentLedgerRef.current.belongsToScope(intent, membershipScopeRef.current)) {
+              return null
+            }
+            if (!session?.access_token || session.user.id !== intent.viewerId) {
+              throw new Error('Onboarding follow session is unavailable or stale')
+            }
+
+            await sendOnboardingFollowIntent(intent, session.access_token, getCsrfHeaders())
+            if (followIntentLedgerRef.current.isCurrent(intent, membershipScopeRef.current)) {
+              failedFollowIntentsRef.current.delete(intent.accountKey)
+            }
+            return null
+          } catch (error) {
+            logger.error('Onboarding trader follow request failed', {
+              action: intent.action,
+              error,
+              source: intent.source,
+              traderId: intent.traderId,
+            })
+
+            if (!followIntentLedgerRef.current.isCurrent(intent, membershipScopeRef.current)) {
+              return null
+            }
+
+            // Keep the desired selection and the exact failed intent. A later
+            // Complete click retries it instead of silently claiming success.
+            followQueueRef.current.set(intent.accountKey, intent)
+            failedFollowIntentsRef.current.set(intent.accountKey, intent)
+            return intent
+          }
+        })
+      )
     )
-    Promise.all(promises)
+
+    const currentScope = membershipScopeRef.current
+    if (
+      notifyFailure &&
+      failures.some(
+        (intent) => intent !== null && followIntentLedgerRef.current.isCurrent(intent, currentScope)
+      )
+    ) {
+      showToastRef.current(
+        translations[languageRef.current].operationFailedRetry ||
+          translations.en.operationFailedRetry,
+        'error'
+      )
+    }
   }, [])
+
+  const settleFollowIntents = useCallback(async () => {
+    followSettlingRef.current = true
+    if (followFlushTimerRef.current) {
+      clearTimeout(followFlushTimerRef.current)
+      followFlushTimerRef.current = null
+    }
+
+    await flushFollowQueue(false)
+    await followRequestSequencerRef.current.drain()
+
+    const currentScope = membershipScopeRef.current
+    const hasCurrentFailure = [...failedFollowIntentsRef.current.values()].some((intent) =>
+      followIntentLedgerRef.current.isCurrent(intent, currentScope)
+    )
+    const hasCurrentQueuedIntent = [...followQueueRef.current.values()].some((intent) =>
+      followIntentLedgerRef.current.isCurrent(intent, currentScope)
+    )
+    if (hasCurrentFailure || hasCurrentQueuedIntent) {
+      throw new Error('One or more trader follow requests did not complete')
+    }
+  }, [flushFollowQueue])
 
   const flushJoinQueue = useCallback(async () => {
     const queue = new Map(joinQueueRef.current)
@@ -345,28 +424,52 @@ export default function OnboardingPage() {
   }, [flushJoinQueue])
 
   const handleFollowTrader = async (traderId: string) => {
-    if (!userId) {
+    if (followSettlingRef.current) return
+
+    let viewerId = userId
+    if (!viewerId) {
       const { data } = await supabase.auth.getUser()
-      if (data?.user?.id) setUserId(data.user.id)
-      else return
+      viewerId = data?.user?.id ?? null
+      if (!viewerId) return
+
+      const currentScope = membershipScopeRef.current
+      membershipScopeRef.current = {
+        active: true,
+        revision: currentScope.revision + 1,
+        viewerId,
+      }
+      setUserId(viewerId)
     }
-    const isFollowed = followedTraders.has(traderId)
-    const next = new Set(followedTraders)
-    if (isFollowed) next.delete(traderId)
-    else next.add(traderId)
-    setFollowedTraders(next)
-    // Queue the action and debounce the flush
+
     const trader = traders.find(
       (candidate) => `${candidate.source}:${candidate.source_trader_id}` === traderId
     )
     if (!trader) return
-    followQueueRef.current.set(traderId, {
-      traderId: trader.source_trader_id,
-      source: trader.source,
-      action: isFollowed ? 'unfollow' : 'follow',
-    })
+
+    const isFollowed = followedTradersRef.current.has(traderId)
+    const intent = followIntentLedgerRef.current.issue(
+      {
+        accountKey: traderId,
+        traderId: trader.source_trader_id,
+        source: trader.source,
+      },
+      isFollowed ? 'unfollow' : 'follow',
+      membershipScopeRef.current
+    )
+    if (!intent) return
+
+    const next = new Set(followedTradersRef.current)
+    if (isFollowed) next.delete(intent.accountKey)
+    else next.add(traderId)
+    followedTradersRef.current = next
+    setFollowedTraders(next)
+    failedFollowIntentsRef.current.delete(intent.accountKey)
+    followQueueRef.current.set(intent.accountKey, intent)
     if (followFlushTimerRef.current) clearTimeout(followFlushTimerRef.current)
-    followFlushTimerRef.current = setTimeout(flushFollowQueue, 500)
+    followFlushTimerRef.current = setTimeout(() => {
+      followFlushTimerRef.current = null
+      void flushFollowQueue()
+    }, 500)
   }
 
   const handleJoinGroup = async (groupId: string) => {
@@ -391,43 +494,61 @@ export default function OnboardingPage() {
     joinFlushTimerRef.current = setTimeout(flushJoinQueue, 500)
   }
 
-  // Follow requests retain their historical fire-and-forget behavior. Group
-  // intents are settled explicitly before completion; an unrelated unmount
-  // invalidates and drops work that has not started instead of publishing UI
-  // reconciliation after ownership is gone.
+  // Leaving onboarding invalidates the shared viewer scope before late request
+  // acknowledgements can reconcile UI. Work that has not started is dropped.
   useEffect(() => {
+    const pendingFollowQueue = followQueueRef.current
     const pendingJoinQueue = joinQueueRef.current
     return () => {
       if (followFlushTimerRef.current) clearTimeout(followFlushTimerRef.current)
       if (joinFlushTimerRef.current) clearTimeout(joinFlushTimerRef.current)
-      flushFollowQueue()
+      pendingFollowQueue.clear()
       pendingJoinQueue.clear()
     }
-  }, [flushFollowQueue])
+  }, [])
 
   const saveAndComplete = async () => {
+    if (saving || followSettlingRef.current || membershipSettlingRef.current) return
     setSaving(true)
     try {
+      await settleFollowIntents()
       await settleMembershipIntents()
-      if (userId) {
-        const updates: Record<string, unknown> = { onboarding_completed: true }
-        if (selectedInterests.length > 0) updates.interests = selectedInterests
-        const { error } = await supabase.from('user_profiles').update(updates).eq('id', userId)
-        if (error) logger.error('Error saving onboarding:', error)
+      if (!userId) {
+        throw new Error('Onboarding session is unavailable')
       }
-      localStorage.setItem('hasOnboarded', 'true')
+
+      const updates: Record<string, unknown> = { onboarding_completed: true }
+      if (selectedInterests.length > 0) updates.interests = selectedInterests
+      const { error } = await supabase.from('user_profiles').update(updates).eq('id', userId)
+      if (error) {
+        throw error
+      }
+
+      if (!membershipScopeRef.current.active) {
+        return
+      }
+      try {
+        localStorage.setItem('hasOnboarded', 'true')
+      } catch {
+        /* localStorage may be unavailable */
+      }
       trackEvent('onboarding_complete', {
         interests: selectedInterests.length,
-        followedTraders: followedTraders.size,
+        followedTraders: followedTradersRef.current.size,
         joinedGroups: joinedGroupsRef.current.size,
       })
       setStep('complete')
     } catch (err) {
+      followSettlingRef.current = false
       membershipSettlingRef.current = false
       logger.error('Error completing onboarding:', err)
-      showToast(tr('saveFailed'), 'error')
+      if (membershipScopeRef.current.active) {
+        showToast(tr('saveFailed'), 'error')
+      }
     } finally {
-      setSaving(false)
+      if (membershipScopeRef.current.active) {
+        setSaving(false)
+      }
     }
   }
 
