@@ -68,17 +68,17 @@ export function queueProfileActionLogin({
 }: {
   action: ProfileActionIntent
   target: string
-  fallbackPath: string
+  fallbackPath?: string
   now?: number
 }): string {
+  const currentPath = browserPath()
+  const safeCurrentPath = safeInternalReturnPath(currentPath)
   const safeFallback = safeInternalReturnPath(fallbackPath)
-  if (!safeFallback) {
+  if (!safeCurrentPath && !safeFallback) {
     throw new Error('Profile action login requires a safe internal fallback path')
   }
 
-  const currentPath = browserPath()
-  const safeCurrentPath = safeInternalReturnPath(currentPath)
-  const returnPath = withActionIntent(safeCurrentPath ?? safeFallback, action)
+  const returnPath = withActionIntent(safeCurrentPath ?? safeFallback!, action)
 
   if (typeof window !== 'undefined') {
     const pending: PendingProfileAction = {

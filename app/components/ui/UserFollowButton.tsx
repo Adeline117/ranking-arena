@@ -9,10 +9,15 @@ import { BUTTON_SIZE_STYLES } from './button-styles'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useUserFollowSync, type UserFollowChangePayload } from '@/lib/hooks/useBroadcastSync'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 import { haptic } from '@/lib/utils/haptics'
 import { getCsrfHeaders } from '@/lib/api/client'
+import {
+  consumeProfileActionLogin,
+  profileUserTarget,
+  queueProfileActionLogin,
+  type ProfileActionIntent,
+} from '@/lib/auth/profile-action-login'
 
 type UserFollowButtonProps = {
   targetUserId: string
@@ -20,6 +25,7 @@ type UserFollowButtonProps = {
   initialFollowing?: boolean
   size?: 'sm' | 'md' | 'lg'
   fullWidth?: boolean
+  loginReturnPath?: string
   onFollowChange?: (following: boolean, mutual: boolean) => void
 }
 
@@ -35,9 +41,10 @@ export default function UserFollowButton({
   initialFollowing = false,
   size = 'md',
   fullWidth = false,
+  loginReturnPath,
   onFollowChange,
 }: UserFollowButtonProps) {
-  const _router = useRouter()
+  const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
   const { getAuthHeadersAsync } = useAuthSession()
@@ -105,11 +112,22 @@ export default function UserFollowButton({
     }
   }, [currentUserId, targetUserId, getAuthHeadersAsync])
 
-  const { openLoginModal } = useLoginModal()
+  const redirectToLogin = useCallback(
+    (action: ProfileActionIntent) => {
+      router.push(
+        queueProfileActionLogin({
+          action,
+          target: profileUserTarget(targetUserId),
+          fallbackPath: loginReturnPath,
+        })
+      )
+    },
+    [loginReturnPath, router, targetUserId]
+  )
 
   const handleToggle = useCallback(async () => {
     if (!currentUserId) {
-      openLoginModal(t('pleaseLogin'))
+      redirectToLogin('follow-user')
       return
     }
 
@@ -163,6 +181,13 @@ export default function UserFollowButton({
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current)
         timeoutRef.current = null
+      }
+
+      if (response.status === 401) {
+        setFollowing(previousFollowing)
+        showToast(t('loginExpiredPleaseRelogin'), 'error')
+        redirectToLogin(following ? 'unfollow-user' : 'follow-user')
+        return
       }
 
       const result = await response.json()
@@ -223,8 +248,23 @@ export default function UserFollowButton({
     showToast,
     t,
     onFollowChange,
-    openLoginModal,
+    redirectToLogin,
+    broadcast,
   ])
+
+  useEffect(() => {
+    if (!currentUserId || currentUserId === targetUserId || initialLoading) return
+    const action = consumeProfileActionLogin({
+      actions: ['follow-user', 'unfollow-user'],
+      target: profileUserTarget(targetUserId),
+    })
+    if (!action) return
+
+    const desiredFollowing = action === 'follow-user'
+    if (following !== desiredFollowing) {
+      void handleToggle()
+    }
+  }, [currentUserId, following, handleToggle, initialLoading, targetUserId])
 
   const sizeStyles = BUTTON_SIZE_STYLES
 
@@ -233,7 +273,7 @@ export default function UserFollowButton({
   if (!currentUserId) {
     return (
       <button
-        onClick={() => useLoginModal.getState().openLoginModal()}
+        onClick={() => redirectToLogin('follow-user')}
         style={{
           ...sizeStyles[size],
           width: fullWidth ? '100%' : 'auto',

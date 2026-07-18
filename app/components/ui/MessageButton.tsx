@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useToast } from './Toast'
 import { ButtonSpinner } from './LoadingSpinner'
@@ -7,15 +8,20 @@ import { useApiMutation } from '@/lib/hooks/useApiMutation'
 import { apiRequest } from '@/lib/api/client'
 import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens } from '@/lib/design-tokens'
 import { BUTTON_SIZE_STYLES, MessageIcon } from './button-styles'
+import {
+  consumeProfileActionLogin,
+  profileUserTarget,
+  queueProfileActionLogin,
+} from '@/lib/auth/profile-action-login'
 
 type MessageButtonProps = {
   targetUserId: string
   currentUserId: string | null
   size?: 'sm' | 'md' | 'lg'
   fullWidth?: boolean
+  loginReturnPath?: string
 }
 
 type StartMessageResponse = {
@@ -34,10 +40,20 @@ export default function MessageButton({
   currentUserId,
   size = 'md',
   fullWidth = false,
+  loginReturnPath,
 }: MessageButtonProps) {
   const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
+  const redirectToLogin = useCallback(() => {
+    router.push(
+      queueProfileActionLogin({
+        action: 'message-user',
+        target: profileUserTarget(targetUserId),
+        fallbackPath: loginReturnPath,
+      })
+    )
+  }, [loginReturnPath, router, targetUserId])
 
   const { mutate, isLoading } = useApiMutation<StartMessageResponse, void>(
     async () => {
@@ -76,7 +92,7 @@ export default function MessageButton({
       onError: (error) => {
         if (error.code === 'UNAUTHORIZED') {
           showToast(t('loginExpiredPleaseRelogin'), 'error')
-          openLoginModal(t('pleaseLogin'))
+          redirectToLogin()
         } else if (
           error.message?.includes('disabled direct messages') ||
           error.message?.includes('关闭私信')
@@ -93,11 +109,9 @@ export default function MessageButton({
     }
   )
 
-  const { openLoginModal } = useLoginModal()
-
-  const handleClick = async () => {
+  const handleClick = useCallback(async () => {
     if (!currentUserId) {
-      openLoginModal(t('pleaseLogin'))
+      redirectToLogin()
       return
     }
 
@@ -110,14 +124,25 @@ export default function MessageButton({
     if (data?.conversation_id) {
       router.push(`/messages/${data.conversation_id}`)
     }
-  }
+  }, [currentUserId, mutate, redirectToLogin, router, showToast, t, targetUserId])
+
+  useEffect(() => {
+    if (!currentUserId || currentUserId === targetUserId || isLoading) return
+    const action = consumeProfileActionLogin({
+      actions: ['message-user'],
+      target: profileUserTarget(targetUserId),
+    })
+    if (action === 'message-user') {
+      void handleClick()
+    }
+  }, [currentUserId, handleClick, isLoading, targetUserId])
 
   const sizeStyles = BUTTON_SIZE_STYLES
 
   if (!currentUserId) {
     return (
       <button
-        onClick={() => useLoginModal.getState().openLoginModal()}
+        onClick={handleClick}
         className="interactive-scale"
         style={{
           ...sizeStyles[size],
