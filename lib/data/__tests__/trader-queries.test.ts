@@ -8,14 +8,19 @@
 // ---- Mocks BEFORE imports (use jest.fn at top level for hoisting) ----
 
 const mockFindTrader = jest.fn()
+const mockGetTraderArenaFollowersCount = jest.fn().mockResolvedValue(42)
+const mockGetTraderArenaFollowersCountBatch = jest.fn().mockResolvedValue(new Map())
 
 jest.mock('../trader-utils', () => ({
   findTraderAcrossSources: (...args: unknown[]) => mockFindTrader(...args),
-  getTraderArenaFollowersCountBatch: jest.fn().mockResolvedValue(new Map()),
+  getTraderArenaFollowersCountBatch: (...args: unknown[]) =>
+    mockGetTraderArenaFollowersCountBatch(...args),
+  traderAccountKey: ({ traderId, source }: { traderId: string; source: string }) =>
+    JSON.stringify([traderId, source]),
 }))
 
 jest.mock('../trader-followers', () => ({
-  getTraderArenaFollowersCount: jest.fn().mockResolvedValue(42),
+  getTraderArenaFollowersCount: (...args: unknown[]) => mockGetTraderArenaFollowersCount(...args),
 }))
 
 jest.mock('@/lib/supabase/client', () => {
@@ -122,6 +127,11 @@ describe('getTraderByHandle', () => {
 
     const result = await getTraderByHandle('btc_king')
 
+    expect(mockGetTraderArenaFollowersCount).toHaveBeenCalledWith(
+      expect.anything(),
+      'BTC_KING',
+      'binance'
+    )
     expect(result.ok).toBe(true)
     if (result.ok) {
       expect(result.data).not.toBeNull()
