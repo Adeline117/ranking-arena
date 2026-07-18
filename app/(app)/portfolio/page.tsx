@@ -21,6 +21,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { bootstrapClientAuth } from '@/lib/auth/client-auth-bootstrap'
 import { logger } from '@/lib/logger'
 
 interface Portfolio {
@@ -66,10 +67,12 @@ async function readListResponse<T>(response: Response, endpoint: string): Promis
 
 export default function PortfolioPage() {
   const router = useRouter()
+  const push = router.push
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
   const { t } = useLanguage()
   const [loading, setLoading] = useState(true)
+  const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [token, setToken] = useState<string | null>(null)
   const [portfolios, setPortfolios] = useState<Portfolio[]>([])
   const [positions, setPositions] = useState<Position[]>([])
@@ -80,28 +83,26 @@ export default function PortfolioPage() {
   const [syncingId, setSyncingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
-  // Auth check
+  const loadAuth = useCallback(async () => {
+    setAuthStatus('loading')
+    const result = await bootstrapClientAuth(supabase.auth)
+
+    if (result.status === 'signed-out') {
+      push('/login?redirect=/portfolio')
+      return
+    }
+    if (result.status === 'error' || !result.session?.access_token) {
+      setAuthStatus('error')
+      return
+    }
+
+    setToken(result.session.access_token)
+    setAuthStatus('ready')
+  }, [push])
+
   useEffect(() => {
-    supabase.auth
-      .getUser()
-      .then(({ data }) => {
-        if (!data.user) {
-          router.push('/login?redirect=/portfolio')
-          return
-        }
-        supabase.auth
-          .getSession()
-          .then(({ data: sessionData }) => {
-            setToken(sessionData.session?.access_token ?? null)
-          })
-          .catch(() => {
-            /* Intentionally swallowed: session token fetch non-critical */
-          })
-      })
-      .catch(() => {
-        /* Intentionally swallowed: auth check non-critical for portfolio page */
-      })
-  }, [router])
+    void loadAuth()
+  }, [loadAuth])
 
   const fetchHeaders = useCallback((): Record<string, string> => {
     if (!token) return { ...getCsrfHeaders() }
@@ -247,6 +248,22 @@ export default function PortfolioPage() {
   const totalEquity = positions.reduce((sum, p) => sum + Number(p.size) * Number(p.mark_price), 0)
   const totalPnlPct = totalEquity > 0 ? (totalPnl / totalEquity) * 100 : 0
   const isInitialLoad = loading && !hasSuccessfulLoad
+
+  if (authStatus === 'error') {
+    return (
+      <div style={styles.page}>
+        <div style={styles.container}>
+          <PageHeader title={t('portfolioTitle')} compact />
+          <ErrorState
+            title={t('somethingWentWrong')}
+            description={t('loadFailedRetryShort')}
+            retry={() => void loadAuth()}
+            variant="compact"
+          />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <>
