@@ -7,6 +7,7 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { supabase } from '@/lib/supabase/client'
 import { trackEvent } from '@/lib/analytics/track'
+import { tipPostHref } from './tip-success-links'
 
 const AUTO_REDIRECT_SECONDS = 15
 
@@ -118,12 +119,10 @@ function TipSuccessContent() {
     details?.amountCents != null ? `$${(details.amountCents / 100).toFixed(2)}` : null
   const postId = details?.postId ?? null
   const handle = details?.handle ?? null
+  const postHref = tipPostHref(postId)
 
   const handleShare = useCallback(async () => {
-    const url =
-      typeof window !== 'undefined'
-        ? `${window.location.origin}${postId ? `/groups/${postId}` : ''}`
-        : ''
+    const url = typeof window !== 'undefined' ? `${window.location.origin}${postHref ?? ''}` : ''
     const text = handle ? t('tipShareText').replace('{handle}', handle) : t('tipShareTextGeneric')
     trackEvent('tip_share', { has_handle: handle ? 1 : 0 })
     try {
@@ -138,7 +137,7 @@ function TipSuccessContent() {
     } catch {
       // Intentionally swallowed: user cancelled share sheet or clipboard denied — no action needed.
     }
-  }, [handle, postId, t, showToast])
+  }, [handle, postHref, t, showToast])
 
   // Bare access with no credential — show a neutral "no tip found" state
   // instead of fabricating "Tip Successful! / receipt emailed".
@@ -220,7 +219,7 @@ function TipSuccessContent() {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {/* 主操作：返回原帖（有 post_id 时），否则返回社区 */}
           <Link
-            href={postId ? `/groups/${postId}` : '/groups'}
+            href={postHref ?? '/groups'}
             className="block w-full rounded-lg py-3 text-sm font-medium transition-colors"
             style={{ background: 'var(--color-accent-primary)', color: 'var(--foreground)' }}
           >
