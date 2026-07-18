@@ -24,8 +24,11 @@ export const dynamic = 'force-dynamic'
 const logger = createLogger('following-api')
 
 function followingCandidateCacheKey(userId: string): string {
-  return `following:v3:candidates:${userId}`
+  return `following:v4:candidates:${userId}`
 }
+
+const FOLLOW_EDGE_PAGE_SIZE = 500
+const QUERY_TIMEOUT_MS = 15000
 
 // 统一的关注项类型
 type FollowItem = {
@@ -55,6 +58,7 @@ export async function invalidateFollowingCache(userId: string): Promise<void> {
   try {
     await Promise.all([
       tieredDel(followingCandidateCacheKey(userId)),
+      tieredDel(`following:v3:candidates:${userId}`),
       tieredDel(`following:v2:candidates:${userId}`),
       // Remove payloads written by older route versions as well. Pre-v2
       // payloads contained mutable profile fields, while v2 omitted legacy
@@ -71,6 +75,19 @@ type TraderFollowCandidate = {
   traderId: string
   source: string | null
   followedAt?: string
+}
+
+type TraderFollowRow = {
+  id: string
+  trader_id: string
+  source: string | null
+  created_at: string | null
+}
+
+type UserFollowRow = {
+  id: string
+  following_id: string
+  created_at: string | null
 }
 
 type UserFollowCandidate = {
@@ -96,35 +113,54 @@ type TraderMaterializedData = {
   arena_score?: number
 }
 
+async function fetchAllPages<Row>(
+  loadPage: (from: number, to: number) => Promise<{ data: Row[] | null; error: unknown }>
+): Promise<Row[]> {
+  const rows: Row[] = []
+
+  for (let from = 0; ; from += FOLLOW_EDGE_PAGE_SIZE) {
+    const { data, error } = await loadPage(from, from + FOLLOW_EDGE_PAGE_SIZE - 1)
+    if (error) throw error
+    if (!Array.isArray(data)) {
+      throw new Error('Following query returned no page data')
+    }
+
+    rows.push(...data)
+    if (data.length < FOLLOW_EDGE_PAGE_SIZE) return rows
+  }
+}
+
 async function fetchFollowingCandidates(userId: string): Promise<FollowingCandidates> {
   const supabase = getSupabaseAdmin()
 
-  const QUERY_TIMEOUT_MS = 15000
-
-  // Abort the underlying PostgREST requests as well as bounding the handler.
-  // A Promise.race timeout alone leaves both network requests running.
-  const [traderFollowsResult, userFollowsResult] = await Promise.all([
-    supabase
-      .from('trader_follows')
-      .select('trader_id, source, created_at')
-      .eq('user_id', userId)
-      .limit(500)
-      .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS)),
+  // Each edge type is read page-by-page with a unique tie-breaker. The two
+  // independent scans run together, but a failure in either scan rejects the
+  // whole candidate load so a partial list is never cached or returned.
+  const [traderFollows, userFollows] = await Promise.all([
+    fetchAllPages<TraderFollowRow>(async (from, to) =>
+      supabase
+        .from('trader_follows')
+        .select('id, trader_id, source, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: false })
+        .range(from, to)
+        .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS))
+    ),
     // NOTE: user_follows.following_id references auth.users (not
     // public.user_profiles), so a PostgREST embed fails with PGRST200.
     // Two-step query: fetch follow rows here, then look up profiles below.
-    supabase
-      .from('user_follows')
-      .select('created_at, following_id')
-      .eq('follower_id', userId)
-      .limit(500)
-      .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS)),
+    fetchAllPages<UserFollowRow>(async (from, to) =>
+      supabase
+        .from('user_follows')
+        .select('id, created_at, following_id')
+        .eq('follower_id', userId)
+        .order('created_at', { ascending: false, nullsFirst: false })
+        .order('id', { ascending: false })
+        .range(from, to)
+        .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS))
+    ),
   ])
-
-  const traderFollows = traderFollowsResult.data || []
-  const userFollows = userFollowsResult.data || []
-  if (traderFollowsResult.error) throw traderFollowsResult.error
-  if (userFollowsResult.error) throw userFollowsResult.error
 
   return {
     traders: traderFollows.flatMap((follow) => {
@@ -279,11 +315,16 @@ async function materializeFollowingItems(
     }
   }
 
-  // 按关注时间降序排序
+  // 按关注时间降序排序，并以稳定边身份打破相同/无效时间戳的平局。
   items.sort((a, b) => {
-    const timeA = a.followed_at ? new Date(a.followed_at).getTime() : 0
-    const timeB = b.followed_at ? new Date(b.followed_at).getTime() : 0
-    return timeB - timeA
+    const parsedTimeA = a.followed_at ? Date.parse(a.followed_at) : 0
+    const parsedTimeB = b.followed_at ? Date.parse(b.followed_at) : 0
+    const timeA = Number.isFinite(parsedTimeA) ? parsedTimeA : 0
+    const timeB = Number.isFinite(parsedTimeB) ? parsedTimeB : 0
+    if (timeA !== timeB) return timeB - timeA
+    if (a.identity_key < b.identity_key) return -1
+    if (a.identity_key > b.identity_key) return 1
+    return 0
   })
 
   return {
