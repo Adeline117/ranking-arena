@@ -166,6 +166,27 @@ BEGIN
       ON role_row.oid = inherited.member_oid
     WHERE NOT role_row.rolsuper
       AND NOT role_row.rolbypassrls
+      AND NOT (
+        -- Supabase keeps one managed, NOINHERIT login bridge that may SET
+        -- ROLE postgres for CLI migrations. It is not browser/runtime
+        -- authority and is safe only with this exact direct edge and role
+        -- shape; any descendant or differently privileged bridge still fails.
+        role_row.rolname = 'cli_login_postgres'
+        AND role_row.rolcanlogin
+        AND NOT role_row.rolinherit
+        AND NOT role_row.rolcreaterole
+        AND NOT role_row.rolcreatedb
+        AND NOT role_row.rolreplication
+        AND EXISTS (
+          SELECT 1
+          FROM pg_catalog.pg_auth_members AS managed_membership
+          WHERE managed_membership.roleid = v_postgres
+            AND managed_membership.member = role_row.oid
+            AND NOT managed_membership.admin_option
+            AND NOT managed_membership.inherit_option
+            AND managed_membership.set_option
+        )
+      )
   ) OR EXISTS (
     WITH RECURSIVE browser_authority(root_oid, role_oid) AS (
       SELECT browser_role.oid, membership.roleid
@@ -662,6 +683,23 @@ BEGIN
       ON role_row.oid = inherited.member_oid
     WHERE NOT role_row.rolsuper
       AND NOT role_row.rolbypassrls
+      AND NOT (
+        role_row.rolname = 'cli_login_postgres'
+        AND role_row.rolcanlogin
+        AND NOT role_row.rolinherit
+        AND NOT role_row.rolcreaterole
+        AND NOT role_row.rolcreatedb
+        AND NOT role_row.rolreplication
+        AND EXISTS (
+          SELECT 1
+          FROM pg_catalog.pg_auth_members AS managed_membership
+          WHERE managed_membership.roleid = v_postgres
+            AND managed_membership.member = role_row.oid
+            AND NOT managed_membership.admin_option
+            AND NOT managed_membership.inherit_option
+            AND managed_membership.set_option
+        )
+      )
   ) OR EXISTS (
     WITH RECURSIVE browser_authority(root_oid, role_oid) AS (
       SELECT browser_role.oid, membership.roleid
