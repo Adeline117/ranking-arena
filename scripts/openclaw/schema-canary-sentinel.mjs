@@ -77,9 +77,10 @@ try {
 }
 
 // ---------- 1b. 填充率契约(该有 vs 真有) ----------
-// 能力矩阵声明提供的指标必须在 trader_stats 有实际数据(0 填充 = parser 漏
-// 提取/能力谎报/管道断裂 — gate sharpe/okx copier_count 一类断链的自动化捕捉)。
-// 脚本自身对 DATABASE_URL 缺失 fail-open,对基建错误不红,只有真断链才 exit 1。
+// active+serving registry 为每个来源/窗口声明的 expected_metrics，必须在最新
+// 通过数量门的榜单人群中有新鲜 trader_stats(0 填充 = parser/管道断裂)。
+// 本地无凭据可跳过；定时工作流设置 REQUIRE_DATABASE_URL=1。只要配置了数据库，
+// 合同、查询或证据写入失败都硬红，不能把监控失明当成健康。
 try {
   const out = execSync('node scripts/qa/fill-rate-check.mjs', {
     encoding: 'utf8',
