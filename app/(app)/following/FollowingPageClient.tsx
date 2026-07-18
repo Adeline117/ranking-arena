@@ -196,7 +196,7 @@ export default function FollowingPageClient() {
   const router = useRouter()
   const { showToast } = useToast()
   const { language, t } = useLanguage()
-  const { email, userId, getAuthHeadersAsync } = useAuthSession()
+  const { userId, getAuthHeadersAsync } = useAuthSession()
   const [items, setItems] = useState<FollowItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
