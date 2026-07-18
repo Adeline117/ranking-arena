@@ -949,6 +949,11 @@ describe('Solana same-lifecycle metadata and program-hit compiler', () => {
     expect(parseDexGoldenRpcEvidence(compiled.golden_rpc_evidence)).toEqual(
       compiled.golden_rpc_evidence
     )
+    expect(compiled.common_transaction_membership).toEqual({
+      stable_transaction_facts_sha256: compiled.golden_rpc_evidence.stable_transaction_facts_sha256,
+      canonical_blockhash: MEMBERSHIP_BLOCK_HASH,
+      transaction_index: 1,
+    })
     expect(parseDexSolanaProgramHitProjection(compiled.common_program_hit_projection)).toEqual(
       compiled.common_program_hit_projection
     )
