@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type { FearGreedData } from '@/lib/utils/fear-greed'
 import { apiFetch } from '@/lib/utils/api-fetch'
 import Sparkline from '@/app/components/ui/Sparkline'
+import ErrorState from '@/app/components/ui/ErrorState'
 
 function getColor(value: number): string {
   if (value <= 25) return tokens.colors.gauge.extremeFear
@@ -22,6 +23,7 @@ export default function FearGreedGauge() {
   const [history, setHistory] = useState<number[]>([])
   const [animatedValue, setAnimatedValue] = useState(0)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
   const prevValueRef = useRef(0)
 
   function getLabel(value: number): string {
@@ -32,34 +34,53 @@ export default function FearGreedGauge() {
     return t('fearGreedExtremeGreed')
   }
 
-  useEffect(() => {
-    apiFetch<{ current?: FearGreedData; history?: FearGreedData[] }>('/api/market/fear-greed')
-      .then((json) => {
-        if (json.current) {
-          // Hide stale data: if timestamp is older than 24 hours, hide entirely
-          const ts = Number(json.current.timestamp) * 1000
-          if (Date.now() - ts > 24 * 60 * 60 * 1000) {
-            setError('stale')
-            return
-          }
-          setData(json.current)
-          // API returns history most-recent-first; reverse for chronological
-          // (oldest → newest) so the sparkline reads left-to-right.
-          if (Array.isArray(json.history) && json.history.length > 1) {
-            setHistory(
-              json.history
-                .map((d) => Number(d.value))
-                .filter((v) => Number.isFinite(v))
-                .reverse()
-            )
-          }
-        }
-      })
-      .catch((err) => {
-        if (err instanceof Error && err.name === 'AbortError') return
-        setError(err instanceof Error ? err.message : 'Failed to load')
-      })
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
+    try {
+      const json = await apiFetch<{ current?: FearGreedData; history?: FearGreedData[] }>(
+        '/api/market/fear-greed'
+      )
+      if (!json.current) {
+        // A successful empty upstream response is not a network failure.
+        setData(null)
+        setHistory([])
+        return
+      }
+
+      // Stale sentiment is unsafe to present as current market context. Keep it
+      // out of the gauge, but expose the failure and an explicit retry.
+      const ts = Number(json.current.timestamp) * 1000
+      if (!Number.isFinite(ts) || Date.now() - ts > 24 * 60 * 60 * 1000) {
+        setData(null)
+        setHistory([])
+        setError('stale')
+        return
+      }
+
+      setData(json.current)
+      // API returns history most-recent-first; reverse for chronological
+      // (oldest → newest) so the sparkline reads left-to-right.
+      setHistory(
+        Array.isArray(json.history) && json.history.length > 1
+          ? json.history
+              .map((d) => Number(d.value))
+              .filter((v) => Number.isFinite(v))
+              .reverse()
+          : []
+      )
+    } catch (err) {
+      setData(null)
+      setHistory([])
+      setError(err instanceof Error ? err.message : 'Failed to load')
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    void load()
+  }, [load])
 
   useEffect(() => {
     if (!data) return
@@ -98,7 +119,7 @@ export default function FearGreedGauge() {
     height: '100%',
   }
 
-  if (!data && !error) {
+  if (loading && !data) {
     return (
       <div style={cardStyle}>
         <div className="skeleton" style={{ height: '100%', borderRadius: tokens.radius.lg }} />
@@ -106,11 +127,36 @@ export default function FearGreedGauge() {
     )
   }
 
-  // Hide entirely when data is stale (>48h) or API is down
-  // — showing outdated Fear & Greed scores is worse than showing nothing
-  if (error && !data) return null
+  if (error && !data) {
+    return (
+      <div style={cardStyle}>
+        <ErrorState
+          title={t('marketDataError')}
+          description={t('loadFailedRetryShort')}
+          retry={() => void load()}
+          variant="compact"
+        />
+      </div>
+    )
+  }
 
-  if (!data) return null
+  if (!data) {
+    return (
+      <div
+        role="status"
+        style={{
+          ...cardStyle,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: tokens.colors.text.tertiary,
+          fontSize: tokens.typography.fontSize.sm,
+        }}
+      >
+        {t('noDataGeneric')}
+      </div>
+    )
+  }
 
   const displayValue = Math.max(0, Math.min(100, data.value ?? 0))
   const color = getColor(displayValue)
