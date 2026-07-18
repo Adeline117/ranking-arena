@@ -17,6 +17,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import dynamic from 'next/dynamic'
+import { buildFavoriteFolderLoginHref } from './login-intent'
 
 // Lazy load: modal only opens when user clicks a post
 const PostDetailModal = dynamic(() => import('./components/PostDetailModal'), { ssr: false })
@@ -58,7 +59,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
   const router = useRouter()
   const { showToast } = useToast()
   const { showDangerConfirm } = useDialog()
-  const { accessToken, email, authChecked } = useAuthSession()
+  const { accessToken, authChecked } = useAuthSession()
 
   const [folder, setFolder] = useState<BookmarkFolder | null>(null)
   const [posts, setPosts] = useState<BookmarkedPost[]>([])
@@ -222,7 +223,7 @@ export default function FolderDetailPage({ params }: { params: Promise<{ folderI
 
   const handleSubscribe = async () => {
     if (!accessToken) {
-      router.push('/login?redirect=/favorites')
+      router.push(buildFavoriteFolderLoginHref(folderId))
       return
     }
 
