@@ -121,7 +121,11 @@ export function getFastQueue(region: string): Queue {
 
 /** Regions THIS worker process consumes (env INGEST_REGIONS=vps_sg on a VPS node). */
 export function consumedRegions(): IngestRegion[] {
-  return parseIngestRegionsEnv(process.env.INGEST_REGIONS)
+  const requireExplicit =
+    process.env.NODE_ENV === 'production' ||
+    process.env.pm_id !== undefined ||
+    process.env.NODE_APP_INSTANCE !== undefined
+  return parseIngestRegionsEnv(process.env.INGEST_REGIONS, { requireExplicit })
 }
 
 /**
