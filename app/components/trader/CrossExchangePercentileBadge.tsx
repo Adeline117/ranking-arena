@@ -34,6 +34,8 @@ import { Box, Text } from '../base'
 import { getBadgeStyle } from './RankPercentileBadge'
 
 interface HeroStatsResponse {
+  sourceBoardCount?: number
+  /** Deprecated compatibility field; not used by this component. */
   exchangeCount: number
   traderCount: number
   isDefault?: boolean

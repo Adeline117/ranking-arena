@@ -18,25 +18,25 @@ import { PRO_FREE_PROMO } from '@/lib/types/premium'
 import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 
 interface HomeHeroSSRProps {
-  exchangeCount?: number
+  sourceBoardCount?: number
 }
 
 export default async function HomeHeroSSR({
-  exchangeCount = PRODUCT_FACTS.fallbackExchangeCount,
+  sourceBoardCount = PRODUCT_FACTS.fallbackSourceBoardCount,
 }: HomeHeroSSRProps) {
   // 2026-07-12 ISR 根因修复:getServerTranslation 的 cookies() 把 `/` 判为动态
   // (revalidate=300 失效,宣传第一落点零边缘缓存)。静态壳固定英文,客户端
   // Phase 2 水合后换语言 —— 与本页"SSR 恒默认视图"决策一致。
   const { t } = getStaticTranslation()
-  const exchangeCountStr = `${exchangeCount}+`
+  const sourceBoardCountStr = `${sourceBoardCount}+`
 
   const headline = t('heroHeadline')
-  const subtitle = t('heroSubtitle').replace('{exchanges}', String(exchangeCount))
+  const subtitle = t('heroSubtitle').replace('{exchanges}', String(sourceBoardCount))
 
   // Trader-count stat intentionally dropped — the hero leads with exchange
   // coverage; the trader total lives in the leaderboard itself.
   const stats = [
-    { value: exchangeCountStr, label: t('heroStatExchanges') },
+    { value: sourceBoardCountStr, label: t('heroStatExchanges') },
     // Real cadence: the leaderboard recomputes every 2h (worker scheduler
     // SCORE_INTERVALS_MS). "30 min" overstated it (that's only the warm-cache
     // cron, which re-warms Redis but doesn't make data fresher) — a freshness

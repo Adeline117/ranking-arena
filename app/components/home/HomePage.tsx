@@ -47,7 +47,7 @@ import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 interface HomePageProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
-  heroStats?: { traderCount: number; exchangeCount: number }
+  heroStats?: { traderCount: number; sourceBoardCount: number }
   initialTotalCount?: number
   initialCategoryCounts?: CategoryCounts
 }

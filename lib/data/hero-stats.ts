@@ -16,15 +16,15 @@ import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 // CrossExchangePercentileBadge, so an inflated fallback (was 17000; real 90D pop is
 // ~9,600) makes "beats X% of N traders" wrong by ~1.8× if the RPC ever fails.
 const DEFAULT_STATS = {
-  exchangeCount: PRODUCT_FACTS.fallbackExchangeCount,
+  sourceBoardCount: PRODUCT_FACTS.fallbackSourceBoardCount,
   traderCount: PRODUCT_FACTS.fallbackRankedTraderCount,
 }
 
-// v2: bumped 2026-07-02 to evict stale exchangeCount (old get_hero_stats counted
-// raw sources ~45; now dedupes by exchange prefix → ~18). Old v1 entries linger
-// up to their 1h TTL, so a fresh key forces the corrected value immediately.
-const CACHE_KEY = 'hero-stats:v2'
-const FALLBACK_MARKER_KEY = 'hero-stats:v2:fallback-marker'
+// v3: the RPC now reports live ranking source boards instead of guessing an
+// exchange family from the first source-name segment. A fresh key prevents the
+// old 18-family value from surviving its one-hour TTL.
+const CACHE_KEY = 'hero-stats:v3'
+const FALLBACK_MARKER_KEY = 'hero-stats:v3:fallback-marker'
 // Success path ('cold' tier): 1h Redis TTL on CACHE_KEY (stats only change on cron runs).
 // Fallback path: a SEPARATE marker key with 60s TTL, NOT overwriting CACHE_KEY.
 // Previously we wrote defaults to CACHE_KEY, which meant a single RPC failure
@@ -32,7 +32,7 @@ const FALLBACK_MARKER_KEY = 'hero-stats:v2:fallback-marker'
 // stays intact; the marker just tracks "tried recently" for stampede control.
 
 export interface HeroStats {
-  exchangeCount: number
+  sourceBoardCount: number
   traderCount: number
   isDefault?: boolean
 }
@@ -104,7 +104,9 @@ export async function getHeroStats(): Promise<HeroStats> {
 
     const rpcData = data as { exchange_count?: number; trader_count?: number } | null
     const stats: HeroStats = {
-      exchangeCount: rpcData?.exchange_count || DEFAULT_STATS.exchangeCount,
+      // The SQL output name remains exchange_count for backward compatibility;
+      // migration 20260717130000 defines its value as live source-board count.
+      sourceBoardCount: rpcData?.exchange_count || DEFAULT_STATS.sourceBoardCount,
       traderCount: rpcData?.trader_count || DEFAULT_STATS.traderCount,
     }
 

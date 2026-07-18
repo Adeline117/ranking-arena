@@ -11,7 +11,7 @@
  * percentile. Reuses the hero's count source so the badge never hardcodes a
  * separate number.
  *
- * Response: { exchangeCount, traderCount, isDefault? }
+ * Response: { sourceBoardCount, exchangeCount, traderCount, isDefault? }
  * Cache: 1 hour (getHeroStats already caches in Redis; CDN caches the response).
  */
 
@@ -23,9 +23,17 @@ export const runtime = 'nodejs'
 export async function GET() {
   // getHeroStats never throws — it returns defaults on any failure.
   const stats = await getHeroStats()
-  return NextResponse.json(stats, {
-    headers: {
-      'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+  return NextResponse.json(
+    {
+      ...stats,
+      // Deprecated compatibility field for older clients. Its value is a live
+      // ranking source-board count, not a count of exchange companies.
+      exchangeCount: stats.sourceBoardCount,
     },
-  })
+    {
+      headers: {
+        'Cache-Control': 'public, s-maxage=3600, stale-while-revalidate=86400',
+      },
+    }
+  )
 }
