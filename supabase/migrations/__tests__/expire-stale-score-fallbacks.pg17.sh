@@ -10,6 +10,7 @@ TABLE_RPC_MIGRATION="$ROOT_DIR/supabase/migrations/20260612135918_arena_score_in
 JSON_RPC_MIGRATION="$ROOT_DIR/supabase/migrations/20260612211910_arena_score_inputs_json.sql"
 CURRENT_MIGRATION="$ROOT_DIR/supabase/migrations/20260716124500_rank_only_active_serving_sources.sql"
 NEW_MIGRATION="$ROOT_DIR/supabase/migrations/20260716135000_expire_stale_score_fallbacks.sql"
+BOARD_WATERMARK_MIGRATION="$ROOT_DIR/supabase/migrations/20260718184000_arena_score_inputs_board_as_of.sql"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -26,7 +27,8 @@ for migration in \
   "$TABLE_RPC_MIGRATION" \
   "$JSON_RPC_MIGRATION" \
   "$CURRENT_MIGRATION" \
-  "$NEW_MIGRATION"; do
+  "$NEW_MIGRATION" \
+  "$BOARD_WATERMARK_MIGRATION"; do
   if [[ ! -f "$migration" ]]; then
     echo "Required migration not found: $migration" >&2
     exit 1
@@ -142,13 +144,31 @@ VALUES
   (2, 'shadow_test',    'onchain', 'USDC', 'shadow',  'active'),
   (3, 'inactive_test',  'onchain', 'USDC', 'serving', 'inactive'),
   (4, 'legacy_test',    'onchain', 'USDC', 'legacy',  'active');
+-- A second active physical board maps to the same public alias. It has no
+-- score row of its own, but its latest passed snapshot still bounds the
+-- freshness of the combined public board.
+INSERT INTO arena.sources
+  (id, slug, product_type, currency, serving_mode, status, meta)
+VALUES
+  (
+    5,
+    'freshness_test_secondary',
+    'onchain',
+    'USDC',
+    'serving',
+    'active',
+    '{"legacy_platform":"freshness_test"}'::jsonb
+  );
 INSERT INTO arena.leaderboard_snapshots
   (id, source_id, timeframe, scraped_at, count_check_passed)
 VALUES
   (10, 1, 90, now() - interval '1 hour', true),
   (20, 2, 90, now() - interval '1 hour', true),
   (30, 3, 90, now() - interval '1 hour', true),
-  (40, 4, 90, now() - interval '1 hour', true);
+  (40, 4, 90, now() - interval '1 hour', true),
+  (50, 5, 90, now() - interval '3 hours', true),
+  (51, 5, 90, now() - interval '5 minutes', false),
+  (52, 5, 30, now() - interval '30 minutes', true);
 INSERT INTO arena.traders
   (id, source_id, exchange_trader_id, nickname, meta)
 VALUES
@@ -533,4 +553,156 @@ assert_equal "replayed view columns" "$VIEW_COLUMNS_AFTER" \
 assert_equal "replayed view row count" "$ROWS_AFTER" \
   "$(psql_cmd -Atqc 'SELECT count(*) FROM arena.score_inputs')"
 
-echo "stale score fallback PostgreSQL 17 proof passed"
+# Deliberately drift the JSON RPC grants before replacement. The board
+# migration must keep the same object identity while removing both API roles.
+psql_cmd -c \
+  'GRANT EXECUTE ON FUNCTION public.arena_score_inputs_json(text, int, int) TO anon, authenticated' \
+  >/dev/null
+
+BOARD_VIEW_OID_BEFORE="$(psql_cmd -Atqc "SELECT 'arena.score_inputs'::regclass::oid")"
+BOARD_VIEW_ACL_BEFORE="$(psql_cmd -Atqc "SELECT relacl::text FROM pg_class WHERE oid='arena.score_inputs'::regclass")"
+BOARD_VIEW_COLUMNS_BEFORE="$(psql_cmd -Atqc "SELECT string_agg(attname||':'||format_type(atttypid,atttypmod),'|' ORDER BY attnum) FROM pg_attribute WHERE attrelid='arena.score_inputs'::regclass AND attnum>0 AND NOT attisdropped")"
+BOARD_TABLE_RPC_OID_BEFORE="$(psql_cmd -Atqc "SELECT 'public.arena_score_inputs(text,integer,integer)'::regprocedure::oid")"
+BOARD_TABLE_RPC_ACL_BEFORE="$(psql_cmd -Atqc "SELECT proacl::text FROM pg_proc WHERE oid='public.arena_score_inputs(text,integer,integer)'::regprocedure")"
+BOARD_TABLE_RPC_RESULT_BEFORE="$(psql_cmd -Atqc "SELECT pg_get_function_result('public.arena_score_inputs(text,integer,integer)'::regprocedure)")"
+BOARD_JSON_RPC_OID_BEFORE="$(psql_cmd -Atqc "SELECT 'public.arena_score_inputs_json(text,integer,integer)'::regprocedure::oid")"
+BOARD_JSON_BASE_PAYLOAD_BEFORE="$(psql_cmd -Atqc "SELECT coalesce(jsonb_agg(value ORDER BY value->>'trader_key'),'[]'::jsonb)::text FROM jsonb_array_elements(public.arena_score_inputs_json('90D',1000,48)) AS payload(value)")"
+
+psql_cmd -f "$BOARD_WATERMARK_MIGRATION" >/dev/null
+
+assert_equal "board migration view OID" "$BOARD_VIEW_OID_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT 'arena.score_inputs'::regclass::oid")"
+assert_equal "board migration view ACL" "$BOARD_VIEW_ACL_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT relacl::text FROM pg_class WHERE oid='arena.score_inputs'::regclass")"
+assert_equal "board migration view columns" "$BOARD_VIEW_COLUMNS_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT string_agg(attname||':'||format_type(atttypid,atttypmod),'|' ORDER BY attnum) FROM pg_attribute WHERE attrelid='arena.score_inputs'::regclass AND attnum>0 AND NOT attisdropped")"
+assert_equal "board migration table RPC OID" "$BOARD_TABLE_RPC_OID_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT 'public.arena_score_inputs(text,integer,integer)'::regprocedure::oid")"
+assert_equal "board migration table RPC ACL" "$BOARD_TABLE_RPC_ACL_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT proacl::text FROM pg_proc WHERE oid='public.arena_score_inputs(text,integer,integer)'::regprocedure")"
+assert_equal "board migration table RPC columns" "$BOARD_TABLE_RPC_RESULT_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT pg_get_function_result('public.arena_score_inputs(text,integer,integer)'::regprocedure)")"
+assert_equal "board migration JSON RPC OID" "$BOARD_JSON_RPC_OID_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT 'public.arena_score_inputs_json(text,integer,integer)'::regprocedure::oid")"
+assert_equal "board migration JSON base payload" "$BOARD_JSON_BASE_PAYLOAD_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT coalesce(jsonb_agg(value - 'board_as_of' ORDER BY value->>'trader_key'),'[]'::jsonb)::text FROM jsonb_array_elements(public.arena_score_inputs_json('90D',1000,48)) AS payload(value)")"
+
+psql_cmd <<'SQL'
+DO $board_watermark_proof$
+DECLARE
+  v_payload jsonb;
+  v_stale_metric_row jsonb;
+  v_boardless_claimed_row jsonb;
+  v_expected_alias_board timestamptz;
+  v_primary_board timestamptz;
+  v_failed_board timestamptz;
+  v_other_window_board timestamptz;
+  v_stale_metric_as_of timestamptz;
+BEGIN
+  SELECT scraped_at INTO STRICT v_expected_alias_board
+    FROM arena.leaderboard_snapshots
+   WHERE id = 50;
+  SELECT scraped_at INTO STRICT v_primary_board
+    FROM arena.leaderboard_snapshots
+   WHERE id = 10;
+  SELECT scraped_at INTO STRICT v_failed_board
+    FROM arena.leaderboard_snapshots
+   WHERE id = 51;
+  SELECT scraped_at INTO STRICT v_other_window_board
+    FROM arena.leaderboard_snapshots
+   WHERE id = 52;
+  SELECT as_of INTO STRICT v_stale_metric_as_of
+    FROM arena.trader_stats
+   WHERE trader_id = 2
+     AND timeframe = 90;
+
+  v_payload := public.arena_score_inputs_json('90D', 1000, 48);
+  IF pg_catalog.jsonb_array_length(v_payload) <> 8 THEN
+    RAISE EXCEPTION 'board watermark changed JSON membership: %', v_payload;
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM pg_catalog.jsonb_array_elements(v_payload) AS payload_row
+    WHERE (payload_row->>'board_as_of')::timestamptz
+      IS DISTINCT FROM v_expected_alias_board
+  ) THEN
+    RAISE EXCEPTION 'rows did not receive the alias-level oldest passed board: %',
+      v_payload;
+  END IF;
+
+  SELECT payload_row INTO STRICT v_stale_metric_row
+    FROM pg_catalog.jsonb_array_elements(v_payload) AS payload_row
+   WHERE payload_row->>'trader_key' = 'fresh-fallback';
+  IF (v_stale_metric_row->>'as_of')::timestamptz
+       IS DISTINCT FROM v_stale_metric_as_of
+     OR (v_stale_metric_row->>'board_as_of')::timestamptz
+       IS DISTINCT FROM v_expected_alias_board
+     OR (v_stale_metric_row->>'as_of')::timestamptz
+       >= (v_stale_metric_row->>'board_as_of')::timestamptz THEN
+    RAISE EXCEPTION 'metric as_of and board_as_of are not independent: %',
+      v_stale_metric_row;
+  END IF;
+
+  SELECT payload_row INTO STRICT v_boardless_claimed_row
+    FROM pg_catalog.jsonb_array_elements(v_payload) AS payload_row
+   WHERE payload_row->>'trader_key' = 'claimed-fresh-no-board';
+  IF v_boardless_claimed_row->'board_rank' IS DISTINCT FROM 'null'::jsonb
+     OR (v_boardless_claimed_row->>'board_as_of')::timestamptz
+       IS DISTINCT FROM v_expected_alias_board THEN
+    RAISE EXCEPTION 'boardless claimed row did not inherit its source board: %',
+      v_boardless_claimed_row;
+  END IF;
+
+  IF v_expected_alias_board >= v_primary_board
+     OR v_expected_alias_board = v_failed_board
+     OR v_expected_alias_board = v_other_window_board THEN
+    RAISE EXCEPTION
+      'fixture no longer proves alias MIN, failed-snapshot, and p_window isolation';
+  END IF;
+
+  IF NOT pg_catalog.has_function_privilege(
+       'service_role',
+       'public.arena_score_inputs_json(text,integer,integer)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'anon',
+       'public.arena_score_inputs_json(text,integer,integer)',
+       'EXECUTE'
+     )
+     OR pg_catalog.has_function_privilege(
+       'authenticated',
+       'public.arena_score_inputs_json(text,integer,integer)',
+       'EXECUTE'
+     ) THEN
+    RAISE EXCEPTION 'board watermark JSON RPC execution ACL is not service-only';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.oid =
+      'public.arena_score_inputs_json(text,integer,integer)'::regprocedure
+      AND function_row.prosecdef
+      AND function_row.proconfig =
+        ARRAY['search_path=pg_catalog, pg_temp']::text[]
+  ) THEN
+    RAISE EXCEPTION 'board watermark JSON RPC is not search-path hardened';
+  END IF;
+END
+$board_watermark_proof$;
+SQL
+
+BOARD_JSON_PAYLOAD_AFTER="$(psql_cmd -Atqc "SELECT public.arena_score_inputs_json('90D',1000,48)::text")"
+psql_cmd -f "$BOARD_WATERMARK_MIGRATION" >/dev/null
+assert_equal "replayed board JSON RPC OID" "$BOARD_JSON_RPC_OID_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT 'public.arena_score_inputs_json(text,integer,integer)'::regprocedure::oid")"
+assert_equal "replayed board JSON payload" "$BOARD_JSON_PAYLOAD_AFTER" \
+  "$(psql_cmd -Atqc "SELECT public.arena_score_inputs_json('90D',1000,48)::text")"
+assert_equal "replayed board view OID" "$BOARD_VIEW_OID_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT 'arena.score_inputs'::regclass::oid")"
+assert_equal "replayed board table RPC OID" "$BOARD_TABLE_RPC_OID_BEFORE" \
+  "$(psql_cmd -Atqc "SELECT 'public.arena_score_inputs(text,integer,integer)'::regprocedure::oid")"
+
+echo "stale score fallback and independent board watermark PostgreSQL 17 proof passed"
