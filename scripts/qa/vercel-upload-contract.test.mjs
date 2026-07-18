@@ -163,6 +163,40 @@ test('waits for Vercel READY within the job budget before allowing promotion', (
   )
 })
 
+test('reasserts the single production writer without ever skipping promoted smoke', () => {
+  assert.match(
+    deployGate,
+    /- name: Pin release-control helper for this Gate run\n        run: install -m 700 scripts\/ci\/enforce-vercel-release-control\.mjs "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"/
+  )
+  assert.equal(
+    deployGate.match(/node "\$RUNNER_TEMP\/enforce-vercel-release-control\.mjs"/g)?.length,
+    4
+  )
+  assert.ok(
+    deployGate.indexOf('Pin release-control helper for this Gate run') <
+      deployGate.indexOf('git checkout --quiet "$HEAD_SHA"')
+  )
+  assert.match(
+    deployGate,
+    /echo "promoted=true" >> "\$GITHUB_OUTPUT"[\s\S]*npx vercel@56\.2\.1 promote/
+  )
+  assert.match(
+    deployGate,
+    /if: always\(\) && steps\.promote_candidate\.outputs\.promoted == 'true'/
+  )
+  assert.match(
+    deployGate,
+    /RELEASE_CONTROL_RESTORED: \$\{\{ steps\.promote_candidate\.outputs\.release_control \}\}/
+  )
+  assert.match(deployGate, /\[ "\$RELEASE_CONTROL_RESTORED" != "true" \]/)
+  assert.match(deployGate, /ROLLBACK_CONTROL_RESTORED=false/)
+  assert.match(deployGate, /ROLLBACK_CONTROL_RESTORED=true/)
+  assert.match(
+    deployGate,
+    /- name: Finalize single production writer\n        if: always\(\) && steps\.promote_candidate\.outputs\.promoted == 'true'/
+  )
+})
+
 test('verifies an exact healthy public SHA after deploy-gate rollback', () => {
   const workflow = deployGate
   assert.match(workflow, /echo "serving=\$SERVING" >> "\$GITHUB_OUTPUT"/)

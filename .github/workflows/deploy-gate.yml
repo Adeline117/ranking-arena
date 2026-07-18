@@ -103,6 +103,15 @@ jobs:
         with:
           fetch-depth: 0
 
+      # Later the job checks out the candidate SHA, which may predate this
+      # helper. Freeze the control-plane code from the current Gate revision so
+      # queued older candidates cannot make post-promote enforcement disappear.
+      - name: Pin release-control helper for this Gate run
+        run: install -m 700 scripts/ci/enforce-vercel-release-control.mjs "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
+
+      - name: Enforce single production writer before deploy
+        run: node "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
+
       # 部署条件 = 本 run 的 SHA 比当前线上 SHA 新（git 祖先关系）。
       # 不再要求恰好等于 HEAD——连续推送爆发期里 HEAD 永远前移会饿死部署
       # （2026-07-02 实测连续 4 轮 superseded）；部署"已验证但稍旧"的 SHA
@@ -266,9 +275,18 @@ jobs:
             echo "Candidate ${HEAD_SHA:0:8} became stale while building; live ${LIVE_SHA:0:8} is newer — skip promotion"
             echo "promoted=false" >> "$GITHUB_OUTPUT"
           elif git merge-base --is-ancestor "$LIVE_SHA" "$HEAD_SHA" 2>/dev/null; then
+            # Record the production-write intent before calling Vercel. If the
+            # CLI changes the alias and then exits non-zero, always() smoke must
+            # still inspect and, if needed, roll back the public release.
+            echo "promoted=true" >> "$GITHUB_OUTPUT"
             npx vercel@56.2.1 promote "${{ steps.deploy_candidate.outputs.url }}" \
               --yes --token="$VERCEL_TOKEN"
-            echo "promoted=true" >> "$GITHUB_OUTPUT"
+            if node "$RUNNER_TEMP/enforce-vercel-release-control.mjs"; then
+              echo "release_control=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "::error::Candidate was promoted but Vercel Git auto-assignment could not be disabled"
+              echo "release_control=false" >> "$GITHUB_OUTPUT"
+            fi
           else
             echo "::error::Live and candidate SHAs are not in one ancestry chain; refusing promotion"
             exit 1
@@ -276,12 +294,13 @@ jobs:
 
       - name: Smoke test + auto-rollback
         id: smoke_release
-        if: steps.promote_candidate.outputs.promoted == 'true'
+        if: always() && steps.promote_candidate.outputs.promoted == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
           PREVIOUS_DEPLOYMENT_ID: ${{ steps.fresh.outputs.previous_id }}
           EXPECTED_ROLLBACK_SHA: ${{ steps.fresh.outputs.serving }}
+          RELEASE_CONTROL_RESTORED: ${{ steps.promote_candidate.outputs.release_control }}
         run: |
           send_telegram_alert() {
             local message="$1"
@@ -308,8 +327,17 @@ jobs:
           }
           sleep 45
           BASE="https://www.arenafi.org"
+          SMOKE_FAILED=false
+          if [ "$RELEASE_CONTROL_RESTORED" != "true" ]; then
+            echo "::error::Vercel release control was not restored immediately after promotion"
+            SMOKE_FAILED=true
+          fi
           if ! scripts/post-deploy-check.sh "$BASE" "$HEAD_SHA"; then
+            SMOKE_FAILED=true
+          fi
+          if [ "$SMOKE_FAILED" = "true" ]; then
             echo "🔄 smoke failed — rolling back to the deployment captured before release"
+            ROLLBACK_CONTROL_RESTORED=false
             if [ -n "$PREVIOUS_DEPLOYMENT_ID" ] && [[ "$EXPECTED_ROLLBACK_SHA" =~ ^[0-9a-f]{40}$ ]]; then
               PROMOTE_CURL_EXIT=0
               PROMOTE_HTTP=$(curl --silent --show-error \
@@ -319,6 +347,11 @@ jobs:
                 "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$PREVIOUS_DEPLOYMENT_ID") \
                 || PROMOTE_CURL_EXIT=$?
               if [ "$PROMOTE_CURL_EXIT" -eq 0 ] && [[ "$PROMOTE_HTTP" == 2* ]]; then
+                if node "$RUNNER_TEMP/enforce-vercel-release-control.mjs"; then
+                  ROLLBACK_CONTROL_RESTORED=true
+                else
+                  echo "::error::Rollback was accepted but Vercel Git auto-assignment remains unverified"
+                fi
                 echo "Vercel accepted rollback promotion; verifying public production..."
                 LAST_CONFIRMED_SHA=""
                 STABLE_CONFIRMATIONS=0
@@ -357,8 +390,11 @@ jobs:
                   fi
                   if [ "$attempt" -lt 10 ]; then sleep 5; fi
                 done
-                if [ "$RECOVERY_SHA" = "$EXPECTED_ROLLBACK_SHA" ]; then
+                if [ "$RECOVERY_SHA" = "$EXPECTED_ROLLBACK_SHA" ] \
+                  && [ "$ROLLBACK_CONTROL_RESTORED" = "true" ]; then
                   ROLLED="✅ 公网已连续确认恢复到发布前健康版本 ${RECOVERY_SHA:0:8}"
+                elif [ "$RECOVERY_SHA" = "$EXPECTED_ROLLBACK_SHA" ]; then
+                  ROLLED="⚠️ 公网已恢复到 ${RECOVERY_SHA:0:8}，但生产域自动分配未确认关闭"
                 else
                   ROLLED="⚠️ Vercel 已接受回滚请求，但公网未确认恢复到 ${EXPECTED_ROLLBACK_SHA:0:8}，需人工处理"
                 fi
@@ -379,6 +415,10 @@ jobs:
           # promote API 直接选"上一个 READY"即可，无需额外 git tag
           # （曾尝试推 last-known-good tag，被仓库 PR-only ruleset 拒绝——
           # 且与 Vercel 历史冗余，已移除）。
+
+      - name: Finalize single production writer
+        if: always() && steps.promote_candidate.outputs.promoted == 'true'
+        run: node "$RUNNER_TEMP/enforce-vercel-release-control.mjs"
 
       # deploy/smoke 步骤本身失败(如 VERCEL_TOKEN 失效)此前静默——补告警。
       # 2026-07-03 血泪：CLI 登录 token 过期 → deploy 步骤 fail → 生产停在旧部署
