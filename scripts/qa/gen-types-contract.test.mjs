@@ -22,6 +22,7 @@ import {
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const TYPES_PATH = join(ROOT, 'lib/supabase/database.types.ts')
 const GEN_TYPES_PATH = join(ROOT, 'scripts/gen-types.sh')
+const TYPEGEN_IMAGE_SEED_PATH = join(ROOT, 'scripts/maintenance/seed-supabase-typegen-image.sh')
 const CI_PATH = join(ROOT, '.github/workflows/ci.yml')
 const DEPLOY_GATE_PATH = join(ROOT, '.github/workflows/deploy-gate.yml')
 const PACKAGE_PATH = join(ROOT, 'package.json')
@@ -561,9 +562,11 @@ printf '%s\\n' "$FAKE_POSTGREST_VERSION"
 test('CI keeps type contracts secret-scoped, push-main only, and deployment-blocking', () => {
   const workflow = readFileSync(CI_PATH, 'utf8')
   const deployGate = readFileSync(DEPLOY_GATE_PATH, 'utf8')
+  const imageSeed = readFileSync(TYPEGEN_IMAGE_SEED_PATH, 'utf8')
   const packageJson = JSON.parse(readFileSync(PACKAGE_PATH, 'utf8'))
   const contractJob = workflowJobBlock(workflow, 'types-contract')
   const liveJob = workflowJobBlock(workflow, 'types-live-drift')
+  const seedStep = workflowStepBlock(liveJob, 'Seed pinned postgres-meta image')
   const regenerateStep = workflowStepBlock(liveJob, 'Regenerate from attested production and diff')
   const lintJob = workflowJobBlock(workflow, 'lint-typecheck')
   const buildJob = workflowJobBlock(workflow, 'build')
@@ -575,11 +578,31 @@ test('CI keeps type contracts secret-scoped, push-main only, and deployment-bloc
 
   assert.match(liveJob, /Types live drift check \(push main only\)/)
   assert.match(liveJob, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/)
+  assert.match(seedStep, /scripts\/maintenance\/seed-supabase-typegen-image\.sh/)
+  assert.doesNotMatch(seedStep, /secrets\./)
+  assert.match(imageSeed, /MIRROR_IMAGE="supabase\/postgres-meta@\$POSTGRES_META_DIGEST"/)
+  assert.match(
+    imageSeed,
+    /ECR_IMAGE="public\.ecr\.aws\/supabase\/postgres-meta@\$POSTGRES_META_DIGEST"/
+  )
+  assert.match(
+    imageSeed,
+    /CLI_IMAGE="public\.ecr\.aws\/supabase\/postgres-meta:\$POSTGRES_META_VERSION"/
+  )
+  assert.match(
+    imageSeed,
+    /POSTGRES_META_DIGEST="sha256:a84cc713585eea7b401e4a2561ec4a1e48c87083d1c7ecb4502f204bb4391300"/
+  )
+  assert.match(readFileSync(GEN_TYPES_PATH, 'utf8'), /SUPABASE_CLI_VERSION="2\.109\.1"/)
+  assert.match(imageSeed, /POSTGRES_META_VERSION="v0\.96\.6"/)
+  assert.match(imageSeed, /docker tag "\$source_image" "\$CLI_IMAGE"/)
+  assert.match(imageSeed, /MAX_ATTEMPTS=3/)
   assert.match(
     regenerateStep,
     /DATABASE_URL: \$\{\{ secrets\.DATABASE_URL \}\}[\s\S]*SUPABASE_URL: \$\{\{ secrets\.SUPABASE_URL \}\}[\s\S]*SUPABASE_SECRET_KEY: \$\{\{ secrets\.SUPABASE_SECRET_KEY \|\| secrets\.SUPABASE_SERVICE_ROLE_KEY \}\}/
   )
   assert.equal(regenerateStep.match(/SUPABASE_SERVICE_ROLE_KEY/g)?.length, 1)
+  assert.match(regenerateStep, /for attempt in 1 2 3/)
   assert.match(liveJob, /npm run qa:schema/)
   assert.match(liveJob, /npm run qa:insert-drift/)
   assert.match(liveJob, /npm run qa:read-drift/)

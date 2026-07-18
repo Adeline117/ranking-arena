@@ -46,6 +46,8 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - name: Seed pinned postgres-meta image
+        run: scripts/maintenance/seed-supabase-typegen-image.sh
       - name: Regenerate from attested production and diff
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -54,7 +56,19 @@ jobs:
           # preferred; the legacy service-role value is only a compatibility
           # fallback and is exposed under the same env name.
           SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: npm run gen:types:check
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if npm run gen:types:check; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 3 ]; then
+              delay=$((attempt * 10))
+              echo "type generation attempt $attempt/3 failed; retrying in ${delay}s" >&2
+              sleep "$delay"
+            fi
+          done
+          exit 1
 
       - name: Schema contract check (代码 DB 依赖 vs 生产 schema)
         env:
