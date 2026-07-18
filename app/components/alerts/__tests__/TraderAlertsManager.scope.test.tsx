@@ -187,6 +187,29 @@ describe('TraderAlertsManager viewer ownership', () => {
     expect(mockAuthedFetch).not.toHaveBeenCalled()
   })
 
+  it('labels the signed-out Alerts tab as alerts instead of a watchlist', () => {
+    mockUseAuthSession.mockReturnValue({
+      accessToken: null,
+      authChecked: true,
+      email: null,
+      loading: false,
+      sessionGeneration: 0,
+      userId: null,
+      viewerKey: 'anonymous',
+    })
+
+    render(<TraderAlertsManager />)
+
+    expect(screen.getByText('traderAlertsSignInTitle')).toBeInTheDocument()
+    expect(screen.getByText('traderAlertsSignInDesc')).toBeInTheDocument()
+    expect(screen.queryByText('watchlistSignInTitle')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: 'login' })).toHaveAttribute(
+      'href',
+      '/login?redirect=%2Fsaved%3Ftab%3Dalerts'
+    )
+    expect(mockAuthedFetch).not.toHaveBeenCalled()
+  })
+
   it('rejects malformed server rows instead of rendering detached alert actions', async () => {
     mockAuthedFetch.mockResolvedValue(
       ok({
