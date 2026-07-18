@@ -23,6 +23,7 @@ import ScoreMiniBar from '@/app/components/ranking/ScoreMiniBar'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
 import { Skeleton } from '@/app/components/ui/Skeleton'
+import ErrorState from '@/app/components/ui/ErrorState'
 
 export type Period = '7D' | '30D' | '90D'
 
@@ -41,6 +42,22 @@ export interface TokenTrader {
 }
 
 const PAGE_SIZE = 50
+const CLIENT_REQUEST_TIMEOUT_MS = 15_000
+const EMPTY_TRADERS: TokenTrader[] = []
+
+interface RankingPageData {
+  traders: TokenTrader[]
+  total: number
+}
+
+type RequestState = {
+  key: string
+  status: 'loading' | 'idle' | 'error'
+}
+
+function rankingPageKey(token: string, period: Period, page: number): string {
+  return `${token}:${period}:${page}`
+}
 
 // Frozen rank + name (sticky-left) then six numeric columns. gap:0 so the
 // sticky offsets are exact px (a grid `gap` would shift the trader column's
@@ -246,12 +263,14 @@ export default function TokenRankingClient({
   initialPeriod,
   initialTraders,
   initialTotal,
+  initialStatus = 'success',
   asOf,
 }: {
   token: string
   initialPeriod: Period
   initialTraders: TokenTrader[]
   initialTotal: number
+  initialStatus?: 'success' | 'error'
   asOf: string
 }) {
   const { t } = useLanguage()
@@ -260,23 +279,38 @@ export default function TokenRankingClient({
   const searchParams = useSearchParams()
 
   const urlPage = Math.max(0, parseInt(searchParams.get('page') || '0', 10) || 0)
-  const hasSSR = initialTraders.length > 0 && urlPage === 0
 
   const [period, setPeriod] = useState<Period>(initialPeriod)
-  const [traders, setTraders] = useState<TokenTrader[]>(hasSSR ? initialTraders : [])
-  const [total, setTotal] = useState(hasSSR ? initialTotal : 0)
-  const [loading, setLoading] = useState(!hasSSR)
   const [page, setPageRaw] = useState(urlPage)
   const [sortKey, setSortKey] = useState<SortKey>('token_pnl')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
-
-  // Key of the data we already hold (SSR seed or a completed fetch). The mount
-  // effect compares against this to skip the redundant first fetch — no
-  // spinner-on-every-visit when SSR already shipped page 0.
-  const loadedKeyRef = useRef<string | null>(hasSSR ? `${initialPeriod}:0` : null)
+  const [pages, setPages] = useState<Map<string, RankingPageData>>(() => {
+    const initialPages = new Map<string, RankingPageData>()
+    if (initialStatus === 'success') {
+      initialPages.set(rankingPageKey(token, initialPeriod, 0), {
+        traders: initialTraders,
+        total: initialTotal,
+      })
+    }
+    return initialPages
+  })
+  const pagesRef = useRef(pages)
+  const [requestState, setRequestState] = useState<RequestState>(() => ({
+    key: rankingPageKey(token, initialPeriod, urlPage),
+    status: initialStatus === 'success' && urlPage === 0 ? 'idle' : 'loading',
+  }))
   const abortRef = useRef<AbortController | null>(null)
 
   const tokenColor = TOKEN_COLORS[token] || tokens.colors.accent.primary
+  const currentKey = rankingPageKey(token, period, page)
+  const currentData = pages.get(currentKey)
+  const currentRequest = requestState.key === currentKey ? requestState : null
+  const currentError = currentRequest?.status === 'error'
+  const loading =
+    currentRequest?.status === 'loading' || (!currentData && currentRequest?.status !== 'error')
+  const showSkeleton = loading && !currentData
+  const traders = currentData?.traders ?? EMPTY_TRADERS
+  const total = currentData?.total ?? 0
 
   const setPage = useCallback(
     (p: number | ((prev: number) => number)) => {
@@ -299,32 +333,65 @@ export default function TokenRankingClient({
       if (abortRef.current) abortRef.current.abort()
       const controller = new AbortController()
       abortRef.current = controller
+      const key = rankingPageKey(token, p, pageIndex)
+      let timedOut = false
+      const timeout = setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, CLIENT_REQUEST_TIMEOUT_MS)
 
-      setLoading(true)
+      setRequestState({ key, status: 'loading' })
       try {
         const res = await fetch(
           `/api/rankings/by-token?token=${encodeURIComponent(token)}&period=${p}&limit=${PAGE_SIZE}&offset=${pageIndex * PAGE_SIZE}`,
           { signal: controller.signal }
         )
-        if (!res.ok) throw new Error('Failed')
-        const data = await res.json()
-        setTraders(data.traders || [])
-        setTotal(data.total || 0)
-        loadedKeyRef.current = `${p}:${pageIndex}`
+        if (!res.ok) throw new Error(`Token rankings request failed: ${res.status}`)
+        const data: unknown = await res.json()
+        if (
+          typeof data !== 'object' ||
+          data === null ||
+          (data as { token?: unknown }).token !== token ||
+          (data as { period?: unknown }).period !== p ||
+          !Array.isArray((data as { traders?: unknown }).traders) ||
+          typeof (data as { total?: unknown }).total !== 'number'
+        ) {
+          throw new Error('Token rankings response did not match the requested page')
+        }
+        if (abortRef.current !== controller || controller.signal.aborted) return
+
+        const nextPages = new Map(pagesRef.current)
+        nextPages.set(key, {
+          traders: (data as { traders: TokenTrader[] }).traders,
+          total: (data as { total: number }).total,
+        })
+        pagesRef.current = nextPages
+        setPages(nextPages)
+        setRequestState({ key, status: 'idle' })
       } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return
+        if (abortRef.current !== controller) return
+        if (controller.signal.aborted && !timedOut) return
+        if (err instanceof Error && err.name === 'AbortError' && !timedOut) return
+        setRequestState({ key, status: 'error' })
       } finally {
-        setLoading(false)
+        clearTimeout(timeout)
       }
     },
     [token]
   )
 
   useEffect(() => {
-    const key = `${period}:${page}`
-    if (loadedKeyRef.current === key) return
-    fetchData(period, page)
-  }, [period, page, fetchData])
+    const key = rankingPageKey(token, period, page)
+    if (pagesRef.current.has(key)) {
+      abortRef.current?.abort()
+      abortRef.current = null
+      setRequestState({ key, status: 'idle' })
+      return
+    }
+    void fetchData(period, page)
+  }, [period, page, fetchData, token])
+
+  useEffect(() => () => abortRef.current?.abort(), [])
 
   const handlePeriodChange = useCallback(
     (newPeriod: Period) => {
@@ -420,11 +487,13 @@ export default function TokenRankingClient({
               {t('tokenRankingHeader').replace('{token}', token)}
             </Text>
             <Text size="sm" style={{ color: tokens.colors.text.secondary }}>
-              {total > 0
-                ? t('tokenRankingCount')
-                    .replace('{count}', total.toLocaleString('en-US'))
-                    .replace('{token}', token)
-                : t('tokenRankingNoData').replace('{token}', token)}
+              {currentError && !currentData
+                ? t('failedToLoadRankings')
+                : total > 0
+                  ? t('tokenRankingCount')
+                      .replace('{count}', total.toLocaleString('en-US'))
+                      .replace('{token}', token)
+                  : t('tokenRankingNoData').replace('{token}', token)}
             </Text>
           </Box>
         </Box>
@@ -435,9 +504,18 @@ export default function TokenRankingClient({
         <PeriodSelector period={period} onChange={handlePeriodChange} loading={loading} />
       </Box>
 
+      {currentError && (
+        <ErrorState
+          title={t('failedToLoadRankings')}
+          description={t('tryAgain')}
+          retry={() => void fetchData(period, page)}
+          variant={currentData ? 'compact' : 'default'}
+        />
+      )}
+
       {/* Table — chrome (header row) stays mounted across period/page changes so
           only the body swaps (no full layout shift). */}
-      {(loading || displayed.length > 0) && (
+      {(showSkeleton || displayed.length > 0) && (
         <>
           <Box
             role="table"
@@ -503,7 +581,7 @@ export default function TokenRankingClient({
                 </div>
 
                 {/* Body: skeleton while loading, else rows */}
-                {loading
+                {showSkeleton
                   ? Array.from({ length: 8 }).map((_, i) => (
                       <div
                         key={`sk-${i}`}
@@ -847,7 +925,7 @@ export default function TokenRankingClient({
       )}
 
       {/* Empty State */}
-      {!loading && displayed.length === 0 && (
+      {!loading && !currentError && currentData && displayed.length === 0 && (
         <EmptyState
           icon={
             <svg

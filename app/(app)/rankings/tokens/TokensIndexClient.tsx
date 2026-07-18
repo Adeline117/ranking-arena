@@ -1,16 +1,17 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Box, Text } from '@/app/components/base'
 import PageHeader from '@/app/components/ui/PageHeader'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
 import Metric from '@/app/components/ui/Metric'
+import ErrorState from '@/app/components/ui/ErrorState'
 import { tokens } from '@/lib/design-tokens'
 import { formatPnL } from '@/lib/utils/format'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-interface PopularToken {
+export interface PopularToken {
   token: string
   trade_count: number
   trader_count: number
@@ -35,6 +36,7 @@ const FEATURED_TOKENS = [
 ]
 
 type SortKey = 'traders' | 'trades' | 'pnl'
+const CLIENT_REQUEST_TIMEOUT_MS = 15_000
 
 function sortValue(tk: PopularToken, key: SortKey): number {
   switch (key) {
@@ -92,14 +94,22 @@ const TOKENS_INDEX_CSS = `
 
 interface TokensIndexClientProps {
   initialTokens?: PopularToken[]
+  initialStatus?: 'success' | 'error'
 }
 
-export default function TokensIndexClient({ initialTokens }: TokensIndexClientProps = {}) {
+export default function TokensIndexClient({
+  initialTokens,
+  initialStatus = initialTokens === undefined ? 'error' : 'success',
+}: TokensIndexClientProps = {}) {
   const { t } = useLanguage()
   const [popularTokens, setPopularTokens] = useState<PopularToken[]>(initialTokens || [])
-  const [loading, setLoading] = useState(!initialTokens || initialTokens.length === 0)
+  const [loadState, setLoadState] = useState<'loading' | 'success' | 'error'>(
+    initialStatus === 'success' ? 'success' : 'loading'
+  )
+  const [hasSuccessfulData, setHasSuccessfulData] = useState(initialStatus === 'success')
   const [search, setSearch] = useState('')
   const [sortKey, setSortKey] = useState<SortKey>('traders')
+  const requestRef = useRef<AbortController | null>(null)
   // SSR controls must not advertise interactivity before React owns their
   // events. On slower mobile hydration, users could type into the search box
   // and then watch their text disappear when hydration reset the DOM value.
@@ -109,31 +119,53 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
     setInteractive(true)
   }, [])
 
-  useEffect(() => {
-    // SSR already provided fresh popular tokens (same 1h cache window). Skip the
-    // redundant client refetch — it re-runs the expensive token aggregation (which
-    // currently times out → 500 on cold cache) on every mount for no benefit. Only
-    // fetch as the fallback when SSR returned empty (its 4s timeout path).
-    if (initialTokens && initialTokens.length > 0) return
+  const loadPopularTokens = useCallback(async () => {
+    requestRef.current?.abort()
     const controller = new AbortController()
-    fetch('/api/rankings/by-token?action=popular-tokens', { signal: controller.signal })
-      .then((r) => {
-        if (!r.ok) throw new Error(`popular-tokens: ${r.status}`)
-        return r.json()
+    requestRef.current = controller
+    let timedOut = false
+    const timeout = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, CLIENT_REQUEST_TIMEOUT_MS)
+    setLoadState('loading')
+
+    try {
+      const response = await fetch('/api/rankings/by-token?action=popular-tokens', {
+        signal: controller.signal,
       })
-      .then((data) => {
-        if (data.tokens) setPopularTokens(data.tokens)
-      })
-      .catch((err) => {
-        if (err.name !== 'AbortError') {
-          /* fire-and-forget: SSR data is the fallback */
-        }
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-    return () => controller.abort()
-  }, [initialTokens])
+      if (!response.ok) throw new Error(`popular-tokens: ${response.status}`)
+      const data: unknown = await response.json()
+      if (
+        typeof data !== 'object' ||
+        data === null ||
+        !Array.isArray((data as { tokens?: unknown }).tokens)
+      ) {
+        throw new Error('popular-tokens: invalid response')
+      }
+      if (requestRef.current !== controller || controller.signal.aborted) return
+
+      setPopularTokens((data as { tokens: PopularToken[] }).tokens)
+      setHasSuccessfulData(true)
+      setLoadState('success')
+    } catch (error) {
+      if (requestRef.current !== controller) return
+      if (controller.signal.aborted && !timedOut) return
+      if (error instanceof Error && error.name === 'AbortError' && !timedOut) return
+      setLoadState('error')
+    } finally {
+      clearTimeout(timeout)
+    }
+  }, [])
+
+  useEffect(() => {
+    // A successful empty SSR result is legitimate data and must not be retried
+    // or relabelled as a transport failure. Only failed/timed-out SSR loads fall
+    // through to the wire.
+    if (initialStatus === 'success') return
+    void loadPopularTokens()
+    return () => requestRef.current?.abort()
+  }, [initialStatus, loadPopularTokens])
 
   // Merge featured tokens with popular tokens (dedup by symbol).
   const allTokens = useMemo(() => {
@@ -194,7 +226,7 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
           onChange={(e) => setSearch(e.target.value)}
           placeholder={t('tokenRankingsSearchPlaceholder')}
           aria-label={t('tokenRankingsSearchPlaceholder')}
-          aria-busy={!interactive}
+          aria-busy={!interactive || loadState === 'loading'}
           disabled={!interactive}
           style={{
             flex: '1 1 240px',
@@ -228,8 +260,17 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
         </Box>
       </Box>
 
+      {loadState === 'error' && (
+        <ErrorState
+          title={t('failedToLoadRankings')}
+          description={t('tryAgain')}
+          retry={() => void loadPopularTokens()}
+          variant={hasSuccessfulData ? 'compact' : 'default'}
+        />
+      )}
+
       {/* Token Grid */}
-      {loading ? (
+      {loadState === 'loading' && !hasSuccessfulData ? (
         <Box
           style={{
             display: 'grid',
@@ -250,7 +291,7 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
             />
           ))}
         </Box>
-      ) : (
+      ) : loadState !== 'error' || hasSuccessfulData ? (
         <Box
           style={{
             display: 'grid',
@@ -342,7 +383,7 @@ export default function TokensIndexClient({ initialTokens }: TokensIndexClientPr
             )
           })}
         </Box>
-      )}
+      ) : null}
     </Box>
   )
 }
