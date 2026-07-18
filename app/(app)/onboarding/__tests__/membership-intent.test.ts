@@ -223,9 +223,28 @@ describe('onboarding page membership guard', () => {
   it('uses the membership intent boundary and keeps the rendered UI byte-identical', () => {
     const source = readFileSync(join(process.cwd(), 'app/(app)/onboarding/page.tsx'), 'utf8')
     const renderSuffix = source.slice(source.indexOf('  if (!mounted)'))
+    const completeFlow = source.slice(
+      source.indexOf('  const saveAndComplete'),
+      source.indexOf('  // Skip the activation flow')
+    )
+    const unmountCleanup = source.slice(
+      source.indexOf('  // Leaving onboarding invalidates'),
+      source.indexOf('  const saveAndComplete')
+    )
 
     expect(source).toContain('sendOnboardingMembershipIntent(')
+    expect(source).toContain('sendOnboardingFollowIntent(')
+    expect(completeFlow.indexOf('await settleFollowIntents()')).toBeGreaterThan(-1)
+    expect(completeFlow.indexOf('await settleMembershipIntents()')).toBeGreaterThan(
+      completeFlow.indexOf('await settleFollowIntents()')
+    )
+    expect(completeFlow.indexOf('onboarding_completed: true')).toBeGreaterThan(
+      completeFlow.indexOf('await settleMembershipIntents()')
+    )
     expect(source).toContain('await settleMembershipIntents()')
+    expect(source).not.toContain('swallow individual failures')
+    expect(unmountCleanup).toContain('pendingFollowQueue.clear()')
+    expect(unmountCleanup).not.toContain('flushFollowQueue(')
     expect(source).not.toContain("fetch('/api/groups/subscribe'")
     expect(createHash('sha256').update(renderSuffix).digest('hex')).toBe(
       '9728777d97cf487022d705e28efcdfb8e3c9ffd31dc9e9983411ea96e724db60'
