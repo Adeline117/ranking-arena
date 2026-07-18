@@ -182,7 +182,31 @@ BEGIN
     )
     SELECT 1
     FROM service_inheritors AS inherited
+    JOIN pg_catalog.pg_roles AS role_row
+      ON role_row.oid = inherited.member_oid
     WHERE inherited.member_oid <> v_postgres
+      AND NOT (
+        -- Supabase's managed CLI login reaches service_role only through its
+        -- exact SET-only postgres bridge. It is neither a runtime nor browser
+        -- inheritor; descendants and any broader role shape remain rejected.
+        role_row.rolname = 'cli_login_postgres'
+        AND role_row.rolcanlogin
+        AND NOT role_row.rolinherit
+        AND NOT role_row.rolcreaterole
+        AND NOT role_row.rolcreatedb
+        AND NOT role_row.rolreplication
+        AND NOT role_row.rolbypassrls
+        AND NOT role_row.rolsuper
+        AND EXISTS (
+          SELECT 1
+          FROM pg_catalog.pg_auth_members AS managed_membership
+          WHERE managed_membership.roleid = v_postgres
+            AND managed_membership.member = role_row.oid
+            AND NOT managed_membership.admin_option
+            AND NOT managed_membership.inherit_option
+            AND managed_membership.set_option
+        )
+      )
   ) OR EXISTS (
     WITH RECURSIVE service_inherits(role_oid) AS (
       SELECT membership.roleid
@@ -1677,7 +1701,28 @@ BEGIN
     )
     SELECT 1
     FROM service_inheritors AS inherited
+    JOIN pg_catalog.pg_roles AS role_row
+      ON role_row.oid = inherited.member_oid
     WHERE inherited.member_oid <> v_postgres
+      AND NOT (
+        role_row.rolname = 'cli_login_postgres'
+        AND role_row.rolcanlogin
+        AND NOT role_row.rolinherit
+        AND NOT role_row.rolcreaterole
+        AND NOT role_row.rolcreatedb
+        AND NOT role_row.rolreplication
+        AND NOT role_row.rolbypassrls
+        AND NOT role_row.rolsuper
+        AND EXISTS (
+          SELECT 1
+          FROM pg_catalog.pg_auth_members AS managed_membership
+          WHERE managed_membership.roleid = v_postgres
+            AND managed_membership.member = role_row.oid
+            AND NOT managed_membership.admin_option
+            AND NOT managed_membership.inherit_option
+            AND managed_membership.set_option
+        )
+      )
   ) OR EXISTS (
     WITH RECURSIVE service_inherits(role_oid) AS (
       SELECT membership.roleid

@@ -75,6 +75,9 @@ describe('atomic paid-group pass migration', () => {
     expect(migration).toContain('WITH RECURSIVE service_inheritors(member_oid)')
     expect(migration).toContain('WITH RECURSIVE service_inherits(role_oid)')
     expect(migration).toContain('WITH RECURSIVE browser_authority(role_oid)')
+    expect(migration).toContain("role_row.rolname = 'cli_login_postgres'")
+    expect(migration).toContain('AND NOT managed_membership.inherit_option')
+    expect(migration).toContain('AND managed_membership.set_option')
     expect(migration).toContain('atomic group pass service-role authority seal drifted')
   })
 
