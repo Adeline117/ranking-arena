@@ -7,6 +7,14 @@
 import { createHash } from 'node:crypto'
 
 import { parseStrictJson } from './strict-json'
+import {
+  RAW_RPC_REQUEST_HASH_BASIS,
+  RAW_RPC_RESPONSE_HASH_BASIS,
+  encodeJsonRpcRequestBody,
+  rawRpcBodyEvidence,
+  readBoundedRpcResponse,
+  type RawRpcBodyEvidence,
+} from './raw-rpc-evidence'
 
 const RPC_REQUEST_ID = 1
 const MAX_RESPONSE_BYTES = 2 * 1024 * 1024
@@ -64,6 +72,7 @@ export type SolanaEvidenceUnavailableReason =
   | 'rpc_error'
   | 'response_too_large'
   | 'malformed_response'
+  | 'evidence_capture_error'
   | 'unsupported_transaction_version'
   | 'wrong_genesis'
 
@@ -109,6 +118,8 @@ export interface SolanaRpcSuccess {
   result: unknown
   provider: SolanaEvidenceProvider
   httpStatus: number | null
+  /** Present only for an explicit in-memory raw capture request. */
+  rawExchange?: SolanaRawRpcEvidenceExchange
 }
 
 export interface SolanaRpcFailure {
@@ -128,6 +139,46 @@ export interface SolanaRpcFailure {
 }
 
 export type SolanaRpcResult = SolanaRpcSuccess | SolanaRpcFailure
+
+export const SOLANA_RAW_RPC_EVIDENCE_LANES = [
+  'genesis_hash',
+  'finalized_anchor_slot',
+  'finalized_anchor_block',
+  'transaction',
+  'signature_status',
+  'membership_block',
+] as const
+
+export type SolanaRawRpcEvidenceLane = (typeof SOLANA_RAW_RPC_EVIDENCE_LANES)[number]
+
+const SOLANA_RAW_RPC_LANE_METHODS: Record<SolanaRawRpcEvidenceLane, string> = {
+  genesis_hash: 'getGenesisHash',
+  finalized_anchor_slot: 'getSlot',
+  finalized_anchor_block: 'getBlock',
+  transaction: 'getTransaction',
+  signature_status: 'getSignatureStatuses',
+  membership_block: 'getBlock',
+}
+
+export interface SolanaRawRpcEvidenceExchange {
+  chain: 'solana'
+  trustBoundary: 'json_rpc_result_transport_only_semantic_lane_not_yet_verified'
+  lane: SolanaRawRpcEvidenceLane
+  method: string
+  endpoint: SolanaEvidenceEndpointIdentity
+  httpStatus: number
+  completedAt: string
+  request: RawRpcBodyEvidence & {
+    hashBasis: typeof RAW_RPC_REQUEST_HASH_BASIS
+  }
+  response: RawRpcBodyEvidence & {
+    hashBasis: typeof RAW_RPC_RESPONSE_HASH_BASIS
+  }
+}
+
+export interface SolanaRawRpcCapture {
+  lane: SolanaRawRpcEvidenceLane
+}
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -306,53 +357,6 @@ async function discardResponseBody(response: Response): Promise<void> {
   }
 }
 
-async function readBoundedResponseText(
-  response: Response
-): Promise<
-  { ok: true; text: string } | { ok: false; reason: 'response_too_large' | 'malformed_response' }
-> {
-  const contentLength = response.headers?.get?.('content-length')
-  if (contentLength && /^\d+$/.test(contentLength) && Number(contentLength) > MAX_RESPONSE_BYTES) {
-    await discardResponseBody(response)
-    return { ok: false, reason: 'response_too_large' }
-  }
-  if (response.body && typeof response.body.getReader === 'function') {
-    const reader = response.body.getReader()
-    const chunks: Uint8Array[] = []
-    let totalBytes = 0
-    while (true) {
-      const chunk = await reader.read()
-      if (chunk.done) break
-      totalBytes += chunk.value.byteLength
-      if (totalBytes > MAX_RESPONSE_BYTES) {
-        try {
-          await reader.cancel()
-        } catch {
-          // Fixed reasons are sufficient; never retain raw stream failures.
-        }
-        return { ok: false, reason: 'response_too_large' }
-      }
-      chunks.push(chunk.value)
-    }
-    const bytes = new Uint8Array(totalBytes)
-    let offset = 0
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset)
-      offset += chunk.byteLength
-    }
-    try {
-      return { ok: true, text: new TextDecoder('utf-8', { fatal: true }).decode(bytes) }
-    } catch {
-      return { ok: false, reason: 'malformed_response' }
-    }
-  }
-  const text = await response.text()
-  if (new TextEncoder().encode(text).byteLength > MAX_RESPONSE_BYTES) {
-    return { ok: false, reason: 'response_too_large' }
-  }
-  return { ok: true, text }
-}
-
 function quotaMessage(message: string): boolean {
   const normalized = message.toLowerCase()
   return (
@@ -380,6 +384,62 @@ function timeoutError(error: unknown): boolean {
   )
 }
 
+function endpointSecretFragments(
+  url: string,
+  endpointId: SolanaEvidenceEndpointId
+): string[] | null {
+  try {
+    const parsed = new URL(url)
+    let encoded = ''
+    let decoded = ''
+    if (endpointId === 'helius_solana_mainnet') {
+      decoded = parsed.searchParams.get('api-key') ?? ''
+      const rawPair = parsed.search
+        .slice(1)
+        .split('&')
+        .find((pair) => pair.startsWith('api-key='))
+      encoded = rawPair?.slice('api-key='.length) ?? ''
+    } else if (endpointId === 'alchemy_solana_mainnet') {
+      encoded = parsed.pathname.split('/').filter(Boolean).at(-1) ?? ''
+      try {
+        decoded = decodeURIComponent(encoded)
+      } catch {
+        decoded = ''
+      }
+    }
+    return [
+      ...new Set(
+        [encoded, decoded, decoded ? encodeURIComponent(decoded) : ''].filter(
+          (candidate) => candidate.length > 0
+        )
+      ),
+    ]
+  } catch {
+    return null
+  }
+}
+
+function parseRawCapture(value: unknown): SolanaRawRpcCapture | undefined {
+  if (value === undefined) return undefined
+  if (!isRecord(value)) throw new TypeError('invalid Solana raw RPC evidence capture')
+  const prototype = Object.getPrototypeOf(value)
+  const keys = Reflect.ownKeys(value)
+  const laneDescriptor = Object.getOwnPropertyDescriptor(value, 'lane')
+  if (
+    (prototype !== Object.prototype && prototype !== null) ||
+    keys.length !== 1 ||
+    keys[0] !== 'lane' ||
+    !laneDescriptor ||
+    !laneDescriptor.enumerable ||
+    !('value' in laneDescriptor) ||
+    typeof laneDescriptor.value !== 'string' ||
+    !SOLANA_RAW_RPC_EVIDENCE_LANES.includes(laneDescriptor.value as SolanaRawRpcEvidenceLane)
+  ) {
+    throw new TypeError('invalid Solana raw RPC evidence capture')
+  }
+  return { lane: laneDescriptor.value as SolanaRawRpcEvidenceLane }
+}
+
 function rpcFailure(
   endpoint: SolanaEvidenceEndpointIdentity,
   reason: SolanaRpcFailure['reason'],
@@ -399,16 +459,27 @@ export async function solanaEvidenceRpc(
   endpoint: SolanaEvidenceEndpoint,
   method: string,
   params: unknown[],
-  timeoutMs: number
+  timeoutMs: number,
+  rawCapture?: SolanaRawRpcCapture
 ): Promise<SolanaRpcResult> {
+  let parsedRawCapture: SolanaRawRpcCapture | undefined
+  try {
+    parsedRawCapture = parseRawCapture(rawCapture)
+  } catch {
+    throw new TypeError('invalid Solana raw RPC evidence capture')
+  }
+  if (parsedRawCapture && SOLANA_RAW_RPC_LANE_METHODS[parsedRawCapture.lane] !== method) {
+    throw new TypeError('invalid Solana raw RPC evidence capture')
+  }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
+    const requestBody = encodeJsonRpcRequestBody(RPC_REQUEST_ID, method, params)
     const response = await fetch(endpoint.url, {
       method: 'POST',
       redirect: 'error',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: RPC_REQUEST_ID, method, params }),
+      body: requestBody.text,
       signal: controller.signal,
     })
     const httpStatus = normalizedHttpStatus(response)
@@ -424,9 +495,20 @@ export async function solanaEvidenceRpc(
       await discardResponseBody(response)
       return rpcFailure(endpoint.identity, 'rpc_error', null, httpStatus)
     }
-    const responseText = await readBoundedResponseText(response)
+    const responseText = await readBoundedRpcResponse(
+      response,
+      MAX_RESPONSE_BYTES,
+      parsedRawCapture !== undefined
+    )
     if (!responseText.ok) {
-      return rpcFailure(endpoint.identity, responseText.reason, null, httpStatus)
+      return rpcFailure(
+        endpoint.identity,
+        responseText.reason === 'raw_capture_unavailable'
+          ? 'evidence_capture_error'
+          : responseText.reason,
+        null,
+        httpStatus
+      )
     }
     let payload: unknown
     try {
@@ -460,11 +542,44 @@ export async function solanaEvidenceRpc(
       }
       return rpcFailure(endpoint.identity, 'rpc_error', rpcCode, httpStatus)
     }
+    let rawExchange: SolanaRawRpcEvidenceExchange | undefined
+    if (parsedRawCapture) {
+      if (httpStatus === null || responseText.bytes === null) {
+        return rpcFailure(endpoint.identity, 'evidence_capture_error', null, httpStatus)
+      }
+      const secretFragments = endpointSecretFragments(endpoint.url, endpoint.identity.endpointId)
+      if (
+        secretFragments === null ||
+        secretFragments.some(
+          (secret) => requestBody.text.includes(secret) || responseText.text.includes(secret)
+        )
+      ) {
+        return rpcFailure(endpoint.identity, 'evidence_capture_error', null, httpStatus)
+      }
+      rawExchange = {
+        chain: 'solana',
+        trustBoundary: 'json_rpc_result_transport_only_semantic_lane_not_yet_verified',
+        lane: parsedRawCapture.lane,
+        method,
+        endpoint: endpointCopy(endpoint.identity),
+        httpStatus,
+        completedAt: new Date().toISOString(),
+        request: {
+          ...requestBody.evidence,
+          hashBasis: RAW_RPC_REQUEST_HASH_BASIS,
+        },
+        response: {
+          ...rawRpcBodyEvidence(responseText.bytes),
+          hashBasis: RAW_RPC_RESPONSE_HASH_BASIS,
+        },
+      }
+    }
     return {
       ok: true,
       result: payload.result,
       provider: providerEvidence(endpoint.identity, [endpoint.identity]),
       httpStatus,
+      ...(rawExchange ? { rawExchange } : {}),
     }
   } catch (error) {
     return rpcFailure(endpoint.identity, timeoutError(error) ? 'timeout' : 'transport_error')

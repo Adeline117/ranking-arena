@@ -31,6 +31,7 @@ import {
   type SolanaEvidenceEndpointIdentity,
   type SolanaEvidenceLane,
   type SolanaEvidenceRpcOpts,
+  type SolanaRawRpcEvidenceExchange,
   type SolanaRpcFailure,
   type SolanaRpcResult,
 } from './solana-evidence-core'
@@ -634,11 +635,15 @@ function anchorBinding(anchor: SolanaVerifiedChainAnchor): SolanaTransactionAnch
  * Capture the three same-endpoint observations needed for transaction
  * finality. Provider failover requires restarting from a fresh chain anchor.
  */
-export async function fetchSolanaTransactionMembershipEvidence(
+async function fetchSolanaTransactionMembershipEvidenceInternal(
   signature: string,
   anchorEvidence: unknown,
-  opts: SolanaEvidenceRpcOpts = {}
-): Promise<SolanaTransactionMembershipEvidence> {
+  opts: SolanaEvidenceRpcOpts,
+  captureRaw: boolean
+): Promise<{
+  evidence: SolanaTransactionMembershipEvidence
+  rawExchanges: SolanaRawRpcEvidenceExchange[]
+}> {
   if (!isSignature(signature)) {
     throw new TypeError('signature must be a base58-encoded 64-byte signature')
   }
@@ -662,20 +667,24 @@ export async function fetchSolanaTransactionMembershipEvidence(
         maxSupportedTransactionVersion: 0,
       },
     ],
-    timeoutMs
+    timeoutMs,
+    captureRaw ? { lane: 'transaction' } : undefined
   )
   const transaction = transactionLane(transactionResult, signature)
   let signatureStatus: SolanaEvidenceLane<SolanaFinalizedSignatureStatusEvidence> =
     dependencyUnavailableLane()
   let canonicalBlock: SolanaEvidenceLane<SolanaBlockSignatureMembershipEvidence> =
     dependencyUnavailableLane()
+  let statusResult: SolanaRpcResult | null = null
+  let blockResult: SolanaRpcResult | null = null
   if (transaction.status === 'available') {
-    const [statusResult, blockResult] = await Promise.all([
+    ;[statusResult, blockResult] = await Promise.all([
       solanaEvidenceRpc(
         endpoint,
         'getSignatureStatuses',
         [[signature], { searchTransactionHistory: true }],
-        timeoutMs
+        timeoutMs,
+        captureRaw ? { lane: 'signature_status' } : undefined
       ),
       solanaEvidenceRpc(
         endpoint,
@@ -689,7 +698,8 @@ export async function fetchSolanaTransactionMembershipEvidence(
             rewards: false,
           },
         ],
-        timeoutMs
+        timeoutMs,
+        captureRaw ? { lane: 'membership_block' } : undefined
       ),
     ])
     signatureStatus = signatureStatusLane(statusResult)
@@ -697,15 +707,65 @@ export async function fetchSolanaTransactionMembershipEvidence(
   }
 
   return {
-    chain: { cluster: 'mainnet-beta', genesisHash: SOLANA_MAINNET_GENESIS_HASH },
-    signature,
-    capturedAt: new Date().toISOString(),
-    membershipPolicy: membershipPolicy(),
-    anchor: anchorBinding(anchor),
-    transaction,
-    signatureStatus,
-    canonicalBlock,
+    evidence: {
+      chain: { cluster: 'mainnet-beta', genesisHash: SOLANA_MAINNET_GENESIS_HASH },
+      signature,
+      capturedAt: new Date().toISOString(),
+      membershipPolicy: membershipPolicy(),
+      anchor: anchorBinding(anchor),
+      transaction,
+      signatureStatus,
+      canonicalBlock,
+    },
+    rawExchanges: captureRaw
+      ? [transactionResult, statusResult, blockResult]
+          .map((result) => (result?.ok ? result.rawExchange : undefined))
+          .filter((exchange): exchange is SolanaRawRpcEvidenceExchange => exchange !== undefined)
+      : [],
   }
+}
+
+export async function fetchSolanaTransactionMembershipEvidence(
+  signature: string,
+  anchorEvidence: unknown,
+  opts: SolanaEvidenceRpcOpts = {}
+): Promise<SolanaTransactionMembershipEvidence> {
+  return (
+    await fetchSolanaTransactionMembershipEvidenceInternal(signature, anchorEvidence, opts, false)
+  ).evidence
+}
+
+export interface SolanaVerifiedTransactionFinalityRawCapture {
+  evidence: SolanaTransactionMembershipEvidence
+  verified: SolanaVerifiedTransactionFinality
+  rawExchanges: SolanaRawRpcEvidenceExchange[]
+}
+
+/**
+ * Capture the exact same response bytes consumed by the strict transaction
+ * finality verifier. Nothing is persisted here, and raw transport success does
+ * not imply a DEX protocol hit.
+ */
+export async function captureSolanaVerifiedTransactionFinalityEvidence(
+  signature: string,
+  anchorEvidence: unknown,
+  opts: SolanaEvidenceRpcOpts = {}
+): Promise<SolanaVerifiedTransactionFinalityRawCapture> {
+  const captured = await fetchSolanaTransactionMembershipEvidenceInternal(
+    signature,
+    anchorEvidence,
+    opts,
+    true
+  )
+  const verified = requireSolanaVerifiedTransactionFinality(captured.evidence, anchorEvidence)
+  const expectedLanes = ['transaction', 'signature_status', 'membership_block'] as const
+  if (
+    captured.rawExchanges.length !== expectedLanes.length ||
+    captured.rawExchanges.some((exchange, index) => exchange.lane !== expectedLanes[index])
+  ) {
+    throw new TypeError('Solana transaction raw evidence capture is incomplete')
+  }
+  return { evidence: captured.evidence, verified, rawExchanges: captured.rawExchanges }
 }
 
 function parseExactBlock(value: unknown): SolanaFinalizedBlockEvidence | null {

@@ -28,6 +28,7 @@ import {
   type SolanaEvidenceEndpointIdentity,
   type SolanaEvidenceLane,
   type SolanaEvidenceRpcOpts,
+  type SolanaRawRpcEvidenceExchange,
   type SolanaRpcResult,
 } from './solana-evidence-core'
 
@@ -41,6 +42,8 @@ export type {
   SolanaEvidenceRpcOpts,
   SolanaEvidenceUnavailable,
   SolanaEvidenceUnavailableReason,
+  SolanaRawRpcEvidenceExchange,
+  SolanaRawRpcEvidenceLane,
 } from './solana-evidence-core'
 
 export const SOLANA_MAINNET_GENESIS_HASH = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d' as const
@@ -379,9 +382,13 @@ export function requireSolanaVerifiedChainAnchor(evidence: unknown): SolanaVerif
  * one resolved endpoint. Provider failover requires restarting this function.
  * Never expose the local-node endpoint option directly to untrusted callers.
  */
-export async function fetchSolanaChainAnchorEvidence(
-  opts: SolanaEvidenceRpcOpts = {}
-): Promise<SolanaChainAnchorEvidence> {
+async function fetchSolanaChainAnchorEvidenceInternal(
+  opts: SolanaEvidenceRpcOpts,
+  captureRaw: boolean
+): Promise<{
+  evidence: SolanaChainAnchorEvidence
+  rawExchanges: SolanaRawRpcEvidenceExchange[]
+}> {
   const parsedOpts = parseOptsOrThrow(opts)
   const endpoint = resolveEndpoint(parsedOpts)
   const base = {
@@ -405,24 +412,40 @@ export async function fetchSolanaChainAnchorEvidence(
   }
   if (!endpoint) {
     return {
-      ...base,
-      observedAt: new Date().toISOString(),
-      genesisHash: unconfiguredLane(),
-      finalizedSlot: unconfiguredLane(),
-      finalizedBlock: unconfiguredLane(),
+      evidence: {
+        ...base,
+        observedAt: new Date().toISOString(),
+        genesisHash: unconfiguredLane(),
+        finalizedSlot: unconfiguredLane(),
+        finalizedBlock: unconfiguredLane(),
+      },
+      rawExchanges: [],
     }
   }
 
   const timeoutMs = parsedOpts.timeoutMs ?? DEFAULT_SOLANA_EVIDENCE_TIMEOUT_MS
   const [genesisResult, slotResult] = await Promise.all([
-    solanaEvidenceRpc(endpoint, 'getGenesisHash', [], timeoutMs),
-    solanaEvidenceRpc(endpoint, 'getSlot', [{ commitment: 'finalized' }], timeoutMs),
+    solanaEvidenceRpc(
+      endpoint,
+      'getGenesisHash',
+      [],
+      timeoutMs,
+      captureRaw ? { lane: 'genesis_hash' } : undefined
+    ),
+    solanaEvidenceRpc(
+      endpoint,
+      'getSlot',
+      [{ commitment: 'finalized' }],
+      timeoutMs,
+      captureRaw ? { lane: 'finalized_anchor_slot' } : undefined
+    ),
   ])
   const genesisHash = genesisLane(genesisResult)
   const finalizedSlot = slotLane(slotResult)
   let finalizedBlock: SolanaEvidenceLane<SolanaFinalizedBlockEvidence> = dependencyUnavailableLane()
+  let blockResult: SolanaRpcResult | null = null
   if (finalizedSlot.status === 'available') {
-    const blockResult = await solanaEvidenceRpc(
+    blockResult = await solanaEvidenceRpc(
       endpoint,
       'getBlock',
       [
@@ -435,16 +458,56 @@ export async function fetchSolanaChainAnchorEvidence(
           rewards: false,
         },
       ],
-      timeoutMs
+      timeoutMs,
+      captureRaw ? { lane: 'finalized_anchor_block' } : undefined
     )
     finalizedBlock = blockLane(blockResult, finalizedSlot.value)
   }
 
   return {
-    ...base,
-    observedAt: new Date().toISOString(),
-    genesisHash,
-    finalizedSlot,
-    finalizedBlock,
+    evidence: {
+      ...base,
+      observedAt: new Date().toISOString(),
+      genesisHash,
+      finalizedSlot,
+      finalizedBlock,
+    },
+    rawExchanges: captureRaw
+      ? [genesisResult, slotResult, blockResult]
+          .map((result) => (result?.ok ? result.rawExchange : undefined))
+          .filter((exchange): exchange is SolanaRawRpcEvidenceExchange => exchange !== undefined)
+      : [],
   }
+}
+
+export async function fetchSolanaChainAnchorEvidence(
+  opts: SolanaEvidenceRpcOpts = {}
+): Promise<SolanaChainAnchorEvidence> {
+  return (await fetchSolanaChainAnchorEvidenceInternal(opts, false)).evidence
+}
+
+export interface SolanaVerifiedChainAnchorRawCapture {
+  evidence: SolanaChainAnchorEvidence
+  verified: SolanaVerifiedChainAnchor
+  rawExchanges: SolanaRawRpcEvidenceExchange[]
+}
+
+/**
+ * Capture the exact same response bytes consumed by the strict anchor
+ * verifier. Nothing is persisted here; callers must separately scan and
+ * authorize any raw artifact storage.
+ */
+export async function captureSolanaVerifiedChainAnchorEvidence(
+  opts: SolanaEvidenceRpcOpts = {}
+): Promise<SolanaVerifiedChainAnchorRawCapture> {
+  const captured = await fetchSolanaChainAnchorEvidenceInternal(opts, true)
+  const verified = requireSolanaVerifiedChainAnchor(captured.evidence)
+  const expectedLanes = ['genesis_hash', 'finalized_anchor_slot', 'finalized_anchor_block'] as const
+  if (
+    captured.rawExchanges.length !== expectedLanes.length ||
+    captured.rawExchanges.some((exchange, index) => exchange.lane !== expectedLanes[index])
+  ) {
+    throw new TypeError('Solana anchor raw evidence capture is incomplete')
+  }
+  return { evidence: captured.evidence, verified, rawExchanges: captured.rawExchanges }
 }

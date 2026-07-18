@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto'
 
 import { SOLANA_MAINNET_GENESIS_HASH, requireSolanaVerifiedChainAnchor } from '../solana-evidence'
 import {
+  captureSolanaVerifiedTransactionFinalityEvidence,
   fetchSolanaTransactionMembershipEvidence,
   requireSolanaVerifiedTransactionFinality,
   type SolanaCanonicalTransactionError,
@@ -19,6 +20,7 @@ interface RpcReply {
   status?: number
   body?: string
   error?: Error
+  stream?: ReadableStream<Uint8Array>
 }
 
 interface RpcCall {
@@ -195,6 +197,34 @@ function defaultResult(request: RpcRequest): unknown {
   throw new Error(`unexpected test RPC method: ${request.method}`)
 }
 
+function successfulResponseBody(request: RpcRequest): string {
+  return `${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    result: defaultResult(request),
+    providerNote: '链上原始字段',
+  })}\n`
+}
+
+function byteStream(body: string): ReadableStream<Uint8Array> {
+  const bytes = new TextEncoder().encode(body)
+  const split = Math.max(1, bytes.byteLength - 2)
+  const chunks = [bytes.slice(0, split), bytes.slice(split)]
+  return {
+    getReader: () => {
+      let index = 0
+      return {
+        read: jest.fn(async () =>
+          index < chunks.length
+            ? { done: false, value: chunks[index++] }
+            : { done: true, value: undefined }
+        ),
+        cancel: jest.fn(async () => undefined),
+      }
+    },
+  } as never
+}
+
 function mockRpc(handler: (request: RpcRequest) => RpcReply = () => ({})): RpcCall[] {
   const calls: RpcCall[] = []
   global.fetch = jest.fn(async (input, init) => {
@@ -210,6 +240,7 @@ function mockRpc(handler: (request: RpcRequest) => RpcReply = () => ({})): RpcCa
     return {
       status: reply.status ?? 200,
       headers: { get: () => null },
+      body: reply.stream,
       text: async () => reply.body ?? JSON.stringify(payload),
     } as Response
   }) as jest.MockedFunction<typeof fetch>
@@ -358,6 +389,106 @@ describe('Solana transaction finality evidence', () => {
     )
     expect(JSON.stringify(evidence)).not.toContain(TEST_RPC_ORIGIN)
     expect(JSON.stringify(evidence)).not.toContain('provider-only detail')
+  })
+
+  it('captures exact transaction transport bytes while keeping normalized evidence minimal', async () => {
+    const calls = mockRpc((request) => ({
+      stream: byteStream(successfulResponseBody(request)),
+    }))
+    const captured = await captureSolanaVerifiedTransactionFinalityEvidence(
+      TX_SIGNATURE,
+      anchorFixture(),
+      {
+        rpcUrl: TEST_RPC_URL,
+        endpointId: TEST_ENDPOINT_ID,
+      }
+    )
+
+    expect(captured.verified).toMatchObject({
+      transactionIndex: 1,
+      executionStatus: 'succeeded',
+      candidateHitEligible: true,
+    })
+    expect(captured.rawExchanges.map(({ lane }) => lane)).toEqual([
+      'transaction',
+      'signature_status',
+      'membership_block',
+    ])
+    expect(captured.rawExchanges).toHaveLength(calls.length)
+    const expectedMethods = ['getTransaction', 'getSignatureStatuses', 'getBlock']
+    for (const [index, exchange] of captured.rawExchanges.entries()) {
+      const requestBody = String(calls[index].init.body)
+      const responseBody = successfulResponseBody(calls[index].request)
+      const requestBytes = Buffer.from(exchange.request.bytes)
+      const responseBytes = Buffer.from(exchange.response.bytes)
+      expect(requestBytes.toString('utf8')).toBe(requestBody)
+      expect(responseBytes.toString('utf8')).toBe(responseBody)
+      expect(exchange.request.sha256).toBe(createHash('sha256').update(requestBytes).digest('hex'))
+      expect(exchange.response.sha256).toBe(
+        createHash('sha256').update(responseBytes).digest('hex')
+      )
+      expect(exchange.method).toBe(expectedMethods[index])
+      expect(exchange.httpStatus).toBe(200)
+      expect(exchange.completedAt).toBe(FIXED_NOW)
+      expect(exchange.endpoint).toEqual({
+        providerId: 'local',
+        endpointId: TEST_ENDPOINT_ID,
+        connectionHash: TEST_CONNECTION_HASH,
+      })
+      expect(exchange).not.toHaveProperty('url')
+    }
+    expect(JSON.stringify(captured.evidence)).not.toContain('provider-only detail')
+    expect(JSON.stringify(captured.evidence)).not.toContain('providerNote')
+    const rawTransaction = Buffer.from(captured.rawExchanges[0].response.bytes).toString('utf8')
+    expect(rawTransaction).toContain('provider-only detail')
+    expect(rawTransaction).toContain('"providerOnly":true')
+    expect(rawTransaction).toContain('链上原始字段')
+  })
+
+  it('fails exact transaction capture closed for text-only transport mocks', async () => {
+    const calls = mockRpc()
+    await expect(
+      captureSolanaVerifiedTransactionFinalityEvidence(TX_SIGNATURE, anchorFixture(), {
+        rpcUrl: TEST_RPC_URL,
+        endpointId: TEST_ENDPOINT_ID,
+      })
+    ).rejects.toThrow('Solana transaction finality evidence is not fully verified')
+    expect(calls).toHaveLength(1)
+
+    const evidence = await capture()
+    expect(
+      requireSolanaVerifiedTransactionFinality(evidence, anchorFixture()).transactionIndex
+    ).toBe(1)
+    expect(evidence).not.toHaveProperty('rawExchanges')
+  })
+
+  it('returns no partial raw capture when a dependent transaction lane fails', async () => {
+    const secret = 'private-api-key'
+    const calls = mockRpc((request) => ({
+      stream: byteStream(
+        request.method === 'getSignatureStatuses'
+          ? JSON.stringify({
+              jsonrpc: '2.0',
+              id: 1,
+              error: { code: -32_601, message: `method unavailable at ${secret}` },
+            })
+          : successfulResponseBody(request)
+      ),
+    }))
+    let error: unknown
+    try {
+      await captureSolanaVerifiedTransactionFinalityEvidence(TX_SIGNATURE, anchorFixture(), {
+        rpcUrl: TEST_RPC_URL,
+        endpointId: TEST_ENDPOINT_ID,
+      })
+    } catch (caught) {
+      error = caught
+    }
+    expect(calls).toHaveLength(3)
+    expect(String(error)).toBe(
+      'TypeError: Solana transaction finality evidence is not fully verified'
+    )
+    expect(String(error)).not.toContain(secret)
   })
 
   it.each([
