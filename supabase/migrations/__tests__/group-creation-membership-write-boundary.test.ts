@@ -85,9 +85,11 @@ describe('group creation and membership server-write boundary', () => {
 
   it('matches the live browser read and service membership paths without UI changes', () => {
     expect(groupPage).toContain(".from('groups')")
-    expect(groupPage).toContain(".from('group_members')")
-    expect(groupsFeed).toContain(".from('group_members')")
-    expect(groupPage).toContain('`/api/groups/${groupId}/membership`')
+    expect(groupPage).toContain(".from('group_member_directory')")
+    expect(groupsFeed).toContain(".from('own_group_memberships')")
+    expect(groupPage).not.toContain(".from('group_members')")
+    expect(groupsFeed).not.toContain(".from('group_members')")
+    expect(groupPage).toContain('`/api/groups/${requestGroupId}/membership`')
     expect(groupPage).not.toMatch(
       /\.from\(['"]group_members['"]\)[\s\S]{0,120}\.(?:insert|update|delete|upsert)\(/
     )
