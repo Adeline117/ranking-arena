@@ -34,10 +34,10 @@ describe('HomeFirstPaintShell', () => {
     const criticalCss = getCriticalCss()
 
     expect(criticalCss).toContain(
-      '.three-col-layout{display:grid;grid-template-columns:240px 1fr 260px;gap:24px'
+      '.three-col-layout{display:grid;grid-template-columns:240px 1fr 260px;gap:20px'
     )
     expect(criticalCss).toContain(
-      '@media(min-width:1280px) and (max-width:1440px){.three-col-layout{grid-template-columns:220px 1fr 240px}}'
+      '@media(min-width:1280px) and (max-width:1439px){.three-col-layout{grid-template-columns:220px 1fr 240px}}'
     )
     expect(criticalCss).toContain(
       '@media(min-width:1441px){.three-col-layout{max-width:1600px;grid-template-columns:260px 1fr 280px}}'
