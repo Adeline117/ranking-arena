@@ -14,10 +14,11 @@
  *   - auto-post-market-summary + friends selected columns that were renamed.
  *   - user_profiles.display_name (prod has `handle`, not `display_name`).
  *
- * This scanner extracts the selected columns from every
- * `.from('t').select('...')` in `app/` + `lib/`, then verifies each column
- * against the LIVE production schema via a PostgREST probe (the exact surface
- * the app queries — views, RLS-exposed cols and all):
+ * This scanner extracts selected columns from runtime `.from('t').select(
+ * '...')` calls in `app/` + `lib/` (tests/mocks are not application query
+ * surfaces), then verifies each column against the LIVE production schema via
+ * a PostgREST probe (the exact surface the app queries — views, RLS-exposed
+ * cols and all):
  *
  *   GET $URL/rest/v1/<table>?select=<cols>&limit=0
  *     200            → every column exists
@@ -47,6 +48,7 @@ const REPO = path.resolve(new URL('../..', import.meta.url).pathname)
 const SCAN_DIRS = ['app', 'lib']
 const PROBE_TIMEOUT_MS = 15_000
 const PROBE_CONCURRENCY = 8
+const NON_RUNTIME_DIRS = new Set(['__mocks__', '__tests__'])
 
 // (file:table:column) or (table:column) entries that are known-OK. Document why.
 // Bias is already toward under-reporting, so this should stay tiny.
@@ -57,7 +59,12 @@ const ALLOWLIST = new Set([
 // Tables that are NOT REST-exposed public tables and therefore un-probeable
 // from here (PGRST205 is expected, not a bug). Kept out of the advisory noise.
 const TABLE_SKIP = new Set([
-  // arena.* tables are reached via RPC, never `.from()` — none expected here.
+  // These security-invoker views intentionally grant SELECT only to browser
+  // roles. The service-role probe must receive 42501, while production types
+  // and the dedicated PG17 migration proof validate their exact columns.
+  'group_member_directory',
+  'group_member_moderation_directory',
+  'own_group_memberships',
 ])
 
 function walk(dir, acc = []) {
@@ -70,11 +77,13 @@ function walk(dir, acc = []) {
   for (const e of entries) {
     if (e.name === 'node_modules' || e.name === '.next' || e.name.startsWith('.')) continue
     const p = path.join(dir, e.name)
-    if (e.isDirectory()) walk(p, acc)
-    else if (
+    if (e.isDirectory()) {
+      if (!NON_RUNTIME_DIRS.has(e.name)) walk(p, acc)
+    } else if (
       (e.name.endsWith('.ts') || e.name.endsWith('.tsx')) &&
       e.name !== 'database.types.ts' && // generated; not a query surface
-      !e.name.endsWith('.d.ts')
+      !e.name.endsWith('.d.ts') &&
+      !/\.(?:spec|test)\.[cm]?tsx?$/.test(e.name)
     )
       acc.push(p)
   }
