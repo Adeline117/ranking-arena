@@ -11,7 +11,7 @@
  * and row hover affordance.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
@@ -23,6 +23,7 @@ import { formatTimeAgo } from '@/lib/utils/date'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import DerivedBoardBadge from '@/app/components/common/DerivedBoardBadge'
 import ProvenanceFooter from '@/app/components/common/ProvenanceFooter'
+import ErrorState from '@/app/components/ui/ErrorState'
 import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
 import {
   formatExchangeMoney,
@@ -212,11 +213,16 @@ function ExchangeLogo({ source, name }: { source: string; name: string }) {
 
 export interface ExchangeRankingsClientProps {
   byTimeframe: Record<ExchangeRankingsTimeframe, ExchangeRankings | null>
+  failedTimeframes?: readonly ExchangeRankingsTimeframe[]
 }
 
-export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankingsClientProps) {
+export default function ExchangeRankingsClient({
+  byTimeframe,
+  failedTimeframes = [],
+}: ExchangeRankingsClientProps) {
   const { t, language } = useLanguage()
   const router = useRouter()
+  const [isRetrying, startRetry] = useTransition()
   const [tf, setTf] = useState<ExchangeRankingsTimeframe>(90)
   // B2 tabs a11y: timeframe pills control the single rankings table region.
   const tfTabsA11y = useTabsA11y({
@@ -230,6 +236,7 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
   const [sortDir, setSortDir] = useState<SortDir>('desc')
 
   const data = byTimeframe[tf]
+  const selectedTimeframeFailed = failedTimeframes.includes(tf)
   const rows = useMemo(() => data?.rows ?? [], [data])
 
   const sortedRows = useMemo(() => {
@@ -262,6 +269,10 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
       setSortKey(key)
       setSortDir(defaultDir(key))
     }
+  }
+
+  function retryFailedTimeframes() {
+    startRetry(() => router.refresh())
   }
 
   const renderTh = (
@@ -336,7 +347,61 @@ export default function ExchangeRankingsClient({ byTimeframe }: ExchangeRankings
         </Box>
       </Box>
 
-      {rows.length === 0 ? (
+      {failedTimeframes.length > 0 && !selectedTimeframeFailed && (
+        <Box
+          role="status"
+          aria-busy={isRetrying}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: tokens.spacing[3],
+            marginBottom: tokens.spacing[3],
+            padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
+            border: '1px solid var(--color-border-primary)',
+            borderRadius: tokens.radius.md,
+            background: 'var(--color-bg-secondary)',
+          }}
+        >
+          <Text size="sm" color="secondary">
+            {t('dataLoadIncomplete')}
+          </Text>
+          <button
+            type="button"
+            onClick={retryFailedTimeframes}
+            disabled={isRetrying}
+            style={{
+              border: 0,
+              padding: tokens.spacing[1],
+              color: 'var(--color-accent-primary)',
+              background: 'transparent',
+              cursor: isRetrying ? 'wait' : 'pointer',
+              font: 'inherit',
+              fontWeight: tokens.typography.fontWeight.semibold,
+            }}
+          >
+            {isRetrying ? t('retrying') : t('retry')}
+          </button>
+        </Box>
+      )}
+
+      {selectedTimeframeFailed ? (
+        <Box
+          {...tfTabsA11y.getSharedPanelProps()}
+          aria-busy={isRetrying}
+          style={{
+            border: '1px solid var(--color-border-primary)',
+            borderRadius: tokens.radius.lg,
+          }}
+        >
+          <ErrorState
+            title={t('failedToLoadRankings')}
+            description={t('loadFailedRetryShort')}
+            retry={retryFailedTimeframes}
+            variant="compact"
+          />
+        </Box>
+      ) : rows.length === 0 ? (
         <Box
           {...tfTabsA11y.getSharedPanelProps()}
           style={{

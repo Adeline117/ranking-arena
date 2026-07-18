@@ -47,16 +47,25 @@ function numOrNull(v: unknown): number | null {
 export async function getExchangeRankings(
   supabase: SupabaseClient,
   timeframe: ExchangeRankingsTimeframe
-): Promise<ExchangeRankings | null> {
+): Promise<ExchangeRankings> {
   const { data, error } = await supabase.rpc('arena_exchange_rankings', {
     p_timeframe: timeframe,
   })
   logRpcError('arena_exchange_rankings', error)
-  if (error || !data || typeof data !== 'object') return null
+  if (error) {
+    throw new Error(`Exchange rankings request failed for ${timeframe}D`, { cause: error })
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(`Exchange rankings returned an invalid ${timeframe}D response`)
+  }
   const d = data as Record<string, unknown>
+  const nonLegacyCount = numOrNull(d.nonLegacyCount)
+  if (nonLegacyCount === null || !Array.isArray(d.rows)) {
+    throw new Error(`Exchange rankings returned an invalid ${timeframe}D response`)
+  }
 
   const rows: ExchangeRankingRow[] = []
-  for (const raw of Array.isArray(d.rows) ? d.rows : []) {
+  for (const raw of d.rows) {
     if (!raw || typeof raw !== 'object') continue
     const r = raw as Record<string, unknown>
     if (typeof r.source !== 'string' || typeof r.asOf !== 'string') continue
@@ -86,7 +95,7 @@ export async function getExchangeRankings(
   }
 
   return {
-    nonLegacyCount: numOrNull(d.nonLegacyCount) ?? 0,
+    nonLegacyCount,
     timeframe,
     rows,
   }
