@@ -8,6 +8,8 @@ set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 MIGRATION="$ROOT_DIR/supabase/migrations/20260718183000_atomic_stripe_entitlement_identity.sql"
+EXTRA_MIGRATION="${STRIPE_ENTITLEMENT_EXTRA_MIGRATION:-}"
+EXTRA_PROOF_SQL="${STRIPE_ENTITLEMENT_EXTRA_PROOF_SQL:-}"
 PG_BIN="${PG17_BIN:-/opt/homebrew/opt/postgresql@17/bin}"
 
 for executable in initdb pg_ctl psql; do
@@ -515,6 +517,13 @@ INSERT INTO public.subscriptions(
 SQL
 
 psql_cmd -f "$MIGRATION" >/dev/null
+if [[ -n "$EXTRA_MIGRATION" ]]; then
+  if [[ ! -r "$EXTRA_MIGRATION" ]]; then
+    echo "Extra Stripe entitlement migration is unreadable: $EXTRA_MIGRATION" >&2
+    exit 1
+  fi
+  psql_cmd -f "$EXTRA_MIGRATION" >/dev/null
+fi
 
 psql_cmd <<'SQL'
 DO $additive_deploy_window$
@@ -2478,5 +2487,13 @@ BEGIN
 END
 $predeploy_concurrency_and_acl_proof$;
 SQL
+
+if [[ -n "$EXTRA_PROOF_SQL" ]]; then
+  if [[ ! -r "$EXTRA_PROOF_SQL" ]]; then
+    echo "Extra Stripe entitlement proof is unreadable: $EXTRA_PROOF_SQL" >&2
+    exit 1
+  fi
+  psql_cmd -f "$EXTRA_PROOF_SQL"
+fi
 
 echo "atomic Stripe payment-period authority PREDEPLOY PostgreSQL 17 proof passed"
