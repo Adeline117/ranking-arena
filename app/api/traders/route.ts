@@ -29,6 +29,12 @@ import {
   currentScoredSources,
   type LeaderboardCountCacheRow,
 } from '@/lib/data/leaderboard-count-cache'
+import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
+import {
+  sourceFreshnessStatusMap,
+  summarizeSourceFreshness,
+  type SourceFreshnessRow,
+} from '@/lib/rankings/source-freshness'
 
 const logger = createLogger('traders-api')
 
@@ -89,7 +95,7 @@ export const GET = withPublic(
     const effectiveSortBy = sortBy || 'arena_score'
 
     // Cache key
-    const cacheKey = `leaderboard:v2:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
+    const cacheKey = `leaderboard:v3:${timeRange}:${exchangeFilter || 'all'}:${categoryFilter || 'all'}:${effectiveSortBy}:${order}:${cursor || 'start'}:${limit}${useLegacyPaging ? `:p${page}` : ''}`
 
     const cachedData = await getOrSetWithLock(
       cacheKey,
@@ -301,6 +307,7 @@ async function fetchFromLeaderboard(
       row.source === 'web3_bot' || row.trader_type === 'bot' || row.trader_type === 'suspected_bot',
     trader_type: (row.trader_type as string) || (row.source === 'web3_bot' ? 'bot' : null),
     is_outlier: row.is_outlier === true,
+    computed_at: (row.computed_at as string) || null,
     // Trust-facing anti-gaming flags — derived at read time from serving-row
     // fields (no pipeline/migration change). Empty [] for the ~97% of rows
     // with plausible metrics.
@@ -378,18 +385,34 @@ async function fetchFromLeaderboard(
     availableSourcesCache.set(timeRange, { sources: availableSources, ts: Date.now() })
   }
 
-  // Latest computed_at + staleness detection
-  const computedAt = data?.[0]?.computed_at || new Date().toISOString()
-  const dataAgeMs = Date.now() - new Date(computedAt).getTime()
-  const dataAgeMinutes = Math.round(dataAgeMs / 60_000)
-  // Data is stale if older than 2 hours (compute-leaderboard runs hourly)
-  const isStale = dataAgeMs > 2 * 60 * 60 * 1000
+  const categorySourceType =
+    categoryFilter === 'onchain' ? 'web3' : categoryFilter === 'spot' ? 'spot' : 'futures'
+  const relevantSources = exchangeFilter
+    ? [exchangeFilter]
+    : categoryFilter
+      ? availableSources.filter(
+          (source) => (SOURCE_TYPE_MAP[source] || 'futures') === categorySourceType
+        )
+      : availableSources
+  const { data: sourceWatermarks } = await supabase
+    .from('leaderboard_source_freshness')
+    .select('source,source_as_of')
+    .eq('season_id', timeRange)
+  const freshnessSummary = summarizeSourceFreshness(
+    (sourceWatermarks || []) as SourceFreshnessRow[],
+    relevantSources
+  )
+  const freshnessBySource = sourceFreshnessStatusMap(freshnessSummary)
+  const dataAgeMinutes =
+    freshnessSummary.ageSeconds == null ? null : Math.round(freshnessSummary.ageSeconds / 60)
 
   // Apply profanity filter to all handles before returning
   const sanitizedTraders = dedupedTraders.map(
     (t: { handle: string | null; [key: string]: unknown }) => ({
       ...t,
       handle: sanitizeDisplayName(t.handle),
+      updated_at: freshnessBySource.get(String(t.source))?.updated_at ?? null,
+      is_stale: freshnessBySource.get(String(t.source))?.is_stale ?? true,
     })
   )
 
@@ -398,9 +421,10 @@ async function fetchFromLeaderboard(
     timeRange,
     totalCount,
     rankingMode: 'arena_score',
-    lastUpdated: computedAt,
-    isStale,
+    lastUpdated: freshnessSummary.asOf,
+    isStale: freshnessSummary.isStale,
     dataAgeMinutes,
+    source_freshness: freshnessSummary.sources,
     // Cursor-based pagination
     nextCursor,
     hasMore,

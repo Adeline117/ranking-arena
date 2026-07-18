@@ -17,7 +17,9 @@ jest.mock('next/server', () => {
       this.status = init.status || 200
       this.headers = new Map(Object.entries(init.headers || {}))
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number; headers?: Record<string, string> }) {
       return new MockNextResponse(data, init)
     }
@@ -31,7 +33,9 @@ jest.mock('next/server', () => {
     constructor(url: string, opts?: { headers?: Record<string, string>; method?: string }) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) }))
+      this.headers = new Map(
+        Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) })
+      )
       this.method = opts?.method || 'GET'
     }
   }
@@ -60,7 +64,10 @@ jest.mock('@/lib/logger', () => ({
 
 jest.mock('@/lib/utils/logger', () => ({
   createLogger: jest.fn(() => ({
-    info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(),
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
   })),
 }))
 
@@ -254,6 +261,173 @@ describe('GET /api/rankings', () => {
     const res = await GET(req)
 
     expect(res.status).toBe(200)
+  })
+
+  it('returns honest per-source watermarks and marks a mixed-source board stale', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-18T12:00:00.000Z'))
+    try {
+      const generation = '2026-07-18T11:55:00.000Z'
+      const rankingRows = [
+        {
+          source: 'binance_futures',
+          source_trader_id: 'fresh-trader',
+          handle: 'Fresh',
+          arena_score: 90,
+          roi: 10,
+          rank: 1,
+          computed_at: '2026-07-18T11:59:00.000Z',
+          is_outlier: false,
+        },
+        {
+          source: 'hyperliquid',
+          source_trader_id: 'stale-trader',
+          handle: 'Stale',
+          arena_score: 80,
+          roi: 9,
+          rank: 2,
+          computed_at: '2026-07-18T11:59:00.000Z',
+          is_outlier: false,
+        },
+      ]
+      const countRows = [
+        { source: '_all_gt0', total_count: 2, updated_at: generation },
+        { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
+        { source: 'hyperliquid_gt0', total_count: 1, updated_at: generation },
+      ]
+      mockSupabaseQuery.mockImplementation((table: string) => {
+        if (table === 'leaderboard_ranks') {
+          return makeChainableQuery({ data: rankingRows, error: null, count: 2 })
+        }
+        if (table === 'leaderboard_count_cache') {
+          return makeChainableQuery({ data: countRows, error: null, count: 3 })
+        }
+        if (table === 'leaderboard_source_freshness') {
+          return makeChainableQuery({
+            data: [
+              {
+                source: 'binance_futures',
+                source_as_of: '2026-07-18T11:00:00.000Z',
+              },
+              {
+                source: 'hyperliquid',
+                source_as_of: '2026-07-16T09:00:00.000Z',
+              },
+            ],
+            error: null,
+            count: 2,
+          })
+        }
+        return makeChainableQuery()
+      })
+
+      const req = new NextRequest('http://localhost/api/rankings?window=90d&sort_by=roi')
+      const res = await GET(req)
+      const body = await res.json()
+      const data = body.data ?? body
+
+      expect(res.status).toBe(200)
+      expect(data.as_of).toBe('2026-07-16T09:00:00.000Z')
+      expect(data.is_stale).toBe(true)
+      expect(data.source_freshness).toEqual([
+        {
+          source: 'binance_futures',
+          updated_at: '2026-07-18T11:00:00.000Z',
+          is_stale: false,
+          age_seconds: 3600,
+        },
+        {
+          source: 'hyperliquid',
+          updated_at: '2026-07-16T09:00:00.000Z',
+          is_stale: true,
+          age_seconds: 51 * 3600,
+        },
+      ])
+      expect(data.traders[0]).toEqual(
+        expect.objectContaining({
+          platform: 'binance_futures',
+          updated_at: '2026-07-18T11:00:00.000Z',
+          is_stale: false,
+          computed_at: '2026-07-18T11:59:00.000Z',
+        })
+      )
+      expect(data.traders[1]).toEqual(
+        expect.objectContaining({
+          platform: 'hyperliquid',
+          updated_at: '2026-07-16T09:00:00.000Z',
+          is_stale: true,
+        })
+      )
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
+  it('scopes page-level freshness to the requested platform filter', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-18T12:00:00.000Z'))
+    try {
+      const generation = '2026-07-18T11:55:00.000Z'
+      mockSupabaseQuery.mockImplementation((table: string) => {
+        if (table === 'leaderboard_ranks') {
+          return makeChainableQuery({
+            data: [
+              {
+                source: 'binance_futures',
+                source_trader_id: 'fresh-trader',
+                arena_score: 90,
+                roi: 10,
+                rank: 1,
+                computed_at: '2026-07-18T11:59:00.000Z',
+              },
+            ],
+            error: null,
+            count: 1,
+          })
+        }
+        if (table === 'leaderboard_count_cache') {
+          return makeChainableQuery({
+            data: [
+              { source: '_all_gt0', total_count: 2, updated_at: generation },
+              { source: 'binance_futures_gt0', total_count: 1, updated_at: generation },
+              { source: 'hyperliquid_gt0', total_count: 1, updated_at: generation },
+            ],
+            error: null,
+            count: 3,
+          })
+        }
+        if (table === 'leaderboard_source_freshness') {
+          return makeChainableQuery({
+            data: [
+              {
+                source: 'binance_futures',
+                source_as_of: '2026-07-18T11:00:00.000Z',
+              },
+              {
+                source: 'hyperliquid',
+                source_as_of: '2026-07-16T09:00:00.000Z',
+              },
+            ],
+            error: null,
+            count: 2,
+          })
+        }
+        return makeChainableQuery()
+      })
+
+      const req = new NextRequest(
+        'http://localhost/api/rankings?window=90d&platform=binance_futures&sort_by=roi'
+      )
+      const res = await GET(req)
+      const body = await res.json()
+      const data = body.data ?? body
+
+      expect(data.is_stale).toBe(false)
+      expect(data.as_of).toBe('2026-07-18T11:00:00.000Z')
+      expect(data.source_freshness.map((source: { source: string }) => source.source)).toEqual([
+        'binance_futures',
+      ])
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   // --- Composite Window ---

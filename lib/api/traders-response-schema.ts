@@ -33,6 +33,9 @@ export const traderOutputSchema = z.object({
   is_verified_data: z.boolean().optional(),
   rank_change: z.number().nullable().optional(),
   is_new: z.boolean().optional(),
+  updated_at: z.string().nullable().optional(),
+  is_stale: z.boolean().optional(),
+  computed_at: z.string().nullable().optional(),
 })
 
 export const tradersResponseSchema = z.object({
@@ -40,8 +43,19 @@ export const tradersResponseSchema = z.object({
   timeRange: z.string(),
   totalCount: z.number(),
   rankingMode: z.string(),
-  lastUpdated: z.string(),
+  lastUpdated: z.string().nullable(),
   isStale: z.boolean(),
+  dataAgeMinutes: z.number().nullable().optional(),
+  source_freshness: z
+    .array(
+      z.object({
+        source: z.string(),
+        updated_at: z.string().nullable(),
+        is_stale: z.boolean(),
+        age_seconds: z.number().nullable(),
+      })
+    )
+    .optional(),
   nextCursor: z.number().nullable(),
   hasMore: z.boolean(),
   page: z.number().optional(),

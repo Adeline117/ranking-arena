@@ -42,6 +42,7 @@ import { LEADERBOARD_PLATFORMS, WINDOWS } from '@/lib/types/leaderboard'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { withPublic } from '@/lib/api/middleware'
 import { getOrSetWithLock } from '@/lib/cache'
+import { summarizeSourceFreshness, type SourceFreshnessRow } from '@/lib/rankings/source-freshness'
 
 // Removed force-dynamic — it contradicted revalidate and prevented CDN caching.
 // With Redis cache + CDN s-maxage headers, this route is fast and scalable.
@@ -105,7 +106,7 @@ export const GET = withPublic(
       : null
 
     // Redis cache — 120s TTL (data refreshes via cron every 30 min, 2-min cache is safe)
-    const cacheKey = `v2-rankings:${platform}:${window}:${sort}:${offset}:${limit}:${tradingStyle || ''}:${minRoi ?? ''}:${minPnl ?? ''}:${minWinRate ?? ''}:${maxDrawdown ?? ''}:${minScore ?? ''}:${minSortino ?? ''}`
+    const cacheKey = `v2-rankings:v3:${platform}:${window}:${sort}:${offset}:${limit}:${tradingStyle || ''}:${minRoi ?? ''}:${minPnl ?? ''}:${minWinRate ?? ''}:${maxDrawdown ?? ''}:${minScore ?? ''}:${minSortino ?? ''}`
 
     const cached = await getOrSetWithLock<RankingsResponse>(
       cacheKey,
@@ -194,18 +195,15 @@ export const GET = withPublic(
         // leaderboard_ranks already has handle + avatar_url — no need for separate
         // trader_profiles / trader_sources joins (eliminated 2 extra DB queries)
 
-        // Calculate staleness
-        const latestUpdate =
-          rows && rows.length > 0
-            ? new Date(
-                Math.max(
-                  ...rows
-                    .map((r) => new Date(String(r.computed_at || '')).getTime())
-                    .filter((t) => !isNaN(t))
-                )
-              )
-            : new Date(0)
-        const stalenessSeconds = Math.floor((Date.now() - latestUpdate.getTime()) / 1000)
+        const { data: sourceWatermarkRows } = await supabase
+          .from('leaderboard_source_freshness')
+          .select('source,source_as_of')
+          .eq('season_id', seasonId)
+          .eq('source', platform)
+        const freshnessSummary = summarizeSourceFreshness(
+          (sourceWatermarkRows || []) as SourceFreshnessRow[],
+          [platform]
+        )
 
         // Build response — maintain exact same response format for frontend consumers
         const traders: RankingEntry[] = (rows || []).map((r) => {
@@ -244,7 +242,9 @@ export const GET = withPublic(
               window_native: true,
               notes: [] as string[],
             },
-            updated_at: String(r.computed_at || ''),
+            updated_at: freshnessSummary.asOf,
+            is_stale: freshnessSummary.isStale,
+            computed_at: String(r.computed_at || '') || null,
           }
 
           return {
@@ -271,8 +271,10 @@ export const GET = withPublic(
             market_type: marketType as 'futures',
             window: window as Window,
             total_count: count || 0,
-            updated_at: latestUpdate.toISOString(),
-            staleness_seconds: stalenessSeconds,
+            updated_at: freshnessSummary.asOf,
+            staleness_seconds: freshnessSummary.ageSeconds,
+            is_stale: freshnessSummary.isStale,
+            source_freshness: freshnessSummary.sources,
           },
         } as RankingsResponse
       }, // end fetcher

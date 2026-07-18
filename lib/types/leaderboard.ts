@@ -1031,8 +1031,15 @@ export interface RankingsResponse {
     market_type: MarketType | 'all'
     window: Window
     total_count: number
-    updated_at: string
-    staleness_seconds: number
+    updated_at: string | null
+    staleness_seconds: number | null
+    is_stale?: boolean
+    source_freshness?: Array<{
+      source: string
+      updated_at: string | null
+      is_stale: boolean
+      age_seconds: number | null
+    }>
     sort_by?: string
     sort_dir?: string
     limit?: number
@@ -1052,7 +1059,9 @@ export interface RankingEntry {
   window: Window
   metrics: SnapshotMetrics
   quality_flags: QualityFlags
-  updated_at: string
+  updated_at: string | null
+  is_stale?: boolean
+  computed_at?: string | null
 }
 
 /** Pipeline type: raw trader detail response (pre-unification) */
