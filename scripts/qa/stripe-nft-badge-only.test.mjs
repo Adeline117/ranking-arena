@@ -52,6 +52,18 @@ test('premium hooks expose NFT only as badge state, never access authority', () 
   }
 })
 
+test('subscription source types cannot model NFT as entitlement authority', () => {
+  const premiumTypes = source('lib/types/premium.ts')
+  const sourceType = premiumTypes.match(/export\s+type\s+SubscriptionSource\s*=\s*([^\n]+)/)
+
+  assert.ok(sourceType, 'lib/types/premium.ts must declare SubscriptionSource')
+  assertNoMatch(
+    sourceType[1],
+    /['"]nft['"]/i,
+    'SubscriptionSource must not expose NFT as a valid entitlement authority'
+  )
+})
+
 test('subscription reconciliation crons contain no NFT fallback or preserve-access branch', () => {
   for (const relativePath of [
     'app/api/cron/reconcile-subscriptions/route.ts',
