@@ -2852,7 +2852,7 @@ const ko = {
   walletProStatus:
     'Arena NFT 배지가 온체인에서 확인되었습니다. Pro 접근 권한은 현재 유효한 요금제를 기준으로 합니다.',
   walletHoldNft:
-    'Arena NFT를 보유하고 연결하면 온체인 배지를 표시할 수 있습니다. Pro 기능은 잠금 해제되지 않습니다.',
+    'Arena NFT를 보유하고 연결하면 온체인 배지를 표시할 수 있습니다. 배지는 표시용이며 Pro 기능에는 유효한 요금제가 필요합니다.',
 
   // Web3 - useSiweAuth
   siweRejected: '서명 요청이 거부되었습니다. 로그인하려면 지갑에서 서명을 승인해 주세요.',

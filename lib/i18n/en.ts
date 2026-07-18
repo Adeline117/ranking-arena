@@ -2956,7 +2956,7 @@ const en = {
   walletProStatus:
     'Your Arena NFT badge is verified on-chain. Pro access is based on your current plan.',
   walletHoldNft:
-    'Hold and link an Arena NFT to display its on-chain badge. It does not unlock Pro features.',
+    'Hold and link an Arena NFT to display its on-chain badge. The badge is display-only; Pro features require a current plan.',
 
   // Web3 - useSiweAuth
   siweRejected:
