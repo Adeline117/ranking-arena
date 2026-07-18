@@ -1292,7 +1292,7 @@ const en = {
   addToCompare: 'Add to compare',
   removeFromCompare: 'Remove from compare',
   comparing: 'Comparing',
-  compareListFull: 'Compare list full (max 5)',
+  compareListFull: 'Compare list full (max 10)',
   inCompare: 'In Compare',
   viewComparison: 'View Comparison',
   rankTrendTooltip: 'Arena Score trend (30D)',
