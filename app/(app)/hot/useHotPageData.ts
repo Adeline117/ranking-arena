@@ -104,6 +104,9 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
   const [loadingPosts, setLoadingPosts] = useState(
     !options.initialPosts || options.initialPosts.length === 0
   )
+  const [postsError, setPostsError] = useState<Error | null>(null)
+  const postsRef = useRef(posts)
+  postsRef.current = posts
 
   // Tabbed sections state
   const [activeHotTab, setActiveHotTab] = useState<'posts' | 'groups'>('posts')
@@ -225,7 +228,10 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
     const controller = new AbortController()
     loadPostsAbortRef.current = controller
 
-    setLoadingPosts(true)
+    // Keep SSR/current last-good posts visible during background refreshes.
+    // The full loading state is only for a first load with no usable data.
+    if (postsRef.current.length === 0) setLoadingPosts(true)
+    setPostsError(null)
     try {
       const headers: Record<string, string> = {}
       if (accessTokenRef.current) {
@@ -236,9 +242,18 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
         signal: controller.signal,
       })
       if (controller.signal.aborted || !scopeIsCurrent(capturedScope)) return
-      const json = await res.json()
+      if (!res.ok) {
+        throw new Error(`Hot posts request failed (${res.status})`)
+      }
+      const json = (await res.json()) as {
+        posts?: unknown
+        data?: { posts?: unknown }
+      }
       if (controller.signal.aborted || !scopeIsCurrent(capturedScope)) return
-      const data = json.posts || json.data?.posts || []
+      const data = json.posts ?? json.data?.posts
+      if (!Array.isArray(data)) {
+        throw new Error('Hot posts response did not contain a posts array')
+      }
 
       if (data.length > 0) {
         const postsData: Post[] = data.map((post: Record<string, unknown>) => {
@@ -298,6 +313,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
           latestPostTime.current = postsData[0].created_at
         }
       } else {
+        // A successful, validated empty response is the only condition allowed
+        // to replace last-good posts with the product's no-data state.
         setPosts([])
       }
     } catch (e) {
@@ -305,6 +322,7 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
       if (e instanceof Error && (e.name === 'AbortError' || controller.signal.aborted)) return
       if (!scopeIsCurrent(capturedScope)) return
       logger.error('Failed to load posts:', e)
+      setPostsError(e instanceof Error ? e : new Error('Failed to load hot posts'))
       showToast(t('loadHotPostsFailed'), 'error')
     } finally {
       if (!controller.signal.aborted && scopeIsCurrent(capturedScope)) setLoadingPosts(false)
@@ -1068,6 +1086,8 @@ export function useHotPageData(options: UseHotPageDataOptions = {}) {
 
     // Posts
     loadingPosts,
+    postsError,
+    refreshPosts: loadPosts,
     hotPosts,
     visibleHot,
     expandedPosts,
