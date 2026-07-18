@@ -1,152 +1,196 @@
 #!/usr/bin/env node
 /**
- * Pipeline status overview: data freshness, cron health, and key counts.
+ * Public launch-status diagnostic.
+ *
+ * The old script queried retired `trader_snapshots` tables with a service-role
+ * key. This version checks the same public serving contracts that users see, so
+ * it works locally and in CI without database credentials.
+ *
+ * Usage:
+ *   node scripts/check_status.mjs
+ *   node scripts/check_status.mjs --status
+ *   node scripts/check_status.mjs --freshness
+ *   node scripts/check_status.mjs --platforms
+ *   ARENA_URL=http://localhost:3000 node scripts/check_status.mjs --all
  */
 
-import { createClient } from '@supabase/supabase-js'
-import { readFileSync } from 'fs'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
+const DEFAULT_BASE_URL = 'https://www.arenafi.org'
+const REQUEST_TIMEOUT_MS = 20_000
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-const envPath = join(__dirname, '../.env.local')
-
-try {
-  for (const l of readFileSync(envPath, 'utf8').split('\n')) {
-    const m = l.match(/^([^#=]+)=["']?(.+?)["']?$/)
-    if (m && !process.env[m[1]]) process.env[m[1]] = m[2]
+function parseArgs(argv) {
+  const flags = new Set(argv)
+  const selected = ['status', 'freshness', 'platforms'].filter((name) => flags.has(`--${name}`))
+  return {
+    baseUrl: (process.env.ARENA_URL || DEFAULT_BASE_URL).replace(/\/+$/, ''),
+    sections:
+      flags.has('--all') || selected.length === 0 ? ['status', 'freshness', 'platforms'] : selected,
   }
-} catch {}
-
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-)
-
-function hoursAgo(dateStr) {
-  return Math.round((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60))
 }
 
-function freshIcon(hours) {
-  if (hours <= 4) return 'OK'
-  if (hours <= 12) return 'WARN'
-  return 'STALE'
-}
-
-async function checkStatus() {
-  console.log('=== Pipeline Status Overview ===\n')
-
-  // 1. Key table counts
-  console.log('--- Table Counts ---')
-  const tables = ['trader_sources', 'trader_snapshots', 'trader_stats_detail', 'trader_equity_curve']
-  for (const table of tables) {
-    const { count, error } = await supabase
-      .from(table)
-      .select('*', { count: 'exact', head: true })
-    if (error) {
-      console.log(`  ${table}: error - ${error.message}`)
-    } else {
-      console.log(`  ${table}: ${(count ?? 0).toLocaleString()} rows`)
-    }
-  }
-
-  // 2. Data freshness per source
-  console.log('\n--- Data Freshness (trader_snapshots) ---')
-
-  const { data: snapshots, error: snapErr } = await supabase
-    .from('trader_snapshots')
-    .select('source')
-    .limit(50000)
-
-  if (snapErr) {
-    console.error('Error:', snapErr.message)
-    process.exit(1)
-  }
-
-  const sourceCounts = {}
-  snapshots?.forEach(r => {
-    sourceCounts[r.source] = (sourceCounts[r.source] || 0) + 1
+async function fetchJson(baseUrl, path) {
+  const response = await fetch(`${baseUrl}${path}`, {
+    headers: {
+      Accept: 'application/json',
+      'Cache-Control': 'no-cache',
+      'User-Agent': 'Arena-Diagnostics/1.0 (+https://www.arenafi.org)',
+    },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   })
 
-  const sources = Object.keys(sourceCounts).sort()
-  let freshCount = 0
-  let warnCount = 0
-  let staleCount = 0
-
-  const colSrc = 20
-  const colCnt = 8
-  const colAge = 12
-  const colSt = 6
-  console.log('  ' + 'Source'.padEnd(colSrc) + 'Count'.padStart(colCnt) + 'Age'.padStart(colAge) + 'Status'.padStart(colSt))
-  console.log('  ' + '-'.repeat(colSrc + colCnt + colAge + colSt))
-
-  for (const source of sources) {
-    const { data: latest } = await supabase
-      .from('trader_snapshots')
-      .select('captured_at')
-      .eq('source', source)
-      .order('captured_at', { ascending: false })
-      .limit(1)
-
-    const age = latest?.[0] ? hoursAgo(latest[0].captured_at) : -1
-    const status = age < 0 ? '?' : freshIcon(age)
-    const ageStr = age < 0 ? 'unknown' : `${age}h ago`
-
-    if (status === 'OK') freshCount++
-    else if (status === 'WARN') warnCount++
-    else staleCount++
-
-    console.log(
-      '  ' +
-      source.padEnd(colSrc) +
-      String(sourceCounts[source]).padStart(colCnt) +
-      ageStr.padStart(colAge) +
-      status.padStart(colSt)
-    )
+  if (!response.ok) {
+    throw new Error(`${path} returned HTTP ${response.status}`)
   }
-
-  // 3. Recent cron activity
-  console.log('\n--- Recent Cron Activity ---')
-  const { data: cronLogs, error: cronErr } = await supabase
-    .from('cron_logs')
-    .select('name, ran_at, result')
-    .order('ran_at', { ascending: false })
-    .limit(20)
-
-  if (cronErr) {
-    console.log(`  cron_logs: ${cronErr.message}`)
-  } else if (!cronLogs || cronLogs.length === 0) {
-    console.log('  No recent cron logs found.')
-  } else {
-    for (const log of cronLogs.slice(0, 10)) {
-      const age = hoursAgo(log.ran_at)
-      let status = 'ok'
-      try {
-        const r = typeof log.result === 'string' ? JSON.parse(log.result) : log.result
-        if (Array.isArray(r) && r.some(x => !x.success)) status = 'partial'
-        if (r?.error) status = 'fail'
-      } catch {}
-      console.log(`  ${age}h ago  ${status.padEnd(8)} ${log.name}`)
-    }
-  }
-
-  // 4. Summary
-  console.log('\n--- Summary ---')
-  console.log(`  Platforms: ${sources.length}`)
-  console.log(`  Fresh (<4h): ${freshCount}  |  Warning (4-12h): ${warnCount}  |  Stale (>12h): ${staleCount}`)
-
-  if (staleCount > 0) {
-    console.log('\n  Action needed: some platforms have stale data (>12h).')
-  } else if (warnCount > 0) {
-    console.log('\n  Some platforms approaching staleness.')
-  } else {
-    console.log('\n  All platforms up to date.')
-  }
-
-  console.log('\nDone.')
+  return response.json()
 }
 
-checkStatus().catch(e => {
-  console.error(e)
-  process.exit(1)
-})
+function hoursSince(value) {
+  const timestamp = Date.parse(value)
+  if (!Number.isFinite(timestamp)) return null
+  return Math.max(0, (Date.now() - timestamp) / 3_600_000)
+}
+
+function formatAge(value) {
+  const hours = hoursSince(value)
+  if (hours == null) return 'unknown'
+  if (hours < 1) return `${Math.round(hours * 60)}m`
+  return `${hours.toFixed(1)}h`
+}
+
+function sortedDifference(left, right) {
+  const rightSet = new Set(right)
+  return [...new Set(left)].filter((value) => !rightSet.has(value)).sort()
+}
+
+async function loadServingSnapshot(baseUrl, sections) {
+  const needsStatus = sections.includes('status')
+  const needsFreshness = sections.includes('freshness')
+  const needsPlatforms = sections.includes('platforms')
+  const [health, platforms, visibleResponse, rankingsResponse, heroStats] = await Promise.all([
+    needsStatus || needsFreshness ? fetchJson(baseUrl, '/api/health') : {},
+    needsPlatforms ? fetchJson(baseUrl, '/api/platforms') : {},
+    needsFreshness || needsPlatforms
+      ? fetchJson(baseUrl, '/api/sources/visible?timeRange=90D')
+      : { success: true, data: { sources: [] } },
+    fetchJson(baseUrl, '/api/rankings?window=90d&limit=1'),
+    needsStatus ? fetchJson(baseUrl, '/api/hero-stats') : {},
+  ])
+
+  if (!visibleResponse?.success || !rankingsResponse?.success) {
+    throw new Error('A public serving API returned success=false')
+  }
+
+  return {
+    health,
+    configuredPlatforms: Array.isArray(platforms?.platforms) ? platforms.platforms : [],
+    visibleSources: Array.isArray(visibleResponse?.data?.sources)
+      ? visibleResponse.data.sources
+      : [],
+    rankings: rankingsResponse.data ?? {},
+    heroStats,
+  }
+}
+
+function printStatus(snapshot) {
+  const { health, rankings, heroStats } = snapshot
+  console.log('\n=== Serving status ===')
+  console.log(`Status:        ${health.status ?? 'unknown'}`)
+  console.log(`Commit:        ${health.commit ?? 'unknown'}`)
+  console.log(`Response:      ${health.responseTimeMs ?? '?'}ms`)
+  console.log(
+    `Ranked traders:${String(rankings.totalCount ?? heroStats.traderCount ?? 0).padStart(8)}`
+  )
+  console.log(`Source families:${String(heroStats.exchangeCount ?? 0).padStart(7)}`)
+
+  for (const [name, check] of Object.entries(health.checks ?? {})) {
+    const message = check?.message ? ` — ${check.message}` : ''
+    console.log(`  ${name.padEnd(10)} ${String(check?.status ?? 'unknown').padEnd(7)}${message}`)
+  }
+
+  const requiredChecks = ['api', 'database', 'redis', 'freshness']
+  const requiredFailed = requiredChecks.some((name) => health.checks?.[name]?.status !== 'pass')
+  return health.status !== 'healthy' || requiredFailed
+}
+
+function printFreshness(snapshot) {
+  const { health, rankings, visibleSources } = snapshot
+  const cacheTimes = visibleSources
+    .map((source) => source.cacheUpdatedAt)
+    .filter((value) => typeof value === 'string')
+  const oldestCacheTime = cacheTimes.sort((a, b) => Date.parse(a) - Date.parse(b))[0]
+
+  console.log('\n=== Serving freshness ===')
+  console.log(`Pipeline:      ${health.checks?.freshness?.message ?? 'unknown'}`)
+  console.log(`Rankings as-of:${rankings.as_of ?? 'unknown'} (${formatAge(rankings.as_of)})`)
+  console.log(
+    `Board cache:   ${oldestCacheTime ?? 'unknown'} (${formatAge(oldestCacheTime)} oldest visible board)`
+  )
+  console.log(`API stale flag:${rankings.is_stale === true ? 'STALE' : 'fresh'}`)
+
+  const rankingsAge = hoursSince(rankings.as_of)
+  const cacheAge = hoursSince(oldestCacheTime)
+  return (
+    health.checks?.freshness?.status !== 'pass' ||
+    rankings.is_stale === true ||
+    rankingsAge == null ||
+    rankingsAge > 6 ||
+    cacheAge == null ||
+    cacheAge > 6
+  )
+}
+
+function printPlatforms(snapshot) {
+  const { configuredPlatforms, visibleSources, rankings } = snapshot
+  const visibleKeys = visibleSources
+    .map((source) => source.filterSource)
+    .filter((value) => typeof value === 'string')
+  const rankingKeys = Array.isArray(rankings.availableSources) ? rankings.availableSources : []
+  const sourceFamilies = new Set(
+    visibleSources.map((source) => source.exchangeSlug).filter((value) => typeof value === 'string')
+  )
+  const onlyVisible = sortedDifference(visibleKeys, rankingKeys)
+  const onlyRankings = sortedDifference(rankingKeys, visibleKeys)
+  const traderCount = visibleSources.reduce(
+    (sum, source) => sum + (Number(source.traderCount) || 0),
+    0
+  )
+
+  console.log('\n=== Source coverage ===')
+  console.log(`Configured platform records: ${configuredPlatforms.length}`)
+  console.log(`Visible source boards (90D): ${visibleSources.length}`)
+  console.log(`Ranking API sources (90D):   ${rankingKeys.length}`)
+  console.log(`Visible source families:     ${sourceFamilies.size}`)
+  console.log(`Visible ranked traders:      ${traderCount.toLocaleString()}`)
+
+  if (onlyVisible.length > 0) console.log(`Only in visible API: ${onlyVisible.join(', ')}`)
+  if (onlyRankings.length > 0) console.log(`Only in rankings API: ${onlyRankings.join(', ')}`)
+
+  return (
+    visibleSources.length === 0 ||
+    rankingKeys.length === 0 ||
+    onlyVisible.length > 0 ||
+    onlyRankings.length > 0
+  )
+}
+
+export async function runDiagnostics({ baseUrl, sections }) {
+  console.log(`Arena diagnostics: ${baseUrl}`)
+  const snapshot = await loadServingSnapshot(baseUrl, sections)
+  let failed = false
+
+  if (sections.includes('status')) failed = printStatus(snapshot) || failed
+  if (sections.includes('freshness')) failed = printFreshness(snapshot) || failed
+  if (sections.includes('platforms')) failed = printPlatforms(snapshot) || failed
+
+  console.log(failed ? '\nResult: FAIL' : '\nResult: PASS')
+  return failed ? 1 : 0
+}
+
+const options = parseArgs(process.argv.slice(2))
+runDiagnostics(options)
+  .then((code) => {
+    process.exitCode = code
+  })
+  .catch((error) => {
+    console.error(`\nResult: ERROR — ${error instanceof Error ? error.message : String(error)}`)
+    process.exitCode = 1
+  })

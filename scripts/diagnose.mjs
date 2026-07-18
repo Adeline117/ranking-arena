@@ -21,9 +21,9 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 
 const tasks = {
   seasons: [resolve(__dirname, 'check_seasons.mjs')],
-  status: [resolve(__dirname, 'check_status.mjs')],
-  freshness: [resolve(__dirname, 'check-freshness.mjs'), '--basic'],
-  platforms: [resolve(__dirname, 'check-freshness.mjs'), '--platform'],
+  status: [resolve(__dirname, 'check_status.mjs'), '--status'],
+  freshness: [resolve(__dirname, 'check_status.mjs'), '--freshness'],
+  platforms: [resolve(__dirname, 'check_status.mjs'), '--platforms'],
   tables: [resolve(__dirname, 'check_tables.mjs')],
   enrichment: [resolve(__dirname, 'check_enrichment.mjs')],
 }
