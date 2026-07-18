@@ -6,7 +6,7 @@ name: Health Monitor
 
 on:
   schedule:
-    - cron: '15,45 * * * *'  # Every 30 min, offset from OpenClaw (0,30)
+    - cron: '15,45 * * * *' # Every 30 min, offset from OpenClaw (0,30)
   workflow_dispatch:
 
 jobs:
@@ -14,52 +14,132 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Check pipeline health
-        id: health
-        run: |
-          RESPONSE=$(curl -sf -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
-            "https://www.arenafi.org/api/health/pipeline" \
-            --max-time 30 2>&1) || {
-            echo "status=down" >> $GITHUB_OUTPUT
-            echo "message=Health endpoint unreachable" >> $GITHUB_OUTPUT
-            exit 0
-          }
-
-          STATUS=$(echo "$RESPONSE" | jq -r '.status // "unknown"')
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-
-          if [ "$STATUS" = "healthy" ]; then
-            echo "message=All systems healthy" >> $GITHUB_OUTPUT
-          else
-            ISSUES=$(echo "$RESPONSE" | jq -r '.issues // [] | join(", ")' 2>/dev/null || echo "unknown issues")
-            echo "message=$STATUS: $ISSUES" >> $GITHUB_OUTPUT
-          fi
-
-      # 2026-07-11:去重标记跨 ephemeral runner 持久化(此前 inline 告警零去重,
-      # 每 30min 不健康即轰炸 → 告警疲劳)。actions/cache 存 last-alert 时间戳。
+      # Restore explicitly, then save explicitly only after a confirmed
+      # Telegram 2xx. The job intentionally fails when health is bad, so the
+      # combined cache action's post-step is not a reliable persistence point.
       - name: Restore alert-dedup marker
-        if: steps.health.outputs.status != 'healthy'
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .hm-alert-marker
           key: hm-alert-marker-${{ github.run_id }}
           restore-keys: hm-alert-marker-
 
-      - name: Send Telegram alert on failure (2h dedup)
-        if: steps.health.outputs.status != 'healthy'
+      - name: Check pipeline health
+        id: health
+        env:
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          HEALTH_URL: https://www.arenafi.org/api/health/pipeline
+          HEALTH_MESSAGE_FILE: /tmp/health-monitor-message.txt
         run: |
-          # 2h 去重:上次告警距今 <2h 则跳过(健康恢复后 marker 自然过期,新事故立即报)
+          rm -f /tmp/pipeline-health.json "$HEALTH_MESSAGE_FILE"
+          CURL_EXIT=0
+          HTTP=$(curl --silent --show-error \
+            --connect-timeout 5 --max-time 30 \
+            --output /tmp/pipeline-health.json --write-out '%{http_code}' \
+            --header "Authorization: Bearer $CRON_SECRET" \
+            "$HEALTH_URL") || CURL_EXIT=$?
+
+          if [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP" != "200" ]; then
+            STATUS="down"
+            MESSAGE="Health endpoint transport failure (curl=$CURL_EXIT HTTP=${HTTP:-000})"
+          elif ! jq -e 'type == "object"' /tmp/pipeline-health.json >/dev/null 2>&1; then
+            STATUS="down"
+            MESSAGE="Health endpoint returned malformed JSON"
+          else
+            RAW_STATUS=$(jq -r '.status // "unknown"' /tmp/pipeline-health.json 2>/dev/null || true)
+            case "$RAW_STATUS" in
+              healthy|degraded|critical)
+                STATUS="$RAW_STATUS"
+                ;;
+              *)
+                STATUS="down"
+                ;;
+            esac
+            if [ "$STATUS" = "healthy" ]; then
+              MESSAGE="All systems healthy"
+            elif [ "$STATUS" = "down" ]; then
+              MESSAGE="Health endpoint returned unsupported status"
+            else
+              SUMMARY=$(jq -c '.summary // {}' /tmp/pipeline-health.json 2>/dev/null \
+                | tr '\r\n' ' ' | cut -c1-1200)
+              MESSAGE="$STATUS: ${SUMMARY:-summary unavailable}"
+            fi
+          fi
+
+          printf '%s\n' "$MESSAGE" > "$HEALTH_MESSAGE_FILE"
+          printf 'status=%s\n' "$STATUS" >> "$GITHUB_OUTPUT"
+          echo "pipeline health: curl=$CURL_EXIT HTTP=${HTTP:-000} status=$STATUS"
+
+      - name: Send Telegram alert on failure (2h dedup)
+        id: telegram
+        if: always() && steps.health.outputs.status != 'healthy'
+        env:
+          HEALTH_STATUS: ${{ steps.health.outputs.status }}
+          HEALTH_MESSAGE_FILE: /tmp/health-monitor-message.txt
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CRITICAL_CHAT_ID || secrets.TELEGRAM_ALERT_CHAT_ID }}
+        run: |
+          send_telegram_alert() {
+            local message="$1"
+            if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_CHAT_ID:-}" ]; then
+              echo "::warning title=Health alert delivery failed::required Telegram secret is missing"
+              echo "### Health alert delivery failed — required Telegram secret is missing" >> "$GITHUB_STEP_SUMMARY"
+              return 1
+            fi
+            local curl_rc=0
+            local http
+            http=$(curl --silent --show-error \
+              --connect-timeout 5 --max-time 10 \
+              --output /dev/null --write-out '%{http_code}' \
+              --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_CHAT_ID}" \
+              --data-urlencode "text=${message}") || curl_rc=$?
+            if [ "$curl_rc" -ne 0 ] || [[ "${http:-000}" != 2* ]]; then
+              echo "::warning title=Health alert delivery failed::curl=$curl_rc HTTP=${http:-000}"
+              echo "### Health alert delivery failed — curl=$curl_rc HTTP=${http:-000}" >> "$GITHUB_STEP_SUMMARY"
+              return 1
+            fi
+            echo "Health alert delivered HTTP $http"
+            return 0
+          }
+
+          # This is a 2h delivery rate-limit, not an incident identity marker.
           NOW=$(date -u +%s)
           LAST=0
-          [ -f .hm-alert-marker ] && LAST=$(cat .hm-alert-marker 2>/dev/null || echo 0)
-          if [ $((NOW - LAST)) -lt 7200 ]; then
+          if [ -f .hm-alert-marker ]; then
+            RAW_LAST=$(cat .hm-alert-marker 2>/dev/null || true)
+            if [[ "$RAW_LAST" =~ ^[0-9]{1,12}$ ]] && [ "$RAW_LAST" -le "$NOW" ]; then
+              LAST="$RAW_LAST"
+            fi
+          fi
+          if [ "$LAST" -gt 0 ] && [ $((NOW - LAST)) -lt 7200 ]; then
             echo "Deduped: last alert $((NOW - LAST))s ago (<2h), skipping"
+            echo "delivered=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          MESSAGE="🚨 [GH Actions] Arena Health: ${{ steps.health.outputs.status }}%0A${{ steps.health.outputs.message }}%0ATime: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-          curl -sf "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-            -d "chat_id=${{ secrets.TELEGRAM_CRITICAL_CHAT_ID || secrets.TELEGRAM_ALERT_CHAT_ID }}" \
-            -d "text=$MESSAGE" \
-            -d "parse_mode=HTML" \
-            --max-time 10 || true
-          echo "$NOW" > .hm-alert-marker
+
+          HEALTH_MESSAGE=$(cat "$HEALTH_MESSAGE_FILE" 2>/dev/null || echo "health details unavailable")
+          MESSAGE=$(printf '🚨 [GH Actions] Arena Health: %s\n%s\nTime: %s' \
+            "${HEALTH_STATUS:-down}" "$HEALTH_MESSAGE" "$(date -u +%Y-%m-%dT%H:%M:%SZ)")
+          if send_telegram_alert "$MESSAGE"; then
+            echo "$NOW" > .hm-alert-marker
+            echo "delivered=true" >> "$GITHUB_OUTPUT"
+          else
+            rm -f .hm-alert-marker
+            echo "delivered=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Save alert-dedup marker after confirmed delivery
+        if: steps.telegram.outputs.delivered == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .hm-alert-marker
+          key: hm-alert-marker-${{ github.run_id }}
+
+      - name: Fail unhealthy health-monitor run
+        if: always() && steps.health.outputs.status != 'healthy'
+        env:
+          HEALTH_STATUS: ${{ steps.health.outputs.status }}
+        run: |
+          echo "::error::Pipeline health monitor reported ${HEALTH_STATUS:-down}"
+          exit 1
