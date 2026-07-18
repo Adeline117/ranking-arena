@@ -65,6 +65,75 @@ describe('profile action login handoff', () => {
     ).toBeNull()
   })
 
+  it('binds an expired-session action to the account that initiated it', () => {
+    const href = queueProfileActionLogin({
+      action: 'follow-user',
+      target: profileUserTarget('user-1'),
+      fallbackPath: '/u/alice',
+      initiatingUserId: 'viewer-a',
+      now: 1_000,
+    })
+    const returnPath = new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
+    window.history.replaceState({}, '', returnPath)
+
+    expect(
+      consumeProfileActionLogin({
+        actions: ['follow-user'],
+        target: profileUserTarget('user-1'),
+        currentUserId: 'viewer-b',
+        now: 2_000,
+      })
+    ).toBeNull()
+    expect(`${window.location.pathname}${window.location.search}`).toBe('/u/alice?tab=portfolio')
+    expect(window.sessionStorage).toHaveLength(0)
+  })
+
+  it('allows a truly anonymous action for the account chosen during login', () => {
+    const href = queueProfileActionLogin({
+      action: 'follow-user',
+      target: profileUserTarget('user-1'),
+      fallbackPath: '/u/alice',
+      now: 1_000,
+    })
+    const returnPath = new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
+    window.history.replaceState({}, '', returnPath)
+
+    expect(
+      consumeProfileActionLogin({
+        actions: ['follow-user'],
+        target: profileUserTarget('user-1'),
+        currentUserId: 'viewer-b',
+        now: 2_000,
+      })
+    ).toBe('follow-user')
+  })
+
+  it('fails closed when the same-tab proof cannot be removed', () => {
+    const href = queueProfileActionLogin({
+      action: 'message-user',
+      target: profileUserTarget('user-1'),
+      fallbackPath: '/u/alice',
+      now: 1_000,
+    })
+    const returnPath = new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
+    window.history.replaceState({}, '', returnPath)
+    const removeSpy = jest.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('storage unavailable')
+    })
+
+    expect(
+      consumeProfileActionLogin({
+        actions: ['message-user'],
+        target: profileUserTarget('user-1'),
+        currentUserId: 'viewer-b',
+        now: 2_000,
+      })
+    ).toBeNull()
+    expect(`${window.location.pathname}${window.location.search}`).toBe('/u/alice?tab=portfolio')
+
+    removeSpy.mockRestore()
+  })
+
   it('rejects a different target and an expired action', () => {
     const href = queueProfileActionLogin({
       action: 'watch-trader',
