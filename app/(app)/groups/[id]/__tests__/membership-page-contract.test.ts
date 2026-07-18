@@ -10,7 +10,7 @@ describe('group page membership acknowledgement contract', () => {
     const markerIndex = pageSource.indexOf(marker)
     expect(markerIndex).toBeGreaterThan(-1)
     expect(createHash('sha256').update(pageSource.slice(markerIndex)).digest('hex')).toBe(
-      'a0bf7b5ace4397ea9a0aaea030902afe8b29f33c38f398f3caa978fb46d60d2e'
+      '8449567b79fadc9df9da349fa7b37166be30d6746e1a0b4599aaaf3a5acbf4ab'
     )
   })
 

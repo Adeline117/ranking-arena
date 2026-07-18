@@ -77,7 +77,7 @@ interface GroupMember {
 
 type GroupDetailAuth = Pick<
   AuthSessionReturn,
-  'accessToken' | 'authChecked' | 'email' | 'sessionGeneration' | 'userId' | 'viewerKey'
+  'accessToken' | 'authChecked' | 'sessionGeneration' | 'userId' | 'viewerKey'
 >
 
 // Inline bilingual text helper (for one-off strings not in the i18n dictionary)
@@ -93,11 +93,10 @@ function isChineseText(text: string): boolean {
 }
 
 interface PageWrapperProps {
-  email: string | null
   children: React.ReactNode
 }
 
-function PageWrapper({ email, children }: PageWrapperProps): React.ReactElement {
+function PageWrapper({ children }: PageWrapperProps): React.ReactElement {
   return (
     <Box
       style={{
@@ -207,7 +206,7 @@ function GroupDetailScopedPage({
   const { isFeaturesUnlocked: isPro } = useSubscription()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const { accessToken, email, userId } = auth
+  const { accessToken, userId } = auth
   const mountedRef = useRef(true)
   const renderedOwnerScopeRef = useRef<GroupDetailOwnerScope>(ownerScope)
   const renderedAccessTokenRef = useRef(accessToken)
@@ -955,7 +954,7 @@ function GroupDetailScopedPage({
   // Loading state
   if (loading) {
     return (
-      <PageWrapper email={email}>
+      <PageWrapper>
         <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
           <Box style={{ marginBottom: tokens.spacing[6] }}>
             <Box
@@ -987,7 +986,7 @@ function GroupDetailScopedPage({
   // Error state
   if (error || !group) {
     return (
-      <PageWrapper email={email}>
+      <PageWrapper>
         <Box as="main" style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[10] }}>
           <Text
             size="lg"
@@ -1013,7 +1012,7 @@ function GroupDetailScopedPage({
   }
 
   return (
-    <PageWrapper email={email}>
+    <PageWrapper>
       {group?.dissolved_at && (
         <Box
           style={{
