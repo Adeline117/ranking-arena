@@ -254,6 +254,17 @@ describe('LoginPageClient exact identity boundary', () => {
     )
   })
 
+  it('distinguishes Terms and Privacy links without relying on brand color', async () => {
+    await renderLogin()
+
+    expect(screen.getByRole('link', { name: 'termsOfService' })).toHaveStyle({
+      textDecoration: 'underline',
+    })
+    expect(screen.getByRole('link', { name: 'privacyPolicy' })).toHaveStyle({
+      textDecoration: 'underline',
+    })
+  })
+
   it('drops a delayed A profile after B wins', async () => {
     const profileRead = deferred<{ data: ReturnType<typeof profile>; error: null }>()
     mockProfileMaybeSingle.mockReturnValueOnce(profileRead.promise)

@@ -43,7 +43,7 @@ function TermsAgreement({ t }: { t: (key: string) => string }) {
       <div
         style={{
           fontSize: tokens.typography.fontSize.sm,
-          color: 'var(--color-text-tertiary)',
+          color: 'var(--color-text-secondary)',
           lineHeight: 1.5,
         }}
       >
@@ -52,7 +52,13 @@ function TermsAgreement({ t }: { t: (key: string) => string }) {
           href="/terms"
           target="_blank"
           rel="noopener"
-          style={{ color: 'var(--color-accent-primary)', textDecoration: 'underline' }}
+          style={{
+            color: 'var(--color-text-primary)',
+            fontWeight: tokens.typography.fontWeight.semibold,
+            textDecoration: 'underline',
+            textDecorationThickness: '1px',
+            textUnderlineOffset: 3,
+          }}
         >
           {t('termsOfService')}
         </a>{' '}
@@ -61,7 +67,13 @@ function TermsAgreement({ t }: { t: (key: string) => string }) {
           href="/privacy"
           target="_blank"
           rel="noopener"
-          style={{ color: 'var(--color-accent-primary)', textDecoration: 'underline' }}
+          style={{
+            color: 'var(--color-text-primary)',
+            fontWeight: tokens.typography.fontWeight.semibold,
+            textDecoration: 'underline',
+            textDecorationThickness: '1px',
+            textUnderlineOffset: 3,
+          }}
         >
           {t('privacyPolicy')}
         </a>

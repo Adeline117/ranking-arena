@@ -116,6 +116,17 @@ describe('LoginModal provisioned identity boundary', () => {
     mockSignOutIfCurrent.mockResolvedValue(true)
   })
 
+  it('distinguishes legal links without relying on color alone', () => {
+    render(<LoginModal open onClose={onClose} />)
+
+    expect(screen.getByRole('link', { name: 'termsOfService' })).toHaveStyle({
+      textDecoration: 'underline',
+    })
+    expect(screen.getByRole('link', { name: 'privacyPolicy' })).toHaveStyle({
+      textDecoration: 'underline',
+    })
+  })
+
   it('closes only after the exact session and required profile are verified', async () => {
     render(<LoginModal open onClose={onClose} />)
     await reachOtpStep()
