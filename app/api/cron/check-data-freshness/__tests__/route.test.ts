@@ -321,12 +321,14 @@ describe('GET /api/cron/check-data-freshness', () => {
     expect(body.platforms).toEqual([
       expect.objectContaining({
         platform: 'binance_futures',
+        displayName: 'Binance',
         lastUpdate: '2026-07-18T11:00:00.000Z',
         recordCount: 300,
         status: 'fresh',
       }),
       expect.objectContaining({
         platform: 'bybit',
+        displayName: 'Bybit',
         lastUpdate: '2026-07-18T10:00:00.000Z',
         recordCount: 150,
         status: 'fresh',

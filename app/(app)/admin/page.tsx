@@ -40,8 +40,13 @@ type AdminTab =
 export default function AdminPage() {
   const router = useRouter()
   const { t } = useLanguage()
-  const { email, accessToken, isAdmin, authChecking } = useAdminAuth()
-  const { freshnessReport, loadFreshnessReport } = useFreshness()
+  const { accessToken, isAdmin, authChecking } = useAdminAuth()
+  const {
+    freshnessReport,
+    loading: freshnessLoading,
+    error: freshnessError,
+    loadFreshnessReport,
+  } = useFreshness(accessToken)
   const { applications, editApplications, loadApplications, loadEditApplications } =
     useApplications(accessToken)
 
@@ -54,8 +59,7 @@ export default function AdminPage() {
       loadApplications()
       loadEditApplications()
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load functions are stable callbacks; only re-run when auth state changes
-  }, [accessToken, isAdmin])
+  }, [accessToken, isAdmin, loadApplications, loadEditApplications, loadFreshnessReport])
 
   if (authChecking) {
     return (
@@ -105,9 +109,18 @@ export default function AdminPage() {
   }
 
   // Check for alerts
-  const hasScraperAlert =
-    freshnessReport?.summary &&
-    (freshnessReport.summary.critical > 0 || freshnessReport.summary.stale > 0)
+  const hasScraperAlert = Boolean(freshnessError || (freshnessReport && !freshnessReport.ok))
+  const hasCriticalScraperAlert = Boolean(
+    freshnessError ||
+    (freshnessReport &&
+      (freshnessReport.summary.critical > 0 || freshnessReport.summary.unknown > 0))
+  )
+  const scraperAttentionCount =
+    (freshnessReport
+      ? freshnessReport.summary.stale +
+        freshnessReport.summary.critical +
+        freshnessReport.summary.unknown
+      : 0) + (freshnessError ? 1 : 0)
   const pendingApplicationsCount = applications.length
   const pendingEditApplicationsCount = editApplications.length
 
@@ -115,7 +128,12 @@ export default function AdminPage() {
     { id: 'dashboard', label: t('dashboard'), ariaLabel: t('dashboard') },
     {
       id: 'scraperStatus',
-      ariaLabel: t('scraperStatus'),
+      ariaLabel: hasScraperAlert
+        ? `${t('scraperStatus')}. ${t('adminScraperAlertA11y').replace(
+            '{count}',
+            String(scraperAttentionCount)
+          )}`
+        : t('scraperStatus'),
       label: (
         <>
           {t('scraperStatus')}
@@ -124,7 +142,7 @@ export default function AdminPage() {
               aria-hidden="true"
               style={{
                 marginLeft: tokens.spacing[1],
-                color: freshnessReport?.summary?.critical
+                color: hasCriticalScraperAlert
                   ? tokens.colors.accent.error
                   : tokens.colors.accent.warning,
               }}
@@ -202,7 +220,14 @@ export default function AdminPage() {
         >
           {activeTab === 'dashboard' && <DashboardTab accessToken={accessToken} />}
 
-          {activeTab === 'scraperStatus' && <ScraperStatusTab />}
+          {activeTab === 'scraperStatus' && (
+            <ScraperStatusTab
+              freshnessReport={freshnessReport}
+              loading={freshnessLoading}
+              error={freshnessError}
+              onRefresh={loadFreshnessReport}
+            />
+          )}
 
           {activeTab === 'users' && <UserManagementTab accessToken={accessToken} />}
 
