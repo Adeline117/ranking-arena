@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { STALE_REALTIME } from '@/lib/hooks/cache-presets'
+import { apiFetch } from '@/lib/utils/api-fetch'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 // Use plain <img> for crypto icons (SVGs cause 400 on Vercel image optimizer)
 import { tokens } from '@/lib/design-tokens'
 import { hasLocalCryptoIcon, normalizeCoinSymbol } from '@/lib/utils/crypto-icons'
@@ -30,9 +32,7 @@ function getCryptoIcon(symbol: string, fallbackImage: string): string {
 }
 
 const spotFetcher = async (url: string): Promise<TickerCoin[]> => {
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`PriceTicker: ${res.status}`)
-  const data: unknown = await res.json()
+  const data = await apiFetch<unknown>(url)
   if (!Array.isArray(data)) return []
   return data.slice(0, 20).map((c: Record<string, unknown>) => ({
     symbol: c.symbol as string,
@@ -43,16 +43,19 @@ const spotFetcher = async (url: string): Promise<TickerCoin[]> => {
 }
 
 export default function PriceTicker() {
+  const { t } = useLanguage()
   const {
     data: coins = [],
     error: swrError,
     isLoading: loading,
+    refetch,
   } = useQuery<TickerCoin[]>({
     queryKey: ['price-ticker'],
     queryFn: () => spotFetcher('/api/market/spot'),
     refetchInterval: 30_000,
     refetchOnWindowFocus: true,
     staleTime: STALE_REALTIME,
+    retry: false,
   })
   const [imgErrors, setImgErrors] = useState<Set<string>>(new Set())
   const error = swrError ? (swrError instanceof Error ? swrError.message : 'Failed to load') : null
@@ -85,6 +88,7 @@ export default function PriceTicker() {
   if (error && coins.length === 0) {
     return (
       <div
+        role="alert"
         style={{
           height: 48,
           display: 'flex',
@@ -94,14 +98,50 @@ export default function PriceTicker() {
           background: tokens.colors.bg.secondary,
           fontSize: 12,
           color: tokens.colors.text.tertiary,
+          gap: tokens.spacing[2],
         }}
       >
-        Market data unavailable
+        <span>{t('marketDataError')}</span>
+        <button
+          type="button"
+          onClick={() => void refetch()}
+          style={{
+            minHeight: 32,
+            padding: `0 ${tokens.spacing[3]}`,
+            borderRadius: tokens.radius.md,
+            border: tokens.glass.border.light,
+            background: tokens.colors.bg.tertiary,
+            color: tokens.colors.text.secondary,
+            cursor: 'pointer',
+            fontSize: tokens.typography.fontSize.xs,
+            fontWeight: tokens.typography.fontWeight.semibold,
+          }}
+        >
+          {t('retry')}
+        </button>
       </div>
     )
   }
 
-  if (coins.length === 0) return <div style={{ height: 48 }} />
+  if (coins.length === 0) {
+    return (
+      <div
+        role="status"
+        style={{
+          height: 48,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderBottom: `1px solid ${tokens.colors.border.primary}`,
+          background: tokens.colors.bg.secondary,
+          color: tokens.colors.text.tertiary,
+          fontSize: tokens.typography.fontSize.xs,
+        }}
+      >
+        {t('noDataGeneric')}
+      </div>
+    )
+  }
 
   const doubled = [...coins, ...coins]
 
