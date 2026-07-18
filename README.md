@@ -2,12 +2,12 @@
 
 # Arena
 
-**Crypto trader ranking platform with real-time data from 35+ exchanges.**
+**Crypto trader discovery and ranking with registry-governed public CEX and DEX data.**
 
 [![Production](https://img.shields.io/badge/production-live-brightgreen)](https://www.arenafi.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org)
-[![Traders](https://img.shields.io/badge/traders-34%2C000%2B-blue)]()
-[![Exchanges](https://img.shields.io/badge/exchanges-35%2B-orange)]()
+[![Ingest adapters](https://img.shields.io/badge/ingest_adapters-26-blue)]()
+[![Vercel schedules](https://img.shields.io/badge/Vercel_schedules-44-orange)]()
 
 [Live Site](https://www.arenafi.org) · [Data API](#data-api) · [Features](#features) · [Architecture](#architecture) · [Data Pipeline](#data-pipeline) · [Getting Started](#getting-started)
 
@@ -15,7 +15,7 @@
 
 ## Data API
 
-Arena provides a REST API for programmatic access to trader rankings, performance data, and search across 35+ exchanges.
+Arena provides a REST API for programmatic access to trader rankings, performance data, and search across the sources currently exposed by the serving registry.
 
 **Pricing**: Free (100 req/day) · Starter $49/mo (10K req/day) · Pro $199/mo (unlimited)
 
@@ -30,56 +30,47 @@ Full documentation and API keys: [arenafi.org/api-docs](https://www.arenafi.org/
 
 ## Overview
 
-Arena aggregates, normalizes, and ranks 34,000+ crypto traders across 35+ centralized and decentralized exchanges. Every trader receives an Arena Score, a composite metric combining ROI and absolute PnL on a 0-100 scale, allowing apples-to-apples comparison regardless of the originating platform. The system ingests data continuously through 53 scheduled cron jobs via 42 exchange connectors, enriches trader profiles with equity curves, position history, and advanced statistics, and serves the results through a Next.js 16 frontend with ISR and edge caching.
+Arena aggregates, normalizes, and ranks public traders from centralized and decentralized sources selected by the active-serving database registry. Arena Score v4 combines profitability, drawdown, risk-adjusted return, consistency, and sample confidence on a 0-100 peer-relative scale. The system has 53 cron/worker endpoints: 44 are production Vercel schedules, while database-driven ingest also runs on external workers. Its 26 registered ingest adapters collect leaderboard and profile surfaces, then the Next.js 16 frontend serves normalized results with ISR and edge caching.
 
-Beyond rankings, Arena provides a 60,000+ item educational library (books, research papers, whitepapers), real-time market data via TradingView WebSocket, community features (groups, posts, comments, reputation-gated access), on-chain attestation via EAS, and a Pro membership tier. The platform supports 4 languages (English, Chinese, Japanese, Korean) and runs on both web and native mobile (iOS/Android via Capacitor).
+Beyond rankings, Arena provides an educational library (books, research papers, whitepapers), market data via TradingView WebSocket, community features (groups, posts, comments, reputation-gated access), on-chain attestation via EAS, and a Pro membership tier. The platform supports 4 languages (English, Chinese, Japanese, Korean) and runs on both web and native mobile (iOS/Android via Capacitor).
 
 ## Features
 
 ### Trader Rankings and Arena Score
 
-Arena Score is a two-dimension composite metric scored on a 0-100 scale:
+Arena Score v4 is computed separately inside each visible time-window cohort:
 
-- **Return Score (0-60 points)**: Measures ROI using annualized log returns with a tanh sigmoid curve. Period-specific calibration coefficients ensure fair comparison across 7D, 30D, and 90D windows.
-- **PnL Score (0-40 points)**: Measures absolute realized profit in USD, log-scaled to handle the wide range from small retail accounts to whale-tier PnL.
+- **Profitability (50%)**: absolute PnL magnitude (30%) plus ROI percentile (20%).
+- **Risk control (40%)**: lower drawdown percentile (20%) plus Sharpe percentile (20%).
+- **Consistency (10%)**: available win-rate and profit-factor percentiles.
+- **Confidence**: sample size and metric completeness discount the quality score; missing optional dimensions are reweighted rather than silently treated as observed zeroes.
 
-**Overall composite score**: `0.70 × S90D + 0.25 × S30D + 0.05 × S7D`, with a momentum bonus based on short-term vs medium-term performance.
-
-Score confidence is tracked as `full`, `partial`, or `minimal` via a Wilson Score multiplier checking 5 signals (ROI, PnL, max drawdown, win rate, Sharpe ratio).
-
-**V3 Percentile Scoring** (advanced): Three-dimension model — Profitability (35%), Risk Control (40%), Execution (25%) — using percentile rank within peer groups.
+The displayed 0-100 score blends the confidence-adjusted composite's cohort percentile (70%) with its relative magnitude (30%). The cross-window composite uses 90D/30D/7D weights from `ARENA_CONFIG.OVERALL_WEIGHTS`; missing windows are reweighted by the consuming route.
 
 Rankings are available across three time windows: 7 days, 30 days, and 90 days.
 
-### Supported Exchanges
+### Source Coverage
 
-**CEX Futures (17):**
-Binance Futures, Bybit, OKX Futures, Bitget Futures, MEXC, HTX, Gate.io, CoinEx, BingX, XT, BloFin, Phemex, KuCoin, Bitunix, Toobit, Bitfinex, BTCC
+Coverage is registry-driven, not a hard-coded exchange list. A registered adapter only means the parser/fetch implementation exists; a source appears in product navigation only when its `arena.sources` row is active, serving, and has a visible board for the requested 7D/30D/90D window.
 
-**CEX Spot (4):**
-Binance Spot, Bybit Spot, OKX Spot, Bitget Spot
+- Public current set: `/api/sources/visible?timeRange=90D` (change the time range as needed).
+- Operator authority: active-serving `arena.sources` plus `arena_visible_sources(...)`.
+- Upstream freshness authority: `leaderboard_source_freshness.source_as_of`.
 
-**CEX Web3/Wallet (2):**
-Binance Web3, OKX Web3
-
-**DEX Perpetuals (9):**
-Hyperliquid, GMX, dYdX, Jupiter Perps, Drift, Aevo, Kwenta, Gains Network, Copin (multi-chain aggregator)
-
-**Other (3):**
-eToro (social trading), Polymarket (prediction market), WooX (copy trading)
+This fail-closed separation prevents retired, shadow, or empty integrations from being advertised as current coverage. Upstream staleness is surfaced separately; it does not silently remove an otherwise visible board from navigation.
 
 ### Trader Profiles
 
 Each trader profile includes:
 
-- Performance metrics across all available time windows (ROI, PnL, win rate, max drawdown, trade count, follower count)
-- Equity curve charts with two-tone visualization (green above zero, red below) and gap-filled daily PnL
-- Position history with asset breakdown analysis
-- Advanced statistics: Sharpe ratio, Sortino ratio, Calmar ratio, profit factor (derived from equity curve data)
+- Performance metrics across available time windows; optional metrics are shown only when the upstream surface or a labeled derivation supports them
+- Equity curves when a verified series surface is available
+- Position history and asset breakdown when the source exposes those surfaces
+- Advanced statistics such as Sharpe, Sortino, Calmar, and profit factor, with provenance/estimation semantics preserved
 - Trading style radar chart (5 dimensions)
 - Bot/Human classification with visual badges
 - Verified trader badge (via claim system)
-- Direct link back to the source exchange's copy-trading page
+- Direct source link when the registry has a verified URL template
 
 ### DeSoc (Decentralized Social)
 
@@ -90,7 +81,7 @@ Each trader profile includes:
 
 ### Market Overview
 
-- TradingView-powered interactive charts with real-time WebSocket price feeds for 12 major tokens (BTC, ETH, SOL, BNB, XRP, ADA, DOGE, AVAX, LINK, DOT, ARB, MATIC)
+- TradingView-powered interactive charts and WebSocket price feeds for selected major assets
 - Sector performance treemap
 - Fear and Greed gauge
 - Funding rates and open interest data (fetched via dedicated cron jobs)
@@ -106,15 +97,15 @@ Each trader profile includes:
 
 ### Library
 
-- 60,000+ curated educational resources: books, research papers, whitepapers, articles
+- Curated educational resources: books, research papers, whitepapers, articles
 - EPUB reader with customizable settings (font, theme, layout)
 - Bookshelf management with favorites
 
 ### Pro Membership
 
-- $4.99/month, $29.99/year, or $49.99 lifetime (Founding Member)
-- Stripe integration for payments, with subscription expiry monitoring via cron
-- All Pro features currently free during beta
+- Monthly, yearly, and lifetime plans backed by the deployed Stripe price catalog
+- Stripe integration for checkout, webhooks, entitlement reconciliation, refunds, and the customer portal
+- Promo access is controlled by the exact deployed `NEXT_PUBLIC_PRO_FREE_PROMO` value; documentation does not assume it is on or off
 
 ### Mobile
 
@@ -126,7 +117,7 @@ Each trader profile includes:
 
 ### Localization and Theming
 
-- 4 languages: English, Chinese, Japanese, Korean (4,800+ keys each, 100% coverage)
+- 4 languages: English, Chinese, Japanese, Korean
 - Dark and Light themes with design tokens (`lib/design-tokens.ts`)
 - Simple object map i18n — zero runtime overhead, type-safe
 
@@ -135,24 +126,23 @@ Each trader profile includes:
 | Layer         | Technology                                | Details                                                                        |
 | ------------- | ----------------------------------------- | ------------------------------------------------------------------------------ |
 | Framework     | Next.js 16                                | App Router, React 19, Turbopack dev server                                     |
-| Language      | TypeScript 5                              | Strict mode, 139 test suites, 2,271 tests                                      |
-| Database      | Supabase                                  | PostgreSQL, Auth, Realtime subscriptions, RLS on all tables, 184 migrations    |
+| Language      | TypeScript 5                              | Strict mode; Jest, Playwright, and `node:test` contract suites                 |
+| Database      | Supabase                                  | PostgreSQL, Auth, Realtime, explicit RLS policies and grants                   |
 | Caching       | Upstash Redis                             | Edge-compatible, used for leaderboard cache, rate limiting, session data       |
 | Search        | Meilisearch                               | Full-text search with fuzzy matching (pg_trgm fallback)                        |
 | Hosting       | Vercel                                    | Edge + Serverless functions, primary region hnd1 (Tokyo), ISR for static pages |
 | Payments      | Stripe                                    | Checkout, subscriptions, webhooks, customer portal                             |
 | Auth          | Supabase Auth + Privy                     | Email/password + Web3 wallet login                                             |
 | Styling       | Tailwind CSS v4                           | Design token system, dark/light theme                                          |
-| Charts        | TradingView + lightweight-charts          | Interactive charts, WebSocket real-time data                                   |
-| Exchange Data | 42 custom connectors + CCXT               | Unified connector framework with BaseConnector abstract class                  |
+| Exchange Data | 26 registered `SourceAdapter`s            | Registry-driven RAW evidence, pure parsers, staging, and serving publication   |
 | State         | Zustand + React Query + SWR               | Zustand for global state, React Query + SWR for server data fetching           |
-| Resilience    | Cockatiel                                 | Retry with exponential backoff + circuit breaker (ConsecutiveBreaker)          |
-| Validation    | Zod                                       | Input validation on all write routes, trader snapshot schemas                  |
-| Monitoring    | Sentry + PipelineLogger + Healthchecks.io | Structured JSON logging, correlation IDs, dead man's switch on critical jobs   |
+| Resilience    | Cockatiel                                 | Retry with exponential backoff + circuit breaker (`ConsecutiveBreaker`)        |
+| Validation    | Zod                                       | Runtime validation for pipeline payloads and protected request bodies          |
+| Monitoring    | Sentry + PipelineLogger + Healthchecks.io | Structured execution logs, health sentinels, and configured dead-man pings     |
 | Alerts        | Telegram Bot                              | Automatic alerts on cron failures and data staleness                           |
 | Mobile        | Capacitor                                 | iOS + Android native apps with push, haptics, biometrics                       |
 | Web3          | viem + wagmi + RainbowKit + EAS           | Wallet login, on-chain attestation                                             |
-| Security      | CSP, HSTS, RLS, timingSafeEqual           | Full security headers, Upstash rate limiting, input validation                 |
+| Security      | CSP, HSTS, RLS, timingSafeEqual           | Security headers, route authorization, rate limiting, and input validation     |
 
 ## Architecture
 
@@ -165,7 +155,7 @@ Each trader profile includes:
                         +--------+----------+
                         |    Next.js 16     |
                         |    App Router     |
-                        |   292 API routes  |
+                        |    API + pages    |
                         +--+-----+-------+--+
                            |     |       |
               +------------+  +--+---+  ++------------+
@@ -173,11 +163,11 @@ Each trader profile includes:
      +--------+-----+  +-----+---+  +-----+-----+   |
      |   Supabase   |  | Upstash  |  | Meilisearch|   |
      |  PostgreSQL  |  |  Redis   |  | Full-text  |   |
-     | 184 migrations|  |  Cache   |  |  Search    |   |
+     |Versioned schema|  |  Cache   |  |  Search    |   |
      |  Auth + RLS  |  +---------+  +-----------+   |
      +--------------+                                |
                                        +-------------+---+
-                                       | 53 Cron Jobs    |
+                                       | 44 Schedules     |
                   +------------------->| Data Pipeline   |
                   |                    +--------+--------+
                   |                             |
@@ -187,99 +177,55 @@ Each trader profile includes:
          +-------------------+        | Playwright      |
                   |                    +-----------------+
          +--------+-------------------------------------------+
-         | 35+ Exchange APIs                                    |
-         | CEX: Binance, OKX, Bybit, Bitget, MEXC, KuCoin,   |
-         |      Gate.io, HTX, CoinEx, BingX, Phemex, XT,      |
-         |      Toobit, Bitfinex, Bitunix, BTCC, Crypto.com   |
-         | DEX: Hyperliquid, GMX, dYdX, Jupiter, Drift,       |
-         |      Aevo, Kwenta, Gains, Copin                     |
-         | Other: eToro, Polymarket, WooX                      |
-         +-----------------------------------------------------+
+         | Registry-governed source APIs                     |
+         | CEX + DEX leaderboards, profiles, and on-chain    |
+         | evidence; active-serving coverage is data-driven  |
+         +----------------------------------------------------+
 ```
 
 ### Key Architectural Decisions
 
-**Unified Connector Framework.** All 42 exchange connectors extend `BaseConnector`, which provides HTTP with retry/backoff (via Cockatiel), rate limiting, circuit breaker (`ConsecutiveBreaker(5)` with 60s recovery), quality flags, and data provenance tracking. Each connector implements `discoverTraders()`, `fetchProfile()`, `fetchSnapshot()`, and `fetchTimeseries()`. The connector registry lazily initializes singletons per (platform, marketType).
+**Registry-Driven Ingest Adapters.** The worker bootstrap explicitly registers 26 `SourceAdapter` implementations in `lib/ingest/adapters/register.ts`; one adapter may serve multiple `arena.sources` rows. Each adapter declares its supported surfaces, fetches durable RAW payloads through a rate-budgeted `FetchSession`, and exposes pure parsers so stored evidence can be replayed without touching the network or clock. The database registry, not a static marketing list, decides which source/window promises are active and serving.
 
-**Three-Tier Proxy Strategy.** WAF-protected exchanges (Bybit, Bitget, BingX, MEXC, XT, Toobit) route through VPS Playwright scrapers first. Geo-blocked exchanges (Binance in some regions) use Cloudflare Worker proxy as fallback. OKX uses direct API (v5 public endpoints are not WAF-blocked). The proxy chain is transparent to connector code via `fetchViaVPS()`.
+**Source-Native Fetch Paths.** Each ingest adapter owns the fetch path appropriate to its upstream: direct public API, region-pinned VPS egress, Playwright, or on-chain RPC/indexer. `FetchSession` applies rate budgets and captures durable RAW evidence before pure parsing; the source registry pins serving mode and execution region rather than assuming one proxy chain fits every source.
 
 **Snapshot Architecture.** The arena ingest worker writes scraped data to the partitioned **`arena.*` schema** (`arena.trader_stats`, `arena.leaderboard_entries`, etc.); `trader_snapshots_v2` was dropped 2026-06-16. `compute-leaderboard` derives `public.leaderboard_ranks` (+ `lr_7d/30d/90d`) as the precomputed read tables for rankings. This separation keeps writes fast and reads indexed. See `docs/ARENA_REBUILD_SPEC.md`.
 
-**Two-Phase Enrichment.** Data ingestion happens in two phases: (1) `batch-fetch-traders` discovers and upserts basic trader data (ROI, PnL, win rate) across all exchanges via 16 batch groups, (2) `batch-enrich` adds equity curves, position history, stats detail, and derived metrics (Sharpe, Sortino, Calmar) for top traders per platform across 26 enrichment modules.
+**Gated Ingest Lifecycle.** External workers schedule source discovery and profile jobs, persist RAW and parsed evidence, apply count/quality gates in staging, and publish only complete boards into the serving schema. Vercel routes provide supporting orchestration and watchdogs; their existence does not prove that a first-party source is scheduled or healthy.
 
-**Incremental Static Regeneration.** Trader profile pages use ISR with `revalidate=300`. The leaderboard cache in Redis is refreshed by `warm-cache` every 5 minutes, so page loads hit warm cache rather than running expensive aggregate queries.
+**Incremental Static Regeneration.** Trader profile pages use ISR with `revalidate=300`. The `warm-cache` production schedule runs at UTC `:04` and `:34`, and a successful ingest chain may also trigger it after a complete leaderboard publish.
 
 ## Data Pipeline
 
-The data pipeline consists of 53 Vercel cron jobs organized into several categories:
+The data pipeline combines 44 production schedules declared in `vercel.json` with external database-driven ingest workers. The repository has 53 cron/worker route implementations, but an endpoint's existence is not proof that Vercel schedules it. `vercel.json` is the only source of truth for Vercel cadence; the database registry and worker scheduler are the sources of truth for first-party ingest.
 
-### Trader Data Ingestion
+This README intentionally does not duplicate all 44 schedule rows. Inspect the deployed declarations directly:
 
-| Job                              | Schedule         | Description                                                                                                             |
-| -------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `batch-fetch-traders?group=a..l` | Every 3-6 hours  | Fetch leaderboard data from all 35+ exchanges, split into 16 batch groups to stay within Vercel function timeout limits |
-| `batch-enrich?period=90D`        | Every 4 hours    | Enrich top traders with equity curves, position history, and stats detail                                               |
-| `batch-enrich?period=30D/7D`     | Every 4 hours    | Enrichment for shorter time windows                                                                                     |
-| `fetch-details?tier=hot`         | Every 15 minutes | Fetch detailed profiles for high-priority traders (top ranked, recently viewed)                                         |
-| `fetch-details?tier=normal`      | Every 4 hours    | Fetch detailed profiles for the broader trader set                                                                      |
+```bash
+jq -r '.crons[] | [.path, .schedule] | @tsv' vercel.json
+```
 
-### Scoring and Aggregation
+### Launch-Critical Monitoring and Maintenance
 
-| Job                          | Schedule         | Description                                                  |
-| ---------------------------- | ---------------- | ------------------------------------------------------------ |
-| `compute-leaderboard`        | Every 30 minutes | Recompute Arena Scores and update ranking positions          |
-| `precompute-composite`       | Every 2 hours    | Precompute composite leaderboard views for faster page loads |
-| `aggregate-daily-snapshots`  | Daily 00:05 UTC  | Roll up point-in-time snapshots into daily aggregates        |
-| `compute-derived-metrics`    | Daily 00:20 UTC  | Compute Sharpe, MDD, win rate from ROI delta                 |
-| `calculate-advanced-metrics` | Every 4 hours    | Derive Sortino, Calmar, profit factor from equity curve data |
-| `snapshot-ranks`             | Daily 00:15 UTC  | Snapshot ranking positions for historical tracking           |
+| Job                        | Schedule                   | Description                                                                                              |
+| -------------------------- | -------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `check-data-freshness`     | Every 3 hours at `:39` UTC | Compare every registry-promised visible board with its upstream `source_as_of`; page on unknown/critical |
+| `meta-monitor`             | Every 6 hours at `:23` UTC | Detect missing cron successes against twice each job's expected interval                                 |
+| `cleanup-data`             | Daily 01:06 UTC            | Clean up stale data                                                                                      |
+| `cleanup-deleted-accounts` | Daily 03:00 UTC            | Remove data for deleted user accounts                                                                    |
+| `cleanup-stuck-logs`       | Every 6 hours at `:27` UTC | Clean stuck pipeline log entries                                                                         |
+| `subscription-expiry`      | Mondays 00:09 UTC          | Process expired Pro subscriptions                                                                        |
+| `backfill-avatars`         | Daily 02:35 UTC            | Backfill missing trader avatar images                                                                    |
+| `check-trader-alerts`      | Every 30 minutes           | Check and send Pro trader metric alerts                                                                  |
 
-### Market Data
-
-| Job                             | Schedule         | Description                           |
-| ------------------------------- | ---------------- | ------------------------------------- |
-| `fetch-market-data?type=prices` | Every hour       | Fetch current crypto prices           |
-| `fetch-funding-rates`           | Every 4 hours    | Fetch perpetual futures funding rates |
-| `fetch-open-interest`           | Every 2 hours    | Fetch open interest data              |
-| `flash-news-fetch`              | Every 30 minutes | Aggregate crypto news                 |
-| `snapshot-positions`            | Every hour       | Snapshot trader positions             |
-
-### Content and Social
-
-| Job                        | Schedule          | Description                          |
-| -------------------------- | ----------------- | ------------------------------------ |
-| `auto-post-market-summary` | Daily 10:05 UTC   | Auto-generate market summary post    |
-| `auto-post-insights`       | Daily 08:03 UTC   | Auto-generate trading insights       |
-| `auto-post-twitter`        | Daily 08:06 UTC   | Auto-post to Twitter                 |
-| `sync-meilisearch`         | Every 30 minutes  | Sync trader data to Meilisearch      |
-| `warm-cache`               | Every 5 minutes   | Warm Redis cache for hot data        |
-| `daily-digest`             | Daily 00:02 UTC   | Generate daily digest                |
-| `weekly-report`            | Mondays 08:00 UTC | Generate weekly pipeline report      |
-| `generate-profiles`        | Every 6 hours     | Auto-generate trader profile content |
-
-### Monitoring and Maintenance
-
-| Job                        | Schedule         | Description                                         |
-| -------------------------- | ---------------- | --------------------------------------------------- |
-| `check-data-freshness`     | Every 3 hours    | Alert if any exchange data goes stale               |
-| `verify-fetchers`          | Every 3 hours    | Verify all fetcher modules are responding correctly |
-| `check-data-gaps`          | Every 4 hours    | Identify missing data windows and trigger backfills |
-| `backfill-data`            | Every 2 hours    | Auto-backfill detected data gaps                    |
-| `cleanup-data`             | Daily 01:00 UTC  | Clean up stale data                                 |
-| `cleanup-deleted-accounts` | Daily 03:00 UTC  | Remove data for deleted user accounts               |
-| `cleanup-stuck-logs`       | Every hour       | Clean stuck pipeline log entries                    |
-| `subscription-expiry`      | Daily 00:04 UTC  | Process expired Pro subscriptions                   |
-| `backfill-avatars`         | Daily 02:30 UTC  | Backfill missing trader avatar images               |
-| `check-trader-alerts`      | Every 30 minutes | Check and send Pro trader metric alerts             |
-
-All cron jobs use `PipelineLogger` for structured execution logging with three destinations: Supabase `pipeline_logs` table, ClickHouse (dual write), and Healthchecks.io dead man's switch for 5 critical jobs. Failures trigger Telegram alerts via the OpenClaw monitoring system on Mac Mini.
+Cron handlers that adopt `PipelineLogger` write structured execution state to Supabase `pipeline_logs` and the ClickHouse dual-write path. A configured critical subset also pings Healthchecks.io; route-specific failures and health sentinels feed the shared alerting system.
 
 ## Directory Structure
 
 ```
 app/                          # Next.js App Router
-  api/                        # 292 API route handlers
-    cron/                     # 53 scheduled job endpoints (called by Vercel Cron)
+  api/                        # Public, authenticated, admin, health, and worker routes
+    cron/                     # 53 cron/worker endpoints (44 scheduled by Vercel)
     v2/, v3/                  # Versioned API endpoints
     admin/                    # Admin-only endpoints (metrics, monitoring)
     health/                   # Health check endpoints (pipeline, dependencies)
@@ -293,33 +239,36 @@ app/                          # Next.js App Router
   settings/                   # User settings
   components/                 # Shared UI components
 
-lib/                          # Core business logic (60+ subdirectories)
-  connectors/                 # Exchange API connectors (84 files)
-    base.ts                   # BaseConnector abstract class (retry, circuit breaker, rate limit)
-    platforms/                # 42 platform-specific connector modules
-    registry.ts               # Connector registry and lazy singleton lookup
+lib/                          # Core business logic
+  ingest/
+    adapters/                 # 26 registered SourceAdapter implementations
+    core/                     # Contracts, registry loading, validation, normalization
+    fetch/                    # Rate-budgeted FetchSession and durable RAW capture
+    staging/                  # RAW/parsed evidence staging
+    serving/                  # Complete-board publication into serving schema
   cron/
-    enrichment-runner.ts      # Enrichment configs for 26 platforms
-    fetchers/                 # 35+ exchange-specific enrichment modules
+    meta-monitor-policy.ts    # Pure missing-success evaluation policy
+    with-cron-lock.ts         # Distributed run lock and delivery deduplication
+    with-cron-budget.ts       # Serverless execution budget guard
   data/                       # Server-side data fetching
     unified.ts                # Unified data layer (getLeaderboard, getTraderDetail, searchTraders)
     trader/                   # Trader data functions with fallback chains
-  services/                   # Business logic (22 files)
+  services/                   # Business logic
     pipeline-logger.ts        # 3-destination execution logging
     pipeline-self-heal.ts     # Auto-recovery
     anomaly-detection.ts      # Statistical anomaly detection
     telegram-bot.ts           # Telegram alerts
     trader-alerts.ts          # Rank change notifications
-  hooks/                      # React hooks (41 files)
+  hooks/                      # React hooks
   stores/                     # Zustand stores (period, inbox, multiAccount, post)
-  types/                      # TypeScript types (13 files)
+  types/                      # TypeScript types
     unified-trader.ts         # Canonical frontend type (UnifiedTrader)
     leaderboard.ts            # Pipeline types, platform configs, rate limits
-  utils/                      # Utilities (68 files)
-    arena-score.ts            # Arena Score V2 formula
-  scoring/                    # Arena Score V3 percentile scoring
+  utils/                      # Utilities
+    arena-score.ts            # Arena Score v4 plus rollback formulae
+  scoring/                    # Score feature/provenance helpers
   cache/                      # Redis cache helpers
-  i18n/                       # 4 languages (en/zh/ja/ko, 4,800+ keys each)
+  i18n/                       # 4 languages (en/zh/ja/ko)
   web3/                       # EAS attestation, wallet integration
   supabase/                   # Supabase client (getSupabaseAdmin singleton)
   stripe/                     # Stripe integration
@@ -352,7 +301,7 @@ Core tables (all with Row Level Security enabled):
 
 | Table                     | Purpose                                                                  |
 | ------------------------- | ------------------------------------------------------------------------ |
-| `leaderboard_ranks`       | Precomputed ranked leaderboard (primary read path, rebuilt every 30 min) |
+| `leaderboard_ranks`       | Precomputed ranked leaderboard; each season is normally rebuilt every 2h |
 | `arena.trader_stats`      | Point-in-time performance per (trader, timeframe) — primary write table  |
 | `arena.traders`           | Trader identity registry, keyed by `(source_id, exchange_trader_id)`     |
 | `trader_sources`          | Trader source identities (legacy serving + enrichment)                   |
@@ -360,7 +309,7 @@ Core tables (all with Row Level Security enabled):
 | `trader_position_history` | Past trading positions with PnL                                          |
 | `trader_stats_detail`     | Advanced statistics (Sharpe, Sortino, Calmar, profit factor) per period  |
 | `trader_asset_breakdown`  | Asset allocation analysis per period                                     |
-| `trader_daily_snapshots`  | Daily ROI/PnL rollups (377K+ rows, 142 days depth)                       |
+| `trader_daily_snapshots`  | Daily ROI/PnL rollups                                                    |
 | `trader_portfolio`        | Current open positions                                                   |
 | `trader_sources`          | Unique trader identities, keyed by `(source, source_trader_id)`          |
 
@@ -451,7 +400,7 @@ The dev server starts at `http://localhost:3000` using Turbopack. The dev server
 npm run build          # Production build
 npm run type-check     # TypeScript strict mode check
 npm run lint           # ESLint (no-console: error, no-explicit-any: warn)
-npm run test           # Jest test suite (139 suites, 2,271 tests)
+npm run test           # Jest test suite
 npm run test:e2e       # Playwright E2E tests
 ```
 
@@ -467,24 +416,24 @@ node scripts/check-data-distribution.mjs         # Data distribution analysis
 
 ## Deployment
 
-The application is deployed on Vercel with automatic deployments from the `main` branch.
+The application is deployed on Vercel through the repository's CI deployment gate. A push to `main` must pass the required checks before the production deployment is created; a pushed commit alone is not proof that production advanced.
 
 ```bash
-vercel --prod          # Manual production deploy via Vercel CLI
-git push origin main   # Triggers automatic deployment
+vercel --prod          # Manual production deploy; verify the linked project first
+git push origin main   # Starts CI; deploy-gate promotes only after required checks pass
 ```
 
 All environment variables must be configured in the Vercel dashboard. The primary serverless function region is `hnd1` (Tokyo) to minimize latency to Asian exchange APIs and avoid geo-blocking.
 
 ### Cron Jobs
 
-Cron schedules are defined in `vercel.json`. All 53 cron endpoints require an `Authorization: Bearer CRON_SECRET` header. Schedules are staggered to avoid database connection contention (no two heavy jobs share the same minute offset).
+Cron schedules are defined in `vercel.json`. The 44 production schedules call authenticated endpoints with `Authorization: Bearer CRON_SECRET`; Vercel injects that header from the Production environment. Schedules are staggered and should be checked with `node scripts/cron-schedule-heatmap.mjs` before adding another job.
 
 ### Infrastructure
 
 | Component                  | Details                                                            |
 | -------------------------- | ------------------------------------------------------------------ |
-| **Vercel**                 | Edge + Serverless, region hnd1, 53 cron jobs                       |
+| **Vercel**                 | Edge + Serverless, region hnd1, 44 production cron schedules       |
 | **SG VPS** (45.76.152.169) | Proxy :3456 + Playwright Scraper :3457 (PM2)                       |
 | **JP VPS** (149.28.27.242) | Polymarket + exchange proxy                                        |
 | **Mac Mini** (OpenClaw)    | Health monitor (30min), daily reports, auto-fix, weekly self-check |
@@ -493,26 +442,20 @@ Cron schedules are defined in `vercel.json`. All 53 cron endpoints require an `A
 ### Monitoring
 
 - Pipeline health: `/api/health/pipeline` (used by OpenClaw Mac Mini monitor)
-- Dependency health: `/api/health/dependencies` (checks Supabase, Redis, Stripe connectivity)
+- Dependency health: `/api/health/detailed?section=dependencies` (checks Supabase, Redis, Stripe connectivity)
 - Admin metrics: `/api/admin/metrics/trends` (pipeline success rates, error rates, active users)
-- Healthchecks.io: dead man's switch on 5 critical cron jobs
+- Healthchecks.io: dead man's switch for the configured monitored `PipelineLogger` subset
 - Sentry: client/server/edge error tracking
 - Telegram alerts: automatic on cron job failures and data staleness
 
 ### Key Metrics
 
-| Metric              | Value                                                          |
-| ------------------- | -------------------------------------------------------------- |
-| Total Traders       | 34,000+                                                        |
-| Active Platforms    | 35                                                             |
-| Exchange Connectors | 42                                                             |
-| Enrichment Modules  | 26                                                             |
-| Cron Jobs           | 53                                                             |
-| API Routes          | 292                                                            |
-| SQL Migrations      | 184                                                            |
-| Test Suites         | 139 (2,271 tests)                                              |
-| Languages           | 4 (en/zh/ja/ko, 4,800+ keys each)                              |
-| Lighthouse          | Performance ~65+, Accessibility 97, Best Practices 96, SEO 100 |
+| Metric           | Value           |
+| ---------------- | --------------- |
+| Ingest Adapters  | 26 registered   |
+| Cron Endpoints   | 53              |
+| Vercel Schedules | 44              |
+| UI Languages     | 4 (en/zh/ja/ko) |
 
 ## License
 
