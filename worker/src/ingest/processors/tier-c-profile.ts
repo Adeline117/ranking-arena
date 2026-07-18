@@ -16,6 +16,8 @@ import type { Job } from 'bullmq'
 import { getConnection } from '../../connection'
 import { getSourceBySlug } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
+import type { IngestRegion } from '@/lib/ingest/core/regions'
+import { assertIngestRegion } from '@/lib/ingest/core/tier-c-routing'
 import {
   supportsSourceSurface,
   UnsupportedSourceSurfaceError,
@@ -43,15 +45,26 @@ import { tierCResultKey, type TierCJobData } from '../queues'
 
 const RESULT_TTL_SECONDS = 120
 
-export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
+type TierCSource = Awaited<ReturnType<typeof getSourceBySlug>>
+
+export async function processTierC(
+  job: Job<TierCJobData>,
+  expectedRegion: IngestRegion
+): Promise<unknown> {
   const { sourceSlug, exchangeTraderId, timeframe, surface } = job.data
+  const region = assertIngestRegion(expectedRegion)
   const src = await getSourceBySlug(sourceSlug)
+  if (src.fetch_region !== region) {
+    throw new Error(
+      `[tier-c] source ${sourceSlug} moved from ${region} to ${src.fetch_region} before fetch`
+    )
+  }
   const adapter = getAdapter(src.adapter_slug)
   const redis = getConnection()
   const resultKey = tierCResultKey(job.data)
 
   if (surface !== 'profile') {
-    return processHeavySurface(job)
+    return processHeavySurface(job, src)
   }
 
   // UTA portfolio traders route profile calls by traders.meta (portfolio_id)
@@ -203,9 +216,8 @@ export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
  * Redis rows are stripped before publish; full rows (with label, for
  * dedupe) only reach arena.copier_records which has no public access.
  */
-async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
+async function processHeavySurface(job: Job<TierCJobData>, src: TierCSource): Promise<unknown> {
   const { sourceSlug, exchangeTraderId, timeframe, surface } = job.data
-  const src = await getSourceBySlug(sourceSlug)
   const adapter = getAdapter(src.adapter_slug)
   const redis = getConnection()
   const resultKey = tierCResultKey(job.data)

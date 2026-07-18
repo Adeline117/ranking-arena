@@ -21,6 +21,12 @@ describe('INGEST_REGIONS startup contract', () => {
     expect(parseIngestRegionsEnv(undefined)).toEqual(INGEST_REGIONS)
   })
 
+  it('requires an explicit assignment for managed production workers', () => {
+    expect(() => parseIngestRegionsEnv(undefined, { requireExplicit: true })).toThrow(
+      'is required for managed or production workers'
+    )
+  })
+
   it('accepts an explicit, fully valid region assignment', () => {
     expect(parseIngestRegionsEnv('local,vps_sg')).toEqual(['local', 'vps_sg'])
     expect(parseIngestRegionsEnv(' vps_jp ')).toEqual(['vps_jp'])

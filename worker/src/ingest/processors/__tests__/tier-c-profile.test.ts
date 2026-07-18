@@ -57,6 +57,7 @@ const src = {
   currency: 'USDC',
   tf_label_map: {},
   meta: {},
+  fetch_region: 'local',
   profile_cache_ttl_seconds: 3_600,
 } as SourceRow & { profile_cache_ttl_seconds: number }
 
@@ -142,7 +143,7 @@ describe('Tier-C incomplete profile window gate', () => {
   it('persists RAW evidence but never writes render or profile caches', async () => {
     mockParseProfile.mockReturnValue(parsedProfile(false))
 
-    await expect(processTierC(job)).rejects.toMatchObject({
+    await expect(processTierC(job, 'local')).rejects.toMatchObject({
       name: 'IncompleteProfileWindowError',
       timeframe: 30,
       reason: 'window_prefix_not_covered',
@@ -168,7 +169,11 @@ describe('Tier-C incomplete profile window gate', () => {
   it('uses the frozen profile as-of for a complete render payload', async () => {
     mockParseProfile.mockReturnValue(parsedProfile(true))
 
-    await expect(processTierC(job)).resolves.toMatchObject({ traderId: 42, stats: 1, series: 0 })
+    await expect(processTierC(job, 'local')).resolves.toMatchObject({
+      traderId: 42,
+      stats: 1,
+      series: 0,
+    })
 
     expect(mockRedisSet).toHaveBeenCalledTimes(1)
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
@@ -211,7 +216,11 @@ describe('Tier-C incomplete profile window gate', () => {
     ]
     mockParseProfile.mockReturnValue(parsed)
 
-    await expect(processTierC(job)).resolves.toMatchObject({ traderId: 42, stats: 1, series: 1 })
+    await expect(processTierC(job, 'local')).resolves.toMatchObject({
+      traderId: 42,
+      stats: 1,
+      series: 1,
+    })
 
     const renderPayload = JSON.parse(String(mockRedisSet.mock.calls[0][1]))
     expect(renderPayload.series).toEqual(parsed.series)
@@ -237,7 +246,7 @@ describe('Tier-C incomplete profile window gate', () => {
     mockParseProfile.mockReturnValue(parsed)
     mockValidateProfile.mockReturnValue([reject])
 
-    await expect(processTierC(job)).resolves.toMatchObject({
+    await expect(processTierC(job, 'local')).resolves.toMatchObject({
       traderId: 42,
       qualityRejected: true,
       reason: 'profile_series_tail_stale',
@@ -280,7 +289,7 @@ describe('Tier-C incomplete profile window gate', () => {
   it('fails an empty profile bundle closed after preserving RAW', async () => {
     mockGetProfile.mockResolvedValue({ ...bundle, pages: [] })
 
-    await expect(processTierC(job)).resolves.toMatchObject({
+    await expect(processTierC(job, 'local')).resolves.toMatchObject({
       traderId: 42,
       qualityRejected: true,
       reason: 'profile_payload_missing',
@@ -320,7 +329,7 @@ describe('Tier-C incomplete profile window gate', () => {
     ])
     mockRecordStagingRejects.mockRejectedValue(new Error('staging audit unavailable'))
 
-    await expect(processTierC(job)).rejects.toThrow('staging audit unavailable')
+    await expect(processTierC(job, 'local')).rejects.toThrow('staging audit unavailable')
 
     expect(mockWriteRawObject).toHaveBeenCalledTimes(1)
     expect(mockRedisSet).not.toHaveBeenCalled()
@@ -355,7 +364,7 @@ describe('Tier-C incomplete profile window gate', () => {
       },
     } as Job<TierCJobData>
 
-    await expect(processTierC(heavyJob)).rejects.toMatchObject({
+    await expect(processTierC(heavyJob, 'local')).rejects.toMatchObject({
       name: 'UnsupportedSourceSurfaceError',
       code: 'UNSUPPORTED_SOURCE_SURFACE',
       sourceSlug: 'okx_spot',
@@ -363,5 +372,30 @@ describe('Tier-C incomplete profile window gate', () => {
     })
     expect(mockOpenSession).not.toHaveBeenCalled()
     expect(mockGetPositions).not.toHaveBeenCalled()
+    expect(mockGetSourceBySlug).toHaveBeenCalledTimes(1)
   })
+
+  it.each(['profile', 'positions'] as const)(
+    'rechecks the processor source snapshot before opening a %s session',
+    async (surface) => {
+      mockGetSourceBySlug.mockResolvedValue({
+        ...src,
+        fetch_region: 'vps_sg',
+      })
+      const movedJob = {
+        data: {
+          ...job.data,
+          surface,
+        },
+      } as Job<TierCJobData>
+
+      await expect(processTierC(movedJob, 'local')).rejects.toThrow(
+        'moved from local to vps_sg before fetch'
+      )
+
+      expect(mockGetAdapter).not.toHaveBeenCalled()
+      expect(mockOpenSession).not.toHaveBeenCalled()
+      expect(mockDbQuery).not.toHaveBeenCalled()
+    }
+  )
 })
