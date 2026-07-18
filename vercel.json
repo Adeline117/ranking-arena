@@ -24,6 +24,10 @@
       "schedule": "2 0 * * *"
     },
     {
+      "path": "/api/cron/check-data-freshness",
+      "schedule": "39 1,4,7,10,13,16,19,22 * * *"
+    },
+    {
       "path": "/api/cron/meta-monitor",
       "schedule": "23 */6 * * *"
     },
