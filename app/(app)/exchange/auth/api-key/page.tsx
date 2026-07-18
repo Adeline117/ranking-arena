@@ -1,12 +1,14 @@
 'use client'
 import PasswordInput from '@/app/components/ui/PasswordInput'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useCallback, useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
+import { bootstrapClientAuth } from '@/lib/auth/client-auth-bootstrap'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
+import ErrorState from '@/app/components/ui/ErrorState'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import { getCsrfHeaders } from '@/lib/api/client'
@@ -15,11 +17,13 @@ import { EXCHANGE_CONFIGS, type ExchangeId } from './exchange-configs'
 function ApiKeyAuthContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const push = router.push
   const { t, language } = useLanguage()
   const { showToast } = useToast()
   const exchangeParam = searchParams.get('exchange') as ExchangeId | null
 
   const [userId, setUserId] = useState<string | null>(null)
+  const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [selectedExchange, setSelectedExchange] = useState<ExchangeId | null>(exchangeParam)
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
@@ -39,20 +43,26 @@ function ApiKeyAuthContent() {
     document.head.appendChild(style)
   }, [])
 
+  const loadAuth = useCallback(async () => {
+    setAuthStatus('loading')
+    const result = await bootstrapClientAuth(supabase.auth)
+
+    if (result.status === 'signed-out') {
+      push('/login?redirect=/exchange/auth/api-key')
+      return
+    }
+    if (result.status === 'error') {
+      setAuthStatus('error')
+      return
+    }
+
+    setUserId(result.user.id)
+    setAuthStatus('ready')
+  }, [push])
+
   useEffect(() => {
-    supabase.auth
-      .getUser()
-      .then(({ data }) => {
-        if (!data.user) {
-          router.push('/login?redirect=/exchange/auth/api-key')
-          return
-        }
-        setUserId(data.user.id)
-      })
-      .catch(() => {
-        /* Intentionally swallowed: auth check non-critical for api-key page */
-      })
-  }, [router])
+    void loadAuth()
+  }, [loadAuth])
 
   // This page is an INTERNAL step of the /exchange/auth flow — always reached
   // with a chosen ?exchange=. If someone lands here bare (or with an unknown
@@ -96,7 +106,12 @@ function ApiKeyAuthContent() {
     try {
       const {
         data: { session },
+        error: sessionError,
       } = await supabase.auth.getSession()
+      if (sessionError) {
+        setError(t('loadFailedRetryShort'))
+        return
+      }
       if (!session) {
         showToast(t('pleaseLogin'), 'warning')
         router.push('/login?redirect=/exchange')
@@ -146,7 +161,28 @@ function ApiKeyAuthContent() {
     }
   }
 
-  if (!userId) {
+  if (authStatus === 'error') {
+    return (
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
+        <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <ErrorState
+            title={t('somethingWentWrong')}
+            description={t('loadFailedRetryShort')}
+            retry={() => void loadAuth()}
+            variant="compact"
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (authStatus === 'loading' || !userId) {
     return (
       <Box
         style={{
