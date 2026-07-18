@@ -1,20 +1,21 @@
 # Stripe 2C 收费上线 Runbook
 
-最后核验：2026-07-14。
+最后核验：2026-07-18。
 
 ## 当前结论
 
-ArenaFi 的 B2C Pro 支付代码和测试沙盒已具备上线前验证条件，但**尚未开始真实收费**：
+ArenaFi 的 B2C Pro **尚未开始真实收费，当前支付入口必须保持关闭**：
 
 - Vercel Production 仍使用 Stripe test key，免费 promo 仍开启。
+- Production 缺少 `STRIPE_WEBHOOK_SECRET`；支付运行时门禁会拒绝创建 B2C、API 和付费群 Checkout，不能把这个 fail-closed 状态称为 sandbox ready。
+- `NEXT_PUBLIC_PRO_FREE_PROMO` 未显式配置，代码当前按免费 promo 开启处理。
+- `STRIPE_LIFETIME_CHECKOUT_ENABLED` 未配置；终身 Checkout 默认关闭，只有完成名额 reservation、退款和 readiness 验收后才能显式开启。
 - 测试价格已与产品唯一口径一致：月付 `$4.99`、年付 `$29.99`、终身 `$49.99`。
-- 测试 webhook 已启用在 `https://www.arenafi.org/api/stripe/webhook`，事件集合与代码契约一致。
-- 月付、年付、终身价格 ID 以及 webhook secret 已配置到 Vercel Production、Preview、Development。
 - Checkout 会在创建 Customer/Session 前验证 Price、Product、币种、金额、周期和 test/live mode；未知 Price 不授予 Pro。
-- webhook 使用可重试状态机；业务处理失败不会再被误记为“已处理”。终身会员写入和订阅/profile 写入均走原子 RPC。
+- webhook 使用可重试状态机；业务处理失败不会再被误记为“已处理”。但 entitlement writer 尚未全部切到新身份完整 RPC，旧 direct write、退款和定时 reconciliation 仍是 `181410` 前的硬阻断。
 - 每日 `stripe-readiness` 金丝雀检查三档 B2C 价格、密钥模式、webhook 事件契约，以及失败或卡住的 webhook 事件。
 
-因此当前状态是 **sandbox ready / paid launch not ready**。最后一步需要 owner 明确收费日期并提供 Stripe live 资源；不能把 test Price、test webhook secret 或 test Customer 直接搬到 live mode。
+因此当前状态是 **paid launch blocked by design**。不能把 test Price、test Customer 或其他 Stripe account/mode 的对象直接搬到 live mode，也不能仅补一个环境变量就开始收费。
 
 ## 不能由代码自动决定的 owner gate
 
@@ -23,7 +24,7 @@ ArenaFi 的 B2C Pro 支付代码和测试沙盒已具备上线前验证条件，
 1. 免费 promo 的结束时间。
 2. Stripe 账户已完成收款、税务/主体、结算账户和争议通知配置。
 3. 月付 `$4.99`、年付 `$29.99`、终身 `$49.99` 是最终对外价格。
-4. 是否保留生产库里的两个历史 test-mode Pro 账号；默认应清理，但必须先确认不是需要保留的 QA/内部权益。
+4. 如何处理生产库里的两个历史模糊 Pro 投影。它们不能被证明属于 test/live、真实付款或内部赠送；默认动作是保留并阻断切换，而不是自动清理。
 
 ## 上线前硬门槛
 
@@ -39,80 +40,82 @@ ArenaFi 的 B2C Pro 支付代码和测试沙盒已具备上线前验证条件，
   - `charge.refunded|refund.updated|charge.refund.updated`
   - `charge.dispute.created`
 - Production `STRIPE_WEBHOOK_SECRET` 是这个 live endpoint 新生成的签名密钥。
+- `STRIPE_LIFETIME_CHECKOUT_ENABLED` 只能在终身名额 reservation、Session 过期释放、退款回收和 200 席并发 canary 全部通过后设为精确值 `true`。
 - `stripe_events` 没有 `failed`，也没有超过 10 分钟的 `processing`。
 - 最新部署 SHA 与 `main` 一致，部署门禁、类型检查、相关支付测试均通过。
 - `/api/cron/stripe-readiness` 返回 `healthy=true`；关闭 promo 后必须进一步返回 `paidLaunchReady=true`。
 
-## 生产库 test 数据清理
+## 历史订阅隔离与证据门
 
-历史审计发现两条 test-mode 活跃订阅。切换 live key 后，这些 `sub_`/`cus_` 在 live mode 不存在；若不清理，会造成错误 Pro、Checkout 409 或 Portal 500。
+生产库有两条 `active/pro` 订阅投影缺少 `plan`，且 profile、订阅和支付历史无法组成完整付款权威。仓库历史可以解释这种形状：旧初始化先创建本地订阅行，旧 webhook 后来写入 Customer、Subscription、状态和周期，却没有写 `plan` 或后续新增的 profile 字段。
 
-先只读确认：
+这只能证明它们是历史遗留投影，**不能证明它们属于 Stripe test mode、live mode、哪个 account/sandbox，也不能证明是否真实扣款**。`sub_`/`cus_` 前缀不携带 mode；当前 key 返回 `resource_missing` 也可能表示另一 mode、另一 account、旧 sandbox 或已不可用对象。
+
+先用只读查询识别异常形状，不在查询或文档中硬编码用户和 Stripe 对象：
 
 ```sql
-SELECT s.user_id, s.stripe_subscription_id, s.stripe_customer_id, s.status,
-       p.subscription_tier, p.pro_plan
+SELECT s.id, s.user_id, s.stripe_subscription_id, s.stripe_customer_id,
+       s.status, s.tier, s.plan, s.current_period_start, s.current_period_end,
+       p.subscription_tier, p.pro_plan, p.pro_expires_at, p.is_pro,
+       p.stripe_customer_id AS profile_stripe_customer_id,
+       p.stripe_subscription_id AS profile_stripe_subscription_id
   FROM public.subscriptions s
   JOIN public.user_profiles p ON p.id = s.user_id
- WHERE s.stripe_subscription_id IN (
-   'sub_1StiFLCL6ewruupgYk5CClnO',
-   'sub_1SujcrCL6ewruupgUexNTCIO'
- );
+ WHERE s.status IN ('active', 'trialing')
+   AND s.tier = 'pro'
+   AND (s.stripe_customer_id IS NOT NULL
+        OR s.stripe_subscription_id IS NOT NULL)
+   AND (s.plan IS NULL
+        OR (s.plan IN ('monthly', 'yearly')
+            AND (s.current_period_start IS NULL
+                 OR s.current_period_end IS NULL)));
 ```
 
-owner 确认后，在同一事务中清理：
+必须先保存不可变证据和 owner 决策，再选择以下唯一允许的结果：
 
-```sql
-BEGIN;
+1. **已证实为 sandbox/QA 且 owner 决定不保留权益**：通过受审计的事务性 lifecycle 路径退役本地投影，并清理全部六个 Pro/Stripe profile 投影字段；不要 `DELETE` 丢失审计历史。
+2. **已证实为 live 真实付款或有效 trial**：从准确 Stripe account/mode 的 Subscription、Invoice、Charge/PaymentIntent、Price 和 period 重建 exact payment/trial authority；禁止根据周期长度猜 `plan`。
+3. **owner 明确认定为内部赠送并决定保留**：先退役伪 Stripe 投影，再通过专门的、有限期限且带 decision/ticket key 的 internal-comp grant RPC 授予；不得冒充 `referral`、不得 direct insert、不得伪造付款。
+4. **证据仍不足或 owner 未决定**：保持投影不变并维持 manual review；允许 additive PREDEPLOY 只做隔离，但禁止 POSTDEPLOY 权威切换和真实收费。
 
-UPDATE public.user_profiles
-   SET subscription_tier = 'free',
-       pro_plan = NULL,
-       stripe_customer_id = NULL,
-       updated_at = now()
- WHERE id IN (
-   'ebe2c2fb-fba8-4fef-b88c-0248a810a57c',
-   'ae6b996d-0aed-4f57-8b40-0c738ddd1491'
- );
-
-DELETE FROM public.subscriptions
- WHERE stripe_subscription_id IN (
-   'sub_1StiFLCL6ewruupgYk5CClnO',
-   'sub_1SujcrCL6ewruupgUexNTCIO'
- );
-
-COMMIT;
-```
-
-清理后立即回读上述查询，结果必须为 0 行。
+无论选择哪种结果，都禁止手填 `plan`、伪造 `payment_history`/付款 ledger、根据开发者角色或显示名自动清理、用当前错误 mode/account 的 key 远端取消对象。manual review 只有在对应权威或退役结果已由同一事务精确落库并回读后才能解决。
 
 ## Live 切换实施顺序
 
-1. 在 Stripe Dashboard 切到 Live mode，创建/确认 B2C Pro 三档价格。
-2. 创建 live webhook endpoint，使用上面的精确事件集合；保存新 `whsec_...`。
-3. 在 Vercel Production 更新：
+1. 保持免费 promo 开启、支付运行时门禁关闭、`STRIPE_LIFETIME_CHECKOUT_ENABLED` 不存在或不为 `true`；停止制造新的历史形状。
+2. 对历史模糊投影执行上一节的证据门。未解决项必须保持 open manual review，后续 readiness 和 POSTDEPLOY 应明确失败。
+3. 在 PostgreSQL 17 对抗测试、静态契约、类型检查和迁移 runner 全绿后，只应用 additive `181400` PREDEPLOY；不得同时应用 `181410`。
+4. 部署所有身份完整 writer：Customer owner CAS、Checkout reservation、invoice/subscription/refund RPC、group/referral/admin/account lifecycle、effect consumer 和 projection reconciler。退款必须先按 Charge 查询本地 immutable ledger；owner 已删除或 refund-first 时也不能提前 ACK 丢事件。
+5. 分页枚举并过期/对账所有旧 lifetime open Session；确认旧实例和旧 writer 已从流量中退出。
+6. 运行 writer-boundary 静态扫描、真实 canary 和 readiness。任何 open review、未完成 effect、paid-but-unbound payment、未合并 refund tombstone、reservation/projection/authority drift 都必须阻断。
+7. 只有 readiness 精确为 ready 且同一待发布 SHA 的 canary 全绿时，才单独应用 `181410` POSTDEPLOY，撤销旧 RPC 并启用数据库 direct-DML guard。此后不能靠回滚旧 app 恢复。
+8. 在 Stripe Dashboard 切到 Live mode，创建/确认 B2C Pro 三档价格。
+9. 创建 live webhook endpoint，使用上面的精确事件集合；保存新 `whsec_...`。
+10. 在 Vercel Production 更新：
 
-   | 变量                                 | Live 值                      |
-   | ------------------------------------ | ---------------------------- |
-   | `STRIPE_SECRET_KEY`                  | `sk_live_...`                |
-   | `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_live_...`                |
-   | `STRIPE_WEBHOOK_SECRET`              | live endpoint 的 `whsec_...` |
-   | `STRIPE_PRO_MONTHLY_PRICE_ID`        | 月付 live Price              |
-   | `STRIPE_PRO_YEARLY_PRICE_ID`         | 年付 live Price              |
-   | `STRIPE_PRO_LIFETIME_PRICE_ID`       | 终身 live Price              |
+| 变量                                 | Live 值                      |
+| ------------------------------------ | ---------------------------- |
+| `STRIPE_SECRET_KEY`                  | `sk_live_...`                |
+| `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY` | `pk_live_...`                |
+| `STRIPE_WEBHOOK_SECRET`              | live endpoint 的 `whsec_...` |
+| `STRIPE_PRO_MONTHLY_PRICE_ID`        | 月付 live Price              |
+| `STRIPE_PRO_YEARLY_PRICE_ID`         | 年付 live Price              |
+| `STRIPE_PRO_LIFETIME_PRICE_ID`       | 终身 live Price              |
 
-4. 保持 `NEXT_PUBLIC_PRO_FREE_PROMO` 开启，先重新部署；不要在同一步开始收费。
-5. 用 Cron secret 调用 `/api/cron/stripe-readiness`，确认除 promo owner gate 外无失败。
-6. 用内部真实账号分别创建月付、年付、终身 Checkout Session，核对 Stripe 托管页金额、币种和 mode；此时不要完成不必要的真实付款。
-7. 将 `NEXT_PUBLIC_PRO_FREE_PROMO=false`，再次部署。
-8. 立即确认 `stripe-readiness` 返回 `healthy=true`、`paidLaunchReady=true`。
-9. 用允许退款的小额真实卡交易完成月付和终身各一次，逐项回读：
-   - Stripe Payment/Subscription 状态正确；
-   - `stripe_events.status='processed'`；
-   - `subscriptions`、`user_profiles` 权益一致；
-   - `/pricing/success` 与会员中心显示正确；
-   - Portal 可打开；取消、退款、争议测试能撤权且不会影响更新的订阅。
-10. 在 Stripe 完成退款，并确认退款 webhook 与本地撤权闭环。
+11. 保持 `NEXT_PUBLIC_PRO_FREE_PROMO` 开启并重新部署；不要在同一步开始收费，终身 flag 仍保持关闭。
+12. 用 Cron secret 调用 `/api/cron/stripe-readiness`，确认除 promo owner gate 外无失败。
+13. 用受保护 Preview 或内部 allowlist 验证月付、年付和终身托管页的金额、币种和 mode；终身流程还必须证明 reservation 占位与 Session 过期释放。
+14. 先只开放月付/年付并重新部署；立即确认 `stripe-readiness` 返回 `healthy=true`、`paidLaunchReady=true`。终身 Checkout 在独立 200 席并发/退款 canary 通过前继续关闭。
+15. 用允许退款的小额真实卡交易完成月付一次，逐项回读：
+
+- Stripe Payment/Subscription 状态正确；
+- `stripe_events.status='processed'`；
+- `subscriptions`、`user_profiles` 权益一致；
+- `/pricing/success` 与会员中心显示正确；
+- Portal 可打开；取消、退款、争议测试能撤权且不会影响更新的订阅。
+
+16. 在 Stripe 完成退款，并确认退款 webhook、本地撤权、outbox supersede、官方群退出和 projection 收敛闭环。
+17. 单独完成终身真实 canary后，才把 `STRIPE_LIFETIME_CHECKOUT_ENABLED=true` 并重新部署；再次验证席位从 reservation 到付款或过期的完整生命周期。
 
 ## 发布后 24 小时验收
 
