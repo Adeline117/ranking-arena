@@ -103,4 +103,6 @@ COMMENT ON TABLE public.leaderboard_source_freshness IS
 COMMENT ON COLUMN public.leaderboard_source_freshness.source_as_of IS
   'Exchange/protocol snapshot time (arena PASSED scraped_at), not Arena score computation time.';
 
+NOTIFY pgrst, 'reload schema';
+
 COMMIT;

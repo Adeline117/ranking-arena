@@ -19,6 +19,7 @@ describe('leaderboard source freshness migration', () => {
     expect(migration).toContain('CREATE INDEX IF NOT EXISTS idx_leaderboard_source_freshness_age')
     expect(migration).toContain('DROP POLICY IF EXISTS "leaderboard_source_freshness_public_read"')
     expect(migration).toContain('leaderboard_source_freshness_not_future')
+    expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
   })
 
   it('backfills from the latest PASSED source scrape and never from score compute time', () => {
