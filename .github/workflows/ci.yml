@@ -184,6 +184,8 @@ jobs:
       # contract here as well as in its named job so PRs cannot merge while an
       # older four-check ruleset is still being updated.
       - run: npm run gen:types:contract
+      - name: Migration history shape ratchet
+        run: npm run qa:migration-history-shape
       - run: npm run lint
       - run: npx tsc --noEmit
       - name: VPS process topology safety
