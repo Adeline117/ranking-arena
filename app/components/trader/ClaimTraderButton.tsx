@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { Button } from '../base'
@@ -48,8 +48,6 @@ export default function ClaimTraderButton({
   const { showToast } = useToast()
   const { showConfirm } = useDialog()
   const { t } = useLanguage()
-  const [loading, _setLoading] = useState(false)
-  const [claimed, _setClaimed] = useState(false)
   const [claimStatus, setClaimStatus] = useState<string | null>(null)
   const [hasVerifiedAccounts, setHasVerifiedAccounts] = useState(false)
   const [thisTraderLinked, setThisTraderLinked] = useState(false)
@@ -165,7 +163,7 @@ export default function ClaimTraderButton({
     )
   }
 
-  if (thisTraderLinked || claimed || claimStatus === 'verified') {
+  if (thisTraderLinked || claimStatus === 'verified') {
     return (
       <Button variant="ghost" size="sm" disabled>
         {t('claimSubmitted')}
@@ -185,8 +183,8 @@ export default function ClaimTraderButton({
   const buttonLabel = hasVerifiedAccounts ? t('linkToProfile') : t('claimTrader')
 
   return (
-    <Button variant="primary" size="sm" onClick={handleClaim} disabled={loading}>
-      {loading ? t('claiming') : buttonLabel}
+    <Button variant="primary" size="sm" onClick={handleClaim}>
+      {buttonLabel}
     </Button>
   )
 }
