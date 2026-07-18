@@ -48,6 +48,20 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (
+      plan === 'lifetime' &&
+      process.env.VERCEL_ENV === 'production' &&
+      process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED !== 'true'
+    ) {
+      return NextResponse.json(
+        {
+          error: 'Lifetime checkout is temporarily unavailable.',
+          code: 'LIFETIME_CHECKOUT_UNAVAILABLE',
+        },
+        { status: 503 }
+      )
+    }
+
     const { user, error: userError } = await extractUserFromRequest(request)
 
     const logger = createLogger('stripe-create-checkout')

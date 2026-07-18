@@ -207,6 +207,9 @@ jest.mock('@supabase/supabase-js', () => ({
 import { NextRequest } from 'next/server'
 import { POST } from '../route'
 
+const originalVercelEnv = process.env.VERCEL_ENV
+const originalLifetimeCheckoutEnabled = process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED
+
 describe('POST /api/stripe/create-checkout', () => {
   const validUser = { id: 'user-123', email: 'user@test.com' }
 
@@ -244,6 +247,21 @@ describe('POST /api/stripe/create-checkout', () => {
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY = 'test-anon-key'
     process.env.NEXT_PUBLIC_APP_URL = 'https://app.test.com'
+    delete process.env.VERCEL_ENV
+    delete process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED
+  })
+
+  afterEach(() => {
+    if (originalVercelEnv === undefined) {
+      delete process.env.VERCEL_ENV
+    } else {
+      process.env.VERCEL_ENV = originalVercelEnv
+    }
+    if (originalLifetimeCheckoutEnabled === undefined) {
+      delete process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED
+    } else {
+      process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED = originalLifetimeCheckoutEnabled
+    }
   })
 
   // --- Rate Limiting ---
@@ -568,6 +586,85 @@ describe('POST /api/stripe/create-checkout', () => {
       }),
       expect.anything()
     )
+  })
+
+  it.each([
+    ['unset', undefined],
+    ['false', 'false'],
+    ['non-exact uppercase value', 'TRUE'],
+  ])(
+    'blocks Production lifetime checkout when the server flag is %s before payment work',
+    async (_label, flagValue) => {
+      process.env.VERCEL_ENV = 'production'
+      if (flagValue === undefined) {
+        delete process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED
+      } else {
+        process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED = flagValue
+      }
+
+      const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan: 'lifetime' }),
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(503)
+      expect(body).toEqual({
+        error: 'Lifetime checkout is temporarily unavailable.',
+        code: 'LIFETIME_CHECKOUT_UNAVAILABLE',
+      })
+      expect(mockExtractUser).not.toHaveBeenCalled()
+      expect(mockBillingProfileSingle).not.toHaveBeenCalled()
+      expect(mockAssertStripePaymentRuntimeReady).not.toHaveBeenCalled()
+      expect(mockAssertProPriceReady).not.toHaveBeenCalled()
+      expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+      expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+      expect(mockCreateOneTimeCheckoutSession).not.toHaveBeenCalled()
+    }
+  )
+
+  it.each(['monthly', 'yearly'])(
+    'keeps Production %s checkout available without the lifetime flag',
+    async (plan) => {
+      process.env.VERCEL_ENV = 'production'
+      delete process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED
+
+      const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan }),
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(200)
+      expect(mockCreateCheckoutSession).toHaveBeenCalledTimes(1)
+      expect(mockCreateOneTimeCheckoutSession).not.toHaveBeenCalled()
+    }
+  )
+
+  it('allows Production lifetime checkout only when the server flag is exactly true', async () => {
+    process.env.VERCEL_ENV = 'production'
+    process.env.STRIPE_LIFETIME_CHECKOUT_ENABLED = 'true'
+
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'lifetime' }),
+    })
+    const res = await POST(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body).toEqual({
+      url: 'https://checkout.stripe.com/lifetime',
+      sessionId: 'cs_lifetime123',
+    })
+    expect(mockAssertStripePaymentRuntimeReady).toHaveBeenCalledTimes(1)
+    expect(mockAssertProPriceReady).toHaveBeenCalledWith('lifetime', 'price_lifetime123')
+    expect(mockGetOrCreateStripeCustomer).toHaveBeenCalledTimes(1)
+    expect(mockCreateOneTimeCheckoutSession).toHaveBeenCalledTimes(1)
   })
 
   it.each(['monthly', 'yearly', 'lifetime'])(
