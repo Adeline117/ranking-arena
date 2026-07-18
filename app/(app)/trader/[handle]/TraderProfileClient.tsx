@@ -621,7 +621,7 @@ export default function TraderProfileClient({
   )
   // 即看即算: for a web3 wallet with no on-chain data yet, compute it on demand
   // (bounded) instead of waiting for the 12h rotation, then refetch.
-  useOnchainEnrichTrigger({
+  const onchainEnrichmentState = useOnchainEnrichTrigger({
     source: data.source,
     exchangeTraderId: data.source_trader_id,
     extras: servingTab.metaExtras,
@@ -1098,6 +1098,7 @@ export default function TraderProfileClient({
                         <OnchainInsights
                           extras={servingTab.metaExtras}
                           currency={servingTab.currency}
+                          enrichmentState={onchainEnrichmentState}
                         />
                       )}
                       {/* M1: holding-duration histogram (MEXC etc.) on default

@@ -1,10 +1,12 @@
 const mockRpc = jest.fn()
 const mockEnrich = jest.fn()
+const mockIsQuotaExhausted = jest.fn()
 
 jest.mock('next/server', () => ({
   NextResponse: {
-    json: (body: unknown, init: { status?: number } = {}) => ({
+    json: (body: unknown, init: { status?: number; headers?: Record<string, string> } = {}) => ({
       status: init.status ?? 200,
+      headers: init.headers ?? {},
       json: async () => body,
     }),
   },
@@ -27,12 +29,16 @@ jest.mock('@/lib/ingest/onchain/enrich', () => ({
   scoreEligibleWinRate: jest.fn(() => null),
 }))
 
+jest.mock('@/lib/ingest/onchain/solana-fetch', () => ({
+  isQuotaExhausted: (...args: unknown[]) => mockIsQuotaExhausted(...args),
+}))
+
 jest.mock('@/lib/utils/logger', () => ({
-  createLogger: () => ({ error: jest.fn() }),
+  createLogger: () => ({ error: jest.fn(), warn: jest.fn() }),
 }))
 
 import type { NextRequest } from 'next/server'
-import { POST } from '../route'
+import { clearOnchainProviderCapacityCircuit, POST } from '../route'
 
 function request(): NextRequest {
   return {
@@ -46,6 +52,8 @@ function request(): NextRequest {
 describe('/api/trader/onchain-enrich quality-aware freshness', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    clearOnchainProviderCapacityCircuit()
+    mockIsQuotaExhausted.mockReturnValue(false)
     mockEnrich.mockResolvedValue({
       realizedPnlUsd: 10,
       unrealizedPnlUsd: 2,
@@ -90,5 +98,50 @@ describe('/api/trader/onchain-enrich quality-aware freshness', () => {
     await expect(response.json()).resolves.toEqual({ status: 'fresh', skipped: true })
     expect(mockEnrich).not.toHaveBeenCalled()
     expect(mockRpc).toHaveBeenCalledTimes(1)
+  })
+
+  it('returns a retryable 503 and opens the chain circuit when provider capacity is exhausted', async () => {
+    mockRpc.mockResolvedValue({ data: { extras: {} }, error: null })
+    mockEnrich.mockRejectedValueOnce(new Error('Monthly capacity limit exceeded'))
+    mockIsQuotaExhausted.mockReturnValue(true)
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(503)
+    await expect(response.json()).resolves.toMatchObject({
+      error: 'provider_capacity_unavailable',
+      retryAfterSeconds: 300,
+    })
+    expect(response.headers).toMatchObject({
+      'Cache-Control': 'no-store',
+      'Retry-After': '300',
+    })
+  })
+
+  it('short-circuits another wallet on the same exhausted chain during cooldown', async () => {
+    mockRpc.mockResolvedValue({ data: { extras: {} }, error: null })
+    mockEnrich.mockRejectedValueOnce(new Error('max usage reached'))
+    mockIsQuotaExhausted.mockReturnValue(true)
+
+    const first = await POST(request())
+    const second = await POST(request())
+
+    expect(first.status).toBe(503)
+    expect(second.status).toBe(503)
+    expect(mockEnrich).toHaveBeenCalledTimes(1)
+    await expect(second.json()).resolves.toMatchObject({
+      error: 'provider_capacity_unavailable',
+    })
+  })
+
+  it('keeps permanent enrichment failures observable as 500s', async () => {
+    mockRpc.mockResolvedValue({ data: { extras: {} }, error: null })
+    mockEnrich.mockRejectedValueOnce(new Error('parser invariant broken'))
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(500)
+    await expect(response.json()).resolves.toEqual({ error: 'enrich_failed' })
+    expect(mockIsQuotaExhausted).toHaveBeenCalledWith('parser invariant broken')
   })
 })

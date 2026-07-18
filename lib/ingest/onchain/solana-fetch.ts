@@ -26,6 +26,7 @@ export function isQuotaExhausted(msg: string): boolean {
   return (
     m.includes('max usage') ||
     m.includes('usage limit') ||
+    m.includes('capacity limit') ||
     m.includes('quota') ||
     m.includes('credits exhausted') ||
     m.includes('payment required') ||

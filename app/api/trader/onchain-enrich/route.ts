@@ -22,12 +22,40 @@ import {
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { createLogger } from '@/lib/utils/logger'
 import { hasCurrentStoredOnchainQualitySchema } from '@/lib/onchain-quality'
+import { isQuotaExhausted } from '@/lib/ingest/onchain/solana-fetch'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
 
 const logger = createLogger('onchain-enrich-api')
 const DEDUP_MINUTES = 30
+const PROVIDER_CAPACITY_COOLDOWN_MS = 5 * 60_000
+
+// A warm serverless process must not hit the same exhausted paid provider for
+// every profile mount. This is deliberately short-lived and process-local:
+// provider capacity can recover without a deploy, while permanent parser/DB
+// failures still execute and remain visible as 500s.
+const providerCapacityCircuit = new Map<string, number>()
+
+function providerUnavailable(chain: string, now = Date.now()) {
+  const until = providerCapacityCircuit.get(chain) ?? now + PROVIDER_CAPACITY_COOLDOWN_MS
+  const retryAfterSeconds = Math.max(1, Math.ceil((until - now) / 1000))
+  return NextResponse.json(
+    { error: 'provider_capacity_unavailable', retryAfterSeconds },
+    {
+      status: 503,
+      headers: {
+        'Cache-Control': 'no-store',
+        'Retry-After': String(retryAfterSeconds),
+      },
+    }
+  )
+}
+
+/** @internal Test isolation for the process-local circuit. */
+export function clearOnchainProviderCapacityCircuit() {
+  providerCapacityCircuit.clear()
+}
 
 export async function POST(req: NextRequest) {
   // 公开端点但每次调用消耗付费链上 API 配额（Alchemy/Etherscan）——
@@ -73,6 +101,13 @@ export async function POST(req: NextRequest) {
     /* dedup is best-effort — proceed to enrich */
   }
 
+  const now = Date.now()
+  const circuitUntil = providerCapacityCircuit.get(chain) ?? 0
+  if (circuitUntil > now) {
+    return providerUnavailable(chain, now)
+  }
+  if (circuitUntil > 0) providerCapacityCircuit.delete(chain)
+
   try {
     // Bounded for the serverless window; no Dune on-demand (BSC realized may be
     // partial until the cron completes it).
@@ -99,6 +134,12 @@ export async function POST(req: NextRequest) {
       tokensTraded: e.tokensTraded,
     })
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err)
+    if (isQuotaExhausted(message)) {
+      providerCapacityCircuit.set(chain, Date.now() + PROVIDER_CAPACITY_COOLDOWN_MS)
+      logger.warn('provider capacity unavailable', { source, exchangeTraderId, chain })
+      return providerUnavailable(chain)
+    }
     logger.error('enrich failed', { source, exchangeTraderId, err })
     return NextResponse.json({ error: 'enrich_failed' }, { status: 500 })
   }
