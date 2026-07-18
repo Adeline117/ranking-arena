@@ -219,27 +219,13 @@ export const PRIORITY_SOURCES: TraderSource[] = [
   'btcc',
   'bitfinex',
   'bitunix',
-  'toobit',
-  'weex',
-  // Social trading
-  'etoro',
   // Web3 / DEX
   'gmx',
   'hyperliquid',
-  'gains',
-  'okx_web3',
-  'dydx',
-  'jupiter_perps',
-  'aevo',
   'drift',
   // Spot
   'binance_spot',
-  'bybit_spot',
   'binance_web3',
-  // New platforms (Wave 2)
-  'woox',
-  'polymarket',
-  'copin',
 ]
 
 // ---------------------------------------------------------------------------
@@ -266,32 +252,18 @@ export const SOURCES_WITH_DATA: TraderSource[] = [
   'btcc',
   'bitfinex',
   'bitunix',
-  'toobit',
-  'weex',
   'kucoin',
   'phemex',
-  // Social trading
-  'etoro',
   // CEX spot
   'binance_spot',
   'bitget_spot',
   'htx_spot',
-  'bybit_spot',
   'okx_spot',
   // Web3 / DEX
   'gmx',
   'hyperliquid',
-  'gains',
-  'okx_web3',
-  'aevo',
-  'dydx',
-  'jupiter_perps',
   'binance_web3',
   'drift',
-  // New platforms (Wave 2)
-  'woox',
-  'polymarket',
-  'copin',
 ]
 
 // ---------------------------------------------------------------------------
