@@ -55,7 +55,7 @@ export async function generateMetadata({
   // here to avoid a doubled '… | Arena | Arena'. OG/Twitter bypass the template.
   const title = `Best ${token} Traders ${CURRENT_YEAR} — Who Trades ${token} Best?`
   const ogTitle = `${title} | Arena`
-  const description = `Top traders for ${token} ranked by PnL. See who profits most trading ${token} across 27+ crypto exchanges. Updated hourly.`
+  const description = `Top traders for ${token} ranked by PnL across current public source boards. Rankings use the latest published data and recompute every two hours.`
 
   return {
     title,

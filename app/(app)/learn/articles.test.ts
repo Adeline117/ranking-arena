@@ -1,13 +1,11 @@
-import { PRODUCT_FACTS } from '@/lib/config/product-facts'
-
 import { ARTICLES, type Localized } from './articles'
 
 const LOCALES: Array<keyof Localized> = ['en', 'zh', 'ja', 'ko']
 const SOURCE_COVERAGE: Localized = {
-  en: `${PRODUCT_FACTS.fallbackExchangeCount}+ active source families`,
-  zh: `${PRODUCT_FACTS.fallbackExchangeCount}+ 个活跃来源家族`,
-  ja: `${PRODUCT_FACTS.fallbackExchangeCount} 以上のアクティブなソースファミリー`,
-  ko: `${PRODUCT_FACTS.fallbackExchangeCount}개 이상의 활성 소스 패밀리`,
+  en: 'live CEX, DEX, and on-chain source boards',
+  zh: '当前有数据的 CEX、DEX 与链上来源板',
+  ja: '稼働中の CEX・DEX・オンチェーンのソースボード',
+  ko: '운영 중인 CEX, DEX 및 온체인 소스 보드',
 }
 
 function article(slug: string) {
@@ -18,16 +16,16 @@ function article(slug: string) {
 
 describe('Learn article product contracts', () => {
   it.each(['understanding-trader-rankings', 'top-traders-by-exchange'])(
-    '%s uses the shared active-source fallback in every locale',
+    '%s describes live ranking boards without a stale numeric claim in every locale',
     (slug) => {
       const target = article(slug)
-      const expectedCount = String(PRODUCT_FACTS.fallbackExchangeCount)
 
       for (const locale of LOCALES) {
         expect(target.excerpt[locale]).toContain(SOURCE_COVERAGE[locale])
         expect(target.content[locale]).toContain(SOURCE_COVERAGE[locale])
-        expect(`${target.excerpt[locale]} ${target.content[locale]}`).not.toContain('45')
-        expect(`${target.excerpt[locale]} ${target.content[locale]}`).toContain(expectedCount)
+        expect(`${target.excerpt[locale]} ${target.content[locale]}`).not.toMatch(
+          /(?:18|25|27|30|44|45)\+/
+        )
       }
     }
   )

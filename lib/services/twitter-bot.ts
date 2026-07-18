@@ -69,7 +69,11 @@ function formatPnl(pnl: number | null): string {
  * Output fits within Twitter's 280-character limit per section.
  */
 export function formatDailyTopMovers(movers: TopMover[], date: Date = new Date()): TweetContent {
-  const dateStr = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+  const dateStr = date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  })
 
   const lines = movers.slice(0, 5).map((m, i) => {
     const medal = ['1.', '2.', '3.', '4.', '5.'][i]
@@ -85,7 +89,7 @@ export function formatDailyTopMovers(movers: TopMover[], date: Date = new Date()
     '',
     ...lines,
     '',
-    `Ranked by Arena Score across 27+ exchanges`,
+    `Ranked by Arena Score across current public source boards`,
     `${BASE_URL}/rankings`,
   ].join('\n')
 
@@ -177,7 +181,9 @@ export async function postTweet(content: TweetContent): Promise<string | null> {
   const creds = getCredentials()
 
   if (!creds) {
-    logger.info('[twitter-bot] No Twitter API credentials configured — logging tweet content (dry-run)')
+    logger.info(
+      '[twitter-bot] No Twitter API credentials configured — logging tweet content (dry-run)'
+    )
     logger.info(`[twitter-bot] Tweet (${content.text.length} chars):\n${content.text}`)
     if (content.ogImageUrl) {
       logger.info(`[twitter-bot] OG image: ${content.ogImageUrl}`)

@@ -507,7 +507,7 @@ export async function GET(request: NextRequest) {
             }}
           >
             <span style={{ fontSize: 14, color: C.dim }}>
-              Crypto Trader Rankings across 18+ active exchange sources
+              Crypto Trader Rankings across live public source boards
             </span>
             <span style={{ fontSize: 14, fontWeight: 600, color: C.dim }}>
               View full rankings at arenafi.org

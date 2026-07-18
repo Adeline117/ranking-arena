@@ -1,6 +1,5 @@
 import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
-import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 
 export async function generateMetadata({
   searchParams,
@@ -17,8 +16,8 @@ export async function generateMetadata({
   const ogTitle = `${title} | Arena`
 
   const description = query
-    ? `Search results for "${query}" — Find traders and resources across ${PRODUCT_FACTS.fallbackExchangeCount}+ active exchange sources.`
-    : `Search for top crypto traders and trading resources across ${PRODUCT_FACTS.fallbackExchangeCount}+ active exchange sources.`
+    ? `Search results for "${query}" — Find traders and resources across live ranking source boards.`
+    : 'Search for top crypto traders and trading resources across live ranking source boards.'
 
   return {
     title,
