@@ -172,7 +172,7 @@ export default function SpotMarket({
 } = {}) {
   const { t } = useLanguage()
   const [data, setData] = useState<SpotCoin[]>(initialData ?? [])
-  const [loading, setLoading] = useState(!initialData?.length && !spotData?.length)
+  const [loading, setLoading] = useState(initialData === undefined && spotData === undefined)
   const [search, setSearch] = useState('')
   const [favorites, setFavorites] = useState<Set<string>>(new Set())
   const [showFavOnly, setShowFavOnly] = useState(false)
@@ -181,10 +181,9 @@ export default function SpotMarket({
 
   // Use shared spotData from parent when available
   useEffect(() => {
-    if (spotData && Array.isArray(spotData) && spotData.length > 0) {
-      setData(spotData as unknown as SpotCoin[])
-      setLoading(false)
-    }
+    if (spotData === undefined) return
+    setData(spotData as unknown as SpotCoin[])
+    setLoading(false)
   }, [spotData])
 
   useEffect(() => {

@@ -289,7 +289,7 @@ export default function SectorTreemap({
       change7d: number
     }[]
   >([])
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(spotData === undefined)
   const [isLight, setIsLight] = useState(false)
 
   useEffect(() => {
@@ -305,7 +305,12 @@ export default function SectorTreemap({
 
   // Use shared spot data from parent instead of fetching independently
   useEffect(() => {
-    if (!spotData || !Array.isArray(spotData) || spotData.length === 0) return
+    if (spotData === undefined) return
+    if (!Array.isArray(spotData) || spotData.length === 0) {
+      setCoins([])
+      setLoading(false)
+      return
+    }
     const mapped = spotData
       .filter(
         (c) =>
