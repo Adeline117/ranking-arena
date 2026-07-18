@@ -9,10 +9,15 @@ import { useFollowSync, type FollowChangePayload } from '@/lib/hooks/useBroadcas
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
 import { haptic } from '@/lib/utils/haptics'
 import { trackEvent } from '@/lib/analytics/track'
+import {
+  consumeProfileActionLogin,
+  profileTraderTarget,
+  queueProfileActionLogin,
+  type ProfileActionIntent,
+} from '@/lib/auth/profile-action-login'
 
 type TraderFollowButtonProps = {
   traderId: string
@@ -20,6 +25,7 @@ type TraderFollowButtonProps = {
   source?: string
   userId: string | null
   initialFollowing?: boolean
+  loginReturnPath?: string
   onFollowChange?: (following: boolean) => void
 }
 
@@ -41,9 +47,10 @@ export default function TraderFollowButton({
   source,
   userId,
   initialFollowing = false,
+  loginReturnPath,
   onFollowChange,
 }: TraderFollowButtonProps) {
-  const _router = useRouter()
+  const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
   const { getAuthHeadersAsync } = useAuthSession()
@@ -91,6 +98,22 @@ export default function TraderFollowButton({
   const [isLoading, setIsLoading] = useState(false)
   // Pulse animation on follow state change
   const [showPulse, setShowPulse] = useState(false)
+  const redirectToLogin = useCallback(
+    (action: ProfileActionIntent) => {
+      if (!source) {
+        showToast(t('operationFailed'), 'error')
+        return
+      }
+      router.push(
+        queueProfileActionLogin({
+          action,
+          target: profileTraderTarget(source, traderId),
+          fallbackPath: loginReturnPath,
+        })
+      )
+    },
+    [loginReturnPath, router, showToast, source, t, traderId]
+  )
 
   // 刷新关注状态（从服务器获取真实状态）
   const refreshFollowState = useCallback(async () => {
@@ -106,9 +129,11 @@ export default function TraderFollowButton({
 
       if (response.ok) {
         const data = await response.json()
-        const actualFollowing = data.following || data.data?.following
-        setFollowing(actualFollowing)
-        onFollowChange?.(actualFollowing)
+        const actualFollowing = data.following ?? data.data?.following
+        if (typeof actualFollowing === 'boolean') {
+          setFollowing(actualFollowing)
+          onFollowChange?.(actualFollowing)
+        }
       }
     } catch {
       // Intentionally swallowed: follow state refresh failed, UI uses cached/optimistic value
@@ -133,14 +158,26 @@ export default function TraderFollowButton({
           body: JSON.stringify({ traderId, source, action }),
         })
 
-        const result = await response.json()
-        const data = result.data || result // Handle wrapped or unwrapped response
-
-        // 清除超时保护
+        // Clear timeout protection as soon as the server responds.
         if (timeoutRef.current) {
           clearTimeout(timeoutRef.current)
           timeoutRef.current = null
         }
+
+        if (response.status === 401) {
+          pendingRef.current = false
+          if (expectedStateRef.current !== null) {
+            setFollowing(!expectedStateRef.current)
+            expectedStateRef.current = null
+          }
+          showToast(t('loginExpiredPleaseRelogin'), 'error')
+          redirectToLogin(action === 'follow' ? 'follow-trader' : 'unfollow-trader')
+          return false
+        }
+
+        const result = await response.json()
+        const data = result.data || result // Handle wrapped or unwrapped response
+
         pendingRef.current = false
         // NOTE: do NOT clear expectedStateRef here — the catch block relies on
         // it to roll back the optimistic flip when the server returns an error.
@@ -223,12 +260,32 @@ export default function TraderFollowButton({
         setIsLoading(false)
       }
     },
-    [traderId, source, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange, t]
+    [
+      traderId,
+      source,
+      userId,
+      getAuthHeadersAsync,
+      showToast,
+      broadcast,
+      onFollowChange,
+      t,
+      redirectToLogin,
+    ]
   )
 
   // UF8: Resume pending follow action after login
   useEffect(() => {
     if (!userId || !traderId || !source) return
+    const action = consumeProfileActionLogin({
+      actions: ['follow-trader', 'unfollow-trader'],
+      target: profileTraderTarget(source, traderId),
+    })
+    if (action) {
+      pendingRef.current = true
+      void executeFollow(action === 'follow-trader' ? 'follow' : 'unfollow')
+      return
+    }
+
     try {
       const pending = sessionStorage.getItem('pendingFollow')
       if (pending) {
@@ -273,8 +330,9 @@ export default function TraderFollowButton({
         if (response.ok) {
           const data = await response.json()
           // 只有在没有待处理操作时才更新状态
-          if (!pendingRef.current) {
-            setFollowing(data.following || data.data?.following)
+          const actualFollowing = data.following ?? data.data?.following
+          if (!pendingRef.current && typeof actualFollowing === 'boolean') {
+            setFollowing(actualFollowing)
           }
         }
       } catch (error) {
@@ -291,7 +349,7 @@ export default function TraderFollowButton({
 
   const handleToggle = useCallback(() => {
     if (!userId) {
-      showToast(t('pleaseLogin'), 'warning')
+      redirectToLogin('follow-trader')
       return
     }
     if (!source) {
@@ -326,7 +384,17 @@ export default function TraderFollowButton({
     setFollowing(newState)
 
     executeFollow(newState ? 'follow' : 'unfollow')
-  }, [userId, source, following, isLoading, executeFollow, showToast, refreshFollowState, t])
+  }, [
+    userId,
+    source,
+    following,
+    isLoading,
+    executeFollow,
+    showToast,
+    refreshFollowState,
+    t,
+    redirectToLogin,
+  ])
 
   // 功能未开放时显示禁用状态
   if (featureDisabled) {
@@ -356,14 +424,7 @@ export default function TraderFollowButton({
     return (
       <button
         onClick={() => {
-          // UF8: Save pending follow action for after login
-          if (typeof window !== 'undefined') {
-            sessionStorage.setItem(
-              'pendingFollow',
-              JSON.stringify({ traderId, source, action: 'follow' })
-            )
-          }
-          useLoginModal.getState().openLoginModal()
+          redirectToLogin('follow-trader')
         }}
         style={{
           padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
