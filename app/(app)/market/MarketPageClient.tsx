@@ -9,7 +9,6 @@ import { SectionErrorBoundary } from '@/app/components/utils/ErrorBoundary'
 import ErrorBoundary from '@/app/components/utils/ErrorBoundary'
 import { tokens } from '@/lib/design-tokens'
 import PageHeader from '@/app/components/ui/PageHeader'
-import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import ErrorState from '@/app/components/ui/ErrorState'
 import { supabase } from '@/lib/supabase/client'
 import { useMarketSpotData, type SpotCoin } from '@/lib/hooks/useMarketSpot'
@@ -17,6 +16,7 @@ import { useMarketSpotData, type SpotCoin } from '@/lib/hooks/useMarketSpot'
 // Core above-fold components: direct import for faster LCP
 import CoreCards from '@/app/components/market/CoreCards'
 import GlobalMarketBar from '@/app/components/market/GlobalMarketBar'
+import MarketSpotDataGate from '@/app/components/market/MarketSpotDataGate'
 import MarketWatchlistEntry from '@/app/components/market/MarketWatchlistEntry'
 import PriceTicker from '@/app/components/market/PriceTicker'
 import FearGreedGauge from '@/app/components/market/FearGreedGauge'
@@ -146,13 +146,7 @@ const MOBILE_SECTOR_CATEGORY_MAP: Record<string, string> = {
   MANA: 'GameFi',
 }
 
-function MobileSectorsTab({
-  spotData,
-  spotLoading,
-}: {
-  spotData?: SpotCoin[]
-  spotLoading: boolean
-}) {
+function MobileSectorsTab({ spotData }: { spotData?: SpotCoin[] }) {
   const { t } = useLanguage()
 
   const sectors = useMemo(() => {
@@ -170,8 +164,6 @@ function MobileSectorsTab({
       .sort((a, b) => b.change - a.change)
   }, [spotData])
 
-  if (spotLoading) return <LoadingSkeleton variant="list" count={4} />
-  if (!spotData) return <ErrorState title={t('loadFailed')} variant="compact" />
   if (sectors.length === 0)
     return (
       <div
@@ -278,10 +270,15 @@ function MarketPageContent({
   // Single shared fetch for /api/market/spot — data passed as props to all children.
   // Seed with the SSR-delivered spot data so the hook doesn't refetch the same
   // ~33KB/100-coin payload on mount (it was already in the document).
-  const { data: spotData, isLoading: spotLoading } = useMarketSpotData(
-    initialSpotData,
-    initialSpotDataUpdatedAt
-  )
+  const {
+    data: spotData,
+    isLoading: spotLoading,
+    isError: spotError,
+    refetch: refetchSpot,
+  } = useMarketSpotData(initialSpotData, initialSpotDataUpdatedAt)
+  const hasUsableSpotData = !!spotData?.length || !!initialSpotData?.length
+  const spotPending = spotLoading && !hasUsableSpotData
+  const spotFailed = spotError && !hasUsableSpotData
 
   useEffect(() => {
     supabase.auth.getUser().then(({ data }) => setEmail(data.user?.email ?? null))
@@ -390,8 +387,26 @@ function MarketPageContent({
           <MobileMarketTabs>
             {{
               overview: <MobileOverviewTab spotData={spotData} />,
-              movers: <MobileMoversTab spotData={spotData} initialSpotData={initialSpotData} />,
-              sectors: <MobileSectorsTab spotData={spotData} spotLoading={spotLoading} />,
+              movers: (
+                <MarketSpotDataGate
+                  pending={spotPending}
+                  failed={spotFailed}
+                  retry={() => void refetchSpot()}
+                  height={300}
+                >
+                  <MobileMoversTab spotData={spotData} initialSpotData={initialSpotData} />
+                </MarketSpotDataGate>
+              ),
+              sectors: (
+                <MarketSpotDataGate
+                  pending={spotPending}
+                  failed={spotFailed}
+                  retry={() => void refetchSpot()}
+                  height={200}
+                >
+                  <MobileSectorsTab spotData={spotData} />
+                </MarketSpotDataGate>
+              ),
               watchlist: <MarketWatchlistEntry />,
             }}
           </MobileMarketTabs>
@@ -461,18 +476,32 @@ function MarketPageContent({
           >
             <SectionErrorBoundary fallbackMessage="Market data failed to load">
               <Suspense fallback={<LoadingCard height={400} />}>
-                <SpotMarket
-                  spotData={spotData}
-                  onTokenClick={handleTokenClick}
-                  sectorFilter={sectorFilter}
-                  initialData={initialSpotData}
-                />
+                <MarketSpotDataGate
+                  pending={spotPending}
+                  failed={spotFailed}
+                  retry={() => void refetchSpot()}
+                  height={400}
+                >
+                  <SpotMarket
+                    spotData={spotData}
+                    onTokenClick={handleTokenClick}
+                    sectorFilter={sectorFilter}
+                    initialData={initialSpotData}
+                  />
+                </MarketSpotDataGate>
               </Suspense>
             </SectionErrorBoundary>
             <div>
               <SectionErrorBoundary fallbackMessage="Failed to load sector heatmap">
                 <Suspense fallback={<LoadingCard height={300} />}>
-                  <SectorTreemap spotData={spotData} onSectorClick={handleSectorClick} />
+                  <MarketSpotDataGate
+                    pending={spotPending}
+                    failed={spotFailed}
+                    retry={() => void refetchSpot()}
+                    height={300}
+                  >
+                    <SectorTreemap spotData={spotData} onSectorClick={handleSectorClick} />
+                  </MarketSpotDataGate>
                 </Suspense>
               </SectionErrorBoundary>
               {sectorFilter && (

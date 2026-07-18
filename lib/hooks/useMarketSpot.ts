@@ -46,6 +46,7 @@ export function useMarketSpotData(initialData?: SpotCoin[], initialDataUpdatedAt
     queryFn: () => fetcher<SpotCoin[]>('/api/market/spot'),
     refetchInterval: REFETCH_REALTIME,
     refetchOnWindowFocus: false,
+    retry: false,
     staleTime: STALE_REALTIME,
     ...(hasSeed
       ? {
