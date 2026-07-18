@@ -60,21 +60,21 @@ const getRecommendedPosts = unstable_cache(
   { revalidate: 300, tags: ['posts'] }
 )
 
+export async function loadRecommendedGroupsSSR() {
+  const supabase = getSupabaseAdmin()
+  const { data, error } = await supabase
+    .from('groups')
+    .select('id, name, name_en, avatar_url, member_count, description')
+    .order('member_count', { ascending: false })
+    .limit(8)
+  if (error) throw new Error(error.message)
+  return data || []
+}
+
 const getRecommendedGroups = unstable_cache(
-  async () => {
-    try {
-      const supabase = getSupabaseAdmin()
-      const { data } = await supabase
-        .from('groups')
-        .select('id, name, name_en, avatar_url, member_count, description')
-        .order('member_count', { ascending: false })
-        .limit(8)
-      return data || []
-    } catch {
-      return []
-    }
-  },
-  ['groups-recommended-groups'],
+  loadRecommendedGroupsSSR,
+  // Do not reuse empty values cached by the former fail-soft loader.
+  ['groups-recommended-groups-v2'],
   { revalidate: 600, tags: ['groups'] }
 )
 
@@ -82,9 +82,14 @@ export default async function GroupsPage() {
   if (!features.social) return <SocialComingSoonPage />
 
   // Parallel server-side data fetching
-  const [initialPosts, recommendedGroups] = await Promise.all([
+  const [initialPosts, recommendedGroupsResult] = await Promise.all([
     getRecommendedPosts(),
-    getRecommendedGroups(),
+    getRecommendedGroups()
+      .then((groups) => ({ groups, status: 'success' as const }))
+      .catch((error) => {
+        logger.error('[groups] getRecommendedGroups failed', error)
+        return { groups: [], status: 'error' as const }
+      }),
   ])
 
   return (
@@ -97,7 +102,11 @@ export default async function GroupsPage() {
         </Box>
       }
     >
-      <GroupsFeedPage initialPosts={initialPosts} initialGroups={recommendedGroups} />
+      <GroupsFeedPage
+        initialPosts={initialPosts}
+        initialGroups={recommendedGroupsResult.groups}
+        initialGroupsStatus={recommendedGroupsResult.status}
+      />
     </Suspense>
   )
 }
