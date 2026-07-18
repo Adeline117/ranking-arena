@@ -12,6 +12,7 @@ describe('trader follows composite identity migration', () => {
     expect(migration).toContain("leaderboard.computed_at >= pg_catalog.now() - interval '5 days'")
     expect(migration).toContain("source_row.status = 'active'")
     expect(migration).toContain("source_row.serving_mode = 'serving'")
+    expect(migration).toContain("(source_row.meta ->> 'legacy_platform') IS DISTINCT FROM 'null'")
     expect(migration).toContain('HAVING pg_catalog.count(DISTINCT source) = 1')
   })
 

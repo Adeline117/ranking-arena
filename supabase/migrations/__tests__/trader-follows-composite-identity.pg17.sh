@@ -95,7 +95,8 @@ CREATE TABLE arena.traders (
 INSERT INTO public.trader_follows (id, user_id, trader_id, source) VALUES
   ('10000000-0000-4000-8000-000000000001', '20000000-0000-4000-8000-000000000001', 'unique-id', NULL),
   ('10000000-0000-4000-8000-000000000002', '20000000-0000-4000-8000-000000000002', 'ambiguous-id', NULL),
-  ('10000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000003', 'missing-id', NULL);
+  ('10000000-0000-4000-8000-000000000003', '20000000-0000-4000-8000-000000000003', 'missing-id', NULL),
+  ('10000000-0000-4000-8000-000000000004', '20000000-0000-4000-8000-000000000004', 'null-sentinel-id', NULL);
 
 INSERT INTO public.leaderboard_ranks VALUES
   ('bybit', 'unique-id', '90D', now()),
@@ -105,10 +106,12 @@ INSERT INTO public.leaderboard_ranks VALUES
 
 INSERT INTO arena.sources (id, slug, status, serving_mode, meta) VALUES
   (1, 'bybit-source', 'active', 'serving', '{"legacy_platform":"bybit"}'),
-  (2, 'inactive-source', 'inactive', 'serving', '{}');
+  (2, 'inactive-source', 'inactive', 'serving', '{}'),
+  (3, 'null-sentinel-source', 'active', 'serving', '{"legacy_platform":"null"}');
 INSERT INTO arena.traders VALUES
   (1, 1, 'unique-id'),
-  (2, 2, 'missing-id');
+  (2, 2, 'missing-id'),
+  (3, 3, 'null-sentinel-id');
 SQL
 
 psql_cmd -q -f "$MIGRATION"
@@ -125,6 +128,10 @@ expect_eq \
   "$(psql_cmd -Atqc "SELECT source IS NULL FROM public.trader_follows WHERE trader_id='missing-id'")" \
   "t" \
   "unresolved legacy preservation"
+expect_eq \
+  "$(psql_cmd -Atqc "SELECT source IS NULL FROM public.trader_follows WHERE trader_id='null-sentinel-id'")" \
+  "t" \
+  "literal null alias preservation"
 
 # One user can follow the same raw trader id on two exchanges.
 psql_cmd -q <<'SQL'

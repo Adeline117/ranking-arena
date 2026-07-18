@@ -73,6 +73,7 @@ FROM (
   WHERE follow_row.source IS NULL
     AND source_row.status = 'active'
     AND source_row.serving_mode = 'serving'
+    AND (source_row.meta ->> 'legacy_platform') IS DISTINCT FROM 'null'
 ) AS candidate;
 
 WITH uniquely_resolved AS (
