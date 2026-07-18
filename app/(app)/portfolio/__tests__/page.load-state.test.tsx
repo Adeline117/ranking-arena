@@ -209,7 +209,7 @@ describe('PortfolioPage load state', () => {
 
   it('keeps last-good data through a failed refresh and replaces it only after retry succeeds', async () => {
     let mode: 'initial' | 'failed' | 'recovered' = 'initial'
-    const now = jest.spyOn(Date, 'now').mockReturnValue(100_000)
+    jest.spyOn(Date, 'now').mockReturnValue(100_000)
 
     mockFetch.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
@@ -239,7 +239,6 @@ describe('PortfolioPage load state', () => {
     expect(screen.getByTestId('position-list')).toHaveTextContent('BTCUSDT')
 
     mode = 'failed'
-    now.mockReturnValue(131_000)
     fireEvent.click(screen.getByRole('button', { name: 'Sync' }))
 
     expect(await screen.findByRole('alert')).toBeInTheDocument()

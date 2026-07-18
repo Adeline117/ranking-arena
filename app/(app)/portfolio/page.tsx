@@ -157,10 +157,6 @@ export default function PortfolioPage() {
     loadAll()
   }, [loadAll])
 
-  // Keep references for sync handler
-  const loadPortfolios = loadAll
-  const loadPositions = loadAll
-
   const handleAddExchange = async (data: {
     exchange: string
     api_key: string
@@ -178,7 +174,7 @@ export default function PortfolioPage() {
       throw new Error(json.error || t('portfolioAddFailed'))
     }
     showToast(t('portfolioConnectSuccess'), 'success')
-    await loadPortfolios()
+    await loadAll(true)
   }
 
   const handleSync = async (portfolioId: string) => {
@@ -211,7 +207,7 @@ export default function PortfolioPage() {
         showToast(reason ? t(reasonKey[reason]) : t('portfolioSyncFailed'), 'info')
         return
       }
-      await loadPositions()
+      await loadAll(true)
       showToast(t('portfolioSyncSuccess'), 'success')
     } catch {
       showToast(t('portfolioNetworkError'), 'error')
@@ -234,7 +230,7 @@ export default function PortfolioPage() {
         showToast(t('portfolioRemoveFailed'), 'error')
         return
       }
-      await Promise.all([loadPortfolios(), loadPositions()])
+      await loadAll(true)
       showToast(t('portfolioRemoved'), 'success')
     } catch {
       showToast(t('portfolioNetworkError'), 'error')
