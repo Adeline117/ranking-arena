@@ -20,6 +20,7 @@
 import path from 'path'
 import { fileURLToPath } from 'url'
 import { config as dotenvConfig } from 'dotenv'
+import { findStaleActivePlatforms, getActiveFetcherFailures } from './health-monitor-contract.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenvConfig({ path: path.resolve(__dirname, '../../.env') })
@@ -90,32 +91,6 @@ function shouldSendAlert(issueFingerprint) {
   return true
 }
 
-// Dead/blocked platforms - skip in alerts & auto-fix
-// Synced 2026-04-03 — skip dead platforms in alerts & auto-fix
-const DEAD_PLATFORMS = new Set([
-  'perpetual_protocol',
-  'whitebit',
-  'bitmart',
-  'btse',
-  'kwenta',
-  'mux',
-  'synthetix',
-  'paradex',
-  'kucoin', // copy trading discontinued 2026-03
-  'phemex', // API 404 since 2026-04
-  'bingx_spot', // no leaderboard API
-  'bitget_spot', // permanently disabled (no leaderboard API)
-  'lbank', // API 404 since 2026-04 (copy-trading endpoint removed)
-  'weex', // origin 521 since 2026-05-29 (CF origin down, not our bug)
-  // 'bingx' — RECOVERED 2026-05-19 via re-enable enrichment
-  // 'bybit', 'bybit_spot' — RECOVERED 2026-04-08 via DB seed fallback in connector
-  'copin', // not a real platform — dYdX data aggregator, no independent leaderboard
-  'gateio', // intermittent — API frequently returns empty, low-priority
-  'vertex',
-  'apex_pro',
-  'rabbitx', // DNS dead / no API
-])
-
 if (!CRON_SECRET) {
   console.error('CRON_SECRET is required')
   process.exit(1)
@@ -173,20 +148,6 @@ function formatDuration(ms) {
   return `${(ms / 1000).toFixed(1)}s`
 }
 
-/**
- * Check if a job name matches a dead platform — used as a local safety net
- * so that even if the server-side DEAD_BLOCKED_PLATFORMS list is missing a
- * platform, the monitor still won't spam alerts for known-dead enrichers/fetchers.
- */
-function isDeadPlatformJob(jobName) {
-  if (!jobName) return false
-  const lower = jobName.toLowerCase()
-  for (const dead of DEAD_PLATFORMS) {
-    if (lower.includes(dead.toLowerCase())) return true
-  }
-  return false
-}
-
 async function runHealthCheck() {
   const issues = []
   // categories: stable fingerprint keys that don't change with counts/job lists
@@ -230,20 +191,12 @@ async function runHealthCheck() {
       )
       categories.add('pipeline:critical')
 
-      // List specific failures — filter dead platforms client-side as defense-in-depth
-      // (server-side already filters via DEAD_BLOCKED_PLATFORMS in /api/health/pipeline,
-      // but this catches any drift between the two lists)
+      // /api/health/pipeline already filters job failures against the server's
+      // current lifecycle contract. Do not maintain a second client-side dead
+      // list: it previously hid revived active sources such as LBank and KuCoin.
       if (pipelineHealth.recentFailures?.length) {
-        const liveFailures = pipelineHealth.recentFailures.filter(
-          (f) => !isDeadPlatformJob(f.job_name)
-        )
-        for (const f of liveFailures.slice(0, 5)) {
+        for (const f of pipelineHealth.recentFailures.slice(0, 5)) {
           issues.push(`  ❌ ${f.job_name}: ${f.error_message?.slice(0, 100) || 'unknown'}`)
-        }
-        if (liveFailures.length === 0 && pipelineHealth.recentFailures.length > 0) {
-          // All failures were on dead platforms — downgrade
-          categories.delete('pipeline:critical')
-          categories.add('pipeline:critical:dead-only')
         }
       }
     } else if (pipelineHealth.status === 'degraded') {
@@ -348,22 +301,15 @@ async function runHealthCheck() {
   // from /api/health/pipeline to reduce DB load). Only use ageHours as signal.
   // Alert if a platform has no lastUpdate (ageHours=null) or is stale >threshold.
   // Default 48h; BloFin uses 12h (Mac Mini only, no fallback — need fast detection).
-  const STALE_THRESHOLD_OVERRIDES = { blofin: 12, etoro: 96 }
-  const DEFAULT_STALE_THRESHOLD = 48
   const platforms = pipelineHealth?.platformHealth || pipelineHealth?.platforms || []
   if (Array.isArray(platforms) && platforms.length > 0) {
-    const stalePlatforms = []
-    for (const p of platforms) {
-      const name = p.platform || p.name
-      if (!name || DEAD_PLATFORMS.has(name) || p.status === 'dead') continue
-      const age = p.ageHours ?? Infinity
-      const threshold = STALE_THRESHOLD_OVERRIDES[name] || DEFAULT_STALE_THRESHOLD
-      if (age > threshold) {
-        stalePlatforms.push(
-          `${name}(${age === Infinity ? 'no data' : age.toFixed(0) + 'h stale'}, threshold: ${threshold}h)`
-        )
-      }
-    }
+    // platformHealth is registry-backed: present means active, absent means
+    // inactive/retired. Every returned row must be evaluated, including a
+    // revived source whose old static label once said "dead".
+    const stalePlatforms = findStaleActivePlatforms(platforms).map(
+      ({ platform, ageHours, thresholdHours }) =>
+        `${platform}(${ageHours === null ? 'no data' : ageHours.toFixed(0) + 'h stale'}, threshold: ${thresholdHours}h)`
+    )
     if (stalePlatforms.length > 0) {
       issues.push(`🚨 Stale platforms: ${stalePlatforms.join(', ')}`)
       categories.add('data:stale-platforms')
@@ -404,13 +350,10 @@ async function runHealthCheck() {
 async function triggerAutoFix(pipelineHealth) {
   const { spawn } = await import('child_process')
   const autoFixScript = path.join(__dirname, 'auto-fix.mjs')
-  const failingJobs = (pipelineHealth.recentFailures || [])
-    .filter((f) => f.job_name?.includes('fetch-traders'))
-    .map((f) => ({
-      platform: f.job_name.replace(/^batch-fetch-traders-/, ''),
-      reason: classifyErrorMsg(f.error_message),
-    }))
-    .filter((f) => !DEAD_PLATFORMS.has(f.platform))
+  const failingJobs = getActiveFetcherFailures(pipelineHealth).map((failure) => ({
+    platform: failure.platform,
+    reason: classifyErrorMsg(failure.errorMessage),
+  }))
   if (failingJobs.length === 0) {
     console.log('[auto-fix] No fetcher failures')
     return
