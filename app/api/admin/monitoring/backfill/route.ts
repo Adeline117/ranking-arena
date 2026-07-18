@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data, error } = await supabase.rpc('arena_backfill_panel' as never)
+    const { data, error } = await supabase.rpc('arena_backfill_panel')
     if (error) {
       logger.error('arena_backfill_panel RPC failed', { error: error.message })
       return NextResponse.json({ error: 'Failed to load backfill data' }, { status: 500 })

@@ -53,7 +53,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data, error } = await supabase.rpc('arena_pipeline_panel' as never)
+    const { data, error } = await supabase.rpc('arena_pipeline_panel')
     if (error) {
       logger.error('arena_pipeline_panel RPC failed', { error: error.message })
       return NextResponse.json({ error: 'Failed to load pipeline data' }, { status: 500 })
@@ -62,7 +62,6 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({
       ok: true,
       timestamp: new Date().toISOString(),
-      // RPC added post-typegen — not in the generated database types union.
       rows: (data ?? []) as unknown as ArenaPipelineRow[],
     })
   } catch (error) {
