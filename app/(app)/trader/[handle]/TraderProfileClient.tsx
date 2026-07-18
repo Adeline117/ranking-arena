@@ -25,6 +25,10 @@ import { useLinkedAccounts } from '@/lib/hooks/useLinkedAccounts'
 import { useSourceCapabilities } from '@/lib/hooks/useSourceCapabilities'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 import { trackEvent } from '@/lib/analytics/track'
+import {
+  claimedTraderCanonicalHref,
+  type ClaimedTraderIdentity,
+} from '@/lib/identity/claimed-trader'
 import { Box, Text } from '@/app/components/base'
 // TopNav is now rendered by app/(app)/trader/[handle]/layout.tsx
 // (was pulled into this client bundle unnecessarily before).
@@ -220,6 +224,12 @@ interface TraderProfileClientProps {
   data: UnregisteredTraderData
   serverTraderData?: TraderPageData | null
   claimedUser?: ClaimedUserProfile | null
+  /**
+   * Exact account ownership resolved server-side from (source, traderId).
+   * Canonicalization to /u/ is intentionally deferred to the browser because
+   * the ISR server cannot observe an explicit ?platform= variant.
+   */
+  claimedTraderIdentity?: ClaimedTraderIdentity | null
   /** ARENA_DATA_SPEC v1.2 serving cutover: 'serving' reads arena.* via the
    *  first-screen/core/records contracts. Default 'legacy' keeps this
    *  component byte-identical to the pre-cutover behavior. */
@@ -253,6 +263,7 @@ export default function TraderProfileClient({
   data: serverData,
   serverTraderData,
   claimedUser,
+  claimedTraderIdentity,
   dataMode = 'legacy',
   servingFirstScreen: serverFirstScreen,
   servingCapability: serverCapability,
@@ -287,13 +298,15 @@ export default function TraderProfileClient({
   // fetch — onto the requested account.
   const urlPlatform = searchParams?.get('platform') ?? null
   const rawUrlHandle = typeof routeParams?.handle === 'string' ? routeParams.handle : ''
-  let urlHandle = rawUrlHandle
-  try {
-    urlHandle = decodeURIComponent(rawUrlHandle)
-  } catch {
-    // Intentionally swallowed: malformed URI encoding, use raw handle as-is
-    // (same behavior as the server component).
-  }
+  const urlHandle = (() => {
+    try {
+      return decodeURIComponent(rawUrlHandle)
+    } catch {
+      // Intentionally swallowed: malformed URI encoding, use raw handle as-is
+      // (same behavior as the server component).
+      return rawUrlHandle
+    }
+  })()
   const platformMismatch =
     isServing && !!urlPlatform && !!urlHandle && urlPlatform !== serverData.source
   const { data: accountOverride } = useQuery<TraderFirstScreenResponse | null>({
@@ -341,6 +354,24 @@ export default function TraderProfileClient({
         : serverData,
     [override, serverData, urlHandle]
   )
+
+  // Claimed profiles use /u/... as their canonical route, but the ISR server
+  // cannot safely redirect because it cannot see ?platform=. Wait until the
+  // browser has either matched the exact server source or validated a differing
+  // source/alias through /first-screen, then compare the full account identity.
+  const claimedCanonicalHref = claimedTraderCanonicalHref({
+    claimedIdentity: claimedTraderIdentity,
+    visibleIdentity: {
+      source: data.source,
+      traderId: data.source_trader_id,
+    },
+    requestedPlatform: urlPlatform,
+    requestedPlatformValidated: Boolean(override),
+  })
+  useEffect(() => {
+    if (claimedCanonicalHref) router.replace(claimedCanonicalHref)
+  }, [claimedCanonicalHref, router])
+
   // ROOT-CAUSE FIX (2026-07-02): the page is ISR-static, and the server's
   // cachedCapabilities() races a 2s timeout → {} — a slow render bakes
   // servingCapability:null INTO the cached HTML for the whole revalidate

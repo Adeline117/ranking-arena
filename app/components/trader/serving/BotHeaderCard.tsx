@@ -107,7 +107,7 @@ export default function BotHeaderCard({ bot, style }: BotHeaderCardProps) {
         <Text size="xs" color="tertiary">
           {t('botOwner')}:{' '}
           <Link
-            href={`/trader/${encodeURIComponent(bot.ownerTraderKey)}${bot.ownerPlatform ? `?source=${encodeURIComponent(bot.ownerPlatform)}` : ''}`}
+            href={`/trader/${encodeURIComponent(bot.ownerTraderKey)}${bot.ownerPlatform ? `?platform=${encodeURIComponent(bot.ownerPlatform)}` : ''}`}
             style={{ color: tokens.colors.accent.brand, fontWeight: 600 }}
           >
             {bot.ownerNickname}
