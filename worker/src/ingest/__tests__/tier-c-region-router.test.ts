@@ -1,10 +1,11 @@
 import type { Job } from 'bullmq'
-import { tierCJobId } from '@/lib/ingest/core/tier-c-keys'
+import { tierCJobId, tierCResultKey } from '@/lib/ingest/core/tier-c-keys'
 import { tierCQueueName } from '@/lib/ingest/core/tier-c-routing'
 import { getSourceBySlug } from '@/lib/ingest/sources'
 import { getTierCQueue } from '../queues'
 import type { TierCJobData } from '../queues'
 import {
+  MAX_TIER_C_REROUTE_HOPS,
   ensureTierCRerouteTarget,
   routeTierCJobRegion,
   tierCRerouteJobId,
@@ -92,7 +93,16 @@ describe('routeTierCJobRegion', () => {
         jobId: rerouteId,
       }
     )
-    expect(enqueue).toHaveBeenCalledWith('vps_sg', { ...data, fetchRegion: 'vps_sg' }, rerouteId)
+    expect(enqueue).toHaveBeenCalledWith(
+      'vps_sg',
+      {
+        ...data,
+        fetchRegion: 'vps_sg',
+        tierCRouteToken: rerouteId,
+        tierCRouteHop: 1,
+      },
+      rerouteId
+    )
     expect(rerouteId).not.toBe(tierCJobId(data))
     expect(rerouteId).not.toContain(':')
     expect(
@@ -100,17 +110,26 @@ describe('routeTierCJobRegion', () => {
         Buffer.from(rerouteId.replace('tierc-reroute-v1--', ''), 'base64url').toString('utf8')
       )
     ).toEqual([tierCQueueName('local'), tierCJobId(data), sourceJob.timestamp, 'local', 'vps_sg'])
+    expect(
+      tierCResultKey({
+        ...data,
+        fetchRegion: 'vps_sg',
+        tierCRouteToken: rerouteId,
+        tierCRouteHop: 1,
+      })
+    ).toBe(tierCResultKey(data))
   })
 
-  it('uses the database region instead of trusting a stale producer hint', async () => {
+  it('fails closed instead of bouncing a stale producer-directed job', async () => {
     const enqueue = jest.fn(async () => undefined)
     const staleHint = { ...data, fetchRegion: 'local' as const }
     const sourceJob = job(staleHint)
-    const rerouteId = tierCRerouteJobId(sourceJob, 'local', 'vps_sg')
 
-    await routeTierCJobRegion(sourceJob, 'local', deps('vps_sg', enqueue))
+    await expect(routeTierCJobRegion(sourceJob, 'local', deps('vps_sg', enqueue))).rejects.toThrow(
+      'no longer matches source region vps_sg'
+    )
 
-    expect(enqueue).toHaveBeenCalledWith('vps_sg', { ...data, fetchRegion: 'vps_sg' }, rerouteId)
+    expect(enqueue).not.toHaveBeenCalled()
   })
 
   it('keeps one source-flight ID stable across retries but separates later flights', () => {
@@ -126,21 +145,94 @@ describe('routeTierCJobRegion', () => {
     )
   })
 
-  it('gives a reverse move a new ID instead of hitting the active source flight', () => {
+  it('refuses a reverse move instead of hitting the still-active source flight', async () => {
+    const enqueue = jest.fn(async () => undefined)
     const baseJob = job(data, { timestamp: 20_000 })
     const outboundId = tierCRerouteJobId(baseJob, 'local', 'vps_sg')
     const activeOutbound = job(
-      { ...data, fetchRegion: 'vps_sg' },
+      {
+        ...data,
+        fetchRegion: 'vps_sg',
+        tierCRouteToken: outboundId,
+        tierCRouteHop: 1,
+      },
       {
         id: outboundId,
         timestamp: 20_100,
         queueName: tierCQueueName('vps_sg'),
       }
     )
-    const reverseId = tierCRerouteJobId(activeOutbound, 'vps_sg', 'local')
 
-    expect(reverseId).not.toBe(outboundId)
-    expect(reverseId).not.toBe(tierCJobId(data))
+    await expect(
+      routeTierCJobRegion(activeOutbound, 'vps_sg', deps('local', enqueue))
+    ).rejects.toThrow('no longer matches source region local')
+    expect(enqueue).not.toHaveBeenCalled()
+  })
+
+  it('runs a one-hop target only when its token, hop, queue, and DB region agree', async () => {
+    const baseJob = job(data, { timestamp: 30_000 })
+    const rerouteId = tierCRerouteJobId(baseJob, 'local', 'vps_sg')
+    const target = job(
+      {
+        ...data,
+        fetchRegion: 'vps_sg',
+        tierCRouteToken: rerouteId,
+        tierCRouteHop: MAX_TIER_C_REROUTE_HOPS,
+      },
+      {
+        id: rerouteId,
+        timestamp: 30_100,
+        queueName: tierCQueueName('vps_sg'),
+      }
+    )
+
+    await expect(routeTierCJobRegion(target, 'vps_sg', deps('vps_sg'))).resolves.toEqual({
+      action: 'run',
+      region: 'vps_sg',
+    })
+  })
+
+  it('rejects a second handoff hop before enqueueing', async () => {
+    const enqueue = jest.fn(async () => undefined)
+    const forgedId = 'tierc-reroute-v1--forged'
+    const overLimit = job(
+      {
+        ...data,
+        fetchRegion: 'vps_sg',
+        tierCRouteToken: forgedId,
+        tierCRouteHop: MAX_TIER_C_REROUTE_HOPS + 1,
+      },
+      {
+        id: forgedId,
+        queueName: tierCQueueName('vps_sg'),
+      }
+    )
+
+    await expect(routeTierCJobRegion(overLimit, 'vps_sg', deps('vps_sg', enqueue))).rejects.toThrow(
+      `exceeds hop limit ${MAX_TIER_C_REROUTE_HOPS}`
+    )
+    expect(enqueue).not.toHaveBeenCalled()
+  })
+
+  it('rejects a routing token that is not the target job identity', async () => {
+    const enqueue = jest.fn(async () => undefined)
+    const target = job(
+      {
+        ...data,
+        fetchRegion: 'vps_sg',
+        tierCRouteToken: 'tierc-reroute-v1--other-flight',
+        tierCRouteHop: 1,
+      },
+      {
+        id: 'tierc-reroute-v1--this-flight',
+        queueName: tierCQueueName('vps_sg'),
+      }
+    )
+
+    await expect(routeTierCJobRegion(target, 'vps_sg', deps('vps_sg', enqueue))).rejects.toThrow(
+      'invalid routing token'
+    )
+    expect(enqueue).not.toHaveBeenCalled()
   })
 
   it('revives a failed existing target before acknowledging the source flight', async () => {

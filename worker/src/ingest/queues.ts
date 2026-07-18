@@ -6,7 +6,7 @@
 
 import { Queue, type ConnectionOptions } from 'bullmq'
 import { getConnection } from '../connection'
-import { INGEST_REGIONS, type IngestRegion } from '@/lib/ingest/core/regions'
+import { INGEST_REGIONS, parseIngestRegionsEnv, type IngestRegion } from '@/lib/ingest/core/regions'
 import { LEGACY_TIER_C_QUEUE_NAME, tierCQueueName } from '@/lib/ingest/core/tier-c-routing'
 
 export { INGEST_REGIONS, type IngestRegion, tierCQueueName }
@@ -121,12 +121,7 @@ export function getFastQueue(region: string): Queue {
 
 /** Regions THIS worker process consumes (env INGEST_REGIONS=vps_sg on a VPS node). */
 export function consumedRegions(): IngestRegion[] {
-  const raw = process.env.INGEST_REGIONS
-  if (!raw) return [...INGEST_REGIONS]
-  return raw
-    .split(',')
-    .map((r) => r.trim())
-    .filter((r): r is IngestRegion => (INGEST_REGIONS as readonly string[]).includes(r))
+  return parseIngestRegionsEnv(process.env.INGEST_REGIONS)
 }
 
 /**
@@ -217,6 +212,10 @@ export interface TierCJobData {
   surface: 'profile' | 'positions' | 'position_history' | 'orders' | 'transfers' | 'copiers'
   /** Producer routing hint. Optional so pre-regionalization jobs stay valid. */
   fetchRegion?: IngestRegion
+  /** Stable ID of the original legacy flight; present only after a reroute. */
+  tierCRouteToken?: string
+  /** Bounded legacy handoff count. Current contract permits exactly one hop. */
+  tierCRouteHop?: number
 }
 
 // Single shared contract — see lib/ingest/core/tier-c-keys.ts (drift-proof).
