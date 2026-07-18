@@ -1,4 +1,6 @@
 import {
+  bookmarkPostTarget,
+  consumePostBookmarkLogin,
   consumeProfileActionLogin,
   profileTraderTarget,
   profileUserTarget,
@@ -171,5 +173,66 @@ describe('profile action login handoff', () => {
     expect(new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')).toBe(
       '/trader/alice?platform=binance&resumeAction=claim-trader'
     )
+  })
+
+  it('returns the exact bookmarked post only from a matching same-tab proof', () => {
+    const postId = '22222222-2222-4222-8222-222222222222'
+    window.history.replaceState({}, '', `/post/${postId}`)
+    const href = queueProfileActionLogin({
+      action: 'bookmark-post',
+      target: bookmarkPostTarget(postId),
+      fallbackPath: `/post/${postId}`,
+      now: 1_000,
+    })
+    const returnPath = new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
+    window.history.replaceState({}, '', returnPath)
+
+    expect(consumePostBookmarkLogin({ currentUserId: 'viewer-b', now: 2_000 })).toBe(postId)
+    expect(`${window.location.pathname}${window.location.search}`).toBe(`/post/${postId}`)
+    expect(window.sessionStorage).toHaveLength(0)
+    expect(consumePostBookmarkLogin({ currentUserId: 'viewer-b', now: 2_000 })).toBeNull()
+  })
+
+  it('does not derive a bookmark target from a crafted URL marker', () => {
+    const postId = '22222222-2222-4222-8222-222222222222'
+    window.history.replaceState({}, '', `/post/${postId}?resumeAction=bookmark-post`)
+
+    expect(consumePostBookmarkLogin({ currentUserId: 'viewer-b', now: 2_000 })).toBeNull()
+  })
+
+  it('rejects expired and cross-account bookmark proofs', () => {
+    const postId = '22222222-2222-4222-8222-222222222222'
+    window.history.replaceState({}, '', `/post/${postId}`)
+    const expiredHref = queueProfileActionLogin({
+      action: 'bookmark-post',
+      target: bookmarkPostTarget(postId),
+      fallbackPath: `/post/${postId}`,
+      now: 1_000,
+    })
+    window.history.replaceState(
+      {},
+      '',
+      new URL(expiredHref, 'https://arena.invalid').searchParams.get('returnUrl')!
+    )
+
+    expect(consumePostBookmarkLogin({ currentUserId: 'viewer-b', now: 16 * 60 * 1_000 })).toBeNull()
+    expect(window.sessionStorage).toHaveLength(0)
+
+    window.history.replaceState({}, '', `/post/${postId}`)
+    const boundHref = queueProfileActionLogin({
+      action: 'bookmark-post',
+      target: bookmarkPostTarget(postId),
+      fallbackPath: `/post/${postId}`,
+      initiatingUserId: 'viewer-a',
+      now: 1_000,
+    })
+    window.history.replaceState(
+      {},
+      '',
+      new URL(boundHref, 'https://arena.invalid').searchParams.get('returnUrl')!
+    )
+
+    expect(consumePostBookmarkLogin({ currentUserId: 'viewer-b', now: 2_000 })).toBeNull()
+    expect(window.sessionStorage).toHaveLength(0)
   })
 })
