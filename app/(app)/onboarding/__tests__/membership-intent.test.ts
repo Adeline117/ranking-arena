@@ -227,6 +227,10 @@ describe('onboarding page membership guard', () => {
       source.indexOf('  const saveAndComplete'),
       source.indexOf('  // Skip the activation flow')
     )
+    const persistenceBoundary = source.slice(
+      source.indexOf('  const persistOnboardingCompletion'),
+      source.indexOf('  const saveAndComplete')
+    )
     const unmountCleanup = source.slice(
       source.indexOf('  // Leaving onboarding invalidates'),
       source.indexOf('  const saveAndComplete')
@@ -238,16 +242,18 @@ describe('onboarding page membership guard', () => {
     expect(completeFlow.indexOf('await settleMembershipIntents()')).toBeGreaterThan(
       completeFlow.indexOf('await settleFollowIntents()')
     )
-    expect(completeFlow.indexOf('onboarding_completed: true')).toBeGreaterThan(
+    expect(completeFlow.indexOf('await persistOnboardingCompletion(')).toBeGreaterThan(
       completeFlow.indexOf('await settleMembershipIntents()')
     )
+    expect(persistenceBoundary).toContain('onboarding_completed: true')
+    expect(persistenceBoundary).toContain(".select('id, onboarding_completed')")
     expect(source).toContain('await settleMembershipIntents()')
     expect(source).not.toContain('swallow individual failures')
     expect(unmountCleanup).toContain('pendingFollowQueue.clear()')
     expect(unmountCleanup).not.toContain('flushFollowQueue(')
     expect(source).not.toContain("fetch('/api/groups/subscribe'")
     expect(createHash('sha256').update(renderSuffix).digest('hex')).toBe(
-      'cd18ada823cb8721d2478d93bb5a690d8f59177a10a9726d242fd7d1dc688fe2'
+      '4f4ae3a1176a03db83761fe37537c43e9aa53dc1a2cb8991d7ef9fdadd7fd251'
     )
   })
 })
