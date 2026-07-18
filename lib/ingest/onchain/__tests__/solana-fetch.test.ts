@@ -1065,12 +1065,238 @@ describe('fetchTxEvidence', () => {
     expect(normalized).not.toHaveProperty('maxSupportedTransactionVersion')
     expect(global.fetch).not.toHaveBeenCalled()
 
-    const unsupported = legacyFixture() as any
-    unsupported.version = 1
+    const unsupported = { ...legacyFixture(), version: 1 }
     expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, unsupported)).toThrow(
       'unsupported Solana transaction version'
     )
     expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, null)).toThrow(
+      'malformed Solana transaction evidence'
+    )
+  })
+
+  it('reads only consumed plain-data fields and ignores provider extensions', () => {
+    const boundedExtension = legacyFixture() as ReturnType<typeof legacyFixture> & {
+      providerExtension?: unknown
+    }
+    const ignoredGetter = jest.fn(() => 'must-not-run')
+    const providerExtension = {
+      source: 'bounded-provider-metadata',
+      values: [1, 2, 3],
+    }
+    Object.defineProperty(providerExtension, 'ignoredAccessor', {
+      enumerable: true,
+      get: ignoredGetter,
+    })
+    boundedExtension.providerExtension = providerExtension
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, boundedExtension)).not.toThrow()
+    expect(ignoredGetter).not.toHaveBeenCalled()
+
+    const consumedAccessor = legacyFixture()
+    const consumedGetter = jest.fn(() => 5_000)
+    Object.defineProperty(consumedAccessor.meta, 'fee', {
+      enumerable: true,
+      get: consumedGetter,
+    })
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, consumedAccessor)).toThrow(
+      'malformed Solana transaction evidence'
+    )
+    expect(consumedGetter).not.toHaveBeenCalled()
+
+    const proxy = legacyFixture()
+    const proxyGet = jest.fn()
+    proxy.meta = new Proxy(proxy.meta, {
+      get(target, property, receiver) {
+        proxyGet(property)
+        return Reflect.get(target, property, receiver)
+      },
+    })
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, proxy)).toThrow(
+      'malformed Solana transaction evidence'
+    )
+    expect(proxyGet).not.toHaveBeenCalled()
+
+    const sparseBomb = legacyFixture() as ReturnType<typeof legacyFixture> & {
+      providerExtension?: unknown
+    }
+    const oversized = new Array(16_385)
+    const sparseGetter = jest.fn(() => 1)
+    Object.defineProperty(oversized, '0', {
+      enumerable: true,
+      get: sparseGetter,
+    })
+    sparseBomb.providerExtension = oversized
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, sparseBomb)).not.toThrow()
+    expect(sparseGetter).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    'alias',
+    'cycle',
+    'negative zero',
+    'undefined',
+    'class instance',
+    'sparse array',
+    'depth budget',
+    'object key budget',
+    'string budget',
+  ] as const)('rejects non-JSON or over-budget consumed input: %s', (fault) => {
+    const fixture = legacyFixture()
+    const meta = fixture.meta as Record<string, unknown>
+    if (fault === 'alias') {
+      const shared = { value: 1 }
+      meta.err = { InstructionError: [shared, shared] }
+    } else if (fault === 'cycle') {
+      const cyclic: Record<string, unknown> = {}
+      cyclic.self = cyclic
+      meta.err = { InstructionError: cyclic }
+    } else if (fault === 'negative zero') {
+      meta.computeUnitsConsumed = -0
+    } else if (fault === 'undefined') {
+      meta.computeUnitsConsumed = undefined
+    } else if (fault === 'class instance') {
+      meta.loadedAddresses = new (class LoadedAddresses {
+        writable: string[] = []
+        readonly: string[] = []
+      })()
+    } else if (fault === 'sparse array') {
+      meta.logMessages = ['first', , 'third']
+    } else if (fault === 'depth budget') {
+      let nested: Record<string, unknown> = { Leaf: 1 }
+      for (let depth = 0; depth < 17; depth += 1) {
+        nested = { Child: nested }
+      }
+      meta.err = { InstructionError: nested }
+    } else if (fault === 'object key budget') {
+      meta.err = {
+        InstructionError: Object.fromEntries(
+          Array.from({ length: 65 }, (_value, index) => [`field${index}`, index])
+        ),
+      }
+    } else {
+      meta.err = 'x'.repeat(20_481)
+    }
+
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, fixture)).toThrow(
+      'malformed Solana transaction evidence'
+    )
+  })
+
+  it('uses the captured TypedArray fill intrinsic for decoded instruction cleanup', () => {
+    const forgedFill = jest.spyOn(Uint8Array.prototype, 'fill').mockImplementation(function (
+      this: Uint8Array
+    ) {
+      return this
+    })
+    try {
+      expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, legacyFixture())).not.toThrow()
+      expect(forgedFill).not.toHaveBeenCalled()
+    } finally {
+      forgedFill.mockRestore()
+    }
+  })
+
+  it.each([
+    [
+      'transaction signatures',
+      (fixture: ReturnType<typeof v0Fixture>) => {
+        fixture.transaction.signatures = Array.from({ length: 20 }, () => SIGNATURE)
+      },
+    ],
+    [
+      'static account keys',
+      (fixture: ReturnType<typeof v0Fixture>) => {
+        fixture.transaction.message.accountKeys = Array.from({ length: 257 }, () => WALLET)
+      },
+    ],
+    [
+      'lookup-loaded account budget',
+      (fixture: ReturnType<typeof v0Fixture>) => {
+        fixture.transaction.message.addressTableLookups[0].writableIndexes = Array.from(
+          { length: 254 },
+          (_value, index) => index
+        )
+        fixture.transaction.message.addressTableLookups[0].readonlyIndexes = []
+      },
+    ],
+    [
+      'token balance rows',
+      (fixture: ReturnType<typeof v0Fixture>) => {
+        fixture.meta.preTokenBalances = Array.from(
+          { length: 8 },
+          () => fixture.meta.preTokenBalances[0]
+        )
+      },
+    ],
+    [
+      'log messages',
+      (fixture: ReturnType<typeof v0Fixture>) => {
+        fixture.meta.logMessages = Array.from({ length: 10_001 }, () => 'x')
+      },
+    ],
+    [
+      'inner instruction accounts',
+      (fixture: ReturnType<typeof v0Fixture>) => {
+        fixture.meta.innerInstructions[0].instructions[0].accounts = Array.from(
+          { length: 256 },
+          () => 0
+        )
+      },
+    ],
+    [
+      'outer instruction packet-derived account ceiling',
+      (fixture: ReturnType<typeof v0Fixture>) => {
+        fixture.transaction.message.instructions[0].accounts = Array.from(
+          { length: 1_233 },
+          () => 0
+        )
+      },
+    ],
+    [
+      'stack height',
+      (fixture: ReturnType<typeof v0Fixture>) => {
+        fixture.meta.innerInstructions[0].instructions[0].stackHeight = 256
+      },
+    ],
+  ] as const)('rejects oversized %s before semantic field mapping', (_label, mutate) => {
+    const fixture = v0Fixture()
+    mutate(fixture)
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, fixture)).toThrow(
+      'malformed Solana transaction evidence'
+    )
+  })
+
+  it('accepts conservative bounded parser ceilings without rejecting historical outer calls', () => {
+    const fixture = v0Fixture()
+    fixture.transaction.signatures = Array.from({ length: 19 }, () => SIGNATURE)
+    fixture.transaction.message.header.numRequiredSignatures = 19
+    fixture.transaction.message.header.numReadonlyUnsignedAccounts = 0
+    fixture.transaction.message.accountKeys = [
+      WALLET,
+      ROUTER_PROGRAM,
+      POOL_PROGRAM,
+      ...Array.from({ length: 16 }, () => POOL_PROGRAM),
+    ]
+    fixture.transaction.message.instructions[0].accounts = Array.from({ length: 256 }, () => 0)
+    fixture.meta.innerInstructions[0].instructions[0].accounts = Array.from(
+      { length: 255 },
+      () => 0
+    )
+    fixture.meta.innerInstructions[0].instructions[0].stackHeight = 255
+    fixture.meta.preBalances = Array.from({ length: 22 }, () => 0)
+    fixture.meta.postBalances = Array.from({ length: 22 }, () => 0)
+    fixture.meta.logMessages = Array.from({ length: 10_000 }, () => 'x')
+
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, fixture)).not.toThrow()
+  })
+
+  it('enforces the log budget in UTF-8 bytes rather than JavaScript code units', () => {
+    const atLimit = legacyFixture()
+    atLimit.meta.logMessages = ['é'.repeat(5_000), 'x'.repeat(240)]
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, atLimit)).not.toThrow()
+
+    const overLimit = legacyFixture()
+    overLimit.meta.logMessages = ['é'.repeat(5_000), 'x'.repeat(241)]
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, overLimit)).toThrow(
       'malformed Solana transaction evidence'
     )
   })
