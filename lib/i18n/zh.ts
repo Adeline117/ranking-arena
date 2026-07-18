@@ -1268,7 +1268,7 @@ const zh = {
   removeFromCompare: '从对比中移除',
   inCompare: '已在对比中',
   comparing: '对比中',
-  compareListFull: '对比列表已满（最多5个）',
+  compareListFull: '对比列表已满（最多10个）',
   rankTrendTooltip: 'Arena Score 趋势 (30天)',
   scoreTrend30d: '分数趋势 (30天)',
   viewComparison: '查看对比',
