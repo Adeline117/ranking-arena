@@ -52,6 +52,8 @@ interface ActivityFeedProps {
   initialActivities: TraderActivity[]
   initialHasMore: boolean
   initialNextCursor: string | null
+  /** Whether the SSR seed is a verified response or a failed placeholder. */
+  initialStatus?: 'success' | 'error'
   /** If provided, restrict feed to this platform (no platform filter shown) */
   fixedPlatform?: string
   /** If provided, restrict feed to this handle (trader profile mode) */
@@ -68,6 +70,7 @@ export default function ActivityFeed({
   initialActivities,
   initialHasMore,
   initialNextCursor,
+  initialStatus = 'success',
   fixedPlatform,
   fixedHandle,
   title,
@@ -142,8 +145,10 @@ export default function ActivityFeed({
     fetchNextPage,
     hasNextPage,
     isFetchingNextPage,
+    isFetching,
     isLoading: loading,
     error: queryError,
+    refetch,
   } = useInfiniteQuery({
     queryKey: ['activities', platform, fixedHandle, following],
     queryFn: async ({ pageParam }: { pageParam: string | null }) => {
@@ -172,7 +177,7 @@ export default function ActivityFeed({
     // the same unfiltered SSR page into every new key with dataUpdatedAt=now,
     // marking it fresh within staleTime and suppressing the filtered fetch.
     initialData:
-      !following && platform === (fixedPlatform ?? null)
+      initialStatus === 'success' && !following && platform === (fixedPlatform ?? null)
         ? {
             pages: [
               {
@@ -287,7 +292,9 @@ export default function ActivityFeed({
               ? t('activityFeedLive')
               : newestAt
                 ? `${t('activityFeedUpdatedPrefix')} ${formatTimeAgo(newestAt, language)}`
-                : t('activityFeedLive')}
+                : error
+                  ? t('loadFailed')
+                  : t('activityFeedLive')}
           </span>
         </div>
       </div>
@@ -362,7 +369,7 @@ export default function ActivityFeed({
 
       {/* Activity list */}
       <div style={{ display: 'flex', flexDirection: 'column' }}>
-        {visibleActivities.length === 0 && !loading ? (
+        {visibleActivities.length === 0 && !loading && !error ? (
           following ? (
             // Personalized feed empty: no follows yet, or followed traders were
             // quiet this window. Nudge toward Discover instead of a dead-end.
@@ -474,14 +481,16 @@ export default function ActivityFeed({
           >
             <span>{error}</span>
             <button
-              onClick={() => handlePlatformChange(platform)}
+              onClick={() => void refetch()}
+              disabled={isFetching}
               style={{
                 padding: `${tokens.spacing[2]} ${tokens.spacing[4]}`,
                 background: tokens.colors.accent.primary,
                 color: tokens.colors.white,
                 border: 'none',
                 borderRadius: tokens.radius.md,
-                cursor: 'pointer',
+                cursor: isFetching ? 'wait' : 'pointer',
+                opacity: isFetching ? 0.65 : 1,
                 fontSize: tokens.typography.fontSize.sm,
                 fontFamily: tokens.typography.fontFamily.sans.join(', '),
               }}
