@@ -25,6 +25,11 @@ export interface DailySnapshotRow {
   pnl: number | null
 }
 
+export interface TraderEventPreferenceRow {
+  id: string
+  notify_trader_events: boolean | null
+}
+
 interface PageError {
   message: string
 }
@@ -34,11 +39,16 @@ interface PageResult<T> {
   error: PageError | null
 }
 
-export type BroadcastEventDataset = 'follows' | 'currentRanks' | 'rankHistory' | 'dailySnapshots'
+export type BroadcastEventDataset =
+  | 'follows'
+  | 'currentRanks'
+  | 'rankHistory'
+  | 'dailySnapshots'
+  | 'userPreferences'
 
 type PageLoader<T> = (from: number, to: number) => PromiseLike<PageResult<T>>
 type ChunkedPageLoader<T> = (
-  traderIds: string[],
+  filterIds: string[],
   from: number,
   to: number
 ) => PromiseLike<PageResult<T>>
@@ -94,14 +104,14 @@ async function readAllPages<T>(
 
 async function readAllChunkedPages<T>(
   dataset: BroadcastEventDataset,
-  traderIds: string[],
+  filterIds: string[],
   loadPage: ChunkedPageLoader<T>,
   pageSize: number,
   filterChunkSize: number
 ): Promise<T[]> {
   const rows: T[] = []
-  for (let index = 0; index < traderIds.length; index += filterChunkSize) {
-    const chunk = traderIds.slice(index, index + filterChunkSize)
+  for (let index = 0; index < filterIds.length; index += filterChunkSize) {
+    const chunk = filterIds.slice(index, index + filterChunkSize)
     const chunkRows = await readAllPages(dataset, (from, to) => loadPage(chunk, from, to), pageSize)
     rows.push(...chunkRows)
   }
@@ -152,4 +162,19 @@ export async function loadBroadcastEventRows(
   )
 
   return { follows, currentRanks, rankHistory, dailySnapshots }
+}
+
+export async function loadBroadcastEventPreferences(
+  userIds: string[],
+  loadPage: ChunkedPageLoader<TraderEventPreferenceRow>,
+  {
+    pageSize = 1000,
+    filterChunkSize = 300,
+  }: {
+    pageSize?: number
+    filterChunkSize?: number
+  } = {}
+): Promise<TraderEventPreferenceRow[]> {
+  const uniqueUserIds = [...new Set(userIds.filter((userId) => userId.length > 0))]
+  return readAllChunkedPages('userPreferences', uniqueUserIds, loadPage, pageSize, filterChunkSize)
 }

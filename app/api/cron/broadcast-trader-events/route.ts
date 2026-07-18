@@ -25,7 +25,7 @@ import {
   EVENT_ROI_MOVE_PCT,
   EVENT_PNL_MOVE_USD,
 } from '@/lib/constants/trader-events'
-import { loadBroadcastEventRows } from './event-data'
+import { loadBroadcastEventPreferences, loadBroadcastEventRows } from './event-data'
 import { traderEventLink, traderEventReference } from './notification-identity'
 
 export const dynamic = 'force-dynamic'
@@ -299,11 +299,15 @@ export async function GET(request: NextRequest) {
     for (const key of events.keys())
       for (const uid of followersByTrader.get(baseKey(key)) ?? []) candidateUserIds.add(uid)
     const optedOut = new Set<string>()
-    const { data: prefs } = await supabase
-      .from('user_profiles')
-      .select('id, notify_trader_events')
-      .in('id', [...candidateUserIds])
-    for (const p of prefs ?? []) {
+    const prefs = await loadBroadcastEventPreferences([...candidateUserIds], (userIds, from, to) =>
+      supabase
+        .from('user_profiles')
+        .select('id, notify_trader_events')
+        .in('id', userIds)
+        .order('id', { ascending: true })
+        .range(from, to)
+    )
+    for (const p of prefs) {
       if (p.notify_trader_events === false) optedOut.add(p.id)
     }
 
