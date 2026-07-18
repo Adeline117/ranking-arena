@@ -10,20 +10,28 @@
  * 直接调用 .rpc('increment_*') / .rpc('decrement_*') 会被 pre-push hook 拦截。
  */
 
-import { SupabaseClient } from '@supabase/supabase-js'
+import type { SupabaseClient } from '@supabase/supabase-js'
+import type { Database } from '@/lib/supabase/database.types'
 import { fireAndForget } from '@/lib/utils/logger'
+
+type PublicFunctions = Database['public']['Functions']
+type CounterRpcName = Extract<
+  keyof PublicFunctions,
+  `increment_${string}_count` | `decrement_${string}_count`
+>
+type CounterRpcArgs<Name extends CounterRpcName> = PublicFunctions[Name]['Args']
 
 /**
  * Fire-and-forget 计数器更新。不阻塞响应，失败只记日志。
  */
-export function updateCount(
-  supabase: SupabaseClient,
-  rpcName: string,
-  params: Record<string, unknown>,
+export function updateCount<Name extends CounterRpcName>(
+  supabase: SupabaseClient<Database>,
+  rpcName: Name,
+  params: CounterRpcArgs<Name>,
   context: string
 ): void {
   fireAndForget(
-    supabase.rpc(rpcName as never, params as never).then(({ error }) => {
+    supabase.rpc(rpcName, params).then(({ error }) => {
       if (error) throw error
     }),
     context
@@ -34,13 +42,13 @@ export function updateCount(
  * 需要等待结果的计数器更新（用于需要返回新计数的场景）。
  * 仅在 API 响应需要返回新计数时使用。
  */
-export async function updateCountSync(
-  supabase: SupabaseClient,
-  rpcName: string,
-  params: Record<string, unknown>,
+export async function updateCountSync<Name extends CounterRpcName>(
+  supabase: SupabaseClient<Database>,
+  rpcName: Name,
+  params: CounterRpcArgs<Name>,
   context: string
 ): Promise<number | null> {
-  const { data, error } = await supabase.rpc(rpcName as never, params as never).maybeSingle()
+  const { data, error } = await supabase.rpc(rpcName, params).maybeSingle()
 
   if (error) {
     const { logger } = await import('@/lib/logger')

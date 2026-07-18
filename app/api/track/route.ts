@@ -6,7 +6,6 @@
 
 import { NextRequest } from 'next/server'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { updateCount } from '@/lib/services/counters'
@@ -17,7 +16,7 @@ const logger = createLogger('track-api')
 const TrackSchema = z.object({
   type: z.enum(['impression', 'click', 'dwell']),
   post_id: z.string().min(1),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.string(), z.json()).optional(),
 })
 
 export async function POST(request: NextRequest) {
@@ -43,7 +42,7 @@ export async function POST(request: NextRequest) {
     }
     const { type, post_id, metadata } = parsed.data
 
-    const supabase = getSupabaseAdmin() as SupabaseClient
+    const supabase = getSupabaseAdmin()
 
     // Insert interaction record. A partial UNIQUE index enforces one
     // 'impression' row per (user, target) — a duplicate returns 23505, which
