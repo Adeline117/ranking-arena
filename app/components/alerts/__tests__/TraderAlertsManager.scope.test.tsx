@@ -210,6 +210,23 @@ describe('TraderAlertsManager viewer ownership', () => {
     expect(mockAuthedFetch).not.toHaveBeenCalled()
   })
 
+  it('keeps load failures distinct from an empty alerts list and retries them', async () => {
+    mockAuthedFetch
+      .mockRejectedValueOnce(new Error('temporary failure'))
+      .mockResolvedValueOnce(alertsFor('user-a'))
+
+    render(<TraderAlertsManager />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('traderAlertsLoadFailed')
+    expect(screen.queryByText('traderAlertsNone')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'retry' }))
+
+    await screen.findByText('trader-user-a')
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
+  })
+
   it('rejects malformed server rows instead of rendering detached alert actions', async () => {
     mockAuthedFetch.mockResolvedValue(
       ok({
