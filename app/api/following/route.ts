@@ -24,12 +24,14 @@ export const dynamic = 'force-dynamic'
 const logger = createLogger('following-api')
 
 function followingCandidateCacheKey(userId: string): string {
-  return `following:v2:candidates:${userId}`
+  return `following:v3:candidates:${userId}`
 }
 
 // 统一的关注项类型
 type FollowItem = {
   id: string
+  /** Stable edge identity. Unlike id, this never collides across exchanges. */
+  identity_key: string
   handle: string
   type: 'trader' | 'user'
   avatar_url?: string
@@ -40,7 +42,10 @@ type FollowItem = {
   pnl?: number
   win_rate?: number
   followers?: number
-  source?: string
+  /** Stored follow source. Null is reserved for a pre-composite legacy edge. */
+  source?: string | null
+  /** Resolved profile platform used for navigation; absent for unresolved legacy edges. */
+  platform?: string
   arena_score?: number
   followed_at?: string
 }
@@ -50,19 +55,21 @@ export async function invalidateFollowingCache(userId: string): Promise<void> {
   try {
     await Promise.all([
       tieredDel(followingCandidateCacheKey(userId)),
-      // Remove payloads written by the pre-v2 route as well. They contained
-      // mutable profile fields and must never be replayed after deployment.
+      tieredDel(`following:v2:candidates:${userId}`),
+      // Remove payloads written by older route versions as well. Pre-v2
+      // payloads contained mutable profile fields, while v2 omitted legacy
+      // null-source edges.
       tieredDel(`following:${userId}`),
     ])
   } catch {
-    // Mutation routes still succeed if Redis is unavailable. The v2 cache has
+    // Mutation routes still succeed if Redis is unavailable. The v3 cache has
     // a distinct namespace, and every candidate is re-materialized below.
   }
 }
 
 type TraderFollowCandidate = {
   traderId: string
-  source: string
+  source: string | null
   followedAt?: string
 }
 
@@ -77,6 +84,17 @@ type FollowingCandidates = {
 }
 
 type FollowingResult = { items: FollowItem[]; traderCount: number; userCount: number }
+
+type TraderMaterializedData = {
+  handle: string
+  source: string
+  avatar_url?: string
+  roi: number
+  pnl?: number
+  win_rate: number
+  followers: number
+  arena_score?: number
+}
 
 async function fetchFollowingCandidates(userId: string): Promise<FollowingCandidates> {
   const supabase = getSupabaseAdmin()
@@ -110,18 +128,15 @@ async function fetchFollowingCandidates(userId: string): Promise<FollowingCandid
 
   return {
     traders: traderFollows.flatMap((follow) => {
-      if (
-        typeof follow.trader_id !== 'string' ||
-        follow.trader_id.length === 0 ||
-        typeof follow.source !== 'string' ||
-        follow.source.length === 0
-      ) {
+      if (typeof follow.trader_id !== 'string' || follow.trader_id.length === 0) {
         return []
       }
+      const source =
+        typeof follow.source === 'string' && follow.source.length > 0 ? follow.source : null
       return [
         {
           traderId: follow.trader_id,
-          source: follow.source,
+          source,
           followedAt: follow.created_at ?? undefined,
         },
       ]
@@ -136,11 +151,15 @@ async function fetchFollowingCandidates(userId: string): Promise<FollowingCandid
 }
 
 function traderCandidateIdentity(candidate: TraderFollowCandidate): string {
-  return `${candidate.source}:${candidate.traderId}`
+  return `${candidate.source ?? '__legacy_null__'}:${candidate.traderId}`
 }
 
 function traderRowIdentity(row: { source: string; source_trader_id: string }): string {
   return `${row.source}:${row.source_trader_id}`
+}
+
+function traderFollowItemIdentity(source: string | null, traderId: string): string {
+  return source === null ? `trader:legacy-null:${traderId}` : `trader:source:${source}:${traderId}`
 }
 
 async function materializeFollowingItems(
@@ -173,6 +192,7 @@ async function materializeFollowingItems(
     if (userObj) {
       items.push({
         id: userObj.id,
+        identity_key: `user:${userObj.id}`,
         handle: userObj.handle || '未命名用户',
         type: 'user',
         avatar_url: userObj.avatar_url ?? undefined,
@@ -198,24 +218,13 @@ async function materializeFollowingItems(
 
     // A trader identity is composite. Matching only source_trader_id can attach
     // another exchange's handle and performance when platforms reuse an ID.
-    const traderDataMap = new Map<
-      string,
-      {
-        handle: string
-        source: string
-        avatar_url?: string
-        roi: number
-        pnl?: number
-        win_rate: number
-        followers: number
-        arena_score?: number
-      }
-    >()
+    const traderDataMap = new Map<string, TraderMaterializedData>()
+    const traderRowsByRawId = new Map<string, TraderMaterializedData[]>()
 
     for (const row of lrData || []) {
       const identity = traderRowIdentity(row)
       if (!traderDataMap.has(identity)) {
-        traderDataMap.set(identity, {
+        const materialized = {
           handle: row.handle || row.source_trader_id,
           source: row.source,
           avatar_url: row.avatar_url || undefined,
@@ -224,31 +233,47 @@ async function materializeFollowingItems(
           win_rate: row.win_rate ?? 0,
           followers: row.followers ?? 0,
           arena_score: row.arena_score ?? undefined,
-        })
+        }
+        traderDataMap.set(identity, materialized)
+        const rows = traderRowsByRawId.get(row.source_trader_id) || []
+        rows.push(materialized)
+        traderRowsByRawId.set(row.source_trader_id, rows)
       }
     }
 
     for (const candidate of candidates.traders) {
-      const data = traderDataMap.get(traderCandidateIdentity(candidate))
+      const exactData =
+        candidate.source === null
+          ? undefined
+          : traderDataMap.get(traderCandidateIdentity(candidate))
+      const legacyMatches =
+        candidate.source === null ? traderRowsByRawId.get(candidate.traderId) || [] : []
+      const data = exactData ?? (legacyMatches.length === 1 ? legacyMatches[0] : undefined)
 
-      if (!data) {
+      if (!data && candidate.source !== null) {
         logger.warn(
           `Trader not found in current leaderboard_ranks: ${traderCandidateIdentity(candidate)}`
         )
-        continue
+      }
+      if (!data && candidate.source === null) {
+        logger.warn(
+          `Legacy trader follow has no unambiguous current profile: ${candidate.traderId}`
+        )
       }
 
       items.push({
         id: candidate.traderId,
-        handle: data.handle || candidate.traderId,
+        identity_key: traderFollowItemIdentity(candidate.source, candidate.traderId),
+        handle: data?.handle || candidate.traderId,
         type: 'trader',
-        avatar_url: data.avatar_url,
-        roi: data.roi,
-        pnl: data.pnl,
-        win_rate: data.win_rate,
-        followers: data.followers,
-        source: data.source || 'binance_futures',
-        arena_score: data.arena_score,
+        avatar_url: data?.avatar_url,
+        roi: data?.roi,
+        pnl: data?.pnl,
+        win_rate: data?.win_rate,
+        followers: data?.followers,
+        source: candidate.source,
+        platform: candidate.source ?? data?.source,
+        arena_score: data?.arena_score,
         followed_at: candidate.followedAt,
       })
     }

@@ -19,7 +19,9 @@ jest.mock('next/server', () => {
       this.headers = new Map()
       this.cookies = { get: jest.fn() }
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
     static json(data: unknown, init?: { status?: number }) {
       return new MockNextResponse(data, init)
     }
@@ -32,15 +34,22 @@ jest.mock('next/server', () => {
     method: string
     cookies: { get: jest.Mock }
     _body: unknown
-    constructor(url: string, opts?: { headers?: Record<string, string>; method?: string; body?: unknown }) {
+    constructor(
+      url: string,
+      opts?: { headers?: Record<string, string>; method?: string; body?: unknown }
+    ) {
       this.url = url
       this.nextUrl = new URL(url)
-      this.headers = new Map(Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) }))
+      this.headers = new Map(
+        Object.entries({ 'user-agent': 'Mozilla/5.0 (Test)', ...(opts?.headers || {}) })
+      )
       this.method = opts?.method || 'GET'
       this.cookies = { get: jest.fn() }
       this._body = opts?.body
     }
-    async json() { return this._body }
+    async json() {
+      return this._body
+    }
   }
 
   return { NextResponse: MockNextResponse, NextRequest: MockNextRequest }
@@ -97,7 +106,9 @@ import { GET, POST } from '../route'
 describe('/api/follow', () => {
   const mockUser = { id: 'user-123', email: 'test@example.com' }
 
-  function createMockSupabase(result: { data: unknown; error: unknown } = { data: null, error: null }) {
+  function createMockSupabase(
+    result: { data: unknown; error: unknown } = { data: null, error: null }
+  ) {
     const handler: ProxyHandler<object> = {
       get(_target, prop) {
         if (prop === 'then') return (resolve: (v: unknown) => void) => resolve(result)
@@ -106,6 +117,43 @@ describe('/api/follow', () => {
       },
     }
     return { from: jest.fn(() => new Proxy({}, handler)) }
+  }
+
+  function createStatefulUnfollowSupabase(
+    rows: Array<{ user_id: string; trader_id: string; source: string | null }>
+  ) {
+    const from = jest.fn(() => {
+      let deleting = false
+      const filters: Array<{ kind: 'eq' | 'is'; field: string; value: unknown }> = []
+      const chain = {
+        delete: jest.fn(() => {
+          deleting = true
+          return chain
+        }),
+        eq: jest.fn((field: string, value: unknown) => {
+          filters.push({ kind: 'eq', field, value })
+          return chain
+        }),
+        is: jest.fn((field: string, value: unknown) => {
+          filters.push({ kind: 'is', field, value })
+          return chain
+        }),
+        then: (resolve: (value: { data: null; error: null }) => void) => {
+          if (deleting) {
+            for (let index = rows.length - 1; index >= 0; index--) {
+              const row = rows[index] as Record<string, unknown>
+              const matches = filters.every(({ kind, field, value }) =>
+                kind === 'is' ? row[field] === null && value === null : row[field] === value
+              )
+              if (matches) rows.splice(index, 1)
+            }
+          }
+          resolve({ data: null, error: null })
+        },
+      }
+      return chain
+    })
+    return { from }
   }
 
   beforeEach(() => {
@@ -141,11 +189,21 @@ describe('/api/follow', () => {
       expect(body.success).toBe(false)
     })
 
-    it('returns following: false when not following', async () => {
+    it('returns 400 when source is missing', async () => {
       mockGetAuthUser.mockResolvedValue(mockUser)
       mockGetSupabaseAdmin.mockReturnValue(createMockSupabase({ data: null, error: null }))
 
       const req = new NextRequest('http://localhost/api/follow?traderId=trader-abc')
+      const res = await GET(req)
+
+      expect(res.status).toBe(400)
+    })
+
+    it('returns following: false when not following', async () => {
+      mockGetAuthUser.mockResolvedValue(mockUser)
+      mockGetSupabaseAdmin.mockReturnValue(createMockSupabase({ data: null, error: null }))
+
+      const req = new NextRequest('http://localhost/api/follow?traderId=trader-abc&source=bybit')
       const res = await GET(req)
       const body = await res.json()
 
@@ -157,9 +215,11 @@ describe('/api/follow', () => {
 
     it('returns following: true when already following', async () => {
       mockGetAuthUser.mockResolvedValue(mockUser)
-      mockGetSupabaseAdmin.mockReturnValue(createMockSupabase({ data: { id: 'follow-1' }, error: null }))
+      mockGetSupabaseAdmin.mockReturnValue(
+        createMockSupabase({ data: { id: 'follow-1' }, error: null })
+      )
 
-      const req = new NextRequest('http://localhost/api/follow?traderId=trader-abc')
+      const req = new NextRequest('http://localhost/api/follow?traderId=trader-abc&source=bybit')
       const res = await GET(req)
       const body = await res.json()
 
@@ -177,7 +237,7 @@ describe('/api/follow', () => {
 
       const req = new NextRequest('http://localhost/api/follow', {
         method: 'POST',
-        body: { traderId: 'trader-abc', action: 'follow' },
+        body: { traderId: 'trader-abc', source: 'bybit', action: 'follow' },
       })
       const res = await POST(req)
       const body = await res.json()
@@ -207,7 +267,7 @@ describe('/api/follow', () => {
 
       const req = new NextRequest('http://localhost/api/follow', {
         method: 'POST',
-        body: { traderId: 'trader-abc', action: 'block' },
+        body: { traderId: 'trader-abc', source: 'bybit', action: 'block' },
       })
       const res = await POST(req)
       const body = await res.json()
@@ -222,7 +282,7 @@ describe('/api/follow', () => {
 
       const req = new NextRequest('http://localhost/api/follow', {
         method: 'POST',
-        body: { traderId: 'trader-abc', action: 'follow' },
+        body: { traderId: 'trader-abc', source: 'bybit', action: 'follow' },
       })
       const res = await POST(req)
       const body = await res.json()
@@ -238,7 +298,7 @@ describe('/api/follow', () => {
 
       const req = new NextRequest('http://localhost/api/follow', {
         method: 'POST',
-        body: { traderId: 'trader-abc', action: 'unfollow' },
+        body: { traderId: 'trader-abc', source: 'bybit', action: 'unfollow' },
       })
       const res = await POST(req)
       const body = await res.json()
@@ -246,6 +306,58 @@ describe('/api/follow', () => {
       expect(res.status).toBe(200)
       const unfollowResult = body.data?.following ?? body.following
       expect(unfollowResult).toBe(false)
+    })
+
+    it('rejects a follow or unfollow that omits the account source', async () => {
+      mockGetAuthUser.mockResolvedValue(mockUser)
+      mockGetSupabaseAdmin.mockReturnValue(createMockSupabase({ data: null, error: null }))
+
+      for (const action of ['follow', 'unfollow'] as const) {
+        const req = new NextRequest('http://localhost/api/follow', {
+          method: 'POST',
+          body: { traderId: 'shared-id', action },
+        })
+        const res = await POST(req)
+        expect(res.status).toBe(400)
+      }
+    })
+
+    it('unfollows only the requested source when two exchanges reuse the same trader id', async () => {
+      mockGetAuthUser.mockResolvedValue(mockUser)
+      const rows = [
+        { user_id: mockUser.id, trader_id: 'shared-id', source: 'bybit' },
+        { user_id: mockUser.id, trader_id: 'shared-id', source: 'binance_futures' },
+      ]
+      mockGetSupabaseAdmin.mockReturnValue(createStatefulUnfollowSupabase(rows))
+
+      const req = new NextRequest('http://localhost/api/follow', {
+        method: 'POST',
+        body: { traderId: 'shared-id', source: 'bybit', action: 'unfollow' },
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(200)
+      expect(rows).toEqual([
+        { user_id: mockUser.id, trader_id: 'shared-id', source: 'binance_futures' },
+      ])
+    })
+
+    it('uses explicit IS NULL semantics for a legacy unfollow', async () => {
+      mockGetAuthUser.mockResolvedValue(mockUser)
+      const rows = [
+        { user_id: mockUser.id, trader_id: 'shared-id', source: null },
+        { user_id: mockUser.id, trader_id: 'shared-id', source: 'bybit' },
+      ]
+      mockGetSupabaseAdmin.mockReturnValue(createStatefulUnfollowSupabase(rows))
+
+      const req = new NextRequest('http://localhost/api/follow', {
+        method: 'POST',
+        body: { traderId: 'shared-id', source: null, action: 'unfollow' },
+      })
+      const res = await POST(req)
+
+      expect(res.status).toBe(200)
+      expect(rows).toEqual([{ user_id: mockUser.id, trader_id: 'shared-id', source: 'bybit' }])
     })
   })
 })

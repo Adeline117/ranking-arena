@@ -238,7 +238,9 @@ export default function OnboardingPage() {
   }
 
   // Batch follow/join: queue actions and flush in parallel after a debounce
-  const followQueueRef = useRef<Map<string, 'follow' | 'unfollow'>>(new Map())
+  const followQueueRef = useRef<
+    Map<string, { traderId: string; source: string; action: 'follow' | 'unfollow' }>
+  >(new Map())
   const joinQueueRef = useRef<Map<string, OnboardingMembershipIntent>>(new Map())
   const followFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const joinFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -252,7 +254,7 @@ export default function OnboardingPage() {
       data: { session },
     } = await supabase.auth.getSession()
     if (!session?.access_token) return
-    const promises = Array.from(queue.entries()).map(([traderId, action]) =>
+    const promises = Array.from(queue.values()).map(({ traderId, source, action }) =>
       fetch('/api/follow', {
         method: 'POST',
         headers: {
@@ -260,7 +262,7 @@ export default function OnboardingPage() {
           Authorization: `Bearer ${session.access_token}`,
           ...getCsrfHeaders(),
         },
-        body: JSON.stringify({ traderId, action }),
+        body: JSON.stringify({ traderId, source, action }),
       }).catch(() => {
         /* swallow individual failures; UI already updated optimistically */
       })
@@ -354,7 +356,15 @@ export default function OnboardingPage() {
     else next.add(traderId)
     setFollowedTraders(next)
     // Queue the action and debounce the flush
-    followQueueRef.current.set(traderId, isFollowed ? 'unfollow' : 'follow')
+    const trader = traders.find(
+      (candidate) => `${candidate.source}:${candidate.source_trader_id}` === traderId
+    )
+    if (!trader) return
+    followQueueRef.current.set(traderId, {
+      traderId: trader.source_trader_id,
+      source: trader.source,
+      action: isFollowed ? 'unfollow' : 'follow',
+    })
     if (followFlushTimerRef.current) clearTimeout(followFlushTimerRef.current)
     followFlushTimerRef.current = setTimeout(flushFollowQueue, 500)
   }

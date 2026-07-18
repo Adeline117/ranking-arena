@@ -19,6 +19,7 @@ import { logger } from '@/lib/logger'
 import { trackInteraction } from '@/lib/tracking'
 import { features } from '@/lib/features'
 import { traderCountLabel } from '@/lib/utils/trader-count'
+import { followItemHref, followItemIdentity, removeFollowItemByIdentity } from './identity'
 
 // 平台配置
 const sourceConfig: Record<string, { label: string; labelEn: string; color: string }> = {
@@ -66,6 +67,7 @@ const getSourceColor = (source: string) =>
 // 统一的关注项类型
 type FollowItem = {
   id: string
+  identity_key: string
   handle: string
   type: 'trader' | 'user'
   avatar_url?: string
@@ -76,7 +78,8 @@ type FollowItem = {
   pnl?: number
   win_rate?: number
   followers?: number
-  source?: string
+  source?: string | null
+  platform?: string
   arena_score?: number
   followed_at?: string
 }
@@ -209,13 +212,14 @@ export default function FollowingPageClient() {
     async (item: FollowItem, e: React.MouseEvent) => {
       e.stopPropagation()
       if (unfollowingId) return
-      setUnfollowingId(item.id)
+      const itemIdentity = followItemIdentity(item)
+      setUnfollowingId(itemIdentity)
 
       // Snapshot current items for rollback (preserves order)
       const snapshot = items
 
       // Optimistic removal
-      setItems((prev) => prev.filter((i) => i.id !== item.id))
+      setItems((prev) => removeFollowItemByIdentity(prev, item))
 
       try {
         const authHeaders = await getAuthHeadersAsync()
@@ -225,7 +229,7 @@ export default function FollowingPageClient() {
         const reqBody =
           item.type === 'user'
             ? { followingId: item.id, action: 'unfollow' }
-            : { traderId: item.id, action: 'unfollow' }
+            : { traderId: item.id, source: item.source ?? null, action: 'unfollow' }
 
         const response = await fetch(url, {
           method: 'POST',
@@ -400,11 +404,8 @@ export default function FollowingPageClient() {
 
   const handleItemClick = (item: FollowItem) => {
     trackInteraction({ action: 'click', target_type: item.type, target_id: item.id })
-    if (item.type === 'trader') {
-      router.push(`/trader/${encodeURIComponent(item.handle)}?source=${item.source || 'binance'}`)
-    } else {
-      router.push(`/u/${encodeURIComponent(item.handle)}`)
-    }
+    const href = followItemHref(item)
+    if (href) router.push(href)
   }
 
   // 未登录
@@ -693,7 +694,7 @@ export default function FollowingPageClient() {
               >
                 {sortedItems.map((item) => (
                   <Box
-                    key={`${item.type}-${item.id}`}
+                    key={followItemIdentity(item)}
                     onClick={() => handleItemClick(item)}
                     style={{
                       display: 'flex',
@@ -701,7 +702,7 @@ export default function FollowingPageClient() {
                       gap: tokens.spacing[3],
                       padding: tokens.spacing[3],
                       borderRadius: tokens.radius.md,
-                      cursor: 'pointer',
+                      cursor: followItemHref(item) ? 'pointer' : 'default',
                       transition: `background ${tokens.transition.base}`,
                       background: 'transparent',
                     }}
@@ -740,17 +741,19 @@ export default function FollowingPageClient() {
                             borderRadius: tokens.radius.sm,
                             background:
                               item.type === 'trader'
-                                ? getSourceColor(item.source || 'binance') + '20'
+                                ? getSourceColor(item.platform || item.source || 'legacy') + '20'
                                 : alpha(tokens.colors.accent.brand, 13),
                             color:
                               item.type === 'trader'
-                                ? getSourceColor(item.source || 'binance')
+                                ? getSourceColor(item.platform || item.source || 'legacy')
                                 : tokens.colors.accent.brand,
                             fontWeight: 500,
                           }}
                         >
                           {item.type === 'trader'
-                            ? getSourceDisplayName(item.source || 'binance', language)
+                            ? item.platform || item.source
+                              ? getSourceDisplayName(item.platform || item.source || '', language)
+                              : 'Legacy follow'
                             : t('followingUserType')}
                         </span>
                       </Box>
@@ -846,7 +849,7 @@ export default function FollowingPageClient() {
                         )}
                       <button
                         onClick={(e) => handleUnfollow(item, e)}
-                        disabled={unfollowingId === item.id}
+                        disabled={unfollowingId === followItemIdentity(item)}
                         title={t('followingUnfollowTitle')}
                         style={{
                           padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
@@ -855,14 +858,15 @@ export default function FollowingPageClient() {
                           background: 'transparent',
                           color: tokens.colors.text.tertiary,
                           fontSize: tokens.typography.fontSize.xs,
-                          cursor: unfollowingId === item.id ? 'not-allowed' : 'pointer',
-                          opacity: unfollowingId === item.id ? 0.5 : 1,
+                          cursor:
+                            unfollowingId === followItemIdentity(item) ? 'not-allowed' : 'pointer',
+                          opacity: unfollowingId === followItemIdentity(item) ? 0.5 : 1,
                           transition: `all ${tokens.transition.base}`,
                           whiteSpace: 'nowrap',
                         }}
                         className="hover-unfollow"
                       >
-                        {unfollowingId === item.id
+                        {unfollowingId === followItemIdentity(item)
                           ? t('followingUnfollowing')
                           : t('followingUnfollowTitle')}
                       </button>

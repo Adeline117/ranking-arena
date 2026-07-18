@@ -157,6 +157,7 @@ export function useBroadcastSync<T = unknown>(channelName: string) {
 
 export interface FollowChangePayload {
   traderId: string
+  source: string
   following: boolean
   userId: string
 }

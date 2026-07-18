@@ -281,7 +281,7 @@ describe('GET /api/following', () => {
 
     expect(response.status).toBe(200)
     expect(mockTieredSet).toHaveBeenCalledWith(
-      'following:v2:candidates:user-123',
+      'following:v3:candidates:user-123',
       {
         traders: [
           {
@@ -469,11 +469,72 @@ describe('GET /api/following', () => {
     const body = await response.json()
 
     expect(body.items).toEqual([
-      expect.objectContaining({ id: 'shared-id', source: 'bybit', handle: 'Bybit trader' }),
       expect.objectContaining({
         id: 'shared-id',
+        identity_key: 'trader:source:bybit:shared-id',
+        source: 'bybit',
+        platform: 'bybit',
+        handle: 'Bybit trader',
+      }),
+      expect.objectContaining({
+        id: 'shared-id',
+        identity_key: 'trader:source:binance_futures:shared-id',
         source: 'binance_futures',
+        platform: 'binance_futures',
         handle: 'Binance trader',
+      }),
+    ])
+    expect(
+      new Set(body.items.map((item: { identity_key: string }) => item.identity_key)).size
+    ).toBe(2)
+  })
+
+  it('surfaces an unresolved legacy null-source edge so it can be precisely unfollowed', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    mockTieredGet.mockResolvedValue({
+      data: {
+        traders: [{ traderId: 'legacy-missing', source: null }],
+        users: [],
+      },
+    })
+    mockQueryResults.set('leaderboard_ranks', { data: [], error: null })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.items).toEqual([
+      expect.objectContaining({
+        id: 'legacy-missing',
+        identity_key: 'trader:legacy-null:legacy-missing',
+        source: null,
+        handle: 'legacy-missing',
+      }),
+    ])
+    expect(body.traderCount).toBe(1)
+  })
+
+  it('keeps a sourced edge removable when its trader drops out of the current leaderboard', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    mockTieredGet.mockResolvedValue({
+      data: {
+        traders: [{ traderId: 'stale-trader', source: 'bybit' }],
+        users: [],
+      },
+    })
+    mockQueryResults.set('leaderboard_ranks', { data: [], error: null })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.items).toEqual([
+      expect.objectContaining({
+        id: 'stale-trader',
+        identity_key: 'trader:source:bybit:stale-trader',
+        source: 'bybit',
+        platform: 'bybit',
+        handle: 'stale-trader',
       }),
     ])
   })
@@ -493,11 +554,12 @@ describe('GET /api/following', () => {
     expect(response.status).toBe(500)
   })
 
-  it('invalidates both candidate and legacy payload namespaces', async () => {
+  it('invalidates current, previous candidate, and legacy payload namespaces', async () => {
     mockTieredDel.mockResolvedValue(undefined)
 
     await invalidateFollowingCache('user-123')
 
+    expect(mockTieredDel).toHaveBeenCalledWith('following:v3:candidates:user-123')
     expect(mockTieredDel).toHaveBeenCalledWith('following:v2:candidates:user-123')
     expect(mockTieredDel).toHaveBeenCalledWith('following:user-123')
   })
