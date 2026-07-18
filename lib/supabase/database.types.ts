@@ -2735,6 +2735,27 @@ export type Database = {
         }
         Relationships: []
       }
+      leaderboard_source_freshness: {
+        Row: {
+          recorded_at: string
+          season_id: string
+          source: string
+          source_as_of: string
+        }
+        Insert: {
+          recorded_at?: string
+          season_id: string
+          source: string
+          source_as_of: string
+        }
+        Update: {
+          recorded_at?: string
+          season_id?: string
+          source?: string
+          source_as_of?: string
+        }
+        Relationships: []
+      }
       leaderboard_snapshots: {
         Row: {
           arena_score: number | null
