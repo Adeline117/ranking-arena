@@ -15,6 +15,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import ErrorMessage from '@/app/components/ui/ErrorMessage'
 
 type Notification = NotificationWithActor
 
@@ -93,6 +94,7 @@ export default function NotificationsList({
     hasNextPage,
     isFetchingNextPage: loadingMore,
     isLoading: loading,
+    isError: loadFailed,
     refetch: refetchNotifications,
   } = useInfiniteQuery({
     queryKey: ['notifications', accessToken],
@@ -394,6 +396,14 @@ export default function NotificationsList({
       {/* Notifications list */}
       {!effectiveCollapsed && (
         <div style={isPanel ? { maxHeight: 'min(400px, 60vh)', overflowY: 'auto' } : undefined}>
+          {!loading && loadFailed && (
+            <div style={{ padding: tokens.spacing[4] }}>
+              <ErrorMessage
+                message={t('failedToLoadRetryShort')}
+                onRetry={() => void loadNotifications()}
+              />
+            </div>
+          )}
           {loading ? (
             <div
               style={{
@@ -452,7 +462,7 @@ export default function NotificationsList({
                 </div>
               ))}
             </div>
-          ) : filtered.length === 0 ? (
+          ) : loadFailed && notifications.length === 0 ? null : filtered.length === 0 ? (
             <div style={{ padding: '24px 12px', textAlign: 'center' }}>
               <Image
                 src="/stickers/gn.webp"
