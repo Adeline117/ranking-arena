@@ -1,0 +1,726 @@
+SELECT pg_catalog.set_config(
+  'request.jwt.claim.role',
+  'service_role',
+  false
+);
+
+CREATE OR REPLACE FUNCTION pg_temp.stripe_null_hardening_snapshot()
+RETURNS jsonb
+LANGUAGE sql
+SET search_path = pg_catalog, pg_temp
+AS $function$
+  SELECT pg_catalog.jsonb_build_object(
+    'profiles',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.user_profiles AS row_value
+    ),
+    'subscriptions',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.subscriptions AS row_value
+    ),
+    'payment_history',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.payment_history AS row_value
+    ),
+    'payments',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.stripe_entitlement_payments AS row_value
+    ),
+    'charge_tombstones',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.stripe_charge_refund_tombstones AS row_value
+    ),
+    'charge_tombstone_events',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.stripe_charge_refund_tombstone_events AS row_value
+    ),
+    'reservations',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.stripe_lifetime_seat_reservations AS row_value
+    ),
+    'legacy_claims',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.stripe_legacy_lifetime_seat_claims AS row_value
+    ),
+    'trials',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.stripe_trial_entitlements AS row_value
+    ),
+    'subscription_events',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.stripe_subscription_state_events AS row_value
+    ),
+    'grants',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.pro_entitlement_grants AS row_value
+    ),
+    'reviews',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.stripe_manual_reviews AS row_value
+    ),
+    'refund_events',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.stripe_entitlement_refund_events AS row_value
+    ),
+    'effects',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.stripe_entitlement_effects AS row_value
+    ),
+    'official_members',
+    (
+      SELECT COALESCE(
+        pg_catalog.jsonb_agg(
+          pg_catalog.to_jsonb(row_value)
+          ORDER BY pg_catalog.to_jsonb(row_value)::text
+        ),
+        '[]'::jsonb
+      )
+      FROM public.test_official_members AS row_value
+    )
+  )
+$function$;
+
+DO $null_business_input_proof$
+DECLARE
+  v_before jsonb := pg_temp.stripe_null_hardening_snapshot();
+  v_after jsonb;
+  v_case record;
+  v_rejected integer := 0;
+BEGIN
+  FOR v_case IN
+    SELECT *
+    FROM (
+      VALUES
+        (
+          'refund tombstone state',
+          $statement$
+            SELECT public.record_charge_refund_tombstone_atomic(
+              NULL,
+              'cus_null_tombstone',
+              NULL,
+              'ch_null_tombstone',
+              true,
+              1000,
+              'usd',
+              500,
+              NULL,
+              'evt_null_tombstone',
+              '2035-01-01Z'
+            )
+          $statement$
+        ),
+        (
+          'reservation release reason',
+          $statement$
+            SELECT public.release_lifetime_membership_reservation_atomic(
+              'f1000000-0000-0000-0000-000000000001',
+              'f2000000-0000-0000-0000-000000000001',
+              'null-release-reason',
+              NULL,
+              NULL,
+              NULL,
+              NULL
+            )
+          $statement$
+        ),
+        (
+          'recurring activation plan',
+          $statement$
+            SELECT public.activate_recurring_entitlement_payment_atomic(
+              'f1000000-0000-0000-0000-000000000002',
+              'cus_null_recurring_plan',
+              'sub_null_recurring_plan',
+              'in_null_recurring_plan',
+              'pi_null_recurring_plan',
+              'ch_null_recurring_plan',
+              NULL,
+              1000,
+              'usd',
+              '2035-01-01Z',
+              '2035-02-01Z',
+              'paid',
+              'active'
+            )
+          $statement$
+        ),
+        (
+          'recurring activation payment status',
+          $statement$
+            SELECT public.activate_recurring_entitlement_payment_atomic(
+              'f1000000-0000-0000-0000-000000000003',
+              'cus_null_payment_status',
+              'sub_null_payment_status',
+              'in_null_payment_status',
+              'pi_null_payment_status',
+              'ch_null_payment_status',
+              'monthly',
+              1000,
+              'usd',
+              '2035-01-01Z',
+              '2035-02-01Z',
+              NULL,
+              'active'
+            )
+          $statement$
+        ),
+        (
+          'recurring activation subscription status',
+          $statement$
+            SELECT public.activate_recurring_entitlement_payment_atomic(
+              'f1000000-0000-0000-0000-000000000004',
+              'cus_null_activation_status',
+              'sub_null_activation_status',
+              'in_null_activation_status',
+              'pi_null_activation_status',
+              'ch_null_activation_status',
+              'monthly',
+              1000,
+              'usd',
+              '2035-01-01Z',
+              '2035-02-01Z',
+              'paid',
+              NULL
+            )
+          $statement$
+        ),
+        (
+          'trial activation plan',
+          $statement$
+            SELECT public.activate_recurring_trial_entitlement_atomic(
+              'f1000000-0000-0000-0000-000000000005',
+              'cus_null_trial_plan',
+              'sub_null_trial_plan',
+              NULL,
+              '2035-01-01Z',
+              '2035-02-01Z',
+              'trialing'
+            )
+          $statement$
+        ),
+        (
+          'subscription state plan',
+          $statement$
+            SELECT public.reconcile_recurring_subscription_state_atomic(
+              'f1000000-0000-0000-0000-000000000006',
+              'cus_null_state_plan',
+              'sub_null_state_plan',
+              NULL,
+              NULL,
+              '2035-01-01Z',
+              '2035-02-01Z',
+              'active',
+              false,
+              NULL,
+              NULL,
+              'evt_null_state_plan',
+              '2035-01-02Z'
+            )
+          $statement$
+        ),
+        (
+          'subscription state Stripe status',
+          $statement$
+            SELECT public.reconcile_recurring_subscription_state_atomic(
+              'f1000000-0000-0000-0000-000000000007',
+              'cus_null_state_status',
+              'sub_null_state_status',
+              NULL,
+              'monthly',
+              '2035-01-01Z',
+              '2035-02-01Z',
+              NULL,
+              false,
+              NULL,
+              NULL,
+              'evt_null_state_status',
+              '2035-01-02Z'
+            )
+          $statement$
+        ),
+        (
+          'refund payment kind',
+          $statement$
+            SELECT public.reconcile_stripe_entitlement_refund_atomic(
+              NULL,
+              'cus_null_refund_kind',
+              NULL,
+              'monthly',
+              'sub_null_refund_kind',
+              'in_null_refund_kind',
+              'pi_null_refund_kind',
+              'ch_null_refund_kind',
+              NULL,
+              1000,
+              'usd',
+              '2035-01-01Z',
+              '2035-02-01Z',
+              'paid',
+              500,
+              'pending',
+              'active',
+              'evt_null_refund_kind',
+              '2035-01-02Z'
+            )
+          $statement$
+        ),
+        (
+          'refund payment status',
+          $statement$
+            SELECT public.reconcile_stripe_entitlement_refund_atomic(
+              NULL,
+              'cus_null_refund_payment',
+              'recurring',
+              'monthly',
+              'sub_null_refund_payment',
+              'in_null_refund_payment',
+              'pi_null_refund_payment',
+              'ch_null_refund_payment',
+              NULL,
+              1000,
+              'usd',
+              '2035-01-01Z',
+              '2035-02-01Z',
+              NULL,
+              500,
+              'pending',
+              'active',
+              'evt_null_refund_payment',
+              '2035-01-02Z'
+            )
+          $statement$
+        ),
+        (
+          'refund state',
+          $statement$
+            SELECT public.reconcile_stripe_entitlement_refund_atomic(
+              NULL,
+              'cus_null_refund_state',
+              'recurring',
+              'monthly',
+              'sub_null_refund_state',
+              'in_null_refund_state',
+              'pi_null_refund_state',
+              'ch_null_refund_state',
+              NULL,
+              1000,
+              'usd',
+              '2035-01-01Z',
+              '2035-02-01Z',
+              'paid',
+              500,
+              NULL,
+              'active',
+              'evt_null_refund_state',
+              '2035-01-02Z'
+            )
+          $statement$
+        ),
+        (
+          'recurring refund plan',
+          $statement$
+            SELECT public.reconcile_stripe_entitlement_refund_atomic(
+              NULL,
+              'cus_null_refund_plan',
+              'recurring',
+              NULL,
+              'sub_null_refund_plan',
+              'in_null_refund_plan',
+              'pi_null_refund_plan',
+              'ch_null_refund_plan',
+              NULL,
+              1000,
+              'usd',
+              '2035-01-01Z',
+              '2035-02-01Z',
+              'paid',
+              500,
+              'pending',
+              'active',
+              'evt_null_refund_plan',
+              '2035-01-02Z'
+            )
+          $statement$
+        ),
+        (
+          'recurring refund subscription status',
+          $statement$
+            SELECT public.reconcile_stripe_entitlement_refund_atomic(
+              NULL,
+              'cus_null_refund_substatus',
+              'recurring',
+              'monthly',
+              'sub_null_refund_substatus',
+              'in_null_refund_substatus',
+              'pi_null_refund_substatus',
+              'ch_null_refund_substatus',
+              NULL,
+              1000,
+              'usd',
+              '2035-01-01Z',
+              '2035-02-01Z',
+              'paid',
+              500,
+              'pending',
+              NULL,
+              'evt_null_refund_substatus',
+              '2035-01-02Z'
+            )
+          $statement$
+        )
+    ) AS test_case(case_name, statement)
+  LOOP
+    BEGIN
+      EXECUTE v_case.statement;
+      RAISE EXCEPTION
+        'NULL business input was accepted: %',
+        v_case.case_name;
+    EXCEPTION
+      WHEN invalid_parameter_value THEN
+        v_rejected := v_rejected + 1;
+    END;
+  END LOOP;
+
+  IF v_rejected IS DISTINCT FROM 13 THEN
+    RAISE EXCEPTION
+      'expected 13 NULL business-input rejections, observed %',
+      v_rejected;
+  END IF;
+
+  v_after := pg_temp.stripe_null_hardening_snapshot();
+  IF v_after IS DISTINCT FROM v_before THEN
+    RAISE EXCEPTION
+      'NULL enum/status validation changed Stripe entitlement state';
+  END IF;
+END
+$null_business_input_proof$;
+
+INSERT INTO auth.users(id)
+VALUES
+  ('ffffffff-ffff-ffff-ffff-ffffffffff01'),
+  ('ffffffff-ffff-ffff-ffff-ffffffffff02');
+
+INSERT INTO public.user_profiles(
+  id,
+  subscription_tier,
+  pro_plan,
+  pro_expires_at,
+  is_pro
+) VALUES
+  (
+    'ffffffff-ffff-ffff-ffff-ffffffffff01',
+    'pro',
+    'monthly',
+    '2036-01-01Z',
+    true
+  ),
+  (
+    'ffffffff-ffff-ffff-ffff-ffffffffff02',
+    'pro',
+    'monthly',
+    '2036-01-01Z',
+    true
+  );
+
+INSERT INTO public.test_official_members(user_id)
+VALUES
+  ('ffffffff-ffff-ffff-ffff-ffffffffff01'),
+  ('ffffffff-ffff-ffff-ffff-ffffffffff02');
+
+CREATE OR REPLACE FUNCTION public.leave_pro_official_group_atomic(
+  p_actor_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+BEGIN
+  IF COALESCE((SELECT auth.role()), '') IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'service role required' USING ERRCODE = '42501';
+  END IF;
+  IF pg_catalog.current_setting('stripe_test.leave_ack', true) = 'sql_null' THEN
+    RETURN NULL;
+  END IF;
+  RETURN '{}'::jsonb;
+END
+$function$;
+
+DO $malformed_leave_ack_proof$
+DECLARE
+  v_case record;
+  v_rejected integer := 0;
+BEGIN
+  FOR v_case IN
+    SELECT *
+    FROM (
+      VALUES
+        (
+          'malformed',
+          'ffffffff-ffff-ffff-ffff-ffffffffff00'::uuid,
+          'ffffffff-ffff-ffff-ffff-ffffffffff01'::uuid
+        ),
+        (
+          'sql_null',
+          'ffffffff-ffff-ffff-ffff-ffffffffff01'::uuid,
+          'ffffffff-ffff-ffff-ffff-ffffffffff02'::uuid
+        )
+    ) AS ack_case(ack_mode, after_user_id, target_user_id)
+  LOOP
+    PERFORM pg_catalog.set_config(
+      'stripe_test.leave_ack',
+      v_case.ack_mode,
+      true
+    );
+    BEGIN
+      PERFORM public.reconcile_due_pro_entitlement_projections_atomic(
+        1,
+        v_case.after_user_id
+      );
+      RAISE EXCEPTION
+        'malformed official-group leave ACK was accepted: %',
+        v_case.ack_mode;
+    EXCEPTION
+      WHEN raise_exception THEN
+        IF SQLERRM IS DISTINCT FROM
+          'atomic official-group leave returned invalid status'
+        THEN
+          RAISE;
+        END IF;
+        v_rejected := v_rejected + 1;
+    END;
+
+    IF NOT EXISTS (
+      SELECT 1
+      FROM public.user_profiles AS profile
+      WHERE profile.id = v_case.target_user_id
+        AND profile.subscription_tier = 'pro'
+        AND profile.pro_plan = 'monthly'
+        AND profile.pro_expires_at = '2036-01-01Z'
+        AND profile.is_pro
+    ) OR NOT EXISTS (
+      SELECT 1
+      FROM public.test_official_members AS membership
+      WHERE membership.user_id = v_case.target_user_id
+    ) THEN
+      RAISE EXCEPTION
+        'malformed leave ACK did not roll back projection side effects: %',
+        v_case.ack_mode;
+    END IF;
+  END LOOP;
+
+  IF v_rejected IS DISTINCT FROM 2 THEN
+    RAISE EXCEPTION
+      'expected malformed and SQL NULL leave ACK rejection';
+  END IF;
+END
+$malformed_leave_ack_proof$;
+
+DO $function_contract_proof$
+DECLARE
+  v_postgres oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'postgres'
+  );
+  v_service_role oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'service_role'
+  );
+BEGIN
+  IF EXISTS (
+    SELECT 1
+    FROM (
+      VALUES
+        (
+          'public.record_charge_refund_tombstone_atomic(uuid,text,text,text,boolean,bigint,text,bigint,text,text,timestamp with time zone)'
+        ),
+        (
+          'public.release_lifetime_membership_reservation_atomic(uuid,uuid,text,text,text,text,timestamp with time zone)'
+        ),
+        (
+          'public.reconcile_due_pro_entitlement_projections_atomic(integer,uuid)'
+        ),
+        (
+          'public.revoke_pro_entitlement_grant_atomic(uuid,text,text,timestamp with time zone)'
+        ),
+        (
+          'public.activate_recurring_entitlement_payment_atomic(uuid,text,text,text,text,text,text,bigint,text,timestamp with time zone,timestamp with time zone,text,text)'
+        ),
+        (
+          'public.activate_recurring_trial_entitlement_atomic(uuid,text,text,text,timestamp with time zone,timestamp with time zone,text)'
+        ),
+        (
+          'public.reconcile_recurring_subscription_state_atomic(uuid,text,text,text,text,timestamp with time zone,timestamp with time zone,text,boolean,timestamp with time zone,timestamp with time zone,text,timestamp with time zone)'
+        ),
+        (
+          'public.reconcile_stripe_entitlement_refund_atomic(uuid,text,text,text,text,text,text,text,text,bigint,text,timestamp with time zone,timestamp with time zone,text,bigint,text,text,text,timestamp with time zone)'
+        )
+    ) AS required_function(signature)
+    JOIN pg_catalog.pg_proc AS function_row
+      ON function_row.oid =
+        pg_catalog.to_regprocedure(required_function.signature)
+    WHERE function_row.proowner IS DISTINCT FROM v_postgres
+      OR function_row.prorettype IS DISTINCT FROM
+        'pg_catalog.jsonb'::pg_catalog.regtype
+      OR function_row.prosecdef IS DISTINCT FROM true
+      OR NOT pg_catalog.has_function_privilege(
+        'service_role',
+        required_function.signature,
+        'EXECUTE'
+      )
+      OR pg_catalog.has_function_privilege(
+        'authenticated',
+        required_function.signature,
+        'EXECUTE'
+      )
+  ) THEN
+    RAISE EXCEPTION
+      'NULL hardening changed a Stripe entitlement signature, owner, or ACL';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1
+    FROM (
+      VALUES
+        (
+          'public.record_charge_refund_tombstone_atomic(uuid,text,text,text,boolean,bigint,text,bigint,text,text,timestamp with time zone)'
+        ),
+        (
+          'public.release_lifetime_membership_reservation_atomic(uuid,uuid,text,text,text,text,timestamp with time zone)'
+        ),
+        (
+          'public.reconcile_due_pro_entitlement_projections_atomic(integer,uuid)'
+        ),
+        (
+          'public.revoke_pro_entitlement_grant_atomic(uuid,text,text,timestamp with time zone)'
+        ),
+        (
+          'public.activate_recurring_entitlement_payment_atomic(uuid,text,text,text,text,text,text,bigint,text,timestamp with time zone,timestamp with time zone,text,text)'
+        ),
+        (
+          'public.activate_recurring_trial_entitlement_atomic(uuid,text,text,text,timestamp with time zone,timestamp with time zone,text)'
+        ),
+        (
+          'public.reconcile_recurring_subscription_state_atomic(uuid,text,text,text,text,timestamp with time zone,timestamp with time zone,text,boolean,timestamp with time zone,timestamp with time zone,text,timestamp with time zone)'
+        ),
+        (
+          'public.reconcile_stripe_entitlement_refund_atomic(uuid,text,text,text,text,text,text,text,text,bigint,text,timestamp with time zone,timestamp with time zone,text,bigint,text,text,text,timestamp with time zone)'
+        )
+    ) AS required_function(signature)
+    JOIN pg_catalog.pg_proc AS function_row
+      ON function_row.oid =
+        pg_catalog.to_regprocedure(required_function.signature)
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(
+        function_row.proacl,
+        pg_catalog.acldefault('f', function_row.proowner)
+      )
+    ) AS acl_row
+    WHERE acl_row.grantee NOT IN (v_postgres, v_service_role)
+  ) THEN
+    RAISE EXCEPTION
+      'NULL hardening introduced an unexpected function ACL grantee';
+  END IF;
+END
+$function_contract_proof$;
+
+SELECT 'Stripe entitlement NULL validation fixture passed' AS proof;

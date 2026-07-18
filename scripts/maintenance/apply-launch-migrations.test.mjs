@@ -29,7 +29,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
   const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
 
-  assert.equal(predeploy.length, 52)
+  assert.equal(predeploy.length, 53)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -51,6 +51,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260718140000_add_metric_completeness_daily.sql',
           '20260718182917_arena_resolver_fetch_region.sql',
           '20260718183000_atomic_stripe_entitlement_identity.sql',
+          '20260718183500_harden_stripe_entitlement_null_validation.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -68,9 +69,9 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716083256_repair_legacy_exchange_logo_paths.sql',
   ])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 63)
+  assert.equal(new Set(all).size, 64)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-11), [
+  assert.deepEqual(predeploy.slice(-12), [
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
@@ -82,12 +83,17 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260718140000_add_metric_completeness_daily.sql',
     '20260718182917_arena_resolver_fetch_region.sql',
     '20260718183000_atomic_stripe_entitlement_identity.sql',
+    '20260718183500_harden_stripe_entitlement_null_validation.sql',
   ])
   assert.ok(predeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
+  assert.ok(predeploy.includes('20260718183500_harden_stripe_entitlement_null_validation.sql'))
   assert.ok(!postdeploy.includes('20260718183000_atomic_stripe_entitlement_identity.sql'))
   assert.ok(!recoveryPrerequisites.includes('20260717120000_trader_follows_composite_identity.sql'))
   assert.ok(
     !recoveryPrerequisites.includes('20260718183000_atomic_stripe_entitlement_identity.sql')
+  )
+  assert.ok(
+    !recoveryPrerequisites.includes('20260718183500_harden_stripe_entitlement_null_validation.sql')
   )
 })
 
