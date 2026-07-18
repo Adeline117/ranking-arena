@@ -13,12 +13,20 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { isAuthorized } from '@/lib/cron/utils'
-import { DEAD_BLOCKED_PLATFORMS, SOURCES_WITH_DATA } from '@/lib/constants/exchanges'
 import { sendScraperAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { evaluateAndAlert } from '@/lib/services/pipeline-self-heal'
+import {
+  parseVisibleLeaderboardSources,
+  type LeaderboardTimeRange,
+} from '@/lib/data/visible-leaderboard-sources'
+import {
+  buildRegistrySourceFreshnessStatuses,
+  parseExpectedSourceWindows,
+  type VisibleSourceWindow,
+} from '@/lib/rankings/source-freshness'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -28,6 +36,7 @@ export const maxDuration = 120
 // 数据过期阈值（毫秒）
 const STALE_THRESHOLD_MS = 8 * 60 * 60 * 1000 // 8 小时
 const CRITICAL_THRESHOLD_MS = 24 * 60 * 60 * 1000 // 24 小时
+const RANKING_SEASONS: readonly LeaderboardTimeRange[] = ['7D', '30D', '90D']
 
 // 平台级阈值覆盖（毫秒）— 某些平台 API 不稳定或更新频率低
 const PLATFORM_THRESHOLD_OVERRIDES: Record<string, { stale: number; critical: number }> = {
@@ -98,128 +107,167 @@ export interface FreshnessReport {
   platforms: PlatformFreshnessStatus[]
 }
 
+type PipelineLogHandle = Awaited<ReturnType<typeof PipelineLogger.start>>
+
+async function bestEffort(label: string, operation: () => Promise<unknown>): Promise<void> {
+  try {
+    await operation()
+  } catch {
+    logger.error(label, {}, new Error(label))
+  }
+}
+
+async function freshnessAuthorityUnavailable(plog: PipelineLogHandle | null) {
+  if (plog) {
+    await bestEffort('Failed to record freshness authority failure', () =>
+      plog.error(new Error('Data freshness authority unavailable'))
+    )
+  }
+  await bestEffort('Failed to send freshness authority alert', () =>
+    sendRateLimitedAlert(
+      {
+        title: '数据新鲜度权威不可用',
+        message: 'registry、可见榜单或 source_as_of 水位查询失败；本次检查已 fail closed。',
+        level: 'critical',
+        details: { authority_available: false },
+      },
+      'data-freshness:authority-unavailable',
+      60 * 60 * 1000
+    )
+  )
+  return NextResponse.json({ error: 'freshness_authority_unavailable' }, { status: 500 })
+}
+
+async function freshnessPipelineLogUnavailable(): Promise<void> {
+  logger.error(
+    'Data freshness pipeline log unavailable',
+    {},
+    new Error('Data freshness pipeline log unavailable')
+  )
+  await bestEffort('Failed to send freshness pipeline-log alert', () =>
+    sendRateLimitedAlert(
+      {
+        title: '数据新鲜度日志链路不可用',
+        message:
+          'PipelineLogger 启动失败；数据权威检查将继续执行，但本次运行可能没有 pipeline log。',
+        level: 'warning',
+        details: { pipeline_log_available: false },
+      },
+      'data-freshness:pipeline-log-unavailable',
+      60 * 60 * 1000
+    )
+  )
+}
+
 /**
  * 构建新鲜度报告（共享逻辑，cron 和 admin endpoint 都用）
  */
 export async function buildFreshnessReport(): Promise<FreshnessReport> {
   const supabase = getSupabaseAdmin()
+  const now = Date.now()
 
-  const allPlatforms = SOURCES_WITH_DATA as string[]
-  const deadSet = new Set(DEAD_BLOCKED_PLATFORMS as string[])
-  const platforms = allPlatforms.filter((p) => !deadSet.has(p))
+  // Registry promises, current positive-count visibility, and upstream
+  // watermarks are independent authorities. Keeping all three prevents a
+  // source from making itself disappear from monitoring when its count falls
+  // to zero or its current-generation cache row goes missing.
+  const [expectedResult, visibleBySeason, watermarkResult] = await Promise.all([
+    supabase.rpc('arena_freshness_expected_sources'),
+    Promise.all(
+      RANKING_SEASONS.map(async (season) => ({
+        season,
+        result: await supabase.rpc('arena_visible_sources', {
+          p_season_id: season,
+        }),
+      }))
+    ),
+    supabase
+      .from('leaderboard_source_freshness')
+      .select('season_id,source,source_as_of')
+      .in('season_id', [...RANKING_SEASONS]),
+  ])
+
+  if (expectedResult.error) {
+    throw new Error('freshness expected source authority is unavailable')
+  }
+  const expectedWindows = parseExpectedSourceWindows(expectedResult.data)
+
+  const visibleWindows: VisibleSourceWindow[] = visibleBySeason.flatMap(({ season, result }) => {
+    if (result.error) {
+      throw new Error('visible source freshness authority is unavailable')
+    }
+    return parseVisibleLeaderboardSources(result.data).map((source) => ({
+      season_id: season,
+      registry_slug: source.registrySlug,
+      source: source.filterSource,
+      display_name: source.exchangeName,
+      record_count: source.traderCount,
+    }))
+  })
+  if (watermarkResult.error || !Array.isArray(watermarkResult.data)) {
+    throw new Error('source watermark freshness authority is unavailable')
+  }
+
+  const sourceStatuses = buildRegistrySourceFreshnessStatuses(
+    expectedWindows,
+    visibleWindows,
+    watermarkResult.data,
+    now
+  )
   const results: PlatformFreshnessStatus[] = []
   const stalePlatforms: string[] = []
   const criticalPlatforms: string[] = []
-  const now = Date.now()
+  const unknownPlatforms: string[] = []
 
-  // 检查每个平台的数据新鲜度
-  for (const platform of platforms) {
-    try {
-      // 平台最新评分时间。迁离退役的 trader_latest → leaderboard_ranks.computed_at
-      // （source 即 platform；compute 每小时跑，computed_at 即新鲜度信号）。
-      const { data, error } = await supabase
-        .from('leaderboard_ranks')
-        .select('computed_at')
-        .eq('source', platform)
-        .order('computed_at', { ascending: false })
-        .limit(1)
-        .single()
+  for (const source of sourceStatuses) {
+    let ageMs: number | null = null
+    let ageHours: number | null = null
+    let status: PlatformFreshnessStatus['status'] = 'unknown'
 
-      if (error && error.code !== 'PGRST116') {
-        logger.dbError('query-platform-freshness', error, { platform })
+    if (source.issues.length > 0 || source.updated_at === null) {
+      unknownPlatforms.push(source.source)
+    } else {
+      ageMs = Math.max(0, now - Date.parse(source.updated_at))
+      ageHours = Math.round((ageMs / (1000 * 60 * 60)) * 10) / 10
+      const overrides = PLATFORM_THRESHOLD_OVERRIDES[source.source]
+      const critThreshold = overrides?.critical ?? CRITICAL_THRESHOLD_MS
+      const staleThreshold = overrides?.stale ?? STALE_THRESHOLD_MS
+
+      if (ageMs >= critThreshold) {
+        status = 'critical'
+        criticalPlatforms.push(source.source)
+      } else if (ageMs >= staleThreshold) {
+        status = 'stale'
+        stalePlatforms.push(source.source)
+      } else {
+        status = 'fresh'
       }
-
-      // 该平台已排名交易员数（estimated）
-      const { count } = await supabase
-        .from('leaderboard_ranks')
-        .select('source', { count: 'estimated', head: true })
-        .eq('source', platform)
-
-      const lastUpdate = data?.computed_at || null
-      let ageMs: number | null = null
-      let ageHours: number | null = null
-      let status: 'fresh' | 'stale' | 'critical' | 'unknown' = 'unknown'
-
-      if (lastUpdate) {
-        ageMs = now - new Date(lastUpdate).getTime()
-        ageHours = Math.round((ageMs / (1000 * 60 * 60)) * 10) / 10
-
-        // Use per-platform threshold overrides if available
-        const overrides = PLATFORM_THRESHOLD_OVERRIDES[platform]
-        const critThreshold = overrides?.critical ?? CRITICAL_THRESHOLD_MS
-        const staleThreshold = overrides?.stale ?? STALE_THRESHOLD_MS
-
-        if (ageMs >= critThreshold) {
-          status = 'critical'
-          criticalPlatforms.push(platform)
-        } else if (ageMs >= staleThreshold) {
-          status = 'stale'
-          stalePlatforms.push(platform)
-        } else {
-          status = 'fresh'
-        }
-
-        // Guard: a single garbage row can make a broken platform appear fresh.
-        // Check recent row count to confirm real data is flowing.
-        if (status === 'fresh' && typeof count === 'number') {
-          try {
-            const { count: recentCount } = await supabase
-              .from('leaderboard_ranks')
-              .select('source', { count: 'estimated', head: true })
-              .eq('source', platform)
-              .gte('computed_at', new Date(now - staleThreshold).toISOString())
-            if (typeof recentCount === 'number' && recentCount < 5) {
-              status = 'stale'
-              stalePlatforms.push(platform)
-              logger.warn(
-                `[freshness] ${platform}: latest row is recent but only ${recentCount} rows in window — marking stale`
-              )
-            }
-          } catch {
-            // Non-blocking: if the recent count query fails, trust the timestamp check
-          }
-        }
-      }
-
-      results.push({
-        platform,
-        displayName: PLATFORM_NAMES[platform] || platform,
-        lastUpdate,
-        ageMs,
-        ageHours,
-        status,
-        recordCount: count || 0,
-      })
-    } catch (error: unknown) {
-      logger.error(
-        'Error processing platform freshness',
-        { platform },
-        error instanceof Error ? error : new Error(String(error))
-      )
-      results.push({
-        platform,
-        displayName: PLATFORM_NAMES[platform] || platform,
-        lastUpdate: null,
-        ageMs: null,
-        ageHours: null,
-        status: 'unknown',
-        recordCount: 0,
-      })
     }
+
+    results.push({
+      platform: source.source,
+      displayName: PLATFORM_NAMES[source.source] || source.display_name,
+      lastUpdate: source.updated_at,
+      ageMs,
+      ageHours,
+      status,
+      recordCount: source.record_count,
+    })
   }
 
   const freshCount = results.filter((r) => r.status === 'fresh').length
-  const unknownCount = results.filter((r) => r.status === 'unknown').length
 
   return {
-    ok: criticalPlatforms.length === 0 && stalePlatforms.length === 0,
-    checked_at: new Date().toISOString(),
+    ok:
+      criticalPlatforms.length === 0 &&
+      stalePlatforms.length === 0 &&
+      unknownPlatforms.length === 0,
+    checked_at: new Date(now).toISOString(),
     summary: {
-      total: platforms.length,
+      total: results.length,
       fresh: freshCount,
       stale: stalePlatforms.length,
       critical: criticalPlatforms.length,
-      unknown: unknownCount,
+      unknown: unknownPlatforms.length,
     },
     thresholds: {
       stale_hours: STALE_THRESHOLD_MS / (1000 * 60 * 60),
@@ -238,65 +286,102 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
-  const plog = await PipelineLogger.start('check-data-freshness')
-
+  let plog: PipelineLogHandle | null = null
   try {
-    const report = await buildFreshnessReport()
+    plog = await PipelineLogger.start('check-data-freshness')
+  } catch {
+    await freshnessPipelineLogUnavailable()
+  }
 
-    const stalePlatforms = report.platforms.filter((p) => p.status === 'stale')
-    const criticalPlatforms = report.platforms.filter((p) => p.status === 'critical')
+  let report: FreshnessReport
+  try {
+    report = await buildFreshnessReport()
+  } catch {
+    return freshnessAuthorityUnavailable(plog)
+  }
 
-    // ── Sentry 告警 ──────────────────────────────────────────
-    if (criticalPlatforms.length > 0) {
-      const names = criticalPlatforms.map((p) => p.displayName).join(', ')
-      await captureMessage(`[DataFreshness] CRITICAL: ${names} 超过 24 小时未更新`, 'error', {
+  const stalePlatforms = report.platforms.filter((p) => p.status === 'stale')
+  const criticalPlatforms = report.platforms.filter((p) => p.status === 'critical')
+  const unknownPlatforms = report.platforms.filter((p) => p.status === 'unknown')
+
+  // ── Sentry 告警 ──────────────────────────────────────────
+  if (unknownPlatforms.length > 0) {
+    const names = unknownPlatforms.map((p) => p.displayName).join(', ')
+    await bestEffort('Failed to capture unknown freshness alert', () =>
+      captureMessage(`[DataFreshness] UNKNOWN WATERMARK: ${names} 缺少可信上游水位`, 'error', {
+        level: 'critical',
+        unknownPlatforms: unknownPlatforms.map((p) => p.platform),
+        criticalPlatforms: criticalPlatforms.map((p) => p.platform),
+        stalePlatforms: stalePlatforms.map((p) => p.platform),
+        summary: report.summary,
+      })
+    )
+    logger.error(
+      `Data freshness watermark unavailable: ${names}`,
+      { unknownPlatforms: unknownPlatforms.map((p) => p.platform) },
+      new Error('Data freshness watermark unavailable')
+    )
+  } else if (criticalPlatforms.length > 0) {
+    const names = criticalPlatforms.map((p) => p.displayName).join(', ')
+    await bestEffort('Failed to capture critical freshness alert', () =>
+      captureMessage(`[DataFreshness] CRITICAL: ${names} 超过 24 小时未更新`, 'error', {
         level: 'critical',
         stalePlatforms: stalePlatforms.map((p) => p.platform),
         criticalPlatforms: criticalPlatforms.map((p) => p.platform),
         summary: report.summary,
       })
-      logger.error(
-        `Data severely stale: ${names} - not updated in 24h`,
-        {
-          criticalPlatforms: criticalPlatforms.map((p) => p.platform),
-        },
-        new Error('Data severely stale')
-      )
-    } else if (stalePlatforms.length > 0) {
-      const names = stalePlatforms.map((p) => p.displayName).join(', ')
-      await captureMessage(`[DataFreshness] STALE: ${names} 超过 8 小时未更新`, 'warning', {
+    )
+    logger.error(
+      `Data severely stale: ${names} - not updated in 24h`,
+      {
+        criticalPlatforms: criticalPlatforms.map((p) => p.platform),
+      },
+      new Error('Data severely stale')
+    )
+  } else if (stalePlatforms.length > 0) {
+    const names = stalePlatforms.map((p) => p.displayName).join(', ')
+    await bestEffort('Failed to capture stale freshness alert', () =>
+      captureMessage(`[DataFreshness] STALE: ${names} 超过 8 小时未更新`, 'warning', {
         level: 'stale',
         stalePlatforms: stalePlatforms.map((p) => p.platform),
         summary: report.summary,
       })
-      logger.warn(`Data stale: ${names} - not updated in 8h`, {
-        stalePlatforms: stalePlatforms.map((p) => p.platform),
+    )
+    logger.warn(`Data stale: ${names} - not updated in 8h`, {
+      stalePlatforms: stalePlatforms.map((p) => p.platform),
+    })
+  }
+
+  // ── Telegram 告警 (rate-limited, 6h cooldown per platform set) ─────
+  if (unknownPlatforms.length > 0 || criticalPlatforms.length > 0 || stalePlatforms.length > 0) {
+    const isCritical = unknownPlatforms.length > 0 || criticalPlatforms.length > 0
+    const lines: string[] = []
+    if (unknownPlatforms.length > 0) {
+      lines.push('水位未知（缺失、非法、超前或当前榜单缺失）:')
+      unknownPlatforms.forEach((p) => {
+        lines.push(`  • ${p.displayName} — ${p.recordCount} visible records`)
       })
     }
+    if (criticalPlatforms.length > 0) {
+      lines.push('严重过期 (>24h):')
+      criticalPlatforms.forEach((p) => {
+        lines.push(`  • ${p.displayName} — ${p.ageHours}h ago, ${p.recordCount} records`)
+      })
+    }
+    if (stalePlatforms.length > 0) {
+      lines.push('陈旧 (>8h):')
+      stalePlatforms.forEach((p) => {
+        lines.push(`  • ${p.displayName} — ${p.ageHours}h ago, ${p.recordCount} records`)
+      })
+    }
+    lines.push(`\n✅ ${report.summary.fresh} fresh / ${report.summary.total} total`)
 
-    // ── Telegram 告警 (rate-limited, 6h cooldown per platform set) ─────
-    if (criticalPlatforms.length > 0 || stalePlatforms.length > 0) {
-      const isCritical = criticalPlatforms.length > 0
-      const lines: string[] = []
-      if (criticalPlatforms.length > 0) {
-        lines.push('严重过期 (>24h):')
-        criticalPlatforms.forEach((p) => {
-          lines.push(`  • ${p.displayName} — ${p.ageHours}h ago, ${p.recordCount} records`)
-        })
-      }
-      if (stalePlatforms.length > 0) {
-        lines.push('陈旧 (>8h):')
-        stalePlatforms.forEach((p) => {
-          lines.push(`  • ${p.displayName} — ${p.ageHours}h ago, ${p.recordCount} records`)
-        })
-      }
-      lines.push(`\n✅ ${report.summary.fresh} fresh / ${report.summary.total} total`)
-
-      const platformKey = [...criticalPlatforms, ...stalePlatforms]
-        .map((p) => p.platform)
-        .sort()
-        .join(',')
-      await sendRateLimitedAlert(
+    const platformKey = [...unknownPlatforms, ...criticalPlatforms, ...stalePlatforms]
+      .map((p) => p.platform)
+      .sort()
+      .join(',')
+    await bestEffort('Failed to send rate-limited freshness alert', () =>
+      sendRateLimitedAlert(
         {
           title: '数据新鲜度告警',
           message: lines.join('\n'),
@@ -304,65 +389,56 @@ export async function GET(req: Request) {
           details: {
             critical_count: criticalPlatforms.length,
             stale_count: stalePlatforms.length,
+            unknown_count: unknownPlatforms.length,
           },
         },
-        `data-freshness:${platformKey}`,
+        `data-freshness:${unknownPlatforms.length > 0 ? 'unknown:' : ''}${platformKey}`,
         6 * 60 * 60 * 1000
       )
-    }
-
-    // ── 外部告警通知（Slack / 飞书等）────────────────────────
-    if (criticalPlatforms.length > 0 || stalePlatforms.length > 0) {
-      try {
-        const alertResult = await sendScraperAlert(
-          criticalPlatforms.map((p) => p.platform),
-          stalePlatforms.map((p) => p.platform),
-          PLATFORM_NAMES
-        )
-        if (alertResult.sent) {
-          // Alert sent successfully
-        }
-      } catch (error: unknown) {
-        logger.error(
-          'Failed to send freshness alert',
-          {},
-          error instanceof Error ? error : new Error(String(error))
-        )
-      }
-    }
-
-    // ── Self-heal evaluation (Redis-backed consecutive failure tracking) ──
-    try {
-      const platformStatuses = report.platforms.map((p) => ({
-        platform: p.platform,
-        ageHours: p.ageHours,
-        recordCount: p.recordCount,
-      }))
-      const selfHealAlerts = await evaluateAndAlert(platformStatuses)
-      if (selfHealAlerts.length > 0) {
-        logger.warn(
-          `[DataFreshness] Self-heal triggered alerts for ${selfHealAlerts.length} platforms`,
-          {
-            platforms: selfHealAlerts.map((a) => a.platform),
-          }
-        )
-      }
-    } catch (shErr) {
-      logger.error('[DataFreshness] Self-heal evaluation error:', shErr)
-    }
-
-    // Always log as success — this is a monitoring job, detecting staleness is expected behavior.
-    // Staleness details are in metadata, not treated as job failure.
-    await plog.success(report.summary.fresh, {
-      summary: report.summary,
-      critical: report.summary.critical,
-      stale: report.summary.stale,
-    })
-
-    return NextResponse.json(report)
-  } catch (error: unknown) {
-    await plog.error(error)
-    const message = error instanceof Error ? error.message : 'Unknown error'
-    return NextResponse.json({ error: message }, { status: 500 })
+    )
   }
+
+  // ── 外部告警通知（Slack / 飞书等）────────────────────────
+  if (criticalPlatforms.length > 0 || stalePlatforms.length > 0) {
+    await bestEffort('Failed to send freshness alert', async () => {
+      await sendScraperAlert(
+        criticalPlatforms.map((p) => p.platform),
+        stalePlatforms.map((p) => p.platform),
+        PLATFORM_NAMES
+      )
+    })
+  }
+
+  // ── Self-heal evaluation (Redis-backed consecutive failure tracking) ──
+  await bestEffort('Data freshness self-heal evaluation failed', async () => {
+    const platformStatuses = report.platforms.map((p) => ({
+      platform: p.platform,
+      ageHours: p.ageHours,
+      recordCount: p.recordCount,
+    }))
+    const selfHealAlerts = await evaluateAndAlert(platformStatuses)
+    if (selfHealAlerts.length > 0) {
+      logger.warn(
+        `[DataFreshness] Self-heal triggered alerts for ${selfHealAlerts.length} platforms`,
+        {
+          platforms: selfHealAlerts.map((a) => a.platform),
+        }
+      )
+    }
+  })
+
+  // Always log as success — this is a monitoring job, detecting staleness is expected behavior.
+  // Staleness details are in metadata, not treated as job failure.
+  if (plog) {
+    await bestEffort('Failed to record freshness check success', () =>
+      plog.success(report.summary.fresh, {
+        summary: report.summary,
+        critical: report.summary.critical,
+        stale: report.summary.stale,
+        unknown: report.summary.unknown,
+      })
+    )
+  }
+
+  return NextResponse.json(report)
 }
