@@ -59,11 +59,6 @@ export const getComparisonData = (t: (key: string) => string): ComparisonRow[] =
   { feature: t('compFeatureBasicFilters'), free: true, pro: true },
   { feature: t('compFeatureTraderDetails'), free: true, pro: true },
   { feature: t('compFeatureAdvancedFilters'), free: false, pro: t('compProMultiFilter') },
-  {
-    feature: t('compFeatureRealtimeData'),
-    free: t('compFreeHourlyRefresh'),
-    pro: t('compProRealtimePush'),
-  },
   { feature: t('compFeatureTraderCompare'), free: false, pro: t('compProUpTo10Traders') },
   { feature: t('compFeatureTraderAlerts'), free: false, pro: t('compProInAppEmailPush') },
   {

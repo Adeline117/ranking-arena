@@ -1240,7 +1240,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 text: resolved(
                   t('pricingProAlerts'),
                   'pricingProAlerts',
-                  'Real-time trader alerts & notifications'
+                  'Trader alerts checked every 30 minutes'
                 ),
               },
               {

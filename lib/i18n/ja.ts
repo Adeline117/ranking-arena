@@ -2520,9 +2520,6 @@ const ja = {
   compProMultiFilter: 'マルチフィルター + 保存と再利用',
   compFeatureCsvExport: 'CSVデータエクスポート',
   compProUnlimited: '無制限',
-  compFeatureRealtimeData: 'リアルタイムデータ',
-  compFreeHourlyRefresh: '1時間ごとに更新',
-  compProRealtimePush: 'リアルタイムプッシュ',
   compFeatureSmartMoney: 'スマートマネーシグナル',
   compProAnomalyDetection: '異常検知',
   compFeatureTraderCompare: 'トレーダー比較',
@@ -4756,7 +4753,7 @@ const ja = {
   // Pricing Pro features
   pricingProUnlockTitle: 'Pro で解放される機能',
   pricingProDetailedAnalytics: '詳細なトレーダー分析とスコア内訳',
-  pricingProAlerts: 'リアルタイムトレーダーアラートと通知',
+  pricingProAlerts: 'トレーダーアラートを30分ごとにチェック',
   pricingProApiAccess: 'API アクセス（近日公開）',
   pricingProCsvExport: 'CSV データエクスポート',
   pricingProAdvancedFilters: '高度なマルチ条件フィルター',
@@ -5209,7 +5206,7 @@ const ja = {
 
   // ── 2026-06-02: 433 missing keys batch (synced with en.ts) ──
   gateAdvancedAlertsTitle: '高度なアラートを解放',
-  gateBenefitAlertsRealtime: 'トレーダーの動きをリアルタイムでプッシュ通知',
+  gateBenefitAlertsRealtime: '30分ごとのチェックで変化を検出後、プッシュとメールで通知',
   gateBenefitAlertsConditions: '1つのアラートに5つ以上の条件を組み合わせ可能',
   gateBenefitAlertsHistory: 'アラート履歴と分析の完全版',
   gateComparisonTitle: 'トレーダーを並べて比較',

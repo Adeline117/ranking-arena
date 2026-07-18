@@ -2629,9 +2629,6 @@ const ko = {
   compProMultiFilter: '다중 필터 + 저장 및 재사용',
   compFeatureCsvExport: 'CSV 데이터 내보내기',
   compProUnlimited: '무제한',
-  compFeatureRealtimeData: '실시간 데이터',
-  compFreeHourlyRefresh: '매시간 갱신',
-  compProRealtimePush: '실시간 푸시',
   compFeatureSmartMoney: '스마트 머니 신호',
   compProAnomalyDetection: '이상 감지',
   compFeatureTraderCompare: '트레이더 비교',
@@ -5002,7 +4999,7 @@ const ko = {
   // Pricing Pro features
   pricingProUnlockTitle: 'Pro 잠금 해제 기능',
   pricingProDetailedAnalytics: '상세 트레이더 분석 및 점수 분석',
-  pricingProAlerts: '실시간 트레이더 알림 및 알림',
+  pricingProAlerts: '트레이더 알림을 30분마다 확인',
   pricingProApiAccess: 'API 접근 (출시 예정)',
   pricingProCsvExport: 'CSV 데이터 내보내기',
   pricingProAdvancedFilters: '고급 다중 조건 필터',
@@ -5445,7 +5442,7 @@ const ko = {
 
   // ── 2026-06-02: 433 missing keys batch (synced with en.ts) ──
   gateAdvancedAlertsTitle: '고급 알림 잠금 해제',
-  gateBenefitAlertsRealtime: '트레이더가 움직이면 실시간 푸시 알림',
+  gateBenefitAlertsRealtime: '30분 확인에서 변화를 감지한 뒤 푸시 및 이메일 알림',
   gateBenefitAlertsConditions: '알림당 5개 이상의 조건 결합',
   gateBenefitAlertsHistory: '전체 알림 기록 및 분석',
   gateComparisonTitle: '트레이더 나란히 비교',
