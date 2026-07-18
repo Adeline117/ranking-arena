@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { profileTraderTarget, queueProfileActionLogin } from '@/lib/auth/profile-action-login'
 
 const mockPush = jest.fn()
@@ -168,5 +168,42 @@ describe('TraderFollowButton login intent', () => {
     expect(`${window.location.pathname}${window.location.search}`).toBe(
       '/trader/alice?platform=binance&tab=stats'
     )
+  })
+
+  it('releases a resumed follow when the request exceeds its timeout', async () => {
+    jest.useFakeTimers()
+    const href = queueProfileActionLogin({
+      action: 'follow-trader',
+      target: profileTraderTarget('binance', 'trader-1'),
+      fallbackPath: '/trader/alice?platform=binance',
+    })
+    window.history.replaceState(
+      {},
+      '',
+      new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
+    )
+    global.fetch = jest.fn(() => new Promise<Response>(() => {})) as typeof fetch
+
+    render(
+      <TraderFollowButton
+        traderId="trader-1"
+        source="binance"
+        userId="viewer-1"
+        loginReturnPath="/trader/alice?platform=binance"
+      />
+    )
+
+    await act(async () => {
+      await Promise.resolve()
+      jest.advanceTimersByTime(8_000)
+      await Promise.resolve()
+    })
+
+    expect(mockShowToast).toHaveBeenCalledWith('timeoutRetry', 'warning')
+    expect(screen.getByRole('button', { name: 'followTrader' })).toHaveAttribute(
+      'aria-busy',
+      'false'
+    )
+    jest.useRealTimers()
   })
 })
