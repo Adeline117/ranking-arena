@@ -32,6 +32,7 @@ import {
 import { loadOnboardingGroups, loadOnboardingTraders } from './load-data'
 import { trackEvent } from '@/lib/analytics/track'
 import { safeInternalReturnPath } from '@/lib/auth/safe-return-path'
+import { useAuthSession } from '@/lib/hooks/useAuthSession'
 
 type Theme = 'dark' | 'light'
 type Step = 'welcome' | 'interests' | 'traders' | 'groups' | 'complete'
@@ -48,13 +49,13 @@ export default function OnboardingPage() {
   const returnUrl = searchParams.get('returnUrl')
   const afterOnboarding = safeInternalReturnPath(returnUrl) || '/'
   const { showToast } = useToast()
+  const { authChecked, userId, sessionGeneration } = useAuthSession()
   const [language, setLang] = useState<Language>('zh')
   const [theme, setTheme] = useState<Theme>('dark')
   const [mounted, setMounted] = useState(false)
   const [step, setStep] = useState<Step>('welcome')
   const [selectedInterests, setSelectedInterests] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
-  const [userId, setUserId] = useState<string | null>(null)
 
   const [traders, setTraders] = useState<Trader[]>([])
   const [groups, setGroups] = useState<Group[]>([])
@@ -105,14 +106,19 @@ export default function OnboardingPage() {
 
   useEffect(() => {
     const currentScope = membershipScopeRef.current
-    if (currentScope.viewerId !== userId) {
+    const active = authChecked && userId !== null
+    if (
+      currentScope.active !== active ||
+      currentScope.revision !== sessionGeneration ||
+      currentScope.viewerId !== userId
+    ) {
       membershipScopeRef.current = {
-        active: true,
-        revision: currentScope.revision + 1,
+        active,
+        revision: sessionGeneration,
         viewerId: userId,
       }
     }
-  }, [userId])
+  }, [authChecked, sessionGeneration, userId])
 
   useEffect(() => {
     return () => {
@@ -131,53 +137,53 @@ export default function OnboardingPage() {
       startedRef.current = true
       trackEvent('onboarding_start')
     }
-    const savedLang = localStorage.getItem('language') as Language | null
-    const savedTheme = localStorage.getItem('theme') as Theme | null
-    if (savedLang) setLang(savedLang)
-    if (savedTheme) {
-      setTheme(savedTheme)
-      document.documentElement.setAttribute('data-theme', savedTheme)
+    try {
+      const savedLang = localStorage.getItem('language') as Language | null
+      const savedTheme = localStorage.getItem('theme') as Theme | null
+      if (savedLang) setLang(savedLang)
+      if (savedTheme) {
+        setTheme(savedTheme)
+        document.documentElement.setAttribute('data-theme', savedTheme)
+      }
+    } catch (err) {
+      logger.warn('Onboarding preferences read failed', err)
     }
-    // Fast path: the local flag short-circuits a re-onboard on the same device.
-    if (localStorage.getItem('hasOnboarded') === 'true') {
-      router.replace(afterOnboarding)
+  }, [])
+
+  useEffect(() => {
+    if (!authChecked) return
+    if (!userId) {
+      router.replace('/login?returnUrl=/onboarding')
       return
     }
-    supabase.auth
-      .getUser()
-      .then(async ({ data }) => {
-        if (!data.user) {
-          router.replace('/login?returnUrl=/onboarding')
-          return
+
+    let active = true
+    const scopedUserId = userId
+    void (async () => {
+      try {
+        // The database flag is authoritative and user-scoped. A device-wide
+        // localStorage shortcut could incorrectly skip onboarding for a second
+        // account that signs in on the same browser.
+        const { data: profile, error } = await supabase
+          .from('user_profiles')
+          .select('onboarding_completed')
+          .eq('id', scopedUserId)
+          .maybeSingle()
+        if (!active) return
+        if (error) {
+          logger.warn('Onboarding flag read failed', error)
+        } else if (profile?.onboarding_completed === true) {
+          router.replace(afterOnboarding)
         }
-        setUserId(data.user.id)
-        // DB onboarding_completed is the authoritative source: a user who already
-        // finished onboarding (possibly on another device, where localStorage is
-        // empty) must not be re-onboarded. Hydrate the local flag from it.
-        try {
-          const { data: profile, error } = await supabase
-            .from('user_profiles')
-            .select('onboarding_completed')
-            .eq('id', data.user.id)
-            .maybeSingle()
-          if (error) {
-            logger.warn('Onboarding flag read failed', error)
-          } else if (profile?.onboarding_completed === true) {
-            try {
-              localStorage.setItem('hasOnboarded', 'true')
-            } catch {
-              /* localStorage may be unavailable */
-            }
-            router.replace(afterOnboarding)
-          }
-        } catch (err) {
-          logger.warn('Onboarding flag read threw', err)
-        }
-      })
-      .catch(() => {
-        router.replace('/login?returnUrl=/onboarding')
-      })
-  }, [router, afterOnboarding])
+      } catch (err) {
+        if (active) logger.warn('Onboarding flag read threw', err)
+      }
+    })()
+
+    return () => {
+      active = false
+    }
+  }, [afterOnboarding, authChecked, router, sessionGeneration, userId])
 
   const fetchTraders = useCallback(async () => {
     const revision = ++tradersLoadRevisionRef.current
@@ -467,20 +473,8 @@ export default function OnboardingPage() {
   const handleFollowTrader = async (traderId: string) => {
     if (followSettlingRef.current) return
 
-    let viewerId = userId
-    if (!viewerId) {
-      const { data } = await supabase.auth.getUser()
-      viewerId = data?.user?.id ?? null
-      if (!viewerId) return
-
-      const currentScope = membershipScopeRef.current
-      membershipScopeRef.current = {
-        active: true,
-        revision: currentScope.revision + 1,
-        viewerId,
-      }
-      setUserId(viewerId)
-    }
+    const viewerId = authChecked ? userId : null
+    if (!viewerId) return
 
     const trader = traders.find(
       (candidate) => `${candidate.source}:${candidate.source_trader_id}` === traderId
@@ -621,7 +615,7 @@ export default function OnboardingPage() {
     }
   }
 
-  if (!mounted) {
+  if (!mounted || !authChecked) {
     return (
       <Box
         style={{
