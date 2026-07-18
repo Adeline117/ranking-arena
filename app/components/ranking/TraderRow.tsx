@@ -142,14 +142,14 @@ export const TraderRow = memo(
       e.stopPropagation()
       if (isSelected) {
         useComparisonStore.getState().removeTrader(compareAccount)
-      } else {
-        useComparisonStore.getState().addTrader({
-          id: trader.id,
-          handle: traderHandle,
-          source: traderSource,
-          avatarUrl: trader.avatar_url || undefined,
-        })
+        return true
       }
+      return useComparisonStore.getState().addTrader({
+        id: trader.id,
+        handle: traderHandle,
+        source: traderSource,
+        avatarUrl: trader.avatar_url || undefined,
+      })
     }
 
     // Flash animation when ROI or rank changes

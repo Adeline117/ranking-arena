@@ -1225,7 +1225,7 @@ const ko = {
   removeFromCompare: '비교에서 삭제',
   inCompare: '비교 중',
   comparing: '비교 중',
-  compareListFull: '비교 목록이 가득 찼습니다 (최대 5개)',
+  compareListFull: '비교 목록이 가득 찼습니다 (최대 10개)',
   viewComparison: '비교 보기',
   rankTrendTooltip: 'Arena Score 트렌드 (30일)',
   scoreTrend30d: '점수 트렌드 (30일)',

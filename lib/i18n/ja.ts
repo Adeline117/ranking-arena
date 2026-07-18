@@ -1176,7 +1176,7 @@ const ja = {
   removeFromCompare: '比較から削除',
   inCompare: '比較中',
   comparing: '比較中',
-  compareListFull: '比較リストが上限です（最大5件）',
+  compareListFull: '比較リストが上限です（最大10件）',
   viewComparison: '比較を表示',
   rankTrendTooltip: 'Arena Score トレンド（30日）',
   scoreTrend30d: 'スコアトレンド（30日）',
