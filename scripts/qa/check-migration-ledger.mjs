@@ -1,7 +1,7 @@
 /**
  * 迁移落地核对（P1 · ADVISORY）—— surfacing 未应用迁移的候选
  *
- * ⚠️ ADVISORY-ONLY,不可作阻断门。原因(2026-06-13 实测确认):
+ * ⚠️ ADVISORY-ONLY,不可作阻断门。原因(2026-07-17 复核):
  *   本项目迁移经 MCP/SQL-editor 用 *任意名字* 应用,仓库文件名↔ledger 名字
  *   没有可靠对应。按 name 匹配会对"换名应用"的迁移误报 —— 例如仓库
  *   `score_inputs_align_compat.sql` 内容已应用,但 ledger 名字是
@@ -9,8 +9,10 @@
  *   → 稳健的漂移主门是 `qa:schema`(schema-contract-check):它查 *现实*
  *     (列/表/函数在生产存不存在),不查 *出身*(文件应用没有),不受
  *     应用通道影响。本检查只作 *候选 surfacing*,每条需人工确认。
- *   → 根治:P3 编排纪律 —— schema 变更走单一通道(supabase db push,
- *     ledger.name = 文件描述),name 匹配才可靠。届时本检查可升为阻断门。
+ *   → 当日 `db push --dry-run` 报 252 remote-only + 34 local-only。生产 schema
+ *     健康不等于历史可 fresh replay；canonical baseline 需独立维护和验证。
+ *   → 新生产变更只走单文件 MCP `apply_migration` + 精确 live proof。禁止裸
+ *     `db push` 或 `migration repair --status reverted` 来修补历史。
  *
  * 核对:仓库 baseline(20260611) 后的迁移文件,名字(去时间戳前缀)是否在
  * 生产 ledger 的 name 集合。缺失 = *候选* 未应用(可能是真漂移,也可能是
@@ -90,8 +92,9 @@ if (missing.length) {
   console.error(`\n⚠️  候选未应用迁移 (${missing.length}) —— 需人工确认(可能是换名应用的误报):`)
   for (const m of missing) console.error(`   ${m.file}  (name: ${m.name})`)
   console.error('\n→ 逐条确认:其 schema 效果是否已在生产(可能经别的 ledger 名字应用)。')
-  console.error('   真未应用 → 用 supabase db push 应用;换名应用的误报 → 忽略。')
+  console.error('   真未应用 → 单文件 MCP apply_migration，并核对精确 ledger/live proof。')
+  console.error('   禁止用 db push 或 migration repair --status reverted 处理本差集。')
   console.error('   稳健的漂移主门是 `npm run qa:schema`(查现实而非出身)。')
   process.exit(1)
 }
-console.log('✅ baseline 后仓库迁移名字全部在 ledger 命中')
+console.log('✅ baseline 后仓库迁移名字全部命中（不代表全历史可 fresh replay）')
