@@ -40,7 +40,7 @@ export type CollectionItemMutationResultCode =
 
 const COLLECTION_RESULT_CODES_BY_ACTION = {
   create: ['created', 'already_exists', 'inactive_actor'],
-  update: ['updated', 'not_found', 'inactive_actor'],
+  update: ['updated', 'already_exists', 'not_found', 'inactive_actor'],
   delete: ['deleted', 'not_found', 'inactive_actor'],
 } as const satisfies Record<CollectionMutationAction, readonly CollectionMutationResultCode[]>
 
