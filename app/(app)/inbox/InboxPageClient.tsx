@@ -9,6 +9,7 @@ import NotificationsList from '@/app/components/inbox/NotificationsList'
 import ConversationsList from '@/app/components/inbox/ConversationsList'
 import { useRequireAuth } from '@/lib/hooks/useRequireAuth'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { NotificationsPageSkeleton } from '@/app/components/ui/PageSkeleton'
 
 type TabKey = 'notifications' | 'messages'
 
@@ -17,7 +18,7 @@ export default function InboxPageClient() {
 
   // U10-7: unify the login-wall param on the shared useRequireAuth (returnUrl=)
   // instead of a hand-written /login?redirect= — the rest of the app uses returnUrl.
-  useRequireAuth()
+  const { isLoggedIn, isLoading } = useRequireAuth()
   const { t } = useLanguage()
   const searchParams = useSearchParams()
   const requestedTab: TabKey = searchParams.get('tab') === 'messages' ? 'messages' : 'notifications'
@@ -43,6 +44,10 @@ export default function InboxPageClient() {
     { key: 'notifications', label: t('tabNotifications') },
     { key: 'messages', label: t('tabMessages') },
   ]
+
+  if (isLoading || !isLoggedIn) {
+    return <NotificationsPageSkeleton />
+  }
 
   return (
     <div
