@@ -5103,6 +5103,9 @@ const ja = {
   watchlistSignInTitle: 'ウォッチリストを表示するにはログインしてください',
   watchlistSignInDesc:
     'アカウントを作成またはログインして、お気に入りのトレーダーを保存・追跡しましょう。',
+  traderAlertsSignInTitle: 'トレーダーアラートを表示するにはログインしてください',
+  traderAlertsSignInDesc:
+    'ログインして、フォロー中のトレーダーのパフォーマンスアラートを作成・管理します。',
   watchlistEmptyTitle: 'ウォッチリストは空です',
   watchlistEmptyDesc:
     'ランキングを閲覧し、トレーダーページの星アイコンをクリックして追加してください。',

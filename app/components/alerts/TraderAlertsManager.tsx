@@ -266,8 +266,8 @@ export default function TraderAlertsManager() {
     return (
       <EmptyState
         variant="card"
-        title={t('watchlistSignInTitle')}
-        description={t('watchlistSignInDesc')}
+        title={t('traderAlertsSignInTitle')}
+        description={t('traderAlertsSignInDesc')}
         action={
           <Link
             href={`/login?redirect=${encodeURIComponent('/saved?tab=alerts')}`}
