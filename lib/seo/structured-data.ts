@@ -12,7 +12,7 @@ const SITE_NAME = 'Arena'
 // on English search results, hurting CTR. Localized variants are handled via
 // hreflang alternates in app/layout.tsx.
 const SITE_DESCRIPTION =
-  'Crypto trader rankings across 30+ exchanges — ROI, Arena Score, and PnL leaderboards.'
+  'Crypto trader rankings across current CEX, DEX, and on-chain source boards — ROI, Arena Score, and PnL leaderboards.'
 
 // ============================================
 // 类型定义

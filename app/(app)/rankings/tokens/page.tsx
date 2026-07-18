@@ -14,14 +14,14 @@ const SSR_TIMEOUT_MS = 4000
 export const metadata: Metadata = {
   title: 'Token Rankings — Who Trades BTC Best?',
   description:
-    'Discover the best traders for every token. See who profits most trading BTC, ETH, SOL, and 50+ tokens across 27 exchanges.',
+    'Discover the best traders for every token. See who profits most trading BTC, ETH, SOL, and other assets across current ranking source boards.',
   alternates: {
     canonical: `${BASE_URL}/rankings/tokens`,
   },
   openGraph: {
     title: 'Token Rankings — Who Trades BTC Best?',
     description:
-      'Token-level trader rankings across 27+ exchanges. Find the best BTC, ETH, SOL traders by PnL.',
+      'Token-level trader rankings across current public source boards. Find the best BTC, ETH, and SOL traders by PnL.',
     url: `${BASE_URL}/rankings/tokens`,
     siteName: 'Arena',
     type: 'website',

@@ -7,14 +7,14 @@ export const revalidate = 3600 // ISR: 1 hour (static content)
 export const metadata: Metadata = {
   title: 'Arena Score Methodology — How We Rank Traders',
   description:
-    'Learn how Arena calculates trader rankings from 25+ exchanges. Our methodology evaluates ROI, PnL, and risk metrics using the Arena Score algorithm for transparent, cross-exchange trader ranking.',
+    'Learn how Arena calculates trader rankings across current public source boards. Our methodology evaluates ROI, PnL, and risk metrics using the Arena Score algorithm.',
   alternates: {
     canonical: `${BASE_URL}/methodology`,
   },
   openGraph: {
     title: 'Arena Score Methodology — How We Rank Crypto Traders',
     description:
-      'Learn how Arena Score is calculated from 25+ exchanges to rank the top crypto traders. Transparent methodology for ROI, PnL, and risk evaluation.',
+      'Learn how Arena Score ranks traders across current public source boards using ROI, PnL, and risk metrics.',
     url: `${BASE_URL}/methodology`,
     siteName: 'Arena',
     type: 'website',
@@ -30,8 +30,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Arena Score Methodology — How We Rank Traders',
-    description:
-      'Learn how Arena Score is calculated from 25+ exchanges to rank the top crypto traders.',
+    description: 'Learn how Arena Score ranks traders across current public source boards.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },

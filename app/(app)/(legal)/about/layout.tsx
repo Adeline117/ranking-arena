@@ -1,8 +1,7 @@
 import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
-import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 
-const coverage = `${PRODUCT_FACTS.fallbackExchangeCount}+ active exchange sources`
+const coverage = 'live CEX, DEX, and on-chain ranking source boards'
 
 export const metadata: Metadata = {
   title: 'About Arena — Crypto Trader Rankings & Community Platform',

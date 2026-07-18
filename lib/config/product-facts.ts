@@ -9,8 +9,6 @@
 export const PRODUCT_FACTS = {
   /** Live 90D source boards represented in the public rankings. */
   fallbackSourceBoardCount: 28,
-  /** @deprecated Transitional alias for static copy updated in the next slice. */
-  fallbackExchangeCount: 28,
   /** Ranked 90D population, also used as the percentile denominator fallback. */
   fallbackRankedTraderCount: 9_600,
   /** BullMQ `SCORE_INTERVALS_MS` in worker/src/scheduler.ts. */

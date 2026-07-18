@@ -71,7 +71,7 @@ function buildWelcomeEmail(): string {
 
         <div style="margin-bottom: 16px; padding-left: 16px; border-left: 3px solid #6366f1;">
           <p style="margin: 0 0 4px; font-weight: 600; color: #fff;">1. Browse Rankings</p>
-          <p style="margin: 0; font-size: 13px; color: #94a3b8;">Discover top traders across 18+ active exchange sources ranked by Arena Score</p>
+          <p style="margin: 0; font-size: 13px; color: #94a3b8;">Discover top traders across live CEX, DEX, and on-chain ranking source boards</p>
         </div>
 
         <div style="margin-bottom: 16px; padding-left: 16px; border-left: 3px solid #22c55e;">
@@ -95,7 +95,7 @@ function buildWelcomeEmail(): string {
 
       <div style="border-top: 1px solid #2a2a3e; padding-top: 16px; text-align: center;">
         <p style="margin: 0; font-size: 12px; color: #64748b;">
-          Arena &mdash; Ranking traders across 18+ active exchange sources<br/>
+          Arena &mdash; Ranking traders across live public source boards<br/>
           <a href="${BASE_URL}/settings" style="color: #6366f1;">Manage email preferences</a>
         </p>
       </div>

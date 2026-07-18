@@ -7,7 +7,7 @@ import { generateBreadcrumbSchema } from '@/lib/seo/structured-data'
 export const metadata: Metadata = {
   title: 'Rankings',
   description:
-    'Real-time crypto trader leaderboard across Binance, Bybit, Bitget, OKX, MEXC, KuCoin, GMX, Hyperliquid and more. Compare 90-day ROI, win rate, drawdown and Arena Score.',
+    'Crypto trader rankings across current CEX, DEX, and on-chain source boards. Compare 90-day ROI, win rate, drawdown, and Arena Score; rankings recompute every two hours.',
   alternates: {
     canonical: `${BASE_URL}/rankings`,
   },
@@ -23,7 +23,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'Trader Rankings',
     description:
-      'Real-time crypto trader leaderboard across 22+ exchanges. Compare ROI, win rate, drawdown and Arena Score.',
+      'Trader rankings across current public source boards, recomputed every two hours. Compare ROI, win rate, drawdown, and Arena Score.',
     url: `${BASE_URL}/rankings`,
     siteName: 'Arena',
     type: 'website',
@@ -32,7 +32,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Trader Rankings',
-    description: 'Real-time crypto trader leaderboard across 22+ exchanges.',
+    description: 'Trader rankings across current public source boards, recomputed every two hours.',
     images: [`${BASE_URL}/og-image.png`],
     creator: '@arenafi',
   },

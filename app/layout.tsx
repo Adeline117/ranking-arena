@@ -12,9 +12,8 @@ import { Analytics } from '@vercel/analytics/next'
 // lib/sentry-init defers the Sentry chunk to requestIdleCallback (after `load`),
 // and its module-level `initialized` guard makes the (app)/ double-mount a no-op.
 import SentryInit from './components/Providers/SentryInit'
-import { PRODUCT_FACTS } from '@/lib/config/product-facts'
 
-const exchangeCoverage = `${PRODUCT_FACTS.fallbackExchangeCount}+ active exchange sources`
+const sourceCoverage = 'live CEX, DEX, and on-chain ranking sources'
 
 // Optimized font loading — 3 weights for better typographic hierarchy, 'optional' avoids font-swap LCP delay
 const inter = Inter({
@@ -43,7 +42,7 @@ export const metadata: Metadata = {
     default: 'Arena | All Rankings in Crypto',
     template: '%s | Arena',
   },
-  description: `All rankings in crypto. Arena tracks top traders across ${exchangeCoverage} — ranked by ROI, Arena Score, and PnL.`,
+  description: `All rankings in crypto. Arena tracks top traders across ${sourceCoverage} — ranked by ROI, Arena Score, and PnL.`,
   metadataBase: new URL(BASE_URL),
   verification: {
     google: 'nnTiBxpNMeCgo9rCLyUbZV9Z-OE8Nr-BLh7E-o2T1R8',
@@ -95,7 +94,7 @@ export const metadata: Metadata = {
   openGraph: {
     type: 'website',
     title: 'Arena ranks everything in crypto',
-    description: `All rankings in crypto. Arena tracks top traders across ${exchangeCoverage} — ranked by ROI, Arena Score, and PnL.`,
+    description: `All rankings in crypto. Arena tracks top traders across ${sourceCoverage} — ranked by ROI, Arena Score, and PnL.`,
     url: BASE_URL,
     siteName: 'Arena',
     locale: 'en_US',
@@ -111,7 +110,7 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'Arena ranks everything in crypto',
-    description: `All rankings in crypto. Arena tracks top traders across ${exchangeCoverage} — ranked by ROI, Arena Score, and PnL.`,
+    description: `All rankings in crypto. Arena tracks top traders across ${sourceCoverage} — ranked by ROI, Arena Score, and PnL.`,
     images: [`${BASE_URL}/api/og?title=Arena&subtitle=All+rankings+in+crypto`],
     creator: '@arenafi',
     site: '@arenafi',
@@ -223,7 +222,7 @@ export default function RootLayout({
             '@type': 'WebSite',
             name: 'Arena',
             url: BASE_URL,
-            description: `Crypto trader rankings across ${exchangeCoverage}.`,
+            description: `Crypto trader rankings across ${sourceCoverage}.`,
             potentialAction: {
               '@type': 'SearchAction',
               target: {

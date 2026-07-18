@@ -23,7 +23,7 @@ const MIN_SERVING_SOURCES = 3
 export const metadata: Metadata = {
   title: 'Exchange Rankings — Copy Trading Leaderboards Compared',
   description:
-    "Which exchange's copy traders actually make money? Compare ranked traders, median and top-decile ROI, % profitable, copier PnL and bot share across exchanges — computed from live leaderboard data.",
+    "Which source board's ranked traders show the strongest historical results? Compare median and top-decile ROI, percent profitable, copier PnL, and bot share from the latest published leaderboard.",
   alternates: { canonical: `${BASE_URL}/rankings/exchanges` },
   keywords: [
     'exchange ranking',
