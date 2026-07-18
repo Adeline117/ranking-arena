@@ -40,6 +40,12 @@ type Step = 'welcome' | 'interests' | 'traders' | 'groups' | 'complete'
 const STEPS: Step[] = ['welcome', 'interests', 'traders', 'groups', 'complete']
 
 class MembershipIntentsUnsettledError extends Error {}
+class OnboardingScopeUnavailableError extends Error {}
+
+interface OnboardingActionScope {
+  revision: number
+  viewerId: string
+}
 
 // Onboarding styles moved to globals.css (#32) — no DOM injection needed
 
@@ -73,9 +79,9 @@ export default function OnboardingPage() {
   const languageRef = useRef(language)
   const showToastRef = useRef(showToast)
   const membershipScopeRef = useRef<OnboardingMembershipScope>({
-    active: true,
-    revision: 0,
-    viewerId: null,
+    active: authChecked && userId !== null,
+    revision: sessionGeneration,
+    viewerId: userId,
   })
   const followIntentLedgerRef = useRef(new OnboardingFollowIntentLedger())
   const followRequestSequencerRef = useRef(new OnboardingFollowRequestSequencer())
@@ -85,6 +91,9 @@ export default function OnboardingPage() {
   const membershipRequestSequencerRef = useRef(new OnboardingMembershipRequestSequencer())
   const failedMembershipIntentsRef = useRef<Map<string, OnboardingMembershipIntent>>(new Map())
   const membershipSettlingRef = useRef(false)
+  const completionPendingRef = useRef(false)
+  const authScopeRef = useRef({ authChecked, sessionGeneration, userId })
+  authScopeRef.current = { authChecked, sessionGeneration, userId }
 
   const tr = (key: string) => translations[language][key] || translations.en[key] || key
 
@@ -238,6 +247,7 @@ export default function OnboardingPage() {
   }
 
   const goToStep = (nextStep: Step) => {
+    if (completionPendingRef.current) return
     trackEvent('onboarding_step_complete', {
       step,
       nextStep,
@@ -471,7 +481,7 @@ export default function OnboardingPage() {
   }, [flushJoinQueue])
 
   const handleFollowTrader = async (traderId: string) => {
-    if (followSettlingRef.current) return
+    if (completionPendingRef.current || followSettlingRef.current) return
 
     const viewerId = authChecked ? userId : null
     if (!viewerId) return
@@ -508,7 +518,7 @@ export default function OnboardingPage() {
   }
 
   const handleJoinGroup = async (groupId: string) => {
-    if (!userId || membershipSettlingRef.current) return
+    if (!userId || completionPendingRef.current || membershipSettlingRef.current) return
     const isJoined = joinedGroupsRef.current.has(groupId)
     const action = isJoined ? 'leave' : 'join'
     const intent = membershipIntentLedgerRef.current.issue(
@@ -542,6 +552,79 @@ export default function OnboardingPage() {
       pendingJoinQueue.clear()
     }
   }, [])
+
+  const captureActionScope = (): OnboardingActionScope => {
+    const authScope = authScopeRef.current
+    const membershipScope = membershipScopeRef.current
+    if (
+      !authScope.authChecked ||
+      !authScope.userId ||
+      !membershipScope.active ||
+      membershipScope.viewerId !== authScope.userId ||
+      membershipScope.revision !== authScope.sessionGeneration
+    ) {
+      throw new OnboardingScopeUnavailableError('Onboarding session is unavailable or stale')
+    }
+    return {
+      revision: authScope.sessionGeneration,
+      viewerId: authScope.userId,
+    }
+  }
+
+  const actionScopeIsCurrent = (scope: OnboardingActionScope) => {
+    const authScope = authScopeRef.current
+    const membershipScope = membershipScopeRef.current
+    return (
+      authScope.authChecked &&
+      authScope.userId === scope.viewerId &&
+      authScope.sessionGeneration === scope.revision &&
+      membershipScope.active &&
+      membershipScope.viewerId === scope.viewerId &&
+      membershipScope.revision === scope.revision
+    )
+  }
+
+  const persistOnboardingCompletion = async (
+    scope: OnboardingActionScope,
+    interests?: string[]
+  ) => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (
+      !actionScopeIsCurrent(scope) ||
+      !session?.access_token ||
+      session.user.id !== scope.viewerId
+    ) {
+      throw new OnboardingScopeUnavailableError('Onboarding session is unavailable or stale')
+    }
+
+    const updates: Record<string, unknown> = { onboarding_completed: true }
+    if (interests && interests.length > 0) updates.interests = interests
+    const { data: updatedProfile, error } = await supabase
+      .from('user_profiles')
+      .update(updates)
+      .eq('id', scope.viewerId)
+      .select('id, onboarding_completed')
+      .maybeSingle()
+    if (
+      error ||
+      updatedProfile?.id !== scope.viewerId ||
+      updatedProfile.onboarding_completed !== true
+    ) {
+      throw error || new Error('Onboarding completion was not acknowledged')
+    }
+    const {
+      data: { session: confirmedSession },
+    } = await supabase.auth.getSession()
+    if (
+      !actionScopeIsCurrent(scope) ||
+      !confirmedSession?.access_token ||
+      confirmedSession.user.id !== scope.viewerId
+    ) {
+      throw new OnboardingScopeUnavailableError('Onboarding session changed while saving')
+    }
+  }
 
   const saveAndComplete = async () => {
     if (saving || followSettlingRef.current || membershipSettlingRef.current) return
@@ -591,27 +674,34 @@ export default function OnboardingPage() {
     }
   }
 
-  // Skip the activation flow: mark onboarding complete (so it never reappears)
-  // and exit to the returnUrl. Routing always proceeds even if the DB write fails.
+  // Skip the activation flow only after all selected actions and the
+  // authoritative profile write are acknowledged for the same viewer.
   const handleSkip = async () => {
-    if (saving) return
+    if (completionPendingRef.current) return
+    completionPendingRef.current = true
     setSaving(true)
-    trackEvent('onboarding_skip', { step })
     try {
-      if (userId) {
-        const { error } = await supabase
-          .from('user_profiles')
-          .update({ onboarding_completed: true })
-          .eq('id', userId)
-        if (error) logger.error('Error skipping onboarding:', error)
-      }
-      try {
-        localStorage.setItem('hasOnboarded', 'true')
-      } catch {
-        /* localStorage may be unavailable */
+      const actionScope = captureActionScope()
+      await settleFollowIntents()
+      await settleMembershipIntents()
+      await persistOnboardingCompletion(actionScope)
+      trackEvent('onboarding_skip', { step })
+      router.replace(afterOnboarding)
+    } catch (err) {
+      followSettlingRef.current = false
+      membershipSettlingRef.current = false
+      logger.error('Error skipping onboarding:', err)
+      if (membershipScopeRef.current.active) {
+        showToast(
+          tr(err instanceof MembershipIntentsUnsettledError ? 'joinFailed' : 'saveFailed'),
+          'error'
+        )
       }
     } finally {
-      router.replace(afterOnboarding)
+      completionPendingRef.current = false
+      if (membershipScopeRef.current.active) {
+        setSaving(false)
+      }
     }
   }
 
