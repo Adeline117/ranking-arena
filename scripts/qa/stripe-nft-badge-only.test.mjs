@@ -81,6 +81,21 @@ test('membership center never counts an NFT badge as a real Pro subscription', (
   )
 })
 
+test('NFT membership card uses display-badge literals, not standalone Pro authority', () => {
+  const card = source('app/(app)/user-center/NftMembershipCard.tsx')
+
+  assertNoMatch(
+    card,
+    /Arena Pro NFT/,
+    'NftMembershipCard must label the collectible as Arena NFT Badge'
+  )
+  assertNoMatch(
+    card,
+    />\s*PRO\s*</,
+    'NftMembershipCard must not render a standalone PRO authority mark'
+  )
+})
+
 test('NFT-facing translations do not claim membership, Pro status, or feature unlocks', () => {
   const forbiddenClaims =
     /\bmembership(?:\s+via|\s*\(|\s+card|\s*$)|\bPro status\b|\bunlock\b|通过[^'"\n]*NFT[^'"\n]*(?:获得|解锁)[^'"\n]*Pro|NFT[^'"\n]*(?:获得|解锁)[^'"\n]*Pro|NFTによるProメンバーシップ|NFT[^'"\n]*Proステータス|ロック解除|NFT를 통한 Pro 멤버십|NFT[^'"\n]*Pro 상태|잠금 해제/i
