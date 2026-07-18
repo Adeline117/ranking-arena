@@ -9,6 +9,7 @@ import { withAuth } from '@/lib/api/middleware'
 import { success, error, badRequest, handleError } from '@/lib/api/response'
 import logger from '@/lib/logger'
 import { socialFeatureGuard } from '@/lib/features'
+import { assertStripePaymentRuntimeReady } from '@/lib/stripe'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -372,6 +373,15 @@ export const POST = withAuth(
 
       let verifiedPayment: VerifiedStripePayment | null = null
       if (activationRequest.tier !== 'trial') {
+        try {
+          assertStripePaymentRuntimeReady()
+        } catch (runtimeError) {
+          logger.error('[group-subscribe] Stripe payment runtime is not ready', {
+            error: runtimeError instanceof Error ? runtimeError.message : String(runtimeError),
+          })
+          return error('Paid subscriptions are not available at this time', 503)
+        }
+
         const stripeSecret = process.env.STRIPE_SECRET_KEY
         if (!stripeSecret) {
           logger.error('[group-subscribe] STRIPE_SECRET_KEY not set; refusing paid subscription')

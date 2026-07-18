@@ -42,6 +42,7 @@ const mockRpc = jest.fn()
 const mockFrom = jest.fn()
 const mockCheckoutRetrieve = jest.fn()
 const mockPaymentIntentRetrieve = jest.fn()
+const mockAssertStripePaymentRuntimeReady = jest.fn()
 
 jest.mock('@/lib/api/middleware', () => ({
   withAuth:
@@ -64,6 +65,9 @@ jest.mock('@/lib/features', () => ({ socialFeatureGuard: () => null }))
 jest.mock('@/lib/logger', () => ({
   __esModule: true,
   default: { error: jest.fn(), warn: jest.fn(), info: jest.fn() },
+}))
+jest.mock('@/lib/stripe', () => ({
+  assertStripePaymentRuntimeReady: () => mockAssertStripePaymentRuntimeReady(),
 }))
 jest.mock('stripe', () => ({
   __esModule: true,
@@ -185,6 +189,7 @@ describe('/api/groups/subscribe atomic boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     process.env.STRIPE_SECRET_KEY = 'sk_test_unit'
+    mockAssertStripePaymentRuntimeReady.mockReturnValue(undefined)
     mockRpc.mockResolvedValue({ data: activationResult(), error: null })
   })
 
@@ -292,6 +297,25 @@ describe('/api/groups/subscribe atomic boundary', () => {
 
     expect(response.status).toBe(503)
     expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockPaymentIntentRetrieve).not.toHaveBeenCalled()
+  })
+
+  it('refuses paid activation before provider retrieval when Production runtime is unsafe', async () => {
+    mockAssertStripePaymentRuntimeReady.mockImplementation(() => {
+      throw new Error('Stripe live mode is required for Production payment actions')
+    })
+
+    const response = await POST(
+      postRequest({
+        group_id: GROUP_ID,
+        tier: 'monthly',
+        payment_intent_id: PAYMENT_INTENT_ID,
+      })
+    )
+
+    expect(response.status).toBe(503)
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockCheckoutRetrieve).not.toHaveBeenCalled()
     expect(mockPaymentIntentRetrieve).not.toHaveBeenCalled()
   })
 

@@ -82,6 +82,7 @@ jest.mock('@/lib/utils/logger', () => ({
 
 const mockGetOrCreateStripeCustomer = jest.fn().mockResolvedValue('cus_test123')
 const mockAssertApiPriceReady = jest.fn().mockResolvedValue(undefined)
+const mockAssertStripePaymentRuntimeReady = jest.fn()
 const mockCreateCheckoutSession = jest
   .fn()
   .mockResolvedValue({ url: 'https://checkout.stripe.com/api-session', id: 'cs_api_test123' })
@@ -92,6 +93,7 @@ jest.mock('@/lib/stripe', () => ({
   },
   getOrCreateStripeCustomer: (...args: unknown[]) => mockGetOrCreateStripeCustomer(...args),
   assertApiPriceReady: (...args: unknown[]) => mockAssertApiPriceReady(...args),
+  assertStripePaymentRuntimeReady: () => mockAssertStripePaymentRuntimeReady(),
   createCheckoutSession: (...args: unknown[]) => mockCreateCheckoutSession(...args),
 }))
 
@@ -160,6 +162,7 @@ describe('POST /api/stripe/create-api-checkout', () => {
     })
     mockGetOrCreateStripeCustomer.mockResolvedValue('cus_test123')
     mockAssertApiPriceReady.mockResolvedValue(undefined)
+    mockAssertStripePaymentRuntimeReady.mockReturnValue(undefined)
     mockCreateCheckoutSession.mockResolvedValue({
       url: 'https://checkout.stripe.com/api-session',
       id: 'cs_api_test123',
@@ -213,6 +216,20 @@ describe('POST /api/stripe/create-api-checkout', () => {
       updated_at: expect.any(String),
     })
     expect(mockProfileUpdateEq).toHaveBeenCalledWith('id', 'user-123')
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('fails closed before customer creation when Production payment runtime is unsafe', async () => {
+    mockAssertStripePaymentRuntimeReady.mockImplementation(() => {
+      throw new Error('Stripe live mode is required for Production payment actions')
+    })
+
+    const res = await POST(request())
+
+    expect(res.status).toBe(503)
+    expect(mockAssertApiPriceReady).not.toHaveBeenCalled()
+    expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+    expect(mockProfileUpdate).not.toHaveBeenCalled()
     expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
 

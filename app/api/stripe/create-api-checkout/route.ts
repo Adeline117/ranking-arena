@@ -5,6 +5,7 @@ import {
   getOrCreateStripeCustomer,
   createCheckoutSession,
   assertApiPriceReady,
+  assertStripePaymentRuntimeReady,
 } from '@/lib/stripe'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -88,6 +89,7 @@ export async function POST(request: NextRequest) {
     }
 
     try {
+      assertStripePaymentRuntimeReady()
       await assertApiPriceReady(plan as ApiPlan, priceId)
     } catch (priceError) {
       logger.error('Stripe API price readiness check failed', {

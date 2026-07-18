@@ -19,6 +19,7 @@ import {
   constructWebhookEvent,
   assertProPriceReady,
   assertApiPriceReady,
+  assertStripePaymentRuntimeReady,
 } from './index'
 
 // Mock server-only (no-op in test environment)
@@ -222,6 +223,39 @@ describe('Stripe price readiness', () => {
     })
 
     await expect(assertApiPriceReady('starter', 'price_api_starter')).resolves.toBeUndefined()
+  })
+})
+
+describe('Stripe payment runtime readiness', () => {
+  test('accepts test mode outside Production when signed webhooks are configured', () => {
+    process.env.VERCEL_ENV = 'preview'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_123'
+
+    expect(() => assertStripePaymentRuntimeReady()).not.toThrow()
+  })
+
+  test('requires a valid webhook signing secret before any paid action', () => {
+    process.env.STRIPE_WEBHOOK_SECRET = 'invalid'
+
+    expect(() => assertStripePaymentRuntimeReady()).toThrow('STRIPE_WEBHOOK_SECRET is invalid')
+  })
+
+  test('rejects test keys for Production payment actions even during a free promo', () => {
+    process.env.VERCEL_ENV = 'production'
+    process.env.NEXT_PUBLIC_PRO_FREE_PROMO = 'true'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_test_123'
+
+    expect(() => assertStripePaymentRuntimeReady()).toThrow(
+      'Stripe live mode is required for Production payment actions'
+    )
+  })
+
+  test('accepts matching live keys for Production payment actions', () => {
+    process.env.VERCEL_ENV = 'production'
+    process.env.STRIPE_SECRET_KEY = 'sk_live_123'
+    process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY = 'pk_live_123'
+
+    expect(() => assertStripePaymentRuntimeReady()).not.toThrow()
   })
 })
 
