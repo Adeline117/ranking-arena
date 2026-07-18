@@ -6,6 +6,10 @@
 
 import { Queue, type ConnectionOptions } from 'bullmq'
 import { getConnection } from '../connection'
+import { INGEST_REGIONS, type IngestRegion } from '@/lib/ingest/core/regions'
+import { LEGACY_TIER_C_QUEUE_NAME, tierCQueueName } from '@/lib/ingest/core/tier-c-routing'
+
+export { INGEST_REGIONS, type IngestRegion, tierCQueueName }
 
 /** bullmq ships a nested ioredis copy whose types fork from ours — the
  *  runtime client is compatible, so bridge the nominal mismatch once. */
@@ -24,12 +28,9 @@ export const INGEST_QUEUE_NAME = 'arena-ingest'
  *             today; by a worker ON the VPS — where the source becomes
  *             effectively local — once deployed there)
  * A worker consumes the queues listed in INGEST_REGIONS (default: all,
- * preserving single-node behavior). Tier-C stays on its own queue
- * regardless of region (user-facing latency path).
+ * preserving single-node behavior). Tier-C has a dedicated queue for each
+ * region (user-facing latency path).
  */
-export const INGEST_REGIONS = ['local', 'vps_sg', 'vps_jp'] as const
-export type IngestRegion = (typeof INGEST_REGIONS)[number]
-
 export function regionQueueName(region: string): string {
   return region === 'local' ? INGEST_QUEUE_NAME : `${INGEST_QUEUE_NAME}-${region}`
 }
@@ -133,13 +134,16 @@ export function consumedRegions(): IngestRegion[] {
  * the main queue's 3 slots for up to ~hours, and a user-facing on-demand
  * fetch must never wait behind them (the route's polling window is 8s).
  */
-export const TIERC_QUEUE_NAME = 'arena-ingest-tierc'
+/** @deprecated Use tierCQueueName(region). Kept for old producers/observers. */
+export const TIERC_QUEUE_NAME = LEGACY_TIER_C_QUEUE_NAME
 
-let tiercQueue: Queue | null = null
+const tiercQueues = new Map<string, Queue>()
 
-export function getTierCQueue(): Queue {
-  if (tiercQueue) return tiercQueue
-  tiercQueue = new Queue(TIERC_QUEUE_NAME, {
+export function getTierCQueue(region: IngestRegion = 'local'): Queue {
+  const name = tierCQueueName(region)
+  const existing = tiercQueues.get(name)
+  if (existing) return existing
+  const queue = new Queue(name, {
     connection: ingestConnection(),
     defaultJobOptions: {
       attempts: 2,
@@ -148,7 +152,8 @@ export function getTierCQueue(): Queue {
       removeOnFail: { age: 24 * 3600, count: 500 },
     },
   })
-  return tiercQueue
+  tiercQueues.set(name, queue)
+  return queue
 }
 
 let queue: Queue | null = null
@@ -210,6 +215,8 @@ export interface TierCJobData {
   exchangeTraderId: string
   timeframe: 0 | 7 | 30 | 90
   surface: 'profile' | 'positions' | 'position_history' | 'orders' | 'transfers' | 'copiers'
+  /** Producer routing hint. Optional so pre-regionalization jobs stay valid. */
+  fetchRegion?: IngestRegion
 }
 
 // Single shared contract — see lib/ingest/core/tier-c-keys.ts (drift-proof).
