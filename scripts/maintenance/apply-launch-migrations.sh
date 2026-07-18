@@ -74,6 +74,7 @@ PREDEPLOY_MIGRATIONS=(
   20260718132000_active_source_platform_freshness.sql
   20260718133000_history_partition_range_guard.sql
   20260718134000_freshness_expected_sources.sql
+  20260718135000_partition_child_rls_convergence.sql
 )
 
 # These contracts revoke compatibility writes or change identity uniqueness
