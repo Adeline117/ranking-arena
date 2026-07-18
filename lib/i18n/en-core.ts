@@ -139,6 +139,7 @@ const enCore = {
   requestTimeout: 'Request timed out, please check your network',
   unknownErrorOccurred: 'An error occurred, please try again later',
   checkNetworkAndRetry: 'Please check your network connection and try again',
+  serviceTemporarilyUnavailable: 'Service temporarily unavailable',
   serverUnavailable: 'Server temporarily unavailable, please try again later',
   resourceNotFound: 'The resource you are looking for does not exist',
   noAccessPermission: 'You do not have permission to access this content',
