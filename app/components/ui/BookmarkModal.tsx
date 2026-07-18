@@ -11,6 +11,7 @@ import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { logger } from '@/lib/logger'
+import ErrorState from './ErrorState'
 
 type BookmarkFolder = {
   id: string
@@ -40,6 +41,7 @@ export default function BookmarkModal({
   const { t } = useLanguage()
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
   const [loading, setLoading] = useState(true)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [creating, setCreating] = useState(false)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [newFolderName, setNewFolderName] = useState('')
@@ -51,6 +53,9 @@ export default function BookmarkModal({
       loadFolders()
     }
     if (!isOpen) {
+      setFolders([])
+      setLoading(true)
+      setLoadFailed(false)
       setShowCreateForm(false)
       setNewFolderName('')
       setNewFolderPublic(true)
@@ -62,10 +67,11 @@ export default function BookmarkModal({
 
   const loadFolders = async () => {
     setLoading(true)
+    setLoadFailed(false)
+    setFolders([])
 
     try {
       if (!accessToken) {
-        setFolders([])
         return
       }
 
@@ -76,22 +82,26 @@ export default function BookmarkModal({
       })
 
       if (response.status === 401) {
-        setFolders([])
+        setLoadFailed(true)
         return
       }
 
       if (!response.ok) {
         showToast(t('loadBookmarksFailed'), 'error')
-        setFolders([])
+        setLoadFailed(true)
         return
       }
 
       const data = await response.json()
-      setFolders(data.data?.folders || data.folders || [])
+      const loadedFolders = data.data?.folders ?? data.folders
+      if (!Array.isArray(loadedFolders)) {
+        throw new Error('Bookmark folders response is missing a folders array')
+      }
+      setFolders(loadedFolders)
     } catch (error) {
       logger.error('Load bookmarks failed:', error)
       showToast(t('loadBookmarksFailed'), 'error')
-      setFolders([])
+      setLoadFailed(true)
     } finally {
       setLoading(false)
     }
@@ -278,6 +288,7 @@ export default function BookmarkModal({
               variant="text"
               size="sm"
               onClick={() => setShowCreateForm(!showCreateForm)}
+              disabled={loading || loadFailed}
               style={{ color: tokens.colors.accent?.primary }}
             >
               {t('newBookmarkFolder')}
@@ -374,6 +385,8 @@ export default function BookmarkModal({
           >
             {t('loading')}
           </Text>
+        ) : loadFailed ? (
+          <ErrorState title={t('loadBookmarksFailed')} retry={loadFolders} variant="compact" />
         ) : folders.length === 0 ? (
           <Text
             size="sm"
