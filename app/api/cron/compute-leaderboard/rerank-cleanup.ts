@@ -7,10 +7,10 @@
  *     rerank_leaderboard(p_season_id) RPC; falls back to inline ORDER BY +
  *     batched UPSERT if the RPC isn't installed (fresh databases).
  *
- *   • cleanupStaleRows() — delete leaderboard_ranks rows whose computed_at
- *     is older than 5 days. Excluded traders never get a re-compute, so
- *     without this cleanup their stale high-scores persist at the top of
- *     the rankings forever (root cause of the multi-day "stuck #1" bugs).
+ *   • cleanupStaleRows() — delete old computed rows only when their SOURCE
+ *     currently has a fresh source-data watermark. A wholly stale source keeps
+ *     its last-good rows so the public board can serve them with an honest
+ *     stale flag.
  *
  * Both are LOW-risk: each runs late, neither blocks the upsert, both are
  * skip-on-deadline. Extracted from route.ts as part of the computeSeason
@@ -20,6 +20,7 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { Period } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
+import { RANKING_SOURCE_STALE_MS } from '@/lib/rankings/source-freshness'
 
 const logger = createLogger('compute-leaderboard')
 
@@ -68,26 +69,43 @@ export async function rerankAllRows(supabase: SupabaseClient, season: Period): P
 }
 
 /**
- * Delete leaderboard_ranks rows whose `computed_at` is older than 5 days.
- * Excluded traders (negative ROI, <5 trades, etc.) never get re-computed
- * so their stale high-scores would persist at the top of rankings forever
- * without this cleanup. Returns the deleted count for logging.
+ * Delete leaderboard_ranks rows whose `computed_at` is older than 5 days only
+ * when the same source has a fresh source-data watermark. This removes
+ * excluded/zombie rows from active boards without deleting a stale source's
+ * last-good board.
  *
  * Limits to 5000 rows per cron cycle so a backlog can't blow the time
  * budget; the next cron picks up where this one left off.
  */
 export async function cleanupStaleRows(supabase: SupabaseClient, season: Period): Promise<number> {
+  const sourceCutoff = new Date(Date.now() - RANKING_SOURCE_STALE_MS).toISOString()
+  const { data: freshSourceRows, error: freshnessError } = await supabase
+    .from('leaderboard_source_freshness')
+    .select('source')
+    .eq('season_id', season)
+    .gte('source_as_of', sourceCutoff)
+
+  // Missing/unreadable provenance must never authorize deletion.
+  if (freshnessError || !freshSourceRows?.length) return 0
+  const freshSources = new Set(
+    freshSourceRows.map((row: { source: string }) => row.source).filter(Boolean)
+  )
+
   const cutoff = new Date(Date.now() - STALE_ROW_AGE_MS).toISOString()
   const { data: staleRows, error: staleErr } = await supabase
     .from('leaderboard_ranks')
-    .select('id')
+    .select('id,source')
     .eq('season_id', season)
     .lt('computed_at', cutoff)
     .limit(5000)
 
   if (staleErr || !staleRows || staleRows.length === 0) return 0
 
-  const staleIds = staleRows.map((r: { id: string }) => r.id)
+  const staleIds = staleRows
+    .filter((row: { source: string }) => freshSources.has(row.source))
+    .map((row: { id: string }) => row.id)
+  if (staleIds.length === 0) return 0
+
   for (let i = 0; i < staleIds.length; i += 500) {
     await supabase
       .from('leaderboard_ranks')

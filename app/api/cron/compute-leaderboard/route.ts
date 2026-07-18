@@ -35,7 +35,7 @@ import { rerankAllRows, cleanupStaleRows, atomicPlatformCleanup } from './rerank
 import { scoreTraders, type ScoredTrader } from './score-traders'
 import { checkDegradationGuard, saveScoredCount } from './degradation-guard'
 import { fetchCurrentScoreMap, buildChangedTraders } from './incremental-diff'
-import { upsertLeaderboard, zeroOutExcluded } from './write-leaderboard'
+import { upsertLeaderboard, upsertSourceFreshness, zeroOutExcluded } from './write-leaderboard'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { PipelineState } from '@/lib/services/pipeline-state'
@@ -409,8 +409,9 @@ async function computeSeason(
     )
   }
 
-  // Log data freshness: when was the last batch-fetch-traders run?
-  // This makes it transparent what data this compute cycle is working with.
+  // Log scheduler provenance only. Per-source captured_at watermarks below are
+  // the source-data freshness gate; a completed batch job is not itself proof
+  // that every exchange/protocol returned fresh data.
   try {
     const { data: latestFetch } = await supabase
       .from('pipeline_logs')
@@ -422,7 +423,9 @@ async function computeSeason(
       .maybeSingle()
     if (latestFetch?.ended_at) {
       const ageMin = Math.round((Date.now() - new Date(latestFetch.ended_at).getTime()) / 60_000)
-      logger.info(`[${season}] Using data as of ${latestFetch.ended_at} (${ageMin}min ago)`)
+      logger.info(
+        `[${season}] Last batch-fetch job completed ${ageMin}min ago (${latestFetch.ended_at}); checking per-source captures`
+      )
     }
   } catch {
     // Non-critical — informational log only
@@ -467,7 +470,8 @@ async function computeSeason(
   // a stale leaderboard. Logic lives in freshness-check.ts.
   const { freshPlatforms, stalePlatforms, queryFailedPlatforms } = await checkPlatformFreshness(
     supabase,
-    traderMap
+    traderMap,
+    season
   )
 
   if (queryFailedPlatforms.length > 0) {
@@ -593,7 +597,11 @@ async function computeSeason(
   // win_rate and max_drawdown are left as null when not available from real API data.
 
   const roiThreshold = ROI_ANOMALY_THRESHOLDS[season]
+  const freshPlatformSet = new Set(freshPlatforms)
   const uniqueTraders = Array.from(traderMap.values())
+    // Stale sources keep their prior public rows and watermark. They must not
+    // be rescored from old input while fresh sources advance independently.
+    .filter((t) => freshPlatformSet.has(t.source))
     .filter((t) => t.source !== 'web3_bot') // DeFi protocol contracts, not real traders — exclude entirely
     .filter((t) => t.roi != null)
     .filter((t) => Math.abs(t.roi!) <= roiThreshold)
@@ -737,6 +745,7 @@ async function computeSeason(
     season,
     uniqueTraders,
     traderMap,
+    freshPlatforms,
     isOutOfTime,
     upsertAborted,
     timeLeftMs,
@@ -790,7 +799,33 @@ async function computeSeason(
     )
   } else {
     const cleaned = await cleanupStaleRows(supabase, season)
-    if (cleaned > 0) logger.info(`${season}: cleaned ${cleaned} stale rows (>5d old)`)
+    if (cleaned > 0) {
+      logger.info(`${season}: cleaned ${cleaned} old orphan rows from currently fresh sources`)
+    }
+  }
+
+  // Publish the source-data watermarks only after every ranking upsert for this
+  // season completed. A partial/errored write must leave the previous
+  // last-good watermarks untouched so public APIs fail closed to stale.
+  if (!upsertAborted && upsertErrors === 0) {
+    try {
+      const watermarksWritten = await upsertSourceFreshness({
+        supabase: supabase as SupabaseClient,
+        season,
+        scoredTraders: scoredFiltered,
+      })
+      logger.info(`[${season}] published ${watermarksWritten} source freshness watermarks`)
+    } catch (freshnessError) {
+      logger.warn(
+        `[${season}] source freshness publish failed; keeping prior watermarks: ${
+          freshnessError instanceof Error ? freshnessError.message : String(freshnessError)
+        }`
+      )
+    }
+  } else {
+    logger.warn(
+      `[${season}] source freshness publish skipped after partial ranking write (aborted=${upsertAborted}, errors=${upsertErrors})`
+    )
   }
 
   // Save scored count for future degradation checks

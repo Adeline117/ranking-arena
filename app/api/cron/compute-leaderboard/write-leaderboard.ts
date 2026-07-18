@@ -10,6 +10,7 @@ import type { TraderRow } from './trader-row'
 import { SOURCE_TYPE_MAP } from '@/lib/constants/exchanges'
 import { validateBeforeWrite, logRejectedWrites } from '@/lib/pipeline/validate-before-write'
 import { createLogger } from '@/lib/utils/logger'
+import { RANKING_SOURCE_FUTURE_TOLERANCE_MS } from '@/lib/rankings/source-freshness'
 
 const logger = createLogger('compute-leaderboard')
 
@@ -33,6 +34,95 @@ function getSourceKind(source: string): string {
     return 'dex_leaderboard'
   }
   return 'cex_leaderboard'
+}
+
+export interface SourceFreshnessWriteRow {
+  season_id: Period
+  source: string
+  source_as_of: string
+  recorded_at: string
+}
+
+/**
+ * Collapse trader-level capture timestamps to one conservative source
+ * watermark. Every row from a PASSED source board normally has the same
+ * captured_at; if a mixed board slips through, retaining the oldest timestamp
+ * prevents the newer subset from hiding older source data.
+ *
+ * A source containing any invalid timestamp is omitted entirely. Its previous
+ * last-good watermark then remains in place and naturally ages into stale.
+ */
+export function buildSourceFreshnessWriteRows(
+  season: Period,
+  traders: readonly ScoredTrader[],
+  recordedAt = new Date().toISOString()
+): SourceFreshnessWriteRow[] {
+  const bySource = new Map<string, { oldestMs: number; invalid: boolean }>()
+  const recordedAtMs = Date.parse(recordedAt)
+  const latestAllowedMs =
+    (Number.isFinite(recordedAtMs) ? recordedAtMs : Date.now()) + RANKING_SOURCE_FUTURE_TOLERANCE_MS
+
+  for (const trader of traders) {
+    const timestamp = Date.parse(trader.source_as_of)
+    const current = bySource.get(trader.source)
+    if (!Number.isFinite(timestamp) || timestamp > latestAllowedMs) {
+      bySource.set(trader.source, {
+        oldestMs: current?.oldestMs ?? Number.POSITIVE_INFINITY,
+        invalid: true,
+      })
+      continue
+    }
+    bySource.set(trader.source, {
+      oldestMs: Math.min(current?.oldestMs ?? timestamp, timestamp),
+      invalid: current?.invalid ?? false,
+    })
+  }
+
+  return [...bySource.entries()]
+    .flatMap(([source, state]) =>
+      state.invalid
+        ? []
+        : [
+            {
+              season_id: season,
+              source,
+              source_as_of: new Date(state.oldestMs).toISOString(),
+              recorded_at: recordedAt,
+            },
+          ]
+    )
+    .sort((a, b) => a.source.localeCompare(b.source))
+}
+
+/**
+ * Publish source watermarks only after the season's ranking writes complete.
+ * Missing sources are intentionally not deleted/upserted: their last-good
+ * watermark must remain visible and age honestly while their last-good ranks
+ * continue to serve.
+ */
+export async function upsertSourceFreshness(params: {
+  supabase: SupabaseClient
+  season: Period
+  scoredTraders: readonly ScoredTrader[]
+}): Promise<number> {
+  const { supabase, season, scoredTraders } = params
+  const rows = buildSourceFreshnessWriteRows(season, scoredTraders)
+  const sourceCount = new Set(scoredTraders.map((trader) => trader.source)).size
+
+  if (rows.length < sourceCount) {
+    logger.warn(
+      `[${season}] source freshness skipped ${sourceCount - rows.length} source(s) with invalid captured_at`
+    )
+  }
+  if (rows.length === 0) return 0
+
+  const { error } = await supabase
+    .from('leaderboard_source_freshness')
+    .upsert(rows, { onConflict: 'season_id,source' })
+  if (error) {
+    throw new Error(`[${season}] source freshness upsert failed: ${error.message}`)
+  }
+  return rows.length
 }
 
 /**
@@ -155,12 +245,21 @@ export async function zeroOutExcluded(params: {
   season: Period
   uniqueTraders: TraderRow[]
   traderMap: Map<string, TraderRow>
+  freshPlatforms: readonly string[]
   isOutOfTime: (buffer: number) => boolean
   upsertAborted: boolean
   timeLeftMs: () => number
 }): Promise<number> {
-  const { supabase, season, uniqueTraders, traderMap, isOutOfTime, upsertAborted, timeLeftMs } =
-    params
+  const {
+    supabase,
+    season,
+    uniqueTraders,
+    traderMap,
+    freshPlatforms,
+    isOutOfTime,
+    upsertAborted,
+    timeLeftMs,
+  } = params
 
   if (upsertAborted || isOutOfTime(25_000)) {
     if (upsertAborted) logger.warn(`[${season}] SKIPPING zero-out (upsert aborted)`)
@@ -170,8 +269,11 @@ export async function zeroOutExcluded(params: {
   }
 
   const computedTraderIds = new Set(uniqueTraders.map((t) => `${t.source}:${t.source_trader_id}`))
+  const freshPlatformSet = new Set(freshPlatforms)
   const allInTraderMap = new Set(
-    Array.from(traderMap.values()).map((t) => `${t.source}:${t.source_trader_id}`)
+    Array.from(traderMap.values())
+      .filter((trader) => freshPlatformSet.has(trader.source))
+      .map((t) => `${t.source}:${t.source_trader_id}`)
   )
   const excludedTraders = Array.from(allInTraderMap).filter((k) => !computedTraderIds.has(k))
 

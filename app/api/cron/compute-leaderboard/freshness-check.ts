@@ -14,6 +14,13 @@
 
 import { getSupabaseAdmin } from '@/lib/api'
 import { SOURCES_WITH_DATA } from '@/lib/constants/exchanges'
+import type { Period } from '@/lib/utils/arena-score'
+import {
+  buildSourceFreshnessStatuses,
+  RANKING_SOURCE_FUTURE_TOLERANCE_MS,
+  RANKING_SOURCE_STALE_MS,
+  type SourceFreshnessRow,
+} from '@/lib/rankings/source-freshness'
 import type { TraderRow } from './trader-row'
 
 export interface FreshnessResult {
@@ -21,8 +28,6 @@ export interface FreshnessResult {
   stalePlatforms: string[]
   queryFailedPlatforms: string[]
 }
-
-const STALE_THRESHOLD_MS = 48 * 3600 * 1000
 
 /**
  * Classify every source in SOURCES_WITH_DATA as fresh / stale / query-failed.
@@ -32,47 +37,56 @@ const STALE_THRESHOLD_MS = 48 * 3600 * 1000
  */
 export async function checkPlatformFreshness(
   supabase: ReturnType<typeof getSupabaseAdmin>,
-  traderMap: Map<string, TraderRow>
+  traderMap: Map<string, TraderRow>,
+  season: Period
 ): Promise<FreshnessResult> {
   const now = Date.now()
   const freshPlatforms: string[] = []
   const stalePlatforms: string[] = []
   const queryFailedPlatforms: string[] = []
 
+  // One small source-level query replaces the old per-source probe against
+  // leaderboard_ranks.computed_at. A score job timestamp is never evidence
+  // that the underlying exchange snapshot is fresh.
+  const { data: persistedWatermarks, error: watermarkError } = await supabase
+    .from('leaderboard_source_freshness')
+    .select('source,source_as_of')
+    .eq('season_id', season)
+  const watermarkRows = (persistedWatermarks || []) as SourceFreshnessRow[]
+
   for (const source of SOURCES_WITH_DATA) {
     const sourceTraders = Array.from(traderMap.values()).filter((t) => t.source === source)
     if (sourceTraders.length > 0) {
-      const latestCaptured = Math.max(
-        ...sourceTraders.map((t) => new Date(t.captured_at).getTime())
-      )
-      if (now - latestCaptured > STALE_THRESHOLD_MS) {
+      const capturedTimestamps = sourceTraders.map((trader) => Date.parse(trader.captured_at))
+      const hasInvalidCapture = capturedTimestamps.some((timestamp) => !Number.isFinite(timestamp))
+      // A mixed source board is only as fresh as its oldest row. Using max()
+      // would let one newly captured row hide an older partial board.
+      const oldestCaptured = hasInvalidCapture ? Number.NaN : Math.min(...capturedTimestamps)
+      if (
+        !Number.isFinite(oldestCaptured) ||
+        oldestCaptured > now + RANKING_SOURCE_FUTURE_TOLERANCE_MS ||
+        now - oldestCaptured > RANKING_SOURCE_STALE_MS
+      ) {
         stalePlatforms.push(source)
       } else {
         freshPlatforms.push(source)
       }
       continue
     }
-    // traderMap empty for this source — check DB directly to distinguish
-    // "query failed" (retry later) from "actually stale" (really no data)
-    try {
-      // Migrated off retiring trader_latest → leaderboard_ranks.computed_at
-      // (source = legacy alias, same keyspace as SOURCES_WITH_DATA).
-      const { data: dbCheck } = await supabase
-        .from('leaderboard_ranks')
-        .select('computed_at')
-        .eq('source', source)
-        .gte('computed_at', new Date(now - STALE_THRESHOLD_MS).toISOString())
-        .order('computed_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (dbCheck) {
-        // DB has fresh data but we failed to load it — query-failed, not stale
-        queryFailedPlatforms.push(source)
-      } else {
-        stalePlatforms.push(source)
-      }
-    } catch {
+
+    // traderMap empty for this source — a fresh last-good source watermark
+    // means this run failed to load it; an old/missing watermark means the
+    // source is genuinely stale. If the watermark query itself failed, fail
+    // closed as query-failed so the caller preserves the prior leaderboard.
+    if (watermarkError) {
       queryFailedPlatforms.push(source)
+      continue
+    }
+    const persisted = buildSourceFreshnessStatuses(watermarkRows, [source], now)[0]
+    if (persisted && !persisted.is_stale) {
+      queryFailedPlatforms.push(source)
+    } else {
+      stalePlatforms.push(source)
     }
   }
 
