@@ -18,6 +18,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       # Restore explicitly, then save explicitly only after a confirmed
       # Telegram 2xx. The job intentionally fails when health is bad, so the
       # combined cache action's post-step is not a reliable persistence point.
@@ -74,11 +78,73 @@ jobs:
           printf 'status=%s\n' "$STATUS" >> "$GITHUB_OUTPUT"
           echo "pipeline health: curl=$CURL_EXIT HTTP=${HTTP:-000} status=$STATUS"
 
+      - name: Verify production main ancestry
+        id: release
+        env:
+          RELEASE_URL: https://www.arenafi.org/api/health
+          HEALTH_MESSAGE_FILE: /tmp/health-monitor-message.txt
+        run: |
+          rm -f /tmp/release-health.json
+          CURL_EXIT=0
+          HTTP=$(curl --silent --show-error \
+            --connect-timeout 5 --max-time 20 \
+            --output /tmp/release-health.json --write-out '%{http_code}' \
+            "${RELEASE_URL}?ancestry_check=$(date -u +%s)") || CURL_EXIT=$?
+
+          STATUS="down"
+          MESSAGE=""
+          if [ "$CURL_EXIT" -ne 0 ] || [ "$HTTP" != "200" ]; then
+            MESSAGE="Release identity transport failure (curl=$CURL_EXIT HTTP=${HTTP:-000})"
+          elif ! SERVING=$(jq -er '.commit | select(type == "string" and test("^[0-9a-f]{40}$"))' \
+            /tmp/release-health.json 2>/dev/null); then
+            MESSAGE="Release identity is missing or malformed"
+          elif ! git fetch origin main --quiet; then
+            MESSAGE="Could not fetch origin/main for release verification"
+          elif ! git cat-file -e "${SERVING}^{commit}" 2>/dev/null \
+            && ! git fetch origin "$SERVING" --quiet 2>/dev/null; then
+            MESSAGE="Serving release ${SERVING:0:12} is not fetchable from the repository"
+          elif git merge-base --is-ancestor "$SERVING" origin/main; then
+            STATUS="healthy"
+          else
+            STATUS="divergent"
+            MESSAGE="Production release ${SERVING:0:12} is outside main ancestry"
+          fi
+
+          if [ "$STATUS" != "healthy" ]; then
+            printf '\n%s\n' "$MESSAGE" >> "$HEALTH_MESSAGE_FILE"
+          fi
+          printf 'status=%s\n' "$STATUS" >> "$GITHUB_OUTPUT"
+          echo "release ancestry: curl=$CURL_EXIT HTTP=${HTTP:-000} status=$STATUS"
+
+      - name: Aggregate health result
+        id: aggregate
+        if: always()
+        env:
+          PIPELINE_STATUS: ${{ steps.health.outputs.status }}
+          RELEASE_STATUS: ${{ steps.release.outputs.status }}
+        run: |
+          case "$PIPELINE_STATUS" in
+            healthy|degraded|critical|down) ;;
+            *) PIPELINE_STATUS="down" ;;
+          esac
+          case "$RELEASE_STATUS" in
+            healthy|divergent|down) ;;
+            *) RELEASE_STATUS="down" ;;
+          esac
+
+          if [ "$PIPELINE_STATUS" != "healthy" ]; then
+            STATUS="$PIPELINE_STATUS"
+          else
+            STATUS="$RELEASE_STATUS"
+          fi
+          printf 'status=%s\n' "$STATUS" >> "$GITHUB_OUTPUT"
+          echo "aggregate health: pipeline=$PIPELINE_STATUS release=$RELEASE_STATUS status=$STATUS"
+
       - name: Send Telegram alert on failure (2h dedup)
         id: telegram
-        if: always() && steps.health.outputs.status != 'healthy'
+        if: always() && steps.aggregate.outputs.status != 'healthy'
         env:
-          HEALTH_STATUS: ${{ steps.health.outputs.status }}
+          HEALTH_STATUS: ${{ steps.aggregate.outputs.status }}
           HEALTH_MESSAGE_FILE: /tmp/health-monitor-message.txt
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CRITICAL_CHAT_ID || secrets.TELEGRAM_ALERT_CHAT_ID }}
@@ -144,13 +210,13 @@ jobs:
           key: hm-alert-marker-v2-${{ github.run_id }}
 
       - name: Open independent issue when Telegram delivery fails
-        if: always() && steps.health.outputs.status != 'healthy' && steps.telegram.outputs.outcome != 'delivered' && steps.telegram.outputs.outcome != 'deduplicated'
+        if: always() && steps.aggregate.outputs.status != 'healthy' && steps.telegram.outputs.outcome != 'delivered' && steps.telegram.outputs.outcome != 'deduplicated'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          HEALTH_STATUS: ${{ steps.health.outputs.status }}
+          HEALTH_STATUS: ${{ steps.aggregate.outputs.status }}
           HEALTH_MESSAGE_FILE: /tmp/health-monitor-message.txt
-          ISSUE_TITLE: '🛑 Arena pipeline health is unhealthy'
+          ISSUE_TITLE: '🛑 Arena production health is unhealthy'
         run: |
           if ! ISSUES=$(gh issue list --repo "$GH_REPO" --state open \
             --search "\"$ISSUE_TITLE\" in:title" --limit 100 \
@@ -178,11 +244,11 @@ jobs:
           fi
 
       - name: Close independent issue after health recovery
-        if: always() && steps.health.outputs.status == 'healthy'
+        if: always() && steps.aggregate.outputs.status == 'healthy'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GH_REPO: ${{ github.repository }}
-          ISSUE_TITLE: '🛑 Arena pipeline health is unhealthy'
+          ISSUE_TITLE: '🛑 Arena production health is unhealthy'
         run: |
           if ! ISSUES=$(gh issue list --repo "$GH_REPO" --state open \
             --search "\"$ISSUE_TITLE\" in:title" --limit 100 \
@@ -204,9 +270,9 @@ jobs:
           fi
 
       - name: Fail unhealthy health-monitor run
-        if: always() && steps.health.outputs.status != 'healthy'
+        if: always() && steps.aggregate.outputs.status != 'healthy'
         env:
-          HEALTH_STATUS: ${{ steps.health.outputs.status }}
+          HEALTH_STATUS: ${{ steps.aggregate.outputs.status }}
         run: |
           echo "::error::Pipeline health monitor reported ${HEALTH_STATUS:-down}"
           exit 1
