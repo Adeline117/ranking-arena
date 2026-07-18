@@ -2,7 +2,7 @@
 
 export const dynamic = 'force-dynamic'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useCallback } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import nextDynamic from 'next/dynamic'
@@ -26,6 +26,7 @@ import { logger } from '@/lib/logger'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import type { UnifiedSearchResult } from '@/app/api/search/route'
+import ErrorMessage from '@/app/components/ui/ErrorMessage'
 import {
   buildCompareApiUrl,
   buildCompareUrl,
@@ -70,6 +71,8 @@ function CompareContent() {
   const [searchResults, setSearchResults] = useState<UnifiedSearchResult[]>([])
   const [searching, setSearching] = useState(false)
   const [searchDone, setSearchDone] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
+  const [searchRetryKey, setSearchRetryKey] = useState(0)
   const [isPro, setIsPro] = useState(BETA_PRO_FEATURES_FREE)
   const [followedTraders, setFollowedTraders] = useState<
     Array<{
@@ -85,6 +88,9 @@ function CompareContent() {
     }>
   >([])
   const [followedLoading, setFollowedLoading] = useState(false)
+  const [followedError, setFollowedError] = useState<string | null>(null)
+  const searchFailedMessage = t('searchFailed')
+  const followedFailedMessage = t('loadFollowingFailed')
 
   // Check auth
   useEffect(() => {
@@ -154,37 +160,37 @@ function CompareContent() {
     return () => clearTimeout(timer)
   }, [loading])
 
-  // Fetch followed traders
-  useEffect(() => {
+  const fetchFollowed = useCallback(async () => {
     if (!accessToken) return
 
-    const fetchFollowed = async () => {
-      setFollowedLoading(true)
-      try {
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        if (!user) return
+    setFollowedLoading(true)
+    setFollowedError(null)
+    try {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser()
+      if (!user) throw new Error('Authenticated user is unavailable')
 
-        const res = await fetch(`/api/following?userId=${user.id}`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        })
-        if (res.ok) {
-          const data = await res.json()
-          const traders = (data.items || []).filter(
-            (item: { type: string }) => item.type === 'trader'
-          )
-          setFollowedTraders(traders)
-        }
-      } catch (err) {
-        logger.error('Fetch followed traders failed:', err)
-      } finally {
-        setFollowedLoading(false)
-      }
+      const res = await fetch(`/api/following?userId=${user.id}`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      })
+      if (!res.ok) throw new Error(`Following request failed: ${res.status}`)
+
+      const data = await res.json()
+      const traders = (data.items || []).filter((item: { type: string }) => item.type === 'trader')
+      setFollowedTraders(traders)
+    } catch (err) {
+      logger.error('Fetch followed traders failed:', err)
+      setFollowedError(followedFailedMessage)
+    } finally {
+      setFollowedLoading(false)
     }
+  }, [accessToken, followedFailedMessage])
 
-    fetchFollowed()
-  }, [accessToken])
+  // Fetch followed traders
+  useEffect(() => {
+    void fetchFollowed()
+  }, [fetchFollowed])
 
   // Debounced trader search via the unified search API (same backend as site-wide search)
   useEffect(() => {
@@ -193,12 +199,15 @@ function CompareContent() {
       setSearchResults([])
       setSearching(false)
       setSearchDone(false)
+      setSearchError(null)
       return
     }
 
     const controller = new AbortController()
     const timer = setTimeout(async () => {
       setSearching(true)
+      setSearchError(null)
+      setSearchResults([])
       try {
         const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=8`, {
           signal: controller.signal,
@@ -213,7 +222,7 @@ function CompareContent() {
       } catch (err) {
         if (!controller.signal.aborted) {
           logger.error('Compare trader search failed:', err)
-          setSearchResults([])
+          setSearchError(searchFailedMessage)
           setSearchDone(true)
         }
       } finally {
@@ -225,7 +234,7 @@ function CompareContent() {
       clearTimeout(timer)
       controller.abort()
     }
-  }, [searchInput])
+  }, [searchFailedMessage, searchInput, searchRetryKey])
 
   // Load traders with equity curve data
   const loadTraders = async (accounts: CompareAccountRef[]) => {
@@ -475,7 +484,7 @@ function CompareContent() {
               }}
             />
 
-            {(searching || searchDone) && searchInput.trim().length >= 2 && (
+            {(searching || searchDone || searchError) && searchInput.trim().length >= 2 && (
               <Box
                 style={{
                   marginTop: tokens.spacing[3],
@@ -495,6 +504,13 @@ function CompareContent() {
                   >
                     {t('compareSearching')}
                   </Text>
+                ) : searchError ? (
+                  <Box style={{ padding: tokens.spacing[3] }}>
+                    <ErrorMessage
+                      message={searchError}
+                      onRetry={() => setSearchRetryKey((value) => value + 1)}
+                    />
+                  </Box>
                 ) : searchResults.length === 0 ? (
                   <Text
                     as="span"
@@ -623,19 +639,25 @@ function CompareContent() {
               {t('compareFromFollowing')}
             </Text>
 
+            {followedError && !followedLoading && (
+              <Box style={{ marginBottom: tokens.spacing[3] }}>
+                <ErrorMessage message={followedError} onRetry={() => void fetchFollowed()} />
+              </Box>
+            )}
+
             {!accessToken ? (
               <Text size="sm" color="tertiary">
                 {t('compareLoginToSelect')}
               </Text>
-            ) : followedLoading ? (
+            ) : followedLoading && followedTraders.length === 0 ? (
               <Text size="sm" color="tertiary">
                 {t('loading')}
               </Text>
-            ) : followedTraders.length === 0 ? (
+            ) : followedTraders.length === 0 && !followedError ? (
               <Text size="sm" color="tertiary">
                 {t('compareNoFollowed')}
               </Text>
-            ) : (
+            ) : followedTraders.length > 0 ? (
               <Box
                 style={{
                   display: 'grid',
@@ -764,7 +786,7 @@ function CompareContent() {
                   )
                 })}
               </Box>
-            )}
+            ) : null}
           </Box>
         )}
 
