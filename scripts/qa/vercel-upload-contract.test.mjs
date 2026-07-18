@@ -103,12 +103,32 @@ test('keeps unrelated operational scripts out of the Vercel upload', () => {
 test('keeps Vercel candidate failures reproducible and diagnosable', () => {
   const workflow = deployGate
   assert.doesNotMatch(workflow, /vercel@latest/)
-  assert.match(workflow, /vercel@56\.2\.1 deploy[^\n]+--logs/)
+  assert.match(
+    workflow,
+    /vercel@56\.2\.1 deploy --prod --skip-domain --yes --no-wait --meta gateSha/
+  )
+  assert.doesNotMatch(workflow, /vercel@56\.2\.1 deploy --prod[^\n]+--logs/)
   assert.match(workflow, /vercel@56\.2\.1 deploy --dry --format=json/)
   assert.match(workflow, /Vercel upload manifest is missing required build file/)
   assert.match(workflow, /--build-env VERCEL_BUILD_SYSTEM_REPORT=1/)
-  assert.match(workflow, /vercel@56\.2\.1 inspect "\$CANDIDATE_URL" --logs/)
+  assert.match(workflow, /timeout 60s npx vercel@56\.2\.1 inspect "\$CANDIDATE_URL" --logs/)
+  assert.match(workflow, /timeout 60s npx vercel@56\.2\.1 inspect "\$DEPLOY_URL" --logs/)
   assert.match(workflow, /::error title=Vercel candidate build failed::/)
+  assert.match(workflow, /::error title=Vercel candidate did not become ready::/)
+})
+
+test('waits for Vercel READY within the job budget before allowing promotion', () => {
+  const workflow = deployGate
+  assert.match(workflow, /cancel-in-progress: false/)
+  assert.match(workflow, /id: wait_candidate/)
+  assert.match(workflow, /node scripts\/ci\/wait-for-vercel-deployment\.mjs "\$DEPLOY_URL"/)
+  assert.match(workflow, /VERCEL_DEPLOY_WAIT_TIMEOUT_MS: '1200000'/)
+  assert.match(workflow, /VERCEL_DEPLOY_POLL_INTERVAL_MS: '15000'/)
+  assert.match(workflow, /VERCEL_DEPLOY_REQUEST_TIMEOUT_MS: '15000'/)
+  assert.match(
+    workflow,
+    /if: steps\.fresh\.outputs\.deploy == 'true' && steps\.wait_candidate\.outcome == 'success'/
+  )
 })
 
 test('makes every deploy-gate Telegram failure observable without blocking the gate', () => {
