@@ -21,6 +21,7 @@ import { chromium } from 'playwright'
 import pg from 'pg'
 import { config } from 'dotenv'
 import { resolve } from 'path'
+import { servingPageReadiness } from './serving-page-readiness.mjs'
 
 config({ path: resolve(process.cwd(), 'worker', '.env') })
 config({ path: resolve(process.cwd(), '.env.local') })
@@ -73,15 +74,29 @@ async function pickRepresentatives() {
 async function checkPage(browser, url, label, expectDormant) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 1400 } })
   const errs = []
+  const unexpectedHttp = []
   page.on('console', (m) => {
     if (m.type() === 'error') errs.push(m.text().slice(0, 90))
   })
   page.on('pageerror', (e) => errs.push('PE:' + String(e).slice(0, 90)))
+  page.on('response', (response) => {
+    if (response.status() < 400) return
+    const request = response.request()
+    const path = new URL(response.url()).pathname
+    unexpectedHttp.push(`${response.status()} ${request.method()} ${path}`.slice(0, 120))
+  })
   let status = 0
+  const readiness = servingPageReadiness(label)
   try {
-    const resp = await page.goto(url, { waitUntil: 'networkidle', timeout: 40000 })
+    const resp = await page.goto(url, { waitUntil: readiness.waitUntil, timeout: 40000 })
     status = resp?.status() ?? 0
-    await page.waitForTimeout(3000)
+    if (readiness.readySelector) {
+      await page
+        .locator(readiness.readySelector)
+        .first()
+        .waitFor({ state: 'visible', timeout: readiness.readyTimeoutMs })
+    }
+    await page.waitForTimeout(readiness.observeMs)
   } catch (e) {
     await page.close()
     return { label, ok: false, why: 'NAV ' + String(e).slice(0, 50) }
@@ -95,6 +110,9 @@ async function checkPage(browser, url, label, expectDormant) {
   if (status !== 200) problems.push('http=' + status)
   if (leak) problems.push('i18n-leak:' + leak[0])
   if (errs.length) problems.push('console=' + errs.length + '(' + errs[0] + ')')
+  if (unexpectedHttp.length) {
+    problems.push(`network=${unexpectedHttp.length}(${unexpectedHttp[0]})`)
+  }
   if (txt.length < 400) problems.push('empty(' + txt.length + ')')
   if (
     expectDormant &&
