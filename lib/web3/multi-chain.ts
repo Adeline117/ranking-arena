@@ -12,6 +12,7 @@
 
 import { createPublicClient, http, type Chain, type PublicClient } from 'viem'
 import { base, baseSepolia, arbitrum, optimism, polygon } from 'viem/chains'
+import { COPY_TRADING_ADDRESSES } from './copy-trading'
 
 // ── Chain IDs ──
 
@@ -23,7 +24,7 @@ export const CHAIN_IDS = {
   POLYGON: 137,
 } as const
 
-export type SupportedChainId = typeof CHAIN_IDS[keyof typeof CHAIN_IDS]
+export type SupportedChainId = (typeof CHAIN_IDS)[keyof typeof CHAIN_IDS]
 
 // ── Chain Configurations ──
 
@@ -58,7 +59,7 @@ export const CHAIN_CONFIGS: Record<SupportedChainId, ChainConfig> = {
     isSupported: true,
     contracts: {
       membershipNFT: process.env.NEXT_PUBLIC_MEMBERSHIP_NFT_ADDRESS as `0x${string}` | undefined,
-      copyTrading: process.env.NEXT_PUBLIC_COPY_TRADING_BASE as `0x${string}` | undefined,
+      copyTrading: COPY_TRADING_ADDRESSES[CHAIN_IDS.BASE],
     },
   },
   [CHAIN_IDS.BASE_SEPOLIA]: {
@@ -73,7 +74,7 @@ export const CHAIN_CONFIGS: Record<SupportedChainId, ChainConfig> = {
     isSupported: !isProduction,
     contracts: {
       membershipNFT: process.env.NEXT_PUBLIC_MEMBERSHIP_NFT_ADDRESS as `0x${string}` | undefined,
-      copyTrading: process.env.NEXT_PUBLIC_COPY_TRADING_BASE_SEPOLIA as `0x${string}` | undefined,
+      copyTrading: COPY_TRADING_ADDRESSES[CHAIN_IDS.BASE_SEPOLIA],
     },
   },
   [CHAIN_IDS.ARBITRUM]: {
@@ -87,7 +88,7 @@ export const CHAIN_CONFIGS: Record<SupportedChainId, ChainConfig> = {
     isTestnet: false,
     isSupported: false, // Not deployed yet
     contracts: {
-      copyTrading: process.env.NEXT_PUBLIC_COPY_TRADING_ARBITRUM as `0x${string}` | undefined,
+      copyTrading: COPY_TRADING_ADDRESSES[CHAIN_IDS.ARBITRUM],
     },
   },
   [CHAIN_IDS.OPTIMISM]: {
@@ -101,7 +102,7 @@ export const CHAIN_CONFIGS: Record<SupportedChainId, ChainConfig> = {
     isTestnet: false,
     isSupported: false, // Not deployed yet
     contracts: {
-      copyTrading: process.env.NEXT_PUBLIC_COPY_TRADING_OPTIMISM as `0x${string}` | undefined,
+      copyTrading: COPY_TRADING_ADDRESSES[CHAIN_IDS.OPTIMISM],
     },
   },
   [CHAIN_IDS.POLYGON]: {

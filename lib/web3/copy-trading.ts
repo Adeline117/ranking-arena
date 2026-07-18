@@ -10,7 +10,7 @@
  * - Emergency exit positions
  */
 
-import { type Address, type Hex } from 'viem'
+import { getAddress, isAddress, zeroAddress, type Address, type Hex } from 'viem'
 
 // ── Types ──
 
@@ -67,37 +67,41 @@ export const COPY_TRADING_ABI = [
     type: 'function',
     stateMutability: 'view',
     inputs: [{ name: 'strategyId', type: 'bytes32' }],
-    outputs: [{
-      name: '',
-      type: 'tuple',
-      components: [
-        { name: 'trader', type: 'address' },
-        { name: 'follower', type: 'address' },
-        { name: 'allocation', type: 'uint256' },
-        { name: 'maxPositionSize', type: 'uint256' },
-        { name: 'stopLossPercent', type: 'uint8' },
-        { name: 'leverage', type: 'uint8' },
-        { name: 'status', type: 'uint8' },
-        { name: 'totalPnl', type: 'int256' },
-      ],
-    }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple',
+        components: [
+          { name: 'trader', type: 'address' },
+          { name: 'follower', type: 'address' },
+          { name: 'allocation', type: 'uint256' },
+          { name: 'maxPositionSize', type: 'uint256' },
+          { name: 'stopLossPercent', type: 'uint8' },
+          { name: 'leverage', type: 'uint8' },
+          { name: 'status', type: 'uint8' },
+          { name: 'totalPnl', type: 'int256' },
+        ],
+      },
+    ],
   },
   {
     name: 'getPositions',
     type: 'function',
     stateMutability: 'view',
     inputs: [{ name: 'strategyId', type: 'bytes32' }],
-    outputs: [{
-      name: '',
-      type: 'tuple[]',
-      components: [
-        { name: 'symbol', type: 'bytes32' },
-        { name: 'side', type: 'uint8' },
-        { name: 'size', type: 'uint256' },
-        { name: 'entryPrice', type: 'uint256' },
-        { name: 'leverage', type: 'uint8' },
-      ],
-    }],
+    outputs: [
+      {
+        name: '',
+        type: 'tuple[]',
+        components: [
+          { name: 'symbol', type: 'bytes32' },
+          { name: 'side', type: 'uint8' },
+          { name: 'size', type: 'uint256' },
+          { name: 'entryPrice', type: 'uint256' },
+          { name: 'leverage', type: 'uint8' },
+        ],
+      },
+    ],
   },
   // Write functions
   {
@@ -156,13 +160,57 @@ export const COPY_TRADING_ABI = [
 ] as const
 
 // ── Contract Addresses (per chain) ──
-// Update these after deployment - see contracts/DEPLOYMENT.md
+// Copy trading is quarantined by default. An address alone MUST NOT make the
+// product available: activation requires the exact public flag plus a valid,
+// non-placeholder, non-quarantined deployment address.
+
+const COPY_TRADING_ENABLED = process.env.NEXT_PUBLIC_COPY_TRADING_ENABLED === 'true'
+
+const QUARANTINED_DEPLOYMENTS = new Set([
+  // Base v1 — permanently quarantined. See docs/COPY_TRADING_QUARANTINE.md.
+  '0x84afc435af5a2d4c8535f8aa677dc1501b0a9195',
+])
+
+const KNOWN_PLACEHOLDER_ADDRESSES = new Set<string>([
+  zeroAddress,
+  '0x000000000000000000000000000000000000dead',
+  '0x1234567890123456789012345678901234567890',
+  '0xdead000000000000000000000000000000000000',
+  '0xdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef',
+])
+
+function getEnabledCopyTradingAddress(rawAddress: string | undefined): Address | undefined {
+  if (!COPY_TRADING_ENABLED) return undefined
+
+  const candidate = rawAddress?.trim()
+  if (!candidate || !isAddress(candidate, { strict: true })) return undefined
+
+  const normalized = getAddress(candidate)
+  const lowerAddress = normalized.toLowerCase()
+  const addressBody = lowerAddress.slice(2)
+  const isRepeatedPlaceholder =
+    /^([0-9a-f])\1{39}$/.test(addressBody) || /^([0-9a-f]{2})\1{19}$/.test(addressBody)
+  // Precompile/reserved low addresses are never valid Arena deployments and
+  // are commonly used as test placeholders.
+  const isReservedLowAddress = /^0{36}[0-9a-f]{4}$/.test(addressBody)
+
+  if (
+    QUARANTINED_DEPLOYMENTS.has(lowerAddress) ||
+    KNOWN_PLACEHOLDER_ADDRESSES.has(lowerAddress) ||
+    isRepeatedPlaceholder ||
+    isReservedLowAddress
+  ) {
+    return undefined
+  }
+
+  return normalized
+}
 
 export const COPY_TRADING_ADDRESSES: Record<number, Address | undefined> = {
-  8453: process.env.NEXT_PUBLIC_COPY_TRADING_BASE as Address | undefined, // Base mainnet
-  84532: process.env.NEXT_PUBLIC_COPY_TRADING_BASE_SEPOLIA as Address | undefined, // Base Sepolia
-  42161: process.env.NEXT_PUBLIC_COPY_TRADING_ARBITRUM as Address | undefined, // Arbitrum
-  10: process.env.NEXT_PUBLIC_COPY_TRADING_OPTIMISM as Address | undefined, // Optimism
+  8453: getEnabledCopyTradingAddress(process.env.NEXT_PUBLIC_COPY_TRADING_BASE), // Base mainnet
+  84532: getEnabledCopyTradingAddress(process.env.NEXT_PUBLIC_COPY_TRADING_BASE_SEPOLIA), // Base Sepolia
+  42161: getEnabledCopyTradingAddress(process.env.NEXT_PUBLIC_COPY_TRADING_ARBITRUM), // Arbitrum
+  10: getEnabledCopyTradingAddress(process.env.NEXT_PUBLIC_COPY_TRADING_OPTIMISM), // Optimism
 }
 
 // ── Utility Functions ──
@@ -208,9 +256,10 @@ export function formatPosition(position: CopyTradePosition): {
   pnl: string
   pnlPercent: string
 } {
-  const pnlPercent = position.entryPrice > 0n
-    ? Number((position.unrealizedPnl * 10000n) / position.entryPrice) / 100
-    : 0
+  const pnlPercent =
+    position.entryPrice > 0n
+      ? Number((position.unrealizedPnl * 10000n) / position.entryPrice) / 100
+      : 0
 
   return {
     symbol: position.symbol,
