@@ -12,7 +12,7 @@
  * profiles were crawled (topN via Tier-B + on-demand Tier-C) — coverage
  * limited to recently ranked traders, which is exactly what the badge
  * discloses. Count check: there is no upstream count to compare against,
- * so expectedCountOverride=null → bootstrap cycles pass on actual; after 7
+ * so expectedCountOverride=null → bootstrap cycles pass on actual; after 3
  * derived snapshots the rolling median guards against coverage collapse.
  *
  * Scheduling: scheduler.ts upserts `derive:{slug}` at the Tier-A cadence
@@ -25,6 +25,7 @@ import { getSourceBySlug } from '@/lib/ingest/sources'
 import type { ParsedLeaderboardRow, TraderKind, BotStrategy } from '@/lib/ingest/core/types'
 import { publishLeaderboardSnapshot } from '@/lib/ingest/serving/publish'
 import type { TierJobData } from '../queues'
+import { observationCycleId } from '../observation-cycle'
 
 /** sources.meta.derived_board_sort → trader_stats column (default roi —
  *  matches the native boards' default sort, spec §9 #6). */
@@ -82,6 +83,7 @@ export async function processDeriveBoards(job: Job<TierJobData>): Promise<Derive
     typeof src.meta.derived_board_sort === 'string' ? src.meta.derived_board_sort : 'roi'
   const sortColumn = SORT_COLUMNS[sortKey] ?? 'roi'
   const maxAgeHours = Number(src.meta.derived_stats_max_age_hours) || DEFAULT_MAX_STAT_AGE_HOURS
+  const cycleId = observationCycleId(job, 'derive', src.slug)
 
   const results: DeriveBoardResult[] = []
   for (const timeframe of derivedTfs) {
@@ -129,6 +131,7 @@ export async function processDeriveBoards(job: Job<TierJobData>): Promise<Derive
       rawObjectId: null, // no upstream payload — the substrate is our own DB
       isDerived: true,
       expectedCountOverride: null,
+      observationCycleId: cycleId ?? undefined,
     })
 
     console.log(

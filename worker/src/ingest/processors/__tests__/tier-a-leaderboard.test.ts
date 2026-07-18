@@ -72,7 +72,13 @@ const row = {
   raw: {},
 } as ParsedLeaderboardRow
 
-const job = { data: { sourceSlug: src.slug } } as Job<TierJobData>
+const job = {
+  id: 'repeat:tiera:xt_futures:1784361600000',
+  timestamp: 1_784_361_600_000,
+  attemptsMade: 2,
+  data: { sourceSlug: src.slug },
+} as Job<TierJobData>
+const expectedCycleId = `tier-a:${src.slug}:${job.id}:${job.timestamp}`
 
 describe('Tier-A board-series publication guard', () => {
   beforeEach(() => {
@@ -139,6 +145,73 @@ describe('Tier-A board-series publication guard', () => {
         ]),
       }
     )
+    expect(mockWriteRawObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        timeframe: 30,
+        meta: { pageCount: 1, observation_cycle_id: expectedCycleId },
+      })
+    )
+    expect(mockPublishLeaderboardSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({
+        timeframe: 30,
+        observationCycleId: expectedCycleId,
+      })
+    )
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('attempts every native window, then exits with one aggregate error', async () => {
+    const attempted: number[] = []
+    mockNativeRankingTimeframes.mockReturnValue([7, 30, 90])
+    mockGetAdapter.mockReturnValue({
+      listLeaderboard: async function* (_session: unknown, _src: SourceRow, timeframe: number) {
+        attempted.push(timeframe)
+        if (timeframe === 7) throw new Error('upstream 503')
+        yield page
+      },
+      parseLeaderboard: () => ({ rows: [row], reportedTotal: 1 }),
+      parseLeaderboardSeries: () => new Map(),
+    })
+    mockWriteRawObject.mockResolvedValueOnce(9030).mockResolvedValueOnce(9090)
+    mockPublishLeaderboardSnapshot.mockImplementation(
+      async (input: { timeframe: number; rawObjectId: number }) => ({
+        snapshotId: input.timeframe === 30 ? 730 : 790,
+        scrapedAt: '2026-07-16 00:01:02.123456+00',
+        verdict: {
+          passed: input.timeframe !== 30,
+          baselineUsed: input.timeframe === 30 ? 20 : 1,
+          deviationPct: input.timeframe === 30 ? 50 : 0,
+        },
+        published: input.timeframe !== 30,
+        traderIds: input.timeframe === 30 ? new Map() : new Map([[row.exchangeTraderId, 42]]),
+      })
+    )
+    const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+
+    let failure: unknown
+    try {
+      await processTierA(job)
+    } catch (error) {
+      failure = error
+    } finally {
+      errorSpy.mockRestore()
+    }
+
+    expect(attempted).toEqual([7, 30, 90])
+    expect(mockPublishLeaderboardSnapshot.mock.calls.map(([input]) => input.timeframe)).toEqual([
+      30, 90,
+    ])
+    expect(failure).toBeInstanceOf(AggregateError)
+    expect((failure as AggregateError).errors).toHaveLength(2)
+    expect((failure as Error).message).toContain('2/3 native windows failed (7d, 30d)')
+    expect((failure as Error).message).toContain('1 succeeded')
+    expect(mockSessionClose).toHaveBeenCalledTimes(1)
+
+    for (const [input] of mockWriteRawObject.mock.calls) {
+      expect(input.meta.observation_cycle_id).toBe(expectedCycleId)
+    }
+    for (const [input] of mockPublishLeaderboardSnapshot.mock.calls) {
+      expect(input.observationCycleId).toBe(expectedCycleId)
+    }
   })
 })

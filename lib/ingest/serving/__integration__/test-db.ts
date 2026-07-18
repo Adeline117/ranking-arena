@@ -193,17 +193,19 @@ export async function seedSnapshot(opts: {
   minutesAgo: number
   sourceId?: number
   timeframe?: number
+  cycleId?: string
 }): Promise<void> {
   await getRawPool().query(
     `INSERT INTO ${TEST_SCHEMA}.leaderboard_snapshots
-       (source_id, timeframe, scraped_at, actual_count, count_check_passed)
-     VALUES ($1, $2, now() - make_interval(mins => $3), $4, $5)`,
+       (source_id, timeframe, scraped_at, actual_count, count_check_passed, meta)
+     VALUES ($1, $2, now() - make_interval(mins => $3), $4, $5, $6)`,
     [
       opts.sourceId ?? SENTINEL_SOURCE_ID,
       opts.timeframe ?? 7,
       opts.minutesAgo,
       opts.actualCount,
       opts.passed,
+      JSON.stringify(opts.cycleId ? { observation_cycle_id: opts.cycleId } : {}),
     ]
   )
 }

@@ -1,11 +1,11 @@
 /**
  * Rolling-baseline count check (spec §5.1).
  *
- * expected = median(actual_count of last 7 PASSING crawls); a cycle fails
- * if actual deviates >10% from that rolling median → snapshot marked
- * count_check_passed=false, entries NOT published, last good snapshot
- * stays live. The hard-coded survey count (sources.expected_count) is the
- * day-one sanity floor only, used until 7 passing crawls exist.
+ * expected = median(actual_count of the last 7 independent PASSING crawl
+ * cycles); a cycle outside the allowed count envelope is marked
+ * count_check_passed=false, entries are NOT published, and the last good
+ * snapshot stays live. The hard-coded survey count (sources.expected_count)
+ * is the day-one sanity floor only, used until 3 passing cycles exist.
  *
  * evaluateCount is pure; getCountBaseline does the DB read (worker-only).
  */
@@ -18,6 +18,20 @@ export interface CountVerdict {
   baselineUsed: number | null
   deviationPct: number | null
 }
+
+/**
+ * Small upstream boards grow in whole traders, so a strict percentage gate
+ * becomes misleading: +3 is 50% at a baseline of 6, while +6 is 30% at 20.
+ * Both shapes have been observed as complete, naturally expanding boards.
+ *
+ * This allowance is deliberately:
+ * - limited to small baselines;
+ * - growth-only (a short crawl is still judged by the strict drop threshold);
+ * - bounded by an absolute OR relative growth ceiling.
+ */
+export const SMALL_BOARD_BASELINE_MAX = 25
+export const SMALL_BOARD_GROWTH_ABSOLUTE_TOLERANCE = 3
+export const SMALL_BOARD_GROWTH_RELATIVE_TOLERANCE_PCT = 30
 
 export function median(values: number[]): number | null {
   if (values.length === 0) return null
@@ -36,8 +50,14 @@ export function evaluateCount(
     return { passed: true, baselineUsed: baseline, deviationPct: null }
   }
   const deviationPct = (Math.abs(actual - baseline) / baseline) * 100
+  const growth = actual - baseline
+  const smallBoardGrowth =
+    baseline <= SMALL_BOARD_BASELINE_MAX &&
+    growth > 0 &&
+    (growth <= SMALL_BOARD_GROWTH_ABSOLUTE_TOLERANCE ||
+      deviationPct <= SMALL_BOARD_GROWTH_RELATIVE_TOLERANCE_PCT)
   return {
-    passed: deviationPct <= maxDeviationPct,
+    passed: deviationPct <= maxDeviationPct || smallBoardGrowth,
     baselineUsed: baseline,
     deviationPct,
   }
@@ -66,6 +86,70 @@ export const SHIFT_MAX_SPREAD_PCT = 10
 export const BOOTSTRAP_DEVIATION_PCT = 30
 export const ROLLING_DEVIATION_PCT = 10
 
+export interface CountObservation {
+  actualCount: number
+  /**
+   * Stable identity of one scheduled crawl cycle. BullMQ retries MUST reuse
+   * this id; otherwise retries can impersonate independent confirmations.
+   * null disables the sustained-shift escape hatch for this observation.
+   */
+  cycleId: string | null
+}
+
+interface StoredCountObservation {
+  actual_count: number
+  cycle_id: string
+  explicit_cycle: boolean
+}
+
+/**
+ * Read the newest attempt from each independent observation cycle.
+ *
+ * Older snapshots predate cycle ids. Treat each legacy row as its own cycle
+ * rather than collapsing unrelated history; all new Tier-A writes carry the
+ * explicit id. The same de-duplication applies to the passing baseline and to
+ * level-shift evidence, because a partly successful multi-window job is
+ * retried as a whole.
+ */
+async function getRecentDistinctObservations(
+  sourceId: number,
+  timeframe: number,
+  limit: number,
+  options: {
+    passedOnly: boolean
+    excludeCycleId?: string
+  }
+): Promise<StoredCountObservation[]> {
+  const { rows } = await getIngestPool().query<StoredCountObservation>(
+    `WITH observations AS (
+       SELECT id, actual_count, scraped_at,
+              NULLIF(meta->>'observation_cycle_id', '') AS explicit_cycle_id,
+              COALESCE(
+                NULLIF(meta->>'observation_cycle_id', ''),
+                'legacy:' || id::text
+              ) AS cycle_id
+         FROM arena.leaderboard_snapshots
+        WHERE source_id = $1
+          AND timeframe = $2
+          AND ($4::boolean = false OR count_check_passed)
+     ),
+     latest_per_cycle AS (
+       SELECT DISTINCT ON (cycle_id)
+              id, actual_count, scraped_at, cycle_id, explicit_cycle_id
+         FROM observations
+        WHERE ($5::text IS NULL OR cycle_id <> $5)
+        ORDER BY cycle_id, scraped_at DESC, id DESC
+     )
+     SELECT actual_count, cycle_id,
+            (explicit_cycle_id IS NOT NULL) AS explicit_cycle
+       FROM latest_per_cycle
+      ORDER BY scraped_at DESC, id DESC
+      LIMIT $3`,
+    [sourceId, timeframe, limit, options.passedOnly, options.excludeCycleId ?? null]
+  )
+  return rows
+}
+
 /**
  * Rolling median of up to the last 7 passing crawls for (source, TF).
  * With ≥3 passing crawls the median of real data replaces the survey
@@ -74,16 +158,16 @@ export const ROLLING_DEVIATION_PCT = 10
 export async function getCountBaseline(
   sourceId: number,
   timeframe: number,
-  expectedCount: number | null
+  expectedCount: number | null,
+  currentObservation: CountObservation
 ): Promise<CountBaseline> {
-  const { rows } = await getIngestPool().query<{ actual_count: number }>(
-    `SELECT actual_count
-       FROM arena.leaderboard_snapshots
-      WHERE source_id = $1 AND timeframe = $2 AND count_check_passed
-      ORDER BY scraped_at DESC
-      LIMIT 7`,
-    [sourceId, timeframe]
-  )
+  const rows = await getRecentDistinctObservations(sourceId, timeframe, 7, {
+    passedOnly: true,
+    // A retry may revisit a window that already passed earlier in this same
+    // multi-window job. That earlier attempt is not independent history and
+    // must not help the current retry cross the 3-cycle rolling threshold.
+    excludeCycleId: currentObservation.cycleId ?? undefined,
+  })
 
   // Current baseline: rolling median of real passing crawls once we have ≥3,
   // else the (loose) day-one survey number.
@@ -105,22 +189,33 @@ export async function getCountBaseline(
   //    never matched it (xt_spot: expected 84 vs a real ~35 board, and per-TF
   //    sizes differ so no single expected_count fits — 7d/30d/90d each need
   //    their own real level).
-  // Detect a SUSTAINED level: the last N crawls (ANY status) clustered tightly
-  // (spread ≤10%) around a level that deviates from the current baseline by more
-  // than the applicable tolerance → adopt it. A one-off truncated crawl can't
-  // qualify (not consistent across N consecutive), so transient anomalies are
-  // still rejected; only a persistent new normal un-sticks the board.
-  if (baseline !== null && baseline > 0) {
-    const { rows: recent } = await getIngestPool().query<{ actual_count: number }>(
-      `SELECT actual_count
-         FROM arena.leaderboard_snapshots
-        WHERE source_id = $1 AND timeframe = $2
-        ORDER BY scraped_at DESC
-        LIMIT $3`,
-      [sourceId, timeframe, SHIFT_CONFIRM_CRAWLS]
+  // Detect a SUSTAINED level from the CURRENT observation plus the previous
+  // N-1 INDEPENDENT cycles. The current cycle id is excluded from history, so
+  // BullMQ retries of the same scheduled job can never fill the confirmation
+  // quorum. A one-off truncated crawl also cannot qualify.
+  if (
+    baseline !== null &&
+    baseline > 0 &&
+    currentObservation.cycleId !== null &&
+    currentObservation.cycleId.length > 0
+  ) {
+    const recent = await getRecentDistinctObservations(
+      sourceId,
+      timeframe,
+      SHIFT_CONFIRM_CRAWLS - 1,
+      {
+        passedOnly: false,
+        excludeCycleId: currentObservation.cycleId,
+      }
     )
-    if (recent.length === SHIFT_CONFIRM_CRAWLS) {
-      const counts = recent.map((r) => r.actual_count)
+    // Pre-deploy/manual snapshots carry no trustworthy job-instance identity.
+    // They stay visible in the newest-N sequence and break the quorum instead
+    // of being filtered out to expose older rows that were not consecutive.
+    if (
+      recent.length === SHIFT_CONFIRM_CRAWLS - 1 &&
+      recent.every((observation) => observation.explicit_cycle)
+    ) {
+      const counts = [currentObservation.actualCount, ...recent.map((r) => r.actual_count)]
       const recentMedian = median(counts)
       if (recentMedian && recentMedian > 0) {
         const spreadPct = ((Math.max(...counts) - Math.min(...counts)) / recentMedian) * 100

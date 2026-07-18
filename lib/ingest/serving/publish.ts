@@ -59,9 +59,16 @@ export interface PublishSnapshotInput {
   isDerived?: boolean
   /** Override sources.expected_count as the day-one baseline. Derived
    *  boards (spec §1.1-C) have no upstream count — pass null so bootstrap
-   *  cycles pass on actual; once 7 derived snapshots exist the rolling
+   *  cycles pass on actual; once 3 independent snapshots exist the rolling
    *  median takes over as usual. undefined = use sources.expected_count. */
   expectedCountOverride?: number | null
+  /**
+   * Stable identity of the scheduler crawl cycle. Every retry of the same
+   * BullMQ job reuses this id so count-baseline and level-shift evidence can
+   * de-duplicate attempts. Omit only for legacy/manual replay paths; omitted
+   * observations cannot ratify a sustained level shift.
+   */
+  observationCycleId?: string
 }
 
 export interface PublishSnapshotResult {
@@ -159,7 +166,11 @@ export async function publishLeaderboardSnapshot(
   const { baseline, isBootstrap, shifted } = await getCountBaseline(
     src.id,
     timeframe,
-    expectedCount
+    expectedCount,
+    {
+      actualCount: rows.length,
+      cycleId: input.observationCycleId?.trim() || null,
+    }
   )
   if (shifted) {
     console.warn(
@@ -184,8 +195,8 @@ export async function publishLeaderboardSnapshot(
     const { rows: snap } = await client.query<{ id: number; scraped_at: string }>(
       `INSERT INTO arena.leaderboard_snapshots
          (source_id, timeframe, expected_count, actual_count, baseline_used,
-          count_check_passed, is_derived, raw_object_id)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+          count_check_passed, is_derived, raw_object_id, meta)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
        RETURNING id, scraped_at::text AS scraped_at`,
       // ::text — node-pg would otherwise hydrate a JS Date (ms precision),
       // truncating pg's microseconds; entries.scraped_at must round-trip
@@ -199,6 +210,11 @@ export async function publishLeaderboardSnapshot(
         verdict.passed,
         input.isDerived ?? false,
         rawObjectId,
+        JSON.stringify(
+          input.observationCycleId?.trim()
+            ? { observation_cycle_id: input.observationCycleId.trim() }
+            : {}
+        ),
       ]
     )
     const snapshotId = snap[0].id
