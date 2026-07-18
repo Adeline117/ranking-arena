@@ -608,6 +608,43 @@ describe('Solana in-memory golden RPC metadata compiler', () => {
     expectZeroed(bytes)
   })
 
+  it.each([
+    ['success', false],
+    ['final envelope rejection', true],
+  ] as const)('zeroes compiler-derived canonical UTF-8 bytes on %s', (_label, rejectEnvelope) => {
+    const input = compilerInput()
+    const rawBytes = allRawBytes(input)
+    if (rejectEnvelope) input.generated_at = '2026-07-18T08:59:59.000Z'
+
+    const derivedBytes: Uint8Array[] = []
+    const originalEncode = TextEncoder.prototype.encode
+    const encodeSpy = jest.spyOn(TextEncoder.prototype, 'encode').mockImplementation(function (
+      this: TextEncoder,
+      value?: string
+    ) {
+      const bytes = Reflect.apply(originalEncode, this, [value]) as Uint8Array
+      derivedBytes.push(bytes)
+      return bytes
+    })
+    try {
+      if (rejectEnvelope) {
+        expect(() => compileDexSolanaGoldenRpcMetadata(input)).toThrow(
+          'cannot be generated before a capture completes'
+        )
+      } else {
+        expect(() => compileDexSolanaGoldenRpcMetadata(input)).not.toThrow()
+      }
+    } finally {
+      encodeSpy.mockRestore()
+    }
+
+    expect(derivedBytes).toHaveLength(6)
+    for (const bytes of derivedBytes) {
+      expect([...bytes].every((byte) => byte === 0)).toBe(true)
+    }
+    expectZeroed(rawBytes)
+  })
+
   it.each(['success', 'strict verifier failure'] as const)(
     'zeroes an aliased raw Uint8Array on %s',
     (outcome) => {

@@ -91,6 +91,10 @@ interface VerifiedCapture {
   rawExchanges: SolanaRawRpcEvidenceExchange[]
 }
 
+interface EphemeralByteScope {
+  track<T extends Uint8Array>(bytes: T): T
+}
+
 function invalid(reason: string): never {
   throw new TypeError(`invalid Solana golden RPC metadata input: ${reason}`)
 }
@@ -205,7 +209,23 @@ function zeroByteArrays(arrays: Iterable<Uint8Array>): void {
       failed = true
     }
   }
-  if (failed) invalid('raw byte arrays could not all be zeroed')
+  if (failed) invalid('ephemeral byte arrays could not all be zeroed')
+}
+
+function withOwnedBytes<T>(root: unknown, operation: (scope: EphemeralByteScope) => T): T {
+  const byteArrays = new Set<Uint8Array>()
+  const scope: EphemeralByteScope = {
+    track<TBytes extends Uint8Array>(bytes: TBytes): TBytes {
+      byteArrays.add(bytes)
+      return bytes
+    },
+  }
+  try {
+    collectByteArrays(root, byteArrays)
+    return operation(scope)
+  } finally {
+    zeroByteArrays(byteArrays)
+  }
 }
 
 function decodeStrictJson(bytes: Uint8Array, label: string): unknown {
@@ -478,9 +498,9 @@ function expectedParams(
   }
 }
 
-function normalizedDocument(value: unknown) {
+function normalizedDocument(value: unknown, scope: EphemeralByteScope) {
   const body = strictCanonicalJson(value)
-  const bytes = new TextEncoder().encode(body)
+  const bytes = scope.track(new TextEncoder().encode(body))
   const sha256 = createHash('sha256').update(bytes).digest('hex')
   return {
     sha256,
@@ -551,7 +571,7 @@ function verifyCapture(input: DexSolanaGoldenRpcMetadataCaptureInput): VerifiedC
   }
 }
 
-function compileCapture(capture: VerifiedCapture): DexGoldenRpcCapture {
+function compileCapture(capture: VerifiedCapture, scope: EphemeralByteScope): DexGoldenRpcCapture {
   const completedTimes: number[] = [
     canonicalTimestampMs(capture.anchor.observedAt, 'anchor observedAt'),
     canonicalTimestampMs(capture.transaction.capturedAt, 'transaction capturedAt'),
@@ -606,9 +626,9 @@ function compileCapture(capture: VerifiedCapture): DexGoldenRpcCapture {
     capture_completed_at: captureCompletedAt,
     rpc_exchanges: rpcExchanges,
     normalized_documents: {
-      chain_anchor: normalizedDocument(capture.anchorDocument),
-      transaction_membership: normalizedDocument(capture.membershipDocument),
-      verified_finality: normalizedDocument(capture.transaction),
+      chain_anchor: normalizedDocument(capture.anchorDocument, scope),
+      transaction_membership: normalizedDocument(capture.membershipDocument, scope),
+      verified_finality: normalizedDocument(capture.transaction, scope),
     },
     provider_finality_witness: {
       policy: 'solana_verified_transaction_finality_semantics_v2',
@@ -618,7 +638,10 @@ function compileCapture(capture: VerifiedCapture): DexGoldenRpcCapture {
   }
 }
 
-function compileInternal(input: DexSolanaGoldenRpcMetadataInput): DexGoldenRpcEvidence {
+function compileInternal(
+  input: DexSolanaGoldenRpcMetadataInput,
+  scope: EphemeralByteScope
+): DexGoldenRpcEvidence {
   assertExactRecord(input, ['generated_at', 'captures'], 'compiler input')
   assertNoCredentialMaterial(input)
   canonicalTimestampMs(input.generated_at, 'generated_at')
@@ -651,7 +674,7 @@ function compileInternal(input: DexSolanaGoldenRpcMetadataInput): DexGoldenRpcEv
       const rightKey = `${rightEndpoint.provider_id}:${rightEndpoint.endpoint_id}`
       return leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0
     })
-    .map(compileCapture)
+    .map((capture) => compileCapture(capture, scope))
 
   return parseDexGoldenRpcEvidence({
     schema_version: DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION,
@@ -701,11 +724,5 @@ function compileInternal(input: DexSolanaGoldenRpcMetadataInput): DexGoldenRpcEv
 export function compileDexSolanaGoldenRpcMetadata(
   input: DexSolanaGoldenRpcMetadataInput
 ): DexGoldenRpcEvidence {
-  const byteArrays = new Set<Uint8Array>()
-  try {
-    collectByteArrays(input, byteArrays)
-    return compileInternal(input)
-  } finally {
-    zeroByteArrays(byteArrays)
-  }
+  return withOwnedBytes(input, (scope) => compileInternal(input, scope))
 }
