@@ -15,9 +15,16 @@ const VALID_TOKEN_RE = /^[A-Z0-9]{1,20}$/
 
 const PAGE_SIZE = 50
 // SSR fetch budget: the position-history aggregation can be slow on a cold
-// cache during cron contention; past it we hand an empty seed to the client,
-// which then fetches on the wire (mirrors the tokens index page).
+// cache during cron contention; past it we mark the seed failed so the client
+// can retry without presenting a fabricated empty ranking.
 const SSR_TIMEOUT_MS = 4000
+
+export async function loadTokenTradersSSR(
+  token: string,
+  period: Period
+): Promise<{ traders: TokenTrader[]; total: number }> {
+  return getTokenTraderRankings(getSupabaseAdmin(), token, period, PAGE_SIZE, 0)
+}
 
 /**
  * Server-side first-page prefetch — replicates the GET /api/rankings/by-token
@@ -25,18 +32,25 @@ const SSR_TIMEOUT_MS = 4000
  * client-only spinner. Wrapped in unstable_cache (keyed on token+period) and
  * de-duped with the API's own Redis layer by the shared 1h ISR window.
  */
-const getTokenTradersSSR = unstable_cache(
-  async (token: string, period: Period): Promise<{ traders: TokenTrader[]; total: number }> => {
-    try {
-      return await getTokenTraderRankings(getSupabaseAdmin(), token, period, PAGE_SIZE, 0)
-    } catch {
-      // Cold-cache timeout / transient DB error — empty seed, client refetches.
-      return { traders: [], total: 0 }
-    }
-  },
-  ['token-traders-ssr'],
-  { revalidate: 3600, tags: ['rankings', 'by-token'] }
-)
+// Do not inherit empty entries cached by the former catch-and-return loader.
+const getTokenTradersSSR = unstable_cache(loadTokenTradersSSR, ['token-traders-ssr-v2'], {
+  revalidate: 3600,
+  tags: ['rankings', 'by-token'],
+})
+
+async function withSsrTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(() => reject(new Error('Token ranking SSR timed out')), SSR_TIMEOUT_MS)
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
 
 function normalizePeriod(raw: string | undefined): Period {
   const up = (raw || '').toUpperCase()
@@ -115,15 +129,11 @@ export default async function TokenDetailPage({
   const period = normalizePeriod((await searchParams).period)
 
   let initial: { traders: TokenTrader[]; total: number } = { traders: [], total: 0 }
+  let initialStatus: 'success' | 'error' = 'success'
   try {
-    initial = await Promise.race([
-      getTokenTradersSSR(token, period),
-      new Promise<{ traders: TokenTrader[]; total: number }>((resolve) =>
-        setTimeout(() => resolve({ traders: [], total: 0 }), SSR_TIMEOUT_MS)
-      ),
-    ])
+    initial = await withSsrTimeout(getTokenTradersSSR(token, period))
   } catch {
-    // Timeout or error — render with empty seed, client fetches on mount.
+    initialStatus = 'error'
   }
 
   return (
@@ -132,6 +142,7 @@ export default async function TokenDetailPage({
       initialPeriod={period}
       initialTraders={initial.traders}
       initialTotal={initial.total}
+      initialStatus={initialStatus}
       asOf={new Date().toISOString()}
     />
   )
