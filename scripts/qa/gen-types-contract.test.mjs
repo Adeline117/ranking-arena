@@ -314,8 +314,8 @@ test('semantic override manifest stays narrow and auditable', () => {
     'group_member_moderation_directory',
     'own_group_memberships',
   ])
-  assert.equal(Object.keys(NULLABLE_RPC_ARGS).length, 12)
-  assert.equal(fieldCount(NULLABLE_RPC_ARGS), 32)
+  assert.equal(Object.keys(NULLABLE_RPC_ARGS).length, 23)
+  assert.equal(fieldCount(NULLABLE_RPC_ARGS), 56)
   assert.equal(Object.keys(GROUP_CUTOVER_NULLABLE_RPC_ARGS).length, 7)
   assert.equal(fieldCount(GROUP_CUTOVER_NULLABLE_RPC_ARGS), 11)
   assert.deepEqual(Object.keys(NULLABLE_RPC_RETURNS).sort(), [
