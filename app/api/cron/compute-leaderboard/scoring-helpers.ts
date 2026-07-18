@@ -11,8 +11,8 @@
  */
 
 import type { Period } from '@/lib/utils/arena-score'
-import { getSupabaseAdmin } from '@/lib/api'
 import { createLogger } from '@/lib/utils/logger'
+import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TraderRow } from './trader-row'
 
 const logger = createLogger('compute-leaderboard')
@@ -170,50 +170,80 @@ export function markOutliers<T extends ScoredRowForOutlier>(scored: T[]): number
  * (from trader_follows), discarding whatever the exchange returned.
  */
 export interface ScoredRowForArenaFollowers {
+  source: string
   source_trader_id: string
   followers: number
 }
 
+function traderAccountKey(traderId: string, source: string): string {
+  return JSON.stringify([traderId, source])
+}
+
 /**
  * Replace exchange `followers` counts with Arena internal follower counts
- * from the `trader_follows` table. Uses the `count_trader_followers` RPC for
- * batched aggregation, falling back to a per-chunk SELECT if the RPC fails.
+ * from the `trader_follows` table. Uses the source-scoped account RPC for
+ * batched aggregation, falling back to a bounded exact-identity SELECT if the
+ * RPC fails.
  *
  * Mutates `scored[].followers` in place. Returns the count of traders that
  * have at least one Arena follower so the caller can log a single summary line.
  */
 export async function applyArenaFollowers<T extends ScoredRowForArenaFollowers>(
-  supabase: ReturnType<typeof getSupabaseAdmin>,
+  supabase: SupabaseClient,
   scored: T[],
   season: Period
-): Promise<{ applied: number; uniqueIds: number }> {
-  const allTraderIds = [...new Set(scored.map((t) => t.source_trader_id))]
+): Promise<{ applied: number; uniqueAccounts: number }> {
+  const accountMap = new Map<string, { traderId: string; source: string }>()
+  for (const trader of scored) {
+    const traderId = trader.source_trader_id.trim()
+    const source = trader.source.trim()
+    if (!traderId || !source) continue
+    accountMap.set(traderAccountKey(traderId, source), { traderId, source })
+  }
+  const accounts = [...accountMap.values()]
   const arenaFollowerMap = new Map<string, number>()
 
-  // Query trader_follows in chunks of 500
-  for (let i = 0; i < allTraderIds.length; i += 500) {
-    const chunk = allTraderIds.slice(i, i + 500)
+  // Query trader_follows in chunks of 500 exact exchange accounts.
+  for (let i = 0; i < accounts.length; i += 500) {
+    const chunk = accounts.slice(i, i + 500)
     try {
-      const { data, error } = await supabase.rpc('count_trader_followers', { trader_ids: chunk })
-      if (!error && data) {
-        for (const row of data as { trader_id: string; cnt: number }[]) {
-          arenaFollowerMap.set(row.trader_id, (arenaFollowerMap.get(row.trader_id) || 0) + row.cnt)
-        }
+      const { data, error } = await supabase.rpc('count_trader_account_followers', {
+        p_trader_ids: chunk.map((account) => account.traderId),
+        p_sources: chunk.map((account) => account.source),
+      })
+      if (error) throw error
+
+      for (const row of (data ?? []) as {
+        trader_id: string
+        source: string
+        cnt: number
+      }[]) {
+        const count = Number(row.cnt)
+        if (!Number.isFinite(count) || count < 0) continue
+        arenaFollowerMap.set(traderAccountKey(row.trader_id, row.source), count)
       }
     } catch (e) {
       logger.warn(
         `[${season}] arena follower batch query failed, using fallback: ${e instanceof Error ? e.message : String(e)}`
       )
-      // Fallback: individual count query
-      const { data: fallbackData } = await supabase
+      const requestedKeys = new Set(
+        chunk.map((account) => traderAccountKey(account.traderId, account.source))
+      )
+      const { data: fallbackData, error: fallbackError } = await supabase
         .from('trader_follows')
-        .select('trader_id')
-        .in('trader_id', chunk)
+        .select('trader_id, source')
+        .in('trader_id', [...new Set(chunk.map((account) => account.traderId))])
+        .in('source', [...new Set(chunk.map((account) => account.source))])
         .limit(10000)
-      if (fallbackData) {
-        for (const row of fallbackData) {
-          arenaFollowerMap.set(row.trader_id, (arenaFollowerMap.get(row.trader_id) || 0) + 1)
-        }
+      if (fallbackError) {
+        logger.warn(`[${season}] arena follower fallback failed: ${fallbackError.message}`)
+        continue
+      }
+      for (const row of fallbackData ?? []) {
+        if (typeof row.source !== 'string') continue
+        const key = traderAccountKey(row.trader_id, row.source)
+        if (!requestedKeys.has(key)) continue
+        arenaFollowerMap.set(key, (arenaFollowerMap.get(key) || 0) + 1)
       }
     }
   }
@@ -221,9 +251,10 @@ export async function applyArenaFollowers<T extends ScoredRowForArenaFollowers>(
   // Apply Arena follower counts to scored array
   let applied = 0
   for (const t of scored) {
-    const count = arenaFollowerMap.get(t.source_trader_id) || 0
+    const count =
+      arenaFollowerMap.get(traderAccountKey(t.source_trader_id.trim(), t.source.trim())) || 0
     t.followers = count
     if (count > 0) applied++
   }
-  return { applied, uniqueIds: arenaFollowerMap.size }
+  return { applied, uniqueAccounts: accounts.length }
 }
