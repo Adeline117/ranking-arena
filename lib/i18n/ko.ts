@@ -6244,6 +6244,7 @@ const ko = {
   passkeyRemoved: '패스키가 삭제되었습니다',
   // Pro 기능 한정 기간 무료 프로모션 배너
   proPromoBanner: '🎉 Pro 기능을 기간 한정 무료로 — 모든 유료 기능을 업그레이드 없이 이용하세요.',
+  proPromoBannerShort: '🎉 베타 기간 동안 Pro 무료',
   proPromoBannerDismiss: '닫기',
   // 사이트 전체 비공개 베타 배너 (서버 렌더링, BetaBanner에서 페인트 전 현지화)
   betaBannerFull:

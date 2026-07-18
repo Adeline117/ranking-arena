@@ -6209,6 +6209,7 @@ const zh = {
   passkeyRemoved: '通行密钥已移除',
   // Pro 限时免费促销横幅
   proPromoBanner: '🎉 Pro 功能限时免费 —— 所有付费功能现在全部免费使用，无需升级。',
+  proPromoBannerShort: '🎉 Beta 期间 Pro 功能免费',
   proPromoBannerDismiss: '关闭',
   // 全站封闭测试横幅（服务端渲染，BetaBanner 在绘制前本地化）
   betaBannerFull: 'Arena 正处于封闭测试阶段 —— 数据正在更新，部分功能仍在开发中。',

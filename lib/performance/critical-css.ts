@@ -28,6 +28,8 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 .pro-promo-lang{display:none}
 .pro-promo-lang[data-pro-promo-lang="en"],html[lang="ja"] .pro-promo-lang[data-pro-promo-lang="ja"],html[lang="ko"] .pro-promo-lang[data-pro-promo-lang="ko"],html[lang="zh-CN"] .pro-promo-lang[data-pro-promo-lang="zh"]{display:inline}
 html[lang="ja"] .pro-promo-lang[data-pro-promo-lang="en"],html[lang="ko"] .pro-promo-lang[data-pro-promo-lang="en"],html[lang="zh-CN"] .pro-promo-lang[data-pro-promo-lang="en"],html[data-pro-promo-hidden="true"] .pro-promo-banner{display:none}
+.pro-promo-short{display:none}
+@media(max-width:480px){.pro-promo-full{display:none}.pro-promo-short{display:inline}}
 
 /* 字体变量 */
 :root{

@@ -4377,6 +4377,9 @@ html[lang='zh-CN'] .pro-promo-banner .pro-promo-lang[data-pro-promo-lang='en'],
 html[data-pro-promo-hidden='true'] .pro-promo-banner {
   display: none;
 }
+.pro-promo-banner .pro-promo-short {
+  display: none;
+}
 @media (max-width: 480px) {
   .beta-banner {
     padding: 7px 38px 7px 12px !important;
@@ -4407,5 +4410,11 @@ html[data-pro-promo-hidden='true'] .pro-promo-banner {
     overflow: hidden;
     text-overflow: ellipsis;
     max-width: 100%;
+  }
+  .pro-promo-banner .pro-promo-full {
+    display: none;
+  }
+  .pro-promo-banner .pro-promo-short {
+    display: inline;
   }
 }
