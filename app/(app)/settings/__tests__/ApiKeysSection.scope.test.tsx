@@ -317,4 +317,92 @@ describe('ApiKeysSection viewer ownership', () => {
       })
     )
   })
+
+  it('shows a persistent load error and restores controls only after retry succeeds', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce({ ok: false, status: 503, data: { error: 'unavailable' } })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        data: { data: [apiKey('user-a')] },
+      })
+      .mockResolvedValue({
+        ok: true,
+        status: 200,
+        data: { data: { keys: [], daily: [], totals: {} } },
+      })
+
+    render(<ApiKeysSection />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('loadFailedRetryShort')
+    expect(screen.queryByText('apiKeyEmpty')).not.toBeInTheDocument()
+    expect(screen.queryByPlaceholderText('apiKeyNamePlaceholder')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'retry' }))
+
+    expect(await screen.findByText('user-a private key')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.getByPlaceholderText('apiKeyNamePlaceholder')).toBeEnabled()
+  })
+
+  it('catches create network failures, preserves the draft, and releases the busy state', async () => {
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url.includes('/usage')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { keys: [], daily: [], totals: {} } },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'GET') {
+        return Promise.resolve({ ok: true, status: 200, data: { data: [] } })
+      }
+      if (url === '/api/user/api-keys' && method === 'POST') {
+        return Promise.reject(new TypeError('Failed to fetch'))
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<ApiKeysSection />)
+    const input = await screen.findByPlaceholderText('apiKeyNamePlaceholder')
+    fireEvent.change(input, { target: { value: 'Keep this draft' } })
+    fireEvent.click(screen.getByRole('button', { name: 'apiKeyCreate' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('networkError', 'error'))
+    expect(input).toHaveValue('Keep this draft')
+    expect(screen.getByRole('button', { name: 'apiKeyCreate' })).toBeEnabled()
+  })
+
+  it('catches revoke network failures and restores the active key action', async () => {
+    mockAuthedFetch.mockImplementation((url: string, method: string) => {
+      if (url.includes('/usage')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: { keys: [], daily: [], totals: {} } },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'GET') {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          data: { data: [apiKey('user-a')] },
+        })
+      }
+      if (url === '/api/user/api-keys' && method === 'PATCH') {
+        return Promise.reject(new TypeError('Failed to fetch'))
+      }
+      return Promise.resolve({ ok: false, status: 500, data: {} })
+    })
+
+    render(<ApiKeysSection />)
+    await screen.findByText('user-a private key')
+    fireEvent.click(screen.getByRole('button', { name: 'revoke' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('networkError', 'error'))
+    expect(screen.getByText('user-a private key')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'revoke' })).toBeEnabled()
+    expect(screen.queryByText('apiKeyRevokedSection')).not.toBeInTheDocument()
+  })
 })
