@@ -2864,7 +2864,7 @@ const zh = {
   walletProNft: 'Arena NFT 徽章',
   walletNoNft: '无 Arena NFT 徽章',
   walletProStatus: '您的 Arena NFT 徽章已完成链上验证。Pro 权限以当前有效套餐为准。',
-  walletHoldNft: '持有并绑定 Arena NFT 可展示链上徽章，但不会解锁 Pro 功能。',
+  walletHoldNft: '持有并绑定 Arena NFT 可展示链上徽章；该徽章仅用于展示，Pro 功能需要有效套餐。',
 
   // Web3 - useSiweAuth
   siweRejected: '签名请求被拒绝。请在钱包中批准签名以登录。',
