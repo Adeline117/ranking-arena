@@ -6017,6 +6017,7 @@ const ja = {
   // Pro 機能 期間限定無料キャンペーンバナー
   proPromoBanner:
     '🎉 Pro機能が期間限定で無料 —— すべての有料機能を、アップグレードなしでお使いいただけます。',
+  proPromoBannerShort: '🎉 ベータ期間中は Pro が無料',
   proPromoBannerDismiss: '閉じる',
   // サイト全体のクローズドベータバナー（サーバーレンダリング、BetaBanner で描画前にローカライズ）
   betaBannerFull: 'Arena はクローズドベータ中です —— データを更新中で、一部の機能は開発中です。',

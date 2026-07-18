@@ -20,10 +20,30 @@ import { PRO_FREE_PROMO } from '@/lib/types/premium'
 import { tokens } from '@/lib/design-tokens'
 
 const LANGS = [
-  { code: 'en', text: en.proPromoBanner, dismiss: en.proPromoBannerDismiss },
-  { code: 'ja', text: ja.proPromoBanner, dismiss: ja.proPromoBannerDismiss },
-  { code: 'ko', text: ko.proPromoBanner, dismiss: ko.proPromoBannerDismiss },
-  { code: 'zh', text: zh.proPromoBanner, dismiss: zh.proPromoBannerDismiss },
+  {
+    code: 'en',
+    text: en.proPromoBanner,
+    shortText: en.proPromoBannerShort,
+    dismiss: en.proPromoBannerDismiss,
+  },
+  {
+    code: 'ja',
+    text: ja.proPromoBanner,
+    shortText: ja.proPromoBannerShort,
+    dismiss: ja.proPromoBannerDismiss,
+  },
+  {
+    code: 'ko',
+    text: ko.proPromoBanner,
+    shortText: ko.proPromoBannerShort,
+    dismiss: ko.proPromoBannerDismiss,
+  },
+  {
+    code: 'zh',
+    text: zh.proPromoBanner,
+    shortText: zh.proPromoBannerShort,
+    dismiss: zh.proPromoBannerDismiss,
+  },
 ] as const
 
 export default function ProPromoBanner() {
@@ -47,9 +67,10 @@ export default function ProPromoBanner() {
         }}
       >
         <span className="pro-promo-text">
-          {LANGS.map(({ code, text }) => (
+          {LANGS.map(({ code, text, shortText }) => (
             <span key={code} className="pro-promo-lang" data-pro-promo-lang={code}>
-              {text}
+              <span className="pro-promo-full">{text}</span>
+              <span className="pro-promo-short">{shortText}</span>
             </span>
           ))}
         </span>

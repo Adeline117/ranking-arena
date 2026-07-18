@@ -6367,6 +6367,7 @@ const en = {
   // Pro free limited-time promo banner
   proPromoBanner:
     '🎉 Pro features are free for a limited time — enjoy everything, no upgrade needed.',
+  proPromoBannerShort: '🎉 Pro is free during beta',
   proPromoBannerDismiss: 'Dismiss',
   // Site-wide closed-beta banner (server-rendered; localized pre-paint in BetaBanner)
   betaBannerFull:
