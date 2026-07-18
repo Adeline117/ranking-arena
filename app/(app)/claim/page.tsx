@@ -138,10 +138,7 @@ export default function ClaimPage() {
           <>
             {linkedTraders.length > 0 && (
               <>
-                <LinkedAccountsSidebar
-                  linkedTraders={linkedTraders}
-                  onRefresh={fetchLinkedTraders}
-                />
+                <LinkedAccountsSidebar linkedTraders={linkedTraders} />
                 <Box
                   style={{
                     textAlign: 'center',
@@ -293,9 +290,7 @@ export default function ClaimPage() {
             <Text style={{ color: tokens.colors.text.secondary, marginBottom: tokens.spacing[4] }}>
               {t('redirectingToProfile')}
             </Text>
-            {linkedTraders.length > 0 && (
-              <LinkedAccountsSidebar linkedTraders={linkedTraders} onRefresh={fetchLinkedTraders} />
-            )}
+            {linkedTraders.length > 0 && <LinkedAccountsSidebar linkedTraders={linkedTraders} />}
           </Box>
         )}
       </Box>
