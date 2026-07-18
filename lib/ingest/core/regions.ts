@@ -22,8 +22,16 @@ export function isIngestRegion(value: unknown): value is IngestRegion {
  * operator explicitly sets the variable, every comma-separated value must be
  * present, known, and unique; empty/typo entries abort startup.
  */
-export function parseIngestRegionsEnv(raw: string | undefined): IngestRegion[] {
-  if (raw === undefined) return [...INGEST_REGIONS]
+export function parseIngestRegionsEnv(
+  raw: string | undefined,
+  options: { requireExplicit?: boolean } = {}
+): IngestRegion[] {
+  if (raw === undefined) {
+    if (options.requireExplicit) {
+      throw new Error('[ingest] INGEST_REGIONS is required for managed or production workers')
+    }
+    return [...INGEST_REGIONS]
+  }
 
   const values = raw.split(',').map((value) => value.trim())
   if (values.length === 0 || values.some((value) => value.length === 0)) {
