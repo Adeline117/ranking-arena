@@ -1,4 +1,4 @@
-import { render, waitFor } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 
 const mockDirectCheckout = jest.fn()
 
@@ -50,6 +50,10 @@ describe('PricingPageClient anonymous plan intent', () => {
     window.history.replaceState({}, '', '/pricing?billing=monthly')
   })
 
+  afterEach(() => {
+    jest.restoreAllMocks()
+  })
+
   it('wires all four CTAs to a typed internal login return without auto-checkout', async () => {
     const { container } = render(<PricingPageClient />)
     const expectedHrefs = [
@@ -67,5 +71,35 @@ describe('PricingPageClient anonymous plan intent', () => {
     })
 
     expect(mockDirectCheckout).not.toHaveBeenCalled()
+  })
+
+  it('keeps URL billing intent usable when session storage is denied', async () => {
+    const getItem = jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('Storage denied', 'SecurityError')
+    })
+    const setItem = jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('Storage denied', 'SecurityError')
+    })
+
+    const { container } = render(<PricingPageClient />)
+
+    await waitFor(() => {
+      const hrefs = Array.from(
+        container.querySelectorAll<HTMLAnchorElement>('a[href^="/login?returnUrl="]')
+      ).map((link) => link.getAttribute('href'))
+      expect(hrefs).toContain('/login?returnUrl=%2Fpricing%3Fplan%3Dpro%26billing%3Dmonthly')
+    })
+
+    fireEvent.click(screen.getByRole('button', { name: /Yearly/ }))
+
+    await waitFor(() => {
+      const hrefs = Array.from(
+        container.querySelectorAll<HTMLAnchorElement>('a[href^="/login?returnUrl="]')
+      ).map((link) => link.getAttribute('href'))
+      expect(hrefs).toContain('/login?returnUrl=%2Fpricing%3Fplan%3Dpro%26billing%3Dyearly')
+    })
+
+    expect(getItem).toHaveBeenCalled()
+    expect(setItem).toHaveBeenCalled()
   })
 })
