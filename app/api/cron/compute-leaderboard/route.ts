@@ -413,7 +413,7 @@ async function computeSeason(
     )
   }
 
-  // Log scheduler provenance only. Per-source captured_at watermarks below are
+  // Log scheduler provenance only. Independent per-source board watermarks below are
   // the source-data freshness gate; a completed batch job is not itself proof
   // that every exchange/protocol returned fresh data.
   try {
@@ -428,7 +428,7 @@ async function computeSeason(
     if (latestFetch?.ended_at) {
       const ageMin = Math.round((Date.now() - new Date(latestFetch.ended_at).getTime()) / 60_000)
       logger.info(
-        `[${season}] Last batch-fetch job completed ${ageMin}min ago (${latestFetch.ended_at}); checking per-source captures`
+        `[${season}] Last batch-fetch job completed ${ageMin}min ago (${latestFetch.ended_at}); checking per-source board watermarks`
       )
     }
   } catch {

@@ -24,6 +24,7 @@ export interface TraderRow {
   copiers: number | null
   arena_score: number | null
   captured_at: string
+  source_board_as_of: string
   full_confidence_at: string | null
   profitability_score: number | null
   risk_control_score: number | null
@@ -165,6 +166,18 @@ export function makeAddToTraderMap(traderMap: Map<string, TraderRow>): (snap: Tr
     }
     // Merge: fill null fields from the duplicate
     const existing = traderMap.get(key)!
+    const existingBoardMs = Date.parse(existing.source_board_as_of)
+    const incomingBoardMs = Date.parse(snap.source_board_as_of)
+    // A duplicate trader can carry observations from more than one published
+    // board. Retain the older board watermark so a newer duplicate cannot make
+    // the source look fresher than all of the data used for scoring. Retain any
+    // unparseable watermark as well so the freshness gate fails closed.
+    if (
+      Number.isFinite(existingBoardMs) &&
+      (!Number.isFinite(incomingBoardMs) || incomingBoardMs < existingBoardMs)
+    ) {
+      existing.source_board_as_of = snap.source_board_as_of
+    }
     if (snap.win_rate != null && existing.win_rate == null) existing.win_rate = snap.win_rate
     if (snap.max_drawdown != null && existing.max_drawdown == null)
       existing.max_drawdown = snap.max_drawdown

@@ -123,7 +123,7 @@ export async function scoreTraders(
     return {
       source: t.source,
       source_trader_id: t.source_trader_id,
-      source_as_of: t.captured_at,
+      source_as_of: t.source_board_as_of,
       arena_score: null as number | null, // v4 — filled by the batch pass below (SERVED + RANKED)
       arena_score_v3: finalScore, // rollback + serving-population gate (real ROI/PnL present)
       arena_score_v4: null as number | null, // = arena_score, filled below
