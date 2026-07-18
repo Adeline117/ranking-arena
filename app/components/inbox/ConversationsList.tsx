@@ -1,7 +1,7 @@
 'use client'
 
-import { useEffect, useState, useCallback, useRef } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useState, useCallback, useRef, useMemo } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import Link from 'next/link'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
@@ -45,6 +45,59 @@ type Conversation = {
 
 function calculateTotalUnread(conversations: Conversation[]): number {
   return conversations.reduce((sum, c) => sum + c.unread_count, 0)
+}
+
+function readCollection<T>(payload: unknown, key: string): T[] {
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    !Array.isArray((payload as Record<string, unknown>)[key])
+  ) {
+    throw new Error(`Invalid ${key} response`)
+  }
+  return (payload as Record<string, unknown>)[key] as T[]
+}
+
+function ConversationListSkeleton({
+  label,
+  rows = 2,
+}: {
+  label: string
+  rows?: number
+}): React.ReactElement {
+  return (
+    <div
+      role="status"
+      aria-label={label}
+      style={{
+        padding: tokens.spacing[3],
+        display: 'flex',
+        flexDirection: 'column',
+        gap: tokens.spacing[1],
+      }}
+    >
+      {Array.from({ length: rows }, (_, index) => (
+        <div
+          key={index}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[3],
+            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          }}
+        >
+          <SkeletonAvatar size={40} />
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <Skeleton width="40%" height="14px" />
+              <Skeleton width="40px" height="10px" />
+            </div>
+            <Skeleton width="65%" height="12px" />
+          </div>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 function UnreadBadge({ count }: { count: number }): React.ReactElement | null {
@@ -230,17 +283,78 @@ export default function ConversationsList({
   initialFilter = 'all',
 }: {
   initialFilter?: ChatFilter
-} = {}): React.ReactElement {
-  const [conversations, setConversations] = useState<Conversation[]>([])
-  const [groupChannels, setGroupChannels] = useState<GroupChannel[]>([])
+} = {}): React.ReactElement | null {
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [chatFilter, setChatFilter] = useState<ChatFilter>(initialFilter)
   const setUnreadMessages = useInboxStore((s) => s.setUnreadMessages)
   const { language, t } = useLanguage()
-  const { user, accessToken, getAuthHeadersAsync } = useAuthSession()
+  const {
+    user,
+    accessToken,
+    getAuthHeadersAsync,
+    isLoggedIn,
+    loading: authLoading,
+    authChecked,
+    viewerKey,
+  } = useAuthSession()
   const { showToast } = useToast()
+  const queryClient = useQueryClient()
+  const authPending = authLoading || !authChecked
+  const canLoad = !authPending && isLoggedIn && Boolean(accessToken)
+  const conversationQueryKey = useMemo(
+    () => ['inbox-conversations', viewerKey] as const,
+    [viewerKey]
+  )
+  const groupChannelQueryKey = useMemo(
+    () => ['inbox-group-channels', viewerKey] as const,
+    [viewerKey]
+  )
 
   useEffect(() => setChatFilter(initialFilter), [initialFilter])
+
+  const {
+    data: conversations = [],
+    isError: conversationsFailed,
+    isFetching: conversationsFetching,
+    isSuccess: conversationsLoaded,
+    refetch: refetchConversations,
+  } = useQuery({
+    queryKey: conversationQueryKey,
+    queryFn: async () => {
+      const headers = await getAuthHeadersAsync()
+      const response = await fetch('/api/conversations', { headers })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return readCollection<Conversation>(await response.json(), 'conversations')
+    },
+    enabled: canLoad,
+    staleTime: STALE_STANDARD,
+    refetchOnWindowFocus: false,
+  })
+
+  const {
+    data: groupChannels = [],
+    isError: groupChannelsFailed,
+    isFetching: groupChannelsFetching,
+    isSuccess: groupChannelsLoaded,
+    refetch: refetchGroupChannels,
+  } = useQuery({
+    queryKey: groupChannelQueryKey,
+    queryFn: async () => {
+      const headers = await getAuthHeadersAsync()
+      const response = await fetch('/api/channels?type=group', { headers })
+      if (!response.ok) throw new Error(`HTTP ${response.status}`)
+      return readCollection<GroupChannel>(await response.json(), 'channels')
+    },
+    enabled: canLoad,
+    staleTime: STALE_STANDARD,
+    refetchOnWindowFocus: false,
+  })
+
+  useEffect(() => {
+    if (conversationsLoaded) {
+      setUnreadMessages(calculateTotalUnread(conversations))
+    }
+  }, [conversations, conversationsLoaded, setUnreadMessages])
 
   // Swipe-to-delete: clear conversation history and hide from list
   const handleDeleteConversation = useCallback(
@@ -255,8 +369,8 @@ export default function ConversationsList({
         })
         if (res.ok) {
           // Remove from local list immediately
-          setConversations((prev) => {
-            const updated = prev.filter((c) => c.id !== conversationId)
+          queryClient.setQueryData<Conversation[]>(conversationQueryKey, (current = []) => {
+            const updated = current.filter((c) => c.id !== conversationId)
             setUnreadMessages(calculateTotalUnread(updated))
             return updated
           })
@@ -268,44 +382,24 @@ export default function ConversationsList({
         showToast(t('unexpectedError'), 'error')
       }
     },
-    [accessToken, getAuthHeadersAsync, setUnreadMessages, showToast, t]
+    [
+      accessToken,
+      conversationQueryKey,
+      getAuthHeadersAsync,
+      queryClient,
+      setUnreadMessages,
+      showToast,
+      t,
+    ]
   )
 
-  // React Query: load conversations + group channels
-  const {
-    isLoading: loading,
-    isError: loadFailed,
-    refetch: refetchConversations,
-  } = useQuery({
-    queryKey: ['conversations', accessToken],
-    queryFn: async () => {
-      const headers = await getAuthHeadersAsync()
-      const [convRes, groupRes] = await Promise.all([
-        fetch('/api/conversations', { headers }),
-        fetch('/api/channels?type=group', { headers }).catch(() => null),
-      ])
-      if (!convRes.ok) throw new Error(`HTTP ${convRes.status}`)
-      const convData = await convRes.json()
-      const convs = convData.conversations || []
-      setConversations(convs)
-      setUnreadMessages(calculateTotalUnread(convs))
-
-      if (groupRes?.ok) {
-        const groupData = await groupRes.json()
-        setGroupChannels(groupData.channels || [])
-      }
-      return convs
-    },
-    enabled: !!accessToken,
-    staleTime: STALE_STANDARD,
-    refetchOnWindowFocus: false,
-  })
-
   const loadConversations = useCallback(() => {
-    refetchConversations()
+    void refetchConversations()
   }, [refetchConversations])
 
-  // useQuery handles initial load + refetch — no manual useEffect needed
+  const loadGroupChannels = useCallback(() => {
+    void refetchGroupChannels()
+  }, [refetchGroupChannels])
 
   // Realtime: auto-refresh when new DMs arrive for this user
   useEffect(() => {
@@ -332,14 +426,14 @@ export default function ConversationsList({
             loadConversations()
             return
           }
-          setConversations((prev) => {
-            const idx = prev.findIndex((c) => c.id === newMsg.conversation_id)
+          let needsRefresh = false
+          queryClient.setQueryData<Conversation[]>(conversationQueryKey, (current = []) => {
+            const idx = current.findIndex((c) => c.id === newMsg.conversation_id)
             if (idx === -1) {
-              // New conversation not in list yet — full refresh needed
-              loadConversations()
-              return prev
+              needsRefresh = true
+              return current
             }
-            const updated = [...prev]
+            const updated = [...current]
             updated[idx] = {
               ...updated[idx],
               last_message_at: newMsg.created_at || new Date().toISOString(),
@@ -354,13 +448,14 @@ export default function ConversationsList({
             setUnreadMessages(calculateTotalUnread(updated))
             return updated
           })
+          if (needsRefresh) loadConversations()
         }
       )
       .subscribe()
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user?.id, loadConversations, setUnreadMessages])
+  }, [conversationQueryKey, loadConversations, queryClient, setUnreadMessages, user?.id])
 
   // Realtime: auto-refresh when new group channel messages arrive
   useEffect(() => {
@@ -385,16 +480,17 @@ export default function ConversationsList({
           if (newMsg.sender_id === user.id) return
           // Update the affected group channel in-place
           if (!newMsg.channel_id) {
-            loadConversations()
+            loadGroupChannels()
             return
           }
-          setGroupChannels((prev) => {
-            const idx = prev.findIndex((ch) => ch.id === newMsg.channel_id)
+          let needsRefresh = false
+          queryClient.setQueryData<GroupChannel[]>(groupChannelQueryKey, (current = []) => {
+            const idx = current.findIndex((ch) => ch.id === newMsg.channel_id)
             if (idx === -1) {
-              loadConversations()
-              return prev
+              needsRefresh = true
+              return current
             }
-            const updated = [...prev]
+            const updated = [...current]
             updated[idx] = {
               ...updated[idx],
               last_message_at: newMsg.created_at || new Date().toISOString(),
@@ -406,13 +502,14 @@ export default function ConversationsList({
             )
             return updated
           })
+          if (needsRefresh) loadGroupChannels()
         }
       )
       .subscribe()
     return () => {
       supabase.removeChannel(channel)
     }
-  }, [user?.id, groupChannels.length, loadConversations])
+  }, [groupChannelQueryKey, groupChannels.length, loadGroupChannels, queryClient, user?.id])
 
   function formatTime(dateString: string): string {
     const date = new Date(dateString)
@@ -432,6 +529,25 @@ export default function ConversationsList({
     }
     return date.toLocaleDateString(locale, { month: 'short', day: 'numeric' })
   }
+
+  const showDirect = chatFilter === 'all' || chatFilter === 'direct'
+  const showGroups = chatFilter === 'all' || chatFilter === 'group'
+  const directLoading = showDirect && conversationsFetching && conversations.length === 0
+  const groupsLoading = showGroups && groupChannelsFetching && groupChannels.length === 0
+  const visibleFailure = (showDirect && conversationsFailed) || (showGroups && groupChannelsFailed)
+  const visibleData =
+    (showDirect && conversations.length > 0) || (showGroups && groupChannels.length > 0)
+  const visibleQueriesLoaded =
+    (!showDirect || conversationsLoaded) && (!showGroups || groupChannelsLoaded)
+  const showGenuineEmpty =
+    canLoad &&
+    visibleQueriesLoaded &&
+    !visibleFailure &&
+    !directLoading &&
+    !groupsLoading &&
+    !visibleData
+
+  if (!authPending && !canLoad) return null
 
   return (
     <div>
@@ -501,112 +617,24 @@ export default function ConversationsList({
       </div>
       <CreateGroupModal isOpen={showCreateGroup} onClose={() => setShowCreateGroup(false)} />
 
-      {!loading && loadFailed && (
-        <div style={{ padding: tokens.spacing[4] }}>
-          <ErrorMessage
-            message={t('failedToLoadRetryShort')}
-            onRetry={() => void loadConversations()}
-          />
-        </div>
-      )}
-
-      {loading ? (
-        <div
-          style={{
-            padding: tokens.spacing[3],
-            display: 'flex',
-            flexDirection: 'column',
-            gap: tokens.spacing[1],
-          }}
-        >
-          {[1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: tokens.spacing[3],
-                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-              }}
-            >
-              <SkeletonAvatar size={40} />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <Skeleton width="40%" height="14px" />
-                  <Skeleton width="40px" height="10px" />
-                </div>
-                <Skeleton width="65%" height="12px" />
-              </div>
-            </div>
-          ))}
-        </div>
-      ) : loadFailed &&
-        conversations.length === 0 &&
-        groupChannels.length === 0 ? null : conversations.length === 0 &&
-        groupChannels.length === 0 ? (
-        <div
-          style={{
-            padding: `${tokens.spacing[8]} ${tokens.spacing[4]}`,
-            textAlign: 'center',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: tokens.spacing[3],
-          }}
-        >
-          <div
-            style={{
-              width: 56,
-              height: 56,
-              borderRadius: '50%',
-              background:
-                'linear-gradient(135deg, var(--color-accent-primary-15) 0%, var(--color-accent-primary-08) 100%)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
-            <svg
-              width="24"
-              height="24"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke={tokens.colors.accent.brand}
-              strokeWidth="1.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </div>
-          <div>
-            <div
-              style={{
-                fontWeight: 700,
-                fontSize: 14,
-                color: tokens.colors.text.primary,
-                marginBottom: 4,
-              }}
-            >
-              {t('noMessages')}
-            </div>
-            <div
-              style={{
-                fontSize: 12,
-                color: tokens.colors.text.tertiary,
-                lineHeight: 1.5,
-                maxWidth: 240,
-                margin: '0 auto',
-              }}
-            >
-              {t('u10inbox_dmEmptyCta')}
-            </div>
-          </div>
-        </div>
+      {authPending ? (
+        <ConversationListSkeleton label={t('loading')} rows={4} />
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', minHeight: 0 }}>
+          {showGroups && groupChannelsFailed && (
+            <div style={{ padding: tokens.spacing[4] }}>
+              <ErrorMessage
+                title={t('groupMessages')}
+                message={t('failedToLoadRetryShort')}
+                onRetry={loadGroupChannels}
+              />
+            </div>
+          )}
+          {groupsLoading && (
+            <ConversationListSkeleton label={`${t('groupMessages')}: ${t('loading')}`} />
+          )}
           {/* Group channels */}
-          {(chatFilter === 'all' || chatFilter === 'group') &&
+          {showGroups &&
             groupChannels.map((ch) => (
               <Link
                 key={`ch-${ch.id}`}
@@ -685,8 +713,20 @@ export default function ConversationsList({
                 </div>
               </Link>
             ))}
+          {showDirect && conversationsFailed && (
+            <div style={{ padding: tokens.spacing[4] }}>
+              <ErrorMessage
+                title={t('directMessages')}
+                message={t('failedToLoadRetryShort')}
+                onRetry={loadConversations}
+              />
+            </div>
+          )}
+          {directLoading && (
+            <ConversationListSkeleton label={`${t('directMessages')}: ${t('loading')}`} />
+          )}
           {/* Direct conversations — swipe left to reveal delete */}
-          {(chatFilter === 'all' || chatFilter === 'direct') &&
+          {showDirect &&
             conversations.map((conv) => (
               <SwipeableConversationRow
                 key={conv.id}
@@ -769,6 +809,67 @@ export default function ConversationsList({
                 </Link>
               </SwipeableConversationRow>
             ))}
+          {showGenuineEmpty && (
+            <div
+              style={{
+                padding: `${tokens.spacing[8]} ${tokens.spacing[4]}`,
+                textAlign: 'center',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: tokens.spacing[3],
+              }}
+            >
+              <div
+                style={{
+                  width: 56,
+                  height: 56,
+                  borderRadius: '50%',
+                  background:
+                    'linear-gradient(135deg, var(--color-accent-primary-15) 0%, var(--color-accent-primary-08) 100%)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <svg
+                  width="24"
+                  height="24"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke={tokens.colors.accent.brand}
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                </svg>
+              </div>
+              <div>
+                <div
+                  style={{
+                    fontWeight: 700,
+                    fontSize: 14,
+                    color: tokens.colors.text.primary,
+                    marginBottom: 4,
+                  }}
+                >
+                  {t('noMessages')}
+                </div>
+                <div
+                  style={{
+                    fontSize: 12,
+                    color: tokens.colors.text.tertiary,
+                    lineHeight: 1.5,
+                    maxWidth: 240,
+                    margin: '0 auto',
+                  }}
+                >
+                  {t('u10inbox_dmEmptyCta')}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
