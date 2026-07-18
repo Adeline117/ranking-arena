@@ -7,6 +7,9 @@
  * the free tier for the top-N deep-profile scope.
  */
 
+import { Buffer } from 'node:buffer'
+import { isProxy } from 'node:util/types'
+
 import { decodeBase58BytesBounded, hasBase58DecodedByteLength } from '@/lib/utils/base58'
 
 import { decodeSolanaSwaps, type SolTxMeta, type SolTokenBalance } from './solana-swaps'
@@ -44,6 +47,24 @@ export type SolanaProviderId = 'helius' | 'alchemy' | 'caller_supplied'
 export const SOLANA_PACKET_DATA_SIZE_BYTES = 1_232
 export const SOLANA_MAX_CPI_INSTRUCTION_DATA_BYTES = 10_240
 export const SOLANA_MAX_INSTRUCTION_TRACE_LENGTH = 64
+const SOLANA_MAX_CPI_INSTRUCTION_ACCOUNTS = 255
+const SOLANA_MAX_TRANSACTION_SIGNATURES = 19
+const SOLANA_MAX_RESOLVED_ACCOUNT_KEYS = 256
+const SOLANA_MAX_ADDRESS_TABLE_LOOKUPS = 255
+const SOLANA_MAX_TOKEN_BALANCES = 256
+const SOLANA_MAX_LOG_MESSAGES = 10_000
+const SOLANA_MAX_LOG_MESSAGE_UTF8_BYTES = 10_000
+const SOLANA_MAX_LOG_TOTAL_UTF8_BYTES = 10_240
+const SOLANA_MAX_ERROR_JSON_NODES = 1_024
+const SOLANA_MAX_ERROR_JSON_DEPTH = 16
+const SOLANA_MAX_ERROR_ARRAY_LENGTH = 256
+const SOLANA_MAX_ERROR_OBJECT_KEYS = 64
+const SOLANA_MAX_ERROR_STRING_UTF8_BYTES = 20_480
+const TYPED_ARRAY_FILL = Uint8Array.prototype.fill
+const TYPED_ARRAY_LENGTH_GETTER = Object.getOwnPropertyDescriptor(
+  Object.getPrototypeOf(Uint8Array.prototype) as object,
+  'length'
+)?.get
 // A compiled instruction needs at least three bytes on the wire (program id
 // index plus empty account/data shortvecs), so this is a conservative absolute
 // count ceiling that cannot reject a packet which actually fits.
@@ -824,8 +845,375 @@ function malformedTxEvidence(): never {
   throw new MalformedSolanaTxEvidenceError('malformed Solana transaction evidence')
 }
 
+interface SolanaErrorCloneBudget {
+  nodes: number
+  stringBytes: number
+  seen: Set<object>
+}
+
+function plainDataRecord(value: unknown): Record<string, unknown> {
+  if (typeof value !== 'object' || value === null || Array.isArray(value) || isProxy(value)) {
+    return malformedTxEvidence()
+  }
+  const prototype = Object.getPrototypeOf(value)
+  if (prototype !== Object.prototype && prototype !== null) return malformedTxEvidence()
+  return value as Record<string, unknown>
+}
+
+function ownDataValue(record: Record<string, unknown>, key: string, required = true): unknown {
+  const descriptor = Object.getOwnPropertyDescriptor(record, key)
+  if (!descriptor) {
+    if (required) return malformedTxEvidence()
+    return undefined
+  }
+  if (!descriptor.enumerable || !('value' in descriptor) || descriptor.value === undefined) {
+    return malformedTxEvidence()
+  }
+  return descriptor.value
+}
+
+function denseArrayValues(value: unknown, maximumLength: number): unknown[] {
+  if (
+    typeof value !== 'object' ||
+    value === null ||
+    isProxy(value) ||
+    !Array.isArray(value) ||
+    Object.getPrototypeOf(value) !== Array.prototype ||
+    value.length > maximumLength
+  ) {
+    return malformedTxEvidence()
+  }
+  const values: unknown[] = []
+  for (let index = 0; index < value.length; index += 1) {
+    const descriptor = Object.getOwnPropertyDescriptor(value, String(index))
+    if (!descriptor || !descriptor.enumerable || !('value' in descriptor)) {
+      return malformedTxEvidence()
+    }
+    values.push(descriptor.value)
+  }
+  return values
+}
+
+function utf8ByteLength(value: string): number {
+  return Buffer.byteLength(value, 'utf8')
+}
+
+function jsonScalar(value: unknown): SolanaRpcJson {
+  if (value === null || typeof value === 'boolean' || typeof value === 'string') return value
+  if (typeof value === 'number' && Number.isFinite(value) && !Object.is(value, -0)) return value
+  return malformedTxEvidence()
+}
+
+function selectedString(value: unknown, maximumUtf8Bytes: number): string {
+  if (
+    typeof value !== 'string' ||
+    value.length > maximumUtf8Bytes ||
+    utf8ByteLength(value) > maximumUtf8Bytes
+  ) {
+    return malformedTxEvidence()
+  }
+  return value
+}
+
+function selectedStringArray(
+  value: unknown,
+  maximumLength: number,
+  maximumItemBytes: number,
+  maximumTotalBytes: number
+): string[] {
+  let totalBytes = 0
+  return denseArrayValues(value, maximumLength).map((item) => {
+    if (typeof item !== 'string' || item.length > maximumItemBytes) {
+      return malformedTxEvidence()
+    }
+    const itemBytes = utf8ByteLength(item)
+    totalBytes += itemBytes
+    if (itemBytes > maximumItemBytes || totalBytes > maximumTotalBytes) {
+      return malformedTxEvidence()
+    }
+    return item
+  })
+}
+
+function selectedNumberArray(value: unknown, maximumLength: number): number[] {
+  return denseArrayValues(value, maximumLength).map((item) => {
+    if (typeof item !== 'number' || !Number.isFinite(item) || Object.is(item, -0)) {
+      return malformedTxEvidence()
+    }
+    return item
+  })
+}
+
+function cloneBoundedSolanaErrorJson(
+  value: unknown,
+  budget: SolanaErrorCloneBudget = {
+    nodes: 0,
+    stringBytes: 0,
+    seen: new Set<object>(),
+  },
+  depth = 0
+): SolanaRpcJson {
+  budget.nodes += 1
+  if (budget.nodes > SOLANA_MAX_ERROR_JSON_NODES || depth > SOLANA_MAX_ERROR_JSON_DEPTH) {
+    return malformedTxEvidence()
+  }
+
+  if (value === null || typeof value === 'boolean') return value
+  if (typeof value === 'number') {
+    if (!Number.isFinite(value) || Object.is(value, -0)) return malformedTxEvidence()
+    return value
+  }
+  if (typeof value === 'string') {
+    if (value.length > SOLANA_MAX_ERROR_STRING_UTF8_BYTES) {
+      return malformedTxEvidence()
+    }
+    budget.stringBytes += utf8ByteLength(value)
+    if (budget.stringBytes > SOLANA_MAX_ERROR_STRING_UTF8_BYTES) {
+      return malformedTxEvidence()
+    }
+    return value
+  }
+  if (typeof value !== 'object' || isProxy(value)) return malformedTxEvidence()
+  if (budget.seen.has(value)) return malformedTxEvidence()
+  budget.seen.add(value)
+
+  if (Array.isArray(value)) {
+    return denseArrayValues(value, SOLANA_MAX_ERROR_ARRAY_LENGTH).map((item) =>
+      cloneBoundedSolanaErrorJson(item, budget, depth + 1)
+    )
+  }
+
+  const record = plainDataRecord(value)
+  const cloned: { [key: string]: SolanaRpcJson } = {}
+  let keyCount = 0
+  for (const key in record) {
+    if (!Object.hasOwn(record, key)) continue
+    keyCount += 1
+    if (keyCount > SOLANA_MAX_ERROR_OBJECT_KEYS) return malformedTxEvidence()
+    if (key.length > SOLANA_MAX_ERROR_STRING_UTF8_BYTES) return malformedTxEvidence()
+    budget.stringBytes += utf8ByteLength(key)
+    if (budget.stringBytes > SOLANA_MAX_ERROR_STRING_UTF8_BYTES) {
+      return malformedTxEvidence()
+    }
+    const child = ownDataValue(record, key)
+    Object.defineProperty(cloned, key, {
+      configurable: true,
+      enumerable: true,
+      writable: true,
+      value: cloneBoundedSolanaErrorJson(child, budget, depth + 1),
+    })
+  }
+  return cloned
+}
+
+function selectedInstruction(
+  value: unknown,
+  maximumAccountIndexes: number
+): { [key: string]: SolanaRpcJson } {
+  const instruction = plainDataRecord(value)
+  const selected: { [key: string]: SolanaRpcJson } = {
+    programIdIndex: jsonScalar(ownDataValue(instruction, 'programIdIndex')),
+    accounts: selectedNumberArray(ownDataValue(instruction, 'accounts'), maximumAccountIndexes),
+    data: selectedString(
+      ownDataValue(instruction, 'data'),
+      SOLANA_MAX_CPI_INSTRUCTION_DATA_BYTES * 2
+    ),
+  }
+  const stackHeight = ownDataValue(instruction, 'stackHeight', false)
+  if (stackHeight !== undefined) selected.stackHeight = jsonScalar(stackHeight)
+  return selected
+}
+
+function selectedTokenBalance(value: unknown): { [key: string]: SolanaRpcJson } {
+  const balance = plainDataRecord(value)
+  const uiTokenAmount = plainDataRecord(ownDataValue(balance, 'uiTokenAmount'))
+  const selected: { [key: string]: SolanaRpcJson } = {
+    accountIndex: jsonScalar(ownDataValue(balance, 'accountIndex')),
+    mint: selectedString(ownDataValue(balance, 'mint'), 64),
+    uiTokenAmount: {
+      amount: selectedString(ownDataValue(uiTokenAmount, 'amount'), 20),
+      decimals: jsonScalar(ownDataValue(uiTokenAmount, 'decimals')),
+    },
+  }
+  for (const key of ['owner', 'programId'] as const) {
+    const child = ownDataValue(balance, key, false)
+    if (child !== undefined) {
+      selected[key] = child === null ? null : selectedString(child, 64)
+    }
+  }
+  return selected
+}
+
+function selectedSolanaTransactionResult(value: unknown): SolanaRpcJson {
+  const result = plainDataRecord(value)
+  const transaction = plainDataRecord(ownDataValue(result, 'transaction'))
+  const message = plainDataRecord(ownDataValue(transaction, 'message'))
+  const header = plainDataRecord(ownDataValue(message, 'header'))
+  const meta = plainDataRecord(ownDataValue(result, 'meta'))
+
+  const selectedMessage: { [key: string]: SolanaRpcJson } = {
+    header: {
+      numRequiredSignatures: jsonScalar(ownDataValue(header, 'numRequiredSignatures')),
+      numReadonlySignedAccounts: jsonScalar(ownDataValue(header, 'numReadonlySignedAccounts')),
+      numReadonlyUnsignedAccounts: jsonScalar(ownDataValue(header, 'numReadonlyUnsignedAccounts')),
+    },
+    accountKeys: selectedStringArray(
+      ownDataValue(message, 'accountKeys'),
+      SOLANA_MAX_RESOLVED_ACCOUNT_KEYS,
+      64,
+      SOLANA_MAX_RESOLVED_ACCOUNT_KEYS * 64
+    ),
+    instructions: denseArrayValues(
+      ownDataValue(message, 'instructions'),
+      SOLANA_MAX_DECLARED_OUTER_INSTRUCTIONS
+    ).map((instruction) => selectedInstruction(instruction, SOLANA_PACKET_DATA_SIZE_BYTES)),
+  }
+
+  const addressTableLookups = ownDataValue(message, 'addressTableLookups', false)
+  if (addressTableLookups !== undefined && addressTableLookups !== null) {
+    selectedMessage.addressTableLookups = denseArrayValues(
+      addressTableLookups,
+      SOLANA_MAX_ADDRESS_TABLE_LOOKUPS
+    ).map((lookupValue) => {
+      const lookup = plainDataRecord(lookupValue)
+      return {
+        accountKey: selectedString(ownDataValue(lookup, 'accountKey'), 64),
+        writableIndexes: selectedNumberArray(
+          ownDataValue(lookup, 'writableIndexes'),
+          SOLANA_MAX_RESOLVED_ACCOUNT_KEYS
+        ),
+        readonlyIndexes: selectedNumberArray(
+          ownDataValue(lookup, 'readonlyIndexes'),
+          SOLANA_MAX_RESOLVED_ACCOUNT_KEYS
+        ),
+      }
+    })
+  } else if (addressTableLookups === null) {
+    selectedMessage.addressTableLookups = null
+  }
+
+  const selectedMeta: { [key: string]: SolanaRpcJson } = {
+    err: cloneBoundedSolanaErrorJson(ownDataValue(meta, 'err')),
+    fee: jsonScalar(ownDataValue(meta, 'fee')),
+    preBalances: selectedNumberArray(
+      ownDataValue(meta, 'preBalances'),
+      SOLANA_MAX_RESOLVED_ACCOUNT_KEYS
+    ),
+    postBalances: selectedNumberArray(
+      ownDataValue(meta, 'postBalances'),
+      SOLANA_MAX_RESOLVED_ACCOUNT_KEYS
+    ),
+  }
+  const computeUnitsConsumed = ownDataValue(meta, 'computeUnitsConsumed', false)
+  if (computeUnitsConsumed !== undefined) {
+    selectedMeta.computeUnitsConsumed = jsonScalar(computeUnitsConsumed)
+  }
+
+  const loadedAddresses = ownDataValue(meta, 'loadedAddresses', false)
+  if (loadedAddresses !== undefined && loadedAddresses !== null) {
+    const loaded = plainDataRecord(loadedAddresses)
+    selectedMeta.loadedAddresses = {
+      writable: selectedStringArray(
+        ownDataValue(loaded, 'writable'),
+        SOLANA_MAX_RESOLVED_ACCOUNT_KEYS,
+        64,
+        SOLANA_MAX_RESOLVED_ACCOUNT_KEYS * 64
+      ),
+      readonly: selectedStringArray(
+        ownDataValue(loaded, 'readonly'),
+        SOLANA_MAX_RESOLVED_ACCOUNT_KEYS,
+        64,
+        SOLANA_MAX_RESOLVED_ACCOUNT_KEYS * 64
+      ),
+    }
+  } else if (loadedAddresses === null) {
+    selectedMeta.loadedAddresses = null
+  }
+
+  for (const key of ['preTokenBalances', 'postTokenBalances'] as const) {
+    const balances = ownDataValue(meta, key, false)
+    if (balances === null) {
+      selectedMeta[key] = null
+    } else if (balances !== undefined) {
+      selectedMeta[key] = denseArrayValues(balances, SOLANA_MAX_TOKEN_BALANCES).map(
+        selectedTokenBalance
+      )
+    }
+  }
+
+  const innerInstructions = ownDataValue(meta, 'innerInstructions', false)
+  if (innerInstructions === null) {
+    selectedMeta.innerInstructions = null
+  } else if (innerInstructions !== undefined) {
+    selectedMeta.innerInstructions = denseArrayValues(
+      innerInstructions,
+      SOLANA_MAX_INSTRUCTION_TRACE_LENGTH
+    ).map((groupValue) => {
+      const group = plainDataRecord(groupValue)
+      return {
+        index: jsonScalar(ownDataValue(group, 'index')),
+        instructions: denseArrayValues(
+          ownDataValue(group, 'instructions'),
+          SOLANA_MAX_INSTRUCTION_TRACE_LENGTH
+        ).map((instruction) =>
+          selectedInstruction(instruction, SOLANA_MAX_CPI_INSTRUCTION_ACCOUNTS)
+        ),
+      }
+    })
+  }
+
+  const logMessages = ownDataValue(meta, 'logMessages', false)
+  if (logMessages === null) {
+    selectedMeta.logMessages = null
+  } else if (logMessages !== undefined) {
+    selectedMeta.logMessages = selectedStringArray(
+      logMessages,
+      SOLANA_MAX_LOG_MESSAGES,
+      SOLANA_MAX_LOG_MESSAGE_UTF8_BYTES,
+      SOLANA_MAX_LOG_TOTAL_UTF8_BYTES
+    )
+  }
+
+  const selected: { [key: string]: SolanaRpcJson } = {
+    slot: jsonScalar(ownDataValue(result, 'slot')),
+    version: jsonScalar(ownDataValue(result, 'version')),
+    transaction: {
+      signatures: selectedStringArray(
+        ownDataValue(transaction, 'signatures'),
+        SOLANA_MAX_TRANSACTION_SIGNATURES,
+        128,
+        SOLANA_MAX_TRANSACTION_SIGNATURES * 128
+      ),
+      message: selectedMessage,
+    },
+    meta: selectedMeta,
+  }
+  const blockTime = ownDataValue(result, 'blockTime', false)
+  if (blockTime !== undefined) selected.blockTime = jsonScalar(blockTime)
+  return selected
+}
+
+function clearDecodedInstructionData(bytes: Uint8Array): void {
+  try {
+    Reflect.apply(TYPED_ARRAY_FILL, bytes, [0])
+    if (!TYPED_ARRAY_LENGTH_GETTER) return malformedTxEvidence()
+    const length: unknown = Reflect.apply(TYPED_ARRAY_LENGTH_GETTER, bytes, [])
+    if (!Number.isSafeInteger(length) || Number(length) < 0) return malformedTxEvidence()
+    for (let index = 0; index < Number(length); index += 1) {
+      if (bytes[index] !== 0) return malformedTxEvidence()
+    }
+  } catch {
+    return malformedTxEvidence()
+  }
+}
+
 function nonNegativeSafeInteger(value: unknown): number {
-  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < 0) {
+  if (
+    typeof value !== 'number' ||
+    !Number.isSafeInteger(value) ||
+    value < 0 ||
+    Object.is(value, -0)
+  ) {
     return malformedTxEvidence()
   }
   return value
@@ -844,65 +1232,114 @@ function solanaPublicKey(value: unknown): string {
   return value
 }
 
-function rawStringArray(value: unknown): string[] {
-  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string')) {
+function rawStringArray(
+  value: unknown,
+  maximumLength: number,
+  maximumItemCodeUnits: number,
+  maximumTotalCodeUnits: number
+): string[] {
+  if (!Array.isArray(value) || value.length > maximumLength) {
     return malformedTxEvidence()
   }
-  return [...value] as string[]
+  let totalCodeUnits = 0
+  const values = value.map((item) => {
+    if (typeof item !== 'string' || item.length > maximumItemCodeUnits) {
+      return malformedTxEvidence()
+    }
+    totalCodeUnits += item.length
+    if (totalCodeUnits > maximumTotalCodeUnits) return malformedTxEvidence()
+    return item
+  })
+  return values
 }
 
-function publicKeyArray(value: unknown): string[] {
-  if (!Array.isArray(value)) return malformedTxEvidence()
+function publicKeyArray(
+  value: unknown,
+  maximumLength = SOLANA_MAX_RESOLVED_ACCOUNT_KEYS
+): string[] {
+  if (!Array.isArray(value) || value.length > maximumLength) return malformedTxEvidence()
   return value.map(solanaPublicKey)
 }
 
-function byteArray(value: unknown): number[] {
-  if (!Array.isArray(value)) return malformedTxEvidence()
+function byteArray(value: unknown, maximumLength = SOLANA_MAX_RESOLVED_ACCOUNT_KEYS): number[] {
+  if (!Array.isArray(value) || value.length > maximumLength) return malformedTxEvidence()
   return value.map(byteInteger)
 }
 
 function transactionVersion(value: unknown): 'legacy' | 0 {
-  if (value === 'legacy' || value === 0) return value
+  if (value === 'legacy' || (value === 0 && !Object.is(value, -0))) return value
+  if (Object.is(value, -0)) return malformedTxEvidence()
   if (typeof value === 'number' && Number.isSafeInteger(value) && value >= 0) {
     throw new UnsupportedSolanaTxVersionError('unsupported Solana transaction version')
   }
   return malformedTxEvidence()
 }
 
-function isSolanaRpcJson(value: unknown): value is SolanaRpcJson {
-  if (
-    value === null ||
-    typeof value === 'string' ||
-    typeof value === 'boolean' ||
-    (typeof value === 'number' && Number.isSafeInteger(value))
-  ) {
-    return true
+function isSolanaRpcJson(
+  value: unknown,
+  budget = { nodes: 0, stringBytes: 0 },
+  depth = 0
+): value is SolanaRpcJson {
+  budget.nodes += 1
+  if (budget.nodes > SOLANA_MAX_ERROR_JSON_NODES || depth > SOLANA_MAX_ERROR_JSON_DEPTH) {
+    return false
   }
-  if (Array.isArray(value)) return value.every(isSolanaRpcJson)
-  return (
-    isJsonObject(value) &&
-    Object.getPrototypeOf(value) === Object.prototype &&
-    Object.values(value).every(isSolanaRpcJson)
-  )
+  if (value === null || typeof value === 'boolean') return true
+  if (typeof value === 'string') {
+    budget.stringBytes += utf8ByteLength(value)
+    return budget.stringBytes <= SOLANA_MAX_ERROR_STRING_UTF8_BYTES
+  }
+  if (typeof value === 'number') {
+    return Number.isSafeInteger(value) && !Object.is(value, -0)
+  }
+  if (Array.isArray(value)) {
+    return (
+      value.length <= SOLANA_MAX_ERROR_ARRAY_LENGTH &&
+      value.every((item) => isSolanaRpcJson(item, budget, depth + 1))
+    )
+  }
+  if (
+    !isJsonObject(value) ||
+    Object.getPrototypeOf(value) !== Object.prototype ||
+    Object.keys(value).length > SOLANA_MAX_ERROR_OBJECT_KEYS
+  ) {
+    return false
+  }
+  return Object.values(value).every((item) => isSolanaRpcJson(item, budget, depth + 1))
 }
 
 function transactionError(value: unknown): SolanaTransactionError | null {
   if (value === null) return null
-  if (typeof value === 'string') return value
+  if (typeof value === 'string') {
+    if (utf8ByteLength(value) > SOLANA_MAX_ERROR_STRING_UTF8_BYTES) {
+      return malformedTxEvidence()
+    }
+    return value
+  }
   if (!isJsonObject(value) || Object.keys(value).length !== 1 || !isSolanaRpcJson(value)) {
     return malformedTxEvidence()
   }
   return value as { [key: string]: SolanaRpcJson }
 }
 
-function parseAddressTableLookups(value: unknown): SolanaAddressTableLookupEvidence[] {
+function parseAddressTableLookups(
+  value: unknown,
+  maximumLoadedAccountCount: number
+): SolanaAddressTableLookupEvidence[] {
   if (value === undefined || value === null) return []
-  if (!Array.isArray(value)) return malformedTxEvidence()
+  if (!Array.isArray(value) || value.length > SOLANA_MAX_ADDRESS_TABLE_LOOKUPS) {
+    return malformedTxEvidence()
+  }
+  let loadedAccountCount = 0
   return value.map((raw) => {
     if (!isJsonObject(raw)) return malformedTxEvidence()
     const writableIndexes = byteArray(raw.writableIndexes)
     const readonlyIndexes = byteArray(raw.readonlyIndexes)
     if (writableIndexes.length + readonlyIndexes.length === 0) {
+      return malformedTxEvidence()
+    }
+    loadedAccountCount += writableIndexes.length + readonlyIndexes.length
+    if (loadedAccountCount > maximumLoadedAccountCount) {
       return malformedTxEvidence()
     }
     return {
@@ -1004,7 +1441,7 @@ function parseResolvedAccountKeys(
       lookup: readonlyOrigins[loadedIndex],
     })
   }
-  if (accountKeys.length > 256) return malformedTxEvidence()
+  if (accountKeys.length > SOLANA_MAX_RESOLVED_ACCOUNT_KEYS) return malformedTxEvidence()
   return { loadedAddresses, accountKeys }
 }
 
@@ -1022,7 +1459,10 @@ function parseCompiledInstruction(
   ) {
     return malformedTxEvidence()
   }
-  const accountIndexes = byteArray(value.accounts)
+  const accountIndexes = byteArray(
+    value.accounts,
+    path.kind === 'outer' ? SOLANA_PACKET_DATA_SIZE_BYTES : SOLANA_MAX_CPI_INSTRUCTION_ACCOUNTS
+  )
   if (accountIndexes.some((index) => index >= accountKeys.length)) return malformedTxEvidence()
   if (typeof value.data !== 'string') return malformedTxEvidence()
   const decodedData = decodeBase58BytesBounded(
@@ -1032,11 +1472,11 @@ function parseCompiledInstruction(
   if (decodedData === null) {
     return malformedTxEvidence()
   }
-  decodedData.fill(0)
+  clearDecodedInstructionData(decodedData)
   const stackHeight =
     value.stackHeight === undefined || value.stackHeight === null
       ? null
-      : nonNegativeSafeInteger(value.stackHeight)
+      : byteInteger(value.stackHeight)
   return {
     path,
     programIdIndex,
@@ -1080,7 +1520,12 @@ function parseInstructions(
       if (outerIndex >= outerValue.length || innerByOuter.has(outerIndex)) {
         return malformedTxEvidence()
       }
-      if (!Array.isArray(group.instructions)) return malformedTxEvidence()
+      if (
+        !Array.isArray(group.instructions) ||
+        group.instructions.length > SOLANA_MAX_INSTRUCTION_TRACE_LENGTH
+      ) {
+        return malformedTxEvidence()
+      }
       reportedInnerInstructionCount += group.instructions.length
       highestReportedOuterIndex = Math.max(highestReportedOuterIndex, outerIndex)
       if (
@@ -1141,7 +1586,9 @@ function parseTokenBalances(
   accountKeys: SolanaResolvedAccountKey[]
 ): SolanaTokenBalanceEvidence[] | null {
   if (value === undefined || value === null) return null
-  if (!Array.isArray(value)) return malformedTxEvidence()
+  if (!Array.isArray(value) || value.length > accountKeys.length) {
+    return malformedTxEvidence()
+  }
   const balances = value.map((raw) => {
     if (!isJsonObject(raw) || !isJsonObject(raw.uiTokenAmount)) {
       return malformedTxEvidence()
@@ -1175,7 +1622,12 @@ function parseTokenBalances(
 
 function parseLogMessages(value: unknown): string[] | null {
   if (value === undefined || value === null) return null
-  return rawStringArray(value)
+  return rawStringArray(
+    value,
+    SOLANA_MAX_LOG_MESSAGES,
+    SOLANA_MAX_LOG_MESSAGE_UTF8_BYTES,
+    SOLANA_MAX_LOG_TOTAL_UTF8_BYTES
+  )
 }
 
 function normalizeSolanaTxEvidence(
@@ -1183,17 +1635,23 @@ function normalizeSolanaTxEvidence(
   value: unknown,
   provider: SolanaProviderEvidence
 ): SolanaTxEvidenceAvailable {
-  if (!isJsonObject(value)) return malformedTxEvidence()
-  const version = transactionVersion(value.version)
-  const slot = nonNegativeSafeInteger(value.slot)
+  const boundedValue = selectedSolanaTransactionResult(value)
+  if (!isJsonObject(boundedValue)) return malformedTxEvidence()
+  const version = transactionVersion(boundedValue.version)
+  const slot = nonNegativeSafeInteger(boundedValue.slot)
   const blockTime =
-    value.blockTime === undefined || value.blockTime === null
+    boundedValue.blockTime === undefined || boundedValue.blockTime === null
       ? null
-      : nonNegativeSafeInteger(value.blockTime)
-  if (!isJsonObject(value.transaction) || !isJsonObject(value.transaction.message)) {
+      : nonNegativeSafeInteger(boundedValue.blockTime)
+  if (!isJsonObject(boundedValue.transaction) || !isJsonObject(boundedValue.transaction.message)) {
     return malformedTxEvidence()
   }
-  const transactionSignatures = rawStringArray(value.transaction.signatures)
+  const transactionSignatures = rawStringArray(
+    boundedValue.transaction.signatures,
+    SOLANA_MAX_TRANSACTION_SIGNATURES,
+    128,
+    SOLANA_MAX_TRANSACTION_SIGNATURES * 128
+  )
   if (
     transactionSignatures.length === 0 ||
     transactionSignatures.some((candidate) => !isSolanaSignature(candidate)) ||
@@ -1201,13 +1659,16 @@ function normalizeSolanaTxEvidence(
   ) {
     return malformedTxEvidence()
   }
-  const message = value.transaction.message
-  const staticAccountKeys = publicKeyArray(message.accountKeys)
-  const addressTableLookups = parseAddressTableLookups(message.addressTableLookups)
-  if (!isJsonObject(value.meta) || !Object.hasOwn(value.meta, 'err')) {
+  const message = boundedValue.transaction.message
+  const staticAccountKeys = publicKeyArray(message.accountKeys, SOLANA_MAX_RESOLVED_ACCOUNT_KEYS)
+  const addressTableLookups = parseAddressTableLookups(
+    message.addressTableLookups,
+    SOLANA_MAX_RESOLVED_ACCOUNT_KEYS - staticAccountKeys.length
+  )
+  if (!isJsonObject(boundedValue.meta) || !Object.hasOwn(boundedValue.meta, 'err')) {
     return malformedTxEvidence()
   }
-  const meta = value.meta
+  const meta = boundedValue.meta
   const { loadedAddresses, accountKeys } = parseResolvedAccountKeys(
     version,
     staticAccountKeys,
