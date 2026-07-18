@@ -3,6 +3,7 @@ import {
   resolveCheckoutSessionAuthority,
   resolveRecurringInvoiceAuthority,
   resolveSubscriptionAuthority,
+  resolveSubscriptionEventStateAuthority,
   StripeAuthorityError,
   type StripeAuthorityClient,
   type StripeAuthorityOptions,
@@ -57,6 +58,8 @@ function subscription(
     latest_invoice: latestInvoice,
     metadata: { userId: USER_ID, supabase_user_id: USER_ID },
     status: 'active',
+    cancel_at_period_end: false,
+    canceled_at: null,
     items: {
       data: [
         {
@@ -607,6 +610,112 @@ describe('Stripe entitlement authority', () => {
     })
     expect(client.invoices.retrieve).not.toHaveBeenCalled()
     expect(client.invoicePayments.list).not.toHaveBeenCalled()
+  })
+
+  it('resolves a past-due signed event snapshot without inventing payment authority', async () => {
+    const scenario = baseScenario()
+    const snapshot = subscription('in_failed', {
+      status: 'past_due',
+      cancel_at_period_end: true,
+      canceled_at: null,
+    })
+    const client = clientFor(scenario)
+
+    const authority = await resolveSubscriptionEventStateAuthority(client, snapshot, options)
+
+    expect(authority).toEqual({
+      kind: 'subscription_state',
+      userId: USER_ID,
+      customerId: CUSTOMER_ID,
+      subscriptionId: SUBSCRIPTION_ID,
+      currentInvoiceId: 'in_failed',
+      priceId: 'price_monthly',
+      plan: 'monthly',
+      currency: 'usd',
+      periodStart: 2_000,
+      periodEnd: 3_000,
+      subscriptionStatus: 'past_due',
+      cancelAtPeriodEnd: true,
+      canceledAt: null,
+    })
+    expect(client.subscriptions.retrieve).not.toHaveBeenCalled()
+    expect(client.invoices.retrieve).not.toHaveBeenCalled()
+    expect(client.invoicePayments.list).not.toHaveBeenCalled()
+  })
+
+  it('rejects a signed state snapshot whose customer identity disagrees', async () => {
+    const scenario = baseScenario()
+    scenario.customers[CUSTOMER_ID] = customer(OTHER_USER_ID)
+
+    await expectAuthorityError(
+      resolveSubscriptionEventStateAuthority(
+        clientFor(scenario),
+        subscription('in_failed', { status: 'past_due' }),
+        options
+      ),
+      'identity_conflict'
+    )
+  })
+
+  it('rejects past-due state without an exact failed invoice reference', async () => {
+    const scenario = baseScenario()
+
+    await expectAuthorityError(
+      resolveSubscriptionEventStateAuthority(
+        clientFor(scenario),
+        subscription(null, { status: 'past_due' }),
+        options
+      ),
+      'invalid_object'
+    )
+  })
+
+  it('rejects malformed state periods and ambiguous products', async () => {
+    const malformedPeriod = baseScenario()
+    malformedPeriod.subscriptions[SUBSCRIPTION_ID] = subscription('in_failed', {
+      status: 'past_due',
+      items: {
+        data: [
+          {
+            id: 'si_pro',
+            current_period_start: 3_000,
+            current_period_end: 2_000,
+            price: { id: 'price_monthly', currency: 'usd' },
+            quantity: 1,
+          },
+        ],
+      } as Stripe.ApiList<Stripe.SubscriptionItem>,
+    })
+    await expectAuthorityError(
+      resolveSubscriptionEventStateAuthority(
+        clientFor(malformedPeriod),
+        malformedPeriod.subscriptions[SUBSCRIPTION_ID],
+        options
+      ),
+      'invalid_period'
+    )
+
+    const ambiguous = baseScenario()
+    ambiguous.subscriptions[SUBSCRIPTION_ID] = subscription('in_failed', {
+      status: 'past_due',
+      items: {
+        data: [
+          subscription().items.data[0],
+          {
+            ...subscription().items.data[0],
+            id: 'si_second',
+          },
+        ],
+      } as Stripe.ApiList<Stripe.SubscriptionItem>,
+    })
+    await expectAuthorityError(
+      resolveSubscriptionEventStateAuthority(
+        clientFor(ambiguous),
+        ambiguous.subscriptions[SUBSCRIPTION_ID],
+        options
+      ),
+      'ambiguous_product'
+    )
   })
 
   it('does not turn a stale no-payment Checkout Session into current paid authority', async () => {
