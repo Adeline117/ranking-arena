@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
@@ -9,6 +10,7 @@ import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { SearchResult, isSolanaDex, walletMatchesTrader } from './types'
 import { trackEvent } from '@/lib/analytics/track'
+import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
 
 declare global {
   interface Window {
@@ -32,9 +34,20 @@ export function DexVerifyForm({
 }) {
   const { t } = useLanguage()
   const { showToast } = useToast()
+  const router = useRouter()
   const [loading, setLoading] = useState(false)
 
   const isSolana = isSolanaDex(trader.source)
+  const redirectToLogin = () => {
+    showToast(t('loginExpiredPleaseRelogin'), 'error')
+    router.push(
+      buildTraderClaimLoginHref({
+        traderId: trader.source_trader_id,
+        source: trader.source,
+        handle: trader.handle,
+      })
+    )
+  }
 
   const handleWalletVerify = async () => {
     if (loading) return
@@ -44,7 +57,7 @@ export function DexVerifyForm({
         data: { session },
       } = await supabase.auth.getSession()
       if (!session) {
-        showToast(t('pleaseLoginFirst'), 'warning')
+        redirectToLogin()
         return
       }
 
@@ -137,9 +150,13 @@ export function DexVerifyForm({
         }),
       })
 
-      const claimData = await claimRes.json()
+      const claimData: { error?: string } = await claimRes.json().catch(() => ({}))
 
       if (!claimRes.ok) {
+        if (claimRes.status === 401) {
+          redirectToLogin()
+          return
+        }
         showToast(claimData.error || t('claimFailed'), 'error')
         return
       }

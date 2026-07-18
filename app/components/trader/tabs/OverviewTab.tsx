@@ -21,6 +21,7 @@ import { features } from '@/lib/features'
 import type { TraderProfile, TraderPerformance } from '@/lib/data/trader'
 import type { EquityCurveData } from '@/app/(app)/u/[handle]/components/types'
 import type { UnregisteredTraderData } from '@/app/(app)/trader/[handle]/TraderProfileClient'
+import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
 
 /** Valid equity curve period keys. */
 type EquityCurvePeriod = keyof EquityCurveData
@@ -428,7 +429,11 @@ const OverviewTab = React.memo(function OverviewTab({
                 />
               ) : (
                 <a
-                  href={`/login?returnUrl=${encodeURIComponent(`/trader/${encodeURIComponent(data.handle)}`)}`}
+                  href={buildTraderClaimLoginHref({
+                    traderId: data.source_trader_id,
+                    source: data.source,
+                    handle: data.handle,
+                  })}
                   style={{
                     padding: '6px 16px',
                     borderRadius: 6,
