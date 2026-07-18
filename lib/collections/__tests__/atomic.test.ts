@@ -41,6 +41,48 @@ describe('collection atomic acknowledgements', () => {
     ).toMatchObject({ applied: true, collection })
   })
 
+  it('accepts PostgreSQL-canonical UUIDs for uppercase request identifiers', () => {
+    expect(
+      parseCollectionMutationAck(
+        {
+          action: 'update',
+          actor_id: ACTOR_ID,
+          applied: true,
+          collection,
+          collection_id: COLLECTION_ID,
+          result_code: 'updated',
+        },
+        {
+          action: 'update',
+          actorId: ACTOR_ID.toUpperCase(),
+          collectionId: COLLECTION_ID.toUpperCase(),
+        }
+      )
+    ).toMatchObject({ applied: true, collection })
+
+    expect(
+      parseCollectionItemMutationAck(
+        {
+          action: 'add',
+          actor_id: ACTOR_ID,
+          applied: true,
+          collection_id: COLLECTION_ID,
+          item,
+          item_id: ITEM_ID,
+          item_type: 'post',
+          result_code: 'inserted',
+        },
+        {
+          action: 'add',
+          actorId: ACTOR_ID.toUpperCase(),
+          collectionId: COLLECTION_ID.toUpperCase(),
+          itemId: ITEM_ID.toUpperCase(),
+          itemType: 'post',
+        }
+      )
+    ).toMatchObject({ applied: true, item })
+  })
+
   it('accepts an exact not-found acknowledgement but never treats it as applied', () => {
     expect(
       parseCollectionMutationAck(
