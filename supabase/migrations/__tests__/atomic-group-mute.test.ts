@@ -22,6 +22,8 @@ describe('atomic group mute boundary', () => {
     expect(migration).toContain("'atomic-group-mute:v2:'")
     expect(migration).toContain('DO $exact_table_authority$')
     expect(migration).toContain('DO $exact_ledger_schema$')
+    expect(migration).toContain('DO $converge_identity_sequence_authority$')
+    expect(migration).toContain('REVOKE ALL PRIVILEGES ON SEQUENCE')
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)
   })

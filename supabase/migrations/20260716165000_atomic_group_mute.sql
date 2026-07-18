@@ -578,6 +578,67 @@ ALTER TABLE public.group_mute_operations OWNER TO postgres;
 COMMENT ON TABLE public.group_mute_operations IS
   'atomic-group-mute-operation-ledger:v2';
 
+-- Managed Supabase grants every new public sequence to browser/service roles
+-- through postgres-owned default privileges. The identity is internal to this
+-- owner-only ledger, so converge those inherited grants before attestation.
+DO $converge_identity_sequence_authority$
+DECLARE
+  v_sequence pg_catalog.regclass := pg_catalog.pg_get_serial_sequence(
+    'public.group_mute_operations',
+    'sequence_id'
+  )::pg_catalog.regclass;
+  v_postgres_oid oid := (
+    SELECT role_row.oid
+    FROM pg_catalog.pg_roles AS role_row
+    WHERE role_row.rolname = 'postgres'
+  );
+  v_sequence_owner oid;
+  v_grantee record;
+BEGIN
+  IF v_sequence IS NULL OR v_postgres_oid IS NULL THEN
+    RAISE EXCEPTION 'group mute identity sequence is unavailable';
+  END IF;
+
+  SELECT sequence_relation.relowner
+  INTO STRICT v_sequence_owner
+  FROM pg_catalog.pg_class AS sequence_relation
+  WHERE sequence_relation.oid = v_sequence
+    AND sequence_relation.relkind = 'S';
+
+  IF v_sequence_owner <> v_postgres_oid THEN
+    RAISE EXCEPTION 'group mute identity sequence owner is incompatible';
+  END IF;
+
+  FOR v_grantee IN
+    SELECT DISTINCT acl_entry.grantee, role_row.rolname
+    FROM pg_catalog.pg_class AS sequence_relation
+    CROSS JOIN LATERAL pg_catalog.aclexplode(
+      COALESCE(
+        sequence_relation.relacl,
+        pg_catalog.acldefault('S', sequence_relation.relowner)
+      )
+    ) AS acl_entry
+    LEFT JOIN pg_catalog.pg_roles AS role_row
+      ON role_row.oid = acl_entry.grantee
+    WHERE sequence_relation.oid = v_sequence
+      AND acl_entry.grantee <> sequence_relation.relowner
+  LOOP
+    IF v_grantee.grantee = 0 THEN
+      EXECUTE pg_catalog.format(
+        'REVOKE ALL PRIVILEGES ON SEQUENCE %s FROM PUBLIC',
+        v_sequence
+      );
+    ELSIF v_grantee.rolname IS NOT NULL THEN
+      EXECUTE pg_catalog.format(
+        'REVOKE ALL PRIVILEGES ON SEQUENCE %s FROM %I',
+        v_sequence,
+        v_grantee.rolname
+      );
+    END IF;
+  END LOOP;
+END
+$converge_identity_sequence_authority$;
+
 CREATE INDEX IF NOT EXISTS group_mute_operations_target_sequence_idx
   ON public.group_mute_operations (group_id, target_id, sequence_id DESC);
 CREATE INDEX IF NOT EXISTS group_mute_operations_latest_applied_idx
