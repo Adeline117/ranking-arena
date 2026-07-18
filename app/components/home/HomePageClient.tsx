@@ -17,6 +17,7 @@ import { trackEvent } from '@/lib/analytics/track'
 interface HomePageClientProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
+  initialIsStale?: boolean
   initialTotalCount?: number
   initialCategoryCounts?: CategoryCounts
 }
@@ -30,6 +31,7 @@ interface HomePageClientProps {
 export default function HomePageClient({
   initialTraders,
   initialLastUpdated,
+  initialIsStale,
   initialTotalCount,
   initialCategoryCounts,
 }: HomePageClientProps) {
@@ -81,9 +83,11 @@ export default function HomePageClient({
     fetchPage,
     lastRefreshFailed,
     staleDataWarning,
+    isStale,
   } = useTraderData({
     initialTraders: convertedInitialTraders,
     initialLastUpdated,
+    initialIsStale,
     initialTotalCount,
     initialCategoryCounts,
   })
@@ -182,6 +186,7 @@ export default function HomePageClient({
           fetchPage={fetchPage}
           lastRefreshFailed={lastRefreshFailed}
           staleDataWarning={staleDataWarning}
+          isStale={isStale}
         />
 
         {/* API CTA — subtle banner for developer discovery */}

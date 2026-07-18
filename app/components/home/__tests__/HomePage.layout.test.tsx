@@ -23,7 +23,11 @@ jest.mock('../../layout/ThreeColumnLayout', () => ({
 
 jest.mock('../HomePageClient', () => ({
   __esModule: true,
-  default: () => <div data-testid="ranking-center">Rankings</div>,
+  default: ({ initialIsStale }: { initialIsStale?: boolean }) => (
+    <div data-testid="ranking-center" data-initial-is-stale={String(initialIsStale)}>
+      Rankings
+    </div>
+  ),
 }))
 jest.mock('../FoundingMemberBanner', () => ({
   __esModule: true,
@@ -80,5 +84,14 @@ describe('HomePage protected information architecture', () => {
     expect(await within(right).findByTestId('right-watchlist')).toBeInTheDocument()
     expect(await within(right).findByTestId('right-trends')).toBeInTheDocument()
     expect(await within(right).findByTestId('right-news')).toBeInTheDocument()
+  })
+
+  it('forwards the SSR source freshness flag into the interactive client', async () => {
+    render(<HomePage initialIsStale />)
+
+    expect(await screen.findByTestId('ranking-center')).toHaveAttribute(
+      'data-initial-is-stale',
+      'true'
+    )
   })
 })

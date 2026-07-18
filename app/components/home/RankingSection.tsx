@@ -51,6 +51,8 @@ interface RankingSectionProps {
   ) => Promise<void>
   lastRefreshFailed?: boolean
   staleDataWarning?: boolean
+  /** Source-watermark freshness from the shared 48-hour server contract. */
+  isStale?: boolean
 }
 
 export default function RankingSection({
@@ -69,6 +71,7 @@ export default function RankingSection({
   fetchPage,
   lastRefreshFailed,
   staleDataWarning,
+  isStale = false,
 }: RankingSectionProps) {
   const {
     language,
@@ -408,6 +411,7 @@ export default function RankingSection({
         t={t}
         onRefresh={onRefresh}
         lastRefreshFailed={lastRefreshFailed}
+        isStale={isStale}
       />
     </section>
   )

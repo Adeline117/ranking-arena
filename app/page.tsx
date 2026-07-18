@@ -91,10 +91,8 @@ export default async function Page() {
   const page = 0
 
   // Fetch data in parallel
-  const [{ traders, lastUpdated, totalCount, categoryCounts }, heroStats] = await Promise.all([
-    getInitialTraders(timeRange, PER_PAGE, page),
-    getHeroStats(),
-  ])
+  const [{ traders, lastUpdated, isStale, totalCount, categoryCounts }, heroStats] =
+    await Promise.all([getInitialTraders(timeRange, PER_PAGE, page), getHeroStats()])
 
   // ItemList for the 90D leaderboard — the actual ranking users land on. Built
   // from the SSR-fetched traders (no extra query); top 20 keeps the payload lean.
@@ -160,6 +158,7 @@ export default async function Page() {
           <HomePageLoader
             initialTraders={traders}
             initialLastUpdated={lastUpdated}
+            initialIsStale={isStale}
             heroStats={heroStats}
             initialTotalCount={totalCount}
             initialCategoryCounts={categoryCounts}

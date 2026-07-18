@@ -167,6 +167,7 @@ export interface TraderDataPayload {
   timeRange: '7D' | '30D' | '90D' | 'COMPOSITE'
   traders: unknown[]
   lastUpdated: string
+  isStale?: boolean
 }
 
 export interface UserFollowChangePayload {
