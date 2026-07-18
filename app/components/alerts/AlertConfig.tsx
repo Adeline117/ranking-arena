@@ -197,13 +197,27 @@ export default function AlertConfig({
         method: 'DELETE',
         headers: { ...authHeaders(), ...getCsrfHeaders() },
       })
-      if (res.ok) {
-        setAlert(DEFAULT_ALERT)
-        setHistory([])
-        showToast(t('alertDisabled'), 'success')
+
+      let data: AlertMutationResponse | null = null
+      try {
+        data = (await res.json()) as AlertMutationResponse
+      } catch {
+        // A proxy may return a non-JSON error page. The status still decides failure.
       }
-    } catch {
-      showToast(t('saveFailed2'), 'error')
+
+      if (!res.ok) {
+        throw new Error(
+          typeof data?.error === 'string' && data.error.trim()
+            ? data.error.trim()
+            : t('saveFailed2')
+        )
+      }
+
+      setAlert(DEFAULT_ALERT)
+      setHistory([])
+      showToast(t('alertDisabled'), 'success')
+    } catch (error) {
+      showToast(error instanceof Error && error.message ? error.message : t('saveFailed2'), 'error')
     }
   }
 
