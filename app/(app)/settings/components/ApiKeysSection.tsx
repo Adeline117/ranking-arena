@@ -80,6 +80,7 @@ export function ApiKeysSection() {
   const [keys, setKeys] = useState<ApiKey[]>([])
   const [loading, setLoading] = useState(true)
   const [creating, setCreating] = useState(false)
+  const [revokingId, setRevokingId] = useState<string | null>(null)
   const [newKeyName, setNewKeyName] = useState('')
   const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null)
   const [stateOwner, setStateOwner] = useState<ApiKeyStateOwner | null>(null)
@@ -149,6 +150,7 @@ export function ApiKeysSection() {
     setKeys([])
     setLoading(auth.loading || !auth.authChecked || Boolean(auth.userId))
     setCreating(false)
+    setRevokingId(null)
     setNewKeyName('')
     setJustCreatedKey(null)
     if (auth.authChecked && !auth.loading && auth.userId) void fetchKeys()
@@ -185,6 +187,10 @@ export function ApiKeysSection() {
       await fetchKeys(scope)
       if (!isSettingsViewerCurrent(scope, authRef.current)) return
       showToast(t('apiKeyCreatedToast'), 'success')
+    } catch {
+      if (stateBelongsToViewer(scope)) {
+        showToast(t('networkError'), 'error')
+      }
     } finally {
       if (isSettingsViewerCurrent(scope, authRef.current)) setCreating(false)
     }
@@ -192,30 +198,44 @@ export function ApiKeysSection() {
 
   const revokeKey = async (id: string) => {
     const scope = captureSettingsViewer(authRef.current)
-    if (!scope || !stateBelongsToViewer(scope) || !keys.some((key) => key.id === id && key.active))
-      return
-    const res = await authedFetch(
-      '/api/user/api-keys',
-      'PATCH',
-      scope.accessToken,
-      { id },
-      15_000,
-      {
-        expectedUserId: scope.userId,
-        expectedSessionGeneration: scope.sessionGeneration,
-      }
+    if (
+      !scope ||
+      !stateBelongsToViewer(scope) ||
+      revokingId !== null ||
+      !keys.some((key) => key.id === id && key.active)
     )
-    if (!stateBelongsToViewer(scope) || res.stale) return
-    if (!res.ok) {
-      showToast(t('apiKeyRevokeFailed'), 'error')
       return
-    }
-    setKeys((prev) =>
-      prev.map((k) =>
-        k.id === id ? { ...k, active: false, revoked_at: new Date().toISOString() } : k
+    setRevokingId(id)
+    try {
+      const res = await authedFetch(
+        '/api/user/api-keys',
+        'PATCH',
+        scope.accessToken,
+        { id },
+        15_000,
+        {
+          expectedUserId: scope.userId,
+          expectedSessionGeneration: scope.sessionGeneration,
+        }
       )
-    )
-    showToast(t('apiKeyRevokedToast'), 'success')
+      if (!stateBelongsToViewer(scope) || res.stale) return
+      if (!res.ok) {
+        showToast(t('apiKeyRevokeFailed'), 'error')
+        return
+      }
+      setKeys((prev) =>
+        prev.map((k) =>
+          k.id === id ? { ...k, active: false, revoked_at: new Date().toISOString() } : k
+        )
+      )
+      showToast(t('apiKeyRevokedToast'), 'success')
+    } catch {
+      if (stateBelongsToViewer(scope)) {
+        showToast(t('networkError'), 'error')
+      }
+    } finally {
+      if (isSettingsViewerCurrent(scope, authRef.current)) setRevokingId(null)
+    }
   }
 
   const copyKey = async (key: string) => {
@@ -243,10 +263,12 @@ export function ApiKeysSection() {
   const renderScope = captureSettingsViewer(auth)
   const stateOwnerIsCurrent = apiKeyStateOwnerMatches(stateOwner, renderScope)
   const stateReady = stateOwnerIsCurrent && loadOutcome === 'ready'
+  const loadFailed = stateOwnerIsCurrent && loadOutcome === 'failed'
   const visibleKeys = stateReady ? keys : []
   const visibleNewKeyName = stateReady ? newKeyName : ''
   const visibleJustCreatedKey = stateReady ? justCreatedKey : null
   const visibleCreating = stateReady && creating
+  const visibleRevokingId = stateReady ? revokingId : null
   const activeKeys = visibleKeys.filter((k) => k.active)
   const revokedKeys = visibleKeys.filter((k) => !k.active)
   const displayLoading =
@@ -265,6 +287,40 @@ export function ApiKeysSection() {
     const scope = captureSettingsViewer(authRef.current)
     if (!scope || !stateBelongsToViewer(scope)) return
     setJustCreatedKey(null)
+  }
+
+  if (loadFailed) {
+    return (
+      <SectionCard id="api-keys" title={t('apiKeysSection')} description={t('apiKeysDesc')}>
+        <Box
+          role="alert"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: tokens.spacing[3],
+            padding: tokens.spacing[4],
+            borderRadius: tokens.radius.md,
+            border: `1px solid ${alpha(tokens.colors.accent.error, 20)}`,
+            background: alpha(tokens.colors.accent.error, 5),
+          }}
+        >
+          <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+            {t('loadFailedRetryShort')}
+          </Text>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => {
+              const scope = captureSettingsViewer(authRef.current)
+              if (scope) void fetchKeys(scope)
+            }}
+          >
+            {t('retry')}
+          </Button>
+        </Box>
+      </SectionCard>
+    )
   }
 
   return (
@@ -379,7 +435,13 @@ export function ApiKeysSection() {
       ) : (
         <>
           {activeKeys.map((k) => (
-            <KeyRow key={k.id} apiKey={k} onRevoke={revokeKey} onCopy={copyKey} />
+            <KeyRow
+              key={k.id}
+              apiKey={k}
+              onRevoke={revokeKey}
+              onCopy={copyKey}
+              isRevoking={visibleRevokingId === k.id}
+            />
           ))}
           {revokedKeys.length > 0 && (
             <div style={{ marginTop: tokens.spacing[4] }}>
@@ -391,7 +453,13 @@ export function ApiKeysSection() {
                 {t('apiKeyRevokedSection')}
               </Text>
               {revokedKeys.map((k) => (
-                <KeyRow key={k.id} apiKey={k} onRevoke={revokeKey} onCopy={copyKey} />
+                <KeyRow
+                  key={k.id}
+                  apiKey={k}
+                  onRevoke={revokeKey}
+                  onCopy={copyKey}
+                  isRevoking={false}
+                />
               ))}
             </div>
           )}
@@ -679,10 +747,12 @@ function KeyRow({
   apiKey,
   onRevoke,
   onCopy,
+  isRevoking,
 }: {
   apiKey: ApiKey
   onRevoke: (id: string) => void
   onCopy: (key: string) => void
+  isRevoking: boolean
 }) {
   const { t, language } = useLanguage()
   const created = formatDateLocalized(apiKey.created_at, language)
@@ -737,8 +807,13 @@ function KeyRow({
           <Button size="sm" variant="ghost" onClick={() => onCopy(apiKey.key)}>
             {t('copy')}
           </Button>
-          <Button size="sm" variant="danger" onClick={() => onRevoke(apiKey.id)}>
-            {t('revoke')}
+          <Button
+            size="sm"
+            variant="danger"
+            disabled={isRevoking}
+            onClick={() => onRevoke(apiKey.id)}
+          >
+            {isRevoking ? t('loading') : t('revoke')}
           </Button>
         </div>
       )}

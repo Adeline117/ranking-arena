@@ -535,6 +535,7 @@ export function TraderLinksSection({ userId }: { userId: string }) {
   const renderScope = renderScopeCandidate?.userId === userId ? renderScopeCandidate : null
   const stateOwnerIsCurrent = traderOwnerMatches(stateOwner, renderScope, loadGenerationRef.current)
   const stateReady = stateOwnerIsCurrent && loadOutcome === 'ready'
+  const loadFailed = stateOwnerIsCurrent && loadOutcome === 'failed'
   const visibleTraders = stateReady ? traders : []
   const visibleEditingLabelId = stateReady ? editingLabelId : null
   const visibleUpdatingId = stateReady ? updatingId : null
@@ -563,6 +564,38 @@ export function TraderLinksSection({ userId }: { userId: string }) {
         <Text size="sm" color="tertiary">
           {t('loadingText')}
         </Text>
+      </Box>
+    )
+  }
+
+  if (loadFailed) {
+    return (
+      <Box
+        role="alert"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: tokens.spacing[3],
+          padding: tokens.spacing[4],
+          borderRadius: tokens.radius.lg,
+          border: `1px solid ${alpha(tokens.colors.accent.error, 20)}`,
+          background: alpha(tokens.colors.accent.error, 5),
+        }}
+      >
+        <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+          {t('loadLinkedTradersFailed')}
+        </Text>
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => {
+            const scope = captureViewer()
+            if (scope) void loadLinkedTraders(scope)
+          }}
+        >
+          {t('retry')}
+        </Button>
       </Box>
     )
   }
