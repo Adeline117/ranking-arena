@@ -5375,6 +5375,8 @@ const zh = {
   watchlistSubtitle: '您收藏的交易员。点击任何交易员页面上的星标即可添加。',
   watchlistSignInTitle: '登录查看自选列表',
   watchlistSignInDesc: '创建账户或登录以保存和追踪您喜欢的交易员。',
+  traderAlertsSignInTitle: '登录查看交易员警报',
+  traderAlertsSignInDesc: '登录后为您关注的交易员创建和管理表现警报。',
   watchlistEmptyTitle: '自选列表为空',
   watchlistEmptyDesc: '浏览排行榜，点击任何交易员页面上的星标图标即可添加。',
   watchlistBrowseRankings: '浏览排行榜',
