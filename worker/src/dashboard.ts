@@ -23,12 +23,12 @@ export function startDashboard(): void {
       // Legacy pipeline queue.
       new BullMQAdapter(getQueue()),
       // New ingest pipeline: region-affine bulk queues (arena-ingest,
-      // arena-ingest-vps_sg, arena-ingest-vps_jp) + the dedicated Tier-C
-      // on-demand queue. Queue instances here are lightweight Redis
+      // arena-ingest-vps_sg, arena-ingest-vps_jp) + the region-affine Tier-C
+      // on-demand queues. Queue instances here are lightweight Redis
       // clients for observability only — the consumers live in the
       // separate arena-ingest-worker PM2 app.
       ...INGEST_REGIONS.map((region) => new BullMQAdapter(getRegionQueue(region))),
-      new BullMQAdapter(getTierCQueue()),
+      ...INGEST_REGIONS.map((region) => new BullMQAdapter(getTierCQueue(region))),
     ],
     serverAdapter,
   })
