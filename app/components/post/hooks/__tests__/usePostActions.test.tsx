@@ -1,13 +1,15 @@
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { useCallback, useState } from 'react'
 import type { PostWithUserState } from '@/lib/types'
+import { bookmarkPostTarget, queueProfileActionLogin } from '@/lib/auth/profile-action-login'
 import { usePostActions } from '../usePostActions'
 
 const mockSetOpenPost = jest.fn()
 const mockUpdatePostReaction = jest.fn()
+const mockRouterPush = jest.fn()
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  useRouter: () => ({ push: mockRouterPush }),
 }))
 
 jest.mock('@/lib/stores/postStore', () => ({
@@ -43,8 +45,8 @@ const initialPost: PostWithUserState = {
 }
 
 type ViewerProps = {
-  accessToken: string
-  currentUserId: string
+  accessToken: string | null
+  currentUserId: string | null
   viewerKey: string
   sessionGeneration: number
 }
@@ -86,13 +88,15 @@ function useAliasedPostActions(viewer: ViewerProps = viewerA) {
   return { actions, post, setPost }
 }
 
-function jsonResponse(body: unknown, ok = true): Response {
-  return { ok, json: async () => body } as Response
+function jsonResponse(body: unknown, ok = true, status = ok ? 200 : 500): Response {
+  return { ok, status, json: async () => body } as Response
 }
 
 describe('usePostActions aliased detail state', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    window.sessionStorage.clear()
+    window.history.replaceState({}, '', '/')
     global.fetch = jest.fn()
   })
 
@@ -368,5 +372,94 @@ describe('usePostActions aliased detail state', () => {
       }))
     })
     expect(result.current.actions.userBookmarks).toEqual({ 'post-b': true })
+  })
+
+  it('queues the exact bookmark target when an anonymous viewer clicks bookmark', async () => {
+    const postId = '22222222-2222-4222-8222-222222222222'
+    window.history.replaceState({}, '', `/post/${postId}?from=hot`)
+    const anonymousViewer: ViewerProps = {
+      accessToken: null,
+      currentUserId: null,
+      viewerKey: 'anon',
+      sessionGeneration: 0,
+    }
+    const { result } = renderHook(() => useAliasedPostActions(anonymousViewer))
+
+    await act(async () => {
+      await result.current.actions.handleBookmark(postId)
+    })
+
+    expect(mockRouterPush).toHaveBeenCalledTimes(1)
+    const loginUrl = new URL(mockRouterPush.mock.calls[0][0], 'https://arena.invalid')
+    expect(loginUrl.pathname).toBe('/login')
+    expect(loginUrl.searchParams.get('returnUrl')).toBe(
+      `/post/${postId}?from=hot&resumeAction=bookmark-post`
+    )
+    expect(window.sessionStorage).toHaveLength(1)
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('resumes one exact same-tab bookmark after login', async () => {
+    const postId = '22222222-2222-4222-8222-222222222222'
+    window.history.replaceState({}, '', `/post/${postId}?from=hot`)
+    const href = queueProfileActionLogin({
+      action: 'bookmark-post',
+      target: bookmarkPostTarget(postId),
+      fallbackPath: `/post/${postId}`,
+    })
+    window.history.replaceState(
+      {},
+      '',
+      new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
+    )
+    ;(global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({ bookmarked: true, bookmark_count: 1 })
+    )
+
+    renderHook(() => useAliasedPostActions())
+
+    await waitFor(() =>
+      expect(global.fetch).toHaveBeenCalledWith(`/api/posts/${postId}/bookmark`, {
+        method: 'POST',
+        headers: expect.objectContaining({
+          Authorization: 'Bearer token-a',
+          'Content-Type': 'application/json',
+        }),
+      })
+    )
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(`${window.location.pathname}${window.location.search}`).toBe(`/post/${postId}?from=hot`)
+    expect(window.sessionStorage).toHaveLength(0)
+  })
+
+  it('never writes a bookmark from a URL marker without same-tab proof', async () => {
+    const postId = '22222222-2222-4222-8222-222222222222'
+    window.history.replaceState({}, '', `/post/${postId}?resumeAction=bookmark-post`)
+
+    renderHook(() => useAliasedPostActions())
+
+    await act(async () => {})
+    expect(global.fetch).not.toHaveBeenCalled()
+    expect(window.sessionStorage).toHaveLength(0)
+  })
+
+  it('preserves an authenticated bookmark target when the API session expires', async () => {
+    const postId = '22222222-2222-4222-8222-222222222222'
+    window.history.replaceState({}, '', `/post/${postId}`)
+    ;(global.fetch as jest.Mock).mockResolvedValue(
+      jsonResponse({ error: 'Session expired' }, false, 401)
+    )
+    const { result } = renderHook(() => useAliasedPostActions())
+
+    await act(async () => {
+      await result.current.actions.handleBookmark(postId)
+    })
+
+    expect(mockRouterPush).toHaveBeenCalledTimes(1)
+    const loginUrl = new URL(mockRouterPush.mock.calls[0][0], 'https://arena.invalid')
+    expect(loginUrl.searchParams.get('returnUrl')).toBe(
+      `/post/${postId}?resumeAction=bookmark-post`
+    )
+    expect(window.sessionStorage).toHaveLength(1)
   })
 })
