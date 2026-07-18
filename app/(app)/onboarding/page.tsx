@@ -627,35 +627,23 @@ export default function OnboardingPage() {
   }
 
   const saveAndComplete = async () => {
-    if (saving || followSettlingRef.current || membershipSettlingRef.current) return
+    if (completionPendingRef.current) return
+    completionPendingRef.current = true
     setSaving(true)
     try {
+      const actionScope = captureActionScope()
       await settleFollowIntents()
       await settleMembershipIntents()
-      if (!userId) {
-        throw new Error('Onboarding session is unavailable')
-      }
-
-      const updates: Record<string, unknown> = { onboarding_completed: true }
-      if (selectedInterests.length > 0) updates.interests = selectedInterests
-      const { error } = await supabase.from('user_profiles').update(updates).eq('id', userId)
-      if (error) {
-        throw error
-      }
-
-      if (!membershipScopeRef.current.active) {
-        return
-      }
+      await persistOnboardingCompletion(actionScope, selectedInterests)
       try {
-        localStorage.setItem('hasOnboarded', 'true')
-      } catch {
-        /* localStorage may be unavailable */
+        trackEvent('onboarding_complete', {
+          interests: selectedInterests.length,
+          followedTraders: followedTradersRef.current.size,
+          joinedGroups: joinedGroupsRef.current.size,
+        })
+      } catch (analyticsError) {
+        logger.warn('Onboarding completion analytics failed', analyticsError)
       }
-      trackEvent('onboarding_complete', {
-        interests: selectedInterests.length,
-        followedTraders: followedTradersRef.current.size,
-        joinedGroups: joinedGroupsRef.current.size,
-      })
       setStep('complete')
     } catch (err) {
       followSettlingRef.current = false
@@ -668,6 +656,7 @@ export default function OnboardingPage() {
         )
       }
     } finally {
+      completionPendingRef.current = false
       if (membershipScopeRef.current.active) {
         setSaving(false)
       }
@@ -685,7 +674,11 @@ export default function OnboardingPage() {
       await settleFollowIntents()
       await settleMembershipIntents()
       await persistOnboardingCompletion(actionScope)
-      trackEvent('onboarding_skip', { step })
+      try {
+        trackEvent('onboarding_skip', { step })
+      } catch (analyticsError) {
+        logger.warn('Onboarding skip analytics failed', analyticsError)
+      }
       router.replace(afterOnboarding)
     } catch (err) {
       followSettlingRef.current = false
@@ -786,6 +779,7 @@ export default function OnboardingPage() {
             type="button"
             onClick={handleSkip}
             disabled={saving}
+            aria-busy={saving}
             className="onboarding-skip-btn"
             style={{
               position: 'absolute',

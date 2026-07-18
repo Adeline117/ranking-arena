@@ -38,11 +38,12 @@ export default function GroupsStep({
     <div key="groups" className="step-content">
       <button
         onClick={onBack}
+        disabled={saving}
         style={{
           background: 'none',
           border: 'none',
           color: theme.textSecondary,
-          cursor: 'pointer',
+          cursor: saving ? 'not-allowed' : 'pointer',
           fontSize: 13,
           fontWeight: 600,
           padding: '4px 0',
@@ -184,10 +185,12 @@ export default function GroupsStep({
                 <button
                   className="follow-btn"
                   onClick={() => onJoinGroup(g.id)}
+                  disabled={saving}
                   style={{
                     background: isJoined ? theme.optionBg : theme.brandGradient,
                     color: isJoined ? theme.textSecondary : 'var(--color-on-accent)',
                     border: isJoined ? `1px solid ${theme.optionBorder}` : 'none',
+                    cursor: saving ? 'not-allowed' : 'pointer',
                   }}
                 >
                   {isJoined ? tr('onboardingJoinedBtn') : tr('onboardingJoinBtn')}
@@ -203,6 +206,7 @@ export default function GroupsStep({
           className="continue-btn"
           onClick={onComplete}
           disabled={saving}
+          aria-busy={saving}
           style={{
             flex: 1,
             padding: '14px 20px',
@@ -221,6 +225,7 @@ export default function GroupsStep({
           className="continue-btn"
           onClick={onComplete}
           disabled={saving}
+          aria-busy={saving}
           style={{
             flex: 2,
             padding: '14px 20px',
