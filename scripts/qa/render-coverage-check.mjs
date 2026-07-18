@@ -9,13 +9,14 @@
  * (2026-07-03 bybit sortino 断链的自动化形态,该类占显示断链的大头)。
  *
  * DOM 级渲染断言(前端 grid 读错 key)不在本层 — 属 UI 工作配套的
- * Playwright 检查。基建失败(网络/5xx/超时)只警告不红,防抖动误报。
+ * Playwright 检查。DB/合同失明硬红；单来源 API 网络/5xx/超时保留告警,
+ * 防瞬时抖动误报。
  *
  * Run: node scripts/qa/render-coverage-check.mjs   (needs DATABASE_URL; unset = skip)
  * Exit: 0 = green/skipped, 1 = contract violations.
  */
 
-import pg from 'pg'
+import { pathToFileURL } from 'node:url'
 import { TYPED_METRICS } from './metric-columns.mjs'
 
 const BASE = process.env.ARENA_BASE_URL || 'https://www.arenafi.org'
@@ -64,14 +65,19 @@ async function fetchCore(slug, traderId) {
   }
 }
 
-async function main() {
-  const dbUrl = process.env.DATABASE_URL
+export async function main(env = process.env) {
+  const dbUrl = env.DATABASE_URL
   if (!dbUrl) {
+    if (env.REQUIRE_DATABASE_URL === '1') {
+      console.error('render-coverage-check requires DATABASE_URL in this environment')
+      return 1
+    }
     console.log(
       '⏭️  render-coverage-check SKIPPED — DATABASE_URL not set (set it to enable the gate)'
     )
     return 0
   }
+  const { default: pg } = await import('pg')
   const pool = new pg.Pool({ connectionString: dbUrl, max: 2 })
   const violations = []
   const infra = []
@@ -114,10 +120,18 @@ async function main() {
   return 1
 }
 
-main().then(
-  (code) => process.exit(code),
-  (err) => {
-    console.error('render-coverage-check infrastructure error (not a violation):', err.message)
-    process.exit(0)
-  }
-)
+const invokedDirectly =
+  process.argv[1] != null && import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (invokedDirectly) {
+  main().then(
+    (code) => process.exit(code),
+    (err) => {
+      console.error(
+        'render-coverage-check infrastructure/contract error:',
+        err instanceof Error ? err.message : String(err)
+      )
+      process.exit(1)
+    }
+  )
+}
