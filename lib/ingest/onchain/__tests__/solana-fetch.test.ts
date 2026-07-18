@@ -1353,6 +1353,113 @@ describe('fetchTxEvidence', () => {
     ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
   })
 
+  it('separates the outer packet ceiling from the larger CPI instruction-data limit', async () => {
+    // The packet-size value is a conservative per-field ceiling here; this
+    // synthetic JSON does not claim that a full serialized packet would fit.
+    for (const data of ['', '1'.repeat(1_232)]) {
+      const accepted = legacyFixture()
+      accepted.transaction.message.instructions[0].data = data
+      mockEvidencePayload({ result: accepted })
+      await expect(
+        fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+      ).resolves.toMatchObject({ status: 'available' })
+    }
+
+    for (const data of ['0OIl!', '1'.repeat(1_233)]) {
+      const rejected = legacyFixture()
+      rejected.transaction.message.instructions[0].data = data
+      mockEvidencePayload({ result: rejected })
+      await expect(
+        fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+      ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+    }
+
+    for (const data of ['1'.repeat(1_233), '1'.repeat(10_240)]) {
+      const acceptedCpi = v0Fixture()
+      acceptedCpi.meta.innerInstructions[0].instructions[0].data = data
+      mockEvidencePayload({ result: acceptedCpi })
+      await expect(
+        fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+      ).resolves.toMatchObject({ status: 'available' })
+    }
+
+    const oversizedCpi = v0Fixture()
+    oversizedCpi.meta.innerInstructions[0].instructions[0].data = '1'.repeat(10_241)
+    mockEvidencePayload({ result: oversizedCpi })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+  })
+
+  it('separates declared outer instructions from the executed trace on failed transactions', async () => {
+    const tooManyOuter = legacyFixture()
+    const outerInstruction = tooManyOuter.transaction.message.instructions[0]
+    tooManyOuter.transaction.message.instructions = Array.from({ length: 65 }, () => ({
+      ...outerInstruction,
+      accounts: [...outerInstruction.accounts],
+    }))
+    mockEvidencePayload({ result: tooManyOuter })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const failedAtTraceLimit = legacyFixture()
+    failedAtTraceLimit.transaction.message.instructions =
+      tooManyOuter.transaction.message.instructions.map((instruction) => ({
+        ...instruction,
+        accounts: [...instruction.accounts],
+      }))
+    failedAtTraceLimit.meta.err = {
+      InstructionError: [64, 'MaxInstructionTraceLengthExceeded'],
+    } as never
+    mockEvidencePayload({ result: failedAtTraceLimit })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({
+      status: 'available',
+      executionStatus: 'failed',
+      instructions: expect.arrayContaining([
+        expect.objectContaining({ path: { kind: 'outer', outerIndex: 64 } }),
+      ]),
+    })
+
+    const tooManyDeclared = legacyFixture()
+    tooManyDeclared.transaction.message.instructions = Array.from({ length: 411 }, () => ({
+      ...outerInstruction,
+      accounts: [...outerInstruction.accounts],
+    }))
+    tooManyDeclared.meta.err = {
+      InstructionError: [64, 'MaxInstructionTraceLengthExceeded'],
+    } as never
+    mockEvidencePayload({ result: tooManyDeclared })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const tooManyWithCpi = v0Fixture()
+    const innerInstruction = tooManyWithCpi.meta.innerInstructions[0].instructions[0]
+    tooManyWithCpi.meta.innerInstructions[0].instructions = Array.from({ length: 64 }, () => ({
+      ...innerInstruction,
+      accounts: [...innerInstruction.accounts],
+    }))
+    mockEvidencePayload({ result: tooManyWithCpi })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+
+    const lateReportedCpi = v0Fixture()
+    const v0OuterInstruction = lateReportedCpi.transaction.message.instructions[0]
+    lateReportedCpi.transaction.message.instructions = Array.from({ length: 64 }, () => ({
+      ...v0OuterInstruction,
+      accounts: [...v0OuterInstruction.accounts],
+    }))
+    lateReportedCpi.meta.innerInstructions[0].index = 63
+    mockEvidencePayload({ result: lateReportedCpi })
+    await expect(
+      fetchTxEvidence(SIGNATURE, { rpcUrl: 'https://rpc.invalid' })
+    ).resolves.toMatchObject({ status: 'unavailable', reason: 'malformed_response' })
+  })
+
   it('fails signature/header count and duplicate token balance identities closed', async () => {
     const signatureMismatch = legacyFixture()
     signatureMismatch.transaction.message.header.numRequiredSignatures = 2
