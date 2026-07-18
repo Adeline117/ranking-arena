@@ -1,4 +1,4 @@
-import { INGEST_REGIONS, isIngestRegion } from '../regions'
+import { INGEST_REGIONS, isIngestRegion, parseIngestRegionsEnv } from '../regions'
 import { LEGACY_TIER_C_QUEUE_NAME, assertIngestRegion, tierCQueueName } from '../tier-c-routing'
 
 describe('Tier-C regional queue contract', () => {
@@ -13,5 +13,27 @@ describe('Tier-C regional queue contract', () => {
     expect(isIngestRegion('unknown')).toBe(false)
     expect(() => assertIngestRegion('unknown')).toThrow('unsupported fetch region')
     expect(() => tierCQueueName(undefined)).toThrow('unsupported fetch region')
+  })
+})
+
+describe('INGEST_REGIONS startup contract', () => {
+  it('keeps the all-region default only when the variable is truly unset', () => {
+    expect(parseIngestRegionsEnv(undefined)).toEqual(INGEST_REGIONS)
+  })
+
+  it('accepts an explicit, fully valid region assignment', () => {
+    expect(parseIngestRegionsEnv('local,vps_sg')).toEqual(['local', 'vps_sg'])
+    expect(parseIngestRegionsEnv(' vps_jp ')).toEqual(['vps_jp'])
+  })
+
+  it.each(['', '   ', 'unknown', 'local,unknown', 'local,,vps_sg'])(
+    'rejects explicit empty or unknown configuration %p',
+    (raw) => {
+      expect(() => parseIngestRegionsEnv(raw)).toThrow('INGEST_REGIONS')
+    }
+  )
+
+  it('rejects duplicate consumers instead of silently normalizing them', () => {
+    expect(() => parseIngestRegionsEnv('local,local')).toThrow('duplicates')
   })
 })
