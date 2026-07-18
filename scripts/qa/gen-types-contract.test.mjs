@@ -578,6 +578,7 @@ test('CI keeps type contracts secret-scoped, push-main only, and deployment-bloc
 
   assert.match(liveJob, /Types live drift check \(push main only\)/)
   assert.match(liveJob, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/)
+  assert.match(liveJob, /^\s{4}timeout-minutes: 15$/m)
   assert.match(seedStep, /scripts\/maintenance\/seed-supabase-typegen-image\.sh/)
   assert.doesNotMatch(seedStep, /secrets\./)
   assert.match(imageSeed, /MIRROR_IMAGE="supabase\/postgres-meta@\$POSTGRES_META_DIGEST"/)
