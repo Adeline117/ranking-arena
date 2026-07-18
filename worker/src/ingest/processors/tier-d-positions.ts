@@ -78,7 +78,12 @@ export async function processTierD(job: Job<TierJobData>): Promise<TierDResult> 
   }
 
   const delayHours = Number(src.meta.positions_delay_hours ?? 0) || 0
-  const session = await openSession(src)
+  // Tier-D can run for hours on large position sets. Its own stable profile
+  // prevents that session from holding Tier A's warm default profile hostage.
+  const session = await openSession(src, {
+    profileLaneKey: 'tier-d',
+    profileSuffix: 'tier-d',
+  })
   const result: TierDResult = { tradersCrawled: 0, positionsWritten: 0, errors: 0 }
 
   try {

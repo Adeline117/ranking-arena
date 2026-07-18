@@ -145,6 +145,9 @@ describe('Tier-A board-series publication guard', () => {
         ]),
       }
     )
+    // openSession(src) is the fetch-layer's source-scoped, single-slot
+    // unsuffixed lane. Do not bypass it with a raw profile suffix override.
+    expect(mockOpenSession).toHaveBeenCalledWith(src)
     expect(mockWriteRawObject).toHaveBeenCalledWith(
       expect.objectContaining({
         timeframe: 30,
@@ -213,5 +216,15 @@ describe('Tier-A board-series publication guard', () => {
     for (const [input] of mockPublishLeaderboardSnapshot.mock.calls) {
       expect(input.observationCycleId).toBe(expectedCycleId)
     }
+  })
+
+  it('does not acquire the Tier-A profile lane before timeframe preparation succeeds', async () => {
+    mockNativeRankingTimeframes.mockImplementation(() => {
+      throw new Error('invalid timeframe config')
+    })
+
+    await expect(processTierA(job)).rejects.toThrow('invalid timeframe config')
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockSessionClose).not.toHaveBeenCalled()
   })
 })
