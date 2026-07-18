@@ -162,6 +162,18 @@ CREATE TABLE public.user_follows (
   UNIQUE (follower_id, following_id)
 );
 
+CREATE TABLE public.notifications (
+  user_id uuid NOT NULL,
+  type text NOT NULL,
+  actor_id uuid NOT NULL
+);
+
+CREATE TABLE public.user_activities (
+  user_id uuid NOT NULL,
+  activity_type text NOT NULL,
+  target_id uuid NOT NULL
+);
+
 ALTER TABLE public.chat_channels OWNER TO postgres;
 ALTER TABLE public.channel_members OWNER TO postgres;
 ALTER TABLE public.user_profiles OWNER TO postgres;
@@ -184,6 +196,55 @@ CREATE POLICY "Service role manages channel members"
   TO service_role
   USING (true)
   WITH CHECK (true);
+
+-- Production already has these two independent AFTER INSERT side effects.
+-- The atomic member-add migration must preserve their exact trigger contracts
+-- while rejecting any broader user_follows trigger inventory.
+CREATE FUNCTION public.create_user_follow_notification()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+PARALLEL UNSAFE
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+DECLARE
+  following_notify_follow boolean := true;
+BEGIN
+  IF following_notify_follow THEN
+    INSERT INTO notifications(user_id, type, actor_id)
+    VALUES (NEW.following_id, 'follow', NEW.follower_id);
+  END IF;
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION public.create_user_follow_notification() OWNER TO postgres;
+
+CREATE FUNCTION public.log_user_follow_activity()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+PARALLEL UNSAFE
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+BEGIN
+  INSERT INTO user_activities(user_id, activity_type, target_id)
+  VALUES (NEW.follower_id, 'follow_user', NEW.following_id);
+  RETURN NEW;
+END
+$function$;
+ALTER FUNCTION public.log_user_follow_activity() OWNER TO postgres;
+
+CREATE TRIGGER on_user_follow
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.create_user_follow_notification();
+
+CREATE TRIGGER trg_log_user_follow_activity
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.log_user_follow_activity();
 
 CREATE FUNCTION public.serialize_post_audience_block_edge()
 RETURNS trigger
@@ -375,6 +436,85 @@ psql_cmd <<'SQL'
 DROP TRIGGER aaa_rogue_channel_member_trigger ON public.channel_members;
 DROP FUNCTION public.rogue_channel_member_trigger();
 SQL
+
+# The two production follow side effects are allowlisted only by exact trigger
+# metadata. A disabled trigger, wrong function, wrong event, or fourth trigger
+# must still fail before the RPC is replaced.
+psql_cmd -c \
+  "ALTER TABLE public.user_follows DISABLE TRIGGER on_user_follow" >/dev/null
+expect_migration_failure
+psql_cmd -c \
+  "ALTER TABLE public.user_follows ENABLE TRIGGER on_user_follow" >/dev/null
+
+psql_cmd <<'SQL'
+DROP TRIGGER trg_log_user_follow_activity ON public.user_follows;
+CREATE TRIGGER trg_log_user_follow_activity
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.create_user_follow_notification();
+SQL
+expect_migration_failure
+psql_cmd <<'SQL'
+DROP TRIGGER trg_log_user_follow_activity ON public.user_follows;
+CREATE TRIGGER trg_log_user_follow_activity
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.log_user_follow_activity();
+SQL
+
+psql_cmd <<'SQL'
+DROP TRIGGER on_user_follow ON public.user_follows;
+CREATE TRIGGER on_user_follow
+AFTER UPDATE ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.create_user_follow_notification();
+SQL
+expect_migration_failure
+psql_cmd <<'SQL'
+DROP TRIGGER on_user_follow ON public.user_follows;
+CREATE TRIGGER on_user_follow
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.create_user_follow_notification();
+SQL
+
+psql_cmd <<'SQL'
+CREATE FUNCTION public.rogue_follow_side_effect()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER zz_rogue_follow_side_effect
+AFTER INSERT ON public.user_follows
+FOR EACH ROW
+EXECUTE FUNCTION public.rogue_follow_side_effect();
+SQL
+expect_migration_failure
+psql_cmd <<'SQL'
+DROP TRIGGER zz_rogue_follow_side_effect ON public.user_follows;
+DROP FUNCTION public.rogue_follow_side_effect();
+SQL
+
+psql_cmd -Atqc "SELECT pg_catalog.pg_get_functiondef('public.create_user_follow_notification()'::regprocedure)" >"$TMP_ROOT/follow-notification-function.sql"
+psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION public.create_user_follow_notification()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+PARALLEL UNSAFE
+SECURITY DEFINER
+SET search_path = public
+AS $function$
+BEGIN
+  RETURN NEW;
+END
+$function$;
+SQL
+expect_migration_failure
+psql_cmd -f "$TMP_ROOT/follow-notification-function.sql" >/dev/null
 
 psql_cmd -Atqc "SELECT pg_catalog.pg_get_functiondef('public.serialize_direct_message_pair_edge()'::regprocedure)" >"$TMP_ROOT/pair-function.sql"
 psql_cmd <<'SQL'
