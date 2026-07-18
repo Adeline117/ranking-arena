@@ -131,7 +131,18 @@ function parseDatabaseUrl(raw) {
     seen.add(name)
     const envName = QUERY_ENV.get(name)
     if (!envName) fail(`unsupported DATABASE_URL option: ${name}`)
+    if (value.includes('\0')) fail(`DATABASE_URL option ${name} contains a null byte`)
     libpq[envName] = value
+  }
+
+  const localHost = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1'
+  if (
+    !localHost &&
+    libpq.PGSSLMODE !== 'require' &&
+    libpq.PGSSLMODE !== 'verify-ca' &&
+    libpq.PGSSLMODE !== 'verify-full'
+  ) {
+    fail('remote DATABASE_URL must require TLS')
   }
 
   return libpq
@@ -139,7 +150,17 @@ function parseDatabaseUrl(raw) {
 
 const childEnv = { ...process.env }
 for (const name of CONNECTION_ENV) delete childEnv[name]
-Object.assign(childEnv, parseDatabaseUrl(process.env.DATABASE_URL))
+const libpq = parseDatabaseUrl(process.env.DATABASE_URL)
+
+if (process.argv[2] === '--check-session-connection') {
+  if (process.argv.length !== 3) fail('session connection check does not accept psql arguments')
+  if (libpq.PGPORT === '6543') {
+    fail('migration execution refuses transaction-pooler port 6543; use port 5432')
+  }
+  process.exit(0)
+}
+
+Object.assign(childEnv, libpq)
 delete childEnv.DATABASE_URL
 
 const child = spawn('psql', process.argv.slice(2), {
