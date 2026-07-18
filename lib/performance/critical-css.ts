@@ -199,32 +199,67 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 @media(min-width:640px){.ranking-table-grid{grid-template-columns:40px 1fr 80px 60px 80px !important}.ranking-table-grid .col-score,.ranking-table-grid .col-pnl{display:flex !important}}
 @media(min-width:768px){.ranking-table-grid{grid-template-columns:44px minmax(140px,1.5fr) 80px 80px 70px 70px 64px !important}.ranking-table-grid .col-score,.ranking-table-grid .col-pnl,.ranking-table-grid .col-winrate,.ranking-table-grid .col-mdd{display:flex !important}}
 
-/* SSR ranking table — simple flex rows (no grid columns)
-   Each row: [Rank] [Avatar+Name (flex:1)] [Score] [ROI+PnL]
-   Same layout on mobile and desktop — no hide-mobile needed. */
+/* SSR ranking table — one responsive DOM, desktop grid / mobile card.
+   The desktop columns mirror RankingTable's default information architecture;
+   below 768px the same cells reflow, so no duplicate link/value tree exists. */
 .ssr-t{background:var(--color-bg-secondary);border-radius:16px;border:1px solid var(--color-border-primary);overflow:hidden}
-.ssr-row{display:flex;align-items:center;gap:12px;padding:10px 16px;text-decoration:none;color:inherit;border-bottom:1px solid var(--color-border-primary);min-height:52px}
-.ssr-row:hover{background:var(--color-bg-hover,#252232)}
-.ssr-row:focus-visible{outline:2px solid var(--color-brand);outline-offset:-2px;border-radius:4px}
-.ssr-row:active{transform:scale(0.998)}
-.ssr-row-gold{background:linear-gradient(135deg,rgba(255,215,0,0.10) 0%,rgba(255,215,0,0.03) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-gold,#FFD700)}
-.ssr-row-silver{background:linear-gradient(135deg,rgba(192,192,192,0.08) 0%,rgba(192,192,192,0.02) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-silver,#C0C0C0)}
-.ssr-row-bronze{background:linear-gradient(135deg,rgba(205,127,50,0.08) 0%,rgba(205,127,50,0.02) 40%,transparent 80%);box-shadow:inset 3px 0 0 var(--color-rank-bronze,#CD7F32)}
-.ssr-rank{font-size:13px;font-weight:800;text-align:center;display:flex;align-items:center;justify-content:center;min-width:36px}
-.ssr-rank-default{color:var(--color-text-tertiary)}
-.ssr-rank-circle{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;color:var(--color-bg-primary,#0B0A10)}
-.ssr-info{display:flex;align-items:center;gap:10px;min-width:0;flex:1}
-.ssr-av{width:36px;height:36px;min-width:36px;aspect-ratio:1;border-radius:50%;background:linear-gradient(135deg,var(--color-accent-primary-30),var(--color-pro-gold-border,#a78bfa));display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:var(--color-on-accent,#fff);overflow:hidden;position:relative;contain:layout style paint}
-.ssr-av img{width:100%;height:100%;object-fit:cover;border-radius:50%;position:absolute;inset:0}
-.ssr-name{font-size:13px;font-weight:600;color:var(--color-text-primary);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.ssr-src{font-size:11px;color:var(--color-text-tertiary);text-transform:capitalize}
-.ssr-score{text-align:right;font-size:13px;font-weight:700;font-variant-numeric:tabular-nums}
-.ssr-score-s{color:var(--color-accent-success,#22c55e)}.ssr-score-a{color:var(--color-score-a,#4ade80)}.ssr-score-b{color:var(--color-accent-primary,#a78bfa)}.ssr-score-c{color:var(--color-text-secondary,#94a3b8)}.ssr-score-d{color:var(--color-text-tertiary,#64748b)}
-.ssr-roi{text-align:right;font-variant-numeric:tabular-nums}
-.ssr-roi-val{font-size:13px;font-weight:600}
-.ssr-roi-pos{color:var(--color-success)}.ssr-roi-neg{color:var(--color-danger)}
-.ssr-pnl{font-size:10px;color:var(--color-text-tertiary)}
-/* .ssr-wr and .ssr-mdd removed — table simplified to Rank+Trader+Score+ROI */
+.ssr-ranking-table{width:100%;max-width:100%;min-width:0;overflow:hidden;background:var(--color-bg-secondary)}
+.ssr-ranking-grid{display:grid;grid-template-columns:40px minmax(0,1.5fr) 58px minmax(72px,96px) minmax(64px,80px) 60px 60px;column-gap:12px;align-items:center;min-width:0;max-width:100%}
+.ssr-ranking-header{min-height:52px;padding:8px 20px;border-top:1px solid var(--glass-border-light);border-bottom:1px solid var(--glass-border-light);box-shadow:0 2px 8px rgba(0,0,0,0.15);background:var(--color-bg-secondary)}
+.ssr-ranking-header>span{min-width:0;color:var(--color-text-tertiary);font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ssr-ranking-header>span:first-child,.ssr-ranking-header>span:nth-child(3){text-align:center}
+.ssr-ranking-header>span:nth-child(n+4){text-align:right}
+.ssr-ranking-body{min-width:0}
+.ssr-ranking-entry{min-height:58px;padding:10px 20px;color:inherit;text-decoration:none;border-bottom:1px solid var(--color-border-primary);position:relative;contain:layout style}
+.ssr-ranking-entry:hover{background:linear-gradient(90deg,var(--color-accent-primary-08) 0%,transparent 50%)}
+.ssr-ranking-entry:focus-visible{outline:2px solid var(--color-brand);outline-offset:-2px;border-radius:4px}
+.ssr-ranking-entry:active{transform:scale(.998)}
+.ssr-ranking-entry-rank-1{min-height:72px;margin:6px 4px 8px;border-radius:14px;background:linear-gradient(135deg,rgba(255,215,0,.18) 0%,rgba(255,215,0,.06) 35%,rgba(255,215,0,.02) 70%,transparent 100%);box-shadow:inset 4px 0 0 var(--color-rank-gold),0 4px 24px rgba(255,215,0,.10)}
+.ssr-ranking-entry-rank-2{min-height:72px;margin:4px 4px 6px;border-radius:14px;background:linear-gradient(135deg,rgba(192,192,192,.14) 0%,rgba(192,192,192,.04) 35%,transparent 80%);box-shadow:inset 4px 0 0 var(--color-rank-silver),0 3px 18px rgba(192,192,192,.08)}
+.ssr-ranking-entry-rank-3{min-height:72px;margin:4px 4px 6px;border-radius:14px;background:linear-gradient(135deg,rgba(205,127,50,.14) 0%,rgba(205,127,50,.04) 35%,transparent 80%);box-shadow:inset 4px 0 0 var(--color-rank-bronze),0 3px 18px rgba(205,127,50,.08)}
+.ssr-rank-cell{display:flex;align-items:center;justify-content:center;min-width:0}
+.ssr-rank-medal{width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:var(--color-bg-primary);font-size:13px;font-weight:700}
+.ssr-rank-medal-1{background:linear-gradient(135deg,var(--color-medal-gold),var(--color-medal-gold-end))}
+.ssr-rank-medal-2{background:linear-gradient(135deg,var(--color-medal-silver),var(--color-medal-silver-end))}
+.ssr-rank-medal-3{background:linear-gradient(135deg,var(--color-medal-bronze),var(--color-medal-bronze-end))}
+.ssr-rank-number{color:var(--color-text-tertiary);font-size:14px;font-weight:800}
+.ssr-trader-cell{display:flex;align-items:center;gap:10px;min-width:0}
+.ssr-trader-avatar{width:36px;height:36px;min-width:36px;aspect-ratio:1;border-radius:50%;background:linear-gradient(135deg,var(--color-accent-primary-30),var(--color-pro-gold-border,#a78bfa));border:2px solid var(--color-border-primary);display:flex;align-items:center;justify-content:center;color:var(--color-on-accent,#fff);font-size:14px;font-weight:700;overflow:hidden;position:relative;contain:layout style paint}
+.ssr-trader-avatar img{width:100%;height:100%;object-fit:cover;border-radius:50%;position:absolute;inset:0}
+.ssr-trader-copy{display:flex;flex-direction:column;align-items:flex-start;gap:4px;min-width:0}
+.ssr-trader-name{max-width:100%;color:var(--color-text-primary);font-size:13px;font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ssr-source-tag{padding:1px 6px;border-radius:6px;color:var(--color-text-tertiary);background:color-mix(in srgb,var(--color-text-tertiary) 8%,transparent);border:1px solid color-mix(in srgb,var(--color-text-tertiary) 19%,transparent);font-size:11px;font-weight:700;line-height:1.4;white-space:nowrap}
+.ssr-score-cell{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;min-width:0}
+.ssr-score-badge{width:38px;height:38px;border-radius:50%;border:2.5px solid var(--ssr-score-border,var(--color-border-primary));background:var(--ssr-score-bg,var(--color-bg-tertiary));color:var(--ssr-score-color,var(--color-text-tertiary));display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:900;font-variant-numeric:tabular-nums}
+.ssr-roi-cell{display:flex;justify-content:flex-end;align-items:center;min-width:0;text-align:right}
+.ssr-roi-track{display:none}
+.ssr-supporting-metrics{display:contents}
+.ssr-metric-cell{display:flex;justify-content:flex-end;align-items:center;min-width:0;text-align:right}
+.ssr-metric-value{color:var(--color-text-secondary);font-size:13px;font-weight:500;font-variant-numeric:tabular-nums;white-space:nowrap}
+.ssr-mobile-metric-label{display:none}
+.ssr-sharpe-cell{display:none}
+.ssr-ranking-empty{padding:48px 16px;text-align:center;color:var(--color-text-tertiary)}
+.ssr-ranking-empty p:first-child{margin-bottom:8px;font-size:14px}
+.ssr-ranking-empty p:last-child{font-size:13px}
+@media(max-width:767px){
+  .ssr-ranking-table{padding:0 0 10px;background:transparent}
+  .ssr-ranking-header{display:none}
+  .ssr-ranking-body{display:flex;flex-direction:column;gap:10px}
+  .ssr-ranking-entry{display:grid;grid-template-columns:32px minmax(0,1fr) auto;grid-template-areas:"rank trader score" "roi roi roi" "support support support";column-gap:12px;row-gap:8px;width:100%;max-width:100%;min-height:0;margin:0;padding:12px 16px;border:1px solid var(--color-border-primary);border-radius:14px;background:var(--color-bg-secondary);box-shadow:none}
+  .ssr-rank-cell{grid-area:rank}
+  .ssr-trader-cell{grid-area:trader}
+  .ssr-trader-avatar{width:44px;height:44px;min-width:44px}
+  .ssr-trader-name{font-size:14px}
+  .ssr-score-cell{grid-area:score;align-items:flex-end}
+  .ssr-score-badge{width:auto;min-width:50px;height:28px;border-width:1px;border-radius:8px}
+  .ssr-roi-cell{grid-area:roi;display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center}
+  .ssr-roi-track{display:block;height:6px;min-width:0;border-radius:3px;background:var(--color-bg-tertiary);overflow:hidden}
+  .ssr-roi-track>span{display:block;height:100%;border-radius:inherit;opacity:.7}
+  .ssr-supporting-metrics{grid-area:support;display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;min-width:0}
+  .ssr-metric-cell{min-width:0;padding:6px 4px;border-radius:8px;background:var(--color-bg-tertiary);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;overflow:hidden}
+  .ssr-mobile-metric-label{display:block;color:var(--color-text-tertiary);font-size:10px;font-weight:500;letter-spacing:.04em;line-height:1.2;text-transform:uppercase;opacity:.7}
+  .ssr-sharpe-cell{display:flex;order:-1}
+}
 .ssr-controls{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;gap:8px;flex-wrap:wrap;position:relative}
 .ssr-range-bar{display:flex;gap:4px}
 .ssr-range-btn{padding:6px 14px;border-radius:8px;border:1px solid var(--color-border-primary);background:transparent;color:var(--color-text-secondary);font-size:12px;font-weight:600;cursor:pointer;transition:all 0.15s}
@@ -241,7 +276,7 @@ footer,.sidebar-contained{content-visibility:auto;contain-intrinsic-size:auto 30
 [data-theme='light'] .ssr-t{box-shadow:0 1px 3px rgba(0,0,0,0.05)}
 
 /* Global tabular-nums for all number displays — prevents CLS from digit width shifts */
-td,th,.ranking-row,.ssr-row,.ssr-score,.ssr-roi-val,.ssr-wr,.ssr-mdd,.col-score,.col-pnl,.col-roi,.col-winrate,.col-mdd,.stat-value,.price-value,.pnl-value,.percentage-value,.rank-number,.roi-value,.metric-value,.number-display,[data-value]{font-variant-numeric:tabular-nums}
+td,th,.ranking-row,.ssr-ranking-entry,.ssr-score-badge,.ssr-metric-value,.col-score,.col-pnl,.col-roi,.col-winrate,.col-mdd,.stat-value,.price-value,.pnl-value,.percentage-value,.rank-number,.roi-value,.metric-value,.number-display,[data-value]{font-variant-numeric:tabular-nums}
 
 /* 预留空间 - 防止字体加载导致的CLS */
 .font-loading body{letter-spacing:-0.011em}

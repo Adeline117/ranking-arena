@@ -1,26 +1,19 @@
 /**
- * SSRRankingTable — Server-rendered mobile card layout.
- * Visually matches the React TraderCard component so the SSR→hydration
- * transition is invisible. Same card structure, same sizes, same colors.
+ * SSRRankingTable — Server-rendered ranking shell.
+ *
+ * One row DOM serves both viewports: desktop gets the same grid information
+ * architecture as RankingTable, while CSS reflows those cells into the
+ * hydrated TraderCard layout on mobile. Keeping a single link/value tree avoids
+ * duplicate accessible content and the old mobile-card → desktop-table flash.
  */
 
-import type { ReactNode } from 'react'
+import type { CSSProperties } from 'react'
 import type { InitialTrader } from '@/lib/getInitialTraders'
-import { formatPnL } from '@/lib/utils/format'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { getScoreColorInfo } from '@/lib/utils/score-colors'
-import { tokens } from '@/lib/design-tokens'
 import Metric from '@/app/components/ui/Metric'
 import ScoreMiniBar from '@/app/components/ranking/ScoreMiniBar'
 import { getStaticTranslation } from '@/lib/i18n/server'
-
-/** Same tiers + CSS vars as the hydrated TraderCard (getScoreStyle in
- *  TraderDisplay wraps the same util) — the SSR shell previously used stale
- *  80/60/40 tiers with raw hexes, so chips visibly shifted on hydration. */
-function getScoreStyle(score: number) {
-  const info = getScoreColorInfo(score)
-  return { bg: info.bgGradient, border: info.borderColor, color: info.color }
-}
 
 function getInitial(name: string): string {
   if (!name) return '?'
@@ -29,9 +22,24 @@ function getInitial(name: string): string {
   return clean.charAt(0).toUpperCase()
 }
 
-// Hydrated CSR (parseSourceInfo) renders all type tags in text-tertiary —
-// the SSR shell's per-type amber/blue/violet flashed away on hydration.
-const SOURCE_TYPE_COLOR = 'var(--color-text-tertiary)'
+function getSourceTypeLabel(sourceType: InitialTrader['source_type']): string {
+  if (sourceType === 'web3') return 'On-chain'
+  if (sourceType === 'futures') return 'Futures'
+  return 'Spot'
+}
+
+function getDrawdownDisplay(value: number | null): string {
+  if (value == null) return '—'
+  return Math.abs(value) < 0.05 ? '< 0.1%' : `-${Math.abs(value).toFixed(1)}%`
+}
+
+function RankBadge({ rank }: { rank: number }) {
+  if (rank <= 3) {
+    return <span className={`ssr-rank-medal ssr-rank-medal-${rank}`}>{rank}</span>
+  }
+
+  return <span className="ssr-rank-number">{rank}</span>
+}
 
 interface Props {
   traders: InitialTrader[]
@@ -39,342 +47,154 @@ interface Props {
 }
 
 export default async function SSRRankingTable({ traders, startRank = 0 }: Props) {
-  // 2026-07-12 ISR 根因修复:getServerTranslation 的 cookies() 把 `/` 判为动态
-  // (revalidate=300 失效,宣传第一落点零边缘缓存)。静态壳固定英文,客户端
-  // Phase 2 水合后换语言 —— 与本页"SSR 恒默认视图"决策一致。
+  // Keep the cacheable shell language-independent. The client tree localizes
+  // after hydration, matching the rest of the homepage's static SSR strategy.
   const { t } = getStaticTranslation()
   if (!traders.length) {
     return (
-      <div
-        style={{
-          padding: '48px 16px',
-          textAlign: 'center',
-          color: 'var(--color-text-tertiary)',
-        }}
-      >
-        <p style={{ fontSize: tokens.typography.fontSize.md, marginBottom: 8 }}>
-          Loading rankings... / 加载排名中...
-        </p>
-        <p style={{ fontSize: tokens.typography.fontSize.sm }}>
-          Data refreshes every few minutes / 数据每几分钟刷新一次
-        </p>
+      <div className="ssr-ranking-empty">
+        <p>Loading rankings... / 加载排名中...</p>
+        <p>Data refreshes every few minutes / 数据每几分钟刷新一次</p>
       </div>
     )
   }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      {traders.map((trader, idx) => {
-        const rank = startRank + idx + 1
-        const roiVal = trader.roi ?? 0
-        const roiPositive = roiVal >= 0
-        const score = trader.arena_score != null ? Number(trader.arena_score).toFixed(0) : null
-        const scoreStyle = trader.arena_score != null ? getScoreStyle(trader.arena_score) : null
-        const typeColor = SOURCE_TYPE_COLOR
-        const typeLabel =
-          trader.source_type === 'web3'
-            ? 'On-chain'
-            : trader.source_type === 'futures'
-              ? 'Futures'
-              : 'Spot'
-        // Confirmed zero-trade wallet (trades_count === 0) reads "Holder", not a
-        // dash — must match the hydrated TraderCard or the label flashes away.
-        const winRate =
-          trader.win_rate != null
-            ? `${Number(trader.win_rate).toFixed(1)}%`
-            : trader.trades_count === 0
-              ? t('holderBadge')
-              : '—'
-        const sharpe = trader.sharpe != null ? Number(trader.sharpe).toFixed(2) : '—'
-        const mdd =
-          trader.max_drawdown != null
-            ? Math.abs(trader.max_drawdown) < 0.05
-              ? '< 0.1%'
-              : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`
-            : '—'
+    <section className="ssr-ranking-table" aria-label="Trader rankings">
+      <div className="ssr-ranking-header ssr-ranking-grid" aria-hidden="true">
+        <span>Rank</span>
+        <span>Trader</span>
+        <span>Score</span>
+        <span>ROI (90D)</span>
+        <span>PnL</span>
+        <span>Win</span>
+        <span>MDD</span>
+      </div>
 
-        // PnL / MDD render through the shared Metric so they carry the same
-        // colorblind-safe arrow cue (audit 1.2) as the hydrated TraderCard.
-        const stats: { label: string; value: string; color?: string; node?: ReactNode }[] = [
-          { label: 'Sharpe', value: sharpe },
-          {
-            label: 'PnL',
-            value: formatPnL(trader.pnl),
-            node:
-              trader.pnl != null ? (
-                <Metric value={trader.pnl} format="pnl" size="sm" as="span" showArrow />
-              ) : undefined,
-          },
-          {
-            label: 'Win%',
-            value: winRate,
-            color:
-              trader.win_rate != null && trader.win_rate > 50
-                ? 'var(--color-accent-success)'
-                : undefined,
-          },
-          {
-            label: 'MDD',
-            value: mdd,
-            node:
-              trader.max_drawdown != null ? (
-                <Metric
-                  value={-Math.abs(trader.max_drawdown)}
-                  format="percent"
-                  display={
-                    Math.abs(trader.max_drawdown) < 0.05
-                      ? '< 0.1%'
-                      : `-${Math.abs(trader.max_drawdown).toFixed(1)}%`
-                  }
-                  size="sm"
-                  as="span"
-                  showArrow
-                />
-              ) : undefined,
-          },
-        ]
+      <div className="ssr-ranking-body">
+        {traders.map((trader, idx) => {
+          const rank = startRank + idx + 1
+          const roi = trader.roi ?? 0
+          const score =
+            trader.arena_score != null && Number.isFinite(Number(trader.arena_score))
+              ? Number(trader.arena_score)
+              : null
+          const scoreStyle = score != null ? getScoreColorInfo(score) : null
+          const winRate =
+            trader.win_rate != null
+              ? `${Number(trader.win_rate).toFixed(1)}%`
+              : trader.trades_count === 0
+                ? t('holderBadge')
+                : '—'
+          const drawdownDisplay = getDrawdownDisplay(trader.max_drawdown)
+          const href = `/trader/${encodeURIComponent(trader.id)}?platform=${encodeURIComponent(trader.source)}`
 
-        return (
-          <a
-            key={`${trader.source}-${trader.id}`}
-            href={`/trader/${encodeURIComponent(trader.id)}?platform=${trader.source}`}
-            className="ssr-card"
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-              padding: '12px 16px',
-              // Match TraderCard's card radius (tokens.radius.lg) — this SSR row is
-              // the pre-hydration twin of TraderCard; a 12-vs-14 mismatch causes a
-              // subtle radius pop on hydration.
-              borderRadius: tokens.radius.lg,
-              background: 'var(--color-bg-secondary)',
-              border: '1px solid var(--color-border-primary)',
-              textDecoration: 'none',
-              color: 'inherit',
-            }}
-          >
-            {/* Row 1: Rank + Avatar + Name + Score */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              {/* Rank */}
-              <div style={{ minWidth: 32, textAlign: 'center' }}>
-                {rank <= 3 ? (
-                  <span
-                    style={{
-                      width: 28,
-                      height: 28,
-                      borderRadius: '50%',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: tokens.typography.fontSize.sm,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      color: 'var(--color-bg-primary)',
-                      background:
-                        rank === 1
-                          ? 'linear-gradient(135deg, var(--color-medal-gold), var(--color-medal-gold-end))'
-                          : rank === 2
-                            ? 'linear-gradient(135deg, var(--color-medal-silver), var(--color-medal-silver-end))'
-                            : 'linear-gradient(135deg, var(--color-medal-bronze), var(--color-medal-bronze-end))',
-                    }}
-                  >
-                    {rank}
-                  </span>
-                ) : (
-                  <span
-                    style={{
-                      fontSize: tokens.typography.fontSize.sm,
-                      // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
-                      fontWeight: 800,
-                      color: 'var(--color-text-tertiary)',
-                    }}
-                  >
-                    {rank}
-                  </span>
-                )}
+          return (
+            <a
+              key={`${trader.source}-${trader.id}`}
+              href={href}
+              className={`ssr-ranking-entry ssr-ranking-grid${rank <= 3 ? ` ssr-ranking-entry-rank-${rank}` : ''}`}
+              aria-label={`Rank ${rank}: ${trader.handle}. Arena Score ${score != null ? score.toFixed(0) : 'not available'}, ROI ${roi >= 0 ? '+' : ''}${roi.toFixed(2)}%`}
+            >
+              <div className="ssr-rank-cell">
+                <RankBadge rank={rank} />
               </div>
 
-              {/* Avatar */}
+              <div className="ssr-trader-cell">
+                <span className="ssr-trader-avatar" aria-hidden="true">
+                  {trader.avatar_url_mirror || trader.avatar_url ? (
+                    <img
+                      src={avatarSrc(trader.avatar_url_mirror || trader.avatar_url)}
+                      alt=""
+                      width={44}
+                      height={44}
+                      loading={rank <= 3 ? 'eager' : 'lazy'}
+                      {...(rank === 1 ? { fetchPriority: 'high' as const } : {})}
+                    />
+                  ) : (
+                    getInitial(trader.handle)
+                  )}
+                </span>
+                <span className="ssr-trader-copy">
+                  <span className="ssr-trader-name">{trader.handle}</span>
+                  <span className="ssr-source-tag">{getSourceTypeLabel(trader.source_type)}</span>
+                </span>
+              </div>
+
               <div
-                style={{
-                  width: 44,
-                  height: 44,
-                  minWidth: 44,
-                  borderRadius: '50%',
-                  background:
-                    'linear-gradient(135deg, var(--color-accent-primary-30, rgba(139,111,168,0.3)), var(--color-pro-gold-border))',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: tokens.typography.fontSize.md,
-                  fontWeight: tokens.typography.fontWeight.bold,
-                  color: 'var(--color-on-accent)',
-                  overflow: 'hidden',
-                  position: 'relative',
-                }}
+                className="ssr-score-cell"
+                aria-hidden="true"
+                style={
+                  scoreStyle
+                    ? ({
+                        '--ssr-score-bg': scoreStyle.bgGradient,
+                        '--ssr-score-border': scoreStyle.borderColor,
+                        '--ssr-score-color': scoreStyle.color,
+                      } as CSSProperties)
+                    : undefined
+                }
               >
-                {trader.avatar_url_mirror || trader.avatar_url ? (
-                  <img
-                    src={avatarSrc(trader.avatar_url_mirror || trader.avatar_url)}
-                    alt=""
-                    width={44}
-                    height={44}
-                    loading={rank <= 3 ? 'eager' : 'lazy'}
-                    {...(rank === 1 ? { fetchPriority: 'high' as const } : {})}
+                <span className="ssr-score-badge">{score != null ? score.toFixed(0) : '—'}</span>
+                {score != null && <ScoreMiniBar score={score} width={50} height={4} />}
+              </div>
+
+              <div className="ssr-roi-cell">
+                <div className="ssr-roi-track" aria-hidden="true">
+                  <span
                     style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      borderRadius: '50%',
-                      position: 'absolute',
-                      inset: 0,
+                      width: `${Math.min(100, Math.abs(roi) / 20)}%`,
+                      background:
+                        roi >= 0 ? 'var(--color-accent-success)' : 'var(--color-accent-error)',
                     }}
                   />
-                ) : (
-                  getInitial(trader.handle)
-                )}
+                </div>
+                <Metric value={trader.roi} format="roi" size="md" showArrow as="span" />
               </div>
 
-              {/* Name + Source */}
-              <div
-                style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}
-              >
-                <div
-                  style={{
-                    fontSize: tokens.typography.fontSize.base,
-                    fontWeight: tokens.typography.fontWeight.bold,
-                    color: 'var(--color-text-primary)',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {trader.handle}
+              <div className="ssr-supporting-metrics">
+                <div className="ssr-metric-cell ssr-pnl-cell">
+                  <span className="ssr-mobile-metric-label">PnL</span>
+                  <Metric value={trader.pnl} format="pnl" size="sm" showArrow as="span" />
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+
+                <div className="ssr-metric-cell ssr-winrate-cell">
+                  <span className="ssr-mobile-metric-label">Win%</span>
                   <span
+                    className="ssr-metric-value"
                     style={{
-                      padding: '1px 6px',
-                      borderRadius: tokens.radius.sm,
-                      // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
-                      fontSize: 11,
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      lineHeight: 1.4,
-                      color: typeColor,
-                      background: `color-mix(in srgb, ${typeColor} 8%, transparent)`,
-                      border: `1px solid color-mix(in srgb, ${typeColor} 19%, transparent)`,
+                      color:
+                        trader.win_rate != null && trader.win_rate > 50
+                          ? 'var(--color-accent-success)'
+                          : undefined,
                     }}
                   >
-                    {typeLabel}
+                    {winRate}
+                  </span>
+                </div>
+
+                <div className="ssr-metric-cell ssr-mdd-cell">
+                  <span className="ssr-mobile-metric-label">MDD</span>
+                  <Metric
+                    value={trader.max_drawdown != null ? -Math.abs(trader.max_drawdown) : null}
+                    format="percent"
+                    display={drawdownDisplay}
+                    size="sm"
+                    showArrow
+                    as="span"
+                  />
+                </div>
+
+                <div className="ssr-metric-cell ssr-sharpe-cell">
+                  <span className="ssr-mobile-metric-label">Sharpe</span>
+                  <span className="ssr-metric-value">
+                    {trader.sharpe != null ? Number(trader.sharpe).toFixed(2) : '—'}
                   </span>
                 </div>
               </div>
-
-              {/* Score badge + graded mini-bar (audit §4) */}
-              {score && scoreStyle && (
-                <div
-                  style={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'flex-end',
-                    gap: 4,
-                  }}
-                >
-                  <div
-                    style={{
-                      minWidth: 50,
-                      height: 28,
-                      // Match TraderCard's score-badge radius (tokens.radius.md).
-                      borderRadius: tokens.radius.md,
-                      background: scoreStyle.bg,
-                      border: `1px solid ${scoreStyle.border}`,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      fontSize: tokens.typography.fontSize.base,
-                      fontWeight: tokens.typography.fontWeight.black,
-                      color: scoreStyle.color,
-                    }}
-                  >
-                    {score}
-                  </div>
-                  {trader.arena_score != null && (
-                    <ScoreMiniBar score={Number(trader.arena_score)} width={50} height={4} />
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Row 2: ROI bar + ROI value */}
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div
-                style={{
-                  flex: 1,
-                  height: 6,
-                  // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
-                  borderRadius: 3,
-                  background: roiPositive
-                    ? `linear-gradient(90deg, var(--color-accent-success) ${Math.min(100, Math.abs(roiVal) / 20)}%, transparent)`
-                    : `linear-gradient(90deg, var(--color-accent-error) ${Math.min(100, Math.abs(roiVal) / 20)}%, transparent)`,
-                  opacity: 0.7,
-                }}
-              />
-              <Metric
-                value={trader.roi}
-                format="roi"
-                size="lg"
-                showArrow
-                style={{ marginLeft: 'auto' }}
-              />
-            </div>
-
-            {/* Row 3: Stats grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 8 }}>
-              {stats.map((stat) => (
-                <div
-                  key={stat.label}
-                  style={{
-                    background: 'var(--color-bg-tertiary)',
-                    // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
-                    borderRadius: 8,
-                    padding: '6px 8px',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 2,
-                  }}
-                >
-                  <span
-                    style={{
-                      // eslint-disable-next-line no-restricted-syntax -- off-scale by design (micro label)
-                      fontSize: 10,
-                      color: 'var(--color-text-tertiary)',
-                      textTransform: 'uppercase',
-                      fontWeight: tokens.typography.fontWeight.medium,
-                      letterSpacing: '0.04em',
-                      opacity: 0.7,
-                    }}
-                  >
-                    {stat.label}
-                  </span>
-                  {stat.node ?? (
-                    <span
-                      style={{
-                        fontSize: tokens.typography.fontSize.sm,
-                        fontWeight: tokens.typography.fontWeight.medium,
-                        color: stat.color || 'var(--color-text-secondary)',
-                        fontVariantNumeric: 'tabular-nums',
-                      }}
-                    >
-                      {stat.value}
-                    </span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </a>
-        )
-      })}
-    </div>
+            </a>
+          )
+        })}
+      </div>
+    </section>
   )
 }
