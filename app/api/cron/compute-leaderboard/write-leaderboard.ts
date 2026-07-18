@@ -44,9 +44,9 @@ export interface SourceFreshnessWriteRow {
 }
 
 /**
- * Collapse trader-level capture timestamps to one conservative source
- * watermark. Every row from a PASSED source board normally has the same
- * captured_at; if a mixed board slips through, retaining the oldest timestamp
+ * Collapse trader-level board-publication timestamps to one conservative
+ * source watermark. Every row from a PASSED source board normally has the same
+ * source_as_of; if a mixed board slips through, retaining the oldest timestamp
  * prevents the newer subset from hiding older source data.
  *
  * A source containing any invalid timestamp is omitted entirely. Its previous
@@ -111,7 +111,7 @@ export async function upsertSourceFreshness(params: {
 
   if (rows.length < sourceCount) {
     logger.warn(
-      `[${season}] source freshness skipped ${sourceCount - rows.length} source(s) with invalid captured_at`
+      `[${season}] source freshness skipped ${sourceCount - rows.length} source(s) with invalid board watermark`
     )
   }
   if (rows.length === 0) return 0

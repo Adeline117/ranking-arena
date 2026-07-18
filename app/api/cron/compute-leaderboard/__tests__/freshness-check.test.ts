@@ -9,7 +9,12 @@ jest.mock('@/lib/constants/exchanges', () => ({
 import { checkPlatformFreshness } from '../freshness-check'
 import type { TraderRow } from '../trader-row'
 
-function trader(source: string, capturedAt: string, id = 'trader'): TraderRow {
+function trader(
+  source: string,
+  capturedAt: string,
+  id = 'trader',
+  sourceBoardAsOf = capturedAt
+): TraderRow {
   return {
     source,
     source_trader_id: id,
@@ -22,6 +27,7 @@ function trader(source: string, capturedAt: string, id = 'trader'): TraderRow {
     copiers: null,
     arena_score: null,
     captured_at: capturedAt,
+    source_board_as_of: sourceBoardAsOf,
     full_confidence_at: null,
     profitability_score: null,
     risk_control_score: null,
@@ -57,7 +63,7 @@ describe('compute leaderboard freshness gate', () => {
     jest.useRealTimers()
   })
 
-  it('uses current captures plus persisted per-window source watermarks', async () => {
+  it('uses current board watermarks plus persisted per-window source watermarks', async () => {
     const query = watermarkQuery({
       data: [
         { source: 'missing_fresh', source_as_of: '2026-07-18T11:00:00.000Z' },
@@ -80,12 +86,30 @@ describe('compute leaderboard freshness gate', () => {
     expect(query.eq).toHaveBeenCalledWith('season_id', '30D')
   })
 
-  it('treats a mixed or invalid loaded source board conservatively as stale', async () => {
+  it('treats a stale row observation with a fresh source board as fresh', async () => {
     const query = watermarkQuery({ data: [], error: null })
     const from = jest.fn(() => ({ select: query.select }))
     const traderMap = new Map([
-      ['loaded:new', trader('loaded', '2026-07-18T11:00:00.000Z', 'new')],
-      ['loaded:old', trader('loaded', '2026-07-15T11:00:00.000Z', 'old')],
+      [
+        'loaded:one',
+        trader('loaded', '2026-07-15T11:00:00.000Z', 'one', '2026-07-18T11:00:00.000Z'),
+      ],
+    ])
+
+    const result = await checkPlatformFreshness({ from } as never, traderMap, '7D')
+
+    expect(result.freshPlatforms).toContain('loaded')
+    expect(result.stalePlatforms).not.toContain('loaded')
+  })
+
+  it('treats a fresh row observation with a stale source board as stale', async () => {
+    const query = watermarkQuery({ data: [], error: null })
+    const from = jest.fn(() => ({ select: query.select }))
+    const traderMap = new Map([
+      [
+        'loaded:one',
+        trader('loaded', '2026-07-18T11:00:00.000Z', 'one', '2026-07-15T11:00:00.000Z'),
+      ],
     ])
 
     const result = await checkPlatformFreshness({ from } as never, traderMap, '7D')
@@ -94,11 +118,34 @@ describe('compute leaderboard freshness gate', () => {
     expect(result.freshPlatforms).not.toContain('loaded')
   })
 
-  it('treats a loaded source with a far-future capture as stale', async () => {
+  it('uses the oldest watermark when a loaded source contains mixed boards', async () => {
     const query = watermarkQuery({ data: [], error: null })
     const from = jest.fn(() => ({ select: query.select }))
     const traderMap = new Map([
-      ['loaded:future', trader('loaded', '2026-07-18T12:10:00.000Z', 'future')],
+      [
+        'loaded:new',
+        trader('loaded', '2026-07-18T11:00:00.000Z', 'new', '2026-07-18T11:00:00.000Z'),
+      ],
+      [
+        'loaded:old',
+        trader('loaded', '2026-07-18T11:00:00.000Z', 'old', '2026-07-15T11:00:00.000Z'),
+      ],
+    ])
+
+    const result = await checkPlatformFreshness({ from } as never, traderMap, '7D')
+
+    expect(result.stalePlatforms).toContain('loaded')
+    expect(result.freshPlatforms).not.toContain('loaded')
+  })
+
+  it.each([
+    ['invalid', 'not-a-timestamp'],
+    ['far-future', '2026-07-18T12:10:00.000Z'],
+  ])('treats a loaded source with an %s board watermark as stale', async (_case, boardAsOf) => {
+    const query = watermarkQuery({ data: [], error: null })
+    const from = jest.fn(() => ({ select: query.select }))
+    const traderMap = new Map([
+      ['loaded:one', trader('loaded', '2026-07-18T11:00:00.000Z', 'one', boardAsOf)],
     ])
 
     const result = await checkPlatformFreshness({ from } as never, traderMap, '7D')
