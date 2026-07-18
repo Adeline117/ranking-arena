@@ -29,6 +29,21 @@ export function isFloatingActionRoute(pathname: string): boolean {
   return pathname === '/' || pathname === '/groups' || pathname.startsWith('/groups/')
 }
 
+/**
+ * Critical forms should not be covered by the global feedback control on a
+ * narrow viewport. These routes retain the footer feedback entry.
+ */
+export function isFeedbackSuppressedRoute(pathname: string): boolean {
+  return (
+    pathname === '/login' ||
+    pathname === '/register' ||
+    pathname === '/forgot-password' ||
+    pathname === '/reset-password' ||
+    pathname === '/pricing' ||
+    pathname.startsWith('/pricing/')
+  )
+}
+
 // Runtime flags with Redis cache (server-side only)
 let runtimeFlagsCache: { flags: Record<string, boolean>; ts: number } | null = null
 const RUNTIME_FLAGS_TTL = 60_000 // 60s
