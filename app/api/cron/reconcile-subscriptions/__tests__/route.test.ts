@@ -4,6 +4,7 @@ const mockFrom = jest.fn()
 const mockRetrieve = jest.fn()
 const mockList = jest.fn()
 const mockUpdateUserSubscription = jest.fn()
+const mockCheckNFTMembership = jest.fn()
 
 jest.mock('@/lib/stripe', () => ({
   getStripe: () => ({ subscriptions: { retrieve: mockRetrieve, list: mockList } }),
@@ -19,7 +20,9 @@ jest.mock('@/app/api/stripe/webhook/handlers/subscription', () => ({
   updateUserSubscription: (...args: unknown[]) => mockUpdateUserSubscription(...args),
 }))
 
-jest.mock('@/lib/web3/nft', () => ({ checkNFTMembership: jest.fn().mockResolvedValue(false) }))
+jest.mock('@/lib/web3/nft', () => ({
+  checkNFTMembership: (...args: unknown[]) => mockCheckNFTMembership(...args),
+}))
 
 jest.mock('@/lib/alerts/send-alert', () => ({
   sendRateLimitedAlert: jest.fn().mockResolvedValue({
@@ -149,5 +152,25 @@ describe('GET /api/cron/reconcile-subscriptions', () => {
 
     expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
     expect(body).toMatchObject({ downgraded: 0, skipped: 1 })
+  })
+
+  it('does not let an NFT badge preserve Pro after Stripe confirms access ended', async () => {
+    queueDatabaseResults(
+      { data: [], error: null },
+      {
+        data: [{ id: 'user-1', pro_plan: 'monthly', stripe_customer_id: 'cus_owner' }],
+        error: null,
+      },
+      { data: [], error: null },
+      { data: null, error: null }
+    )
+    mockList.mockResolvedValue({ data: [stripeSubscription('canceled')] })
+    mockCheckNFTMembership.mockResolvedValue(true)
+
+    const response = await GET(new NextRequest('http://localhost/api/cron/reconcile-subscriptions'))
+    const body = await response.json()
+
+    expect(body).toMatchObject({ downgraded: 1, skipped: 0 })
+    expect(mockCheckNFTMembership).not.toHaveBeenCalled()
   })
 })

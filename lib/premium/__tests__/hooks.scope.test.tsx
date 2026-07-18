@@ -29,6 +29,16 @@ function Probe() {
   )
 }
 
+function BadgeProbe() {
+  const premium = usePremium()
+  return (
+    <div data-testid="badge-state">
+      {premium.isLoading ? 'loading' : 'ready'}:{premium.tier}:{premium.source}:
+      {premium.hasNFT ? 'badge' : 'no-badge'}
+    </div>
+  )
+}
+
 describe('PremiumProvider viewer ownership', () => {
   beforeEach(() => {
     jest.clearAllMocks()
@@ -104,6 +114,55 @@ describe('PremiumProvider viewer ownership', () => {
     })
     await waitFor(() =>
       expect(screen.getByTestId('premium-state')).toHaveTextContent('ready:free:user-b')
+    )
+  })
+
+  it('shows an NFT badge without converting a free viewer into Pro', async () => {
+    mockUseAuthSession.mockReturnValue({
+      authChecked: true,
+      viewerKey: 'user:badge-owner',
+      sessionGeneration: 1,
+      userId: 'badge-owner',
+    })
+    mockGetAuthSession.mockResolvedValue({
+      userId: 'badge-owner',
+      accessToken: 'badge-token',
+    })
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/membership/nft') {
+        return { ok: true, json: async () => ({ hasNft: true }) } as Response
+      }
+      return {
+        ok: true,
+        json: async () => ({
+          subscription: {
+            userId: 'badge-owner',
+            tier: 'free',
+            status: 'active',
+            startDate: '2026-07-18T00:00:00.000Z',
+            endDate: null,
+            trialEndDate: null,
+            autoRenew: false,
+            usage: {
+              apiCallsToday: 0,
+              comparisonReportsThisMonth: 0,
+              exportsThisMonth: 0,
+              currentFollows: 0,
+              currentCustomRankings: 0,
+            },
+          },
+        }),
+      } as Response
+    })
+
+    render(
+      <PremiumProvider>
+        <BadgeProbe />
+      </PremiumProvider>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('badge-state')).toHaveTextContent('ready:free:free:badge')
     )
   })
 })

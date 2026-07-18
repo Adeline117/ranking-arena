@@ -845,7 +845,7 @@ const ko = {
   profileSection: '프로필',
   securitySection: '계정 보안',
   walletSection: '지갑',
-  walletDescription: 'Web3 지갑을 연결하고 관리합니다. NFT 멤버십 상태를 확인합니다.',
+  walletDescription: 'Web3 지갑을 연결하고 관리하며 온체인 NFT 배지를 확인합니다.',
   exchangesSection: '거래소 연결',
   apiKeysSection: 'API 키',
   alertsSection: '트레이더 알림',
@@ -2822,8 +2822,8 @@ const ko = {
   voteSignatureRejected: '서명이 거부되었습니다',
 
   // Web3 - NFTBadge
-  nftBadgeTitle: 'Arena NFT를 통한 Pro 멤버십',
-  nftBadgePro: 'Pro',
+  nftBadgeTitle: 'Arena 온체인 NFT 배지',
+  nftBadgePro: 'NFT',
 
   // Web3 - OnChainBadge
   onChainVerified: '온체인 인증됨',
@@ -2835,7 +2835,8 @@ const ko = {
   // Web3 - WalletSection
   walletLinkedSuccess: '지갑 연결 완료',
   walletUnlinkTitle: '지갑 연결 해제',
-  walletUnlinkConfirm: '지갑 연결을 해제하시겠습니까? 해당되는 경우 NFT 멤버십 혜택을 잃게 됩니다.',
+  walletUnlinkConfirm:
+    '지갑 연결을 해제하시겠습니까? 온체인 NFT 배지는 더 이상 표시되지 않지만 현재 요금제는 변경되지 않습니다.',
   walletUnlinked: '지갑 연결 해제됨',
   walletUnlinkFailed: '지갑 연결 해제 실패',
   walletLinkedHeading: '연결된 지갑',
@@ -2846,10 +2847,12 @@ const ko = {
   walletSigning: '서명 중...',
   walletLinkButton: '지갑 연결',
   walletConnectButton: '지갑 연결',
-  walletProNft: 'Pro 멤버십 (NFT)',
-  walletNoNft: 'NFT 멤버십 없음',
-  walletProStatus: 'NFT를 통해 Pro 상태를 보유하고 있습니다. 등급: {tier}',
-  walletHoldNft: 'Arena Pro NFT를 보유하여 Pro 기능을 잠금 해제하세요.',
+  walletProNft: 'Arena NFT 배지',
+  walletNoNft: 'Arena NFT 배지 없음',
+  walletProStatus:
+    'Arena NFT 배지가 온체인에서 확인되었습니다. Pro 접근 권한은 현재 유효한 요금제를 기준으로 합니다.',
+  walletHoldNft:
+    'Arena NFT를 보유하고 연결하면 온체인 배지를 표시할 수 있습니다. Pro 기능은 잠금 해제되지 않습니다.',
 
   // Web3 - useSiweAuth
   siweRejected: '서명 요청이 거부되었습니다. 로그인하려면 지갑에서 서명을 승인해 주세요.',
@@ -2933,12 +2936,12 @@ const ko = {
   billingMonthly: '월간',
   expirationDate: '만료일',
   nextRenewal: '다음 갱신일',
-  nftMembershipCard: 'NFT 멤버십 카드',
+  nftMembershipCard: 'NFT 배지',
   nftValidUntil: '유효기간:',
-  nftNotMintedPro: 'Pro 회원이지만 아직 NFT 멤버십 카드를 발행하지 않았습니다.',
-  nftLinkWalletHint: '지갑을 연결하면 NFT 멤버십 카드가 자동으로 발행됩니다.',
+  nftNotMintedPro: 'Pro 회원이지만 아직 NFT 배지를 발행하지 않았습니다.',
+  nftLinkWalletHint: '지갑을 연결하면 NFT 배지가 자동으로 발행됩니다.',
   nftLinkWallet: '지갑 연결',
-  nftUpgradeHint: 'Pro로 업그레이드하여 NFT 멤버십 카드를 받으세요.',
+  nftUpgradeHint: 'Pro로 업그레이드하여 NFT 배지를 받으세요.',
   benefitsComparison: '혜택 비교',
   benefitFeature: '기능',
   benefitFollowTraders: '트레이더 팔로우',
@@ -2949,7 +2952,7 @@ const ko = {
   benefitApiAccess: 'API 접근',
   benefitProGroups: 'Pro 그룹',
   benefitAdvancedFilter: '고급 필터',
-  benefitNft: 'NFT 멤버십',
+  benefitNft: 'NFT 배지',
   benefitLimited: '제한',
   benefitUnlimited: '무제한',
   benefitUnit: '',
@@ -3749,7 +3752,7 @@ const ko = {
   statusPastDue: '연체',
   expiresLabel: '만료일',
   validUntil: '유효 기간',
-  proMintNft: 'Pro 회원은 독점 NFT 멤버십 카드를 발행할 수 있습니다',
+  proMintNft: 'Pro 회원은 독점 NFT 배지를 발행할 수 있습니다',
   linkWallet: '지갑 연결',
   featureLabel: '기능',
   followTradersLabel: '트레이더 팔로우',
@@ -3766,7 +3769,7 @@ const ko = {
   directMessagesLabel: '다이렉트 메시지',
   basicLabel: '기본',
   unlimitedLabel: '무제한',
-  nftMembershipLabel: 'NFT 멤버십',
+  nftMembershipLabel: 'NFT 배지',
   usageStatsTitle: '사용 통계',
   followedTradersUsage: '팔로우한 트레이더',
   apiCallsTodayLabel: '오늘 API 호출 수',

@@ -4,7 +4,6 @@
  * 功能:
  * 1. 检查即将过期的订阅并发送提醒
  * 2. 自动降级已过期的用户
- * 3. 检查 NFT 会员有效期
  *
  * 触发频率: 每天 UTC 0:00
  */
@@ -13,7 +12,7 @@ import { NextRequest } from 'next/server'
 import { createLogger } from '@/lib/utils/logger'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { checkNFTMembership } from '@/lib/web3/nft'
+import type { Database } from '@/lib/supabase/database.types'
 import { withCron } from '@/lib/api/with-cron'
 import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { getStripe, STRIPE_API_PRICE_IDS, STRIPE_PRICE_IDS } from '@/lib/stripe'
@@ -28,13 +27,12 @@ export const maxDuration = 60
 const logger = createLogger('subscription-expiry')
 
 export const GET = withCron('subscription-expiry', async (_request: NextRequest) => {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase: SupabaseClient<Database> = getSupabaseAdmin()
   const now = new Date()
   const results = {
     expiringReminders: 0,
     downgraded: 0,
     repaired: 0,
-    nftChecked: 0,
     errors: [] as string[],
   }
   const stripe = getStripe()
@@ -160,7 +158,7 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
     const expiredUserIds = expiredSubscriptions.map((s) => s.user_id)
     const { data: expiredProfiles, error: expiredProfilesError } = await supabase
       .from('user_profiles')
-      .select('id, pro_plan, wallet_address')
+      .select('id, pro_plan')
       .in('id', expiredUserIds)
 
     if (expiredProfilesError) {
@@ -214,19 +212,6 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
             continue
           }
 
-          if (profile?.wallet_address) {
-            try {
-              if (await checkNFTMembership(profile.wallet_address)) {
-                results.nftChecked++
-                continue
-              }
-              results.nftChecked++
-            } catch (_error) {
-              results.errors.push(`NFT fallback verification failed for ${local.user_id}`)
-              continue
-            }
-          }
-
           await updateUserSubscription(local.user_id, endedSubscription, endedPlan)
           confirmedExpired.push(local)
         } catch (_error) {
@@ -274,159 +259,6 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
     }
   }
 
-  // ============================================
-  // 3. 检查 NFT 会员有效期
-  // ============================================
-  const { data: nftUsers } = await supabase
-    .from('user_profiles')
-    .select('id, wallet_address, subscription_tier, stripe_customer_id, pro_plan')
-    .not('wallet_address', 'is', null)
-    .eq('subscription_tier', 'pro')
-
-  if (nftUsers && nftUsers.length > 0) {
-    const validNftUsers = nftUsers.filter((u) => u.wallet_address)
-
-    // Check NFT membership with concurrency limit of 5
-    const NFT_CONCURRENCY = 5
-    const nftResults: { user: (typeof validNftUsers)[number]; hasValidNFT: boolean }[] = []
-
-    for (let i = 0; i < validNftUsers.length; i += NFT_CONCURRENCY) {
-      const batch = validNftUsers.slice(i, i + NFT_CONCURRENCY)
-      const batchResults = await Promise.all(
-        batch.map(async (user) => {
-          try {
-            const hasValidNFT = await checkNFTMembership(user.wallet_address!)
-            results.nftChecked++
-            return { user, hasValidNFT }
-          } catch (err) {
-            results.errors.push(`NFT check error for ${user.id}: ${err}`)
-            return null
-          }
-        })
-      )
-      for (const r of batchResults) {
-        if (r) nftResults.push(r)
-      }
-    }
-
-    // Batch query: find which of these users have active subscriptions
-    const nftUserIds = nftResults.filter((r) => !r.hasValidNFT).map((r) => r.user.id)
-
-    if (nftUserIds.length > 0) {
-      const { data: activeSubUsers, error: activeSubUsersError } = await supabase
-        .from('subscriptions')
-        .select('user_id, stripe_customer_id')
-        .in('user_id', nftUserIds)
-        .in('status', ['active', 'trialing'])
-
-      if (activeSubUsersError) {
-        results.errors.push(
-          `Active subscription query for NFT fallback failed: ${activeSubUsersError.message}`
-        )
-      } else {
-        const localActiveByUser = new Map(
-          (activeSubUsers || []).map((subscription) => [subscription.user_id, subscription])
-        )
-        const toDowngrade: typeof nftResults = []
-
-        for (const result of nftResults.filter((item) => !item.hasValidNFT)) {
-          if (result.user.pro_plan === 'lifetime') continue
-
-          const localActive = localActiveByUser.get(result.user.id)
-          const customerId = result.user.stripe_customer_id || localActive?.stripe_customer_id
-          if (!customerId) {
-            if (localActive) {
-              results.errors.push(`Cannot verify Stripe fallback for NFT user ${result.user.id}`)
-              continue
-            }
-            toDowngrade.push(result)
-            continue
-          }
-
-          try {
-            const stripeSubscriptions = await stripe.subscriptions.list({
-              customer: customerId,
-              status: 'all',
-              limit: 100,
-            })
-            const classification = classifyActiveProSubscription(
-              stripeSubscriptions.data,
-              configuredPrices
-            )
-            if (classification.kind === 'active') {
-              await updateUserSubscription(
-                result.user.id,
-                classification.subscription,
-                classification.plan
-              )
-              results.repaired++
-              continue
-            }
-            if (classification.kind === 'unknown-active-price') {
-              results.errors.push(`Unknown active Stripe price for NFT user ${result.user.id}`)
-              continue
-            }
-            toDowngrade.push(result)
-          } catch (_error) {
-            results.errors.push(`Stripe NFT fallback verification failed for ${result.user.id}`)
-          }
-        }
-
-        if (toDowngrade.length > 0) {
-          const downgradeIds = toDowngrade.map((r) => r.user.id)
-
-          // Batch UPDATE user_profiles → free tier
-          const { error: profileErr } = await supabase
-            .from('user_profiles')
-            .update({
-              subscription_tier: 'free',
-              pro_plan: null,
-              updated_at: now.toISOString(),
-            })
-            .in('id', downgradeIds)
-
-          if (profileErr) {
-            results.errors.push(`Batch NFT profile downgrade error: ${profileErr.message}`)
-          } else {
-            // Send NFT expiry notifications with dedup
-            const { sendNotification: sendNftNotif } = await import('@/lib/data/notifications')
-            await Promise.allSettled(
-              toDowngrade.map((r) =>
-                sendNftNotif(
-                  supabase,
-                  {
-                    user_id: r.user.id,
-                    type: 'nft_expired' as import('@/lib/data/notifications').NotificationType,
-                    title: 'NFT 会员已过期',
-                    message:
-                      '您的 NFT 会员证已过期，账号已降级为免费用户。如需继续使用 Pro 功能，请续费或重新购买 NFT。',
-                    reference_id: `nft_expired_${r.user.id}`,
-                  },
-                  'subscription-expiry'
-                )
-              )
-            )
-
-            const proGroupId = process.env.PRO_OFFICIAL_GROUP_ID || ''
-            if (proGroupId) {
-              const { error: groupError } = await supabase
-                .from('group_members')
-                .delete()
-                .in('user_id', downgradeIds)
-                .eq('group_id', proGroupId)
-              if (groupError) {
-                results.errors.push(`NFT Pro group removal error: ${groupError.message}`)
-              }
-            }
-
-            results.downgraded += toDowngrade.length
-            logger.info(`Batch downgraded ${toDowngrade.length} users due to NFT expiry`)
-          }
-        }
-      }
-    }
-  }
-
   // Alert on errors — payment-critical, uses 15min cooldown via 'critical' level
   if (results.errors.length > 0) {
     await sendRateLimitedAlert(
@@ -441,6 +273,6 @@ export const GET = withCron('subscription-expiry', async (_request: NextRequest)
   }
 
   logger.info('Subscription expiry check completed', results)
-  const processed = results.expiringReminders + results.downgraded + results.nftChecked
+  const processed = results.expiringReminders + results.downgraded
   return { count: processed, ...results }
 })
