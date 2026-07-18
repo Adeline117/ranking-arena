@@ -9,6 +9,7 @@ const mockRpc = jest.fn()
 const mockFrom = jest.fn()
 const mockPlogSuccess = jest.fn()
 const mockPlogError = jest.fn()
+const mockReleaseCronLock = jest.fn()
 const mockSupabaseClient = { from: mockFrom, rpc: mockRpc }
 
 jest.mock('@/lib/env', () => ({
@@ -42,8 +43,11 @@ jest.mock('@/lib/cron/utils', () => ({
 }))
 
 jest.mock('@/lib/alerts/send-alert', () => ({
-  sendScraperAlert: jest.fn(),
   sendRateLimitedAlert: jest.fn(),
+}))
+
+jest.mock('@/lib/cron/with-cron-lock', () => ({
+  acquireCronLock: jest.fn(),
 }))
 
 jest.mock('@/lib/utils/logger', () => ({
@@ -99,15 +103,16 @@ jest.mock('@/lib/services/pipeline-self-heal', () => ({
   evaluateAndAlert: jest.fn(),
 }))
 
-import { sendRateLimitedAlert, sendScraperAlert } from '@/lib/alerts/send-alert'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
+import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { evaluateAndAlert } from '@/lib/services/pipeline-self-heal'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { captureMessage } from '@/lib/utils/logger'
 import { GET } from '../route'
 
-const mockSendScraperAlert = jest.mocked(sendScraperAlert)
 const mockSendRateLimitedAlert = jest.mocked(sendRateLimitedAlert)
+const mockAcquireCronLock = jest.mocked(acquireCronLock)
 const mockCaptureMessage = jest.mocked(captureMessage)
 const mockEvaluateAndAlert = jest.mocked(evaluateAndAlert)
 const mockPipelineStart = jest.mocked(PipelineLogger.start)
@@ -253,6 +258,8 @@ describe('GET /api/cron/check-data-freshness', () => {
     )
     mockPlogSuccess.mockResolvedValue(undefined)
     mockPlogError.mockResolvedValue(undefined)
+    mockReleaseCronLock.mockResolvedValue(undefined)
+    mockAcquireCronLock.mockResolvedValue(mockReleaseCronLock)
     mockPipelineStart.mockResolvedValue({
       id: 1,
       success: mockPlogSuccess,
@@ -261,7 +268,6 @@ describe('GET /api/cron/check-data-freshness', () => {
       timeout: jest.fn(),
     })
     mockCaptureMessage.mockResolvedValue(undefined)
-    mockSendScraperAlert.mockResolvedValue({ sent: true, channels: [] })
     mockSendRateLimitedAlert.mockResolvedValue({ sent: true, rateLimited: false, channels: [] })
     mockEvaluateAndAlert.mockResolvedValue([])
     resetAuthority()
@@ -274,10 +280,27 @@ describe('GET /api/cron/check-data-freshness', () => {
 
       expect(response.status).toBe(401)
       expect(mockPipelineStart).not.toHaveBeenCalled()
+      expect(mockAcquireCronLock).not.toHaveBeenCalled()
       expect(mockRpc).not.toHaveBeenCalled()
       expect(mockFrom).not.toHaveBeenCalled()
     }
   )
+
+  it('skips a duplicate delivery while the distributed lock is held', async () => {
+    mockAcquireCronLock.mockResolvedValueOnce(null)
+
+    const response = await GET(createRequest('test-secret'))
+
+    expect(response.status).toBe(200)
+    expect(await response.json()).toEqual({
+      ok: true,
+      skipped: true,
+      reason: 'concurrent_execution',
+    })
+    expect(mockPipelineStart).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockReleaseCronLock).not.toHaveBeenCalled()
+  })
 
   it('uses independent registry, visible-generation, and source_as_of authorities', async () => {
     const response = await GET(createRequest('test-secret'))
@@ -322,6 +345,10 @@ describe('GET /api/cron/check-data-freshness', () => {
       expect.objectContaining({ critical: 0, stale: 0, unknown: 0 })
     )
     expect(mockPlogError).not.toHaveBeenCalled()
+    expect(mockAcquireCronLock).toHaveBeenCalledWith('check-data-freshness', {
+      ttlSeconds: 150,
+    })
+    expect(mockReleaseCronLock).toHaveBeenCalledTimes(1)
   })
 
   it.each([
@@ -368,7 +395,6 @@ describe('GET /api/cron/check-data-freshness', () => {
       'data-freshness:binance_futures',
       expect.any(Number)
     )
-    expect(mockSendScraperAlert).toHaveBeenCalledWith([], ['binance_futures'], expect.any(Object))
     expect(mockPlogSuccess).toHaveBeenCalled()
     expect(mockPlogError).not.toHaveBeenCalled()
   })
@@ -493,6 +519,7 @@ describe('GET /api/cron/check-data-freshness', () => {
       'data-freshness:authority-unavailable',
       expect.any(Number)
     )
+    expect(mockReleaseCronLock).toHaveBeenCalledTimes(1)
   })
 
   it('keeps checking healthy data under a separately reported PipelineLogger degradation', async () => {
@@ -532,9 +559,9 @@ describe('GET /api/cron/check-data-freshness', () => {
     setWatermarkAge('binance_futures', 10 * HOUR_MS)
     mockCaptureMessage.mockRejectedValueOnce(new Error('sentry unavailable'))
     mockSendRateLimitedAlert.mockRejectedValueOnce(new Error('telegram unavailable'))
-    mockSendScraperAlert.mockRejectedValueOnce(new Error('scraper alert unavailable'))
     mockEvaluateAndAlert.mockRejectedValueOnce(new Error('self-heal unavailable'))
     mockPlogSuccess.mockRejectedValueOnce(new Error('pipeline log unavailable'))
+    mockReleaseCronLock.mockRejectedValueOnce(new Error('redis unlock unavailable'))
 
     const response = await GET(createRequest('test-secret'))
     const body = await response.json()
@@ -543,6 +570,7 @@ describe('GET /api/cron/check-data-freshness', () => {
     expect(body.summary).toMatchObject({ stale: 1, unknown: 0 })
     expect(mockPlogError).not.toHaveBeenCalled()
     expect(mockSendRateLimitedAlert).toHaveBeenCalledTimes(1)
+    expect(mockReleaseCronLock).toHaveBeenCalledTimes(1)
   })
 
   it('keeps a sanitized authority response when failure logging and alerting also fail', async () => {
@@ -569,5 +597,7 @@ describe('GET /api/cron/check-data-freshness', () => {
     expect(route).toContain("rpc('arena_visible_sources'")
     expect(route).toContain("from('leaderboard_source_freshness')")
     expect(route).toContain("select('season_id,source,source_as_of')")
+    expect(route).toContain("acquireCronLock('check-data-freshness'")
+    expect(route).not.toContain('sendScraperAlert')
   })
 })
