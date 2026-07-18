@@ -229,21 +229,33 @@ export async function applyArenaFollowers<T extends ScoredRowForArenaFollowers>(
       const requestedKeys = new Set(
         chunk.map((account) => traderAccountKey(account.traderId, account.source))
       )
-      const { data: fallbackData, error: fallbackError } = await supabase
-        .from('trader_follows')
-        .select('trader_id, source')
-        .in('trader_id', [...new Set(chunk.map((account) => account.traderId))])
-        .in('source', [...new Set(chunk.map((account) => account.source))])
-        .limit(10000)
-      if (fallbackError) {
-        logger.warn(`[${season}] arena follower fallback failed: ${fallbackError.message}`)
-        continue
+      const fallbackCounts = new Map<string, number>()
+      const pageSize = 1000
+      let fallbackComplete = true
+      for (let offset = 0; ; offset += pageSize) {
+        const { data: fallbackData, error: fallbackError } = await supabase
+          .from('trader_follows')
+          .select('trader_id, source')
+          .in('trader_id', [...new Set(chunk.map((account) => account.traderId))])
+          .in('source', [...new Set(chunk.map((account) => account.source))])
+          .range(offset, offset + pageSize - 1)
+        if (fallbackError) {
+          logger.warn(`[${season}] arena follower fallback failed: ${fallbackError.message}`)
+          fallbackComplete = false
+          break
+        }
+        for (const row of fallbackData ?? []) {
+          if (typeof row.source !== 'string') continue
+          const key = traderAccountKey(row.trader_id, row.source)
+          if (!requestedKeys.has(key)) continue
+          fallbackCounts.set(key, (fallbackCounts.get(key) || 0) + 1)
+        }
+        if ((fallbackData?.length ?? 0) < pageSize) break
       }
-      for (const row of fallbackData ?? []) {
-        if (typeof row.source !== 'string') continue
-        const key = traderAccountKey(row.trader_id, row.source)
-        if (!requestedKeys.has(key)) continue
-        arenaFollowerMap.set(key, (arenaFollowerMap.get(key) || 0) + 1)
+      if (fallbackComplete) {
+        for (const [key, count] of fallbackCounts) {
+          arenaFollowerMap.set(key, count)
+        }
       }
     }
   }

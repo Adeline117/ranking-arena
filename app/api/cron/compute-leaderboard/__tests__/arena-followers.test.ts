@@ -49,11 +49,11 @@ describe('applyArenaFollowers account identity', () => {
     const query = {
       select: jest.fn(),
       in: jest.fn(),
-      limit: jest.fn(),
+      range: jest.fn(),
     }
     query.select.mockReturnValue(query)
     query.in.mockReturnValue(query)
-    query.limit.mockResolvedValue({
+    query.range.mockResolvedValue({
       data: [
         { trader_id: 'shared-id', source: 'bybit' },
         { trader_id: 'shared-id', source: 'bybit' },
@@ -71,6 +71,39 @@ describe('applyArenaFollowers account identity', () => {
 
     expect(rows[0].followers).toBe(2)
     expect(result).toEqual({ applied: 1, uniqueAccounts: 1 })
+  })
+
+  it('paginates fallback counts without merging a reused id across sources', async () => {
+    const rpc = jest.fn().mockResolvedValue({
+      data: null,
+      error: { message: 'RPC unavailable' },
+    })
+    const firstPage = Array.from({ length: 1000 }, () => ({
+      trader_id: 'shared-id',
+      source: 'bybit',
+    }))
+    const query = {
+      select: jest.fn(),
+      in: jest.fn(),
+      range: jest.fn(),
+    }
+    query.select.mockReturnValue(query)
+    query.in.mockReturnValue(query)
+    query.range.mockResolvedValueOnce({ data: firstPage, error: null }).mockResolvedValueOnce({
+      data: [{ trader_id: 'shared-id', source: 'binance' }],
+      error: null,
+    })
+    const supabase = {
+      rpc,
+      from: jest.fn().mockReturnValue(query),
+    } as unknown as SupabaseClient
+    const rows = [scored('bybit'), scored('binance')]
+
+    await applyArenaFollowers(supabase, rows, '90D')
+
+    expect(query.range).toHaveBeenNthCalledWith(1, 0, 999)
+    expect(query.range).toHaveBeenNthCalledWith(2, 1000, 1999)
+    expect(rows.map((row) => row.followers)).toEqual([1000, 1])
   })
 
   it('deduplicates repeated account rows and zeroes invalid identities', async () => {
