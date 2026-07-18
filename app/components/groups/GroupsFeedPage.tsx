@@ -17,6 +17,7 @@ import { Box, Text } from '@/app/components/base'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { logger } from '@/lib/logger'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import ErrorState from '@/app/components/ui/ErrorState'
 
 type Group = {
   id: string
@@ -39,38 +40,51 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
   const { language, t } = useLanguage()
   const { userId } = useAuthSession()
   const [myGroups, setMyGroups] = useState<Group[]>([])
-  const [_loadingGroups, setLoadingGroups] = useState(true)
-  const [_groupsError, setGroupsError] = useState(false)
+  const [loadingGroups, setLoadingGroups] = useState(true)
+  const [groupsError, setGroupsError] = useState(false)
+  const [groupsLoadAttempt, setGroupsLoadAttempt] = useState(0)
   const [subTab, setSubTab] = useState<SubTabKey>('recommended')
   const [groupQuery, setGroupQuery] = useState('')
 
   // Load user's joined groups
   useEffect(() => {
+    let cancelled = false
+
     if (!userId) {
+      setMyGroups([])
+      setGroupsError(false)
       setLoadingGroups(false)
-      return
+      return () => {
+        cancelled = true
+      }
     }
 
     const loadMyGroups = async () => {
+      setMyGroups([])
+      setGroupsError(false)
+      setLoadingGroups(true)
+
       try {
         // Private membership preferences come from the caller-scoped projection;
         // the public directory intentionally does not expose pinned state.
-        const { data: memberships } = await supabase
+        const { data: memberships, error: membershipsError } = await supabase
           .from('own_group_memberships')
           .select('group_id, pinned')
           .eq('user_id', userId)
+        if (membershipsError) throw membershipsError
 
         if (!memberships || memberships.length === 0) {
-          setMyGroups([])
-          setLoadingGroups(false)
+          if (!cancelled) setMyGroups([])
           return
         }
 
         const groupIds = memberships.map((membership) => membership.group_id)
-        const { data: joinedGroups } = await supabase
+        const { data: joinedGroups, error: joinedGroupsError } = await supabase
           .from('groups')
           .select('id, name, name_en, avatar_url, member_count')
           .in('id', groupIds)
+        if (joinedGroupsError) throw joinedGroupsError
+
         const groupById = new Map((joinedGroups || []).map((group) => [group.id, group]))
 
         const groupsData = memberships
@@ -81,17 +95,24 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
           .filter((g): g is Group => g != null)
           // pinned first, then keep insertion order (recency of membership)
           .sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned))
-        setMyGroups(groupsData)
+        if (!cancelled) setMyGroups(groupsData)
       } catch (err) {
         logger.error('Failed to load groups:', err)
-        setGroupsError(true)
+        if (!cancelled) {
+          setMyGroups([])
+          setGroupsError(true)
+        }
       } finally {
-        setLoadingGroups(false)
+        if (!cancelled) setLoadingGroups(false)
       }
     }
 
-    loadMyGroups()
-  }, [userId])
+    void loadMyGroups()
+
+    return () => {
+      cancelled = true
+    }
+  }, [groupsLoadAttempt, userId])
 
   const myGroupIds = myGroups.map((g) => g.id)
 
@@ -192,7 +213,26 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
         </Box>
 
         {subTab === 'following' &&
-          (myGroups.length > 0 ? (
+          (loadingGroups ? (
+            <Box
+              aria-busy="true"
+              style={{
+                padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`,
+                background: tokens.colors.bg.secondary,
+                borderRadius: tokens.radius.xl,
+                border: `1px solid ${tokens.colors.border.primary}`,
+              }}
+            >
+              <div className="skeleton" style={{ height: 80, borderRadius: tokens.radius.lg }} />
+            </Box>
+          ) : groupsError ? (
+            <ErrorState
+              variant="compact"
+              title={t('sidebarLoadFailedShort')}
+              description={t('loadFailedRetryShort')}
+              retry={() => setGroupsLoadAttempt((attempt) => attempt + 1)}
+            />
+          ) : myGroups.length > 0 ? (
             <>
               {/* My-groups rail — pinned groups first, marked with 📌 (U9-12) */}
               <Box
