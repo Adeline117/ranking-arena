@@ -1,0 +1,581 @@
+{
+  "schema_version": 1,
+  "data_contract": "arena.dex.bsc-protocol-manifest@1",
+  "purpose": "phase0_bsc_protocol_discovery_seed_only",
+  "evidence_as_of": "2026-07-18T06:55:08.000Z",
+  "chain": {
+    "namespace": "eip155",
+    "chain_id": 56,
+    "network": "bsc-mainnet",
+    "source_slug": "binance_web3_bsc"
+  },
+  "coverage": {
+    "selection_basis": "official_pancakeswap_seed_only",
+    "live_wallet_sample_profiled": false,
+    "non_pancakeswap_protocols_profiled": false,
+    "protocol_event_share_measured": false,
+    "wallet_population_recall_measured": false,
+    "coverage_claim": "none"
+  },
+  "artifacts": [
+    {
+      "artifact_id": "pancake-v2-addresses-81521fc1",
+      "artifact_kind": "official_address_registry",
+      "official_url": "https://github.com/pancakeswap/pancake-developer/blob/81521fc1ccbbfe26ec2a1300059e1143338f3466/docs/pages/contracts/v2/addresses.md",
+      "repository": "https://github.com/pancakeswap/pancake-developer",
+      "git_commit": "81521fc1ccbbfe26ec2a1300059e1143338f3466",
+      "path": "docs/pages/contracts/v2/addresses.md",
+      "declared_raw_file_sha256": "cf84d8c2a0aac50300f7fb18118b5159a3206244714125e8a75d8c2f6248408f",
+      "hash_basis": "git_file_raw_bytes",
+      "integrity_state": "declared_not_repository_verified",
+      "license": "NOASSERTION",
+      "license_scope": "none",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "pancake-v2-factory-cb079908",
+      "artifact_kind": "contract_source",
+      "official_url": "https://github.com/pancakeswap/pancake-smart-contracts/blob/cb079908a30328e46d42fe8cc77b9f7d38a15c2f/projects/exchange-protocol/contracts/PancakeFactory.sol",
+      "repository": "https://github.com/pancakeswap/pancake-smart-contracts",
+      "git_commit": "cb079908a30328e46d42fe8cc77b9f7d38a15c2f",
+      "path": "projects/exchange-protocol/contracts/PancakeFactory.sol",
+      "declared_raw_file_sha256": "72e35f8e71c199fe27b6fb1f9723f4adf74f5355e94a0a580b0b1b57d6504784",
+      "hash_basis": "git_file_raw_bytes",
+      "integrity_state": "declared_not_repository_verified",
+      "license": "GPL-3.0-only",
+      "license_scope": "file",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "pancake-v2-pair-cb079908",
+      "artifact_kind": "event_interface",
+      "official_url": "https://github.com/pancakeswap/pancake-smart-contracts/blob/cb079908a30328e46d42fe8cc77b9f7d38a15c2f/projects/exchange-protocol/contracts/PancakePair.sol",
+      "repository": "https://github.com/pancakeswap/pancake-smart-contracts",
+      "git_commit": "cb079908a30328e46d42fe8cc77b9f7d38a15c2f",
+      "path": "projects/exchange-protocol/contracts/PancakePair.sol",
+      "declared_raw_file_sha256": "2cbba91a92213c2ab84cae383be85e2b864c696abc8bb70aba9190732b584b1e",
+      "hash_basis": "git_file_raw_bytes",
+      "integrity_state": "declared_not_repository_verified",
+      "license": "GPL-3.0-only",
+      "license_scope": "file",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "pancake-v3-deployments-98684794",
+      "artifact_kind": "official_deployment_registry",
+      "official_url": "https://github.com/pancakeswap/pancake-v3-contracts/blob/986847948755cba528324d41be19480731c36c2a/deployments/bscMainnet.json",
+      "repository": "https://github.com/pancakeswap/pancake-v3-contracts",
+      "git_commit": "986847948755cba528324d41be19480731c36c2a",
+      "path": "deployments/bscMainnet.json",
+      "declared_raw_file_sha256": "cd72575c75643cc55e500963b2a94451e64166a84ce15a57412ce9737d48ad05",
+      "hash_basis": "git_file_raw_bytes",
+      "integrity_state": "declared_not_repository_verified",
+      "license": "NOASSERTION",
+      "license_scope": "none",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "pancake-v3-factory-interface-98684794",
+      "artifact_kind": "event_interface",
+      "official_url": "https://github.com/pancakeswap/pancake-v3-contracts/blob/986847948755cba528324d41be19480731c36c2a/projects/v3-core/contracts/interfaces/IPancakeV3Factory.sol",
+      "repository": "https://github.com/pancakeswap/pancake-v3-contracts",
+      "git_commit": "986847948755cba528324d41be19480731c36c2a",
+      "path": "projects/v3-core/contracts/interfaces/IPancakeV3Factory.sol",
+      "declared_raw_file_sha256": "390685b7ff3fe9d4a0895fc9a420402dd0ce01adb6dc7137c022d68c65a66bdd",
+      "hash_basis": "git_file_raw_bytes",
+      "integrity_state": "declared_not_repository_verified",
+      "license": "GPL-2.0-or-later",
+      "license_scope": "file",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "pancake-v3-pool-events-98684794",
+      "artifact_kind": "event_interface",
+      "official_url": "https://github.com/pancakeswap/pancake-v3-contracts/blob/986847948755cba528324d41be19480731c36c2a/projects/v3-core/contracts/interfaces/pool/IPancakeV3PoolEvents.sol",
+      "repository": "https://github.com/pancakeswap/pancake-v3-contracts",
+      "git_commit": "986847948755cba528324d41be19480731c36c2a",
+      "path": "projects/v3-core/contracts/interfaces/pool/IPancakeV3PoolEvents.sol",
+      "declared_raw_file_sha256": "c9979f9c2678921e77f3cc4484c24438267c2aa0c289c4199a59455899d56930",
+      "hash_basis": "git_file_raw_bytes",
+      "integrity_state": "declared_not_repository_verified",
+      "license": "GPL-2.0-or-later",
+      "license_scope": "file",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "pancake-infinity-core-deployments-7c04695f",
+      "artifact_kind": "official_deployment_registry",
+      "official_url": "https://github.com/pancakeswap/infinity-core/blob/7c04695faeab8b06570cf6c277d9a9717136fb26/script/config/bsc-mainnet.json",
+      "repository": "https://github.com/pancakeswap/infinity-core",
+      "git_commit": "7c04695faeab8b06570cf6c277d9a9717136fb26",
+      "path": "script/config/bsc-mainnet.json",
+      "declared_raw_file_sha256": "81da53698252c25fce50bf0267a4230ff4420ccfdf0c9a9167caf0bdae179209",
+      "hash_basis": "git_file_raw_bytes",
+      "integrity_state": "declared_not_repository_verified",
+      "license": "GPL-2.0-only",
+      "license_scope": "repository",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "pancake-infinity-cl-interface-7c04695f",
+      "artifact_kind": "event_interface",
+      "official_url": "https://github.com/pancakeswap/infinity-core/blob/7c04695faeab8b06570cf6c277d9a9717136fb26/src/pool-cl/interfaces/ICLPoolManager.sol",
+      "repository": "https://github.com/pancakeswap/infinity-core",
+      "git_commit": "7c04695faeab8b06570cf6c277d9a9717136fb26",
+      "path": "src/pool-cl/interfaces/ICLPoolManager.sol",
+      "declared_raw_file_sha256": "d2a488219dd1f4c6ce12bcb7234f692cb658384a61859a3b52ebb3a125edb2c5",
+      "hash_basis": "git_file_raw_bytes",
+      "integrity_state": "declared_not_repository_verified",
+      "license": "MIT",
+      "license_scope": "file",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "pancake-infinity-bin-interface-7c04695f",
+      "artifact_kind": "event_interface",
+      "official_url": "https://github.com/pancakeswap/infinity-core/blob/7c04695faeab8b06570cf6c277d9a9717136fb26/src/pool-bin/interfaces/IBinPoolManager.sol",
+      "repository": "https://github.com/pancakeswap/infinity-core",
+      "git_commit": "7c04695faeab8b06570cf6c277d9a9717136fb26",
+      "path": "src/pool-bin/interfaces/IBinPoolManager.sol",
+      "declared_raw_file_sha256": "cd1d173cfebea734f0a9badf9762c7706f36d3c04e2ca991ba02d9cb1d85575b",
+      "hash_basis": "git_file_raw_bytes",
+      "integrity_state": "declared_not_repository_verified",
+      "license": "MIT",
+      "license_scope": "file",
+      "usage": "reference_only"
+    },
+    {
+      "artifact_id": "pancake-infinity-router-deployments-8b03511e",
+      "artifact_kind": "official_deployment_registry",
+      "official_url": "https://github.com/pancakeswap/infinity-universal-router/blob/8b03511e482ad742b7e27427ddf8cd80bf0239f1/deploy-addresses/bsc-mainnet.json",
+      "repository": "https://github.com/pancakeswap/infinity-universal-router",
+      "git_commit": "8b03511e482ad742b7e27427ddf8cd80bf0239f1",
+      "path": "deploy-addresses/bsc-mainnet.json",
+      "declared_raw_file_sha256": "6a8fa0ce9853b2dcce764b20e044db57d990669c78a30cbf928ad34eb60c644c",
+      "hash_basis": "git_file_raw_bytes",
+      "integrity_state": "declared_not_repository_verified",
+      "license": "NOASSERTION",
+      "license_scope": "none",
+      "usage": "reference_only"
+    }
+  ],
+  "protocols": [
+    {
+      "protocol_id": "pancakeswap_v2",
+      "family": "pancakeswap",
+      "lifecycle_status": "official_source_candidate_unverified",
+      "selection_basis": "official_pancakeswap_seed_not_live_sample",
+      "upgrade_model": "immutable_factory_dynamic_pools",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "artifact_integrity_unverified",
+        "chain_code_unverified",
+        "child_contract_set_incomplete",
+        "creation_transaction_unverified",
+        "decoder_owner_unassigned",
+        "deployment_start_block_unverified",
+        "finality_policy_unverified",
+        "golden_transactions_unverified",
+        "live_sample_event_share_unmeasured",
+        "registry_replay_unverified",
+        "runtime_source_build_unbound",
+        "trace_internal_attribution_unverified",
+        "upgrade_epochs_unverified"
+      ],
+      "epochs": [
+        {
+          "epoch_id": "official-source-snapshot",
+          "version_label": "PancakeSwap V2",
+          "start_block": null,
+          "end_block": null,
+          "activation_state": "unverified",
+          "contracts": [
+            {
+              "contract_id": "factory",
+              "role": "factory",
+              "address": "0xca143ce32fe78f1f7019d7d551a6402fc5350c73",
+              "event_role": "factory_discovery_root",
+              "address_artifact_id": "pancake-v2-addresses-81521fc1",
+              "address_evidence_locator": "BNB Smart Chain > Factory",
+              "interface_artifact_ids": ["pancake-v2-factory-cb079908"],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            },
+            {
+              "contract_id": "router",
+              "role": "router",
+              "address": "0x10ed43c718714eb63d5aa57b78b54704e256024e",
+              "event_role": "attribution_only",
+              "address_artifact_id": "pancake-v2-addresses-81521fc1",
+              "address_evidence_locator": "BNB Smart Chain > Router v2",
+              "interface_artifact_ids": [],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            }
+          ],
+          "event_surface": {
+            "kind": "factory_created_contracts",
+            "discovery_root_contract_id": "factory",
+            "discovery_event": "PairCreated",
+            "child_contract_kind": "pair",
+            "child_event_interface_artifact_id": "pancake-v2-pair-cb079908",
+            "trade_event_emitter_scope": "discovered_child_contracts",
+            "discovered_child_set_complete": false,
+            "child_start_blocks_verified": false
+          }
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "implementation_state": "not_started",
+        "golden_transactions_verified": false,
+        "required_fact_families": [
+          "failed_transaction_semantics",
+          "fees",
+          "native_bnb_cashflow",
+          "router_user_attribution",
+          "swap_fills",
+          "token_cashflow"
+        ]
+      },
+      "finality_policy": null
+    },
+    {
+      "protocol_id": "pancakeswap_v3",
+      "family": "pancakeswap",
+      "lifecycle_status": "official_source_candidate_unverified",
+      "selection_basis": "official_pancakeswap_seed_not_live_sample",
+      "upgrade_model": "immutable_factory_dynamic_pools",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "artifact_integrity_unverified",
+        "chain_code_unverified",
+        "child_contract_set_incomplete",
+        "creation_transaction_unverified",
+        "decoder_owner_unassigned",
+        "deployment_start_block_unverified",
+        "finality_policy_unverified",
+        "golden_transactions_unverified",
+        "live_sample_event_share_unmeasured",
+        "registry_replay_unverified",
+        "runtime_source_build_unbound",
+        "trace_internal_attribution_unverified",
+        "upgrade_epochs_unverified"
+      ],
+      "epochs": [
+        {
+          "epoch_id": "official-source-snapshot",
+          "version_label": "PancakeSwap V3",
+          "start_block": null,
+          "end_block": null,
+          "activation_state": "unverified",
+          "contracts": [
+            {
+              "contract_id": "factory",
+              "role": "factory",
+              "address": "0x0bfbcf9fa4f9c56b0f40a671ad40e0805a091865",
+              "event_role": "factory_discovery_root",
+              "address_artifact_id": "pancake-v3-deployments-98684794",
+              "address_evidence_locator": "/PancakeV3Factory",
+              "interface_artifact_ids": ["pancake-v3-factory-interface-98684794"],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            },
+            {
+              "contract_id": "pool_deployer",
+              "role": "pool_deployer",
+              "address": "0x41ff9aa7e16b8b1a8a8dc4f0efacd93d02d071c9",
+              "event_role": "deployment_context",
+              "address_artifact_id": "pancake-v3-deployments-98684794",
+              "address_evidence_locator": "/PancakeV3PoolDeployer",
+              "interface_artifact_ids": [],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            },
+            {
+              "contract_id": "swap_router",
+              "role": "router",
+              "address": "0x1b81d678ffb9c0263b24a97847620c99d213eb14",
+              "event_role": "attribution_only",
+              "address_artifact_id": "pancake-v3-deployments-98684794",
+              "address_evidence_locator": "/SwapRouter",
+              "interface_artifact_ids": [],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            }
+          ],
+          "event_surface": {
+            "kind": "factory_created_contracts",
+            "discovery_root_contract_id": "factory",
+            "discovery_event": "PoolCreated",
+            "child_contract_kind": "pool",
+            "child_event_interface_artifact_id": "pancake-v3-pool-events-98684794",
+            "trade_event_emitter_scope": "discovered_child_contracts",
+            "discovered_child_set_complete": false,
+            "child_start_blocks_verified": false
+          }
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "implementation_state": "not_started",
+        "golden_transactions_verified": false,
+        "required_fact_families": [
+          "failed_transaction_semantics",
+          "fees",
+          "native_bnb_cashflow",
+          "router_user_attribution",
+          "swap_fills",
+          "token_cashflow"
+        ]
+      },
+      "finality_policy": null
+    },
+    {
+      "protocol_id": "pancakeswap_infinity_cl",
+      "family": "pancakeswap",
+      "lifecycle_status": "official_source_candidate_unverified",
+      "selection_basis": "official_pancakeswap_seed_not_live_sample",
+      "upgrade_model": "singleton_managers_upgradeability_unverified",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "artifact_integrity_unverified",
+        "chain_code_unverified",
+        "creation_transaction_unverified",
+        "decoder_owner_unassigned",
+        "deployment_start_block_unverified",
+        "finality_policy_unverified",
+        "golden_transactions_unverified",
+        "hook_delta_semantics_unverified",
+        "live_sample_event_share_unmeasured",
+        "manager_pool_registry_unverified",
+        "registry_replay_unverified",
+        "runtime_source_build_unbound",
+        "trace_internal_attribution_unverified",
+        "upgrade_epochs_unverified"
+      ],
+      "epochs": [
+        {
+          "epoch_id": "official-source-snapshot",
+          "version_label": "PancakeSwap Infinity CL",
+          "start_block": null,
+          "end_block": null,
+          "activation_state": "unverified",
+          "contracts": [
+            {
+              "contract_id": "cl_pool_manager",
+              "role": "pool_manager",
+              "address": "0xa0ffb9c1ce1fe56963b0321b32e7a0302114058b",
+              "event_role": "singleton_trade_event_source",
+              "address_artifact_id": "pancake-infinity-core-deployments-7c04695f",
+              "address_evidence_locator": "/clPoolManager",
+              "interface_artifact_ids": ["pancake-infinity-cl-interface-7c04695f"],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            },
+            {
+              "contract_id": "vault",
+              "role": "vault",
+              "address": "0x238a358808379702088667322f80ac48bad5e6c4",
+              "event_role": "settlement_context",
+              "address_artifact_id": "pancake-infinity-core-deployments-7c04695f",
+              "address_evidence_locator": "/vault",
+              "interface_artifact_ids": [],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            },
+            {
+              "contract_id": "universal_router",
+              "role": "universal_router",
+              "address": "0xd9c500dff816a1da21a48a732d3498bf09dc9aeb",
+              "event_role": "attribution_only",
+              "address_artifact_id": "pancake-infinity-router-deployments-8b03511e",
+              "address_evidence_locator": "/UniversalRouter",
+              "interface_artifact_ids": [],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            }
+          ],
+          "event_surface": {
+            "kind": "singleton_pool_manager",
+            "trade_event_source_contract_id": "cl_pool_manager",
+            "initialization_event": "Initialize",
+            "pool_identity_scope": "manager_scoped_pool_id",
+            "initialization_registry_complete": false
+          }
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "implementation_state": "not_started",
+        "golden_transactions_verified": false,
+        "required_fact_families": [
+          "failed_transaction_semantics",
+          "fees",
+          "native_bnb_cashflow",
+          "router_user_attribution",
+          "swap_fills",
+          "token_cashflow"
+        ]
+      },
+      "finality_policy": null
+    },
+    {
+      "protocol_id": "pancakeswap_infinity_bin",
+      "family": "pancakeswap",
+      "lifecycle_status": "official_source_candidate_unverified",
+      "selection_basis": "official_pancakeswap_seed_not_live_sample",
+      "upgrade_model": "singleton_managers_upgradeability_unverified",
+      "verification_state": "draft",
+      "blocking_reasons": [
+        "artifact_integrity_unverified",
+        "chain_code_unverified",
+        "creation_transaction_unverified",
+        "decoder_owner_unassigned",
+        "deployment_start_block_unverified",
+        "finality_policy_unverified",
+        "golden_transactions_unverified",
+        "hook_delta_semantics_unverified",
+        "live_sample_event_share_unmeasured",
+        "manager_pool_registry_unverified",
+        "registry_replay_unverified",
+        "runtime_source_build_unbound",
+        "trace_internal_attribution_unverified",
+        "upgrade_epochs_unverified"
+      ],
+      "epochs": [
+        {
+          "epoch_id": "official-source-snapshot",
+          "version_label": "PancakeSwap Infinity Bin",
+          "start_block": null,
+          "end_block": null,
+          "activation_state": "unverified",
+          "contracts": [
+            {
+              "contract_id": "bin_pool_manager",
+              "role": "pool_manager",
+              "address": "0xc697d2898e0d09264376196696c51d7abbbaa4a9",
+              "event_role": "singleton_trade_event_source",
+              "address_artifact_id": "pancake-infinity-core-deployments-7c04695f",
+              "address_evidence_locator": "/binPoolManager",
+              "interface_artifact_ids": ["pancake-infinity-bin-interface-7c04695f"],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            },
+            {
+              "contract_id": "vault",
+              "role": "vault",
+              "address": "0x238a358808379702088667322f80ac48bad5e6c4",
+              "event_role": "settlement_context",
+              "address_artifact_id": "pancake-infinity-core-deployments-7c04695f",
+              "address_evidence_locator": "/vault",
+              "interface_artifact_ids": [],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            },
+            {
+              "contract_id": "universal_router",
+              "role": "universal_router",
+              "address": "0xd9c500dff816a1da21a48a732d3498bf09dc9aeb",
+              "event_role": "attribution_only",
+              "address_artifact_id": "pancake-infinity-router-deployments-8b03511e",
+              "address_evidence_locator": "/UniversalRouter",
+              "interface_artifact_ids": [],
+              "onchain_verification": {
+                "state": "not_verified",
+                "observed_at": null,
+                "finalized_block": null,
+                "creation_transaction_hash": null,
+                "runtime_code_keccak256": null
+              }
+            }
+          ],
+          "event_surface": {
+            "kind": "singleton_pool_manager",
+            "trade_event_source_contract_id": "bin_pool_manager",
+            "initialization_event": "Initialize",
+            "pool_identity_scope": "manager_scoped_pool_id",
+            "initialization_registry_complete": false
+          }
+        }
+      ],
+      "decoder": {
+        "owner": null,
+        "implementation_state": "not_started",
+        "golden_transactions_verified": false,
+        "required_fact_families": [
+          "failed_transaction_semantics",
+          "fees",
+          "native_bnb_cashflow",
+          "router_user_attribution",
+          "swap_fills",
+          "token_cashflow"
+        ]
+      },
+      "finality_policy": null
+    }
+  ],
+  "known_gaps": [
+    "meme_router_families_not_profiled",
+    "non_pancakeswap_protocols_not_profiled",
+    "pancakeswap_classic_stableswap_not_seeded",
+    "pancakeswap_x_not_seeded"
+  ],
+  "authorization": {
+    "execution": false,
+    "artifact_persistence": false,
+    "serving": false,
+    "rank": false,
+    "score": false
+  }
+}
