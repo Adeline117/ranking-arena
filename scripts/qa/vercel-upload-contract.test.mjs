@@ -12,6 +12,10 @@ const releaseControl = fs.readFileSync(
   path.join(root, '.github/workflows/vercel-release-control.yml'),
   'utf8'
 )
+const releaseControlScript = fs.readFileSync(
+  path.join(root, 'scripts/ci/enforce-vercel-release-control.mjs'),
+  'utf8'
+)
 const nextConfig = fs.readFileSync(path.join(root, 'next.config.ts'), 'utf8')
 const ciWorkflow = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')
 
@@ -127,19 +131,22 @@ test('keeps Deploy Gate as the only writer of production domains', () => {
   assert.match(releaseControl, /push:\n    branches: \[main\]/)
   assert.match(releaseControl, /workflow_dispatch:/)
   assert.match(releaseControl, /cancel-in-progress: false/)
+  assert.match(releaseControl, /uses: actions\/checkout@v4/)
+  assert.match(releaseControl, /run: node scripts\/ci\/enforce-vercel-release-control\.mjs/)
+  assert.match(releaseControlScript, /https:\/\/api\.vercel\.com/)
   assert.match(
-    releaseControl,
-    /https:\/\/api\.vercel\.com\/v9\/projects\/\$\{VERCEL_PROJECT_ID\}\?teamId=\$\{VERCEL_ORG_ID\}/
+    releaseControlScript,
+    /\/v9\/projects\/\$\{encodeURIComponent\(resolvedProjectId\)\}/
   )
-  assert.match(releaseControl, /--request PATCH/)
-  assert.match(releaseControl, /--data '\{"autoAssignCustomDomains":false\}'/)
-  assert.match(releaseControl, /patch_value.*\n[\s\S]*\[ "\$patch_value" != 'false' \]/)
-  assert.match(releaseControl, /verify_value.*\n[\s\S]*\[ "\$verify_value" != 'false' \]/)
+  assert.match(releaseControlScript, /JSON\.stringify\(\{ autoAssignCustomDomains: false \}\)/)
+  assert.match(releaseControlScript, /payload\.id !== projectId/)
+  assert.match(releaseControlScript, /payload\.autoAssignCustomDomains !== false/)
+  assert.match(releaseControlScript, /method: 'PATCH'/)
+  assert.match(releaseControlScript, /method: 'GET'/)
   assert.match(
-    releaseControl,
+    releaseControlScript,
     /Vercel autoAssignCustomDomains=false; Deploy Gate is the sole production writer/
   )
-  assert.doesNotMatch(releaseControl, /curl[^\n]*\|\| true/)
 })
 
 test('waits for Vercel READY within the job budget before allowing promotion', () => {
