@@ -23,6 +23,12 @@ body{margin:0;font-family:var(--font-inter),system-ui,sans-serif;line-height:1.5
 @media(max-width:360px){.top-nav-theme-action{display:none!important}}
 main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 
+/* Root promo banner — present in the server HTML, localized and dismissed
+   before paint without waiting for hydration. */
+.pro-promo-lang{display:none}
+.pro-promo-lang[data-pro-promo-lang="en"],html[lang="ja"] .pro-promo-lang[data-pro-promo-lang="ja"],html[lang="ko"] .pro-promo-lang[data-pro-promo-lang="ko"],html[lang="zh-CN"] .pro-promo-lang[data-pro-promo-lang="zh"]{display:inline}
+html[lang="ja"] .pro-promo-lang[data-pro-promo-lang="en"],html[lang="ko"] .pro-promo-lang[data-pro-promo-lang="en"],html[lang="zh-CN"] .pro-promo-lang[data-pro-promo-lang="en"],html[data-pro-promo-hidden="true"] .pro-promo-banner{display:none}
+
 /* 字体变量 */
 :root{
   --font-inter:'Inter',system-ui,sans-serif;
@@ -167,6 +173,10 @@ iframe{display:block;max-width:100%}
 .home-page-root{min-height:100vh;background:var(--bg-primary,#0B0A10);color:var(--text-primary,#EDEDED)}
 .home-page-container{max-width:1400px;margin:0 auto;padding:8px 16px}
 @media(min-width:1441px){.home-page-container{max-width:1600px}}
+/* Phase 2 is appended after the server shell. Hide the geometry-matched shell
+   in the same style calculation that reveals the interactive root; the
+   HomePageClient layout effect remains the fallback for browsers without :has. */
+html:has(#homepage-interactive) #ssr-home-content-shell{display:none}
 
 /* CSS Containment for rendering performance */
 .trader-card-contained{contain:layout style paint}
