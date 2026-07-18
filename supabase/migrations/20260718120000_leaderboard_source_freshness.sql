@@ -59,7 +59,10 @@ live_boards AS (
 source_watermarks AS (
   SELECT
     (latest.timeframe::text || 'D') AS season_id,
-    COALESCE(source.meta->>'legacy_platform', source.slug) AS source,
+    COALESCE(
+      NULLIF(source.meta->>'legacy_platform', ''),
+      source.slug
+    ) AS source,
     -- More than one physical source board may map to one public source alias.
     -- The public source is only as fresh as its oldest contributing board.
     MIN(latest.scraped_at) AS source_as_of
@@ -68,13 +71,20 @@ source_watermarks AS (
     ON source.id = latest.source_id
   JOIN live_boards AS live
     ON live.season_id = (latest.timeframe::text || 'D')
-   AND live.source = COALESCE(source.meta->>'legacy_platform', source.slug)
-  WHERE source.serving_mode <> 'legacy'
+   AND live.source = COALESCE(
+     NULLIF(source.meta->>'legacy_platform', ''),
+     source.slug
+   )
+  WHERE source.status = 'active'
+    AND source.serving_mode = 'serving'
     AND source.currency IN ('USDT', 'USDx', 'USDC', 'USD')
     AND (source.meta->>'legacy_platform') IS DISTINCT FROM 'null'
   GROUP BY
     (latest.timeframe::text || 'D'),
-    COALESCE(source.meta->>'legacy_platform', source.slug)
+    COALESCE(
+      NULLIF(source.meta->>'legacy_platform', ''),
+      source.slug
+    )
 )
 INSERT INTO public.leaderboard_source_freshness (
   season_id,
