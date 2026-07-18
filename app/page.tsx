@@ -4,6 +4,7 @@ import { getHeroStats } from '@/lib/data/hero-stats'
 import SSRRankingTable from './components/home/SSRRankingTable'
 import HomeHeroSSR from './components/home/HomeHeroSSR'
 import RankingControls from './components/home/RankingControls'
+import HomeFirstPaintShell from './components/home/HomeFirstPaintShell'
 import TopNav from './components/layout/TopNav'
 import HomePageLoader from './components/home/HomePageLoader'
 import { SkipLink } from './components/Providers/Accessibility'
@@ -138,26 +139,21 @@ export default async function Page() {
           <HomeHeroSSR exchangeCount={heroStats?.exchangeCount} />
         </div>
 
-        {/* SSR ranking table — visible until React takes over.
-          The HomePageClient useLayoutEffect hides this BEFORE first paint
-          (when initialTraders is provided, loading starts as false).
-          On slow mobile without JS, this stays visible as the primary content. */}
-        <div
-          id="ssr-ranking-table"
-          className="three-col-layout three-col-no-left three-col-no-right"
-        >
-          <div className="three-col-center">
-            <div className="ssr-t" style={{ marginTop: 8 }}>
-              <RankingControls
-                activeRange={timeRange}
-                page={page}
-                totalCount={totalCount}
-                perPage={PER_PAGE}
-              />
-              <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
-            </div>
+        {/* Keep the final desktop information architecture visible from the
+          first server paint. The old shell intentionally rendered rankings as
+          one full-width column and introduced both sidebars only after a large
+          client bundle arrived (25s on a throttled mobile connection). */}
+        <HomeFirstPaintShell>
+          <div className="ssr-t" style={{ marginTop: 8 }}>
+            <RankingControls
+              activeRange={timeRange}
+              page={page}
+              totalCount={totalCount}
+              perPage={PER_PAGE}
+            />
+            <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
           </div>
-        </div>
+        </HomeFirstPaintShell>
 
         <PageErrorBoundary>
           <HomePageLoader
