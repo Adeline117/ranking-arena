@@ -177,7 +177,7 @@ test('turns transport, HTTP, and JSON failures into an explicit down result', ()
 test('writes a dedup marker only after Telegram returns 2xx', () => {
   const delivered = runTelegram({ http: '200' })
   assert.equal(delivered.status, 0)
-  assert.equal(delivered.output, 'delivered=true\n')
+  assert.equal(delivered.output, 'delivered=true\noutcome=delivered\n')
   assert.match(delivered.marker?.trim() ?? '', /^\d+$/)
   assert.equal(delivered.summary, '')
 
@@ -188,7 +188,7 @@ test('writes a dedup marker only after Telegram returns 2xx', () => {
   ]) {
     const failed = runTelegram(scenario)
     assert.equal(failed.status, 0)
-    assert.equal(failed.output, 'delivered=false\n')
+    assert.equal(failed.output, 'delivered=false\noutcome=failed\n')
     assert.equal(failed.marker, null)
     assert.match(failed.summary, /Health alert delivery failed/)
     assert.doesNotMatch(
@@ -202,13 +202,13 @@ test('dedups only a valid recent marker and retries invalid or future markers', 
   const now = Math.floor(Date.now() / 1000)
   const recent = runTelegram({ marker: now - 60 })
   assert.equal(recent.status, 0)
-  assert.equal(recent.output, 'delivered=false\n')
+  assert.equal(recent.output, 'delivered=false\noutcome=deduplicated\n')
   assert.equal(recent.curlCalls, '')
 
   for (const marker of ['not-a-number', now + 3600]) {
     const retried = runTelegram({ marker })
     assert.equal(retried.status, 0)
-    assert.equal(retried.output, 'delivered=true\n')
+    assert.equal(retried.output, 'delivered=true\noutcome=delivered\n')
     assert.equal(retried.curlCalls, 'called\n')
   }
 })
@@ -240,4 +240,19 @@ test('keeps secrets and dynamic health data out of shell expression interpolatio
   assert.match(telegram, /--write-out '%\{http_code\}'/)
   assert.doesNotMatch(telegram, /api\.telegram\.org[^\n]*\|\| true/)
   assert.ok(telegram.indexOf('if send_telegram_alert') < telegram.indexOf('> .hm-alert-marker'))
+})
+
+test('uses a de-duplicated GitHub issue when the primary alert channel fails', () => {
+  assert.match(workflow, /permissions:\n  contents: read\n  issues: write/)
+  assert.match(
+    workflow,
+    /- name: Open independent issue when Telegram delivery fails\n        if: always\(\).*outcome != 'delivered'.*outcome != 'deduplicated'/
+  )
+  assert.match(workflow, /ISSUE_TITLE: '🛑 Arena pipeline health is unhealthy'/)
+  assert.match(workflow, /gh issue create --repo "\$GH_REPO"/)
+  assert.match(
+    workflow,
+    /- name: Close independent issue after health recovery\n        if: always\(\) && steps\.health\.outputs\.status == 'healthy'/
+  )
+  assert.match(workflow, /gh issue close "\$NUMBER" --repo "\$GH_REPO"/)
 })
