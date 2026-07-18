@@ -25,6 +25,7 @@ import {
   EVENT_ROI_MOVE_PCT,
   EVENT_PNL_MOVE_USD,
 } from '@/lib/constants/trader-events'
+import { loadBroadcastEventRows } from './event-data'
 import { traderEventLink, traderEventReference } from './notification-identity'
 
 export const dynamic = 'force-dynamic'
@@ -49,12 +50,53 @@ export async function GET(request: NextRequest) {
   try {
     const supabase = getSupabaseAdmin()
 
-    // 1. Audience: who follows which trader.
-    const { data: follows, error: fErr } = await supabase
-      .from('trader_follows')
-      .select('user_id, trader_id, source')
-    if (fErr) throw fErr
-    if (!follows?.length) {
+    const yesterday = new Date()
+    yesterday.setDate(yesterday.getDate() - 1)
+    const yStr = yesterday.toISOString().split('T')[0]
+
+    // Read every input page before producing any event. The filtered datasets
+    // also chunk trader ids so a large follow graph cannot overflow the
+    // PostgREST URL. Any page failure rejects the complete input set.
+    const {
+      follows,
+      currentRanks: lr,
+      rankHistory: rh,
+      dailySnapshots: ds,
+    } = await loadBroadcastEventRows({
+      follows: (from, to) =>
+        supabase
+          .from('trader_follows')
+          .select('user_id, trader_id, source')
+          .order('id', { ascending: true })
+          .range(from, to),
+      currentRanks: (traderIds, from, to) =>
+        supabase
+          .from('leaderboard_ranks')
+          .select('source_trader_id, source, rank, roi, pnl')
+          .in('source_trader_id', traderIds)
+          .eq('season_id', '90D')
+          .order('id', { ascending: true })
+          .range(from, to),
+      rankHistory: (traderIds, from, to) =>
+        supabase
+          .from('rank_history')
+          .select('trader_key, platform, rank')
+          .in('trader_key', traderIds)
+          .eq('period', '90D')
+          .eq('snapshot_date', yStr)
+          .order('id', { ascending: true })
+          .range(from, to),
+      dailySnapshots: (traderIds, from, to) =>
+        supabase
+          .from('trader_daily_snapshots')
+          .select('trader_key, platform, roi, pnl')
+          .in('trader_key', traderIds)
+          .eq('date', yStr)
+          .order('id', { ascending: true })
+          .range(from, to),
+    })
+
+    if (follows.length === 0) {
       await plog.success(0, { message: 'no trader follows' })
       return NextResponse.json({ status: 'ok', events: 0 })
     }
@@ -62,23 +104,14 @@ export async function GET(request: NextRequest) {
     // Key separator is '|' — trader ids and source slugs can both contain '_'
     // (e.g. bybit_copytrade), so '_' would be ambiguous to split back.
     const followersByTrader = new Map<string, string[]>() // `${trader_id}|${source}` → userIds
-    const traderIdSet = new Set<string>()
     for (const f of follows) {
       const key = `${f.trader_id}|${f.source ?? ''}`
       const arr = followersByTrader.get(key)
       if (arr) arr.push(f.user_id)
       else followersByTrader.set(key, [f.user_id])
-      traderIdSet.add(f.trader_id)
     }
-    const traderIds = [...traderIdSet]
 
     // 2. Current metrics (90D serving).
-    const { data: lr, error: lrErr } = await supabase
-      .from('leaderboard_ranks')
-      .select('source_trader_id, source, rank, roi, pnl')
-      .in('source_trader_id', traderIds)
-      .eq('season_id', '90D')
-    if (lrErr) throw lrErr
     const curMap = new Map<
       string,
       { rank: number | null; roi: number | null; pnl: number | null }
@@ -112,27 +145,12 @@ export async function GET(request: NextRequest) {
     }
 
     // 3. Yesterday: rank from rank_history, roi/pnl from daily snapshots.
-    const yesterday = new Date()
-    yesterday.setDate(yesterday.getDate() - 1)
-    const yStr = yesterday.toISOString().split('T')[0]
-
     const prevRank = new Map<string, number>()
-    const { data: rh } = await supabase
-      .from('rank_history')
-      .select('trader_key, platform, rank')
-      .in('trader_key', traderIds)
-      .eq('period', '90D')
-      .eq('snapshot_date', yStr)
     for (const r of rh ?? []) {
       if (r.rank != null) prevRank.set(`${r.trader_key}|${r.platform ?? ''}`, r.rank)
     }
 
     const prevMetric = new Map<string, { roi: number | null; pnl: number | null }>()
-    const { data: ds } = await supabase
-      .from('trader_daily_snapshots')
-      .select('trader_key, platform, roi, pnl')
-      .in('trader_key', traderIds)
-      .eq('date', yStr)
     for (const s of ds ?? []) {
       prevMetric.set(`${s.trader_key}|${s.platform ?? ''}`, {
         roi: s.roi ?? null,
