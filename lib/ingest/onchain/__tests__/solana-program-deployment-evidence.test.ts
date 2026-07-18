@@ -11,6 +11,7 @@ import {
   disposeSolanaV3ProgramDeploymentRawCapture,
   findSolanaV3ProgramDataAddress,
   parseSolanaV3ProgramDeploymentObservation,
+  replaySolanaV3ProgramDeploymentRawCapture,
   SOLANA_BPF_LOADER_V3,
   SOLANA_PROGRAM_ACCOUNT_MAX_DECODED_BYTES,
   SOLANA_V3_PROGRAMDATA_HEADER_BYTES,
@@ -639,6 +640,19 @@ function replaceRawBody(
   }
 }
 
+function mutateRawJsonBody(
+  exchange: SolanaRawRpcEvidenceExchange,
+  kind: 'request' | 'response',
+  mutate: (document: Record<string, unknown>) => void
+): void {
+  const document = JSON.parse(new TextDecoder().decode(exchange[kind].bytes)) as Record<
+    string,
+    unknown
+  >
+  mutate(document)
+  replaceRawBody(exchange, kind, JSON.stringify(document))
+}
+
 type CoreRpcResult = Awaited<ReturnType<typeof solanaEvidenceCore.solanaEvidenceRpc>>
 type CoreRpcSuccess = Extract<CoreRpcResult, { ok: true }>
 
@@ -759,6 +773,177 @@ describe('Solana v3 program deployment raw capture', () => {
           exchange.response.bytes.every((byte) => byte === 0)
       )
     ).toBe(true)
+  })
+
+  it('replays all five raw lanes and ignores forged embedded sidecars', async () => {
+    mockDeploymentCaptureRpc()
+    const capture = await captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+      rpcUrl: CAPTURE_RPC_URL,
+      endpointId: CAPTURE_ENDPOINT_ID,
+    })
+    const expectedCodeSha256 = capture.observation.programdata_account.code_sha256
+    capture.anchor.verified = {
+      ...capture.anchor.verified,
+      finalizedRootSlot: 1,
+    }
+    capture.observation = {
+      ...capture.observation,
+      programdata_account: {
+        ...capture.observation.programdata_account,
+        code_sha256: '0'.repeat(64),
+      },
+    }
+
+    const replayed = replaySolanaV3ProgramDeploymentRawCapture(capture)
+
+    expect(replayed.anchor.finalizedRootSlot).toBe(CONTEXT_SLOT)
+    expect(replayed.observation.programdata_account.code_sha256).toBe(expectedCodeSha256)
+    expect(replayed.rawExchanges.map((exchange) => exchange.lane)).toEqual([
+      'genesis_hash',
+      'finalized_anchor_slot',
+      'finalized_anchor_produced_slots',
+      'finalized_anchor_block',
+      'program_accounts',
+    ])
+    expect(
+      replayed.rawExchanges.some(
+        (exchange) =>
+          exchange.request.bytes.some((byte) => byte !== 0) ||
+          exchange.response.bytes.some((byte) => byte !== 0)
+      )
+    ).toBe(true)
+
+    disposeSolanaV3ProgramDeploymentRawCapture(capture)
+    expect(
+      replayed.rawExchanges.every(
+        (exchange) =>
+          exchange.request.bytes.every((byte) => byte === 0) &&
+          exchange.response.bytes.every((byte) => byte === 0)
+      )
+    ).toBe(true)
+  })
+
+  it.each([
+    [
+      'genesis',
+      0,
+      (document: Record<string, unknown>) => {
+        document.params = [null]
+      },
+    ],
+    [
+      'finalized root',
+      1,
+      (document: Record<string, unknown>) => {
+        const params = document.params as [Record<string, unknown>]
+        params[0].commitment = 'confirmed'
+      },
+    ],
+    [
+      'produced slots',
+      2,
+      (document: Record<string, unknown>) => {
+        const params = document.params as [number, number, Record<string, unknown>]
+        params[2].minContextSlot = CONTEXT_SLOT - 1
+      },
+    ],
+    [
+      'finalized block',
+      3,
+      (document: Record<string, unknown>) => {
+        const params = document.params as [number, Record<string, unknown>]
+        params[1].rewards = true
+      },
+    ],
+  ])(
+    'rejects replayed %s anchor request drift after metadata is recomputed',
+    async (_label, index, mutate) => {
+      mockDeploymentCaptureRpc()
+      const capture = await captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+        rpcUrl: CAPTURE_RPC_URL,
+        endpointId: CAPTURE_ENDPOINT_ID,
+      })
+      mutateRawJsonBody(capture.anchor.rawExchanges[index], 'request', mutate)
+
+      expect(() => replaySolanaV3ProgramDeploymentRawCapture(capture)).toThrow(
+        'does not match the normalized anchor'
+      )
+      expect(capture.anchor.rawExchanges[index].request.bytes.some((byte) => byte !== 0)).toBe(true)
+
+      disposeSolanaV3ProgramDeploymentRawCapture(capture)
+      expect(capture.anchor.rawExchanges[index].request.bytes.every((byte) => byte === 0)).toBe(
+        true
+      )
+    }
+  )
+
+  it.each([
+    [
+      'genesis',
+      0,
+      (document: Record<string, unknown>) => {
+        document.result = OTHER_PUBLIC_KEY
+      },
+    ],
+    [
+      'finalized root',
+      1,
+      (document: Record<string, unknown>) => {
+        document.result = CONTEXT_SLOT + 1
+      },
+    ],
+    [
+      'produced slots',
+      2,
+      (document: Record<string, unknown>) => {
+        document.result = [CONTEXT_SLOT - 1]
+      },
+    ],
+    [
+      'finalized block',
+      3,
+      (document: Record<string, unknown>) => {
+        const result = document.result as Record<string, unknown>
+        result.blockHeight = CONTEXT_SLOT
+      },
+    ],
+  ])(
+    'rejects replayed %s anchor response drift after metadata is recomputed',
+    async (_label, index, mutate) => {
+      mockDeploymentCaptureRpc()
+      const capture = await captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+        rpcUrl: CAPTURE_RPC_URL,
+        endpointId: CAPTURE_ENDPOINT_ID,
+      })
+      mutateRawJsonBody(capture.anchor.rawExchanges[index], 'response', mutate)
+
+      expect(() => replaySolanaV3ProgramDeploymentRawCapture(capture)).toThrow(
+        'does not match the normalized anchor'
+      )
+      expect(capture.anchor.rawExchanges[index].response.bytes.some((byte) => byte !== 0)).toBe(
+        true
+      )
+
+      disposeSolanaV3ProgramDeploymentRawCapture(capture)
+      expect(capture.anchor.rawExchanges[index].response.bytes.every((byte) => byte === 0)).toBe(
+        true
+      )
+    }
+  )
+
+  it('rejects an anchor lane sidecar that conflicts with its raw method order', async () => {
+    mockDeploymentCaptureRpc()
+    const capture = await captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+      rpcUrl: CAPTURE_RPC_URL,
+      endpointId: CAPTURE_ENDPOINT_ID,
+    })
+    capture.anchor.rawExchanges[0].lane = 'finalized_anchor_slot'
+
+    expect(() => replaySolanaV3ProgramDeploymentRawCapture(capture)).toThrow(
+      'raw RPC exchange conflicts with its verified endpoint or lane'
+    )
+
+    disposeSolanaV3ProgramDeploymentRawCapture(capture)
   })
 
   it('ignores a conflicting valid sidecar and rejects invalid raw response semantics', async () => {

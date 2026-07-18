@@ -4,6 +4,7 @@ import { isUint8Array } from 'node:util/types'
 import { decodeBase58BytesBounded, hasBase58DecodedByteLength } from '@/lib/utils/base58'
 
 import {
+  SOLANA_MAINNET_GENESIS_HASH,
   captureSolanaVerifiedChainAnchorEvidence,
   requireSolanaVerifiedChainAnchor,
   type SolanaEvidenceRpcOpts,
@@ -120,6 +121,20 @@ export interface SolanaV3ProgramDeploymentRawCapture {
   anchor: SolanaV3ProgramDeploymentAnchorRawCapture
   programAccountsExchange: SolanaRawRpcEvidenceExchange
   observation: SolanaV3ProgramDeploymentObservation
+}
+
+export type SolanaV3ProgramDeploymentRawExchanges = readonly [
+  SolanaRawRpcEvidenceExchange,
+  SolanaRawRpcEvidenceExchange,
+  SolanaRawRpcEvidenceExchange,
+  SolanaRawRpcEvidenceExchange,
+  SolanaRawRpcEvidenceExchange,
+]
+
+export interface SolanaV3ProgramDeploymentReplayedRawCapture {
+  anchor: SolanaVerifiedChainAnchor
+  observation: SolanaV3ProgramDeploymentObservation
+  rawExchanges: SolanaV3ProgramDeploymentRawExchanges
 }
 
 function invalid(reason: string): never {
@@ -608,43 +623,156 @@ function decodeRawJson(bytes: Uint8Array, label: string): unknown {
   }
 }
 
-function requireProgramAccountsRawResult(
+function requireRawJsonRpcRequestAndResult(
   exchange: SolanaRawRpcEvidenceExchange,
+  lane: SolanaRawRpcEvidenceExchange['lane'],
+  method: string,
   endpoint: SolanaVerifiedChainAnchor['endpoint'],
-  programId: string,
-  programDataAddress: string,
-  minimumContextSlot: number
-): unknown {
-  const bodies = requireRawExchangeBodies(
-    exchange,
-    'program_accounts',
-    'getMultipleAccounts',
-    endpoint,
-    PROGRAM_ACCOUNTS_RAW_RPC_RESPONSE_MAX_BYTES
-  )
-  const request = exactDataRecord(decodeRawJson(bodies.request, 'raw RPC request'), [
+  responseMaxBytes: number,
+  label: string
+): { params: unknown[]; result: unknown } {
+  const bodies = requireRawExchangeBodies(exchange, lane, method, endpoint, responseMaxBytes)
+  const request = exactDataRecord(decodeRawJson(bodies.request, `raw ${label} request`), [
     'jsonrpc',
     'id',
     'method',
     'params',
   ])
   const params = request ? exactDenseArray(request.params) : null
-  const addresses = params ? exactDenseArray(params[0]) : null
-  const config =
-    params && params.length === 2
-      ? exactDataRecord(params[1], ['commitment', 'encoding', 'minContextSlot'])
-      : null
   if (
     !request ||
     request.jsonrpc !== '2.0' ||
     request.id !== 1 ||
-    request.method !== 'getMultipleAccounts' ||
-    !params ||
-    params.length !== 2 ||
+    request.method !== method ||
+    !params
+  ) {
+    invalid(`raw ${label} request is not the exact JSON-RPC request`)
+  }
+
+  const response = exactDataRecord(decodeRawJson(bodies.response, `raw ${label} response`), [
+    'jsonrpc',
+    'id',
+    'result',
+  ])
+  if (!response || response.jsonrpc !== '2.0' || response.id !== 1) {
+    invalid(`raw ${label} response is not a successful JSON-RPC result`)
+  }
+  return { params, result: response.result }
+}
+
+function requireAnchorRawExchangeSemantics(
+  exchange: SolanaRawRpcEvidenceExchange,
+  index: number,
+  anchor: SolanaVerifiedChainAnchor
+): void {
+  const expected = REQUIRED_ANCHOR_RAW_LANES[index]
+  if (!expected) invalid('verified anchor raw exchange set is incomplete')
+  const [lane, method] = expected
+  const raw = requireRawJsonRpcRequestAndResult(
+    exchange,
+    lane,
+    method,
+    anchor.endpoint,
+    ANCHOR_RAW_RPC_RESPONSE_MAX_BYTES,
+    `anchor ${lane}`
+  )
+
+  if (lane === 'genesis_hash') {
+    if (raw.params.length !== 0 || raw.result !== SOLANA_MAINNET_GENESIS_HASH) {
+      invalid('raw genesis anchor does not match the normalized anchor')
+    }
+    return
+  }
+
+  if (lane === 'finalized_anchor_slot') {
+    const config = raw.params.length === 1 ? exactDataRecord(raw.params[0], ['commitment']) : null
+    if (!config || config.commitment !== 'finalized' || raw.result !== anchor.finalizedRootSlot) {
+      invalid('raw finalized root anchor does not match the normalized anchor')
+    }
+    return
+  }
+
+  if (lane === 'finalized_anchor_produced_slots') {
+    const config =
+      raw.params.length === 3
+        ? exactDataRecord(raw.params[2], ['commitment', 'minContextSlot'])
+        : null
+    const slots = exactDenseArray(raw.result)
+    const expectedSlots = anchor.producedSlotResolution.producedSlots
+    if (
+      raw.params[0] !== anchor.producedSlotResolution.rangeStartSlot ||
+      raw.params[1] !== anchor.finalizedRootSlot ||
+      !config ||
+      config.commitment !== 'finalized' ||
+      config.minContextSlot !== anchor.finalizedRootSlot ||
+      !slots ||
+      slots.length !== expectedSlots.length ||
+      slots.some((slot, slotIndex) => slot !== expectedSlots[slotIndex])
+    ) {
+      invalid('raw produced-slot anchor does not match the normalized anchor')
+    }
+    return
+  }
+
+  const config =
+    raw.params.length === 2
+      ? exactDataRecord(raw.params[1], [
+          'commitment',
+          'encoding',
+          'transactionDetails',
+          'maxSupportedTransactionVersion',
+          'rewards',
+        ])
+      : null
+  const block = exactDataRecord(raw.result, [
+    'blockhash',
+    'previousBlockhash',
+    'parentSlot',
+    'blockTime',
+    'blockHeight',
+  ])
+  const expectedBlock = anchor.finalizedBlock
+  if (
+    raw.params[0] !== anchor.finalizedSlot ||
+    !config ||
+    config.commitment !== 'finalized' ||
+    config.encoding !== 'json' ||
+    config.transactionDetails !== 'none' ||
+    config.maxSupportedTransactionVersion !== 0 ||
+    config.rewards !== false ||
+    !block ||
+    block.blockhash !== expectedBlock.blockhash ||
+    block.previousBlockhash !== expectedBlock.previousBlockhash ||
+    block.parentSlot !== expectedBlock.parentSlot ||
+    block.blockTime !== expectedBlock.blockTime ||
+    block.blockHeight !== expectedBlock.blockHeight
+  ) {
+    invalid('raw finalized block anchor does not match the normalized anchor')
+  }
+}
+
+function requireProgramAccountsRawObservation(
+  exchange: SolanaRawRpcEvidenceExchange,
+  endpoint: SolanaVerifiedChainAnchor['endpoint'],
+  minimumContextSlot: number,
+  expectedProgramId?: string
+): SolanaV3ProgramDeploymentObservation {
+  const raw = requireRawJsonRpcRequestAndResult(
+    exchange,
+    'program_accounts',
+    'getMultipleAccounts',
+    endpoint,
+    PROGRAM_ACCOUNTS_RAW_RPC_RESPONSE_MAX_BYTES,
+    'program account'
+  )
+  const addresses = raw.params.length === 2 ? exactDenseArray(raw.params[0]) : null
+  const config =
+    raw.params.length === 2
+      ? exactDataRecord(raw.params[1], ['commitment', 'encoding', 'minContextSlot'])
+      : null
+  if (
     !addresses ||
     addresses.length !== 2 ||
-    addresses[0] !== programId ||
-    addresses[1] !== programDataAddress ||
     !config ||
     config.commitment !== 'finalized' ||
     config.encoding !== 'base64' ||
@@ -652,29 +780,96 @@ function requireProgramAccountsRawResult(
   ) {
     invalid('raw program account request does not match the verified anchor')
   }
-
-  const response = exactDataRecord(decodeRawJson(bodies.response, 'raw RPC response'), [
-    'jsonrpc',
-    'id',
-    'result',
-  ])
-  if (!response || response.jsonrpc !== '2.0' || response.id !== 1) {
-    invalid('raw program account response is not a successful JSON-RPC result')
+  const programId = publicKey(addresses[0], 'raw request program_id')
+  const programDataAddress = publicKey(addresses[1], 'raw request programdata_address')
+  const derivedProgramData = findSolanaV3ProgramDataAddress(programId)
+  if (
+    (expectedProgramId !== undefined && programId !== expectedProgramId) ||
+    programDataAddress !== derivedProgramData.address
+  ) {
+    invalid('raw program account request does not match the verified anchor')
   }
-  return response.result
+
+  const observation = parseSolanaV3ProgramDeploymentObservation({
+    program_id: programId,
+    programdata_address: programDataAddress,
+    requested_min_context_slot: minimumContextSlot,
+    result: raw.result,
+  })
+  if (
+    observation.program_id !== programId ||
+    observation.programdata_address !== programDataAddress ||
+    observation.programdata_bump_seed !== derivedProgramData.bump_seed ||
+    observation.requested_min_context_slot_decimal !== String(minimumContextSlot)
+  ) {
+    invalid('program deployment observation conflicts with the raw capture request')
+  }
+  return observation
+}
+
+function requireAnchorRawExchanges(value: unknown): SolanaV3ProgramDeploymentAnchorRawExchanges {
+  const items = exactDenseArray(value)
+  if (!items || items.length !== REQUIRED_ANCHOR_RAW_LANES.length) {
+    invalid('verified anchor raw exchange set is incomplete')
+  }
+  const exchanges = items as SolanaRawRpcEvidenceExchange[]
+  return [exchanges[0], exchanges[1], exchanges[2], exchanges[3]]
 }
 
 function takeAnchorRawExchanges(
   value: unknown,
   ownedExchanges: SolanaRawRpcEvidenceExchange[]
 ): SolanaV3ProgramDeploymentAnchorRawExchanges {
-  const items = exactDenseArray(value)
-  if (!items || items.length !== REQUIRED_ANCHOR_RAW_LANES.length) {
-    invalid('verified anchor raw exchange set is incomplete')
-  }
-  const exchanges = items as SolanaRawRpcEvidenceExchange[]
+  const exchanges = requireAnchorRawExchanges(value)
   for (const exchange of exchanges) ownedExchanges.push(exchange)
-  return [exchanges[0], exchanges[1], exchanges[2], exchanges[3]]
+  return exchanges
+}
+
+/**
+ * Rebuild the verified anchor and current loader-v3 observation from the five
+ * raw JSON-RPC exchanges. Embedded `verified` and `observation` sidecars are
+ * deliberately ignored.
+ *
+ * This verifier does not take ownership of the raw byte arrays. The caller
+ * must dispose the capture after consuming any metadata derived from it.
+ */
+export function replaySolanaV3ProgramDeploymentRawCapture(
+  input: unknown
+): SolanaV3ProgramDeploymentReplayedRawCapture {
+  try {
+    const capture = exactDataRecord(input, ['anchor', 'programAccountsExchange', 'observation'])
+    const anchorCapture = capture
+      ? exactDataRecord(capture.anchor, ['evidence', 'verified', 'rawExchanges'])
+      : null
+    if (!capture || !anchorCapture) invalid('raw capture has an unexpected shape')
+
+    const anchorRawExchanges = requireAnchorRawExchanges(anchorCapture.rawExchanges)
+    const anchor = requireSolanaVerifiedChainAnchor(anchorCapture.evidence)
+    for (let index = 0; index < anchorRawExchanges.length; index += 1) {
+      requireAnchorRawExchangeSemantics(anchorRawExchanges[index], index, anchor)
+    }
+
+    const programAccountsExchange = capture.programAccountsExchange as SolanaRawRpcEvidenceExchange
+    const observation = requireProgramAccountsRawObservation(
+      programAccountsExchange,
+      anchor.endpoint,
+      anchor.finalizedRootSlot
+    )
+    return {
+      anchor,
+      observation,
+      rawExchanges: [
+        anchorRawExchanges[0],
+        anchorRawExchanges[1],
+        anchorRawExchanges[2],
+        anchorRawExchanges[3],
+        programAccountsExchange,
+      ],
+    }
+  } catch (error) {
+    if (error instanceof TypeError && error.message.startsWith(INVALID_PREFIX)) throw error
+    throw new TypeError(`${INVALID_PREFIX} raw capture could not be replayed safely`)
+  }
 }
 
 export function disposeSolanaV3ProgramDeploymentRawCapture(
@@ -705,14 +900,7 @@ export async function captureSolanaV3ProgramDeploymentObservation(
       invalid('program account endpoint differs from the verified anchor endpoint')
     }
     for (let index = 0; index < anchorRawExchanges.length; index += 1) {
-      const [lane, method] = REQUIRED_ANCHOR_RAW_LANES[index]
-      requireRawExchangeBodies(
-        anchorRawExchanges[index],
-        lane,
-        method,
-        verifiedAnchor.endpoint,
-        ANCHOR_RAW_RPC_RESPONSE_MAX_BYTES
-      )
+      requireAnchorRawExchangeSemantics(anchorRawExchanges[index], index, verifiedAnchor)
     }
 
     const minimumContextSlot = verifiedAnchor.finalizedRootSlot
@@ -736,20 +924,12 @@ export async function captureSolanaV3ProgramDeploymentObservation(
     const programAccountsExchange = result.rawExchange
     if (programAccountsExchange === undefined) invalid('program account raw capture is unavailable')
     ownedExchanges.push(programAccountsExchange)
-    const rawResult = requireProgramAccountsRawResult(
+    const observation = requireProgramAccountsRawObservation(
       programAccountsExchange,
       verifiedAnchor.endpoint,
-      canonicalProgramId,
-      programData.address,
-      minimumContextSlot
+      minimumContextSlot,
+      canonicalProgramId
     )
-
-    const observation = parseSolanaV3ProgramDeploymentObservation({
-      program_id: canonicalProgramId,
-      programdata_address: programData.address,
-      requested_min_context_slot: minimumContextSlot,
-      result: rawResult,
-    })
     if (
       observation.program_id !== canonicalProgramId ||
       observation.programdata_address !== programData.address ||
