@@ -141,6 +141,9 @@ export function TraderHeaderActions({
   const { t } = useLanguage()
   const [moreOpen, setMoreOpen] = useState(false)
   const actionsRef = useRef<HTMLDivElement>(null)
+  const loginReturnPath = `/trader/${encodeURIComponent(handle)}${
+    source ? `?platform=${encodeURIComponent(source)}` : ''
+  }`
 
   useEffect(() => {
     if (!moreOpen) return
@@ -197,16 +200,22 @@ export function TraderHeaderActions({
         </ActionButton>
       )}
 
-      {/* Follow icon — rendered for anonymous users too: the buttons themselves
-          open the login modal (TraderFollowButton also queues pendingFollow) */}
+      {/* Follow icon — rendered for anonymous users too. The buttons carry the
+          exact trader route and intended action through full-page login. */}
       {!isOwnProfile &&
         (isRegistered ? (
-          <UserFollowButton targetUserId={traderId} currentUserId={userId} size="sm" />
+          <UserFollowButton
+            targetUserId={traderId}
+            currentUserId={userId}
+            size="sm"
+            loginReturnPath={loginReturnPath}
+          />
         ) : (
           <TraderFollowButton
             traderId={traderId}
             source={source}
             userId={userId}
+            loginReturnPath={loginReturnPath}
             onFollowChange={(isFollowing) => {
               onFollowChange?.(isFollowing ? 1 : -1)
             }}
@@ -215,7 +224,12 @@ export function TraderHeaderActions({
 
       {/* Watchlist star */}
       {source && (
-        <WatchlistToggleButton source={source} sourceTraderID={traderId} handle={handle} />
+        <WatchlistToggleButton
+          source={source}
+          sourceTraderID={traderId}
+          handle={handle}
+          loginReturnPath={loginReturnPath}
+        />
       )}
 
       <button

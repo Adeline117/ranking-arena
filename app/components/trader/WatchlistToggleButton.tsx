@@ -1,25 +1,34 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useWatchlist } from '@/lib/hooks/useWatchlist'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
-import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { trackEvent } from '@/lib/analytics/track'
+import {
+  consumeProfileActionLogin,
+  profileTraderTarget,
+  queueProfileActionLogin,
+  type ProfileActionIntent,
+} from '@/lib/auth/profile-action-login'
 
 interface WatchlistToggleButtonProps {
   source: string
   sourceTraderID: string
   handle?: string
+  loginReturnPath?: string
 }
 
 export default function WatchlistToggleButton({
   source,
   sourceTraderID,
   handle,
+  loginReturnPath,
 }: WatchlistToggleButtonProps) {
+  const router = useRouter()
   const { isLoggedIn } = useAuthSession()
   const { isWatched, addToWatchlist, removeFromWatchlist } = useWatchlist()
   const { showToast } = useToast()
@@ -29,31 +38,77 @@ export default function WatchlistToggleButton({
 
   const watched = isWatched(source, sourceTraderID)
 
-  const handleClick = async () => {
+  const redirectToLogin = useCallback(
+    (action: ProfileActionIntent) => {
+      router.push(
+        queueProfileActionLogin({
+          action,
+          target: profileTraderTarget(source, sourceTraderID),
+          fallbackPath: loginReturnPath,
+        })
+      )
+    },
+    [loginReturnPath, router, source, sourceTraderID]
+  )
+
+  const executeWatchlistAction = useCallback(
+    async (action: 'watch' | 'unwatch') => {
+      if (pendingRef.current) return
+      pendingRef.current = true
+      setIsLoading(true)
+      try {
+        if (action === 'unwatch') {
+          await removeFromWatchlist(source, sourceTraderID)
+          showToast(t('removedFromWatchlist'), 'info')
+        } else {
+          await addToWatchlist(source, sourceTraderID, handle)
+          trackEvent('save_trader', { traderId: sourceTraderID, source })
+          showToast(t('addedToWatchlist'), 'success')
+        }
+      } catch (error) {
+        if (error instanceof Error && /(?:^|\s)401$/.test(error.message)) {
+          showToast(t('loginExpiredPleaseRelogin'), 'error')
+          redirectToLogin(action === 'watch' ? 'watch-trader' : 'unwatch-trader')
+        } else {
+          showToast(t('watchlistError'), 'error')
+        }
+      } finally {
+        pendingRef.current = false
+        setIsLoading(false)
+      }
+    },
+    [
+      addToWatchlist,
+      handle,
+      redirectToLogin,
+      removeFromWatchlist,
+      showToast,
+      source,
+      sourceTraderID,
+      t,
+    ]
+  )
+
+  const handleClick = () => {
     if (pendingRef.current) return
     if (!isLoggedIn) {
-      useLoginModal.getState().openLoginModal()
+      redirectToLogin('watch-trader')
       return
     }
 
-    pendingRef.current = true
-    setIsLoading(true)
-    try {
-      if (watched) {
-        await removeFromWatchlist(source, sourceTraderID)
-        showToast(t('removedFromWatchlist'), 'info')
-      } else {
-        await addToWatchlist(source, sourceTraderID, handle)
-        trackEvent('save_trader', { traderId: sourceTraderID, source })
-        showToast(t('addedToWatchlist'), 'success')
-      }
-    } catch {
-      showToast(t('watchlistError'), 'error')
-    } finally {
-      pendingRef.current = false
-      setIsLoading(false)
-    }
+    void executeWatchlistAction(watched ? 'unwatch' : 'watch')
   }
+
+  useEffect(() => {
+    if (!isLoggedIn) return
+    const action = consumeProfileActionLogin({
+      actions: ['watch-trader', 'unwatch-trader'],
+      target: profileTraderTarget(source, sourceTraderID),
+    })
+    if (action) {
+      void executeWatchlistAction(action === 'watch-trader' ? 'watch' : 'unwatch')
+    }
+  }, [executeWatchlistAction, isLoggedIn, source, sourceTraderID])
 
   return (
     <button
