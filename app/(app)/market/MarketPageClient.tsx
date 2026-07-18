@@ -17,6 +17,7 @@ import { useMarketSpotData, type SpotCoin } from '@/lib/hooks/useMarketSpot'
 // Core above-fold components: direct import for faster LCP
 import CoreCards from '@/app/components/market/CoreCards'
 import GlobalMarketBar from '@/app/components/market/GlobalMarketBar'
+import MarketWatchlistEntry from '@/app/components/market/MarketWatchlistEntry'
 import PriceTicker from '@/app/components/market/PriceTicker'
 import FearGreedGauge from '@/app/components/market/FearGreedGauge'
 
@@ -249,37 +250,6 @@ function MobileSectorsTab({
   )
 }
 
-function WatchlistPlaceholder() {
-  const { t } = useLanguage()
-  return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: 200,
-        color: tokens.colors.text.tertiary,
-        fontSize: 14,
-        gap: 8,
-      }}
-    >
-      <svg
-        width="32"
-        height="32"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        style={{ opacity: 0.5 }}
-      >
-        <polygon points="12,2 15.09,8.26 22,9.27 17,14.14 18.18,21.02 12,17.77 5.82,21.02 7,14.14 2,9.27 8.91,8.26" />
-      </svg>
-      <span>{t('watchlistComingSoon')}</span>
-    </div>
-  )
-}
-
 function MarketPageContent({
   initialSpotData,
   initialSpotDataUpdatedAt,
@@ -422,7 +392,7 @@ function MarketPageContent({
               overview: <MobileOverviewTab spotData={spotData} />,
               movers: <MobileMoversTab spotData={spotData} initialSpotData={initialSpotData} />,
               sectors: <MobileSectorsTab spotData={spotData} spotLoading={spotLoading} />,
-              watchlist: <WatchlistPlaceholder />,
+              watchlist: <MarketWatchlistEntry />,
             }}
           </MobileMarketTabs>
         </Suspense>
