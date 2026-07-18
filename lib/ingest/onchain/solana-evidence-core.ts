@@ -10,9 +10,10 @@ import { parseStrictJson } from './strict-json'
 import {
   RAW_RPC_REQUEST_HASH_BASIS,
   RAW_RPC_RESPONSE_HASH_BASIS,
+  disposeRawRpcBytes,
   encodeJsonRpcRequestBody,
-  rawRpcBodyEvidence,
   readBoundedRpcResponse,
+  takeRawRpcBodyEvidence,
   type RawRpcBodyEvidence,
 } from './raw-rpc-evidence'
 
@@ -167,6 +168,22 @@ const SOLANA_RAW_RPC_LANE_METHODS: Record<SolanaRawRpcEvidenceLane, string> = {
   transaction: 'getTransaction',
   signature_status: 'getSignatureStatuses',
   membership_block: 'getBlock',
+}
+
+export function disposeSolanaRawRpcEvidenceExchanges(
+  exchanges: readonly SolanaRawRpcEvidenceExchange[]
+): void {
+  let failed = false
+  for (const exchange of exchanges) {
+    for (const bytes of [exchange.request.bytes, exchange.response.bytes]) {
+      try {
+        disposeRawRpcBytes(bytes)
+      } catch {
+        failed = true
+      }
+    }
+  }
+  if (failed) throw new TypeError('Solana raw RPC evidence bytes could not all be cleared')
 }
 
 export interface SolanaRawRpcEvidenceExchange {
@@ -490,8 +507,12 @@ export async function solanaEvidenceRpc(
   }
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let requestBytes: Uint8Array | null = null
+  let responseBytes: Uint8Array | null = null
+  let rawExchangeOwnershipTransferred = false
   try {
     const requestBody = encodeJsonRpcRequestBody(RPC_REQUEST_ID, method, params)
+    requestBytes = requestBody.evidence.bytes
     const response = await fetch(endpoint.url, {
       method: 'POST',
       redirect: 'error',
@@ -527,6 +548,7 @@ export async function solanaEvidenceRpc(
         httpStatus
       )
     }
+    responseBytes = responseText.bytes
     let payload: unknown
     try {
       payload = responseText.text ? parseStrictJson(responseText.text) : null
@@ -586,22 +608,28 @@ export async function solanaEvidenceRpc(
           hashBasis: RAW_RPC_REQUEST_HASH_BASIS,
         },
         response: {
-          ...rawRpcBodyEvidence(responseText.bytes),
+          ...takeRawRpcBodyEvidence(responseText.bytes),
           hashBasis: RAW_RPC_RESPONSE_HASH_BASIS,
         },
       }
     }
-    return {
+    const result: SolanaRpcSuccess = {
       ok: true,
       result: payload.result,
       provider: providerEvidence(endpoint.identity, [endpoint.identity]),
       httpStatus,
       ...(rawExchange ? { rawExchange } : {}),
     }
+    rawExchangeOwnershipTransferred = rawExchange !== undefined
+    return result
   } catch (error) {
     return rpcFailure(endpoint.identity, timeoutError(error) ? 'timeout' : 'transport_error')
   } finally {
     clearTimeout(timer)
+    if (!rawExchangeOwnershipTransferred) {
+      disposeRawRpcBytes(requestBytes)
+      disposeRawRpcBytes(responseBytes)
+    }
   }
 }
 

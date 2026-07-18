@@ -16,6 +16,7 @@ import {
   DEFAULT_SOLANA_EVIDENCE_TIMEOUT_MS,
   canonicalTimestampMs,
   dependencyUnavailableLane,
+  disposeSolanaRawRpcEvidenceExchanges,
   endpointCopy,
   exactDataRecord,
   exactDenseArray,
@@ -777,15 +778,20 @@ export async function captureSolanaVerifiedTransactionFinalityEvidence(
     opts,
     true
   )
-  const verified = requireSolanaVerifiedTransactionFinality(captured.evidence, anchorEvidence)
-  const expectedLanes = ['transaction', 'signature_status', 'membership_block'] as const
-  if (
-    captured.rawExchanges.length !== expectedLanes.length ||
-    captured.rawExchanges.some((exchange, index) => exchange.lane !== expectedLanes[index])
-  ) {
-    throw new TypeError('Solana transaction raw evidence capture is incomplete')
+  try {
+    const verified = requireSolanaVerifiedTransactionFinality(captured.evidence, anchorEvidence)
+    const expectedLanes = ['transaction', 'signature_status', 'membership_block'] as const
+    if (
+      captured.rawExchanges.length !== expectedLanes.length ||
+      captured.rawExchanges.some((exchange, index) => exchange.lane !== expectedLanes[index])
+    ) {
+      throw new TypeError('Solana transaction raw evidence capture is incomplete')
+    }
+    return { evidence: captured.evidence, verified, rawExchanges: captured.rawExchanges }
+  } catch (error) {
+    disposeSolanaRawRpcEvidenceExchanges(captured.rawExchanges)
+    throw error
   }
-  return { evidence: captured.evidence, verified, rawExchanges: captured.rawExchanges }
 }
 
 function parseExactBlock(value: unknown): SolanaFinalizedBlockEvidence | null {
