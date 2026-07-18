@@ -31,12 +31,12 @@ export default async function HomeHeroSSR({
   const sourceBoardCountStr = `${sourceBoardCount}+`
 
   const headline = t('heroHeadline')
-  const subtitle = t('heroSubtitle').replace('{exchanges}', String(sourceBoardCount))
+  const subtitle = t('heroSubtitle').replace('{boards}', String(sourceBoardCount))
 
   // Trader-count stat intentionally dropped — the hero leads with exchange
   // coverage; the trader total lives in the leaderboard itself.
   const stats = [
-    { value: sourceBoardCountStr, label: t('heroStatExchanges') },
+    { value: sourceBoardCountStr, label: t('heroStatSourceBoards') },
     // Real cadence: the leaderboard recomputes every 2h (worker scheduler
     // SCORE_INTERVALS_MS). "30 min" overstated it (that's only the warm-cache
     // cron, which re-warms Redis but doesn't make data fresher) — a freshness

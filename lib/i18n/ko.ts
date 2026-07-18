@@ -1941,7 +1941,7 @@ const ko = {
   loginCreateAccount: '계정 만들기',
   loginSubtitle: 'Arena는 암호화폐의 모든 것을 순위화합니다',
   loginValueProp1: '현재 90일 순위에 트레이더 {count}명',
-  loginValueProp2: '활성 거래소 소스 {count}곳의 성과 비교',
+  loginValueProp2: '현재 운영 중인 랭킹 소스 보드 {count}개의 성과 비교',
   loginValueProp3: '트레이딩 커뮤니티 참여',
   discoverMore: 'Arena 더 알아보기',
   loginConnectWallet: '지갑 연결',
@@ -3049,16 +3049,17 @@ const ko = {
 
   // Hero section
   heroHeadline: '세계 최고의 암호화폐 트레이더를 추적하세요',
-  heroSubtitle: '추적 중인 {exchanges}개 소스의 순위를 최신 가용 데이터로 2시간마다 재계산',
+  heroSubtitle:
+    '현재 운영 중인 랭킹 소스 보드 {boards}개의 순위를 최신 가용 데이터로 2시간마다 재계산',
   heroScoreExplainer:
-    'Arena Score는 추적 중인 모든 거래소의 모든 트레이더를 한 줄로 순위화합니다 — 당신의 위치를 정확히 확인하세요.',
+    'Arena Score는 현재 운영 중인 모든 소스 보드의 트레이더를 같은 기준으로 순위화합니다.',
   heroNeutrality:
-    '어떤 거래소도 순위를 돈으로 살 수 없습니다 — 추적하는 모든 거래소를 공정하게 순위화합니다.',
+    '어떤 소스도 순위를 돈으로 살 수 없습니다 — 운영 중인 모든 보드에 같은 규칙을 적용합니다.',
   heroHowRanked: '랭킹 산정 방식 →',
   heroCTABrowse: '순위 둘러보기',
   heroCTASignUp: '무료 가입',
   heroStatTraders: '트레이더',
-  heroStatExchanges: '거래소',
+  heroStatSourceBoards: '운영 중 보드',
   heroStatUpdated: '업데이트 주기',
   heroExploreRankings: '랭킹 탐색',
   heroProBadge: 'Pro로 업그레이드 — 모든 트레이더와 고급 필터 잠금 해제',
@@ -5021,7 +5022,7 @@ const ko = {
     '아니요. 데이터 API 요금제는 Arena Pro와 별도로 판매됩니다. Pro는 트레이더 탐색, 알림, 비교 및 심층 분석을 위한 상품입니다.',
   pricingLimitedTimeBanner: '한정 기간: 모든 Pro 기능이 현재 무료입니다!',
   pricingStatTradersRanked: '랭킹된 트레이더',
-  pricingStatExchangesTracked: '추적 중인 거래소',
+  pricingStatExchangesTracked: '운영 중 랭킹 보드',
   pricingStatUpdateFrequency: '업데이트 주기',
   pricingAllFeaturesFree: '모든 기능을 기간 한정 무료로 이용',
   pricingFoundingMemberBadge: '창립 멤버 \u00b7 선착순 200명',

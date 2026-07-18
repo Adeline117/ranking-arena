@@ -89,7 +89,7 @@ jest.mock('@/app/components/ui/Toast', () => ({
 }))
 
 jest.mock('@/lib/hooks/useProductFacts', () => ({
-  useProductFacts: () => ({ rankedTraderCount: 1000, exchangeCount: 12 }),
+  useProductFacts: () => ({ rankedTraderCount: 1000, sourceBoardCount: 12 }),
 }))
 
 jest.mock('@/lib/analytics/track', () => ({ trackEvent: jest.fn() }))

@@ -1232,7 +1232,7 @@ export default function LoginPageClient() {
               '{count}',
               formatRankedTraderCount(productFacts.rankedTraderCount, lang)
             ),
-            t('loginValueProp2').replace('{count}', String(productFacts.exchangeCount)),
+            t('loginValueProp2').replace('{count}', String(productFacts.sourceBoardCount)),
             t('loginValueProp3'),
           ].map((prop, i) => (
             <div

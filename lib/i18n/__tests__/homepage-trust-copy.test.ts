@@ -17,8 +17,9 @@ describe('homepage trust copy', () => {
 
   it('describes the two-hour recompute cadence without claiming real-time rankings', () => {
     for (const subtitle of subtitles) {
-      expect(subtitle).toContain('{exchanges}')
+      expect(subtitle).toContain('{boards}')
       expect(subtitle).toContain('2')
+      expect(subtitle).toMatch(/board|来源板|ソースボード|소스 보드/i)
       expect(subtitle).not.toMatch(/real[- ]?time|实时|リアルタイム|실시간/i)
     }
   })
