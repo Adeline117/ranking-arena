@@ -28,6 +28,9 @@ import {
   parseExpectedSourceWindows,
   type VisibleSourceWindow,
 } from '@/lib/rankings/source-freshness'
+import type { FreshnessReport, PlatformFreshnessStatus } from '@/lib/rankings/freshness-report'
+
+export type { FreshnessReport, PlatformFreshnessStatus } from '@/lib/rankings/freshness-report'
 
 export const runtime = 'nodejs'
 export const preferredRegion = 'sfo1'
@@ -44,68 +47,6 @@ const PLATFORM_THRESHOLD_OVERRIDES: Record<string, { stale: number; critical: nu
   blofin: { stale: 48 * 60 * 60 * 1000, critical: 72 * 60 * 60 * 1000 }, // BloFin API 频繁限流
   gmx: { stale: 48 * 60 * 60 * 1000, critical: 72 * 60 * 60 * 1000 }, // On-chain, less frequent
   gains: { stale: 48 * 60 * 60 * 1000, critical: 72 * 60 * 60 * 1000 }, // On-chain
-}
-
-// 平台显示名称映射
-const PLATFORM_NAMES: Record<string, string> = {
-  binance_futures: 'Binance 合约',
-  // binance_spot: REMOVED 2026-03-14
-  binance_web3: 'Binance Web3',
-  bybit: 'Bybit',
-  bitget_futures: 'Bitget 合约',
-  mexc: 'MEXC',
-  coinex: 'CoinEx',
-  okx_web3: 'OKX Web3',
-  okx_futures: 'OKX 合约',
-  // kucoin: 'KuCoin', — DEAD
-  gmx: 'GMX',
-  htx: 'HTX',
-  htx_futures: 'HTX Futures',
-  weex: 'WEEX',
-  phemex: 'Phemex',
-  bingx: 'BingX',
-  gateio: 'Gate.io',
-  xt: 'XT',
-  gains: 'Gains Network',
-  blofin: 'BloFin',
-  drift: 'Drift',
-  bitunix: 'Bitunix',
-  btcc: 'BTCC',
-  paradex: 'Paradex',
-  bitfinex: 'Bitfinex',
-  toobit: 'Toobit',
-  jupiter_perps: 'Jupiter Perps',
-  hyperliquid: 'Hyperliquid',
-  dydx: 'dYdX',
-  aevo: 'Aevo',
-  bybit_spot: 'Bybit Spot',
-}
-
-export interface PlatformFreshnessStatus {
-  platform: string
-  displayName: string
-  lastUpdate: string | null
-  ageMs: number | null
-  ageHours: number | null
-  status: 'fresh' | 'stale' | 'critical' | 'unknown'
-  recordCount: number
-}
-
-export interface FreshnessReport {
-  ok: boolean
-  checked_at: string
-  summary: {
-    total: number
-    fresh: number
-    stale: number
-    critical: number
-    unknown: number
-  }
-  thresholds: {
-    stale_hours: number
-    critical_hours: number
-  }
-  platforms: PlatformFreshnessStatus[]
 }
 
 type PipelineLogHandle = Awaited<ReturnType<typeof PipelineLogger.start>>
@@ -246,7 +187,7 @@ export async function buildFreshnessReport(): Promise<FreshnessReport> {
 
     results.push({
       platform: source.source,
-      displayName: PLATFORM_NAMES[source.source] || source.display_name,
+      displayName: source.display_name,
       lastUpdate: source.updated_at,
       ageMs,
       ageHours,

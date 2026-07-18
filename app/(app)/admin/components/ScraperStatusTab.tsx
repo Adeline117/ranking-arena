@@ -1,25 +1,38 @@
 'use client'
 
-import { useEffect } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import Card from '@/app/components/ui/Card'
-import { useFreshness } from '../hooks/useFreshness'
+import type { FreshnessLoadError, FreshnessReport } from '../hooks/useFreshness'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 
-export default function ScraperStatusTab() {
-  const { freshnessReport, loading, loadFreshnessReport } = useFreshness()
-  const { t } = useLanguage()
+interface ScraperStatusTabProps {
+  freshnessReport: FreshnessReport | null
+  loading: boolean
+  error: FreshnessLoadError | null
+  onRefresh: () => Promise<boolean>
+}
 
-  useEffect(() => {
-    loadFreshnessReport()
-  }, [loadFreshnessReport])
+const STATUS_ORDER: Record<string, number> = {
+  unknown: 0,
+  critical: 1,
+  stale: 2,
+  fresh: 3,
+}
+
+export default function ScraperStatusTab({
+  freshnessReport,
+  loading,
+  error,
+  onRefresh,
+}: ScraperStatusTabProps) {
+  const { t } = useLanguage()
 
   const statusColors: Record<string, string> = {
     fresh: tokens.colors.accent.success,
     stale: tokens.colors.accent.warning,
     critical: tokens.colors.accent.error,
-    unknown: tokens.colors.text.tertiary,
+    unknown: tokens.colors.accent.error,
   }
 
   const getStatusLabel = (status: string): string => {
@@ -39,9 +52,30 @@ export default function ScraperStatusTab() {
     return date.toLocaleString()
   }
 
+  const errorMessage =
+    error?.kind === 'unauthorized' || error?.kind === 'forbidden'
+      ? t('adminFreshnessPermissionError')
+      : error?.kind === 'invalid_response'
+        ? t('adminFreshnessInvalidResponse')
+        : t('adminFreshnessLoadError')
+
+  const sortedPlatforms = [...(freshnessReport?.platforms ?? [])].sort((left, right) => {
+    const statusDifference = STATUS_ORDER[left.status] - STATUS_ORDER[right.status]
+    return statusDifference || left.displayName.localeCompare(right.displayName)
+  })
+
   return (
     <Card title={t('adminScraperMonitor')}>
-      <Box style={{ marginBottom: tokens.spacing[4], display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: tokens.spacing[3] }}>
+      <Box
+        style={{
+          marginBottom: tokens.spacing[4],
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: tokens.spacing[3],
+        }}
+      >
         <Box>
           {freshnessReport?.summary && freshnessReport?.thresholds && (
             <Box style={{ display: 'flex', gap: tokens.spacing[4], flexWrap: 'wrap' }}>
@@ -52,33 +86,66 @@ export default function ScraperStatusTab() {
                 {t('adminFreshCount').replace('{count}', String(freshnessReport.summary.fresh))}
               </Text>
               <Text size="sm" style={{ color: tokens.colors.accent.warning }}>
-                {t('adminStaleCount').replace('{threshold}', freshnessReport.thresholds.stale).replace('{count}', String(freshnessReport.summary.stale))}
+                {t('adminStaleCount')
+                  .replace('{threshold}', String(freshnessReport.thresholds.stale_hours))
+                  .replace('{count}', String(freshnessReport.summary.stale))}
               </Text>
               <Text size="sm" style={{ color: tokens.colors.accent.error }}>
-                {t('adminCriticalCount').replace('{threshold}', freshnessReport.thresholds.critical).replace('{count}', String(freshnessReport.summary.critical))}
+                {t('adminCriticalCount')
+                  .replace('{threshold}', String(freshnessReport.thresholds.critical_hours))
+                  .replace('{count}', String(freshnessReport.summary.critical))}
+              </Text>
+              <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+                {t('adminUnknownCount').replace('{count}', String(freshnessReport.summary.unknown))}
               </Text>
             </Box>
           )}
         </Box>
-        <Button variant="secondary" size="sm" onClick={loadFreshnessReport} disabled={loading}>
+        <Button variant="secondary" size="sm" onClick={() => void onRefresh()} disabled={loading}>
           {loading ? t('adminRefreshing') : t('adminRefreshStatus')}
         </Button>
       </Box>
 
+      {error && (
+        <Box
+          role="alert"
+          style={{
+            marginBottom: tokens.spacing[4],
+            padding: tokens.spacing[3],
+            border: `1px solid ${tokens.colors.accent.error}`,
+            borderRadius: tokens.radius.md,
+            background: tokens.colors.bg.tertiary,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            flexWrap: 'wrap',
+            gap: tokens.spacing[3],
+          }}
+        >
+          <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+            {errorMessage}
+          </Text>
+          <Button variant="secondary" size="sm" onClick={() => void onRefresh()} disabled={loading}>
+            {t('retry')}
+          </Button>
+        </Box>
+      )}
+
       {loading && !freshnessReport ? (
-        <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
+        <Box aria-live="polite" style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
           <Text color="tertiary">{t('loading')}</Text>
         </Box>
       ) : freshnessReport ? (
         <Box>
-          {/* Status overview cards */}
-          <Box style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-            gap: tokens.spacing[4],
-            marginBottom: tokens.spacing[4],
-          }}>
-            {(freshnessReport.platforms || []).map((platform) => (
+          <Box
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gap: tokens.spacing[4],
+              marginBottom: tokens.spacing[4],
+            }}
+          >
+            {sortedPlatforms.map((platform) => (
               <Box
                 key={platform.platform}
                 style={{
@@ -89,8 +156,17 @@ export default function ScraperStatusTab() {
                   borderLeft: `4px solid ${statusColors[platform.status]}`,
                 }}
               >
-                <Box style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: tokens.spacing[2] }}>
-                  <Text size="md" weight="bold">{platform.displayName}</Text>
+                <Box
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'flex-start',
+                    marginBottom: tokens.spacing[2],
+                  }}
+                >
+                  <Text size="md" weight="bold">
+                    {platform.displayName}
+                  </Text>
                   <Box
                     style={{
                       padding: `${tokens.spacing[1]} ${tokens.spacing[2]}`,
@@ -105,7 +181,13 @@ export default function ScraperStatusTab() {
                   </Box>
                 </Box>
 
-                <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
+                <Box
+                  style={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: tokens.spacing[1],
+                  }}
+                >
                   <Text size="sm" color="secondary">
                     {t('adminLastUpdate').replace('{time}', formatDate(platform.lastUpdate))}
                   </Text>
@@ -115,14 +197,16 @@ export default function ScraperStatusTab() {
                     </Text>
                   )}
                   <Text size="xs" color="tertiary">
-                    {t('adminRecordCount').replace('{count}', platform.recordCount.toLocaleString())}
+                    {t('adminRecordCount').replace(
+                      '{count}',
+                      platform.recordCount.toLocaleString()
+                    )}
                   </Text>
                 </Box>
               </Box>
             ))}
           </Box>
 
-          {/* Check time */}
           <Box style={{ textAlign: 'center', marginTop: tokens.spacing[4] }}>
             <Text size="xs" color="tertiary">
               {t('adminCheckedAt').replace('{time}', formatDate(freshnessReport.checked_at))}
@@ -131,27 +215,48 @@ export default function ScraperStatusTab() {
         </Box>
       ) : (
         <Box style={{ padding: tokens.spacing[8], textAlign: 'center' }}>
-          <Text color="tertiary">{t('noData')}</Text>
+          <Text color="tertiary">{error ? t('adminNoVerifiedFreshness') : t('noData')}</Text>
         </Box>
       )}
 
-      {/* Explanation */}
-      <Box style={{
-        marginTop: tokens.spacing[6],
-        padding: tokens.spacing[4],
-        background: tokens.colors.bg.tertiary,
-        borderRadius: tokens.radius.lg,
-      }}>
-        <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>{t('adminStatusExplanation')}</Text>
+      <Box
+        style={{
+          marginTop: tokens.spacing[6],
+          padding: tokens.spacing[4],
+          background: tokens.colors.bg.tertiary,
+          borderRadius: tokens.radius.lg,
+        }}
+      >
+        <Text size="sm" weight="bold" style={{ marginBottom: tokens.spacing[2] }}>
+          {t('adminStatusExplanation')}
+        </Text>
         <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[1] }}>
           <Text size="xs" color="secondary">
-            <span style={{ color: tokens.colors.accent.success, fontWeight: 'bold' }}>● {t('adminStatusFresh')}</span>: {t('adminFreshDesc')}
+            <span style={{ color: tokens.colors.accent.success, fontWeight: 'bold' }}>
+              ● {t('adminStatusFresh')}
+            </span>
+            : {t('adminFreshDesc')}
           </Text>
           <Text size="xs" color="secondary">
-            <span style={{ color: tokens.colors.accent.warning, fontWeight: 'bold' }}>● {t('adminStatusStale')}</span>: {t('adminStaleDesc')}
+            <span style={{ color: tokens.colors.accent.warning, fontWeight: 'bold' }}>
+              ● {t('adminStatusStale')}
+            </span>
+            : {t('adminStaleDesc')}
           </Text>
           <Text size="xs" color="secondary">
-            <span style={{ color: tokens.colors.accent.error, fontWeight: 'bold' }}>● {t('adminStatusCritical')}</span>: {t('adminCriticalDesc')}
+            <span style={{ color: tokens.colors.accent.error, fontWeight: 'bold' }}>
+              ● {t('adminStatusCritical')}
+            </span>
+            : {t('adminCriticalDesc')}
+          </Text>
+          <Text size="xs" color="secondary">
+            <span style={{ color: tokens.colors.accent.error, fontWeight: 'bold' }}>
+              ● {t('adminStatusUnknown')}
+            </span>
+            : {t('adminUnknownDesc')}
+          </Text>
+          <Text size="xs" color="tertiary">
+            {t('adminThresholdOverrides')}
           </Text>
         </Box>
       </Box>
