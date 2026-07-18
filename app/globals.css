@@ -12,16 +12,15 @@
    - JS idle callback removes the SSR DOM nodes for cleanup.
    - Phase 2 has min-height matching SSR content (~1650px) to prevent CLS
      when SSR shells collapse to 0. */
-/* Phase 2 transition: SSR shells are hidden by JS (HomePageClient.tsx) only
-   AFTER React has real data to replace them. This prevents the "spinner of death"
-   on slow mobile connections where 4MB JS takes 10+ seconds to download.
-
-   Previously, CSS rules (.homepage-interactive-mounted, :has()) hid SSR content
-   the instant #homepage-interactive appeared in the DOM — before React had data.
-   This created a blank page until all JS loaded and hydrated.
-
-   Now: SSR content stays visible until JS explicitly hides it (loading=false).
-   #ssr-topnav stays visible permanently (Phase 2 TopNav renders separately). */
+/* Phase 2 transition:
+   - The server shell now contains the final source strip + three-column
+     geometry and stays visible while the deferred bundle downloads.
+   - Once #homepage-interactive is committed, critical CSS hides the complete
+     server shell in that same style calculation. HomePageClient is statically
+     imported with the server data, so there is no empty center-column gap.
+   - HomePageClient's layout effect remains a fallback for browsers without
+     :has() support.
+   #ssr-topnav stays visible permanently. */
 
 /*
  * Performance Optimization: CSS files moved to async loading
@@ -4361,6 +4360,21 @@ html[lang='ja'] .beta-banner .beta-lang[data-beta-lang='en'],
 html[lang='ko'] .beta-banner .beta-lang[data-beta-lang='en'],
 html[lang='zh-CN'] .beta-banner .beta-lang[data-beta-lang='en'],
 html[data-beta-banner-hidden='true'] .beta-banner {
+  display: none;
+}
+.pro-promo-banner .pro-promo-lang {
+  display: none;
+}
+.pro-promo-banner .pro-promo-lang[data-pro-promo-lang='en'],
+html[lang='ja'] .pro-promo-banner .pro-promo-lang[data-pro-promo-lang='ja'],
+html[lang='ko'] .pro-promo-banner .pro-promo-lang[data-pro-promo-lang='ko'],
+html[lang='zh-CN'] .pro-promo-banner .pro-promo-lang[data-pro-promo-lang='zh'] {
+  display: inline;
+}
+html[lang='ja'] .pro-promo-banner .pro-promo-lang[data-pro-promo-lang='en'],
+html[lang='ko'] .pro-promo-banner .pro-promo-lang[data-pro-promo-lang='en'],
+html[lang='zh-CN'] .pro-promo-banner .pro-promo-lang[data-pro-promo-lang='en'],
+html[data-pro-promo-hidden='true'] .pro-promo-banner {
   display: none;
 }
 @media (max-width: 480px) {
