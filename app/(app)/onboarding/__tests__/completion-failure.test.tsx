@@ -6,6 +6,7 @@ const GROUP_ID = '20000000-0000-4000-8000-000000000002'
 const mockGetSession = jest.fn()
 const mockMaybeSingle = jest.fn()
 const mockUpdateEq = jest.fn()
+const mockUpdateMaybeSingle = jest.fn()
 const mockShowToast = jest.fn()
 const mockLoadTraders = jest.fn()
 const mockLoadGroups = jest.fn()
@@ -31,7 +32,14 @@ jest.mock('@/lib/supabase/client', () => ({
         }),
       }),
       update: () => ({
-        eq: (...args: unknown[]) => mockUpdateEq(...args),
+        eq: (...args: unknown[]) => {
+          mockUpdateEq(...args)
+          return {
+            select: () => ({
+              maybeSingle: (...selectArgs: unknown[]) => mockUpdateMaybeSingle(...selectArgs),
+            }),
+          }
+        },
       }),
     }),
   },
@@ -151,7 +159,10 @@ describe('onboarding membership completion boundary', () => {
       data: { onboarding_completed: false },
       error: null,
     })
-    mockUpdateEq.mockResolvedValue({ error: null })
+    mockUpdateMaybeSingle.mockResolvedValue({
+      data: { id: USER_ID, onboarding_completed: true },
+      error: null,
+    })
     mockLoadTraders.mockResolvedValue([])
     mockLoadGroups.mockResolvedValue([])
   })
@@ -194,5 +205,63 @@ describe('onboarding membership completion boundary', () => {
     await waitFor(() => expect(mockUpdateEq).toHaveBeenCalledTimes(1))
     expect(await screen.findByTestId('onboarding-complete')).toBeInTheDocument()
     expect(localStorage.getItem('hasOnboarded')).toBe('true')
+  })
+
+  it('keeps a failed skip on the page and allows an explicit retry', async () => {
+    mockUpdateMaybeSingle
+      .mockResolvedValueOnce({
+        data: null,
+        error: new Error('write unavailable'),
+      })
+      .mockResolvedValueOnce({
+        data: { id: USER_ID, onboarding_completed: true },
+        error: null,
+      })
+    render(<OnboardingPage />)
+    await waitFor(() => expect(mockMaybeSingle).toHaveBeenCalled())
+
+    const skip = screen.getByRole('button', { name: 'skip' })
+    fireEvent.click(skip)
+    fireEvent.click(skip)
+
+    await waitFor(() => expect(mockUpdateMaybeSingle).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Failed to save', 'error'))
+    expect(mockReplace).not.toHaveBeenCalled()
+    expect(skip).toBeEnabled()
+
+    fireEvent.click(skip)
+
+    await waitFor(() => expect(mockUpdateMaybeSingle).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('/'))
+  })
+
+  it('does not treat an unacknowledged zero-row skip update as success', async () => {
+    mockUpdateMaybeSingle.mockResolvedValueOnce({ data: null, error: null })
+    render(<OnboardingPage />)
+    await waitFor(() => expect(mockMaybeSingle).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'skip' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Failed to save', 'error'))
+    expect(mockReplace).not.toHaveBeenCalled()
+  })
+
+  it('rejects a skip when the live session belongs to another viewer', async () => {
+    mockGetSession.mockResolvedValueOnce({
+      data: {
+        session: {
+          access_token: 'other-access-token',
+          user: { id: '30000000-0000-4000-8000-000000000003' },
+        },
+      },
+    })
+    render(<OnboardingPage />)
+    await waitFor(() => expect(mockMaybeSingle).toHaveBeenCalled())
+
+    fireEvent.click(screen.getByRole('button', { name: 'skip' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Failed to save', 'error'))
+    expect(mockUpdateEq).not.toHaveBeenCalled()
+    expect(mockReplace).not.toHaveBeenCalled()
   })
 })
