@@ -12,6 +12,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import dynamic from 'next/dynamic'
+import Link from 'next/link'
 import { tokens } from '@/lib/design-tokens'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
@@ -138,6 +139,23 @@ export default function AlertBellButton({ traderId, traderHandle, source }: Aler
             source={source}
             userId={userId ?? undefined}
           />
+          <Link
+            href="/saved?tab=alerts"
+            onClick={() => setOpen(false)}
+            aria-label={t('viewAllAlerts')}
+            style={{
+              display: 'inline-flex',
+              minHeight: 44,
+              alignItems: 'center',
+              marginTop: tokens.spacing[3],
+              color: tokens.colors.accent.primary,
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.semibold,
+              textDecoration: 'none',
+            }}
+          >
+            {t('viewAllAlerts')} →
+          </Link>
         </div>
       </ModalOverlay>
     </>
