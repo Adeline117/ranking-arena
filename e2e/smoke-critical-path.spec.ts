@@ -34,13 +34,47 @@ test.describe('Critical Path Smoke Tests', () => {
     // rendered. Protect the actual information architecture as well.
     const layout = page.locator('#homepage-interactive .three-col-layout').first()
     await expect(layout).toBeVisible({ timeout: 30_000 })
-    await expect(layout.locator(':scope > .three-col-left')).toBeVisible()
-    await expect(layout.locator(':scope > .three-col-center')).toBeVisible()
-    await expect(layout.locator(':scope > .three-col-right')).toBeVisible()
-    const desktopColumns = await layout.evaluate((element) =>
-      getComputedStyle(element).gridTemplateColumns.trim().split(/\s+/)
-    )
-    expect(desktopColumns).toHaveLength(3)
+    const left = layout.locator(':scope > .three-col-left')
+    const center = layout.locator(':scope > .three-col-center')
+    const right = layout.locator(':scope > .three-col-right')
+    await expect(left).toBeVisible()
+    await expect(center).toBeVisible()
+    await expect(right).toBeVisible()
+
+    // This is an exact product contract, not just a "three tracks exist"
+    // assertion. At 1440x900 the nested container padding leaves 1336px for
+    // the grid: 240 + 20 + 796 + 20 + 260. Lock the rendered positions too,
+    // so a later breakpoint override cannot silently trade ranking space for
+    // different sidebars while still satisfying a three-column count check.
+    const desktopGeometry = await layout.evaluate((element) => {
+      const round = (value: number) => Math.round(value * 100) / 100
+      const rectFor = (selector: string) => {
+        const region = element.querySelector<HTMLElement>(`:scope > ${selector}`)
+        if (!region) throw new Error(`Missing direct homepage region: ${selector}`)
+
+        const rect = region.getBoundingClientRect()
+        return { x: round(rect.x), width: round(rect.width) }
+      }
+      const style = getComputedStyle(element)
+
+      return {
+        viewport: { width: window.innerWidth, height: window.innerHeight },
+        columns: style.gridTemplateColumns.replace(/\s+/g, ' ').trim(),
+        columnGap: style.columnGap,
+        left: rectFor('.three-col-left'),
+        center: rectFor('.three-col-center'),
+        right: rectFor('.three-col-right'),
+      }
+    })
+
+    expect(desktopGeometry).toEqual({
+      viewport: { width: 1440, height: 900 },
+      columns: '240px 796px 260px',
+      columnGap: '20px',
+      left: { x: 52, width: 240 },
+      center: { x: 312, width: 796 },
+      right: { x: 1128, width: 260 },
+    })
   })
 
   test('2. Click a trader → detail page loads with stats', async ({ page }) => {

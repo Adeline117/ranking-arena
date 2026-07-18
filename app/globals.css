@@ -915,11 +915,11 @@ select:focus-visible {
 .three-col-layout {
   display: grid;
   grid-template-columns: 240px 1fr 260px;
-  gap: 24px;
+  gap: 20px;
   align-items: start;
   max-width: 1400px;
   margin: 0 auto;
-  padding: 0 20px;
+  padding: 0 16px;
   min-height: calc(100vh - 120px);
   /* Fixed height prevents CLS 0.233 from layout shift when data loads */
   contain: layout style;
@@ -943,8 +943,8 @@ select:focus-visible {
   }
 }
 
-/* Large desktop: full three columns */
-@media (min-width: 1280px) and (max-width: 1440px) {
+/* Large desktop: compact three columns below the established 1440px baseline */
+@media (min-width: 1280px) and (max-width: 1439px) {
   .three-col-layout {
     grid-template-columns: 220px 1fr 240px;
   }
