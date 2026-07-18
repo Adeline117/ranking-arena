@@ -12,6 +12,7 @@
 
 import type { Period } from '@/lib/utils/arena-score'
 import { createLogger } from '@/lib/utils/logger'
+import type { Database } from '@/lib/supabase/database.types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { TraderRow } from './trader-row'
 
@@ -189,7 +190,7 @@ function traderAccountKey(traderId: string, source: string): string {
  * have at least one Arena follower so the caller can log a single summary line.
  */
 export async function applyArenaFollowers<T extends ScoredRowForArenaFollowers>(
-  supabase: SupabaseClient,
+  supabase: SupabaseClient<Database>,
   scored: T[],
   season: Period
 ): Promise<{ applied: number; uniqueAccounts: number }> {
@@ -213,11 +214,7 @@ export async function applyArenaFollowers<T extends ScoredRowForArenaFollowers>(
       })
       if (error) throw error
 
-      for (const row of (data ?? []) as {
-        trader_id: string
-        source: string
-        cnt: number
-      }[]) {
+      for (const row of data ?? []) {
         const count = Number(row.cnt)
         if (!Number.isFinite(count) || count < 0) continue
         arenaFollowerMap.set(traderAccountKey(row.trader_id, row.source), count)

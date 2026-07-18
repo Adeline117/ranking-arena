@@ -5,6 +5,7 @@
  */
 
 import { supabase } from '@/lib/supabase/client'
+import type { Database } from '@/lib/supabase/database.types'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { createLogger } from '@/lib/utils/logger'
 
@@ -202,7 +203,7 @@ export async function findTradersAcrossSources(
  * Counts exact (trader_id, source) identities without merging exchanges.
  */
 export async function getTraderArenaFollowersCountBatch(
-  client: SupabaseClient,
+  client: SupabaseClient<Database>,
   accounts: TraderAccountIdentity[]
 ): Promise<Map<string, number>> {
   const result = new Map<string, number>()
@@ -223,7 +224,7 @@ export async function getTraderArenaFollowersCountBatch(
 
     if (error || !data) return result
 
-    for (const row of data as { trader_id: string; source: string; cnt: number }[]) {
+    for (const row of data) {
       const count = Number(row.cnt)
       if (!Number.isFinite(count) || count < 0) continue
       result.set(traderAccountKey({ traderId: row.trader_id, source: row.source }), count)
