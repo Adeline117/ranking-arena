@@ -8,6 +8,7 @@
  *   - bootstrap tolerance: ±30% vs expected_count until 3 passing crawls
  *   - rolling median: ±10% vs median of last 7 PASSING crawls
  *   - failed snapshots excluded from the baseline pool (smoke-SOP lesson)
+ *   - BullMQ retries de-duplicated as one observation cycle
  *   - derived boards: null expected override → bootstrap passes on actual
  */
 
@@ -263,6 +264,183 @@ describe('publishLeaderboardSnapshot — count-check gate', () => {
       rows: makeRows(99),
       rejects: [],
       rawObjectId: null,
+    })
+
+    expect(res.published).toBe(true)
+    expect(res.verdict.baselineUsed).toBe(100)
+  })
+
+  test('retries of one BullMQ cycle cannot ratify a level shift', async () => {
+    const src = makeSource({ expected_count: 100 })
+    await insertSourceRow(src)
+
+    for (const [i, cycleId] of ['pass-a', 'pass-b', 'pass-c'].entries()) {
+      await seedSnapshot({
+        actualCount: 100,
+        passed: true,
+        minutesAgo: 90 - i * 10,
+        cycleId,
+      })
+    }
+    // Three failed attempts from ONE scheduled job. Without cycle
+    // de-duplication these look like three confirmations at 130.
+    for (const minutesAgo of [30, 20, 10]) {
+      await seedSnapshot({
+        actualCount: 130,
+        passed: false,
+        minutesAgo,
+        cycleId: 'retrying-job',
+      })
+    }
+
+    const res = await publishLeaderboardSnapshot({
+      src,
+      timeframe: 7,
+      rows: makeRows(130),
+      rejects: [],
+      rawObjectId: null,
+      observationCycleId: 'retrying-job',
+    })
+
+    expect(res.published).toBe(false)
+    expect(res.verdict.baselineUsed).toBe(100)
+  })
+
+  test('the current observation ratifies a shift only on the third independent cycle', async () => {
+    const src = makeSource({ expected_count: 100 })
+    await insertSourceRow(src)
+
+    for (const [i, cycleId] of ['pass-a', 'pass-b', 'pass-c'].entries()) {
+      await seedSnapshot({
+        actualCount: 100,
+        passed: true,
+        minutesAgo: 120 - i * 10,
+        cycleId,
+      })
+    }
+    await seedSnapshot({
+      actualCount: 130,
+      passed: false,
+      minutesAgo: 20,
+      cycleId: 'shift-a',
+    })
+    await seedSnapshot({
+      actualCount: 130,
+      passed: false,
+      minutesAgo: 10,
+      cycleId: 'shift-b',
+    })
+
+    const res = await publishLeaderboardSnapshot({
+      src,
+      timeframe: 7,
+      rows: makeRows(130),
+      rejects: [],
+      rawObjectId: null,
+      observationCycleId: 'shift-c',
+    })
+
+    expect(res.published).toBe(true)
+    expect(res.verdict.baselineUsed).toBe(130)
+  })
+
+  test('legacy snapshots without cycle identity cannot ratify a level shift', async () => {
+    const src = makeSource({ expected_count: 100 })
+    await insertSourceRow(src)
+
+    for (const [i, cycleId] of ['pass-a', 'pass-b', 'pass-c'].entries()) {
+      await seedSnapshot({
+        actualCount: 100,
+        passed: true,
+        minutesAgo: 90 - i * 10,
+        cycleId,
+      })
+    }
+    // These may be two retries of one pre-deploy job. Without explicit cycle
+    // identity they cannot count as two independent confirmations.
+    await seedSnapshot({ actualCount: 130, passed: false, minutesAgo: 20 })
+    await seedSnapshot({ actualCount: 130, passed: false, minutesAgo: 10 })
+
+    const res = await publishLeaderboardSnapshot({
+      src,
+      timeframe: 7,
+      rows: makeRows(130),
+      rejects: [],
+      rawObjectId: null,
+      observationCycleId: 'post-deploy-current',
+    })
+
+    expect(res.published).toBe(false)
+    expect(res.verdict.baselineUsed).toBe(100)
+  })
+
+  test('an intervening legacy observation breaks consecutive shift proof', async () => {
+    const src = makeSource({ expected_count: 100 })
+    await insertSourceRow(src)
+
+    for (const [i, cycleId] of ['pass-a', 'pass-b', 'pass-c'].entries()) {
+      await seedSnapshot({
+        actualCount: 100,
+        passed: true,
+        minutesAgo: 120 - i * 10,
+        cycleId,
+      })
+    }
+    await seedSnapshot({
+      actualCount: 130,
+      passed: false,
+      minutesAgo: 30,
+      cycleId: 'shift-old',
+    })
+    await seedSnapshot({ actualCount: 50, passed: false, minutesAgo: 20 })
+    await seedSnapshot({
+      actualCount: 130,
+      passed: false,
+      minutesAgo: 10,
+      cycleId: 'shift-new',
+    })
+
+    const res = await publishLeaderboardSnapshot({
+      src,
+      timeframe: 7,
+      rows: makeRows(130),
+      rejects: [],
+      rawObjectId: null,
+      observationCycleId: 'shift-current',
+    })
+
+    expect(res.published).toBe(false)
+    expect(res.verdict.baselineUsed).toBe(100)
+  })
+
+  test('passing retries count once when deciding whether rolling median exists', async () => {
+    const src = makeSource({ expected_count: 100 })
+    await insertSourceRow(src)
+
+    for (const [i, cycleId] of ['prior-a', 'prior-b'].entries()) {
+      await seedSnapshot({
+        actualCount: 20,
+        passed: true,
+        minutesAgo: 50 - i * 10,
+        cycleId,
+      })
+    }
+    for (const minutesAgo of [30, 20, 10]) {
+      await seedSnapshot({
+        actualCount: 20,
+        passed: true,
+        minutesAgo,
+        cycleId: 'one-partially-successful-job',
+      })
+    }
+
+    const res = await publishLeaderboardSnapshot({
+      src,
+      timeframe: 7,
+      rows: makeRows(95),
+      rejects: [],
+      rawObjectId: null,
+      observationCycleId: 'one-partially-successful-job',
     })
 
     expect(res.published).toBe(true)
