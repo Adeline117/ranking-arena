@@ -6,6 +6,7 @@ import {
   createCheckoutSession,
   getStripe,
   assertProPriceReady,
+  assertStripePaymentRuntimeReady,
 } from '@/lib/stripe'
 import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
@@ -107,6 +108,7 @@ export async function POST(request: NextRequest) {
     const typedPlan = plan as 'monthly' | 'yearly' | 'lifetime'
     const priceId = STRIPE_PRICE_IDS[typedPlan]
     try {
+      assertStripePaymentRuntimeReady()
       await assertProPriceReady(typedPlan, priceId)
     } catch (priceError) {
       logger.error('Stripe Pro price readiness check failed', {

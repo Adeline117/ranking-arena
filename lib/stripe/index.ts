@@ -36,6 +36,26 @@ export function getStripe(): Stripe {
   return _stripe
 }
 
+/**
+ * Paid actions must never reach a public test-mode Checkout from Production,
+ * and must not take payment when signed webhook fulfillment is unavailable.
+ */
+export function assertStripePaymentRuntimeReady(): void {
+  const secretKey = requireEnv('STRIPE_SECRET_KEY')
+  const webhookSecret = requireEnv('STRIPE_WEBHOOK_SECRET')
+
+  if (!webhookSecret.startsWith('whsec_')) {
+    throw new Error('STRIPE_WEBHOOK_SECRET is invalid')
+  }
+
+  if (process.env.VERCEL_ENV === 'production') {
+    const publishableKey = requireEnv('NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY')
+    if (!secretKey.startsWith('sk_live_') || !publishableKey.startsWith('pk_live_')) {
+      throw new Error('Stripe live mode is required for Production payment actions')
+    }
+  }
+}
+
 // 保留 stripe 导出以保持兼容性（但现在是 getter）
 export const stripe = {
   get customers() {

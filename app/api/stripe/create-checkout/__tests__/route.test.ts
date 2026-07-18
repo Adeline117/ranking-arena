@@ -99,6 +99,7 @@ jest.mock('@/lib/utils/logger', () => {
 
 const mockGetOrCreateStripeCustomer = jest.fn().mockResolvedValue('cus_test123')
 const mockAssertProPriceReady = jest.fn().mockResolvedValue(undefined)
+const mockAssertStripePaymentRuntimeReady = jest.fn()
 const mockCreateCheckoutSession = jest
   .fn()
   .mockResolvedValue({ url: 'https://checkout.stripe.com/session', id: 'cs_test123' })
@@ -125,6 +126,7 @@ jest.mock('@/lib/stripe', () => ({
   },
   getOrCreateStripeCustomer: (...args: unknown[]) => mockGetOrCreateStripeCustomer(...args),
   assertProPriceReady: (...args: unknown[]) => mockAssertProPriceReady(...args),
+  assertStripePaymentRuntimeReady: () => mockAssertStripePaymentRuntimeReady(),
   createCheckoutSession: (...args: unknown[]) => mockCreateCheckoutSession(...args),
   getStripe: () => mockGetStripe(),
 }))
@@ -223,6 +225,7 @@ describe('POST /api/stripe/create-checkout', () => {
       error: null,
     })
     mockAssertProPriceReady.mockResolvedValue(undefined)
+    mockAssertStripePaymentRuntimeReady.mockReturnValue(undefined)
     mockCreateCheckoutSession.mockResolvedValue({
       url: 'https://checkout.stripe.com/session',
       id: 'cs_test123',
@@ -336,6 +339,24 @@ describe('POST /api/stripe/create-checkout', () => {
     const res = await POST(req)
 
     expect(res.status).toBe(503)
+    expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('fails closed before creating a customer when Production payment runtime is unsafe', async () => {
+    mockAssertStripePaymentRuntimeReady.mockImplementation(() => {
+      throw new Error('Stripe live mode is required for Production payment actions')
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly' }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockAssertProPriceReady).not.toHaveBeenCalled()
     expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
     expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
