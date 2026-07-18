@@ -12,7 +12,9 @@ jobs:
   smoke-test:
     if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    # 45s propagation + five bounded retries + rollback + notification. The
+    # former 3m cap could kill the job before rollback even started.
+    timeout-minutes: 10
     steps:
       - name: Wait for deployment to propagate
         run: sleep 45
@@ -31,8 +33,9 @@ jobs:
           FAILURES=""
 
           for path in "/" "/trader/soul" "/login" "/pricing" "/api/health"; do
-            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" --max-time 15 \
-              --retry 2 --retry-all-errors --retry-delay 1 \
+            STATUS=$(curl -sS -o /dev/null -w "%{http_code}" \
+              --connect-timeout 5 --max-time 15 \
+              --retry 2 --retry-all-errors --retry-delay 1 --retry-max-time 40 \
               "${BASE}${path}?_smoke=$(date +%s)" || true)
             case "$STATUS" in
               2??|3??)
@@ -67,48 +70,31 @@ jobs:
         if: steps.smoke.outputs.fail != '0'
         env:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
         run: |
           ROLLED_BACK="false"
 
-          # Auto-rollback: find the previous production deployment and promote it
-          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
+          # Vercel Instant Rollback selects the previous deployment that
+          # actually served production. Do not infer it from READY list order:
+          # deploy-gate intentionally creates READY --skip-domain candidates
+          # that have never served traffic.
+          if [ -n "$VERCEL_TOKEN" ] && [ -n "$VERCEL_ORG_ID" ] && [ -n "$VERCEL_PROJECT_ID" ]; then
             echo "🔄 Attempting auto-rollback..."
-            # List recent production deployments, skip the current one, promote the previous
-            DEPLOYMENTS=$(curl -s -H "Authorization: Bearer $VERCEL_TOKEN" \
-              "https://api.vercel.com/v6/deployments?projectId=$VERCEL_PROJECT_ID&target=production&limit=5&state=READY")
-
-            # Get the second deployment (previous production) — first is the broken one
-            PREV_ID=$(echo "$DEPLOYMENTS" | jq -r '.deployments[1].uid // empty')
-
-            if [ -n "$PREV_ID" ]; then
-              echo "Promoting previous deployment: $PREV_ID"
-              # v10 projects/promote 是唯一真实存在的 promote 端点——旧的
-              # /v6/deployments/{id}/promote 返回 404（2026-07-02 实测），
-              # 即这段回滚代码在修正前从未可能成功过
-              PROMOTE_BODY=$(mktemp)
-              PROMOTE_HTTP=$(curl -sS -o "$PROMOTE_BODY" -w "%{http_code}" -X POST \
-                -H "Authorization: Bearer $VERCEL_TOKEN" \
-                -H "Content-Type: application/json" \
-                "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$PREV_ID" || true)
-              PROMOTE_RESULT=$(cat "$PROMOTE_BODY")
-              rm -f "$PROMOTE_BODY"
-              echo "Promote result [$PROMOTE_HTTP]: $PROMOTE_RESULT"
-
-              case "$PROMOTE_HTTP" in
-                2??)
-                  ROLLED_BACK="true"
-                  echo "✅ Auto-rollback request accepted"
-                  ;;
-                *)
-                  echo "⚠️ Auto-rollback request failed (HTTP ${PROMOTE_HTTP:-000})"
-                  ;;
-              esac
+            set +e
+            timeout 120s npx vercel@56.2.1 rollback --yes --timeout 90s \
+              --token="$VERCEL_TOKEN" > /tmp/vercel-rollback.log 2>&1
+            ROLLBACK_EXIT=$?
+            set -e
+            if [ "$ROLLBACK_EXIT" -eq 0 ]; then
+              ROLLED_BACK="true"
+              echo "✅ Vercel confirmed rollback to the previous production deployment"
             else
-              echo "⚠️ Could not find previous deployment to rollback to"
+              echo "⚠️ Auto-rollback failed (exit $ROLLBACK_EXIT)"
+              tail -40 /tmp/vercel-rollback.log
             fi
           else
-            echo "⚠️ VERCEL_TOKEN or VERCEL_PROJECT_ID not configured — cannot auto-rollback"
+            echo "⚠️ Vercel project credentials are incomplete — cannot auto-rollback"
           fi
 
           # Send Telegram alert with rollback status
