@@ -111,115 +111,49 @@ export const TraderCard = memo(
     }
 
     return (
-      <Link
-        href={href}
-        prefetch={false}
-        style={{ textDecoration: 'none', display: 'block' }}
-        aria-label={`#${rank} ${displayName}, ROI ${formatROI(trader.roi)}`}
+      <Box
+        className="ranking-row trader-card-contained glass-card glass-card-hover"
+        style={{
+          padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+          borderRadius: tokens.radius.lg,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'stretch',
+          width: '100%',
+          maxWidth: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          gap: tokens.spacing[2],
+          position: 'relative',
+          border: isSelected ? `2px solid ${tokens.colors.accent.primary}` : undefined,
+        }}
       >
-        <Box
-          className="ranking-row trader-card-contained glass-card glass-card-hover"
+        <Link
+          href={href}
+          prefetch={false}
           style={{
-            padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
-            borderRadius: tokens.radius.lg,
+            color: 'inherit',
+            textDecoration: 'none',
             cursor: 'pointer',
             display: 'flex',
             flexDirection: 'column',
+            alignItems: 'stretch',
+            minWidth: 0,
             gap: tokens.spacing[2],
-            position: 'relative',
-            border: isSelected ? `2px solid ${tokens.colors.accent.primary}` : undefined,
           }}
+          aria-label={`#${rank} ${displayName}, ROI ${formatROI(trader.roi)}`}
         >
-          {/* Share + Compare actions */}
+          {/* Top row: Rank + Avatar + Name */}
           <Box
             style={{
-              position: 'absolute',
-              top: 4,
-              right: 4,
               display: 'flex',
               alignItems: 'center',
-              gap: 2,
-              zIndex: tokens.zIndex.dropdown,
+              width: '100%',
+              minWidth: 0,
+              gap: tokens.spacing[3],
             }}
           >
-            {/* Share button */}
-            <Box
-              onClick={handleShare}
-              style={{
-                width: tokens.touchTarget.min,
-                height: tokens.touchTarget.min,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                borderRadius: tokens.radius.md,
-                transition: 'background 0.15s ease',
-              }}
-              aria-label="Share trader"
-            >
-              {shareConfirmed ? (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke={tokens.colors.accent.success}
-                  strokeWidth="2.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              ) : (
-                <svg
-                  width="16"
-                  height="16"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke={tokens.colors.text.tertiary}
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                >
-                  <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
-                  <polyline points="16 6 12 2 8 6" />
-                  <line x1="12" y1="2" x2="12" y2="15" />
-                </svg>
-              )}
-            </Box>
-
-            {/* Compare checkbox */}
-            <Box
-              className="compare-checkbox-cell"
-              onClick={handleCompareToggle}
-              style={{
-                width: tokens.touchTarget.min,
-                height: tokens.touchTarget.min,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                opacity: isSelected ? 1 : 0,
-                transition: 'opacity 0.15s ease',
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={isSelected}
-                disabled={!isSelected && !canAddMore}
-                readOnly
-                aria-label="Select trader for comparison"
-                style={{
-                  cursor: 'pointer',
-                  width: 16,
-                  height: 16,
-                  accentColor: tokens.colors.accent.primary,
-                }}
-              />
-            </Box>
-          </Box>
-
-          {/* Top row: Rank + Avatar + Name */}
-          <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[3] }}>
             {/* Rank */}
             <Box style={{ minWidth: 32 }}>
               <RankDisplay
@@ -324,6 +258,7 @@ export const TraderCard = memo(
                       display: 'flex',
                       flexDirection: 'column',
                       alignItems: 'flex-end',
+                      flexShrink: 0,
                       gap: 4,
                     }}
                   >
@@ -371,7 +306,7 @@ export const TraderCard = memo(
               format="roi"
               size="lg"
               showArrow
-              style={{ marginLeft: 'auto' }}
+              style={{ marginLeft: 'auto', flexShrink: 0 }}
             />
           </Box>
 
@@ -457,8 +392,131 @@ export const TraderCard = memo(
               }
             />
           </Box>
+        </Link>
+
+        {/* Keep actions outside the profile Link: nested interactive controls inside
+            an anchor are invalid HTML and caused taps to navigate instead of acting.
+            A normal-flow row also reserves real space instead of covering the name
+            and Arena Score on narrow cards. */}
+        <Box
+          role="group"
+          aria-label={`${displayName} actions`}
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+            gap: tokens.spacing[2],
+            paddingTop: tokens.spacing[1],
+            borderTop: `1px solid ${tokens.colors.border.primary}`,
+          }}
+        >
+          <button
+            type="button"
+            onClick={handleShare}
+            aria-label={`${t('share')}: ${displayName}`}
+            style={{
+              minWidth: 0,
+              minHeight: tokens.touchTarget.min,
+              border: 'none',
+              borderRadius: tokens.radius.md,
+              background: 'transparent',
+              color: shareConfirmed ? tokens.colors.accent.success : tokens.colors.text.secondary,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: tokens.spacing[2],
+              cursor: 'pointer',
+              font: 'inherit',
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.semibold,
+            }}
+          >
+            {shareConfirmed ? (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <polyline points="20 6 9 17 4 12" />
+              </svg>
+            ) : (
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8" />
+                <polyline points="16 6 12 2 8 6" />
+                <line x1="12" y1="2" x2="12" y2="15" />
+              </svg>
+            )}
+            <span>{t('share')}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleCompareToggle}
+            disabled={!isSelected && !canAddMore}
+            aria-pressed={isSelected}
+            aria-label={`${isSelected ? t('removeFromCompare') : t('addToCompare')}: ${displayName}`}
+            style={{
+              minWidth: 0,
+              minHeight: tokens.touchTarget.min,
+              border: 'none',
+              borderRadius: tokens.radius.md,
+              background: isSelected ? alpha(tokens.colors.accent.primary, 10) : 'transparent',
+              color: isSelected ? tokens.colors.accent.primary : tokens.colors.text.secondary,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: tokens.spacing[2],
+              cursor: !isSelected && !canAddMore ? 'not-allowed' : 'pointer',
+              opacity: !isSelected && !canAddMore ? 0.45 : 1,
+              font: 'inherit',
+              fontSize: tokens.typography.fontSize.sm,
+              fontWeight: tokens.typography.fontWeight.semibold,
+            }}
+          >
+            <span
+              className="compare-checkbox-cell"
+              style={{
+                width: 16,
+                height: 16,
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={isSelected}
+                disabled={!isSelected && !canAddMore}
+                readOnly
+                aria-hidden="true"
+                tabIndex={-1}
+                style={{
+                  pointerEvents: 'none',
+                  width: 16,
+                  height: 16,
+                  accentColor: tokens.colors.accent.primary,
+                }}
+              />
+            </span>
+            <span>{t('compare')}</span>
+          </button>
         </Box>
-      </Link>
+      </Box>
     )
     // areTraderPropsEqual ignores `series`, so compare it explicitly — otherwise the
     // card would skip its re-render when batch history arrives and never upgrade
