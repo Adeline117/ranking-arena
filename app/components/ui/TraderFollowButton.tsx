@@ -145,19 +145,41 @@ export default function TraderFollowButton({
   const executeFollow = useCallback(
     async (action: 'follow' | 'unfollow'): Promise<boolean> => {
       setIsLoading(true)
+      const abortController = new AbortController()
+      let timedOut = false
+
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+      const timeout = new Promise<never>((_, reject) => {
+        timeoutRef.current = setTimeout(() => {
+          timedOut = true
+          abortController.abort()
+          const error = new Error('Trader follow request timed out')
+          error.name = 'AbortError'
+          reject(error)
+        }, 8000)
+      })
+
       try {
         if (!source) throw new Error('Trader source is unavailable')
-        const authHeaders = await getAuthHeadersAsync()
-        const csrfHeaders = getCsrfHeaders()
-        const response = await fetch('/api/follow', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            ...authHeaders,
-            ...csrfHeaders,
-          },
-          body: JSON.stringify({ traderId, source, action }),
-        })
+        const response = await Promise.race([
+          (async () => {
+            const authHeaders = await getAuthHeadersAsync()
+            const csrfHeaders = getCsrfHeaders()
+            return fetch('/api/follow', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                ...authHeaders,
+                ...csrfHeaders,
+              },
+              body: JSON.stringify({ traderId, source, action }),
+              signal: abortController.signal,
+            })
+          })(),
+          timeout,
+        ])
 
         // Clear timeout protection as soon as the server responds.
         if (timeoutRef.current) {
@@ -243,6 +265,11 @@ export default function TraderFollowButton({
           setFollowing(!expectedStateRef.current)
           expectedStateRef.current = null
         }
+        if (timedOut || (error instanceof Error && error.name === 'AbortError')) {
+          void refreshFollowState()
+          showToast(t('timeoutRetry'), 'warning')
+          return false
+        }
         const errorMsg = error instanceof Error ? error.message : t('operationFailed')
         if (errorMsg.includes('table') || errorMsg.includes('503')) {
           setFeatureDisabled(true)
@@ -258,6 +285,11 @@ export default function TraderFollowButton({
         }
         return false
       } finally {
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+        pendingRef.current = false
         setIsLoading(false)
       }
     },
@@ -271,6 +303,7 @@ export default function TraderFollowButton({
       onFollowChange,
       t,
       redirectToLogin,
+      refreshFollowState,
     ]
   )
 
@@ -352,35 +385,11 @@ export default function TraderFollowButton({
     const newState = !following
     expectedStateRef.current = newState
 
-    // 超时保护：8秒后自动解锁，防止永久锁定 (unified with UserFollowButton)
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
-    timeoutRef.current = setTimeout(() => {
-      if (pendingRef.current) {
-        pendingRef.current = false
-        expectedStateRef.current = null
-        // 获取服务器的真实状态而不是简单回滚
-        refreshFollowState()
-        showToast(t('timeoutRetry'), 'warning')
-      }
-    }, 8000)
-
     // 乐观更新 UI
     setFollowing(newState)
 
     executeFollow(newState ? 'follow' : 'unfollow')
-  }, [
-    userId,
-    source,
-    following,
-    isLoading,
-    executeFollow,
-    showToast,
-    refreshFollowState,
-    t,
-    redirectToLogin,
-  ])
+  }, [userId, source, following, isLoading, executeFollow, showToast, t, redirectToLogin])
 
   // 功能未开放时显示禁用状态
   if (featureDisabled) {
