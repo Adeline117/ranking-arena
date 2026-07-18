@@ -10,6 +10,7 @@ import {
   DEX_GOLDEN_RPC_REQUIRED_BLOCKERS,
   dexGoldenRemoteEndpointIdentity,
   dexGoldenRpcEvidenceSha256,
+  type DexGoldenRpcEvidence,
 } from './dex-golden-rpc-evidence'
 import { DEX_SOLANA_STABLE_TRANSACTION_FACTS_CONTRACT } from './dex-golden-transaction-facts'
 import {
@@ -257,6 +258,11 @@ export interface DexSolanaGoldenProtocolCaseV2VerifyInput {
   case_input: unknown
   manifest_input: unknown
   metadata_input: DexSolanaGoldenRpcMetadataInput
+}
+
+export interface DexSolanaGoldenProtocolCaseV2Bundle {
+  golden_rpc_evidence: DexGoldenRpcEvidence
+  golden_protocol_case: DexSolanaGoldenProtocolCaseV2
 }
 
 type SourceDerivation = z.infer<typeof sourceDerivationSchema>
@@ -531,9 +537,9 @@ function sourceCore(
   }
 }
 
-function buildInternal(
+function buildBundleInternal(
   input: DexSolanaGoldenProtocolCaseV2BuildInput
-): DexSolanaGoldenProtocolCaseV2 {
+): DexSolanaGoldenProtocolCaseV2Bundle {
   assertExactBuildInput(input)
   if (!isCanonicalTimestamp(input.generated_at)) {
     throw new TypeError('protocol case v2 generated_at must be a canonical timestamp')
@@ -579,7 +585,7 @@ function buildInternal(
   const artifactIds = [...protocol.reference_artifact_ids].sort(compareText)
   const artifacts = selectedArtifacts(manifest.artifacts, artifactIds)
 
-  return parseDexSolanaGoldenProtocolCaseV2({
+  const goldenProtocolCase = parseDexSolanaGoldenProtocolCaseV2({
     schema_version: DEX_SOLANA_GOLDEN_PROTOCOL_CASE_V2_SCHEMA_VERSION,
     data_contract: DEX_SOLANA_GOLDEN_PROTOCOL_CASE_V2_CONTRACT,
     purpose: 'phase0_solana_manifest_program_hit_same_lifecycle_binding_only',
@@ -651,18 +657,33 @@ function buildInternal(
       score: false,
     },
   })
+  return {
+    golden_rpc_evidence: evidence,
+    golden_protocol_case: goldenProtocolCase,
+  }
+}
+
+/**
+ * Compile the complete metadata-only RPC evidence and its protocol-hit case in
+ * one raw-byte lifecycle. Both returned documents are safe to persist; request,
+ * response, and normalized JSON bodies never escape the compiler.
+ */
+export function buildDexSolanaGoldenProtocolCaseV2Bundle(
+  input: DexSolanaGoldenProtocolCaseV2BuildInput
+): DexSolanaGoldenProtocolCaseV2Bundle {
+  let ownedMetadataInput: unknown
+  try {
+    ownedMetadataInput = ownDataProperty(input, 'metadata_input')
+    return buildBundleInternal(input)
+  } finally {
+    disposeDexSolanaGoldenRpcMetadataInputBytes(ownedMetadataInput)
+  }
 }
 
 export function buildDexSolanaGoldenProtocolCaseV2(
   input: DexSolanaGoldenProtocolCaseV2BuildInput
 ): DexSolanaGoldenProtocolCaseV2 {
-  let ownedMetadataInput: unknown
-  try {
-    ownedMetadataInput = ownDataProperty(input, 'metadata_input')
-    return buildInternal(input)
-  } finally {
-    disposeDexSolanaGoldenRpcMetadataInputBytes(ownedMetadataInput)
-  }
+  return buildDexSolanaGoldenProtocolCaseV2Bundle(input).golden_protocol_case
 }
 
 export function verifyDexSolanaGoldenProtocolCaseV2(

@@ -16,7 +16,11 @@ import {
   type SolanaVerifiedTransactionFinalityRawCapture,
 } from '../../lib/ingest/onchain/solana-transaction-evidence'
 import manifestJson from '../fixtures/dex-solana-protocol-manifest.v1.json'
-import { dexGoldenRemoteEndpointIdentity } from '../lib/dex-golden-rpc-evidence'
+import {
+  dexGoldenRemoteEndpointIdentity,
+  dexGoldenRpcEvidenceSha256,
+  parseDexGoldenRpcEvidence,
+} from '../lib/dex-golden-rpc-evidence'
 import type {
   DexSolanaGoldenRpcMetadataCaptureInput,
   DexSolanaGoldenRpcMetadataInput,
@@ -26,6 +30,7 @@ import {
   DEX_SOLANA_GOLDEN_PROTOCOL_CASE_V2_REQUIRED_BLOCKERS,
   DEX_SOLANA_GOLDEN_PROTOCOL_CASE_V2_SCHEMA_VERSION,
   buildDexSolanaGoldenProtocolCaseV2,
+  buildDexSolanaGoldenProtocolCaseV2Bundle,
   dexSolanaGoldenProtocolCaseV2Sha256,
   dexSolanaProgramHitSourceDerivationV2Sha256,
   parseDexSolanaGoldenProtocolCaseV2,
@@ -565,6 +570,13 @@ function propertyNames(value: unknown, names = new Set<string>()): Set<string> {
   return names
 }
 
+function containsArrayBufferView(value: unknown, seen = new Set<object>()): boolean {
+  if (ArrayBuffer.isView(value)) return true
+  if (typeof value !== 'object' || value === null || seen.has(value)) return false
+  seen.add(value)
+  return Object.values(value).some((child) => containsArrayBufferView(child, seen))
+}
+
 describe('Solana same-lifecycle golden protocol case v2', () => {
   it('builds and recompiles a closed @2 case while every raw byte remains ephemeral', () => {
     const input = buildInput(
@@ -672,6 +684,112 @@ describe('Solana same-lifecycle golden protocol case v2', () => {
       })
     ).toEqual(value)
     expectZeroed(verifyBytes)
+  })
+
+  it('returns one closed metadata-and-case bundle without exposing raw or normalized bodies', () => {
+    const input = buildInput(
+      metadataInput(
+        providerCapture('solana_official_mainnet'),
+        providerCapture('publicnode_solana_mainnet', {
+          providerExtension: { providerVersion: 'different-but-unconsumed' },
+        })
+      )
+    )
+    const bytes = allRawBytes(input.metadata_input)
+    const bundle = buildDexSolanaGoldenProtocolCaseV2Bundle(input)
+    const evidence = bundle.golden_rpc_evidence
+    const protocolCase = bundle.golden_protocol_case
+
+    expect(Object.keys(bundle).sort()).toEqual(['golden_protocol_case', 'golden_rpc_evidence'])
+    expect(containsArrayBufferView(bundle)).toBe(false)
+    expect(parseDexGoldenRpcEvidence(evidence)).toEqual(evidence)
+    expect(parseDexSolanaGoldenProtocolCaseV2(protocolCase)).toEqual(protocolCase)
+    expect(dexGoldenRpcEvidenceSha256(evidence)).toBe(
+      protocolCase.golden_rpc_evidence.canonical_sha256
+    )
+    expect(protocolCase.golden_rpc_evidence).toMatchObject({
+      generated_at: evidence.generated_at,
+      transaction_id: evidence.transaction_id,
+      stable_facts_contract: evidence.stable_transaction_facts_contract,
+      stable_facts_sha256: evidence.stable_transaction_facts_sha256,
+      source_evidence_blockers: evidence.required_blockers,
+    })
+    expect(protocolCase.common_transaction_membership.stable_transaction_facts_sha256).toBe(
+      evidence.stable_transaction_facts_sha256
+    )
+
+    for (const source of protocolCase.source_derivations) {
+      const capture = evidence.captures.find(
+        (candidate) => candidate.endpoint.endpoint_id === source.endpoint.endpoint_id
+      )
+      const transactionExchange = capture?.rpc_exchanges.find(
+        (exchange) => exchange.lane === 'transaction'
+      )
+      if (capture === undefined || transactionExchange === undefined) {
+        throw new Error('bundle source is not closed over its transaction exchange')
+      }
+      expect(source).toMatchObject({
+        golden_rpc_evidence_sha256: protocolCase.golden_rpc_evidence.canonical_sha256,
+        stable_transaction_facts_sha256: evidence.stable_transaction_facts_sha256,
+        transaction_exchange_binding_sha256: transactionExchange.exchange_binding_sha256,
+        transaction_response_sha256: transactionExchange.response.sha256,
+        program_hit_projection_sha256: protocolCase.common_program_hit_projection_sha256,
+      })
+    }
+
+    for (const capture of evidence.captures) {
+      for (const exchange of capture.rpc_exchanges) {
+        for (const commitment of [exchange.request, exchange.response]) {
+          expect(commitment).toMatchObject({
+            persistence_state: 'not_persisted',
+            content_available_for_replay: false,
+            contains_secrets: false,
+          })
+        }
+      }
+      for (const document of Object.values(capture.normalized_documents)) {
+        expect(document).toMatchObject({
+          persistence_state: 'not_persisted',
+          content_available_for_replay: false,
+          contains_secrets: false,
+        })
+      }
+    }
+
+    const names = propertyNames(bundle)
+    for (const forbidden of [
+      'bytes',
+      'body',
+      'text',
+      'raw_body',
+      'normalized_body',
+      'normalized_json_body',
+      'transaction_result',
+      'dataBase58',
+      'accountKeys',
+      'instructions',
+      'rawExchanges',
+      'blob_locator',
+      'url',
+      'headers',
+    ]) {
+      expect(names.has(forbidden)).toBe(false)
+    }
+    expect(JSON.stringify(bundle)).not.toContain('https://')
+    expectZeroed(bytes)
+  })
+
+  it('zeroes every owned byte when same-lifecycle bundle construction fails', () => {
+    const input = buildInput()
+    mutateOneTransactionResult(input.metadata_input, (result) => {
+      result.transaction.message.instructions[0].data = '2'
+    })
+    const bytes = allRawBytes(input.metadata_input)
+
+    expect(() => buildDexSolanaGoldenProtocolCaseV2Bundle(input)).toThrow(
+      'disagree on the complete program-hit projection'
+    )
+    expectZeroed(bytes)
   })
 
   it('pins every versioned binding and complete case hash', () => {
