@@ -21,6 +21,7 @@ DATA_DIR="$TMP_ROOT/data"
 SOCKET_DIR="$TMP_ROOT/socket"
 LOG_FILE="$TMP_ROOT/postgres.log"
 PORT=55489
+MANAGED_DB=private_report_evidence_managed
 mkdir -p "$SOCKET_DIR"
 
 cleanup() {
@@ -38,6 +39,24 @@ trap cleanup EXIT
 
 psql_cmd() {
   "$PG_BIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKET_DIR" -p "$PORT" -d postgres "$@"
+}
+
+psql_template() {
+  "$PG_BIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKET_DIR" -p "$PORT" -d template1 "$@"
+}
+
+psql_managed_root() {
+  "$PG_BIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKET_DIR" -p "$PORT" -d "$MANAGED_DB" "$@"
+}
+
+psql_managed_admin() {
+  "$PG_BIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKET_DIR" -p "$PORT" \
+    -U fixture_admin -d "$MANAGED_DB" "$@"
+}
+
+psql_managed_deploy() {
+  "$PG_BIN/psql" -X -v ON_ERROR_STOP=1 -h "$SOCKET_DIR" -p "$PORT" \
+    -U postgres -d "$MANAGED_DB" "$@"
 }
 
 "$PG_BIN/initdb" \
@@ -323,6 +342,13 @@ $rollback_proof$;
 DELETE FROM public.content_reports;
 DELETE FROM storage.objects WHERE bucket_id = 'reports';
 SQL
+
+# Preserve the exact empty 112300 state for a separate managed-Supabase
+# first-install/replay proof. The main database continues exercising the
+# owner-capable convergence path below.
+psql_template -c \
+  "CREATE DATABASE ${MANAGED_DB} WITH TEMPLATE postgres OWNER postgres" \
+  >/dev/null
 
 psql_cmd -f "$MIGRATION" >/dev/null
 
@@ -1596,6 +1622,395 @@ BEGIN
 END
 $canonical_claimed_orphan_cleanup$;
 RESET request.jwt.claim.role;
+SQL
+
+# Managed Supabase owns storage relations with supabase_storage_admin while the
+# deploy principal is a non-superuser, non-member postgres role with BYPASSRLS
+# and explicit table privileges. Install the 14 production-shaped PUBLIC
+# policies on unrelated buckets before demoting postgres.
+psql_managed_root <<'SQL'
+CREATE ROLE supabase_storage_admin NOLOGIN NOSUPERUSER NOBYPASSRLS;
+CREATE ROLE fixture_admin LOGIN SUPERUSER;
+
+CREATE FUNCTION auth.uid()
+RETURNS uuid
+LANGUAGE sql
+STABLE
+AS $$
+  SELECT NULLIF(
+    pg_catalog.current_setting('request.jwt.claim.sub', true),
+    ''
+  )::uuid
+$$;
+
+CREATE FUNCTION storage.foldername(p_name text)
+RETURNS text[]
+LANGUAGE sql
+IMMUTABLE
+AS $$
+  SELECT pg_catalog.string_to_array(p_name, '/')
+$$;
+
+DROP POLICY "Legacy broad storage access" ON storage.objects;
+
+CREATE POLICY "Public can view avatars"
+  ON storage.objects AS PERMISSIVE FOR SELECT TO PUBLIC
+  USING (
+    bucket_id = 'avatars'
+    AND (SELECT auth.role()) = 'anon'
+  );
+CREATE POLICY "Public can view covers"
+  ON storage.objects AS PERMISSIVE FOR SELECT TO PUBLIC
+  USING (
+    bucket_id = 'covers'
+    AND (SELECT auth.role()) = 'anon'
+  );
+CREATE POLICY "Users can delete own avatar"
+  ON storage.objects AS PERMISSIVE FOR DELETE TO PUBLIC
+  USING (
+    bucket_id = 'avatars'
+    AND auth.role() = 'authenticated'
+    AND (
+      (storage.foldername(name))[1] = auth.uid()::text
+      OR name LIKE auth.uid()::text || '-%'
+    )
+  );
+CREATE POLICY "Users can delete own cover"
+  ON storage.objects AS PERMISSIVE FOR DELETE TO PUBLIC
+  USING (
+    bucket_id = 'covers'
+    AND auth.role() = 'authenticated'
+    AND (
+      (storage.foldername(name))[1] = auth.uid()::text
+      OR name LIKE auth.uid()::text || '-%'
+    )
+  );
+CREATE POLICY "Users can update own avatar"
+  ON storage.objects AS PERMISSIVE FOR UPDATE TO PUBLIC
+  USING (
+    bucket_id = 'avatars'
+    AND auth.role() = 'authenticated'
+    AND (
+      (storage.foldername(name))[1] = auth.uid()::text
+      OR name LIKE auth.uid()::text || '-%'
+    )
+  );
+CREATE POLICY "Users can update own cover"
+  ON storage.objects AS PERMISSIVE FOR UPDATE TO PUBLIC
+  USING (
+    bucket_id = 'covers'
+    AND auth.role() = 'authenticated'
+    AND (
+      (storage.foldername(name))[1] = auth.uid()::text
+      OR name LIKE auth.uid()::text || '-%'
+    )
+  );
+CREATE POLICY "Users can upload own avatar"
+  ON storage.objects AS PERMISSIVE FOR INSERT TO PUBLIC
+  WITH CHECK (
+    bucket_id = 'avatars'
+    AND auth.role() = 'authenticated'
+    AND (
+      (storage.foldername(name))[1] = auth.uid()::text
+      OR name LIKE auth.uid()::text || '-%'
+    )
+  );
+CREATE POLICY "Users can upload own cover"
+  ON storage.objects AS PERMISSIVE FOR INSERT TO PUBLIC
+  WITH CHECK (
+    bucket_id = 'covers'
+    AND auth.role() = 'authenticated'
+    AND (
+      (storage.foldername(name))[1] = auth.uid()::text
+      OR name LIKE auth.uid()::text || '-%'
+    )
+  );
+CREATE POLICY "postgres_upload_bulk"
+  ON storage.objects AS PERMISSIVE FOR INSERT TO PUBLIC
+  WITH CHECK (bucket_id = 'bulk-data');
+CREATE POLICY "posts_delete"
+  ON storage.objects AS PERMISSIVE FOR DELETE TO PUBLIC
+  USING (
+    bucket_id = 'posts'
+    AND auth.role() = 'authenticated'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+CREATE POLICY "posts_insert"
+  ON storage.objects AS PERMISSIVE FOR INSERT TO PUBLIC
+  WITH CHECK (
+    bucket_id = 'posts'
+    AND auth.role() = 'authenticated'
+  );
+CREATE POLICY "posts_select"
+  ON storage.objects AS PERMISSIVE FOR SELECT TO PUBLIC
+  USING (
+    bucket_id = 'posts'
+    AND (SELECT auth.role()) = 'anon'
+  );
+CREATE POLICY "posts_update"
+  ON storage.objects AS PERMISSIVE FOR UPDATE TO PUBLIC
+  USING (
+    bucket_id = 'posts'
+    AND auth.role() = 'authenticated'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  )
+  WITH CHECK (
+    bucket_id = 'posts'
+    AND auth.role() = 'authenticated'
+    AND (storage.foldername(name))[1] = auth.uid()::text
+  );
+CREATE POLICY "public_read_bulk"
+  ON storage.objects AS PERMISSIVE FOR SELECT TO PUBLIC
+  USING (
+    bucket_id = 'bulk-data'
+    AND (SELECT auth.role()) = 'anon'
+  );
+
+ALTER TABLE public.content_reports OWNER TO postgres;
+GRANT SELECT ON public.posts,
+  public.comments,
+  public.conversations,
+  public.user_profiles
+  TO postgres;
+GRANT USAGE ON SCHEMA auth TO postgres;
+GRANT SELECT, REFERENCES ON auth.users TO postgres;
+GRANT USAGE ON SCHEMA storage TO postgres;
+GRANT SELECT, INSERT, UPDATE ON storage.buckets TO postgres;
+GRANT SELECT, INSERT, UPDATE, DELETE ON storage.objects TO postgres;
+
+ALTER TABLE storage.buckets ENABLE ROW LEVEL SECURITY;
+ALTER TABLE storage.buckets OWNER TO supabase_storage_admin;
+ALTER TABLE storage.objects OWNER TO supabase_storage_admin;
+ALTER SCHEMA storage OWNER TO supabase_storage_admin;
+
+CREATE TABLE public.managed_storage_policy_snapshot AS
+SELECT pg_catalog.jsonb_agg(
+  pg_catalog.jsonb_build_array(
+    policy.polname,
+    policy.polpermissive,
+    policy.polcmd,
+    policy.polroles::text,
+    pg_catalog.pg_get_expr(policy.polqual, policy.polrelid, true),
+    pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid, true)
+  )
+  ORDER BY policy.polname
+) AS snapshot
+FROM pg_catalog.pg_policy AS policy
+WHERE policy.polrelid = 'storage.objects'::regclass;
+ALTER TABLE public.managed_storage_policy_snapshot OWNER TO postgres;
+
+ALTER ROLE service_role BYPASSRLS;
+ALTER ROLE postgres LOGIN NOSUPERUSER BYPASSRLS;
+SQL
+
+psql_managed_deploy -f "$MIGRATION" >/dev/null
+
+psql_managed_admin <<'SQL'
+DO $managed_first_install_proof$
+DECLARE
+  v_expected jsonb := (
+    SELECT snapshot FROM public.managed_storage_policy_snapshot
+  );
+  v_actual jsonb := (
+    SELECT pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_array(
+        policy.polname,
+        policy.polpermissive,
+        policy.polcmd,
+        policy.polroles::text,
+        pg_catalog.pg_get_expr(policy.polqual, policy.polrelid, true),
+        pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid, true)
+      )
+      ORDER BY policy.polname
+    )
+    FROM pg_catalog.pg_policy AS policy
+    WHERE policy.polrelid = 'storage.objects'::regclass
+  );
+BEGIN
+  IF v_actual IS DISTINCT FROM v_expected
+     OR (SELECT pg_catalog.count(*) FROM pg_catalog.pg_policy AS policy
+         WHERE policy.polrelid = 'storage.objects'::regclass) <> 14
+     OR EXISTS (
+       SELECT 1
+       FROM pg_catalog.pg_policy AS policy
+       WHERE policy.polrelid = 'storage.objects'::regclass
+         AND policy.polname IN (
+           'Non-service roles cannot access report evidence',
+           'Service role manages report evidence'
+         )
+     )
+     OR (
+       SELECT role_row.rolname
+       FROM pg_catalog.pg_class AS relation
+       JOIN pg_catalog.pg_roles AS role_row
+         ON role_row.oid = relation.relowner
+       WHERE relation.oid = 'storage.objects'::regclass
+     ) <> 'supabase_storage_admin'
+     OR (
+       SELECT role_row.rolname
+       FROM pg_catalog.pg_class AS relation
+       JOIN pg_catalog.pg_roles AS role_row
+         ON role_row.oid = relation.relowner
+       WHERE relation.oid = 'storage.buckets'::regclass
+     ) <> 'supabase_storage_admin'
+     OR NOT (
+       SELECT relation.relrowsecurity
+       FROM pg_catalog.pg_class AS relation
+       WHERE relation.oid = 'storage.objects'::regclass
+     )
+     OR NOT EXISTS (
+       SELECT 1 FROM storage.buckets AS bucket
+       WHERE bucket.id = 'reports'
+         AND bucket.name = 'reports'
+         AND bucket.public IS false
+         AND bucket.file_size_limit = 2097152
+     )
+  THEN
+    RAISE EXCEPTION
+      'managed first install changed storage ownership/policies or missed the bucket';
+  END IF;
+END
+$managed_first_install_proof$;
+
+INSERT INTO storage.objects(bucket_id, name)
+VALUES (
+  'reports',
+  '11111111-1111-4111-8111-111111111111/managed-denial.png'
+);
+
+SET ROLE anon;
+DO $managed_anon_denial$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM storage.objects AS object_row
+    WHERE object_row.bucket_id = 'reports'
+  ) THEN
+    RAISE EXCEPTION 'managed PUBLIC policies exposed reports to anon';
+  END IF;
+END
+$managed_anon_denial$;
+RESET ROLE;
+
+SET ROLE authenticated;
+DO $managed_authenticated_denial$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM storage.objects AS object_row
+    WHERE object_row.bucket_id = 'reports'
+  ) THEN
+    RAISE EXCEPTION 'managed PUBLIC policies exposed reports to authenticated';
+  END IF;
+END
+$managed_authenticated_denial$;
+RESET ROLE;
+
+SET ROLE service_role;
+DO $managed_service_bypass$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM storage.objects AS object_row
+    WHERE object_row.bucket_id = 'reports'
+  ) THEN
+    RAISE EXCEPTION 'managed service_role did not retain Storage bypass';
+  END IF;
+END
+$managed_service_bypass$;
+RESET ROLE;
+
+DELETE FROM storage.objects
+WHERE bucket_id = 'reports'
+  AND name =
+    '11111111-1111-4111-8111-111111111111/managed-denial.png';
+SQL
+
+# Immediate managed replay must leave the complete policy catalog untouched.
+psql_managed_deploy -f "$MIGRATION" >/dev/null
+
+psql_managed_admin <<'SQL'
+DO $managed_replay_proof$
+BEGIN
+  IF (
+    SELECT snapshot FROM public.managed_storage_policy_snapshot
+  ) IS DISTINCT FROM (
+    SELECT pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_array(
+        policy.polname,
+        policy.polpermissive,
+        policy.polcmd,
+        policy.polroles::text,
+        pg_catalog.pg_get_expr(policy.polqual, policy.polrelid, true),
+        pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid, true)
+      )
+      ORDER BY policy.polname
+    )
+    FROM pg_catalog.pg_policy AS policy
+    WHERE policy.polrelid = 'storage.objects'::regclass
+  ) THEN
+    RAISE EXCEPTION 'managed replay rewrote storage.objects policies';
+  END IF;
+END
+$managed_replay_proof$;
+SQL
+
+# A leading safe-looking bucket term is insufficient when a top-level OR can
+# authorize reports. The exact-expression verifier must reject it pre-mutation.
+psql_managed_admin <<'SQL'
+CREATE POLICY "Managed unsafe disjunctive reports read"
+  ON storage.objects AS PERMISSIVE FOR SELECT TO PUBLIC
+  USING (bucket_id = 'avatars' OR bucket_id = 'reports');
+SQL
+if psql_managed_deploy -f "$MIGRATION" \
+  >"$TMP_ROOT/managed-unsafe-select.log" 2>&1; then
+  echo "managed migration accepted a disjunctive reports SELECT policy" >&2
+  exit 1
+fi
+grep -q 'managed storage.objects permissive policy' \
+  "$TMP_ROOT/managed-unsafe-select.log"
+psql_managed_admin -c \
+  'DROP POLICY "Managed unsafe disjunctive reports read" ON storage.objects'
+
+# INSERT authorization is driven by WITH CHECK, not USING. A generic check
+# must be rejected independently of the safe SELECT shapes above.
+psql_managed_admin <<'SQL'
+CREATE POLICY "Managed unsafe generic reports insert"
+  ON storage.objects AS PERMISSIVE FOR INSERT TO PUBLIC
+  WITH CHECK (true);
+SQL
+if psql_managed_deploy -f "$MIGRATION" \
+  >"$TMP_ROOT/managed-unsafe-insert.log" 2>&1; then
+  echo "managed migration accepted a generic reports INSERT policy" >&2
+  exit 1
+fi
+grep -q 'managed storage.objects permissive policy' \
+  "$TMP_ROOT/managed-unsafe-insert.log"
+psql_managed_admin -c \
+  'DROP POLICY "Managed unsafe generic reports insert" ON storage.objects'
+
+psql_managed_admin <<'SQL'
+DO $managed_failure_rollback_proof$
+BEGIN
+  IF (
+    SELECT snapshot FROM public.managed_storage_policy_snapshot
+  ) IS DISTINCT FROM (
+    SELECT pg_catalog.jsonb_agg(
+      pg_catalog.jsonb_build_array(
+        policy.polname,
+        policy.polpermissive,
+        policy.polcmd,
+        policy.polroles::text,
+        pg_catalog.pg_get_expr(policy.polqual, policy.polrelid, true),
+        pg_catalog.pg_get_expr(policy.polwithcheck, policy.polrelid, true)
+      )
+      ORDER BY policy.polname
+    )
+    FROM pg_catalog.pg_policy AS policy
+    WHERE policy.polrelid = 'storage.objects'::regclass
+  ) THEN
+    RAISE EXCEPTION
+      'managed unsafe-policy failures changed the original policy catalog';
+  END IF;
+END
+$managed_failure_rollback_proof$;
 SQL
 
 echo "private report evidence PostgreSQL 17 proof passed"
