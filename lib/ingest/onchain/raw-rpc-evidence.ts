@@ -17,12 +17,19 @@ export type BoundedRpcResponse =
       reason: 'response_too_large' | 'malformed_response' | 'raw_capture_unavailable'
     }
 
-function bytesEvidence(bytes: Uint8Array): RawRpcBodyEvidence {
-  const copy = new Uint8Array(bytes)
+const TYPED_ARRAY_FILL = Uint8Array.prototype.fill
+
+export function disposeRawRpcBytes(bytes: Uint8Array | null | undefined): void {
+  if (bytes !== null && bytes !== undefined) {
+    Reflect.apply(TYPED_ARRAY_FILL, bytes, [0])
+  }
+}
+
+function ownedBytesEvidence(bytes: Uint8Array): RawRpcBodyEvidence {
   return {
-    bytes: copy,
-    sha256: createHash('sha256').update(copy).digest('hex'),
-    byteLength: copy.byteLength,
+    bytes,
+    sha256: createHash('sha256').update(bytes).digest('hex'),
+    byteLength: bytes.byteLength,
   }
 }
 
@@ -32,11 +39,16 @@ export function encodeJsonRpcRequestBody(
   params: unknown[]
 ): { text: string; evidence: RawRpcBodyEvidence } {
   const text = JSON.stringify({ jsonrpc: '2.0', id, method, params })
-  return { text, evidence: bytesEvidence(new TextEncoder().encode(text)) }
+  return { text, evidence: ownedBytesEvidence(new TextEncoder().encode(text)) }
 }
 
 export function rawRpcBodyEvidence(bytes: Uint8Array): RawRpcBodyEvidence {
-  return bytesEvidence(bytes)
+  return ownedBytesEvidence(new Uint8Array(bytes))
+}
+
+/** Transfer one owned response buffer into evidence without leaving a copy. */
+export function takeRawRpcBodyEvidence(bytes: Uint8Array): RawRpcBodyEvidence {
+  return ownedBytesEvidence(bytes)
 }
 
 async function discardResponseBody(response: Response): Promise<void> {
@@ -55,6 +67,7 @@ function decodeUtf8(bytes: Uint8Array): BoundedRpcResponse {
       bytes,
     }
   } catch {
+    disposeRawRpcBytes(bytes)
     return { ok: false, reason: 'malformed_response' }
   }
 }
@@ -72,10 +85,14 @@ function copyByteChunk(value: unknown): Uint8Array | null {
   ) {
     return null
   }
+  let source: Uint8Array | null = null
   try {
-    return new Uint8Array(view.buffer, view.byteOffset, view.byteLength).slice()
+    source = new Uint8Array(view.buffer, view.byteOffset, view.byteLength)
+    return source.slice()
   } catch {
     return null
+  } finally {
+    disposeRawRpcBytes(source)
   }
 }
 
@@ -111,43 +128,55 @@ export async function readBoundedRpcResponse(
   if (response.body && typeof response.body.getReader === 'function') {
     const reader = response.body.getReader()
     const chunks: Uint8Array[] = []
-    let totalBytes = 0
-    while (true) {
-      const chunk = await reader.read()
-      if (chunk.done) break
-      const copiedChunk = copyByteChunk(chunk.value)
-      if (!copiedChunk) {
-        try {
-          await reader.cancel()
-        } catch {
-          // Fixed evidence reason only.
+    try {
+      let totalBytes = 0
+      while (true) {
+        const chunk = await reader.read()
+        if (chunk.done) break
+        const copiedChunk = copyByteChunk(chunk.value)
+        if (!copiedChunk) {
+          try {
+            await reader.cancel()
+          } catch {
+            // Fixed evidence reason only.
+          }
+          return { ok: false, reason: 'malformed_response' }
         }
-        return { ok: false, reason: 'malformed_response' }
-      }
-      totalBytes += copiedChunk.byteLength
-      if (!Number.isSafeInteger(totalBytes) || totalBytes > maxBytes) {
-        try {
-          await reader.cancel()
-        } catch {
-          // Fixed evidence reason only.
+        chunks.push(copiedChunk)
+        totalBytes += copiedChunk.byteLength
+        if (!Number.isSafeInteger(totalBytes) || totalBytes > maxBytes) {
+          try {
+            await reader.cancel()
+          } catch {
+            // Fixed evidence reason only.
+          }
+          return { ok: false, reason: 'response_too_large' }
         }
-        return { ok: false, reason: 'response_too_large' }
       }
-      chunks.push(copiedChunk)
+      const bytes = new Uint8Array(totalBytes)
+      try {
+        let offset = 0
+        for (const chunk of chunks) {
+          bytes.set(chunk, offset)
+          offset += chunk.byteLength
+        }
+        return decodeUtf8(bytes)
+      } catch (error) {
+        disposeRawRpcBytes(bytes)
+        throw error
+      }
+    } finally {
+      for (const chunk of chunks) disposeRawRpcBytes(chunk)
     }
-    const bytes = new Uint8Array(totalBytes)
-    let offset = 0
-    for (const chunk of chunks) {
-      bytes.set(chunk, offset)
-      offset += chunk.byteLength
-    }
-    return decodeUtf8(bytes)
   }
 
   if (requireExactBytes) return { ok: false, reason: 'raw_capture_unavailable' }
 
   const text = await response.text()
-  if (new TextEncoder().encode(text).byteLength > maxBytes) {
+  const encoded = new TextEncoder().encode(text)
+  const byteLength = encoded.byteLength
+  disposeRawRpcBytes(encoded)
+  if (byteLength > maxBytes) {
     return { ok: false, reason: 'response_too_large' }
   }
   return { ok: true, text, bytes: null }

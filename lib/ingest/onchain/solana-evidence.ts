@@ -13,6 +13,7 @@ import {
   DEFAULT_SOLANA_EVIDENCE_TIMEOUT_MS,
   canonicalTimestampMs,
   dependencyUnavailableLane,
+  disposeSolanaRawRpcEvidenceExchanges,
   endpointCopy,
   exactDataRecord,
   exactDenseArray,
@@ -687,18 +688,23 @@ export async function captureSolanaVerifiedChainAnchorEvidence(
   opts: SolanaEvidenceRpcOpts = {}
 ): Promise<SolanaVerifiedChainAnchorRawCapture> {
   const captured = await fetchSolanaChainAnchorEvidenceInternal(opts, true)
-  const verified = requireSolanaVerifiedChainAnchor(captured.evidence)
-  const expectedLanes = [
-    'genesis_hash',
-    'finalized_anchor_slot',
-    'finalized_anchor_produced_slots',
-    'finalized_anchor_block',
-  ] as const
-  if (
-    captured.rawExchanges.length !== expectedLanes.length ||
-    captured.rawExchanges.some((exchange, index) => exchange.lane !== expectedLanes[index])
-  ) {
-    throw new TypeError('Solana anchor raw evidence capture is incomplete')
+  try {
+    const verified = requireSolanaVerifiedChainAnchor(captured.evidence)
+    const expectedLanes = [
+      'genesis_hash',
+      'finalized_anchor_slot',
+      'finalized_anchor_produced_slots',
+      'finalized_anchor_block',
+    ] as const
+    if (
+      captured.rawExchanges.length !== expectedLanes.length ||
+      captured.rawExchanges.some((exchange, index) => exchange.lane !== expectedLanes[index])
+    ) {
+      throw new TypeError('Solana anchor raw evidence capture is incomplete')
+    }
+    return { evidence: captured.evidence, verified, rawExchanges: captured.rawExchanges }
+  } catch (error) {
+    disposeSolanaRawRpcEvidenceExchanges(captured.rawExchanges)
+    throw error
   }
-  return { evidence: captured.evidence, verified, rawExchanges: captured.rawExchanges }
 }
