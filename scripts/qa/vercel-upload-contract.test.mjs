@@ -8,6 +8,8 @@ import test from 'node:test'
 const root = path.resolve(import.meta.dirname, '../..')
 const ignoreRules = fs.readFileSync(path.join(root, '.vercelignore'), 'utf8')
 const deployGate = fs.readFileSync(path.join(root, '.github/workflows/deploy-gate.yml'), 'utf8')
+const nextConfig = fs.readFileSync(path.join(root, 'next.config.ts'), 'utf8')
+const ciWorkflow = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')
 
 function ignoredByVercelRules(relativePath) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-vercel-upload-'))
@@ -129,6 +131,14 @@ test('waits for Vercel READY within the job budget before allowing promotion', (
     workflow,
     /if: steps\.fresh\.outputs\.deploy == 'true' && steps\.wait_candidate\.outcome == 'success'/
   )
+})
+
+test('skips duplicate Next type validation only for a CI-attested candidate', () => {
+  assert.match(nextConfig, /ignoreBuildErrors: process\.env\.ARENA_CI_TYPES_ATTESTED === '1'/)
+  assert.equal(deployGate.match(/--build-env ARENA_CI_TYPES_ATTESTED=1/g)?.length, 1)
+  assert.doesNotMatch(deployGate, /--env ARENA_CI_TYPES_ATTESTED=/)
+  assert.match(deployGate, /"Lint & Type Check"/)
+  assert.match(ciWorkflow, /- run: npx tsc --noEmit/)
 })
 
 test('makes every deploy-gate Telegram failure observable without blocking the gate', () => {
