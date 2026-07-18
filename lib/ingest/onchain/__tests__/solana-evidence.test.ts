@@ -2,9 +2,11 @@ import { createHash } from 'node:crypto'
 
 import {
   SOLANA_MAINNET_GENESIS_HASH,
+  captureSolanaVerifiedChainAnchorEvidence,
   fetchSolanaChainAnchorEvidence,
   requireSolanaVerifiedChainAnchor,
 } from '../solana-evidence'
+import { parseOptsOrThrow, resolveEndpoint, solanaEvidenceRpc } from '../solana-evidence-core'
 
 interface RpcRequest {
   jsonrpc: string
@@ -21,6 +23,7 @@ interface MockReply {
   contentLength?: string
   cancel?: jest.Mock<Promise<void>, []>
   stream?: ReadableStream<Uint8Array>
+  arrayBuffer?: jest.Mock<Promise<ArrayBuffer>, []>
 }
 
 interface RpcCall {
@@ -61,6 +64,34 @@ function successfulResult(request: RpcRequest): unknown {
   return finalizedBlock()
 }
 
+function successfulResponseBody(request: RpcRequest): string {
+  return `${JSON.stringify({
+    jsonrpc: '2.0',
+    id: 1,
+    result: successfulResult(request),
+    providerNote: '链上原始字段',
+  })}\n`
+}
+
+function byteStream(body: string): ReadableStream<Uint8Array> {
+  const bytes = new TextEncoder().encode(body)
+  const split = Math.max(1, bytes.byteLength - 2)
+  const chunks = [bytes.slice(0, split), bytes.slice(split)]
+  return {
+    getReader: () => {
+      let index = 0
+      return {
+        read: jest.fn(async () =>
+          index < chunks.length
+            ? { done: false, value: chunks[index++] }
+            : { done: true, value: undefined }
+        ),
+        cancel: jest.fn(async () => undefined),
+      }
+    },
+  } as never
+}
+
 function mockRpc(
   handler: (request: RpcRequest, url: string, init: RequestInit) => MockReply
 ): RpcCall[] {
@@ -80,6 +111,7 @@ function mockRpc(
       status: reply.status ?? 200,
       headers: { get: () => reply.contentLength ?? null },
       body: reply.stream ?? (reply.cancel ? { cancel: reply.cancel } : undefined),
+      arrayBuffer: reply.arrayBuffer,
       text: async () => reply.body ?? JSON.stringify(payload),
     } as Response
   }) as jest.MockedFunction<typeof fetch>
@@ -197,6 +229,132 @@ describe('fetchSolanaChainAnchorEvidence', () => {
     })
     expect(JSON.stringify(anchor)).not.toContain(TEST_RPC_ORIGIN)
     expect(JSON.stringify(anchor)).not.toContain('private-api-key')
+  })
+
+  it('captures the exact same request and streamed response bytes before UTF-8 decoding', async () => {
+    const calls = mockRpc((request) => ({ stream: byteStream(successfulResponseBody(request)) }))
+    const captured = await captureSolanaVerifiedChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+
+    expect(captured.verified.finalizedSlot).toBe(SLOT)
+    expect(captured.rawExchanges.map(({ lane }) => lane)).toEqual([
+      'genesis_hash',
+      'finalized_anchor_slot',
+      'finalized_anchor_block',
+    ])
+    expect(captured.rawExchanges).toHaveLength(calls.length)
+    const expectedMethods = ['getGenesisHash', 'getSlot', 'getBlock']
+    for (const [index, exchange] of captured.rawExchanges.entries()) {
+      const requestBody = String(calls[index].init.body)
+      const responseBody = successfulResponseBody(calls[index].request)
+      const requestBytes = Buffer.from(exchange.request.bytes)
+      const responseBytes = Buffer.from(exchange.response.bytes)
+      expect(requestBytes.toString('utf8')).toBe(requestBody)
+      expect(responseBytes.toString('utf8')).toBe(responseBody)
+      expect(exchange.request.byteLength).toBe(Buffer.byteLength(requestBody))
+      expect(exchange.response.byteLength).toBe(Buffer.byteLength(responseBody))
+      expect(exchange.request.sha256).toBe(createHash('sha256').update(requestBytes).digest('hex'))
+      expect(exchange.response.sha256).toBe(
+        createHash('sha256').update(responseBytes).digest('hex')
+      )
+      expect(exchange.request.hashBasis).toBe('utf8_json_rpc_request_body_bytes')
+      expect(exchange.response.hashBasis).toBe(
+        'fetch_content_decoded_http_entity_body_bytes_before_utf8'
+      )
+      expect(exchange.method).toBe(expectedMethods[index])
+      expect(exchange.httpStatus).toBe(200)
+      expect(exchange.completedAt).toBe(FIXED_NOW)
+      expect(exchange.trustBoundary).toBe(
+        'json_rpc_result_transport_only_semantic_lane_not_yet_verified'
+      )
+      expect(exchange.endpoint).toEqual({
+        providerId: 'local',
+        endpointId: TEST_ENDPOINT_ID,
+        connectionHash: TEST_CONNECTION_HASH,
+      })
+      expect(exchange).not.toHaveProperty('url')
+    }
+    expect(JSON.stringify(captured.evidence)).not.toContain('providerNote')
+    expect(Buffer.from(captured.rawExchanges[2].response.bytes).toString('utf8')).toContain(
+      '链上原始字段'
+    )
+  })
+
+  it('fails exact capture closed for a text-only response while preserving the normal API', async () => {
+    const arrayBuffers: Array<jest.Mock<Promise<ArrayBuffer>, []>> = []
+    const calls = mockRpc(() => {
+      const arrayBuffer = jest.fn(async () => new ArrayBuffer(0))
+      arrayBuffers.push(arrayBuffer)
+      return { contentLength: '10', arrayBuffer }
+    })
+    await expect(
+      captureSolanaVerifiedChainAnchorEvidence({
+        rpcUrl: TEST_RPC_URL,
+        endpointId: TEST_ENDPOINT_ID,
+      })
+    ).rejects.toThrow('Solana chain anchor is not fully verified')
+    expect(calls).toHaveLength(2)
+    expect(arrayBuffers.every((arrayBuffer) => arrayBuffer.mock.calls.length === 0)).toBe(true)
+
+    const anchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+    expect(requireSolanaVerifiedChainAnchor(anchor).finalizedSlot).toBe(SLOT)
+  })
+
+  it('never returns raw bytes from an RPC error body that echoes an endpoint secret', async () => {
+    const secret = 'private-api-key'
+    mockRpc(() => ({
+      stream: byteStream(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          error: { code: -32_601, message: `method unavailable at ${secret}` },
+        })
+      ),
+    }))
+    let error: unknown
+    try {
+      await captureSolanaVerifiedChainAnchorEvidence({
+        rpcUrl: `https://mainnet.helius-rpc.com/?api-key=${secret}`,
+        endpointId: 'helius_solana_mainnet',
+      })
+    } catch (caught) {
+      error = caught
+    }
+    expect(error).toBeInstanceOf(TypeError)
+    expect(String(error)).toBe('TypeError: Solana chain anchor is not fully verified')
+    expect(String(error)).not.toContain(secret)
+  })
+
+  it.each([
+    ['decoded short secret', 'k%2F', 'k/'],
+    ['encoded short secret', 'k%2F', 'k%2F'],
+  ])('rejects a successful response that echoes a %s', async (_label, encodedKey, echo) => {
+    mockRpc((request) => ({
+      stream: byteStream(
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: successfulResult(request),
+          providerEcho: echo,
+        })
+      ),
+    }))
+    let error: unknown
+    try {
+      await captureSolanaVerifiedChainAnchorEvidence({
+        rpcUrl: `https://mainnet.helius-rpc.com/?api-key=${encodedKey}`,
+        endpointId: 'helius_solana_mainnet',
+      })
+    } catch (caught) {
+      error = caught
+    }
+    expect(String(error)).toBe('TypeError: Solana chain anchor is not fully verified')
+    expect(String(error)).not.toContain(echo)
   })
 
   it('strictly reparses serialized evidence before granting verified status', async () => {
@@ -477,6 +635,32 @@ describe('fetchSolanaChainAnchorEvidence', () => {
         'invalid Solana evidence options'
       )
     }
+    expect(calls).toHaveLength(0)
+  })
+
+  it('rejects mislabeled or exotic raw capture metadata before making a request', async () => {
+    const calls = mockRpc(() => ({}))
+    const endpoint = resolveEndpoint(
+      parseOptsOrThrow({ rpcUrl: TEST_RPC_URL, endpointId: TEST_ENDPOINT_ID })
+    )
+    expect(endpoint).not.toBeNull()
+    await expect(
+      solanaEvidenceRpc(endpoint!, 'getSlot', [], 20_000, {
+        lane: 'genesis_hash',
+      })
+    ).rejects.toThrow('invalid Solana raw RPC evidence capture')
+
+    const proxy = new Proxy(
+      {},
+      {
+        getPrototypeOf() {
+          throw new Error('private-api-key')
+        },
+      }
+    )
+    await expect(
+      solanaEvidenceRpc(endpoint!, 'getSlot', [], 20_000, proxy as never)
+    ).rejects.toThrow('invalid Solana raw RPC evidence capture')
     expect(calls).toHaveLength(0)
   })
 
