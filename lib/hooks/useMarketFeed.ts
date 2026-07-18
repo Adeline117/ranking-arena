@@ -18,6 +18,7 @@ export interface MarketFeedState {
   connectionStatus: Record<ExchangeId, boolean>
   connected: boolean
   error: string | null
+  retry: () => void
 }
 
 export interface UseMarketFeedOptions {
@@ -35,6 +36,7 @@ export interface UseMarketFeedOptions {
 
 const DEFAULT_SYMBOLS = ['BTC-USDT', 'ETH-USDT', 'SOL-USDT']
 const DEFAULT_EXCHANGES: ExchangeId[] = ['binance', 'bybit', 'okx']
+const CONNECTION_TIMEOUT_MS = 15_000
 
 export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedState {
   const {
@@ -45,7 +47,7 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
     initialDelayMs = 2000,
   } = options
 
-  const [state, setState] = useState<MarketFeedState>({
+  const [state, setState] = useState<Omit<MarketFeedState, 'retry'>>({
     trades: [],
     tickers: new Map(),
     connectionStatus: { binance: false, bybit: false, okx: false },
@@ -55,6 +57,7 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
 
   const eventSourceRef = useRef<EventSource | null>(null)
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const connectionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const reconnectAttempts = useRef(0)
   const mountedRef = useRef(true)
 
@@ -74,28 +77,49 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
       eventSourceRef.current.close()
       eventSourceRef.current = null
     }
+    if (connectionTimerRef.current) {
+      clearTimeout(connectionTimerRef.current)
+      connectionTimerRef.current = null
+    }
 
     const params = new URLSearchParams({
       symbols: symbolsKey,
       exchanges: exchangesKey,
     })
 
-    const es = new EventSource(`/api/ws/market?${params}`)
+    let es: EventSource
+    try {
+      es = new EventSource(`/api/ws/market?${params}`)
+    } catch {
+      setState((prev) => ({ ...prev, connected: false, error: 'connection_failed' }))
+      return
+    }
     eventSourceRef.current = es
+    connectionTimerRef.current = setTimeout(() => {
+      if (eventSourceRef.current !== es || !mountedRef.current) return
+      es.close()
+      eventSourceRef.current = null
+      connectionTimerRef.current = null
+      setState((prev) => ({ ...prev, connected: false, error: 'connection_timeout' }))
+    }, CONNECTION_TIMEOUT_MS)
 
     es.onopen = () => {
-      if (!mountedRef.current) return
+      if (!mountedRef.current || eventSourceRef.current !== es) return
+      if (connectionTimerRef.current) {
+        clearTimeout(connectionTimerRef.current)
+        connectionTimerRef.current = null
+      }
       reconnectAttempts.current = 0
-      setState(prev => ({ ...prev, connected: true, error: null }))
+      setState((prev) => ({ ...prev, connected: true, error: null }))
     }
 
     es.onmessage = (event) => {
-      if (!mountedRef.current) return
+      if (!mountedRef.current || eventSourceRef.current !== es) return
       try {
         const msg = JSON.parse(event.data)
 
         if (msg.type === 'snapshot') {
-          setState(prev => ({
+          setState((prev) => ({
             ...prev,
             trades: msg.trades || [],
             connectionStatus: msg.connectionStatus || prev.connectionStatus,
@@ -104,7 +128,7 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
         }
 
         if (msg.type === 'trade') {
-          setState(prev => {
+          setState((prev) => {
             const newTrades = [msg.data, ...prev.trades]
             if (newTrades.length > maxTrades) newTrades.length = maxTrades
             return { ...prev, trades: newTrades }
@@ -113,7 +137,7 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
         }
 
         if (msg.type === 'ticker') {
-          setState(prev => {
+          setState((prev) => {
             const newTickers = new Map(prev.tickers)
             newTickers.set(`${msg.data.pair}:${msg.data.exchange}`, msg.data)
             return { ...prev, tickers: newTickers }
@@ -125,11 +149,18 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
     }
 
     es.onerror = () => {
+      // A close from a manual retry can still dispatch an error event. Never
+      // let that stale socket clear or reschedule the replacement's timers.
+      if (eventSourceRef.current !== es) return
+      if (connectionTimerRef.current) {
+        clearTimeout(connectionTimerRef.current)
+        connectionTimerRef.current = null
+      }
       es.close()
       if (eventSourceRef.current === es) eventSourceRef.current = null
       if (!mountedRef.current) return
 
-      setState(prev => ({ ...prev, connected: false }))
+      setState((prev) => ({ ...prev, connected: false, error: 'connection_failed' }))
 
       // Clear any outstanding reconnect timer before scheduling a new one —
       // es.onerror can fire multiple times per broken connection on some
@@ -153,6 +184,17 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
     }
   }, [enabled, symbolsKey, exchangesKey, maxTrades])
 
+  const retry = useCallback(() => {
+    if (!enabled) return
+    reconnectAttempts.current = 0
+    if (reconnectTimerRef.current) {
+      clearTimeout(reconnectTimerRef.current)
+      reconnectTimerRef.current = null
+    }
+    setState((prev) => ({ ...prev, connected: false, error: null }))
+    connect()
+  }, [connect, enabled])
+
   useEffect(() => {
     mountedRef.current = true
 
@@ -174,8 +216,12 @@ export function useMarketFeed(options: UseMarketFeedOptions = {}): MarketFeedSta
         clearTimeout(reconnectTimerRef.current)
         reconnectTimerRef.current = null
       }
+      if (connectionTimerRef.current) {
+        clearTimeout(connectionTimerRef.current)
+        connectionTimerRef.current = null
+      }
     }
   }, [connect, initialDelayMs])
 
-  return state
+  return { ...state, retry }
 }

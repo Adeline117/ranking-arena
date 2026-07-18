@@ -222,7 +222,7 @@ export default function LiveTradesFeed() {
   // lifetime. This card is below the primary market content, so only connect
   // while it is actually near the viewport; leaving the area releases the SSE
   // subscription via useMarketFeed cleanup.
-  const { trades, connected, error } = useMarketFeed({
+  const { trades, connected, error, retry } = useMarketFeed({
     maxTrades: 150,
     enabled: nearViewport,
   })
@@ -415,6 +415,7 @@ export default function LiveTradesFeed() {
       >
         {error && !connected && filteredTrades.length === 0 ? (
           <div
+            role="alert"
             style={{
               padding: 40,
               textAlign: 'center',
@@ -426,6 +427,24 @@ export default function LiveTradesFeed() {
             <p style={{ fontSize: tokens.typography.fontSize.xs, opacity: 0.7 }}>
               {t('connectionLostMessage')}
             </p>
+            <button
+              type="button"
+              onClick={retry}
+              style={{
+                minHeight: 36,
+                marginTop: tokens.spacing[3],
+                padding: `0 ${tokens.spacing[4]}`,
+                borderRadius: tokens.radius.md,
+                border: tokens.glass.border.light,
+                background: tokens.colors.bg.tertiary,
+                color: tokens.colors.text.secondary,
+                cursor: 'pointer',
+                fontSize: tokens.typography.fontSize.sm,
+                fontWeight: tokens.typography.fontWeight.semibold,
+              }}
+            >
+              {t('retryConnection')}
+            </button>
           </div>
         ) : !connected && trades.length === 0 ? (
           <div
