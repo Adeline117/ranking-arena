@@ -14,6 +14,7 @@ YYYYMMDDHHMMSS_description.sql
 - `description` — Short snake_case description of the change
 
 Examples:
+
 ```
 20260409150432_add_trader_alerts_table.sql
 20260409161205_add_hot_score_index.sql
@@ -58,41 +59,33 @@ CREATE INDEX idx_traders_verified ON traders(verified) WHERE verified = TRUE;
 
 ## Applying Migrations
 
-### Via Supabase CLI (recommended):
-```bash
-supabase db push
-```
+As of 2026-07-17, `db push --dry-run` reports **252 remote-only and 34
+local-only** versions. The production schema passes live contract checks, but
+the historical directory is not a fresh-replay source.
 
-### Via Supabase Dashboard:
-1. Go to SQL Editor
-2. Paste the migration SQL
-3. Execute
+Production changes must be serialized and applied through Supabase MCP
+`apply_migration`, exactly one reviewed file at a time, with the file
+description as the ledger name. Afterwards, prove the exact ledger entry, live
+object definition/privileges, and `npm run qa:schema`.
 
-### Via psql:
-```bash
-psql $DATABASE_URL -f supabase/migrations/NNNNN_description.sql
-```
+Do not run production `supabase db push`, `--include-all`, Dashboard/`psql`
+batch application, or `supabase migration repair --status reverted`. A
+read-only dry run may diagnose drift; it does not authorize an apply.
 
 ## Rules
 
 1. **Always use `scripts/new-migration.sh`** to generate filenames — never write a raw filename
 2. **Never modify an existing migration** that has been applied to staging/production
-3. **Always test locally first** using `supabase db reset`
+3. **Rehearse the changed file** in an isolated PG17/shadow environment where possible
 4. **One concern per migration** — don't mix unrelated changes
-5. **Include rollback comments** for complex changes (as SQL comments)
+5. **Document forward compensation/PITR recovery** for complex changes
 6. **Pre-commit hook** (`.git/hooks/pre-commit`) blocks commits with duplicate
    version prefixes — if you see that error, you likely created a filename by
    hand instead of running the helper script
 
 ## Local Development
 
-```bash
-# Start local Supabase
-supabase start
-
-# Apply all migrations
-supabase db reset
-
-# Create a new migration from diff
-supabase db diff -f my_change_name
-```
+The full historical chain cannot currently build a clean database, so
+`supabase db reset` is not a valid replay gate. Restoring fresh replay requires
+a separately reviewed canonical-baseline maintenance wave, validated from an
+empty PG17/shadow project before adoption.

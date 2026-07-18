@@ -358,31 +358,37 @@ Deploy cron scripts to US-based VPS for geo-unblocked, long-running tasks.
 ## ADR-023: Production migrations require a proven single-file channel
 
 **Date:** 2026-07-16
+**Last verified:** 2026-07-17
 **Status:** Accepted; supersedes the `db push` no-op assumption in ADR-004/012
 
 ### Context
 
-The 2026-07-02 ledger reconciliation was a point-in-time repair. Later renamed
-and remote-only migration versions accumulated again. On 2026-07-16,
-`supabase db push --dry-run` refused to plan because remote history could not be
-matched to the repository; treating the earlier no-op result as permanent is unsafe.
+The 2026-07-02 ledger reconciliation was a point-in-time repair. On 2026-07-17,
+`supabase db push --dry-run` reported 252 remote-only and 34 local-only
+versions. Production schema contracts are healthy, but that proves the current
+runtime shape—not that the historical directory can rebuild a clean database.
 
 ### Decision
 
-- Serialize schema writes and prefer Supabase MCP `apply_migration` with exactly
+- Serialize production schema writes and use Supabase MCP `apply_migration` with exactly
   one file, using the file description as the migration name.
-- Never run `db push` unless `db push --dry-run` succeeds and lists only the
-  intended migration. Never use `--include-all` to work around history drift.
+- Treat `db push --dry-run` as diagnosis only. Do not run production `db push`,
+  `--include-all`, or `migration repair --status reverted` against this drifted
+  history.
 - Verify the exact ledger name, live object definition/privileges, and
   `npm run qa:schema` after applying. Global `qa:migrations` remains advisory
   while historical renamed entries exist.
-- `migration repair --status reverted` changes history only; schema rollback
-  requires a forward compensating migration (or a deliberately chosen PITR).
+- Restore fresh replay in a separate canonical-baseline maintenance wave, with
+  clean PG17/shadow validation before adoption. Do not mix it into feature
+  delivery or an incident response.
+- Roll back schema with a forward compensating migration or a deliberately
+  chosen PITR, not ledger surgery.
 
 ### Consequences
 
 - ✅ A stale ledger assumption cannot silently replay unrelated DDL.
 - ✅ Each production schema change has an exact live-definition and ledger proof.
+- ⚠️ Current production health does not close the fresh-rebuild disaster-recovery gap.
 - ⚠️ If the MCP channel is unavailable, rollout pauses unless an explicitly
   reviewed break-glass procedure preserves both DDL and ledger evidence.
 

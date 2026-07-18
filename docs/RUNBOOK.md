@@ -204,6 +204,10 @@ Source: `lib/utils/arena-score.ts`
 > 2026-07-11:此前只备不演练、且无 restore 脚本/runbook(SLO.md 自承"每季度
 > 演练一次")。备份侧已静默坏过两次(PM-20260702/20260703),恢复侧从未验证。
 > 现有脚本 `scripts/maintenance/restore-from-r2.mjs`。
+>
+> **当前硬缺口（2026-07-17）**：`db push --dry-run` 报告 252 remote-only +
+> 34 local-only。生产 schema 健康，但仓库历史不能 fresh replay；灾备重建禁止
+> 使用裸 `db push` 或 `migration repair --status reverted`。
 
 **备份是什么**:`backup-to-r2.mjs` 每日 dump `-n arena -n public`(PLAIN SQL,
 `--no-owner --no-privileges`)→ gzip → R2 `db-backups/YYYY/MM/arena-backup-<date>-schemas.sql.gz`
@@ -230,11 +234,15 @@ node scripts/maintenance/restore-from-r2.mjs
 **真灾难时(Supabase 项目本身出事)**:
 
 1. 先看 Supabase PITR 是否可用(付费档,恢复 auth+全库,首选,`--nuclear` 见下)。
-2. PITR 也没了 → 建**新** Supabase 项目 → `supabase db push`(先跑迁移,拿到
-   RLS 策略+grants,因为 dump 是 `--no-privileges` 不含它们)→ 再
-   `RESTORE_TARGET_URL=<新项目> restore-from-r2.mjs` 灌 arena+public 数据。
+2. PITR 也没了 → 只能用**已独立验证的 canonical baseline**建立新项目，再以
+   `RESTORE_TARGET_URL=<新项目>` 运行 restore 脚本并核对 RLS/grants。baseline
+   尚未验收时，不得把历史目录临时 `db push` 伪装成可恢复方案；升级事故并受控
+   地从可信 schema snapshot/clone 重建。
 3. auth 用户:无 R2 副本 → 只能靠 PITR;若彻底丢,用户需重新注册(已知缺口,
    见 LAUNCH_AUDIT_2026-07-11 运营 #2,建议 BACKUP_SCHEMAS 加 auth)。
+
+canonical baseline 必须在独立维护波次中捕获，并在空白 PG17/shadow 项目完成
+schema、权限、R2 数据恢复与 `npm run qa:schema` 演练后才能进入本 runbook。
 
 **脚本安全**:`RESTORE_TARGET_URL == DATABASE_URL`(生产)时硬拒绝,除非
 `--force-prod`(几乎永远不该用)。
