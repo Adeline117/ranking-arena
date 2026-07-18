@@ -1,4 +1,0 @@
-FIND {"tag":"en-dark-mob","route":"/rankings/tokens","sev":"P0","kind":"errtext","detail":"500","shot":"/Users/adelinewen/ranking-arena/shots/en-dark-mob___rankings_tokens.png"}
-FIND {"tag":"en-dark-mob","route":"/rankings/weekly","sev":"P0","kind":"errtext","detail":"404","shot":"/Users/adelinewen/ranking-arena/shots/en-dark-mob___rankings_weekly.png"}
-FIND {"tag":"en-dark-mob","route":"/api-docs","sev":"P0","kind":"errtext","detail":"500","shot":"/Users/adelinewen/ranking-arena/shots/en-dark-mob___api_docs.png"}
-DONE total findings 3

@@ -1,4 +1,0 @@
-FIND {"tag":"en-light-desk","route":"/rankings/tokens","sev":"P0","kind":"errtext","detail":"404","shot":"/Users/adelinewen/ranking-arena/shots/en-light-desk___rankings_tokens.png"}
-FIND {"tag":"ja-dark-mob","route":"/rankings/tokens","sev":"P0","kind":"errtext","detail":"404","shot":"/Users/adelinewen/ranking-arena/shots/ja-dark-mob___rankings_tokens.png"}
-FIND {"tag":"ko-light-mob","route":"/rankings/tokens","sev":"P0","kind":"errtext","detail":"404","shot":"/Users/adelinewen/ranking-arena/shots/ko-light-mob___rankings_tokens.png"}
-DONE total findings 3

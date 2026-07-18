@@ -42,6 +42,7 @@ yarn-error.log*
 # env files (can opt-in for committing if needed)
 .env*
 !.env.example
+!**/.env.template
 
 # vercel
 .vercel
@@ -110,7 +111,7 @@ ranking-arena.db
 /*.db
 /data/*.db
 /--version/
-logs/
+/logs/
 scripts/monitoring/reports/
 
 # Compiled fetchers
@@ -158,21 +159,23 @@ convert-img-to-image.sh
 install.sh
 financial_publications_summary.md
 arena-*-test.mjs
-test-*.mjs
+/test-*.mjs
 quiz-*-test.mjs
 
 # E2E test artifacts (screenshots, debug specs)
 e2e/*-screenshots/
 e2e/*debug*
+/shots/
+/shots-auth/
 
 # Claude Code config
-.claude/
-!.claude/skills/
-!.claude/commands/
-!.claude/agents/
-!.claude/hooks/
-!.claude/settings.json
-!.claude/ARENA_SKILL_SYSTEM.md
+/.claude/*
+!/.claude/skills/
+!/.claude/commands/
+!/.claude/agents/
+!/.claude/hooks/
+!/.claude/settings.json
+!/.claude/ARENA_SKILL_SYSTEM.md
 .backup-*
 # trigger.dev (tracked — Phase 1 canary)
 # trigger.config.ts
