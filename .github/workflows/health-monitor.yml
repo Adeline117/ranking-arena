@@ -9,6 +9,10 @@ on:
     - cron: '15,45 * * * *' # Every 30 min, offset from OpenClaw (0,30)
   workflow_dispatch:
 
+permissions:
+  contents: read
+  issues: write
+
 jobs:
   health-check:
     runs-on: ubuntu-latest
@@ -115,6 +119,7 @@ jobs:
           if [ "$LAST" -gt 0 ] && [ $((NOW - LAST)) -lt 7200 ]; then
             echo "Deduped: last alert $((NOW - LAST))s ago (<2h), skipping"
             echo "delivered=false" >> "$GITHUB_OUTPUT"
+            echo "outcome=deduplicated" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -124,9 +129,11 @@ jobs:
           if send_telegram_alert "$MESSAGE"; then
             echo "$NOW" > .hm-alert-marker
             echo "delivered=true" >> "$GITHUB_OUTPUT"
+            echo "outcome=delivered" >> "$GITHUB_OUTPUT"
           else
             rm -f .hm-alert-marker
             echo "delivered=false" >> "$GITHUB_OUTPUT"
+            echo "outcome=failed" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Save alert-dedup marker after confirmed delivery
@@ -135,6 +142,66 @@ jobs:
         with:
           path: .hm-alert-marker
           key: hm-alert-marker-v2-${{ github.run_id }}
+
+      - name: Open independent issue when Telegram delivery fails
+        if: always() && steps.health.outputs.status != 'healthy' && steps.telegram.outputs.outcome != 'delivered' && steps.telegram.outputs.outcome != 'deduplicated'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          HEALTH_STATUS: ${{ steps.health.outputs.status }}
+          HEALTH_MESSAGE_FILE: /tmp/health-monitor-message.txt
+          ISSUE_TITLE: '🛑 Arena pipeline health is unhealthy'
+        run: |
+          if ! ISSUES=$(gh issue list --repo "$GH_REPO" --state open \
+            --search "\"$ISSUE_TITLE\" in:title" --limit 100 \
+            --json number,title 2>/dev/null); then
+            ISSUES='[]'
+            echo "::warning title=Independent health alert degraded::could not list existing issues"
+            echo "### Independent health alert degraded — could not list existing issues" >> "$GITHUB_STEP_SUMMARY"
+          fi
+          NUMBER=$(jq -r --arg title "$ISSUE_TITLE" \
+            '.[] | select(.title == $title) | .number' <<< "$ISSUES" | head -1)
+          if [ -n "$NUMBER" ]; then
+            echo "Independent health issue already open: #$NUMBER"
+            exit 0
+          fi
+
+          HEALTH_MESSAGE=$(cat "$HEALTH_MESSAGE_FILE" 2>/dev/null || echo "health details unavailable")
+          BODY=$(printf 'Pipeline health monitor reported **%s**.\n\n%s\n\nTelegram delivery also failed, so this issue is the independent alert channel.\n\nRun: %s/actions/runs/%s' \
+            "${HEALTH_STATUS:-down}" "$HEALTH_MESSAGE" \
+            "https://github.com/$GH_REPO" "$GITHUB_RUN_ID")
+          if ! gh issue create --repo "$GH_REPO" --title "$ISSUE_TITLE" --body "$BODY" >/dev/null; then
+            echo "::warning title=Independent health alert failed::could not create GitHub issue"
+            echo "### Independent health alert failed — could not create GitHub issue" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Independent health issue created"
+          fi
+
+      - name: Close independent issue after health recovery
+        if: always() && steps.health.outputs.status == 'healthy'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          ISSUE_TITLE: '🛑 Arena pipeline health is unhealthy'
+        run: |
+          if ! ISSUES=$(gh issue list --repo "$GH_REPO" --state open \
+            --search "\"$ISSUE_TITLE\" in:title" --limit 100 \
+            --json number,title 2>/dev/null); then
+            echo "::warning title=Health recovery issue cleanup failed::could not list open issues"
+            echo "### Health recovery issue cleanup failed — could not list open issues" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          NUMBER=$(jq -r --arg title "$ISSUE_TITLE" \
+            '.[] | select(.title == $title) | .number' <<< "$ISSUES" | head -1)
+          if [ -z "$NUMBER" ]; then exit 0; fi
+          if ! gh issue comment "$NUMBER" --repo "$GH_REPO" \
+            --body "✅ Pipeline health recovered. Closing automatically." >/dev/null \
+            || ! gh issue close "$NUMBER" --repo "$GH_REPO" >/dev/null; then
+            echo "::warning title=Health recovery issue cleanup failed::issue #$NUMBER remains open"
+            echo "### Health recovery issue cleanup failed — issue #$NUMBER remains open" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "Closed recovered health issue #$NUMBER"
+          fi
 
       - name: Fail unhealthy health-monitor run
         if: always() && steps.health.outputs.status != 'healthy'
