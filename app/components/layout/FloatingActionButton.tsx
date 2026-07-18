@@ -44,7 +44,8 @@ export default function FloatingActionButton() {
       className="fab-container"
       style={{
         position: 'fixed',
-        bottom: 'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + 20px)',
+        bottom:
+          'calc(var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) + var(--transient-bottom-offset, 0px) + 20px)',
         right: 20,
         zIndex: tokens.zIndex.sticky + 1,
       }}

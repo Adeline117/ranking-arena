@@ -125,6 +125,11 @@ html.theme-transition #main-content {
   --background: #000000;
   --foreground: #ffffff;
   --mobile-nav-height: 60px;
+  --cookie-consent-height: 0px;
+  --transient-bottom-offset: 0px;
+  /* Compatibility alias for existing floating widgets. New consumers should
+     use --transient-bottom-offset directly. */
+  --transient-bottom-bar: var(--transient-bottom-offset);
 
   /* Brand colors - Arena Purple (slightly more saturated) */
   --color-brand: #9373b5;
@@ -160,6 +165,182 @@ html.theme-transition #main-content {
   /* Transition tokens */
   --transition-fast: 0.15s;
   --transition-base: 0.25s;
+}
+
+/* ============================================
+   Cookie consent — responsive bottom flow
+   ============================================ */
+
+.cookie-consent-spacer {
+  height: var(--cookie-consent-height, 0px);
+  flex: 0 0 auto;
+}
+
+.cookie-consent {
+  position: fixed;
+  left: 0;
+  right: 0;
+  padding: 12px max(16px, env(safe-area-inset-left)) 12px max(16px, env(safe-area-inset-right));
+  background: var(--color-bg-primary);
+  color: var(--color-text-primary);
+  border-top: 1px solid var(--color-brand-light);
+  box-shadow: 0 -12px 36px var(--color-overlay-dark);
+  animation: fadeIn 180ms ease-out;
+}
+
+.cookie-consent-inner {
+  width: 100%;
+  max-width: 1040px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 20px;
+}
+
+.cookie-consent-copy {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.cookie-consent-icon {
+  width: 40px;
+  height: 40px;
+  flex: 0 0 40px;
+  display: grid;
+  place-items: center;
+  border-radius: var(--radius-md, 10px);
+  border: 1px solid var(--color-accent-primary-30);
+  background: var(--color-accent-primary-12);
+  color: var(--color-brand);
+}
+
+.cookie-consent-title {
+  margin: 0 0 2px;
+  color: var(--color-text-primary);
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.cookie-consent-description {
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.cookie-consent-privacy-link {
+  color: var(--color-brand);
+  font-weight: 700;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+}
+
+.cookie-consent-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cookie-consent-action {
+  min-width: 120px;
+  min-height: 44px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    border-color 160ms ease,
+    color 160ms ease,
+    transform 160ms ease;
+}
+
+.cookie-consent-action-secondary {
+  border: 1px solid var(--color-border-secondary);
+  background: var(--color-bg-tertiary);
+  color: var(--color-text-primary);
+}
+
+.cookie-consent-action-primary {
+  border: 1px solid transparent;
+  /* The standard gradient's light stop is only 4.25:1 against white. This
+     deeper brand surface keeps 14px button copy above WCAG AA in both themes. */
+  background: var(--color-brand-deep);
+  color: #fff;
+  box-shadow: 0 4px 16px var(--color-accent-primary-30);
+}
+
+.cookie-consent-action:hover {
+  transform: translateY(-1px);
+}
+
+.cookie-consent-action:focus-visible,
+.cookie-consent-privacy-link:focus-visible {
+  outline: 2px solid var(--color-brand);
+  outline-offset: 3px;
+}
+
+html.has-cookie-consent {
+  scroll-padding-bottom: calc(
+    var(--mobile-nav-height, 60px) + env(safe-area-inset-bottom, 0px) +
+      var(--transient-bottom-offset, 0px) + 16px
+  );
+}
+
+@media (max-width: 767px) {
+  .cookie-consent {
+    max-height: calc(
+      100dvh - var(--mobile-nav-height, 60px) - env(safe-area-inset-bottom, 0px) - 72px
+    );
+    padding: 16px;
+    overflow-y: auto;
+    border: 1px solid var(--color-brand-light);
+    border-bottom: 0;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .cookie-consent-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .cookie-consent-copy {
+    align-items: flex-start;
+  }
+
+  .cookie-consent-icon {
+    width: 36px;
+    height: 36px;
+    flex-basis: 36px;
+  }
+
+  .cookie-consent-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr);
+  }
+
+  .cookie-consent-action {
+    width: 100%;
+    min-width: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cookie-consent,
+  .cookie-consent-action {
+    animation: none;
+    transition: none;
+  }
 }
 
 /* Dark theme (default) */
