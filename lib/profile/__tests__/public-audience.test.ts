@@ -2,6 +2,7 @@ import {
   isPublicProfileActive,
   PublicProfileAudienceReadError,
   readPublicProfileAudienceByHandle,
+  readPublicProfileAudienceById,
   type PublicProfileAudienceRow,
 } from '../public-audience'
 
@@ -25,6 +26,14 @@ function clientResult(data: unknown, error: unknown = null) {
   const select = jest.fn().mockReturnValue({ ilike })
   const from = jest.fn().mockReturnValue({ select })
   return { client: { from }, from, select, ilike, limit }
+}
+
+function clientIdResult(data: unknown, error: unknown = null) {
+  const limit = jest.fn().mockResolvedValue({ data, error })
+  const eq = jest.fn().mockReturnValue({ limit })
+  const select = jest.fn().mockReturnValue({ eq })
+  const from = jest.fn().mockReturnValue({ select })
+  return { client: { from }, from, select, eq, limit }
 }
 
 describe('public profile audience', () => {
@@ -94,6 +103,31 @@ describe('public profile audience', () => {
 
     await expect(
       readPublicProfileAudienceByHandle(result.client as never, 'ali,ce', NOW)
+    ).resolves.toEqual({ status: 'missing', profile: null })
+    expect(result.from).not.toHaveBeenCalled()
+  })
+
+  it('binds immutable profile-id reads to the same current-state predicate', async () => {
+    const active = clientIdResult([profile()])
+
+    await expect(
+      readPublicProfileAudienceById(active.client as never, profile().id, NOW)
+    ).resolves.toEqual({ status: 'active', profile: profile() })
+    expect(active.eq).toHaveBeenCalledWith('id', profile().id)
+    expect(active.limit).toHaveBeenCalledWith(2)
+
+    const bannedProfile = profile({ is_banned: true, ban_expires_at: null })
+    const banned = clientIdResult([bannedProfile])
+    await expect(
+      readPublicProfileAudienceById(banned.client as never, bannedProfile.id, NOW)
+    ).resolves.toEqual({ status: 'inactive', profile: bannedProfile })
+  })
+
+  it('rejects malformed profile ids before touching the service client', async () => {
+    const result = clientIdResult([profile()])
+
+    await expect(
+      readPublicProfileAudienceById(result.client as never, 'not-a-profile-id', NOW)
     ).resolves.toEqual({ status: 'missing', profile: null })
     expect(result.from).not.toHaveBeenCalled()
   })

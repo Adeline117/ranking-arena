@@ -26,6 +26,8 @@ export class PublicProfileAudienceReadError extends Error {
   }
 }
 
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+
 function isNullableTimestamp(value: unknown): value is string | null {
   return value === null || (typeof value === 'string' && Number.isFinite(Date.parse(value)))
 }
@@ -49,6 +51,21 @@ function parseAudienceRow(value: unknown): PublicProfileAudienceRow {
   }
 
   return row as PublicProfileAudienceRow
+}
+
+function resolveAudienceRows(data: unknown, now: number): PublicProfileAudience {
+  if (!Array.isArray(data)) {
+    throw new PublicProfileAudienceReadError('Invalid public profile audience result')
+  }
+  if (data.length === 0) return { status: 'missing', profile: null }
+  if (data.length !== 1) {
+    throw new PublicProfileAudienceReadError('Ambiguous public profile identity')
+  }
+
+  const profile = parseAudienceRow(data[0])
+  return isPublicProfileActive(profile, now)
+    ? { status: 'active', profile }
+    : { status: 'inactive', profile }
 }
 
 /**
@@ -99,16 +116,40 @@ export async function readPublicProfileAudienceByHandle(
       cause: result.error,
     })
   }
-  if (!Array.isArray(result.data)) {
-    throw new PublicProfileAudienceReadError('Invalid public profile audience result')
-  }
-  if (result.data.length === 0) return { status: 'missing', profile: null }
-  if (result.data.length !== 1) {
-    throw new PublicProfileAudienceReadError('Ambiguous public profile handle')
+  return resolveAudienceRows(result.data, now)
+}
+
+/**
+ * Resolve current public-account state by immutable profile id. This is the
+ * resource-binding counterpart to the handle lookup: a service-role route can
+ * authorize a handle, read child candidates, and then re-check the exact owner
+ * id before releasing those candidates.
+ */
+export async function readPublicProfileAudienceById(
+  supabase: SupabaseClient<Database>,
+  profileId: string,
+  now = Date.now()
+): Promise<PublicProfileAudience> {
+  if (!UUID_PATTERN.test(profileId)) return { status: 'missing', profile: null }
+
+  let result: { data: unknown; error: unknown }
+  try {
+    result = await supabase
+      .from('user_profiles')
+      .select(PUBLIC_PROFILE_AUDIENCE_SELECT)
+      .eq('id', profileId)
+      .limit(2)
+  } catch (error) {
+    throw new PublicProfileAudienceReadError('Public profile audience read failed', {
+      cause: error,
+    })
   }
 
-  const profile = parseAudienceRow(result.data[0])
-  return isPublicProfileActive(profile, now)
-    ? { status: 'active', profile }
-    : { status: 'inactive', profile }
+  if (result.error) {
+    throw new PublicProfileAudienceReadError('Public profile audience read failed', {
+      cause: result.error,
+    })
+  }
+
+  return resolveAudienceRows(result.data, now)
 }
