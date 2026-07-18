@@ -170,6 +170,13 @@ require_environment() {
   fi
 }
 
+# libpq accepts a connection URI through PGDATABASE. Keep the credential in
+# the inherited environment instead of placing DATABASE_URL in psql's argv,
+# where same-host process inspection and CI diagnostics can expose it.
+psql_with_database() {
+  PGDATABASE="$DATABASE_URL" psql "$@"
+}
+
 require_session_connection() {
   local authority="${DATABASE_URL#*://}"
   local host_port="${authority%%/*}"
@@ -429,7 +436,7 @@ ledger_state() {
   name="$(migration_name "$migration")"
   hash="$(shasum -a 256 "$MIGRATIONS_DIR/$migration" | awk '{print $1}')"
 
-  psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1 -Atc \
+  psql_with_database -X -q -v ON_ERROR_STOP=1 -Atc \
     "SELECT CASE
        WHEN ledger.version IS NULL THEN 'missing'
        WHEN ledger.name = '$name'
@@ -564,11 +571,11 @@ status() {
       'FROM target' \
       'LEFT JOIN supabase_migrations.schema_migrations AS ledger USING (version)' \
       'ORDER BY target.ordinal;'
-  } | psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1 -At
+  } | psql_with_database -X -q -v ON_ERROR_STOP=1 -At
 }
 
 run_sql_stream() {
-  psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1
+  psql_with_database -X -q -v ON_ERROR_STOP=1
 }
 
 main() {
