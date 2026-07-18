@@ -52,6 +52,7 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
           compareSomeUnavailable:
             'Some requested traders are unavailable and were removed from this comparison.',
           compareTraders: 'Compare traders',
+          errorOccurred: 'Something went wrong, please try again',
           loadFollowingFailed: 'Failed to load following',
           loading: 'Loading',
           retry: 'Retry',
@@ -234,6 +235,62 @@ describe('ComparePageClient discovery failures', () => {
       expect(mockReplace).toHaveBeenCalledWith('/compare?ids=alice&platforms=binance', {
         scroll: false,
       })
+    )
+  })
+
+  it('shows the compare API failure and retries the same source-qualified accounts', async () => {
+    mockSearchParams.set('ids', 'shared,shared')
+    mockSearchParams.set('platforms', 'bybit,binance_futures')
+    let compareAttempts = 0
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/subscription') {
+        return okJson({ subscription: { tier: 'pro' } })
+      }
+      if (url.startsWith('/api/following')) {
+        return okJson({ items: [] })
+      }
+      if (url.startsWith('/api/compare')) {
+        compareAttempts += 1
+        if (compareAttempts === 1) {
+          return {
+            ok: false,
+            status: 503,
+            json: async () => ({ error: 'Comparison service is temporarily unavailable' }),
+          }
+        }
+        return okJson({
+          data: {
+            traders: [
+              { id: 'shared', source: 'bybit', handle: 'Bybit trader', roi: 12 },
+              {
+                id: 'shared',
+                source: 'binance_futures',
+                handle: 'Binance trader',
+                roi: 8,
+              },
+            ],
+            missingAccounts: [],
+          },
+        })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    }) as unknown as typeof fetch
+
+    render(<ComparePageClient />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Comparison service is temporarily unavailable'
+    )
+    expect(compareAttempts).toBe(1)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    await waitFor(() => expect(compareAttempts).toBe(2))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      '/api/compare?ids=shared%2Cshared&platforms=bybit%2Cbinance_futures&include_equity=1',
+      { headers: { Authorization: 'Bearer access-token' } }
     )
   })
 })

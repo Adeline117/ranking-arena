@@ -197,4 +197,34 @@ describe('ComparePageClient login recovery', () => {
       )
     ).toBe(false)
   })
+
+  it('preserves the exact comparison when an authenticated API session expires', async () => {
+    mockAuth = { accessToken: 'expired-token', authChecked: true, userId: 'viewer-1' }
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/subscription') {
+        return okJson({ subscription: { tier: 'pro' } })
+      }
+      if (url.startsWith('/api/following')) {
+        return okJson({ items: [] })
+      }
+      if (url.startsWith('/api/compare')) {
+        return {
+          ok: false,
+          status: 401,
+          json: async () => ({ error: 'Session expired' }),
+        }
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    }) as unknown as typeof fetch
+
+    render(<ComparePageClient />)
+
+    await waitFor(() => expect(mockPush).toHaveBeenCalledTimes(1))
+    const loginUrl = new URL(mockPush.mock.calls[0][0], 'https://arena.invalid')
+    expect(loginUrl.searchParams.get('returnUrl')).toBe(
+      `${comparePath}&resumeAction=compare-traders`
+    )
+    expect(window.sessionStorage).toHaveLength(1)
+  })
 })
