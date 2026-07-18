@@ -45,6 +45,11 @@ import {
   currentScoredSources,
   type LeaderboardCountCacheRow,
 } from '@/lib/data/leaderboard-count-cache'
+import {
+  sourceFreshnessStatusMap,
+  summarizeSourceFreshness,
+  type SourceFreshnessRow,
+} from '@/lib/rankings/source-freshness'
 
 const logger = createLogger('rankings-api')
 
@@ -147,7 +152,7 @@ export const GET = withPublic(
       !cursor &&
       offset === 0
     const cacheKey = isDefaultQuery
-      ? `api:rankings:v2:${normalizedWindow}:${category || 'all'}:${limit}`
+      ? `api:rankings:v3:${normalizedWindow}:${category || 'all'}:${limit}`
       : null // skip cache for filtered queries
 
     let result: unknown
@@ -164,10 +169,16 @@ export const GET = withPublic(
           traders: unknown[]
           totalcount: number
           total_count: number
-          as_of: string
+          as_of: string | null
           is_stale: boolean
           availableSources: string[]
-        }>(precomputedKey, 'hot')
+          source_freshness?: Array<{
+            source: string
+            updated_at: string | null
+            is_stale: boolean
+            age_seconds: number | null
+          }>
+        }>(`${precomputedKey}:v2`, 'hot')
 
         if (
           precomputed &&
@@ -432,36 +443,34 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     return true
   })
 
-  // Fetch available sources + freshness check in PARALLEL (was serial, ~100-200ms saved)
+  // Fetch available sources + true source-data watermarks in parallel. Never
+  // substitute pipeline_logs or leaderboard_ranks.computed_at: both describe
+  // Arena compute activity, not the age of exchange/protocol data.
   const seasonIdUpper = seasonId
-  const [availableSources, lastRun] = await Promise.all([
+  const [availableSources, freshnessResult] = await Promise.all([
     getAvailableSources(supabase, seasonIdUpper),
     supabase
-      .from('pipeline_logs')
-      .select('ended_at')
-      .like('job_name', 'compute-leaderboard%')
-      .eq('status', 'success')
-      .order('ended_at', { ascending: false })
-      .limit(1)
-      .maybeSingle()
-      .then((r) => r.data),
+      .from('leaderboard_source_freshness')
+      .select('source,source_as_of')
+      .eq('season_id', seasonIdUpper),
   ])
 
-  // Freshness check: use most recent pipeline run, not displayed rows' computed_at.
-  let latestCapturedAt: number
-  if (lastRun?.ended_at) {
-    latestCapturedAt = new Date(lastRun.ended_at).getTime()
-  } else if (paginatedRows.length > 0) {
-    latestCapturedAt = Math.max(
-      ...paginatedRows
-        .map((r: Record<string, unknown>) => new Date(r.computed_at as string).getTime())
-        .filter((t) => t > 0)
-    )
-  } else {
-    latestCapturedAt = Date.now()
-  }
-  const stalenessMs = Date.now() - latestCapturedAt
-  const isStale = stalenessMs > 3600 * 1000
+  const observedSources = [
+    ...new Set(paginatedRows.map((row) => String(row.source || '')).filter(Boolean)),
+  ]
+  const liveSources = availableSources.length > 0 ? availableSources : observedSources
+  const relevantSources = platformFilter
+    ? [platformFilter]
+    : platformsInCategory
+      ? liveSources.filter((source) => platformsInCategory.includes(source))
+      : liveSources
+  // A failed/missing table read yields no watermarks and therefore a
+  // fail-closed stale summary for every relevant source.
+  const freshnessSummary = summarizeSourceFreshness(
+    (freshnessResult.data || []) as SourceFreshnessRow[],
+    relevantSources
+  )
+  const freshnessBySource = sourceFreshnessStatusMap(freshnessSummary)
 
   // Transform to response format
   const PLACEHOLDER_NAMES = new Set([
@@ -510,6 +519,7 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     const roi = row.roi != null ? Number(row.roi) : null
     const pnl = row.pnl != null ? Number(row.pnl) : null
     const arenaScore = row.arena_score != null ? Number(row.arena_score) : null
+    const sourceFreshness = freshnessBySource.get(String(row.source))
 
     return {
       platform: displayPlatform as Platform,
@@ -535,7 +545,11 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
       // lib/hooks/ — only lib/connectors/* uses that shape internally).
       // Saved ~30-40% response payload size.
       quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
-      updated_at: (row.computed_at as string) || null,
+      // Compatibility name retained, but the value is now the source-data
+      // watermark rather than Arena's score computation timestamp.
+      updated_at: sourceFreshness?.updated_at ?? null,
+      is_stale: sourceFreshness?.is_stale ?? true,
+      computed_at: (row.computed_at as string) || null,
       profitability_score: row.profitability_score != null ? Number(row.profitability_score) : null,
       risk_control_score: row.risk_control_score != null ? Number(row.risk_control_score) : null,
       execution_score: row.execution_score != null ? Number(row.execution_score) : null,
@@ -560,8 +574,9 @@ async function getRankingsFallback(rankingsQuery: RankingsQuery, _cursor?: strin
     totalCount: totalCount || 0,
     totalcount: totalCount || 0,
     total_count: totalCount || 0,
-    as_of: new Date(latestCapturedAt).toISOString(),
-    is_stale: isStale,
+    as_of: freshnessSummary.asOf,
+    is_stale: freshnessSummary.isStale,
+    source_freshness: freshnessSummary.sources,
     availableSources,
     next_cursor: null,
   }
