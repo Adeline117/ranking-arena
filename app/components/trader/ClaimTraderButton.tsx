@@ -10,6 +10,10 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { logger } from '@/lib/logger'
 import { isDexWalletPlatform } from '@/lib/constants/wallet-platforms'
 import { walletIdentitiesMatch } from '@/lib/validators/wallet-identity'
+import {
+  buildTraderClaimLoginHref,
+  buildTraderClaimReturnPath,
+} from '@/lib/auth/trader-claim-login'
 
 interface ClaimTraderButtonProps {
   traderId: string
@@ -51,6 +55,8 @@ export default function ClaimTraderButton({
   const [claimStatus, setClaimStatus] = useState<string | null>(null)
   const [hasVerifiedAccounts, setHasVerifiedAccounts] = useState(false)
   const [thisTraderLinked, setThisTraderLinked] = useState(false)
+  const claimIdentity = { traderId, source, handle }
+  const claimReturnPath = buildTraderClaimReturnPath(claimIdentity)
 
   useEffect(() => {
     let alive = true
@@ -132,11 +138,18 @@ export default function ClaimTraderButton({
   }, [userId, source, traderId])
 
   const handleClaim = async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+    if (!session) {
+      showToast(t('pleaseLoginFirst'), 'warning')
+      router.push(buildTraderClaimLoginHref(claimIdentity))
+      return
+    }
+
     // For DEX platforms, redirect to the claim page with wallet flow
     if (isDexPlatform(source)) {
-      router.push(
-        `/claim?trader=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}&handle=${encodeURIComponent(handle)}`
-      )
+      router.push(claimReturnPath)
       return
     }
 
@@ -148,19 +161,8 @@ export default function ClaimTraderButton({
     const confirmed = await showConfirm(confirmTitle, confirmDesc)
     if (!confirmed) return
 
-    // Check session
-    const {
-      data: { session },
-    } = await supabase.auth.getSession()
-    if (!session) {
-      showToast(t('pleaseLoginFirst'), 'warning')
-      return
-    }
-
     // For CEX platforms, redirect to claim page with API key flow
-    router.push(
-      `/claim?trader=${encodeURIComponent(traderId)}&source=${encodeURIComponent(source)}&handle=${encodeURIComponent(handle)}&step=verify`
-    )
+    router.push(claimReturnPath)
   }
 
   if (thisTraderLinked || claimStatus === 'verified') {

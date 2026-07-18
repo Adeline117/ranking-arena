@@ -12,7 +12,6 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { useLoginModal } from '@/lib/hooks/useLoginModal'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
@@ -29,6 +28,7 @@ import { CexVerifyForm } from './components/CexVerifyForm'
 import { DexVerifyForm } from './components/DexVerifyForm'
 import { LinkedAccountsSidebar } from './components/LinkedAccountsSidebar'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
 
 // ============================================
 // Main Page Component
@@ -100,7 +100,13 @@ export default function ClaimPage() {
   const handleTraderSelect = (result: SearchResult) => {
     if (!user) {
       showToast(t('pleaseLoginFirst'), 'warning')
-      useLoginModal.getState().openLoginModal()
+      router.push(
+        buildTraderClaimLoginHref({
+          traderId: result.source_trader_id,
+          source: result.source,
+          handle: result.handle,
+        })
+      )
       return
     }
     setSelectedTrader(result)
@@ -233,7 +239,15 @@ export default function ClaimPage() {
               <Box style={{ textAlign: 'center' }}>
                 <Text style={{ marginBottom: tokens.spacing[3] }}>{t('pleaseLoginFirst')}</Text>
                 <button
-                  onClick={() => useLoginModal.getState().openLoginModal()}
+                  onClick={() =>
+                    router.push(
+                      buildTraderClaimLoginHref({
+                        traderId: selectedTrader.source_trader_id,
+                        source: selectedTrader.source,
+                        handle: selectedTrader.handle,
+                      })
+                    )
+                  }
                   style={{
                     color: tokens.colors.accent.primary,
                     background: 'none',
