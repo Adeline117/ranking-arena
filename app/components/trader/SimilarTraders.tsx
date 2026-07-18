@@ -14,7 +14,7 @@ import {
 import { formatDisplayName, formatROI } from '@/app/components/ranking/utils'
 import type { TraderProfile } from '@/lib/data/trader'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { avatarSrc } from '@/lib/utils/avatar-proxy'
+import { avatarSrc, isSvgAvatarSource } from '@/lib/utils/avatar-proxy'
 
 // Extended type for similar traders with performance metrics
 interface SimilarTraderWithMetrics extends TraderProfile {
@@ -79,6 +79,7 @@ const AnimatedAvatar = memo(function AnimatedAvatar({
           sizes="40px"
           loading="lazy"
           placeholder="empty"
+          unoptimized={isSvgAvatarSource(avatarUrl)}
           style={{
             objectFit: 'cover',
             opacity: imageLoaded ? 1 : 0,
