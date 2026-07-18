@@ -1,0 +1,1102 @@
+\set ON_ERROR_STOP on
+
+-- The preceding NULL fixture intentionally replaces this dependency with
+-- malformed acknowledgements. Restore the production-shaped test double before
+-- proving downstream terminal paths on the same 181830 -> 181835 -> 181836 DB.
+CREATE OR REPLACE FUNCTION public.leave_pro_official_group_atomic(
+  p_actor_id uuid
+)
+RETURNS jsonb
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $function$
+DECLARE
+  v_deleted integer;
+BEGIN
+  IF COALESCE((SELECT auth.role()), '') IS DISTINCT FROM 'service_role' THEN
+    RAISE EXCEPTION 'service role required' USING ERRCODE = '42501';
+  END IF;
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended('pro-official-group-assignment', 0)
+  );
+  PERFORM pg_catalog.pg_advisory_xact_lock(
+    pg_catalog.hashtextextended(
+      'pro-official-group-user:' || p_actor_id::text,
+      0
+    )
+  );
+  DELETE FROM public.test_official_members WHERE user_id = p_actor_id;
+  GET DIAGNOSTICS v_deleted = ROW_COUNT;
+  RETURN pg_catalog.jsonb_build_object(
+    'status',
+    CASE WHEN v_deleted = 1 THEN 'left' ELSE 'not_member' END
+  );
+END
+$function$;
+
+INSERT INTO auth.users(id)
+VALUES
+  ('00000000-0000-0000-0000-000000000960'),
+  ('00000000-0000-0000-0000-000000000961'),
+  ('00000000-0000-0000-0000-000000000962'),
+  ('00000000-0000-0000-0000-000000000963'),
+  ('00000000-0000-0000-0000-000000000964'),
+  ('00000000-0000-0000-0000-000000000965'),
+  ('00000000-0000-0000-0000-000000000966'),
+  ('00000000-0000-0000-0000-000000000967'),
+  ('00000000-0000-0000-0000-000000000968');
+
+INSERT INTO public.user_profiles(
+  id,
+  subscription_tier,
+  is_pro
+)
+VALUES
+  ('00000000-0000-0000-0000-000000000960', 'free', false),
+  ('00000000-0000-0000-0000-000000000961', 'free', false),
+  ('00000000-0000-0000-0000-000000000962', 'free', false),
+  ('00000000-0000-0000-0000-000000000963', 'free', false),
+  ('00000000-0000-0000-0000-000000000964', 'free', false),
+  ('00000000-0000-0000-0000-000000000965', 'free', false),
+  ('00000000-0000-0000-0000-000000000966', 'free', false),
+  ('00000000-0000-0000-0000-000000000967', 'free', false),
+  ('00000000-0000-0000-0000-000000000968', 'free', false);
+
+DO $duplicate_lifetime_refund_is_durable$
+DECLARE
+  v_user_id uuid := '00000000-0000-0000-0000-000000000960';
+  v_first_status text;
+  v_second_status text;
+  v_replay_status text;
+  v_first_payment_id uuid;
+  v_second_payment_id uuid;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+
+  v_first_status := public.test_activate_lifetime(
+    v_user_id,
+    'duplicate_lifetime_original',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => 2)
+  ) ->> 'status';
+  IF v_first_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION
+      'first lifetime activation failed: %',
+      v_first_status;
+  END IF;
+
+  SELECT subscription.entitlement_payment_id
+  INTO v_first_payment_id
+  FROM public.subscriptions AS subscription
+  WHERE subscription.user_id = v_user_id;
+
+  v_second_status := public.test_activate_lifetime(
+    v_user_id,
+    'duplicate_lifetime_second',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => 1)
+  ) ->> 'status';
+  IF v_second_status IS DISTINCT FROM 'duplicate_refund_queued' THEN
+    RAISE EXCEPTION
+      'duplicate lifetime purchase did not return durable refund status: %',
+      v_second_status;
+  END IF;
+
+  SELECT payment.id
+  INTO v_second_payment_id
+  FROM public.stripe_entitlement_payments AS payment
+  WHERE payment.stripe_charge_id = 'ch_duplicate_lifetime_second';
+
+  IF v_second_payment_id IS NULL
+    OR v_second_payment_id IS NOT DISTINCT FROM v_first_payment_id
+    OR (
+      SELECT subscription.entitlement_payment_id
+      FROM public.subscriptions AS subscription
+      WHERE subscription.user_id = v_user_id
+    ) IS DISTINCT FROM v_first_payment_id
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.user_id = v_user_id
+    ) <> 2
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'charge'
+        AND review.object_id = 'ch_duplicate_lifetime_second'
+        AND review.user_id = v_user_id
+        AND review.reason_key = 'duplicate_lifetime_purchase'
+        AND review.state = 'open'
+    ) <> 1
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.entitlement_payment_id = v_second_payment_id
+        AND effect.user_id = v_user_id
+        AND effect.source_kind = 'payment'
+        AND effect.source_key = v_second_payment_id::text
+        AND effect.operation_key =
+          'review:duplicate_lifetime_purchase'
+        AND effect.effect_type = 'payment_manual_review'
+        AND effect.status = 'pending'
+        AND effect.payload ->> 'reason_key' =
+          'duplicate_lifetime_purchase'
+    ) <> 1
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.entitlement_payment_id = v_second_payment_id
+        AND effect.user_id = v_user_id
+        AND effect.source_kind = 'payment'
+        AND effect.source_key = v_second_payment_id::text
+        AND effect.operation_key =
+          'refund:duplicate_lifetime_purchase'
+        AND effect.effect_type = 'payment_auto_refund'
+        AND effect.status = 'pending'
+        AND effect.payload ->> 'reason_key' =
+          'duplicate_lifetime_purchase'
+        AND effect.payload ->> 'checkout_session_id' =
+          'cs_duplicate_lifetime_second'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION
+      'duplicate lifetime payment review/refund outbox rolled back or drifted';
+  END IF;
+
+  v_replay_status := public.test_activate_lifetime(
+    v_user_id,
+    'duplicate_lifetime_second',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => 1)
+  ) ->> 'status';
+  IF v_replay_status IS DISTINCT FROM 'duplicate_refund_queued'
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.user_id = v_user_id
+    ) <> 2
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_manual_reviews AS review
+      WHERE review.object_type = 'charge'
+        AND review.object_id = 'ch_duplicate_lifetime_second'
+        AND review.reason_key = 'duplicate_lifetime_purchase'
+    ) <> 1
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.entitlement_payment_id = v_second_payment_id
+        AND effect.operation_key IN (
+          'review:duplicate_lifetime_purchase',
+          'refund:duplicate_lifetime_purchase'
+        )
+    ) <> 2
+  THEN
+    RAISE EXCEPTION
+      'duplicate lifetime refund replay was not idempotent';
+  END IF;
+END
+$duplicate_lifetime_refund_is_durable$;
+
+DO $bound_early_signed_expiry_is_exact_and_replay_safe$
+DECLARE
+  v_user_id uuid := '00000000-0000-0000-0000-000000000961';
+  v_reservation jsonb;
+  v_recovery jsonb;
+  v_reservation_id uuid;
+  v_checkout_expires_at timestamptz;
+  v_created_at timestamptz;
+  v_bound_at timestamptz;
+  v_signed_event_created_at timestamptz;
+  v_status text;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+
+  v_reservation := public.reserve_lifetime_membership_spot_atomic(
+    v_user_id,
+    'early-signed-expiry:000000000961',
+    1800
+  );
+  v_reservation_id := (v_reservation ->> 'reservation_id')::uuid;
+  v_checkout_expires_at :=
+    (v_reservation ->> 'checkout_expires_at')::timestamptz;
+  IF v_reservation ->> 'status' IS DISTINCT FROM 'reserved'
+    OR v_reservation_id IS NULL
+  THEN
+    RAISE EXCEPTION 'early signed-expiry reservation setup failed';
+  END IF;
+
+  v_recovery := public.reserve_lifetime_membership_spot_atomic(
+    v_user_id,
+    'early-signed-expiry:000000000961',
+    1800
+  );
+  IF v_recovery ->> 'status' IS DISTINCT FROM 'already_reserved'
+    OR v_recovery ->> 'request_nonce'
+      IS DISTINCT FROM 'early-signed-expiry:000000000961'
+    OR (v_recovery ->> 'reservation_id')::uuid
+      IS DISTINCT FROM v_reservation_id
+  THEN
+    RAISE EXCEPTION
+      'already_reserved did not recover the original reservation nonce';
+  END IF;
+
+  v_recovery := public.reserve_lifetime_membership_spot_atomic(
+    v_user_id,
+    'new-minute-retry:000000000961',
+    1800
+  );
+  IF v_recovery ->> 'status' IS DISTINCT FROM 'reservation_exists'
+    OR v_recovery ->> 'request_nonce'
+      IS DISTINCT FROM 'early-signed-expiry:000000000961'
+    OR (v_recovery ->> 'reservation_id')::uuid
+      IS DISTINCT FROM v_reservation_id
+  THEN
+    RAISE EXCEPTION
+      'reservation_exists did not recover the original reservation nonce';
+  END IF;
+
+  -- Model a delayed idempotency replay: Stripe created the Session shortly
+  -- after reservation, the first response was lost, and DB binding happens
+  -- more than five minutes after the signed expiration was created.
+  UPDATE public.stripe_lifetime_seat_reservations
+  SET created_at =
+        pg_catalog.statement_timestamp()
+          - pg_catalog.make_interval(mins => 20)
+  WHERE id = v_reservation_id
+  RETURNING created_at INTO v_created_at;
+
+  v_status :=
+    public.bind_lifetime_membership_reservation_session_atomic(
+      v_user_id,
+      v_reservation_id,
+      'early-signed-expiry:000000000961',
+      'cs_early_signed_expiry_000000000961',
+      v_checkout_expires_at
+    ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'bound' THEN
+    RAISE EXCEPTION 'early signed-expiry bind failed: %', v_status;
+  END IF;
+
+  SELECT reservation.updated_at
+  INTO v_bound_at
+  FROM public.stripe_lifetime_seat_reservations AS reservation
+  WHERE reservation.id = v_reservation_id;
+  -- Stripe event.created is whole-second precision. This exact event is ten
+  -- minutes older than the late bind but ten minutes newer than reservation.
+  v_signed_event_created_at :=
+    pg_catalog.date_trunc(
+      'second',
+      v_bound_at - pg_catalog.make_interval(mins => 10)
+    );
+
+  IF v_signed_event_created_at >= v_checkout_expires_at THEN
+    RAISE EXCEPTION
+      'early signed-expiry fixture did not precede natural expiry';
+  ELSIF v_signed_event_created_at
+      >= v_bound_at - pg_catalog.make_interval(mins => 5)
+    OR v_signed_event_created_at <= v_created_at
+  THEN
+    RAISE EXCEPTION
+      'late-bind signed-expiry fixture did not cross the mutable bind boundary';
+  END IF;
+
+  v_status := public.release_lifetime_membership_reservation_atomic(
+    v_user_id,
+    v_reservation_id,
+    'early-signed-expiry:000000000961',
+    'cs_wrong_early_signed_expiry',
+    'stripe_checkout_session_expired',
+    'evt_wrong_early_signed_expiry',
+    v_signed_event_created_at
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'release_not_verified'
+    OR (
+      SELECT reservation.status
+      FROM public.stripe_lifetime_seat_reservations AS reservation
+      WHERE reservation.id = v_reservation_id
+    ) IS DISTINCT FROM 'bound'
+  THEN
+    RAISE EXCEPTION
+      'early signed-expiry accepted a non-bound Checkout Session';
+  END IF;
+
+  v_status := public.release_lifetime_membership_reservation_atomic(
+    v_user_id,
+    v_reservation_id,
+    'early-signed-expiry:000000000961',
+    'cs_early_signed_expiry_000000000961',
+    'stripe_checkout_session_expired',
+      'evt_stale_early_signed_expiry',
+    v_created_at - pg_catalog.make_interval(mins => 6)
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'release_not_verified'
+    OR (
+      SELECT reservation.status
+      FROM public.stripe_lifetime_seat_reservations AS reservation
+      WHERE reservation.id = v_reservation_id
+    ) IS DISTINCT FROM 'bound'
+  THEN
+    RAISE EXCEPTION
+      'early signed-expiry accepted an event predating the reservation boundary';
+  END IF;
+
+  v_status := public.release_lifetime_membership_reservation_atomic(
+    v_user_id,
+    v_reservation_id,
+    'early-signed-expiry:000000000961',
+    'cs_early_signed_expiry_000000000961',
+    'stripe_checkout_session_expired',
+    'evt_early_signed_expiry_000000000961',
+    v_signed_event_created_at
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'released'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_lifetime_seat_reservations AS reservation
+      WHERE reservation.id = v_reservation_id
+        AND reservation.status = 'released'
+        AND reservation.checkout_session_id =
+          'cs_early_signed_expiry_000000000961'
+        AND reservation.release_reason =
+          'stripe_checkout_session_expired'
+        AND reservation.release_event_id =
+          'evt_early_signed_expiry_000000000961'
+        AND reservation.release_event_created_at =
+          v_signed_event_created_at
+        AND reservation.released_at IS NOT NULL
+    )
+  THEN
+    RAISE EXCEPTION
+      'exact bound early signed-expiry did not durably release its seat';
+  END IF;
+
+  v_status := public.release_lifetime_membership_reservation_atomic(
+    v_user_id,
+    v_reservation_id,
+    'early-signed-expiry:000000000961',
+    'cs_early_signed_expiry_000000000961',
+    'stripe_checkout_session_expired',
+    'evt_early_signed_expiry_000000000961',
+    v_signed_event_created_at
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'already_released' THEN
+    RAISE EXCEPTION
+      'exact early signed-expiry replay was not idempotent: %',
+      v_status;
+  END IF;
+
+  v_status := public.release_lifetime_membership_reservation_atomic(
+    v_user_id,
+    v_reservation_id,
+    'early-signed-expiry:000000000961',
+    'cs_early_signed_expiry_000000000961',
+    'stripe_checkout_session_expired',
+    'evt_conflicting_early_signed_expiry',
+    v_signed_event_created_at
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'identity_conflict'
+    OR (
+      SELECT reservation.release_event_id
+      FROM public.stripe_lifetime_seat_reservations AS reservation
+      WHERE reservation.id = v_reservation_id
+    ) IS DISTINCT FROM 'evt_early_signed_expiry_000000000961'
+  THEN
+    RAISE EXCEPTION
+      'early signed-expiry replay identity was not immutable';
+  END IF;
+END
+$bound_early_signed_expiry_is_exact_and_replay_safe$;
+
+DO $unbound_ambiguous_create_remains_fail_closed$
+DECLARE
+  v_user_id uuid := '00000000-0000-0000-0000-000000000962';
+  v_reservation jsonb;
+  v_reservation_id uuid;
+  v_status text;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+
+  v_reservation := public.reserve_lifetime_membership_spot_atomic(
+    v_user_id,
+    'ambiguous-create:000000000962',
+    1800
+  );
+  v_reservation_id := (v_reservation ->> 'reservation_id')::uuid;
+  v_status := public.release_lifetime_membership_reservation_atomic(
+    v_user_id,
+    v_reservation_id,
+    'ambiguous-create:000000000962',
+    NULL,
+    'stripe_checkout_create_failed',
+    NULL,
+    NULL
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'released' THEN
+    RAISE EXCEPTION
+      'ambiguous-create release setup failed: %',
+      v_status;
+  END IF;
+
+  -- The DB never bound this Session, so even a server-delivered signed event
+  -- cannot be silently equated with the earlier identity-poor release. The
+  -- webhook layer must persist a manual review and ACK it.
+  v_status := public.release_lifetime_membership_reservation_atomic(
+    v_user_id,
+    v_reservation_id,
+    'ambiguous-create:000000000962',
+    'cs_ambiguous_create_000000000962',
+    'stripe_checkout_session_expired',
+    'evt_ambiguous_create_000000000962',
+    pg_catalog.statement_timestamp()
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'identity_conflict'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM public.stripe_lifetime_seat_reservations AS reservation
+      WHERE reservation.id = v_reservation_id
+        AND reservation.status = 'released'
+        AND reservation.release_reason =
+          'stripe_checkout_create_failed'
+        AND reservation.checkout_session_id IS NULL
+        AND reservation.release_event_id IS NULL
+        AND reservation.release_event_created_at IS NULL
+    )
+  THEN
+    RAISE EXCEPTION
+      'unbound ambiguous-create Session was silently trusted';
+  END IF;
+END
+$unbound_ambiguous_create_remains_fail_closed$;
+
+DO $exact_recurring_to_lifetime_cancel_is_fenced$
+DECLARE
+  v_user_id uuid := '00000000-0000-0000-0000-000000000963';
+  v_recurring_status text;
+  v_lifetime_status text;
+  v_replay_status text;
+  v_refund_status text;
+  v_lifetime_paid_at timestamptz :=
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(hours => 1);
+  v_lifetime_payment_id uuid;
+  v_cancel_effect_id uuid;
+  v_cancel_lease_token uuid;
+  v_finish_status text;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+
+  v_recurring_status := public.test_activate_recurring(
+    v_user_id,
+    'sub_cancel_current_963',
+    'cancel_recurring_original_963',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => 1),
+    pg_catalog.statement_timestamp() + pg_catalog.make_interval(days => 30)
+  ) ->> 'status';
+  IF v_recurring_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION
+      'exact recurring cancellation setup failed: %',
+      v_recurring_status;
+  END IF;
+
+  v_lifetime_status := public.test_activate_lifetime(
+    v_user_id,
+    'lifetime_supersedes_recurring_963',
+    v_lifetime_paid_at
+  ) ->> 'status';
+  IF v_lifetime_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION
+      'recurring to lifetime activation failed: %',
+      v_lifetime_status;
+  END IF;
+
+  SELECT payment.id
+  INTO v_lifetime_payment_id
+  FROM public.stripe_entitlement_payments AS payment
+  WHERE payment.checkout_session_id =
+    'cs_lifetime_supersedes_recurring_963';
+
+  SELECT effect.id
+  INTO v_cancel_effect_id
+  FROM public.stripe_entitlement_effects AS effect
+  WHERE effect.entitlement_payment_id = v_lifetime_payment_id
+    AND effect.user_id = v_user_id
+    AND effect.source_kind = 'payment'
+    AND effect.source_key = v_lifetime_payment_id::text
+    AND effect.operation_key =
+      'cancel:subscription:sub_cancel_current_963'
+    AND effect.effect_type = 'stripe_subscription_cancel'
+    AND effect.status = 'pending'
+    AND effect.payload = pg_catalog.jsonb_build_object(
+      'stripe_subscription_id',
+        'sub_cancel_current_963',
+      'stripe_customer_id',
+        'cus_00000000000000000000000000000963',
+      'reason',
+        'lifetime_membership_activated'
+    );
+
+  IF v_lifetime_payment_id IS NULL
+    OR v_cancel_effect_id IS NULL
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.user_id = v_user_id
+        AND effect.effect_type = 'stripe_subscription_cancel'
+    ) <> 1
+    OR NOT public.stripe_entitlement_effect_is_current_v2(
+      v_cancel_effect_id
+    )
+  THEN
+    RAISE EXCEPTION
+      'exact recurring to lifetime did not queue one current cancel effect';
+  END IF;
+
+  UPDATE public.stripe_entitlement_effects
+  SET status = 'superseded',
+      lease_token = NULL,
+      lease_expires_at = NULL,
+      completed_at = pg_catalog.clock_timestamp(),
+      updated_at = pg_catalog.clock_timestamp()
+  WHERE id IS DISTINCT FROM v_cancel_effect_id
+    AND status IN ('pending', 'failed');
+  UPDATE public.stripe_entitlement_effects
+  SET available_at =
+        pg_catalog.statement_timestamp() - pg_catalog.make_interval(secs => 1)
+  WHERE id = v_cancel_effect_id;
+
+  SELECT leased_effect.lease_token
+  INTO v_cancel_lease_token
+  FROM public.lease_stripe_entitlement_effects_atomic(100, 300)
+    AS leased_effect
+  WHERE leased_effect.id = v_cancel_effect_id;
+  IF v_cancel_lease_token IS NULL THEN
+    RAISE EXCEPTION
+      'current recurring cancellation effect was not leaseable: status=%, error=%, current=%',
+      (
+        SELECT effect.status
+        FROM public.stripe_entitlement_effects AS effect
+        WHERE effect.id = v_cancel_effect_id
+      ),
+      (
+        SELECT effect.last_error
+        FROM public.stripe_entitlement_effects AS effect
+        WHERE effect.id = v_cancel_effect_id
+      ),
+      public.stripe_entitlement_effect_is_current_v2(v_cancel_effect_id);
+  END IF;
+
+  v_replay_status := public.test_activate_lifetime(
+    v_user_id,
+    'lifetime_supersedes_recurring_963',
+    v_lifetime_paid_at
+  ) ->> 'status';
+  IF v_replay_status IS DISTINCT FROM 'already_activated'
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.user_id = v_user_id
+        AND effect.effect_type = 'stripe_subscription_cancel'
+    ) <> 1
+  THEN
+    RAISE EXCEPTION
+      'recurring cancellation effect replay was not idempotent';
+  END IF;
+
+  v_refund_status := public.test_refund_lifetime(
+    v_user_id,
+    'lifetime_supersedes_recurring_963',
+    50000,
+    'succeeded',
+    'evt_refund_lifetime_cancel_963',
+    pg_catalog.statement_timestamp(),
+    v_lifetime_paid_at
+  ) ->> 'status';
+  IF v_refund_status IS NULL
+    OR public.stripe_entitlement_effect_is_current_v2(
+      v_cancel_effect_id
+    )
+  THEN
+    RAISE EXCEPTION
+      'full lifetime refund did not fence subscription cancellation currentness';
+  END IF;
+
+  v_finish_status := public.finish_stripe_entitlement_effect_atomic(
+    v_cancel_effect_id,
+    v_cancel_lease_token,
+    true,
+    'sub_cancel_current_963',
+    NULL,
+    NULL
+  ) ->> 'status';
+  IF v_finish_status IS DISTINCT FROM 'authority_superseded'
+    OR (
+      SELECT effect.status
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.id = v_cancel_effect_id
+    ) IS DISTINCT FROM 'superseded'
+  THEN
+    RAISE EXCEPTION
+      'full lifetime refund did not fence leased cancellation completion';
+  END IF;
+END
+$exact_recurring_to_lifetime_cancel_is_fenced$;
+
+DO $nonexact_legacy_projection_never_guesses_remote_cancel$
+DECLARE
+  v_user_id uuid := '00000000-0000-0000-0000-000000000964';
+  v_status text;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+
+  UPDATE public.user_profiles
+  SET stripe_customer_id =
+        'cus_00000000000000000000000000000964'
+  WHERE id = v_user_id;
+
+  INSERT INTO public.subscriptions (
+    user_id,
+    stripe_customer_id,
+    stripe_subscription_id,
+    status,
+    tier,
+    plan,
+    current_period_start,
+    current_period_end
+  ) VALUES (
+    v_user_id,
+    'cus_00000000000000000000000000000964',
+    'sub_nonexact_legacy_964',
+    'active',
+    'pro',
+    'monthly',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => 1),
+    pg_catalog.statement_timestamp() + pg_catalog.make_interval(days => 30)
+  );
+
+  v_status := public.test_activate_lifetime(
+    v_user_id,
+    'lifetime_over_nonexact_legacy_964',
+    pg_catalog.statement_timestamp()
+      - pg_catalog.make_interval(hours => 1)
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'activated'
+    OR EXISTS (
+      SELECT 1
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.user_id = v_user_id
+        AND effect.effect_type = 'stripe_subscription_cancel'
+    )
+  THEN
+    RAISE EXCEPTION
+      'nonexact legacy subscription projection queued a guessed cancellation';
+  END IF;
+END
+$nonexact_legacy_projection_never_guesses_remote_cancel$;
+
+DO $active_cancel_effect_leases_and_finishes_idempotently$
+DECLARE
+  v_user_id uuid := '00000000-0000-0000-0000-000000000965';
+  v_status text;
+  v_effect_id uuid;
+  v_lease_token uuid;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+
+  v_status := public.test_activate_recurring(
+    v_user_id,
+    'sub_cancel_active_965',
+    'cancel_active_original_965',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => 1),
+    pg_catalog.statement_timestamp() + pg_catalog.make_interval(days => 30)
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION 'active cancel recurring setup failed: %', v_status;
+  END IF;
+
+  v_status := public.test_activate_lifetime(
+    v_user_id,
+    'lifetime_cancel_active_965',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(hours => 1)
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION 'active cancel lifetime setup failed: %', v_status;
+  END IF;
+
+  SELECT effect.id
+  INTO v_effect_id
+  FROM public.stripe_entitlement_effects AS effect
+  WHERE effect.user_id = v_user_id
+    AND effect.effect_type = 'stripe_subscription_cancel';
+
+  UPDATE public.stripe_entitlement_effects
+  SET status = 'superseded',
+      lease_token = NULL,
+      lease_expires_at = NULL,
+      completed_at = pg_catalog.clock_timestamp(),
+      updated_at = pg_catalog.clock_timestamp()
+  WHERE id IS DISTINCT FROM v_effect_id
+    AND status IN ('pending', 'failed');
+  UPDATE public.stripe_entitlement_effects
+  SET available_at =
+        pg_catalog.statement_timestamp() - pg_catalog.make_interval(secs => 1)
+  WHERE id = v_effect_id;
+
+  SELECT leased_effect.lease_token
+  INTO v_lease_token
+  FROM public.lease_stripe_entitlement_effects_atomic(100, 300)
+    AS leased_effect
+  WHERE leased_effect.id = v_effect_id;
+
+  IF v_lease_token IS NULL
+    OR public.finish_stripe_entitlement_effect_atomic(
+      v_effect_id,
+      v_lease_token,
+      true,
+      'sub_cancel_active_965',
+      NULL,
+      NULL
+    ) ->> 'status' IS DISTINCT FROM 'completed'
+    OR public.finish_stripe_entitlement_effect_atomic(
+      v_effect_id,
+      v_lease_token,
+      true,
+      'sub_cancel_active_965',
+      NULL,
+      NULL
+    ) ->> 'status' IS DISTINCT FROM 'already_completed'
+  THEN
+    RAISE EXCEPTION
+      'active recurring cancellation did not lease and finish idempotently';
+  END IF;
+END
+$active_cancel_effect_leases_and_finishes_idempotently$;
+
+DO $banned_cancel_effect_remains_financially_actionable$
+DECLARE
+  v_user_id uuid := '00000000-0000-0000-0000-000000000966';
+  v_status text;
+  v_effect_id uuid;
+  v_lease_token uuid;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+
+  v_status := public.test_activate_recurring(
+    v_user_id,
+    'sub_cancel_banned_966',
+    'cancel_banned_original_966',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => 1),
+    pg_catalog.statement_timestamp() + pg_catalog.make_interval(days => 30)
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION 'banned cancel recurring setup failed: %', v_status;
+  END IF;
+
+  v_status := public.test_activate_lifetime(
+    v_user_id,
+    'lifetime_cancel_banned_966',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(hours => 1)
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION 'banned cancel lifetime setup failed: %', v_status;
+  END IF;
+
+  SELECT effect.id
+  INTO v_effect_id
+  FROM public.stripe_entitlement_effects AS effect
+  WHERE effect.user_id = v_user_id
+    AND effect.effect_type = 'stripe_subscription_cancel';
+
+  UPDATE public.user_profiles
+  SET banned_at = pg_catalog.clock_timestamp(),
+      is_banned = true,
+      ban_expires_at = NULL
+  WHERE id = v_user_id;
+
+  UPDATE public.stripe_entitlement_effects
+  SET status = 'superseded',
+      lease_token = NULL,
+      lease_expires_at = NULL,
+      completed_at = pg_catalog.clock_timestamp(),
+      updated_at = pg_catalog.clock_timestamp()
+  WHERE id IS DISTINCT FROM v_effect_id
+    AND status IN ('pending', 'failed');
+  UPDATE public.stripe_entitlement_effects
+  SET available_at =
+        pg_catalog.statement_timestamp() - pg_catalog.make_interval(secs => 1)
+  WHERE id = v_effect_id;
+
+  SELECT leased_effect.lease_token
+  INTO v_lease_token
+  FROM public.lease_stripe_entitlement_effects_atomic(100, 300)
+    AS leased_effect
+  WHERE leased_effect.id = v_effect_id;
+
+  IF v_lease_token IS NULL
+    OR public.finish_stripe_entitlement_effect_atomic(
+      v_effect_id,
+      v_lease_token,
+      true,
+      'sub_cancel_banned_966',
+      NULL,
+      NULL
+    ) ->> 'status' IS DISTINCT FROM 'completed'
+  THEN
+    RAISE EXCEPTION
+      'banned recurring cancellation was incorrectly subject-gated';
+  END IF;
+END
+$banned_cancel_effect_remains_financially_actionable$;
+
+DO $hard_deleted_cancel_effect_remains_financially_actionable$
+DECLARE
+  v_user_id uuid := '00000000-0000-0000-0000-000000000967';
+  v_status text;
+  v_effect_id uuid;
+  v_payment_id uuid;
+  v_lease_token uuid;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+
+  v_status := public.test_activate_recurring(
+    v_user_id,
+    'sub_cancel_deleted_967',
+    'cancel_deleted_original_967',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => 1),
+    pg_catalog.statement_timestamp() + pg_catalog.make_interval(days => 30)
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION 'deleted cancel recurring setup failed: %', v_status;
+  END IF;
+
+  v_status := public.test_activate_lifetime(
+    v_user_id,
+    'lifetime_cancel_deleted_967',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(hours => 1)
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION 'deleted cancel lifetime setup failed: %', v_status;
+  END IF;
+
+  SELECT effect.id, effect.entitlement_payment_id
+  INTO v_effect_id, v_payment_id
+  FROM public.stripe_entitlement_effects AS effect
+  WHERE effect.user_id = v_user_id
+    AND effect.effect_type = 'stripe_subscription_cancel';
+
+  DELETE FROM auth.users AS auth_user
+  WHERE auth_user.id = v_user_id;
+
+  IF (
+      SELECT effect.user_id
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.id = v_effect_id
+    ) IS NOT NULL
+    OR (
+      SELECT payment.user_id
+      FROM public.stripe_entitlement_payments AS payment
+      WHERE payment.id = v_payment_id
+    ) IS NOT NULL
+    OR EXISTS (
+      SELECT 1
+      FROM public.subscriptions AS subscription
+      WHERE subscription.entitlement_payment_id = v_payment_id
+    )
+    OR NOT public.stripe_entitlement_effect_is_current_v2(v_effect_id)
+  THEN
+    RAISE EXCEPTION
+      'hard-delete cancellation fixture did not retain exact financial authority';
+  END IF;
+
+  UPDATE public.stripe_entitlement_effects
+  SET status = 'superseded',
+      lease_token = NULL,
+      lease_expires_at = NULL,
+      completed_at = pg_catalog.clock_timestamp(),
+      updated_at = pg_catalog.clock_timestamp()
+  WHERE id IS DISTINCT FROM v_effect_id
+    AND status IN ('pending', 'failed');
+  UPDATE public.stripe_entitlement_effects
+  SET available_at =
+        pg_catalog.statement_timestamp() - pg_catalog.make_interval(secs => 1)
+  WHERE id = v_effect_id;
+
+  SELECT leased_effect.lease_token
+  INTO v_lease_token
+  FROM public.lease_stripe_entitlement_effects_atomic(100, 300)
+    AS leased_effect
+  WHERE leased_effect.id = v_effect_id;
+
+  IF v_lease_token IS NULL
+    OR public.finish_stripe_entitlement_effect_atomic(
+      v_effect_id,
+      v_lease_token,
+      true,
+      'sub_cancel_deleted_967',
+      NULL,
+      NULL
+    ) ->> 'status' IS DISTINCT FROM 'completed'
+  THEN
+    RAISE EXCEPTION
+      'hard-deleted recurring cancellation was not financially actionable';
+  END IF;
+END
+$hard_deleted_cancel_effect_remains_financially_actionable$;
+
+DO $cancel_effect_payload_and_operation_are_exact$
+DECLARE
+  v_user_id uuid := '00000000-0000-0000-0000-000000000968';
+  v_status text;
+  v_effect_id uuid;
+  v_payload jsonb;
+  v_operation_key text;
+  v_paid_at timestamptz :=
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(hours => 1);
+  v_lease_token uuid;
+BEGIN
+  PERFORM pg_catalog.set_config(
+    'request.jwt.claim.role',
+    'service_role',
+    true
+  );
+
+  v_status := public.test_activate_recurring(
+    v_user_id,
+    'sub_cancel_payload_968',
+    'cancel_payload_original_968',
+    pg_catalog.statement_timestamp() - pg_catalog.make_interval(days => 1),
+    pg_catalog.statement_timestamp() + pg_catalog.make_interval(days => 30)
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION 'payload cancel recurring setup failed: %', v_status;
+  END IF;
+
+  v_status := public.test_activate_lifetime(
+    v_user_id,
+    'lifetime_cancel_payload_968',
+    v_paid_at
+  ) ->> 'status';
+  IF v_status IS DISTINCT FROM 'activated' THEN
+    RAISE EXCEPTION 'payload cancel lifetime setup failed: %', v_status;
+  END IF;
+
+  SELECT effect.id, effect.payload, effect.operation_key
+  INTO v_effect_id, v_payload, v_operation_key
+  FROM public.stripe_entitlement_effects AS effect
+  WHERE effect.user_id = v_user_id
+    AND effect.effect_type = 'stripe_subscription_cancel';
+
+  IF NOT public.stripe_entitlement_effect_is_current_v2(v_effect_id) THEN
+    RAISE EXCEPTION 'exact cancellation payload was not current';
+  END IF;
+
+  UPDATE public.stripe_entitlement_effects
+  SET payload = pg_catalog.jsonb_set(
+    payload,
+    '{stripe_customer_id}',
+    '"cus_wrong_payload_968"'::jsonb
+  )
+  WHERE id = v_effect_id;
+  IF public.stripe_entitlement_effect_is_current_v2(v_effect_id) THEN
+    RAISE EXCEPTION 'wrong cancellation customer payload remained current';
+  END IF;
+
+  UPDATE public.stripe_entitlement_effects
+  SET payload = v_payload,
+      operation_key = 'cancel:subscription:sub_wrong_operation_968'
+  WHERE id = v_effect_id;
+  IF public.stripe_entitlement_effect_is_current_v2(v_effect_id) THEN
+    RAISE EXCEPTION 'wrong cancellation operation remained current';
+  END IF;
+
+  UPDATE public.stripe_entitlement_effects
+  SET operation_key = v_operation_key,
+      payload = pg_catalog.jsonb_set(
+        v_payload,
+        '{stripe_subscription_id}',
+        '"sub_wrong_payload_968"'::jsonb
+      )
+  WHERE id = v_effect_id;
+  IF public.stripe_entitlement_effect_is_current_v2(v_effect_id) THEN
+    RAISE EXCEPTION 'wrong cancellation subscription payload remained current';
+  END IF;
+
+  UPDATE public.stripe_entitlement_effects
+  SET operation_key = v_operation_key,
+      payload = v_payload
+  WHERE id = v_effect_id;
+
+  v_status := public.test_refund_lifetime(
+    v_user_id,
+    'lifetime_cancel_payload_968',
+    50000,
+    'succeeded',
+    'evt_refund_lifetime_cancel_968',
+    pg_catalog.statement_timestamp(),
+    v_paid_at
+  ) ->> 'status';
+  IF v_status IS NULL THEN
+    RAISE EXCEPTION 'payload cancellation refund setup failed';
+  END IF;
+
+  UPDATE public.stripe_entitlement_effects
+  SET status = 'superseded',
+      lease_token = NULL,
+      lease_expires_at = NULL,
+      completed_at = pg_catalog.clock_timestamp(),
+      updated_at = pg_catalog.clock_timestamp()
+  WHERE id IS DISTINCT FROM v_effect_id
+    AND status IN ('pending', 'failed');
+  UPDATE public.stripe_entitlement_effects
+  SET available_at =
+        pg_catalog.statement_timestamp() - pg_catalog.make_interval(secs => 1)
+  WHERE id = v_effect_id;
+
+  SELECT leased_effect.lease_token
+  INTO v_lease_token
+  FROM public.lease_stripe_entitlement_effects_atomic(100, 300)
+    AS leased_effect
+  WHERE leased_effect.id = v_effect_id;
+  IF v_lease_token IS NOT NULL
+    OR (
+      SELECT effect.status
+      FROM public.stripe_entitlement_effects AS effect
+      WHERE effect.id = v_effect_id
+    ) IS DISTINCT FROM 'superseded'
+  THEN
+    RAISE EXCEPTION
+      'full lifetime refund was leased for remote cancellation';
+  END IF;
+END
+$cancel_effect_payload_and_operation_are_exact$;
+
+\echo 'Stripe lifetime terminal corrections fixture passed'
