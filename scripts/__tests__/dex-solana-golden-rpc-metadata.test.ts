@@ -27,6 +27,7 @@ import {
 import {
   compileDexSolanaGoldenRpcMetadata,
   compileDexSolanaGoldenRpcMetadataWithProgramHits,
+  disposeDexSolanaGoldenRpcMetadataInputBytes,
   type DexSolanaGoldenRpcMetadataCaptureInput,
   type DexSolanaGoldenRpcMetadataInput,
   type DexSolanaGoldenRpcMetadataWithProgramHitsInput,
@@ -920,6 +921,27 @@ describe('Solana in-memory golden RPC metadata compiler', () => {
 })
 
 describe('Solana same-lifecycle metadata and program-hit compiler', () => {
+  it('idempotently disposes owned metadata bytes without using a forged fill method', () => {
+    const input = compilerInput()
+    const aliasedBytes = aliasedRequestBytes(input)
+    const rawBytes = allRawBytes(input)
+    const fillSpy = jest.spyOn(Uint8Array.prototype, 'fill').mockImplementation(function (
+      this: Uint8Array
+    ) {
+      return this
+    })
+    try {
+      disposeDexSolanaGoldenRpcMetadataInputBytes(input)
+      disposeDexSolanaGoldenRpcMetadataInputBytes(input)
+    } finally {
+      fillSpy.mockRestore()
+    }
+
+    expect(fillSpy).not.toHaveBeenCalled()
+    expect([...aliasedBytes].every((byte) => byte === 0)).toBe(true)
+    expectZeroed(rawBytes)
+  })
+
   it('derives one closed common projection before zeroing every owned byte', () => {
     const input = programHitCompilerInput(
       providerCapture('solana_official_mainnet', { programHitTransaction: true }),

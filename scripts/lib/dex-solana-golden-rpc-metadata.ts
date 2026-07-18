@@ -274,6 +274,20 @@ function withOwnedBytes<T>(root: unknown, operation: (scope: EphemeralByteScope)
   }
 }
 
+/**
+ * Destructively release every Uint8Array reachable from a metadata compiler
+ * input through own data properties. This is idempotent, performs no schema
+ * validation, and intentionally exposes no callback or content.
+ */
+export function disposeDexSolanaGoldenRpcMetadataInputBytes(input: unknown): void {
+  const byteArrays = new Set<Uint8Array>()
+  try {
+    collectByteArrays(input, byteArrays)
+  } finally {
+    zeroByteArrays(byteArrays)
+  }
+}
+
 function decodeStrictJson(bytes: Uint8Array, label: string): unknown {
   let text: string
   try {
