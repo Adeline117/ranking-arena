@@ -102,13 +102,18 @@ const mockAssertProPriceReady = jest.fn().mockResolvedValue(undefined)
 const mockCreateCheckoutSession = jest
   .fn()
   .mockResolvedValue({ url: 'https://checkout.stripe.com/session', id: 'cs_test123' })
+const mockListSubscriptions = jest.fn()
+const mockCreateOneTimeCheckoutSession = jest
+  .fn()
+  .mockResolvedValue({ url: 'https://checkout.stripe.com/lifetime', id: 'cs_lifetime123' })
 const mockGetStripe = jest.fn(() => ({
   checkout: {
     sessions: {
-      create: jest
-        .fn()
-        .mockResolvedValue({ url: 'https://checkout.stripe.com/lifetime', id: 'cs_lifetime123' }),
+      create: (...args: unknown[]) => mockCreateOneTimeCheckoutSession(...args),
     },
+  },
+  subscriptions: {
+    list: (...args: unknown[]) => mockListSubscriptions(...args),
   },
 }))
 
@@ -222,6 +227,11 @@ describe('POST /api/stripe/create-checkout', () => {
       url: 'https://checkout.stripe.com/session',
       id: 'cs_test123',
     })
+    mockCreateOneTimeCheckoutSession.mockResolvedValue({
+      url: 'https://checkout.stripe.com/lifetime',
+      id: 'cs_lifetime123',
+    })
+    mockListSubscriptions.mockResolvedValue({ data: [], has_more: false })
     // Reset env mock
     mockEnv.STRIPE_SECRET_KEY = 'sk_test_123'
     mockEnv.NEXT_PUBLIC_APP_URL = 'https://app.test.com'
@@ -423,6 +433,7 @@ describe('POST /api/stripe/create-checkout', () => {
       expect.objectContaining({
         customerId: 'cus_test123',
         priceId: 'price_monthly123',
+        allowPromotionCodes: false,
       })
     )
     expect(mockProfileUpdate).toHaveBeenCalledWith({
@@ -445,6 +456,77 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(res.status).toBe(200)
     expect(body.url).toBeDefined()
     expect(body.sessionId).toBeDefined()
+    expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ allowPromotionCodes: false })
+    )
+  })
+
+  it('grants a trial only after the complete Stripe subscription history has no prior trial', async () => {
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: true }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    expect(mockListSubscriptions).toHaveBeenCalledWith({
+      customer: 'cus_test123',
+      status: 'all',
+      limit: 100,
+    })
+    expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({ trialDays: 7 })
+    )
+  })
+
+  it('finds a prior trial on the 101st Stripe subscription and denies another trial', async () => {
+    const firstHundred = Array.from({ length: 100 }, (_, index) => ({
+      id: `sub_history_${index + 1}`,
+      trial_start: null,
+      trial_end: null,
+    }))
+    mockListSubscriptions
+      .mockResolvedValueOnce({ data: firstHundred, has_more: true })
+      .mockResolvedValueOnce({
+        data: [{ id: 'sub_trial_101', trial_start: 1_700_000_000, trial_end: 1_700_604_800 }],
+        has_more: false,
+      })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly', trial: true }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    expect(mockListSubscriptions).toHaveBeenNthCalledWith(2, {
+      customer: 'cus_test123',
+      status: 'all',
+      limit: 100,
+      starting_after: 'sub_history_100',
+    })
+    expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+      expect.not.objectContaining({ trialDays: 7 })
+    )
+  })
+
+  it('fails closed on a non-advancing Stripe trial-history page', async () => {
+    mockListSubscriptions.mockResolvedValue({ data: [], has_more: true })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'yearly', trial: true }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(200)
+    expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
+      expect.not.objectContaining({ trialDays: 7 })
+    )
   })
 
   it('creates lifetime one-time payment checkout session', async () => {
@@ -459,22 +541,32 @@ describe('POST /api/stripe/create-checkout', () => {
     expect(res.status).toBe(200)
     expect(body.url).toBeDefined()
     expect(body.sessionId).toBeDefined()
-  })
-
-  it('passes promotion code to checkout session', async () => {
-    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
-      method: 'POST',
-      headers: { authorization: 'Bearer valid-token' },
-      body: JSON.stringify({ plan: 'monthly', promotionCode: 'promo_abc' }),
-    })
-    const res = await POST(req)
-    await res.json()
-
-    expect(res.status).toBe(200)
-    expect(mockCreateCheckoutSession).toHaveBeenCalledWith(
-      expect.objectContaining({ promotionCode: 'promo_abc' })
+    expect(mockCreateOneTimeCheckoutSession).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allow_promotion_codes: false,
+      }),
+      expect.anything()
     )
   })
+
+  it.each(['monthly', 'yearly', 'lifetime'])(
+    'rejects an explicit 100%% promotion code before creating a %s Checkout Session',
+    async (plan) => {
+      const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+        method: 'POST',
+        headers: { authorization: 'Bearer valid-token' },
+        body: JSON.stringify({ plan, promotionCode: 'promo_free_100_percent' }),
+      })
+      const res = await POST(req)
+      const body = await res.json()
+
+      expect(res.status).toBe(400)
+      expect(body.code).toBe('PROMOTION_CODES_DISABLED')
+      expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+      expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+      expect(mockCreateOneTimeCheckoutSession).not.toHaveBeenCalled()
+    }
+  )
 
   // --- Error Handling ---
 

@@ -59,6 +59,15 @@ export async function POST(request: NextRequest) {
     if (!['monthly', 'yearly', 'lifetime'].includes(plan)) {
       return NextResponse.json({ error: 'Invalid plan type' }, { status: 400 })
     }
+    if (promotionCode !== undefined) {
+      return NextResponse.json(
+        {
+          error: 'Promotion codes are not available for Pro checkout.',
+          code: 'PROMOTION_CODES_DISABLED',
+        },
+        { status: 400 }
+      )
+    }
 
     // Prevent duplicate subscriptions — check before doing anything else
     const supabaseAdmin = getSupabaseAdmin()
@@ -217,10 +226,9 @@ export async function POST(request: NextRequest) {
           success_url: sUrl,
           cancel_url: cUrl,
           metadata: meta,
-          allow_promotion_codes: !promotionCode,
+          allow_promotion_codes: false,
           billing_address_collection: 'auto',
           locale: 'auto',
-          ...(promotionCode ? { discounts: [{ promotion_code: promotionCode }] } : {}),
         },
         {
           idempotencyKey: lifetimeIdempotencyKey,
@@ -234,11 +242,7 @@ export async function POST(request: NextRequest) {
         successUrl: sUrl,
         cancelUrl: cUrl,
         metadata: meta,
-      }
-
-      // Add promotion code if provided
-      if (promotionCode) {
-        checkoutOptions.promotionCode = promotionCode
+        allowPromotionCodes: false,
       }
 
       // Add 7-day free trial if requested (only for new subscribers, not lifetime).
@@ -247,12 +251,30 @@ export async function POST(request: NextRequest) {
       if (trial) {
         let alreadyTrialed = false
         try {
-          const history = await getStripe().subscriptions.list({
-            customer: customerId,
-            status: 'all',
-            limit: 100,
-          })
-          alreadyTrialed = history.data.some((s) => s.trial_start != null || s.trial_end != null)
+          let startingAfter: string | undefined
+          while (true) {
+            const history = await getStripe().subscriptions.list({
+              customer: customerId,
+              status: 'all',
+              limit: 100,
+              ...(startingAfter ? { starting_after: startingAfter } : {}),
+            })
+            if (
+              history.data.some(
+                (subscription) => subscription.trial_start != null || subscription.trial_end != null
+              )
+            ) {
+              alreadyTrialed = true
+              break
+            }
+            if (!history.has_more) break
+
+            const lastSubscription = history.data.at(-1)
+            if (!lastSubscription || lastSubscription.id === startingAfter) {
+              throw new Error('Stripe trial-history pagination did not advance')
+            }
+            startingAfter = lastSubscription.id
+          }
         } catch (err) {
           // Stripe 查询失败 → 保守不给 trial(宁可少给也不重复白送)
           logger.warn('trial-history check failed; denying trial', {

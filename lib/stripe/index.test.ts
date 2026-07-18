@@ -430,6 +430,26 @@ describe('createCheckoutSession', () => {
         mode: 'subscription',
         success_url: 'https://example.com/success',
         cancel_url: 'https://example.com/cancel',
+        allow_promotion_codes: true,
+      }),
+      expect.objectContaining({ idempotencyKey: expect.any(String) })
+    )
+  })
+
+  test('can explicitly remove the hosted promotion-code field without changing the default', async () => {
+    stripe.checkout.sessions.create = jest.fn().mockResolvedValue({ id: 'cs_test123' })
+
+    await createCheckoutSession({
+      customerId: 'cus_123',
+      priceId: 'price_123',
+      successUrl: 'https://example.com/success',
+      cancelUrl: 'https://example.com/cancel',
+      allowPromotionCodes: false,
+    })
+
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        allow_promotion_codes: false,
       }),
       expect.objectContaining({ idempotencyKey: expect.any(String) })
     )

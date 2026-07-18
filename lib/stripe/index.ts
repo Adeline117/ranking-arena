@@ -289,6 +289,7 @@ export async function createCheckoutSession(params: {
   cancelUrl: string
   metadata?: Record<string, string>
   promotionCode?: string
+  allowPromotionCodes?: boolean
   trialDays?: number
 }): Promise<Stripe.Checkout.Session> {
   // Validate priceId before making Stripe API call
@@ -318,7 +319,9 @@ export async function createCheckoutSession(params: {
       metadata: params.metadata,
       ...(params.trialDays ? { trial_period_days: params.trialDays } : {}),
     },
-    allow_promotion_codes: !params.promotionCode, // Disable UI promotion code input if one is explicitly provided
+    // B2C paid authority can explicitly disable the promotion-code field
+    // without changing the API-tier/default helper behavior.
+    allow_promotion_codes: params.allowPromotionCodes ?? !params.promotionCode,
     billing_address_collection: 'auto',
     locale: 'auto',
   }
