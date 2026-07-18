@@ -635,6 +635,10 @@ export interface SolanaTxEvidenceUnavailable {
 }
 
 export type SolanaTxEvidence = SolanaTxEvidenceAvailable | SolanaTxEvidenceUnavailable
+export type SolanaNormalizedTxResult = Omit<
+  SolanaTxEvidenceAvailable,
+  'provider' | 'commitmentRequested' | 'encoding' | 'maxSupportedTransactionVersion'
+>
 
 interface SolanaEvidenceRpcSuccess {
   ok: true
@@ -1252,6 +1256,37 @@ function normalizeSolanaTxEvidence(
     innerInstructionsStatus,
     instructions,
     logMessages: parseLogMessages(meta.logMessages),
+  }
+}
+
+/**
+ * Strictly normalize one already-decoded getTransaction result without
+ * performing network I/O or attaching provider/request provenance. Callers
+ * must bind the capture separately; this function only composes the complete
+ * transaction parser and never exposes its partial parsing helpers.
+ */
+export function normalizeSolanaTxEvidenceResult(
+  signature: string,
+  result: unknown
+): SolanaNormalizedTxResult {
+  if (!isSolanaSignature(signature)) {
+    throw new TypeError('signature must be a base58-encoded 64-byte signature')
+  }
+  try {
+    const {
+      provider: _provider,
+      commitmentRequested: _commitmentRequested,
+      encoding: _encoding,
+      maxSupportedTransactionVersion: _maxSupportedTransactionVersion,
+      ...normalized
+    } = normalizeSolanaTxEvidence(signature, result, evidenceProvider(null, []))
+    return normalized
+  } catch (error) {
+    throw new TypeError(
+      error instanceof UnsupportedSolanaTxVersionError
+        ? 'unsupported Solana transaction version'
+        : 'malformed Solana transaction evidence'
+    )
   }
 }
 

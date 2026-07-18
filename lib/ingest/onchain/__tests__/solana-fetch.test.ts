@@ -2,6 +2,7 @@ import {
   computeSolanaWalletOnchain,
   fetchSignatures,
   fetchTxEvidence,
+  normalizeSolanaTxEvidenceResult,
   scanSignatureRecords,
   scanSignatures,
 } from '../solana-fetch'
@@ -1045,6 +1046,33 @@ describe('fetchTxEvidence', () => {
   afterEach(() => {
     if (originalFetch) global.fetch = originalFetch
     else delete (global as typeof global & { fetch?: typeof fetch }).fetch
+  })
+
+  it('normalizes a decoded result without network access or invented source provenance', () => {
+    global.fetch = jest.fn()
+
+    const normalized = normalizeSolanaTxEvidenceResult(SIGNATURE, legacyFixture())
+    expect(normalized).toMatchObject({
+      status: 'available',
+      signature: SIGNATURE,
+      version: 'legacy',
+      executionStatus: 'succeeded',
+      innerInstructionsStatus: 'verified_empty',
+    })
+    expect(normalized).not.toHaveProperty('provider')
+    expect(normalized).not.toHaveProperty('commitmentRequested')
+    expect(normalized).not.toHaveProperty('encoding')
+    expect(normalized).not.toHaveProperty('maxSupportedTransactionVersion')
+    expect(global.fetch).not.toHaveBeenCalled()
+
+    const unsupported = legacyFixture() as any
+    unsupported.version = 1
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, unsupported)).toThrow(
+      'unsupported Solana transaction version'
+    )
+    expect(() => normalizeSolanaTxEvidenceResult(SIGNATURE, null)).toThrow(
+      'malformed Solana transaction evidence'
+    )
   })
 
   it('maps exact legacy evidence without using floating token amounts', async () => {
