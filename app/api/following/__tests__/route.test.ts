@@ -85,16 +85,27 @@ const mockGetAuthUser = jest.fn()
 type QueryResult = { data: unknown; error: unknown }
 let mockDefaultQueryResult: QueryResult = { data: [], error: null }
 let mockQueryResults = new Map<string, QueryResult>()
+let mockQueryResultQueues = new Map<string, QueryResult[]>()
+let mockQueryCalls: Array<{ table: string; method: string; args: unknown[] }> = []
 
 function buildChainMock(table: string): unknown {
   const handler: ProxyHandler<object> = {
     get(_target, prop) {
       if (prop === 'then') {
-        return (resolve: (v: unknown) => void) =>
-          resolve(mockQueryResults.get(table) ?? mockDefaultQueryResult)
+        return (resolve: (v: unknown) => void) => {
+          const queue = mockQueryResultQueues.get(table)
+          resolve(
+            queue && queue.length > 0
+              ? queue.shift()
+              : (mockQueryResults.get(table) ?? mockDefaultQueryResult)
+          )
+        }
       }
       if (prop === 'catch' || prop === 'finally') return undefined
-      return jest.fn(() => new Proxy({}, handler))
+      return jest.fn((...args: unknown[]) => {
+        mockQueryCalls.push({ table, method: String(prop), args })
+        return new Proxy({}, handler)
+      })
     },
   }
   return new Proxy({}, handler)
@@ -163,6 +174,8 @@ describe('GET /api/following', () => {
     mockTieredSet.mockResolvedValue(undefined)
     mockDefaultQueryResult = { data: [], error: null }
     mockQueryResults = new Map()
+    mockQueryResultQueues = new Map()
+    mockQueryCalls = []
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
   })
@@ -281,7 +294,7 @@ describe('GET /api/following', () => {
 
     expect(response.status).toBe(200)
     expect(mockTieredSet).toHaveBeenCalledWith(
-      'following:v3:candidates:user-123',
+      'following:v4:candidates:user-123',
       {
         traders: [
           {
@@ -379,6 +392,83 @@ describe('GET /api/following', () => {
     expect(body.hasMore).toBe(true)
   })
 
+  it('reads more than 500 follow edges and returns them in a stable order', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    const rows = Array.from({ length: 501 }, (_, i) => ({
+      id: `edge-${String(i).padStart(3, '0')}`,
+      trader_id: `t${String(i).padStart(3, '0')}`,
+      source: 'bybit',
+      created_at: '2026-07-16T00:00:00.000Z',
+    }))
+    mockQueryResultQueues.set('trader_follows', [
+      { data: rows.slice(0, 500), error: null },
+      { data: rows.slice(500), error: null },
+    ])
+    mockQueryResults.set('leaderboard_ranks', {
+      data: rows.map((row) => ({
+        source_trader_id: row.trader_id,
+        source: row.source,
+        handle: row.trader_id,
+        avatar_url: null,
+        roi: 1,
+        pnl: null,
+        win_rate: null,
+        followers: null,
+        arena_score: 50,
+      })),
+      error: null,
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.count).toBe(501)
+    expect(body.items[0].id).toBe('t000')
+    expect(body.items[500].id).toBe('t500')
+    expect(
+      mockQueryCalls
+        .filter(({ table, method }) => table === 'trader_follows' && method === 'range')
+        .map(({ args }) => args)
+    ).toEqual([
+      [0, 499],
+      [500, 999],
+    ])
+    expect(
+      mockQueryCalls
+        .filter(({ table, method }) => table === 'trader_follows' && method === 'order')
+        .slice(0, 2)
+        .map(({ args }) => args)
+    ).toEqual([
+      ['created_at', { ascending: false, nullsFirst: false }],
+      ['id', { ascending: false }],
+    ])
+  })
+
+  it('fails closed when a later follow-edge page fails', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    mockQueryResultQueues.set('trader_follows', [
+      {
+        data: Array.from({ length: 500 }, (_, i) => ({
+          id: `edge-${i}`,
+          trader_id: `t${i}`,
+          source: 'bybit',
+          created_at: null,
+        })),
+        error: null,
+      },
+      { data: null, error: new Error('second page unavailable') },
+    ])
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body.error).toBe('Internal server error')
+    expect(mockTieredSet).not.toHaveBeenCalled()
+    expect(mockSupabaseFrom).not.toHaveBeenCalledWith('leaderboard_ranks')
+  })
+
   it('clamps limit to max 200', async () => {
     mockGetAuthUser.mockResolvedValue(mockUser)
     mockTieredGet.mockResolvedValue({
@@ -471,17 +561,17 @@ describe('GET /api/following', () => {
     expect(body.items).toEqual([
       expect.objectContaining({
         id: 'shared-id',
-        identity_key: 'trader:source:bybit:shared-id',
-        source: 'bybit',
-        platform: 'bybit',
-        handle: 'Bybit trader',
-      }),
-      expect.objectContaining({
-        id: 'shared-id',
         identity_key: 'trader:source:binance_futures:shared-id',
         source: 'binance_futures',
         platform: 'binance_futures',
         handle: 'Binance trader',
+      }),
+      expect.objectContaining({
+        id: 'shared-id',
+        identity_key: 'trader:source:bybit:shared-id',
+        source: 'bybit',
+        platform: 'bybit',
+        handle: 'Bybit trader',
       }),
     ])
     expect(
