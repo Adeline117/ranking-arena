@@ -58,6 +58,9 @@ describe('group subscription expiry owner compatibility migration', () => {
     expect(migration).toContain('membership.inherit_option OR membership.set_option')
     expect(migration).toContain('NOT role_row.rolsuper')
     expect(migration).toContain('AND NOT role_row.rolbypassrls')
+    expect(migration).toContain("role_row.rolname = 'cli_login_postgres'")
+    expect(migration).toContain('AND NOT managed_membership.inherit_option')
+    expect(migration).toContain('AND managed_membership.set_option')
     expect(migration).toContain('inherited.role_oid IN (v_service, v_postgres)')
   })
 
