@@ -5,9 +5,6 @@ BEGIN;
 
 SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;
 
-SET LOCAL lock_timeout = '5s';
-SET LOCAL statement_timeout = '2min';
-
 DO $preflight$
 BEGIN
   IF EXISTS (
