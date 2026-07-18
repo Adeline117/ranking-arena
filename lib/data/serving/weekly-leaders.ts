@@ -125,14 +125,23 @@ function parseBitmart(raw: unknown): BitmartWeekly | null {
 export async function getWeeklyLeaders(
   supabase: SupabaseClient,
   limit = 50
-): Promise<WeeklyLeaders | null> {
+): Promise<WeeklyLeaders> {
   const { data, error } = await supabase.rpc('arena_weekly_leaders', { p_limit: limit })
   logRpcError('arena_weekly_leaders', error)
-  if (error || !data || typeof data !== 'object') return null
+  if (error) {
+    throw new Error('Weekly rankings request failed', { cause: error })
+  }
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error('Weekly rankings returned an invalid response')
+  }
   const d = data as Record<string, unknown>
+  const nonLegacyCount = numOrNull(d.nonLegacyCount)
+  if (nonLegacyCount === null || !Array.isArray(d.rows)) {
+    throw new Error('Weekly rankings returned an invalid response')
+  }
 
   const rows: WeeklyLeaderRow[] = []
-  for (const raw of Array.isArray(d.rows) ? d.rows : []) {
+  for (const raw of d.rows) {
     if (!raw || typeof raw !== 'object') continue
     const r = raw as Record<string, unknown>
     const roi = numOrNull(r.roi)
@@ -170,7 +179,7 @@ export async function getWeeklyLeaders(
   }
 
   return {
-    nonLegacyCount: numOrNull(d.nonLegacyCount) ?? 0,
+    nonLegacyCount,
     rows,
     bitmart: parseBitmart(d.bitmartWeekly),
   }
