@@ -13,12 +13,15 @@ import { sendNotification } from '@/lib/data/notifications'
 export async function handleSubscriptionUpdate(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string
 
-  const { data: profile } = await getSupabase()
+  const { data: profile, error: profileError } = await getSupabase()
     .from('user_profiles')
     .select('id')
     .eq('stripe_customer_id', customerId)
-    .single()
+    .maybeSingle()
 
+  if (profileError) {
+    throw new Error(`Failed to find subscription owner: ${profileError.message}`)
+  }
   if (!profile) {
     logger.warn('Subscription update: no user found for stripe_customer_id', { customerId })
     return
@@ -50,14 +53,7 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
 
   // Regular Pro membership subscription — 显式白名单匹配,不再"未知 price 默认
   // monthly"(2026-07-11 审计:此前任何未知/误建/测试 price 都静默授 Pro monthly)。
-  let plan: 'monthly' | 'yearly' | 'lifetime' | null = null
-  if (priceId === STRIPE_PRICE_IDS.yearly || priceId === env.STRIPE_PRO_YEARLY_PRICE_ID) {
-    plan = 'yearly'
-  } else if (STRIPE_PRICE_IDS.lifetime && priceId === STRIPE_PRICE_IDS.lifetime) {
-    plan = 'lifetime'
-  } else if (STRIPE_PRICE_IDS.monthly && priceId === STRIPE_PRICE_IDS.monthly) {
-    plan = 'monthly'
-  }
+  const plan = getProPlanFromPriceId(priceId)
 
   if (!plan) {
     // 未命中任何已知 price → 不授权,critical 告警人工核查(先 observe;确认 env
@@ -79,7 +75,7 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
     } catch {
       /* alert failure non-fatal */
     }
-    return
+    throw new Error(`Cannot map Stripe price ${priceId || 'missing'} to a Pro plan`)
   }
 
   await updateUserSubscription(profile.id, subscription, plan)
@@ -88,12 +84,15 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
 export async function handleSubscriptionCanceled(subscription: Stripe.Subscription) {
   const customerId = subscription.customer as string
 
-  const { data: profile } = await getSupabase()
+  const { data: profile, error: profileLookupError } = await getSupabase()
     .from('user_profiles')
     .select('id')
     .eq('stripe_customer_id', customerId)
-    .single()
+    .maybeSingle()
 
+  if (profileLookupError) {
+    throw new Error(`Failed to find canceled subscription owner: ${profileLookupError.message}`)
+  }
   if (!profile) {
     logger.warn('Subscription canceled: no user found for stripe_customer_id', { customerId })
     return
@@ -133,18 +132,25 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
       userId: profile.id,
       error: subError.message,
     })
+    throw new Error(`Failed to cancel subscription record: ${subError.message}`)
   }
 
   // P-1 FIX: Only downgrade if the canceled subscription is still the user's
   // current one. If the user re-subscribed (new stripe_subscription_id replaced
   // the old one via upsert), a late-delivered `customer.subscription.deleted`
   // for the old sub must NOT downgrade them.
-  const { data: currentSub } = await getSupabase()
+  const { data: currentSub, error: currentSubError } = await getSupabase()
     .from('subscriptions')
     .select('stripe_subscription_id, status')
     .eq('user_id', profile.id)
-    .single()
+    .maybeSingle()
 
+  if (currentSubError) {
+    throw new Error(
+      `Failed to verify current subscription before downgrade: ${currentSubError.message}`
+    )
+  }
+  let downgradedToFree = false
   if (currentSub && currentSub.stripe_subscription_id !== subscription.id) {
     logger.info('Skipping profile downgrade — user has a newer subscription', {
       userId: profile.id,
@@ -153,11 +159,14 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
     })
   } else {
     // Check lifetime plan holder
-    const { data: currentProfile } = await getSupabase()
+    const { data: currentProfile, error: currentProfileError } = await getSupabase()
       .from('user_profiles')
       .select('pro_plan')
       .eq('id', profile.id)
-      .single()
+      .maybeSingle()
+    if (currentProfileError) {
+      throw new Error(`Failed to verify lifetime entitlement: ${currentProfileError.message}`)
+    }
     if (currentProfile?.pro_plan === 'lifetime') {
       logger.info('Skipping downgrade for lifetime user on subscription cancel', {
         userId: profile.id,
@@ -175,17 +184,22 @@ export async function handleSubscriptionCanceled(subscription: Stripe.Subscripti
           userId: profile.id,
           error: profileError.message,
         })
+        throw new Error(`Failed to downgrade user tier: ${profileError.message}`)
       }
+      downgradedToFree = true
     }
   }
 
-  try {
-    const leftGroup = await leaveProOfficialGroup(profile.id)
-    if (leftGroup) {
-      logger.info(`User ${profile.id} left Pro official group`)
+  if (downgradedToFree) {
+    try {
+      const leftGroup = await leaveProOfficialGroup(profile.id)
+      if (leftGroup) {
+        logger.info(`User ${profile.id} left Pro official group`)
+      }
+    } catch (leaveError) {
+      logger.error('Error leaving Pro official group', { error: leaveError })
+      throw leaveError
     }
-  } catch (leaveError) {
-    logger.error('Error leaving Pro official group', { error: leaveError })
   }
 
   logger.info(`Subscription canceled for user ${profile.id}`)
@@ -312,5 +326,20 @@ function getApiPlanFromPriceId(priceId: string | undefined): string | null {
   if (!priceId) return null
   if (STRIPE_API_PRICE_IDS.starter && priceId === STRIPE_API_PRICE_IDS.starter) return 'starter'
   if (STRIPE_API_PRICE_IDS.pro && priceId === STRIPE_API_PRICE_IDS.pro) return 'pro'
+  return null
+}
+
+export function getProPlanFromPriceId(
+  priceId: string | undefined
+): 'monthly' | 'yearly' | 'lifetime' | null {
+  if (priceId === STRIPE_PRICE_IDS.yearly || priceId === env.STRIPE_PRO_YEARLY_PRICE_ID) {
+    return 'yearly'
+  }
+  if (STRIPE_PRICE_IDS.lifetime && priceId === STRIPE_PRICE_IDS.lifetime) {
+    return 'lifetime'
+  }
+  if (STRIPE_PRICE_IDS.monthly && priceId === STRIPE_PRICE_IDS.monthly) {
+    return 'monthly'
+  }
   return null
 }

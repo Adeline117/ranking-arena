@@ -22,7 +22,9 @@ async function isLifetimePurchaseCharge(charge: Stripe.Charge): Promise<boolean 
       pi,
       error: err instanceof Error ? err.message : err,
     })
-    return null
+    throw new Error(
+      `Failed to identify lifetime refund: ${err instanceof Error ? err.message : String(err)}`
+    )
   }
 }
 
@@ -33,12 +35,15 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
     return
   }
 
-  const { data: profile } = await getSupabase()
+  const { data: profile, error: profileError } = await getSupabase()
     .from('user_profiles')
     .select('id, subscription_tier')
     .eq('stripe_customer_id', customerId)
-    .single()
+    .maybeSingle()
 
+  if (profileError) {
+    throw new Error(`Failed to find refunded charge owner: ${profileError.message}`)
+  }
   if (!profile) {
     logger.warn('Refund processed but no user found', { customerId, chargeId: charge.id })
     return
@@ -60,22 +65,34 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
     )
   if (historyErr) {
     logger.error('Failed to record refund', { error: historyErr, chargeId: charge.id })
+    throw new Error(`Failed to record refund: ${historyErr.message}`)
   }
 
   if (charge.refunded && charge.amount === charge.amount_refunded) {
-    const { data: subscription } = await getSupabase()
+    let entitlementRevoked = false
+    const { data: subscription, error: subscriptionLookupError } = await getSupabase()
       .from('subscriptions')
       .select('id, status')
       .eq('user_id', profile.id)
       .eq('status', 'active')
-      .single()
+      .maybeSingle()
 
+    if (subscriptionLookupError) {
+      throw new Error(
+        `Failed to find active subscription for refunded charge: ${subscriptionLookupError.message}`
+      )
+    }
     // Cancel active subscription if exists
     if (subscription) {
-      await getSupabase()
+      const { error: cancellationError } = await getSupabase()
         .from('subscriptions')
         .update({ status: 'canceled', canceled_at: new Date().toISOString() })
         .eq('id', subscription.id)
+      if (cancellationError) {
+        throw new Error(
+          `Failed to cancel subscription after full refund: ${cancellationError.message}`
+        )
+      }
       logger.info(`Subscription ${subscription.id} canceled due to full refund`)
     }
 
@@ -84,15 +101,18 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
     // 2026-07-11 修:此前注释这么说、代码却无条件跳过 → 买 lifetime→退款→
     // 白嫖 Pro。现回查 checkout session 判定这笔是否 lifetime 购买;
     // 判定不了(null)时保守跳过降级但 error 级留痕(人工跟进,不静默)。
-    const { data: currentProfile } = await getSupabase()
+    const { data: currentProfile, error: currentProfileError } = await getSupabase()
       .from('user_profiles')
       .select('pro_plan')
       .eq('id', profile.id)
-      .single()
+      .maybeSingle()
+    if (currentProfileError) {
+      throw new Error(`Failed to verify refunded entitlement: ${currentProfileError.message}`)
+    }
     const lifetimeCharge =
       currentProfile?.pro_plan === 'lifetime' ? await isLifetimePurchaseCharge(charge) : false
     if (currentProfile?.pro_plan === 'lifetime' && lifetimeCharge === true) {
-      await getSupabase()
+      const { error: downgradeError } = await getSupabase()
         .from('user_profiles')
         .update({
           subscription_tier: 'free',
@@ -100,6 +120,12 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
           updated_at: new Date().toISOString(),
         })
         .eq('id', profile.id)
+      if (downgradeError) {
+        throw new Error(
+          `Failed to revoke lifetime entitlement after refund: ${downgradeError.message}`
+        )
+      }
+      entitlementRevoked = true
       logger.info('Lifetime purchase fully refunded — Pro revoked', {
         userId: profile.id,
         chargeId: charge.id,
@@ -111,22 +137,29 @@ export async function handleChargeRefunded(charge: Stripe.Charge) {
         lookup: lifetimeCharge === null ? 'lookup-failed' : 'other-charge',
       })
     } else {
-      await getSupabase()
+      const { error: downgradeError } = await getSupabase()
         .from('user_profiles')
         .update({
           subscription_tier: 'free',
           updated_at: new Date().toISOString(),
         })
         .eq('id', profile.id)
+      if (downgradeError) {
+        throw new Error(`Failed to downgrade refunded user: ${downgradeError.message}`)
+      }
+      entitlementRevoked = true
     }
 
-    try {
-      await leaveProOfficialGroup(profile.id)
-    } catch (leaveError) {
-      logger.error('Error leaving Pro group after refund', { error: leaveError })
-    }
+    if (entitlementRevoked) {
+      try {
+        await leaveProOfficialGroup(profile.id)
+      } catch (leaveError) {
+        logger.error('Error leaving Pro group after refund', { error: leaveError })
+        throw leaveError
+      }
 
-    logger.info(`User ${profile.id} downgraded to free after full refund`)
+      logger.info(`User ${profile.id} downgraded to free after full refund`)
+    }
   }
 
   logger.info('Charge refunded', {

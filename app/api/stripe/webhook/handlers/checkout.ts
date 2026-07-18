@@ -2,7 +2,7 @@ import Stripe from 'stripe'
 import { stripe, API_TIER_LIMITS } from '@/lib/stripe'
 import { joinProOfficialGroup } from '@/app/api/pro-official-group/route'
 import { getSupabase, withRetry, logger } from './shared'
-import { updateUserSubscription } from './subscription'
+import { getProPlanFromPriceId, updateUserSubscription } from './subscription'
 import { mintNFTForUser } from './nft'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { fireAndForget } from '@/lib/utils/logger'
@@ -25,7 +25,7 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
   if (!userId) {
     logger.error('No userId in session metadata', { metadata: session.metadata })
-    return
+    throw new Error(`Checkout ${session.id} cannot be mapped to a user`)
   }
 
   // API tier subscription checkout
@@ -33,7 +33,7 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     const apiPlan = session.metadata.api_plan
     if (!apiPlan || !['starter', 'pro'].includes(apiPlan)) {
       logger.error('Invalid api_plan in metadata', { metadata: session.metadata })
-      return
+      throw new Error(`Checkout ${session.id} has invalid API plan metadata`)
     }
     const subscriptionId = session.subscription as string
     if (!subscriptionId || session.payment_status !== 'paid') {
@@ -71,23 +71,30 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
 
   if (session.mode !== 'subscription') {
     logger.warn(`Session ${session.id} is not a subscription`, { mode: session.mode })
+    if (session.payment_status === 'paid') {
+      throw new Error(`Paid checkout ${session.id} has no supported product mapping`)
+    }
     return
   }
 
   const subscriptionId = session.subscription as string
   if (!subscriptionId) {
     logger.error('No subscription ID in checkout session')
-    return
+    throw new Error(`Checkout ${session.id} is missing its subscription ID`)
   }
 
   // If user already has an active subscription with a DIFFERENT stripe_subscription_id,
   // cancel the new one automatically to prevent double billing
-  const { data: existingSub } = await getSupabase()
+  const { data: existingSub, error: existingSubError } = await getSupabase()
     .from('subscriptions')
     .select('stripe_subscription_id, status')
     .eq('user_id', userId)
     .in('status', ['active', 'trialing'])
     .maybeSingle()
+
+  if (existingSubError) {
+    throw new Error(`Failed to check existing subscription: ${existingSubError.message}`)
+  }
 
   if (
     existingSub?.stripe_subscription_id &&
@@ -111,17 +118,29 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
       return
     }
 
-    await updateUserSubscription(userId, subscription, plan || 'monthly')
+    const priceId = subscription.items.data[0]?.price.id
+    const authoritativePlan = getProPlanFromPriceId(priceId)
+    if (!authoritativePlan || authoritativePlan === 'lifetime') {
+      throw new Error(`Cannot map Stripe price ${priceId || 'missing'} to a subscription plan`)
+    }
+    if (plan && plan !== authoritativePlan) {
+      throw new Error(
+        `Checkout plan metadata ${plan} does not match Stripe price plan ${authoritativePlan}`
+      )
+    }
+
+    await updateUserSubscription(userId, subscription, authoritativePlan)
 
     try {
       const joinResult = await joinProOfficialGroup(userId)
       if (joinResult.success) {
         logger.info(`User ${userId} joined Pro official group`, { groupId: joinResult.groupId })
       } else {
-        logger.warn(`Failed to join Pro official group`, { message: joinResult.message })
+        throw new Error(`Failed to join Pro official group: ${joinResult.message}`)
       }
     } catch (joinError) {
       logger.error('Error joining Pro official group', { error: joinError })
+      throw joinError
     }
 
     await mintNFTForUser(userId, plan || 'monthly')
@@ -164,7 +183,7 @@ export async function handleTipPaymentCompleted(session: Stripe.Checkout.Session
 
   if (!tipId) {
     logger.warn('Tip payment completed without tip_id', { sessionId: session.id })
-    return
+    throw new Error(`Paid tip checkout ${session.id} is missing tip_id`)
   }
 
   logger.info('Tip payment completed', {
@@ -176,7 +195,7 @@ export async function handleTipPaymentCompleted(session: Stripe.Checkout.Session
     sessionId: session.id,
   })
 
-  const { error: updateError } = await getSupabase()
+  const { data: updatedTip, error: updateError } = await getSupabase()
     .from('tips')
     .update({
       status: 'completed',
@@ -184,10 +203,15 @@ export async function handleTipPaymentCompleted(session: Stripe.Checkout.Session
       completed_at: new Date().toISOString(),
     })
     .eq('id', tipId)
+    .select('id')
+    .maybeSingle()
 
   if (updateError) {
     logger.error('Failed to update tip status', { tipId, error: updateError.message })
-    return
+    throw new Error(`Failed to mark tip completed: ${updateError.message}`)
+  }
+  if (!updatedTip) {
+    throw new Error(`Failed to mark tip completed: tip ${tipId} was not found`)
   }
 
   if (toUserId && fromUserId && postId) {
@@ -276,9 +300,12 @@ async function handleLifetimePayment(userId: string, customerId: string) {
     const joinResult = await joinProOfficialGroup(userId)
     if (joinResult.success) {
       logger.info(`Lifetime user ${userId} joined Pro official group`)
+    } else {
+      throw new Error(`Failed to join Pro official group: ${joinResult.message}`)
     }
   } catch (joinError) {
     logger.error('Error joining Pro official group for lifetime user', { error: joinError })
+    throw joinError
   }
 
   await mintNFTForUser(userId, 'lifetime')

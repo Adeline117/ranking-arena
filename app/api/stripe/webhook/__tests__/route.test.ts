@@ -196,6 +196,31 @@ describe('POST /api/stripe/webhook', () => {
     })
   })
 
+  it('does not acknowledge a paid tip whose local persistence failed', async () => {
+    constructEventMock.mockReturnValue({
+      ...event(),
+      data: {
+        object: {
+          id: 'cs_tip',
+          customer: 'cus_123',
+          metadata: { type: 'tip', tip_id: 'tip-123' },
+        },
+      },
+    })
+    mockHandleTipPaymentCompleted.mockRejectedValueOnce(new Error('Failed to mark tip completed'))
+
+    const response = await POST(createRequest())
+
+    expect(response.status).toBe(500)
+    expect(mockHandleTipPaymentCompleted).toHaveBeenCalledTimes(1)
+    expect(mockHandleCheckoutComplete).not.toHaveBeenCalled()
+    expect(mockRpc).toHaveBeenCalledWith('finish_stripe_event', {
+      p_event_id: 'evt_test_retryable',
+      p_succeeded: false,
+      p_error: 'Failed to mark tip completed',
+    })
+  })
+
   it.each([
     ['customer.subscription.updated', mockHandleSubscriptionUpdate],
     ['customer.subscription.deleted', mockHandleSubscriptionCanceled],
