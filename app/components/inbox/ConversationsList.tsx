@@ -20,6 +20,7 @@ const CreateGroupModal = dynamic(() => import('@/app/components/features/CreateG
 })
 import { getCsrfHeaders } from '@/lib/api/client'
 import { Skeleton, SkeletonAvatar } from '@/app/components/ui/Skeleton'
+import ErrorMessage from '@/app/components/ui/ErrorMessage'
 
 type GroupChannel = {
   id: string
@@ -232,7 +233,6 @@ export default function ConversationsList({
 } = {}): React.ReactElement {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [groupChannels, setGroupChannels] = useState<GroupChannel[]>([])
-  const [error, setError] = useState<string | null>(null)
   const [showCreateGroup, setShowCreateGroup] = useState(false)
   const [chatFilter, setChatFilter] = useState<ChatFilter>(initialFilter)
   const setUnreadMessages = useInboxStore((s) => s.setUnreadMessages)
@@ -272,7 +272,11 @@ export default function ConversationsList({
   )
 
   // React Query: load conversations + group channels
-  const { isLoading: loading, refetch: refetchConversations } = useQuery({
+  const {
+    isLoading: loading,
+    isError: loadFailed,
+    refetch: refetchConversations,
+  } = useQuery({
     queryKey: ['conversations', accessToken],
     queryFn: async () => {
       const headers = await getAuthHeadersAsync()
@@ -285,7 +289,6 @@ export default function ConversationsList({
       const convs = convData.conversations || []
       setConversations(convs)
       setUnreadMessages(calculateTotalUnread(convs))
-      setError(null)
 
       if (groupRes?.ok) {
         const groupData = await groupRes.json()
@@ -498,6 +501,15 @@ export default function ConversationsList({
       </div>
       <CreateGroupModal isOpen={showCreateGroup} onClose={() => setShowCreateGroup(false)} />
 
+      {!loading && loadFailed && (
+        <div style={{ padding: tokens.spacing[4] }}>
+          <ErrorMessage
+            message={t('failedToLoadRetryShort')}
+            onRetry={() => void loadConversations()}
+          />
+        </div>
+      )}
+
       {loading ? (
         <div
           style={{
@@ -528,36 +540,10 @@ export default function ConversationsList({
             </div>
           ))}
         </div>
-      ) : error ? (
-        <div style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
-          <div
-            style={{
-              color: tokens.colors.accent.error,
-              fontSize: 13,
-              marginBottom: tokens.spacing[2],
-            }}
-          >
-            {error}
-          </div>
-          <button
-            onClick={() => loadConversations()}
-            style={{
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.md,
-              background: tokens.colors.accent.primary,
-              color: tokens.colors.white,
-              border: 'none',
-              cursor: 'pointer',
-              fontSize: 12,
-              fontWeight: 600,
-              transition: `all ${tokens.transition.base}`,
-            }}
-            className="hover-lift"
-          >
-            {t('retry')}
-          </button>
-        </div>
-      ) : conversations.length === 0 && groupChannels.length === 0 ? (
+      ) : loadFailed &&
+        conversations.length === 0 &&
+        groupChannels.length === 0 ? null : conversations.length === 0 &&
+        groupChannels.length === 0 ? (
         <div
           style={{
             padding: `${tokens.spacing[8]} ${tokens.spacing[4]}`,
