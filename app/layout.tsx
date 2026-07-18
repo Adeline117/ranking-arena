@@ -140,12 +140,6 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <head>
-        {/* Fix Next.js Suspense streaming injecting spurious noindex meta tags */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `document.querySelectorAll("meta[name=robots][content=noindex]").forEach(function(m){m.remove()});new MutationObserver(function(m){m.forEach(function(r){r.addedNodes.forEach(function(n){if(n.nodeName==="META"&&n.getAttribute("name")==="robots"&&n.content==="noindex"){n.remove()}})})}).observe(document.head,{childList:true})`,
-          }}
-        />
         <script
           dangerouslySetInnerHTML={{
             __html: `try{var l=localStorage.getItem('language');if(!l){var n=(navigator.language||'').toLowerCase();l=n.indexOf('zh')===0?'zh':n.indexOf('ja')===0?'ja':n.indexOf('ko')===0?'ko':'en';localStorage.setItem('language',l)}document.documentElement.lang=l==='en'?'en':l==='ja'?'ja':l==='ko'?'ko':'zh-CN';document.cookie='language='+l+';path=/;max-age=31536000;SameSite=Lax'}catch(e){}`,
@@ -293,11 +287,6 @@ export default function RootLayout({
         }}
         suppressHydrationWarning
       >
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `(function(){var origInsert=Node.prototype.insertBefore;Node.prototype.insertBefore=function(n,r){if(r&&r.parentNode!==this)return n;return origInsert.call(this,n,r)};var origRemove=Node.prototype.removeChild;Node.prototype.removeChild=function(c){if(c.parentNode!==this)return c;return origRemove.call(this,c)}})()`,
-          }}
-        />
         <SentryInit />
         <BetaBanner />
         <ProPromoBanner />
