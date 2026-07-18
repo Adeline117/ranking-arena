@@ -103,4 +103,31 @@ describe('MessageButton login intent', () => {
     expect(`${window.location.pathname}${window.location.search}`).toBe('/u/alice?tab=overview')
     expect(mockApiRequest).toHaveBeenCalledTimes(1)
   })
+
+  it('consumes an anonymous message intent without messaging the target account itself', async () => {
+    const href = queueProfileActionLogin({
+      action: 'message-user',
+      target: profileUserTarget('target-user'),
+      fallbackPath: '/u/alice',
+    })
+    window.history.replaceState(
+      {},
+      '',
+      new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
+    )
+
+    render(
+      <MessageButton
+        targetUserId="target-user"
+        currentUserId="target-user"
+        loginReturnPath="/u/alice"
+      />
+    )
+
+    await waitFor(() =>
+      expect(`${window.location.pathname}${window.location.search}`).toBe('/u/alice?tab=overview')
+    )
+    expect(window.sessionStorage).toHaveLength(0)
+    expect(mockApiRequest).not.toHaveBeenCalled()
+  })
 })

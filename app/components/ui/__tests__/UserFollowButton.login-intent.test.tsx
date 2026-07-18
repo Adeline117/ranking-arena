@@ -137,4 +137,67 @@ describe('UserFollowButton login intent', () => {
     expect(`${window.location.pathname}${window.location.search}`).toBe('/u/alice?tab=portfolio')
     expect(global.fetch).toHaveBeenCalledTimes(2)
   })
+
+  it('executes an explicit unfollow even when the initial status read fails', async () => {
+    const href = queueProfileActionLogin({
+      action: 'unfollow-user',
+      target: profileUserTarget('target-user'),
+      fallbackPath: '/u/alice',
+    })
+    window.history.replaceState(
+      {},
+      '',
+      new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
+    )
+    global.fetch = jest
+      .fn()
+      .mockResolvedValueOnce(response({ error: 'unavailable' }, 500))
+      .mockResolvedValueOnce(
+        response({ following: false, mutual: false, success: true })
+      ) as typeof fetch
+
+    render(
+      <UserFollowButton
+        targetUserId="target-user"
+        currentUserId="viewer-user"
+        loginReturnPath="/u/alice"
+      />
+    )
+
+    await waitFor(() => expect(global.fetch).toHaveBeenCalledTimes(2))
+    expect(global.fetch).toHaveBeenLastCalledWith(
+      '/api/users/follow',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify({ followingId: 'target-user', action: 'unfollow' }),
+      })
+    )
+  })
+
+  it('consumes an anonymous follow intent without following the target account itself', async () => {
+    const href = queueProfileActionLogin({
+      action: 'follow-user',
+      target: profileUserTarget('target-user'),
+      fallbackPath: '/u/alice',
+    })
+    window.history.replaceState(
+      {},
+      '',
+      new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
+    )
+
+    render(
+      <UserFollowButton
+        targetUserId="target-user"
+        currentUserId="target-user"
+        loginReturnPath="/u/alice"
+      />
+    )
+
+    await waitFor(() =>
+      expect(`${window.location.pathname}${window.location.search}`).toBe('/u/alice?tab=portfolio')
+    )
+    expect(window.sessionStorage).toHaveLength(0)
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
 })
