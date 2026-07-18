@@ -104,10 +104,15 @@ describe('挂载与加载态', () => {
     )
   })
 
-  it('有 SSR 数据：挂载不发请求、不闪 loading（首屏 LCP 契约）', () => {
-    const { result } = setup({ initialTraders: [ssrTrader], initialTotalCount: 1 })
+  it('有 SSR 数据：挂载不发请求、不闪 loading，并保留服务端 freshness', () => {
+    const { result } = setup({
+      initialTraders: [ssrTrader],
+      initialTotalCount: 1,
+      initialIsStale: true,
+    })
     expect(result.current.loading).toBe(false)
     expect(result.current.traders[0].id).toBe('ssr-1')
+    expect(result.current.isStale).toBe(true)
     expect(mockFetch).not.toHaveBeenCalled()
   })
 })
@@ -161,13 +166,14 @@ describe('错误降级', () => {
     expect(result.current.lastRefreshFailed).toBe(true)
   })
 
-  it('API 标记 is_stale → staleDataWarning 亮起（fallback 缓存需要提示用户）', async () => {
+  it('API 的 source freshness 标记进入独立 isStale 状态', async () => {
     const { result } = setup({ initialTraders: [ssrTrader], initialTotalCount: 1 })
-    mockPayloadOnce({ traders: [apiTrader('t-stale')], is_stale: true })
+    mockPayloadOnce({ traders: [apiTrader('t-stale')], isStale: true })
     await act(async () => {
       await result.current.fetchPage(0)
     })
-    expect(result.current.staleDataWarning).toBe(true)
+    expect(result.current.isStale).toBe(true)
+    expect(result.current.staleDataWarning).toBe(false)
   })
 })
 
@@ -228,34 +234,45 @@ describe('sticky filters（交易所页 bug 的根因防回归）', () => {
 
 // ---------------------------------------------------------------------------
 describe('指纹去重', () => {
-  it('相同数据的第二次 fetch 跳过 dispatch：lastUpdated 保持首次值', async () => {
+  it('指标相同但 lastUpdated/isStale 变化时仍传播 freshness', async () => {
     const { result } = setup({ initialTraders: [ssrTrader], initialTotalCount: 1 })
 
     const sameTraders = [apiTrader('t-1', { arena_score: 50, roi: 10 })]
-    mockPayloadOnce({ traders: sameTraders, lastUpdated: '2026-07-03T00:00:00Z' })
+    mockPayloadOnce({
+      traders: sameTraders,
+      lastUpdated: '2026-07-03T00:00:00Z',
+      isStale: false,
+    })
     await act(async () => {
       await result.current.fetchPage(0)
     })
     expect(result.current.lastUpdated).toBe('2026-07-03T00:00:00Z')
+    expect(result.current.isStale).toBe(false)
 
-    // 同 id:score:roi 指纹 + 新 lastUpdated → 整个 LOAD_SUCCESS 被跳过，
-    // 避免 60s 自动刷新在榜单未变时触发 50 行重渲染级联
-    mockPayloadOnce({ traders: sameTraders, lastUpdated: '2026-07-03T01:00:00Z' })
+    // 排名指标完全相同，但来源水位与陈旧状态变化：必须越过指标去重。
+    mockPayloadOnce({
+      traders: sameTraders,
+      lastUpdated: '2026-07-03T01:00:00Z',
+      isStale: true,
+    })
     await act(async () => {
       await result.current.fetchPage(0)
     })
-    expect(result.current.lastUpdated).toBe('2026-07-03T00:00:00Z')
+    expect(result.current.lastUpdated).toBe('2026-07-03T01:00:00Z')
+    expect(result.current.isStale).toBe(true)
     expect(result.current.loading).toBe(false)
 
     // 数据真变了（roi 变化）→ 正常更新
     mockPayloadOnce({
       traders: [apiTrader('t-1', { arena_score: 50, roi: 99 })],
       lastUpdated: '2026-07-03T02:00:00Z',
+      isStale: false,
     })
     await act(async () => {
       await result.current.fetchPage(0)
     })
     expect(result.current.lastUpdated).toBe('2026-07-03T02:00:00Z')
+    expect(result.current.isStale).toBe(false)
     expect(result.current.traders[0].roi).toBe(99)
   })
 })

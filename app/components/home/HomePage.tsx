@@ -47,6 +47,7 @@ import type { InitialTrader, CategoryCounts } from '@/lib/getInitialTraders'
 interface HomePageProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
+  initialIsStale?: boolean
   heroStats?: { traderCount: number; sourceBoardCount: number }
   initialTotalCount?: number
   initialCategoryCounts?: CategoryCounts
@@ -55,6 +56,7 @@ interface HomePageProps {
 export default function HomePage({
   initialTraders,
   initialLastUpdated,
+  initialIsStale,
   heroStats: _heroStats,
   initialTotalCount,
   initialCategoryCounts,
@@ -208,6 +210,7 @@ export default function HomePage({
               <HomePageClient
                 initialTraders={initialTraders}
                 initialLastUpdated={initialLastUpdated}
+                initialIsStale={initialIsStale}
                 initialTotalCount={initialTotalCount}
                 initialCategoryCounts={initialCategoryCounts}
               />

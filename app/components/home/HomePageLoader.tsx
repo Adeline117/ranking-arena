@@ -46,6 +46,7 @@ const SpeedInsights = dynamic(
 interface HomePageLoaderProps {
   initialTraders?: InitialTrader[]
   initialLastUpdated?: string | null
+  initialIsStale?: boolean
   heroStats?: { traderCount: number; sourceBoardCount: number }
   initialTotalCount?: number
   initialCategoryCounts?: CategoryCounts

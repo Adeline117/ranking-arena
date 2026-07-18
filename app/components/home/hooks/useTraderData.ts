@@ -27,6 +27,7 @@ interface UseTraderDataOptions {
   sortOrder?: SortOrder
   initialTraders?: Trader[]
   initialLastUpdated?: string | null
+  initialIsStale?: boolean
   initialTotalCount?: number
   initialCategoryCounts?: CategoryCounts
 }
@@ -47,6 +48,8 @@ interface TraderDataState {
   totalCount: number
   categoryCounts: CategoryCounts
   lastRefreshFailed: boolean
+  /** Source-watermark freshness from the shared server contract. */
+  isStale: boolean
   /** True when consecutive auto-refresh failures exceed threshold (3+) */
   staleDataWarning: boolean
 }
@@ -57,6 +60,7 @@ type TraderDataAction =
       traders: Trader[]
       lastUpdated: string | null
       availableSources?: string[]
+      isStale?: boolean
     }
   | { type: 'SET_LOADING'; loading: boolean }
   | { type: 'SET_ERROR'; error: string | null }
@@ -71,6 +75,7 @@ type TraderDataAction =
       availableSources: string[]
       totalCount?: number
       categoryCounts?: CategoryCounts
+      isStale: boolean
     }
   | { type: 'LOAD_ERROR'; error: string }
   | { type: 'LOAD_ABORT' }
@@ -85,6 +90,7 @@ function traderDataReducer(state: TraderDataState, action: TraderDataAction): Tr
         currentTraders: action.traders,
         lastUpdated: action.lastUpdated,
         availableSources: action.availableSources || state.availableSources,
+        isStale: action.isStale ?? state.isStale,
       }
     case 'SET_LOADING':
       // Invariant: loading=false implies isChangingTimeRange=false.
@@ -118,6 +124,7 @@ function traderDataReducer(state: TraderDataState, action: TraderDataAction): Tr
         totalCount: action.totalCount ?? state.totalCount,
         categoryCounts: action.categoryCounts ?? state.categoryCounts,
         lastRefreshFailed: false,
+        isStale: action.isStale,
         staleDataWarning: false,
       }
     case 'LOAD_ERROR':
@@ -154,6 +161,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     autoRefreshInterval = AUTO_REFRESH_MS,
     initialTraders,
     initialLastUpdated,
+    initialIsStale = false,
     initialTotalCount = 0,
     initialCategoryCounts = { all: 0, futures: 0, spot: 0, onchain: 0 },
   } = options
@@ -178,6 +186,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
     totalCount: initialTotalCount,
     categoryCounts: initialCategoryCounts,
     lastRefreshFailed: false,
+    isStale: initialIsStale,
     staleDataWarning: false,
   })
 
@@ -215,6 +224,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
             type: 'SET_TRADERS',
             traders: payload.traders as Trader[],
             lastUpdated: payload.lastUpdated,
+            isStale: payload.isStale,
           })
         })
       }
@@ -336,12 +346,23 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           profit_factor: t.profit_factor != null ? Number(t.profit_factor) : null,
         }))
 
-        // Fingerprint check: skip dispatch if data is identical to current state.
-        // This prevents the full 50-row re-render cascade on auto-refresh when
-        // the leaderboard hasn't changed (which is most of the time).
-        const fingerprint = traders
+        const responseLastUpdated = data.lastUpdated || data.as_of || null
+        // Current /api/traders uses camelCase. Keep the legacy snake_case read
+        // during rollout so older cached payloads cannot silently lose the flag.
+        const responseIsStale =
+          typeof data.isStale === 'boolean'
+            ? data.isStale
+            : typeof data.is_stale === 'boolean'
+              ? data.is_stale
+              : false
+
+        // Fingerprint check: metrics, source watermark, and source-stale state
+        // together define the visible ranking state. A freshness-only change
+        // must reach the footer even when every score remains identical.
+        const traderFingerprint = traders
           .map((t) => `${t.id}:${t.arena_score}:${t.roi}:${t.is_verified ? 'v' : ''}`)
           .join('|')
+        const fingerprint = `${traderFingerprint}::freshness:${responseLastUpdated ?? 'unknown'}:${responseIsStale ? 'stale' : 'fresh'}`
         if (fingerprint === dataFingerprintRef.current) {
           // Data unchanged — skip dispatch to avoid unnecessary re-renders
           dispatch({ type: 'SET_LOADING', loading: false })
@@ -353,21 +374,19 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
           dispatch({
             type: 'LOAD_SUCCESS',
             traders,
-            lastUpdated: data.lastUpdated || data.as_of || null,
+            lastUpdated: responseLastUpdated,
             availableSources: data.availableSources || [],
             totalCount: data.totalCount ?? totalCountRef.current,
+            isStale: responseIsStale,
           })
-          // Surface stale data warning when API serves from fallback cache
-          if (data.is_stale) {
-            dispatch({ type: 'SET_STALE_DATA_WARNING', warning: true })
-          }
         })
 
         // Broadcast for multi-tab sync
         broadcast('TRADER_DATA_UPDATED', {
           timeRange,
           traders,
-          lastUpdated: data.lastUpdated || '',
+          lastUpdated: responseLastUpdated || '',
+          isStale: responseIsStale,
         })
       } catch (err) {
         if (err instanceof Error && err.name === 'AbortError') {
@@ -527,6 +546,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       fetchPage,
       lastRefreshFailed: state.lastRefreshFailed,
       staleDataWarning: state.staleDataWarning,
+      isStale: state.isStale,
     }),
     [
       state.currentTraders,
@@ -541,6 +561,7 @@ export function useTraderData(options: UseTraderDataOptions = {}) {
       state.categoryCounts,
       state.lastRefreshFailed,
       state.staleDataWarning,
+      state.isStale,
       changeTimeRange,
       refresh,
       retryDeferredFetch,

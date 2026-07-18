@@ -44,4 +44,17 @@ describe('public ranking freshness route contracts', () => {
     expect(ssr).toContain('lastUpdated: freshness.asOf')
     expect(ssr).toContain('home-initial-traders-v4')
   })
+
+  it('homepage carries the SSR stale flag into the interactive freshness state', () => {
+    const page = source('app/page.tsx')
+    const loader = source('app/components/home/HomePageLoader.tsx')
+    const home = source('app/components/home/HomePage.tsx')
+    const client = source('app/components/home/HomePageClient.tsx')
+
+    expect(page).toContain('initialIsStale={isStale}')
+    expect(loader).toContain('initialIsStale?: boolean')
+    expect(home).toContain('initialIsStale={initialIsStale}')
+    expect(client).toContain('initialIsStale,')
+    expect(client).toContain('isStale={isStale}')
+  })
 })

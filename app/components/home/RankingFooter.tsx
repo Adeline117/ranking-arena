@@ -13,16 +13,8 @@ interface RankingFooterProps {
   t: (key: string) => string
   onRefresh?: () => void
   lastRefreshFailed?: boolean
-}
-
-function isStale(dateStr: string | null | undefined): boolean {
-  if (!dateStr) return false
-  try {
-    const diffMs = Date.now() - new Date(dateStr).getTime()
-    return diffMs > 2 * 60 * 60 * 1000 // > 2 hours (matches compute-leaderboard 2h cadence)
-  } catch {
-    return false
-  }
+  /** Authoritative source-watermark freshness; do not infer it from score compute time. */
+  isStale: boolean
 }
 
 export default function RankingFooter({
@@ -32,8 +24,8 @@ export default function RankingFooter({
   t,
   onRefresh,
   lastRefreshFailed,
+  isStale,
 }: RankingFooterProps) {
-  const stale = isStale(lastUpdated)
   const { language } = useLanguage()
 
   // Live relative timestamp: re-render every 10s so "12s ago" keeps ticking.
@@ -48,7 +40,7 @@ export default function RankingFooter({
   return (
     <>
       {/* Stale data warning banner */}
-      {!loading && stale && (
+      {!loading && isStale && (
         <Box
           style={{
             margin: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
@@ -76,7 +68,7 @@ export default function RankingFooter({
             justifyContent: 'flex-end',
             gap: 4,
             fontSize: tokens.typography.fontSize.xs,
-            color: stale ? 'var(--color-accent-warning, #f59e0b)' : 'var(--color-text-tertiary)',
+            color: isStale ? 'var(--color-accent-warning, #f59e0b)' : 'var(--color-text-tertiary)',
             paddingRight: tokens.spacing[3],
           }}
         >
