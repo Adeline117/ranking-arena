@@ -47,7 +47,7 @@ describe('ROI-less ranking source shadow migration', () => {
     expect(migration).toContain("rank_row.source IN ('gtrade', 'bitfinex')")
     expect(migration).toContain('rank_row.arena_score > 0')
     expect(migration).toContain('rank_row.is_outlier IS NOT TRUE')
-    expect(migration).toContain('rank_row.roi BETWEEN -50000 AND 50000')
+    expect(migration).not.toMatch(/rank_row\.roi\s+BETWEEN/)
     expect(migration).toContain('IF v_visible_rank_rows <> 0 THEN')
   })
 
