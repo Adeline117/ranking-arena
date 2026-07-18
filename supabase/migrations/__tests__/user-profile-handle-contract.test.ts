@@ -19,10 +19,35 @@ describe('user profile handle contract migration', () => {
 
   it('fails closed on ownership, schema, function overload and index-name drift', () => {
     expect(migration).toContain('public.user_profiles must be an ordinary postgres-owned table')
+    expect(migration).toContain('auth.users authority is incompatible')
     expect(migration).toContain('profile handle-contract columns are incompatible')
     expect(migration).toContain('canonical auth profile provisioner is missing or incompatible')
     expect(migration).toContain('unexpected profile handle function overload exists')
     expect(migration).toContain('profile handle index name belongs to another relation')
+  })
+
+  it('supports exact owner and hosted managed-auth authority modes', () => {
+    expect(migration).toContain(
+      'v_owner_auth_mode := v_current_super OR v_auth_owner = CURRENT_USER'
+    )
+    expect(migration).toContain("CURRENT_USER = 'postgres'")
+    expect(migration).toContain("v_auth_owner = 'supabase_auth_admin'")
+    expect(migration).toContain('AND NOT v_current_super')
+    expect(migration).toContain('AND v_current_bypassrls')
+    expect(migration).toContain('managed auth.users privileges are insufficient')
+    expect(migration).toContain("'auth.users',\n      'SELECT'")
+    expect(migration).toContain("'auth.users',\n        'UPDATE'")
+    expect(migration).toContain('managed auth profile provisioning trigger is incompatible')
+
+    const triggerConvergence = migration.match(
+      /DO \$replace_auth_profile_triggers\$[\s\S]*?\$replace_auth_profile_triggers\$;/
+    )?.[0]
+    expect(triggerConvergence).toBeDefined()
+    expect(triggerConvergence).toMatch(
+      /IF v_managed_auth_mode THEN\s+RETURN;\s+END IF;[\s\S]*?DROP TRIGGER/
+    )
+    expect(triggerConvergence).toContain('CREATE TRIGGER on_auth_user_created')
+    expect(migration).not.toMatch(/\nCREATE TRIGGER on_auth_user_created/)
   })
 
   it('backfills identities and repairs legacy collisions deterministically', () => {
@@ -95,5 +120,10 @@ describe('user profile handle contract migration', () => {
     expect(migration).toContain('auth profile provisioner source drifted')
     expect(migration).toContain('profile handle trigger is incompatible')
     expect(migration).toContain('auth profile provisioning trigger is incompatible')
+    expect(migration).toContain('trigger_row.tgconstraint = 0')
+    expect(migration).toContain('NOT trigger_row.tgdeferrable')
+    expect(migration).toContain('NOT trigger_row.tginitdeferred')
+    expect(migration).toContain('trigger_row.tgnargs = 0')
+    expect(migration).toContain('pg_catalog.octet_length(trigger_row.tgargs) = 0')
   })
 })

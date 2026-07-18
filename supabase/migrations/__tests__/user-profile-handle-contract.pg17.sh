@@ -75,6 +75,23 @@ expect_migration_failure() {
   fi
 }
 
+expect_managed_migration_failure() {
+  local needle="$1"
+  local label="$2"
+  local failure_log="$TMP_ROOT/${label}.log"
+  if psql_cmd \
+    -c 'SET ROLE postgres' \
+    -f "$MIGRATION" >"$failure_log" 2>&1; then
+    echo "Expected managed migration failure: $label" >&2
+    return 1
+  fi
+  if ! grep -Fq "$needle" "$failure_log"; then
+    cat "$failure_log" >&2
+    echo "Missing managed migration failure evidence: $needle" >&2
+    return 1
+  fi
+}
+
 "$PG_BIN/initdb" \
   -D "$DATA_DIR" \
   --auth-local=trust \
@@ -94,6 +111,7 @@ CREATE ROLE authenticated NOLOGIN;
 CREATE ROLE service_role NOLOGIN NOBYPASSRLS;
 CREATE ROLE hostile_owner NOLOGIN;
 
+ALTER SCHEMA public OWNER TO postgres;
 GRANT USAGE ON SCHEMA public TO anon, authenticated, service_role;
 
 CREATE SCHEMA auth AUTHORIZATION postgres;
@@ -517,5 +535,201 @@ BEGIN
 END
 $replay_proof$;
 SQL
+
+# Hosted Supabase keeps auth.users under supabase_auth_admin while the postgres
+# migration identity is a non-superuser BYPASSRLS role.  In that topology the
+# migration must preserve the already-canonical auth trigger OID while repairing
+# the function in place, including on replay.
+psql_cmd <<'SQL'
+CREATE ROLE supabase_auth_admin NOLOGIN;
+
+ALTER TABLE auth.users ENABLE ROW LEVEL SECURITY;
+ALTER TABLE auth.users OWNER TO supabase_auth_admin;
+ALTER SCHEMA auth OWNER TO supabase_auth_admin;
+GRANT USAGE ON SCHEMA auth TO postgres;
+GRANT SELECT, INSERT, UPDATE, DELETE, TRIGGER ON auth.users TO postgres;
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $function$
+BEGIN
+  -- managed-success-function-drift
+  RETURN NEW;
+END
+$function$;
+GRANT EXECUTE ON FUNCTION public.handle_new_user() TO authenticated;
+
+ALTER ROLE postgres NOSUPERUSER BYPASSRLS;
+SQL
+
+MANAGED_TRIGGER_OID_BEFORE="$(
+  psql_cmd -Atqc "
+    SELECT trigger_row.oid
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'auth.users'::pg_catalog.regclass
+      AND trigger_row.tgname = 'on_auth_user_created'
+      AND NOT trigger_row.tgisinternal
+  "
+)"
+
+psql_cmd -c 'SET ROLE postgres' -f "$MIGRATION" >/dev/null
+psql_cmd -c 'SET ROLE postgres' -f "$MIGRATION" >/dev/null
+
+MANAGED_TRIGGER_OID_AFTER="$(
+  psql_cmd -Atqc "
+    SELECT trigger_row.oid
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'auth.users'::pg_catalog.regclass
+      AND trigger_row.tgname = 'on_auth_user_created'
+      AND NOT trigger_row.tgisinternal
+  "
+)"
+if [[ -z "$MANAGED_TRIGGER_OID_BEFORE" ]] \
+  || [[ "$MANAGED_TRIGGER_OID_AFTER" != "$MANAGED_TRIGGER_OID_BEFORE" ]]; then
+  echo "Managed auth replay replaced the canonical trigger OID" >&2
+  exit 1
+fi
+
+psql_cmd <<'SQL'
+SET ROLE postgres;
+
+INSERT INTO auth.users (id, email, raw_user_meta_data)
+VALUES (
+  '40404040-4040-4040-8040-404040404040',
+  'managed@example.com',
+  '{"handle":"Managed"}'
+);
+
+DO $managed_replay_proof$
+DECLARE
+  v_postgres oid := (
+    SELECT oid FROM pg_catalog.pg_roles WHERE rolname = 'postgres'
+  );
+BEGIN
+  IF (
+    SELECT owner_role.rolname
+    FROM pg_catalog.pg_class AS relation
+    JOIN pg_catalog.pg_roles AS owner_role
+      ON owner_role.oid = relation.relowner
+    WHERE relation.oid = 'auth.users'::pg_catalog.regclass
+  ) <> 'supabase_auth_admin'
+    OR NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_roles AS role_row
+      WHERE role_row.rolname = CURRENT_USER
+        AND role_row.rolname = 'postgres'
+        AND NOT role_row.rolsuper
+        AND role_row.rolbypassrls
+    )
+    OR NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_trigger AS trigger_row
+      WHERE trigger_row.tgrelid = 'auth.users'::pg_catalog.regclass
+        AND trigger_row.tgname = 'on_auth_user_created'
+        AND trigger_row.tgfoid =
+          'public.handle_new_user()'::pg_catalog.regprocedure
+        AND trigger_row.tgenabled = 'O'
+        AND NOT trigger_row.tgisinternal
+        AND trigger_row.tgtype = 5
+        AND trigger_row.tgattr = ''::pg_catalog.int2vector
+        AND trigger_row.tgqual IS NULL
+        AND trigger_row.tgconstraint = 0
+        AND NOT trigger_row.tgdeferrable
+        AND NOT trigger_row.tginitdeferred
+        AND trigger_row.tgnargs = 0
+        AND pg_catalog.octet_length(trigger_row.tgargs) = 0
+    )
+    OR (
+      SELECT pg_catalog.count(*)
+      FROM pg_catalog.pg_trigger AS trigger_row
+      WHERE trigger_row.tgrelid = 'auth.users'::pg_catalog.regclass
+        AND trigger_row.tgfoid =
+          'public.handle_new_user()'::pg_catalog.regprocedure
+        AND NOT trigger_row.tgisinternal
+    ) <> 1
+    OR NOT EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.oid =
+          'public.handle_new_user()'::pg_catalog.regprocedure
+        AND function_row.proowner = v_postgres
+        AND function_row.prosecdef
+        AND function_row.proconfig =
+          ARRAY['search_path=pg_catalog, pg_temp']::text[]
+        AND pg_catalog.strpos(
+          function_row.prosrc,
+          'NEW.raw_user_meta_data'
+        ) > 0
+        AND pg_catalog.strpos(
+          function_row.prosrc,
+          'managed-success-function-drift'
+        ) = 0
+    )
+    OR pg_catalog.has_function_privilege(
+      'authenticated',
+      'public.handle_new_user()',
+      'EXECUTE'
+    )
+    OR (
+      SELECT handle
+      FROM public.user_profiles
+      WHERE id = '40404040-4040-4040-8040-404040404040'
+    ) <> 'Managed'
+  THEN
+    RAISE EXCEPTION 'managed auth replay did not preserve trigger authority';
+  END IF;
+END
+$managed_replay_proof$;
+
+RESET ROLE;
+SQL
+
+# A managed trigger mismatch must fail before the function can be replaced.
+# The failed transaction leaves both the trigger OID/disabled state and the
+# deliberately drifted function source untouched.
+psql_cmd <<'SQL'
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY INVOKER
+SET search_path = public
+AS $function$
+BEGIN
+  -- managed-atomic-failure-sentinel
+  RETURN NEW;
+END
+$function$;
+ALTER TABLE auth.users DISABLE TRIGGER on_auth_user_created;
+SQL
+
+expect_managed_migration_failure \
+  'managed auth profile provisioning trigger is incompatible' \
+  'managed-trigger-drift'
+
+if [[ "$(psql_cmd -Atqc "
+  SELECT trigger_row.oid::text || ':' || trigger_row.tgenabled::text
+  FROM pg_catalog.pg_trigger AS trigger_row
+  WHERE trigger_row.tgrelid = 'auth.users'::pg_catalog.regclass
+    AND trigger_row.tgname = 'on_auth_user_created'
+    AND NOT trigger_row.tgisinternal
+")" != "${MANAGED_TRIGGER_OID_BEFORE}:D" ]]; then
+  echo "Failed managed migration did not preserve the drifted trigger atomically" >&2
+  exit 1
+fi
+if [[ "$(psql_cmd -Atqc "
+  SELECT (pg_catalog.strpos(
+    function_row.prosrc,
+    'managed-atomic-failure-sentinel'
+  ) > 0)::text
+  FROM pg_catalog.pg_proc AS function_row
+  WHERE function_row.oid =
+    'public.handle_new_user()'::pg_catalog.regprocedure
+")" != "true" ]]; then
+  echo "Failed managed migration partially replaced the provisioner" >&2
+  exit 1
+fi
 
 echo "User profile handle contract PostgreSQL 17 proof passed"
