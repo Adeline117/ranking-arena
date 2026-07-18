@@ -72,6 +72,10 @@ export const GET = withAuth(
         .in('conversation_id', conversationIds),
     ])
 
+    if (profilesResult.error || unreadResult.error || memberSettingsResult.error) {
+      return NextResponse.json({ error: 'Failed to fetch conversations' }, { status: 500 })
+    }
+
     // 构建用户资料映射
     const profileMap = new Map<
       string,
