@@ -161,10 +161,13 @@ export function EquityCurveSection({
   return (
     <Box className="stats-card glass-card" style={cardStyle}>
       <Box
+        className="equity-curve-toolbar"
         style={{
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: tokens.spacing[2],
           marginBottom: tokens.spacing[4],
         }}
       >
@@ -203,7 +206,16 @@ export function EquityCurveSection({
           ))}
         </Box>
 
-        <Box style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[2] }}>
+        <Box
+          className="equity-curve-actions"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: tokens.spacing[2],
+            marginLeft: 'auto',
+            maxWidth: '100%',
+          }}
+        >
           {/* Period Selector */}
           <PeriodSelector value={period} onChange={setPeriod} t={t} />
           {/* Export chart as image */}
