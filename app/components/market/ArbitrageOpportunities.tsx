@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { apiFetch } from '@/lib/utils/api-fetch'
+import ErrorState from '@/app/components/ui/ErrorState'
 
 interface CrossExchangeOpp {
   type: 'cross-exchange'
@@ -26,17 +27,30 @@ export default function ArbitrageOpportunities() {
   const { t } = useLanguage()
   const [opps, setOpps] = useState<ArbOpp[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState(false)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(false)
+    try {
+      const json = await apiFetch<{ ok?: boolean; opportunities?: ArbOpp[] }>(
+        '/api/market/arbitrage'
+      )
+      if (!json.ok || !Array.isArray(json.opportunities)) {
+        throw new Error('Malformed arbitrage response')
+      }
+      setOpps(json.opportunities.slice(0, 4))
+    } catch {
+      setOpps([])
+      setError(true)
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   useEffect(() => {
-    apiFetch<{ ok?: boolean; opportunities?: ArbOpp[] }>('/api/market/arbitrage')
-      .then((json) => {
-        if (json.ok && Array.isArray(json.opportunities)) {
-          setOpps(json.opportunities.slice(0, 4))
-        }
-      })
-      .catch((err) => console.warn('[ArbitrageOpportunities] fetch failed', err))
-      .finally(() => setLoading(false))
-  }, [])
+    void load()
+  }, [load])
 
   const hasOpps = opps.length > 0
 
@@ -105,6 +119,13 @@ export default function ArbitrageOpportunities() {
 
       {loading ? (
         <div className="skeleton" style={{ height: 120, borderRadius: tokens.radius.md }} />
+      ) : error ? (
+        <ErrorState
+          title={t('marketDataError')}
+          description={t('loadFailedRetryShort')}
+          retry={() => void load()}
+          variant="compact"
+        />
       ) : hasOpps ? (
         <div
           style={{ display: 'flex', flexDirection: 'column', gap: `${tokens.spacing[1]}`, flex: 1 }}
