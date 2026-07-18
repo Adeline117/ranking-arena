@@ -209,7 +209,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
     email && !alreadySubscribed
       ? () => {
           trackEvent('click_upgrade_cta', { plan: billing })
-          directCheckout(billing)
+          directCheckout({ plan: billing })
         }
       : undefined
 
@@ -737,7 +737,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                   <button
                     onClick={() => {
                       trackEvent('click_free_trial', { plan: billing })
-                      directCheckout(billing, { trial: true })
+                      directCheckout({ plan: billing, trial: true })
                     }}
                     disabled={checkoutLoading}
                     style={{
@@ -1060,7 +1060,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               <button
                 onClick={() => {
                   trackEvent('click_upgrade_cta', { plan: 'lifetime' })
-                  directCheckout('lifetime')
+                  directCheckout({ plan: 'lifetime', billing })
                 }}
                 disabled={checkoutLoading}
                 style={{
