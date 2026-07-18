@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import GroupsFeedPage from '../GroupsFeedPage'
 
 const membershipQuery = jest.fn()
+const groupDirectoryQuery = jest.fn()
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
   useAuthSession: () => ({ userId: 'viewer-1' }),
@@ -28,14 +29,25 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
 jest.mock('@/lib/supabase/client', () => ({
   supabase: {
     from: jest.fn((table: string) => {
-      if (table !== 'own_group_memberships') {
-        throw new Error(`Unexpected table: ${table}`)
+      if (table === 'own_group_memberships') {
+        return {
+          select: jest.fn(() => ({
+            eq: (...args: unknown[]) => membershipQuery(...args),
+          })),
+        }
       }
-      return {
-        select: jest.fn(() => ({
-          eq: (...args: unknown[]) => membershipQuery(...args),
-        })),
+
+      if (table === 'groups') {
+        return {
+          select: jest.fn(() => ({
+            order: jest.fn(() => ({
+              limit: (...args: unknown[]) => groupDirectoryQuery(...args),
+            })),
+          })),
+        }
       }
+
+      throw new Error(`Unexpected table: ${table}`)
     }),
   },
 }))
@@ -95,5 +107,19 @@ describe('GroupsFeedPage joined-groups failure state', () => {
     await waitFor(() => expect(membershipQuery).toHaveBeenCalledTimes(2))
     expect(await screen.findByText('No groups followed yet')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps a failed recommended seed distinct from an empty recommendation list', async () => {
+    membershipQuery.mockResolvedValue({ data: [], error: null })
+    groupDirectoryQuery.mockResolvedValue({ data: [], error: null })
+
+    render(<GroupsFeedPage initialPosts={[]} initialGroups={[]} initialGroupsStatus="error" />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load, please retry')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    await waitFor(() => expect(groupDirectoryQuery).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   })
 })
