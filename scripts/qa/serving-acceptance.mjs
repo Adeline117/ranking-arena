@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable no-console -- acceptance CLI intentionally streams each probe's verdict */
 /**
  * Serving acceptance — the single end-to-end gate for the rebuilt data layer.
  *
@@ -14,8 +15,9 @@
  *
  * Layers:
  *   1. pipeline-coverage-audit  — data flowed AND reached the read path
- *      (passed snapshots, compat rows, series coverage) — DB-level.
- *   2. ingest-shadow-diff       — compat rows match arena.* source of truth.
+ *      (per-window snapshots, scored rows, current count cache, series) — DB-level.
+ *   2. ingest-shadow-diff       — active serving registry, score-visible rows,
+ *      API identity/filtering, and current leaderboard counts agree.
  *   3. serving-profiles-e2e     — real browser render per serving source
  *      (HTTP, i18n leaks, console errors, empty/dormant states).
  *
@@ -45,8 +47,8 @@ function run(label, file, args = []) {
 const results = []
 // 1. coverage audit (DB) — informational on LOW-SERIES, fails on real breaks
 results.push(await run('1/3 Pipeline coverage audit', 'pipeline-coverage-audit.mjs', ['--soft']))
-// 2. shadow diff (DB)
-results.push(await run('2/3 Shadow compat diff', '../ingest-shadow-diff.ts'))
+// 2. canonical ranking/count-cache diff (DB; legacy filename kept for operators)
+results.push(await run('2/3 Serving rank/cache diff', '../ingest-shadow-diff.ts'))
 // 3. real-browser render
 results.push(
   await run('3/3 Serving profile render', 'serving-profiles-e2e.mjs', baseUrl ? [baseUrl] : [])
