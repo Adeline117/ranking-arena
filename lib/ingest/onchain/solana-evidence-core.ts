@@ -97,7 +97,7 @@ export interface SolanaEvidenceRpcOpts {
   /** A single approved endpoint. endpointId is mandatory when this is set. */
   rpcUrl?: string
   endpointId?: SolanaEvidenceEndpointId
-  /** Per JSON-RPC request; capture has two sequential request rounds. */
+  /** Per JSON-RPC request; anchor capture has three sequential request rounds. */
   timeoutMs?: number
 }
 
@@ -143,6 +143,7 @@ export type SolanaRpcResult = SolanaRpcSuccess | SolanaRpcFailure
 export const SOLANA_RAW_RPC_EVIDENCE_LANES = [
   'genesis_hash',
   'finalized_anchor_slot',
+  'finalized_anchor_produced_slots',
   'finalized_anchor_block',
   'transaction',
   'signature_status',
@@ -154,6 +155,7 @@ export type SolanaRawRpcEvidenceLane = (typeof SOLANA_RAW_RPC_EVIDENCE_LANES)[nu
 const SOLANA_RAW_RPC_LANE_METHODS: Record<SolanaRawRpcEvidenceLane, string> = {
   genesis_hash: 'getGenesisHash',
   finalized_anchor_slot: 'getSlot',
+  finalized_anchor_produced_slots: 'getBlocks',
   finalized_anchor_block: 'getBlock',
   transaction: 'getTransaction',
   signature_status: 'getSignatureStatuses',

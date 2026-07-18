@@ -30,6 +30,7 @@ interface RpcCall {
 }
 
 const SLOT = 433_347_059
+const FINALIZED_ROOT_SLOT = SLOT + 2
 const BLOCK_HASH = '66VMKCNBU8H2CQsYVFm94vv8Qobz7EgxPTxw7CyystSu'
 const PREVIOUS_BLOCK_HASH = '3kvmuuz5t9rDT3YBdBhhrRwEcn9hnMnVm4nLXNzrro93'
 const BLOCK_TIME = 1_784_235_622
@@ -116,9 +117,12 @@ function anchorFixture() {
     chain: { cluster: 'mainnet-beta', genesisHash: SOLANA_MAINNET_GENESIS_HASH },
     observedAt: FIXED_NOW,
     anchorPolicy: {
-      version: 'solana_current_finalized_block_v1',
+      version: 'solana_current_finalized_produced_block_v2',
       genesisMethod: 'getGenesisHash',
-      slotMethod: 'getSlot',
+      rootSlotMethod: 'getSlot',
+      producedSlotsMethod: 'getBlocks',
+      producedSlotLookback: 512,
+      minContextSlotPolicy: 'finalized_root_slot',
       blockMethod: 'getBlock',
       commitment: 'finalized',
       encoding: 'json',
@@ -129,7 +133,14 @@ function anchorFixture() {
       maxCurrentAnchorLagMs: 900_000,
     },
     genesisHash: lane(SOLANA_MAINNET_GENESIS_HASH),
-    finalizedSlot: lane(SLOT),
+    finalizedRootSlot: lane(FINALIZED_ROOT_SLOT),
+    producedSlotResolution: lane({
+      rangeStartSlot: FINALIZED_ROOT_SLOT - 512,
+      rangeEndSlot: FINALIZED_ROOT_SLOT,
+      producedSlots: [SLOT],
+      selectedSlot: SLOT,
+      selectionPolicy: 'highest_returned_finalized_produced_slot_v1',
+    }),
     finalizedBlock: lane(anchorBlock()),
   }
 }
@@ -352,8 +363,9 @@ describe('Solana transaction finality evidence', () => {
         blockMaxSupportedTransactionVersion: null,
       },
       anchor: {
-        verifiedAnchorHashPolicy: 'solana_verified_anchor_semantics_v1',
-        verifiedAnchorHash: '523c6e14d8e1f3f0cd70cb493fb3594d98630bb3f8ad7c38612ea10aae190315',
+        verifiedAnchorHashPolicy: 'solana_verified_anchor_semantics_v2',
+        finalizedRootSlot: FINALIZED_ROOT_SLOT,
+        finalizedSlot: SLOT,
       },
       transaction: {
         status: 'available',
@@ -382,10 +394,10 @@ describe('Solana transaction finality evidence', () => {
       transactionIndex: 1,
       executionStatus: 'succeeded',
       candidateHitEligible: true,
-      semanticHashPolicy: 'solana_verified_transaction_finality_semantics_v1',
+      semanticHashPolicy: 'solana_verified_transaction_finality_semantics_v2',
     })
     expect(verified.semanticHash).toBe(
-      'e62f4323b1678355b2c388b0e89f507e2b4a734d19fcd17a66b7b6b61bd2241f'
+      '0eb82716b885d9797c6cb08c9a5b1c391d3cbae812b0ef9a4dce7c296a34e1d3'
     )
     expect(JSON.stringify(evidence)).not.toContain(TEST_RPC_ORIGIN)
     expect(JSON.stringify(evidence)).not.toContain('provider-only detail')
@@ -704,6 +716,15 @@ describe('Solana transaction finality evidence', () => {
         value.anchor.verifiedAnchorHash = '0'.repeat(64)
       },
       (value) => {
+        value.anchor.finalizedRootSlot += 1
+      },
+      (value) => {
+        value.anchor.producedSlotResolution.producedSlots[0] -= 1
+      },
+      (value) => {
+        value.anchor.producedSlotResolution.selectionPolicy = 'provider_selected'
+      },
+      (value) => {
         value.transaction.value.extra = true
       },
       (value) => {
@@ -774,6 +795,28 @@ describe('Solana transaction finality evidence', () => {
 
     evidence.canonicalBlock.value.blockhash = BLOCK_HASH
     expect(() => requireSolanaVerifiedTransactionFinality(evidence, anchorFixture())).toThrow()
+  })
+
+  it('uses the selected produced slot, not the later finalized root, as the transaction bound', async () => {
+    mockRpc()
+    const evidence = (await capture()) as any
+    const slotBetweenSelectedAndRoot = SLOT + 1
+    evidence.transaction.value.slot = slotBetweenSelectedAndRoot
+    evidence.signatureStatus.value.slot = slotBetweenSelectedAndRoot
+    evidence.signatureStatus.value.contextSlot = FINALIZED_ROOT_SLOT
+    evidence.canonicalBlock.value = {
+      slot: slotBetweenSelectedAndRoot,
+      blockhash: LOWER_BLOCK_HASH,
+      previousBlockhash: LOWER_PREVIOUS_BLOCK_HASH,
+      parentSlot: SLOT,
+      blockTime: BLOCK_TIME,
+      blockHeight: BLOCK_HEIGHT + 1,
+      signatures: [OTHER_SIGNATURE, TX_SIGNATURE, THIRD_SIGNATURE],
+    }
+
+    expect(() => requireSolanaVerifiedTransactionFinality(evidence, anchorFixture())).toThrow(
+      'Solana transaction finality evidence is not fully verified'
+    )
   })
 
   it('enforces canonical capture and future-time boundaries without Date.now at verification', async () => {
@@ -918,8 +961,10 @@ describe('Solana transaction finality evidence', () => {
 
   it('uses the fully reconstructed verified anchor rather than trusting its embedded hash', () => {
     const anchor = requireSolanaVerifiedChainAnchor(anchorFixture())
+    expect(anchor.finalizedRootSlot).toBe(FINALIZED_ROOT_SLOT)
+    expect(anchor.finalizedSlot).toBe(SLOT)
     expect(anchor.semanticHash).toBe(
-      '523c6e14d8e1f3f0cd70cb493fb3594d98630bb3f8ad7c38612ea10aae190315'
+      'b3bd82a991bf4855d3288638329d2296c05b82e53cabcedb08533337f3946873'
     )
   })
 })

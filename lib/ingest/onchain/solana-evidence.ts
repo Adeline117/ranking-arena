@@ -15,6 +15,7 @@ import {
   dependencyUnavailableLane,
   endpointCopy,
   exactDataRecord,
+  exactDenseArray,
   isRecord,
   parseAvailableLane,
   parseOptsOrThrow,
@@ -50,6 +51,10 @@ export const SOLANA_MAINNET_GENESIS_HASH = '5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc1
 
 const MAX_FUTURE_BLOCK_SKEW_MS = 60_000
 const MAX_CURRENT_ANCHOR_LAG_MS = 900_000
+const FINALIZED_PRODUCED_SLOT_LOOKBACK = 512
+const MAX_FINALIZED_PRODUCED_SLOTS = FINALIZED_PRODUCED_SLOT_LOOKBACK + 1
+const FINALIZED_PRODUCED_SLOT_SELECTION_POLICY =
+  'highest_returned_finalized_produced_slot_v1' as const
 const SOLANA_BLOCK_UNAVAILABLE_RPC_CODES = new Set([
   -32_001, // block cleaned up
   -32_004, // block not available
@@ -72,6 +77,14 @@ export interface SolanaFinalizedBlockEvidence {
   blockHeight: number | null
 }
 
+export interface SolanaProducedSlotResolution {
+  rangeStartSlot: number
+  rangeEndSlot: number
+  producedSlots: number[]
+  selectedSlot: number
+  selectionPolicy: typeof FINALIZED_PRODUCED_SLOT_SELECTION_POLICY
+}
+
 export interface SolanaChainAnchorEvidence {
   chain: {
     cluster: 'mainnet-beta'
@@ -80,9 +93,12 @@ export interface SolanaChainAnchorEvidence {
   /** Local capture completion time; never presented as chain time. */
   observedAt: string
   anchorPolicy: {
-    version: 'solana_current_finalized_block_v1'
+    version: 'solana_current_finalized_produced_block_v2'
     genesisMethod: 'getGenesisHash'
-    slotMethod: 'getSlot'
+    rootSlotMethod: 'getSlot'
+    producedSlotsMethod: 'getBlocks'
+    producedSlotLookback: 512
+    minContextSlotPolicy: 'finalized_root_slot'
     blockMethod: 'getBlock'
     commitment: 'finalized'
     encoding: 'json'
@@ -93,7 +109,8 @@ export interface SolanaChainAnchorEvidence {
     maxCurrentAnchorLagMs: 900_000
   }
   genesisHash: SolanaEvidenceLane<typeof SOLANA_MAINNET_GENESIS_HASH>
-  finalizedSlot: SolanaEvidenceLane<number>
+  finalizedRootSlot: SolanaEvidenceLane<number>
+  producedSlotResolution: SolanaEvidenceLane<SolanaProducedSlotResolution>
   finalizedBlock: SolanaEvidenceLane<SolanaFinalizedBlockEvidence>
 }
 
@@ -106,9 +123,12 @@ export interface SolanaVerifiedChainAnchor {
   endpoint: SolanaEvidenceEndpointIdentity
   observedAt: string
   genesisHash: typeof SOLANA_MAINNET_GENESIS_HASH
+  finalizedRootSlot: number
+  producedSlotResolution: SolanaProducedSlotResolution
+  /** Highest produced slot returned inside the bounded finalized root range. */
   finalizedSlot: number
   finalizedBlock: SolanaFinalizedBlockEvidence
-  semanticHashPolicy: 'solana_verified_anchor_semantics_v1'
+  semanticHashPolicy: 'solana_verified_anchor_semantics_v2'
   semanticHash: string
 }
 
@@ -137,6 +157,58 @@ function slotLane(result: SolanaRpcResult): SolanaEvidenceLane<number> {
   return {
     status: 'available',
     value: slot,
+    provider: result.provider,
+    httpStatus: result.httpStatus,
+  }
+}
+
+function parseProducedSlotResolution(
+  value: unknown,
+  finalizedRootSlot: number
+): SolanaProducedSlotResolution | null {
+  const producedSlots = exactDenseArray(value)
+  if (
+    !producedSlots ||
+    producedSlots.length < 1 ||
+    producedSlots.length > MAX_FINALIZED_PRODUCED_SLOTS
+  ) {
+    return null
+  }
+  const rangeStartSlot = Math.max(0, finalizedRootSlot - FINALIZED_PRODUCED_SLOT_LOOKBACK)
+  const parsedSlots: number[] = []
+  let previousSlot: number | null = null
+  for (const valueSlot of producedSlots) {
+    const slot = safeNonNegativeInteger(valueSlot)
+    if (
+      slot === null ||
+      slot < rangeStartSlot ||
+      slot > finalizedRootSlot ||
+      (previousSlot !== null && slot <= previousSlot)
+    ) {
+      return null
+    }
+    parsedSlots.push(slot)
+    previousSlot = slot
+  }
+  return {
+    rangeStartSlot,
+    rangeEndSlot: finalizedRootSlot,
+    producedSlots: parsedSlots,
+    selectedSlot: parsedSlots[parsedSlots.length - 1],
+    selectionPolicy: FINALIZED_PRODUCED_SLOT_SELECTION_POLICY,
+  }
+}
+
+function producedSlotResolutionLane(
+  result: SolanaRpcResult,
+  finalizedRootSlot: number
+): SolanaEvidenceLane<SolanaProducedSlotResolution> {
+  if (!result.ok) return unavailableFromRpc(result)
+  const resolution = parseProducedSlotResolution(result.result, finalizedRootSlot)
+  if (!resolution) return unavailableFromSuccess(result, 'malformed_response')
+  return {
+    status: 'available',
+    value: resolution,
     provider: result.provider,
     httpStatus: result.httpStatus,
   }
@@ -234,18 +306,67 @@ function copyFinalizedBlock(block: SolanaFinalizedBlockEvidence): SolanaFinalize
   }
 }
 
+function copyProducedSlotResolution(
+  resolution: SolanaProducedSlotResolution
+): SolanaProducedSlotResolution {
+  return {
+    rangeStartSlot: resolution.rangeStartSlot,
+    rangeEndSlot: resolution.rangeEndSlot,
+    producedSlots: [...resolution.producedSlots],
+    selectedSlot: resolution.selectedSlot,
+    selectionPolicy: FINALIZED_PRODUCED_SLOT_SELECTION_POLICY,
+  }
+}
+
+function parseExactProducedSlotResolution(
+  value: unknown,
+  finalizedRootSlot: number
+): SolanaProducedSlotResolution | null {
+  const resolution = exactDataRecord(value, [
+    'rangeStartSlot',
+    'rangeEndSlot',
+    'producedSlots',
+    'selectedSlot',
+    'selectionPolicy',
+  ])
+  if (
+    !resolution ||
+    resolution.rangeStartSlot !==
+      Math.max(0, finalizedRootSlot - FINALIZED_PRODUCED_SLOT_LOOKBACK) ||
+    resolution.rangeEndSlot !== finalizedRootSlot ||
+    resolution.selectionPolicy !== FINALIZED_PRODUCED_SLOT_SELECTION_POLICY
+  ) {
+    return null
+  }
+  const parsed = parseProducedSlotResolution(resolution.producedSlots, finalizedRootSlot)
+  if (
+    !parsed ||
+    resolution.rangeStartSlot !== parsed.rangeStartSlot ||
+    resolution.rangeEndSlot !== parsed.rangeEndSlot ||
+    resolution.selectedSlot !== parsed.selectedSlot
+  ) {
+    return null
+  }
+  return parsed
+}
+
 function solanaAnchorSemanticHash(
   endpoint: SolanaEvidenceEndpointIdentity,
   observedAt: string,
+  finalizedRootSlot: number,
+  resolution: SolanaProducedSlotResolution,
   block: SolanaFinalizedBlockEvidence
 ): string {
   const fields = [
-    'solana_verified_anchor_semantics_v1',
+    'solana_verified_anchor_semantics_v2',
     'mainnet-beta',
     SOLANA_MAINNET_GENESIS_HASH,
-    'solana_current_finalized_block_v1',
+    'solana_current_finalized_produced_block_v2',
     'getGenesisHash',
     'getSlot',
+    'getBlocks',
+    FINALIZED_PRODUCED_SLOT_LOOKBACK,
+    'finalized_root_slot',
     'getBlock',
     'finalized',
     'json',
@@ -258,6 +379,12 @@ function solanaAnchorSemanticHash(
     endpoint.endpointId,
     endpoint.connectionHash,
     observedAt,
+    finalizedRootSlot,
+    resolution.rangeStartSlot,
+    resolution.rangeEndSlot,
+    resolution.producedSlots,
+    resolution.selectedSlot,
+    resolution.selectionPolicy,
     block.slot,
     block.blockhash,
     block.previousBlockhash,
@@ -278,7 +405,8 @@ function requireSolanaVerifiedChainAnchorInternal(evidence: unknown): SolanaVeri
     'observedAt',
     'anchorPolicy',
     'genesisHash',
-    'finalizedSlot',
+    'finalizedRootSlot',
+    'producedSlotResolution',
     'finalizedBlock',
   ])
   if (!root) return invalidVerifiedAnchor()
@@ -286,7 +414,10 @@ function requireSolanaVerifiedChainAnchorInternal(evidence: unknown): SolanaVeri
   const policy = exactDataRecord(root.anchorPolicy, [
     'version',
     'genesisMethod',
-    'slotMethod',
+    'rootSlotMethod',
+    'producedSlotsMethod',
+    'producedSlotLookback',
+    'minContextSlotPolicy',
     'blockMethod',
     'commitment',
     'encoding',
@@ -297,9 +428,17 @@ function requireSolanaVerifiedChainAnchorInternal(evidence: unknown): SolanaVeri
     'maxCurrentAnchorLagMs',
   ])
   const genesisLaneValue = parseAvailableLane(root.genesisHash)
-  const slotLaneValue = parseAvailableLane(root.finalizedSlot)
+  const rootSlotLaneValue = parseAvailableLane(root.finalizedRootSlot)
+  const resolutionLaneValue = parseAvailableLane(root.producedSlotResolution)
   const blockLaneValue = parseAvailableLane(root.finalizedBlock)
-  const finalizedSlot = slotLaneValue ? safeNonNegativeInteger(slotLaneValue.value) : null
+  const finalizedRootSlot = rootSlotLaneValue
+    ? safeNonNegativeInteger(rootSlotLaneValue.value)
+    : null
+  const producedSlotResolution =
+    resolutionLaneValue && finalizedRootSlot !== null
+      ? parseExactProducedSlotResolution(resolutionLaneValue.value, finalizedRootSlot)
+      : null
+  const finalizedSlot = producedSlotResolution?.selectedSlot ?? null
   const finalizedBlock = blockLaneValue ? parseExactFinalizedBlock(blockLaneValue.value) : null
   const observedAtMs = canonicalTimestampMs(root.observedAt)
   const blockTimeMs = unixTimestampMs(finalizedBlock?.blockTime ?? null)
@@ -308,9 +447,12 @@ function requireSolanaVerifiedChainAnchorInternal(evidence: unknown): SolanaVeri
     chain.cluster !== 'mainnet-beta' ||
     chain.genesisHash !== SOLANA_MAINNET_GENESIS_HASH ||
     !policy ||
-    policy.version !== 'solana_current_finalized_block_v1' ||
+    policy.version !== 'solana_current_finalized_produced_block_v2' ||
     policy.genesisMethod !== 'getGenesisHash' ||
-    policy.slotMethod !== 'getSlot' ||
+    policy.rootSlotMethod !== 'getSlot' ||
+    policy.producedSlotsMethod !== 'getBlocks' ||
+    policy.producedSlotLookback !== FINALIZED_PRODUCED_SLOT_LOOKBACK ||
+    policy.minContextSlotPolicy !== 'finalized_root_slot' ||
     policy.blockMethod !== 'getBlock' ||
     policy.commitment !== 'finalized' ||
     policy.encoding !== 'json' ||
@@ -321,7 +463,11 @@ function requireSolanaVerifiedChainAnchorInternal(evidence: unknown): SolanaVeri
     policy.maxCurrentAnchorLagMs !== MAX_CURRENT_ANCHOR_LAG_MS ||
     !genesisLaneValue ||
     genesisLaneValue.value !== SOLANA_MAINNET_GENESIS_HASH ||
-    !slotLaneValue ||
+    !rootSlotLaneValue ||
+    finalizedRootSlot === null ||
+    finalizedRootSlot <= 0 ||
+    !resolutionLaneValue ||
+    !producedSlotResolution ||
     finalizedSlot === null ||
     finalizedSlot <= 0 ||
     !blockLaneValue ||
@@ -332,7 +478,8 @@ function requireSolanaVerifiedChainAnchorInternal(evidence: unknown): SolanaVeri
     blockTimeMs === null ||
     blockTimeMs > observedAtMs + MAX_FUTURE_BLOCK_SKEW_MS ||
     observedAtMs - blockTimeMs > MAX_CURRENT_ANCHOR_LAG_MS ||
-    !sameEndpoint(genesisLaneValue.endpoint, slotLaneValue.endpoint) ||
+    !sameEndpoint(genesisLaneValue.endpoint, rootSlotLaneValue.endpoint) ||
+    !sameEndpoint(genesisLaneValue.endpoint, resolutionLaneValue.endpoint) ||
     !sameEndpoint(genesisLaneValue.endpoint, blockLaneValue.endpoint)
   ) {
     return invalidVerifiedAnchor()
@@ -342,9 +489,12 @@ function requireSolanaVerifiedChainAnchorInternal(evidence: unknown): SolanaVeri
   return {
     chain: { cluster: 'mainnet-beta', genesisHash: SOLANA_MAINNET_GENESIS_HASH },
     anchorPolicy: {
-      version: 'solana_current_finalized_block_v1',
+      version: 'solana_current_finalized_produced_block_v2',
       genesisMethod: 'getGenesisHash',
-      slotMethod: 'getSlot',
+      rootSlotMethod: 'getSlot',
+      producedSlotsMethod: 'getBlocks',
+      producedSlotLookback: FINALIZED_PRODUCED_SLOT_LOOKBACK,
+      minContextSlotPolicy: 'finalized_root_slot',
       blockMethod: 'getBlock',
       commitment: 'finalized',
       encoding: 'json',
@@ -357,10 +507,18 @@ function requireSolanaVerifiedChainAnchorInternal(evidence: unknown): SolanaVeri
     endpoint,
     observedAt,
     genesisHash: SOLANA_MAINNET_GENESIS_HASH,
+    finalizedRootSlot,
+    producedSlotResolution: copyProducedSlotResolution(producedSlotResolution),
     finalizedSlot,
     finalizedBlock: copyFinalizedBlock(finalizedBlock),
-    semanticHashPolicy: 'solana_verified_anchor_semantics_v1',
-    semanticHash: solanaAnchorSemanticHash(endpoint, observedAt, finalizedBlock),
+    semanticHashPolicy: 'solana_verified_anchor_semantics_v2',
+    semanticHash: solanaAnchorSemanticHash(
+      endpoint,
+      observedAt,
+      finalizedRootSlot,
+      producedSlotResolution,
+      finalizedBlock
+    ),
   }
 }
 
@@ -378,9 +536,11 @@ export function requireSolanaVerifiedChainAnchor(evidence: unknown): SolanaVerif
 }
 
 /**
- * Capture one mainnet identity + highest finalized slot/block observation from
- * one resolved endpoint. Provider failover requires restarting this function.
- * Never expose the local-node endpoint option directly to untrusted callers.
+ * Capture one mainnet identity, a finalized context upper bound, the provider's
+ * produced slots inside a fixed bounded range, and the selected readable block
+ * from one resolved endpoint. A missing root slot in getBlocks is not an
+ * independent skipped-slot proof. Provider failover requires restarting this
+ * function. Never expose the local-node endpoint option to untrusted callers.
  */
 async function fetchSolanaChainAnchorEvidenceInternal(
   opts: SolanaEvidenceRpcOpts,
@@ -397,9 +557,12 @@ async function fetchSolanaChainAnchorEvidenceInternal(
       genesisHash: SOLANA_MAINNET_GENESIS_HASH,
     } as const,
     anchorPolicy: {
-      version: 'solana_current_finalized_block_v1',
+      version: 'solana_current_finalized_produced_block_v2',
       genesisMethod: 'getGenesisHash',
-      slotMethod: 'getSlot',
+      rootSlotMethod: 'getSlot',
+      producedSlotsMethod: 'getBlocks',
+      producedSlotLookback: FINALIZED_PRODUCED_SLOT_LOOKBACK,
+      minContextSlotPolicy: 'finalized_root_slot',
       blockMethod: 'getBlock',
       commitment: 'finalized',
       encoding: 'json',
@@ -416,7 +579,8 @@ async function fetchSolanaChainAnchorEvidenceInternal(
         ...base,
         observedAt: new Date().toISOString(),
         genesisHash: unconfiguredLane(),
-        finalizedSlot: unconfiguredLane(),
+        finalizedRootSlot: unconfiguredLane(),
+        producedSlotResolution: unconfiguredLane(),
         finalizedBlock: unconfiguredLane(),
       },
       rawExchanges: [],
@@ -441,15 +605,36 @@ async function fetchSolanaChainAnchorEvidenceInternal(
     ),
   ])
   const genesisHash = genesisLane(genesisResult)
-  const finalizedSlot = slotLane(slotResult)
+  const finalizedRootSlot = slotLane(slotResult)
+  let producedSlotResolution: SolanaEvidenceLane<SolanaProducedSlotResolution> =
+    dependencyUnavailableLane()
   let finalizedBlock: SolanaEvidenceLane<SolanaFinalizedBlockEvidence> = dependencyUnavailableLane()
+  let producedSlotsResult: SolanaRpcResult | null = null
   let blockResult: SolanaRpcResult | null = null
-  if (finalizedSlot.status === 'available') {
+  if (finalizedRootSlot.status === 'available') {
+    const rangeStartSlot = Math.max(0, finalizedRootSlot.value - FINALIZED_PRODUCED_SLOT_LOOKBACK)
+    producedSlotsResult = await solanaEvidenceRpc(
+      endpoint,
+      'getBlocks',
+      [
+        rangeStartSlot,
+        finalizedRootSlot.value,
+        { commitment: 'finalized', minContextSlot: finalizedRootSlot.value },
+      ],
+      timeoutMs,
+      captureRaw ? { lane: 'finalized_anchor_produced_slots' } : undefined
+    )
+    producedSlotResolution = producedSlotResolutionLane(
+      producedSlotsResult,
+      finalizedRootSlot.value
+    )
+  }
+  if (producedSlotResolution.status === 'available') {
     blockResult = await solanaEvidenceRpc(
       endpoint,
       'getBlock',
       [
-        finalizedSlot.value,
+        producedSlotResolution.value.selectedSlot,
         {
           commitment: 'finalized',
           encoding: 'json',
@@ -461,7 +646,7 @@ async function fetchSolanaChainAnchorEvidenceInternal(
       timeoutMs,
       captureRaw ? { lane: 'finalized_anchor_block' } : undefined
     )
-    finalizedBlock = blockLane(blockResult, finalizedSlot.value)
+    finalizedBlock = blockLane(blockResult, producedSlotResolution.value.selectedSlot)
   }
 
   return {
@@ -469,11 +654,12 @@ async function fetchSolanaChainAnchorEvidenceInternal(
       ...base,
       observedAt: new Date().toISOString(),
       genesisHash,
-      finalizedSlot,
+      finalizedRootSlot,
+      producedSlotResolution,
       finalizedBlock,
     },
     rawExchanges: captureRaw
-      ? [genesisResult, slotResult, blockResult]
+      ? [genesisResult, slotResult, producedSlotsResult, blockResult]
           .map((result) => (result?.ok ? result.rawExchange : undefined))
           .filter((exchange): exchange is SolanaRawRpcEvidenceExchange => exchange !== undefined)
       : [],
@@ -502,7 +688,12 @@ export async function captureSolanaVerifiedChainAnchorEvidence(
 ): Promise<SolanaVerifiedChainAnchorRawCapture> {
   const captured = await fetchSolanaChainAnchorEvidenceInternal(opts, true)
   const verified = requireSolanaVerifiedChainAnchor(captured.evidence)
-  const expectedLanes = ['genesis_hash', 'finalized_anchor_slot', 'finalized_anchor_block'] as const
+  const expectedLanes = [
+    'genesis_hash',
+    'finalized_anchor_slot',
+    'finalized_anchor_produced_slots',
+    'finalized_anchor_block',
+  ] as const
   if (
     captured.rawExchanges.length !== expectedLanes.length ||
     captured.rawExchanges.some((exchange, index) => exchange.lane !== expectedLanes[index])

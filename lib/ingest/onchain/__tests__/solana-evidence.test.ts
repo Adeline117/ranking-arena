@@ -61,6 +61,7 @@ function finalizedBlock(overrides: Record<string, unknown> = {}) {
 function successfulResult(request: RpcRequest): unknown {
   if (request.method === 'getGenesisHash') return SOLANA_MAINNET_GENESIS_HASH
   if (request.method === 'getSlot') return SLOT
+  if (request.method === 'getBlocks') return [SLOT]
   return finalizedBlock()
 }
 
@@ -145,7 +146,7 @@ describe('fetchSolanaChainAnchorEvidence', () => {
     else process.env.ALCHEMY_API_KEY = originalAlchemyKey
   })
 
-  it('binds exact mainnet identity, finalized slot, and block requests to one endpoint', async () => {
+  it('binds finalized root, produced-slot resolution, and selected block to one endpoint', async () => {
     const calls = mockRpc(() => ({}))
     const anchor = await fetchSolanaChainAnchorEvidence({
       rpcUrl: TEST_RPC_URL,
@@ -159,6 +160,12 @@ describe('fetchSolanaChainAnchorEvidence', () => {
         id: 1,
         method: 'getSlot',
         params: [{ commitment: 'finalized' }],
+      },
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'getBlocks',
+        params: [SLOT - 512, SLOT, { commitment: 'finalized', minContextSlot: SLOT }],
       },
       {
         jsonrpc: '2.0',
@@ -188,20 +195,39 @@ describe('fetchSolanaChainAnchorEvidence', () => {
       chain: { cluster: 'mainnet-beta', genesisHash: SOLANA_MAINNET_GENESIS_HASH },
       observedAt: FIXED_NOW,
       anchorPolicy: {
-        version: 'solana_current_finalized_block_v1',
+        version: 'solana_current_finalized_produced_block_v2',
+        rootSlotMethod: 'getSlot',
+        producedSlotsMethod: 'getBlocks',
+        producedSlotLookback: 512,
+        minContextSlotPolicy: 'finalized_root_slot',
         commitment: 'finalized',
         transactionDetails: 'none',
         maxFutureBlockSkewMs: 60_000,
         maxCurrentAnchorLagMs: 900_000,
       },
       genesisHash: { status: 'available', value: SOLANA_MAINNET_GENESIS_HASH },
-      finalizedSlot: { status: 'available', value: SLOT },
+      finalizedRootSlot: { status: 'available', value: SLOT },
+      producedSlotResolution: {
+        status: 'available',
+        value: {
+          rangeStartSlot: SLOT - 512,
+          rangeEndSlot: SLOT,
+          producedSlots: [SLOT],
+          selectedSlot: SLOT,
+          selectionPolicy: 'highest_returned_finalized_produced_slot_v1',
+        },
+      },
       finalizedBlock: {
         status: 'available',
         value: { slot: SLOT, ...finalizedBlock() },
       },
     })
-    for (const lane of [anchor.genesisHash, anchor.finalizedSlot, anchor.finalizedBlock]) {
+    for (const lane of [
+      anchor.genesisHash,
+      anchor.finalizedRootSlot,
+      anchor.producedSlotResolution,
+      anchor.finalizedBlock,
+    ]) {
       expect(lane).toMatchObject({
         provider: {
           servedBy: {
@@ -224,11 +250,119 @@ describe('fetchSolanaChainAnchorEvidence', () => {
     expect(verified).toMatchObject({
       finalizedSlot: SLOT,
       finalizedBlock: { slot: SLOT, blockhash: BLOCK_HASH },
-      semanticHashPolicy: 'solana_verified_anchor_semantics_v1',
-      semanticHash: '523c6e14d8e1f3f0cd70cb493fb3594d98630bb3f8ad7c38612ea10aae190315',
+      semanticHashPolicy: 'solana_verified_anchor_semantics_v2',
     })
+    expect(verified.semanticHash).toBe(
+      '1fc4752a9081e393e8964962aeb1ad0ccc45d7319f465def3cd4048773f61129'
+    )
     expect(JSON.stringify(anchor)).not.toContain(TEST_RPC_ORIGIN)
     expect(JSON.stringify(anchor)).not.toContain('private-api-key')
+  })
+
+  it('selects the highest returned produced slot when the finalized root is omitted', async () => {
+    const finalizedRootSlot = SLOT + 7
+    const producedSlots = [SLOT - 2, SLOT]
+    const calls = mockRpc((request) => ({
+      payload: {
+        jsonrpc: '2.0',
+        id: 1,
+        result:
+          request.method === 'getSlot'
+            ? finalizedRootSlot
+            : request.method === 'getBlocks'
+              ? producedSlots
+              : successfulResult(request),
+      },
+    }))
+    const anchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+
+    expect(calls[2].request).toEqual({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getBlocks',
+      params: [
+        finalizedRootSlot - 512,
+        finalizedRootSlot,
+        { commitment: 'finalized', minContextSlot: finalizedRootSlot },
+      ],
+    })
+    expect(calls[3].request.method).toBe('getBlock')
+    expect(calls[3].request.params[0]).toBe(SLOT)
+    expect(
+      calls.some(
+        ({ request }) => request.method === 'getBlock' && request.params[0] === finalizedRootSlot
+      )
+    ).toBe(false)
+    expect(anchor.producedSlotResolution).toMatchObject({
+      status: 'available',
+      value: {
+        rangeStartSlot: finalizedRootSlot - 512,
+        rangeEndSlot: finalizedRootSlot,
+        producedSlots,
+        selectedSlot: SLOT,
+      },
+    })
+    expect(requireSolanaVerifiedChainAnchor(anchor)).toMatchObject({
+      finalizedRootSlot,
+      finalizedSlot: SLOT,
+      producedSlotResolution: { producedSlots, selectedSlot: SLOT },
+      finalizedBlock: { slot: SLOT },
+    })
+  })
+
+  it('accepts the complete 513-slot inclusive resolution window', async () => {
+    const producedSlots = Array.from({ length: 513 }, (_, index) => SLOT - 512 + index)
+    mockRpc((request) => ({
+      payload: {
+        jsonrpc: '2.0',
+        id: 1,
+        result: request.method === 'getBlocks' ? producedSlots : successfulResult(request),
+      },
+    }))
+    const anchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+
+    expect(requireSolanaVerifiedChainAnchor(anchor).producedSlotResolution.producedSlots).toEqual(
+      producedSlots
+    )
+  })
+
+  it('clamps the produced-slot range start to zero', async () => {
+    const finalizedRootSlot = 7
+    const calls = mockRpc((request) => ({
+      payload: {
+        jsonrpc: '2.0',
+        id: 1,
+        result:
+          request.method === 'getSlot'
+            ? finalizedRootSlot
+            : request.method === 'getBlocks'
+              ? [2, finalizedRootSlot]
+              : request.method === 'getBlock'
+                ? finalizedBlock({ parentSlot: 6, blockHeight: 7 })
+                : successfulResult(request),
+      },
+    }))
+    const anchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+
+    expect(calls[2].request.params).toEqual([
+      0,
+      finalizedRootSlot,
+      { commitment: 'finalized', minContextSlot: finalizedRootSlot },
+    ])
+    expect(requireSolanaVerifiedChainAnchor(anchor)).toMatchObject({
+      finalizedRootSlot,
+      finalizedSlot: finalizedRootSlot,
+      producedSlotResolution: { rangeStartSlot: 0, rangeEndSlot: finalizedRootSlot },
+    })
   })
 
   it('captures the exact same request and streamed response bytes before UTF-8 decoding', async () => {
@@ -242,10 +376,11 @@ describe('fetchSolanaChainAnchorEvidence', () => {
     expect(captured.rawExchanges.map(({ lane }) => lane)).toEqual([
       'genesis_hash',
       'finalized_anchor_slot',
+      'finalized_anchor_produced_slots',
       'finalized_anchor_block',
     ])
     expect(captured.rawExchanges).toHaveLength(calls.length)
-    const expectedMethods = ['getGenesisHash', 'getSlot', 'getBlock']
+    const expectedMethods = ['getGenesisHash', 'getSlot', 'getBlocks', 'getBlock']
     for (const [index, exchange] of captured.rawExchanges.entries()) {
       const requestBody = String(calls[index].init.body)
       const responseBody = successfulResponseBody(calls[index].request)
@@ -277,7 +412,7 @@ describe('fetchSolanaChainAnchorEvidence', () => {
       expect(exchange).not.toHaveProperty('url')
     }
     expect(JSON.stringify(captured.evidence)).not.toContain('providerNote')
-    expect(Buffer.from(captured.rawExchanges[2].response.bytes).toString('utf8')).toContain(
+    expect(Buffer.from(captured.rawExchanges[3].response.bytes).toString('utf8')).toContain(
       '链上原始字段'
     )
   })
@@ -388,7 +523,23 @@ describe('fetchSolanaChainAnchorEvidence', () => {
         value.genesisHash.value = BLOCK_HASH
       },
       (value) => {
-        value.finalizedSlot.value = 0
+        value.finalizedRootSlot.value = 0
+      },
+      (value) => {
+        value.producedSlotResolution.value.producedSlots[0] -= 1
+      },
+      (value) => {
+        value.producedSlotResolution.value.selectedSlot -= 1
+      },
+      (value) => {
+        value.producedSlotResolution.value.selectionPolicy = 'provider_selected'
+      },
+      (value) => {
+        delete value.producedSlotResolution.value.producedSlots[0]
+      },
+      (value) => {
+        value.producedSlotResolution.provider.servedBy.connectionHash = '0'.repeat(64)
+        value.producedSlotResolution.provider.attempted[0].connectionHash = '0'.repeat(64)
       },
       (value) => {
         value.finalizedBlock.value.slot -= 1
@@ -448,9 +599,12 @@ describe('fetchSolanaChainAnchorEvidence', () => {
   })
 
   it.each([
-    ['version', 'solana_current_finalized_block_v2'],
+    ['version', 'solana_current_finalized_produced_block_v3'],
     ['genesisMethod', 'getBlock'],
-    ['slotMethod', 'getBlockHeight'],
+    ['rootSlotMethod', 'getBlockHeight'],
+    ['producedSlotsMethod', 'getBlock'],
+    ['producedSlotLookback', 511],
+    ['minContextSlotPolicy', 'none'],
     ['blockMethod', 'getBlocks'],
     ['commitment', 'confirmed'],
     ['encoding', 'base64'],
@@ -483,7 +637,8 @@ describe('fetchSolanaChainAnchorEvidence', () => {
       finalizedBlock: source.finalizedBlock,
       anchorPolicy: source.anchorPolicy,
       chain: source.chain,
-      finalizedSlot: source.finalizedSlot,
+      producedSlotResolution: source.producedSlotResolution,
+      finalizedRootSlot: source.finalizedRootSlot,
       observedAt: source.observedAt,
       genesisHash: source.genesisHash,
     }
@@ -496,13 +651,81 @@ describe('fetchSolanaChainAnchorEvidence', () => {
     )
   })
 
+  it('binds the finalized root, full produced-slot list, and endpoint into the semantic hash', async () => {
+    mockRpc(() => ({}))
+    const anchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+    const expected = requireSolanaVerifiedChainAnchor(anchor)
+
+    const extraProducedSlot = clone(anchor) as any
+    extraProducedSlot.producedSlotResolution.value.producedSlots = [SLOT - 1, SLOT]
+    expect(requireSolanaVerifiedChainAnchor(extraProducedSlot).semanticHash).not.toBe(
+      expected.semanticHash
+    )
+
+    const laterRoot = clone(anchor) as any
+    laterRoot.finalizedRootSlot.value = SLOT + 1
+    laterRoot.producedSlotResolution.value.rangeStartSlot = SLOT + 1 - 512
+    laterRoot.producedSlotResolution.value.rangeEndSlot = SLOT + 1
+    expect(requireSolanaVerifiedChainAnchor(laterRoot).semanticHash).not.toBe(expected.semanticHash)
+
+    mockRpc(() => ({}))
+    const otherEndpointAnchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: 'http://localhost:8899/',
+      endpointId: TEST_ENDPOINT_ID,
+    })
+    expect(requireSolanaVerifiedChainAnchor(otherEndpointAnchor).semanticHash).not.toBe(
+      expected.semanticHash
+    )
+  })
+
+  it('rejects endpoint drift independently in each of the four anchor lanes', async () => {
+    mockRpc(() => ({}))
+    const anchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+    mockRpc(() => ({}))
+    const otherEndpointAnchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: 'http://localhost:8899/',
+      endpointId: TEST_ENDPOINT_ID,
+    })
+    const otherProviders = [
+      otherEndpointAnchor.genesisHash,
+      otherEndpointAnchor.finalizedRootSlot,
+      otherEndpointAnchor.producedSlotResolution,
+      otherEndpointAnchor.finalizedBlock,
+    ].map((lane) => clone(lane.provider))
+
+    const laneNames = [
+      'genesisHash',
+      'finalizedRootSlot',
+      'producedSlotResolution',
+      'finalizedBlock',
+    ] as const
+    for (const [index, laneName] of laneNames.entries()) {
+      const drifted = clone(anchor) as any
+      drifted[laneName].provider = otherProviders[index]
+      expect(() => requireSolanaVerifiedChainAnchor(drifted)).toThrow(
+        'Solana chain anchor is not fully verified'
+      )
+    }
+  })
+
   it('rejects a forged connection hash for a statically approved remote endpoint', async () => {
     mockRpc(() => ({}))
     const anchor = (await fetchSolanaChainAnchorEvidence({
       rpcUrl: 'https://api.mainnet-beta.solana.com/',
       endpointId: 'solana_official_mainnet',
     })) as any
-    for (const lane of [anchor.genesisHash, anchor.finalizedSlot, anchor.finalizedBlock]) {
+    for (const lane of [
+      anchor.genesisHash,
+      anchor.finalizedRootSlot,
+      anchor.producedSlotResolution,
+      anchor.finalizedBlock,
+    ]) {
       lane.provider.servedBy.connectionHash = '0'.repeat(64)
       lane.provider.attempted[0].connectionHash = '0'.repeat(64)
     }
@@ -572,7 +795,12 @@ describe('fetchSolanaChainAnchorEvidence', () => {
     const calls = mockRpc(() => ({}))
     const anchor = await fetchSolanaChainAnchorEvidence({ rpcUrl: TEST_RPC_URL })
     expect(calls).toHaveLength(0)
-    for (const lane of [anchor.genesisHash, anchor.finalizedSlot, anchor.finalizedBlock]) {
+    for (const lane of [
+      anchor.genesisHash,
+      anchor.finalizedRootSlot,
+      anchor.producedSlotResolution,
+      anchor.finalizedBlock,
+    ]) {
       expect(lane).toEqual({
         status: 'unavailable',
         reason: 'provider_unconfigured',
@@ -719,7 +947,7 @@ describe('fetchSolanaChainAnchorEvidence', () => {
   ] as const)('accepts the exact approved route for %s', async (rpcUrl, endpointId, providerId) => {
     const calls = mockRpc(() => ({}))
     const anchor = await fetchSolanaChainAnchorEvidence({ rpcUrl, endpointId })
-    expect(calls).toHaveLength(3)
+    expect(calls).toHaveLength(4)
     expect(anchor.genesisHash).toMatchObject({
       status: 'available',
       provider: { servedBy: { providerId, endpointId } },
@@ -749,7 +977,7 @@ describe('fetchSolanaChainAnchorEvidence', () => {
     process.env.ALCHEMY_API_KEY = 'alchemy-private-api-key'
     const calls = mockRpc(() => ({}))
     const anchor = await fetchSolanaChainAnchorEvidence()
-    expect(calls).toHaveLength(3)
+    expect(calls).toHaveLength(4)
     expect(calls.every(({ url }) => url.includes('solana-mainnet.g.alchemy.com'))).toBe(true)
     expect(anchor.genesisHash).toMatchObject({
       status: 'available',
@@ -770,7 +998,8 @@ describe('fetchSolanaChainAnchorEvidence', () => {
       endpointId: TEST_ENDPOINT_ID,
     })
     expect(anchor.genesisHash).toMatchObject({ status: 'unavailable', reason: 'wrong_genesis' })
-    expect(anchor.finalizedSlot.status).toBe('available')
+    expect(anchor.finalizedRootSlot.status).toBe('available')
+    expect(anchor.producedSlotResolution.status).toBe('available')
     expect(anchor.finalizedBlock.status).toBe('available')
     expect(() => requireSolanaVerifiedChainAnchor(anchor)).toThrow(
       'Solana chain anchor is not fully verified'
@@ -813,9 +1042,13 @@ describe('fetchSolanaChainAnchorEvidence', () => {
         endpointId: TEST_ENDPOINT_ID,
       })
       expect(calls).toHaveLength(2)
-      expect(anchor.finalizedSlot).toMatchObject({
+      expect(anchor.finalizedRootSlot).toMatchObject({
         status: 'unavailable',
         reason: 'malformed_response',
+      })
+      expect(anchor.producedSlotResolution).toMatchObject({
+        status: 'unavailable',
+        reason: 'dependency_unavailable',
       })
       expect(anchor.finalizedBlock).toMatchObject({
         status: 'unavailable',
@@ -823,6 +1056,109 @@ describe('fetchSolanaChainAnchorEvidence', () => {
       })
     }
   )
+
+  it.each([
+    ['null', null],
+    ['object', {}],
+    ['empty list', []],
+    ['unordered list', [SLOT, SLOT - 1]],
+    ['duplicate slot', [SLOT - 1, SLOT - 1]],
+    ['below requested range', [SLOT - 513]],
+    ['above finalized root', [SLOT + 1]],
+    ['negative slot', [-1]],
+    ['fractional slot', [SLOT - 0.5]],
+    ['unsafe slot', [Number.MAX_SAFE_INTEGER + 1]],
+    ['string slot', [String(SLOT)]],
+    ['more than 513 entries', Array.from({ length: 514 }, (_, index) => SLOT - 513 + index)],
+  ])('rejects a malformed produced-slot %s without probing getBlock', async (_label, result) => {
+    const calls = mockRpc((request) => ({
+      payload: {
+        jsonrpc: '2.0',
+        id: 1,
+        result: request.method === 'getBlocks' ? result : successfulResult(request),
+      },
+    }))
+    const anchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+    expect(calls).toHaveLength(3)
+    expect(calls.some(({ request }) => request.method === 'getBlock')).toBe(false)
+    expect(anchor.producedSlotResolution).toMatchObject({
+      status: 'unavailable',
+      reason: 'malformed_response',
+    })
+    expect(anchor.finalizedBlock).toMatchObject({
+      status: 'unavailable',
+      reason: 'dependency_unavailable',
+    })
+    expect(() => requireSolanaVerifiedChainAnchor(anchor)).toThrow(
+      'Solana chain anchor is not fully verified'
+    )
+  })
+
+  it('does not fall back to another slot when getBlocks is unavailable', async () => {
+    const calls = mockRpc((request) => ({
+      payload:
+        request.method === 'getBlocks'
+          ? {
+              jsonrpc: '2.0',
+              id: 1,
+              error: { code: -32_601, message: 'getBlocks unavailable private-api-key' },
+            }
+          : { jsonrpc: '2.0', id: 1, result: successfulResult(request) },
+    }))
+    const anchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+    expect(calls).toHaveLength(3)
+    expect(calls.some(({ request }) => request.method === 'getBlock')).toBe(false)
+    expect(anchor.producedSlotResolution).toMatchObject({
+      status: 'unavailable',
+      reason: 'rpc_error',
+      rpcCode: -32_601,
+    })
+    expect(anchor.finalizedBlock).toMatchObject({
+      status: 'unavailable',
+      reason: 'dependency_unavailable',
+    })
+    expect(JSON.stringify(anchor)).not.toContain('private-api-key')
+  })
+
+  it('does not probe an older slot when getBlock fails for the selected produced slot', async () => {
+    const calls = mockRpc((request) => ({
+      payload:
+        request.method === 'getBlock'
+          ? {
+              jsonrpc: '2.0',
+              id: 1,
+              error: { code: -32_004, message: 'selected block unavailable private-api-key' },
+            }
+          : {
+              jsonrpc: '2.0',
+              id: 1,
+              result: request.method === 'getBlocks' ? [SLOT - 3, SLOT] : successfulResult(request),
+            },
+    }))
+    const anchor = await fetchSolanaChainAnchorEvidence({
+      rpcUrl: TEST_RPC_URL,
+      endpointId: TEST_ENDPOINT_ID,
+    })
+    const blockCalls = calls.filter(({ request }) => request.method === 'getBlock')
+    expect(blockCalls).toHaveLength(1)
+    expect(blockCalls[0].request.params[0]).toBe(SLOT)
+    expect(anchor.producedSlotResolution).toMatchObject({
+      status: 'available',
+      value: { producedSlots: [SLOT - 3, SLOT], selectedSlot: SLOT },
+    })
+    expect(anchor.finalizedBlock).toMatchObject({
+      status: 'unavailable',
+      reason: 'not_found_or_unavailable',
+      rpcCode: -32_004,
+    })
+    expect(JSON.stringify(anchor)).not.toContain('private-api-key')
+  })
 
   it('retains slot zero as raw evidence but never treats it as a current verified anchor', async () => {
     mockRpc((request) => ({
@@ -841,7 +1177,7 @@ describe('fetchSolanaChainAnchorEvidence', () => {
       rpcUrl: TEST_RPC_URL,
       endpointId: TEST_ENDPOINT_ID,
     })
-    expect(anchor.finalizedSlot).toMatchObject({ status: 'available', value: 0 })
+    expect(anchor.finalizedRootSlot).toMatchObject({ status: 'available', value: 0 })
     expect(() => requireSolanaVerifiedChainAnchor(anchor)).toThrow(
       'Solana chain anchor is not fully verified'
     )
@@ -1007,7 +1343,7 @@ describe('fetchSolanaChainAnchorEvidence', () => {
       status: 'unavailable',
       reason: 'malformed_response',
     })
-    expect(anchor.finalizedSlot).toMatchObject({
+    expect(anchor.finalizedRootSlot).toMatchObject({
       status: 'unavailable',
       reason: 'malformed_response',
     })

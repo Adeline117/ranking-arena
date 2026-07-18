@@ -39,6 +39,7 @@ import {
   SOLANA_MAINNET_GENESIS_HASH,
   requireSolanaVerifiedChainAnchor,
   type SolanaFinalizedBlockEvidence,
+  type SolanaProducedSlotResolution,
   type SolanaVerifiedChainAnchor,
 } from './solana-evidence'
 
@@ -201,10 +202,12 @@ export interface SolanaTransactionMembershipPolicy {
 
 export interface SolanaTransactionAnchorBinding {
   endpoint: SolanaEvidenceEndpointIdentity
-  verifiedAnchorHashPolicy: 'solana_verified_anchor_semantics_v1'
+  verifiedAnchorHashPolicy: 'solana_verified_anchor_semantics_v2'
   verifiedAnchorHash: string
   observedAt: string
   anchorPolicy: SolanaVerifiedChainAnchor['anchorPolicy']
+  finalizedRootSlot: number
+  producedSlotResolution: SolanaProducedSlotResolution
   finalizedSlot: number
   finalizedBlock: SolanaFinalizedBlockEvidence
 }
@@ -238,7 +241,7 @@ export interface SolanaVerifiedTransactionFinality {
   executionStatus: 'succeeded' | 'failed'
   /** Execution/finality gate only; it does not prove a DEX protocol hit. */
   candidateHitEligible: boolean
-  semanticHashPolicy: 'solana_verified_transaction_finality_semantics_v1'
+  semanticHashPolicy: 'solana_verified_transaction_finality_semantics_v2'
   semanticHash: string
 }
 
@@ -607,7 +610,10 @@ function copyAnchorPolicy(
   return {
     version: policy.version,
     genesisMethod: policy.genesisMethod,
-    slotMethod: policy.slotMethod,
+    rootSlotMethod: policy.rootSlotMethod,
+    producedSlotsMethod: policy.producedSlotsMethod,
+    producedSlotLookback: policy.producedSlotLookback,
+    minContextSlotPolicy: policy.minContextSlotPolicy,
     blockMethod: policy.blockMethod,
     commitment: policy.commitment,
     encoding: policy.encoding,
@@ -619,13 +625,27 @@ function copyAnchorPolicy(
   }
 }
 
+function copyProducedSlotResolution(
+  resolution: SolanaProducedSlotResolution
+): SolanaProducedSlotResolution {
+  return {
+    rangeStartSlot: resolution.rangeStartSlot,
+    rangeEndSlot: resolution.rangeEndSlot,
+    producedSlots: [...resolution.producedSlots],
+    selectedSlot: resolution.selectedSlot,
+    selectionPolicy: resolution.selectionPolicy,
+  }
+}
+
 function anchorBinding(anchor: SolanaVerifiedChainAnchor): SolanaTransactionAnchorBinding {
   return {
     endpoint: endpointCopy(anchor.endpoint),
-    verifiedAnchorHashPolicy: 'solana_verified_anchor_semantics_v1',
+    verifiedAnchorHashPolicy: 'solana_verified_anchor_semantics_v2',
     verifiedAnchorHash: anchor.semanticHash,
     observedAt: anchor.observedAt,
     anchorPolicy: copyAnchorPolicy(anchor.anchorPolicy),
+    finalizedRootSlot: anchor.finalizedRootSlot,
+    producedSlotResolution: copyProducedSlotResolution(anchor.producedSlotResolution),
     finalizedSlot: anchor.finalizedSlot,
     finalizedBlock: copyBlock(anchor.finalizedBlock),
   }
@@ -937,7 +957,10 @@ function anchorPolicyMatches(
   const policy = exactDataRecord(value, [
     'version',
     'genesisMethod',
-    'slotMethod',
+    'rootSlotMethod',
+    'producedSlotsMethod',
+    'producedSlotLookback',
+    'minContextSlotPolicy',
     'blockMethod',
     'commitment',
     'encoding',
@@ -951,7 +974,10 @@ function anchorPolicyMatches(
     policy &&
     policy.version === anchor.anchorPolicy.version &&
     policy.genesisMethod === anchor.anchorPolicy.genesisMethod &&
-    policy.slotMethod === anchor.anchorPolicy.slotMethod &&
+    policy.rootSlotMethod === anchor.anchorPolicy.rootSlotMethod &&
+    policy.producedSlotsMethod === anchor.anchorPolicy.producedSlotsMethod &&
+    policy.producedSlotLookback === anchor.anchorPolicy.producedSlotLookback &&
+    policy.minContextSlotPolicy === anchor.anchorPolicy.minContextSlotPolicy &&
     policy.blockMethod === anchor.anchorPolicy.blockMethod &&
     policy.commitment === anchor.anchorPolicy.commitment &&
     policy.encoding === anchor.anchorPolicy.encoding &&
@@ -960,6 +986,32 @@ function anchorPolicyMatches(
     policy.rewards === anchor.anchorPolicy.rewards &&
     policy.maxFutureBlockSkewMs === anchor.anchorPolicy.maxFutureBlockSkewMs &&
     policy.maxCurrentAnchorLagMs === anchor.anchorPolicy.maxCurrentAnchorLagMs
+  )
+}
+
+function producedSlotResolutionMatches(
+  value: unknown,
+  anchor: SolanaVerifiedChainAnchor
+): value is SolanaProducedSlotResolution {
+  const resolution = exactDataRecord(value, [
+    'rangeStartSlot',
+    'rangeEndSlot',
+    'producedSlots',
+    'selectedSlot',
+    'selectionPolicy',
+  ])
+  const producedSlots = resolution ? exactDenseArray(resolution.producedSlots) : null
+  return Boolean(
+    resolution &&
+    producedSlots &&
+    resolution.rangeStartSlot === anchor.producedSlotResolution.rangeStartSlot &&
+    resolution.rangeEndSlot === anchor.producedSlotResolution.rangeEndSlot &&
+    resolution.selectedSlot === anchor.producedSlotResolution.selectedSlot &&
+    resolution.selectionPolicy === anchor.producedSlotResolution.selectionPolicy &&
+    producedSlots.length === anchor.producedSlotResolution.producedSlots.length &&
+    producedSlots.every(
+      (slot, index) => slot === anchor.producedSlotResolution.producedSlots[index]
+    )
   )
 }
 
@@ -1051,7 +1103,7 @@ function transactionSemanticHash(
 ): string {
   const policy = membershipPolicy()
   const fields = [
-    'solana_verified_transaction_finality_semantics_v1',
+    'solana_verified_transaction_finality_semantics_v2',
     'mainnet-beta',
     SOLANA_MAINNET_GENESIS_HASH,
     policy.version,
@@ -1072,6 +1124,12 @@ function transactionSemanticHash(
     anchor.semanticHashPolicy,
     anchor.semanticHash,
     anchor.observedAt,
+    anchor.finalizedRootSlot,
+    anchor.producedSlotResolution.rangeStartSlot,
+    anchor.producedSlotResolution.rangeEndSlot,
+    anchor.producedSlotResolution.producedSlots,
+    anchor.producedSlotResolution.selectedSlot,
+    anchor.producedSlotResolution.selectionPolicy,
     anchor.finalizedSlot,
     anchor.finalizedBlock.slot,
     anchor.finalizedBlock.blockhash,
@@ -1134,10 +1192,15 @@ function requireSolanaVerifiedTransactionFinalityInternal(
     'verifiedAnchorHash',
     'observedAt',
     'anchorPolicy',
+    'finalizedRootSlot',
+    'producedSlotResolution',
     'finalizedSlot',
     'finalizedBlock',
   ])
   const boundEndpoint = boundAnchor ? parseApprovedEndpoint(boundAnchor.endpoint) : null
+  const boundFinalizedRootSlot = boundAnchor
+    ? canonicalUnsigned(boundAnchor.finalizedRootSlot)
+    : null
   const boundFinalizedSlot = boundAnchor ? canonicalUnsigned(boundAnchor.finalizedSlot) : null
   const boundFinalizedBlock = boundAnchor ? parseExactBlock(boundAnchor.finalizedBlock) : null
   const transactionLaneValue = parseAvailableLane(root.transaction)
@@ -1166,10 +1229,13 @@ function requireSolanaVerifiedTransactionFinalityInternal(
     !boundAnchor ||
     !boundEndpoint ||
     !sameEndpoint(boundEndpoint, anchor.endpoint) ||
-    boundAnchor.verifiedAnchorHashPolicy !== 'solana_verified_anchor_semantics_v1' ||
+    boundAnchor.verifiedAnchorHashPolicy !== 'solana_verified_anchor_semantics_v2' ||
     boundAnchor.verifiedAnchorHash !== anchor.semanticHash ||
     boundAnchor.observedAt !== anchor.observedAt ||
     !anchorPolicyMatches(boundAnchor.anchorPolicy, anchor) ||
+    boundFinalizedRootSlot === null ||
+    boundFinalizedRootSlot !== anchor.finalizedRootSlot ||
+    !producedSlotResolutionMatches(boundAnchor.producedSlotResolution, anchor) ||
     boundFinalizedSlot === null ||
     boundFinalizedSlot !== anchor.finalizedSlot ||
     !boundFinalizedBlock ||
@@ -1232,7 +1298,7 @@ function requireSolanaVerifiedTransactionFinalityInternal(
     transactionIndex,
     executionStatus: succeeded ? 'succeeded' : 'failed',
     candidateHitEligible: succeeded,
-    semanticHashPolicy: 'solana_verified_transaction_finality_semantics_v1',
+    semanticHashPolicy: 'solana_verified_transaction_finality_semantics_v2',
     semanticHash: transactionSemanticHash(
       boundEndpoint,
       anchor,
