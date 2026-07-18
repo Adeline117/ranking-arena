@@ -30,7 +30,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - run: npm run gen:types:contract
 
   # 真实生产 diff 只允许在已合入 main 的可信代码上运行。secret 在各 step
@@ -46,7 +46,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - name: Regenerate from attested production and diff
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -178,7 +178,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       # The repository ruleset already requires this job. Keep the offline
       # contract here as well as in its named job so PRs cannot merge while an
       # older four-check ruleset is still being updated.
@@ -233,7 +233,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
 
       - name: Run tests with coverage
         run: npm test -- --coverage --coverageReporters=text --coverageReporters=lcov --ci
@@ -268,7 +268,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - run: npm run build
         env:
           NODE_ENV: production
@@ -333,7 +333,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
 
       # Desktop smoke only → chromium is enough. Nightly installs webkit for the
       # full mobile/tablet matrix.
@@ -385,7 +385,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
 
       - name: E2E data consistency verification
         run: npx tsx scripts/e2e-data-verify.ts --verbose

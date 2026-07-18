@@ -30,7 +30,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
 
       - name: Install PostgreSQL 17 client（匹配 Supabase 服务器）
         run: |
