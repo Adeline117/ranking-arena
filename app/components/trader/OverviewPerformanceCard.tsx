@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { tokens, alpha as colorAlpha } from '@/lib/design-tokens'
-import { Box } from '../base'
+import { Box, Text } from '../base'
 import type { TraderPerformance } from '@/lib/data/trader'
 import { PeriodSelector } from './performance/PeriodSelector'
 import { HeroMetrics } from './performance/HeroMetrics'
@@ -10,6 +10,7 @@ import { MetricBadgesGrid } from './performance/MetricBadgesGrid'
 import { ScoreBreakdownSection } from './performance/ScoreBreakdownSection'
 import type { Period } from './performance/PeriodSelector'
 import { usePeriodStore } from '@/lib/stores/periodStore'
+import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import type {
   GmxMaxCapitalRoiDisclosure,
   GmxRealizedNetDisclosure,
@@ -102,6 +103,7 @@ export default function OverviewPerformanceCard({
   positionSummary,
 }: OverviewPerformanceCardProps) {
   void profitableWeeksPct
+  const { t } = useLanguage()
   const period = usePeriodStore((s) => s.period) as Period
   const setStorePeriod = usePeriodStore((s) => s.setPeriod)
   const [isAnimating, setIsAnimating] = useState(false)
@@ -242,6 +244,17 @@ export default function OverviewPerformanceCard({
     avgHoldingTimeHours,
   } = data
   const periodArenaScore = data.arenaScore
+  // The default serving layout is now the unified three-tab experience, so
+  // dormant-period feedback must live in this shared performance card too.
+  // The older escape-hatch ServingProfilePanel already had this notice, but it
+  // is not mounted for normal users. Treat missing fields as unknown, require
+  // at least one real activity metric, and never turn a non-zero PnL/ROI into a
+  // dormant claim.
+  const activityMetrics = [roi, pnl, winRate, totalPositions].filter(
+    (value): value is number => value != null && Number.isFinite(Number(value))
+  )
+  const isDormantPeriod =
+    activityMetrics.length > 0 && activityMetrics.every((value) => Number(value) === 0)
 
   // 生成 sparkline 数据 — 使用当前 period 对应的 equity curve，过滤掉 null/NaN 值
   const periodCurve = allEquityCurves?.[period] ?? equityCurve
@@ -273,6 +286,23 @@ export default function OverviewPerformanceCard({
             source={source}
             lastUpdated={lastUpdated}
           />
+
+          {isDormantPeriod && (
+            <Box
+              role="status"
+              style={{
+                marginBottom: tokens.spacing[4],
+                padding: `${tokens.spacing[3]} ${tokens.spacing[4]}`,
+                borderRadius: tokens.radius.lg,
+                background: 'var(--color-bg-tertiary)',
+                border: `1px solid ${tokens.colors.border.primary}`,
+              }}
+            >
+              <Text size="sm" color="tertiary">
+                {t('traderDormantForPeriod')}
+              </Text>
+            </Box>
+          )}
 
           {/* Content — shimmer on period switch */}
           <Box

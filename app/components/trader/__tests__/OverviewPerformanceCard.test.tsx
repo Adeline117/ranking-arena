@@ -3,6 +3,10 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import OverviewPerformanceCard from '../OverviewPerformanceCard'
 import { usePeriodStore } from '@/lib/stores/periodStore'
 
+jest.mock('@/app/components/Providers/LanguageProvider', () => ({
+  useLanguage: () => ({ t: (key: string) => key }),
+}))
+
 jest.mock('../performance/PeriodSelector', () => ({
   PeriodSelector: ({
     period,
@@ -100,5 +104,28 @@ describe('OverviewPerformanceCard period switching', () => {
     view.unmount()
 
     expect(jest.getTimerCount()).toBe(0)
+  })
+
+  it('shows the dormant notice only for the selected all-zero activity period', () => {
+    render(
+      <OverviewPerformanceCard
+        performance={{
+          roi_90d: 2.46,
+          pnl: 19.34,
+          win_rate: 32,
+          total_positions: 26,
+          roi_30d: 0,
+          pnl_30d: 0,
+          win_rate_30d: undefined,
+          total_positions_30d: 0,
+        }}
+      />
+    )
+
+    expect(screen.queryByText('traderDormantForPeriod')).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: '30D period' }))
+
+    expect(screen.getByText('traderDormantForPeriod')).toBeInTheDocument()
   })
 })
