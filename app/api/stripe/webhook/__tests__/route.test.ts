@@ -79,6 +79,7 @@ function createRequest(signature: string | null = 'valid-signature'): NextReques
 function event(type = 'checkout.session.completed') {
   return {
     id: 'evt_test_retryable',
+    created: 1_800_000_000,
     type,
     data: {
       object: {
@@ -242,5 +243,11 @@ describe('POST /api/stripe/webhook', () => {
 
     expect(response.status).toBe(200)
     expect(handler).toHaveBeenCalledTimes(1)
+    if (type === 'checkout.session.expired') {
+      expect(handler).toHaveBeenCalledWith(expect.anything(), {
+        id: 'evt_test_retryable',
+        created: 1_800_000_000,
+      })
+    }
   })
 })

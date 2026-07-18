@@ -29,6 +29,7 @@ jest.mock('next/server', () => {
 const mockSessionRetrieve = jest.fn()
 const mockSubscriptionRetrieve = jest.fn()
 const mockPaymentIntentRetrieve = jest.fn()
+const mockActivateLifetimeCheckoutEntitlement = jest.fn()
 jest.mock('stripe', () => ({
   __esModule: true,
   default: jest.fn().mockImplementation(() => ({
@@ -43,6 +44,12 @@ const mockRpc = jest.fn()
 jest.mock('@/lib/supabase/server', () => ({
   getAuthUser: (...args: unknown[]) => mockGetAuthUser(...args),
   getSupabaseAdmin: () => ({ rpc: mockRpc }),
+}))
+jest.mock('@/lib/stripe/lifetime-entitlement', () => ({
+  activateLifetimeCheckoutEntitlement: (...args: unknown[]) =>
+    mockActivateLifetimeCheckoutEntitlement(...args),
+  lifetimeActivationGranted: (status: string) =>
+    status === 'activated' || status === 'already_activated',
 }))
 
 jest.mock('@/lib/utils/rate-limit', () => ({
@@ -107,6 +114,7 @@ describe('POST /api/stripe/verify-session', () => {
     mockPaymentIntentRetrieve.mockResolvedValue({
       latest_charge: { id: 'ch_test_123', refunded: false, amount_refunded: 0 },
     })
+    mockActivateLifetimeCheckoutEntitlement.mockResolvedValue({ status: 'activated' })
     mockRpc.mockResolvedValue({ error: null })
   })
 
@@ -140,9 +148,34 @@ describe('POST /api/stripe/verify-session', () => {
     const response = await POST(request())
 
     expect(response.status).toBe(200)
-    expect(mockRpc).toHaveBeenCalledWith('activate_lifetime_membership', {
-      p_user_id: 'user-123',
-      p_stripe_customer_id: 'cus_test_123',
+    expect(mockActivateLifetimeCheckoutEntitlement).toHaveBeenCalledWith(
+      expect.objectContaining({
+        expectedUserId: 'user-123',
+        session: expect.objectContaining({ id: 'cs_test_123' }),
+      })
+    )
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('does not report success when exact lifetime authority requires review', async () => {
+    mockSessionRetrieve.mockResolvedValue(
+      baseSession({
+        mode: 'payment',
+        subscription: null,
+        payment_intent: 'pi_test_123',
+        metadata: { userId: 'user-123', plan: 'lifetime' },
+      })
+    )
+    mockActivateLifetimeCheckoutEntitlement.mockResolvedValue({
+      status: 'reservation_refund_queued',
+    })
+
+    const response = await POST(request())
+
+    expect(response.status).toBe(409)
+    expect(await response.json()).toEqual({
+      error: 'Payment requires review before membership can be activated.',
+      code: 'LIFETIME_ACTIVATION_REVIEW',
     })
   })
 

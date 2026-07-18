@@ -1,17 +1,59 @@
 import Stripe from 'stripe'
-import { stripe, API_TIER_LIMITS } from '@/lib/stripe'
+import { stripe, API_TIER_LIMITS, getStripe } from '@/lib/stripe'
 import { joinProOfficialGroup } from '@/app/api/pro-official-group/route'
-import { getSupabase, withRetry, logger } from './shared'
+import { getSupabase, withRetry, logger, type StripeWebhookEventContext } from './shared'
 import { getProPlanFromPriceId, updateUserSubscription } from './subscription'
 import { mintNFTForUser } from './nft'
 import { sendAlert } from '@/lib/alerts/send-alert'
 import { fireAndForget } from '@/lib/utils/logger'
 import { sendNotification } from '@/lib/data/notifications'
+import {
+  activateLifetimeCheckoutEntitlement,
+  lifetimeActivationGranted,
+  LIFETIME_RESERVATION_ID_METADATA_KEY,
+  LIFETIME_RESERVATION_NONCE_METADATA_KEY,
+  recordStripeCheckoutManualReview,
+} from '@/lib/stripe/lifetime-entitlement'
+import { getSupabaseAdmin } from '@/lib/supabase/server'
+import type { Json } from '@/lib/supabase/database.types'
+
+const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+const reservationNoncePattern = /^[A-Za-z0-9_.:-]{8,128}$/
+
+function rpcStatus(value: unknown): string | null {
+  return value && !Array.isArray(value) && typeof value === 'object'
+    ? String((value as Record<string, unknown>).status || '')
+    : null
+}
+
+function canonicalUuid(value: string | null | undefined): string | null {
+  const candidate = value?.trim()
+  return candidate && uuidPattern.test(candidate) ? candidate.toLowerCase() : null
+}
 
 export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
-  const userId = session.metadata?.userId || session.metadata?.supabase_user_id
+  const rawUserId = session.metadata?.userId
+  const rawSupabaseUserId = session.metadata?.supabase_user_id
+  const metadataUserId = canonicalUuid(rawUserId)
+  const metadataSupabaseUserId = canonicalUuid(rawSupabaseUserId)
+  const canonicalAliasesMatch =
+    !!metadataUserId && !!metadataSupabaseUserId && metadataUserId === metadataSupabaseUserId
+  const canonicalPaymentUserId = canonicalAliasesMatch ? metadataUserId : null
+  const userId = rawUserId || rawSupabaseUserId
   const plan = session.metadata?.plan
   const customerId = session.customer as string
+  const paidOneTime = session.mode === 'payment' && session.payment_status === 'paid'
+  const hasLifetimeReservationMarker =
+    Object.prototype.hasOwnProperty.call(
+      session.metadata || {},
+      LIFETIME_RESERVATION_ID_METADATA_KEY
+    ) ||
+    Object.prototype.hasOwnProperty.call(
+      session.metadata || {},
+      LIFETIME_RESERVATION_NONCE_METADATA_KEY
+    )
+  const lifetimeIntent =
+    session.mode === 'payment' && (plan === 'lifetime' || hasLifetimeReservationMarker)
 
   logger.info('Checkout completed', {
     userId,
@@ -22,6 +64,87 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     mode: session.mode,
     subscription: session.subscription,
   })
+
+  const recordCompletedCheckoutReview = async (params: {
+    reasonKey: string
+    reason: string
+    context: Json
+  }) =>
+    recordStripeCheckoutManualReview({
+      supabase: getSupabaseAdmin(),
+      sessionId: session.id || 'unknown_checkout_session',
+      userId: canonicalPaymentUserId,
+      reasonKey: params.reasonKey,
+      reason: params.reason,
+      context: params.context,
+    })
+
+  if (lifetimeIntent) {
+    if (!paidOneTime) {
+      logger.warn('Lifetime checkout completed without payment', {
+        sessionId: session.id,
+        paymentStatus: session.payment_status,
+      })
+      return
+    }
+
+    const reservationId = canonicalUuid(session.metadata?.[LIFETIME_RESERVATION_ID_METADATA_KEY])
+    const reservationNonce =
+      session.metadata?.[LIFETIME_RESERVATION_NONCE_METADATA_KEY]?.trim() || null
+    const lifetimeMetadataIsExact =
+      canonicalAliasesMatch &&
+      plan === 'lifetime' &&
+      !!reservationId &&
+      !!reservationNonce &&
+      reservationNoncePattern.test(reservationNonce)
+
+    if (!lifetimeMetadataIsExact || !canonicalPaymentUserId) {
+      await recordCompletedCheckoutReview({
+        reasonKey: 'lifetime_checkout_metadata_invalid',
+        reason:
+          'A paid lifetime Checkout Session had missing, malformed, or conflicting entitlement metadata.',
+        context: {
+          session_id: session.id,
+          mode: session.mode,
+          payment_status: session.payment_status,
+          plan: plan || null,
+          metadata_user_id: rawUserId || null,
+          metadata_supabase_user_id: rawSupabaseUserId || null,
+          reservation_id: session.metadata?.[LIFETIME_RESERVATION_ID_METADATA_KEY] || null,
+          reservation_nonce: session.metadata?.[LIFETIME_RESERVATION_NONCE_METADATA_KEY] || null,
+        },
+      })
+      return
+    }
+
+    const outcome = await handleLifetimePayment(session, canonicalPaymentUserId)
+    if (!lifetimeActivationGranted(outcome.status)) {
+      logger.warn('Lifetime checkout reached a safe non-grant terminal state', {
+        userId: canonicalPaymentUserId,
+        sessionId: session.id,
+        status: outcome.status,
+        reviewCode: outcome.reviewCode,
+      })
+    }
+    return
+  }
+
+  if (paidOneTime) {
+    await recordCompletedCheckoutReview({
+      reasonKey: 'paid_checkout_product_unsupported',
+      reason: 'A paid one-time Checkout Session had no supported exact product mapping.',
+      context: {
+        session_id: session.id,
+        mode: session.mode,
+        payment_status: session.payment_status,
+        plan: plan || null,
+        metadata_type: session.metadata?.type || null,
+        metadata_user_id: rawUserId || null,
+        metadata_supabase_user_id: rawSupabaseUserId || null,
+      },
+    })
+    return
+  }
 
   if (!userId) {
     logger.error('No userId in session metadata', { metadata: session.metadata })
@@ -56,24 +179,8 @@ export async function handleCheckoutComplete(session: Stripe.Checkout.Session) {
     return
   }
 
-  // Lifetime (one-time payment) vs subscription checkout
-  if (session.mode === 'payment' && plan === 'lifetime') {
-    if (session.payment_status !== 'paid') {
-      logger.warn('Lifetime checkout completed without payment', {
-        sessionId: session.id,
-        paymentStatus: session.payment_status,
-      })
-      return
-    }
-    await handleLifetimePayment(userId, customerId)
-    return
-  }
-
   if (session.mode !== 'subscription') {
     logger.warn(`Session ${session.id} is not a subscription`, { mode: session.mode })
-    if (session.payment_status === 'paid') {
-      throw new Error(`Paid checkout ${session.id} has no supported product mapping`)
-    }
     return
   }
 
@@ -239,7 +346,10 @@ export async function handleTipPaymentCompleted(session: Stripe.Checkout.Session
   logger.info('Tip recorded successfully', { tipId, amountCents })
 }
 
-export async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
+export async function handleCheckoutExpired(
+  session: Stripe.Checkout.Session,
+  event: StripeWebhookEventContext
+) {
   const userId = session.metadata?.userId || session.metadata?.supabase_user_id
   const plan = session.metadata?.plan
 
@@ -250,6 +360,150 @@ export async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
     customerEmail: session.customer_details?.email,
     amountTotal: session.amount_total,
   })
+
+  const sessionMetadata = session.metadata || {}
+  const carriesLifetimeReservationIdentity =
+    Object.prototype.hasOwnProperty.call(sessionMetadata, LIFETIME_RESERVATION_ID_METADATA_KEY) ||
+    Object.prototype.hasOwnProperty.call(sessionMetadata, LIFETIME_RESERVATION_NONCE_METADATA_KEY)
+
+  if (plan === 'lifetime' || carriesLifetimeReservationIdentity) {
+    const metadataUserId = canonicalUuid(session.metadata?.userId)
+    const metadataSupabaseUserId = canonicalUuid(session.metadata?.supabase_user_id)
+    const reviewUserId =
+      metadataUserId && metadataUserId === metadataSupabaseUserId ? metadataUserId : null
+    const reservationId = canonicalUuid(session.metadata?.[LIFETIME_RESERVATION_ID_METADATA_KEY])
+    const requestNonce = session.metadata?.[LIFETIME_RESERVATION_NONCE_METADATA_KEY]?.trim() || null
+    const eventCreatedIsValid =
+      Number.isSafeInteger(event.created) && event.created > 0 && event.created <= 253_402_300_799
+    const metadataIsValid =
+      plan === 'lifetime' &&
+      !!metadataUserId &&
+      metadataUserId === metadataSupabaseUserId &&
+      !!reservationId &&
+      !!requestNonce &&
+      reservationNoncePattern.test(requestNonce) &&
+      session.id.startsWith('cs_') &&
+      event.id.startsWith('evt_') &&
+      eventCreatedIsValid
+
+    const recordExpiryReview = async (params: {
+      reasonKey: string
+      reason: string
+      context: Json
+    }) => {
+      await recordStripeCheckoutManualReview({
+        supabase: getSupabaseAdmin(),
+        sessionId: session.id || 'unknown_checkout_session',
+        userId: reviewUserId,
+        reasonKey: params.reasonKey,
+        reason: params.reason,
+        context: params.context,
+      })
+    }
+
+    if (!metadataIsValid) {
+      await recordExpiryReview({
+        reasonKey: 'lifetime_expiry_metadata_invalid',
+        reason: 'An expired lifetime Checkout Session had incomplete or malformed identity.',
+        context: {
+          event_id: event.id,
+          event_created: event.created,
+          session_id: session.id,
+          plan: plan || null,
+          metadata_user_id: session.metadata?.userId || null,
+          metadata_supabase_user_id: session.metadata?.supabase_user_id || null,
+          reservation_id: session.metadata?.[LIFETIME_RESERVATION_ID_METADATA_KEY] || null,
+          request_nonce: session.metadata?.[LIFETIME_RESERVATION_NONCE_METADATA_KEY] || null,
+        },
+      })
+      return
+    }
+    if (!metadataUserId || !reservationId || !requestNonce) {
+      throw new Error('Validated lifetime expiry identity unexpectedly became incomplete')
+    }
+
+    const supabaseAdmin = getSupabaseAdmin()
+    const exactReleaseArgs = {
+      p_user_id: metadataUserId,
+      p_reservation_id: reservationId,
+      p_request_nonce: requestNonce,
+      p_checkout_session_id: session.id,
+      p_release_reason: 'stripe_checkout_session_expired',
+      p_event_id: event.id,
+      p_event_created_at: new Date(event.created * 1000).toISOString(),
+    }
+    const { data, error } = await supabaseAdmin.rpc(
+      'release_lifetime_membership_reservation_atomic',
+      exactReleaseArgs
+    )
+    if (error) {
+      throw new Error(`Failed to release expired lifetime reservation: ${error.message}`)
+    }
+
+    const acceptedReleaseStatuses = new Set(['released', 'already_released', 'already_expired'])
+    const status = rpcStatus(data)
+    if (!acceptedReleaseStatuses.has(String(status))) {
+      let remediationStatus: string | null = null
+      let retryExactStatus: string | null = null
+      if (status === 'release_not_verified') {
+        const { data: remediationData, error: remediationError } = await supabaseAdmin.rpc(
+          'release_lifetime_membership_reservation_atomic',
+          {
+            p_user_id: metadataUserId,
+            p_reservation_id: reservationId,
+            p_request_nonce: requestNonce,
+            p_checkout_session_id: null,
+            p_release_reason: 'stripe_checkout_abandoned',
+            p_event_id: null,
+            p_event_created_at: null,
+          }
+        )
+        if (remediationError) {
+          throw new Error(
+            `Failed to remediate an unbound expired lifetime reservation: ${remediationError.message}`
+          )
+        }
+        remediationStatus = rpcStatus(remediationData)
+        if (acceptedReleaseStatuses.has(String(remediationStatus))) {
+          return
+        }
+        if (remediationStatus === 'release_not_verified') {
+          // The reservation can bind between the first exact transaction and
+          // the reserved-state remediation transaction. Replay the same signed
+          // identity once so that newly-bound row is released, too.
+          const { data: retryExactData, error: retryExactError } = await supabaseAdmin.rpc(
+            'release_lifetime_membership_reservation_atomic',
+            exactReleaseArgs
+          )
+          if (retryExactError) {
+            throw new Error(
+              `Failed to retry exact expired lifetime reservation release: ${retryExactError.message}`
+            )
+          }
+          retryExactStatus = rpcStatus(retryExactData)
+          if (acceptedReleaseStatuses.has(String(retryExactStatus))) {
+            return
+          }
+        }
+      }
+
+      await recordExpiryReview({
+        reasonKey: 'lifetime_expiry_release_conflict',
+        reason: 'A signed lifetime Checkout expiration could not release its exact reservation.',
+        context: {
+          event_id: event.id,
+          event_created: event.created,
+          session_id: session.id,
+          reservation_id: reservationId,
+          request_nonce: requestNonce,
+          release_status: status,
+          remediation_status: remediationStatus,
+          retry_exact_status: retryExactStatus,
+        },
+      })
+      return
+    }
+  }
 
   // Record abandonment for funnel analysis
   if (userId) {
@@ -284,44 +538,17 @@ export async function handleCheckoutExpired(session: Stripe.Checkout.Session) {
   )
 }
 
-async function handleLifetimePayment(userId: string, customerId: string) {
-  logger.info('Processing lifetime payment', { userId, customerId })
-
-  await withRetry(async () => {
-    const { error } = await getSupabase().rpc('activate_lifetime_membership', {
-      p_user_id: userId,
-      p_stripe_customer_id: customerId,
-    })
-    if (error) throw new Error(`Failed to activate lifetime membership: ${error.message}`)
+async function handleLifetimePayment(session: Stripe.Checkout.Session, userId: string) {
+  logger.info('Processing exact lifetime payment authority', {
+    userId,
+    sessionId: session.id,
   })
-
-  // Join Pro official group
-  try {
-    const joinResult = await joinProOfficialGroup(userId)
-    if (joinResult.success) {
-      logger.info(`Lifetime user ${userId} joined Pro official group`)
-    } else {
-      throw new Error(`Failed to join Pro official group: ${joinResult.message}`)
-    }
-  } catch (joinError) {
-    logger.error('Error joining Pro official group for lifetime user', { error: joinError })
-    throw joinError
-  }
-
-  await mintNFTForUser(userId, 'lifetime')
-
-  logger.info(`Lifetime payment processed for user ${userId}`)
-
-  // Celebrate the lifetime purchase on Telegram (same rationale as above).
-  fireAndForget(
-    sendAlert({
-      title: '🎉 New lifetime subscriber',
-      message: `User ${userId} bought a lifetime plan`,
-      level: 'info',
-      details: { userId, customerId, plan: 'lifetime' },
-    }),
-    'stripe-new-lifetime-alert'
-  )
+  return activateLifetimeCheckoutEntitlement({
+    stripe: getStripe(),
+    supabase: getSupabaseAdmin(),
+    session,
+    expectedUserId: userId,
+  })
 }
 
 export async function handleApiTierActivation(

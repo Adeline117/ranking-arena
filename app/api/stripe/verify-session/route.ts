@@ -9,6 +9,10 @@ import { createLogger } from '@/lib/utils/logger'
 import { checkRateLimit, RateLimitPresets } from '@/lib/utils/rate-limit'
 import { getAuthUser, getSupabaseAdmin } from '@/lib/supabase/server'
 import { env } from '@/lib/env'
+import {
+  activateLifetimeCheckoutEntitlement,
+  lifetimeActivationGranted,
+} from '@/lib/stripe/lifetime-entitlement'
 
 // 懒加载 Stripe 客户端
 function getStripe() {
@@ -132,17 +136,32 @@ export async function POST(request: NextRequest) {
 
     // Lifetime one-time payment (mode=payment)
     if (session.mode === 'payment' && plan === 'lifetime') {
-      const { error: activationError } = await supabaseAdmin.rpc('activate_lifetime_membership', {
-        p_user_id: userId,
-        p_stripe_customer_id: customerId,
+      const outcome = await activateLifetimeCheckoutEntitlement({
+        stripe,
+        supabase: supabaseAdmin,
+        session,
+        expectedUserId: authUser.id,
       })
-
-      if (activationError) {
-        logger.error('Atomic lifetime activation failed', { error: activationError, userId })
-        return NextResponse.json({ error: 'Failed to activate membership' }, { status: 500 })
+      if (!lifetimeActivationGranted(outcome.status)) {
+        logger.warn('Lifetime verification reached a safe non-grant terminal state', {
+          userId,
+          sessionId,
+          status: outcome.status,
+          reviewCode: outcome.reviewCode,
+        })
+        if (outcome.status === 'refunded_payment') {
+          return NextResponse.json({ error: 'Payment was refunded' }, { status: 400 })
+        }
+        return NextResponse.json(
+          {
+            error: 'Payment requires review before membership can be activated.',
+            code: 'LIFETIME_ACTIVATION_REVIEW',
+          },
+          { status: 409 }
+        )
       }
 
-      logger.info('Lifetime payment verified', { userId })
+      logger.info('Exact lifetime payment verified', { userId, status: outcome.status })
       return NextResponse.json({
         success: true,
         tier: 'pro' as const,

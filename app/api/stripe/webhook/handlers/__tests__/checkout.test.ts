@@ -1,5 +1,6 @@
 const mockRetrieveSubscription = jest.fn()
 const mockCancelSubscription = jest.fn()
+const mockGetStripeClient = {}
 jest.mock('@/lib/stripe', () => ({
   stripe: {
     subscriptions: {
@@ -7,7 +8,21 @@ jest.mock('@/lib/stripe', () => ({
       cancel: (...args: unknown[]) => mockCancelSubscription(...args),
     },
   },
+  getStripe: () => mockGetStripeClient,
   API_TIER_LIMITS: { free: 100, starter: 10_000, pro: 0 },
+}))
+
+const mockActivateLifetimeCheckoutEntitlement = jest.fn()
+const mockRecordStripeCheckoutManualReview = jest.fn()
+jest.mock('@/lib/stripe/lifetime-entitlement', () => ({
+  activateLifetimeCheckoutEntitlement: (...args: unknown[]) =>
+    mockActivateLifetimeCheckoutEntitlement(...args),
+  recordStripeCheckoutManualReview: (...args: unknown[]) =>
+    mockRecordStripeCheckoutManualReview(...args),
+  lifetimeActivationGranted: (status: string) =>
+    status === 'activated' || status === 'already_activated',
+  LIFETIME_RESERVATION_ID_METADATA_KEY: 'lifetime_reservation_id',
+  LIFETIME_RESERVATION_NONCE_METADATA_KEY: 'lifetime_reservation_nonce',
 }))
 
 const mockUpdateUserSubscription = jest.fn()
@@ -20,22 +35,35 @@ jest.mock('../subscription', () => ({
 const mockRpc = jest.fn()
 const mockFrom = jest.fn()
 const mockJoinProOfficialGroup = jest.fn()
+const mockMintNFTForUser = jest.fn()
+const mockSendAlert = jest.fn()
 jest.mock('../shared', () => ({
   getSupabase: () => ({ from: mockFrom, rpc: mockRpc }),
   withRetry: (operation: () => unknown) => operation(),
   logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn() },
 }))
+jest.mock('@/lib/supabase/server', () => ({
+  getSupabaseAdmin: () => ({ rpc: mockRpc }),
+}))
 
 jest.mock('@/app/api/pro-official-group/route', () => ({
   joinProOfficialGroup: (...args: unknown[]) => mockJoinProOfficialGroup(...args),
 }))
-jest.mock('../nft', () => ({ mintNFTForUser: jest.fn().mockResolvedValue(undefined) }))
-jest.mock('@/lib/alerts/send-alert', () => ({ sendAlert: jest.fn().mockResolvedValue(undefined) }))
+jest.mock('../nft', () => ({
+  mintNFTForUser: (...args: unknown[]) => mockMintNFTForUser(...args),
+}))
+jest.mock('@/lib/alerts/send-alert', () => ({
+  sendAlert: (...args: unknown[]) => mockSendAlert(...args),
+}))
 jest.mock('@/lib/utils/logger', () => ({ fireAndForget: jest.fn() }))
 jest.mock('@/lib/data/notifications', () => ({ sendNotification: jest.fn() }))
 
 import type Stripe from 'stripe'
-import { handleCheckoutComplete, handleTipPaymentCompleted } from '../checkout'
+import {
+  handleCheckoutComplete,
+  handleCheckoutExpired,
+  handleTipPaymentCompleted,
+} from '../checkout'
 
 function checkoutSession(
   overrides: Partial<Stripe.Checkout.Session> = {}
@@ -49,6 +77,47 @@ function checkoutSession(
     metadata: { userId: 'user-123', plan: 'monthly' },
     ...overrides,
   } as Stripe.Checkout.Session
+}
+
+const lifetimeUserId = '21e34ce2-43c1-4bcc-8f19-79b36d56605c'
+const lifetimeReservationId = '9a8df3e8-e908-4f27-9cb4-8b892d748cc7'
+const lifetimeRequestNonce = `lifetime:${lifetimeUserId}:123`
+const expiredEvent = { id: 'evt_expired_123', created: 1_800_000_000 }
+
+function expiredLifetimeSession(
+  metadataOverrides: Record<string, string> = {}
+): Stripe.Checkout.Session {
+  return checkoutSession({
+    mode: 'payment',
+    payment_status: 'unpaid',
+    subscription: null,
+    metadata: {
+      userId: lifetimeUserId,
+      supabase_user_id: lifetimeUserId,
+      plan: 'lifetime',
+      lifetime_reservation_id: lifetimeReservationId,
+      lifetime_reservation_nonce: lifetimeRequestNonce,
+      ...metadataOverrides,
+    },
+  })
+}
+
+function paidLifetimeSession(
+  metadataOverrides: Record<string, string> = {}
+): Stripe.Checkout.Session {
+  return checkoutSession({
+    mode: 'payment',
+    payment_status: 'paid',
+    subscription: null,
+    metadata: {
+      userId: lifetimeUserId,
+      supabase_user_id: lifetimeUserId,
+      plan: 'lifetime',
+      lifetime_reservation_id: lifetimeReservationId,
+      lifetime_reservation_nonce: lifetimeRequestNonce,
+      ...metadataOverrides,
+    },
+  })
 }
 
 function noExistingSubscriptionQuery() {
@@ -91,6 +160,10 @@ describe('handleCheckoutComplete entitlement safety', () => {
     mockUpdateUserSubscription.mockResolvedValue(undefined)
     mockGetProPlanFromPriceId.mockReturnValue('monthly')
     mockJoinProOfficialGroup.mockResolvedValue({ success: true, groupId: 'pro-group' })
+    mockMintNFTForUser.mockResolvedValue(undefined)
+    mockSendAlert.mockResolvedValue(undefined)
+    mockActivateLifetimeCheckoutEntitlement.mockResolvedValue({ status: 'activated' })
+    mockRecordStripeCheckoutManualReview.mockResolvedValue(undefined)
     mockRpc.mockResolvedValue({ error: null })
   })
 
@@ -218,55 +291,394 @@ describe('handleCheckoutComplete entitlement safety', () => {
     expect(mockUpdateUserSubscription).not.toHaveBeenCalled()
   })
 
-  it('does not acknowledge an unsupported paid one-time checkout', async () => {
+  it('durably reviews and acknowledges an unsupported paid one-time checkout', async () => {
     await expect(
       handleCheckoutComplete(
         checkoutSession({
           mode: 'payment',
           payment_status: 'paid',
           subscription: null,
-          metadata: { userId: 'user-123', plan: 'unknown' },
+          metadata: { userId: 'not-a-uuid', plan: 'unknown' },
         })
       )
-    ).rejects.toThrow('Paid checkout cs_test_123 has no supported product mapping')
+    ).resolves.toBeUndefined()
+
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'cs_test_123',
+        userId: null,
+        reasonKey: 'paid_checkout_product_unsupported',
+      })
+    )
   })
 
   it('activates a paid lifetime membership through one atomic RPC', async () => {
-    await handleCheckoutComplete(
-      checkoutSession({
-        mode: 'payment',
-        payment_status: 'paid',
-        subscription: null,
-        metadata: { userId: 'user-123', plan: 'lifetime' },
-      })
+    const session = paidLifetimeSession()
+
+    await handleCheckoutComplete(session)
+
+    expect(mockActivateLifetimeCheckoutEntitlement).toHaveBeenCalledWith({
+      stripe: mockGetStripeClient,
+      supabase: expect.anything(),
+      session,
+      expectedUserId: lifetimeUserId,
+    })
+    expect(mockJoinProOfficialGroup).not.toHaveBeenCalled()
+    expect(mockMintNFTForUser).not.toHaveBeenCalled()
+    expect(mockSendAlert).not.toHaveBeenCalled()
+    expect(mockFrom).not.toHaveBeenCalled()
+    expect(mockRpc).not.toHaveBeenCalled()
+  })
+
+  it('acknowledges a durable non-grant lifetime terminal state without direct side effects', async () => {
+    mockActivateLifetimeCheckoutEntitlement.mockResolvedValue({
+      status: 'reservation_refund_queued',
+    })
+
+    await expect(handleCheckoutComplete(paidLifetimeSession())).resolves.toBeUndefined()
+    expect(mockJoinProOfficialGroup).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'missing alias',
+      {
+        supabase_user_id: '',
+      },
+    ],
+    [
+      'invalid alias',
+      {
+        userId: 'not-a-uuid',
+      },
+    ],
+    [
+      'conflicting aliases',
+      {
+        supabase_user_id: 'd77f7404-6045-48be-a78e-49a0e18f9db2',
+      },
+    ],
+  ])(
+    'durably reviews and acknowledges paid lifetime metadata with a %s',
+    async (_label, metadata) => {
+      await expect(handleCheckoutComplete(paidLifetimeSession(metadata))).resolves.toBeUndefined()
+
+      expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'cs_test_123',
+          userId: null,
+          reasonKey: 'lifetime_checkout_metadata_invalid',
+        })
+      )
+      expect(mockActivateLifetimeCheckoutEntitlement).not.toHaveBeenCalled()
+    }
+  )
+
+  it('keeps malformed paid lifetime completion retryable until manual review is durable', async () => {
+    mockRecordStripeCheckoutManualReview.mockRejectedValue(
+      new Error('manual review persistence unavailable')
     )
 
-    expect(mockRpc).toHaveBeenCalledWith('activate_lifetime_membership', {
-      p_user_id: 'user-123',
-      p_stripe_customer_id: 'cus_test_123',
+    await expect(
+      handleCheckoutComplete(paidLifetimeSession({ userId: 'not-a-uuid' }))
+    ).rejects.toThrow('manual review persistence unavailable')
+    expect(mockActivateLifetimeCheckoutEntitlement).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    [
+      'corrupted plan carried by the reservation marker',
+      {
+        plan: 'monthly',
+      },
+    ],
+    [
+      'invalid reservation id',
+      {
+        lifetime_reservation_id: 'not-a-uuid',
+      },
+    ],
+    [
+      'invalid reservation nonce',
+      {
+        lifetime_reservation_nonce: 'bad nonce',
+      },
+    ],
+  ])(
+    'durably reviews and acknowledges a paid lifetime Session with %s',
+    async (_label, metadata) => {
+      await expect(handleCheckoutComplete(paidLifetimeSession(metadata))).resolves.toBeUndefined()
+
+      expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'cs_test_123',
+          userId: lifetimeUserId,
+          reasonKey: 'lifetime_checkout_metadata_invalid',
+        })
+      )
+      expect(mockActivateLifetimeCheckoutEntitlement).not.toHaveBeenCalled()
+    }
+  )
+})
+
+describe('handleCheckoutExpired lifetime reservation release', () => {
+  beforeEach(() => {
+    jest.clearAllMocks()
+    mockRpc.mockResolvedValue({ data: { status: 'released' }, error: null })
+    mockRecordStripeCheckoutManualReview.mockResolvedValue(undefined)
+    mockFrom.mockReturnValue({
+      insert: () => Promise.resolve({ error: null }),
     })
   })
 
-  it('retries a paid lifetime checkout when official-group entitlement persistence fails', async () => {
-    mockJoinProOfficialGroup.mockResolvedValue({
-      success: false,
-      message: 'group write unavailable',
+  it('releases a bound lifetime seat from exact signed early-expiry identity', async () => {
+    await handleCheckoutExpired(expiredLifetimeSession(), expiredEvent)
+
+    expect(mockRpc).toHaveBeenCalledWith('release_lifetime_membership_reservation_atomic', {
+      p_user_id: lifetimeUserId,
+      p_reservation_id: lifetimeReservationId,
+      p_request_nonce: lifetimeRequestNonce,
+      p_checkout_session_id: 'cs_test_123',
+      p_release_reason: 'stripe_checkout_session_expired',
+      p_event_id: 'evt_expired_123',
+      p_event_created_at: '2027-01-15T08:00:00.000Z',
     })
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it.each(['already_released', 'already_expired'])(
+    'acknowledges the idempotent %s release state',
+    async (status) => {
+      mockRpc.mockResolvedValue({ data: { status }, error: null })
+
+      await expect(
+        handleCheckoutExpired(expiredLifetimeSession(), expiredEvent)
+      ).resolves.toBeUndefined()
+
+      expect(mockRpc).toHaveBeenCalledTimes(1)
+      expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+    }
+  )
+
+  it('records malformed lifetime expiry metadata for review and acknowledges it', async () => {
+    await expect(
+      handleCheckoutExpired(
+        expiredLifetimeSession({ lifetime_reservation_id: 'not-a-uuid' }),
+        expiredEvent
+      )
+    ).resolves.toBeUndefined()
+
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId: 'cs_test_123',
+        userId: lifetimeUserId,
+        reasonKey: 'lifetime_expiry_metadata_invalid',
+      })
+    )
+  })
+
+  it('records a partial lifetime identity even when its plan marker is corrupted', async () => {
+    await expect(
+      handleCheckoutExpired(expiredLifetimeSession({ plan: 'monthly' }), expiredEvent)
+    ).resolves.toBeUndefined()
+
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonKey: 'lifetime_expiry_metadata_invalid',
+        context: expect.objectContaining({ plan: 'monthly' }),
+      })
+    )
+  })
+
+  it('does not attribute an invalid expiry review from only one canonical user alias', async () => {
+    await expect(
+      handleCheckoutExpired(
+        expiredLifetimeSession({ supabase_user_id: 'not-a-uuid' }),
+        expiredEvent
+      )
+    ).resolves.toBeUndefined()
+
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: null,
+        reasonKey: 'lifetime_expiry_metadata_invalid',
+      })
+    )
+  })
+
+  it('reviews an empty lifetime reservation marker even when the plan marker is corrupted', async () => {
+    await expect(
+      handleCheckoutExpired(
+        expiredLifetimeSession({
+          plan: 'monthly',
+          lifetime_reservation_id: '',
+          lifetime_reservation_nonce: '',
+        }),
+        expiredEvent
+      )
+    ).resolves.toBeUndefined()
+
+    expect(mockRpc).not.toHaveBeenCalled()
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonKey: 'lifetime_expiry_metadata_invalid',
+      })
+    )
+  })
+
+  it('uses signed expiry to release the reserved seat preserved by route-side expiration', async () => {
+    mockRpc
+      .mockResolvedValueOnce({ data: { status: 'release_not_verified' }, error: null })
+      .mockResolvedValueOnce({ data: { status: 'released' }, error: null })
 
     await expect(
-      handleCheckoutComplete(
-        checkoutSession({
-          mode: 'payment',
-          payment_status: 'paid',
-          subscription: null,
-          metadata: { userId: 'user-123', plan: 'lifetime' },
+      handleCheckoutExpired(expiredLifetimeSession(), expiredEvent)
+    ).resolves.toBeUndefined()
+
+    expect(mockRpc).toHaveBeenNthCalledWith(2, 'release_lifetime_membership_reservation_atomic', {
+      p_user_id: lifetimeUserId,
+      p_reservation_id: lifetimeReservationId,
+      p_request_nonce: lifetimeRequestNonce,
+      p_checkout_session_id: null,
+      p_release_reason: 'stripe_checkout_abandoned',
+      p_event_id: null,
+      p_event_created_at: null,
+    })
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it('retries exact signed release after a reserved-to-bound remediation race', async () => {
+    mockRpc
+      .mockResolvedValueOnce({ data: { status: 'release_not_verified' }, error: null })
+      .mockResolvedValueOnce({ data: { status: 'release_not_verified' }, error: null })
+      .mockResolvedValueOnce({ data: { status: 'released' }, error: null })
+
+    await expect(
+      handleCheckoutExpired(expiredLifetimeSession(), expiredEvent)
+    ).resolves.toBeUndefined()
+
+    expect(mockRpc).toHaveBeenNthCalledWith(3, 'release_lifetime_membership_reservation_atomic', {
+      p_user_id: lifetimeUserId,
+      p_reservation_id: lifetimeReservationId,
+      p_request_nonce: lifetimeRequestNonce,
+      p_checkout_session_id: 'cs_test_123',
+      p_release_reason: 'stripe_checkout_session_expired',
+      p_event_id: 'evt_expired_123',
+      p_event_created_at: '2027-01-15T08:00:00.000Z',
+    })
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it.each(['not_found', 'identity_conflict', 'already_converted'])(
+    'records the terminal %s release conflict for durable review and acknowledges it',
+    async (status) => {
+      mockRpc.mockResolvedValue({ data: { status }, error: null })
+
+      await expect(
+        handleCheckoutExpired(expiredLifetimeSession(), expiredEvent)
+      ).resolves.toBeUndefined()
+
+      expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+        expect.objectContaining({
+          sessionId: 'cs_test_123',
+          userId: lifetimeUserId,
+          reasonKey: 'lifetime_expiry_release_conflict',
+          context: expect.objectContaining({
+            release_status: status,
+            remediation_status: null,
+          }),
         })
       )
-    ).rejects.toThrow('Failed to join Pro official group: group write unavailable')
-    expect(mockRpc).toHaveBeenCalledWith('activate_lifetime_membership', {
-      p_user_id: 'user-123',
-      p_stripe_customer_id: 'cus_test_123',
+    }
+  )
+
+  it('records a remaining release_not_verified result after remediation', async () => {
+    mockRpc
+      .mockResolvedValueOnce({ data: { status: 'release_not_verified' }, error: null })
+      .mockResolvedValueOnce({ data: { status: 'release_not_verified' }, error: null })
+      .mockResolvedValueOnce({ data: { status: 'release_not_verified' }, error: null })
+
+    await expect(
+      handleCheckoutExpired(expiredLifetimeSession(), expiredEvent)
+    ).resolves.toBeUndefined()
+
+    expect(mockRecordStripeCheckoutManualReview).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reasonKey: 'lifetime_expiry_release_conflict',
+        context: expect.objectContaining({
+          release_status: 'release_not_verified',
+          remediation_status: 'release_not_verified',
+          retry_exact_status: 'release_not_verified',
+        }),
+      })
+    )
+  })
+
+  it('throws when the abandoned-release remediation database write fails', async () => {
+    mockRpc
+      .mockResolvedValueOnce({ data: { status: 'release_not_verified' }, error: null })
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: 'remediation database unavailable' },
+      })
+
+    await expect(handleCheckoutExpired(expiredLifetimeSession(), expiredEvent)).rejects.toThrow(
+      'Failed to remediate an unbound expired lifetime reservation: remediation database unavailable'
+    )
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it('throws when the post-race exact release retry database write fails', async () => {
+    mockRpc
+      .mockResolvedValueOnce({ data: { status: 'release_not_verified' }, error: null })
+      .mockResolvedValueOnce({ data: { status: 'release_not_verified' }, error: null })
+      .mockResolvedValueOnce({
+        data: null,
+        error: { message: 'exact retry database unavailable' },
+      })
+
+    await expect(handleCheckoutExpired(expiredLifetimeSession(), expiredEvent)).rejects.toThrow(
+      'Failed to retry exact expired lifetime reservation release: exact retry database unavailable'
+    )
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it('throws when the exact release database write fails', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'reservation database unavailable' },
     })
+
+    await expect(handleCheckoutExpired(expiredLifetimeSession(), expiredEvent)).rejects.toThrow(
+      'Failed to release expired lifetime reservation: reservation database unavailable'
+    )
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it('throws when the exact release network call fails', async () => {
+    mockRpc.mockRejectedValue(new Error('reservation network unavailable'))
+
+    await expect(handleCheckoutExpired(expiredLifetimeSession(), expiredEvent)).rejects.toThrow(
+      'reservation network unavailable'
+    )
+    expect(mockRecordStripeCheckoutManualReview).not.toHaveBeenCalled()
+  })
+
+  it('throws when malformed metadata cannot be durably recorded for review', async () => {
+    mockRecordStripeCheckoutManualReview.mockRejectedValue(
+      new Error('manual review database unavailable')
+    )
+
+    await expect(
+      handleCheckoutExpired(
+        expiredLifetimeSession({ lifetime_reservation_nonce: 'bad nonce' }),
+        expiredEvent
+      )
+    ).rejects.toThrow('manual review database unavailable')
+    expect(mockRpc).not.toHaveBeenCalled()
   })
 })
 

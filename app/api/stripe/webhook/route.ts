@@ -111,7 +111,10 @@ export async function POST(request: NextRequest) {
           }
 
           case 'checkout.session.expired':
-            await handleCheckoutExpired(event.data.object as Stripe.Checkout.Session)
+            await handleCheckoutExpired(event.data.object as Stripe.Checkout.Session, {
+              id: event.id,
+              created: event.created,
+            })
             break
 
           case 'customer.subscription.created':

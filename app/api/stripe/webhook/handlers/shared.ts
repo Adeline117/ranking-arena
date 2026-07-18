@@ -6,6 +6,11 @@ export const logger = createLogger('stripe-webhook')
 
 export const getSupabase = () => getSupabaseAdmin() as SupabaseClient
 
+export type StripeWebhookEventContext = {
+  id: string
+  created: number
+}
+
 // Retry wrapper for database operations
 export async function withRetry<T>(
   operation: () => Promise<T>,
@@ -20,7 +25,7 @@ export async function withRetry<T>(
       lastError = error as Error
       logger.warn(`Retry ${i + 1}/${maxRetries} failed`, { error })
       if (i < maxRetries - 1) {
-        await new Promise(resolve => setTimeout(resolve, delay * (i + 1)))
+        await new Promise((resolve) => setTimeout(resolve, delay * (i + 1)))
       }
     }
   }
