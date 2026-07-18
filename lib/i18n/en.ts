@@ -4829,7 +4829,7 @@ const en = {
   // Activity Feed (global feed page)
   activityFeedTitle: 'Activity Feed',
   activityFeedDesc:
-    'Auto-generated milestones from live trader data — rank climbs, ROI breakouts, win streaks, and large profits.',
+    'Auto-generated milestones from the latest published trader data — rank climbs, ROI breakouts, win streaks, and large profits.',
   activityFilterAll: 'All',
   activityFeedEmpty: 'No activity events yet. Check back after the next data sync.',
   activityFeedLoading: 'Loading...',

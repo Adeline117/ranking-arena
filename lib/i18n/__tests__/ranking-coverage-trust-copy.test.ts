@@ -17,6 +17,7 @@ describe('ranking coverage trust copy', () => {
         dictionary.snapshotWantLive,
         dictionary.snapshotViewLive,
         dictionary.exchangeRankingsSubtitle,
+        dictionary.activityFeedDesc,
         dictionary.helpWhatIsArenaA,
         dictionary.aboutIntroP1,
         dictionary.aboutFeature1Title,

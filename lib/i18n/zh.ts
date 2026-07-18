@@ -4717,7 +4717,8 @@ const zh = {
 
   // Activity Feed (global feed page)
   activityFeedTitle: '动态流',
-  activityFeedDesc: '来自实时交易数据的自动生成里程碑 — 排名攀升、ROI 突破、连胜记录和大额盈利。',
+  activityFeedDesc:
+    '来自最新已发布交易员数据的自动里程碑——排名攀升、ROI 突破、连胜记录和大额盈利。',
   activityFilterAll: '全部',
   activityFeedEmpty: '暂无动态事件，请在下次数据同步后再来查看。',
   activityFeedLoading: '加载中...',

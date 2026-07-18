@@ -4669,7 +4669,8 @@ const ko = {
 
   // Activity Feed
   activityFeedTitle: '활동 피드',
-  activityFeedDesc: '라이브 트레이더 데이터의 마일스톤 — 순위 상승, ROI 돌파, 연승, 대규모 수익.',
+  activityFeedDesc:
+    '최신 공개 트레이더 데이터에서 자동 생성한 마일스톤 — 순위 상승, ROI 돌파, 연승, 대규모 수익.',
   activityFilterAll: '전체',
   activityFeedEmpty: '아직 활동 이벤트가 없습니다. 다음 데이터 동기화 후 다시 확인해 주세요.',
   activityFeedLoading: '로딩 중...',
