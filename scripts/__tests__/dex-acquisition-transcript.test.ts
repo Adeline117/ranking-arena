@@ -769,6 +769,15 @@ describe('DEX acquisition transcript contract', () => {
       pricing_evidence_sha256: HASH.pricing,
     }
     expect(() => parseDexAcquisitionTranscript(money, fixtureJson)).toThrow()
+
+    const oversizedMoney = validTranscript()
+    oversizedMoney.telemetry.cost = {
+      measurement_state: 'measured',
+      currency: 'USD',
+      billed_usd: '1'.repeat(33),
+      pricing_evidence_sha256: HASH.pricing,
+    }
+    expect(() => parseDexAcquisitionTranscript(oversizedMoney, fixtureJson)).toThrow()
   })
 
   it('enforces chain-specific acquisition and finality claims', () => {
