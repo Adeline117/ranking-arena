@@ -147,8 +147,8 @@ jobs:
           # --skip-domain 是防迟到回退的关键：构建完成不自动抢生产域名，
           # 下一步重新读取 live SHA 后再决定是否 promote。
           # 固定 CLI，避免 `@latest` 在同一 commit 的重试间改变行为。stdout
-          # 必须只保留 deployment URL；官方 `--logs` 走 stderr，失败时提炼为
-          # Actions annotation，使未登录的值班检查也能看到真实 Vercel 原因。
+          # 必须只保留 deployment URL；--no-wait 先释放同步 CLI，再由下一个
+          # step 用 Vercel API 做 20 分钟有界等待，避免 job timeout 杀死告警。
           # 先用 CLI 自己的真实清单验证 lifecycle 文件；不能再用 gitignore
           # 模拟（Vercel 对嵌套负向规则的行为不同，曾让完整构建一直到
           # postbuild 才 MODULE_NOT_FOUND）。
@@ -161,7 +161,7 @@ jobs:
             "$REQUIRED_BUILD_FILE"
           echo "Vercel upload includes required build file: $REQUIRED_BUILD_FILE"
           set +e
-          npx vercel@56.2.1 deploy --prod --skip-domain --yes --logs --meta gateSha="$HEAD_SHA" \
+          npx vercel@56.2.1 deploy --prod --skip-domain --yes --no-wait --meta gateSha="$HEAD_SHA" \
             --build-env ARENA_RELEASE_SHA="$HEAD_SHA" \
             --build-env VERCEL_BUILD_SYSTEM_REPORT=1 \
             --env ARENA_RELEASE_SHA="$HEAD_SHA" \
@@ -169,10 +169,14 @@ jobs:
             2> >(tee /tmp/vercel-deploy.stderr >&2)
           DEPLOY_EXIT=$?
           set -e
+          CANDIDATE_URL=$(tail -1 /tmp/deploy-url.txt | tr -d '\r\n')
+          if [ "$DEPLOY_EXIT" -eq 0 ] && [[ "$CANDIDATE_URL" != https://*.vercel.app ]]; then
+            echo "Vercel returned an invalid deployment URL" | tee -a /tmp/vercel-deploy.stderr >&2
+            DEPLOY_EXIT=1
+          fi
           if [ "$DEPLOY_EXIT" -ne 0 ]; then
-            CANDIDATE_URL=$(tail -1 /tmp/deploy-url.txt | tr -d '\r\n')
             if [[ "$CANDIDATE_URL" == https://*.vercel.app ]]; then
-              npx vercel@56.2.1 inspect "$CANDIDATE_URL" --logs \
+              timeout 60s npx vercel@56.2.1 inspect "$CANDIDATE_URL" --logs \
                 --token="$VERCEL_TOKEN" > /tmp/vercel-inspect.log 2>&1 || true
             else
               : > /tmp/vercel-inspect.log
@@ -199,13 +203,51 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
             exit "$DEPLOY_EXIT"
           fi
-          DEPLOY_URL=$(cat /tmp/deploy-url.txt)
-          echo "url=$DEPLOY_URL" >> "$GITHUB_OUTPUT"
-          echo "Built without aliasing: $DEPLOY_URL"
+          echo "url=$CANDIDATE_URL" >> "$GITHUB_OUTPUT"
+          echo "Submitted without aliasing: $CANDIDATE_URL"
+
+      - name: Wait for candidate READY (bounded)
+        id: wait_candidate
+        if: steps.fresh.outputs.deploy == 'true'
+        env:
+          VERCEL_DEPLOY_WAIT_TIMEOUT_MS: '1200000'
+          VERCEL_DEPLOY_POLL_INTERVAL_MS: '15000'
+          VERCEL_DEPLOY_REQUEST_TIMEOUT_MS: '15000'
+        run: |
+          DEPLOY_URL="${{ steps.deploy_candidate.outputs.url }}"
+          set +e
+          node scripts/ci/wait-for-vercel-deployment.mjs "$DEPLOY_URL" \
+            2> >(tee /tmp/vercel-wait.stderr >&2)
+          WAIT_EXIT=$?
+          set -e
+          if [ "$WAIT_EXIT" -ne 0 ]; then
+            timeout 60s npx vercel@56.2.1 inspect "$DEPLOY_URL" --logs \
+              --token="$VERCEL_TOKEN" > /tmp/vercel-inspect.log 2>&1 || true
+            { cat /tmp/vercel-wait.stderr; cat /tmp/vercel-inspect.log; } \
+              | sed -E $'s/\\x1B\\[[0-9;]*[[:alpha:]]//g' \
+              | tail -80 > /tmp/vercel-wait.clean
+            ERROR_SUMMARY=$(grep -Ei 'error|failed|exceeded|cancel|unauthorized|forbidden|invalid|memory|module|terminal|timeout' \
+              /tmp/vercel-wait.clean | tail -12 | tr '\n' ' ' | cut -c1-1800)
+            if [ -z "$ERROR_SUMMARY" ]; then
+              ERROR_SUMMARY=$(tail -8 /tmp/vercel-wait.clean | tr '\n' ' ' | cut -c1-1800)
+            fi
+            ERROR_SUMMARY=${ERROR_SUMMARY//'%'/'%25'}
+            ERROR_SUMMARY=${ERROR_SUMMARY//$'\r'/'%0D'}
+            ERROR_SUMMARY=${ERROR_SUMMARY//$'\n'/'%0A'}
+            echo "::error title=Vercel candidate did not become ready::$ERROR_SUMMARY"
+            {
+              echo '### Vercel candidate did not become ready'
+              echo '```text'
+              tail -80 /tmp/vercel-wait.clean
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit "$WAIT_EXIT"
+          fi
+          echo "Candidate READY without aliasing: $DEPLOY_URL"
 
       - name: Promote only if candidate is not stale after build
         id: promote_candidate
-        if: steps.fresh.outputs.deploy == 'true'
+        if: steps.fresh.outputs.deploy == 'true' && steps.wait_candidate.outcome == 'success'
         run: |
           git fetch origin main --quiet
           LIVE_SHA=$(curl -fsS "https://www.arenafi.org/api/health?release_check=$(date +%s)" \
