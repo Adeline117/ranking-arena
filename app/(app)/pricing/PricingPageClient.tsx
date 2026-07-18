@@ -23,6 +23,7 @@ import {
 import { useDirectCheckout } from '@/lib/hooks/useDirectCheckout'
 import { useToast } from '@/app/components/ui/Toast'
 import { useProductFacts } from '@/lib/hooks/useProductFacts'
+import { buildPricingLoginHref, parsePricingBilling } from '@/lib/premium/pricing-login-intent'
 
 const CheckIcon = ({ size = 16, color }: { size?: number; color?: string }) => (
   <svg
@@ -141,6 +142,16 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
     trackEvent('view_pricing')
   }, [])
 
+  useEffect(() => {
+    const requestedBilling = parsePricingBilling(
+      new URLSearchParams(window.location.search).get('billing')
+    )
+    if (!requestedBilling) return
+
+    sessionStorage.setItem('pricing-billing', requestedBilling)
+    setBillingRaw(requestedBilling)
+  }, [])
+
   const features = [
     resolved(t('featureCategoryRanking'), 'featureCategoryRanking', 'Category Rankings'),
     resolved(t('featureTraderAlerts'), 'featureTraderAlerts', 'Trader Alerts'),
@@ -194,9 +205,6 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
     }
   }, [checkoutError, showToast])
 
-  // Logged-in users go directly to Stripe checkout; anonymous users go to login
-  // Already-subscribed users go to settings to manage their subscription
-  const ctaHref = email ? (alreadySubscribed ? '/settings' : undefined) : '/login'
   const handleCta =
     email && !alreadySubscribed
       ? () => {
@@ -546,7 +554,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               </span>
             ) : (
               <Link
-                href="/login"
+                href={buildPricingLoginHref('free', billing)}
                 onClick={() => {
                   trackEvent('click_upgrade_cta', { plan: 'free', billing })
                 }}
@@ -756,7 +764,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
             ) : (
               <>
                 <Link
-                  href="/login"
+                  href={buildPricingLoginHref('pro', billing)}
                   onClick={() => trackEvent('click_upgrade_cta', { plan: 'pro', billing })}
                   style={{
                     display: 'block',
@@ -783,7 +791,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
                 </Link>
                 {!PRO_FREE_PROMO && (
                   <Link
-                    href="/login"
+                    href={buildPricingLoginHref('trial', billing)}
                     onClick={() => trackEvent('click_free_trial', { plan: billing })}
                     style={{
                       display: 'block',
@@ -1086,7 +1094,7 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
               </button>
             ) : (
               <Link
-                href="/login"
+                href={buildPricingLoginHref('lifetime', billing)}
                 onClick={() => trackEvent('click_upgrade_cta', { plan: 'lifetime' })}
                 style={{
                   display: 'block',
