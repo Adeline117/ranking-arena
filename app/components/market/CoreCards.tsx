@@ -6,6 +6,7 @@ import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import CryptoIcon from '@/app/components/common/CryptoIcon'
+import ErrorState from '@/app/components/ui/ErrorState'
 import Link from 'next/link'
 import { apiFetch } from '@/lib/utils/api-fetch'
 import { formatTokenPrice } from '@/lib/utils/format'
@@ -347,21 +348,29 @@ function spotRowsToCoins(spots: SpotCoin[]): CoinRow[] {
 export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
   const { t } = useLanguage()
   // Market data — auto-refreshes every 60s via React Query
-  const { data: marketData, dataUpdatedAt } = useQuery<{ rows: CoinRow[] }>({
+  const {
+    data: marketData,
+    dataUpdatedAt,
+    isLoading: marketLoading,
+    isError: marketError,
+    refetch: refetchMarket,
+  } = useQuery<{ rows: CoinRow[] }>({
     queryKey: ['market-core'],
-    queryFn: async () => {
-      const res = await fetch('/api/market')
-      if (!res.ok) throw new Error(`market: ${res.status}`)
-      return res.json()
-    },
+    queryFn: () => apiFetch<{ rows: CoinRow[] }>('/api/market'),
     refetchInterval: 60_000,
     refetchIntervalInBackground: false,
     staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
+    retry: false,
   })
 
   // Exchange data — refreshes every 60s
-  const { data: exchangeData } = useQuery<ExchangeInfo[]>({
+  const {
+    data: exchangeData,
+    isLoading: exchangesLoading,
+    isError: exchangesError,
+    refetch: refetchExchanges,
+  } = useQuery<ExchangeInfo[]>({
     queryKey: ['market-exchanges'],
     queryFn: async () => {
       const json = await apiFetch<ExchangeInfo[]>('/api/market/exchanges')
@@ -370,11 +379,12 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
     refetchInterval: 60_000,
     staleTime: STALE_STANDARD,
     refetchOnWindowFocus: false,
+    retry: false,
   })
 
   const exchanges = exchangeData ?? []
   const lastFetchedAt = dataUpdatedAt || null
-  const marketLoaded = !!marketData
+  const hasSpotFallback = !!spotData?.length
 
   // Derive gainers/losers from market data + spot fallback
   const { gainers, losers } = useMemo(() => {
@@ -439,7 +449,16 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
       >
         <CardWrapper title={t('gainersTop5')} accentColor={tokens.gradient.success}>
           {gainers.length === 0 ? (
-            marketLoaded ? (
+            marketLoading && !hasSpotFallback ? (
+              <div style={{ height: 160 }} className="skeleton" />
+            ) : marketError && !hasSpotFallback ? (
+              <ErrorState
+                title={t('marketDataError')}
+                description={t('loadFailedRetryShort')}
+                retry={() => void refetchMarket()}
+                variant="compact"
+              />
+            ) : (
               <div
                 style={{
                   height: 160,
@@ -452,8 +471,6 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
               >
                 {t('noGainers')}
               </div>
-            ) : (
-              <div style={{ height: 160 }} className="skeleton" />
             )
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -473,7 +490,16 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
         </CardWrapper>
         <CardWrapper title={t('losersTop5')} accentColor={tokens.gradient.error}>
           {losers.length === 0 ? (
-            marketLoaded ? (
+            marketLoading && !hasSpotFallback ? (
+              <div style={{ height: 160 }} className="skeleton" />
+            ) : marketError && !hasSpotFallback ? (
+              <ErrorState
+                title={t('marketDataError')}
+                description={t('loadFailedRetryShort')}
+                retry={() => void refetchMarket()}
+                variant="compact"
+              />
+            ) : (
               <div
                 style={{
                   height: 160,
@@ -486,8 +512,6 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
               >
                 {t('noLosers')}
               </div>
-            ) : (
-              <div style={{ height: 160 }} className="skeleton" />
             )
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -506,8 +530,28 @@ export default function CoreCards({ spotData }: { spotData?: SpotCoin[] }) {
           )}
         </CardWrapper>
         <CardWrapper title={t('fundFlow')} accentColor={tokens.gradient.purple}>
-          {exchanges.length === 0 ? (
+          {exchangesLoading ? (
             <div style={{ height: 160 }} className="skeleton" />
+          ) : exchangesError ? (
+            <ErrorState
+              title={t('marketDataError')}
+              description={t('loadFailedRetryShort')}
+              retry={() => void refetchExchanges()}
+              variant="compact"
+            />
+          ) : exchanges.length === 0 ? (
+            <div
+              style={{
+                height: 160,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                color: tokens.colors.text.tertiary,
+                fontSize: tokens.typography.fontSize.sm,
+              }}
+            >
+              {t('noDataGeneric')}
+            </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
               {exchanges.map((ex, i) => (
