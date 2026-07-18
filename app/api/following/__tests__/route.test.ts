@@ -83,27 +83,35 @@ const mockGetAuthUser = jest.fn()
 
 // Supabase query chain proxy
 type QueryResult = { data: unknown; error: unknown }
+type QueryCall = { table: string; method: string; args: unknown[] }
+type QueryResponder = (calls: QueryCall[]) => QueryResult | Promise<QueryResult>
 let mockDefaultQueryResult: QueryResult = { data: [], error: null }
 let mockQueryResults = new Map<string, QueryResult>()
 let mockQueryResultQueues = new Map<string, QueryResult[]>()
-let mockQueryCalls: Array<{ table: string; method: string; args: unknown[] }> = []
+let mockQueryResponders = new Map<string, QueryResponder>()
+let mockQueryCalls: QueryCall[] = []
 
 function buildChainMock(table: string): unknown {
+  const chainCalls: QueryCall[] = []
   const handler: ProxyHandler<object> = {
     get(_target, prop) {
       if (prop === 'then') {
-        return (resolve: (v: unknown) => void) => {
+        return (resolve: (v: unknown) => void, reject: (error: unknown) => void) => {
+          const responder = mockQueryResponders.get(table)
           const queue = mockQueryResultQueues.get(table)
-          resolve(
-            queue && queue.length > 0
-              ? queue.shift()
+          const result = responder
+            ? responder([...chainCalls])
+            : queue && queue.length > 0
+              ? queue.shift()!
               : (mockQueryResults.get(table) ?? mockDefaultQueryResult)
-          )
+          Promise.resolve(result).then(resolve, reject)
         }
       }
       if (prop === 'catch' || prop === 'finally') return undefined
       return jest.fn((...args: unknown[]) => {
-        mockQueryCalls.push({ table, method: String(prop), args })
+        const call = { table, method: String(prop), args }
+        mockQueryCalls.push(call)
+        chainCalls.push(call)
         return new Proxy({}, handler)
       })
     },
@@ -175,6 +183,7 @@ describe('GET /api/following', () => {
     mockDefaultQueryResult = { data: [], error: null }
     mockQueryResults = new Map()
     mockQueryResultQueues = new Map()
+    mockQueryResponders = new Map()
     mockQueryCalls = []
     process.env.NEXT_PUBLIC_SUPABASE_URL = 'https://test.supabase.co'
     process.env.SUPABASE_SERVICE_ROLE_KEY = 'test-service-key'
@@ -404,19 +413,28 @@ describe('GET /api/following', () => {
       { data: rows.slice(0, 500), error: null },
       { data: rows.slice(500), error: null },
     ])
-    mockQueryResults.set('leaderboard_ranks', {
-      data: rows.map((row) => ({
-        source_trader_id: row.trader_id,
-        source: row.source,
-        handle: row.trader_id,
-        avatar_url: null,
-        roi: 1,
-        pnl: null,
-        win_rate: null,
-        followers: null,
-        arena_score: 50,
-      })),
-      error: null,
+    let activeRankChunks = 0
+    let maxActiveRankChunks = 0
+    mockQueryResponders.set('leaderboard_ranks', async (calls) => {
+      const ids = calls.find(({ method }) => method === 'in')?.args[1] as string[]
+      activeRankChunks += 1
+      maxActiveRankChunks = Math.max(maxActiveRankChunks, activeRankChunks)
+      await new Promise((resolve) => setTimeout(resolve, 1))
+      activeRankChunks -= 1
+      return {
+        data: ids.map((id) => ({
+          source_trader_id: id,
+          source: 'bybit',
+          handle: id,
+          avatar_url: null,
+          roi: 1,
+          pnl: null,
+          win_rate: null,
+          followers: null,
+          arena_score: 50,
+        })),
+        error: null,
+      }
     })
 
     const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
@@ -443,6 +461,112 @@ describe('GET /api/following', () => {
       ['created_at', { ascending: false, nullsFirst: false }],
       ['id', { ascending: false }],
     ])
+    const rankInCalls = mockQueryCalls.filter(
+      ({ table, method }) => table === 'leaderboard_ranks' && method === 'in'
+    )
+    expect(rankInCalls).toHaveLength(6)
+    expect(rankInCalls.every(({ args }) => (args[1] as string[]).length <= 100)).toBe(true)
+    expect(maxActiveRankChunks).toBe(3)
+  })
+
+  it('pages more than 500 user edges and chunks profile materialization', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    const rows = Array.from({ length: 501 }, (_, i) => ({
+      id: `edge-${String(i).padStart(3, '0')}`,
+      following_id: `user-${String(i).padStart(3, '0')}`,
+      created_at: '2026-07-16T00:00:00.000Z',
+    }))
+    mockQueryResultQueues.set('user_follows', [
+      { data: rows.slice(0, 500), error: null },
+      { data: rows.slice(500), error: null },
+    ])
+    let activeProfileChunks = 0
+    let maxActiveProfileChunks = 0
+    mockQueryResponders.set('user_profiles', async (calls) => {
+      const ids = calls.find(({ method }) => method === 'in')?.args[1] as string[]
+      activeProfileChunks += 1
+      maxActiveProfileChunks = Math.max(maxActiveProfileChunks, activeProfileChunks)
+      await new Promise((resolve) => setTimeout(resolve, 1))
+      activeProfileChunks -= 1
+      return {
+        data: ids.map((id) => ({
+          id,
+          handle: id,
+          bio: null,
+          avatar_url: null,
+          deleted_at: null,
+          banned_at: null,
+          is_banned: false,
+          ban_expires_at: null,
+        })),
+        error: null,
+      }
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
+
+    expect(response.status).toBe(200)
+    expect(body.count).toBe(501)
+    expect(body.userCount).toBe(501)
+    expect(body.items[0].id).toBe('user-000')
+    expect(body.items[500].id).toBe('user-500')
+    expect(
+      mockQueryCalls
+        .filter(({ table, method }) => table === 'user_follows' && method === 'range')
+        .map(({ args }) => args)
+    ).toEqual([
+      [0, 499],
+      [500, 999],
+    ])
+    const profileInCalls = mockQueryCalls.filter(
+      ({ table, method }) => table === 'user_profiles' && method === 'in'
+    )
+    expect(profileInCalls).toHaveLength(6)
+    expect(profileInCalls.every(({ args }) => (args[1] as string[]).length <= 100)).toBe(true)
+    expect(maxActiveProfileChunks).toBe(3)
+  })
+
+  it('fails closed when a later materialization chunk fails', async () => {
+    mockGetAuthUser.mockResolvedValue(mockUser)
+    const traders = Array.from({ length: 250 }, (_, i) => ({
+      traderId: `t${i}`,
+      source: 'bybit',
+    }))
+    mockTieredGet.mockResolvedValue({
+      data: { traders, users: [] },
+    })
+    let chunkNumber = 0
+    mockQueryResponders.set('leaderboard_ranks', async (calls) => {
+      const currentChunk = chunkNumber
+      chunkNumber += 1
+      await new Promise((resolve) => setTimeout(resolve, currentChunk === 1 ? 1 : 5))
+      if (currentChunk === 1) {
+        return { data: null, error: new Error('rank chunk unavailable') }
+      }
+      const ids = calls.find(({ method }) => method === 'in')?.args[1] as string[]
+      return {
+        data: ids.map((id) => ({
+          source_trader_id: id,
+          source: 'bybit',
+          handle: id,
+          avatar_url: null,
+          roi: 1,
+          pnl: null,
+          win_rate: null,
+          followers: null,
+          arena_score: 50,
+        })),
+        error: null,
+      }
+    })
+
+    const response = await GET(new NextRequest('http://localhost/api/following?userId=user-123'))
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body.error).toBe('Internal server error')
+    expect(body.items).toBeUndefined()
   })
 
   it('fails closed when a later follow-edge page fails', async () => {
