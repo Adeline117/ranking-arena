@@ -2,7 +2,13 @@ import { createHash } from 'node:crypto'
 
 import { PublicKey } from '@solana/web3.js'
 
+import { requireSolanaVerifiedChainAnchor, SOLANA_MAINNET_GENESIS_HASH } from '../solana-evidence'
+import * as solanaEvidenceCore from '../solana-evidence-core'
+import type { SolanaRawRpcEvidenceExchange } from '../solana-evidence-core'
+import { RAW_RPC_REQUEST_HASH_BASIS, RAW_RPC_RESPONSE_HASH_BASIS } from '../raw-rpc-evidence'
 import {
+  captureSolanaV3ProgramDeploymentObservation,
+  disposeSolanaV3ProgramDeploymentRawCapture,
   findSolanaV3ProgramDataAddress,
   parseSolanaV3ProgramDeploymentObservation,
   SOLANA_BPF_LOADER_V3,
@@ -10,6 +16,16 @@ import {
   SOLANA_V3_PROGRAMDATA_HEADER_BYTES,
   SOLANA_V3_PROGRAM_OBSERVATION_PROOF_BOUNDARY,
 } from '../solana-program-deployment-evidence'
+
+jest.mock('../solana-evidence-core', () => {
+  const actual =
+    jest.requireActual<typeof import('../solana-evidence-core')>('../solana-evidence-core')
+  return {
+    ...actual,
+    disposeSolanaRawRpcEvidenceExchanges: jest.fn(actual.disposeSolanaRawRpcEvidenceExchanges),
+    solanaEvidenceRpc: jest.fn(actual.solanaEvidenceRpc),
+  }
+})
 
 const PROGRAM_ID = 'JUP6LkbZbjS1jKKwapdHNy74zcZ3tLUZoi5QNyVTaV4'
 const PROGRAMDATA_ADDRESS = '4Ec7ZxZS6Sbdg5UGSLHbAnM7GQHp2eFd4KYWRexAipQT'
@@ -518,5 +534,422 @@ describe('Solana v3 program deployment observation', () => {
       'input could not be inspected safely'
     )
     expect(() => parseSolanaV3ProgramDeploymentObservation(hostile)).not.toThrow('private-api-key')
+  })
+})
+
+interface CaptureRpcRequest {
+  jsonrpc: '2.0'
+  id: 1
+  method: string
+  params: unknown[]
+}
+
+const CAPTURE_RPC_URL = 'http://127.0.0.1:8899/'
+const CAPTURE_ENDPOINT_ID = 'local_solana_node' as const
+const CAPTURE_NOW = '2026-07-18T00:00:00.000Z'
+const CAPTURE_BLOCK_HASH = '66VMKCNBU8H2CQsYVFm94vv8Qobz7EgxPTxw7CyystSu'
+const CAPTURE_PREVIOUS_BLOCK_HASH = '3kvmuuz5t9rDT3YBdBhhrRwEcn9hnMnVm4nLXNzrro93'
+
+function mockDeploymentCaptureRpc(
+  programData = programDataBytes(),
+  options: { programAccountsHttpStatus?: number } = {}
+) {
+  const calls: CaptureRpcRequest[] = []
+  const sourceChunks: Uint8Array[] = []
+  global.fetch = jest.fn(async (_input, init) => {
+    const request = JSON.parse(String(init?.body)) as CaptureRpcRequest
+    calls.push(request)
+    if (
+      request.method === 'getMultipleAccounts' &&
+      options.programAccountsHttpStatus !== undefined
+    ) {
+      return {
+        status: options.programAccountsHttpStatus,
+        headers: { get: () => null },
+        body: { cancel: jest.fn(async () => undefined) },
+      } as unknown as Response
+    }
+    const result =
+      request.method === 'getGenesisHash'
+        ? SOLANA_MAINNET_GENESIS_HASH
+        : request.method === 'getSlot'
+          ? CONTEXT_SLOT
+          : request.method === 'getBlocks'
+            ? [CONTEXT_SLOT]
+            : request.method === 'getBlock'
+              ? {
+                  blockhash: CAPTURE_BLOCK_HASH,
+                  previousBlockhash: CAPTURE_PREVIOUS_BLOCK_HASH,
+                  parentSlot: CONTEXT_SLOT - 1,
+                  blockTime: Math.floor(Date.parse(CAPTURE_NOW) / 1000) - 30,
+                  blockHeight: CONTEXT_SLOT - 10,
+                }
+              : fixture(programBytes(), programData).result
+    const sourceBytes = new TextEncoder().encode(JSON.stringify({ jsonrpc: '2.0', id: 1, result }))
+    sourceChunks.push(sourceBytes)
+    return {
+      status: 200,
+      headers: { get: () => null },
+      body: {
+        getReader: () => {
+          let emitted = false
+          return {
+            read: jest.fn(async () => {
+              if (emitted) return { done: true, value: undefined }
+              emitted = true
+              return { done: false, value: sourceBytes }
+            }),
+            cancel: jest.fn(async () => undefined),
+          }
+        },
+      },
+    } as unknown as Response
+  }) as jest.MockedFunction<typeof fetch>
+  return { calls, sourceChunks }
+}
+
+function coreRpcMock(): jest.MockedFunction<typeof solanaEvidenceCore.solanaEvidenceRpc> {
+  return solanaEvidenceCore.solanaEvidenceRpc as jest.MockedFunction<
+    typeof solanaEvidenceCore.solanaEvidenceRpc
+  >
+}
+
+function resetCoreRpcMock(): void {
+  const actual =
+    jest.requireActual<typeof import('../solana-evidence-core')>('../solana-evidence-core')
+  coreRpcMock().mockReset().mockImplementation(actual.solanaEvidenceRpc)
+}
+
+function replaceRawBody(
+  exchange: SolanaRawRpcEvidenceExchange,
+  kind: 'request' | 'response',
+  text: string
+): void {
+  exchange[kind].bytes.fill(0)
+  const bytes = new TextEncoder().encode(text)
+  const evidence = {
+    bytes,
+    sha256: sha256(bytes),
+    byteLength: bytes.byteLength,
+  }
+  if (kind === 'request') {
+    exchange.request = { ...evidence, hashBasis: RAW_RPC_REQUEST_HASH_BASIS }
+  } else {
+    exchange.response = { ...evidence, hashBasis: RAW_RPC_RESPONSE_HASH_BASIS }
+  }
+}
+
+type CoreRpcResult = Awaited<ReturnType<typeof solanaEvidenceCore.solanaEvidenceRpc>>
+type CoreRpcSuccess = Extract<CoreRpcResult, { ok: true }>
+
+function interceptProgramRpc(transform: (result: CoreRpcSuccess) => CoreRpcResult): void {
+  const actual =
+    jest.requireActual<typeof import('../solana-evidence-core')>('../solana-evidence-core')
+  coreRpcMock().mockImplementation(async (...args) => {
+    const result = await actual.solanaEvidenceRpc(...args)
+    return args[1] === 'getMultipleAccounts' && result.ok ? transform(result) : result
+  })
+}
+
+function coreDisposeMock(): jest.MockedFunction<
+  typeof solanaEvidenceCore.disposeSolanaRawRpcEvidenceExchanges
+> {
+  return solanaEvidenceCore.disposeSolanaRawRpcEvidenceExchanges as jest.MockedFunction<
+    typeof solanaEvidenceCore.disposeSolanaRawRpcEvidenceExchanges
+  >
+}
+
+function expectDisposedExchangeCount(count: number): SolanaRawRpcEvidenceExchange[] {
+  const disposeMock = coreDisposeMock()
+  expect(disposeMock).toHaveBeenCalledTimes(1)
+  const disposed = [...disposeMock.mock.calls[0][0]] as SolanaRawRpcEvidenceExchange[]
+  expect(disposed).toHaveLength(count)
+  expect(
+    disposed.every(
+      (exchange) =>
+        exchange.request.bytes.every((byte) => byte === 0) &&
+        exchange.response.bytes.every((byte) => byte === 0)
+    )
+  ).toBe(true)
+  return disposed
+}
+
+describe('Solana v3 program deployment raw capture', () => {
+  const originalFetch = global.fetch
+
+  beforeEach(() => {
+    jest.useFakeTimers()
+    jest.setSystemTime(new Date(CAPTURE_NOW))
+  })
+
+  afterEach(() => {
+    global.fetch = originalFetch
+    resetCoreRpcMock()
+    jest.restoreAllMocks()
+    jest.useRealTimers()
+  })
+
+  it('binds one endpoint anchor and exact program-account request in one owned lifecycle', async () => {
+    const { calls, sourceChunks } = mockDeploymentCaptureRpc()
+
+    const capture = await captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+      rpcUrl: CAPTURE_RPC_URL,
+      endpointId: CAPTURE_ENDPOINT_ID,
+      timeoutMs: 20_000,
+    })
+
+    expect(calls.map((call) => call.method)).toEqual([
+      'getGenesisHash',
+      'getSlot',
+      'getBlocks',
+      'getBlock',
+      'getMultipleAccounts',
+    ])
+    expect(calls[4]).toEqual({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getMultipleAccounts',
+      params: [
+        [PROGRAM_ID, PROGRAMDATA_ADDRESS],
+        {
+          commitment: 'finalized',
+          encoding: 'base64',
+          minContextSlot: CONTEXT_SLOT,
+        },
+      ],
+    })
+    expect(capture.anchor.verified.finalizedRootSlot).toBe(CONTEXT_SLOT)
+    expect(capture.anchor.verified).toEqual(
+      requireSolanaVerifiedChainAnchor(capture.anchor.evidence)
+    )
+    expect(capture.anchor.evidence.finalizedRootSlot).toMatchObject({
+      status: 'available',
+      value: CONTEXT_SLOT,
+    })
+    expect(capture.observation).toMatchObject({
+      program_id: PROGRAM_ID,
+      programdata_address: PROGRAMDATA_ADDRESS,
+      requested_min_context_slot_decimal: String(CONTEXT_SLOT),
+      accounts_context_slot_decimal: String(CONTEXT_SLOT),
+    })
+    const rawExchanges = [...capture.anchor.rawExchanges, capture.programAccountsExchange]
+    expect(rawExchanges.map((exchange) => exchange.lane)).toEqual([
+      'genesis_hash',
+      'finalized_anchor_slot',
+      'finalized_anchor_produced_slots',
+      'finalized_anchor_block',
+      'program_accounts',
+    ])
+    expect(sourceChunks).toHaveLength(5)
+    expect(sourceChunks.every((bytes) => bytes.every((byte) => byte === 0))).toBe(true)
+    expect(
+      rawExchanges.some(
+        (exchange) =>
+          exchange.request.bytes.some((byte) => byte !== 0) ||
+          exchange.response.bytes.some((byte) => byte !== 0)
+      )
+    ).toBe(true)
+
+    disposeSolanaV3ProgramDeploymentRawCapture(capture)
+    expect(() => disposeSolanaV3ProgramDeploymentRawCapture(capture)).not.toThrow()
+    expect(
+      rawExchanges.every(
+        (exchange) =>
+          exchange.request.bytes.every((byte) => byte === 0) &&
+          exchange.response.bytes.every((byte) => byte === 0)
+      )
+    ).toBe(true)
+  })
+
+  it('ignores a conflicting valid sidecar and rejects invalid raw response semantics', async () => {
+    const { sourceChunks } = mockDeploymentCaptureRpc(programDataBytes({ tag: 2 }))
+    interceptProgramRpc((result) => ({
+      ...result,
+      result: fixture(programBytes(), programDataBytes()).result,
+    }))
+    coreDisposeMock().mockClear()
+
+    await expect(
+      captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+        rpcUrl: CAPTURE_RPC_URL,
+        endpointId: CAPTURE_ENDPOINT_ID,
+      })
+    ).rejects.toThrow('ProgramData state tag is not ProgramData')
+
+    expect(sourceChunks.every((bytes) => bytes.every((byte) => byte === 0))).toBe(true)
+    expectDisposedExchangeCount(5)
+  })
+
+  it.each([
+    [
+      'program id',
+      (request: { params: [string[], Record<string, unknown>] }) => {
+        request.params[0][0] = `K${PROGRAM_ID.slice(1)}`
+      },
+    ],
+    [
+      'address order',
+      (request: { params: [string[], Record<string, unknown>] }) => {
+        request.params[0].reverse()
+      },
+    ],
+    [
+      'commitment',
+      (request: { params: [string[], Record<string, unknown>] }) => {
+        request.params[1].commitment = 'confirmed'
+      },
+    ],
+    [
+      'encoding',
+      (request: { params: [string[], Record<string, unknown>] }) => {
+        request.params[1].encoding = 'base64+zstd'
+      },
+    ],
+    [
+      'minimum context slot',
+      (request: { params: [string[], Record<string, unknown>] }) => {
+        request.params[1].minContextSlot = CONTEXT_SLOT - 1
+      },
+    ],
+    [
+      'extra config field',
+      (request: { params: [string[], Record<string, unknown>] }) => {
+        request.params[1].extra = true
+      },
+    ],
+  ])(
+    'rejects raw request %s drift even when the parsed sidecar is valid',
+    async (_label, mutate) => {
+      const { sourceChunks } = mockDeploymentCaptureRpc()
+      coreDisposeMock().mockClear()
+      interceptProgramRpc((result) => {
+        const exchange = result.rawExchange
+        if (!exchange) throw new Error('test fixture did not capture raw program accounts')
+        const request = JSON.parse(new TextDecoder().decode(exchange.request.bytes)) as {
+          params: [string[], Record<string, unknown>]
+        }
+        mutate(request)
+        replaceRawBody(exchange, 'request', JSON.stringify(request))
+        return result
+      })
+
+      await expect(
+        captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+          rpcUrl: CAPTURE_RPC_URL,
+          endpointId: CAPTURE_ENDPOINT_ID,
+        })
+      ).rejects.toThrow('raw program account request does not match the verified anchor')
+
+      expect(sourceChunks.every((bytes) => bytes.every((byte) => byte === 0))).toBe(true)
+      expectDisposedExchangeCount(5)
+    }
+  )
+
+  it.each([
+    [
+      'sha256',
+      (exchange: SolanaRawRpcEvidenceExchange) => {
+        exchange.response.sha256 = '0'.repeat(64)
+      },
+    ],
+    [
+      'byte length',
+      (exchange: SolanaRawRpcEvidenceExchange) => {
+        exchange.response.byteLength += 1
+      },
+    ],
+    [
+      'hash basis',
+      (exchange: SolanaRawRpcEvidenceExchange) => {
+        ;(exchange.response as { hashBasis: string }).hashBasis = RAW_RPC_REQUEST_HASH_BASIS
+      },
+    ],
+  ])('rejects forged raw response %s metadata and clears all bytes', async (_label, mutate) => {
+    const { sourceChunks } = mockDeploymentCaptureRpc()
+    coreDisposeMock().mockClear()
+    interceptProgramRpc((result) => {
+      const exchange = result.rawExchange
+      if (!exchange) throw new Error('test fixture did not capture raw program accounts')
+      mutate(exchange)
+      return result
+    })
+
+    await expect(
+      captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+        rpcUrl: CAPTURE_RPC_URL,
+        endpointId: CAPTURE_ENDPOINT_ID,
+      })
+    ).rejects.toThrow('raw RPC response hash, length, or basis is invalid')
+
+    expect(sourceChunks.every((bytes) => bytes.every((byte) => byte === 0))).toBe(true)
+    expectDisposedExchangeCount(5)
+  })
+
+  it('rejects extra fields in the raw JSON-RPC response envelope', async () => {
+    const { sourceChunks } = mockDeploymentCaptureRpc()
+    coreDisposeMock().mockClear()
+    interceptProgramRpc((result) => {
+      const exchange = result.rawExchange
+      if (!exchange) throw new Error('test fixture did not capture raw program accounts')
+      replaceRawBody(
+        exchange,
+        'response',
+        JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          result: result.result,
+          extra: true,
+        })
+      )
+      return result
+    })
+
+    await expect(
+      captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+        rpcUrl: CAPTURE_RPC_URL,
+        endpointId: CAPTURE_ENDPOINT_ID,
+      })
+    ).rejects.toThrow('raw program account response is not a successful JSON-RPC result')
+
+    expect(sourceChunks.every((bytes) => bytes.every((byte) => byte === 0))).toBe(true)
+    expectDisposedExchangeCount(5)
+  })
+
+  it('clears the four anchor exchanges when the program-account RPC is unavailable', async () => {
+    const { calls, sourceChunks } = mockDeploymentCaptureRpc(programDataBytes(), {
+      programAccountsHttpStatus: 503,
+    })
+    coreDisposeMock().mockClear()
+
+    await expect(
+      captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+        rpcUrl: CAPTURE_RPC_URL,
+        endpointId: CAPTURE_ENDPOINT_ID,
+      })
+    ).rejects.toThrow('program account RPC capture is unavailable')
+
+    expect(calls.map((call) => call.method)).toEqual([
+      'getGenesisHash',
+      'getSlot',
+      'getBlocks',
+      'getBlock',
+      'getMultipleAccounts',
+    ])
+    expect(sourceChunks).toHaveLength(4)
+    expect(sourceChunks.every((bytes) => bytes.every((byte) => byte === 0))).toBe(true)
+    expectDisposedExchangeCount(4)
+  })
+
+  it('rejects an unapproved endpoint before network I/O', async () => {
+    global.fetch = jest.fn() as jest.MockedFunction<typeof fetch>
+
+    await expect(
+      captureSolanaV3ProgramDeploymentObservation(PROGRAM_ID, {
+        rpcUrl: 'https://example.invalid/',
+        endpointId: 'solana_official_mainnet',
+      })
+    ).rejects.toThrow('approved RPC endpoint is unavailable')
+
+    expect(global.fetch).not.toHaveBeenCalled()
   })
 })
