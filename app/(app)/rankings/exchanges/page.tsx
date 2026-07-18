@@ -57,9 +57,28 @@ const TIMEFRAMES: ExchangeRankingsTimeframe[] = [7, 30, 90]
 
 export default async function ExchangeRankingsPage() {
   const supabase = getReadReplica()
-  const [tf7, tf30, tf90] = await Promise.all(
+  const settled = await Promise.allSettled(
     TIMEFRAMES.map((tf) => getExchangeRankings(supabase, tf))
   )
+  const byTimeframe = {} as Record<ExchangeRankingsTimeframe, ExchangeRankings | null>
+  const failedTimeframes: ExchangeRankingsTimeframe[] = []
+
+  settled.forEach((result, index) => {
+    const timeframe = TIMEFRAMES[index]
+    if (result.status === 'fulfilled') {
+      byTimeframe[timeframe] = result.value
+      return
+    }
+    byTimeframe[timeframe] = null
+    failedTimeframes.push(timeframe)
+  })
+
+  if (failedTimeframes.length === TIMEFRAMES.length) {
+    throw new AggregateError(
+      settled.flatMap((result) => (result.status === 'rejected' ? [result.reason] : [])),
+      'Exchange rankings are unavailable'
+    )
+  }
 
   // Gate (plan E.11): the page only exists once >= 3 sources read from
   // arena.* — below that a cross-exchange comparison is noise, not signal.
@@ -68,19 +87,19 @@ export default async function ExchangeRankingsPage() {
   // to 30 minutes and this page is in the sitemap, amplifying the SEO
   // damage. Render the client's i18n'd "no data yet" empty state instead
   // (TopNav stays interactive) and log loudly so the gap is not silent.
-  const gateCount = tf90?.nonLegacyCount ?? tf30?.nonLegacyCount ?? tf7?.nonLegacyCount ?? 0
+  const gateCount = Math.max(
+    0,
+    ...TIMEFRAMES.map((timeframe) => byTimeframe[timeframe]?.nonLegacyCount ?? 0)
+  )
   if (gateCount < MIN_SERVING_SOURCES) {
     console.error(
       `[serving-gate] /rankings/exchanges gate triggered (nonLegacyCount=${gateCount} < ${MIN_SERVING_SOURCES}) — rendering empty state instead of 404`
     )
-    return <ExchangeRankingsClient byTimeframe={{ 7: null, 30: null, 90: null }} />
+    for (const timeframe of TIMEFRAMES) {
+      const data = byTimeframe[timeframe]
+      if (data) byTimeframe[timeframe] = { ...data, rows: [] }
+    }
   }
 
-  const byTimeframe: Record<ExchangeRankingsTimeframe, ExchangeRankings | null> = {
-    7: tf7,
-    30: tf30,
-    90: tf90,
-  }
-
-  return <ExchangeRankingsClient byTimeframe={byTimeframe} />
+  return <ExchangeRankingsClient byTimeframe={byTimeframe} failedTimeframes={failedTimeframes} />
 }
