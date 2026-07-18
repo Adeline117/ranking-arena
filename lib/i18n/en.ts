@@ -829,7 +829,7 @@ const en = {
   welcomeJoin: 'Welcome',
   welcomeDesc: 'Home to top traders from major exchanges',
   stepViewRanking: 'View Trader Rankings',
-  stepViewRankingDesc: 'Real-time ROI data from 22 exchanges, 26+ data sources',
+  stepViewRankingDesc: 'Rankings from current CEX, DEX, and on-chain source boards',
   stepFollowTraders: 'Follow Top Traders',
   stepFollowTradersDesc: 'Track their updates and strategies',
   stepJoinCommunity: 'Join Community',
@@ -2148,7 +2148,7 @@ const en = {
   helpGettingStartedTitle: 'Getting Started',
   helpWhatIsArenaQ: 'What is Arena?',
   helpWhatIsArenaA:
-    'Arena is a crypto trader leaderboard and community platform. We currently rank 9,600+ traders across 18+ active exchange sources by ROI, risk management, and consistency.',
+    'Arena is a crypto trader leaderboard and community platform. We rank thousands of public trader records across live CEX, DEX, and on-chain source boards.',
   helpHowToStartQ: 'How do I get started?',
   helpHowToStartA:
     'Sign up with Google, email, or a crypto wallet. After registration, you can personalize your experience by selecting interests and following top traders. Then explore the Rankings page to discover traders.',
@@ -3014,7 +3014,7 @@ const en = {
   favorites: 'Favorites',
 
   // Common UI text (reduce hardcoding)
-  viewLiveLeaderboard: 'View Live Leaderboard',
+  viewLiveLeaderboard: 'View Current Leaderboard',
   popularTraders: 'Popular Traders',
   followingTab: 'Following',
   recommendedTab: 'Recommended',
@@ -3115,16 +3115,16 @@ const en = {
   aboutSubtitle: 'The open ranking platform for crypto traders',
   aboutIntroTitle: 'What is Arena?',
   aboutIntroP1:
-    'Arena is a data-driven crypto trader ranking platform. We currently rank 9,600+ traders from 18+ active centralized, decentralized, and on-chain exchange sources.',
+    'Arena is a data-driven crypto trader ranking platform covering thousands of public trader records across live CEX, DEX, and on-chain source boards.',
   aboutIntroP2:
     'Whether you are looking for top-performing traders to follow, comparing strategies across exchanges, or showcasing your own track record, Arena provides the tools and data you need.',
   aboutFeaturesTitle: 'Core Features',
-  aboutFeature1Title: 'Real-Time Leaderboard',
+  aboutFeature1Title: 'Two-Hour Leaderboard',
   aboutFeature1Desc:
-    'Rankings updated continuously with verified PnL, ROI, win rate, and risk metrics across multiple timeframes.',
-  aboutFeature2Title: 'Multi-Exchange Coverage',
+    'Rankings are recomputed every two hours from the latest available PnL, ROI, win-rate, and risk metrics; field availability varies by source.',
+  aboutFeature2Title: 'Live Source-Board Coverage',
   aboutFeature2Desc:
-    'Data aggregated from 27+ exchanges including Binance, Bybit, OKX, Bitget, Gate.io, MEXC, Hyperliquid, dYdX, Drift, and more.',
+    'Current boards include Binance, Bybit, OKX, Bitget, Gate, MEXC, Hyperliquid, GMX, and other CEX, DEX, spot, derivatives, and on-chain sources.',
   aboutFeature3Title: 'Trader Comparison',
   aboutFeature3Desc:
     'Compare up to 4 traders side by side with detailed metric breakdowns and performance charts.',
@@ -3138,11 +3138,11 @@ const en = {
     '56K+ curated educational resources on trading strategies, risk management, and market analysis.',
   aboutDataTitle: 'Data Sources',
   aboutDataDesc:
-    'We integrate with 27+ centralized and decentralized exchanges to provide comprehensive coverage of the crypto trading landscape. All ranking data is derived from verified trading records -- no self-reported numbers.',
+    'We rank public records from the source boards currently serving data. Coverage changes when a source passes or fails freshness and quality gates.',
   aboutDataCEX:
-    'CEX: Binance, Bybit, OKX, Bitget, Gate.io, MEXC, BingX, HTX, CoinEx, Phemex, BTCC, Bitunix, Bitfinex, eToro, and more',
-  aboutDataDEX: 'DEX: Hyperliquid, dYdX, GMX, Jupiter, Drift, Aevo, Kwenta, Gains Network',
-  aboutDataOnChain: 'On-chain data verified through blockchain explorers and API integrations',
+    'CEX and derivatives: Binance, Bybit, OKX, Bitget, Gate, MEXC, BingX, HTX, BTCC, BitMart, Bitunix, Blofin, Phemex, Toobit, XT, and more',
+  aboutDataDEX: 'On-chain: Hyperliquid, GMX, Binance Wallet, and OKX Wallet',
+  aboutDataOnChain: 'Source data comes from public APIs, public boards, and chain indexers',
   aboutVisionTitle: 'Our Vision',
   aboutVisionDesc:
     'We believe transparency breeds trust. In a space where inflated screenshots and fake PnL run rampant, Arena provides a neutral, data-backed arena where performance speaks for itself. Our goal is to become the standard for crypto trader evaluation worldwide.',
@@ -5384,8 +5384,8 @@ const en = {
   postListView: 'List',
   snapshotExpiredDesc: 'This snapshot has expired and is no longer available.',
   snapshotCopied: 'Copied',
-  snapshotWantLive: 'Want to see the live leaderboard?',
-  snapshotViewLive: 'View Live Leaderboard',
+  snapshotWantLive: 'Want to see the current leaderboard?',
+  snapshotViewLive: 'View Current Leaderboard',
 
   // Token Rankings
   tokenRankingsTitle: 'Token Rankings',
@@ -5413,7 +5413,7 @@ const en = {
   // Exchange Rankings (spec §6.1)
   exchangeRankingsTitle: 'Exchange Rankings',
   exchangeRankingsSubtitle:
-    "Which exchange's copy traders actually make money — computed from live leaderboard data",
+    "Which source board's ranked traders show the strongest historical results — computed from the latest published leaderboard",
   exchangeRankingsColExchange: 'Exchange',
   exchangeRankingsColTraders: 'Ranked traders',
   exchangeRankingsColMedianRoi: 'Median ROI',
@@ -6506,7 +6506,7 @@ const en = {
     'You can delete your account at any time, and our liability is limited to the extent the law allows.',
   termsSec1Title: '1. Service Description',
   termsSec1Body:
-    'Arena is a cryptocurrency trader ranking and performance analytics platform. We aggregate publicly available trading data from 25+ centralized and decentralized exchanges to compute trader rankings using our proprietary Arena Score algorithm.',
+    'Arena is a cryptocurrency trader ranking and performance analytics platform. We aggregate publicly available data from current CEX, DEX, and on-chain source boards to compute trader rankings using the Arena Score algorithm.',
   termsSec1Warning:
     'Important: Arena is NOT an investment advisory service. Rankings and data provided on this platform do not constitute financial advice, trading recommendations, or solicitation to trade. Always conduct your own research before making any investment decisions.',
   termsSec2Title: '2. Disclaimer',
@@ -6590,19 +6590,19 @@ const en = {
   privacySec10Body: 'For questions or concerns about this Privacy Policy, please send a message to',
   methodologyTitle: 'Methodology',
   methodologySubtitle:
-    'How Arena ranks crypto traders across 18+ active exchange sources — transparent, data-driven, recomputed every 2 hours',
+    'How Arena ranks crypto traders across live source boards — transparent, data-driven, recomputed every 2 hours',
   methodologyBackRankings: 'Back to Rankings',
   methodologyKeyPoint1: 'Arena Score (0–100) measures risk-adjusted performance, not raw ROI.',
   methodologyKeyPoint2:
-    'We aggregate public data from 18+ active exchange sources and recompute the leaderboard every 2 hours.',
+    'We aggregate public data from live CEX, DEX, and on-chain source boards and recompute the leaderboard every 2 hours.',
   methodologyKeyPoint3: 'Long-term consistency dominates: 90D is weighted 70%, 30D 25%, and 7D 5%.',
   methodologyKeyPoint4:
     'Tanh normalization, outlier checks, and server-side computation guard against gaming.',
   methodologySec1Title: 'Data Sources',
   methodologySec1Intro:
-    'Arena aggregates publicly available trading data from 25+ centralized and decentralized exchanges, including:',
+    'Arena aggregates publicly available trading data from the source boards currently represented in the rankings, including:',
   methodologySec1List:
-    'CEX: Binance Futures, Binance Spot, Bybit, OKX, Bitget, MEXC, HTX, Gate.io, CoinEx, BingX, BTCC, Bitfinex, Bitunix, eToro, and more\nDEX: Hyperliquid, GMX, dYdX, Vertex, Drift, Aevo, Gains Network, Kwenta, and more',
+    'CEX and derivatives: Binance, Bybit, OKX, Bitget, MEXC, HTX, Gate, BingX, BTCC, BitMart, Bitunix, Blofin, Phemex, Toobit, XT, and more\nOn-chain: Hyperliquid, GMX, Binance Wallet, and OKX Wallet',
   methodologySec1Outro:
     'Data is collected via official exchange APIs and, for geo-restricted or WAF-protected exchanges, through VPS-based scrapers deployed in multiple regions (Singapore, Japan).',
   methodologySec2Title: 'Update Frequency',
