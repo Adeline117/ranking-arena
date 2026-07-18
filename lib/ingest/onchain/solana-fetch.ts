@@ -7,7 +7,7 @@
  * the free tier for the top-N deep-profile scope.
  */
 
-import { hasBase58DecodedByteLength, isBase58String } from '@/lib/utils/base58'
+import { decodeBase58BytesBounded, hasBase58DecodedByteLength } from '@/lib/utils/base58'
 
 import { decodeSolanaSwaps, type SolTxMeta, type SolTokenBalance } from './solana-swaps'
 import { computeWalletPnl, type WalletPnl } from './pnl-accounting'
@@ -38,6 +38,15 @@ export function isQuotaExhausted(msg: string): boolean {
 let heliusExhausted = false
 
 export type SolanaProviderId = 'helius' | 'alchemy' | 'caller_supplied'
+// Runtime constants: an outer instruction is carried inside the 1,232-byte
+// transaction packet, while a CPI instruction may carry up to 10 KiB.
+export const SOLANA_PACKET_DATA_SIZE_BYTES = 1_232
+export const SOLANA_MAX_CPI_INSTRUCTION_DATA_BYTES = 10_240
+export const SOLANA_MAX_INSTRUCTION_TRACE_LENGTH = 64
+// A compiled instruction needs at least three bytes on the wire (program id
+// index plus empty account/data shortvecs), so this is a conservative absolute
+// count ceiling that cannot reject a packet which actually fits.
+export const SOLANA_MAX_DECLARED_OUTER_INSTRUCTIONS = Math.floor(SOLANA_PACKET_DATA_SIZE_BYTES / 3)
 
 interface SolanaEndpoint {
   url: string
@@ -1010,9 +1019,15 @@ function parseCompiledInstruction(
   }
   const accountIndexes = byteArray(value.accounts)
   if (accountIndexes.some((index) => index >= accountKeys.length)) return malformedTxEvidence()
-  if (typeof value.data !== 'string' || (value.data.length > 0 && !isBase58String(value.data))) {
+  if (typeof value.data !== 'string') return malformedTxEvidence()
+  const decodedData = decodeBase58BytesBounded(
+    value.data,
+    path.kind === 'outer' ? SOLANA_PACKET_DATA_SIZE_BYTES : SOLANA_MAX_CPI_INSTRUCTION_DATA_BYTES
+  )
+  if (decodedData === null) {
     return malformedTxEvidence()
   }
+  decodedData.fill(0)
   const stackHeight =
     value.stackHeight === undefined || value.stackHeight === null
       ? null
@@ -1032,12 +1047,15 @@ function parseInstructions(
   outerValue: unknown,
   innerValue: unknown,
   accountKeys: SolanaResolvedAccountKey[],
-  staticAccountKeyCount: number
+  staticAccountKeyCount: number,
+  executionSucceeded: boolean
 ): {
   innerInstructionsStatus: SolanaTxEvidenceAvailable['innerInstructionsStatus']
   instructions: SolanaInstructionEvidence[]
 } {
-  if (!Array.isArray(outerValue)) return malformedTxEvidence()
+  if (!Array.isArray(outerValue) || outerValue.length > SOLANA_MAX_DECLARED_OUTER_INSTRUCTIONS) {
+    return malformedTxEvidence()
+  }
   const innerByOuter = new Map<number, unknown[]>()
   const innerInstructionsStatus =
     innerValue === undefined || innerValue === null
@@ -1046,7 +1064,11 @@ function parseInstructions(
         ? 'verified_empty'
         : 'present'
   if (innerValue !== undefined && innerValue !== null) {
-    if (!Array.isArray(innerValue)) return malformedTxEvidence()
+    if (!Array.isArray(innerValue) || innerValue.length > SOLANA_MAX_INSTRUCTION_TRACE_LENGTH) {
+      return malformedTxEvidence()
+    }
+    let reportedInnerInstructionCount = 0
+    let highestReportedOuterIndex = -1
     for (const group of innerValue) {
       if (!isJsonObject(group)) return malformedTxEvidence()
       const outerIndex = byteInteger(group.index)
@@ -1054,8 +1076,24 @@ function parseInstructions(
         return malformedTxEvidence()
       }
       if (!Array.isArray(group.instructions)) return malformedTxEvidence()
+      reportedInnerInstructionCount += group.instructions.length
+      highestReportedOuterIndex = Math.max(highestReportedOuterIndex, outerIndex)
+      if (
+        reportedInnerInstructionCount + highestReportedOuterIndex + 1 >
+        SOLANA_MAX_INSTRUCTION_TRACE_LENGTH
+      ) {
+        return malformedTxEvidence()
+      }
       innerByOuter.set(outerIndex, group.instructions)
     }
+    if (
+      executionSucceeded &&
+      outerValue.length + reportedInnerInstructionCount > SOLANA_MAX_INSTRUCTION_TRACE_LENGTH
+    ) {
+      return malformedTxEvidence()
+    }
+  } else if (executionSucceeded && outerValue.length > SOLANA_MAX_INSTRUCTION_TRACE_LENGTH) {
+    return malformedTxEvidence()
   }
 
   const instructions: SolanaInstructionEvidence[] = []
@@ -1185,7 +1223,8 @@ function normalizeSolanaTxEvidence(
     message.instructions,
     meta.innerInstructions,
     accountKeys,
-    staticAccountKeys.length
+    staticAccountKeys.length,
+    executionError === null
   )
 
   return {

@@ -1,6 +1,6 @@
 const BASE58_ALPHABET = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 const BASE58_PATTERN = /^[1-9A-HJ-NP-Za-km-z]+$/
-const MAX_BOUNDED_DECODE_BYTES = 4_096
+const MAX_BOUNDED_DECODE_BYTES = 10_240
 
 export function isBase58String(value: unknown): value is string {
   return typeof value === 'string' && value.length > 0 && BASE58_PATTERN.test(value)
