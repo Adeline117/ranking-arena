@@ -38,6 +38,8 @@ type Step = 'welcome' | 'interests' | 'traders' | 'groups' | 'complete'
 
 const STEPS: Step[] = ['welcome', 'interests', 'traders', 'groups', 'complete']
 
+class MembershipIntentsUnsettledError extends Error {}
+
 // Onboarding styles moved to globals.css (#32) — no DOM injection needed
 
 export default function OnboardingPage() {
@@ -80,6 +82,7 @@ export default function OnboardingPage() {
   const followSettlingRef = useRef(false)
   const membershipIntentLedgerRef = useRef(new OnboardingMembershipIntentLedger())
   const membershipRequestSequencerRef = useRef(new OnboardingMembershipRequestSequencer())
+  const failedMembershipIntentsRef = useRef<Map<string, OnboardingMembershipIntent>>(new Map())
   const membershipSettlingRef = useRef(false)
 
   const tr = (key: string) => translations[language][key] || translations.en[key] || key
@@ -369,7 +372,7 @@ export default function OnboardingPage() {
     }
   }, [flushFollowQueue])
 
-  const flushJoinQueue = useCallback(async () => {
+  const flushJoinQueue = useCallback(async (notifyFailure = true) => {
     const queue = new Map(joinQueueRef.current)
     joinQueueRef.current.clear()
     if (queue.size === 0) return
@@ -398,6 +401,9 @@ export default function OnboardingPage() {
             }
 
             await sendOnboardingMembershipIntent(intent, session.access_token, getCsrfHeaders())
+            if (membershipIntentLedgerRef.current.isCurrent(intent, membershipScopeRef.current)) {
+              failedMembershipIntentsRef.current.delete(intent.groupId)
+            }
             return null
           } catch (error) {
             logger.error('Onboarding group membership request failed', {
@@ -413,6 +419,7 @@ export default function OnboardingPage() {
             const next = rollbackOnboardingMembershipIntent(joinedGroupsRef.current, intent)
             joinedGroupsRef.current = next
             setJoinedGroups(next)
+            failedMembershipIntentsRef.current.set(intent.groupId, intent)
             return intent
           }
         })
@@ -421,6 +428,7 @@ export default function OnboardingPage() {
 
     const currentScope = membershipScopeRef.current
     if (
+      notifyFailure &&
       failures.some(
         (intent) =>
           intent !== null && membershipIntentLedgerRef.current.isCurrent(intent, currentScope)
@@ -439,8 +447,21 @@ export default function OnboardingPage() {
       clearTimeout(joinFlushTimerRef.current)
       joinFlushTimerRef.current = null
     }
-    await flushJoinQueue()
+    await flushJoinQueue(false)
     await membershipRequestSequencerRef.current.drain()
+
+    const currentScope = membershipScopeRef.current
+    const hasCurrentFailure = [...failedMembershipIntentsRef.current.values()].some((intent) =>
+      membershipIntentLedgerRef.current.isCurrent(intent, currentScope)
+    )
+    const hasCurrentQueuedIntent = [...joinQueueRef.current.values()].some((intent) =>
+      membershipIntentLedgerRef.current.isCurrent(intent, currentScope)
+    )
+    if (hasCurrentFailure || hasCurrentQueuedIntent) {
+      throw new MembershipIntentsUnsettledError(
+        'One or more group membership requests did not complete'
+      )
+    }
   }, [flushJoinQueue])
 
   const handleFollowTrader = async (traderId: string) => {
@@ -509,6 +530,7 @@ export default function OnboardingPage() {
     joinedGroupsRef.current = next
     setJoinedGroups(next)
     // Queue the action and debounce the flush
+    failedMembershipIntentsRef.current.delete(groupId)
     joinQueueRef.current.set(groupId, intent)
     if (joinFlushTimerRef.current) clearTimeout(joinFlushTimerRef.current)
     joinFlushTimerRef.current = setTimeout(flushJoinQueue, 500)
@@ -563,7 +585,10 @@ export default function OnboardingPage() {
       membershipSettlingRef.current = false
       logger.error('Error completing onboarding:', err)
       if (membershipScopeRef.current.active) {
-        showToast(tr('saveFailed'), 'error')
+        showToast(
+          tr(err instanceof MembershipIntentsUnsettledError ? 'joinFailed' : 'saveFailed'),
+          'error'
+        )
       }
     } finally {
       if (membershipScopeRef.current.active) {
