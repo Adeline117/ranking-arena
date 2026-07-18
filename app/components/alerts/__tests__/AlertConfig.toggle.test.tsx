@@ -8,6 +8,7 @@ const mockTranslations: Record<string, string> = {
   alertDisabled: 'Alerts disabled',
   alertEnabled: 'Alerts enabled',
   alertSettings: 'Alert settings',
+  delete: 'Delete',
   loading: 'Loading',
   loginRequired: 'Login required',
   pricingProAlerts: 'Real-time trader alerts',
@@ -223,5 +224,23 @@ describe('AlertConfig enable toggle', () => {
     expect(await screen.findByRole('button', { name: 'Alerts disabled' })).toBeEnabled()
     expect(mockShowToast).toHaveBeenCalledWith('Alerts disabled', 'success')
     expect(mockFetch).toHaveBeenCalledTimes(3)
+  })
+
+  it('keeps the alert and reports the server error when delete returns non-2xx', async () => {
+    loadResponses()
+    mockFetch.mockResolvedValueOnce(response({ error: 'Delete blocked' }, 503))
+    await renderLoadedConfig()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => {
+      expect(mockShowToast).toHaveBeenCalledWith('Delete blocked', 'error')
+    })
+    expect(mockShowToast).not.toHaveBeenCalledWith('Alerts disabled', 'success')
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeInTheDocument()
+    expect(mockFetch).toHaveBeenLastCalledWith(
+      '/api/trader-alerts?id=alert-1',
+      expect.objectContaining({ method: 'DELETE' })
+    )
   })
 })
