@@ -10,10 +10,10 @@ import {
   parseDexGoldenWalletSnapshot,
 } from './dex-golden-wallets'
 
-export const DEX_ACQUISITION_RUN_MANIFEST_SCHEMA_VERSION = 2 as const
-export const DEX_ACQUISITION_RUN_MANIFEST_CONTRACT = 'arena.dex.acquisition-run-manifest@2' as const
-export const DEX_ACQUISITION_QUERY_POLICY_SCHEMA_VERSION = 1 as const
-export const DEX_ACQUISITION_QUERY_POLICY_CONTRACT = 'arena.dex.acquisition-query-policy@1' as const
+export const DEX_ACQUISITION_RUN_MANIFEST_SCHEMA_VERSION = 3 as const
+export const DEX_ACQUISITION_RUN_MANIFEST_CONTRACT = 'arena.dex.acquisition-run-manifest@3' as const
+export const DEX_ACQUISITION_QUERY_POLICY_SCHEMA_VERSION = 2 as const
+export const DEX_ACQUISITION_QUERY_POLICY_CONTRACT = 'arena.dex.acquisition-query-policy@2' as const
 export const DEX_ACQUISITION_ENDPOINT_PROFILE_CONTRACT =
   'arena.dex.acquisition-endpoint-profile@1' as const
 export const DEX_ACQUISITION_CONNECTION_DESCRIPTOR_CONTRACT =
@@ -32,6 +32,26 @@ export const DEX_ACQUISITION_MAX_RUN_DECODED_BYTES = 1024 * 1024 * 1024 * 1024
 export const DEX_ACQUISITION_MAX_IN_FLIGHT_DECODED_BYTES = 512 * 1024 * 1024
 export const DEX_ACQUISITION_MAX_RUN_DURATION_MS = 72 * 60 * 60 * 1000
 export const DEX_ACQUISITION_MAX_RUN_BILLED_USD = 100
+export const DEX_ACQUISITION_PERSISTED_METADATA_FIELDS = [
+  'endpoint_identity',
+  'source_independence_group',
+  'public_height_time_bounds',
+  'request_params_sha256',
+  'request_body_sha256',
+  'request_body_byte_length',
+  'request_hash_basis',
+  'transport_status',
+  'reported_content_length',
+  'content_byte_length',
+  'content_sha256',
+  'content_hash_basis',
+  'opaque_cursor_commitments',
+  'batch_page_item_hash_chain_metadata',
+  'verification_state',
+  'public_block_transaction_identifiers',
+  'deterministic_facts',
+  'deterministic_manifest',
+] as const
 
 export const DEX_ACQUISITION_QUERY_TEMPLATE_CONTRACT_BY_MODE = {
   bsc_provider_address_index: 'arena.dex.bsc-address-index-query@1',
@@ -263,6 +283,43 @@ const phaseBudgetSchema = z
   })
   .strict()
 
+const metadataOnlyEvidencePolicySchema = z
+  .object({
+    mode: z.literal('metadata_only'),
+    body_lifecycle: z
+      .object({
+        provider_request_body: z.literal('in_memory_only_then_zero_or_release'),
+        provider_response_body: z.literal('in_memory_only_then_zero_or_release'),
+        normalized_json_body: z.literal('in_memory_only_then_zero_or_release'),
+      })
+      .strict(),
+    persisted_metadata_fields: z.tuple([
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[0]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[1]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[2]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[3]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[4]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[5]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[6]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[7]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[8]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[9]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[10]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[11]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[12]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[13]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[14]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[15]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[16]),
+      z.literal(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS[17]),
+    ]),
+    opaque_cursor_storage: z.literal('domain_separated_commitment_only'),
+    blob_availability: z.literal('absent'),
+    replay_state: z.literal('declared_not_replayed'),
+    replay_promotion_policy: z.literal('refetch_and_recompute_required'),
+  })
+  .strict()
+
 const queryPolicySchema = z
   .object({
     schema_version: z.literal(DEX_ACQUISITION_QUERY_POLICY_SCHEMA_VERSION),
@@ -359,7 +416,7 @@ const queryPolicySchema = z
         strict_utf8: z.literal(true),
         strict_json_duplicate_keys: z.literal('reject'),
         redirect_policy: z.literal('error'),
-        raw_page_archive_required: z.literal(true),
+        evidence_persistence: metadataOnlyEvidencePolicySchema,
         fixed_height_and_utc_window: z.literal(true),
         include_failed_transactions: z.literal(true),
         malformed_response_policy: z.literal('fail_lane'),

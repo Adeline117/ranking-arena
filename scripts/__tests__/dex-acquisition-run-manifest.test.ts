@@ -7,6 +7,7 @@ import {
   DEX_ACQUISITION_QUERY_POLICY_CONTRACT,
   DEX_ACQUISITION_QUERY_POLICY_SCHEMA_VERSION,
   DEX_ACQUISITION_QUERY_TEMPLATE_CONTRACT_BY_MODE,
+  DEX_ACQUISITION_PERSISTED_METADATA_FIELDS,
   DEX_ACQUISITION_RUN_MANIFEST_CONTRACT,
   DEX_ACQUISITION_RUN_MANIFEST_SCHEMA_VERSION,
   dexAcquisitionConnectionDescriptorSha256,
@@ -188,7 +189,19 @@ function queryPolicy(source: DexGoldenSource): DexAcquisitionQueryPolicy {
       strict_utf8: true,
       strict_json_duplicate_keys: 'reject',
       redirect_policy: 'error',
-      raw_page_archive_required: true,
+      evidence_persistence: {
+        mode: 'metadata_only',
+        body_lifecycle: {
+          provider_request_body: 'in_memory_only_then_zero_or_release',
+          provider_response_body: 'in_memory_only_then_zero_or_release',
+          normalized_json_body: 'in_memory_only_then_zero_or_release',
+        },
+        persisted_metadata_fields: [...DEX_ACQUISITION_PERSISTED_METADATA_FIELDS],
+        opaque_cursor_storage: 'domain_separated_commitment_only',
+        blob_availability: 'absent',
+        replay_state: 'declared_not_replayed',
+        replay_promotion_policy: 'refetch_and_recompute_required',
+      },
       fixed_height_and_utc_window: true,
       include_failed_transactions: true,
       malformed_response_policy: 'fail_lane',
@@ -504,11 +517,11 @@ describe('DEX acquisition run manifest contract', () => {
       height_unit: 'slot',
     })
     expect(bsc).toMatchObject({
-      schema_version: 2,
-      data_contract: 'arena.dex.acquisition-run-manifest@2',
+      schema_version: 3,
+      data_contract: 'arena.dex.acquisition-run-manifest@3',
       query_policy: {
-        schema_version: 1,
-        data_contract: 'arena.dex.acquisition-query-policy@1',
+        schema_version: 2,
+        data_contract: 'arena.dex.acquisition-query-policy@2',
       },
     })
     expect(solana.window.finality_anchor_policy).toBe('solana_verified_anchor_semantics_v2')
@@ -521,16 +534,124 @@ describe('DEX acquisition run manifest contract', () => {
     })
   })
 
-  it('rejects legacy run schema version 1', () => {
+  it('rejects legacy run schema versions 1 and 2', () => {
+    const previousSchema = validManifest()
+    mutableRecord(previousSchema).schema_version = 2
+    expect(() => parseDexAcquisitionRunManifest(previousSchema, fixtureJson)).toThrow()
+
     const legacySchema = validManifest()
     mutableRecord(legacySchema).schema_version = 1
     expect(() => parseDexAcquisitionRunManifest(legacySchema, fixtureJson)).toThrow()
   })
 
-  it('rejects the legacy run-manifest @1 contract', () => {
+  it('rejects the previous @2 and legacy @1 run-manifest contracts', () => {
+    const previousContract = validManifest()
+    mutableRecord(previousContract).data_contract = 'arena.dex.acquisition-run-manifest@2'
+    expect(() => parseDexAcquisitionRunManifest(previousContract, fixtureJson)).toThrow()
+
     const legacyContract = validManifest()
     mutableRecord(legacyContract).data_contract = 'arena.dex.acquisition-run-manifest@1'
     expect(() => parseDexAcquisitionRunManifest(legacyContract, fixtureJson)).toThrow()
+  })
+
+  it('rejects the pre-metadata query-policy @1 identity', () => {
+    const previousSchema = validManifest()
+    mutableRecord(previousSchema.query_policy).schema_version = 1
+    expect(() => parseDexAcquisitionRunManifest(previousSchema, fixtureJson)).toThrow()
+
+    const previousContract = validManifest()
+    mutableRecord(previousContract.query_policy).data_contract =
+      'arena.dex.acquisition-query-policy@1'
+    expect(() => parseDexAcquisitionRunManifest(previousContract, fixtureJson)).toThrow()
+  })
+
+  it('pins the exact metadata-only evidence lifecycle and persisted field order', () => {
+    const manifest = parseDexAcquisitionRunManifest(validManifest(), fixtureJson)
+
+    expect(manifest.query_policy.transport.evidence_persistence).toEqual({
+      mode: 'metadata_only',
+      body_lifecycle: {
+        provider_request_body: 'in_memory_only_then_zero_or_release',
+        provider_response_body: 'in_memory_only_then_zero_or_release',
+        normalized_json_body: 'in_memory_only_then_zero_or_release',
+      },
+      persisted_metadata_fields: DEX_ACQUISITION_PERSISTED_METADATA_FIELDS,
+      opaque_cursor_storage: 'domain_separated_commitment_only',
+      blob_availability: 'absent',
+      replay_state: 'declared_not_replayed',
+      replay_promotion_policy: 'refetch_and_recompute_required',
+    })
+    expect(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS).toContain('source_independence_group')
+    expect(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS).toContain(
+      'batch_page_item_hash_chain_metadata'
+    )
+    expect(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS).toContain('verification_state')
+    expect(DEX_ACQUISITION_PERSISTED_METADATA_FIELDS).not.toContain(
+      'batch_page_hash_chain_metadata'
+    )
+  })
+
+  it('rejects the v2 raw archive flag and body, blob, URL, header, or secret fields', () => {
+    const forbiddenRawFlag = validManifest()
+    mutableRecord(forbiddenRawFlag.query_policy.transport).raw_page_archive_required = true
+    expect(() => parseDexAcquisitionRunManifest(forbiddenRawFlag, fixtureJson)).toThrow()
+
+    const previousRawPolicy = validManifest()
+    const previousRawTransport = mutableRecord(previousRawPolicy.query_policy.transport)
+    delete previousRawTransport.evidence_persistence
+    previousRawTransport.raw_page_archive_required = true
+    expect(() => parseDexAcquisitionRunManifest(previousRawPolicy, fixtureJson)).toThrow()
+
+    for (const [field, value] of [
+      ['provider_response_body', '{"jsonrpc":"2.0","result":[]}'],
+      ['blob_locator', 'sha256:'.concat('ab'.repeat(32))],
+      ['endpoint_url', 'https://rpc.example.test/?api_key=secret'],
+      ['request_headers', { authorization: 'Bearer secret' }],
+      ['api_secret', 'secret'],
+    ] as const) {
+      const changed = validManifest()
+      mutableRecord(changed.query_policy.transport.evidence_persistence)[field] = value
+      expect(() => parseDexAcquisitionRunManifest(changed, fixtureJson)).toThrow()
+    }
+  })
+
+  it('rejects forged, missing, or reordered persisted metadata policy fields', () => {
+    const reordered = validManifest()
+    reordered.query_policy.transport.evidence_persistence.persisted_metadata_fields.reverse()
+    expect(() => parseDexAcquisitionRunManifest(reordered, fixtureJson)).toThrow()
+
+    const forged = validManifest()
+    mutableRecord(forged.query_policy.transport.evidence_persistence).persisted_metadata_fields = [
+      ...DEX_ACQUISITION_PERSISTED_METADATA_FIELDS.slice(0, -1),
+      'raw_provider_body',
+    ]
+    expect(() => parseDexAcquisitionRunManifest(forged, fixtureJson)).toThrow()
+
+    const missing = validManifest()
+    mutableRecord(missing.query_policy.transport.evidence_persistence).persisted_metadata_fields =
+      DEX_ACQUISITION_PERSISTED_METADATA_FIELDS.slice(1)
+    expect(() => parseDexAcquisitionRunManifest(missing, fixtureJson)).toThrow()
+  })
+
+  it('rejects forged body lifecycle, cursor, blob, and replay policy literals', () => {
+    const mutations = [
+      ['mode', 'raw_archive'],
+      ['opaque_cursor_storage', 'plaintext'],
+      ['blob_availability', 'retrievable'],
+      ['replay_state', 'replayed'],
+      ['replay_promotion_policy', 'trust_declared_hashes'],
+    ] as const
+    for (const [field, value] of mutations) {
+      const changed = validManifest()
+      mutableRecord(changed.query_policy.transport.evidence_persistence)[field] = value
+      expect(() => parseDexAcquisitionRunManifest(changed, fixtureJson)).toThrow()
+    }
+
+    const persistedBody = validManifest()
+    mutableRecord(
+      persistedBody.query_policy.transport.evidence_persistence.body_lifecycle
+    ).provider_response_body = 'persist'
+    expect(() => parseDexAcquisitionRunManifest(persistedBody, fixtureJson)).toThrow()
   })
 
   it('rejects Solana v1 anchor semantics', () => {
@@ -570,8 +691,8 @@ describe('DEX acquisition run manifest contract', () => {
 
   it('pins domain-bound policy and manifest hashes', () => {
     const manifest = validManifest()
-    const expectedPolicy = '01ff3784bcf6bd9046f2549dd07a5def79b756838b56df478d0a1c42f8037005'
-    const expectedManifest = 'e11f5709760864bfc2504abf26d3ae328517128377c7f2987986165c9a19cd0b'
+    const expectedPolicy = 'f22b0830b1d4415f46a0c91fa68c3b282ea62ea7d79762e8210c92b37cecbf4d'
+    const expectedManifest = '53f71b3e39f49ad956317bc69c45e0783ab2cb5db2a4f9608ea066106ce7714d'
 
     expect(dexAcquisitionQueryPolicySha256(manifest.query_policy)).toBe(expectedPolicy)
     expect(dexAcquisitionRunManifestSha256(manifest, fixtureJson)).toBe(expectedManifest)
