@@ -706,10 +706,7 @@ async function computeSeason(
   // lock expired but the previous function is still writing.
   let dbLockAcquired = false
   try {
-    const { data: lockResult } = await supabase.rpc(
-      'acquire_leaderboard_lock' as never,
-      { season } as never
-    )
+    const { data: lockResult } = await supabase.rpc('acquire_leaderboard_lock', { season })
     dbLockAcquired = lockResult === true
     if (!dbLockAcquired) {
       logger.warn(
@@ -814,7 +811,7 @@ async function computeSeason(
   // Release DB advisory lock
   if (dbLockAcquired) {
     try {
-      await supabase.rpc('release_leaderboard_lock' as never, { season } as never)
+      await supabase.rpc('release_leaderboard_lock', { season })
     } catch {
       // Non-critical — session-level lock auto-releases when connection closes
     }

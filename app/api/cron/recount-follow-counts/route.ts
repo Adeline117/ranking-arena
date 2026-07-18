@@ -19,15 +19,14 @@ export const maxDuration = 60
 export const GET = withCron('recount-follow-counts', async (_request: NextRequest) => {
   const supabase = getSupabaseAdmin()
 
-  const { data, error } = await supabase.rpc('recount_all_follow_counts' as never)
+  const { data, error } = await supabase.rpc('recount_all_follow_counts')
 
   if (error) {
     logger.error('[recount-follow-counts] RPC error:', error)
     throw error
   }
 
-  const rows = data as Array<{ updated_count: number }> | null
-  const updatedCount = rows?.[0]?.updated_count ?? 0
+  const updatedCount = data?.[0]?.updated_count ?? 0
   logger.info(`[recount-follow-counts] Fixed ${updatedCount} user profiles`)
 
   return { count: Number(updatedCount) }

@@ -30,7 +30,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data, error } = await supabase.rpc('arena_trust_scorecard' as never)
+    const { data, error } = await supabase.rpc('arena_trust_scorecard')
     if (error) {
       logger.error('arena_trust_scorecard RPC failed', { error: error.message })
       return NextResponse.json({ error: 'Failed to load trust scorecard' }, { status: 500 })

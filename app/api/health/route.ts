@@ -142,7 +142,7 @@ export async function GET() {
     // is service_role-only. Raced against an 8s timeout for cold-start tolerance.
     const result = await Promise.race([
       getSupabaseAdmin()
-        .rpc('arena_latest_snapshot_at' as never)
+        .rpc('arena_latest_snapshot_at')
         .then((r) => r as { data: string | null; error: { message: string } | null }),
       new Promise<{ data: null; error: { message: string } }>((resolve) =>
         setTimeout(

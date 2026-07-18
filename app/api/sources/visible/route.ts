@@ -23,13 +23,9 @@ export async function GET(request: NextRequest) {
       }
       const timeRange = rawTimeRange as LeaderboardTimeRange
 
-      // RPC was added after the latest generated database types.
-      const { data, error } = await supabase.rpc(
-        'arena_visible_sources' as never,
-        {
-          p_season_id: timeRange,
-        } as never
-      )
+      const { data, error } = await supabase.rpc('arena_visible_sources', {
+        p_season_id: timeRange,
+      })
       if (error) throw new Error(`arena_visible_sources failed: ${error.message}`)
 
       const sources = parseVisibleLeaderboardSources(data)
