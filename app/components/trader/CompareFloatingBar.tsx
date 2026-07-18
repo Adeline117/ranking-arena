@@ -8,6 +8,7 @@ import { useComparisonStore } from '@/lib/stores/comparisonStore'
 import { useShallow } from 'zustand/react/shallow'
 import { useLanguage } from '../Providers/LanguageProvider'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
+import { buildCompareUrl, compareAccountKey } from '@/lib/compare/identity'
 
 /**
  * Floating comparison bar that shows selected traders for comparison
@@ -30,10 +31,7 @@ function CompareFloatingBar() {
   // present when the anchor first mounted (adding/removing traders updated the
   // list + count but left href pointing at the stale selection). Keying the
   // Link on the derived URL forces a fresh href attribute on every change.
-  const compareUrl = useMemo(
-    () => `/compare?ids=${encodeURIComponent(selectedTraders.map((t) => t.id).join(','))}`,
-    [selectedTraders]
-  )
+  const compareUrl = useMemo(() => buildCompareUrl(selectedTraders), [selectedTraders])
 
   // Don't render if no traders selected
   if (selectedTraders.length === 0) {
@@ -124,7 +122,7 @@ function CompareFloatingBar() {
           >
             {selectedTraders.map((trader) => (
               <div
-                key={trader.id}
+                key={compareAccountKey(trader)}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -182,7 +180,7 @@ function CompareFloatingBar() {
                 <button
                   onClick={(e) => {
                     e.stopPropagation()
-                    removeTrader(trader.id)
+                    removeTrader(trader)
                   }}
                   aria-label={`${t('removeFromCompare')}: ${trader.handle}`}
                   title={`${t('removeFromCompare')}: ${trader.handle}`}

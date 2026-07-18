@@ -357,7 +357,9 @@ test.describe('E. API Endpoints', () => {
   })
 
   test('E7: Compare API — 未认证', async ({ request }) => {
-    const response = await request.get(`${BASE}/api/compare?ids=test1,test2`)
+    const response = await request.get(
+      `${BASE}/api/compare?ids=test1,test2&platforms=bybit,binance_futures`
+    )
     expect([401, 403]).toContain(response.status())
   })
 

@@ -25,6 +25,7 @@ import { BOT_BADGE_STYLE, BOT_EMOJI_STYLE } from './TraderRowStyles'
 import AntiGamingBadge from './AntiGamingBadge'
 import VerifiedDataBadge from './VerifiedDataBadge'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
+import type { CompareAccountRef } from '@/lib/compare/identity'
 import { getPlatformNote } from '@/lib/constants/platform-metrics'
 import { EXCHANGE_NAMES } from '@/lib/constants/exchanges'
 
@@ -60,9 +61,16 @@ export const TraderCard = memo(
     const href = `/trader/${encodeURIComponent(trader.id)}${trader.source ? `?platform=${encodeURIComponent(trader.source)}` : ''}`
     const displayName =
       trader.display_name || formatDisplayName(traderHandle, trader.source || source)
-    const sourceInfo = parseSourceInfo(trader.source || source || '')
+    const traderSource = trader.source || source || ''
+    const sourceInfo = parseSourceInfo(traderSource)
+    const compareAccount: CompareAccountRef = { id: trader.id, source: traderSource }
 
-    const isSelected = useComparisonStore(useCallback((s) => s.isSelected(trader.id), [trader.id]))
+    const isSelected = useComparisonStore(
+      useCallback(
+        (s) => s.isSelected({ id: trader.id, source: traderSource }),
+        [trader.id, traderSource]
+      )
+    )
     // Stable boolean selector: only changes when comparison count crosses the max threshold.
     // Previously used s.canAddMore() which returns a new closure on every store change,
     // causing all 50 TraderCards to re-render per comparison add/remove.
@@ -91,12 +99,12 @@ export const TraderCard = memo(
       e.preventDefault()
       e.stopPropagation()
       if (isSelected) {
-        useComparisonStore.getState().removeTrader(trader.id)
+        useComparisonStore.getState().removeTrader(compareAccount)
       } else {
         useComparisonStore.getState().addTrader({
           id: trader.id,
           handle: traderHandle,
-          source: trader.source || source || '',
+          source: traderSource,
           avatarUrl: trader.avatar_url || undefined,
         })
       }

@@ -13,6 +13,7 @@ import TraderShareActions from './TraderShareActions'
 import { ActionButton } from './TraderHeaderHelpers'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { trackEvent } from '@/lib/analytics/track'
+import type { CompareAccountRef } from '@/lib/compare/identity'
 
 interface TraderHeaderActionsProps {
   traderId: string
@@ -42,7 +43,8 @@ function CompareToggle({
   source: string
   avatarUrl?: string
 }) {
-  const isSelected = useComparisonStore((s) => s.isSelected(traderId))
+  const compareAccount: CompareAccountRef = { id: traderId, source }
+  const isSelected = useComparisonStore((s) => s.isSelected(compareAccount))
   const addTrader = useComparisonStore((s) => s.addTrader)
   const removeTrader = useComparisonStore((s) => s.removeTrader)
   const canAddMore = useComparisonStore((s) => s.canAddMore())
@@ -50,7 +52,7 @@ function CompareToggle({
 
   const handleToggle = () => {
     if (isSelected) {
-      removeTrader(traderId)
+      removeTrader(compareAccount)
     } else {
       addTrader({ id: traderId, handle, source, avatarUrl })
     }
@@ -233,11 +235,11 @@ export function TraderHeaderActions({
         )}
 
         {/* Compare toggle (P0-4) */}
-        {!isOwnProfile && (
+        {!isOwnProfile && source && (
           <CompareToggle
             traderId={traderId}
             handle={handle}
-            source={source || ''}
+            source={source}
             avatarUrl={effectiveAvatarUrl}
           />
         )}

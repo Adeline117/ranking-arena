@@ -1,20 +1,34 @@
 /**
  * comparisonStore / quizStore / inboxStore / periodStore — 轻量状态机。
  */
-import { useComparisonStore, type CompareTrader } from '../comparisonStore'
+import {
+  migrateComparisonPersistedState,
+  useComparisonStore,
+  type CompareTrader,
+} from '../comparisonStore'
 import { useQuizStore } from '../quizStore'
 import { useInboxStore, selectTotalUnread } from '../inboxStore'
 import { usePeriodStore } from '../periodStore'
 
-const trader = (id: string): CompareTrader => ({ id, handle: `h-${id}`, source: 'bybit' })
+const trader = (id: string, source = 'bybit'): CompareTrader => ({
+  id,
+  handle: `h-${id}`,
+  source,
+})
 
 describe('comparisonStore — 对比选择(上限 10)', () => {
   beforeEach(() => useComparisonStore.getState().clearAll())
 
-  it('addTrader 成功 → true;重复 → false', () => {
+  it('addTrader 成功 → true;同一复合身份重复 → false', () => {
     expect(useComparisonStore.getState().addTrader(trader('a'))).toBe(true)
     expect(useComparisonStore.getState().addTrader(trader('a'))).toBe(false)
     expect(useComparisonStore.getState().selectedTraders).toHaveLength(1)
+  })
+
+  it('允许不同来源使用同一 trader ID', () => {
+    expect(useComparisonStore.getState().addTrader(trader('shared', 'bybit'))).toBe(true)
+    expect(useComparisonStore.getState().addTrader(trader('shared', 'binance_futures'))).toBe(true)
+    expect(useComparisonStore.getState().selectedTraders).toHaveLength(2)
   })
 
   it('满 10 个 → 拒绝并返回 false', () => {
@@ -25,16 +39,41 @@ describe('comparisonStore — 对比选择(上限 10)', () => {
   })
 
   it('removeTrader / isSelected', () => {
-    useComparisonStore.getState().addTrader(trader('a'))
-    expect(useComparisonStore.getState().isSelected('a')).toBe(true)
-    useComparisonStore.getState().removeTrader('a')
-    expect(useComparisonStore.getState().isSelected('a')).toBe(false)
+    const bybit = trader('same', 'bybit')
+    const binance = trader('same', 'binance_futures')
+    useComparisonStore.getState().addTrader(bybit)
+    useComparisonStore.getState().addTrader(binance)
+
+    expect(useComparisonStore.getState().isSelected(bybit)).toBe(true)
+    expect(useComparisonStore.getState().isSelected(binance)).toBe(true)
+    useComparisonStore.getState().removeTrader(bybit)
+    expect(useComparisonStore.getState().isSelected(bybit)).toBe(false)
+    expect(useComparisonStore.getState().isSelected(binance)).toBe(true)
   })
 
-  it('getCompareUrl:逗号列表 URI 编码', () => {
+  it('getCompareUrl: ids 与 platforms 成对 URI 编码', () => {
     useComparisonStore.getState().addTrader(trader('a b')) // 含空格的 id
-    useComparisonStore.getState().addTrader(trader('c'))
-    expect(useComparisonStore.getState().getCompareUrl()).toBe('/compare?ids=a%20b%2Cc')
+    useComparisonStore.getState().addTrader(trader('c', 'binance_futures'))
+    expect(useComparisonStore.getState().getCompareUrl()).toBe(
+      '/compare?ids=a%20b%2Cc&platforms=bybit%2Cbinance_futures'
+    )
+  })
+
+  it('v1 持久化数据按复合身份迁移并丢弃无来源条目', () => {
+    expect(
+      migrateComparisonPersistedState({
+        selectedTraders: [
+          trader('same', 'bybit'),
+          trader('same', 'binance_futures'),
+          trader('same', 'bybit'),
+          { id: 'legacy', handle: 'Legacy', source: '' },
+        ],
+        isBarExpanded: false,
+      })
+    ).toEqual({
+      selectedTraders: [trader('same', 'bybit'), trader('same', 'binance_futures')],
+      isBarExpanded: false,
+    })
   })
 
   it('toggleBar / setBarExpanded', () => {

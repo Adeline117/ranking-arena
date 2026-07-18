@@ -2,6 +2,11 @@ import type { Metadata } from 'next'
 import { BASE_URL } from '@/lib/constants/urls'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { resolveTrader } from '@/lib/data/unified'
+import {
+  buildCompareUrl,
+  parseCompareAccounts,
+  type CompareAccountRef,
+} from '@/lib/compare/identity'
 
 /**
  * The og/compare route renders from name/roi/score query params (edge, no DB).
@@ -11,15 +16,18 @@ import { resolveTrader } from '@/lib/data/unified'
  * pass those; on any failure we fall back to the static site image rather than a
  * fabricated card. (`/api/compare` can't be used — it's auth-gated, crawlers 401.)
  */
-async function buildCompareOgUrl(idList: string[]): Promise<string> {
+async function buildCompareOgUrl(accounts: CompareAccountRef[]): Promise<string> {
   const staticFallback = `${BASE_URL}/og-image.png`
-  if (idList.length === 0) return staticFallback
+  if (accounts.length === 0) return staticFallback
   try {
     const supabase = getSupabaseAdmin()
     const rows = (
       await Promise.all(
-        idList.map(async (id) => {
-          const resolved = await resolveTrader(supabase, { handle: id })
+        accounts.map(async (account) => {
+          const resolved = await resolveTrader(supabase, {
+            handle: account.id,
+            platform: account.source,
+          })
           if (!resolved) return null
           const { data } = await supabase
             .from('leaderboard_ranks')
@@ -60,18 +68,20 @@ async function buildCompareOgUrl(idList: string[]): Promise<string> {
 }
 
 export async function generateMetadata(props: {
-  searchParams?: Promise<{ ids?: string }>
+  searchParams?: Promise<{ ids?: string; platforms?: string }>
 }): Promise<Metadata> {
   const resolved = props.searchParams ? await props.searchParams : {}
   const ids = resolved.ids
-  const idList = ids ? ids.split(',').slice(0, 3) : []
+  const platforms = resolved.platforms
+  const parsed = parseCompareAccounts(ids, platforms)
+  const accounts = parsed.ok ? parsed.accounts : []
 
-  const ogUrl = await buildCompareOgUrl(idList)
+  const ogUrl = await buildCompareOgUrl(accounts.slice(0, 3))
 
   const title = 'Compare Traders'
   const description =
-    idList.length > 0
-      ? `Comparing ${idList.length} traders side-by-side on Arena`
+    accounts.length > 0
+      ? `Comparing ${accounts.length} traders side-by-side on Arena`
       : 'Compare traders side-by-side across exchanges.'
 
   return {
@@ -83,7 +93,7 @@ export async function generateMetadata(props: {
     openGraph: {
       title,
       description,
-      url: `${BASE_URL}/compare${ids ? '?ids=' + ids : ''}`,
+      url: `${BASE_URL}${buildCompareUrl(accounts)}`,
       siteName: 'Arena',
       type: 'website',
       images: [{ url: ogUrl, width: 1200, height: 630, alt: 'Arena Trader Comparison' }],

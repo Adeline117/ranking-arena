@@ -9,6 +9,11 @@ import logger from '@/lib/logger'
 import { resolveTrader, getTraderDetail, toTraderPageData } from '@/lib/data/unified'
 import { withAuth } from '@/lib/api/middleware'
 import { tieredGetOrSet } from '@/lib/cache/redis-layer'
+import {
+  compareAccountKey,
+  parseCompareAccounts,
+  type CompareAccountRef,
+} from '@/lib/compare/identity'
 
 export const runtime = 'nodejs'
 export const preferredRegion = ['sfo1', 'hnd1']
@@ -41,7 +46,7 @@ interface TraderCompareData {
 
 /**
  * GET - 获取多traders allowed for comparison的对比数据
- * Query params: ids=trader1,trader2,trader3 (最多10个)
+ * Query params: ids=trader1,trader2&platforms=bybit,binance_futures (最多10个)
  */
 export const GET = withAuth(
   async ({ supabase, user, request }) => {
@@ -68,24 +73,24 @@ export const GET = withAuth(
     // 获取查询参数
     const { searchParams } = new URL(request.url)
     const idsParam = searchParams.get('ids')
+    const platformsParam = searchParams.get('platforms')
+    const parsedAccounts = parseCompareAccounts(idsParam, platformsParam)
 
-    if (!idsParam) {
-      return error(
-        'Missing ids parameter. Usage: GET /api/compare?ids=trader1,trader2 (max 10, Pro required)',
-        400
-      )
+    if (!parsedAccounts.ok) {
+      const validationMessage: Record<typeof parsedAccounts.error, string> = {
+        missing_ids:
+          'Missing ids parameter. Usage: GET /api/compare?ids=trader1,trader2&platforms=bybit,binance_futures (max 10, Pro required)',
+        missing_platforms:
+          'Missing platforms parameter. Every trader ID must have an explicit platform.',
+        empty_value: 'Trader IDs and platforms must not contain empty values.',
+        length_mismatch: 'ids and platforms must contain the same number of values.',
+        duplicate_account: 'Duplicate trader account in comparison.',
+      }
+      return error(validationMessage[parsedAccounts.error], 400)
     }
 
-    const traderIds = idsParam
-      .split(',')
-      .map((id) => id.trim())
-      .filter(Boolean)
-
-    if (traderIds.length === 0) {
-      return error('At least one trader ID is required', 400)
-    }
-
-    if (traderIds.length > MAX_TRADERS_TO_COMPARE) {
+    const accounts = parsedAccounts.accounts
+    if (accounts.length > MAX_TRADERS_TO_COMPARE) {
       return error(`Maximum ${MAX_TRADERS_TO_COMPARE} traders allowed for comparison`, 400)
     }
 
@@ -93,12 +98,18 @@ export const GET = withAuth(
     const includeEquity = searchParams.get('include_equity') === '1'
 
     // Cache per-trader compare data (60s) to avoid 25-55 queries on repeated comparisons
-    async function fetchTraderCompare(traderId: string): Promise<TraderCompareData | null> {
-      const cacheKey = `compare:trader:${traderId}:eq=${includeEquity ? 1 : 0}`
+    async function fetchTraderCompare(
+      account: CompareAccountRef
+    ): Promise<TraderCompareData | null> {
+      const identity = compareAccountKey(account)
+      const cacheKey = `compare:trader:${encodeURIComponent(identity)}:eq=${includeEquity ? 1 : 0}`
       return tieredGetOrSet(
         cacheKey,
         async () => {
-          const resolved = await resolveTrader(supabase, { handle: traderId })
+          const resolved = await resolveTrader(supabase, {
+            handle: account.id,
+            platform: account.source,
+          })
           if (!resolved) return null
           try {
             const detail = await getTraderDetail(supabase, {
@@ -116,9 +127,9 @@ export const GET = withAuth(
               : undefined
 
             return {
-              id: traderId,
-              handle: (profile?.handle as string) || traderId,
-              source: (profile?.source as string) || resolved.platform,
+              id: resolved.traderKey,
+              handle: (profile?.handle as string) || resolved.handle || resolved.traderKey,
+              source: resolved.platform,
               roi: (perf?.roi_90d as number) ?? 0,
               roi_7d: perf?.roi_7d as number | undefined,
               roi_30d: perf?.roi_30d as number | undefined,
@@ -139,7 +150,7 @@ export const GET = withAuth(
               ...(includeEquity ? { equity_curve: equityCurve } : {}),
             } as TraderCompareData
           } catch (err) {
-            logger.warn(`[compare] Failed to fetch detail for ${traderId}:`, err)
+            logger.warn(`[compare] Failed to fetch detail for ${identity}:`, err)
             return null
           }
         },
@@ -148,17 +159,19 @@ export const GET = withAuth(
     }
 
     // Fetch all traders in parallel with per-trader caching
-    const detailResults = await Promise.all(traderIds.map(fetchTraderCompare))
+    const detailResults = await Promise.all(accounts.map(fetchTraderCompare))
 
-    // 按请求的 ID 顺序排序
-    const sortedData = traderIds
-      .map((id, i) => detailResults[i])
+    // 按请求的复合身份顺序排序
+    const sortedData = accounts
+      .map((_, i) => detailResults[i])
       .filter(Boolean) as TraderCompareData[]
 
     return success(
       {
         traders: sortedData,
-        requestedIds: traderIds,
+        requestedIds: accounts.map((account) => account.id),
+        requestedPlatforms: accounts.map((account) => account.source),
+        requestedAccounts: accounts,
         foundCount: sortedData.length,
       },
       200,

@@ -16,6 +16,7 @@ import { useLanguage } from '../Providers/LanguageProvider'
 import { CompactErrorBoundary } from '../utils/ErrorBoundary'
 import ShareCompareButton from './ShareCompareButton'
 import { formatPnL, formatRatio } from '@/lib/utils/format'
+import { compareAccountKey, type CompareAccountRef } from '@/lib/compare/identity'
 
 // Lazy load chart components — only rendered when user switches to the equity tab
 const EquityCurveOverlay = dynamic(() => import('./EquityCurveOverlay'), { ssr: false })
@@ -61,7 +62,7 @@ interface TraderCompareData {
 
 interface TraderComparisonProps {
   traders: TraderCompareData[]
-  onRemove?: (traderId: string) => void
+  onRemove?: (account: CompareAccountRef) => void
   showRemoveButton?: boolean
 }
 
@@ -121,6 +122,18 @@ function getSourceLabels(t: (key: string) => string): Record<string, string> {
     kucoin: `KuCoin ${t('categoryFutures')}`,
     gmx: `GMX ${t('categoryWeb3')}`,
   }
+}
+
+function traderAccount(trader: TraderCompareData): CompareAccountRef {
+  return { id: trader.id, source: trader.source }
+}
+
+function traderIdentity(trader: TraderCompareData): string {
+  return compareAccountKey(traderAccount(trader))
+}
+
+function traderHref(trader: TraderCompareData): string {
+  return `/trader/${encodeURIComponent(trader.id)}?platform=${encodeURIComponent(trader.source)}`
 }
 
 export default function TraderComparison({
@@ -256,7 +269,7 @@ export default function TraderComparison({
 
   // Equity curve data
   const equityTraders = traders.map((tr, i) => ({
-    traderId: tr.id,
+    traderId: traderIdentity(tr),
     traderName: tr.handle || tr.id.slice(0, 10),
     data: tr.equity_curve || [],
     color: CHART_COLORS[i % CHART_COLORS.length],
@@ -289,7 +302,7 @@ export default function TraderComparison({
       {showRemoveButton && onRemove && (
         <button
           aria-label="Close"
-          onClick={() => onRemove(trader.id)}
+          onClick={() => onRemove(traderAccount(trader))}
           style={{
             position: 'absolute',
             top: -8,
@@ -316,7 +329,7 @@ export default function TraderComparison({
         </button>
       )}
 
-      <Link href={`/trader/${encodeURIComponent(trader.id)}`}>
+      <Link href={traderHref(trader)}>
         {(() => {
           const proxyAvatarUrl = getTraderAvatarUrl(trader.avatar_url)
           return (
@@ -378,7 +391,7 @@ export default function TraderComparison({
         })()}
       </Link>
 
-      <Link href={`/trader/${encodeURIComponent(trader.id)}`} style={{ textDecoration: 'none' }}>
+      <Link href={traderHref(trader)} style={{ textDecoration: 'none' }}>
         <Text
           size="sm"
           weight="bold"
@@ -485,7 +498,7 @@ export default function TraderComparison({
           ))}
         </Box>
 
-        <ShareCompareButton traderIds={traders.map((t) => t.id)} comparisonRef={comparisonRef} />
+        <ShareCompareButton accounts={traders.map(traderAccount)} comparisonRef={comparisonRef} />
       </Box>
 
       <Box
@@ -514,7 +527,7 @@ export default function TraderComparison({
           >
             <Box className="compare-label-col" />
             {traders.map((trader) => (
-              <Box key={trader.id} style={traderHeaderCellStyle}>
+              <Box key={traderIdentity(trader)} style={traderHeaderCellStyle}>
                 {renderTraderHeaderContent(trader)}
               </Box>
             ))}
@@ -547,7 +560,7 @@ export default function TraderComparison({
                 <td role="cell" className="compare-label-col" />
                 {traders.map((trader) => (
                   <th
-                    key={trader.id}
+                    key={traderIdentity(trader)}
                     role="columnheader"
                     scope="col"
                     style={{ ...traderHeaderCellStyle, padding: 0, fontWeight: 'inherit' }}
@@ -611,7 +624,7 @@ export default function TraderComparison({
 
                       return (
                         <td
-                          key={trader.id}
+                          key={traderIdentity(trader)}
                           role="cell"
                           className="compare-metric-cell"
                           style={{ textAlign: 'center', position: 'relative', padding: 0 }}
@@ -679,7 +692,7 @@ export default function TraderComparison({
                     const color = CHART_COLORS[i % CHART_COLORS.length]
                     return (
                       <Box
-                        key={trader.id}
+                        key={traderIdentity(trader)}
                         role="listitem"
                         style={{
                           display: 'flex',
