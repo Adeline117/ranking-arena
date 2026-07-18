@@ -1258,6 +1258,8 @@ const en = {
   compareMax5: 'Maximum 5 traders for comparison',
   compareMax10: 'Maximum 10 traders for comparison',
   compareAlreadyAdded: 'Trader already in comparison',
+  compareSomeUnavailable:
+    'Some requested traders are unavailable and were removed from this comparison.',
   compareEmptyTitle: 'Add traders to compare',
   compareEmptyDesc: 'Compare up to 10 traders',
   compareMetrics: 'Metrics',

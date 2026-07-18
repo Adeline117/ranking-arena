@@ -1143,6 +1143,7 @@ const ja = {
   compareMax5: '比較できるのは最大5人までです',
   compareMax10: '比較できるのは最大10人までです',
   compareAlreadyAdded: 'このトレーダーは既に比較に追加されています',
+  compareSomeUnavailable: '一部のトレーダーは現在利用できないため、この比較から削除されました。',
   compareEmptyTitle: 'トレーダーを追加して比較',
   compareEmptyDesc: '最大10人のトレーダーを比較できます',
   compareMetrics: '指標',

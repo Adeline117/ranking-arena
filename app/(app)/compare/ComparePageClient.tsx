@@ -55,6 +55,11 @@ interface TraderCompareData extends CompareAccountRef {
   equity_curve?: Array<{ date: string; roi: number }>
 }
 
+interface CompareLoadResult {
+  traders: TraderCompareData[]
+  missingAccounts: CompareAccountRef[]
+}
+
 function CompareContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -132,7 +137,11 @@ function CompareContent() {
       if (ids || platforms) {
         const parsed = parseCompareAccounts(ids, platforms)
         if (parsed.ok) {
-          tradersPromise = loadTraders(parsed.accounts)
+          tradersPromise = loadTraders(parsed.accounts).then((result) => {
+            if (result && result.missingAccounts.length > 0) {
+              router.replace(buildCompareUrl(result.traders), { scroll: false })
+            }
+          })
         } else {
           logger.warn('Invalid compare URL identity parameters:', parsed.error)
           setError(t('errorOccurred'))
@@ -237,8 +246,8 @@ function CompareContent() {
   }, [searchFailedMessage, searchInput, searchRetryKey])
 
   // Load traders with equity curve data
-  const loadTraders = async (accounts: CompareAccountRef[]) => {
-    if (!accessToken || accounts.length === 0) return
+  const loadTraders = async (accounts: CompareAccountRef[]): Promise<CompareLoadResult | null> => {
+    if (!accessToken || accounts.length === 0) return null
 
     try {
       const res = await fetch(buildCompareApiUrl(accounts, { includeEquity: true }), {
@@ -255,21 +264,27 @@ function CompareContent() {
               t('errorOccurred')
           )
         }
-        return
+        return null
       }
 
       // /api/compare 用 success() 包装 → { success, data: { traders }, meta }。
       // 此前读 data.traders(undefined)导致对比页对所有人 100% 空渲染(2026-07-04 修)。
       const json = await res.json()
-      const list = (json.data?.traders ?? json.traders ?? []) as TraderCompareData[]
+      const payload = json.data ?? json
+      const list = (payload.traders ?? []) as TraderCompareData[]
+      const missingAccounts = Array.isArray(payload.missingAccounts)
+        ? (payload.missingAccounts as CompareAccountRef[])
+        : []
       setTraders(list)
-      setError(null)
+      setError(missingAccounts.length > 0 ? t('compareSomeUnavailable') : null)
       if (list.length >= 2) {
         tryUnlock('first_comparison')
       }
+      return { traders: list, missingAccounts }
     } catch (err) {
       logger.error('Load traders failed:', err)
       setError(t('errorOccurred'))
+      return null
     }
   }
 
@@ -285,8 +300,13 @@ function CompareContent() {
     }
 
     const newAccounts = [...traders.map(({ id, source }) => ({ id, source })), account]
-    await loadTraders(newAccounts)
-    router.replace(buildCompareUrl(newAccounts), { scroll: false })
+    const result = await loadTraders(newAccounts)
+    if (!result) return
+
+    router.replace(buildCompareUrl(result.traders), { scroll: false })
+    if (result.missingAccounts.length > 0) {
+      showToast(t('compareSomeUnavailable'), 'warning')
+    }
   }
 
   // Add trader picked from a search result. Search result ids are

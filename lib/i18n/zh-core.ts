@@ -76,6 +76,7 @@ const zhCore = {
   errorBoundaryTitle: '组件加载出错',
   errorMessage: '抱歉，页面遇到了问题',
   errorOccurred: '出错了，请稍后重试',
+  compareSomeUnavailable: '部分交易员当前不可用，已从本次对比中移除。',
   errorPersist: '如果问题持续存在，请稍后再试',
   errorRefresh: '请尝试刷新页面或返回首页',
   errorTitle: '出错了',
