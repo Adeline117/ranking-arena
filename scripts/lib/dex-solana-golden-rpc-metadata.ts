@@ -100,8 +100,15 @@ export interface DexSolanaGoldenRpcProgramHitSourceDerivation {
   program_hit_projection_sha256: string
 }
 
+export interface DexSolanaGoldenRpcCommonTransactionMembership {
+  stable_transaction_facts_sha256: string
+  canonical_blockhash: string
+  transaction_index: number
+}
+
 export interface DexSolanaGoldenRpcMetadataWithProgramHits {
   golden_rpc_evidence: DexGoldenRpcEvidence
+  common_transaction_membership: DexSolanaGoldenRpcCommonTransactionMembership
   common_program_hit_projection: DexSolanaProgramHitProjection
   common_program_hit_projection_sha256: string
   source_derivations: readonly [
@@ -838,6 +845,11 @@ export function compileDexSolanaGoldenRpcMetadataWithProgramHits(
     }
     return {
       golden_rpc_evidence: compiled.evidence,
+      common_transaction_membership: {
+        stable_transaction_facts_sha256: compiled.evidence.stable_transaction_facts_sha256,
+        canonical_blockhash: compiled.captures[0].verifiedTransaction.canonicalBlock.blockhash,
+        transaction_index: compiled.captures[0].verifiedTransaction.transactionIndex,
+      },
       common_program_hit_projection: first.projection,
       common_program_hit_projection_sha256: firstSha256,
       source_derivations: [first.source, second.source],
