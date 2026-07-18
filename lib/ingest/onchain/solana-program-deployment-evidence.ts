@@ -1,8 +1,29 @@
 import { createHash } from 'node:crypto'
+import { isUint8Array } from 'node:util/types'
 
 import { decodeBase58BytesBounded, hasBase58DecodedByteLength } from '@/lib/utils/base58'
 
-import { exactDataRecord, exactDenseArray } from './solana-evidence-core'
+import {
+  captureSolanaVerifiedChainAnchorEvidence,
+  requireSolanaVerifiedChainAnchor,
+  type SolanaEvidenceRpcOpts,
+  type SolanaVerifiedChainAnchor,
+  type SolanaVerifiedChainAnchorRawCapture,
+} from './solana-evidence'
+import {
+  DEFAULT_SOLANA_EVIDENCE_TIMEOUT_MS,
+  canonicalTimestampMs,
+  disposeSolanaRawRpcEvidenceExchanges,
+  exactDataRecord,
+  exactDenseArray,
+  parseOptsOrThrow,
+  resolveEndpoint,
+  sameEndpoint,
+  solanaEvidenceRpc,
+  type SolanaRawRpcEvidenceExchange,
+} from './solana-evidence-core'
+import { RAW_RPC_REQUEST_HASH_BASIS, RAW_RPC_RESPONSE_HASH_BASIS } from './raw-rpc-evidence'
+import { parseStrictJson } from './strict-json'
 
 export const SOLANA_BPF_LOADER_V3 = 'BPFLoaderUpgradeab1e11111111111111111111111' as const
 export const SOLANA_V3_PROGRAM_ACCOUNT_DATA_BYTES = 36 as const
@@ -24,6 +45,16 @@ const INVALID_PREFIX = 'invalid Solana v3 program deployment observation:'
 const ED25519_PRIME = (1n << 255n) - 19n
 const ED25519_D = mod(-121665n * modPow(121666n, ED25519_PRIME - 2n))
 const ED25519_SQRT_M1 = modPow(2n, (ED25519_PRIME - 1n) / 4n)
+const RAW_RPC_REQUEST_MAX_BYTES = 64 * 1024
+const ANCHOR_RAW_RPC_RESPONSE_MAX_BYTES = 2 * 1024 * 1024
+const PROGRAM_ACCOUNTS_RAW_RPC_RESPONSE_MAX_BYTES = 16 * 1024 * 1024
+const SHA256_RE = /^[0-9a-f]{64}$/
+const REQUIRED_ANCHOR_RAW_LANES = [
+  ['genesis_hash', 'getGenesisHash'],
+  ['finalized_anchor_slot', 'getSlot'],
+  ['finalized_anchor_produced_slots', 'getBlocks'],
+  ['finalized_anchor_block', 'getBlock'],
+] as const
 
 interface ParsedProgramAccount {
   dataBase64: string
@@ -69,6 +100,26 @@ export interface SolanaV3ProgramDeploymentObservation {
     code_sha256: string
     code_hash_basis: 'programdata_allocated_bytes_after_45_byte_state_header_including_trailing_zeros'
   }
+}
+
+export type SolanaV3ProgramDeploymentAnchorRawExchanges = readonly [
+  SolanaRawRpcEvidenceExchange,
+  SolanaRawRpcEvidenceExchange,
+  SolanaRawRpcEvidenceExchange,
+  SolanaRawRpcEvidenceExchange,
+]
+
+export type SolanaV3ProgramDeploymentAnchorRawCapture = Omit<
+  SolanaVerifiedChainAnchorRawCapture,
+  'rawExchanges'
+> & {
+  rawExchanges: SolanaV3ProgramDeploymentAnchorRawExchanges
+}
+
+export interface SolanaV3ProgramDeploymentRawCapture {
+  anchor: SolanaV3ProgramDeploymentAnchorRawCapture
+  programAccountsExchange: SolanaRawRpcEvidenceExchange
+  observation: SolanaV3ProgramDeploymentObservation
 }
 
 function invalid(reason: string): never {
@@ -459,5 +510,272 @@ export function parseSolanaV3ProgramDeploymentObservation(
   } catch (error) {
     if (error instanceof TypeError && error.message.startsWith(INVALID_PREFIX)) throw error
     throw new TypeError(`${INVALID_PREFIX} input could not be inspected safely`)
+  }
+}
+
+function intrinsicRawByteLength(bytes: Uint8Array): number {
+  if (!TYPED_ARRAY_LENGTH_GETTER) invalid('TypedArray length intrinsic is unavailable')
+  const length: unknown = Reflect.apply(TYPED_ARRAY_LENGTH_GETTER, bytes, [])
+  if (!Number.isSafeInteger(length) || Number(length) < 0) {
+    invalid('raw RPC bytes have an invalid internal length')
+  }
+  return Number(length)
+}
+
+function requireRawBodyBytes(
+  value: unknown,
+  kind: 'request' | 'response',
+  maxBytes: number
+): Uint8Array {
+  const body = exactDataRecord(value, ['bytes', 'sha256', 'byteLength', 'hashBasis'])
+  if (!body || !isUint8Array(body.bytes)) invalid(`raw RPC ${kind} evidence is malformed`)
+  const bytes = body.bytes
+  const byteLength = intrinsicRawByteLength(bytes)
+  const expectedHashBasis =
+    kind === 'request' ? RAW_RPC_REQUEST_HASH_BASIS : RAW_RPC_RESPONSE_HASH_BASIS
+  if (
+    byteLength < 1 ||
+    byteLength > maxBytes ||
+    typeof body.byteLength !== 'number' ||
+    !Number.isSafeInteger(body.byteLength) ||
+    body.byteLength !== byteLength ||
+    typeof body.sha256 !== 'string' ||
+    !SHA256_RE.test(body.sha256) ||
+    body.sha256 !== sha256(bytes) ||
+    body.hashBasis !== expectedHashBasis
+  ) {
+    invalid(`raw RPC ${kind} hash, length, or basis is invalid`)
+  }
+  return bytes
+}
+
+function requireRawExchangeBodies(
+  exchange: SolanaRawRpcEvidenceExchange,
+  expectedLane: SolanaRawRpcEvidenceExchange['lane'],
+  expectedMethod: string,
+  expectedEndpoint: SolanaVerifiedChainAnchor['endpoint'],
+  responseMaxBytes: number
+): { request: Uint8Array; response: Uint8Array } {
+  const root = exactDataRecord(exchange, [
+    'chain',
+    'trustBoundary',
+    'lane',
+    'method',
+    'endpoint',
+    'httpStatus',
+    'completedAt',
+    'request',
+    'response',
+  ])
+  const endpoint = root
+    ? exactDataRecord(root.endpoint, ['providerId', 'endpointId', 'connectionHash'])
+    : null
+  if (
+    !root ||
+    !endpoint ||
+    root.chain !== 'solana' ||
+    root.trustBoundary !== 'json_rpc_result_transport_only_semantic_lane_not_yet_verified' ||
+    root.lane !== expectedLane ||
+    root.method !== expectedMethod ||
+    typeof root.httpStatus !== 'number' ||
+    !Number.isSafeInteger(root.httpStatus) ||
+    root.httpStatus < 200 ||
+    root.httpStatus >= 300 ||
+    canonicalTimestampMs(root.completedAt) === null ||
+    endpoint.providerId !== expectedEndpoint.providerId ||
+    endpoint.endpointId !== expectedEndpoint.endpointId ||
+    endpoint.connectionHash !== expectedEndpoint.connectionHash
+  ) {
+    invalid('raw RPC exchange conflicts with its verified endpoint or lane')
+  }
+  return {
+    request: requireRawBodyBytes(root.request, 'request', RAW_RPC_REQUEST_MAX_BYTES),
+    response: requireRawBodyBytes(root.response, 'response', responseMaxBytes),
+  }
+}
+
+function decodeRawJson(bytes: Uint8Array, label: string): unknown {
+  let text: string
+  try {
+    text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
+  } catch {
+    invalid(`${label} is not valid UTF-8`)
+  }
+  try {
+    return parseStrictJson(text)
+  } catch {
+    invalid(`${label} is not strict JSON`)
+  }
+}
+
+function requireProgramAccountsRawResult(
+  exchange: SolanaRawRpcEvidenceExchange,
+  endpoint: SolanaVerifiedChainAnchor['endpoint'],
+  programId: string,
+  programDataAddress: string,
+  minimumContextSlot: number
+): unknown {
+  const bodies = requireRawExchangeBodies(
+    exchange,
+    'program_accounts',
+    'getMultipleAccounts',
+    endpoint,
+    PROGRAM_ACCOUNTS_RAW_RPC_RESPONSE_MAX_BYTES
+  )
+  const request = exactDataRecord(decodeRawJson(bodies.request, 'raw RPC request'), [
+    'jsonrpc',
+    'id',
+    'method',
+    'params',
+  ])
+  const params = request ? exactDenseArray(request.params) : null
+  const addresses = params ? exactDenseArray(params[0]) : null
+  const config =
+    params && params.length === 2
+      ? exactDataRecord(params[1], ['commitment', 'encoding', 'minContextSlot'])
+      : null
+  if (
+    !request ||
+    request.jsonrpc !== '2.0' ||
+    request.id !== 1 ||
+    request.method !== 'getMultipleAccounts' ||
+    !params ||
+    params.length !== 2 ||
+    !addresses ||
+    addresses.length !== 2 ||
+    addresses[0] !== programId ||
+    addresses[1] !== programDataAddress ||
+    !config ||
+    config.commitment !== 'finalized' ||
+    config.encoding !== 'base64' ||
+    config.minContextSlot !== minimumContextSlot
+  ) {
+    invalid('raw program account request does not match the verified anchor')
+  }
+
+  const response = exactDataRecord(decodeRawJson(bodies.response, 'raw RPC response'), [
+    'jsonrpc',
+    'id',
+    'result',
+  ])
+  if (!response || response.jsonrpc !== '2.0' || response.id !== 1) {
+    invalid('raw program account response is not a successful JSON-RPC result')
+  }
+  return response.result
+}
+
+function takeAnchorRawExchanges(
+  value: unknown,
+  ownedExchanges: SolanaRawRpcEvidenceExchange[]
+): SolanaV3ProgramDeploymentAnchorRawExchanges {
+  const items = exactDenseArray(value)
+  if (!items || items.length !== REQUIRED_ANCHOR_RAW_LANES.length) {
+    invalid('verified anchor raw exchange set is incomplete')
+  }
+  const exchanges = items as SolanaRawRpcEvidenceExchange[]
+  for (const exchange of exchanges) ownedExchanges.push(exchange)
+  return [exchanges[0], exchanges[1], exchanges[2], exchanges[3]]
+}
+
+export function disposeSolanaV3ProgramDeploymentRawCapture(
+  capture: SolanaV3ProgramDeploymentRawCapture
+): void {
+  disposeSolanaRawRpcEvidenceExchanges([
+    ...capture.anchor.rawExchanges,
+    capture.programAccountsExchange,
+  ])
+}
+
+export async function captureSolanaV3ProgramDeploymentObservation(
+  programId: string,
+  opts: SolanaEvidenceRpcOpts = {}
+): Promise<SolanaV3ProgramDeploymentRawCapture> {
+  const ownedExchanges: SolanaRawRpcEvidenceExchange[] = []
+  try {
+    const canonicalProgramId = publicKey(programId, 'program_id')
+    const programData = findSolanaV3ProgramDataAddress(canonicalProgramId)
+    const parsedOpts = parseOptsOrThrow(opts)
+    const endpoint = resolveEndpoint(parsedOpts)
+    if (endpoint === null) invalid('approved RPC endpoint is unavailable')
+
+    const capturedAnchor = await captureSolanaVerifiedChainAnchorEvidence(opts)
+    const anchorRawExchanges = takeAnchorRawExchanges(capturedAnchor.rawExchanges, ownedExchanges)
+    const verifiedAnchor = requireSolanaVerifiedChainAnchor(capturedAnchor.evidence)
+    if (!sameEndpoint(verifiedAnchor.endpoint, endpoint.identity)) {
+      invalid('program account endpoint differs from the verified anchor endpoint')
+    }
+    for (let index = 0; index < anchorRawExchanges.length; index += 1) {
+      const [lane, method] = REQUIRED_ANCHOR_RAW_LANES[index]
+      requireRawExchangeBodies(
+        anchorRawExchanges[index],
+        lane,
+        method,
+        verifiedAnchor.endpoint,
+        ANCHOR_RAW_RPC_RESPONSE_MAX_BYTES
+      )
+    }
+
+    const minimumContextSlot = verifiedAnchor.finalizedRootSlot
+    const result = await solanaEvidenceRpc(
+      endpoint,
+      'getMultipleAccounts',
+      [
+        [canonicalProgramId, programData.address],
+        {
+          commitment: 'finalized',
+          encoding: 'base64',
+          minContextSlot: minimumContextSlot,
+        },
+      ],
+      parsedOpts.timeoutMs ?? DEFAULT_SOLANA_EVIDENCE_TIMEOUT_MS,
+      { lane: 'program_accounts' }
+    )
+    if (!result.ok) {
+      invalid('program account RPC capture is unavailable')
+    }
+    const programAccountsExchange = result.rawExchange
+    if (programAccountsExchange === undefined) invalid('program account raw capture is unavailable')
+    ownedExchanges.push(programAccountsExchange)
+    const rawResult = requireProgramAccountsRawResult(
+      programAccountsExchange,
+      verifiedAnchor.endpoint,
+      canonicalProgramId,
+      programData.address,
+      minimumContextSlot
+    )
+
+    const observation = parseSolanaV3ProgramDeploymentObservation({
+      program_id: canonicalProgramId,
+      programdata_address: programData.address,
+      requested_min_context_slot: minimumContextSlot,
+      result: rawResult,
+    })
+    if (
+      observation.program_id !== canonicalProgramId ||
+      observation.programdata_address !== programData.address ||
+      observation.programdata_bump_seed !== programData.bump_seed ||
+      observation.requested_min_context_slot_decimal !== String(minimumContextSlot)
+    ) {
+      invalid('program deployment observation conflicts with the capture request')
+    }
+    if (ownedExchanges.length !== 5) invalid('program deployment raw capture is incomplete')
+
+    return {
+      anchor: {
+        evidence: capturedAnchor.evidence,
+        verified: verifiedAnchor,
+        rawExchanges: anchorRawExchanges,
+      },
+      programAccountsExchange,
+      observation,
+    }
+  } catch (error) {
+    try {
+      disposeSolanaRawRpcEvidenceExchanges(ownedExchanges)
+    } catch {
+      throw new TypeError(`${INVALID_PREFIX} captured bytes could not be cleared`)
+    }
+    if (error instanceof TypeError && error.message.startsWith(INVALID_PREFIX)) throw error
+    throw new TypeError(`${INVALID_PREFIX} capture failed closed`)
   }
 }
