@@ -71,11 +71,18 @@ main{min-height:100vh;background:var(--bg-primary,#0B0A10)}
 
 /* Three-column layout — Critical for CLS prevention.
    min-height reserves space before the grid content loads. */
-.three-col-layout{display:grid;grid-template-columns:1fr;gap:20px;align-items:start;max-width:1400px;margin:0 auto;padding:0 16px;min-height:calc(100vh - 120px);contain:layout style}
-@media(min-width:1024px){.three-col-layout{grid-template-columns:200px 1fr}}
-@media(min-width:1280px){.three-col-layout{grid-template-columns:240px 1fr 260px}}
+.three-col-layout{display:grid;grid-template-columns:240px 1fr 260px;gap:24px;align-items:start;max-width:1400px;margin:0 auto;padding:0 20px;min-height:calc(100vh - 120px);contain:layout style}
+@media(min-width:1024px) and (max-width:1279px){.three-col-layout{grid-template-columns:200px 1fr}.three-col-right{display:none!important}}
+@media(min-width:1280px) and (max-width:1440px){.three-col-layout{grid-template-columns:220px 1fr 240px}}
 @media(min-width:1441px){.three-col-layout{max-width:1600px;grid-template-columns:260px 1fr 280px}}
-@media(max-width:1023px){.three-col-layout{display:block;padding:0 12px}.three-col-left,.three-col-right{display:none !important}}
+@media(max-width:1023px){.three-col-layout{display:block;padding:0 12px}.three-col-left,.three-col-right{display:none!important}}
+@media(max-width:480px){.three-col-layout{padding:0 8px}}
+.three-col-layout.three-col-no-left{grid-template-columns:1fr 260px}
+.three-col-layout.three-col-no-left.three-col-no-right{grid-template-columns:1fr}
+.three-col-layout.three-col-no-right:not(.three-col-no-left){grid-template-columns:240px 1fr}
+@media(min-width:1024px) and (max-width:1279px){.three-col-layout.three-col-no-left{grid-template-columns:1fr}}
+@media(min-width:1280px) and (max-width:1440px){.three-col-layout.three-col-no-left{grid-template-columns:1fr 240px}.three-col-layout.three-col-no-left.three-col-no-right{grid-template-columns:1fr}}
+@media(min-width:1441px){.three-col-layout.three-col-no-left{grid-template-columns:1fr 280px}.three-col-layout.three-col-no-left.three-col-no-right{grid-template-columns:1fr}.three-col-layout.three-col-no-right:not(.three-col-no-left){grid-template-columns:260px 1fr}}
 .three-col-center{min-height:calc(100vh - 60px);min-width:0;overflow-x:clip}
 
 /* Safe Area (iPhone 刘海屏) */

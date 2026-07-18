@@ -15,11 +15,19 @@ import { SectionErrorBoundary } from '../utils/ErrorBoundary'
 import DeferredMount from '../utils/DeferredMount'
 // RankingSkeleton removed from Phase 2 — see SSR comment above
 import { features } from '@/lib/features'
+import enFull from '@/lib/i18n/en'
+import { registerFullDict } from '@/lib/i18n'
 // Lazy-load sidebar widgets
 const HotDiscussions = lazy(() => import('../sidebar/HotDiscussions'))
 const WatchlistMarket = lazy(() => import('../sidebar/WatchlistMarket'))
 const NewsFlash = lazy(() => import('../sidebar/NewsFlash'))
 const TrendingHashtags = lazy(() => import('../sidebar/TrendingHashtags'))
+
+// HomePage is already a deferred Phase-2 chunk. Register the full English
+// dictionary in that same chunk before rendering it so slow connections never
+// expose raw keys such as "sidebarHotDiscussions" while a second i18n chunk
+// catches up. This does not increase the provider-light server shell or its LCP.
+registerFullDict('en', enFull)
 
 // PERF P1-PERF-2 (audit): stagger widget mounts so each widget's SWR fetch
 // fires on a different tick, preventing the simultaneous 4-way network burst

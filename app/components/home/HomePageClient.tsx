@@ -122,10 +122,12 @@ export default function HomePageClient({
     if (ssrControls) ssrControls.style.display = 'none'
   }, [])
 
-  // Hide full SSR table once React data is ready
+  // Hide the complete first-paint shell once React data is ready. Keeping the
+  // source strip and both sidebar placeholders in the same shell prevents a
+  // one-column → three-column jump while the deferred client bundle downloads.
   useLayoutEffect(() => {
     if (loading) return
-    const el = document.getElementById('ssr-ranking-table')
+    const el = document.getElementById('ssr-home-content-shell')
     if (el) el.style.display = 'none'
   }, [loading])
 
