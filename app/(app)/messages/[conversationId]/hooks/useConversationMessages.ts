@@ -27,6 +27,7 @@ import type {
   MessageReaction,
 } from '../components/types'
 import { getLocaleFromLanguage } from '@/lib/utils/format'
+import { buildConversationLoginHref } from '../login-intent'
 
 interface UseConversationMessagesOptions {
   conversationId: string
@@ -49,6 +50,7 @@ export function useConversationMessages({
   const router = useRouter()
   const { showToast } = useToast()
   const { t, language } = useLanguage()
+  const loginHref = buildConversationLoginHref(conversationId)
   const [messages, setMessages] = useState<Message[]>([])
   const [otherUser, setOtherUser] = useState<OtherUser | null>(null)
   const [loading, setLoading] = useState(true)
@@ -110,7 +112,7 @@ export function useConversationMessages({
           const auth = await getAuthSession()
           if (!auth) {
             showToast(t('pleaseLogin'), 'error')
-            router.push('/login?redirect=/inbox')
+            router.push(loginHref)
             return
           }
           authToken = auth.accessToken
@@ -132,7 +134,7 @@ export function useConversationMessages({
             }
           }
           showToast(t('loginExpiredPleaseRelogin'), 'error')
-          router.push('/login?redirect=/inbox')
+          router.push(loginHref)
           return
         }
         const data = await res.json().catch(() => ({}))
@@ -158,7 +160,7 @@ export function useConversationMessages({
         setLoading(false)
       }
     },
-    [showToast, router, t]
+    [showToast, router, t, loginHref]
   )
 
   const loadOlderMessages = useCallback(async () => {
@@ -354,7 +356,7 @@ export function useConversationMessages({
       const auth = await getAuthSession()
       if (!auth) {
         showToast(t('pleaseLogin'), 'error')
-        router.push('/login?redirect=/inbox')
+        router.push(loginHref)
         return
       }
 
@@ -441,7 +443,7 @@ export function useConversationMessages({
         showToast(em, 'error')
       }
     },
-    [userId, otherUser, showToast, t, router, replyingTo]
+    [userId, otherUser, showToast, t, router, replyingTo, loginHref]
   )
 
   const handleRetry = useCallback(
@@ -452,14 +454,14 @@ export function useConversationMessages({
         const refreshed = await refreshAuthToken()
         if (!refreshed) {
           showToast(t('loginExpiredPleaseRelogin'), 'error')
-          router.push('/login?redirect=/inbox')
+          router.push(loginHref)
           return
         }
       }
       const currentAuth = auth || (await getAuthSession())
       if (!currentAuth) {
         showToast(t('pleaseLogin'), 'error')
-        router.push('/login?redirect=/inbox')
+        router.push(loginHref)
         return
       }
       setMessages((prev) => updateMessageStatus(prev, failedMsg.id, false, 'sending'))
@@ -514,7 +516,7 @@ export function useConversationMessages({
         showToast(em, 'error')
       }
     },
-    [otherUser, showToast, t, router]
+    [otherUser, showToast, t, router, loginHref]
   )
 
   const handleVoiceSent = useCallback(
@@ -637,7 +639,7 @@ export function useConversationMessages({
       const auth = await getAuthSession()
       if (!auth) {
         showToast(t('pleaseLogin'), 'error')
-        router.push('/login?redirect=/inbox')
+        router.push(loginHref)
         return
       }
 
@@ -691,7 +693,7 @@ export function useConversationMessages({
         showToast(t('operationFailed'), 'error')
       }
     },
-    [userId, showToast, t, router]
+    [userId, showToast, t, router, loginHref]
   )
 
   return {

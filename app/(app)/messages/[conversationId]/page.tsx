@@ -22,6 +22,7 @@ import MediaPreview from './components/MediaPreview'
 import { useConversationAuth } from './hooks/useConversationAuth'
 import { useConversationMessages } from './hooks/useConversationMessages'
 import { useFileUpload } from './hooks/useFileUpload'
+import { buildConversationLoginHref } from './login-intent'
 
 export default function ConversationPage({
   params,
@@ -50,7 +51,7 @@ export default function ConversationPage({
   const isTypingRef = useRef(false)
 
   // Auth hook
-  const { email, userId, authChecked, accessToken } = useConversationAuth()
+  const { email, userId, authChecked, accessToken } = useConversationAuth(conversationId)
 
   // Messages hook
   const msgHook = useConversationMessages({ conversationId, userId, accessToken })
@@ -298,7 +299,7 @@ export default function ConversationPage({
               {t('loginToViewMessages')}
             </Text>
             <Link
-              href="/login"
+              href={buildConversationLoginHref(conversationId)}
               style={{
                 display: 'inline-block',
                 padding: '12px 24px',
