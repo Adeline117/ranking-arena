@@ -1191,6 +1191,7 @@ const ko = {
   compareMax5: '비교는 최대 5명까지 가능합니다',
   compareMax10: '비교는 최대 10명까지 가능합니다',
   compareAlreadyAdded: '이미 비교에 추가된 트레이더입니다',
+  compareSomeUnavailable: '일부 트레이더를 현재 사용할 수 없어 이번 비교에서 제거했습니다.',
   compareEmptyTitle: '비교할 트레이더를 추가하세요',
   compareEmptyDesc: '최대 10명의 트레이더를 비교하세요',
   compareMetrics: '지표',

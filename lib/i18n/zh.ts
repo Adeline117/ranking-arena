@@ -1234,6 +1234,7 @@ const zh = {
   compareMax5: '最多只能对比 5 位交易员',
   compareMax10: '最多只能对比 10 位交易员',
   compareAlreadyAdded: '该交易员已在对比列表中',
+  compareSomeUnavailable: '部分交易员当前不可用，已从本次对比中移除。',
   compareEmptyTitle: '请添加交易员进行对比',
   compareEmptyDesc: '最多可对比 10 位交易员',
   compareMetrics: '指标对比',

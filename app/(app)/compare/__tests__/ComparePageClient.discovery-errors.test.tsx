@@ -49,6 +49,8 @@ jest.mock('@/app/components/Providers/LanguageProvider', () => ({
           compareSearchNoResults: 'No search results',
           compareSearchPlaceholder: 'Search traders',
           compareSearching: 'Searching',
+          compareSomeUnavailable:
+            'Some requested traders are unavailable and were removed from this comparison.',
           compareTraders: 'Compare traders',
           loadFollowingFailed: 'Failed to load following',
           loading: 'Loading',
@@ -102,6 +104,8 @@ function okJson(body: unknown) {
 describe('ComparePageClient discovery failures', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockSearchParams.delete('ids')
+    mockSearchParams.delete('platforms')
     mockGetUser.mockResolvedValue({ data: { user: { id: 'viewer-1' } } })
   })
 
@@ -192,5 +196,44 @@ describe('ComparePageClient discovery failures', () => {
     await waitFor(() => expect(followingAttempts).toBe(2))
     expect(await screen.findByText('Alice')).toBeInTheDocument()
     expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('reports unresolved URL accounts and replaces the URL with only loaded identities', async () => {
+    mockSearchParams.set('ids', 'alice,ghost')
+    mockSearchParams.set('platforms', 'binance,bybit')
+    global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url === '/api/subscription') {
+        return okJson({ subscription: { tier: 'pro' } })
+      }
+      if (url.startsWith('/api/following')) {
+        return okJson({ items: [] })
+      }
+      if (url.startsWith('/api/compare')) {
+        return okJson({
+          data: {
+            traders: [
+              {
+                id: 'alice',
+                source: 'binance',
+                handle: 'Alice',
+                roi: 12,
+              },
+            ],
+            missingAccounts: [{ id: 'ghost', source: 'bybit' }],
+          },
+        })
+      }
+      throw new Error(`Unexpected fetch: ${url}`)
+    }) as unknown as typeof fetch
+
+    render(<ComparePageClient />)
+
+    expect(await screen.findByText(/Some requested traders are unavailable/)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(mockReplace).toHaveBeenCalledWith('/compare?ids=alice&platforms=binance', {
+        scroll: false,
+      })
+    )
   })
 })

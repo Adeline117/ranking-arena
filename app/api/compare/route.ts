@@ -165,10 +165,12 @@ export const GET = withAuth(
     const sortedData = accounts
       .map((_, i) => detailResults[i])
       .filter(Boolean) as TraderCompareData[]
+    const missingAccounts = accounts.filter((_, i) => detailResults[i] === null)
 
     return success(
       {
         traders: sortedData,
+        missingAccounts,
         requestedIds: accounts.map((account) => account.id),
         requestedPlatforms: accounts.map((account) => account.source),
         requestedAccounts: accounts,

@@ -400,6 +400,7 @@ describe('GET /api/compare', () => {
       { id: 't1', source: 'binance_futures' },
       { id: 't2', source: 'bybit' },
     ])
+    expect(body.data.missingAccounts).toEqual([])
     expect(mockResolveTrader).toHaveBeenNthCalledWith(1, expect.anything(), {
       handle: 't1',
       platform: 'binance_futures',
@@ -409,6 +410,34 @@ describe('GET /api/compare', () => {
       platform: 'bybit',
     })
     expect(body.data.foundCount).toBe(2)
+  })
+
+  it('returns the exact account identities that could not be resolved', async () => {
+    mockResolveTrader
+      .mockResolvedValueOnce({ platform: 'binance_futures', traderKey: 't1', handle: 'Trader1' })
+      .mockResolvedValueOnce(null)
+    mockGetTraderDetail.mockResolvedValueOnce({
+      source: 'binance_futures',
+      sourceId: 't1',
+      handle: 'Trader1',
+      roi: 45.2,
+    })
+    mockToTraderPageData.mockReturnValueOnce({
+      performance: { roi: 45.2 },
+      profile: { handle: 'Trader1', avatar_url: null },
+      equityCurve: null,
+    })
+
+    const req = new NextRequest(
+      'http://localhost/api/compare?ids=t1,missing&platforms=binance_futures,bybit'
+    )
+    const res = await GET(req)
+    const body = await res.json()
+
+    expect(res.status).toBe(200)
+    expect(body.data.traders).toHaveLength(1)
+    expect(body.data.missingAccounts).toEqual([{ id: 'missing', source: 'bybit' }])
+    expect(body.data.foundCount).toBe(1)
   })
 
   // --- DB Error ---

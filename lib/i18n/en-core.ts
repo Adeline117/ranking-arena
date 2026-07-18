@@ -133,6 +133,8 @@ const enCore = {
 
   // ── Errors ──────────────────────────────────────────────────────────
   errorOccurred: 'Something went wrong, please try again',
+  compareSomeUnavailable:
+    'Some requested traders are unavailable and were removed from this comparison.',
   serverError: 'Server is temporarily unavailable, please try again',
   notFound: 'Content not found or has been removed',
   noPermission: "You don't have permission to access this",
