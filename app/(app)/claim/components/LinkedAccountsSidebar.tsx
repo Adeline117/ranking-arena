@@ -6,13 +6,7 @@ import { Box, Text } from '@/app/components/base'
 import { LinkedTrader } from './types'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
-export function LinkedAccountsSidebar({
-  linkedTraders,
-  onRefresh: _onRefresh,
-}: {
-  linkedTraders: LinkedTrader[]
-  onRefresh: () => void
-}) {
+export function LinkedAccountsSidebar({ linkedTraders }: { linkedTraders: LinkedTrader[] }) {
   const { t } = useLanguage()
 
   if (linkedTraders.length === 0) return null
