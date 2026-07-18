@@ -95,6 +95,7 @@ export async function GET(
 
       const payload = await requestTierC({
         sourceSlug: resolved.source,
+        fetchRegion: resolved.fetchRegion,
         exchangeTraderId: resolved.exchangeTraderId,
         timeframe: tfToInt(tf),
         surface: kind,
