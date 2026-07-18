@@ -18,23 +18,23 @@ function formatCount(n: number): string {
 export interface HomeHeroProps {
   /** Total trader count from server */
   traderCount?: number
-  /** Total exchange count from server */
-  exchangeCount?: number
+  /** Total live ranking source-board count from server */
+  sourceBoardCount?: number
 }
 
 export default function HomeHero({
   traderCount: traderCountProp,
-  exchangeCount: exchangeCountProp,
+  sourceBoardCount: sourceBoardCountProp,
 }: HomeHeroProps) {
   useLanguage() // subscribe to language changes for re-render
 
   const traderNum = traderCountProp ?? PRODUCT_FACTS.fallbackRankedTraderCount
-  const exchangeNum = exchangeCountProp ?? PRODUCT_FACTS.fallbackExchangeCount
+  const sourceBoardNum = sourceBoardCountProp ?? PRODUCT_FACTS.fallbackSourceBoardCount
   const traderCountStr = formatCount(traderNum)
-  const exchangeCountStr = `${exchangeNum}+`
+  const sourceBoardCountStr = `${sourceBoardNum}+`
 
   const subtitle = t('heroSubtitle' as Parameters<typeof t>[0])
-    .replace('{exchanges}', exchangeCountStr.replace('+', ''))
+    .replace('{exchanges}', sourceBoardCountStr.replace('+', ''))
     .replace('{traders}', traderCountStr)
 
   return (
@@ -135,9 +135,9 @@ export default function HomeHero({
         >
           {[
             {
-              num: exchangeNum,
+              num: sourceBoardNum,
               suffix: '+',
-              fallback: exchangeCountStr,
+              fallback: sourceBoardCountStr,
               label: t('heroStatExchanges' as Parameters<typeof t>[0]),
               delay: 0.2,
             },

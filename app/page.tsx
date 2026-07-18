@@ -55,8 +55,8 @@ export const revalidate = 300
 // Site-level JSON-LD structured data. The hero RPC currently reports a
 // deduplicated source-family count, not a canonical arena.exchanges count, so
 // describe it as source coverage and fall back to neutral wording when absent.
-function buildOrganizationJsonLd(exchangeCount?: number | null) {
-  const sourceCoverage = formatTrackedSourceCoverage(exchangeCount)
+function buildOrganizationJsonLd(sourceBoardCount?: number | null) {
+  const sourceCoverage = formatTrackedSourceCoverage(sourceBoardCount)
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',
@@ -117,7 +117,7 @@ export default async function Page() {
           nav. SkipLink uses useLanguage()'s hydration-safe fallback, so it works
           without Providers (homepage deliberately omits them for LCP). */}
       <SkipLink targetId="main-content" />
-      <JsonLd data={buildOrganizationJsonLd(heroStats?.exchangeCount)} />
+      <JsonLd data={buildOrganizationJsonLd(heroStats?.sourceBoardCount)} />
       <JsonLd data={itemListJsonLd} />
 
       {/* SSR TopNav — stays visible permanently (see HomePage.tsx). Outside
@@ -136,7 +136,7 @@ export default async function Page() {
           id="ssr-hero-shell"
           style={{ maxWidth: 1400, margin: '0 auto', padding: '12px 20px 0' }}
         >
-          <HomeHeroSSR exchangeCount={heroStats?.exchangeCount} />
+          <HomeHeroSSR sourceBoardCount={heroStats?.sourceBoardCount} />
         </div>
 
         {/* Keep the final desktop information architecture visible from the

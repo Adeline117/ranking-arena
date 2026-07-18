@@ -9,7 +9,8 @@ import {
 describe('product facts', () => {
   it('uses one operational fallback when live facts are unavailable', () => {
     expect(buildProductFactsSnapshot()).toEqual({
-      exchangeCount: PRODUCT_FACTS.fallbackExchangeCount,
+      sourceBoardCount: PRODUCT_FACTS.fallbackSourceBoardCount,
+      exchangeCount: PRODUCT_FACTS.fallbackSourceBoardCount,
       rankedTraderCount: PRODUCT_FACTS.fallbackRankedTraderCount,
       leaderboardRefreshHours: 2,
       leaderboardRefreshLabel: '2h',
@@ -20,12 +21,20 @@ describe('product facts', () => {
 
   it('prefers valid live counts without changing the scheduler cadence', () => {
     expect(
-      buildProductFactsSnapshot({ exchangeCount: 21, traderCount: 12_345, isDefault: false })
+      buildProductFactsSnapshot({ sourceBoardCount: 21, traderCount: 12_345, isDefault: false })
     ).toMatchObject({
+      sourceBoardCount: 21,
       exchangeCount: 21,
       rankedTraderCount: 12_345,
       leaderboardRefreshLabel: '2h',
       isFallback: false,
+    })
+  })
+
+  it('accepts the legacy exchangeCount response without changing its meaning', () => {
+    expect(buildProductFactsSnapshot({ exchangeCount: 19 })).toMatchObject({
+      sourceBoardCount: 19,
+      exchangeCount: 19,
     })
   })
 

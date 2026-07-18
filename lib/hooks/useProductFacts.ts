@@ -4,6 +4,8 @@ import { useQuery } from '@tanstack/react-query'
 import { buildProductFactsSnapshot, type ProductFactsSnapshot } from '@/lib/config/product-facts'
 
 interface HeroStatsResponse {
+  sourceBoardCount?: number
+  /** Deprecated compatibility field from older deployments. */
   exchangeCount?: number
   traderCount?: number
   isDefault?: boolean
@@ -23,5 +25,8 @@ export function useProductFacts(): ProductFactsSnapshot {
     retry: 1,
   })
 
-  return buildProductFactsSnapshot(data)
+  return buildProductFactsSnapshot({
+    ...data,
+    sourceBoardCount: data?.sourceBoardCount ?? data?.exchangeCount,
+  })
 }

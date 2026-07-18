@@ -7,8 +7,10 @@
  */
 
 export const PRODUCT_FACTS = {
-  /** Deduplicated active exchange families represented in the leaderboard. */
-  fallbackExchangeCount: 18,
+  /** Live 90D source boards represented in the public rankings. */
+  fallbackSourceBoardCount: 28,
+  /** @deprecated Compatibility alias; this count is source boards, not exchanges. */
+  fallbackExchangeCount: 28,
   /** Ranked 90D population, also used as the percentile denominator fallback. */
   fallbackRankedTraderCount: 9_600,
   /** BullMQ `SCORE_INTERVALS_MS` in worker/src/scheduler.ts. */
@@ -35,6 +37,8 @@ export function formatTrackedSourceCoverage(count?: number | null): string {
 }
 
 export interface ProductFactsSnapshot {
+  sourceBoardCount: number
+  /** @deprecated Compatibility alias; use sourceBoardCount. */
   exchangeCount: number
   rankedTraderCount: number
   leaderboardRefreshHours: number
@@ -44,21 +48,26 @@ export interface ProductFactsSnapshot {
 }
 
 export function buildProductFactsSnapshot(input?: {
+  sourceBoardCount?: number | null
+  /** Legacy /api/hero-stats field accepted during the contract transition. */
   exchangeCount?: number | null
   traderCount?: number | null
   isDefault?: boolean
 }): ProductFactsSnapshot {
-  const exchangeCount =
-    typeof input?.exchangeCount === 'number' && input.exchangeCount > 0
-      ? input.exchangeCount
-      : PRODUCT_FACTS.fallbackExchangeCount
+  const sourceBoardCount =
+    typeof input?.sourceBoardCount === 'number' && input.sourceBoardCount > 0
+      ? input.sourceBoardCount
+      : typeof input?.exchangeCount === 'number' && input.exchangeCount > 0
+        ? input.exchangeCount
+        : PRODUCT_FACTS.fallbackSourceBoardCount
   const rankedTraderCount =
     typeof input?.traderCount === 'number' && input.traderCount > 0
       ? input.traderCount
       : PRODUCT_FACTS.fallbackRankedTraderCount
 
   return {
-    exchangeCount,
+    sourceBoardCount,
+    exchangeCount: sourceBoardCount,
     rankedTraderCount,
     leaderboardRefreshHours: PRODUCT_FACTS.leaderboardRefreshHours,
     leaderboardRefreshLabel: `${PRODUCT_FACTS.leaderboardRefreshHours}h`,
