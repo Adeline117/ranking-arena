@@ -7,15 +7,19 @@
  */
 
 import type { Metadata } from 'next'
+import { cache } from 'react'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { resolveTrader } from '@/lib/data/unified'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
 import { createOgVerificationProof } from '@/lib/utils/og-verification-proof'
 import WrappedCardClient from './WrappedCardClient'
 import WrappedEmptyState from './WrappedEmptyState'
+import WrappedUnavailableState from './WrappedUnavailableState'
 import { BASE_URL } from '@/lib/constants/urls'
 
-export const revalidate = 300
+// This route only reads public ranking data. Its searchParams prop keeps each
+// platform/window variant request-rendered; leave the segment on Next's
+// default "auto" policy and use request-scoped React cache below for dedupe.
 
 // Platform display label map
 const PLATFORM_LABELS: Record<string, string> = {
@@ -72,20 +76,20 @@ interface Props {
 
 // SSR timeout: during cron contention, resolveTrader can block on row locks
 // for 30+ seconds. Race against this timeout so users get a fast, retryable
-// error page (NOT a 404 — the trader may well exist).
+// unavailable state (NOT a 404 — the trader may well exist).
 const SSR_TIMEOUT_MS = 3000
 
-// Discriminated result so the page can tell "handle genuinely does not
-// exist" (→ notFound) apart from transient timeouts / DB errors (→ error
-// boundary, retryable). Collapsing both into null was serving 404s for
-// traders that exist whenever the DB was slow.
+// Discriminated result so the page can tell "no matching snapshot" (→ empty
+// state) apart from transient timeouts / DB errors (→ retryable unavailable
+// state). Collapsing them was serving a false missing/fatal state for traders
+// that exist whenever the DB was slow.
 type WrappedFetchResult =
   | { ok: true; data: WrappedTraderData }
   | { ok: false; reason: 'not_found' | 'timeout' | 'error' }
 
 const RESOLVE_TIMEOUT = Symbol('resolve-timeout')
 
-async function fetchWrappedData(
+async function fetchWrappedDataUncached(
   handle: string,
   platform?: string,
   windowParam = '7d'
@@ -200,6 +204,11 @@ async function fetchWrappedData(
   }
 }
 
+// generateMetadata and the page render both need the same public snapshot.
+// React cache is scoped to one server request, so this dedupes that work
+// without persisting transient timeout/error results across users or requests.
+const fetchWrappedData = cache(fetchWrappedDataUncached)
+
 export async function generateMetadata({ params, searchParams }: Props): Promise<Metadata> {
   const { handle } = await params
   const { platform, window: windowParam = '7d' } = await searchParams
@@ -270,8 +279,6 @@ export async function generateMetadata({ params, searchParams }: Props): Promise
   }
 }
 
-export const dynamic = 'force-dynamic'
-
 export default async function WrappedPage({ params, searchParams }: Props) {
   const { handle } = await params
   const { platform, window: windowParam = '7d' } = await searchParams
@@ -283,9 +290,10 @@ export default async function WrappedPage({ params, searchParams }: Props) {
     // (e.g. a logged-in user viewing their own handle) but simply has no
     // ranking data yet. Render a dedicated "no rank card yet" empty state
     // instead of the generic 404 dead-end. Transient timeouts / DB errors
-    // still surface the segment's error.tsx (retryable).
+    // render an explicit retryable state without replacing the entire route
+    // with its fatal error boundary.
     if (result.reason === 'not_found') return <WrappedEmptyState handle={decoded} />
-    throw new Error(`wrapped card temporarily unavailable (${result.reason}) for handle=${decoded}`)
+    return <WrappedUnavailableState handle={decoded} reason={result.reason} />
   }
   const data = result.data
 

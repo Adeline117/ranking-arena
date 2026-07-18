@@ -271,6 +271,7 @@ const zhCore = {
   sectionLoadFailed: '该区块加载失败',
   serverError: '服务器开小差了，请稍后重试',
   serverUnavailable: '服务器暂时不可用，请稍后重试',
+  serviceTemporarilyUnavailable: '服务暂时不可用',
   settings: '设置',
   share: '分享',
   sharpeRatio: '夏普比率',
