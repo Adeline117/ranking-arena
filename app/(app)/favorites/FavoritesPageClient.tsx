@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useState, useRef } from 'react'
+import { useCallback, useEffect, useState, useRef } from 'react'
 import Link from 'next/link'
 import { tokens, alpha } from '@/lib/design-tokens'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { Box, Text, Button } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
+import ErrorState from '@/app/components/ui/ErrorState'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
@@ -15,6 +16,7 @@ import Breadcrumb from '@/app/components/ui/Breadcrumb'
 import PageHeader from '@/app/components/ui/PageHeader'
 import { logger } from '@/lib/logger'
 import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
+import { isViewerScopeCurrent, type ViewerKey } from '@/lib/auth/viewer-scope'
 
 interface BookmarkFolder {
   id: string
@@ -38,13 +40,104 @@ interface SubscribedFolder {
   subscribed_at: string
 }
 
+type LoadStatus = 'idle' | 'loading' | 'success' | 'error'
+type FolderLane = 'my' | 'subscribed'
+type RequestScope = {
+  viewerKey: ViewerKey
+  sessionGeneration: number
+  userId: string
+}
+
+const FOLDER_CACHE_TTL_MS = 60_000
+const FOLDER_REQUEST_TIMEOUT_MS = 15_000
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object'
+}
+
+function isNullableString(value: unknown): value is string | null | undefined {
+  return value === undefined || value === null || typeof value === 'string'
+}
+
+function isBookmarkFolder(value: unknown): value is BookmarkFolder {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    isNullableString(value.description) &&
+    isNullableString(value.avatar_url) &&
+    typeof value.post_count === 'number' &&
+    Number.isFinite(value.post_count) &&
+    typeof value.is_public === 'boolean' &&
+    typeof value.is_default === 'boolean'
+  )
+}
+
+function isSubscribedFolder(value: unknown): value is SubscribedFolder {
+  return (
+    isRecord(value) &&
+    typeof value.id === 'string' &&
+    typeof value.name === 'string' &&
+    isNullableString(value.description) &&
+    isNullableString(value.avatar_url) &&
+    typeof value.post_count === 'number' &&
+    Number.isFinite(value.post_count) &&
+    typeof value.subscriber_count === 'number' &&
+    Number.isFinite(value.subscriber_count) &&
+    isNullableString(value.owner_handle) &&
+    isNullableString(value.owner_avatar_url) &&
+    typeof value.subscribed_at === 'string'
+  )
+}
+
+function isRequestScopeCurrent(
+  expected: RequestScope,
+  current: {
+    viewerKey: ViewerKey
+    sessionGeneration: number
+    userId: string | null
+  }
+): boolean {
+  return (
+    expected.viewerKey === current.viewerKey &&
+    expected.sessionGeneration === current.sessionGeneration &&
+    expected.userId === current.userId &&
+    isViewerScopeCurrent(expected)
+  )
+}
+
+async function readFolderList<T>(
+  response: Response,
+  isFolder: (value: unknown) => value is T
+): Promise<T[]> {
+  if (!response.ok) throw new Error(`Folder request failed with HTTP ${response.status}`)
+
+  const payload: unknown = await response.json()
+  if (
+    !payload ||
+    typeof payload !== 'object' ||
+    !('data' in payload) ||
+    !payload.data ||
+    typeof payload.data !== 'object' ||
+    !('folders' in payload.data) ||
+    !Array.isArray(payload.data.folders) ||
+    !payload.data.folders.every(isFolder)
+  ) {
+    throw new Error('Folder request returned an invalid payload')
+  }
+
+  return payload.data.folders
+}
+
 export default function FavoritesPageClient({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useLanguage()
   const { showToast } = useToast()
-  const { accessToken, authChecked, email } = useAuthSession()
+  const { accessToken, authChecked, userId, viewerKey, sessionGeneration } = useAuthSession()
   const [folders, setFolders] = useState<BookmarkFolder[]>([])
   const [subscribedFolders, setSubscribedFolders] = useState<SubscribedFolder[]>([])
-  const [loading, setLoading] = useState(true)
+  const [foldersStatus, setFoldersStatus] = useState<LoadStatus>('idle')
+  const [subscribedStatus, setSubscribedStatus] = useState<LoadStatus>('idle')
+  const [dataViewerKey, setDataViewerKey] = useState<ViewerKey>('pending')
   const [activeTab, setActiveTab] = useState<'my' | 'subscribed'>('my')
   // B2 tabs a11y: my/subscribed folders share the single list region below.
   const favTabsA11y = useTabsA11y({
@@ -61,93 +154,217 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
   const [newFolderPublic, setNewFolderPublic] = useState(false)
   const [creating, setCreating] = useState(false)
 
-  // Cache ref to skip refetch within 60s (avoids redundant requests on remount)
-  const lastFetchRef = useRef<{ ts: number; token: string | null }>({ ts: 0, token: null })
+  const currentScopeRef = useRef({ viewerKey, sessionGeneration, userId })
+  currentScopeRef.current = { viewerKey, sessionGeneration, userId }
+  const requestIdsRef = useRef<Record<FolderLane, number>>({ my: 0, subscribed: 0 })
+  const requestControllersRef = useRef<Partial<Record<FolderLane, AbortController>>>({})
+  const createRequestIdRef = useRef(0)
+  // Cache only validated successes and bind them to the stable viewer identity.
+  // Token refreshes for one viewer keep the cache; account changes synchronously
+  // hide it and reset both timestamps.
+  const successCacheRef = useRef<{
+    viewerKey: ViewerKey
+    my: number | null
+    subscribed: number | null
+  }>({ viewerKey: 'pending', my: null, subscribed: null })
+
+  const loadFolders = useCallback(
+    async (force = false) => {
+      if (
+        !authChecked ||
+        !accessToken ||
+        !userId ||
+        viewerKey === 'pending' ||
+        viewerKey === 'anon'
+      ) {
+        return
+      }
+
+      const scope: RequestScope = { viewerKey, sessionGeneration, userId }
+      const cachedAt =
+        successCacheRef.current.viewerKey === viewerKey ? successCacheRef.current.my : null
+      if (!force && cachedAt !== null && Date.now() - cachedAt < FOLDER_CACHE_TTL_MS) return
+
+      requestControllersRef.current.my?.abort()
+      const controller = new AbortController()
+      requestControllersRef.current.my = controller
+      const requestId = ++requestIdsRef.current.my
+      let timedOut = false
+      const timeoutId = setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, FOLDER_REQUEST_TIMEOUT_MS)
+      setFoldersStatus('loading')
+
+      try {
+        const response = await fetch('/api/bookmark-folders', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: controller.signal,
+        })
+        const nextFolders = await readFolderList(response, isBookmarkFolder)
+        if (
+          controller.signal.aborted ||
+          requestIdsRef.current.my !== requestId ||
+          !isRequestScopeCurrent(scope, currentScopeRef.current)
+        ) {
+          return
+        }
+
+        setFolders(nextFolders)
+        setFoldersStatus('success')
+        if (successCacheRef.current.viewerKey === viewerKey) {
+          successCacheRef.current.my = Date.now()
+        }
+      } catch (error) {
+        if (
+          (!timedOut && controller.signal.aborted) ||
+          requestIdsRef.current.my !== requestId ||
+          !isRequestScopeCurrent(scope, currentScopeRef.current)
+        ) {
+          return
+        }
+        logger.error('Error fetching folders:', error)
+        // Preserve this viewer's last-good list; an error must never become an
+        // authoritative empty response or advance the success cache.
+        setFoldersStatus('error')
+      } finally {
+        clearTimeout(timeoutId)
+        if (requestControllersRef.current.my === controller) {
+          delete requestControllersRef.current.my
+        }
+      }
+    },
+    [accessToken, authChecked, sessionGeneration, userId, viewerKey]
+  )
+
+  const loadSubscribedFolders = useCallback(
+    async (force = false) => {
+      if (
+        !authChecked ||
+        !accessToken ||
+        !userId ||
+        viewerKey === 'pending' ||
+        viewerKey === 'anon'
+      ) {
+        return
+      }
+
+      const scope: RequestScope = { viewerKey, sessionGeneration, userId }
+      const cachedAt =
+        successCacheRef.current.viewerKey === viewerKey ? successCacheRef.current.subscribed : null
+      if (!force && cachedAt !== null && Date.now() - cachedAt < FOLDER_CACHE_TTL_MS) return
+
+      requestControllersRef.current.subscribed?.abort()
+      const controller = new AbortController()
+      requestControllersRef.current.subscribed = controller
+      const requestId = ++requestIdsRef.current.subscribed
+      let timedOut = false
+      const timeoutId = setTimeout(() => {
+        timedOut = true
+        controller.abort()
+      }, FOLDER_REQUEST_TIMEOUT_MS)
+      setSubscribedStatus('loading')
+
+      try {
+        const response = await fetch('/api/bookmark-folders/subscribed', {
+          headers: { Authorization: `Bearer ${accessToken}` },
+          signal: controller.signal,
+        })
+        // The route's feature-unavailable contract is a 200 with an empty
+        // folders array. A 404 indicates routing/deployment failure.
+        const nextFolders = await readFolderList(response, isSubscribedFolder)
+        if (
+          controller.signal.aborted ||
+          requestIdsRef.current.subscribed !== requestId ||
+          !isRequestScopeCurrent(scope, currentScopeRef.current)
+        ) {
+          return
+        }
+
+        setSubscribedFolders(nextFolders)
+        setSubscribedStatus('success')
+        if (successCacheRef.current.viewerKey === viewerKey) {
+          successCacheRef.current.subscribed = Date.now()
+        }
+      } catch (error) {
+        if (
+          (!timedOut && controller.signal.aborted) ||
+          requestIdsRef.current.subscribed !== requestId ||
+          !isRequestScopeCurrent(scope, currentScopeRef.current)
+        ) {
+          return
+        }
+        logger.warn('[Favorites] Failed to fetch subscribed folders:', error)
+        setSubscribedStatus('error')
+      } finally {
+        clearTimeout(timeoutId)
+        if (requestControllersRef.current.subscribed === controller) {
+          delete requestControllersRef.current.subscribed
+        }
+      }
+    },
+    [accessToken, authChecked, sessionGeneration, userId, viewerKey]
+  )
 
   useEffect(() => {
-    // 等待认证检查完成
-    if (!authChecked) return
-
-    if (!accessToken) {
-      setLoading(false)
-      return
+    const viewerChanged = successCacheRef.current.viewerKey !== viewerKey
+    if (viewerChanged) {
+      requestControllersRef.current.my?.abort()
+      requestControllersRef.current.subscribed?.abort()
+      requestIdsRef.current.my += 1
+      requestIdsRef.current.subscribed += 1
+      createRequestIdRef.current += 1
+      successCacheRef.current = { viewerKey, my: null, subscribed: null }
+      setDataViewerKey(viewerKey)
+      setFolders([])
+      setSubscribedFolders([])
+      setFoldersStatus('idle')
+      setSubscribedStatus('idle')
+      setCreating(false)
+      setShowCreateForm(false)
+      setNewFolderName('')
+      setNewFolderPublic(false)
     }
 
-    // Skip refetch if same token and data is fresh (<60s)
     if (
-      lastFetchRef.current.token === accessToken &&
-      Date.now() - lastFetchRef.current.ts < 60_000 &&
-      folders.length > 0
+      !authChecked ||
+      !accessToken ||
+      !userId ||
+      viewerKey === 'pending' ||
+      viewerKey === 'anon'
     ) {
       return
     }
 
-    const abortController = new AbortController()
+    void loadFolders(viewerChanged)
+    void loadSubscribedFolders(viewerChanged)
+  }, [accessToken, authChecked, loadFolders, loadSubscribedFolders, userId, viewerKey])
 
-    const load = async () => {
-      setLoading(true)
-      try {
-        // 并行加载我的收藏夹和已订阅的收藏夹
-        const [foldersResponse, subscribedResponse] = await Promise.all([
-          fetch('/api/bookmark-folders', {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            signal: abortController.signal,
-          }),
-          fetch('/api/bookmark-folders/subscribed', {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            signal: abortController.signal,
-          }),
-        ])
-
-        const foldersData = await foldersResponse.json()
-        const subscribedData = await subscribedResponse.json()
-
-        if (foldersResponse.ok) {
-          setFolders(foldersData.data?.folders || [])
-        } else {
-          logger.error('Error fetching folders:', foldersData.error)
-          setFolders([])
-          showToast(t('loadFoldersFailed'), 'error')
-        }
-
-        if (subscribedResponse.ok) {
-          setSubscribedFolders(subscribedData.data?.folders || [])
-        } else {
-          // 订阅功能可能未启用，静默处理
-          if (subscribedResponse.status !== 404) {
-            logger.warn(
-              '[Favorites] Subscribed folders not available:',
-              subscribedData.error?.message || subscribedResponse.status
-            )
-          }
-          setSubscribedFolders([])
-        }
-
-        lastFetchRef.current = { ts: Date.now(), token: accessToken }
-      } catch (error) {
-        if ((error as Error).name === 'AbortError') return
-        logger.error('Error loading folders:', error)
-        setFolders([])
-        setSubscribedFolders([])
-        showToast(t('loadFoldersFailedRetry'), 'error')
-      } finally {
-        if (!abortController.signal.aborted) {
-          setLoading(false)
-        }
-      }
-    }
-
-    load()
-
-    return () => {
-      abortController.abort()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load is defined inside effect; showToast/t are stable refs
-  }, [accessToken, authChecked])
+  useEffect(
+    () => () => {
+      requestControllersRef.current.my?.abort()
+      requestControllersRef.current.subscribed?.abort()
+      requestIdsRef.current.my += 1
+      requestIdsRef.current.subscribed += 1
+      createRequestIdRef.current += 1
+    },
+    []
+  )
 
   const createFolder = async () => {
-    if (!newFolderName.trim() || !accessToken) return
+    if (
+      !newFolderName.trim() ||
+      !accessToken ||
+      !userId ||
+      viewerKey === 'pending' ||
+      viewerKey === 'anon'
+    ) {
+      return
+    }
 
+    const scope: RequestScope = { viewerKey, sessionGeneration, userId }
+    if (!isRequestScopeCurrent(scope, currentScopeRef.current)) return
+    const requestId = ++createRequestIdRef.current
     setCreating(true)
     try {
       const response = await fetch('/api/bookmark-folders', {
@@ -164,21 +381,44 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
       })
 
       const data = await response.json()
+      if (
+        requestId !== createRequestIdRef.current ||
+        !isRequestScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        return
+      }
       if (response.ok) {
-        const newFolder = data.data?.folder
-        if (newFolder) setFolders((prev) => [...prev, newFolder])
+        // The pre-create GET can resolve after this write and overwrite an
+        // optimistic append. Invalidate it and reload the authoritative list.
+        requestControllersRef.current.my?.abort()
+        requestIdsRef.current.my += 1
+        if (successCacheRef.current.viewerKey === viewerKey) {
+          successCacheRef.current.my = null
+        }
         setNewFolderName('')
         setNewFolderPublic(false)
         setShowCreateForm(false)
         showToast(t('folderCreated'), 'success')
+        void loadFolders(true)
       } else {
         showToast(data.error || t('createFailed'), 'error')
       }
     } catch (error) {
+      if (
+        requestId !== createRequestIdRef.current ||
+        !isRequestScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        return
+      }
       logger.error('Error creating folder:', error)
       showToast(t('createFailed'), 'error')
     } finally {
-      setCreating(false)
+      if (
+        requestId === createRequestIdRef.current &&
+        isRequestScopeCurrent(scope, currentScopeRef.current)
+      ) {
+        setCreating(false)
+      }
     }
   }
 
@@ -208,9 +448,19 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
         color: tokens.colors.text.primary,
       }
   const loginHref = embedded ? '/login?redirect=/saved?tab=posts' : '/login?redirect=/favorites'
+  const viewerDataReady = dataViewerKey === viewerKey
+  const visibleFolders = viewerDataReady ? folders : []
+  const visibleSubscribedFolders = viewerDataReady ? subscribedFolders : []
+  const activeStatus = activeTab === 'my' ? foldersStatus : subscribedStatus
+  const activeFolderCount =
+    activeTab === 'my' ? visibleFolders.length : visibleSubscribedFolders.length
+  const panelLoading =
+    !viewerDataReady ||
+    activeStatus === 'idle' ||
+    (activeStatus === 'loading' && activeFolderCount === 0)
 
   // 等待认证检查完成后再判断是否需要登录
-  if (!authChecked || (authChecked && !accessToken && loading)) {
+  if (!authChecked) {
     return (
       <Box style={outerStyle}>
         <Box style={{ maxWidth: 900, margin: '0 auto', padding: tokens.spacing[6] }}>
@@ -290,6 +540,7 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
               <Button
                 variant="primary"
                 size="sm"
+                aria-label={t('newFolder')}
                 onClick={() => setShowCreateForm(!showCreateForm)}
               >
                 + {t('newFolder')}
@@ -305,6 +556,7 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
                 <Button
                   variant="primary"
                   size="sm"
+                  aria-label={t('newFolder')}
                   onClick={() => setShowCreateForm(!showCreateForm)}
                 >
                   + {t('newFolder')}
@@ -349,7 +601,7 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
               transition: `all ${tokens.transition.base}`,
             }}
           >
-            {t('myFoldersTab')} ({folders.length})
+            {t('myFoldersTab')} ({visibleFolders.length})
           </button>
           <button
             type="button"
@@ -378,12 +630,12 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
               transition: `all ${tokens.transition.base}`,
             }}
           >
-            {t('subscribedFoldersTab')} ({subscribedFolders.length})
+            {t('subscribedFoldersTab')} ({visibleSubscribedFolders.length})
           </button>
         </Box>
 
         {/* 新建收藏夹表单 */}
-        {showCreateForm && (
+        {viewerDataReady && showCreateForm && (
           <Box
             style={{
               marginBottom: tokens.spacing[6],
@@ -463,39 +715,57 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
 
         {/* 收藏夹列表 */}
         <div {...favTabsA11y.getSharedPanelProps()}>
-          {loading ? (
+          {viewerDataReady && activeTab === 'my' && foldersStatus === 'error' && (
+            <ErrorState
+              title={t('loadFoldersFailed')}
+              description={t('loadFoldersFailedRetry')}
+              retry={() => void loadFolders(true)}
+              variant="compact"
+            />
+          )}
+          {viewerDataReady && activeTab === 'subscribed' && subscribedStatus === 'error' && (
+            <ErrorState
+              title={t('loadFoldersFailed')}
+              description={t('loadFoldersFailedRetry')}
+              retry={() => void loadSubscribedFolders(true)}
+              variant="compact"
+            />
+          )}
+          {panelLoading ? (
             <ListSkeleton count={5} gap={12} />
           ) : activeTab === 'my' ? (
             // 我的收藏夹
-            folders.length === 0 ? (
-              <EmptyState
-                title={t('noFolders')}
-                description={t('noFoldersCta')}
-                action={
-                  <button
-                    onClick={() => setShowCreateForm(true)}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      minHeight: 44,
-                      padding: '10px 24px',
-                      background: tokens.colors.accent.brand,
-                      color: tokens.colors.white,
-                      borderRadius: tokens.radius.md,
-                      border: 'none',
-                      cursor: 'pointer',
-                      fontWeight: tokens.typography.fontWeight.bold,
-                      fontSize: tokens.typography.fontSize.base,
-                    }}
-                  >
-                    + {t('newFolder')}
-                  </button>
-                }
-              />
+            visibleFolders.length === 0 ? (
+              foldersStatus === 'success' ? (
+                <EmptyState
+                  title={t('noFolders')}
+                  description={t('noFoldersCta')}
+                  action={
+                    <button
+                      onClick={() => setShowCreateForm(true)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        minHeight: 44,
+                        padding: '10px 24px',
+                        background: tokens.colors.accent.brand,
+                        color: tokens.colors.white,
+                        borderRadius: tokens.radius.md,
+                        border: 'none',
+                        cursor: 'pointer',
+                        fontWeight: tokens.typography.fontWeight.bold,
+                        fontSize: tokens.typography.fontSize.base,
+                      }}
+                    >
+                      + {t('newFolder')}
+                    </button>
+                  }
+                />
+              ) : null
             ) : (
               <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-                {folders.map((folder) => (
+                {visibleFolders.map((folder) => (
                   <Link
                     key={folder.id}
                     href={`/favorites/${folder.id}`}
@@ -632,34 +902,36 @@ export default function FavoritesPageClient({ embedded = false }: { embedded?: b
               </Box>
             )
           ) : // 收藏的收藏夹
-          subscribedFolders.length === 0 ? (
-            <EmptyState
-              title={t('noSubscribedFolders')}
-              description={t('noSubscribedFoldersDesc')}
-              action={
-                <Link
-                  href="/rankings"
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    minHeight: 44,
-                    padding: '10px 24px',
-                    background: tokens.colors.accent.brand,
-                    color: tokens.colors.white,
-                    borderRadius: tokens.radius.md,
-                    textDecoration: 'none',
-                    fontWeight: tokens.typography.fontWeight.bold,
-                    fontSize: tokens.typography.fontSize.base,
-                  }}
-                >
-                  {t('browsePublicFolders')}
-                </Link>
-              }
-            />
+          visibleSubscribedFolders.length === 0 ? (
+            subscribedStatus === 'success' ? (
+              <EmptyState
+                title={t('noSubscribedFolders')}
+                description={t('noSubscribedFoldersDesc')}
+                action={
+                  <Link
+                    href="/rankings"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      minHeight: 44,
+                      padding: '10px 24px',
+                      background: tokens.colors.accent.brand,
+                      color: tokens.colors.white,
+                      borderRadius: tokens.radius.md,
+                      textDecoration: 'none',
+                      fontWeight: tokens.typography.fontWeight.bold,
+                      fontSize: tokens.typography.fontSize.base,
+                    }}
+                  >
+                    {t('browsePublicFolders')}
+                  </Link>
+                }
+              />
+            ) : null
           ) : (
             <Box style={{ display: 'flex', flexDirection: 'column', gap: tokens.spacing[3] }}>
-              {subscribedFolders.map((folder) => (
+              {visibleSubscribedFolders.map((folder) => (
                 <Link
                   key={folder.id}
                   href={`/favorites/${folder.id}`}
