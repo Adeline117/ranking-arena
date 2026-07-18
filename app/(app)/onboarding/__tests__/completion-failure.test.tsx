@@ -3,7 +3,6 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 const USER_ID = '10000000-0000-4000-8000-000000000001'
 const GROUP_ID = '20000000-0000-4000-8000-000000000002'
 
-const mockGetUser = jest.fn()
 const mockGetSession = jest.fn()
 const mockMaybeSingle = jest.fn()
 const mockUpdateEq = jest.fn()
@@ -24,7 +23,6 @@ jest.mock('@/lib/supabase/client', () => ({
   supabase: {
     auth: {
       getSession: (...args: unknown[]) => mockGetSession(...args),
-      getUser: (...args: unknown[]) => mockGetUser(...args),
     },
     from: () => ({
       select: () => ({
@@ -37,6 +35,14 @@ jest.mock('@/lib/supabase/client', () => ({
       }),
     }),
   },
+}))
+
+jest.mock('@/lib/hooks/useAuthSession', () => ({
+  useAuthSession: () => ({
+    authChecked: true,
+    userId: USER_ID,
+    sessionGeneration: 1,
+  }),
 }))
 
 jest.mock('@/app/components/ui/Toast', () => ({
@@ -138,7 +144,6 @@ describe('onboarding membership completion boundary', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     localStorage.clear()
-    mockGetUser.mockResolvedValue({ data: { user: { id: USER_ID } } })
     mockGetSession.mockResolvedValue({
       data: { session: { access_token: 'access-token', user: { id: USER_ID } } },
     })

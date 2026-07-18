@@ -222,7 +222,7 @@ describe('onboarding membership request ordering', () => {
 describe('onboarding page membership guard', () => {
   it('uses the membership intent boundary and protects the reviewed render contract', () => {
     const source = readFileSync(join(process.cwd(), 'app/(app)/onboarding/page.tsx'), 'utf8')
-    const renderSuffix = source.slice(source.indexOf('  if (!mounted)'))
+    const renderSuffix = source.slice(source.indexOf('  if (!mounted || !authChecked)'))
     const completeFlow = source.slice(
       source.indexOf('  const saveAndComplete'),
       source.indexOf('  // Skip the activation flow')
@@ -247,7 +247,7 @@ describe('onboarding page membership guard', () => {
     expect(unmountCleanup).not.toContain('flushFollowQueue(')
     expect(source).not.toContain("fetch('/api/groups/subscribe'")
     expect(createHash('sha256').update(renderSuffix).digest('hex')).toBe(
-      'f4056b8d4e588431dc99b3c4b59781fe2c9f6218facc5559366993991d23fc42'
+      'cd18ada823cb8721d2478d93bb5a690d8f59177a10a9726d242fd7d1dc688fe2'
     )
   })
 })
