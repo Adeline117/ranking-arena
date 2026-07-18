@@ -10,16 +10,18 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
-import {
-  DEAD_BLOCKED_PLATFORMS,
-  EXCHANGE_CONFIG,
-  SOURCES_WITH_DATA,
-} from '@/lib/constants/exchanges'
+import { DEAD_BLOCKED_PLATFORMS, EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { tieredGet, tieredSet } from '@/lib/cache/redis-layer'
 import { getFireAndForgetStats, logger } from '@/lib/utils/logger'
 import { verifyAdminAuth } from '@/lib/auth/verify-service-auth'
 import { getRateLimitStats } from '@/lib/ratelimit/TokenBucket'
+import {
+  buildPlatformHealth,
+  classifyPlatformHealth,
+  type PlatformFreshnessRow,
+  type PlatformHealth,
+} from '@/lib/services/platform-health'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -36,35 +38,38 @@ async function withDeadline<T>(
   fallback: T,
   label: string
 ): Promise<T> {
-  return Promise.race([
-    Promise.resolve(promise),
-    new Promise<T>((resolve) =>
-      setTimeout(() => {
+  return new Promise<T>((resolve, reject) => {
+    let settled = false
+    const timeout = setTimeout(() => {
+      if (!settled) {
+        settled = true
         logger.warn(`[health/pipeline] ${label} exceeded ${ms}ms, returning fallback`)
         resolve(fallback)
-      }, ms)
-    ),
-  ])
-}
+      }
+    }, ms)
 
-export interface PlatformHealth {
-  platform: string
-  displayName: string
-  lastUpdate: string | null
-  ageHours: number | null
-  currentCount: number
-  avgCount: number | null
-  countRatio: number | null
-  status: 'healthy' | 'warning' | 'critical'
+    Promise.resolve(promise).then(
+      (value) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        resolve(value)
+      },
+      (error: unknown) => {
+        if (settled) return
+        settled = true
+        clearTimeout(timeout)
+        reject(error)
+      }
+    )
+  })
 }
 
 /**
- * Check per-platform data health from trader_snapshots_v2
+ * Check per-platform data health from the active arena source registry.
  */
 async function getPlatformHealthData(): Promise<PlatformHealth[]> {
   const supabase = getSupabaseAdmin()
-  const deadSet = new Set<string>([...DEAD_BLOCKED_PLATFORMS])
-  const activePlatforms = (SOURCES_WITH_DATA as string[]).filter((p) => !deadSet.has(p))
   const now = Date.now()
   const sevenDaysAgo = new Date(now - 7 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -76,114 +81,59 @@ async function getPlatformHealthData(): Promise<PlatformHealth[]> {
   // occasionally hangs 30s+ under load and was causing the entire endpoint
   // (and therefore the external monitor) to time out. Individual queries must
   // fail fast so the overall response still returns within the monitor budget.
-  const emptyResponse = { data: [] as unknown[], error: null } as unknown
+  const logsQuery = supabase
+    .from('pipeline_logs')
+    .select('job_name, records_processed')
+    .eq('status', 'success')
+    .gte('started_at', sevenDaysAgo)
+    .not('records_processed', 'is', null)
+    .gt('records_processed', 0)
+    .then(({ data, error }) => ({ data, error }))
+  const freshnessQuery = supabase.rpc('get_platform_freshness').then(
+    ({
+      data,
+      error,
+    }): {
+      data: PlatformFreshnessRow[] | null
+      error: unknown
+    } => ({ data, error })
+  )
+
   const [allLogsRes, lbLatestRes] = await Promise.all([
-    withDeadline(
-      supabase
-        .from('pipeline_logs')
-        .select('job_name, records_processed')
-        .eq('status', 'success')
-        .gte('started_at', sevenDaysAgo)
-        .not('records_processed', 'is', null)
-        .gt('records_processed', 0) as unknown as PromiseLike<{
-        data: Array<{ job_name: string; records_processed: number }> | null
-        error: unknown
-      }>,
-      10_000,
-      emptyResponse as {
-        data: Array<{ job_name: string; records_processed: number }> | null
-        error: unknown
-      },
-      'pipeline_logs records_processed'
-    ),
+    withDeadline(logsQuery, 10_000, { data: [], error: null }, 'pipeline_logs records_processed'),
     // get_platform_freshness() returns FETCH freshness per source from
     // arena.leaderboard_snapshots.scraped_at (when last crawled) — not score
     // freshness, which would false-alert sources that fetched but weren't scored.
     // (Migrated off retiring trader_latest 2026-06-15; RPC keyed by legacy alias.)
     withDeadline(
-      (supabase as any).rpc('get_platform_freshness') as unknown as PromiseLike<{
-        data: Array<{ source: string; latest: string }> | null
-        error: unknown
-      }>,
+      freshnessQuery,
       25_000,
-      emptyResponse as {
-        data: Array<{ source: string; latest: string }> | null
-        error: unknown
-      },
+      { data: null, error: new Error('platform freshness query timed out') },
       'platform_freshness'
     ),
   ])
 
-  // Build platform → latest update map from get_platform_freshness (arena scraped_at)
-  const pgQueryResult = lbLatestRes as { data: unknown[] | null; error: unknown }
-  const platformLastUpdate = new Map<string, string>()
-  const lbData = (pgQueryResult.data || []) as Array<{
-    source?: string
-    platform?: string
-    computed_at?: string | Date
-    latest?: string
-    updated_at?: string | Date
-  }>
-  for (const row of lbData) {
-    const platform = row.source || row.platform || ''
-    const rawTs = row.latest || row.updated_at || row.computed_at
-    const ts =
-      rawTs instanceof Date ? rawTs.toISOString() : typeof rawTs === 'string' ? rawTs : null
-    if (!ts || !platform) continue
-    if (!platformLastUpdate.has(platform) || (platformLastUpdate.get(platform) ?? '') < ts) {
-      platformLastUpdate.set(platform, ts)
-    }
+  if (lbLatestRes.error || !lbLatestRes.data?.length) {
+    throw new Error('active platform freshness authority is unavailable')
+  }
+  if (allLogsRes.error) {
+    logger.warn('[health/pipeline] pipeline log averages are unavailable')
   }
 
-  // Build per-platform avg records from pipeline_logs (JS-side grouping)
-  const platformAvgRecords = new Map<string, number>()
-  const allLogs = allLogsRes.data || []
-  for (const platform of activePlatforms) {
-    const matching = allLogs.filter((l) => l.job_name.includes(platform))
-    if (matching.length > 0) {
-      const avg = matching.reduce((sum, r) => sum + (r.records_processed || 0), 0) / matching.length
-      platformAvgRecords.set(platform, avg)
-    }
-  }
-
-  const results: PlatformHealth[] = activePlatforms.map((platform) => {
-    const config = EXCHANGE_CONFIG[platform as keyof typeof EXCHANGE_CONFIG]
-    const displayName = config?.name || platform
-
-    const lastUpdate = platformLastUpdate.get(platform) || null
-    // Count queries removed to reduce DB load (was 31 extra queries).
-    // countRatio check disabled — it always triggered false warning when currentCount=0.
-    const currentCount = 0
-    const avgCount = platformAvgRecords.get(platform) ?? null
-
-    let ageHours: number | null = null
-    if (lastUpdate) {
-      ageHours = Math.round(((now - new Date(lastUpdate).getTime()) / (1000 * 60 * 60)) * 10) / 10
-    }
-
-    const countRatio = null // Disabled: no count data available without per-platform queries
-
-    let status: 'healthy' | 'warning' | 'critical' = 'healthy'
-    if (ageHours == null || ageHours > 24) {
-      status = 'critical'
-    } else if (ageHours > 6) {
-      status = 'warning'
-    }
-
-    return {
-      platform,
-      displayName,
-      lastUpdate,
-      ageHours,
-      currentCount,
-      avgCount: avgCount != null ? Math.round(avgCount) : null,
-      countRatio: countRatio != null ? Math.round(countRatio * 100) / 100 : null,
-      status,
-    }
+  // The RPC returns one row for every active registry source, including
+  // latest=null when a genuinely active source has never produced a snapshot.
+  // Its rows are the complete platform authority: do not merge them with
+  // SOURCES_WITH_DATA, which is historical and intentionally includes no
+  // lifecycle state.
+  return buildPlatformHealth({
+    freshnessRows: lbLatestRes.data || [],
+    logs: allLogsRes.data || [],
+    now,
+    getDisplayName: (platform) => {
+      const config = EXCHANGE_CONFIG[platform as keyof typeof EXCHANGE_CONFIG]
+      return config?.name || platform
+    },
   })
-
-  results.sort((a, b) => a.platform.localeCompare(b.platform))
-  return results
 }
 
 export async function GET(req: NextRequest) {
@@ -209,7 +159,9 @@ export async function GET(req: NextRequest) {
     // v4 (2026-04-16): added `circuits` field and circuit-based status
     // escalation; bump to avoid serving cached responses without circuit data.
     // v5 (2026-04-16): added `rateLimits` field + hot-exchange escalation.
-    const CACHE_KEY = 'api:health:pipeline:v5'
+    // v6 (2026-07-18): platform membership now comes from active arena.sources;
+    // discard v5 entries that still contain retired/inactive static sources.
+    const CACHE_KEY = 'api:health:pipeline:v6'
     const cached = await tieredGet(CACHE_KEY, 'warm')
     if (cached.data !== null) {
       // Defensive: even on cache hit, validate the cached entry isn't degraded.
@@ -239,13 +191,17 @@ export async function GET(req: NextRequest) {
         withDeadline(PipelineLogger.getJobStatuses(), 15_000, [], 'getJobStatuses'),
         withDeadline(PipelineLogger.getJobStats(), 15_000, [], 'getJobStats'),
         withDeadline(PipelineLogger.getRecentFailures(10), 10_000, [], 'getRecentFailures'),
-        withDeadline(
+        withDeadline<PlatformHealth[] | null>(
           getPlatformHealthData(),
           20_000,
-          [] as PlatformHealth[],
+          null,
           'getPlatformHealthData'
         ),
       ])
+
+      if (platformHealth === null) {
+        throw new Error('active platform health computation timed out')
+      }
 
       // Filter out dead/blocked platforms from failure counts
       const deadSet = new Set<string>([...DEAD_BLOCKED_PLATFORMS])
@@ -271,6 +227,8 @@ export async function GET(req: NextRequest) {
       const platformHealthy = platformHealth.filter((p) => p.status === 'healthy').length
       const platformWarning = platformHealth.filter((p) => p.status === 'warning').length
       const platformCritical = platformHealth.filter((p) => p.status === 'critical').length
+      const platformNeverFetched = platformHealth.filter((p) => p.lastUpdate === null).length
+      const platformStatus = classifyPlatformHealth(platformHealth)
 
       let overallStatus: 'healthy' | 'degraded' | 'critical' = 'healthy'
       // Root cause fix: previous thresholds were too aggressive:
@@ -280,9 +238,10 @@ export async function GET(req: NextRequest) {
       // New thresholds: tolerate up to 10% failures as normal, require >2 stuck
       // jobs for critical (single stuck is often just a slow run).
       const failedPct = totalJobs > 0 ? failedJobs / totalJobs : 0
-      if (stuckJobs >= 3 || failedPct > 0.3 || platformCritical > platformHealth.length * 0.3) {
+      if (platformStatus === 'critical' || stuckJobs >= 3 || failedPct > 0.3) {
         overallStatus = 'critical'
       } else if (
+        platformStatus === 'degraded' ||
         failedPct > 0.1 ||
         stuckJobs >= 1 ||
         staleJobs > totalJobs * 0.2 ||
@@ -377,6 +336,7 @@ export async function GET(req: NextRequest) {
           platformHealthy,
           platformWarning,
           platformCritical,
+          platformNeverFetched,
           totalPlatforms: platformHealth.length,
           backgroundFailureCount: backgroundFailures.length,
           circuitsOpen: circuits.open.length,

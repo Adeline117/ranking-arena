@@ -3,99 +3,112 @@
  */
 
 import { getSupabaseAdmin } from '@/lib/supabase/server'
-import type { SupabaseClient } from '@supabase/supabase-js'
 import { PipelineState } from '@/lib/services/pipeline-state'
 import type { CheckResult } from './types'
 
 /** Check 1: Data Freshness — platforms have data updated within expected windows. */
 export async function checkDataFreshness(platformsHint?: string[]): Promise<CheckResult> {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const issues: CheckResult['issues'] = []
 
-  let platformFreshness: Array<{
-    platform: string
-    latest_snapshot: string
-    trader_count: number
-  }> | null = null
-  try {
-    const { data: rpcData } = await supabase.rpc('get_platform_freshness')
-    if (rpcData && Array.isArray(rpcData) && rpcData.length > 0) {
-      platformFreshness = rpcData as unknown as typeof platformFreshness
-    }
-  } catch {
-    /* RPC not available */
+  const unavailable = (description: string): CheckResult => ({
+    check: {
+      name: 'data_freshness',
+      category: 'freshness',
+      passed: false,
+      score: 0,
+      details: description,
+    },
+    issues: [
+      {
+        platform: 'all',
+        type: 'freshness_authority_unavailable',
+        severity: 'critical',
+        description,
+        recommendation: 'Restore get_platform_freshness before trusting pipeline evaluation.',
+      },
+    ],
+  })
+
+  const { data: rpcData, error: rpcError } = await supabase.rpc('get_platform_freshness')
+  if (rpcError || !Array.isArray(rpcData) || rpcData.length === 0) {
+    return unavailable('Active source freshness authority is unavailable or empty')
   }
 
-  if (!platformFreshness) {
-    const { data: lrData } = await supabase
-      .from('leaderboard_ranks')
-      .select('source, computed_at')
-      .eq('season_id', '90D')
-      .not('arena_score', 'is', null)
-      .order('computed_at', { ascending: false })
-      .limit(5000)
-
-    if (lrData && lrData.length > 0) {
-      const byPlatform = new Map<string, { latest: string; count: number }>()
-      for (const row of lrData) {
-        const existing = byPlatform.get(row.source)
-        if (!existing) {
-          byPlatform.set(row.source, { latest: row.computed_at, count: 1 })
-        } else {
-          existing.count++
-        }
-      }
-      platformFreshness = [...byPlatform.entries()].map(([platform, { latest, count }]) => ({
-        platform,
-        latest_snapshot: latest,
-        trader_count: count,
-      }))
+  const now = Date.now()
+  const seen = new Set<string>()
+  const normalized: Array<{ platform: string; timestamp: number | null }> = []
+  for (const row of rpcData) {
+    const platform = row.source.trim()
+    if (!platform || seen.has(platform)) {
+      return unavailable(`Active source freshness authority returned invalid source "${platform}"`)
     }
+    seen.add(platform)
+
+    const timestamp = row.latest == null ? null : new Date(row.latest).getTime()
+    if (
+      (timestamp != null && !Number.isFinite(timestamp)) ||
+      (timestamp != null && timestamp > now + 5 * 60 * 1000)
+    ) {
+      return unavailable(`Active source freshness authority returned invalid time for ${platform}`)
+    }
+    normalized.push({ platform, timestamp })
+  }
+
+  const platforms = platformsHint?.length
+    ? normalized.filter((platform) => platformsHint.includes(platform.platform))
+    : normalized
+  if (platforms.length === 0) {
+    return unavailable('Active source freshness authority returned no requested platforms')
   }
 
   let staleCount = 0
-  let totalPlatforms = 0
+  const DEX_PLATFORMS = ['hyperliquid', 'gmx', 'gtrade']
+  const CEX_MAX_STALE_MS = 6 * 3600 * 1000
+  const DEX_MAX_STALE_MS = 12 * 3600 * 1000
 
-  if (platformFreshness && Array.isArray(platformFreshness)) {
-    const platforms = platformsHint?.length
-      ? platformFreshness.filter((p) => platformsHint.includes(p.platform))
-      : platformFreshness
+  for (const platform of platforms) {
+    const maxAge =
+      platform.platform.includes('web3') || DEX_PLATFORMS.includes(platform.platform)
+        ? DEX_MAX_STALE_MS
+        : CEX_MAX_STALE_MS
 
-    totalPlatforms = platforms.length
-    const now = Date.now()
-    const DEX_PLATFORMS = ['hyperliquid', 'gmx', 'drift', 'jupiter_perps', 'aevo', 'gains']
-    const CEX_MAX_STALE_MS = 6 * 3600 * 1000
-    const DEX_MAX_STALE_MS = 12 * 3600 * 1000
+    if (platform.timestamp == null) {
+      staleCount++
+      issues.push({
+        platform: platform.platform,
+        type: 'missing_active_source_snapshot',
+        severity: 'critical',
+        description: 'Active source has never produced a passing snapshot',
+        recommendation: `Check the active registry and ingest job for ${platform.platform}.`,
+      })
+      continue
+    }
 
-    for (const p of platforms) {
-      const age = now - new Date(p.latest_snapshot).getTime()
-      const maxAge =
-        p.platform?.includes('web3') || DEX_PLATFORMS.includes(p.platform)
-          ? DEX_MAX_STALE_MS
-          : CEX_MAX_STALE_MS
-
-      if (age > maxAge) {
-        staleCount++
-        issues.push({
-          platform: p.platform,
-          type: 'stale_data',
-          severity: age > maxAge * 2 ? 'critical' : 'warning',
-          description: `Data is ${Math.round(age / 3600000)}h old (max: ${Math.round(maxAge / 3600000)}h)`,
-          recommendation: `Check cron job for ${p.platform}. May need VPS fallback or connector fix.`,
-        })
-      }
+    const age = now - platform.timestamp
+    if (age > maxAge) {
+      staleCount++
+      issues.push({
+        platform: platform.platform,
+        type: 'stale_data',
+        severity: age > maxAge * 2 ? 'critical' : 'warning',
+        description: `Data is ${Math.round(age / 3600000)}h old (max: ${Math.round(maxAge / 3600000)}h)`,
+        recommendation: `Check cron job for ${platform.platform}. May need VPS fallback or connector fix.`,
+      })
     }
   }
 
   const score =
-    totalPlatforms > 0 ? Math.round(((totalPlatforms - staleCount) / totalPlatforms) * 100) : 50
+    platforms.length > 0
+      ? Math.round(((platforms.length - staleCount) / platforms.length) * 100)
+      : 0
   return {
     check: {
       name: 'data_freshness',
       category: 'freshness',
       passed: staleCount === 0,
       score,
-      details: `${totalPlatforms - staleCount}/${totalPlatforms} platforms fresh`,
+      details: `${platforms.length - staleCount}/${platforms.length} platforms fresh`,
     },
     issues,
   }
@@ -103,7 +116,7 @@ export async function checkDataFreshness(platformsHint?: string[]): Promise<Chec
 
 /** Check 2: Record Count Consistency — flag drops > 20% vs baseline. */
 export async function checkRecordCounts(): Promise<CheckResult> {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const issues: CheckResult['issues'] = []
 
   let currentCount: number | null = null
@@ -156,7 +169,7 @@ export async function checkRecordCounts(): Promise<CheckResult> {
 
 /** Check 3: ROI Anomaly Detection — find impossible ROI values. */
 export async function checkROIAnomalies(): Promise<CheckResult> {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const issues: CheckResult['issues'] = []
 
   const { data: anomalies, count: anomalyCount } = await supabase
@@ -204,7 +217,7 @@ export async function checkROIAnomalies(): Promise<CheckResult> {
 
 /** Check 4: Arena Score Coverage — >90% of leaderboard traders have non-null scores. */
 export async function checkArenaScoreCoverage(): Promise<CheckResult> {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const issues: CheckResult['issues'] = []
 
   const { count: totalCount } = await supabase
@@ -244,7 +257,7 @@ export async function checkArenaScoreCoverage(): Promise<CheckResult> {
 
 /** Check 5: Leaderboard Integrity — no duplicate traders, reasonable distribution. */
 export async function checkLeaderboardIntegrity(): Promise<CheckResult> {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const issues: CheckResult['issues'] = []
 
   const { count: totalRows } = await supabase
@@ -294,7 +307,7 @@ export async function checkLeaderboardIntegrity(): Promise<CheckResult> {
 
 /** Check 6: Enrichment Coverage — >60% of top traders have enrichment data. */
 export async function checkEnrichmentCoverage(): Promise<CheckResult> {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const issues: CheckResult['issues'] = []
 
   const { data: sample } = await supabase
@@ -349,7 +362,7 @@ export async function checkEnrichmentCoverage(): Promise<CheckResult> {
 
 /** Check 7: Platform Coverage — all expected platforms have leaderboard data. */
 export async function checkPlatformCoverage(): Promise<CheckResult> {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const issues: CheckResult['issues'] = []
   const EXPECTED = [
     'binance_futures',
@@ -408,7 +421,7 @@ export async function checkPlatformCoverage(): Promise<CheckResult> {
 
 /** Check 12: Per-Platform Data Coverage — verify each platform has sufficient enrichment. */
 export async function checkPerPlatformDataCoverage(): Promise<CheckResult> {
-  const supabase = getSupabaseAdmin() as SupabaseClient
+  const supabase = getSupabaseAdmin()
   const issues: CheckResult['issues'] = []
   const PLATFORMS = [
     'binance_futures',
