@@ -76,6 +76,12 @@ CREATE ROLE service_role NOLOGIN BYPASSRLS;
 CREATE ROLE authenticator LOGIN NOINHERIT;
 CREATE ROLE drifted_moderator NOLOGIN;
 
+-- Reproduce managed Supabase's postgres/public default sequence grants. The
+-- owner-only mute ledger migration must remove these inherited privileges.
+ALTER DEFAULT PRIVILEGES IN SCHEMA public
+  GRANT SELECT, UPDATE, USAGE ON SEQUENCES
+  TO anon, authenticated, service_role;
+
 -- PostgREST must be able to SET the JWT-selected role, but it must not
 -- automatically inherit service_role while it remains authenticator.
 GRANT service_role TO authenticator WITH INHERIT FALSE, SET TRUE;
