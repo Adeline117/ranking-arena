@@ -9,12 +9,18 @@ import {
   type DexGoldenWalletSnapshot,
   parseDexGoldenWalletSnapshot,
 } from './dex-golden-wallets'
+import {
+  DEX_ACQUISITION_RUN_WINDOW_SECONDS,
+  dexAcquisitionObservedEndpointBindingsStructuralSchema,
+  dexAcquisitionSourceStructuralSchema,
+  parseDexAcquisitionEndpointBindingContext,
+} from './dex-acquisition-run-manifest'
 
-export const DEX_ACQUISITION_TRANSCRIPT_SCHEMA_VERSION = 1 as const
-export const DEX_ACQUISITION_TRANSCRIPT_CONTRACT = 'arena.dex.acquisition-transcript@1' as const
+export const DEX_ACQUISITION_TRANSCRIPT_SCHEMA_VERSION = 2 as const
+export const DEX_ACQUISITION_TRANSCRIPT_CONTRACT = 'arena.dex.acquisition-transcript@2' as const
 export const DEX_TRANSACTION_MEMBERSHIP_INDEX_CONTRACT =
   'arena.dex.transaction-membership-index@1' as const
-export const DEX_ACQUISITION_WINDOW_SECONDS = 7 * 24 * 60 * 60
+export const DEX_ACQUISITION_WINDOW_SECONDS = DEX_ACQUISITION_RUN_WINDOW_SECONDS
 
 const SHA256 = /^[0-9a-f]{64}$/
 const FULL_GIT_SHA = /^[0-9a-f]{40}$/
@@ -88,50 +94,6 @@ const windowSchema = z
   })
   .strict()
 
-const acquisitionModeSchema = z.enum([
-  'bsc_provider_address_index',
-  'solana_rpc_signatures_for_address',
-  'sqd_finalized_stream_wallet_locator',
-  'manifest_protocol_event_rpc_scan',
-  'manifest_protocol_event_sqd_finalized_stream',
-])
-
-const sourceSchema = z
-  .object({
-    provider_id: logicalIdSchema,
-    data_source_id: logicalIdSchema,
-    endpoint_id: logicalIdSchema,
-    endpoint_identity_sha256: sha256Schema,
-    acquisition_mode: acquisitionModeSchema,
-    query_shape: z.enum([
-      'one_query_per_wallet',
-      'batched_wallet_locator',
-      'protocol_wide_local_match',
-    ]),
-    completeness_scope: z.enum([
-      'provider_address_index_query',
-      'rpc_address_signature_query',
-      'provider_dataset_wallet_locator_query',
-      'manifest_protocol_events_in_height_range',
-    ]),
-    source_independence_group: logicalIdSchema,
-    finality_claim: z.enum([
-      'strict_rpc_membership_bound',
-      'provider_index_with_strict_rpc_membership',
-      'provider_finalized_stream_assertion',
-    ]),
-    declared_source_role: z.enum([
-      'primary_shadow',
-      'same_provider_control',
-      'declared_independent_differential',
-    ]),
-    auth_mode: z.enum(['none', 'api_key', 'bearer', 'signed']),
-    redirect_policy: z.literal('error'),
-    exact_endpoint_per_run: z.literal(true),
-    mixed_provider_pages: z.literal(false),
-  })
-  .strict()
-
 const artifactsSchema = z
   .object({
     run_manifest_sha256: sha256Schema,
@@ -157,7 +119,7 @@ const candidateEvidenceSchema = z
 const blockCatalogSchema = z
   .object({
     state: z.enum(['complete', 'partial', 'not_run']),
-    completeness_scope: z.literal('same_provider_internal_continuity_only'),
+    completeness_scope: z.literal('bound_catalog_profile_internal_continuity_only'),
     produced_unit_count: safeNonNegativeIntegerSchema,
     verified_skipped_unit_count: safeNonNegativeIntegerSchema,
     missing_unit_count: safeNonNegativeIntegerSchema,
@@ -167,7 +129,7 @@ const blockCatalogSchema = z
     first_observed_height: nullableHeightSchema,
     last_observed_height: nullableHeightSchema,
     evidence_sha256: sha256Schema.nullable(),
-    independent_gap_evidence_sha256: sha256Schema.nullable(),
+    source_separated_gap_evidence_sha256: sha256Schema.nullable(),
   })
   .strict()
 
@@ -193,9 +155,22 @@ const completionReasonSchema = z.enum([
 const queryLaneSchema = z
   .object({
     lane_id: logicalIdSchema,
+    endpoint_profile_id: logicalIdSchema,
     scope: z.union([
       z.object({ kind: z.literal('wallet'), wallet: z.string().min(1) }).strict(),
       z.object({ kind: z.literal('all_golden_wallets') }).strict(),
+      z
+        .object({
+          kind: z.literal('all_protocol_manifest_events'),
+          protocol_manifest_contract: z.enum([
+            'arena.dex.bsc-protocol-manifest@1',
+            'arena.dex.solana-protocol-manifest@1',
+          ]),
+          protocol_manifest_sha256: sha256Schema,
+          upstream_filter: z.literal('all_manifest_deployments_and_events'),
+          evaluation: z.literal('local_golden_50_match'),
+        })
+        .strict(),
     ]),
     query_state: queryStateSchema,
     completion_reason: completionReasonSchema,
@@ -249,9 +224,12 @@ const candidateTotalsSchema = z
   })
   .strict()
 
+// An accepted response passed the phase-specific decoder and semantic checks;
+// HTTP/RPC error bodies and rate-limit responses do not count as accepted.
 const telemetryPhaseSchema = z
   .object({
     request_count: safeNonNegativeIntegerSchema,
+    accepted_response_count: safeNonNegativeIntegerSchema,
     request_bytes: safeNonNegativeIntegerSchema,
     response_wire_bytes: safeNonNegativeIntegerSchema,
     response_decoded_bytes: safeNonNegativeIntegerSchema,
@@ -262,15 +240,19 @@ const telemetryPhaseSchema = z
 
 const telemetrySchema = z
   .object({
+    accounting_scope: z.literal('manifest_resolution_and_acquisition'),
     phases: z
       .object({
         boundary_resolution: telemetryPhaseSchema,
         block_catalog: telemetryPhaseSchema,
         discovery: telemetryPhaseSchema,
         transaction_evidence: telemetryPhaseSchema,
+        finality_anchor: telemetryPhaseSchema,
+        gap_evidence: telemetryPhaseSchema,
       })
       .strict(),
     request_count: safeNonNegativeIntegerSchema,
+    accepted_response_count: safeNonNegativeIntegerSchema,
     request_bytes: safeNonNegativeIntegerSchema,
     response_wire_bytes: safeNonNegativeIntegerSchema,
     response_decoded_bytes: safeNonNegativeIntegerSchema,
@@ -292,7 +274,7 @@ const claimsSchema = z
   .object({
     technical_sample_scope: z.literal('leaderboard_derived_stratified_50_wallets'),
     query_exhaustion_scope: z.literal('provider_query_only'),
-    block_catalog_scope: z.literal('same_provider_internal_continuity_only'),
+    block_catalog_scope: z.literal('bound_catalog_profile_internal_continuity_only'),
     wallet_chain_history_complete: z.literal(false),
     chain_population_complete: z.literal(false),
     population_denominator_eligible: z.literal(false),
@@ -311,12 +293,16 @@ const transcriptSchema = z
     purpose: z.literal('phase0_7d_technical_bakeoff_only'),
     mode: z.literal('shadow_only'),
     generated_at: canonicalTimestampSchema,
-    generator_git_sha: z.string().regex(FULL_GIT_SHA),
+    generator_git_sha: z
+      .string()
+      .regex(FULL_GIT_SHA)
+      .refine((value) => !/^0{40}$/.test(value), 'git SHA must be nonzero'),
     structural_state: z.enum(['structurally_complete', 'partial', 'failed']),
     chain: z.union([bscChainSchema, solanaChainSchema]),
     golden_sample: goldenSampleSchema,
     window: windowSchema,
-    source: sourceSchema,
+    source: dexAcquisitionSourceStructuralSchema,
+    endpoint_bindings: dexAcquisitionObservedEndpointBindingsStructuralSchema,
     artifacts: artifactsSchema,
     candidate_evidence: candidateEvidenceSchema,
     block_catalog: blockCatalogSchema,
@@ -332,10 +318,10 @@ const transcriptSchema = z
   })
   .strict()
 
-export type DexAcquisitionMode = z.infer<typeof acquisitionModeSchema>
 export type DexAcquisitionQueryLane = z.infer<typeof queryLaneSchema>
 export type DexAcquisitionWalletResult = z.infer<typeof walletResultSchema>
 export type DexAcquisitionTranscript = z.infer<typeof transcriptSchema>
+export type DexAcquisitionMode = DexAcquisitionTranscript['source']['acquisition_mode']
 
 function isCanonicalTimestamp(value: string): boolean {
   const parsed = Date.parse(value)
@@ -373,15 +359,22 @@ function sumQueryLanes(
 }
 
 function assertDistinctEvidenceHashes(transcript: DexAcquisitionTranscript): void {
+  const endpointHashes = [
+    transcript.endpoint_bindings.registry_sha256,
+    ...transcript.endpoint_bindings.profiles.flatMap((profile) => [
+      profile.connection_descriptor_sha256,
+      profile.endpoint_identity_sha256,
+    ]),
+  ]
   const hashes = [
     transcript.golden_sample.parent_snapshot_sha256,
     transcript.golden_sample.subset_sha256,
     transcript.window.height_range.start_anchor_semantic_sha256,
     transcript.window.height_range.end_anchor_semantic_sha256,
-    transcript.source.endpoint_identity_sha256,
+    ...endpointHashes,
     ...Object.values(transcript.artifacts),
     transcript.block_catalog.evidence_sha256,
-    transcript.block_catalog.independent_gap_evidence_sha256,
+    transcript.block_catalog.source_separated_gap_evidence_sha256,
     transcript.telemetry.cost.pricing_evidence_sha256,
     ...transcript.query_lanes.flatMap((lane) => [lane.page_chain_sha256, lane.checkpoint_sha256]),
   ].filter((value): value is string => value !== null)
@@ -514,7 +507,7 @@ function assertBlockCatalog(transcript: DexAcquisitionTranscript): void {
       catalog.first_observed_height !== null ||
       catalog.last_observed_height !== null ||
       catalog.evidence_sha256 !== null ||
-      catalog.independent_gap_evidence_sha256 !== null
+      catalog.source_separated_gap_evidence_sha256 !== null
     ) {
       throw new Error('not-run block catalog must be empty')
     }
@@ -565,15 +558,15 @@ function assertBlockCatalog(transcript: DexAcquisitionTranscript): void {
   if (
     transcript.chain.namespace === 'solana' &&
     catalog.verified_skipped_unit_count > 0 &&
-    catalog.independent_gap_evidence_sha256 === null
+    catalog.source_separated_gap_evidence_sha256 === null
   ) {
-    throw new Error('Solana skipped slots require independent gap evidence')
+    throw new Error('Solana skipped slots require source-separated gap evidence')
   }
   if (
-    catalog.independent_gap_evidence_sha256 !== null &&
+    catalog.source_separated_gap_evidence_sha256 !== null &&
     (transcript.chain.namespace !== 'solana' || catalog.verified_skipped_unit_count === 0)
   ) {
-    throw new Error('independent gap evidence is reserved for verified Solana skipped slots')
+    throw new Error('source-separated gap evidence is reserved for verified Solana skipped slots')
   }
 
   if (catalog.state === 'complete') {
@@ -799,6 +792,7 @@ function assertTelemetry(transcript: DexAcquisitionTranscript): void {
   const { telemetry } = transcript
   const phaseFields = [
     'request_count',
+    'accepted_response_count',
     'request_bytes',
     'response_wire_bytes',
     'response_decoded_bytes',
@@ -827,8 +821,31 @@ function assertTelemetry(transcript: DexAcquisitionTranscript): void {
     } else if (phase.request_bytes === 0) {
       throw new Error(`recorded telemetry phase requests require request bytes: ${phaseName}`)
     }
-    if (phase.retry_count > phase.request_count || phase.rate_limit_count > phase.request_count) {
-      throw new Error(`telemetry retry/rate-limit count exceeds requests: ${phaseName}`)
+    if (
+      phase.retry_count > phase.request_count ||
+      phase.accepted_response_count + phase.rate_limit_count > phase.request_count
+    ) {
+      throw new Error(`telemetry response/retry count exceeds requests: ${phaseName}`)
+    }
+    if (
+      phase.accepted_response_count > 0 &&
+      (phase.response_wire_bytes === 0 || phase.response_decoded_bytes === 0)
+    ) {
+      throw new Error(`accepted telemetry responses require response bytes: ${phaseName}`)
+    }
+  }
+
+  for (const [phaseName, phase] of [
+    ['boundary_resolution', telemetry.phases.boundary_resolution],
+    ['finality_anchor', telemetry.phases.finality_anchor],
+  ] as const) {
+    if (
+      phase.request_count === 0 ||
+      phase.accepted_response_count === 0 ||
+      phase.response_wire_bytes === 0 ||
+      phase.response_decoded_bytes === 0
+    ) {
+      throw new Error(`${phaseName} requires response-backed endpoint telemetry`)
     }
   }
 
@@ -837,8 +854,8 @@ function assertTelemetry(transcript: DexAcquisitionTranscript): void {
     if (phaseFields.some((field) => catalogPhase[field] !== 0)) {
       throw new Error('not-run block catalog cannot contain catalog telemetry')
     }
-  } else if (catalogPhase.request_count === 0) {
-    throw new Error('attempted block catalog requires at least one catalog request')
+  } else if (catalogPhase.request_count === 0 || catalogPhase.accepted_response_count === 0) {
+    throw new Error('attempted block catalog requires an accepted catalog response')
   }
 
   const discoveryPhase = telemetry.phases.discovery
@@ -856,9 +873,11 @@ function assertTelemetry(transcript: DexAcquisitionTranscript): void {
   }
   if (
     transcript.query_totals.page_count > 0 &&
-    (discoveryPhase.response_wire_bytes === 0 || discoveryPhase.response_decoded_bytes === 0)
+    (discoveryPhase.accepted_response_count < transcript.query_totals.page_count ||
+      discoveryPhase.response_wire_bytes === 0 ||
+      discoveryPhase.response_decoded_bytes === 0)
   ) {
-    throw new Error('committed query pages require discovery response bytes')
+    throw new Error('committed query pages require accepted discovery responses and bytes')
   }
   if (
     transcript.block_catalog.state !== 'not_run' &&
@@ -881,9 +900,32 @@ function assertTelemetry(transcript: DexAcquisitionTranscript): void {
     transcript.candidate_totals.evidence_rejected_count
   if (
     responseBackedEvidenceCount > 0 &&
-    (evidencePhase.response_wire_bytes === 0 || evidencePhase.response_decoded_bytes === 0)
+    (evidencePhase.accepted_response_count === 0 ||
+      evidencePhase.response_wire_bytes === 0 ||
+      evidencePhase.response_decoded_bytes === 0)
   ) {
-    throw new Error('response-backed transaction evidence requires response bytes')
+    throw new Error('response-backed transaction evidence requires an accepted response and bytes')
+  }
+
+  const gapPhase = telemetry.phases.gap_evidence
+  if (transcript.chain.namespace === 'eip155') {
+    if (phaseFields.some((field) => gapPhase[field] !== 0)) {
+      throw new Error('BSC acquisition cannot contain skipped-slot gap telemetry')
+    }
+  } else if (
+    transcript.block_catalog.verified_skipped_unit_count > 0 &&
+    (gapPhase.request_count === 0 ||
+      gapPhase.accepted_response_count === 0 ||
+      gapPhase.response_wire_bytes === 0 ||
+      gapPhase.response_decoded_bytes === 0)
+  ) {
+    throw new Error('verified Solana skipped slots require response-backed gap telemetry')
+  }
+  if (
+    transcript.block_catalog.state === 'not_run' &&
+    phaseFields.some((field) => gapPhase[field] !== 0)
+  ) {
+    throw new Error('not-run block catalog cannot contain gap-evidence telemetry')
   }
 
   const { cost } = telemetry
@@ -931,6 +973,11 @@ function assertGoldenSample(
     }
   }
 
+  const discoveryProfileId = transcript.endpoint_bindings.phases.discovery
+  if (transcript.query_lanes.some((lane) => lane.endpoint_profile_id !== discoveryProfileId)) {
+    throw new Error('every query lane must bind the exact discovery endpoint profile')
+  }
+
   if (transcript.source.query_shape === 'one_query_per_wallet') {
     for (let index = 0; index < subset.wallets.length; index += 1) {
       const lane = transcript.query_lanes[index]
@@ -947,13 +994,30 @@ function assertGoldenSample(
         throw new Error('wallet candidates require a committed page in their matching query lane')
       }
     }
-  } else {
+  } else if (transcript.source.query_shape === 'batched_wallet_locator') {
     const lane = transcript.query_lanes[0]
     if (lane?.lane_id !== 'all-golden-wallets' || lane.scope.kind !== 'all_golden_wallets') {
-      throw new Error('batched and protocol-wide queries require one all-wallet query lane')
+      throw new Error('batched wallet queries require one all-golden-wallet query lane')
     }
     if (transcript.candidate_totals.candidate_identity_count > 0 && lane.page_count === 0) {
       throw new Error('all-wallet candidates require a committed shared query page')
+    }
+  } else {
+    const lane = transcript.query_lanes[0]
+    const expectedContract =
+      transcript.chain.namespace === 'eip155'
+        ? 'arena.dex.bsc-protocol-manifest@1'
+        : 'arena.dex.solana-protocol-manifest@1'
+    if (
+      lane?.lane_id !== 'all-protocol-manifest-events' ||
+      lane.scope.kind !== 'all_protocol_manifest_events' ||
+      lane.scope.protocol_manifest_contract !== expectedContract ||
+      lane.scope.protocol_manifest_sha256 !== transcript.artifacts.protocol_manifest_sha256
+    ) {
+      throw new Error('protocol-wide queries require one exact manifest-event query lane')
+    }
+    if (transcript.candidate_totals.candidate_identity_count > 0 && lane.page_count === 0) {
+      throw new Error('protocol-linked wallet candidates require a committed shared query page')
     }
   }
 
@@ -972,8 +1036,13 @@ function assertTranscriptInvariants(
   parentSnapshot: DexGoldenWalletSnapshot
 ): void {
   assertWindow(transcript)
-  assertGoldenSample(transcript, parentSnapshot)
   assertSource(transcript)
+  parseDexAcquisitionEndpointBindingContext({
+    chain: transcript.chain,
+    source: transcript.source,
+    endpoint_bindings: transcript.endpoint_bindings,
+  })
+  assertGoldenSample(transcript, parentSnapshot)
   assertDistinctEvidenceHashes(transcript)
   assertBlockCatalog(transcript)
   for (const lane of transcript.query_lanes) {
@@ -987,7 +1056,7 @@ function assertTranscriptInvariants(
 }
 
 /**
- * Parse a single-chain, single-provider, fixed-window technical transcript.
+ * Parse a single-chain, phase-bound-endpoint, fixed-window technical transcript.
  * The supplied parent fixture is re-derived so a plausible-looking subset SHA
  * or reordered 50-wallet result set cannot be accepted on its own. This parser
  * validates the summary and its content-addressed references; it deliberately
