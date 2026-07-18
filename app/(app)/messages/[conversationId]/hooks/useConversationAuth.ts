@@ -6,8 +6,10 @@ import { supabase } from '@/lib/supabase/client'
 import { getAuthSession, refreshAuthToken } from '@/lib/auth'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
+import { fireAndForget } from '@/lib/utils/logger'
+import { buildConversationLoginHref } from '../login-intent'
 
-export function useConversationAuth() {
+export function useConversationAuth(conversationId: string) {
   const router = useRouter()
   const { showToast } = useToast()
   const { t } = useLanguage()
@@ -17,20 +19,37 @@ export function useConversationAuth() {
   const [accessToken, setAccessToken] = useState<string | null>(null)
 
   useEffect(() => {
-    getAuthSession().then((auth) => {
-      if (auth) {
-        setUserId(auth.userId)
-        setAccessToken(auth.accessToken)
-        supabase.auth.getSession().then(({ data }) => {
-          setEmail(data.session?.user?.email ?? null)
-        }).catch(() => { /* Intentionally swallowed: email fetch non-critical */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-      } else {
+    let cancelled = false
+    getAuthSession()
+      .then((auth) => {
+        if (cancelled) return
+        if (auth) {
+          setUserId(auth.userId)
+          setAccessToken(auth.accessToken)
+          fireAndForget(
+            supabase.auth.getSession().then(({ data }) => {
+              if (cancelled) return
+              setEmail(data.session?.user?.email ?? null)
+            }),
+            'conversation-auth-email'
+          )
+        } else {
+          setUserId(null)
+          setAccessToken(null)
+        }
+      })
+      .catch(() => {
+        if (cancelled) return
         setUserId(null)
+        setEmail(null)
         setAccessToken(null)
-      }
-      setAuthChecked(true)
-    }).catch(() => { /* Intentionally swallowed: auth session check non-critical */ }) // eslint-disable-line no-restricted-syntax -- intentional fire-and-forget
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      })
+      .finally(() => {
+        if (!cancelled) setAuthChecked(true)
+      })
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session) {
         setUserId(session.user.id)
         setEmail(session.user.email ?? null)
@@ -41,18 +60,24 @@ export function useConversationAuth() {
         setAccessToken(null)
       }
     })
-    return () => { subscription.unsubscribe() }
+    return () => {
+      cancelled = true
+      subscription.unsubscribe()
+    }
   }, [])
 
-  const ensureAuth = useCallback(async (): Promise<{ userId: string; accessToken: string } | null> => {
+  const ensureAuth = useCallback(async (): Promise<{
+    userId: string
+    accessToken: string
+  } | null> => {
     const auth = await getAuthSession()
     if (auth) return auth
     const refreshed = await refreshAuthToken()
     if (refreshed) return refreshed
     showToast(t('loginExpiredPleaseRelogin'), 'error')
-    router.push('/login?redirect=/inbox')
+    router.push(buildConversationLoginHref(conversationId))
     return null
-  }, [showToast, t, router])
+  }, [conversationId, showToast, t, router])
 
   return { email, userId, authChecked, accessToken, ensureAuth }
 }
