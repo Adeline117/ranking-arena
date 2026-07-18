@@ -378,7 +378,6 @@ export async function createOneTimePaymentSession(params: {
   successUrl: string
   cancelUrl: string
   metadata: Record<string, string>
-  promotionCode?: string
 }): Promise<Stripe.Checkout.Session> {
   const idempotencyKey = `payment_${params.userId}_${params.discriminator}_${Math.floor(Date.now() / 60_000)}`
 
@@ -391,13 +390,13 @@ export async function createOneTimePaymentSession(params: {
     success_url: params.successUrl,
     cancel_url: params.cancelUrl,
     metadata: { ...params.metadata, user_id: params.userId },
-    allow_promotion_codes: !params.promotionCode,
+    // One-time product writers persist an exact amount before fulfillment.
+    // Dashboard defaults must not make that payable amount mutable.
+    allow_promotion_codes: false,
+    automatic_tax: { enabled: false },
+    adaptive_pricing: { enabled: false },
     billing_address_collection: 'auto',
     locale: 'auto',
-  }
-
-  if (params.promotionCode) {
-    sessionParams.discounts = [{ promotion_code: params.promotionCode }]
   }
 
   return stripe.checkout.sessions.create(sessionParams, { idempotencyKey })

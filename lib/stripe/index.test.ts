@@ -11,6 +11,7 @@ import {
   SUBSCRIPTION_STATUS_MAP,
   getOrCreateStripeCustomer,
   createCheckoutSession,
+  createOneTimePaymentSession,
   createPortalSession,
   cancelSubscription,
   resumeSubscription,
@@ -508,6 +509,54 @@ describe('createCheckoutSession', () => {
         },
       }),
       expect.objectContaining({ idempotencyKey: expect.any(String) })
+    )
+  })
+})
+
+describe('createOneTimePaymentSession', () => {
+  test('freezes dashboard-controlled price mutation for exact one-time payments', async () => {
+    const mockSession = {
+      id: 'cs_tip123',
+      url: 'https://checkout.stripe.com/...',
+    }
+    stripe.checkout.sessions.create = jest.fn().mockResolvedValue(mockSession)
+
+    const result = await createOneTimePaymentSession({
+      customerId: 'cus_123',
+      userId: 'user-123',
+      discriminator: 'tip_post-123_500',
+      lineItems: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: { name: 'Tip' },
+            unit_amount: 500,
+          },
+          quantity: 1,
+        },
+      ],
+      successUrl: 'https://example.com/success',
+      cancelUrl: 'https://example.com/cancel',
+      metadata: { type: 'tip', tip_id: 'tip-123' },
+    })
+
+    expect(result).toBe(mockSession)
+    expect(stripe.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        customer: 'cus_123',
+        mode: 'payment',
+        allow_promotion_codes: false,
+        automatic_tax: { enabled: false },
+        adaptive_pricing: { enabled: false },
+        metadata: {
+          type: 'tip',
+          tip_id: 'tip-123',
+          user_id: 'user-123',
+        },
+      }),
+      expect.objectContaining({
+        idempotencyKey: expect.stringMatching(/^payment_user-123_tip_post-123_500_/),
+      })
     )
   })
 })
