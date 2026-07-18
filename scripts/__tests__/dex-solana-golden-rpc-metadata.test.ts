@@ -23,13 +23,18 @@ import {
   dexGoldenRpcEvidenceSha256,
   dexGoldenRpcParamsSha256,
   parseDexGoldenRpcEvidence,
-  type DexGoldenRemoteEndpointId,
 } from '../lib/dex-golden-rpc-evidence'
 import {
   compileDexSolanaGoldenRpcMetadata,
+  compileDexSolanaGoldenRpcMetadataWithProgramHits,
   type DexSolanaGoldenRpcMetadataCaptureInput,
   type DexSolanaGoldenRpcMetadataInput,
+  type DexSolanaGoldenRpcMetadataWithProgramHitsInput,
 } from '../lib/dex-solana-golden-rpc-metadata'
+import {
+  dexSolanaProgramHitProjectionSha256,
+  parseDexSolanaProgramHitProjection,
+} from '../lib/dex-solana-program-hit-projection'
 
 const CAPTURED_AT = '2026-07-18T09:00:00.000Z'
 const GENERATED_AT = '2026-07-18T09:01:00.000Z'
@@ -87,6 +92,9 @@ const ANCHOR_BLOCK_HASH = syntheticBase58(32, 'anchor-block')
 const ANCHOR_PARENT_HASH = syntheticBase58(32, 'anchor-parent')
 const MEMBERSHIP_BLOCK_HASH = syntheticBase58(32, 'membership-block')
 const MEMBERSHIP_PARENT_HASH = syntheticBase58(32, 'membership-parent')
+const PAYER = syntheticBase58(32, 'program-hit-payer')
+const TARGET_PROGRAM_ID = syntheticBase58(32, 'program-hit-target')
+const OTHER_PROGRAM_ID = syntheticBase58(32, 'program-hit-other')
 
 function endpoint(id: FixtureEndpointId): SolanaEvidenceEndpointIdentity {
   const golden = dexGoldenRemoteEndpointIdentity(id)
@@ -159,6 +167,8 @@ function rawExchange(
 interface CaptureOptions {
   signature?: string
   membershipBlockHash?: string
+  programHitTransaction?: boolean
+  providerExtension?: unknown
 }
 
 function providerCapture(
@@ -337,13 +347,44 @@ function providerCapture(
         transactionIndex: normalizedTransaction.reportedTransactionIndex,
         transaction: {
           signatures: normalizedTransaction.signatures,
-          message: { providerOnly: true },
+          message: options.programHitTransaction
+            ? {
+                header: {
+                  numRequiredSignatures: 1,
+                  numReadonlySignedAccounts: 0,
+                  numReadonlyUnsignedAccounts: 2,
+                },
+                accountKeys: [PAYER, TARGET_PROGRAM_ID, OTHER_PROGRAM_ID],
+                addressTableLookups: [],
+                instructions: [
+                  {
+                    programIdIndex: 1,
+                    accounts: [0],
+                    data: '11111111',
+                  },
+                ],
+              }
+            : { providerOnly: true },
         },
         meta: {
           err: normalizedTransaction.err,
           status: normalizedTransaction.status,
           fee: 5_000,
+          ...(options.programHitTransaction
+            ? {
+                loadedAddresses: { writable: [], readonly: [] },
+                preBalances: [10_000, 0, 0],
+                postBalances: [5_000, 0, 0],
+                preTokenBalances: [],
+                postTokenBalances: [],
+                innerInstructions: [],
+                logMessages: ['synthetic same-lifecycle fixture'],
+              }
+            : {}),
         },
+        ...(options.providerExtension === undefined
+          ? {}
+          : { providerExtension: options.providerExtension }),
       }
     ),
     rawExchange(
@@ -408,6 +449,16 @@ function compilerInput(
   return {
     generated_at: GENERATED_AT,
     captures: [first, second],
+  }
+}
+
+function programHitCompilerInput(
+  first = providerCapture('solana_official_mainnet', { programHitTransaction: true }),
+  second = providerCapture('publicnode_solana_mainnet', { programHitTransaction: true })
+): DexSolanaGoldenRpcMetadataWithProgramHitsInput {
+  return {
+    metadata_input: compilerInput(first, second),
+    target_program_id: TARGET_PROGRAM_ID,
   }
 }
 
@@ -652,7 +703,12 @@ describe('Solana in-memory golden RPC metadata compiler', () => {
       const aliasedBytes = aliasedRequestBytes(input)
       const bytes = allRawBytes(input)
       if (outcome === 'strict verifier failure') {
-        ;(input.captures[0].anchor.evidence as unknown as Record<string, unknown>).unexpected = true
+        Object.defineProperty(input.captures[0].anchor.evidence, 'unexpected', {
+          configurable: true,
+          enumerable: true,
+          value: true,
+          writable: true,
+        })
         expect(() => compileDexSolanaGoldenRpcMetadata(input)).toThrow(
           'Solana chain anchor is not fully verified'
         )
@@ -772,7 +828,12 @@ describe('Solana in-memory golden RPC metadata compiler', () => {
 
   it('rejects normalized evidence that no longer passes the strict verifier', () => {
     const input = compilerInput()
-    ;(input.captures[0].anchor.evidence as unknown as Record<string, unknown>).unexpected = 'forged'
+    Object.defineProperty(input.captures[0].anchor.evidence, 'unexpected', {
+      configurable: true,
+      enumerable: true,
+      value: 'forged',
+      writable: true,
+    })
     expectFailureAndZeroing(input, 'Solana chain anchor is not fully verified')
   })
 
@@ -856,4 +917,202 @@ describe('Solana in-memory golden RPC metadata compiler', () => {
       expectFailureAndZeroing(input)
     }
   )
+})
+
+describe('Solana same-lifecycle metadata and program-hit compiler', () => {
+  it('derives one closed common projection before zeroing every owned byte', () => {
+    const input = programHitCompilerInput(
+      providerCapture('solana_official_mainnet', { programHitTransaction: true }),
+      providerCapture('publicnode_solana_mainnet', {
+        programHitTransaction: true,
+        providerExtension: { apiVersion: 'provider-specific-v2' },
+      })
+    )
+    const rawBytes = allRawBytes(input.metadata_input)
+    const derivedBytes: Uint8Array[] = []
+    const originalEncode = TextEncoder.prototype.encode
+    const encodeSpy = jest.spyOn(TextEncoder.prototype, 'encode').mockImplementation(function (
+      this: TextEncoder,
+      value?: string
+    ) {
+      const bytes = Reflect.apply(originalEncode, this, [value]) as Uint8Array
+      derivedBytes.push(bytes)
+      return bytes
+    })
+    let compiled: ReturnType<typeof compileDexSolanaGoldenRpcMetadataWithProgramHits>
+    try {
+      compiled = compileDexSolanaGoldenRpcMetadataWithProgramHits(input)
+    } finally {
+      encodeSpy.mockRestore()
+    }
+
+    expect(parseDexGoldenRpcEvidence(compiled.golden_rpc_evidence)).toEqual(
+      compiled.golden_rpc_evidence
+    )
+    expect(parseDexSolanaProgramHitProjection(compiled.common_program_hit_projection)).toEqual(
+      compiled.common_program_hit_projection
+    )
+    expect(compiled.common_program_hit_projection).toMatchObject({
+      signature: SIGNATURE,
+      slot_decimal: String(TRANSACTION_SLOT),
+      transaction_version: 0,
+      execution_status: 'succeeded',
+      target_program_id: TARGET_PROGRAM_ID,
+      target_hit_count: 1,
+      inner_instructions_state: 'verified_empty',
+    })
+    expect(compiled.common_program_hit_projection_sha256).toBe(
+      dexSolanaProgramHitProjectionSha256(compiled.common_program_hit_projection)
+    )
+    expect(compiled.common_program_hit_projection_sha256).toBe(
+      '5c6172bddcd782d59622a1dc789868bcc474c8a09c12ab336158eff80771456c'
+    )
+    expect(compiled.source_derivations.map((source) => source.endpoint.endpoint_id)).toEqual([
+      'publicnode_solana_mainnet',
+      'solana_official_mainnet',
+    ])
+    for (const source of compiled.source_derivations) {
+      expect(source.program_hit_projection_sha256).toBe(
+        compiled.common_program_hit_projection_sha256
+      )
+      const capture = compiled.golden_rpc_evidence.captures.find(
+        (candidate) => candidate.endpoint.endpoint_id === source.endpoint.endpoint_id
+      )
+      const transactionExchange = capture?.rpc_exchanges.find(
+        (exchange) => exchange.lane === 'transaction'
+      )
+      expect(source).toMatchObject({
+        endpoint: capture?.endpoint,
+        capture_completed_at: capture?.capture_completed_at,
+        transaction_exchange_binding_sha256: transactionExchange?.exchange_binding_sha256,
+        transaction_response_sha256: transactionExchange?.response.sha256,
+      })
+    }
+    expect(compiled.source_derivations[0].transaction_response_sha256).not.toBe(
+      compiled.source_derivations[1].transaction_response_sha256
+    )
+
+    const names = propertyNames(compiled)
+    for (const forbiddenName of [
+      'transaction_result',
+      'dataBase58',
+      'staticAccountKeys',
+      'accountKeys',
+      'instructions',
+      'bytes',
+      'text',
+      'raw_body',
+      'normalized_body',
+      'blob_locator',
+    ]) {
+      expect(names.has(forbiddenName)).toBe(false)
+    }
+    expectZeroed(rawBytes)
+    expect(derivedBytes).toHaveLength(6)
+    for (const bytes of derivedBytes) {
+      expect([...bytes].every((byte) => byte === 0)).toBe(true)
+    }
+  })
+
+  it('is deterministic when the two capture inputs arrive in reverse order', () => {
+    const first = programHitCompilerInput()
+    const second = programHitCompilerInput(
+      providerCapture('publicnode_solana_mainnet', { programHitTransaction: true }),
+      providerCapture('solana_official_mainnet', { programHitTransaction: true })
+    )
+    const firstBytes = allRawBytes(first.metadata_input)
+    const secondBytes = allRawBytes(second.metadata_input)
+
+    const firstCompiled = compileDexSolanaGoldenRpcMetadataWithProgramHits(first)
+    const secondCompiled = compileDexSolanaGoldenRpcMetadataWithProgramHits(second)
+
+    expect(secondCompiled).toEqual(firstCompiled)
+    expectZeroed(firstBytes)
+    expectZeroed(secondBytes)
+  })
+
+  it('rejects complete projection drift and zeroes both providers before throwing', () => {
+    const input = programHitCompilerInput()
+    mutateResponse(input.metadata_input.captures[1].transaction.rawExchanges[0], (payload) => {
+      const result = payload.result as {
+        transaction: { message: { instructions: Array<{ data: string }> } }
+      }
+      result.transaction.message.instructions[0].data = '2'
+    })
+    const rawBytes = allRawBytes(input.metadata_input)
+    const derivedBytes: Uint8Array[] = []
+    const originalEncode = TextEncoder.prototype.encode
+    const encodeSpy = jest.spyOn(TextEncoder.prototype, 'encode').mockImplementation(function (
+      this: TextEncoder,
+      value?: string
+    ) {
+      const bytes = Reflect.apply(originalEncode, this, [value]) as Uint8Array
+      derivedBytes.push(bytes)
+      return bytes
+    })
+
+    try {
+      expect(() => compileDexSolanaGoldenRpcMetadataWithProgramHits(input)).toThrow(
+        'disagree on the complete program-hit projection'
+      )
+    } finally {
+      encodeSpy.mockRestore()
+    }
+    expectZeroed(rawBytes)
+    expect(derivedBytes).toHaveLength(6)
+    for (const bytes of derivedBytes) {
+      expect([...bytes].every((byte) => byte === 0)).toBe(true)
+    }
+  })
+
+  it.each(['incomplete transaction result', 'target-free transaction result'] as const)(
+    'fails closed for a %s and zeroes every raw request and response',
+    (fault) => {
+      const input =
+        fault === 'incomplete transaction result'
+          ? {
+              metadata_input: compilerInput(),
+              target_program_id: TARGET_PROGRAM_ID,
+            }
+          : programHitCompilerInput()
+      if (fault === 'target-free transaction result') {
+        input.target_program_id = syntheticBase58(32, 'absent-program')
+      }
+      const rawBytes = allRawBytes(input.metadata_input)
+
+      expect(() => compileDexSolanaGoldenRpcMetadataWithProgramHits(input)).toThrow()
+      expectZeroed(rawBytes)
+    }
+  )
+
+  it('uses captured TypedArray fill intrinsics for projection and raw-byte cleanup', () => {
+    const input = programHitCompilerInput()
+    const rawBytes = allRawBytes(input.metadata_input)
+    const fillSpy = jest.spyOn(Uint8Array.prototype, 'fill').mockImplementation(function (
+      this: Uint8Array
+    ) {
+      return this
+    })
+    try {
+      expect(() => compileDexSolanaGoldenRpcMetadataWithProgramHits(input)).not.toThrow()
+    } finally {
+      fillSpy.mockRestore()
+    }
+
+    expect(fillSpy).not.toHaveBeenCalled()
+    expectZeroed(rawBytes)
+  })
+
+  it('rejects extra compiler envelope fields without leaking owned bytes', () => {
+    const input = {
+      ...programHitCompilerInput(),
+      callback: () => 'forbidden',
+    }
+    const rawBytes = allRawBytes(input.metadata_input)
+
+    expect(() => compileDexSolanaGoldenRpcMetadataWithProgramHits(input as never)).toThrow(
+      'program-hit compiler input has an unexpected shape'
+    )
+    expectZeroed(rawBytes)
+  })
 })

@@ -37,6 +37,11 @@ import {
   buildDexSolanaStableTransactionFacts,
   dexSolanaStableTransactionFactsSha256,
 } from './dex-golden-transaction-facts'
+import {
+  dexSolanaProgramHitProjectionSha256,
+  projectDexSolanaProgramHits,
+  type DexSolanaProgramHitProjection,
+} from './dex-solana-program-hit-projection'
 
 const ALLOWED_ENDPOINT_IDS = ['publicnode_solana_mainnet', 'solana_official_mainnet'] as const
 const CREDENTIAL_KEY_NAMES = new Set([
@@ -82,6 +87,29 @@ export interface DexSolanaGoldenRpcMetadataInput {
   ]
 }
 
+export interface DexSolanaGoldenRpcMetadataWithProgramHitsInput {
+  metadata_input: DexSolanaGoldenRpcMetadataInput
+  target_program_id: string
+}
+
+export interface DexSolanaGoldenRpcProgramHitSourceDerivation {
+  endpoint: DexGoldenRpcCapture['endpoint']
+  capture_completed_at: string
+  transaction_exchange_binding_sha256: string
+  transaction_response_sha256: string
+  program_hit_projection_sha256: string
+}
+
+export interface DexSolanaGoldenRpcMetadataWithProgramHits {
+  golden_rpc_evidence: DexGoldenRpcEvidence
+  common_program_hit_projection: DexSolanaProgramHitProjection
+  common_program_hit_projection_sha256: string
+  source_derivations: readonly [
+    DexSolanaGoldenRpcProgramHitSourceDerivation,
+    DexSolanaGoldenRpcProgramHitSourceDerivation,
+  ]
+}
+
 interface VerifiedCapture {
   endpointId: AllowedEndpointId
   anchor: SolanaVerifiedChainAnchor
@@ -89,6 +117,17 @@ interface VerifiedCapture {
   anchorDocument: unknown
   membershipDocument: unknown
   rawExchanges: SolanaRawRpcEvidenceExchange[]
+}
+
+interface CompiledCapture {
+  metadata: DexGoldenRpcCapture
+  transactionResult: unknown
+  verifiedTransaction: SolanaVerifiedTransactionFinality
+}
+
+interface CompiledMetadata {
+  evidence: DexGoldenRpcEvidence
+  captures: readonly [CompiledCapture, CompiledCapture]
 }
 
 interface EphemeralByteScope {
@@ -168,7 +207,7 @@ function byteView(value: unknown): Uint8Array | null {
 
 function intrinsicByteLength(bytes: Uint8Array): number {
   if (!TYPED_ARRAY_LENGTH_GETTER) invalid('TypedArray length intrinsic is unavailable')
-  const length = Reflect.apply(TYPED_ARRAY_LENGTH_GETTER, bytes, []) as unknown
+  const length: unknown = Reflect.apply(TYPED_ARRAY_LENGTH_GETTER, bytes, [])
   if (!Number.isSafeInteger(length) || Number(length) < 0) {
     invalid('raw byte array has an invalid internal length')
   }
@@ -571,7 +610,7 @@ function verifyCapture(input: DexSolanaGoldenRpcMetadataCaptureInput): VerifiedC
   }
 }
 
-function compileCapture(capture: VerifiedCapture, scope: EphemeralByteScope): DexGoldenRpcCapture {
+function compileCapture(capture: VerifiedCapture, scope: EphemeralByteScope): CompiledCapture {
   const completedTimes: number[] = [
     canonicalTimestampMs(capture.anchor.observedAt, 'anchor observedAt'),
     canonicalTimestampMs(capture.transaction.capturedAt, 'transaction capturedAt'),
@@ -581,6 +620,8 @@ function compileCapture(capture: VerifiedCapture, scope: EphemeralByteScope): De
   }
   const captureCompletedAt = new Date(Math.max(...completedTimes)).toISOString()
   const endpoint = dexGoldenRemoteEndpointIdentity(capture.endpointId)
+  let transactionResult: unknown
+  let transactionResultObserved = false
   const rpcExchanges: DexGoldenRpcExchange[] = capture.rawExchanges.map((exchange, index) => {
     const [lane, method] = DEX_SOLANA_GOLDEN_RPC_LANES[index]
     if (
@@ -599,6 +640,10 @@ function compileCapture(capture: VerifiedCapture, scope: EphemeralByteScope): De
     const parsedRequest = parseRequest(exchange, method, params)
     const responseResult = parseResponse(exchange)
     assertRawResultBinding(lane, responseResult, capture.anchor, capture.transaction)
+    if (lane === 'transaction') {
+      transactionResult = responseResult
+      transactionResultObserved = true
+    }
     const core = {
       lane,
       method,
@@ -620,7 +665,8 @@ function compileCapture(capture: VerifiedCapture, scope: EphemeralByteScope): De
     }
   })
 
-  return {
+  if (!transactionResultObserved) invalid('transaction response result is missing')
+  const metadata: DexGoldenRpcCapture = {
     endpoint,
     endpoint_assertion_state: 'declared_not_replayed',
     capture_completed_at: captureCompletedAt,
@@ -636,12 +682,17 @@ function compileCapture(capture: VerifiedCapture, scope: EphemeralByteScope): De
     },
     stable_transaction_facts_sha256: dexSolanaStableTransactionFactsSha256(capture.transaction),
   }
+  return {
+    metadata,
+    transactionResult,
+    verifiedTransaction: capture.transaction,
+  }
 }
 
 function compileInternal(
   input: DexSolanaGoldenRpcMetadataInput,
   scope: EphemeralByteScope
-): DexGoldenRpcEvidence {
+): CompiledMetadata {
   assertExactRecord(input, ['generated_at', 'captures'], 'compiler input')
   assertNoCredentialMaterial(input)
   canonicalTimestampMs(input.generated_at, 'generated_at')
@@ -666,7 +717,7 @@ function compileInternal(
     invalid('the two providers disagree on stable transaction facts')
   }
 
-  const captures = verified
+  const compiledCaptures = verified
     .sort((left, right) => {
       const leftEndpoint = dexGoldenRemoteEndpointIdentity(left.endpointId)
       const rightEndpoint = dexGoldenRemoteEndpointIdentity(right.endpointId)
@@ -676,7 +727,9 @@ function compileInternal(
     })
     .map((capture) => compileCapture(capture, scope))
 
-  return parseDexGoldenRpcEvidence({
+  if (compiledCaptures.length !== 2) invalid('exactly two compiled captures are required')
+  const captures = compiledCaptures as [CompiledCapture, CompiledCapture]
+  const evidence = parseDexGoldenRpcEvidence({
     schema_version: DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION,
     data_contract: DEX_GOLDEN_RPC_EVIDENCE_CONTRACT,
     purpose: 'phase0_shadow_finality_membership_evidence_only',
@@ -694,7 +747,7 @@ function compileInternal(
     transaction_id: verified[0].transaction.signature,
     stable_transaction_facts_contract: DEX_SOLANA_STABLE_TRANSACTION_FACTS_CONTRACT,
     stable_transaction_facts_sha256: firstFactsHash,
-    captures,
+    captures: captures.map((capture) => capture.metadata),
     required_blockers: [...DEX_GOLDEN_RPC_REQUIRED_BLOCKERS],
     claims: {
       normalized_documents_replayed: false,
@@ -712,6 +765,7 @@ function compileInternal(
       score: false,
     },
   })
+  return { evidence, captures }
 }
 
 /**
@@ -724,5 +778,69 @@ function compileInternal(
 export function compileDexSolanaGoldenRpcMetadata(
   input: DexSolanaGoldenRpcMetadataInput
 ): DexGoldenRpcEvidence {
-  return withOwnedBytes(input, (scope) => compileInternal(input, scope))
+  return withOwnedBytes(input, (scope) => compileInternal(input, scope).evidence)
+}
+
+function sourceProgramHitDerivation(
+  capture: CompiledCapture,
+  targetProgramId: string
+): {
+  projection: DexSolanaProgramHitProjection
+  source: DexSolanaGoldenRpcProgramHitSourceDerivation
+} {
+  const projection = projectDexSolanaProgramHits({
+    signature: capture.verifiedTransaction.signature,
+    target_program_id: targetProgramId,
+    transaction_result: capture.transactionResult,
+  })
+  if (
+    projection.signature !== capture.verifiedTransaction.signature ||
+    projection.slot_decimal !== String(capture.verifiedTransaction.transaction.slot) ||
+    projection.transaction_version !== capture.verifiedTransaction.transaction.version ||
+    projection.execution_status !== capture.verifiedTransaction.executionStatus
+  ) {
+    invalid('program-hit projection conflicts with verified transaction finality')
+  }
+  const transactionExchange = capture.metadata.rpc_exchanges.find(
+    (exchange) => exchange.lane === 'transaction'
+  )
+  if (transactionExchange === undefined) invalid('compiled transaction exchange is missing')
+  const projectionSha256 = dexSolanaProgramHitProjectionSha256(projection)
+  return {
+    projection,
+    source: {
+      endpoint: { ...capture.metadata.endpoint },
+      capture_completed_at: capture.metadata.capture_completed_at,
+      transaction_exchange_binding_sha256: transactionExchange.exchange_binding_sha256,
+      transaction_response_sha256: transactionExchange.response.sha256,
+      program_hit_projection_sha256: projectionSha256,
+    },
+  }
+}
+
+/**
+ * Compile the existing metadata-only evidence and derive one exact program-hit
+ * projection from each transaction response before the owned response bytes
+ * are zeroed. Parsed responses never escape this fixed derivation path.
+ */
+export function compileDexSolanaGoldenRpcMetadataWithProgramHits(
+  input: DexSolanaGoldenRpcMetadataWithProgramHitsInput
+): DexSolanaGoldenRpcMetadataWithProgramHits {
+  return withOwnedBytes(input, (scope) => {
+    assertExactRecord(input, ['metadata_input', 'target_program_id'], 'program-hit compiler input')
+    const compiled = compileInternal(input.metadata_input, scope)
+    const first = sourceProgramHitDerivation(compiled.captures[0], input.target_program_id)
+    const second = sourceProgramHitDerivation(compiled.captures[1], input.target_program_id)
+    const firstSha256 = first.source.program_hit_projection_sha256
+    const secondSha256 = second.source.program_hit_projection_sha256
+    if (firstSha256 !== secondSha256 || !sameJson(first.projection, second.projection)) {
+      invalid('the two providers disagree on the complete program-hit projection')
+    }
+    return {
+      golden_rpc_evidence: compiled.evidence,
+      common_program_hit_projection: first.projection,
+      common_program_hit_projection_sha256: firstSha256,
+      source_derivations: [first.source, second.source],
+    }
+  })
 }
