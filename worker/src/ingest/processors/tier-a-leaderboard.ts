@@ -43,11 +43,14 @@ export async function processTierA(job: Job<TierJobData>): Promise<TierAResult[]
   }
 
   const adapter = getAdapter(src.adapter_slug)
-  const session = await openSession(src)
   const timeframes = nativeRankingTimeframes(src)
   const cycleId = observationCycleId(job, 'tier-a', src.slug)
   const results: TierAResult[] = []
   const failures: Array<{ timeframe: number; error: Error }> = []
+  // Compute every potentially-throwing input before acquiring the source's
+  // persistent-profile lease. Once acquired, the try/finally begins
+  // immediately so future edits cannot strand the unsuffixed Tier-A lane.
+  const session = await openSession(src)
 
   try {
     for (const timeframe of timeframes) {

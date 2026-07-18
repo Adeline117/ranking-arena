@@ -69,7 +69,14 @@ export async function processTierC(job: Job<TierCJobData>): Promise<unknown> {
     return { surfacesFetched: 0, skipped: 'claimed' }
   }
 
-  const session = await openSession(src)
+  // The dedicated Tier-C worker runs with concurrency=2. Use two fixed,
+  // persistent slots per source so concurrent on-demand jobs cannot share a
+  // ProcessSingleton; any future excess concurrency queues for these slots.
+  const session = await openSession(src, {
+    profileLaneKey: 'tier-c',
+    profileSuffix: 'tier-c',
+    profileSlotCount: 2,
+  })
   try {
     const scrapedAt = new Date().toISOString()
     const bundle = await adapter.getProfile(session, src, exchangeTraderId, timeframe, traderMeta, {
@@ -199,7 +206,12 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
   const resultKey = tierCResultKey(job.data)
   const scrapedAt = new Date().toISOString()
 
-  const session = await openSession(src)
+  // Profile and heavy-tab jobs share the same bounded Tier-C slot pool.
+  const session = await openSession(src, {
+    profileLaneKey: 'tier-c',
+    profileSuffix: 'tier-c',
+    profileSlotCount: 2,
+  })
   try {
     const ctx: ParseCtx = {
       sourceSlug: src.slug,

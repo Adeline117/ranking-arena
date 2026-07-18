@@ -24,7 +24,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { chromium } from 'playwright'
-import type { APIRequestContext, BrowserContext, Page, Request } from 'playwright'
+import type { APIRequestContext, Browser, BrowserContext, Page, Request } from 'playwright'
 import type { SourceRow } from '../core/types'
 import type {
   CapturedExchange,
@@ -35,6 +35,12 @@ import type {
 import { BlockedUpstreamError, PacedGate } from './rate-limiter'
 import { Circuit, type CircuitState } from './circuit'
 import { getIngestPool } from '../db'
+import {
+  acquireProfileLane,
+  validateProfileLaneConfig,
+  type ProfileLaneConfig,
+  type ProfileLaneLease,
+} from './profile-lanes'
 
 const CONTEXT_OPTIONS = {
   timezoneId: 'UTC',
@@ -152,7 +158,13 @@ function toTemplate(req: Request): ReplayRequestTemplate {
 
 class PlaywrightFetchSession implements FetchSession {
   private context: BrowserContext | null = null
+  private contextCreation: Promise<BrowserContext> | null = null
+  private resetPromise: Promise<void> | null = null
+  private savePromise: Promise<void> | null = null
   private pageInstance: Page | null = null
+  private state: 'open' | 'closing' | 'closed' = 'open'
+  private closePromise: Promise<void> | null = null
+  private terminalError: Error | null = null
   /** Last main-frame http(s) URL — restored after a mid-session context reset. */
   private lastNavigatedUrl: string | null = null
   private readonly gate: PacedGate
@@ -161,24 +173,35 @@ class PlaywrightFetchSession implements FetchSession {
   constructor(
     readonly sourceSlug: string,
     private readonly src: SourceRow,
-    private readonly profileSuffix?: string
+    private readonly profileDirectory?: string,
+    private profileLaneLease?: ProfileLaneLease
   ) {
     this.gate = new PacedGate({ budgetMs: src.rate_budget_ms })
     this.circuit = getCircuit(src.slug)
   }
 
-  private async ensureContext(): Promise<BrowserContext> {
-    if (this.context) return this.context
+  private isLocalProfile(): boolean {
+    return this.src.fetch_region === 'local' || isLocalRegion(this.src.fetch_region)
+  }
 
+  private assertOpen(): void {
+    if (this.state !== 'open') {
+      throw new Error(`[ingest] ${this.sourceSlug} fetch session is ${this.state}`)
+    }
+    if (this.terminalError) throw this.terminalError
+  }
+
+  private async createContext(): Promise<BrowserContext> {
+    const region = this.src.fetch_region
     // Local when fetch_region is literally 'local' OR matches this node's
     // INGEST_LOCAL_REGION (a region-resident worker runs browsers itself).
     // Keep the literal 'local' check first so TS narrows the else branch
     // for remoteWsEndpoint().
-    if (this.src.fetch_region === 'local' || isLocalRegion(this.src.fetch_region)) {
-      const profileName = this.profileSuffix
-        ? `${this.src.slug}-${this.profileSuffix}`
-        : this.src.slug
-      const userDataDir = path.join(process.cwd(), '.arena-ingest', 'profiles', profileName)
+    if (region === 'local' || isLocalRegion(region)) {
+      if (!this.profileDirectory) {
+        throw new Error(`[ingest] ${this.sourceSlug}: local profile lane has no owned directory`)
+      }
+      const userDataDir = this.profileDirectory
       // Some Akamai-fronted sources (Bybit: net::ERR_HTTP2_PROTOCOL_ERROR)
       // TLS-fingerprint-block the bundled Chromium even on page loads, but
       // accept an installed branded browser headless. Per-source opt-in via
@@ -192,26 +215,81 @@ class PlaywrightFetchSession implements FetchSession {
       // next launch. If no live process holds this profile, clear the
       // stale locks instead of failing the job (recurred 3× in one day).
       clearStaleSingletonLocks(userDataDir)
-      this.context = await chromium.launchPersistentContext(userDataDir, {
+      return chromium.launchPersistentContext(userDataDir, {
         ...CONTEXT_OPTIONS,
         headless: true,
         channel,
       })
-    } else {
-      const browser = await chromium.connect(remoteWsEndpoint(this.src.fetch_region))
+    }
+
+    const browser = await chromium.connect(remoteWsEndpoint(region))
+    try {
       const storageState = await this.loadState()
-      this.context = await browser.newContext({
+      return await browser.newContext({
         ...CONTEXT_OPTIONS,
         storageState: storageState ?? undefined,
       })
+    } catch (error) {
+      await browser.close().catch(() => undefined)
+      throw error
     }
-    return this.context
+  }
+
+  private async ensureContext(): Promise<BrowserContext> {
+    this.assertOpen()
+    const reset = this.resetPromise
+    if (reset) {
+      await reset
+      this.assertOpen()
+    }
+    if (this.context) return this.context
+
+    if (!this.contextCreation) {
+      const creation = this.createContext()
+        .then((context) => {
+          // Assign before resolving: close() waiting on this promise must see and
+          // close a context that finished launching after close began.
+          this.profileLaneLease?.markLaunchSucceeded()
+          this.context = context
+          return context
+        })
+        .catch((error: unknown) => {
+          if (this.isLocalProfile() && this.profileLaneLease) {
+            const launchError = error instanceof Error ? error : new Error(String(error))
+            this.terminalError = launchError
+            if (PlaywrightFetchSession.isProcessSingletonFailure(launchError)) {
+              this.settleProfileLane('quarantine')
+            } else {
+              this.settleProfileLane('launch_failure')
+            }
+          }
+          throw error
+        })
+      const tracked = creation.finally(() => {
+        if (this.contextCreation === tracked) this.contextCreation = null
+      })
+      this.contextCreation = tracked
+    }
+
+    const context = await this.contextCreation
+    this.assertOpen()
+    return context
   }
 
   async page(): Promise<Page> {
+    this.assertOpen()
+    const reset = this.resetPromise
+    if (reset) {
+      await reset
+      this.assertOpen()
+    }
     if (this.pageInstance && !this.pageInstance.isClosed()) return this.pageInstance
     const ctx = await this.ensureContext()
     const page = ctx.pages()[0] ?? (await ctx.newPage())
+    if (this.state !== 'open') {
+      await page.close().catch(() => undefined)
+      this.assertOpen()
+    }
     this.pageInstance = page
     page.on('framenavigated', (frame) => {
       if (frame === page.mainFrame() && /^https?:/.test(frame.url())) {
@@ -229,16 +307,21 @@ class PlaywrightFetchSession implements FetchSession {
         .goto(this.lastNavigatedUrl, { waitUntil: 'domcontentloaded', timeout: 60_000 })
         .catch(() => undefined) // best-effort — adapter retries surface a dead origin
     }
+    this.assertOpen()
     return page
   }
 
   async api(): Promise<APIRequestContext> {
+    this.assertOpen()
     const ctx = await this.ensureContext()
+    this.assertOpen()
     return ctx.request
   }
 
   async capture(matcher: RegExp | ((url: string) => boolean)): Promise<EndpointCapture> {
+    this.assertOpen()
     const page = await this.page()
+    this.assertOpen()
     const matches = (url: string) => (matcher instanceof RegExp ? matcher.test(url) : matcher(url))
 
     const captured: CapturedExchange[] = []
@@ -297,21 +380,48 @@ class PlaywrightFetchSession implements FetchSession {
     return /Browser closed|Target closed|browser has been closed|disconnected|WebSocket/i.test(msg)
   }
 
+  private static isProcessSingletonFailure(err: unknown): boolean {
+    const msg = err instanceof Error ? err.message : String(err)
+    return /ProcessSingleton|SingletonLock|profile (?:appears to be|is) in use|user data directory is already in use/i.test(
+      msg
+    )
+  }
+
   /** Tear down the dead context so ensureContext() reconnects fresh. */
-  private async resetContext(): Promise<void> {
-    try {
-      this.context
-        ?.browser()
-        ?.close()
-        .catch(() => undefined)
-    } catch {
-      // already gone
+  private resetContext(): Promise<void> {
+    this.assertOpen()
+    if (this.resetPromise) return this.resetPromise
+
+    const reset = this.resetContextInternal()
+    const tracked = reset.finally(() => {
+      if (this.resetPromise === tracked) this.resetPromise = null
+    })
+    this.resetPromise = tracked
+    return tracked
+  }
+
+  private async resetContextInternal(): Promise<void> {
+    const save = this.savePromise
+    if (save) {
+      await save
+      this.assertOpen()
     }
-    this.context = null
-    this.pageInstance = null
+
+    try {
+      await this.closeCurrentContextAndConfirm()
+    } catch (error) {
+      const resetError =
+        error instanceof Error
+          ? error
+          : new Error(`[ingest] ${this.sourceSlug}: context reset failed: ${String(error)}`)
+      this.terminalError = resetError
+      this.settleProfileLane('quarantine')
+      throw resetError
+    }
   }
 
   async pageFetch(template: ReplayRequestTemplate): Promise<{ status: number; json: unknown }> {
+    this.assertOpen()
     // A 480-page crawl rides one WS connection for ~20 min; without
     // in-place recovery a single tunnel blip aborts the whole timeframe
     // and the retry re-fetches everything from page 1. One reconnect
@@ -321,6 +431,7 @@ class PlaywrightFetchSession implements FetchSession {
         return await this.pageFetchOnce(template)
       } catch (err) {
         if (attempt >= 1 || !PlaywrightFetchSession.isConnectionLoss(err)) throw err
+        this.assertOpen()
         console.warn(
           `[ingest] ${this.sourceSlug}: browser connection lost mid-fetch — reconnecting…`
         )
@@ -360,18 +471,49 @@ class PlaywrightFetchSession implements FetchSession {
   }
 
   async paced<T>(fn: () => Promise<T>): Promise<T> {
+    this.assertOpen()
     this.circuit.assertCanProceed()
     try {
-      const result = await this.gate.run(fn)
+      const result = await this.gate.run(async () => {
+        // PacedGate may sleep for the source budget before invoking the
+        // callback. Closing during that wait must prevent the callback itself,
+        // not merely make a later Playwright operation fail.
+        const reset = this.resetPromise
+        if (reset) await reset
+        this.assertOpen()
+        return fn()
+      })
       this.circuit.recordSuccess()
       return result
     } catch (err) {
+      // A lifecycle rejection is not an upstream failure and must not pollute
+      // source circuit/failure-rate accounting.
+      if (this.state !== 'open' || err === this.terminalError) throw err
       this.circuit.recordFailure(err instanceof BlockedUpstreamError)
       throw err
     }
   }
 
-  async saveState(): Promise<void> {
+  saveState(): Promise<void> {
+    this.assertOpen()
+    if (this.savePromise) return this.savePromise
+
+    const reset = this.resetPromise
+    const save = (async () => {
+      if (reset) {
+        await reset
+        this.assertOpen()
+      }
+      await this.saveCurrentState()
+    })()
+    const tracked = save.finally(() => {
+      if (this.savePromise === tracked) this.savePromise = null
+    })
+    this.savePromise = tracked
+    return tracked
+  }
+
+  private async saveCurrentState(): Promise<void> {
     if (!this.context) return
     const state = await this.context.storageState()
     await getIngestPool().query(
@@ -392,46 +534,150 @@ class PlaywrightFetchSession implements FetchSession {
     return state ? (state as Awaited<ReturnType<BrowserContext['storageState']>>) : null
   }
 
-  async close(): Promise<void> {
+  private async closeCurrentContextAndConfirm(): Promise<void> {
+    const context = this.context
+    if (!context) return
+
+    const page = this.pageInstance
     try {
-      await this.saveState()
+      if (page && !page.isClosed()) await page.close()
     } catch (err) {
-      console.error(`[ingest] saveState failed for ${this.sourceSlug}:`, err)
+      console.warn(`[ingest] ${this.sourceSlug}: page close failed:`, err)
     }
-    const logCloseError = (what: string) => (err: unknown) =>
-      console.warn(`[ingest] ${this.sourceSlug}: ${what} close failed:`, err)
-    if (this.pageInstance && !this.pageInstance.isClosed()) {
-      await this.pageInstance.close().catch(logCloseError('page'))
+
+    const local = this.isLocalProfile()
+    let browser: Browser | null = null
+    try {
+      browser = context.browser()
+    } catch {
+      // A broken context can fail even while asking for its browser handle.
     }
-    if (this.context) {
-      const browser = this.context.browser()
-      await this.context.close().catch(logCloseError('context'))
-      // Remote connections own a browser handle; persistent contexts
-      // (literal 'local' or this node's INGEST_LOCAL_REGION) do not.
-      if (browser && this.src.fetch_region !== 'local' && !isLocalRegion(this.src.fetch_region)) {
-        await browser.close().catch(logCloseError('browser'))
+
+    try {
+      await context.close()
+    } catch (contextError) {
+      if (!browser) {
+        throw new Error(
+          `[ingest] ${this.sourceSlug}: context close failed and no browser fallback exists; ` +
+            `persistent-profile slot quarantined`,
+          { cause: contextError }
+        )
       }
-      this.context = null
-      this.pageInstance = null
+
+      try {
+        await browser.close()
+      } catch (browserError) {
+        throw new AggregateError(
+          [contextError, browserError],
+          `[ingest] ${this.sourceSlug}: context and browser close both failed; ` +
+            `persistent-profile slot quarantined`
+        )
+      }
+      console.warn(
+        `[ingest] ${this.sourceSlug}: context close failed; browser fallback confirmed closure`
+      )
+      browser = null
+    }
+
+    // A remote newContext owns a connected Browser handle. Closing the
+    // context is not enough to tear down that WS connection.
+    if (!local && browser) {
+      await browser.close()
+    }
+
+    if (this.context === context) this.context = null
+    if (this.pageInstance === page) this.pageInstance = null
+  }
+
+  private settleProfileLane(disposition: 'release' | 'launch_failure' | 'quarantine'): void {
+    const lease = this.profileLaneLease
+    this.profileLaneLease = undefined
+    if (!lease) return
+    if (disposition === 'release') lease.release()
+    else if (disposition === 'launch_failure') lease.releaseAfterLaunchFailure()
+    else lease.quarantine()
+  }
+
+  private async closeInternal(): Promise<void> {
+    let closureConfirmed = false
+    try {
+      // A close racing launch/connect must not release the ProcessSingleton
+      // lane first. The creation promise assigns this.context before settling.
+      const creation = this.contextCreation
+      if (creation) await creation.catch(() => undefined)
+
+      // A reset owns context teardown while it is in flight. Wait for its
+      // positive closure proof (or failure), then retry any still-owned context
+      // below before deciding whether the lane can be released.
+      const reset = this.resetPromise
+      if (reset) await reset.catch(() => undefined)
+
+      const save = this.savePromise
+      if (save) {
+        await save.catch((err) => {
+          console.error(`[ingest] saveState failed for ${this.sourceSlug}:`, err)
+        })
+      }
+
+      try {
+        await this.saveCurrentState()
+      } catch (err) {
+        console.error(`[ingest] saveState failed for ${this.sourceSlug}:`, err)
+      }
+
+      await this.closeCurrentContextAndConfirm()
+      closureConfirmed = true
+    } finally {
+      // Never make a local profile available until closure is positively
+      // confirmed. A quarantined slot stays withheld until process restart.
+      this.settleProfileLane(closureConfirmed ? 'release' : 'quarantine')
     }
   }
+
+  close(): Promise<void> {
+    if (this.closePromise) return this.closePromise
+    this.state = 'closing'
+    this.closePromise = this.closeInternal().finally(() => {
+      this.state = 'closed'
+    })
+    return this.closePromise
+  }
+}
+
+export interface OpenSessionOptions {
+  /** Logical mutex lane, independent from its physical directory suffix. */
+  profileLaneKey?: string
+  /**
+   * Suffix for the local persistent-profile dir (`profiles/<slug>-<suffix>`).
+   * Omit it for Tier A, which intentionally retains `profiles/<slug>`.
+   */
+  profileSuffix?: string
+  /**
+   * Fixed number of persistent-profile slots in this logical lane.
+   * Callers beyond the bound wait in-process; they never mint more dirs.
+   */
+  profileSlotCount?: number
 }
 
 export async function openSession(
   src: SourceRow,
-  opts?: {
-    /**
-     * Suffix for the local persistent-profile dir (`profiles/<slug>-<suffix>`).
-     * Chrome's ProcessSingleton allows ONE live Chrome per profile dir — a
-     * long tier-A crawl (bybit_mt5 ≈29k traders, hours) holds `profiles/<slug>`
-     * for its whole run, and every concurrent tierbs launch on the same slug
-     * died with "Failed to create a ProcessSingleton" (90 errors/run, 0 series
-     * — 2026-07-09). A suffixed dir gives the concurrent tier its own Chrome +
-     * cookie jar (warms once, persists). Remote-WS regions are unaffected
-     * (fresh newContext per session, no profile dir).
-     */
-    profileSuffix?: string
-  }
+  opts?: OpenSessionOptions
 ): Promise<FetchSession> {
-  return new PlaywrightFetchSession(src.slug, src, opts?.profileSuffix)
+  if (opts?.profileSuffix !== undefined && opts.profileLaneKey === undefined) {
+    throw new Error('[ingest] profileSuffix requires an explicit, independent profileLaneKey')
+  }
+
+  const config: ProfileLaneConfig = {
+    laneKey: opts?.profileLaneKey ?? 'tier-a',
+    profileSuffix: opts?.profileSuffix,
+    slotCount: opts?.profileSlotCount,
+  }
+  validateProfileLaneConfig(config)
+
+  let lease: ProfileLaneLease | undefined
+  if (src.fetch_region === 'local' || isLocalRegion(src.fetch_region)) {
+    lease = await acquireProfileLane(src.slug, config)
+  }
+
+  return new PlaywrightFetchSession(src.slug, src, lease?.profileDirectory, lease)
 }

@@ -227,7 +227,12 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
   // native ∪ derived: derived 30/90 boards are synthesized from these
   // profile stats (spec §1.1-C), so Tier-B must crawl their TFs too.
   const timeframes = profileTimeframes(src)
-  const session = await openSession(src)
+  // Tier A intentionally keeps the legacy unsuffixed profile (warm cookies).
+  // Tier B owns a stable lane so a long profile crawl cannot collide with it.
+  const session = await openSession(src, {
+    profileLaneKey: 'tier-b',
+    profileSuffix: 'tier-b',
+  })
   const startedAt = Date.now()
   let attempted = 0
   const result: TierBResult = { ...empty }

@@ -263,7 +263,10 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
   // profiles/<slug>'s Chrome ProcessSingleton for hours — bybit_mt5 backfill
   // died 100% ("Failed to create a ProcessSingleton", 90 errors/run) whenever
   // its giant board crawl was running (2026-07-09).
-  const session = await openSession(src, { profileSuffix: 'series' })
+  const session = await openSession(src, {
+    profileLaneKey: 'tier-b-series',
+    profileSuffix: 'series',
+  })
   const startedAt = Date.now()
   let attempted = 0
   // Cursor advances only for cursor-batch traders — newcomers ride for free.
