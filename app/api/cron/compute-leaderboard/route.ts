@@ -36,6 +36,7 @@ import { scoreTraders, type ScoredTrader } from './score-traders'
 import { checkDegradationGuard, saveScoredCount } from './degradation-guard'
 import { fetchCurrentScoreMap, buildChangedTraders } from './incremental-diff'
 import { upsertLeaderboard, upsertSourceFreshness, zeroOutExcluded } from './write-leaderboard'
+import { hasComputeFailures, type ComputeResult } from './result-status'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { tieredGet, tieredSet, tieredDel } from '@/lib/cache/redis-layer'
 import { PipelineState } from '@/lib/services/pipeline-state'
@@ -162,7 +163,7 @@ export async function GET(request: NextRequest) {
     // PERF FIX: sequential instead of parallel to prevent connection pool saturation.
     // With staggered cron (single season per invocation), this loop runs once.
     // The parallel path caused 3× peak connection usage → pool exhaustion → 30-57min timeouts.
-    const results: Array<{ season: string; count: number; error: unknown }> = []
+    const results: ComputeResult[] = []
     for (const season of targetSeasons) {
       try {
         const count = await computeSeason(
@@ -331,7 +332,7 @@ export async function GET(request: NextRequest) {
 
     const totalRanked = Object.values(stats.seasons).reduce((a, b) => a + b, 0)
     // Distinguish between computation FAILUREs (real errors) and degradation SKIPs (auto-recoverable)
-    const hasRealFailures = results.some((r) => r.error && r.count !== -1)
+    const hasRealFailures = hasComputeFailures(results)
     if (hasRealFailures) {
       // Real computation failure — report as error
       await plog.error(new Error(warnings.join('; ')), { stats, rolledBack })
@@ -347,19 +348,22 @@ export async function GET(request: NextRequest) {
       await plog.success(totalRanked, { stats })
     }
 
-    return NextResponse.json({
-      ok: warnings.length === 0,
-      elapsed_ms: elapsed,
-      // ENDGAME cutover visibility: which Phase-1 reader actually ran
-      // (trader_latest | arena | diff). Lets the cutover be verified from the
-      // response instead of guessing from data side-effects.
-      read_source: getPhase1ReadSource(),
-      stats,
-      previous_counts: previousCounts,
-      warnings: warnings.length > 0 ? warnings : undefined,
-      rolled_back: rolledBack.length > 0 ? rolledBack : undefined,
-      wr_mdd_derived: wrMddDerived,
-    })
+    return NextResponse.json(
+      {
+        ok: warnings.length === 0,
+        elapsed_ms: elapsed,
+        // ENDGAME cutover visibility: which Phase-1 reader actually ran
+        // (trader_latest | arena | diff). Lets the cutover be verified from the
+        // response instead of guessing from data side-effects.
+        read_source: getPhase1ReadSource(),
+        stats,
+        previous_counts: previousCounts,
+        warnings: warnings.length > 0 ? warnings : undefined,
+        rolled_back: rolledBack.length > 0 ? rolledBack : undefined,
+        wr_mdd_derived: wrMddDerived,
+      },
+      { status: hasRealFailures ? 500 : 200 }
+    )
   } catch (error: unknown) {
     // Release idempotency lock on failure (atomic Redis DEL with fallback)
     try {
