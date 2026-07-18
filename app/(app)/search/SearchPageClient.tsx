@@ -139,6 +139,7 @@ function SearchContent() {
     data: rawSearchData,
     error: searchFetchError,
     isLoading: swrLoading,
+    refetch: retrySearch,
   } = useQuery<UnifiedSearchResponse>({
     queryKey: ['search', debouncedQuery, debouncedPlatform],
     queryFn: () => searchFetcher(searchKey!),
@@ -947,7 +948,11 @@ function SearchContent() {
             ))}
           </div>
         ) : searchError ? (
-          <ErrorState title={t('searchErrorTitle')} description={t('searchTryAgainLater')} />
+          <ErrorState
+            title={t('searchErrorTitle')}
+            description={t('searchTryAgainLater')}
+            retry={() => void retrySearch()}
+          />
         ) : !query ? (
           <div style={{ textAlign: 'center', padding: '80px 24px' }}>
             <div
