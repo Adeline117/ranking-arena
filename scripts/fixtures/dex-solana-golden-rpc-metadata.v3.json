@@ -1,0 +1,491 @@
+{
+  "schema_version": 3,
+  "data_contract": "arena.dex.golden-rpc-transaction-evidence@3",
+  "purpose": "phase0_shadow_finality_membership_evidence_only",
+  "proof_boundary": "same_provider_rpc_assertions_not_cryptographic_inclusion_or_protocol_hit_proof",
+  "verification_state": "declared_not_replayed",
+  "generated_at": "2026-07-18T12:01:20.674Z",
+  "chain": {
+    "namespace": "solana",
+    "cluster": "mainnet-beta",
+    "genesis_hash": "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d",
+    "product_source_slug": "okx_web3_solana",
+    "chain_stream_slug": "solana_mainnet"
+  },
+  "transaction_id": "j79Ffrrm3v5mD1WoM2fNrsRsefDFoFx9DTdZARp877uZqZ3RDrXQ35yNxKZ26SBGqDCj8n358Z9GztGRFxKDpef",
+  "stable_transaction_facts_contract": "arena.dex.solana-stable-transaction-facts@1",
+  "stable_transaction_facts_sha256": "d29905e525cd5f0c7aa97fcfe033f5a5b1862111dfa2a3f71020401fc51f7803",
+  "captures": [
+    {
+      "endpoint": {
+        "provider_id": "publicnode",
+        "endpoint_id": "publicnode_solana_mainnet",
+        "connection_hash": "1a0dd0c9ce97b403a421191f3f5ff796b9733b98700464c0bea7a4271ed75835"
+      },
+      "endpoint_assertion_state": "declared_not_replayed",
+      "capture_completed_at": "2026-07-18T12:01:20.668Z",
+      "rpc_exchanges": [
+        {
+          "lane": "genesis_hash",
+          "method": "getGenesisHash",
+          "params_sha256": "074e6c31e6caf4a68aede03b0bcae8d38e9dbebb743dc51357a860ae6b1a61a5",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "fba5cf2177b503cadfe3ad4cfba8a766723bf6d4746f39b6924c5dc548604d82",
+            "byte_length": 62,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "072c547ad3321ad6379bf249c218bcf112eaa3bd0138f07ace4077db1785a37d",
+            "byte_length": 81,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "cecc9854fa6feb4dfdf4ee416c162f99d6205cc3492b0f342b438120895ff4d8"
+        },
+        {
+          "lane": "finalized_anchor_slot",
+          "method": "getSlot",
+          "params_sha256": "d50258b991a6fb764c7332bf3260a32f169242c815774411eb0215e8c20c08ce",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "f6fd9231fc3a7bb314b4ece3d00ac97697d208bdf0e718583cdafd7ce4be736f",
+            "byte_length": 81,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "3f8b2d6e01b329f8be4219c5f97ff30add658e3400ce2aad4ed9d6d0eb320d0e",
+            "byte_length": 44,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "df79fff1fb7ba2982ab52e3b5a868475110a276afb8469e4a1700dfe49dfdad0"
+        },
+        {
+          "lane": "finalized_anchor_produced_slots",
+          "method": "getBlocks",
+          "params_sha256": "58dabff5483adbf41166b32ca156e697b1593a01c516049a0d9341f621b72b67",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "a62e413a3689d2e143369fa721c4ac81890ed732de31f3108c92881ee45e02e2",
+            "byte_length": 130,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "5fd5a66b63e434c143a130d614f21ca3812b7c036aae3164ac9059deeff48f20",
+            "byte_length": 5166,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "5c7b5207240e78e67cf0acd7c3405a8755ceb92b6d0f6d4ce90f1ad026d117f4"
+        },
+        {
+          "lane": "finalized_anchor_block",
+          "method": "getBlock",
+          "params_sha256": "4a9ded459ea779052732c2d112f256c776c9ba6f0201158da7330acc67537328",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "87c3180f50d716bb92fd9774f2ec6a23f3f68f0f867da3205f6dd85b77c95822",
+            "byte_length": 189,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "e8ce7b054691dfd96cc6d1d0bd09eac9df5006ce15ef7b8bace580fa3d21348f",
+            "byte_length": 232,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "a5ff3e0205f2de7b5d2471319be89922c5ee2ba021f50bd59fa638939d4a7abc"
+        },
+        {
+          "lane": "transaction",
+          "method": "getTransaction",
+          "params_sha256": "7ddf69346c9946577592b3b18a1faa0b1c644e54a8594db1dbbe6a99a99c82ee",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "bb825554ddf0f7054856496639aca6d87e1f407bbe2c830f4346a45184a44a83",
+            "byte_length": 231,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "d874cfef6a79682a139298863a82b8f723aea60fc610d903396f96fca502cb08",
+            "byte_length": 15200,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "1377275f3544daa54f1b0fb4aaaafb357c228c21db7d93ea8fe8e9cab9283299"
+        },
+        {
+          "lane": "signature_status",
+          "method": "getSignatureStatuses",
+          "params_sha256": "4da4b294422172edb429f5f52e1da62fadbe126899b2422e82c587ac3f7329fd",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "fe0a22de280b14d45a05fae58dd0786c4c9870c88674614f7b7678c9120d672e",
+            "byte_length": 193,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "0f65932070402e2c429727dff2a1951f778711e120a4adf21c6790b03c0343c2",
+            "byte_length": 201,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "52fd570b9c80eab1d99a9cfdbea7bfb9a7c744f3291f8e164f8873563ca85003"
+        },
+        {
+          "lane": "membership_block",
+          "method": "getBlock",
+          "params_sha256": "a627e6d264f93c772c7e627ed4b197bb3ee4890d20cb1fc6f5e39afe9ce2eaeb",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "29f22ca75f7066d0698bd9aa923e8d66c9cc6c20840489f17b471317bf59a8b6",
+            "byte_length": 160,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "110f90aefd335fbb11b54544bba28ab999ad03c5c7eabd19459cfa689f540070",
+            "byte_length": 98040,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "9517007d21d756a609bee449b2e8272ab9bafce20f4f1133828968e2d154ce54"
+        }
+      ],
+      "normalized_documents": {
+        "chain_anchor": {
+          "sha256": "db30309eddec8f61e363394cf7542aeb4f36319d3435663d2dca816887300df2",
+          "byte_length": 7789,
+          "hash_basis": "strict_canonical_json_utf8_bytes",
+          "persistence_state": "not_persisted",
+          "content_available_for_replay": false,
+          "contains_secrets": false
+        },
+        "transaction_membership": {
+          "sha256": "560f511bfdc980184b3a024dfc9a7c487cdd5a1ad4134925b84846f67d273a4b",
+          "byte_length": 106668,
+          "hash_basis": "strict_canonical_json_utf8_bytes",
+          "persistence_state": "not_persisted",
+          "content_available_for_replay": false,
+          "contains_secrets": false
+        },
+        "verified_finality": {
+          "sha256": "712e8cf8dbbc3af27c39fd57f2ebe05f6e64aac447918885c3dd8c030b22d5aa",
+          "byte_length": 105729,
+          "hash_basis": "strict_canonical_json_utf8_bytes",
+          "persistence_state": "not_persisted",
+          "content_available_for_replay": false,
+          "contains_secrets": false
+        }
+      },
+      "provider_finality_witness": {
+        "policy": "solana_verified_transaction_finality_semantics_v2",
+        "semantic_sha256": "2d1ccfaa7e36773e4318b66251e6e88a4b2308a0cd7436e45a4231e45a9dcd65"
+      },
+      "stable_transaction_facts_sha256": "d29905e525cd5f0c7aa97fcfe033f5a5b1862111dfa2a3f71020401fc51f7803"
+    },
+    {
+      "endpoint": {
+        "provider_id": "solana_foundation",
+        "endpoint_id": "solana_official_mainnet",
+        "connection_hash": "35b43110ca343cb83302940613b9b73836392079891b1c4476b8723a0bc49d1c"
+      },
+      "endpoint_assertion_state": "declared_not_replayed",
+      "capture_completed_at": "2026-07-18T12:00:59.665Z",
+      "rpc_exchanges": [
+        {
+          "lane": "genesis_hash",
+          "method": "getGenesisHash",
+          "params_sha256": "074e6c31e6caf4a68aede03b0bcae8d38e9dbebb743dc51357a860ae6b1a61a5",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "fba5cf2177b503cadfe3ad4cfba8a766723bf6d4746f39b6924c5dc548604d82",
+            "byte_length": 62,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "072c547ad3321ad6379bf249c218bcf112eaa3bd0138f07ace4077db1785a37d",
+            "byte_length": 81,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "49ead3aec9323d7a450dccf462f5108db1dfbdfe75d55a7b6034e221ab964e48"
+        },
+        {
+          "lane": "finalized_anchor_slot",
+          "method": "getSlot",
+          "params_sha256": "d50258b991a6fb764c7332bf3260a32f169242c815774411eb0215e8c20c08ce",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "f6fd9231fc3a7bb314b4ece3d00ac97697d208bdf0e718583cdafd7ce4be736f",
+            "byte_length": 81,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "c1a6dd8ddbf5ce4f41091ba183c63e1aa6a56886fb4e14e3930dc7c00d42674d",
+            "byte_length": 44,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "6fa087265c634c590704b491f5bca42668f6c09f61b64c283589f35ffb5a0650"
+        },
+        {
+          "lane": "finalized_anchor_produced_slots",
+          "method": "getBlocks",
+          "params_sha256": "30e86ae6ea35eeca58ffdeb299dfd23e0d3681286d75527111ce4252ba16db01",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "ceb971be4dfb8e51262048205feebfa0c7736a2b08f78740fa4ba5a197823d54",
+            "byte_length": 130,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "79a139070fdc6dae49d20c097aada11414afd47bf1eb598aa48926f53b677266",
+            "byte_length": 5166,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "2e889668d0e1eb03737e41588214eb423de7036c978ae38f0b4818030910e14b"
+        },
+        {
+          "lane": "finalized_anchor_block",
+          "method": "getBlock",
+          "params_sha256": "b7be64c681abdd2ffad08d16eae7512c81cf66178e137536fe9695fa13bd7eb9",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "238285cb8c7842fdaa1c3b2fe490bb0984fee5e794803cd014f95ea70c34f160",
+            "byte_length": 189,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "1d5545e45afd62b3f5f35b29272cd2e8e051f5c82d0294219ba858ae79bf111e",
+            "byte_length": 231,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "8187f58617c4e5f9cb1b16c20a20bc5de966ea810537ef3b5de690cd33ec3fbb"
+        },
+        {
+          "lane": "transaction",
+          "method": "getTransaction",
+          "params_sha256": "7ddf69346c9946577592b3b18a1faa0b1c644e54a8594db1dbbe6a99a99c82ee",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "bb825554ddf0f7054856496639aca6d87e1f407bbe2c830f4346a45184a44a83",
+            "byte_length": 231,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "d874cfef6a79682a139298863a82b8f723aea60fc610d903396f96fca502cb08",
+            "byte_length": 15200,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "bb037cfbaaf4e0aaaa016f47bfcba45e7452e6405448f9539d8820dbf2b061d2"
+        },
+        {
+          "lane": "signature_status",
+          "method": "getSignatureStatuses",
+          "params_sha256": "4da4b294422172edb429f5f52e1da62fadbe126899b2422e82c587ac3f7329fd",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "fe0a22de280b14d45a05fae58dd0786c4c9870c88674614f7b7678c9120d672e",
+            "byte_length": 193,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "07a6c8dd9ce22cd2d43c6a623b7a7531648188383c8623da31a95883f8904f9c",
+            "byte_length": 201,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "a5d82157f0fe7ba5353609c63d31020d9f12fc2d8f6ff7406fdfdb1bc44f7fa5"
+        },
+        {
+          "lane": "membership_block",
+          "method": "getBlock",
+          "params_sha256": "a627e6d264f93c772c7e627ed4b197bb3ee4890d20cb1fc6f5e39afe9ce2eaeb",
+          "params_hash_basis": "arena_dex_json_rpc_params_v1",
+          "http_status": 200,
+          "request": {
+            "sha256": "29f22ca75f7066d0698bd9aa923e8d66c9cc6c20840489f17b471317bf59a8b6",
+            "byte_length": 160,
+            "media_type": "application/json",
+            "hash_basis": "utf8_json_rpc_request_body_bytes",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "response": {
+            "sha256": "110f90aefd335fbb11b54544bba28ab999ad03c5c7eabd19459cfa689f540070",
+            "byte_length": 98040,
+            "media_type": "application/json",
+            "hash_basis": "fetch_content_decoded_http_entity_body_bytes_before_utf8",
+            "persistence_state": "not_persisted",
+            "content_available_for_replay": false,
+            "contains_secrets": false
+          },
+          "exchange_binding_sha256": "17f74083911b61f276992219941287d74fe763a36f22aa9286fb1ae4c7bb5f76"
+        }
+      ],
+      "normalized_documents": {
+        "chain_anchor": {
+          "sha256": "5172142c3de6f1034e13117be8052f7db6d5f779fa01078ab8f9fb697540256d",
+          "byte_length": 7828,
+          "hash_basis": "strict_canonical_json_utf8_bytes",
+          "persistence_state": "not_persisted",
+          "content_available_for_replay": false,
+          "contains_secrets": false
+        },
+        "transaction_membership": {
+          "sha256": "721c1c5f633adb601d8f11d2f21621a10f0f4e7001165189f1fcdb8baf7782a6",
+          "byte_length": 106702,
+          "hash_basis": "strict_canonical_json_utf8_bytes",
+          "persistence_state": "not_persisted",
+          "content_available_for_replay": false,
+          "contains_secrets": false
+        },
+        "verified_finality": {
+          "sha256": "7e5cb2d4cd8bc2bd05dec4454828bbf06881a6b70828ec44f26c914d0cd97476",
+          "byte_length": 105733,
+          "hash_basis": "strict_canonical_json_utf8_bytes",
+          "persistence_state": "not_persisted",
+          "content_available_for_replay": false,
+          "contains_secrets": false
+        }
+      },
+      "provider_finality_witness": {
+        "policy": "solana_verified_transaction_finality_semantics_v2",
+        "semantic_sha256": "782c58fe6096730dfd2d93f767d365500c06a5914f2549bb98c5107cb6fbd50d"
+      },
+      "stable_transaction_facts_sha256": "d29905e525cd5f0c7aa97fcfe033f5a5b1862111dfa2a3f71020401fc51f7803"
+    }
+  ],
+  "required_blockers": [
+    "decoder_facts_unverified",
+    "normalized_documents_not_replayed",
+    "protocol_invocation_unverified",
+    "provider_independence_not_attested",
+    "raw_and_normalized_bodies_not_persisted",
+    "raw_blob_persistence_not_authorized"
+  ],
+  "claims": {
+    "normalized_documents_replayed": false,
+    "provider_independence_verified": false,
+    "finality_membership_verified": false,
+    "protocol_invocation_verified": false,
+    "decoder_facts_verified": false
+  },
+  "authorization": {
+    "network_execution": false,
+    "raw_blob_persistence": false,
+    "decoder_fixture": false,
+    "serving": false,
+    "rank": false,
+    "score": false
+  }
+}
