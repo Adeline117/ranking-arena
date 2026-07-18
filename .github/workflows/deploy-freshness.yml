@@ -5,7 +5,7 @@ name: Deploy Freshness Sentinel
 # The only alert channel (Telegram) was 401-broken, so nobody knew for hours —
 # a batch of real bug fixes never went live. This sentinel is the reliable
 # backstop: it compares the LIVE deployed commit (/api/health `commit`) to
-# origin/main and, if the newest commit has been sitting undeployed for >45min,
+# origin/main and, if the oldest undeployed commit has been waiting for >45min,
 # alerts via a de-duplicated GitHub ISSUE (does not depend on Telegram) + fails
 # loudly. Self-heals: closes the issue once prod catches up.
 
@@ -30,7 +30,7 @@ jobs:
       GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
-      STALE_MINUTES: '45' # newest commit undeployed longer than this ⇒ stuck
+      STALE_MINUTES: '45' # oldest undeployed commit older than this ⇒ stuck
       HEALTH_URL: 'https://www.arenafi.org/api/health'
       ISSUE_TITLE: '🛑 Production deploy is stale'
     steps:
@@ -41,60 +41,140 @@ jobs:
       - name: Check production deploy freshness
         run: |
           set -uo pipefail
-          HEAD_SHA=$(git rev-parse HEAD)
-          DEPLOYED=$(curl -s --max-time 25 "$HEALTH_URL" \
-            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{try{process.stdout.write(String(JSON.parse(s).commit||"").trim())}catch{process.stdout.write("")}})')
-          echo "HEAD=$HEAD_SHA  deployed=$DEPLOYED"
+
+          warn_visible() {
+            local message="$1"
+            echo "::warning::$message"
+            echo "### $message" >> "$GITHUB_STEP_SUMMARY"
+          }
+
+          find_open_issue() {
+            local issues
+            if ! issues=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" \
+              --limit 100 --json number,title 2>/dev/null); then
+              warn_visible "Deploy freshness could not list fallback issues" >&2
+              return 0
+            fi
+            jq -r --arg title "$ISSUE_TITLE" \
+              '.[] | select(.title == $title) | .number' <<< "$issues" | head -1
+          }
 
           close_issue() {
-            NUM=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
-            if [ -n "$NUM" ]; then
-              gh issue comment "$NUM" --body "✅ 部署已追上 main（deployed ${DEPLOYED:0:8}）。自动关闭。" 2>/dev/null || true
-              gh issue close "$NUM" 2>/dev/null || true
+            local number
+            number=$(find_open_issue)
+            if [ -n "$number" ]; then
+              if ! gh issue comment "$number" \
+                --body "✅ 部署已追上 main（deployed ${DEPLOYED:0:8}）。自动关闭。" >/dev/null 2>&1; then
+                warn_visible "Deploy freshness could not comment on recovery issue"
+              fi
+              if ! gh issue close "$number" >/dev/null 2>&1; then
+                warn_visible "Deploy freshness could not close recovery issue"
+              fi
             fi
           }
 
-          # Can't compare (endpoint down / VERCEL_GIT_COMMIT_SHA unset) → warn, don't fail.
-          if [ -z "$DEPLOYED" ] || [ "$DEPLOYED" = "unknown" ]; then
-            echo "::warning::deployed commit unavailable — cannot check freshness"
+          send_telegram_alert() {
+            local message="$1"
+            if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_ALERT_CHAT_ID:-}" ]; then
+              warn_visible "Deploy freshness Telegram alert is not configured"
+              return 0
+            fi
+            local curl_rc=0
+            local http
+            http=$(curl --silent --show-error \
+              --connect-timeout 5 --max-time 10 \
+              --output /dev/null --write-out '%{http_code}' \
+              --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_ALERT_CHAT_ID:-}" \
+              --data-urlencode "text=${message}") || curl_rc=$?
+            if [ "$curl_rc" -ne 0 ] || [[ "${http:-000}" != 2* ]]; then
+              warn_visible "Deploy freshness Telegram alert failed (curl=$curl_rc HTTP=${http:-000})"
+            else
+              echo "Deploy freshness Telegram alert delivered HTTP $http"
+            fi
+            return 0
+          }
+
+          upsert_issue() {
+            local message="$1"
+            local number
+            number=$(find_open_issue)
+            if [ -n "$number" ]; then
+              if ! gh issue comment "$number" \
+                --body "${message}"$'\n\n'"$(date -u +%FT%TZ)" >/dev/null 2>&1; then
+                warn_visible "Deploy freshness could not update fallback issue"
+              fi
+            elif ! gh issue create --title "$ISSUE_TITLE" \
+              --body "${message}"$'\n\n'"由 deploy-freshness sentinel 自动创建；部署追上后会自动关闭。" \
+              >/dev/null 2>&1; then
+              warn_visible "Deploy freshness could not create fallback issue"
+            fi
+          }
+
+          fail_freshness() {
+            local message="$1"
+            echo "::error::$message"
+            send_telegram_alert "$message"
+            upsert_issue "$message"
+            exit 1
+          }
+
+          if ! git fetch origin main --quiet; then
+            fail_freshness "🛑 部署新鲜度哨兵失明：无法刷新 origin/main。"
+          fi
+          HEAD_SHA=$(git rev-parse origin/main)
+          rm -f /tmp/deploy-freshness-health.json
+          HEALTH_CURL_EXIT=0
+          HEALTH_HTTP=$(curl --silent --show-error \
+            --connect-timeout 5 --max-time 25 \
+            --output /tmp/deploy-freshness-health.json --write-out '%{http_code}' \
+            "$HEALTH_URL") || HEALTH_CURL_EXIT=$?
+          if [ "$HEALTH_CURL_EXIT" -ne 0 ] || [ "$HEALTH_HTTP" != "200" ]; then
+            fail_freshness "🛑 部署新鲜度哨兵失明：生产 health 不可读（curl=$HEALTH_CURL_EXIT HTTP=${HEALTH_HTTP:-000}）。"
+          fi
+          if ! jq -e 'type == "object"' /tmp/deploy-freshness-health.json >/dev/null 2>&1; then
+            fail_freshness "🛑 部署新鲜度哨兵失明：生产 health 返回非法 JSON。"
+          fi
+
+          HEALTH_STATUS=$(jq -r '.status // empty' /tmp/deploy-freshness-health.json 2>/dev/null || true)
+          DEPLOYED=$(jq -r '.commit // empty' /tmp/deploy-freshness-health.json 2>/dev/null || true)
+          echo "HEAD=$HEAD_SHA deployed=${DEPLOYED:-missing} health=${HEALTH_STATUS:-missing}"
+          if [ "$HEALTH_STATUS" != "healthy" ] || [[ ! "$DEPLOYED" =~ ^[0-9a-f]{40}$ ]]; then
+            fail_freshness "🛑 部署新鲜度哨兵失明：生产 health 未提供 healthy + 完整 commit（status=${HEALTH_STATUS:-missing}）。"
+          fi
+
+          if [ "$DEPLOYED" = "$HEAD_SHA" ]; then
+            echo "✅ prod up to date"
+            close_issue
             exit 0
           fi
-          if [ "$DEPLOYED" = "$HEAD_SHA" ]; then
-            echo "✅ prod up to date"; close_issue; exit 0
+          if ! git cat-file -e "${DEPLOYED}^{commit}" 2>/dev/null; then
+            fail_freshness "🛑 线上 commit ${DEPLOYED:0:8} 不在 main 完整历史中，无法证明部署新鲜度。"
+          fi
+          if git merge-base --is-ancestor "$HEAD_SHA" "$DEPLOYED" 2>/dev/null; then
+            echo "✅ production is ahead of this workflow snapshot"
+            close_issue
+            exit 0
+          fi
+          if ! git merge-base --is-ancestor "$DEPLOYED" "$HEAD_SHA" 2>/dev/null; then
+            fail_freshness "🛑 线上 ${DEPLOYED:0:8} 与 main ${HEAD_SHA:0:8} 历史分叉，拒绝把它误判为正常滞后。"
           fi
 
-          # Time-based signal: only fire if the NEWEST commit has been undeployed
-          # too long (tolerates the normal ~12min CI+deploy window and rapid pushing,
-          # since deploy-gate always jumps to the newest verified SHA).
-          HEAD_TIME=$(git show -s --format=%ct HEAD)
-          AGE_MIN=$(( ( $(date +%s) - HEAD_TIME ) / 60 ))
-          if git cat-file -e "${DEPLOYED}^{commit}" 2>/dev/null; then
-            BEHIND=$(git rev-list --count "${DEPLOYED}..HEAD" 2>/dev/null || echo "?")
-          else
-            BEHIND="?(deployed commit not in history — force-push?)"
+          OLDEST_UNDEPLOYED=$(git rev-list --reverse "${DEPLOYED}..${HEAD_SHA}" | sed -n '1p')
+          if [ -z "$OLDEST_UNDEPLOYED" ]; then
+            fail_freshness "🛑 无法解析 ${DEPLOYED:0:8} 之后最早未部署 commit。"
           fi
-          echo "prod is $BEHIND commits behind; newest commit age=${AGE_MIN}min (threshold ${STALE_MINUTES})"
+          OLDEST_TIME=$(git show -s --format=%ct "$OLDEST_UNDEPLOYED")
+          NOW=$(date +%s)
+          AGE_MIN=$(( (NOW - OLDEST_TIME) / 60 ))
+          if [ "$AGE_MIN" -lt 0 ]; then AGE_MIN=0; fi
+          BEHIND=$(git rev-list --count "${DEPLOYED}..${HEAD_SHA}")
+          echo "prod is $BEHIND commits behind; oldest undeployed ${OLDEST_UNDEPLOYED:0:8} age=${AGE_MIN}min (threshold ${STALE_MINUTES})"
 
           if [ "$AGE_MIN" -le "$STALE_MINUTES" ]; then
-            echo "✅ within normal deploy window"; exit 0
+            echo "✅ within normal deploy window"
+            exit 0
           fi
 
-          MSG="🛑 生产部署滞后:最新 commit ${HEAD_SHA:0:8} 已 ${AGE_MIN} 分钟未上线(线上仍是 ${DEPLOYED:0:8},落后 ${BEHIND} 个 commit)。多半是 CI 门禁红→deploy-gate 扣留。查 Actions 的 CI / Deploy Gate 失败原因,修复后 push 即重新排队。"
-          echo "::error::$MSG"
-
-          # Telegram (best-effort; token may be broken — that's why the issue exists)
-          if [ -n "${TELEGRAM_BOT_TOKEN:-}" ]; then
-            curl -s -X POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
-              --data-urlencode "chat_id=${TELEGRAM_ALERT_CHAT_ID:-}" \
-              --data-urlencode "text=${MSG}" >/dev/null 2>&1 || true
-          fi
-
-          # Reliable channel: de-duplicated GitHub issue (visible in repo, no external dep)
-          NUM=$(gh issue list --state open --search "\"$ISSUE_TITLE\" in:title" --json number --jq '.[0].number' 2>/dev/null || echo "")
-          if [ -n "$NUM" ]; then
-            gh issue comment "$NUM" --body "${MSG}"$'\n\n'"$(date -u +%FT%TZ)" 2>/dev/null || true
-          else
-            gh issue create --title "$ISSUE_TITLE" \
-              --body "${MSG}"$'\n\n'"由 deploy-freshness sentinel 自动创建;部署追上后会自动关闭。" 2>/dev/null || true
-          fi
-          exit 1
+          MSG="🛑 生产部署滞后：最早未部署 commit ${OLDEST_UNDEPLOYED:0:8} 已等待 ${AGE_MIN} 分钟（main ${HEAD_SHA:0:8}，线上 ${DEPLOYED:0:8}，落后 ${BEHIND} 个 commit）。多半是 CI 门禁红或 deploy-gate 扣留。查 Actions 的 CI / Deploy Gate，修复后 push 即重新排队。"
+          fail_freshness "$MSG"
