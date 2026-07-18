@@ -82,7 +82,7 @@ CREATE TABLE public.groups (
 );
 CREATE TABLE public.group_members (
   group_id uuid NOT NULL REFERENCES public.groups(id) ON DELETE CASCADE,
-  user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  user_id uuid NOT NULL,
   role public.member_role NOT NULL DEFAULT 'member',
   PRIMARY KEY (group_id, user_id)
 );
@@ -255,10 +255,203 @@ INSERT INTO public.group_members(group_id, user_id, role) VALUES
   ('10000000-0000-4000-8000-000000000001', 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa', 'member');
 INSERT INTO public.group_bans(group_id, user_id) VALUES
   ('30000000-0000-4000-8000-000000000003', 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb');
+INSERT INTO public.group_members(group_id, user_id, role) VALUES
+  (
+    '40000000-0000-4000-8000-000000000004',
+    'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+    'member'
+  );
+TRUNCATE public.edge_trigger_log;
+SQL
+
+# A committed orphan makes the missing-FK first install fail before any
+# function, trigger, or constraint is installed.
+if psql_cmd -f "$MIGRATION" >"$LOG_DIR/missing-fk-orphan.log" 2>&1; then
+  echo "Missing group_members FK unexpectedly accepted an orphan" >&2
+  exit 1
+fi
+grep -Fq 'group_members user_id FK is missing and orphan rows exist' \
+  "$LOG_DIR/missing-fk-orphan.log"
+
+psql_cmd <<'SQL'
+DO $orphan_preflight_rollback_proof$
+DECLARE
+  user_id_attnum smallint := (
+    SELECT attribute.attnum
+    FROM pg_catalog.pg_attribute AS attribute
+    WHERE attribute.attrelid = 'public.group_members'::pg_catalog.regclass
+      AND attribute.attname = 'user_id'
+  );
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.group_members AS member
+    WHERE member.user_id =
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_members'::pg_catalog.regclass
+      AND constraint_info.contype = 'f'
+      AND user_id_attnum = ANY (constraint_info.conkey)
+  ) OR pg_catalog.to_regprocedure(
+    'public.reject_inactive_group_edge()'
+  ) IS NOT NULL OR pg_catalog.to_regprocedure(
+    'public.purge_deleted_account_group_edges(uuid)'
+  ) IS NOT NULL THEN
+    RAISE EXCEPTION 'orphan preflight failure partially mutated the migration';
+  END IF;
+END
+$orphan_preflight_rollback_proof$;
+
+DELETE FROM public.group_members
+WHERE user_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+TRUNCATE public.edge_trigger_log;
+SQL
+
+# One noncanonical user_id FK is not an "absent" contract and must never be
+# silently dropped or replaced.
+psql_cmd <<'SQL'
+ALTER TABLE public.group_members
+  ADD CONSTRAINT unexpected_group_members_user_id_fkey
+  FOREIGN KEY (user_id)
+  REFERENCES auth.users(id)
+  ON DELETE RESTRICT;
+SQL
+if psql_cmd -f "$MIGRATION" >"$LOG_DIR/unexpected-single-fk.log" 2>&1; then
+  echo "Migration unexpectedly replaced a noncanonical group_members FK" >&2
+  exit 1
+fi
+grep -Fq 'account purge CASCADE FK is incompatible: public.group_members' \
+  "$LOG_DIR/unexpected-single-fk.log"
+if [[ "$(psql_cmd -Atqc "SELECT to_regprocedure('public.reject_inactive_group_edge()') IS NULL AND EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.group_members'::regclass AND conname = 'unexpected_group_members_user_id_fkey') AND NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conrelid = 'public.group_members'::regclass AND conname = 'group_members_user_id_fkey')")" != "t" ]]; then
+  echo "Noncanonical FK failure changed the original constraint state" >&2
+  exit 1
+fi
+psql_cmd -c \
+  'ALTER TABLE public.group_members DROP CONSTRAINT unexpected_group_members_user_id_fkey' \
+  >/dev/null
+
+# Commit an orphan after preflight has observed an empty FK-compatible state
+# but before ACCESS EXCLUSIVE is acquired. The validated ADD CONSTRAINT must
+# catch it under the lock and roll the entire migration back.
+(
+  PGAPPNAME=concurrent_group_member_orphan psql_cmd <<'SQL'
+BEGIN;
+INSERT INTO public.group_members(group_id, user_id, role) VALUES (
+  '40000000-0000-4000-8000-000000000004',
+  'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
+  'member'
+);
+SELECT /* concurrent_group_member_orphan */ pg_catalog.pg_sleep(1.2);
+COMMIT;
+SQL
+) >"$LOG_DIR/concurrent-orphan-writer.log" 2>&1 &
+ORPHAN_WRITER_PID=$!
+
+for _ in {1..50}; do
+  if [[ "$(psql_cmd -Atqc "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name = 'concurrent_group_member_orphan' AND wait_event = 'PgSleep')")" == "t" ]]; then
+    break
+  fi
+  sleep 0.05
+done
+if [[ "$(psql_cmd -Atqc "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE application_name = 'concurrent_group_member_orphan' AND wait_event = 'PgSleep')")" != "t" ]]; then
+  echo "Failed to pause the concurrent orphan writer" >&2
+  exit 1
+fi
+
+if psql_cmd -f "$MIGRATION" >"$LOG_DIR/concurrent-orphan-validation.log" 2>&1; then
+  echo "Validated FK unexpectedly accepted a concurrently committed orphan" >&2
+  exit 1
+fi
+wait "$ORPHAN_WRITER_PID"
+grep -Fq 'violates foreign key constraint "group_members_user_id_fkey"' \
+  "$LOG_DIR/concurrent-orphan-validation.log"
+
+psql_cmd <<'SQL'
+DO $concurrent_orphan_rollback_proof$
+DECLARE
+  user_id_attnum smallint := (
+    SELECT attribute.attnum
+    FROM pg_catalog.pg_attribute AS attribute
+    WHERE attribute.attrelid = 'public.group_members'::pg_catalog.regclass
+      AND attribute.attname = 'user_id'
+  );
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM public.group_members AS member
+    WHERE member.user_id =
+      'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee'
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_members'::pg_catalog.regclass
+      AND constraint_info.contype = 'f'
+      AND user_id_attnum = ANY (constraint_info.conkey)
+  ) OR pg_catalog.to_regprocedure(
+    'public.reject_inactive_group_edge()'
+  ) IS NOT NULL THEN
+    RAISE EXCEPTION
+      'concurrent orphan validation did not roll back migration state';
+  END IF;
+END
+$concurrent_orphan_rollback_proof$;
+
+DELETE FROM public.group_members
+WHERE user_id = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 TRUNCATE public.edge_trigger_log;
 SQL
 
 psql_cmd -f "$MIGRATION" >"$LOG_DIR/first-apply.log"
+
+psql_cmd <<'SQL'
+DO $missing_fk_first_install_proof$
+DECLARE
+  user_id_attnum smallint := (
+    SELECT attribute.attnum
+    FROM pg_catalog.pg_attribute AS attribute
+    WHERE attribute.attrelid = 'public.group_members'::pg_catalog.regclass
+      AND attribute.attname = 'user_id'
+  );
+  auth_id_attnum smallint := (
+    SELECT attribute.attnum
+    FROM pg_catalog.pg_attribute AS attribute
+    WHERE attribute.attrelid = 'auth.users'::pg_catalog.regclass
+      AND attribute.attname = 'id'
+  );
+BEGIN
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_members'::pg_catalog.regclass
+      AND constraint_info.contype = 'f'
+      AND user_id_attnum = ANY (constraint_info.conkey)
+  ) <> 1 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_members'::pg_catalog.regclass
+      AND constraint_info.conname = 'group_members_user_id_fkey'
+      AND constraint_info.contype = 'f'
+      AND constraint_info.conkey = ARRAY[user_id_attnum]::smallint[]
+      AND constraint_info.confrelid = 'auth.users'::pg_catalog.regclass
+      AND constraint_info.confkey = ARRAY[auth_id_attnum]::smallint[]
+      AND constraint_info.confmatchtype = 's'
+      AND constraint_info.confupdtype = 'a'
+      AND constraint_info.confdeltype = 'c'
+      AND constraint_info.convalidated
+      AND NOT constraint_info.condeferrable
+      AND NOT constraint_info.condeferred
+  ) THEN
+    RAISE EXCEPTION 'missing FK first install did not create the exact contract';
+  END IF;
+END
+$missing_fk_first_install_proof$;
+SQL
+
+psql_cmd -f "$MIGRATION" >"$LOG_DIR/missing-fk-immediate-replay.log"
 
 # Only service_role may cross the RPC boundary.
 if psql_cmd -c \
