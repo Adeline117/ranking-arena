@@ -11,12 +11,15 @@
 
 // Mock @/lib/env so env.CRON_SECRET reads process.env.CRON_SECRET at call time
 jest.mock('@/lib/env', () => ({
-  env: new Proxy({}, {
-    get(_t, key) {
-      if (key === 'CRON_SECRET') return process.env.CRON_SECRET
-      return process.env[String(key)]
-    },
-  }),
+  env: new Proxy(
+    {},
+    {
+      get(_t, key) {
+        if (key === 'CRON_SECRET') return process.env.CRON_SECRET
+        return process.env[String(key)]
+      },
+    }
+  ),
 }))
 
 // Mock pg pool (getPool) — the route now uses raw SQL for heavy snapshot queries.
@@ -31,11 +34,12 @@ const mockPgClient = {
       return Promise.resolve({ rows: [], rowCount: 0 })
     }
     // Main SELECT query — determine window from params
-    // The route passes [seasonId, freshnessThreshold] as params
+    // The route passes [seasonId] as params
     const windowMatch = _params?.[0] as string | undefined
-    const rows = windowMatch && mockPgQueryResults[windowMatch]
-      ? mockPgQueryResults[windowMatch]
-      : (mockPgQueryResults['default'] || [])
+    const rows =
+      windowMatch && mockPgQueryResults[windowMatch]
+        ? mockPgQueryResults[windowMatch]
+        : mockPgQueryResults['default'] || []
     return Promise.resolve({ rows, rowCount: rows.length })
   }),
   release: jest.fn(),
@@ -72,9 +76,30 @@ jest.mock('@/lib/utils/logger', () => ({
     warn: jest.fn(),
     error: jest.fn(),
   }),
-  logger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  apiLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
-  dataLogger: { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn(), apiError: jest.fn(), dbError: jest.fn() },
+  logger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  apiLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
+  dataLogger: {
+    info: jest.fn(),
+    warn: jest.fn(),
+    error: jest.fn(),
+    debug: jest.fn(),
+    apiError: jest.fn(),
+    dbError: jest.fn(),
+  },
   captureError: jest.fn(),
   captureMessage: jest.fn(),
 }))
@@ -130,17 +155,20 @@ function chainProxy(resolvedValue: { data: unknown; error: unknown }) {
   const catchFn = (reject: (v: unknown) => void) => Promise.resolve(resolvedValue).catch(reject)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const proxy: any = new Proxy({}, {
-    get(_, prop) {
-      // Make proxy thenable so `await` resolves to { data, error }
-      if (prop === 'then') return thenFn
-      if (prop === 'catch') return catchFn
-      return jest.fn().mockImplementation((..._args: unknown[]) => {
-        if (prop === 'single' || prop === 'maybeSingle') return Promise.resolve(resolvedValue)
-        return proxy
-      })
-    },
-  })
+  const proxy: any = new Proxy(
+    {},
+    {
+      get(_, prop) {
+        // Make proxy thenable so `await` resolves to { data, error }
+        if (prop === 'then') return thenFn
+        if (prop === 'catch') return catchFn
+        return jest.fn().mockImplementation((..._args: unknown[]) => {
+          if (prop === 'single' || prop === 'maybeSingle') return Promise.resolve(resolvedValue)
+          return proxy
+        })
+      },
+    }
+  )
   return proxy
 }
 
@@ -149,6 +177,7 @@ function makeSnapshotRow(overrides: Record<string, unknown> = {}) {
     platform: 'binance-futures',
     trader_key: 'trader1',
     as_of_ts: new Date().toISOString(),
+    computed_at: new Date().toISOString(),
     arena_score: 85,
     roi_pct: 50,
     pnl_usd: 10000,
@@ -204,20 +233,42 @@ describe('GET /api/cron/precompute-composite', () => {
       ],
       '30D': [
         makeSnapshotRow({ trader_key: 'trader1', arena_score: 85, roi_pct: 50 }),
-        makeSnapshotRow({ trader_key: 'trader3', arena_score: 75, roi_pct: 40, platform: 'hyperliquid' }),
+        makeSnapshotRow({
+          trader_key: 'trader3',
+          arena_score: 75,
+          roi_pct: 40,
+          platform: 'hyperliquid',
+        }),
       ],
-      '90D': [
-        makeSnapshotRow({ trader_key: 'trader1', arena_score: 80, roi_pct: 45 }),
-      ],
+      '90D': [makeSnapshotRow({ trader_key: 'trader1', arena_score: 80, roi_pct: 45 })],
     }
 
     // Supabase client only used for trader_sources display names now
     mockSupabaseFrom.mockImplementation((table: string) => {
-      if (table === 'trader_sources') return chainProxy({ data: [
-        { source: 'binance-futures', source_trader_id: 'trader1', handle: 'CryptoKing', avatar_url: 'https://img/1.png' },
-        { source: 'binance-futures', source_trader_id: 'trader2', handle: 'TraderJoe', avatar_url: null },
-        { source: 'hyperliquid', source_trader_id: 'trader3', handle: 'DeFiWhale', avatar_url: null },
-      ], error: null })
+      if (table === 'trader_sources')
+        return chainProxy({
+          data: [
+            {
+              source: 'binance-futures',
+              source_trader_id: 'trader1',
+              handle: 'CryptoKing',
+              avatar_url: 'https://img/1.png',
+            },
+            {
+              source: 'binance-futures',
+              source_trader_id: 'trader2',
+              handle: 'TraderJoe',
+              avatar_url: null,
+            },
+            {
+              source: 'hyperliquid',
+              source_trader_id: 'trader3',
+              handle: 'DeFiWhale',
+              avatar_url: null,
+            },
+          ],
+          error: null,
+        })
       return chainProxy({ data: [], error: null })
     })
 
@@ -232,15 +283,108 @@ describe('GET /api/cron/precompute-composite', () => {
 
     // Should have stored composite data in Redis
     expect(mockTieredSet).toHaveBeenCalled()
-    // First call stores 'precomputed:composite:all'
+    // First call stores the freshness-aware composite cache generation.
     const firstCall = mockTieredSet.mock.calls[0]
-    expect(firstCall[0]).toBe('precomputed:composite:all')
+    expect(firstCall[0]).toBe('precomputed:composite:all:v2')
     const compositeData = firstCall[1]
     expect(compositeData.window).toBe('COMPOSITE')
     expect(compositeData.precomputed).toBe(true)
     expect(compositeData.traders.length).toBeGreaterThan(0)
     // Traders should be ranked
     expect(compositeData.traders[0].rank).toBe(1)
+    const leaderboardSelect = mockPgClient.query.mock.calls.find(([sql]) =>
+      String(sql).includes('FROM leaderboard_ranks AS ranks')
+    )?.[0] as string
+    expect(leaderboardSelect).toContain('ranks.arena_score > 0')
+    expect(leaderboardSelect).toContain('ranks.roi IS NOT NULL')
+    expect(leaderboardSelect).toContain('(ranks.is_outlier IS NULL OR ranks.is_outlier = false)')
+  })
+
+  it('keeps stale last-good composite rows but exposes their source watermark', async () => {
+    jest.useFakeTimers().setSystemTime(new Date('2026-07-18T12:00:00.000Z'))
+    try {
+      mockPgQueryResults = {
+        '7D': [
+          makeSnapshotRow({
+            platform: 'binance-futures',
+            trader_key: 'fresh',
+            as_of_ts: '2026-07-18T11:00:00.000Z',
+            computed_at: '2026-07-18T11:59:00.000Z',
+          }),
+          makeSnapshotRow({
+            platform: 'hyperliquid',
+            trader_key: 'stale',
+            as_of_ts: '2026-07-16T09:00:00.000Z',
+            computed_at: '2026-07-18T11:59:00.000Z',
+          }),
+        ],
+        '30D': [
+          makeSnapshotRow({
+            platform: 'binance-futures',
+            trader_key: 'fresh',
+            as_of_ts: '2026-07-18T10:30:00.000Z',
+          }),
+          makeSnapshotRow({
+            platform: 'hyperliquid',
+            trader_key: 'stale',
+            as_of_ts: '2026-07-16T09:00:00.000Z',
+          }),
+        ],
+        '90D': [
+          makeSnapshotRow({
+            platform: 'binance-futures',
+            trader_key: 'fresh',
+            as_of_ts: '2026-07-18T10:00:00.000Z',
+          }),
+          makeSnapshotRow({
+            platform: 'hyperliquid',
+            trader_key: 'stale',
+            as_of_ts: '2026-07-16T09:00:00.000Z',
+          }),
+        ],
+      }
+      mockSupabaseFrom.mockImplementation((table: string) => {
+        if (table === 'trader_sources') return chainProxy({ data: [], error: null })
+        return chainProxy({ data: [], error: null })
+      })
+
+      const res = await GET(createCronRequest(CRON_SECRET))
+      expect(res.status).toBe(200)
+
+      const compositeData = mockTieredSet.mock.calls.find(
+        ([key]) => key === 'precomputed:composite:all:v2'
+      )?.[1]
+      expect(compositeData).toBeDefined()
+      expect(compositeData.is_stale).toBe(true)
+      expect(compositeData.as_of).toBe('2026-07-16T09:00:00.000Z')
+      expect(compositeData.source_freshness).toEqual([
+        {
+          source: 'binance-futures',
+          updated_at: '2026-07-18T10:00:00.000Z',
+          is_stale: false,
+          age_seconds: 7200,
+        },
+        {
+          source: 'hyperliquid',
+          updated_at: '2026-07-16T09:00:00.000Z',
+          is_stale: true,
+          age_seconds: 51 * 3600,
+        },
+      ])
+      expect(
+        compositeData.traders.find(
+          (entry: { platform: string }) => entry.platform === 'hyperliquid'
+        )
+      ).toEqual(
+        expect.objectContaining({
+          updated_at: '2026-07-16T09:00:00.000Z',
+          is_stale: true,
+          computed_at: expect.any(String),
+        })
+      )
+    } finally {
+      jest.useRealTimers()
+    }
   })
 
   // ---- Empty data ----------------------------------------------------------
@@ -263,7 +407,8 @@ describe('GET /api/cron/precompute-composite', () => {
 
   it('returns 500 when a database query throws', async () => {
     // Make pg client.query throw to simulate DB failure
-    mockPgClient.query.mockImplementationOnce(() => Promise.resolve({ rows: [], rowCount: 0 })) // BEGIN
+    mockPgClient.query
+      .mockImplementationOnce(() => Promise.resolve({ rows: [], rowCount: 0 })) // BEGIN
       .mockImplementationOnce(() => Promise.resolve({ rows: [], rowCount: 0 })) // SET LOCAL
       .mockImplementationOnce(() => Promise.reject(new Error('DB connection lost'))) // SELECT
 
@@ -275,10 +420,12 @@ describe('GET /api/cron/precompute-composite', () => {
   })
 
   it.skip('returns 500 when snapshot fetch rejects with error', async () => {
-    mockSupabaseFrom.mockImplementation(() => chainProxy({
-      data: null,
-      error: { message: 'relation does not exist' },
-    }))
+    mockSupabaseFrom.mockImplementation(() =>
+      chainProxy({
+        data: null,
+        error: { message: 'relation does not exist' },
+      })
+    )
 
     const res = await GET(createCronRequest(CRON_SECRET))
     expect(res.status).toBe(500)

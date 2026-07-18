@@ -15,6 +15,15 @@ import { attachAvatarMirrors } from '@/lib/data/avatar-mirrors'
 import { logger, fireAndForget } from '@/lib/logger'
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import * as cache from '@/lib/cache'
+import {
+  currentScoredSources,
+  type LeaderboardCountCacheRow,
+} from '@/lib/data/leaderboard-count-cache'
+import {
+  summarizeSourceFreshness,
+  type SourceFreshnessRow,
+  type SourceFreshnessSummary,
+} from '@/lib/rankings/source-freshness'
 
 /** @deprecated Use UnifiedTrader from lib/types/unified-trader.ts */
 export interface InitialTrader {
@@ -96,6 +105,7 @@ export interface CategoryCounts {
 export interface InitialTradersResult {
   traders: InitialTrader[]
   lastUpdated: string | null
+  isStale: boolean
   totalCount: number
   categoryCounts: CategoryCounts
 }
@@ -106,11 +116,13 @@ export interface InitialTradersResult {
  * drift onto different keys again.
  * v3 (2026-07-12): shape gained rank_change/is_new — bumped so 2h-TTL v2
  * entries (without the new fields) don't serve arrow-less rows for hours.
+ * v4 (2026-07-18): lastUpdated is the oldest live source-data watermark,
+ * never leaderboard_ranks.computed_at.
  */
 export function homeInitialTradersCacheKeys(timeRange: Period, page: number) {
   return {
-    cacheKey: `home-initial-traders-v3:${timeRange}:p${page}`,
-    fallbackKey: `home-initial-traders-fallback-v3:${timeRange}:p${page}`,
+    cacheKey: `home-initial-traders-v4:${timeRange}:p${page}`,
+    fallbackKey: `home-initial-traders-fallback-v4:${timeRange}:p${page}`,
   }
 }
 
@@ -144,6 +156,7 @@ export async function getInitialTraders(
     return {
       traders: [],
       lastUpdated: null,
+      isStale: true,
       totalCount: 0,
       categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 },
     }
@@ -209,6 +222,7 @@ export async function getInitialTraders(
     return {
       traders: [],
       lastUpdated: null,
+      isStale: true,
       totalCount: 0,
       categoryCounts: { all: 0, futures: 0, spot: 0, onchain: 0 },
     }
@@ -237,12 +251,13 @@ export async function fetchLeaderboardFromDB(
 
   try {
     // Fetch traders + category counts in parallel
-    const [tradersResult, counts] = await Promise.race([
+    const [tradersResult, counts, freshnessRows] = await Promise.race([
       Promise.all([
         page === 0
           ? fetchViaDiverseRPC(supabase, timeRange, limit)
           : fetchPaginatedFromDB(supabase, timeRange, limit, page),
         fetchCategoryCounts(supabase, timeRange),
+        fetchInitialFreshnessRows(supabase, timeRange),
       ]),
       new Promise<never>((_, reject) => {
         controller.signal.addEventListener('abort', () =>
@@ -255,9 +270,16 @@ export async function fetchLeaderboardFromDB(
     // Prefer our own CDN mirror over the exchange-CDN proxy (no 429 cold-burst).
     // Fail-open: missing mirrors leave avatar_url untouched (origin proxy still works).
     const enrichedTraders = await attachAvatarMirrors(supabase, tradersResult.traders)
+    const freshness = summarizeInitialTraderFreshness({
+      countRows: freshnessRows.countRows,
+      watermarkRows: freshnessRows.watermarkRows,
+      observedSources: enrichedTraders.map((trader) => trader.source),
+    })
     return {
       ...tradersResult,
       traders: enrichedTraders,
+      lastUpdated: freshness.asOf,
+      isStale: freshness.isStale,
       totalCount: counts.all,
       categoryCounts: counts,
     }
@@ -272,8 +294,60 @@ export async function fetchLeaderboardFromDB(
     } else {
       logger.error('[getInitialTraders] Error:', err)
     }
-    return { traders: [], lastUpdated: null, totalCount: 0, categoryCounts: emptyCounts }
+    return {
+      traders: [],
+      lastUpdated: null,
+      isStale: true,
+      totalCount: 0,
+      categoryCounts: emptyCounts,
+    }
   }
+}
+
+async function fetchInitialFreshnessRows(
+  supabase: ReturnType<typeof getSupabaseAdmin>,
+  timeRange: Period
+): Promise<{
+  countRows: LeaderboardCountCacheRow[]
+  watermarkRows: SourceFreshnessRow[]
+}> {
+  const [countResult, watermarkResult] = await Promise.all([
+    supabase
+      .from('leaderboard_count_cache')
+      .select('source,total_count,updated_at')
+      .eq('season_id', timeRange)
+      .like('source', '%_gt0'),
+    supabase
+      .from('leaderboard_source_freshness')
+      .select('source,source_as_of')
+      .eq('season_id', timeRange),
+  ])
+
+  return {
+    countRows: (countResult.data || []) as LeaderboardCountCacheRow[],
+    watermarkRows: (watermarkResult.data || []) as SourceFreshnessRow[],
+  }
+}
+
+/**
+ * SSR must use the same source-level contract as the JSON APIs. Prefer the
+ * complete live-source set from the atomic count-cache generation; only fall
+ * back to the sources observed on the rendered page when that cache is
+ * unavailable.
+ */
+export function summarizeInitialTraderFreshness(params: {
+  countRows: readonly LeaderboardCountCacheRow[]
+  watermarkRows: readonly SourceFreshnessRow[]
+  observedSources: readonly string[]
+  nowMs?: number
+}): SourceFreshnessSummary {
+  const liveSources = currentScoredSources(params.countRows)
+  const nowMs = params.nowMs ?? Date.now()
+  if (liveSources.length === 0 && params.observedSources.length > 0) {
+    const observed = summarizeSourceFreshness(params.watermarkRows, params.observedSources, nowMs)
+    return { ...observed, isStale: true }
+  }
+  return summarizeSourceFreshness(params.watermarkRows, liveSources, nowMs)
 }
 
 /**
