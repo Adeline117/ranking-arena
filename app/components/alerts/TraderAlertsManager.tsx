@@ -280,7 +280,7 @@ export default function TraderAlertsManager() {
         description={t('traderAlertsSignInDesc')}
         action={
           <Link
-            href={`/login?redirect=${encodeURIComponent('/saved?tab=alerts')}`}
+            href={`/login?returnUrl=${encodeURIComponent('/saved?tab=alerts')}`}
             style={ctaStyle}
           >
             {t('login')}

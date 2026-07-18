@@ -205,7 +205,7 @@ describe('TraderAlertsManager viewer ownership', () => {
     expect(screen.queryByText('watchlistSignInTitle')).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'login' })).toHaveAttribute(
       'href',
-      '/login?redirect=%2Fsaved%3Ftab%3Dalerts'
+      '/login?returnUrl=%2Fsaved%3Ftab%3Dalerts'
     )
     expect(mockAuthedFetch).not.toHaveBeenCalled()
   })
