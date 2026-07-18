@@ -163,6 +163,7 @@ jobs:
           set +e
           npx vercel@56.2.1 deploy --prod --skip-domain --yes --no-wait --meta gateSha="$HEAD_SHA" \
             --build-env ARENA_RELEASE_SHA="$HEAD_SHA" \
+            --build-env ARENA_CI_TYPES_ATTESTED=1 \
             --build-env VERCEL_BUILD_SYSTEM_REPORT=1 \
             --env ARENA_RELEASE_SHA="$HEAD_SHA" \
             --token="$VERCEL_TOKEN" > /tmp/deploy-url.txt \

@@ -168,9 +168,12 @@ const nextConfig = {
     return config
   },
 
-  // TypeScript — CI runs tsc separately; enable build-time checks as safety net
+  // The deploy gate already requires `tsc --noEmit` for this exact SHA. It
+  // injects the attestation only into its staged CLI candidate so Vercel does
+  // not repeat the expensive type phase after webpack. Git previews and the
+  // emergency direct-deploy path do not get this flag and retain Next's check.
   typescript: {
-    ignoreBuildErrors: false,
+    ignoreBuildErrors: process.env.ARENA_CI_TYPES_ATTESTED === '1',
   },
 
   // 性能优化
