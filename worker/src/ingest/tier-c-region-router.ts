@@ -18,6 +18,8 @@ export interface TierCRegionRouterDeps {
   enqueue(region: IngestRegion, data: TierCJobData, jobId: string): Promise<void>
 }
 
+export const MAX_TIER_C_REROUTE_HOPS = 1
+
 type TierCRerouteTarget = Pick<Job<TierCJobData>, 'getState' | 'retry'>
 
 const SAFE_TARGET_STATES = new Set([
@@ -109,6 +111,48 @@ const defaultDeps: TierCRegionRouterDeps = {
   },
 }
 
+function isLegacyTierCJob(job: Job<TierCJobData>, queueRegion: IngestRegion): boolean {
+  const { fetchRegion, tierCRouteToken, tierCRouteHop } = job.data
+  if (fetchRegion === undefined) {
+    if (tierCRouteToken !== undefined || tierCRouteHop !== undefined) {
+      throw new Error('[tier-c] legacy job has incomplete routing metadata')
+    }
+    return true
+  }
+
+  const claimedRegion = assertIngestRegion(fetchRegion)
+  if (claimedRegion !== queueRegion) {
+    throw new Error(`[tier-c] directed job claims ${claimedRegion} but arrived on ${queueRegion}`)
+  }
+
+  const hasToken = tierCRouteToken !== undefined
+  const hasHop = tierCRouteHop !== undefined
+  if (hasToken !== hasHop) {
+    throw new Error('[tier-c] directed job has incomplete routing metadata')
+  }
+  if (!hasToken) {
+    // Current producers and jobs handed off by the first rolling worker build
+    // have fetchRegion but no token/hop. They may run only on that exact queue.
+    return false
+  }
+
+  if (
+    typeof tierCRouteToken !== 'string' ||
+    !tierCRouteToken.startsWith('tierc-reroute-v1--') ||
+    tierCRouteToken !== job.id
+  ) {
+    throw new Error('[tier-c] rerouted job has invalid routing token')
+  }
+  if (
+    !Number.isSafeInteger(tierCRouteHop) ||
+    tierCRouteHop < 1 ||
+    tierCRouteHop > MAX_TIER_C_REROUTE_HOPS
+  ) {
+    throw new Error(`[tier-c] rerouted job exceeds hop limit ${MAX_TIER_C_REROUTE_HOPS}`)
+  }
+  return false
+}
+
 /**
  * Verify the queue region against the current database source row before any
  * browser or HTTP fetch starts. A legacy/moved-source job is acknowledged only
@@ -126,13 +170,29 @@ export async function routeTierCJobRegion(
     throw new Error('[tier-c] job is missing sourceSlug')
   }
 
+  const isLegacy = isLegacyTierCJob(job, queueRegion)
   const sourceRegion = assertIngestRegion(await deps.sourceRegion(sourceSlug))
   if (sourceRegion === queueRegion) {
     return { action: 'run', region: sourceRegion }
   }
 
-  const data: TierCJobData = { ...job.data, fetchRegion: sourceRegion }
+  // Only pre-regionalization jobs are eligible for one compatibility handoff.
+  // A producer-directed or already-rerouted job whose DB region changed fails
+  // closed; the next request resolves the current region and creates a new
+  // flight instead of bouncing an active job between queues.
+  if (!isLegacy) {
+    throw new Error(
+      `[tier-c] directed job on ${queueRegion} no longer matches source region ${sourceRegion}`
+    )
+  }
+
   const jobId = tierCRerouteJobId(job, queueRegion, sourceRegion)
+  const data: TierCJobData = {
+    ...job.data,
+    fetchRegion: sourceRegion,
+    tierCRouteToken: jobId,
+    tierCRouteHop: 1,
+  }
   await deps.enqueue(sourceRegion, data, jobId)
   return {
     action: 'rerouted',
