@@ -175,9 +175,9 @@ export async function scoreTraders(
   }
 
   // Replace exchange followers with Arena internal follower counts
-  const { applied, uniqueIds } = await applyArenaFollowers(supabase, scored, season)
+  const { applied, uniqueAccounts } = await applyArenaFollowers(supabase, scored, season)
   logger.info(
-    `[${season}] Arena followers: ${applied} traders have followers (${uniqueIds} unique trader_ids queried)`
+    `[${season}] Arena followers: ${applied} traders have followers (${uniqueAccounts} unique exchange accounts queried)`
   )
 
   // Served population = traders with a real (v3) score — the SAME quality gate as
