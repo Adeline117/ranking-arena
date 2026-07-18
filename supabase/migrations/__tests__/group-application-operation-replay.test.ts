@@ -39,7 +39,11 @@ describe('group application operation replay migration', () => {
       'LOCK TABLE auth.users IN SHARE ROW EXCLUSIVE MODE NOWAIT',
       lockSet
     )
-    const dependencyLock = migration.indexOf('LOCK TABLE public.user_profiles,', lockSet)
+    const profileLock = migration.indexOf(
+      'LOCK TABLE public.user_profiles IN ACCESS EXCLUSIVE MODE NOWAIT',
+      lockSet
+    )
+    const dependencyLock = migration.indexOf('LOCK TABLE public.subscriptions,', lockSet)
     const mutation = migration.indexOf(
       'ALTER TABLE public.group_application_operation_results OWNER TO postgres',
       lockSet
@@ -52,10 +56,13 @@ describe('group application operation replay migration', () => {
     )
     expect(ledgerLock).toBeGreaterThan(lockSet)
     expect(authLock).toBeGreaterThan(ledgerLock)
-    expect(dependencyLock).toBeGreaterThan(authLock)
+    expect(profileLock).toBeGreaterThan(authLock)
+    expect(dependencyLock).toBeGreaterThan(profileLock)
     expect(mutation).toBeGreaterThan(dependencyLock)
     expect(migration).toContain('WHEN lock_not_available OR deadlock_detected')
     expect(migration).toContain('could not acquire complete group-application DDL lock set')
+    expect(migration).toContain('ALTER COLUMN is_banned SET NOT NULL')
+    expect(migration).toContain('user profile ban flag convergence was incomplete')
   })
 
   it('makes both promoted runtimes enter through the ledger deployment barrier', () => {
