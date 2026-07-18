@@ -196,18 +196,15 @@ async function moderateMute(input: {
   reason: string | null
 }): Promise<AtomicMuteAcknowledgement | NextResponse> {
   const admin = getSupabaseAdmin()
-  const { data, error } = await admin.rpc(
-    'moderate_group_mute_atomic' as never,
-    {
-      p_actor_id: input.actorId,
-      p_operation_id: input.operationId,
-      p_group_id: input.groupId,
-      p_target_id: input.targetUserId,
-      p_action: input.action,
-      p_muted_until: input.mutedUntil,
-      p_reason: input.reason,
-    } as never
-  )
+  const { data, error } = await admin.rpc('moderate_group_mute_atomic', {
+    p_actor_id: input.actorId,
+    p_operation_id: input.operationId,
+    p_group_id: input.groupId,
+    p_target_id: input.targetUserId,
+    p_action: input.action,
+    p_muted_until: input.mutedUntil,
+    p_reason: input.reason,
+  })
 
   if (error) {
     logger.error('Atomic group mute operation failed', {

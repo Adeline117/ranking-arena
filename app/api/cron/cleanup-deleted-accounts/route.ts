@@ -95,8 +95,8 @@ export const GET = withCron('cleanup-deleted-accounts', async (_request: NextReq
         // edge triggers acquire the same advisory locks used by join/moderation,
         // so purge those edges in canonical lock order before touching Auth.
         const { data: groupPurgeResult, error: groupPurgeError } = await supabase.rpc(
-          'purge_deleted_account_group_edges' as never,
-          { p_user_id: account.id } as never
+          'purge_deleted_account_group_edges',
+          { p_user_id: account.id }
         )
         if (groupPurgeError) {
           throw new Error(`Group edge purge failed: ${groupPurgeError.message}`)

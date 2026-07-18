@@ -239,15 +239,12 @@ export const POST = withAuth(
     const admin = getSupabaseAdmin()
 
     if (action === 'leave') {
-      const { data, error } = await admin.rpc(
-        'mutate_group_membership_atomic' as never,
-        {
-          p_actor_id: user.id,
-          p_group_id: groupId,
-          p_action: 'leave',
-          p_pro_free_promo: PRO_FREE_PROMO,
-        } as never
-      )
+      const { data, error } = await admin.rpc('mutate_group_membership_atomic', {
+        p_actor_id: user.id,
+        p_group_id: groupId,
+        p_action: 'leave',
+        p_pro_free_promo: PRO_FREE_PROMO,
+      })
       if (error) return failedRpc('leave', error)
 
       const result = readAtomicResult(data)
@@ -278,15 +275,12 @@ export const POST = withAuth(
         return NextResponse.json({ error: 'Invalid or expired invite' }, { status: 400 })
       }
 
-      const { data, error } = await admin.rpc(
-        'redeem_group_invite_atomic' as never,
-        {
-          p_actor_id: user.id,
-          p_group_id: groupId,
-          p_token_hash: hashInviteToken(inviteToken),
-          p_pro_free_promo: PRO_FREE_PROMO,
-        } as never
-      )
+      const { data, error } = await admin.rpc('redeem_group_invite_atomic', {
+        p_actor_id: user.id,
+        p_group_id: groupId,
+        p_token_hash: hashInviteToken(inviteToken),
+        p_pro_free_promo: PRO_FREE_PROMO,
+      })
       if (error) return failedRpc('invite redemption', error)
 
       const result = readAtomicResult(data)
@@ -298,15 +292,12 @@ export const POST = withAuth(
     }
 
     const join = async () => {
-      const { data, error } = await admin.rpc(
-        'mutate_group_membership_atomic' as never,
-        {
-          p_actor_id: user.id,
-          p_group_id: groupId,
-          p_action: 'join',
-          p_pro_free_promo: PRO_FREE_PROMO,
-        } as never
-      )
+      const { data, error } = await admin.rpc('mutate_group_membership_atomic', {
+        p_actor_id: user.id,
+        p_group_id: groupId,
+        p_action: 'join',
+        p_pro_free_promo: PRO_FREE_PROMO,
+      })
       return { result: readAtomicResult(data), error, data }
     }
 
@@ -321,14 +312,14 @@ export const POST = withAuth(
     }
 
     const { data: requestData, error: requestError } = await admin.rpc(
-      'mutate_group_join_request_atomic' as never,
+      'mutate_group_join_request_atomic',
       {
         p_actor_id: user.id,
         p_group_id: groupId,
         p_action: 'request',
         p_answer_text: answerText ?? null,
         p_pro_free_promo: PRO_FREE_PROMO,
-      } as never
+      }
     )
     if (requestError) return failedRpc('join request', requestError)
 
