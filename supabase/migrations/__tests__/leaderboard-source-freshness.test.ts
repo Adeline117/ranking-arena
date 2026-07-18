@@ -7,16 +7,22 @@ const migration = readFileSync(
 )
 
 describe('leaderboard source freshness migration', () => {
-  it('is replay-safe and keyed independently for every ranking window and source', () => {
+  it('is ledger-resumable and keyed independently for every ranking window and source', () => {
     expect(migration).toContain('BEGIN;')
     expect(migration).toContain("SET LOCAL lock_timeout = '5s'")
     expect(migration).toContain("SET LOCAL statement_timeout = '2min'")
     expect(migration.trimEnd()).toMatch(/COMMIT;$/)
-    expect(migration).toContain('CREATE TABLE IF NOT EXISTS public.leaderboard_source_freshness')
+    expect(migration).toContain('CREATE TABLE public.leaderboard_source_freshness')
+    expect(migration).not.toContain(
+      'CREATE TABLE IF NOT EXISTS public.leaderboard_source_freshness'
+    )
     expect(migration).toContain('PRIMARY KEY (season_id, source)')
     expect(migration).toContain('ON CONFLICT (season_id, source) DO UPDATE')
     expect(migration).toContain("CHECK (season_id IN ('7D', '30D', '90D'))")
-    expect(migration).toContain('CREATE INDEX IF NOT EXISTS idx_leaderboard_source_freshness_age')
+    expect(migration).toContain('CREATE INDEX idx_leaderboard_source_freshness_age')
+    expect(migration).not.toContain(
+      'CREATE INDEX IF NOT EXISTS idx_leaderboard_source_freshness_age'
+    )
     expect(migration).toContain('DROP POLICY IF EXISTS "leaderboard_source_freshness_public_read"')
     expect(migration).toContain('leaderboard_source_freshness_not_future')
     expect(migration).toContain("NOTIFY pgrst, 'reload schema'")

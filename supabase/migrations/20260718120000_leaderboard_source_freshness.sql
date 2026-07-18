@@ -10,7 +10,7 @@ BEGIN;
 SET LOCAL lock_timeout = '5s';
 SET LOCAL statement_timeout = '2min';
 
-CREATE TABLE IF NOT EXISTS public.leaderboard_source_freshness (
+CREATE TABLE public.leaderboard_source_freshness (
   season_id text NOT NULL
     CHECK (season_id IN ('7D', '30D', '90D')),
   source text NOT NULL,
@@ -21,7 +21,7 @@ CREATE TABLE IF NOT EXISTS public.leaderboard_source_freshness (
   PRIMARY KEY (season_id, source)
 );
 
-CREATE INDEX IF NOT EXISTS idx_leaderboard_source_freshness_age
+CREATE INDEX idx_leaderboard_source_freshness_age
   ON public.leaderboard_source_freshness (season_id, source_as_of DESC);
 
 ALTER TABLE public.leaderboard_source_freshness ENABLE ROW LEVEL SECURITY;
