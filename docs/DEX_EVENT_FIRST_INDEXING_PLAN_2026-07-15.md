@@ -60,11 +60,14 @@ flowchart LR
   `sha256:<digest>` 只是内容标识，不表示对应 body 已保存或可取回。没有通过重新获取与重算演练
   的批次必须标为 `declared_not_replayed`，不得进入 population denominator、serving、rank 或
   score。
-- **现行契约 blocker**：`arena.dex.acquisition-run-manifest@2` 仍把
+- **前一版契约冲突（结构已解除，授权仍关闭）**：`arena.dex.acquisition-run-manifest@2` 曾把
   `transport.raw_page_archive_required=true` 固定为旧的 raw-replay 目标，同时把
-  `claims.artifact_persistence_authorized=false` 固定为安全门。后者优先：当前 manifest 只能作为
-  未授权草稿，不能执行或持久化 artifact。改为 metadata-only acquisition 必须发布新契约版本并
-  拒绝旧版本，不能把 `true` 解释成已有授权。
+  `claims.artifact_persistence_authorized=false` 固定为安全门。后者优先，因此 @2 只能作为未授权
+  历史草稿，不能把 `true` 解释成已有授权。2026-07-17 已以
+  `acquisition-run-manifest@3` / `acquisition-query-policy@2` 的 exact metadata-only tuple 取代 raw
+  archive flag，并由 parser 拒绝 @2/@1。这只解除 schema 语义冲突；@3 仍固定
+  execution/artifact persistence/serving/rank/score 全部 false，真实 artifacts 未逐项加载验签前
+  collector 不能运行，也不能写 artifact。
 
 ## 2. “覆盖大部分公开交易员”的可验收定义
 
@@ -780,9 +783,10 @@ Arena 规范事实/账本 → 官方 API/托管 indexer 对账。任何第三方
 - [ ] 验证 BSC factory child set/start/end blocks、Solana deployment/code epochs，并把两链
       `decoder_owner` 从 null 补成可追责 owner；这些 blocker 未关闭前，draft manifest 不得进入
       candidate denominator、decoder authorization 或生产发布。
-- [ ] 发布 metadata-only `acquisition-run-manifest@3` 并拒绝仍要求 raw page archive 的 @2；
-      保持 execution/artifact persistence/serving/rank/score 全部未授权，直到真实 artifacts
-      逐项加载验签。
+- [x] 固定 metadata-only `acquisition-run-manifest@3` / `acquisition-query-policy@2`，拒绝仍要求
+      raw page archive 的 @2/@1；允许字段已覆盖 source independence、verification state 与
+      batch/page/item hash chain，但 execution/artifact persistence/serving/rank/score 仍全部
+      未授权，直到真实 artifacts 逐项加载验签。
 - [ ] 单独审计并迁移 gTrade/legacy `writeRawObject` provider-body 路径；未取得 owner 授权前，
       不得把既有 `raw-snapshots` 行为扩展到 DEX event/golden/acquisition artifact。
 - [x] 固定 100 个 golden wallets：每链 top 20、随机 20、异常/高频 10；保存全局快照与每链 50

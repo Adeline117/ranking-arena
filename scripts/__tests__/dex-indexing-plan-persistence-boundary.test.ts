@@ -23,13 +23,20 @@ describe('DEX indexing plan persistence boundary', () => {
     expect(plan).toContain('`declared_not_replayed`')
     expect(plan).toContain('不得进入 population denominator、serving、rank 或')
     expect(plan).toContain('metadata-only `acquisition-run-manifest@3`')
+    expect(plan).toContain(
+      '[x] 固定 metadata-only `acquisition-run-manifest@3` / `acquisition-query-policy@2`'
+    )
   })
 
-  it('records the v2 raw-archive conflict without treating it as authorization', () => {
+  it('records the resolved v2 raw-archive conflict without opening runtime authorization', () => {
     expect(plan).toContain('`arena.dex.acquisition-run-manifest@2`')
     expect(plan).toContain('`transport.raw_page_archive_required=true`')
     expect(plan).toContain('`claims.artifact_persistence_authorized=false`')
     expect(plan).toContain('后者优先')
+    expect(plan).toContain('前一版契约冲突（结构已解除，授权仍关闭）')
+    expect(plan).toContain('parser 拒绝 @2/@1')
+    expect(plan).toContain('collector 不能运行，也不能写 artifact')
+    expect(plan).not.toContain('**现行契约 blocker**')
   })
 
   it('does not prescribe raw provider body storage for the new DEX path', () => {
