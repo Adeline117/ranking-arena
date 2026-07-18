@@ -65,14 +65,12 @@ export default async function WeeklyArenaPage() {
   // 30 minutes and this page is in the sitemap, amplifying the SEO damage.
   // Render the client's i18n'd "no data yet" empty state instead (TopNav
   // stays interactive) and log loudly so the gap is not silent.
-  if (!data || data.nonLegacyCount < MIN_SERVING_SOURCES) {
+  if (data.nonLegacyCount < MIN_SERVING_SOURCES) {
     console.error(
-      `[serving-gate] /rankings/weekly gate triggered (nonLegacyCount=${data?.nonLegacyCount ?? 'null'} < ${MIN_SERVING_SOURCES}) — rendering empty state instead of 404`
+      `[serving-gate] /rankings/weekly gate triggered (nonLegacyCount=${data.nonLegacyCount} < ${MIN_SERVING_SOURCES}) — rendering empty state instead of 404`
     )
     return (
-      <WeeklyArenaClient
-        data={{ nonLegacyCount: data?.nonLegacyCount ?? 0, rows: [], bitmart: null }}
-      />
+      <WeeklyArenaClient data={{ nonLegacyCount: data.nonLegacyCount, rows: [], bitmart: null }} />
     )
   }
 
