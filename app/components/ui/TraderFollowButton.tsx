@@ -273,9 +273,17 @@ export default function TraderFollowButton({
     ]
   )
 
-  // UF8: Resume pending follow action after login
+  // Resume only the short-lived, path-bound login proof. Older releases wrote
+  // an unbounded `pendingFollow` record; clear it without executing so a stale
+  // tab can never follow someone days later.
   useEffect(() => {
     if (!userId || !traderId || !source) return
+    try {
+      sessionStorage.removeItem('pendingFollow')
+    } catch {
+      // Storage can be unavailable; there is still no legacy execution path.
+    }
+
     const action = consumeProfileActionLogin({
       actions: ['follow-trader', 'unfollow-trader'],
       target: profileTraderTarget(source, traderId),
@@ -284,30 +292,6 @@ export default function TraderFollowButton({
       pendingRef.current = true
       void executeFollow(action === 'follow-trader' ? 'follow' : 'unfollow')
       return
-    }
-
-    try {
-      const pending = sessionStorage.getItem('pendingFollow')
-      if (pending) {
-        const { traderId: pendingTraderId, source: pendingSource, action } = JSON.parse(pending)
-        if (
-          pendingTraderId === traderId &&
-          pendingSource === source &&
-          action === 'follow' &&
-          !following
-        ) {
-          sessionStorage.removeItem('pendingFollow')
-          // Keep the mount-time status refresh from overwriting this request with
-          // a stale pre-mutation snapshot. executeFollow clears the lock and only
-          // applies the state returned by a successful response.
-          pendingRef.current = true
-          void executeFollow('follow')
-        } else {
-          sessionStorage.removeItem('pendingFollow')
-        }
-      }
-    } catch {
-      /* intentionally empty */
     }
   }, [userId, traderId, source]) // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only resume pending follow when account identity changes; executeFollow and onFollowChange are stable refs
 

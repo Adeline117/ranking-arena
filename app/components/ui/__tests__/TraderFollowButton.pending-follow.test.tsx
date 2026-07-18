@@ -6,9 +6,6 @@ const mockShowToast = jest.fn()
 const mockGetAuthHeadersAsync = jest.fn().mockResolvedValue({
   Authorization: 'Bearer access-token',
 })
-const mockOnFollowChange = jest.fn()
-const mockTrackEvent = jest.fn()
-
 jest.mock('@/lib/hooks/useBroadcastSync', () => ({
   useFollowSync: () => ({
     broadcast: mockBroadcast,
@@ -41,7 +38,7 @@ jest.mock('@/lib/hooks/useLoginModal', () => ({
 }))
 
 jest.mock('@/lib/analytics/track', () => ({
-  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+  trackEvent: jest.fn(),
 }))
 
 jest.mock('@/lib/utils/haptics', () => ({
@@ -68,17 +65,10 @@ function queuePendingFollow() {
 }
 
 function renderLoggedInButton() {
-  return render(
-    <TraderFollowButton
-      traderId="trader-1"
-      source="binance"
-      userId="user-1"
-      onFollowChange={mockOnFollowChange}
-    />
-  )
+  return render(<TraderFollowButton traderId="trader-1" source="binance" userId="user-1" />)
 }
 
-describe('TraderFollowButton pending-login follow', () => {
+describe('TraderFollowButton legacy pending-login follow', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     sessionStorage.clear()
@@ -88,45 +78,23 @@ describe('TraderFollowButton pending-login follow', () => {
     global.fetch = originalFetch
   })
 
-  it('stays unfollowed and shows the API error when the resumed follow fails', async () => {
-    global.fetch = jest.fn().mockResolvedValue(response({ error: 'Follow unavailable' }, 500))
+  it('clears a stale legacy record without executing its mutation', async () => {
+    global.fetch = jest.fn().mockResolvedValue(response({ following: false }))
     queuePendingFollow()
 
     renderLoggedInButton()
 
-    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Follow unavailable', 'error'))
-
+    await waitFor(() => expect(global.fetch).toHaveBeenCalled())
+    expect(mockBroadcast).not.toHaveBeenCalled()
+    expect(sessionStorage.getItem('pendingFollow')).toBeNull()
+    expect(global.fetch).toHaveBeenCalledTimes(1)
+    expect(global.fetch).toHaveBeenCalledWith(
+      '/api/follow?traderId=trader-1&source=binance',
+      expect.objectContaining({ signal: expect.any(AbortSignal) })
+    )
     expect(screen.getByRole('button', { name: 'followTrader' })).toHaveAttribute(
       'aria-pressed',
       'false'
     )
-    expect(mockOnFollowChange).not.toHaveBeenCalledWith(true)
-    expect(mockBroadcast).not.toHaveBeenCalled()
-    expect(sessionStorage.getItem('pendingFollow')).toBeNull()
-  })
-
-  it('shows Following only after the resumed follow is confirmed by the server', async () => {
-    global.fetch = jest
-      .fn()
-      .mockResolvedValue(response({ data: { following: true, success: true } }))
-    queuePendingFollow()
-
-    renderLoggedInButton()
-
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'unfollowTrader' })).toHaveAttribute(
-        'aria-pressed',
-        'true'
-      )
-    )
-
-    expect(mockOnFollowChange).toHaveBeenCalledWith(true)
-    expect(mockShowToast).toHaveBeenCalledWith('followSuccess', 'success')
-    expect(mockBroadcast).toHaveBeenCalledWith('FOLLOW_CHANGED', {
-      traderId: 'trader-1',
-      source: 'binance',
-      following: true,
-      userId: 'user-1',
-    })
   })
 })
