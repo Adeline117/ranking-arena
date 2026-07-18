@@ -21,7 +21,11 @@ import { chromium } from 'playwright'
 import pg from 'pg'
 import { config } from 'dotenv'
 import { resolve } from 'path'
-import { servingPageReadiness } from './serving-page-readiness.mjs'
+import {
+  isOptionalOnchainDegradation,
+  isOptionalResourceConsoleError,
+  servingPageReadiness,
+} from './serving-page-readiness.mjs'
 
 config({ path: resolve(process.cwd(), 'worker', '.env') })
 config({ path: resolve(process.cwd(), '.env.local') })
@@ -75,6 +79,8 @@ async function checkPage(browser, url, label, expectedDormantPeriod = null) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 1400 } })
   const errs = []
   const unexpectedHttp = []
+  const optionalHttp = []
+  const responseChecks = []
   page.on('console', (m) => {
     if (m.type() === 'error') errs.push(m.text().slice(0, 90))
   })
@@ -83,7 +89,34 @@ async function checkPage(browser, url, label, expectedDormantPeriod = null) {
     if (response.status() < 400) return
     const request = response.request()
     const path = new URL(response.url()).pathname
-    unexpectedHttp.push(`${response.status()} ${request.method()} ${path}`.slice(0, 120))
+    const detail = `${response.status()} ${request.method()} ${path}`.slice(0, 120)
+    if (
+      response.status() === 503 &&
+      request.method() === 'POST' &&
+      path === '/api/trader/onchain-enrich'
+    ) {
+      responseChecks.push(
+        response
+          .headerValue('retry-after')
+          .then((retryAfter) => {
+            if (
+              isOptionalOnchainDegradation({
+                status: response.status(),
+                method: request.method(),
+                pathname: path,
+                retryAfter,
+              })
+            ) {
+              optionalHttp.push(detail)
+            } else {
+              unexpectedHttp.push(detail)
+            }
+          })
+          .catch(() => unexpectedHttp.push(detail))
+      )
+      return
+    }
+    unexpectedHttp.push(detail)
   })
   let status = 0
   const readiness = servingPageReadiness(label)
@@ -114,15 +147,24 @@ async function checkPage(browser, url, label, expectedDormantPeriod = null) {
     await page.close()
     return { label, ok: false, why: 'NAV ' + String(e).slice(0, 50) }
   }
+  await Promise.allSettled(responseChecks)
   const txt = await page.evaluate(() => document.body.innerText)
   // Oversized empty chart heuristic: a chart canvas/svg with almost no text
   // around it in the chart region. Simpler proxy: dormant pages must show
   // the dormant notice, never a lone chart.
   const leak = KEY_LEAK.exec(txt)
   const problems = []
+  let optionalConsoleBudget = optionalHttp.length
+  const hardErrors = errs.filter((message) => {
+    if (optionalConsoleBudget > 0 && isOptionalResourceConsoleError(message)) {
+      optionalConsoleBudget--
+      return false
+    }
+    return true
+  })
   if (status !== 200) problems.push('http=' + status)
   if (leak) problems.push('i18n-leak:' + leak[0])
-  if (errs.length) problems.push('console=' + errs.length + '(' + errs[0] + ')')
+  if (hardErrors.length) problems.push('console=' + hardErrors.length + '(' + hardErrors[0] + ')')
   if (unexpectedHttp.length) {
     problems.push(`network=${unexpectedHttp.length}(${unexpectedHttp[0]})`)
   }
@@ -133,8 +175,10 @@ async function checkPage(browser, url, label, expectedDormantPeriod = null) {
   ) {
     problems.push('dormant-notice-missing')
   }
+  const softSignals =
+    optionalHttp.length > 0 ? [`optional-provider=${optionalHttp.length}(${optionalHttp[0]})`] : []
   await page.close()
-  return { label, ok: problems.length === 0, why: problems.join(',') }
+  return { label, ok: problems.length === 0, why: [...problems, ...softSignals].join(',') }
 }
 
 const browser = await chromium.launch({ headless: true })
@@ -151,7 +195,7 @@ for (const [path, label] of [
   results.push(await checkPage(browser, BASE + path, label, false))
 }
 for (const c of cases) {
-  const url = `${BASE}/trader/${encodeURIComponent(c.id)}?source=${c.slug}`
+  const url = `${BASE}/trader/${encodeURIComponent(c.id)}?platform=${encodeURIComponent(c.slug)}`
   results.push(
     await checkPage(browser, url, `${c.kind}:${c.slug}`, c.kind === 'dormant' ? '30D' : null)
   )

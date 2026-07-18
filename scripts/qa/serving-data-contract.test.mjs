@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { test } from 'node:test'
 import { resolve } from 'node:path'
+import { isOptionalOnchainDegradation, servingPageReadiness } from './serving-page-readiness.mjs'
 
 const root = resolve(import.meta.dirname, '..', '..')
 const coverage = readFileSync(resolve(root, 'scripts/qa/pipeline-coverage-audit.mjs'), 'utf8')
@@ -59,4 +60,28 @@ test('dormant profile acceptance selects the zero-activity period before asserti
   assert.match(profileRender, /name: `\$\{expectedDormantPeriod\} period`/)
   assert.match(profileRender, /getAttribute\('aria-pressed'\) === 'true'/)
   assert.match(profileRender, /c\.kind === 'dormant' \? '30D' : null/)
+})
+
+test('profile acceptance waits for core content instead of optional provider idleness', () => {
+  assert.deepEqual(servingPageReadiness('active:okx_web3_solana'), {
+    waitUntil: 'domcontentloaded',
+    readySelector: 'main#main-content h1:visible',
+    readyTimeoutMs: 15_000,
+    observeMs: 5_000,
+  })
+  assert.match(profileRender, /\?platform=\$\{encodeURIComponent\(c\.slug\)\}/)
+  assert.doesNotMatch(profileRender, /\?source=\$\{c\.slug\}/)
+})
+
+test('only a retryable optional on-chain capacity response degrades softly', () => {
+  const retryable = {
+    status: 503,
+    method: 'POST',
+    pathname: '/api/trader/onchain-enrich',
+    retryAfter: '300',
+  }
+  assert.equal(isOptionalOnchainDegradation(retryable), true)
+  assert.equal(isOptionalOnchainDegradation({ ...retryable, retryAfter: null }), false)
+  assert.equal(isOptionalOnchainDegradation({ ...retryable, status: 500 }), false)
+  assert.equal(isOptionalOnchainDegradation({ ...retryable, pathname: '/api/rankings' }), false)
 })
