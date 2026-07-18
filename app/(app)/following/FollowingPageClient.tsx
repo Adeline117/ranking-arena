@@ -9,6 +9,7 @@ import PageHeader from '@/app/components/ui/PageHeader'
 import { Box, Text } from '@/app/components/base'
 import { ListSkeleton } from '@/app/components/ui/Skeleton'
 import EmptyState from '@/app/components/ui/EmptyState'
+import ErrorState from '@/app/components/ui/ErrorState'
 import Avatar from '@/app/components/ui/Avatar'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -199,6 +200,7 @@ export default function FollowingPageClient() {
   const [items, setItems] = useState<FollowItem[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(false)
   const [sortMode, setSortMode] = useState<SortMode>('recent')
   const [unfollowingId, setUnfollowingId] = useState<string | null>(null)
@@ -206,6 +208,7 @@ export default function FollowingPageClient() {
   const [platformFilter, setPlatformFilter] = useState<string>('all')
   const PAGE_SIZE = 50
   const offsetRef = useRef(0)
+  const failedRequestRef = useRef({ offset: 0, append: false })
 
   // Inline unfollow with optimistic UI
   const handleUnfollow = useCallback(
@@ -274,7 +277,8 @@ export default function FollowingPageClient() {
 
         if (!response.ok) {
           logger.error('Error fetching following:', data.error)
-          if (!append) setItems([])
+          failedRequestRef.current = { offset, append }
+          setLoadError(t('loadFollowingFailed'))
           showToast(t('loadFollowingFailed'), 'error')
           return
         }
@@ -287,9 +291,11 @@ export default function FollowingPageClient() {
         }
         offsetRef.current = offset + newItems.length
         setHasMore(data.hasMore === true)
+        setLoadError(null)
       } catch (error) {
         logger.error('Error loading following:', error)
-        if (!append) setItems([])
+        failedRequestRef.current = { offset, append }
+        setLoadError(t('loadFollowingFailed'))
         showToast(t('loadFollowingFailed'), 'error')
       } finally {
         fetchingRef.current = false
@@ -304,6 +310,17 @@ export default function FollowingPageClient() {
     await fetchFollowing(offsetRef.current, true)
     setLoadingMore(false)
   }, [loadingMore, hasMore, fetchFollowing])
+
+  const retryFollowing = useCallback(async () => {
+    const { offset, append } = failedRequestRef.current
+    const showFullPageLoading = !append && items.length === 0
+
+    if (showFullPageLoading) setLoading(true)
+    if (append) setLoadingMore(true)
+    await fetchFollowing(offset, append)
+    if (showFullPageLoading) setLoading(false)
+    if (append) setLoadingMore(false)
+  }, [fetchFollowing, items.length])
 
   useEffect(() => {
     if (!userId) {
@@ -506,6 +523,8 @@ export default function FollowingPageClient() {
 
           {loading ? (
             <ListSkeleton count={5} gap={12} />
+          ) : loadError && visibleItems.length === 0 ? (
+            <ErrorState title={loadError} retry={retryFollowing} variant="compact" />
           ) : visibleItems.length === 0 ? (
             <EmptyState
               icon={
@@ -548,6 +567,10 @@ export default function FollowingPageClient() {
             />
           ) : (
             <>
+              {loadError && (
+                <ErrorState title={loadError} retry={retryFollowing} variant="compact" />
+              )}
+
               {/* ============= 汇总统计卡片 ============= */}
               <Box
                 style={{
