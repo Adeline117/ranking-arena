@@ -34,6 +34,8 @@ export default function HotContent({ initialPosts }: HotContentProps) {
     loggedIn,
     accessToken,
     loadingPosts,
+    postsError,
+    refreshPosts,
     visibleHot,
     expandedPosts,
     setExpandedPosts,
@@ -79,16 +81,7 @@ export default function HotContent({ initialPosts }: HotContentProps) {
         color: 'var(--color-text-primary)',
       }}
     >
-      <PullToRefreshWrapper
-        onRefresh={async () => {
-          // TODO(7.6): replace full-page reload with an in-place refetch. The hot
-          // page uses a manual fetch in useHotPageData (not React Query) and does
-          // not expose its loadPosts() callback, so a targeted refetch isn't
-          // available here without changing that hook. Keeping reload for now so
-          // pull-to-refresh still produces fresh data.
-          window.location.reload()
-        }}
-      >
+      <PullToRefreshWrapper onRefresh={refreshPosts}>
         <Box as="main" py={6} style={{ maxWidth: 1400, margin: '0 auto' }}>
           <ThreeColumnLayout
             leftSidebar={
@@ -218,26 +211,63 @@ export default function HotContent({ initialPosts }: HotContentProps) {
                   {/* Tab Content: Hot Posts */}
                   {activeHotTab === 'posts' && (
                     <>
+                      {postsError && (
+                        <Box
+                          role="alert"
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: tokens.spacing[3],
+                            padding: tokens.spacing[3],
+                            marginBottom: tokens.spacing[3],
+                            borderRadius: tokens.radius.lg,
+                            background: 'var(--color-accent-error-10)',
+                            border: '1px solid var(--color-red-border)',
+                          }}
+                        >
+                          <Text size="sm" style={{ color: tokens.colors.accent.error }}>
+                            {t('loadHotPostsFailed')}
+                          </Text>
+                          <button
+                            type="button"
+                            onClick={() => void refreshPosts()}
+                            style={{
+                              flexShrink: 0,
+                              border: 0,
+                              background: 'none',
+                              color: tokens.colors.accent.primary,
+                              font: 'inherit',
+                              fontWeight: Number(tokens.typography.fontWeight.bold),
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {t('retry')}
+                          </button>
+                        </Box>
+                      )}
                       {loadingPosts ? (
                         <Box style={{ padding: tokens.spacing[4], textAlign: 'center' }}>
                           <Text color="tertiary">{t('loading')}</Text>
                         </Box>
                       ) : visibleHot.length === 0 ? (
-                        <div className="empty-state" style={{ padding: '64px 24px' }}>
-                          <div className="empty-state-icon">
-                            <svg
-                              width="28"
-                              height="28"
-                              viewBox="0 0 24 24"
-                              fill="none"
-                              stroke="currentColor"
-                              strokeWidth="1.5"
-                            >
-                              <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
-                            </svg>
+                        !postsError && (
+                          <div className="empty-state" style={{ padding: '64px 24px' }}>
+                            <div className="empty-state-icon">
+                              <svg
+                                width="28"
+                                height="28"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="1.5"
+                              >
+                                <path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.072-2.143-.224-4.054 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.153.433-2.294 1-3a2.5 2.5 0 0 0 2.5 2.5z" />
+                              </svg>
+                            </div>
+                            <p className="empty-state-title">{t('noData')}</p>
                           </div>
-                          <p className="empty-state-title">{t('noData')}</p>
-                        </div>
+                        )
                       ) : (
                         <Box
                           className="stagger-fade"
