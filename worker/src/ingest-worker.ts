@@ -139,7 +139,7 @@ async function routeTierC(job: Job<TierCJobData>, region: IngestRegion): Promise
     return decision
   }
   const { processTierC } = await import('./ingest/processors/tier-c-profile')
-  return processTierC(job)
+  return processTierC(job, region)
 }
 
 async function main(): Promise<void> {
