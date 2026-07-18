@@ -8470,6 +8470,15 @@ export type Database = {
         Returns: Json
       }
       arena_exchange_rankings: { Args: { p_timeframe: number }; Returns: Json }
+      arena_freshness_expected_sources: {
+        Args: never
+        Returns: {
+          exchange_name: string
+          filter_source: string
+          registry_slug: string
+          season_id: string
+        }[]
+      }
       arena_first_screen: {
         Args: { p_source: string; p_trader: string }
         Returns: Json

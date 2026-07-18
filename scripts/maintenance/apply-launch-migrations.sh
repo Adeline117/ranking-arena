@@ -71,7 +71,9 @@ PREDEPLOY_MIGRATIONS=(
   20260718123000_shadow_sources_without_roi_basis.sql
   20260718130000_count_trader_account_followers.sql
   20260718131000_source_scope_trader_follow_activity.sql
+  20260718132000_active_source_platform_freshness.sql
   20260718133000_history_partition_range_guard.sql
+  20260718134000_freshness_expected_sources.sql
 )
 
 # These contracts revoke compatibility writes or change identity uniqueness
