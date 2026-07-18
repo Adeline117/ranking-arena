@@ -101,6 +101,7 @@ jest.mock('@/lib/utils/profanity', () => ({
 
 jest.mock('@/lib/notifications/telegram', () => ({
   sendTelegramAlert: jest.fn().mockResolvedValue(undefined),
+  sendTelegramAlertDetailed: jest.fn().mockResolvedValue({ outcome: 'delivered', httpStatus: 200 }),
 }))
 
 jest.mock('@/lib/db', () => ({

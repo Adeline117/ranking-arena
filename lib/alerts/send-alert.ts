@@ -5,11 +5,12 @@
  * 保留 sendAlert / sendScraperAlert / sendSmartAlert 等接口向后兼容。
  */
 
-import { sendTelegramAlert, type AlertLevel } from '@/lib/notifications/telegram'
+import { sendTelegramAlertDetailed, type AlertLevel } from '@/lib/notifications/telegram'
 import { logger } from '@/lib/logger'
 import { getSharedRedis } from '@/lib/cache/redis-client'
 
 interface AlertPayload {
+  source?: string
   title: string
   message: string
   level: 'info' | 'warning' | 'critical'
@@ -19,6 +20,17 @@ interface AlertPayload {
 }
 
 type AlertChannel = 'telegram' | 'slack' | 'email' | 'webhook'
+
+interface ChannelDelivery {
+  delivered: boolean
+  handled: boolean
+}
+
+interface AlertDispatchResult {
+  sent: boolean
+  channels: string[]
+  requestedChannelDelivered: boolean
+}
 
 /**
  * SEV1 backup channel — GitHub Issue.
@@ -108,62 +120,67 @@ async function sendGithubIssueAlert(payload: AlertPayload): Promise<boolean> {
 }
 
 /** Channel registry — add new channels here (Novu-inspired) */
-const CHANNEL_HANDLERS: Record<AlertChannel, (payload: AlertPayload) => Promise<boolean>> = {
-  telegram: async (payload) => {
-    return sendTelegramAlert({
-      level: payload.level as AlertLevel,
-      source: '系统告警',
-      title: payload.title,
-      message: payload.message,
-      details: payload.details
-        ? Object.fromEntries(Object.entries(payload.details).map(([k, v]) => [k, String(v)]))
-        : undefined,
-    })
-  },
-  slack: async (_payload) => {
-    // Stub: Slack webhook integration not yet configured
-    return false
-  },
-  email: async (_payload) => {
-    // Stub: email integration not yet configured (planned: Resend)
-    return false
-  },
-  webhook: async (payload) => {
-    const url = process.env.ALERT_WEBHOOK_URL
-    if (!url) return false
-    // Retry with exponential backoff (svix 3.1K★ pattern)
-    const maxRetries = 3
-    for (let attempt = 0; attempt < maxRetries; attempt++) {
-      try {
-        const res = await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...payload, attempt, timestamp: new Date().toISOString() }),
-          signal: AbortSignal.timeout(5000),
-        })
-        if (res.ok) return true
-        if (res.status >= 400 && res.status < 500) return false // Don't retry 4xx
-      } catch (err) {
-        logger.error(
-          '[send-alert] webhook request failed:',
-          err instanceof Error ? err.message : String(err)
-        )
+const CHANNEL_HANDLERS: Record<AlertChannel, (payload: AlertPayload) => Promise<ChannelDelivery>> =
+  {
+    telegram: async (payload) => {
+      const result = await sendTelegramAlertDetailed({
+        level: payload.level as AlertLevel,
+        source: payload.source ?? '系统告警',
+        title: payload.title,
+        message: payload.message,
+        details: payload.details
+          ? Object.fromEntries(Object.entries(payload.details).map(([k, v]) => [k, String(v)]))
+          : undefined,
+      })
+      return {
+        delivered: result.outcome === 'delivered',
+        handled: result.outcome !== 'failed',
       }
-      if (attempt < maxRetries - 1) {
-        await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt))) // 1s, 2s, 4s
+    },
+    slack: async (_payload) => {
+      // Stub: Slack webhook integration not yet configured
+      return { delivered: false, handled: false }
+    },
+    email: async (_payload) => {
+      // Stub: email integration not yet configured (planned: Resend)
+      return { delivered: false, handled: false }
+    },
+    webhook: async (payload) => {
+      const url = process.env.ALERT_WEBHOOK_URL
+      if (!url) return { delivered: false, handled: false }
+      // Retry with exponential backoff (svix 3.1K★ pattern)
+      const maxRetries = 3
+      for (let attempt = 0; attempt < maxRetries; attempt++) {
+        try {
+          const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ ...payload, attempt, timestamp: new Date().toISOString() }),
+            signal: AbortSignal.timeout(5000),
+          })
+          if (res.ok) return { delivered: true, handled: true }
+          if (res.status >= 400 && res.status < 500) {
+            return { delivered: false, handled: false }
+          }
+        } catch (err) {
+          logger.error(
+            '[send-alert] webhook request failed:',
+            err instanceof Error ? err.message : String(err)
+          )
+        }
+        if (attempt < maxRetries - 1) {
+          await new Promise((r) => setTimeout(r, 1000 * Math.pow(2, attempt))) // 1s, 2s, 4s
+        }
       }
-    }
-    return false
-  },
-}
+      return { delivered: false, handled: false }
+    },
+  }
 
 // ============================================
 // 核心发送 — 多渠道并发
 // ============================================
 
-export async function sendAlert(
-  payload: AlertPayload
-): Promise<{ sent: boolean; channels: string[] }> {
+async function dispatchAlert(payload: AlertPayload): Promise<AlertDispatchResult> {
   const channels = payload.channels || ['telegram']
   const sentChannels: string[] = []
 
@@ -171,25 +188,33 @@ export async function sendAlert(
   const results = await Promise.allSettled(
     channels.map(async (channel) => {
       const handler = CHANNEL_HANDLERS[channel]
-      if (!handler) return false
+      if (!handler) {
+        return { channel, delivery: { delivered: false, handled: false } }
+      }
       try {
-        const success = await handler(payload)
-        if (success) sentChannels.push(channel)
-        return success
+        const delivery = await handler(payload)
+        return { channel, delivery }
       } catch (err) {
         logger.warn(`[Alert] Channel ${channel} failed:`, err)
-        return false
+        return { channel, delivery: { delivered: false, handled: false } }
       }
     })
   )
 
-  const anySent = results.some((r) => r.status === 'fulfilled' && r.value)
+  const fulfilled = results.flatMap((result) =>
+    result.status === 'fulfilled' ? [result.value] : []
+  )
+  for (const result of fulfilled) {
+    if (result.delivery.delivered) sentChannels.push(result.channel)
+  }
+  const requestedChannelDelivered = fulfilled.some((result) => result.delivery.delivered)
+  const telegramResult = fulfilled.find((result) => result.channel === 'telegram')
 
   // SEV1 backstop: Telegram is the only real primary channel and it's a SPOF
   // (a 401-broken token silently swallowed 28 deploys' worth of alerts). For
-  // critical alerts, if the primary (Telegram) did NOT succeed, open a GitHub
-  // issue on a second, independent channel. Fully env-gated + fail-open.
-  if (payload.level === 'critical' && !sentChannels.includes('telegram')) {
+  // critical alerts, use the independent GitHub channel only for a real
+  // Telegram failure. Expected dedup/in-flight suppression is already handled.
+  if (payload.level === 'critical' && telegramResult && !telegramResult.delivery.handled) {
     try {
       const ghSent = await sendGithubIssueAlert(payload)
       if (ghSent) sentChannels.push('github')
@@ -198,7 +223,18 @@ export async function sendAlert(
     }
   }
 
-  return { sent: anySent || sentChannels.includes('github'), channels: sentChannels }
+  return {
+    sent: requestedChannelDelivered || sentChannels.includes('github'),
+    channels: sentChannels,
+    requestedChannelDelivered,
+  }
+}
+
+export async function sendAlert(
+  payload: AlertPayload
+): Promise<{ sent: boolean; channels: string[] }> {
+  const result = await dispatchAlert(payload)
+  return { sent: result.sent, channels: result.channels }
 }
 
 // ============================================
@@ -358,39 +394,51 @@ export async function sendRateLimitedAlert(
 ): Promise<{ sent: boolean; rateLimited: boolean; channels: string[] }> {
   const now = Date.now()
   const effectiveCooldown = rateLimitMs ?? COOLDOWN_BY_LEVEL[payload.level] ?? 300000
+  const redisKey = `alert:ratelimit:${rateLimitKey}`
+  let redis: Awaited<ReturnType<typeof getSharedRedis>> = null
 
-  // Try Redis first (survives cold starts)
+  // Read the shared cooldown first. A read failure falls back to the local gate.
   try {
-    const redis = await getSharedRedis()
+    redis = await getSharedRedis()
     if (redis) {
-      const redisKey = `alert:ratelimit:${rateLimitKey}`
       const existing = await redis.get<number>(redisKey)
       if (existing && now - existing < effectiveCooldown) {
         return { sent: false, rateLimited: true, channels: [] }
       }
-      const result = await sendAlert(payload)
-      if (result.sent) {
-        await redis.set(redisKey, now, { ex: Math.ceil(effectiveCooldown / 1000) })
-      }
-      return { ...result, rateLimited: false }
     }
   } catch (err) {
     logger.error(
-      '[send-alert] Redis rate limit failed:',
+      '[send-alert] Redis rate limit read failed:',
       err instanceof Error ? err.message : String(err)
     )
+    redis = null
   }
 
-  // In-memory fallback
+  // Also honor a local marker left by a prior Redis read/write outage.
   const lastSent = rateLimitCache.get(rateLimitKey)
   if (lastSent && now - lastSent < effectiveCooldown) {
     return { sent: false, rateLimited: true, channels: [] }
   }
 
-  const result = await sendAlert(payload)
+  // Dispatch exactly once. A post-delivery cooldown write failure must never
+  // fall through and send the alert a second time.
+  const result = await dispatchAlert(payload)
 
-  if (result.sent) {
-    rateLimitCache.set(rateLimitKey, now)
+  if (result.requestedChannelDelivered) {
+    let storedInRedis = false
+    if (redis) {
+      try {
+        await redis.set(redisKey, now, { ex: Math.ceil(effectiveCooldown / 1000) })
+        storedInRedis = true
+      } catch (err) {
+        logger.error(
+          '[send-alert] Redis rate limit write failed:',
+          err instanceof Error ? err.message : String(err)
+        )
+      }
+    }
+
+    if (!storedInRedis) rateLimitCache.set(rateLimitKey, now)
     for (const [key, time] of rateLimitCache.entries()) {
       if (now - time > effectiveCooldown * 2) {
         rateLimitCache.delete(key)
@@ -398,7 +446,7 @@ export async function sendRateLimitedAlert(
     }
   }
 
-  return { ...result, rateLimited: false }
+  return { sent: result.sent, channels: result.channels, rateLimited: false }
 }
 
 // ============================================

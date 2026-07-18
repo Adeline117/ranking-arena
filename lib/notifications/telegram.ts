@@ -29,6 +29,18 @@ export interface TelegramAlertOptions {
   details?: Record<string, string | number>
 }
 
+export type TelegramDeliveryResult =
+  | { outcome: 'delivered'; httpStatus: number }
+  | {
+      outcome: 'suppressed'
+      reason: 'deduplicated' | 'in_flight' | 'info_log_only' | 'warning_buffered'
+    }
+  | {
+      outcome: 'failed'
+      reason: 'missing_config' | 'http_error' | 'timeout' | 'network_error'
+      httpStatus?: number
+    }
+
 // ============================================
 // 24-hour Dedup via Redis
 // ============================================
@@ -42,32 +54,159 @@ const DEDUP_TTL_BY_LEVEL: Record<AlertLevel, number> = {
 }
 
 const DEDUP_TTL_SECONDS = 24 * 60 * 60 // 24 hours (legacy default)
+const INFLIGHT_TTL_SECONDS = 30
+const TELEGRAM_REQUEST_TIMEOUT_MS = 8_000
+
+const ACQUIRE_DELIVERY_LEASE_SCRIPT = `
+if redis.call('EXISTS', KEYS[1]) == 1 then
+  return 'deduplicated'
+end
+if redis.call('SET', KEYS[2], ARGV[1], 'NX', 'EX', ARGV[2]) then
+  return 'acquired'
+end
+return 'in_flight'
+`
+
+const COMMIT_DELIVERY_SCRIPT = `
+redis.call('SET', KEYS[1], ARGV[2], 'EX', ARGV[3])
+if redis.call('GET', KEYS[2]) == ARGV[1] then
+  redis.call('DEL', KEYS[2])
+end
+return 1
+`
+
+const RELEASE_DELIVERY_LEASE_SCRIPT = `
+if redis.call('GET', KEYS[1]) == ARGV[1] then
+  return redis.call('DEL', KEYS[1])
+end
+return 0
+`
+
+type AcquiredDeliveryLease = {
+  state: 'acquired'
+  markDelivered: () => Promise<void>
+  release: () => Promise<void>
+}
+
+type DeliveryLease = { state: 'deduplicated' } | { state: 'in_flight' } | AcquiredDeliveryLease
+
+const inMemoryDelivered = new Map<string, { deliveredAt: number; expiresAt: number }>()
+const inMemoryInFlight = new Set<string>()
+
+function pruneInMemoryDedup(now: number): void {
+  for (const [key, value] of inMemoryDelivered) {
+    if (value.expiresAt <= now) inMemoryDelivered.delete(key)
+  }
+}
+
+function getInMemorySuppression(key: string, now: number): DeliveryLease | null {
+  pruneInMemoryDedup(now)
+  const delivered = inMemoryDelivered.get(key)
+  if (delivered && delivered.expiresAt > now) return { state: 'deduplicated' }
+  if (inMemoryInFlight.has(key)) return { state: 'in_flight' }
+  return null
+}
+
+function acquireInMemoryLease(key: string, ttlSeconds: number): DeliveryLease {
+  const now = Date.now()
+  const suppression = getInMemorySuppression(key, now)
+  if (suppression) return suppression
+
+  inMemoryInFlight.add(key)
+  return {
+    state: 'acquired',
+    markDelivered: async () => {
+      const deliveredAt = Date.now()
+      inMemoryDelivered.set(key, {
+        deliveredAt,
+        expiresAt: deliveredAt + ttlSeconds * 1000,
+      })
+    },
+    release: async () => {
+      inMemoryInFlight.delete(key)
+    },
+  }
+}
 
 /**
- * Check if this alert was already sent within the dedup window.
- * Uses Upstash Redis if available, falls back to in-memory Map.
+ * Acquire a short sending lease without claiming that delivery succeeded.
+ * The durable dedup marker is committed only after Telegram confirms ok:true.
  */
-async function isDeduplicated(
+async function acquireDeliveryLease(
   key: string,
   ttlSeconds: number = DEDUP_TTL_SECONDS
-): Promise<boolean> {
-  // No dedup if TTL is 0 (e.g., report level)
-  if (ttlSeconds <= 0) return false
+): Promise<DeliveryLease> {
+  if (ttlSeconds <= 0) {
+    return {
+      state: 'acquired',
+      markDelivered: async () => {},
+      release: async () => {},
+    }
+  }
+
+  const localSuppression = getInMemorySuppression(key, Date.now())
+  if (localSuppression) return localSuppression
 
   try {
     const redis = await getSharedRedis()
     if (redis) {
-      const existing = await redis.get<number>(`alert:dedup:${key}`)
-      if (existing) return true
-      await redis.set(`alert:dedup:${key}`, Date.now(), { ex: ttlSeconds })
-      return false
+      const dedupKey = `alert:dedup:${key}`
+      const inflightKey = `alert:inflight:${key}`
+      const leaseToken = `${Date.now()}:${Math.random().toString(36).slice(2)}`
+      const state = (await redis.eval(
+        ACQUIRE_DELIVERY_LEASE_SCRIPT,
+        [dedupKey, inflightKey],
+        [leaseToken, INFLIGHT_TTL_SECONDS.toString()]
+      )) as DeliveryLease['state']
+
+      if (state === 'deduplicated' || state === 'in_flight') return { state }
+      if (state !== 'acquired') {
+        throw new Error('unexpected Redis lease response')
+      }
+
+      inMemoryInFlight.add(key)
+      return {
+        state: 'acquired',
+        markDelivered: async () => {
+          const deliveredAt = Date.now()
+          inMemoryDelivered.set(key, {
+            deliveredAt,
+            expiresAt: deliveredAt + ttlSeconds * 1000,
+          })
+          try {
+            await redis.eval(
+              COMMIT_DELIVERY_SCRIPT,
+              [dedupKey, inflightKey],
+              [leaseToken, deliveredAt.toString(), ttlSeconds.toString()]
+            )
+          } catch (err) {
+            logger.error(
+              '[telegram] Redis delivery commit failed:',
+              err instanceof Error ? err.name : 'UnknownError'
+            )
+          }
+        },
+        release: async () => {
+          inMemoryInFlight.delete(key)
+          try {
+            await redis.eval(RELEASE_DELIVERY_LEASE_SCRIPT, [inflightKey], [leaseToken])
+          } catch (err) {
+            logger.error(
+              '[telegram] Redis delivery lease release failed:',
+              err instanceof Error ? err.name : 'UnknownError'
+            )
+          }
+        },
+      }
     }
   } catch (err) {
-    logger.error('[telegram] Redis dedup failed:', err instanceof Error ? err.message : String(err))
+    logger.error(
+      '[telegram] Redis delivery lease failed:',
+      err instanceof Error ? err.name : 'UnknownError'
+    )
   }
 
-  // In-memory fallback (won't survive Vercel cold starts, but better than nothing)
-  return isRateLimitedInMemory(key, ttlSeconds * 1000)
+  return acquireInMemoryLease(key, ttlSeconds)
 }
 
 /**
@@ -77,30 +216,16 @@ async function clearDedup(key: string): Promise<void> {
   try {
     const redis = await getSharedRedis()
     if (redis) {
-      await redis.del(`alert:dedup:${key}`)
+      await redis.del(`alert:dedup:${key}`, `alert:inflight:${key}`)
     }
   } catch (err) {
     logger.error(
       '[telegram] Redis dedup clear failed:',
-      err instanceof Error ? err.message : String(err)
+      err instanceof Error ? err.name : 'UnknownError'
     )
   }
-  inMemoryMap.delete(key)
-}
-
-// In-memory fallback
-const inMemoryMap = new Map<string, number>()
-const IN_MEMORY_TTL = 60 * 60 * 1000 // 1 hour (shorter than Redis, since it's unreliable across cold starts)
-
-function isRateLimitedInMemory(key: string, ttlMs: number = IN_MEMORY_TTL): boolean {
-  const last = inMemoryMap.get(key) || 0
-  if (Date.now() - last < ttlMs) return true
-  inMemoryMap.set(key, Date.now())
-  // Cleanup old entries
-  for (const [k, t] of inMemoryMap) {
-    if (Date.now() - t > IN_MEMORY_TTL * 2) inMemoryMap.delete(k)
-  }
-  return false
+  inMemoryDelivered.delete(key)
+  inMemoryInFlight.delete(key)
 }
 
 // ============================================
@@ -129,13 +254,16 @@ const LEVEL_LABEL: Record<AlertLevel, string> = {
  * - INFO: NOT sent — only logged
  * - REPORT: always sent (bypasses dedup)
  *
- * Returns true if the message was actually sent to Telegram.
+ * Returns a typed outcome so callers can distinguish expected suppression from
+ * transport failure. The compatibility wrapper below remains boolean.
  */
-export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boolean> {
+export async function sendTelegramAlertDetailed(
+  opts: TelegramAlertOptions
+): Promise<TelegramDeliveryResult> {
   // INFO level: log only, never send
   if (opts.level === 'info') {
     logger.info(`[Telegram/INFO] ${opts.source}: ${opts.title} — ${opts.message}`)
-    return false
+    return { outcome: 'suppressed', reason: 'info_log_only' }
   }
 
   // WARNING level: log and buffer for daily digest, don't send individually
@@ -150,7 +278,7 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
         err instanceof Error ? err.message : String(err)
       )
     }
-    return false
+    return { outcome: 'suppressed', reason: 'warning_buffered' }
   }
 
   // CRITICAL and REPORT: send to Telegram
@@ -162,12 +290,17 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
     opts.level === 'critical' ? process.env.TELEGRAM_CRITICAL_CHAT_ID || fyiChatId : fyiChatId
   if (!token || !chatId) {
     logger.warn('[Telegram] 未配置 TELEGRAM_BOT_TOKEN / TELEGRAM_ALERT_CHAT_ID')
-    return false
+    return { outcome: 'failed', reason: 'missing_config' }
   }
 
   // Severity-based dedup: critical=1h, report=no dedup
   // Normalize title to prevent key explosion from dynamic error messages
   const dedupTtl = DEDUP_TTL_BY_LEVEL[opts.level]
+  let lease: AcquiredDeliveryLease = {
+    state: 'acquired',
+    markDelivered: async () => {},
+    release: async () => {},
+  }
   if (dedupTtl > 0) {
     // Strip numbers, hashes, timestamps from title to create stable dedup key
     const normalizedTitle = opts.title
@@ -175,11 +308,16 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
       .replace(/[a-f0-9]{8,}/gi, 'HASH')
       .slice(0, 80)
     const dedupKey = `${opts.source}:${normalizedTitle}`
-    const deduped = await isDeduplicated(dedupKey, dedupTtl)
-    if (deduped) {
+    const candidateLease = await acquireDeliveryLease(dedupKey, dedupTtl)
+    if (candidateLease.state === 'deduplicated') {
       logger.info(`[Telegram] ${dedupTtl / 3600}h 去重跳过: ${dedupKey}`)
-      return false
+      return { outcome: 'suppressed', reason: 'deduplicated' }
     }
+    if (candidateLease.state === 'in_flight') {
+      logger.info(`[Telegram] 发送进行中，跳过重复请求: ${dedupKey}`)
+      return { outcome: 'suppressed', reason: 'in_flight' }
+    }
+    lease = candidateLease
   }
 
   const icon = LEVEL_ICON[opts.level]
@@ -208,16 +346,38 @@ export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boo
         parse_mode: 'HTML',
         disable_web_page_preview: true,
       }),
+      signal: AbortSignal.timeout(TELEGRAM_REQUEST_TIMEOUT_MS),
     })
-    if (!res.ok) {
+    const responseBody = await res.json().catch(() => null)
+    const telegramAccepted =
+      !!responseBody &&
+      typeof responseBody === 'object' &&
+      'ok' in responseBody &&
+      responseBody.ok === true
+    if (!res.ok || !telegramAccepted) {
       logger.error(`[Telegram] 发送失败: ${res.status}`)
-      return false
+      return { outcome: 'failed', reason: 'http_error', httpStatus: res.status }
     }
-    return true
+    await lease.markDelivered()
+    return { outcome: 'delivered', httpStatus: res.status }
   } catch (err) {
-    logger.error('[Telegram] 发送异常:', err)
-    return false
+    const isTimeout = err instanceof Error && err.name === 'TimeoutError'
+    logger.error(
+      `[Telegram] ${isTimeout ? '发送超时' : '发送异常'}:`,
+      err instanceof Error ? err.name : 'UnknownError'
+    )
+    return { outcome: 'failed', reason: isTimeout ? 'timeout' : 'network_error' }
+  } finally {
+    await lease.release()
   }
+}
+
+/**
+ * Backward-compatible boolean API. Only a confirmed Telegram delivery is true.
+ */
+export async function sendTelegramAlert(opts: TelegramAlertOptions): Promise<boolean> {
+  const result = await sendTelegramAlertDetailed(opts)
+  return result.outcome === 'delivered'
 }
 
 // ============================================
