@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { Box, Text } from '@/app/components/base'
+import { Box, Button, Text } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import type { OnboardingTheme, Trader } from './types'
 
@@ -11,8 +11,10 @@ interface TradersStepProps {
   traders: Trader[]
   followedTraders: Set<string>
   loadingTraders: boolean
+  loadFailed: boolean
   tr: (key: string) => string
   onFollowTrader: (traderId: string) => void
+  onRetry: () => void
   onBack: () => void
   onContinue: () => void
 }
@@ -32,8 +34,10 @@ export default function TradersStep({
   traders,
   followedTraders,
   loadingTraders,
+  loadFailed,
   tr,
   onFollowTrader,
+  onRetry,
   onBack,
   onContinue,
 }: TradersStepProps) {
@@ -104,6 +108,18 @@ export default function TradersStep({
               style={{ height: 52, borderRadius: 10, background: theme.optionBg, marginBottom: 4 }}
             />
           ))
+        ) : loadFailed ? (
+          <Box role="alert" style={{ textAlign: 'center', padding: `${tokens.spacing[5]} 0` }}>
+            <Text
+              size="sm"
+              style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}
+            >
+              {tr('loadFailedRetryMsg')}
+            </Text>
+            <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+              {tr('retryButton')}
+            </Button>
+          </Box>
         ) : traders.length === 0 ? (
           <Text style={{ textAlign: 'center', color: theme.textSecondary, padding: '20px 0' }}>
             {tr('noDataShort')}
