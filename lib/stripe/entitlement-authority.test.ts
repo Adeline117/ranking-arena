@@ -439,6 +439,74 @@ describe('Stripe entitlement authority', () => {
     })
   })
 
+  it('rejects non-UUID Arena identities before a database UUID write can poison retries', async () => {
+    const scenario = baseScenario()
+    scenario.customers[CUSTOMER_ID] = customer('not-an-arena-uuid')
+    const error = await expectAuthorityError(
+      resolveRecurringInvoiceAuthority(clientFor(scenario), 'in_paid', options),
+      'identity_invalid'
+    )
+
+    expect(error.toReviewPayload()).toMatchObject({
+      stage: 'identity',
+      objectIds: {
+        customerId: CUSTOMER_ID,
+        subscriptionId: SUBSCRIPTION_ID,
+        invoiceId: 'in_paid',
+      },
+      details: {
+        source: 'customer.metadata',
+        candidates: expect.arrayContaining([{ key: 'userId', value: 'not-an-arena-uuid' }]),
+      },
+    })
+  })
+
+  it('canonicalizes equivalent uppercase UUID metadata across Stripe identity sources', async () => {
+    const scenario = baseScenario()
+    const uppercaseUserId = USER_ID.toUpperCase()
+    scenario.customers[CUSTOMER_ID] = customer(uppercaseUserId)
+    scenario.subscriptions[SUBSCRIPTION_ID] = subscription('in_paid', {
+      metadata: { userId: uppercaseUserId },
+    })
+    scenario.invoices.in_paid = invoice('in_paid', 1_000, 2_000, {
+      parent: {
+        type: 'subscription_details',
+        quote_details: null,
+        subscription_details: {
+          subscription: SUBSCRIPTION_ID,
+          metadata: {
+            userId: uppercaseUserId,
+            supabase_user_id: uppercaseUserId,
+          },
+        },
+      } as Stripe.Invoice['parent'],
+    })
+
+    const authority = await resolveRecurringInvoiceAuthority(
+      clientFor(scenario),
+      'in_paid',
+      options
+    )
+
+    expect(authority.userId).toBe(USER_ID)
+  })
+
+  it('rejects a malformed caller-provided expected Arena identity', async () => {
+    const scenario = baseScenario()
+    const error = await expectAuthorityError(
+      resolveRecurringInvoiceAuthority(clientFor(scenario), 'in_paid', {
+        ...options,
+        expectedUserId: 'not-an-arena-uuid',
+      }),
+      'identity_invalid'
+    )
+
+    expect(error.toReviewPayload()).toMatchObject({
+      stage: 'identity',
+      details: { expectedUserId: 'not-an-arena-uuid' },
+    })
+  })
+
   it('rejects a paid PaymentRecord instead of treating it as product payment', async () => {
     const scenario = baseScenario()
     scenario.invoicePayments.in_paid = [

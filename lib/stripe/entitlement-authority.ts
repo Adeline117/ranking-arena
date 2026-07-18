@@ -33,6 +33,7 @@ export type StripeAuthorityErrorCode =
   | 'currency_mismatch'
   | 'deleted_customer'
   | 'identity_conflict'
+  | 'identity_invalid'
   | 'identity_missing'
   | 'invalid_object'
   | 'invalid_payment_state'
@@ -251,6 +252,7 @@ type PaymentChain = {
 type ProductResolution = { plan: ProPlan; priceId: string } | { plan: 'lifetime'; priceId: string }
 
 const USER_ID_METADATA_KEYS = ['supabase_user_id', 'userId', 'user_id'] as const
+const USER_ID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 const PAGE_LIMIT = 100
 const MAX_CHECKOUT_TO_TRIAL_START_SECONDS = 24 * 60 * 60
 
@@ -355,7 +357,17 @@ function metadataIdentity(
     const value = source.metadata?.[key]?.trim()
     return value ? [{ key, value }] : []
   })
-  const distinct = [...new Set(candidates.map((candidate) => candidate.value))]
+  const invalid = candidates.filter((candidate) => !USER_ID_PATTERN.test(candidate.value))
+  if (invalid.length > 0) {
+    authorityError(
+      'identity_invalid',
+      'identity',
+      `Invalid Arena user metadata on ${source.source}`,
+      objectIds,
+      { source: source.source, candidates }
+    )
+  }
+  const distinct = [...new Set(candidates.map((candidate) => candidate.value.toLowerCase()))]
   if (distinct.length > 1) {
     authorityError(
       'identity_conflict',
@@ -387,7 +399,17 @@ function resolveIdentity(
     return userId ? [{ source: source.source, userId }] : []
   })
   const distinct = [...new Set(identities.map((identity) => identity.userId))]
-  const expected = expectedUserId?.trim()
+  const expectedCandidate = expectedUserId?.trim()
+  if (expectedCandidate && !USER_ID_PATTERN.test(expectedCandidate)) {
+    authorityError(
+      'identity_invalid',
+      'identity',
+      'Expected Arena user identity is malformed',
+      objectIds,
+      { expectedUserId: expectedCandidate }
+    )
+  }
+  const expected = expectedCandidate?.toLowerCase()
   if (distinct.length !== 1 || (expected && distinct[0] !== expected)) {
     authorityError(
       'identity_conflict',
