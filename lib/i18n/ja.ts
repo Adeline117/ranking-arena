@@ -1847,7 +1847,7 @@ const ja = {
   loginCreateAccount: 'アカウントを作成',
   loginSubtitle: 'Arenaは暗号資産のすべてをランキングします',
   loginValueProp1: '現在の90日ランキングに{count}人のトレーダー',
-  loginValueProp2: '{count}のアクティブな取引所ソースで実績を比較',
+  loginValueProp2: '{count}の稼働中ランキングソースボードで実績を比較',
   loginValueProp3: 'トレーディングコミュニティに参加',
   discoverMore: 'Arenaをもっと見る',
   loginConnectWallet: 'ウォレットを接続',
@@ -2916,16 +2916,16 @@ const ja = {
 
   heroHeadline: '世界最高の暗号トレーダーを追跡',
   heroSubtitle:
-    '{exchanges}の追跡対象ソースを横断し、最新の利用可能なデータで2時間ごとに再計算するランキング',
+    '{boards}の稼働中ランキングソースボードを、最新の利用可能なデータで2時間ごとに再計算',
   heroScoreExplainer:
-    'Arena Score は追跡中のすべての取引所の全トレーダーを横断でランク付け——あなたの立ち位置がひと目でわかります。',
+    'Arena Score はすべての稼働中ソースボードのトレーダーを同じ基準で順位付けします。',
   heroNeutrality:
-    'いかなる取引所も掲載順位を購入できません——追跡するすべての取引所を公平にランク付けします。',
+    '掲載順位を購入できるソースはありません——すべての稼働中ボードに同じルールを適用します。',
   heroHowRanked: 'ランキングの仕組み →',
   heroCTABrowse: 'ランキングを見る',
   heroCTASignUp: '無料登録',
   heroStatTraders: 'トレーダー',
-  heroStatExchanges: '取引所',
+  heroStatSourceBoards: '稼働中ボード',
   heroStatUpdated: '更新頻度',
   heroExploreRankings: 'ランキングを見る',
   heroProBadge: 'Proにアップグレード — 全トレーダーと高度なフィルターを解放',
@@ -4777,7 +4777,7 @@ const ja = {
     'いいえ。データ API プランは Arena Pro とは別売りです。Pro はトレーダーの発見、アラート、比較、詳細分析向けです。',
   pricingLimitedTimeBanner: '期間限定：すべての Pro 機能が現在無料です！',
   pricingStatTradersRanked: 'ランク付けされたトレーダー',
-  pricingStatExchangesTracked: '追跡中の取引所',
+  pricingStatExchangesTracked: '稼働中ランキングボード',
   pricingStatUpdateFrequency: '更新頻度',
   pricingAllFeaturesFree: 'すべての機能が期間限定で無料',
   pricingFoundingMemberBadge: '創設メンバー \u00b7 先着200名限定',

@@ -9,7 +9,7 @@
 export const PRODUCT_FACTS = {
   /** Live 90D source boards represented in the public rankings. */
   fallbackSourceBoardCount: 28,
-  /** @deprecated Compatibility alias; this count is source boards, not exchanges. */
+  /** @deprecated Transitional alias for static copy updated in the next slice. */
   fallbackExchangeCount: 28,
   /** Ranked 90D population, also used as the percentile denominator fallback. */
   fallbackRankedTraderCount: 9_600,
@@ -30,16 +30,14 @@ export const HOMEPAGE_TRUST_COPY = {
   ogCadenceLabel: `Recomputed Every ${PRODUCT_FACTS.leaderboardRefreshHours}h`,
 } as const
 
-export function formatTrackedSourceCoverage(count?: number | null): string {
+export function formatLiveSourceBoardCoverage(count?: number | null): string {
   return typeof count === 'number' && Number.isInteger(count) && count > 0
-    ? `${count} tracked source families`
-    : 'tracked public sources'
+    ? `${count} live ranking source boards`
+    : 'live public ranking sources'
 }
 
 export interface ProductFactsSnapshot {
   sourceBoardCount: number
-  /** @deprecated Compatibility alias; use sourceBoardCount. */
-  exchangeCount: number
   rankedTraderCount: number
   leaderboardRefreshHours: number
   leaderboardRefreshLabel: string
@@ -67,7 +65,6 @@ export function buildProductFactsSnapshot(input?: {
 
   return {
     sourceBoardCount,
-    exchangeCount: sourceBoardCount,
     rankedTraderCount,
     leaderboardRefreshHours: PRODUCT_FACTS.leaderboardRefreshHours,
     leaderboardRefreshLabel: `${PRODUCT_FACTS.leaderboardRefreshHours}h`,

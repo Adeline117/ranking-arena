@@ -353,11 +353,11 @@ export default function PricingPageClient({ lifetimeCount = 0 }: PricingPageClie
         >
           {[
             {
-              value: `${productFacts.exchangeCount}+`,
+              value: `${productFacts.sourceBoardCount}+`,
               label: resolved(
                 t('pricingStatExchangesTracked'),
                 'pricingStatExchangesTracked',
-                'Exchanges Tracked'
+                'Live Ranking Boards'
               ),
             },
             {

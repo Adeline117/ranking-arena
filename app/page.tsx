@@ -14,7 +14,7 @@ import { BASE_URL } from '@/lib/constants/urls'
 import {
   HOMEPAGE_TRUST_COPY,
   PRODUCT_FACTS,
-  formatTrackedSourceCoverage,
+  formatLiveSourceBoardCoverage,
 } from '@/lib/config/product-facts'
 import { generateTraderItemListSchema } from '@/lib/seo/structured-data'
 import type { Period } from '@/lib/utils/arena-score'
@@ -56,7 +56,7 @@ export const revalidate = 300
 // deduplicated source-family count, not a canonical arena.exchanges count, so
 // describe it as source coverage and fall back to neutral wording when absent.
 function buildOrganizationJsonLd(sourceBoardCount?: number | null) {
-  const sourceCoverage = formatTrackedSourceCoverage(sourceBoardCount)
+  const sourceCoverage = formatLiveSourceBoardCoverage(sourceBoardCount)
   return {
     '@context': 'https://schema.org',
     '@type': 'Organization',

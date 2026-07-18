@@ -34,7 +34,7 @@ export default function HomeHero({
   const sourceBoardCountStr = `${sourceBoardNum}+`
 
   const subtitle = t('heroSubtitle' as Parameters<typeof t>[0])
-    .replace('{exchanges}', sourceBoardCountStr.replace('+', ''))
+    .replace('{boards}', sourceBoardCountStr.replace('+', ''))
     .replace('{traders}', traderCountStr)
 
   return (
@@ -138,7 +138,7 @@ export default function HomeHero({
               num: sourceBoardNum,
               suffix: '+',
               fallback: sourceBoardCountStr,
-              label: t('heroStatExchanges' as Parameters<typeof t>[0]),
+              label: t('heroStatSourceBoards' as Parameters<typeof t>[0]),
               delay: 0.2,
             },
             {

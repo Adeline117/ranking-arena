@@ -3,14 +3,13 @@ import {
   PRODUCT_FACTS,
   buildProductFactsSnapshot,
   formatRankedTraderCount,
-  formatTrackedSourceCoverage,
+  formatLiveSourceBoardCoverage,
 } from '../product-facts'
 
 describe('product facts', () => {
   it('uses one operational fallback when live facts are unavailable', () => {
     expect(buildProductFactsSnapshot()).toEqual({
       sourceBoardCount: PRODUCT_FACTS.fallbackSourceBoardCount,
-      exchangeCount: PRODUCT_FACTS.fallbackSourceBoardCount,
       rankedTraderCount: PRODUCT_FACTS.fallbackRankedTraderCount,
       leaderboardRefreshHours: 2,
       leaderboardRefreshLabel: '2h',
@@ -24,7 +23,6 @@ describe('product facts', () => {
       buildProductFactsSnapshot({ sourceBoardCount: 21, traderCount: 12_345, isDefault: false })
     ).toMatchObject({
       sourceBoardCount: 21,
-      exchangeCount: 21,
       rankedTraderCount: 12_345,
       leaderboardRefreshLabel: '2h',
       isFallback: false,
@@ -34,7 +32,6 @@ describe('product facts', () => {
   it('accepts the legacy exchangeCount response without changing its meaning', () => {
     expect(buildProductFactsSnapshot({ exchangeCount: 19 })).toMatchObject({
       sourceBoardCount: 19,
-      exchangeCount: 19,
     })
   })
 
@@ -48,8 +45,10 @@ describe('product facts', () => {
     expect(HOMEPAGE_TRUST_COPY.ogCoverageLabel).toBe('Tracked Public Sources')
     expect(HOMEPAGE_TRUST_COPY.ogCadenceLabel).toBe('Recomputed Every 2h')
     expect(Object.values(HOMEPAGE_TRUST_COPY).join(' ')).not.toContain('32+')
-    expect(formatTrackedSourceCoverage(18)).toBe('18 tracked source families')
-    expect(formatTrackedSourceCoverage(Number.POSITIVE_INFINITY)).toBe('tracked public sources')
-    expect(formatTrackedSourceCoverage()).toBe('tracked public sources')
+    expect(formatLiveSourceBoardCoverage(28)).toBe('28 live ranking source boards')
+    expect(formatLiveSourceBoardCoverage(Number.POSITIVE_INFINITY)).toBe(
+      'live public ranking sources'
+    )
+    expect(formatLiveSourceBoardCoverage()).toBe('live public ranking sources')
   })
 })

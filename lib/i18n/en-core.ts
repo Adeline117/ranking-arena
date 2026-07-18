@@ -291,11 +291,11 @@ const enCore = {
   // ── Hero Section ────────────────────────────────────────────────────
   heroHeadline: "Track the World's Best Crypto Traders",
   heroSubtitle:
-    'Rankings across {exchanges} tracked sources, recomputed every 2 hours from the latest available data.',
+    'Rankings from {boards} live source boards, recomputed every 2 hours from the latest available data.',
   heroCTABrowse: 'Browse Rankings',
   heroCTASignUp: 'Sign Up Free',
   heroStatTraders: 'Traders',
-  heroStatExchanges: 'Exchanges',
+  heroStatSourceBoards: 'Live Boards',
   heroStatUpdated: 'Update Freq',
   heroProBadge: 'Go Pro — Unlock All Traders & Advanced Filters',
   heroProBadgePromo: 'Pro features are free for now — everything unlocked',
