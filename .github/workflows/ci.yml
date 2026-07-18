@@ -47,8 +47,6 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
-      - name: Seed pinned postgres-meta image
-        run: scripts/maintenance/seed-supabase-typegen-image.sh
       - name: Regenerate from attested production and diff
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
