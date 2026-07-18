@@ -2,7 +2,6 @@
 
 import { useState } from 'react'
 import type { CSSProperties } from 'react'
-import Link from 'next/link'
 import Image from 'next/image'
 import { useRouter } from 'next/navigation'
 import dynamic from 'next/dynamic'
@@ -519,41 +518,24 @@ export default function UserProfileHeader({
           </button>
         )}
 
-        {features.social && !isOwnProfile && profile.isRegistered && currentUserId && (
+        {features.social && !isOwnProfile && profile.isRegistered && (
           <>
             <UserFollowButton
               targetUserId={profile.id}
               currentUserId={currentUserId}
               size="sm"
+              loginReturnPath={`/u/${encodeURIComponent(handle)}`}
               onFollowChange={(isFollowing) => {
                 onFollowersCountChange(isFollowing ? 1 : -1)
               }}
             />
-            <MessageButton targetUserId={profile.id} currentUserId={currentUserId} size="sm" />
+            <MessageButton
+              targetUserId={profile.id}
+              currentUserId={currentUserId}
+              size="sm"
+              loginReturnPath={`/u/${encodeURIComponent(handle)}`}
+            />
           </>
-        )}
-
-        {features.social && !isOwnProfile && profile.isRegistered && !currentUserId && mounted && (
-          <Link
-            href={`/login?returnUrl=${encodeURIComponent(`/u/${handle}`)}`}
-            style={{
-              color: tokens.colors.accent.primary,
-              fontSize: tokens.typography.fontSize.sm,
-              padding: `${tokens.spacing[2]} ${tokens.spacing[3]}`,
-              borderRadius: tokens.radius.lg,
-              background: `${alpha(tokens.colors.accent.primary, 8)}`,
-              border: `1px solid ${alpha(tokens.colors.accent.primary, 25)}`,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: tokens.spacing[2],
-              fontWeight: tokens.typography.fontWeight.medium,
-              textDecoration: 'none',
-              transition: 'all 0.25s cubic-bezier(0.4, 0, 0.2, 1)',
-            }}
-          >
-            {t('userProfileLoginToFollow')}
-          </Link>
         )}
       </Box>
     </Box>

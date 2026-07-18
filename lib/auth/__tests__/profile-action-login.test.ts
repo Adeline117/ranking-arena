@@ -91,13 +91,16 @@ describe('profile action login handoff', () => {
     ).toBeNull()
   })
 
-  it('refuses an unsafe fallback instead of silently returning to the homepage', () => {
-    expect(() =>
-      queueProfileActionLogin({
-        action: 'claim-trader',
-        target: profileTraderTarget('binance', 'trader-1'),
-        fallbackPath: '//evil.example',
-      })
-    ).toThrow('safe internal fallback')
+  it('uses the live internal route instead of an unsafe fallback', () => {
+    window.history.replaceState({}, '', '/trader/alice?platform=binance')
+    const href = queueProfileActionLogin({
+      action: 'claim-trader',
+      target: profileTraderTarget('binance', 'trader-1'),
+      fallbackPath: '//evil.example',
+    })
+
+    expect(new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')).toBe(
+      '/trader/alice?platform=binance&resumeAction=claim-trader'
+    )
   })
 })
