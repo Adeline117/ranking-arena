@@ -35,9 +35,13 @@ describe('leaderboard source freshness migration', () => {
   it('backfills only source boards that still serve positive ranking rows', () => {
     expect(migration).toContain('FROM public.leaderboard_ranks AS ranks')
     expect(migration).toContain('WHERE ranks.arena_score > 0')
-    expect(migration).toContain("source.serving_mode <> 'legacy'")
+    expect(migration).toContain("source.status = 'active'")
+    expect(migration).toContain("source.serving_mode = 'serving'")
+    expect(migration).not.toContain("source.serving_mode <> 'legacy'")
     expect(migration).toContain("(source.meta->>'legacy_platform') IS DISTINCT FROM 'null'")
-    expect(migration).toContain("COALESCE(source.meta->>'legacy_platform', source.slug)")
+    expect(migration).toMatch(
+      /COALESCE\(\s+NULLIF\(source\.meta->>'legacy_platform', ''\),\s+source\.slug\s+\)/
+    )
     expect(migration).toContain('GROUP BY')
   })
 })
