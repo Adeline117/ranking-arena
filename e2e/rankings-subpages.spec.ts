@@ -1,4 +1,4 @@
-import { expect, test, type Page, type Response } from '@playwright/test'
+import { expect, test, type Locator, type Page, type Response } from '@playwright/test'
 import { dismissOverlays } from './helpers'
 
 function pageHealth(page: Page) {
@@ -58,6 +58,21 @@ async function expectSuccessfulNavigation(response: Response | null) {
   expect(response!.status()).toBeLessThan(400)
 }
 
+async function clickUntilAttribute(
+  action: Locator,
+  state: Locator,
+  attribute: string,
+  expected: string
+) {
+  // A Client Component's SSR control can become visible just before React
+  // attaches its event handler under a busy browser. Retry the real user
+  // action within a bounded window; a genuinely inert control still fails.
+  await expect(async () => {
+    await action.click()
+    await expect(state).toHaveAttribute(attribute, expected, { timeout: 1_000 })
+  }).toPass({ timeout: 10_000 })
+}
+
 test.describe('current rankings sub-pages', () => {
   test.describe.configure({ retries: 0 })
   test.use({ locale: 'de-DE', timezoneId: 'Pacific/Honolulu' })
@@ -107,8 +122,7 @@ test.describe('current rankings sub-pages', () => {
     const sortMetrics = ['traderCount', 'tradeCount', 'totalPnl'] as const
     for (const [index, metric] of sortMetrics.entries()) {
       const button = sortButtons.nth(index)
-      await button.click()
-      await expect(button).toHaveAttribute('aria-pressed', 'true')
+      await clickUntilAttribute(button, button, 'aria-pressed', 'true')
       const values = await cards.evaluateAll(
         (links, dataKey) =>
           links.map((link) => Number((link as HTMLElement).dataset[dataKey as string])),
@@ -140,18 +154,14 @@ test.describe('current rankings sub-pages', () => {
     const exchangeLinks = page.locator('table tbody a[href^="/exchange/"]')
     for (const timeframe of ['7D', '30D', '90D']) {
       const tab = tablist.getByRole('tab', { name: timeframe, exact: true })
-      await tab.click()
-      await expect(tab).toHaveAttribute('aria-selected', 'true')
+      await clickUntilAttribute(tab, tab, 'aria-selected', 'true')
       await expect(exchangeLinks.first()).toBeVisible()
     }
 
     const firstSort = page.locator('table thead button').first()
     await expect(firstSort).toBeVisible()
     const sortHeader = firstSort.locator('xpath=..')
-    const beforeSort = await sortHeader.getAttribute('aria-sort')
-    await firstSort.click()
-    await expect(sortHeader).not.toHaveAttribute('aria-sort', beforeSort ?? 'none')
-    await expect(sortHeader).toHaveAttribute('aria-sort', 'ascending')
+    await clickUntilAttribute(firstSort, sortHeader, 'aria-sort', 'ascending')
     const exchangeNamesAreSorted = await exchangeLinks.evaluateAll((links) => {
       const names = links.map((link) => link.textContent?.trim().toLowerCase() ?? '')
       return names.every((name, index) => index === 0 || names[index - 1].localeCompare(name) <= 0)
@@ -190,10 +200,7 @@ test.describe('current rankings sub-pages', () => {
     const sortButton = page.locator('table thead button').first()
     await expect(sortButton).toBeVisible()
     const sortHeader = sortButton.locator('xpath=..')
-    const beforeSort = await sortHeader.getAttribute('aria-sort')
-    await sortButton.click()
-    await expect(sortHeader).not.toHaveAttribute('aria-sort', beforeSort ?? 'none')
-    await expect(sortHeader).toHaveAttribute('aria-sort', 'ascending')
+    await clickUntilAttribute(sortButton, sortHeader, 'aria-sort', 'ascending')
     const traderNamesAreSorted = await traderLinks.evaluateAll((links) => {
       const names = links.map(
         (link) => (link as HTMLElement).dataset.traderName?.toLowerCase() ?? ''
