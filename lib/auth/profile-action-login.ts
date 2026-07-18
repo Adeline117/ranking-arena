@@ -17,6 +17,7 @@ export type ProfileActionIntent =
   | 'unwatch-trader'
   | 'claim-trader'
   | 'compare-traders'
+  | 'bookmark-post'
 
 type PendingProfileAction = {
   version: 2
@@ -153,6 +154,26 @@ export function consumeProfileActionLogin({
   currentUserId?: string | null
   now?: number
 }): ProfileActionIntent | null {
+  const pending = consumePendingProfileAction({
+    actions,
+    targetMatches: (pendingTarget) => pendingTarget === target,
+    currentUserId,
+    now,
+  })
+  return pending?.action ?? null
+}
+
+function consumePendingProfileAction({
+  actions,
+  targetMatches,
+  currentUserId,
+  now,
+}: {
+  actions: readonly ProfileActionIntent[]
+  targetMatches: (target: string) => boolean
+  currentUserId?: string | null
+  now: number
+}): PendingProfileAction | null {
   if (typeof window === 'undefined') return null
 
   let pending: PendingProfileAction
@@ -175,7 +196,7 @@ export function consumeProfileActionLogin({
   const expired = now - pending.createdAt < 0 || now - pending.createdAt > MAX_PENDING_AGE_MS
   const proofMatches =
     !expired &&
-    pending.target === target &&
+    targetMatches(pending.target) &&
     pending.returnPath === currentPath &&
     pending.action === actionFromUrl &&
     actions.includes(pending.action)
@@ -203,7 +224,7 @@ export function consumeProfileActionLogin({
   removeCurrentActionMarker(currentPath!)
   if (!proofRemoved) return null
 
-  return pending.action
+  return pending
 }
 
 export function profileUserTarget(userId: string): string {
@@ -212,6 +233,45 @@ export function profileUserTarget(userId: string): string {
 
 export function profileTraderTarget(source: string, traderId: string): string {
   return `trader:${source.toLowerCase()}:${traderId}`
+}
+
+const BOOKMARK_POST_TARGET_PREFIX = 'post:'
+
+export function bookmarkPostTarget(postId: string): string {
+  const normalized = postId.trim()
+  if (!normalized) {
+    throw new Error('Bookmark login requires a non-empty post id')
+  }
+  return `${BOOKMARK_POST_TARGET_PREFIX}${normalized}`
+}
+
+function postIdFromBookmarkTarget(target: string): string | null {
+  if (!target.startsWith(BOOKMARK_POST_TARGET_PREFIX)) return null
+  const postId = target.slice(BOOKMARK_POST_TARGET_PREFIX.length)
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(postId)
+    ? postId
+    : null
+}
+
+/**
+ * Consume a bookmark action from its same-tab proof and return the exact post
+ * selected before login. The target is read only after all v2 proof checks pass;
+ * a URL marker by itself never supplies or authorizes a post mutation.
+ */
+export function consumePostBookmarkLogin({
+  currentUserId,
+  now = Date.now(),
+}: {
+  currentUserId?: string | null
+  now?: number
+}): string | null {
+  const pending = consumePendingProfileAction({
+    actions: ['bookmark-post'],
+    targetMatches: (target) => postIdFromBookmarkTarget(target) !== null,
+    currentUserId,
+    now,
+  })
+  return pending ? postIdFromBookmarkTarget(pending.target) : null
 }
 
 /**
