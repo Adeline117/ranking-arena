@@ -28,6 +28,8 @@ function followingCandidateCacheKey(userId: string): string {
 }
 
 const FOLLOW_EDGE_PAGE_SIZE = 500
+const MATERIALIZATION_CHUNK_SIZE = 100
+const MATERIALIZATION_CONCURRENCY = 3
 const QUERY_TIMEOUT_MS = 15000
 
 // 统一的关注项类型
@@ -130,6 +132,60 @@ async function fetchAllPages<Row>(
   }
 }
 
+async function mapWithConcurrency<Input, Output>(
+  inputs: Input[],
+  concurrency: number,
+  worker: (input: Input) => Promise<Output>
+): Promise<Output[]> {
+  if (inputs.length === 0) return []
+
+  const outputs = new Array<Output>(inputs.length)
+  let nextIndex = 0
+  let stopped = false
+
+  const consume = async () => {
+    while (!stopped) {
+      const index = nextIndex
+      if (index >= inputs.length) return
+      nextIndex += 1
+
+      try {
+        outputs[index] = await worker(inputs[index])
+      } catch (error) {
+        // Do not launch more chunks after the first failure. Requests already
+        // in flight may finish, but the caller receives no partial result.
+        stopped = true
+        throw error
+      }
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(concurrency, inputs.length) }, () => consume()))
+  return outputs
+}
+
+async function fetchRowsInChunks<Row>(
+  ids: string[],
+  label: string,
+  loadChunk: (ids: string[]) => Promise<{ data: Row[] | null; error: unknown }>
+): Promise<Row[]> {
+  const chunks: string[][] = []
+  for (let index = 0; index < ids.length; index += MATERIALIZATION_CHUNK_SIZE) {
+    chunks.push(ids.slice(index, index + MATERIALIZATION_CHUNK_SIZE))
+  }
+
+  const chunkRows = await mapWithConcurrency(chunks, MATERIALIZATION_CONCURRENCY, async (chunk) => {
+    const { data, error } = await loadChunk(chunk)
+    if (error) throw error
+    if (!Array.isArray(data)) {
+      throw new Error(`${label} materialization returned no chunk data`)
+    }
+    return data
+  })
+
+  return chunkRows.flat()
+}
+
 async function fetchFollowingCandidates(userId: string): Promise<FollowingCandidates> {
   const supabase = getSupabaseAdmin()
 
@@ -207,18 +263,17 @@ async function materializeFollowingItems(
   // Redis stores only edge candidates. Mutable account fields and moderation
   // state are read on every request before a service-role row is released.
   const followingIds = [...new Set(candidates.users.map((candidate) => candidate.userId))]
-  const { data: followingProfiles, error: followingProfilesError } = followingIds.length
-    ? await supabase
-        .from('user_profiles')
-        .select('id, handle, bio, avatar_url, deleted_at, banned_at, is_banned, ban_expires_at')
-        .in('id', followingIds)
-        .abortSignal(AbortSignal.timeout(15000))
-    : { data: null, error: null }
-  if (followingProfilesError) throw followingProfilesError
+  const followingProfiles = await fetchRowsInChunks(followingIds, 'user_profiles', async (chunk) =>
+    supabase
+      .from('user_profiles')
+      .select('id, handle, bio, avatar_url, deleted_at, banned_at, is_banned, ban_expires_at')
+      .in('id', chunk)
+      .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS))
+  )
 
   const now = Date.now()
   const userProfileById = new Map(
-    (followingProfiles || [])
+    followingProfiles
       .filter((profile) => isPublicProfileActive(profile, now))
       .map((profile) => [profile.id, profile])
   )
@@ -240,24 +295,25 @@ async function materializeFollowingItems(
 
   if (candidates.traders.length > 0) {
     const traderIds = [...new Set(candidates.traders.map((candidate) => candidate.traderId))]
-    const { data: lrData, error: lrError } = await supabase
-      .from('leaderboard_ranks')
-      .select(
-        'source_trader_id, handle, source, avatar_url, roi, pnl, win_rate, followers, arena_score, rank'
-      )
-      .in('source_trader_id', traderIds)
-      .eq('season_id', '90D')
-      .gt('arena_score', 0)
-      .or('is_outlier.is.null,is_outlier.eq.false')
-      .abortSignal(AbortSignal.timeout(15000))
-    if (lrError) throw lrError
+    const lrData = await fetchRowsInChunks(traderIds, 'leaderboard_ranks', async (chunk) =>
+      supabase
+        .from('leaderboard_ranks')
+        .select(
+          'source_trader_id, handle, source, avatar_url, roi, pnl, win_rate, followers, arena_score, rank'
+        )
+        .in('source_trader_id', chunk)
+        .eq('season_id', '90D')
+        .gt('arena_score', 0)
+        .or('is_outlier.is.null,is_outlier.eq.false')
+        .abortSignal(AbortSignal.timeout(QUERY_TIMEOUT_MS))
+    )
 
     // A trader identity is composite. Matching only source_trader_id can attach
     // another exchange's handle and performance when platforms reuse an ID.
     const traderDataMap = new Map<string, TraderMaterializedData>()
     const traderRowsByRawId = new Map<string, TraderMaterializedData[]>()
 
-    for (const row of lrData || []) {
+    for (const row of lrData) {
       const identity = traderRowIdentity(row)
       if (!traderDataMap.has(identity)) {
         const materialized = {
