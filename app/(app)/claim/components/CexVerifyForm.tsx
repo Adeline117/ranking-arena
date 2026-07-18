@@ -2,6 +2,7 @@
 import PasswordInput from '@/app/components/ui/PasswordInput'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { supabase } from '@/lib/supabase/client'
@@ -10,6 +11,7 @@ import { trackEvent } from '@/lib/analytics/track'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useToast } from '@/app/components/ui/Toast'
 import { SearchResult, CEX_PLATFORMS } from './types'
+import { buildTraderClaimLoginHref } from '@/lib/auth/trader-claim-login'
 
 export function CexVerifyForm({
   trader,
@@ -20,6 +22,7 @@ export function CexVerifyForm({
 }) {
   const { t } = useLanguage()
   const { showToast } = useToast()
+  const router = useRouter()
   const [apiKey, setApiKey] = useState('')
   const [apiSecret, setApiSecret] = useState('')
   const [passphrase, setPassphrase] = useState('')
@@ -28,6 +31,16 @@ export function CexVerifyForm({
 
   const platform = CEX_PLATFORMS.find((p) => trader.source.startsWith(p.value.split('_')[0]))
   const needsPassphrase = platform?.requiresPassphrase ?? false
+  const redirectToLogin = () => {
+    showToast(t('loginExpiredPleaseRelogin'), 'error')
+    router.push(
+      buildTraderClaimLoginHref({
+        traderId: trader.source_trader_id,
+        source: trader.source,
+        handle: trader.handle,
+      })
+    )
+  }
 
   const handleVerify = async () => {
     if (loading) return // Guard against double-click race condition
@@ -42,7 +55,7 @@ export function CexVerifyForm({
         data: { session },
       } = await supabase.auth.getSession()
       if (!session) {
-        showToast(t('pleaseLoginFirst'), 'warning')
+        redirectToLogin()
         return
       }
 
@@ -66,9 +79,16 @@ export function CexVerifyForm({
           }),
         })
 
-        const verifyData = await verifyRes.json()
+        const verifyData: { verified?: boolean; message?: string; uid?: string } = await verifyRes
+          .json()
+          .catch(() => ({}))
 
-        if (!verifyRes.ok || !verifyData.verified) {
+        if (verifyRes.status === 401) {
+          redirectToLogin()
+          return
+        }
+
+        if (!verifyRes.ok || !verifyData.verified || !verifyData.uid) {
           // The exchange's raw (English) error is passed through — prefix it with
           // a localized "Exchange returned:" so a zh/ja/ko user knows the message
           // is upstream, not a mistranslation. Fall back to our own mismatch copy.
@@ -103,9 +123,13 @@ export function CexVerifyForm({
         }),
       })
 
-      const claimData = await claimRes.json()
+      const claimData: { error?: string } = await claimRes.json().catch(() => ({}))
 
       if (!claimRes.ok) {
+        if (claimRes.status === 401) {
+          redirectToLogin()
+          return
+        }
         showToast(claimData.error || t('claimFailed'), 'error')
         return
       }

@@ -4,6 +4,11 @@ import type { ReactNode } from 'react'
 const mockGetSession = jest.fn()
 const mockShowToast = jest.fn()
 const mockTrackEvent = jest.fn()
+const mockPush = jest.fn()
+
+jest.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush }),
+}))
 
 jest.mock('@/lib/supabase/client', () => ({
   supabase: {
@@ -116,5 +121,37 @@ describe('DexVerifyForm proof submission', () => {
     expect(fetchMock.mock.calls.some(([url]) => url === '/api/traders/claim/verify-wallet')).toBe(
       false
     )
+  })
+
+  it('returns an expired claim to the exact wallet verification flow', async () => {
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      json: async () => ({ error: 'Unauthorized' }),
+    }) as typeof fetch
+
+    render(
+      <DexVerifyForm
+        trader={{
+          handle: 'Wallet Trader',
+          source: 'hyperliquid',
+          source_trader_id: checksumWallet.toLowerCase(),
+        }}
+        onSuccess={jest.fn()}
+      />
+    )
+
+    const timeoutSpy = jest.spyOn(global, 'setTimeout').mockImplementationOnce(() => 0 as never)
+    fireEvent.click(screen.getByRole('button', { name: 'claimWalletSignMessage' }))
+    timeoutSpy.mockRestore()
+
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(
+        `/login?returnUrl=${encodeURIComponent(
+          `/claim?trader=${encodeURIComponent(checksumWallet.toLowerCase())}&source=hyperliquid&handle=Wallet+Trader&step=verify`
+        )}`
+      )
+    )
+    expect(mockShowToast).toHaveBeenCalledWith('loginExpiredPleaseRelogin', 'error')
   })
 })
