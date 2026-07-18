@@ -10,6 +10,8 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { useAuthSession } from '@/lib/hooks/useAuthSession'
 import EmptyState from '@/app/components/ui/EmptyState'
+import ErrorState from '@/app/components/ui/ErrorState'
+import { apiFetch } from '@/lib/utils/api-fetch'
 import CategoryFilter from './components/CategoryFilter'
 import NewsCard from './components/NewsCard'
 import NewsTimelineSkeleton from './components/NewsTimelineSkeleton'
@@ -112,9 +114,14 @@ export default function FlashNewsPageClient() {
   const [news, setNews] = useState<FlashNews[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
-  const [_currentPage, setCurrentPage] = useState(1)
+  const [currentPage, setCurrentPage] = useState(1)
   const [selectedCategory, setSelectedCategory] = useState('all')
   const [hasMore, setHasMore] = useState(true)
+  const [loadError, setLoadError] = useState(false)
+  const [loadMoreFailure, setLoadMoreFailure] = useState<{
+    page: number
+    category: string
+  } | null>(null)
   const [_pagination, setPagination] = useState({
     page: 1,
     limit: 20,
@@ -124,6 +131,8 @@ export default function FlashNewsPageClient() {
     hasPrev: false,
   })
   const sentinelRef = useRef<HTMLDivElement>(null)
+  const initialRequestIdRef = useRef(0)
+  const loadingMoreRef = useRef(false)
   // "N new" buffer — polled items are held here instead of shifting the list
   // under the reader; revealed only when the pill is clicked.
   const [buffered, setBuffered] = useState<FlashNews[]>([])
@@ -138,43 +147,72 @@ export default function FlashNewsPageClient() {
   const [translatingIds, setTranslatingIds] = useState<Set<string>>(new Set())
 
   const fetchNews = useCallback(
-    async (page = 1, category = 'all', append = false) => {
+    async (page = 1, category = 'all', append = false): Promise<boolean> => {
+      if (append && loadingMoreRef.current) return false
+      const requestId = append ? null : ++initialRequestIdRef.current
+      const isCurrentInitialRequest = () => append || requestId === initialRequestIdRef.current
+
       try {
-        if (append) setLoadingMore(true)
-        else setLoading(true)
+        if (append) {
+          loadingMoreRef.current = true
+          setLoadingMore(true)
+          setLoadMoreFailure(null)
+        } else {
+          setLoading(true)
+          setLoadError(false)
+        }
         const params = new URLSearchParams({ page: page.toString(), limit: '20' })
         if (category !== 'all') {
           params.append('category', category)
         }
 
-        const response = await fetch(`/api/flash-news?${params}`)
-        if (!response.ok) throw new Error('Failed to fetch news')
-
-        const raw = await response.json()
+        // apiFetch bounds a stuck browser request at 15 seconds. A first-load
+        // skeleton must always resolve to data, a genuine empty, or an error.
+        const raw = await apiFetch<
+          FlashNewsResponse | { data?: FlashNewsResponse; success?: boolean }
+        >(`/api/flash-news?${params}`)
+        if (!isCurrentInitialRequest()) return false
         // API wraps in { success, data: { news, pagination } }
-        const data: FlashNewsResponse = raw.data || raw
-        const newsList = data.news || []
-        const pag = data.pagination || {
-          page: 1,
-          limit: 20,
-          total: 0,
-          totalPages: 0,
-          hasNext: false,
-          hasPrev: false,
+        const wrapped = raw as { data?: FlashNewsResponse }
+        const data = wrapped.data || (raw as FlashNewsResponse)
+        if (
+          !data ||
+          !Array.isArray(data.news) ||
+          !data.pagination ||
+          typeof data.pagination.hasNext !== 'boolean'
+        ) {
+          throw new Error('Malformed flash news response')
         }
+        const newsList = data.news
+        const pag = data.pagination
         if (append) {
-          setNews((prev) => [...prev, ...newsList])
+          setNews((prev) => {
+            const knownIds = new Set(prev.map((item) => item.id))
+            return [...prev, ...newsList.filter((item) => !knownIds.has(item.id))]
+          })
         } else {
           setNews(newsList)
         }
         setPagination(pag)
         setHasMore(pag.hasNext)
         if (!append) setLastUpdated(new Date())
+        return true
       } catch {
+        if (!isCurrentInitialRequest()) return false
+        if (append) {
+          setLoadMoreFailure({ page, category })
+        } else {
+          setLoadError(true)
+        }
         showToast(t('flashNewsFetchFailed'), 'error')
+        return false
       } finally {
-        setLoading(false)
-        setLoadingMore(false)
+        if (append) {
+          loadingMoreRef.current = false
+          setLoadingMore(false)
+        } else if (isCurrentInitialRequest()) {
+          setLoading(false)
+        }
       }
     },
     [showToast, t]
@@ -193,7 +231,14 @@ export default function FlashNewsPageClient() {
     setNews([])
     setBuffered([])
     setHasMore(true)
-    fetchNews(1, selectedCategory)
+    setLoadError(false)
+    setLoadMoreFailure(null)
+    void fetchNews(1, selectedCategory)
+    return () => {
+      // Ignore a superseded category response even if the underlying request
+      // finishes after its replacement.
+      initialRequestIdRef.current += 1
+    }
   }, [fetchNews, selectedCategory])
 
   // Poll page 1 and stash genuinely-new items in the buffer (never mutate the
@@ -268,11 +313,19 @@ export default function FlashNewsPageClient() {
     if (!sentinelRef.current) return
     const observer = new IntersectionObserver(
       (entries) => {
-        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
-          setCurrentPage((prev) => {
-            const nextPage = prev + 1
-            fetchNews(nextPage, selectedCategory, true)
-            return nextPage
+        if (
+          entries[0].isIntersecting &&
+          hasMore &&
+          !loading &&
+          !loadingMore &&
+          !loadingMoreRef.current &&
+          !loadMoreFailure
+        ) {
+          const nextPage = currentPage + 1
+          void fetchNews(nextPage, selectedCategory, true).then((loaded) => {
+            // Commit the page cursor only after that exact page loaded. A
+            // failed page remains retryable instead of being skipped.
+            if (loaded) setCurrentPage(nextPage)
           })
         }
       },
@@ -280,7 +333,15 @@ export default function FlashNewsPageClient() {
     )
     observer.observe(sentinelRef.current)
     return () => observer.disconnect()
-  }, [hasMore, loading, loadingMore, selectedCategory, fetchNews])
+  }, [currentPage, hasMore, loading, loadingMore, loadMoreFailure, selectedCategory, fetchNews])
+
+  const retryLoadMore = useCallback(() => {
+    if (!loadMoreFailure) return
+    const failed = loadMoreFailure
+    void fetchNews(failed.page, failed.category, true).then((loaded) => {
+      if (loaded) setCurrentPage(failed.page)
+    })
+  }, [fetchNews, loadMoreFailure])
 
   // Translate content for items that need it
   const translateNewsContent = useCallback(
@@ -631,6 +692,13 @@ export default function FlashNewsPageClient() {
         <div style={{ transition: 'opacity 0.3s ease', opacity: loading ? 0.5 : 1 }}>
           {loading && news.length === 0 ? (
             <NewsTimelineSkeleton />
+          ) : loadError && news.length === 0 ? (
+            <ErrorState
+              title={t('flashNewsFetchFailed')}
+              description={t('loadFailedRetryShort')}
+              retry={() => void fetchNews(1, selectedCategory)}
+              variant="compact"
+            />
           ) : news.length === 0 ? (
             <EmptyState
               icon={
@@ -763,7 +831,7 @@ export default function FlashNewsPageClient() {
               {/* Infinite scroll sentinel — 仅当有筛选后结果时挂载。否则(搜索无结果/
                   突发-only 空)sentinel 会继续翻页拉取被客户端过滤掉的数据,空态
                   「未找到匹配内容」下方还转「加载中…」spinner,自相矛盾。 */}
-              {filtered.length > 0 && (
+              {filtered.length > 0 && !loadMoreFailure && (
                 <>
                   <div ref={sentinelRef} style={{ height: 1 }} />
                   {loadingMore && (
@@ -796,6 +864,14 @@ export default function FlashNewsPageClient() {
                     </Box>
                   )}
                 </>
+              )}
+              {loadMoreFailure && (
+                <ErrorState
+                  title={t('flashNewsFetchFailed')}
+                  description={t('loadFailedRetryShort')}
+                  retry={retryLoadMore}
+                  variant="compact"
+                />
               )}
               {!hasMore && news.length > 0 && (
                 <Box
