@@ -274,6 +274,9 @@ export default function TraderShareActions({
     setDownloading(true)
     try {
       const res = await fetch(buildOgUrl())
+      if (!res.ok) {
+        throw new Error(`Rank card download failed (${res.status})`)
+      }
       const blob = await res.blob()
       const objectUrl = URL.createObjectURL(blob)
       const a = document.createElement('a')
@@ -282,7 +285,7 @@ export default function TraderShareActions({
       a.click()
       URL.revokeObjectURL(objectUrl)
     } catch {
-      showToast(t('copyFailed'), 'error')
+      showToast(t('quizDownloadFailed'), 'error')
     } finally {
       setDownloading(false)
     }
