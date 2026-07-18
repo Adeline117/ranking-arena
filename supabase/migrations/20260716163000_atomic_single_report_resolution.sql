@@ -27,6 +27,9 @@ DECLARE
   v_comment_function pg_catalog.regprocedure := pg_catalog.to_regprocedure(
     'public.moderate_comment(uuid,uuid,text,text)'
   );
+  v_comment_guard_function pg_catalog.regprocedure := pg_catalog.to_regprocedure(
+    'public.guard_canonical_comment_mutation()'
+  );
   v_postgres_oid oid := (
     SELECT role_row.oid
     FROM pg_catalog.pg_roles AS role_row
@@ -370,35 +373,144 @@ BEGIN
     RAISE EXCEPTION 'canonical comment moderation dependency drifted';
   END IF;
 
-  IF EXISTS (
-    SELECT 1
-    FROM (
-      VALUES
-        (
-          'trg_comments_00_guard_canonical_mutation',
-          'public.guard_canonical_comment_mutation()',
-          31
-        ),
-        (
-          'trg_comments_10_cascade_soft_delete',
-          'public.cascade_comment_soft_delete()',
-          17
-        )
-    ) AS expected_trigger(trigger_name, function_name, trigger_type)
-    WHERE NOT EXISTS (
+  -- Production received 20260715093000 but not the later 151000 contract
+  -- migration, so the canonical mutation guard may be wholly absent. Accept
+  -- only that exact legacy state or the exact guard installed below; a partial
+  -- function/trigger deployment still fails closed.
+  IF v_comment_guard_function IS NULL THEN
+    IF EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_proc AS function_row
+      WHERE function_row.pronamespace = 'public'::regnamespace
+        AND function_row.proname = 'guard_canonical_comment_mutation'
+    ) OR EXISTS (
       SELECT 1
       FROM pg_catalog.pg_trigger AS trigger_row
-      WHERE trigger_row.tgrelid = 'public.comments'::pg_catalog.regclass
-        AND trigger_row.tgname = expected_trigger.trigger_name
-        AND trigger_row.tgfoid =
-          pg_catalog.to_regprocedure(expected_trigger.function_name)
-        AND trigger_row.tgtype = expected_trigger.trigger_type
-        AND trigger_row.tgenabled = 'O'
+      WHERE trigger_row.tgrelid = 'public.comments'::regclass
+        AND trigger_row.tgname IN (
+          'trg_comments_00_guard_canonical_delete',
+          'trg_comments_00_guard_canonical_mutation'
+        )
         AND NOT trigger_row.tgisinternal
-        AND trigger_row.tgconstraint = 0
-        AND trigger_row.tgnargs = 0
-        AND trigger_row.tgqual IS NULL
-    )
+    ) THEN
+      RAISE EXCEPTION
+        'partial canonical comment mutation guard deployment detected';
+    END IF;
+  ELSIF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.pronamespace = 'public'::regnamespace
+      AND function_row.proname = 'guard_canonical_comment_mutation'
+  ) <> 1 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_proc AS function_row
+    JOIN pg_catalog.pg_language AS language_row
+      ON language_row.oid = function_row.prolang
+    WHERE function_row.oid = v_comment_guard_function
+      AND function_row.prokind = 'f'
+      AND function_row.prorettype = 'trigger'::regtype
+      AND NOT function_row.proretset
+      AND function_row.pronargs = 0
+      AND function_row.pronargdefaults = 0
+      AND NOT function_row.prosecdef
+      AND function_row.provolatile = 'v'
+      AND function_row.proparallel = 'u'
+      AND NOT function_row.proleakproof
+      AND function_row.proowner = v_postgres_oid
+      AND language_row.lanname = 'plpgsql'
+      AND function_row.proconfig =
+        ARRAY['search_path=pg_catalog, public']::text[]
+      AND pg_catalog.md5(function_row.prosrc) =
+        '4f0422b5ee68b4dbe055331e322eaa19'
+      AND NOT EXISTS (
+        SELECT 1
+        FROM pg_catalog.aclexplode(
+          COALESCE(
+            function_row.proacl,
+            pg_catalog.acldefault('f', function_row.proowner)
+          )
+        ) AS acl_entry
+        WHERE acl_entry.grantee <> function_row.proowner
+          AND acl_entry.privilege_type = 'EXECUTE'
+      )
+  ) OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'public.comments'::regclass
+      AND trigger_row.tgname = 'trg_comments_00_guard_canonical_mutation'
+      AND trigger_row.tgfoid = v_comment_guard_function
+      AND trigger_row.tgtype = 31
+      AND trigger_row.tgenabled = 'O'
+      AND NOT trigger_row.tgisinternal
+      AND trigger_row.tgconstraint = 0
+      AND trigger_row.tgnargs = 0
+      AND trigger_row.tgqual IS NULL
+      AND pg_catalog.cardinality(trigger_row.tgattr::smallint[]) = 5
+      AND trigger_row.tgattr::smallint[] @> ARRAY[
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = 'public.comments'::regclass
+            AND attribute.attname = 'deleted_at'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = 'public.comments'::regclass
+            AND attribute.attname = 'deleted_by'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = 'public.comments'::regclass
+            AND attribute.attname = 'delete_reason'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = 'public.comments'::regclass
+            AND attribute.attname = 'content'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+        ),
+        (
+          SELECT attribute.attnum
+          FROM pg_catalog.pg_attribute AS attribute
+          WHERE attribute.attrelid = 'public.comments'::regclass
+            AND attribute.attname = 'updated_at'
+            AND attribute.attnum > 0
+            AND NOT attribute.attisdropped
+        )
+      ]::smallint[]
+  ) OR EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'public.comments'::regclass
+      AND trigger_row.tgname = 'trg_comments_00_guard_canonical_delete'
+      AND NOT trigger_row.tgisinternal
+  ) THEN
+    RAISE EXCEPTION 'canonical comment moderation trigger contract drifted';
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'public.comments'::pg_catalog.regclass
+      AND trigger_row.tgname = 'trg_comments_10_cascade_soft_delete'
+      AND trigger_row.tgfoid =
+        pg_catalog.to_regprocedure('public.cascade_comment_soft_delete()')
+      AND trigger_row.tgtype = 17
+      AND trigger_row.tgenabled = 'O'
+      AND NOT trigger_row.tgisinternal
+      AND trigger_row.tgconstraint = 0
+      AND trigger_row.tgnargs = 0
+      AND trigger_row.tgqual IS NULL
   ) THEN
     RAISE EXCEPTION 'canonical comment moderation trigger contract drifted';
   END IF;
@@ -460,6 +572,93 @@ LOCK TABLE public.user_profiles,
   public.content_reports,
   public.admin_logs
   IN SHARE ROW EXCLUSIVE MODE;
+
+-- Restore the missing 151000 guard atomically with the report boundary. The
+-- preflight above permits only complete absence or this exact sealed contract,
+-- so CREATE OR REPLACE cannot conceal a partial or foreign implementation.
+CREATE OR REPLACE FUNCTION public.guard_canonical_comment_mutation()
+RETURNS trigger
+LANGUAGE plpgsql
+VOLATILE
+PARALLEL UNSAFE
+SECURITY INVOKER
+SET search_path = pg_catalog, public
+AS $function$
+DECLARE
+  v_mutation_path text := current_setting('app.comment_mutation_path', true);
+BEGIN
+  IF TG_OP = 'INSERT' THEN
+    IF NEW.deleted_at IS NOT NULL
+       OR NEW.deleted_by IS NOT NULL
+       OR NEW.delete_reason IS NOT NULL THEN
+      RAISE EXCEPTION 'new comments must start active without moderation metadata'
+        USING ERRCODE = '42501';
+    END IF;
+
+    RETURN NEW;
+  END IF;
+
+  IF pg_trigger_depth() > 1
+     OR v_mutation_path IN (
+       'delete_own_comment',
+       'moderate_comment',
+       'update_own_comment'
+     ) THEN
+    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    RAISE EXCEPTION 'direct comment deletion is disabled; use the canonical RPC'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.deleted_at IS DISTINCT FROM OLD.deleted_at THEN
+    RAISE EXCEPTION 'direct comment deletion state changes are disabled; use the canonical RPC'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.deleted_by IS DISTINCT FROM OLD.deleted_by
+     OR NEW.delete_reason IS DISTINCT FROM OLD.delete_reason THEN
+    RAISE EXCEPTION 'direct comment moderation metadata changes are disabled; use the canonical RPC'
+      USING ERRCODE = '42501';
+  END IF;
+
+  IF NEW.content IS DISTINCT FROM OLD.content
+     OR NEW.updated_at IS DISTINCT FROM OLD.updated_at THEN
+    RAISE EXCEPTION 'direct comment content changes are disabled; use the canonical RPC'
+      USING ERRCODE = '42501';
+  END IF;
+
+  RETURN NEW;
+END
+$function$;
+
+ALTER FUNCTION public.guard_canonical_comment_mutation() OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.guard_canonical_comment_mutation()
+  FROM PUBLIC, anon, authenticated, service_role;
+COMMENT ON FUNCTION public.guard_canonical_comment_mutation() IS
+  'single-report-comment-mutation-guard:v1:4f0422b5ee68b4dbe055331e322eaa19';
+
+DO $install_missing_comment_guard_trigger$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'public.comments'::regclass
+      AND trigger_row.tgname = 'trg_comments_00_guard_canonical_mutation'
+      AND NOT trigger_row.tgisinternal
+  ) THEN
+    EXECUTE $ddl$
+      CREATE TRIGGER trg_comments_00_guard_canonical_mutation
+      BEFORE INSERT OR DELETE OR UPDATE OF
+        deleted_at, deleted_by, delete_reason, content, updated_at
+      ON public.comments
+      FOR EACH ROW
+      EXECUTE FUNCTION public.guard_canonical_comment_mutation()
+    $ddl$;
+  END IF;
+END
+$install_missing_comment_guard_trigger$;
 
 CREATE OR REPLACE FUNCTION public.resolve_content_report_atomic(
   p_actor_id uuid,

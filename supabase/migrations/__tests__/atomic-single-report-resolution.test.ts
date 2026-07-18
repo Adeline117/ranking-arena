@@ -40,6 +40,8 @@ describe('atomic single report resolution migration', () => {
     expect(migration).toContain('single report resolution FK authority drifted')
     expect(migration).toContain('trg_comments_00_guard_canonical_mutation')
     expect(migration).toContain('trg_comments_10_cascade_soft_delete')
+    expect(migration).toContain('partial canonical comment mutation guard deployment detected')
+    expect(migration).toContain('single-report-comment-mutation-guard:v1:')
     expect(migration).toContain('canonical comment moderation trigger contract drifted')
     expect(migration).toContain('report-moderation-operation-id:v1:')
     expect(migration).toContain('4796e70c1a1d65b6ce16ff9359f6fcf6')

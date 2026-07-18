@@ -161,29 +161,6 @@ CREATE TABLE public.admin_logs (
   created_at timestamptz DEFAULT pg_catalog.now()
 );
 
-CREATE FUNCTION public.guard_canonical_comment_mutation()
-RETURNS trigger
-LANGUAGE plpgsql
-SET search_path = pg_catalog, public
-AS $$
-BEGIN
-  IF pg_catalog.pg_trigger_depth() > 1
-     OR pg_catalog.current_setting('app.comment_mutation_path', true) =
-       'moderate_comment'
-  THEN
-    RETURN CASE WHEN TG_OP = 'DELETE' THEN OLD ELSE NEW END;
-  END IF;
-  IF TG_OP = 'INSERT'
-     AND NEW.deleted_at IS NULL
-     AND NEW.deleted_by IS NULL
-     AND NEW.delete_reason IS NULL
-  THEN
-    RETURN NEW;
-  END IF;
-  RAISE EXCEPTION 'direct comment mutation disabled' USING ERRCODE = '42501';
-END
-$$;
-
 CREATE FUNCTION public.cascade_comment_soft_delete()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -204,11 +181,6 @@ BEGIN
   RETURN NEW;
 END
 $$;
-
-CREATE TRIGGER trg_comments_00_guard_canonical_mutation
-BEFORE INSERT OR DELETE OR UPDATE OF deleted_at, deleted_by, delete_reason, content, updated_at
-ON public.comments
-FOR EACH ROW EXECUTE FUNCTION public.guard_canonical_comment_mutation();
 
 CREATE TRIGGER trg_comments_10_cascade_soft_delete
 AFTER UPDATE OF deleted_at ON public.comments
