@@ -182,14 +182,8 @@ psql_with_database() {
 }
 
 require_session_connection() {
-  local authority="${DATABASE_URL#*://}"
-  local host_port="${authority%%/*}"
-  host_port="${host_port##*@}"
-
-  if [[ "$host_port" == *:6543 ]]; then
-    echo "migration execution refuses transaction-pooler port 6543; use a direct or session-pooler DATABASE_URL on port 5432" >&2
-    exit 1
-  fi
+  node "$ROOT/scripts/maintenance/psql-from-database-url.mjs" \
+    --check-session-connection
 }
 
 migration_version() {

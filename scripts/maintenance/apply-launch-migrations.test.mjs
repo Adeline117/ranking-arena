@@ -164,8 +164,10 @@ test('transactional exact-ledger checks re-attest and lock every skipped prerequ
 })
 
 test('production writes require phase-specific confirmations', () => {
-  assert.match(source, /require_session_connection/)
-  assert.match(source, /refuses transaction-pooler port 6543/)
+  assert.match(
+    source,
+    /require_session_connection\(\)[\s\S]*psql-from-database-url\.mjs"[\s\S]*--check-session-connection/
+  )
   assert.match(source, /if \[\[ "\$command" != "status" \]\]/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_PREDEPLOY"/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_POSTDEPLOY"/)
@@ -260,6 +262,34 @@ test('database URL parser fails closed on unsupported or duplicate libpq options
     assert.match(result.stderr, /psql connection configuration error/)
     assert.doesNotMatch(result.stderr, /runner|secret|db\.example|postgresql/)
   }
+})
+
+test('session-pooler guard is bound to the parsed URL and ignores ambient libpq values', () => {
+  const helper = resolve(ROOT, 'scripts/maintenance/psql-from-database-url.mjs')
+  const result = spawnSync(process.execPath, [helper, '--check-session-connection'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      DATABASE_URL: 'postgresql://runner:secret@db.example.test:6543/arena',
+      PGPORT: '5432',
+      PGSERVICE: 'bypass-attempt',
+    },
+  })
+  assert.equal(result.status, 2)
+  assert.match(result.stderr, /refuses transaction-pooler port 6543/)
+  assert.doesNotMatch(result.stderr, /runner|secret|db\.example|postgresql/)
+
+  const accepted = spawnSync(process.execPath, [helper, '--check-session-connection'], {
+    cwd: ROOT,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      DATABASE_URL: 'postgresql://runner:secret@db.example.test:5432/arena',
+      PGPORT: '6543',
+    },
+  })
+  assert.equal(accepted.status, 0, accepted.stderr)
 })
 
 test('concurrent recovery is resumable and never enters a transaction', () => {
