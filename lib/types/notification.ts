@@ -2,34 +2,38 @@
  * 通知相关类型定义
  */
 
-export type NotificationType =
-  | 'follow'
-  | 'like'
-  | 'reaction'
-  | 'comment'
-  | 'system'
-  | 'mention'
-  | 'copy_trade'
-  | 'trader_alert'
-  // Trader-alert subtypes — distinct stored types so the in-app card can localize
-  // each headline by type (the shared `trader_alert` type couldn't distinguish them).
-  | 'trader_alert_roi'
-  | 'trader_alert_drawdown'
-  | 'trader_alert_score'
-  | 'trader_alert_pnl'
-  | 'trader_alert_rank'
-  | 'message'
-  | 'post_reply'
-  | 'new_follower'
-  | 'group_update'
-  | 'ranking_change'
-  | 'referral_reward'
-  | 'tip_received'
-  | 'subscription_expiring'
-  | 'subscription_expired'
-  | 'nft_expired'
-  | 'nft_pending'
-  | 'nft_minted'
+// Canonical persisted notification vocabulary. The database CHECK migration
+// has a contract test against this exact list; generic send APIs intentionally
+// expose only a smaller, separately reviewed subset.
+export const PERSISTED_NOTIFICATION_TYPES = [
+  'follow',
+  'like',
+  'reaction',
+  'comment',
+  'system',
+  'mention',
+  'copy_trade',
+  'message',
+  'trader_alert',
+  'trader_alert_roi',
+  'trader_alert_drawdown',
+  'trader_alert_score',
+  'trader_alert_pnl',
+  'trader_alert_rank',
+  'post_reply',
+  'new_follower',
+  'group_update',
+  'ranking_change',
+  'referral_reward',
+  'tip_received',
+  'subscription_expiring',
+  'subscription_expired',
+  'nft_expired',
+  'nft_pending',
+  'nft_minted',
+] as const
+
+export type NotificationType = (typeof PERSISTED_NOTIFICATION_TYPES)[number]
 
 export interface Notification {
   id: string

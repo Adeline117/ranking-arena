@@ -13,6 +13,7 @@
 import { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
 import { fireAndForget } from '@/lib/utils/logger'
+import type { NotificationType as PersistedNotificationType } from '@/lib/types/notification'
 
 export interface Notification {
   id: string
@@ -30,34 +31,7 @@ export interface Notification {
   actor_avatar_url?: string
 }
 
-export type NotificationType =
-  | 'follow'
-  | 'like'
-  | 'reaction'
-  | 'comment'
-  | 'system'
-  | 'mention'
-  | 'copy_trade'
-  | 'message'
-  | 'trader_alert'
-  // Trader-alert subtypes — distinct stored types so the in-app card can localize
-  // each headline by type (the shared `trader_alert` type couldn't distinguish them).
-  | 'trader_alert_roi'
-  | 'trader_alert_drawdown'
-  | 'trader_alert_score'
-  | 'trader_alert_pnl'
-  | 'trader_alert_rank'
-  | 'post_reply'
-  | 'new_follower'
-  | 'group_update'
-  | 'ranking_change'
-  | 'referral_reward'
-  | 'tip_received'
-  | 'subscription_expiring'
-  | 'subscription_expired'
-  | 'nft_expired'
-  | 'nft_pending'
-  | 'nft_minted'
+export type NotificationType = PersistedNotificationType
 
 export interface NotificationListOptions {
   limit?: number

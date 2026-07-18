@@ -22,6 +22,7 @@ const SOCIAL_NOTIFICATION_TYPES = [
   'new_follower',
   'group_update',
   'like',
+  'reaction',
   'comment',
   'follow',
   'mention',
