@@ -67,7 +67,7 @@
 
 1. ~~迁移 `20260602223029` 未应用~~ — **已根治**（`5190ad318`）：原版 GRANT 引用不存在的列必失败，按实测 schema 重写为 v2 并应用生产；客户端 94 处读取清查后 search-history 迁 RPC-first、privy 邮箱枚举探测删除；referral_code/referred_by/last_export_at 三列补齐（`d81da6a68`）。QA 验证：他人 email 42501 / handle 200 / RPC 200。
 2. **Stripe 保持测试模式**（用户确认 beta 期有意为之，2026-06-12）。
-3. **admin data-health 页**调用仅接受 `ADMIN_SECRET` 的路由，浏览器无法提供 — 路由需支持 admin 用户 Bearer。
+3. ~~**admin data-health 页**无 Bearer 调服务端 secret 路由并把 401 显示成 0 平台~~ — **已根治（2026-07-17）**：旧页面永久跳转到 `/admin?tab=scraperStatus`；canonical tab 使用 admin JWT、共享运行时契约和 fail-closed 错误态；不兼容的旧 API 对认证调用明确返回 410。
 4. ~~`/api/follow` `/api/watchlist` `/api/referral` schema 漂移~~ — **已全部根治**（`9d2047a7e` + `d81da6a68`）：follow 触发器查已删 traders 表（DB 函数已修+生产验证）；trader_watchlist 迁移补应用生产（功能恢复+增删查验证）；referral_code/referred_by/last_export_at 列已补齐应用，推荐码与导出冷却功能完整恢复。
 5. React #418 hydration 告警：localStorage 有语言偏好但 cookie 缺失时首屏 SSR/CSR 语言不一致（边缘场景，sweep 注入伪影为主）。
 6. `docs/QA_TEST_CASES.md` 的 `test.*@example.com` 账号生产不存在 — 真实 QA 账号是 `qa.button.test@arenafi.org`（密码用 service role 重置即可复用，详见 memory/qa-test-accounts.md）。

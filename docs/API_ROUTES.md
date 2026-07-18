@@ -218,7 +218,9 @@
 | `/api/admin/alert-config` | GET/PUT | 预警配置 | 管理员 |
 | `/api/admin/stats` | GET | 系统统计 | 管理员 |
 | `/api/admin/data-report` | GET | 数据报告 | 管理员 |
+| `/api/admin/data-freshness` | GET | registry + serving board + `source_as_of` 权威新鲜度（只读、不发告警） | 管理员 / Cron Token |
 | `/api/admin/import-binance` | POST | 导入 Binance 数据 | 管理员 |
+| `/api/monitoring/freshness` | GET | 已退役旧 contract；认证后返回 410 与 successor link | 管理员 / Cron Token |
 
 ---
 

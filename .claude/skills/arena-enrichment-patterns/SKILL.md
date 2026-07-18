@@ -58,7 +58,8 @@
 
 ```bash
 # 检查数据新鲜度
-curl https://www.arenafi.org/api/monitoring/freshness
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  https://www.arenafi.org/api/admin/data-freshness
 
 # 检查某平台的 null 统计
 node scripts/diagnose.mjs --source=hyperliquid
@@ -78,8 +79,8 @@ node scripts/import/backfill_daily_snapshots.mjs --limit=5000
 # 主要刷新（每小时）
 0 * * * * /opt/arena/cron_refresh.sh major
 
-# 数据新鲜度监控（每2小时）
-0 */2 * * * curl -H "Authorization: Bearer $CRON_SECRET" https://www.arenafi.org/api/monitoring/freshness
+# 数据新鲜度监控由 Vercel /api/cron/check-data-freshness 唯一调度；
+# VPS 不再重复触发。
 ```
 
 ## 脚本开发规范
