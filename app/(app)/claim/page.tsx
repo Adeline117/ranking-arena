@@ -113,7 +113,7 @@ export default function ClaimPage() {
     setTimeout(() => {
       if (selectedTrader) {
         router.push(
-          `/trader/${encodeURIComponent(selectedTrader.handle)}?source=${encodeURIComponent(selectedTrader.source)}`
+          `/trader/${encodeURIComponent(selectedTrader.source_trader_id)}?platform=${encodeURIComponent(selectedTrader.source)}`
         )
       }
     }, 2000)

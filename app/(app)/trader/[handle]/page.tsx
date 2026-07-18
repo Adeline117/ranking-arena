@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { cache } from 'react'
 import { unstable_cache } from 'next/cache'
-import { redirect, notFound } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { getReadReplica } from '@/lib/supabase/read-replica'
 import { JsonLd } from '@/app/components/Providers/JsonLd'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
@@ -27,6 +27,7 @@ import {
 import { SSR_QUERY_TIMEOUT_MS, SERVING_RESOLVE_TIMEOUT_MS } from '@/lib/constants/timeouts'
 import { logger } from '@/lib/logger'
 import { getVerifiedTraderKeys, verifiedTraderKey } from '@/lib/data/verified-traders'
+import { findClaimedUserHandleByIdentity } from '@/lib/identity/claimed-trader'
 
 // Derive display names from central config
 const EXCHANGE_DISPLAY: Record<string, string> = Object.fromEntries(
@@ -289,47 +290,18 @@ const cachedLeaderboardMeta = unstable_cache(
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
-// Cached user handle lookup for claimed trader pages.
+// Cached user handle lookup for one exact claimed exchange account. Raw trader
+// IDs and handles collide across sources, so this function must never start
+// from the URL handle or pick the first matching trader_sources row.
 const cachedFindUserHandleByTrader = unstable_cache(
-  async (traderHandle: string): Promise<string | null> => {
+  async (source: string, traderId: string): Promise<string | null> => {
     try {
-      const supabase = getReadReplica()
-      // Find trader identity by handle, then check for active authorization
-      const { data: sources } = await supabase
-        .from('trader_sources')
-        .select('source, source_trader_id')
-        .eq('handle', traderHandle)
-        .limit(10)
-
-      if (!sources?.length) return null
-
-      // NOTE: trader_authorizations.user_id references auth.users (not
-      // public.user_profiles), so a PostgREST embed fails with PGRST200.
-      // Two-step query: fetch user_id, then look up the profile handle.
-      for (const src of sources) {
-        const { data: auth } = await supabase
-          .from('trader_authorizations')
-          .select('user_id')
-          .eq('platform', src.source)
-          .eq('trader_id', src.source_trader_id)
-          .eq('status', 'active')
-          .maybeSingle()
-
-        if (auth?.user_id) {
-          const { data: profile } = await supabase
-            .from('user_profiles')
-            .select('handle')
-            .eq('id', auth.user_id)
-            .maybeSingle()
-          return profile?.handle || null
-        }
-      }
-      return null
+      return await findClaimedUserHandleByIdentity(getReadReplica(), { source, traderId })
     } catch {
       return null
     }
   },
-  ['trader-user-handle'],
+  ['trader-user-handle-by-source-and-id-v2'],
   { revalidate: 300, tags: ['trader-profile'] }
 )
 
@@ -478,10 +450,12 @@ export async function generateMetadata({
 
   // Single canonical per trader (2026-07-11 SEO 审计:此前 canonical=原始请求段,
   // 同一交易员经 /trader/{id} vs /trader/{handle} 各自 self-canonical → 重复内容)。
-  // 规则复刻页面自身的重定向(page.tsx:743):ASCII handle → /trader/{handle}?platform=
-  // (与重定向落点一致);非 ASCII(Vercel 对多字节路径 500,页面不重定向)或未解析 →
-  // 用 id 形式 /trader/{traderKey}?platform=(id 恒 ASCII 安全、恒 200)。**必须带
-  // ?platform=**:同 handle/id 跨 okx_futures/okx_spot 等多账号,裸形式会合并不同交易员。
+  // ASCII handles remain the readable canonical path; non-ASCII handles use
+  // the stable exchange-local ID because Vercel has historically rejected some
+  // encoded multi-byte paths. **必须带 ?platform=**:同 handle/id 跨
+  // okx_futures/okx_spot 等多账号,裸形式会合并不同交易员。页面不再在 ISR
+  // server 中重定向，因为 server 看不到 query variant；canonical 由 metadata
+  // 表达，认领账户的 /u/ 跳转则在客户端核对复合身份后执行。
   const canonicalPath = resolvedData
     ? `/trader/${encodeURIComponent(
         /^[a-zA-Z0-9_.-]+$/.test(resolvedData.handle || '')
@@ -541,12 +515,10 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
     // Intentionally swallowed: malformed URI encoding, use raw handle string as-is
   }
 
-  // Phase 1: Resolve trader identity + find linked user account in parallel.
-  // cachedResolveTrader deduplicates the DB query shared with generateMetadata.
-  const [userHandle, resolved] = await Promise.all([
-    cachedFindUserHandleByTrader(decodedHandle),
-    cachedResolveTrader(decodedHandle),
-  ])
+  // Phase 1 resolves an account before looking up claim ownership. A display
+  // handle alone is not an identity: the same raw value can exist on many
+  // sources. cachedResolveTrader deduplicates the query shared with metadata.
+  const resolved = await cachedResolveTrader(decodedHandle)
 
   // ── ARENA_DATA_SPEC v1.2 serving branch (spec §2.4-1) ──
   // ROOT-CAUSE FIX (2026-06-12): ALWAYS consult the arena (serving) resolver and
@@ -585,14 +557,10 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   }
 
   if (servingResolved) {
-    // Claimed traders keep their canonical /u/ URL in serving mode too.
-    if (userHandle) {
-      redirect(`/u/${encodeURIComponent(userHandle)}`)
-    }
-
-    const [firstScreenRaw, capabilities] = await Promise.all([
+    const [firstScreenRaw, capabilities, userHandle] = await Promise.all([
       cachedGetFirstScreen(servingResolved.source, servingResolved.exchangeTraderId),
       cachedCapabilities(),
+      cachedFindUserHandleByTrader(servingResolved.source, servingResolved.exchangeTraderId),
     ])
 
     // ROOT-CAUSE FIX (2026-06-11): a serving-only trader (exists only in arena.*,
@@ -729,6 +697,15 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
             data={servingTraderData}
             serverTraderData={null}
             claimedUser={null}
+            claimedTraderIdentity={
+              userHandle
+                ? {
+                    source: servingResolved.source,
+                    traderId: servingResolved.exchangeTraderId,
+                    userHandle,
+                  }
+                : null
+            }
             dataMode="serving"
             servingFirstScreen={firstScreen}
             servingCapability={capabilities[servingResolved.source] ?? null}
@@ -750,31 +727,13 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
   // here (return null, NOT notFound(), to avoid the page-level noindex bug).
   if (isRetiredSource(resolved.platform)) return null
 
-  // Redirect claimed traders to canonical /u/ URL (avoids SEO duplicate content)
-  if (userHandle) {
-    redirect(`/u/${encodeURIComponent(userHandle)}`)
-  }
-
-  // Redirect raw address URLs to human-readable handle URLs (better SEO)
-  // Skip redirect for non-ASCII handles (Chinese, Korean, etc.) — Vercel's
-  // routing layer returns 500 for percent-encoded multi-byte UTF-8 paths.
-  // Only redirect URL-safe handles (no spaces/commas). Handles like "The bigger the waves..."
-  // cause redirect loops because resolveTrader cant find them by display name.
-  const isAsciiHandle = resolved.handle && /^[a-zA-Z0-9_.-]+$/.test(resolved.handle)
-  if (isAsciiHandle && resolved.handle! !== decodedHandle) {
-    redirect(
-      `/trader/${encodeURIComponent(resolved.handle!)}?platform=${encodeURIComponent(resolved.platform)}`
-    )
-  }
-
   // Phase 2: Fetch trader detail.
-  // cachedGetTraderDetail serves the ~11-query fetch from Next.js data cache.
-  // Note: userHandle is always falsy here (truthy case redirects above), so
-  // claimedUserProfile is always null — no need to fetch user_profiles.
+  // cachedGetTraderDetail serves the ~11-query fetch from Next.js data cache;
+  // claim ownership is looked up in parallel by the resolved composite identity.
   const claimedUserProfile = null
 
-  const detailResult = await cachedGetTraderDetail(resolved.platform, resolved.traderKey).catch(
-    (err) => {
+  const [detailResult, userHandle] = await Promise.all([
+    cachedGetTraderDetail(resolved.platform, resolved.traderKey).catch((err) => {
       // Log real fetch failures so they aren't silently masked as "no data".
       // cachedGetTraderDetail already handles TRADER_DETAIL_NULL internally;
       // errors reaching here are unexpected (e.g. network/timeout).
@@ -783,8 +742,9 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
         err instanceof Error ? err.message : err
       )
       return null
-    }
-  )
+    }),
+    cachedFindUserHandleByTrader(resolved.platform, resolved.traderKey),
+  ])
 
   const serverTraderData = detailResult ? toTraderPageData(detailResult) : null
 
@@ -863,6 +823,15 @@ export default async function TraderPage({ params }: { params: Promise<{ handle:
               | null
           }
           claimedUser={claimedUserProfile}
+          claimedTraderIdentity={
+            userHandle
+              ? {
+                  source: resolved.platform,
+                  traderId: resolved.traderKey,
+                  userHandle,
+                }
+              : null
+          }
         />
       </ErrorBoundary>
     </>
