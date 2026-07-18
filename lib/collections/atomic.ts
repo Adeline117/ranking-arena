@@ -111,6 +111,19 @@ function isNullableTimestamp(value: unknown): value is string | null {
   return value === null || (typeof value === 'string' && Number.isFinite(Date.parse(value)))
 }
 
+function isUUID(value: unknown): value is string {
+  return typeof value === 'string' && UUID_PATTERN.test(value)
+}
+
+function isSameUUID(left: unknown, right: unknown): boolean {
+  return isUUID(left) && isUUID(right) && left.toLowerCase() === right.toLowerCase()
+}
+
+function isSameNullableUUID(left: unknown, right: string | null): boolean {
+  if (left === null || right === null) return left === right
+  return isSameUUID(left, right)
+}
+
 function includesString(values: readonly string[], value: unknown): value is string {
   return typeof value === 'string' && values.includes(value)
 }
@@ -180,12 +193,13 @@ export function parseCollectionMutationAck(
     COLLECTION_RESULT_CODES_BY_ACTION[expected.action]
   if (
     value.action !== expected.action ||
-    value.actor_id !== expected.actorId ||
+    !isSameUUID(value.actor_id, expected.actorId) ||
     typeof value.applied !== 'boolean' ||
     (value.collection_id !== null &&
       (typeof value.collection_id !== 'string' || !UUID_PATTERN.test(value.collection_id))) ||
     !includesString(resultCodes, value.result_code) ||
-    (expected.collectionId !== undefined && value.collection_id !== expected.collectionId)
+    (expected.collectionId !== undefined &&
+      !isSameNullableUUID(value.collection_id, expected.collectionId))
   ) {
     throw new Error('Malformed collection mutation acknowledgement')
   }
@@ -198,7 +212,8 @@ export function parseCollectionMutationAck(
     (!value.applied && collection !== null) ||
     (expected.action === 'delete' && collection !== null) ||
     (collection !== null &&
-      (collection.id !== value.collection_id || collection.user_id !== expected.actorId)) ||
+      (!isSameUUID(collection.id, value.collection_id) ||
+        !isSameUUID(collection.user_id, expected.actorId))) ||
     (expected.action === 'create' &&
       (value.applied ? value.collection_id === null : value.collection_id !== null))
   ) {
@@ -227,10 +242,10 @@ export function parseCollectionItemMutationAck(
     ITEM_RESULT_CODES_BY_ACTION[expected.action]
   if (
     value.action !== expected.action ||
-    value.actor_id !== expected.actorId ||
-    value.collection_id !== expected.collectionId ||
+    !isSameUUID(value.actor_id, expected.actorId) ||
+    !isSameUUID(value.collection_id, expected.collectionId) ||
     value.item_type !== expected.itemType ||
-    value.item_id !== expected.itemId ||
+    !isSameUUID(value.item_id, expected.itemId) ||
     typeof value.applied !== 'boolean' ||
     !includesString(resultCodes, value.result_code)
   ) {
@@ -243,9 +258,9 @@ export function parseCollectionItemMutationAck(
     (value.applied && item === null) ||
     (!value.applied && item !== null) ||
     (item !== null &&
-      (item.collection_id !== expected.collectionId ||
+      (!isSameUUID(item.collection_id, expected.collectionId) ||
         item.item_type !== expected.itemType ||
-        item.item_id !== expected.itemId))
+        !isSameUUID(item.item_id, expected.itemId)))
   ) {
     throw new Error('Malformed collection item acknowledgement')
   }
