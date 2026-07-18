@@ -125,6 +125,7 @@ jobs:
             '.deployments[] | select((.meta.gateSha // .meta.githubCommitSha // "") == $sha) | .uid' \
             | head -1)
           echo "previous_id=$PREVIOUS_ID" >> "$GITHUB_OUTPUT"
+          echo "serving=$SERVING" >> "$GITHUB_OUTPUT"
           echo "serving=$SERVING run=$HEAD_SHA"
           if [ "$SERVING" = "$HEAD_SHA" ]; then
             echo "already serving ${HEAD_SHA:0:8} — skip"
@@ -274,10 +275,13 @@ jobs:
           fi
 
       - name: Smoke test + auto-rollback
+        id: smoke_release
         if: steps.promote_candidate.outputs.promoted == 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+          PREVIOUS_DEPLOYMENT_ID: ${{ steps.fresh.outputs.previous_id }}
+          EXPECTED_ROLLBACK_SHA: ${{ steps.fresh.outputs.serving }}
         run: |
           send_telegram_alert() {
             local message="$1"
@@ -306,20 +310,67 @@ jobs:
           BASE="https://www.arenafi.org"
           if ! scripts/post-deploy-check.sh "$BASE" "$HEAD_SHA"; then
             echo "🔄 smoke failed — rolling back to the deployment captured before release"
-            PREV_ID="${{ steps.fresh.outputs.previous_id }}"
-            if [ -n "$PREV_ID" ]; then
-              PROMOTE_HTTP=$(curl -sS -o /tmp/rollback-response.json -w "%{http_code}" \
-                -X POST -H "Authorization: Bearer $VERCEL_TOKEN" \
-                "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$PREV_ID" || true)
-              case "$PROMOTE_HTTP" in
-                2??) ROLLED="已自动回滚到发布前部署 $PREV_ID" ;;
-                *) ROLLED="⚠️ 回滚请求失败 HTTP ${PROMOTE_HTTP:-000}，需人工处理" ;;
-              esac
+            if [ -n "$PREVIOUS_DEPLOYMENT_ID" ] && [[ "$EXPECTED_ROLLBACK_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+              PROMOTE_CURL_EXIT=0
+              PROMOTE_HTTP=$(curl --silent --show-error \
+                --connect-timeout 5 --max-time 30 \
+                --output /tmp/rollback-response.json --write-out "%{http_code}" \
+                --request POST --header "Authorization: Bearer $VERCEL_TOKEN" \
+                "https://api.vercel.com/v10/projects/$VERCEL_PROJECT_ID/promote/$PREVIOUS_DEPLOYMENT_ID") \
+                || PROMOTE_CURL_EXIT=$?
+              if [ "$PROMOTE_CURL_EXIT" -eq 0 ] && [[ "$PROMOTE_HTTP" == 2* ]]; then
+                echo "Vercel accepted rollback promotion; verifying public production..."
+                LAST_CONFIRMED_SHA=""
+                STABLE_CONFIRMATIONS=0
+                RECOVERY_SHA=""
+                for attempt in $(seq 1 10); do
+                  rm -f /tmp/gate-rollback-health.json
+                  HEALTH_CURL_EXIT=0
+                  HEALTH_HTTP=$(curl --silent --show-error \
+                    --connect-timeout 3 --max-time 8 \
+                    --output /tmp/gate-rollback-health.json --write-out "%{http_code}" \
+                    "https://www.arenafi.org/api/health?gate_rollback_verify=$(date +%s)") \
+                    || HEALTH_CURL_EXIT=$?
+                  HEALTH_BODY=$(cat /tmp/gate-rollback-health.json 2>/dev/null || true)
+                  HEALTH_STATUS=$(jq -r '.status // empty' <<< "$HEALTH_BODY" 2>/dev/null || true)
+                  SERVING_SHA=$(jq -r '.commit // empty' <<< "$HEALTH_BODY" 2>/dev/null || true)
+                  echo "rollback verification $attempt/10: curl=$HEALTH_CURL_EXIT HTTP=${HEALTH_HTTP:-000} status=${HEALTH_STATUS:-missing} serving=${SERVING_SHA:-missing} expected=$EXPECTED_ROLLBACK_SHA"
+                  if [ "$HEALTH_CURL_EXIT" -eq 0 ] \
+                    && [ "$HEALTH_HTTP" = "200" ] \
+                    && [ "$HEALTH_STATUS" = "healthy" ] \
+                    && [ "$SERVING_SHA" = "$EXPECTED_ROLLBACK_SHA" ] \
+                    && [ "$SERVING_SHA" != "$HEAD_SHA" ]; then
+                    if [ "$SERVING_SHA" = "$LAST_CONFIRMED_SHA" ]; then
+                      STABLE_CONFIRMATIONS=$((STABLE_CONFIRMATIONS+1))
+                    else
+                      LAST_CONFIRMED_SHA="$SERVING_SHA"
+                      STABLE_CONFIRMATIONS=1
+                    fi
+                    echo "healthy rollback target ${SERVING_SHA:0:8} confirmation $STABLE_CONFIRMATIONS/2"
+                    if [ "$STABLE_CONFIRMATIONS" -ge 2 ]; then
+                      RECOVERY_SHA="$SERVING_SHA"
+                      break
+                    fi
+                  else
+                    LAST_CONFIRMED_SHA=""
+                    STABLE_CONFIRMATIONS=0
+                  fi
+                  if [ "$attempt" -lt 10 ]; then sleep 5; fi
+                done
+                if [ "$RECOVERY_SHA" = "$EXPECTED_ROLLBACK_SHA" ]; then
+                  ROLLED="✅ 公网已连续确认恢复到发布前健康版本 ${RECOVERY_SHA:0:8}"
+                else
+                  ROLLED="⚠️ Vercel 已接受回滚请求，但公网未确认恢复到 ${EXPECTED_ROLLBACK_SHA:0:8}，需人工处理"
+                fi
+              else
+                ROLLED="⚠️ 回滚请求失败 curl=$PROMOTE_CURL_EXIT HTTP=${PROMOTE_HTTP:-000}，需人工处理"
+              fi
             else
-              ROLLED="⚠️ 发布前未捕获回滚部署，需人工处理"
+              ROLLED="⚠️ 发布前回滚部署或精确 serving SHA 未捕获，需人工处理"
             fi
             MESSAGE=$(printf '🚨 Deploy Gate 业务/SHA smoke 失败\nCommit: %.8s\n%s' "$HEAD_SHA" "$ROLLED")
             send_telegram_alert "$MESSAGE"
+            echo "alerted=true" >> "$GITHUB_OUTPUT"
             exit 1
           fi
           echo "✅ deploy + smoke green for ${HEAD_SHA:0:8}"
@@ -333,7 +384,7 @@ jobs:
       # 2026-07-03 血泪：CLI 登录 token 过期 → deploy 步骤 fail → 生产停在旧部署
       # 且无告警。job 级 failure() 兜底，任何非 CI-red 的失败也发声。
       - name: Alert on deploy/smoke step failure
-        if: failure() && steps.gate.outputs.pass == 'true'
+        if: failure() && steps.gate.outputs.pass == 'true' && steps.smoke_release.outputs.alerted != 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
