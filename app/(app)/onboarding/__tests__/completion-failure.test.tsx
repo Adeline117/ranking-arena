@@ -11,6 +11,7 @@ const mockShowToast = jest.fn()
 const mockLoadTraders = jest.fn()
 const mockLoadGroups = jest.fn()
 const mockReplace = jest.fn()
+const mockTrackEvent = jest.fn()
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({
@@ -78,7 +79,7 @@ jest.mock('@/lib/api/client', () => ({
 }))
 
 jest.mock('@/lib/analytics/track', () => ({
-  trackEvent: jest.fn(),
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
 
 jest.mock('../load-data', () => ({
@@ -204,7 +205,68 @@ describe('onboarding membership completion boundary', () => {
     await waitFor(() => expect(fetcher).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(mockUpdateEq).toHaveBeenCalledTimes(1))
     expect(await screen.findByTestId('onboarding-complete')).toBeInTheDocument()
-    expect(localStorage.getItem('hasOnboarded')).toBe('true')
+    expect(localStorage.getItem('hasOnboarded')).toBeNull()
+  })
+
+  it('keeps a failed completion retryable and prevents duplicate writes', async () => {
+    mockUpdateMaybeSingle
+      .mockResolvedValueOnce({
+        data: null,
+        error: new Error('write unavailable'),
+      })
+      .mockResolvedValueOnce({
+        data: { id: USER_ID, onboarding_completed: true },
+        error: null,
+      })
+    await reachGroupsStep()
+
+    const complete = screen.getByRole('button', { name: 'Complete onboarding' })
+    fireEvent.click(complete)
+    fireEvent.click(complete)
+
+    await waitFor(() => expect(mockUpdateMaybeSingle).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Failed to save', 'error'))
+    expect(screen.queryByTestId('onboarding-complete')).not.toBeInTheDocument()
+    expect(mockTrackEvent).not.toHaveBeenCalledWith('onboarding_complete', expect.anything())
+    expect(complete).toBeEnabled()
+
+    fireEvent.click(complete)
+
+    await waitFor(() => expect(mockUpdateMaybeSingle).toHaveBeenCalledTimes(2))
+    expect(await screen.findByTestId('onboarding-complete')).toBeInTheDocument()
+  })
+
+  it('does not complete after the acknowledged write if the viewer changes', async () => {
+    mockGetSession
+      .mockResolvedValueOnce({
+        data: { session: { access_token: 'access-token', user: { id: USER_ID } } },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          session: {
+            access_token: 'other-access-token',
+            user: { id: '30000000-0000-4000-8000-000000000003' },
+          },
+        },
+      })
+    await reachGroupsStep()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Complete onboarding' }))
+
+    await waitFor(() => expect(mockUpdateMaybeSingle).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Failed to save', 'error'))
+    expect(screen.queryByTestId('onboarding-complete')).not.toBeInTheDocument()
+    expect(mockTrackEvent).not.toHaveBeenCalledWith('onboarding_complete', expect.anything())
+  })
+
+  it('does not complete when the profile update acknowledges no row', async () => {
+    mockUpdateMaybeSingle.mockResolvedValueOnce({ data: null, error: null })
+    await reachGroupsStep()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Complete onboarding' }))
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith('Failed to save', 'error'))
+    expect(screen.queryByTestId('onboarding-complete')).not.toBeInTheDocument()
   })
 
   it('keeps a failed skip on the page and allows an explicit retry', async () => {
