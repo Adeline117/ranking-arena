@@ -22,6 +22,7 @@ import type {
 } from '../core/types'
 import type { RejectedRow } from '../staging/validate'
 import { deriveMissingRatios, deriveRiskFromBlocks } from '../core/series-risk'
+import { ensureHistoryPartitions } from './history-partitions'
 
 /** PURE-DEX sources the spec authorizes to self-compute risk from chain data
  *  (§31/32/34: "所有数据要靠我们链上算"). CEX gives real Sharpe on its page —
@@ -962,6 +963,7 @@ export async function publishHistoryRows(
   const client = await ingestClientConnect()
   try {
     await client.query('BEGIN')
+    await ensureHistoryPartitions(client, kind, rows)
     let written = 0
 
     if (kind === 'position_history') {
