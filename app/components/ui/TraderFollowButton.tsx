@@ -117,7 +117,7 @@ export default function TraderFollowButton({
 
   // 执行关注/取消关注操作
   const executeFollow = useCallback(
-    async (action: 'follow' | 'unfollow') => {
+    async (action: 'follow' | 'unfollow'): Promise<boolean> => {
       setIsLoading(true)
       try {
         if (!source) throw new Error('Trader source is unavailable')
@@ -151,7 +151,7 @@ export default function TraderFollowButton({
           expectedStateRef.current = null
           setFeatureDisabled(true)
           showToast(t('followFeatureComingSoon'), 'info')
-          return
+          return false
         }
 
         if (!response.ok) {
@@ -159,6 +159,9 @@ export default function TraderFollowButton({
           const apiErr = data.error
           const apiErrMsg = typeof apiErr === 'string' ? apiErr : apiErr?.message
           throw new Error(apiErrMsg || t('operationFailed'))
+        }
+        if (typeof data.following !== 'boolean') {
+          throw new Error(t('operationFailed'))
         }
 
         expectedStateRef.current = null
@@ -188,6 +191,7 @@ export default function TraderFollowButton({
             userId,
           })
         }
+        return true
       } catch (error: unknown) {
         // 清除超时保护
         if (timeoutRef.current) {
@@ -214,6 +218,7 @@ export default function TraderFollowButton({
             setTimeout(() => executeFollow(failedAction), 2000)
           }
         }
+        return false
       } finally {
         setIsLoading(false)
       }
@@ -235,11 +240,11 @@ export default function TraderFollowButton({
           !following
         ) {
           sessionStorage.removeItem('pendingFollow')
-          // Auto-execute the follow
-          executeFollow('follow').then(() => {
-            setFollowing(true)
-            onFollowChange?.(true)
-          })
+          // Keep the mount-time status refresh from overwriting this request with
+          // a stale pre-mutation snapshot. executeFollow clears the lock and only
+          // applies the state returned by a successful response.
+          pendingRef.current = true
+          void executeFollow('follow')
         } else {
           sessionStorage.removeItem('pendingFollow')
         }
@@ -250,7 +255,9 @@ export default function TraderFollowButton({
   }, [userId, traderId, source]) // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only resume pending follow when account identity changes; executeFollow and onFollowChange are stable refs
 
   useEffect(() => {
-    if (!userId || !source) return
+    // The pending-login effect above may already be resuming a follow. Do not
+    // start a concurrent pre-mutation status read that can land after the POST.
+    if (!userId || !source || pendingRef.current) return
 
     const abortController = new AbortController()
 
