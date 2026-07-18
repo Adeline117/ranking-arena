@@ -13,6 +13,7 @@ import { formatPnL } from '@/lib/utils/format'
 import LoadingSkeleton from '@/app/components/ui/LoadingSkeleton'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { useToast } from '@/app/components/ui/Toast'
 
 interface WatchlistItem {
   source: string
@@ -67,6 +68,7 @@ function traderHref(item: WatchlistItem): string {
 
 export default function WatchlistClient({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useLanguage()
+  const { showToast } = useToast()
   const router = useRouter()
   const [, setEmail] = useState<string | null>(null)
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null)
@@ -148,32 +150,38 @@ export default function WatchlistClient({ embedded = false }: { embedded?: boole
     loadWatchlist()
   }, [loadWatchlist])
 
-  const handleRemove = useCallback(async (source: string, id: string) => {
-    setRemoving(`${source}:${id}`)
-    try {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession()
-      if (!session) return
-      const res = await fetch('/api/watchlist', {
-        method: 'DELETE',
-        headers: {
-          Authorization: `Bearer ${session.access_token}`,
-          'Content-Type': 'application/json',
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({ source, source_trader_id: id }),
-      })
-      if (res.ok)
+  const handleRemove = useCallback(
+    async (source: string, id: string) => {
+      setRemoving(`${source}:${id}`)
+      try {
+        const {
+          data: { session },
+        } = await supabase.auth.getSession()
+        if (!session) throw new Error('Watchlist session is unavailable')
+
+        const res = await fetch('/api/watchlist', {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({ source, source_trader_id: id }),
+        })
+        if (!res.ok) throw new Error(`Watchlist remove failed (${res.status})`)
+
         setWatchlist((prev) =>
           prev.filter((w) => !(w.source === source && w.source_trader_id === id))
         )
-    } catch (err) {
-      console.error('[watchlist] remove failed:', err)
-    } finally {
-      setRemoving(null)
-    }
-  }, [])
+      } catch (err) {
+        console.error('[watchlist] remove failed:', err)
+        showToast(t('watchlistError'), 'error')
+      } finally {
+        setRemoving(null)
+      }
+    },
+    [showToast, t]
+  )
 
   const platforms = useMemo(
     () => Array.from(new Set(watchlist.map((w) => w.source))).sort(),
