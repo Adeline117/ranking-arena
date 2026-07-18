@@ -12,6 +12,7 @@ import {
 import { sanitizeDisplayName } from '@/lib/utils/profanity'
 import { getExchangeLogoUrl } from '@/lib/utils/avatar'
 import { canonicalizeLocalExchangeLogoPath } from '@/lib/utils/exchange-logo-path'
+import type { Database } from '@/lib/supabase/database.types'
 import { detectTraderType } from './helpers'
 import { markOutliers, applyArenaFollowers } from './scoring-helpers'
 import type { TraderRow } from './trader-row'
@@ -63,7 +64,7 @@ export async function scoreTraders(
   handleMap: Map<string, { handle: string | null; avatar_url: string | null }>,
   contractAddresses: Set<string>,
   season: Period,
-  supabase: SupabaseClient
+  supabase: SupabaseClient<Database>
 ): Promise<{ scored: ScoredTrader[]; scoredFiltered: ScoredTrader[] }> {
   const scored = uniqueTraders.map((t) => {
     // Win rate normalization: clamp to 0-100, convert decimal if needed
