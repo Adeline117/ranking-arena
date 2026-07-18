@@ -55,10 +55,11 @@ export const metadata: Metadata = {
 // Server-side data fetch
 // ---------------------------------------------------------------------------
 
-async function fetchInitialActivities(): Promise<{
+export async function fetchInitialActivities(): Promise<{
   activities: TraderActivity[]
   hasMore: boolean
   nextCursor: string | null
+  status: 'success' | 'error'
 }> {
   try {
     const supabase = getSupabaseAdmin()
@@ -73,7 +74,8 @@ async function fetchInitialActivities(): Promise<{
       .limit(LIMIT + 1)
 
     if (error || !data) {
-      return { activities: [], hasMore: false, nextCursor: null }
+      logger.warn('[feed] initial activity query failed:', error?.message ?? 'missing data')
+      return { activities: [], hasMore: false, nextCursor: null, status: 'error' }
     }
 
     const hasMore = data.length > LIMIT
@@ -84,13 +86,14 @@ async function fetchInitialActivities(): Promise<{
       activities: page as TraderActivity[],
       hasMore,
       nextCursor,
+      status: 'success',
     }
   } catch (error) {
     logger.warn(
       '[feed] fetchActivities failed:',
       error instanceof Error ? error.message : String(error)
     )
-    return { activities: [], hasMore: false, nextCursor: null }
+    return { activities: [], hasMore: false, nextCursor: null, status: 'error' }
   }
 }
 
@@ -101,7 +104,7 @@ async function fetchInitialActivities(): Promise<{
 export default async function FeedPage() {
   if (!features.social) redirect('/')
 
-  const { activities, hasMore, nextCursor } = await fetchInitialActivities()
+  const { activities, hasMore, nextCursor, status } = await fetchInitialActivities()
 
   return (
     <div
@@ -123,6 +126,7 @@ export default async function FeedPage() {
             initialActivities={activities}
             initialHasMore={hasMore}
             initialNextCursor={nextCursor}
+            initialStatus={status}
           />
         </Suspense>
       </div>
