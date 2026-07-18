@@ -41,7 +41,7 @@ jobs:
       QA_TEST_PASSWORD: ${{ secrets.QA_TEST_PASSWORD }}
       QA_TEST_PASSWORD_B: ${{ secrets.QA_TEST_PASSWORD_B }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v6
         with:
           node-version: '22'
