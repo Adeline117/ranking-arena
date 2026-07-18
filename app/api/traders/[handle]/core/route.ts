@@ -72,6 +72,7 @@ export async function GET(
 
       const tierCReq = {
         sourceSlug: resolved.source,
+        fetchRegion: resolved.fetchRegion,
         exchangeTraderId: resolved.exchangeTraderId,
         timeframe: tfToInt(tf),
         surface: 'profile' as const,

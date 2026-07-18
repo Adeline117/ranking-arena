@@ -12,9 +12,15 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { logger } from '@/lib/logger'
+import { isIngestRegion, type IngestRegion } from '@/lib/ingest/core/regions'
 
 export interface ServingResolved {
   source: string
+  /**
+   * Null only when the deployed resolver contract is stale or corrupt.
+   * Warm reads may still render, but Tier-C enqueueing must fail closed.
+   */
+  fetchRegion: IngestRegion | null
   exchangeTraderId: string
   nickname: string | null
   avatarMirrorUrl: string | null
@@ -56,8 +62,16 @@ export async function resolveServingTrader(
     if (!data) return null // genuine not-found (RPC succeeded, no row)
     const d = data as Record<string, unknown>
     if (typeof d.source !== 'string' || typeof d.exchangeTraderId !== 'string') return null
+    const fetchRegion = isIngestRegion(d.fetchRegion) ? d.fetchRegion : null
+    if (!fetchRegion) {
+      logger.error('[resolveServingTrader] resolver returned an invalid fetch region:', {
+        source: d.source,
+        fetchRegion: d.fetchRegion,
+      })
+    }
     return {
       source: d.source,
+      fetchRegion,
       exchangeTraderId: d.exchangeTraderId,
       nickname: typeof d.nickname === 'string' ? d.nickname : null,
       avatarMirrorUrl: typeof d.avatarMirrorUrl === 'string' ? d.avatarMirrorUrl : null,

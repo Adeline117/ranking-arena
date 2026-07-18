@@ -1,5 +1,5 @@
 /**
- * Tier-C on-demand bridge: Vercel route ↔ Mac Mini ingest worker
+ * Tier-C on-demand bridge: Vercel route ↔ region-resident ingest worker
  * (spec §2.4, plan Workstream D).
  *
  * The worker has no inbound reachability, so the cold path is queue +
@@ -20,6 +20,8 @@
 import type { ConnectionOptions, Queue } from 'bullmq'
 import type { Redis } from 'ioredis'
 import { logger } from '@/lib/logger'
+import { isIngestRegion, type IngestRegion } from '@/lib/ingest/core/regions'
+import { tierCQueueName } from '@/lib/ingest/core/tier-c-routing'
 import type { RecordKind, ServingCurrency, TraderCoreModules } from './types'
 import { intToTf } from './core'
 
@@ -27,6 +29,8 @@ export type TierCSurface = 'profile' | RecordKind
 
 export interface TierCRequest {
   sourceSlug: string
+  /** DB-resolved routing authority. Null/unknown requests are never enqueued. */
+  fetchRegion: IngestRegion | null
   exchangeTraderId: string
   timeframe: 0 | 7 | 30 | 90
   surface: TierCSurface
@@ -38,12 +42,19 @@ import { tierCJobId, tierCResultKey } from '@/lib/ingest/core/tier-c-keys'
 export { tierCJobId, tierCResultKey }
 
 const TIER_C_JOB_NAME = 'tierc:profile' // INGEST_JOB.TIER_C
-const QUEUE_NAME = 'arena-ingest-tierc' // TIERC_QUEUE_NAME — dedicated user-facing queue
 
-let bridge: { queue: Queue; redis: Redis } | null = null
+export interface TierCBridge {
+  queue: Pick<Queue, 'add'>
+  redis: Pick<Redis, 'get'>
+}
 
-async function getBridge(): Promise<{ queue: Queue; redis: Redis } | null> {
-  if (bridge) return bridge
+export type TierCBridgeProvider = (region: IngestRegion) => Promise<TierCBridge | null>
+
+const bridges = new Map<IngestRegion, { queue: Queue; redis: Redis }>()
+
+async function getBridge(region: IngestRegion): Promise<TierCBridge | null> {
+  const existing = bridges.get(region)
+  if (existing) return existing
   const url = process.env.REDIS_URL
   if (!url) return null
   try {
@@ -60,10 +71,11 @@ async function getBridge(): Promise<{ queue: Queue; redis: Redis } | null> {
     redis.on('error', (err) => logger.error('[tier-c] redis error:', err.message))
     // bullmq ships a nested ioredis whose types fork from ours; the runtime
     // client is compatible (same bridge as worker/src/ingest/queues.ts).
-    const queue = new BullQueue(QUEUE_NAME, {
+    const queue = new BullQueue(tierCQueueName(region), {
       connection: redis as unknown as ConnectionOptions,
     })
-    bridge = { queue, redis }
+    const bridge = { queue, redis }
+    bridges.set(region, bridge)
     return bridge
   } catch (err) {
     logger.error('[tier-c] bridge init failed:', err instanceof Error ? err.message : err)
@@ -88,8 +100,28 @@ export async function requestTierC(
   req: TierCRequest,
   opts: RequestTierCOptions = {}
 ): Promise<Record<string, unknown> | null> {
+  return requestTierCWithProvider(req, opts, getBridge)
+}
+
+/**
+ * Testable core of requestTierC. Keeping the provider explicit proves the
+ * resolved DB region selects the queue before any enqueue is attempted.
+ */
+export async function requestTierCWithProvider(
+  req: TierCRequest,
+  opts: RequestTierCOptions,
+  bridgeProvider: TierCBridgeProvider
+): Promise<Record<string, unknown> | null> {
   try {
-    const b = await getBridge()
+    if (!isIngestRegion(req.fetchRegion)) {
+      logger.error('[tier-c] request rejected: missing or invalid fetch region', {
+        sourceSlug: req.sourceSlug,
+        fetchRegion: req.fetchRegion,
+      })
+      return null
+    }
+
+    const b = await bridgeProvider(req.fetchRegion)
     if (!b) return null
     const resultKey = tierCResultKey(req)
 

@@ -3,7 +3,14 @@
  * both sides (drift-proof), plus result payload → TraderCoreModules mapping.
  */
 
-import { tierCJobId, tierCResultKey, coreModulesFromTierC } from '../tier-c'
+import {
+  tierCJobId,
+  tierCResultKey,
+  coreModulesFromTierC,
+  requestTierCWithProvider,
+  type TierCBridge,
+  type TierCRequest,
+} from '../tier-c'
 
 describe('tier-c key contract is a single shared module (drift-proof)', () => {
   const req = {
@@ -38,6 +45,63 @@ describe('tier-c key contract is a single shared module (drift-proof)', () => {
 
   it('result key shape', () => {
     expect(tierCResultKey(req)).toBe('arena:live:bitget_futures:beb24d718eb23b54ac91:30:profile')
+  })
+})
+
+describe('Tier-C producer region routing', () => {
+  const req: TierCRequest = {
+    sourceSlug: 'binance_futures',
+    fetchRegion: 'vps_sg',
+    exchangeTraderId: 'trader-42',
+    timeframe: 30,
+    surface: 'profile',
+  }
+
+  function bridge(): TierCBridge {
+    return {
+      redis: { get: jest.fn(async () => null) },
+      queue: { add: jest.fn(async () => ({})) } as unknown as TierCBridge['queue'],
+    }
+  }
+
+  it('selects the DB-resolved region before enqueueing', async () => {
+    const target = bridge()
+    const provider = jest.fn(async () => target)
+
+    await expect(
+      requestTierCWithProvider(req, { fireAndForget: true }, provider)
+    ).resolves.toBeNull()
+
+    expect(provider).toHaveBeenCalledWith('vps_sg')
+    expect(target.queue.add).toHaveBeenCalledWith(
+      'tierc:profile',
+      req,
+      expect.objectContaining({
+        jobId: tierCJobId(req),
+        priority: 1,
+        removeOnComplete: true,
+      })
+    )
+  })
+
+  it('fails closed when the resolver did not supply a supported region', async () => {
+    const provider = jest.fn(async () => bridge())
+
+    await expect(
+      requestTierCWithProvider({ ...req, fetchRegion: null }, { fireAndForget: true }, provider)
+    ).resolves.toBeNull()
+
+    expect(provider).not.toHaveBeenCalled()
+  })
+
+  it('returns a fresh prior result without enqueueing another job', async () => {
+    const target = bridge()
+    const getResult = target.redis.get as jest.Mock
+    getResult.mockResolvedValueOnce(JSON.stringify({ stats: [1] }))
+    const provider = jest.fn(async () => target)
+
+    await expect(requestTierCWithProvider(req, {}, provider)).resolves.toEqual({ stats: [1] })
+    expect(target.queue.add).not.toHaveBeenCalled()
   })
 })
 
