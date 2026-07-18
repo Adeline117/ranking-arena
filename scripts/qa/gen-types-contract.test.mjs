@@ -1,5 +1,13 @@
 import assert from 'node:assert/strict'
-import { chmodSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -22,7 +30,6 @@ import {
 const ROOT = resolve(fileURLToPath(new URL('../..', import.meta.url)))
 const TYPES_PATH = join(ROOT, 'lib/supabase/database.types.ts')
 const GEN_TYPES_PATH = join(ROOT, 'scripts/gen-types.sh')
-const TYPEGEN_IMAGE_SEED_PATH = join(ROOT, 'scripts/maintenance/seed-supabase-typegen-image.sh')
 const CI_PATH = join(ROOT, '.github/workflows/ci.yml')
 const DEPLOY_GATE_PATH = join(ROOT, '.github/workflows/deploy-gate.yml')
 const PACKAGE_PATH = join(ROOT, 'package.json')
@@ -52,10 +59,17 @@ function cleanEnv(overrides = {}) {
   const env = { ...process.env }
   for (const name of [
     'DATABASE_URL',
+    'EXPECTED_POSTGRES_META_VERSION',
     'GEN_TYPES_ATTESTOR_BIN',
     'GEN_TYPES_OUT',
+    'PG_CONN_TIMEOUT_SECS',
+    'PG_META_DB_URL',
+    'PG_META_GENERATE_TYPES',
+    'PG_META_GENERATE_TYPES_DETECT_ONE_TO_ONE_RELATIONSHIPS',
+    'PG_META_GENERATE_TYPES_INCLUDED_SCHEMAS',
+    'PG_QUERY_TIMEOUT_SECS',
+    'POSTGRES_META_NPX_BIN',
     'SUPABASE_ACCESS_TOKEN',
-    'SUPABASE_CLI_BIN',
     'SUPABASE_SECRET_KEY',
     'SUPABASE_SERVICE_ROLE_KEY',
     'SUPABASE_URL',
@@ -71,6 +85,44 @@ function runGenTypes(env) {
     env,
     encoding: 'utf8',
   })
+}
+
+function createPostgresMetaHarness(temp, { version = '0.96.6', serverSource } = {}) {
+  const modulesDir = join(temp, 'npx-runtime', 'node_modules')
+  const binDir = join(modulesDir, '.bin')
+  const packageDir = join(modulesDir, '@supabase', 'postgres-meta')
+  const serverDir = join(packageDir, 'dist', 'server')
+  const fakeNpx = join(temp, 'fake-npx')
+
+  mkdirSync(binDir, { recursive: true })
+  mkdirSync(serverDir, { recursive: true })
+  writeFileSync(join(packageDir, 'package.json'), JSON.stringify({ version }))
+  if (serverSource !== undefined) {
+    writeFileSync(join(serverDir, 'server.js'), serverSource)
+  }
+  writeFileSync(
+    fakeNpx,
+    `#!/bin/sh
+printf '%s\\0' "$@" > "$FAKE_NPX_ARGS_PATH"
+while [ "$#" -gt 0 ] && [ "$1" != "--" ]; do
+  shift
+done
+if [ "$#" -eq 0 ]; then
+  echo "fake npx: command separator is missing" >&2
+  exit 64
+fi
+shift
+PATH="$FAKE_NPX_PATH_PREFIX:$PATH"
+export PATH
+exec "$@"
+`
+  )
+  chmodSync(fakeNpx, 0o755)
+
+  return {
+    binDir,
+    fakeNpx,
+  }
 }
 
 function workflowJobBlock(workflow, jobName) {
@@ -418,7 +470,7 @@ test('checked-in canonical types are attested and idempotent', () => {
   assert.equal(twice, CANONICAL)
 })
 
-test('db-url generator output gets exact internal metadata and all semantic overrides idempotently', () => {
+test('postgres-meta generator output gets exact internal metadata and all semantic overrides idempotently', () => {
   const generated = fullCutoverGeneratorFixture()
   assert.doesNotMatch(generated, /^\s+__InternalSupabase:/m)
 
@@ -493,58 +545,101 @@ test('gen-types fails when DATABASE_URL is unavailable', () => {
   assert.match(result.stderr, /DATABASE_URL is required/)
 })
 
-test('gen-types uses only db-url, offline injected attestation, and never logs credentials', () => {
+test('gen-types keeps the database URL in env only and pins the postgres-meta runner', () => {
   const temp = mkdtempSync(join(tmpdir(), 'arena-gen-types-contract.'))
   try {
     const body = CANONICAL.replace(INTERNAL_BLOCK, '').slice(CANONICAL.indexOf('export type Json'))
     const bodyPath = join(temp, 'body.ts')
     const expectedPath = join(temp, 'expected.ts')
-    const argsPath = join(temp, 'args.txt')
+    const npxArgsPath = join(temp, 'npx-args.bin')
     const attestorArgsPath = join(temp, 'attestor-args.txt')
-    const fakeCli = join(temp, 'fake-supabase')
+    const attestorEnvPath = join(temp, 'attestor-env.txt')
+    const observationPath = join(temp, 'generator-observation.json')
     const fakeAttestor = join(temp, 'fake-attestor')
+    const harness = createPostgresMetaHarness(temp, {
+      serverSource: `const { readFileSync, writeFileSync } = require('node:fs')
+writeFileSync(
+  process.env.FAKE_GENERATOR_OBSERVATION,
+  JSON.stringify({
+    argv: process.argv.slice(2),
+    databaseUrl: process.env.DATABASE_URL ?? null,
+    pgMetaDbUrl: process.env.PG_META_DB_URL,
+    generateTypes: process.env.PG_META_GENERATE_TYPES,
+    includedSchemas: process.env.PG_META_GENERATE_TYPES_INCLUDED_SCHEMAS,
+    detectOneToOne: process.env.PG_META_GENERATE_TYPES_DETECT_ONE_TO_ONE_RELATIONSHIPS,
+    connectionTimeout: process.env.PG_CONN_TIMEOUT_SECS,
+    queryTimeout: process.env.PG_QUERY_TIMEOUT_SECS,
+    supabaseUrl: process.env.SUPABASE_URL ?? null,
+    supabaseSecretKey: process.env.SUPABASE_SECRET_KEY ?? null,
+    supabaseServiceRoleKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? null,
+  })
+)
+process.stdout.write(readFileSync(process.env.FAKE_TYPES_BODY))
+`,
+    })
     writeFileSync(bodyPath, body)
     writeFileSync(expectedPath, CANONICAL)
-    writeFileSync(
-      fakeCli,
-      `#!/bin/sh
-printf '%s\\n' "$@" > "$FAKE_ARGS_PATH"
-cat "$FAKE_TYPES_BODY"
-`
-    )
     writeFileSync(
       fakeAttestor,
       `#!/bin/sh
 printf '%s\\n' "$@" > "$FAKE_ATTESTOR_ARGS_PATH"
+printf '%s\\n' "\${DATABASE_URL-unset}" "\${PG_META_DB_URL-unset}" > "$FAKE_ATTESTOR_ENV_PATH"
 printf '%s\\n' "$FAKE_POSTGREST_VERSION"
 `
     )
-    chmodSync(fakeCli, 0o755)
     chmodSync(fakeAttestor, 0o755)
 
     const result = runGenTypes(
       cleanEnv({
         CHECK: '1',
         DATABASE_URL: VALID_ENV.DATABASE_URL,
-        FAKE_ARGS_PATH: argsPath,
         FAKE_ATTESTOR_ARGS_PATH: attestorArgsPath,
+        FAKE_ATTESTOR_ENV_PATH: attestorEnvPath,
+        FAKE_GENERATOR_OBSERVATION: observationPath,
+        FAKE_NPX_ARGS_PATH: npxArgsPath,
+        FAKE_NPX_PATH_PREFIX: harness.binDir,
         FAKE_POSTGREST_VERSION: POSTGREST_VERSION,
         FAKE_TYPES_BODY: bodyPath,
         GEN_TYPES_ATTESTOR_BIN: fakeAttestor,
         GEN_TYPES_OUT: expectedPath,
+        POSTGRES_META_NPX_BIN: harness.fakeNpx,
         SUPABASE_ACCESS_TOKEN: 'must-not-select-project-mode',
-        SUPABASE_CLI_BIN: fakeCli,
         SUPABASE_SECRET_KEY: VALID_ENV.SUPABASE_SECRET_KEY,
+        SUPABASE_SERVICE_ROLE_KEY: 'legacy-service-role-marker',
         SUPABASE_URL: VALID_ENV.SUPABASE_URL,
       })
     )
     assert.equal(result.status, 0, result.stderr)
 
-    const cliArgs = readFileSync(argsPath, 'utf8')
-    assert.match(cliArgs, /--db-url/)
-    assert.doesNotMatch(cliArgs, /--project-id/)
-    assert.match(cliArgs, /database-secret/)
+    const npxArgs = readFileSync(npxArgsPath, 'utf8').split('\0').filter(Boolean)
+    assert.deepEqual(npxArgs.slice(0, 6), [
+      '--yes',
+      '--ignore-scripts',
+      '--package=@supabase/postgres-meta@0.96.6',
+      '--',
+      'sh',
+      '-c',
+    ])
+    assert.equal(npxArgs.length, 7)
+    assert.match(npxArgs[6], /EXPECTED_POSTGRES_META_VERSION/)
+    assert.match(npxArgs[6], /dist\/server\/server\.js/)
+    assert.doesNotMatch(npxArgs.join('\n'), /--db-url|database-secret|postgres(?:ql)?:\/\//)
+
+    assert.deepEqual(JSON.parse(readFileSync(observationPath, 'utf8')), {
+      argv: [],
+      databaseUrl: null,
+      pgMetaDbUrl: VALID_ENV.DATABASE_URL,
+      generateTypes: 'typescript',
+      includedSchemas: 'public',
+      detectOneToOne: 'true',
+      connectionTimeout: '15',
+      queryTimeout: '15',
+      supabaseUrl: null,
+      supabaseSecretKey: null,
+      supabaseServiceRoleKey: null,
+    })
     assert.equal(readFileSync(attestorArgsPath, 'utf8'), '\n')
+    assert.equal(readFileSync(attestorEnvPath, 'utf8'), 'unset\nunset\n')
 
     const output = result.stdout + result.stderr
     assert.doesNotMatch(output, /database-secret/)
@@ -559,14 +654,80 @@ printf '%s\\n' "$FAKE_POSTGREST_VERSION"
   }
 })
 
+test('gen-types fails closed on a mismatched package, missing server, or missing dependency', () => {
+  const scenarios = [
+    {
+      name: 'mismatched-version',
+      version: '0.96.7',
+      serverSource: 'process.stdout.write("must-not-run")\n',
+      expectedError: /pinned postgres-meta generation failed \(details withheld\)/,
+    },
+    {
+      name: 'missing-server',
+      version: '0.96.6',
+      serverSource: undefined,
+      expectedError: /pinned postgres-meta generation failed \(details withheld\)/,
+    },
+    {
+      name: 'missing-dependency',
+      version: '0.96.6',
+      serverSource: "require('arena-postgres-meta-deliberately-missing')\n",
+      expectedError: /pinned postgres-meta generation failed \(details withheld\)/,
+    },
+    {
+      name: 'stderr-url',
+      version: '0.96.6',
+      serverSource: 'process.stderr.write(process.env.PG_META_DB_URL); process.exitCode = 23\n',
+      expectedError: /pinned postgres-meta generation failed \(details withheld\)/,
+    },
+  ]
+
+  for (const scenario of scenarios) {
+    const temp = mkdtempSync(join(tmpdir(), `arena-gen-types-${scenario.name}.`))
+    try {
+      const expectedPath = join(temp, 'expected.ts')
+      const npxArgsPath = join(temp, 'npx-args.bin')
+      const fakeAttestor = join(temp, 'fake-attestor')
+      const harness = createPostgresMetaHarness(temp, scenario)
+      writeFileSync(expectedPath, 'original-output-must-survive\n')
+      writeFileSync(fakeAttestor, `#!/bin/sh\nprintf '%s\\n' "$FAKE_POSTGREST_VERSION"\n`)
+      chmodSync(fakeAttestor, 0o755)
+
+      const result = runGenTypes(
+        cleanEnv({
+          DATABASE_URL: VALID_ENV.DATABASE_URL,
+          FAKE_NPX_ARGS_PATH: npxArgsPath,
+          FAKE_NPX_PATH_PREFIX: harness.binDir,
+          FAKE_POSTGREST_VERSION: POSTGREST_VERSION,
+          GEN_TYPES_ATTESTOR_BIN: fakeAttestor,
+          GEN_TYPES_OUT: expectedPath,
+          POSTGRES_META_NPX_BIN: harness.fakeNpx,
+        })
+      )
+
+      assert.notEqual(result.status, 0, `${scenario.name} unexpectedly passed`)
+      assert.match(result.stderr, scenario.expectedError)
+      assert.equal(readFileSync(expectedPath, 'utf8'), 'original-output-must-survive\n')
+
+      const npxArgs = readFileSync(npxArgsPath, 'utf8')
+      const output = result.stdout + result.stderr
+      for (const secret of ['database-secret', VALID_ENV.DATABASE_URL]) {
+        assert.doesNotMatch(npxArgs, new RegExp(secret.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+        assert.doesNotMatch(output, new RegExp(secret.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')))
+      }
+    } finally {
+      rmSync(temp, { recursive: true, force: true })
+    }
+  }
+})
+
 test('CI keeps type contracts secret-scoped, push-main only, and deployment-blocking', () => {
   const workflow = readFileSync(CI_PATH, 'utf8')
   const deployGate = readFileSync(DEPLOY_GATE_PATH, 'utf8')
-  const imageSeed = readFileSync(TYPEGEN_IMAGE_SEED_PATH, 'utf8')
+  const genTypes = readFileSync(GEN_TYPES_PATH, 'utf8')
   const packageJson = JSON.parse(readFileSync(PACKAGE_PATH, 'utf8'))
   const contractJob = workflowJobBlock(workflow, 'types-contract')
   const liveJob = workflowJobBlock(workflow, 'types-live-drift')
-  const seedStep = workflowStepBlock(liveJob, 'Seed pinned postgres-meta image')
   const regenerateStep = workflowStepBlock(liveJob, 'Regenerate from attested production and diff')
   const lintJob = workflowJobBlock(workflow, 'lint-typecheck')
   const buildJob = workflowJobBlock(workflow, 'build')
@@ -579,25 +740,34 @@ test('CI keeps type contracts secret-scoped, push-main only, and deployment-bloc
   assert.match(liveJob, /Types live drift check \(push main only\)/)
   assert.match(liveJob, /if: github\.event_name == 'push' && github\.ref == 'refs\/heads\/main'/)
   assert.match(liveJob, /^\s{4}timeout-minutes: 15$/m)
-  assert.match(seedStep, /scripts\/maintenance\/seed-supabase-typegen-image\.sh/)
-  assert.doesNotMatch(seedStep, /secrets\./)
-  assert.match(imageSeed, /MIRROR_IMAGE="supabase\/postgres-meta@\$POSTGRES_META_DIGEST"/)
-  assert.match(
-    imageSeed,
-    /ECR_IMAGE="public\.ecr\.aws\/supabase\/postgres-meta@\$POSTGRES_META_DIGEST"/
+  assert.doesNotMatch(liveJob, /seed-supabase-typegen-image|docker/i)
+  assert.match(genTypes, /POSTGRES_META_VERSION="0\.96\.6"/)
+  assert.match(genTypes, /"--package=\$POSTGRES_META_PACKAGE"/)
+  assert.match(genTypes, /--ignore-scripts/)
+  assert.match(genTypes, /export PG_META_DB_URL="\$DATABASE_URL"/)
+  assert.match(genTypes, /env -u DATABASE_URL -u PG_META_DB_URL/)
+  assert.match(genTypes, /EXPECTED_POSTGRES_META_VERSION/)
+  assert.doesNotMatch(genTypes, /SUPABASE_CMD|GENERATE_ARGS/)
+  const generatorIndex = genTypes.indexOf('"$POSTGRES_META_NPX_BIN"')
+  const postprocessIndex = genTypes.indexOf(
+    'POSTGREST_VERSION="$POSTGREST_VERSION" node "$POSTPROCESS"'
   )
-  assert.match(
-    imageSeed,
-    /CLI_IMAGE="public\.ecr\.aws\/supabase\/postgres-meta:\$POSTGRES_META_VERSION"/
-  )
-  assert.match(
-    imageSeed,
-    /POSTGRES_META_DIGEST="sha256:a84cc713585eea7b401e4a2561ec4a1e48c87083d1c7ecb4502f204bb4391300"/
-  )
-  assert.match(readFileSync(GEN_TYPES_PATH, 'utf8'), /SUPABASE_CLI_VERSION="2\.109\.1"/)
-  assert.match(imageSeed, /POSTGRES_META_VERSION="v0\.96\.6"/)
-  assert.match(imageSeed, /docker tag "\$source_image" "\$CLI_IMAGE"/)
-  assert.match(imageSeed, /MAX_ATTEMPTS=3/)
+  assert.ok(generatorIndex >= 0 && postprocessIndex > generatorIndex)
+  for (const name of [
+    'PG_META_DB_URL',
+    'EXPECTED_POSTGRES_META_VERSION',
+    'PG_META_GENERATE_TYPES',
+    'PG_META_GENERATE_TYPES_INCLUDED_SCHEMAS',
+    'PG_META_GENERATE_TYPES_DETECT_ONE_TO_ONE_RELATIONSHIPS',
+    'PG_CONN_TIMEOUT_SECS',
+    'PG_QUERY_TIMEOUT_SECS',
+  ]) {
+    const unsetIndex = genTypes.indexOf(`unset ${name}`, generatorIndex)
+    assert.ok(
+      unsetIndex > generatorIndex && unsetIndex < postprocessIndex,
+      `${name} must be unset immediately after generation`
+    )
+  }
   assert.match(
     regenerateStep,
     /DATABASE_URL: \$\{\{ secrets\.DATABASE_URL \}\}[\s\S]*SUPABASE_URL: \$\{\{ secrets\.SUPABASE_URL \}\}[\s\S]*SUPABASE_SECRET_KEY: \$\{\{ secrets\.SUPABASE_SECRET_KEY \|\| secrets\.SUPABASE_SERVICE_ROLE_KEY \}\}/
