@@ -21,6 +21,12 @@ DECLARE
   v_post_block_function regprocedure := pg_catalog.to_regprocedure(
     'public.serialize_post_audience_block_edge()'
   );
+  v_follow_notification_function regprocedure := pg_catalog.to_regprocedure(
+    'public.create_user_follow_notification()'
+  );
+  v_follow_activity_function regprocedure := pg_catalog.to_regprocedure(
+    'public.log_user_follow_activity()'
+  );
   v_add_function regprocedure := pg_catalog.to_regprocedure(
     'public.add_channel_members_atomic(uuid,uuid,uuid[])'
   );
@@ -48,6 +54,8 @@ DECLARE
   );
   v_pair_source text;
   v_post_block_source text;
+  v_follow_notification_source text;
+  v_follow_activity_source text;
 BEGIN
   IF v_postgres_oid IS NULL OR v_service_oid IS NULL OR EXISTS (
     SELECT 1
@@ -757,6 +765,82 @@ BEGIN
     RAISE EXCEPTION 'canonical block/follow serializer body is incompatible';
   END IF;
 
+  IF v_follow_notification_function IS NULL OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.pronamespace = 'public'::regnamespace
+      AND function_row.proname = 'create_user_follow_notification'
+  ) <> 1 OR v_follow_activity_function IS NULL OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_proc AS function_row
+    WHERE function_row.pronamespace = 'public'::regnamespace
+      AND function_row.proname = 'log_user_follow_activity'
+  ) <> 1 THEN
+    RAISE EXCEPTION 'canonical follow side-effect functions are incompatible';
+  END IF;
+
+  SELECT function_row.prosrc
+  INTO v_follow_notification_source
+  FROM pg_catalog.pg_proc AS function_row
+  JOIN pg_catalog.pg_language AS language_row
+    ON language_row.oid = function_row.prolang
+  WHERE function_row.oid = v_follow_notification_function
+    AND function_row.prokind = 'f'
+    AND function_row.prorettype = 'trigger'::regtype
+    AND NOT function_row.proretset
+    AND function_row.pronargs = 0
+    AND function_row.pronargdefaults = 0
+    AND function_row.prosecdef
+    AND function_row.provolatile = 'v'
+    AND function_row.proparallel = 'u'
+    AND NOT function_row.proleakproof
+    AND function_row.proowner = v_postgres_oid
+    AND language_row.lanname = 'plpgsql'
+    AND function_row.proconfig =
+      ARRAY['search_path=public']::text[];
+
+  SELECT function_row.prosrc
+  INTO v_follow_activity_source
+  FROM pg_catalog.pg_proc AS function_row
+  JOIN pg_catalog.pg_language AS language_row
+    ON language_row.oid = function_row.prolang
+  WHERE function_row.oid = v_follow_activity_function
+    AND function_row.prokind = 'f'
+    AND function_row.prorettype = 'trigger'::regtype
+    AND NOT function_row.proretset
+    AND function_row.pronargs = 0
+    AND function_row.pronargdefaults = 0
+    AND function_row.prosecdef
+    AND function_row.provolatile = 'v'
+    AND function_row.proparallel = 'u'
+    AND NOT function_row.proleakproof
+    AND function_row.proowner = v_postgres_oid
+    AND language_row.lanname = 'plpgsql'
+    AND function_row.proconfig =
+      ARRAY['search_path=public']::text[];
+
+  IF v_follow_notification_source IS NULL
+     OR pg_catalog.strpos(
+       v_follow_notification_source,
+       'INSERT INTO notifications'
+     ) = 0
+     OR pg_catalog.strpos(
+       v_follow_notification_source,
+       'notify_follow'
+     ) = 0
+     OR v_follow_activity_source IS NULL
+     OR pg_catalog.strpos(
+       v_follow_activity_source,
+       'INSERT INTO user_activities'
+     ) = 0
+     OR pg_catalog.strpos(
+       v_follow_activity_source,
+       $$'follow_user'$$
+     ) = 0
+  THEN
+    RAISE EXCEPTION 'follow side-effect function contract is incompatible';
+  END IF;
+
   IF (
     SELECT pg_catalog.count(*)
     FROM pg_catalog.pg_trigger AS trigger_row
@@ -767,7 +851,7 @@ BEGIN
     FROM pg_catalog.pg_trigger AS trigger_row
     WHERE trigger_row.tgrelid = 'public.user_follows'::regclass
       AND NOT trigger_row.tgisinternal
-  ) <> 1 OR (
+  ) <> 3 OR (
     SELECT pg_catalog.count(*)
     FROM pg_catalog.pg_trigger AS trigger_row
     WHERE trigger_row.tgfoid = v_pair_function
@@ -793,7 +877,31 @@ BEGIN
       AND NOT trigger_row.tgisinternal
       AND trigger_row.tgtype = 31
       AND trigger_row.tgqual IS NULL
-  ) THEN
+  ) OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'public.user_follows'::regclass
+      AND trigger_row.tgname = 'on_user_follow'
+      AND trigger_row.tgfoid = v_follow_notification_function
+      AND trigger_row.tgenabled = 'O'
+      AND NOT trigger_row.tgisinternal
+      AND trigger_row.tgtype = 5
+      AND trigger_row.tgqual IS NULL
+      AND trigger_row.tgnargs = 0
+      AND pg_catalog.cardinality(trigger_row.tgattr::smallint[]) = 0
+  ) <> 1 OR (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'public.user_follows'::regclass
+      AND trigger_row.tgname = 'trg_log_user_follow_activity'
+      AND trigger_row.tgfoid = v_follow_activity_function
+      AND trigger_row.tgenabled = 'O'
+      AND NOT trigger_row.tgisinternal
+      AND trigger_row.tgtype = 5
+      AND trigger_row.tgqual IS NULL
+      AND trigger_row.tgnargs = 0
+      AND pg_catalog.cardinality(trigger_row.tgattr::smallint[]) = 0
+  ) <> 1 THEN
     RAISE EXCEPTION 'block/follow serializer trigger inventory is incompatible';
   END IF;
 

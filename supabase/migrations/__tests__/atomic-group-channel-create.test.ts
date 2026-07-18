@@ -96,7 +96,12 @@ describe('atomic group-channel creation', () => {
     expect(migration).toContain('trg_serialize_dm_block_pair')
     expect(migration).toContain('trg_serialize_dm_follow_pair')
     expect(migration).toContain('trg_serialize_post_audience_block_edge')
+    expect(migration).toContain("'public.create_user_follow_notification()'")
+    expect(migration).toContain("'public.log_user_follow_activity()'")
+    expect(migration).toContain('on_user_follow')
+    expect(migration).toContain('trg_log_user_follow_activity')
     expect(migration).toContain('trigger_row.tgtype = 31')
+    expect(migration).toContain('trigger_row.tgtype = 5')
     expect(migration).toContain('trigger_row.tgqual IS NULL')
   })
 
