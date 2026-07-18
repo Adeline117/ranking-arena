@@ -6,6 +6,7 @@ const mockShowToast = jest.fn()
 const mockAddToWatchlist = jest.fn()
 const mockRemoveFromWatchlist = jest.fn()
 let mockIsLoggedIn = false
+let mockUserId: string | null = null
 let mockWatched = false
 
 jest.mock('next/navigation', () => ({
@@ -13,7 +14,7 @@ jest.mock('next/navigation', () => ({
 }))
 
 jest.mock('@/lib/hooks/useAuthSession', () => ({
-  useAuthSession: () => ({ isLoggedIn: mockIsLoggedIn }),
+  useAuthSession: () => ({ isLoggedIn: mockIsLoggedIn, userId: mockUserId }),
 }))
 
 jest.mock('@/lib/hooks/useWatchlist', () => ({
@@ -51,6 +52,7 @@ describe('WatchlistToggleButton login intent', () => {
   beforeEach(() => {
     jest.clearAllMocks()
     mockIsLoggedIn = false
+    mockUserId = null
     mockWatched = false
     window.sessionStorage.clear()
     window.history.replaceState({}, '', '/trader/alice?platform=binance&tab=portfolio')
@@ -68,6 +70,7 @@ describe('WatchlistToggleButton login intent', () => {
 
   it('re-authenticates a 401 and retains the desired watch state', async () => {
     mockIsLoggedIn = true
+    mockUserId = 'viewer-1'
     mockAddToWatchlist.mockRejectedValue(new Error('watchlist add: 401'))
     renderButton()
 
@@ -83,6 +86,7 @@ describe('WatchlistToggleButton login intent', () => {
 
   it('retains an expired removal as an unwatch intent', async () => {
     mockIsLoggedIn = true
+    mockUserId = 'viewer-1'
     mockWatched = true
     mockRemoveFromWatchlist.mockRejectedValue(new Error('watchlist remove: 401'))
     renderButton()
@@ -108,6 +112,7 @@ describe('WatchlistToggleButton login intent', () => {
       new URL(href, 'https://arena.invalid').searchParams.get('returnUrl')!
     )
     mockIsLoggedIn = true
+    mockUserId = 'viewer-1'
     mockAddToWatchlist.mockResolvedValue(undefined)
 
     renderButton()
