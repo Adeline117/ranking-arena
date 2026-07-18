@@ -9,7 +9,7 @@
  * manufactures local-only alert state.
  */
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { Box, Text, Button } from '@/app/components/base'
 import { tokens, alpha } from '@/lib/design-tokens'
@@ -18,6 +18,7 @@ import { authedFetch } from '@/lib/api/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
 import EmptyState from '@/app/components/ui/EmptyState'
+import ErrorMessage from '@/app/components/ui/ErrorMessage'
 import {
   captureSettingsViewer,
   isSettingsViewerCurrent,
@@ -44,6 +45,7 @@ type TraderAlertsPayload = {
 type TraderAlertsUiState = {
   alerts: TraderAlert[]
   loading: boolean
+  loadFailed: boolean
   forbidden: boolean
   removing: string | null
 }
@@ -56,6 +58,7 @@ type TraderAlertsOperation = {
 const emptyTraderAlertsUiState = (): TraderAlertsUiState => ({
   alerts: [],
   loading: true,
+  loadFailed: false,
   forbidden: false,
   removing: null,
 })
@@ -124,6 +127,7 @@ export default function TraderAlertsManager() {
   const nextOperationIdRef = useRef(0)
   const loadOperationRef = useRef<TraderAlertsOperation | null>(null)
   const removeOperationRef = useRef<TraderAlertsOperation | null>(null)
+  const [loadAttempt, setLoadAttempt] = useState(0)
 
   const viewerIsCurrent = (viewer: SettingsViewerSnapshot): boolean =>
     mountedRef.current && isSettingsViewerCurrent(viewer, authRef.current)
@@ -168,18 +172,24 @@ export default function TraderAlertsManager() {
         )
         if (!operationIsCurrent(operation, loadOperationRef) || result.stale) return
         if (result.status === 403) {
-          setUi((current) => ({ ...current, alerts: [], forbidden: true }))
+          setUi((current) => ({
+            ...current,
+            alerts: [],
+            loadFailed: false,
+            forbidden: true,
+          }))
           return
         }
         if (!result.ok) throw new Error('Failed to load trader alerts')
         setUi((current) => ({
           ...current,
           alerts: readAlerts(result.data),
+          loadFailed: false,
           forbidden: false,
         }))
       } catch {
         if (operationIsCurrent(operation, loadOperationRef)) {
-          showToastRef.current(tRef.current('traderAlertsLoadFailed'), 'error')
+          setUi((current) => ({ ...current, alerts: [], loadFailed: true }))
         }
       } finally {
         if (operationIsCurrent(operation, loadOperationRef)) {
@@ -195,7 +205,7 @@ export default function TraderAlertsManager() {
     }
     // Access-token rotation does not change the viewer-owned resource identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scopeKey])
+  }, [scopeKey, loadAttempt])
 
   const remove = async (alert: TraderAlert) => {
     const viewer = captureSettingsViewer(authRef.current)
@@ -291,6 +301,15 @@ export default function TraderAlertsManager() {
             {t('upgrade')}
           </Link>
         }
+      />
+    )
+  }
+
+  if (ui.loadFailed) {
+    return (
+      <ErrorMessage
+        message={t('traderAlertsLoadFailed')}
+        onRetry={() => setLoadAttempt((attempt) => attempt + 1)}
       />
     )
   }
