@@ -12,42 +12,74 @@
 #   npm run gen:types                 # 写 lib/supabase/database.types.ts
 #   CHECK=1 npm run gen:types         # 只生成到临时文件 + diff,不覆盖(CI 用)
 #
-# 认证:
-#   - 本地:先 `supabase login`(一次),或设 SUPABASE_ACCESS_TOKEN
-#   - CI:仓库 secret SUPABASE_ACCESS_TOKEN(Supabase 个人访问令牌)
+# 生产输入（全部必需）:
+#   - DATABASE_URL:唯一生成源，固定走 CLI --db-url
+#   - SUPABASE_URL + SUPABASE_SECRET_KEY（或 legacy service-role key）:
+#     REST OpenAPI 身份/版本证明
+# 缺失、目标项目不符或 PostgREST major 不支持时全部失败；schema 门禁不得
+# 把“没检查”伪装成通过。
 
 set -euo pipefail
 
-PROJECT_REF="iknktzifjdyujdccyhsv"
-OUT="lib/supabase/database.types.ts"
+ROOT="$(git rev-parse --show-toplevel)"
+SUPABASE_CLI_VERSION="2.109.1"
+OUT="${GEN_TYPES_OUT:-$ROOT/lib/supabase/database.types.ts}"
+ATTESTOR="$ROOT/scripts/attest-production-types-source.mjs"
+POSTPROCESS="$ROOT/scripts/postprocess-database-types.mjs"
 HEADER="// AUTO-GENERATED from production schema via scripts/gen-types.sh — DO NOT EDIT BY HAND.
 // Regenerate: npm run gen:types   |   Drift gate: CI 'gen-types-check' job.
+
 "
 
-# CLI 解析:优先全局 supabase,否则回退 npx（CI 无需预装全局）
-if command -v supabase >/dev/null 2>&1; then
-  SUPABASE_BIN="supabase"
+# 精确锁定 CLI 版本，避免 latest/global 版本升级让同一 schema 产生不同输出。
+# 测试可注入单个 fake executable；生产流程不设置 SUPABASE_CLI_BIN。
+if [ -n "${SUPABASE_CLI_BIN:-}" ]; then
+  SUPABASE_CMD=("$SUPABASE_CLI_BIN")
 else
-  SUPABASE_BIN="npx --yes supabase"
+  SUPABASE_CMD=(npx --yes "supabase@$SUPABASE_CLI_VERSION")
 fi
 
-# CHECK 模式（CI 门禁）在缺认证时优雅跳过——这样把本 job 接进 CI 不会在
-# SUPABASE_ACCESS_TOKEN secret 配好前就把 CI 弄红。设 token 即激活硬门。
-if [ "${CHECK:-0}" = "1" ] && [ -z "${SUPABASE_ACCESS_TOKEN:-}" ]; then
-  echo "⏭️  gen-types CHECK 跳过 —— 未设 SUPABASE_ACCESS_TOKEN（设 secret 即启用类型漂移门）"
-  exit 0
+if [ -z "${DATABASE_URL:-}" ]; then
+  echo "❌ gen-types: DATABASE_URL is required" >&2
+  exit 1
 fi
 
-TMP="$(mktemp)"
-trap 'rm -f "$TMP"' EXIT
+GENERATE_ARGS=(
+  gen types typescript
+  --db-url "$DATABASE_URL"
+  --schema public
+)
+
+# 测试可注入离线 attestor；真实生成流程始终运行 Node REST 证明。证明脚本
+# 只从 env 读取 key，避免凭据进入 argv 或诊断输出。
+if [ -n "${GEN_TYPES_ATTESTOR_BIN:-}" ]; then
+  ATTEST_CMD=("$GEN_TYPES_ATTESTOR_BIN")
+else
+  ATTEST_CMD=(node "$ATTESTOR")
+fi
+POSTGREST_VERSION="$("${ATTEST_CMD[@]}")"
+
+# 在 OUT 同目录建立随机私有目录，既避免可预测临时文件/symlink 覆写，也
+# 保证最终 rename 不跨文件系统。所有门禁通过后才原子替换 canonical。
+OUT_DIR="$(dirname "$OUT")"
+TMP_DIR="$(mktemp -d "$OUT_DIR/.arena-database-types.XXXXXX")"
+TMP="$TMP_DIR/database.types.ts"
+trap 'rm -rf "$TMP_DIR"' EXIT
 
 # 生产 public schema → TypeScript
-echo "$HEADER" > "$TMP"
-$SUPABASE_BIN gen types typescript --project-id "$PROJECT_REF" --schema public >> "$TMP"
+printf '%s' "$HEADER" > "$TMP"
+"${SUPABASE_CMD[@]}" "${GENERATE_ARGS[@]}" >> "$TMP"
 
-# 用仓库 prettier 统一格式(CLI 输出是双引号,已提交文件是 prettier 单引号)——
-# 否则 CHECK 模式的 diff 永远因引号/换行差异误判为 schema 漂移(2026-07 修)。
-npx prettier --config "$(git rev-parse --show-toplevel)/.prettierrc" --parser typescript --write "$TMP" >/dev/null 2>&1 || true
+# 生成器无法推断少量 SQL 语义（view 只读性、nullable RPC 参数）。
+# AST 后处理对目标对象和原始形状做精确断言；任何未知漂移都会失败。
+POSTGREST_VERSION="$POSTGREST_VERSION" node "$POSTPROCESS" "$TMP"
+
+# CLI 输出是双引号；仓库 canonical 文件使用 Prettier。格式化失败也必须
+# 让门禁失败，不能继续比较一个未经规范化的临时文件。
+npx prettier \
+  --config "$ROOT/.prettierrc" \
+  --parser typescript \
+  --write "$TMP" >/dev/null
 
 if [ "${CHECK:-0}" = "1" ]; then
   # CI 模式：与已提交版本比对,有 diff 即非零退出
@@ -58,12 +90,11 @@ if [ "${CHECK:-0}" = "1" ]; then
     diff "$OUT" "$TMP" 2>/dev/null | head -40 >&2 || true
     exit 1
   fi
-  echo "✅ gen-types: 类型与生产 schema 一致"
+  echo "✅ gen-types: 类型与生产 schema 一致（db-url + REST attested）"
   exit 0
 fi
 
 # 正常模式：覆盖
 mv "$TMP" "$OUT"
-trap - EXIT
-echo "✅ gen-types: $OUT 已从生产 schema 重新生成"
+echo "✅ gen-types: $OUT 已从生产 schema 重新生成（db-url + REST attested）"
 echo "   下一步：npm run type-check —— 看是否有代码引用了已不存在的列/表。"

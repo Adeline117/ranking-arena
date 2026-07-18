@@ -962,7 +962,7 @@ export type Database = {
           created_at: string | null
           description: string | null
           id: string
-          images: string[] | null
+          images: string[]
           reason: string
           reporter_id: string
           resolved_at: string | null
@@ -976,7 +976,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           id?: string
-          images?: string[] | null
+          images: string[]
           reason: string
           reporter_id: string
           resolved_at?: string | null
@@ -990,7 +990,7 @@ export type Database = {
           created_at?: string | null
           description?: string | null
           id?: string
-          images?: string[] | null
+          images?: string[]
           reason?: string
           reporter_id?: string
           resolved_at?: string | null
@@ -1721,7 +1721,7 @@ export type Database = {
         Row: {
           applicant_id: string
           avatar_url: string | null
-          created_at: string | null
+          created_at: string
           description: string | null
           description_en: string | null
           group_id: string
@@ -1740,7 +1740,7 @@ export type Database = {
         Insert: {
           applicant_id: string
           avatar_url?: string | null
-          created_at?: string | null
+          created_at?: string
           description?: string | null
           description_en?: string | null
           group_id: string
@@ -1759,7 +1759,7 @@ export type Database = {
         Update: {
           applicant_id?: string
           avatar_url?: string | null
-          created_at?: string | null
+          created_at?: string
           description?: string | null
           description_en?: string | null
           group_id?: string
@@ -1792,36 +1792,85 @@ export type Database = {
           },
         ]
       }
+      group_invite_redemptions: {
+        Row: {
+          group_id: string
+          invite_id: string
+          redeemed_at: string
+          user_id: string
+        }
+        Insert: {
+          group_id: string
+          invite_id: string
+          redeemed_at?: string
+          user_id: string
+        }
+        Update: {
+          group_id?: string
+          invite_id?: string
+          redeemed_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'group_invite_redemptions_group_id_fkey'
+            columns: ['group_id']
+            isOneToOne: false
+            referencedRelation: 'group_subscription_stats'
+            referencedColumns: ['group_id']
+          },
+          {
+            foreignKeyName: 'group_invite_redemptions_group_id_fkey'
+            columns: ['group_id']
+            isOneToOne: false
+            referencedRelation: 'groups'
+            referencedColumns: ['id']
+          },
+          {
+            foreignKeyName: 'group_invite_redemptions_invite_id_fkey'
+            columns: ['invite_id']
+            isOneToOne: false
+            referencedRelation: 'group_invites'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       group_invites: {
         Row: {
           created_at: string | null
           created_by: string | null
-          expires_at: string | null
-          group_id: string | null
+          expires_at: string
+          group_id: string
           id: string
-          max_uses: number | null
+          max_uses: number
+          revoked_at: string | null
+          revoked_by: string | null
           token_hash: string
-          used_count: number | null
+          used_count: number
         }
         Insert: {
           created_at?: string | null
           created_by?: string | null
-          expires_at?: string | null
-          group_id?: string | null
+          expires_at: string
+          group_id: string
           id?: string
-          max_uses?: number | null
+          max_uses?: number
+          revoked_at?: string | null
+          revoked_by?: string | null
           token_hash: string
-          used_count?: number | null
+          used_count?: number
         }
         Update: {
           created_at?: string | null
           created_by?: string | null
-          expires_at?: string | null
-          group_id?: string | null
+          expires_at?: string
+          group_id?: string
           id?: string
-          max_uses?: number | null
+          max_uses?: number
+          revoked_at?: string | null
+          revoked_by?: string | null
           token_hash?: string
-          used_count?: number | null
+          used_count?: number
         }
         Relationships: [
           {
@@ -1843,6 +1892,7 @@ export type Database = {
       group_join_requests: {
         Row: {
           answer_text: string
+          consumed_at: string | null
           created_at: string
           decided_at: string | null
           decided_by: string | null
@@ -1853,6 +1903,7 @@ export type Database = {
         }
         Insert: {
           answer_text?: string
+          consumed_at?: string | null
           created_at?: string
           decided_at?: string | null
           decided_by?: string | null
@@ -1863,6 +1914,7 @@ export type Database = {
         }
         Update: {
           answer_text?: string
+          consumed_at?: string | null
           created_at?: string
           decided_at?: string | null
           decided_by?: string | null
@@ -1941,6 +1993,87 @@ export type Database = {
             referencedColumns: ['id']
           },
         ]
+      }
+      group_mute_operations: {
+        Row: {
+          action: string
+          actor_id: string
+          audit_log_id: string | null
+          created_at: string
+          evidence_action: string
+          evidence_actor_id: string
+          evidence_audit_id: string
+          evidence_details: Json
+          evidence_kind: string
+          evidence_operation_id: string | null
+          group_id: string
+          initial_applied: boolean
+          muted_until: string | null
+          operation_id: string
+          previous_muted_by: string | null
+          previous_muted_until: string | null
+          previous_reason: string | null
+          reason: string | null
+          result_group_name: string
+          result_muted_by: string | null
+          result_muted_until: string | null
+          result_reason: string | null
+          sequence_id: number
+          target_id: string
+        }
+        Insert: {
+          action: string
+          actor_id: string
+          audit_log_id?: string | null
+          created_at?: string
+          evidence_action: string
+          evidence_actor_id: string
+          evidence_audit_id: string
+          evidence_details: Json
+          evidence_kind: string
+          evidence_operation_id?: string | null
+          group_id: string
+          initial_applied: boolean
+          muted_until?: string | null
+          operation_id: string
+          previous_muted_by?: string | null
+          previous_muted_until?: string | null
+          previous_reason?: string | null
+          reason?: string | null
+          result_group_name: string
+          result_muted_by?: string | null
+          result_muted_until?: string | null
+          result_reason?: string | null
+          sequence_id?: never
+          target_id: string
+        }
+        Update: {
+          action?: string
+          actor_id?: string
+          audit_log_id?: string | null
+          created_at?: string
+          evidence_action?: string
+          evidence_actor_id?: string
+          evidence_audit_id?: string
+          evidence_details?: Json
+          evidence_kind?: string
+          evidence_operation_id?: string | null
+          group_id?: string
+          initial_applied?: boolean
+          muted_until?: string | null
+          operation_id?: string
+          previous_muted_by?: string | null
+          previous_muted_until?: string | null
+          previous_reason?: string | null
+          reason?: string | null
+          result_group_name?: string
+          result_muted_by?: string | null
+          result_muted_until?: string | null
+          result_reason?: string | null
+          sequence_id?: never
+          target_id?: string
+        }
+        Relationships: []
       }
       group_payment_consumptions: {
         Row: {
@@ -2126,7 +2259,7 @@ export type Database = {
           is_premium_only: boolean | null
           is_verified_only: boolean | null
           join_prompt: string | null
-          member_count: number | null
+          member_count: number
           min_arena_score: number | null
           name: string
           name_en: string | null
@@ -2155,7 +2288,7 @@ export type Database = {
           is_premium_only?: boolean | null
           is_verified_only?: boolean | null
           join_prompt?: string | null
-          member_count?: number | null
+          member_count?: number
           min_arena_score?: number | null
           name: string
           name_en?: string | null
@@ -2184,7 +2317,7 @@ export type Database = {
           is_premium_only?: boolean | null
           is_verified_only?: boolean | null
           join_prompt?: string | null
-          member_count?: number | null
+          member_count?: number
           min_arena_score?: number | null
           name?: string
           name_en?: string | null
@@ -4918,6 +5051,56 @@ export type Database = {
         }
         Relationships: []
       }
+      report_evidence_uploads: {
+        Row: {
+          created_at: string
+          evidence_ref: string
+          expires_at: string
+          lease_expires_at: string | null
+          lease_token: string | null
+          mime_type: string
+          object_name: string
+          report_id: string | null
+          reporter_id: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          evidence_ref: string
+          expires_at: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          mime_type: string
+          object_name: string
+          report_id?: string | null
+          reporter_id: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          evidence_ref?: string
+          expires_at?: string
+          lease_expires_at?: string | null
+          lease_token?: string | null
+          mime_type?: string
+          object_name?: string
+          report_id?: string | null
+          reporter_id?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: 'report_evidence_uploads_report_id_fkey'
+            columns: ['report_id']
+            isOneToOne: false
+            referencedRelation: 'content_reports'
+            referencedColumns: ['id']
+          },
+        ]
+      }
       report_moderation_operations: {
         Row: {
           action: string
@@ -7621,10 +7804,10 @@ export type Database = {
           email_digest_last_sent: string | null
           follower_count: number | null
           following_count: number | null
-          handle: string | null
+          handle: string
           id: string
           interests: Json | null
-          is_banned: boolean | null
+          is_banned: boolean
           is_online: boolean | null
           is_pro: boolean | null
           is_verified: boolean | null
@@ -7692,10 +7875,10 @@ export type Database = {
           email_digest_last_sent?: string | null
           follower_count?: number | null
           following_count?: number | null
-          handle?: string | null
+          handle: string
           id: string
           interests?: Json | null
-          is_banned?: boolean | null
+          is_banned?: boolean
           is_online?: boolean | null
           is_pro?: boolean | null
           is_verified?: boolean | null
@@ -7763,10 +7946,10 @@ export type Database = {
           email_digest_last_sent?: string | null
           follower_count?: number | null
           following_count?: number | null
-          handle?: string | null
+          handle?: string
           id?: string
           interests?: Json | null
-          is_banned?: boolean | null
+          is_banned?: boolean
           is_online?: boolean | null
           is_pro?: boolean | null
           is_verified?: boolean | null
@@ -7992,17 +8175,6 @@ export type Database = {
         }
         Relationships: []
       }
-      own_group_memberships: {
-        Row: {
-          group_id: string
-          joined_at: string
-          muted_until: string | null
-          pinned: boolean
-          role: Database['public']['Enums']['member_role']
-          user_id: string
-        }
-        Relationships: []
-      }
       mv_popular_tokens_90d: {
         Row: {
           token: string | null
@@ -8023,6 +8195,17 @@ export type Database = {
           trade_count: number | null
           trade_date: string | null
           win_count: number | null
+        }
+        Relationships: []
+      }
+      own_group_memberships: {
+        Row: {
+          group_id: string
+          joined_at: string
+          muted_until: string | null
+          pinned: boolean
+          role: Database['public']['Enums']['member_role']
+          user_id: string
         }
         Relationships: []
       }
@@ -8192,7 +8375,19 @@ export type Database = {
       }
     }
     Functions: {
+      ack_report_evidence_cleanup: {
+        Args: {
+          p_evidence_ref: string
+          p_lease_token: string
+          p_reporter_id: string
+        }
+        Returns: boolean
+      }
       acquire_leaderboard_lock: { Args: { season: string }; Returns: boolean }
+      acquire_post_audience_block_edges: {
+        Args: { p_actor_id: string; p_author_ids: string[] }
+        Returns: undefined
+      }
       activate_group_subscription_atomic: {
         Args: {
           p_actor_id: string
@@ -8439,10 +8634,6 @@ export type Database = {
         Returns: number
       }
       calculate_user_weight: { Args: { p_user_id: string }; Returns: number }
-      cancel_group_subscription_atomic: {
-        Args: { p_actor_id: string; p_subscription_id: string }
-        Returns: Json
-      }
       can_access_group: {
         Args: { p_group_id: string; p_user_id: string }
         Returns: boolean
@@ -8481,6 +8672,18 @@ export type Database = {
       can_service_actor_read_post: {
         Args: { p_actor_id?: string; p_post_id: string }
         Returns: boolean
+      }
+      cancel_group_subscription_atomic: {
+        Args: { p_actor_id: string; p_subscription_id: string }
+        Returns: Json
+      }
+      cast_post_poll_vote_atomic: {
+        Args: {
+          p_actor_id: string
+          p_option_indexes: number[]
+          p_post_id: string
+        }
+        Returns: Json
       }
       check_dm_permission: {
         Args: { p_receiver_id: string; p_sender_id: string }
@@ -8578,6 +8781,10 @@ export type Database = {
         Args: { max_val: number; min_val: number; val: number }
         Returns: number
       }
+      content_report_evidence_refs_valid: {
+        Args: { p_images: string[]; p_reporter_id: string }
+        Returns: boolean
+      }
       count_distinct_projects: { Args: never; Returns: number }
       count_trader_followers: {
         Args: { trader_ids: string[] }
@@ -8596,11 +8803,29 @@ export type Database = {
         }
         Returns: Json
       }
+      create_group_invite_atomic: {
+        Args: {
+          p_actor_id: string
+          p_expires_at: string
+          p_group_id: string
+          p_max_uses?: number
+          p_token_hash: string
+        }
+        Returns: Json
+      }
       create_monthly_partition: {
         Args: { p_table_name?: string; p_target_date?: string }
         Returns: string
       }
       create_next_tph_partition: { Args: never; Returns: undefined }
+      current_user_can_read_post_with_current_entitlement: {
+        Args: { p_post_id: string }
+        Returns: boolean
+      }
+      current_user_has_current_group_entitlement: {
+        Args: { p_group_id: string }
+        Returns: boolean
+      }
       db_stats: {
         Args: never
         Returns: {
@@ -8638,7 +8863,18 @@ export type Database = {
           member_count: number
         }[]
       }
+      delete_direct_message_atomic: {
+        Args: { p_actor_id: string; p_message_id: string }
+        Returns: Json
+      }
       delete_own_comment: {
+        Args: { p_comment_id: string; p_post_id: string; p_user_id: string }
+        Returns: {
+          comment_count: number
+          deleted_count: number
+        }[]
+      }
+      delete_own_comment_locked_impl: {
         Args: { p_comment_id: string; p_post_id: string; p_user_id: string }
         Returns: {
           comment_count: number
@@ -8672,6 +8908,10 @@ export type Database = {
       exec_sql: { Args: { sql: string }; Returns: undefined }
       expire_group_subscriptions: { Args: never; Returns: number }
       fill_null_pnl_from_siblings: { Args: never; Returns: number }
+      finalize_report_evidence_upload: {
+        Args: { p_evidence_ref: string; p_reporter_id: string }
+        Returns: Json
+      }
       finalize_trader_alert_delivery: {
         Args: {
           p_delivery_id: string
@@ -9142,6 +9382,14 @@ export type Database = {
         Args: { p_other_user_id: string }
         Returns: boolean
       }
+      has_current_global_pro_entitlement: {
+        Args: { p_actor_id: string }
+        Returns: boolean
+      }
+      has_current_group_entitlement: {
+        Args: { p_actor_id: string; p_group_id: string }
+        Returns: boolean
+      }
       has_valid_group_subscription: {
         Args: { p_group_id: string; p_user_id: string }
         Returns: boolean
@@ -9319,9 +9567,34 @@ export type Database = {
         Returns: undefined
       }
       increment_view_count: { Args: { post_id: string }; Returns: undefined }
+      inspect_group_invite_atomic: {
+        Args: {
+          p_actor_id: string
+          p_group_id: string
+          p_pro_free_promo?: boolean
+          p_token_hash: string
+        }
+        Returns: Json
+      }
+      is_current_user_active_for_direct_messages: {
+        Args: never
+        Returns: boolean
+      }
+      is_current_user_channel_member: {
+        Args: { p_channel_id: string }
+        Returns: boolean
+      }
       is_group_admin: { Args: { gid: string; uid: string }; Returns: boolean }
       join_pro_official_group_atomic: {
         Args: { p_actor_id: string; p_owner_id: string }
+        Returns: Json
+      }
+      lease_report_evidence_cleanup: {
+        Args: { p_evidence_ref: string; p_reporter_id: string }
+        Returns: Json
+      }
+      lease_stale_report_evidence_cleanup: {
+        Args: { p_limit?: number }
         Returns: Json
       }
       leave_pro_official_group_atomic: {
@@ -9330,6 +9603,18 @@ export type Database = {
       }
       lock_actor_can_interact_with_post: {
         Args: { p_actor_id: string; p_post_id: string }
+        Returns: boolean
+      }
+      lock_actor_can_interact_with_post_locked_impl: {
+        Args: { p_actor_id: string; p_post_id: string }
+        Returns: boolean
+      }
+      lock_post_interaction_block_edges: {
+        Args: {
+          p_actor_id: string
+          p_post_id: string
+          p_target_comment_id?: string | null
+        }
         Returns: boolean
       }
       moderate_comment: {
@@ -9345,6 +9630,28 @@ export type Database = {
           post_id: string
         }[]
       }
+      moderate_group_member_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_group_id: string
+          p_reason?: string | null
+          p_target_id: string
+        }
+        Returns: Json
+      }
+      moderate_group_mute_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_group_id: string
+          p_muted_until: string | null
+          p_operation_id: string
+          p_reason: string | null
+          p_target_id: string
+        }
+        Returns: Json
+      }
       moderate_report_queue_atomic: {
         Args: {
           p_action: string
@@ -9354,17 +9661,39 @@ export type Database = {
           p_operation_id: string
         }
         Returns: {
-          action_taken: string | null
+          action_taken: string
           applied: boolean
           author_id: string | null
           content_affected_count: number
           content_soft_deleted: boolean | null
           report_count: number
-          report_status: string | null
+          report_status: string
           result_action: string
           result_content_id: string
           result_content_type: string
           result_operation_id: string
+          strike_id: string | null
+          strike_type: string | null
+        }[]
+      }
+      moderate_report_queue_atomic_v1_internal: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_content_id: string
+          p_content_type: string
+        }
+        Returns: {
+          action_taken: string
+          applied: boolean
+          author_id: string | null
+          content_affected_count: number
+          content_soft_deleted: boolean | null
+          report_count: number
+          report_status: string
+          result_action: string
+          result_content_id: string
+          result_content_type: string
           strike_id: string | null
           strike_type: string | null
         }[]
@@ -9380,12 +9709,27 @@ export type Database = {
         }
         Returns: Json
       }
-      mutate_user_block_atomic: {
+      mutate_group_join_request_atomic: {
         Args: {
           p_action: string
           p_actor_id: string
-          p_target_id: string
+          p_answer_text?: string | null
+          p_group_id: string
+          p_pro_free_promo?: boolean
         }
+        Returns: Json
+      }
+      mutate_group_membership_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_group_id: string
+          p_pro_free_promo?: boolean
+        }
+        Returns: Json
+      }
+      mutate_user_block_atomic: {
+        Args: { p_action: string; p_actor_id: string; p_target_id: string }
         Returns: Json
       }
       mutate_user_collection_atomic: {
@@ -9403,11 +9747,7 @@ export type Database = {
         Returns: Json
       }
       mutate_user_follow_atomic: {
-        Args: {
-          p_action: string
-          p_actor_id: string
-          p_target_id: string
-        }
+        Args: { p_action: string; p_actor_id: string; p_target_id: string }
         Returns: Json
       }
       project_stats: {
@@ -9424,10 +9764,18 @@ export type Database = {
           total: number
         }[]
       }
+      purge_deleted_account_group_edges: {
+        Args: { p_user_id: string }
+        Returns: Json
+      }
       qa_schema_inventory: { Args: never; Returns: Json }
       read_group_subscription_atomic: {
         Args: { p_actor_id: string; p_group_id: string }
         Returns: Json
+      }
+      recalculate_direct_message_conversation_summary: {
+        Args: { p_conversation_id: string }
+        Returns: boolean
       }
       recommend_by_collaborative_filtering: {
         Args: { p_limit?: number; p_target_type?: string; p_user_id: string }
@@ -9445,26 +9793,9 @@ export type Database = {
           score: number
         }[]
       }
-      resolve_content_report_atomic: {
-        Args: {
-          p_action: string
-          p_actor_id: string
-          p_reason: string | null
-          p_report_id: string
-        }
-        Returns: {
-          action_taken: string | null
-          admin_log_id: string | null
-          applied: boolean
-          content_affected_count: number
-          content_id: string
-          content_soft_deleted: boolean | null
-          content_type: string
-          report_id: string
-          report_status: string
-          result_action: string
-          result_code: string
-        }[]
+      record_post_impression: {
+        Args: { p_metadata?: Json | null; p_post_id: string; p_user_id: string }
+        Returns: boolean
       }
       record_rejected_writes: { Args: { p_rows: Json }; Returns: undefined }
       record_user_activity: {
@@ -9481,6 +9812,15 @@ export type Database = {
         Args: { hashtag_ids: string[] }
         Returns: undefined
       }
+      redeem_group_invite_atomic: {
+        Args: {
+          p_actor_id: string
+          p_group_id: string
+          p_pro_free_promo?: boolean
+          p_token_hash: string
+        }
+        Returns: Json
+      }
       refresh_hot_scores: { Args: never; Returns: undefined }
       refresh_hot_scores_incremental: { Args: never; Returns: number }
       refresh_leaderboard_count_cache: { Args: never; Returns: undefined }
@@ -9488,11 +9828,48 @@ export type Database = {
       refresh_popular_tokens_mv: { Args: never; Returns: undefined }
       refresh_source_capabilities_mv: { Args: never; Returns: undefined }
       release_leaderboard_lock: { Args: { season: string }; Returns: boolean }
+      release_report_evidence_cleanup: {
+        Args: {
+          p_evidence_ref: string
+          p_lease_token: string
+          p_reporter_id: string
+        }
+        Returns: boolean
+      }
       release_stale_locks: { Args: never; Returns: number }
       rerank_leaderboard: { Args: { p_season_id: string }; Returns: number }
+      reserve_report_evidence_upload: {
+        Args: {
+          p_extension: string
+          p_mime_type: string
+          p_reporter_id: string
+        }
+        Returns: Json
+      }
       reset_api_key_daily_counts: { Args: never; Returns: undefined }
       reset_daily_api_calls: { Args: never; Returns: undefined }
       reset_monthly_usage: { Args: never; Returns: undefined }
+      resolve_content_report_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_reason: string | null
+          p_report_id: string
+        }
+        Returns: {
+          action_taken: string
+          admin_log_id: string
+          applied: boolean
+          content_affected_count: number
+          content_id: string
+          content_soft_deleted: boolean | null
+          content_type: string
+          report_id: string
+          report_status: string
+          result_action: string
+          result_code: string
+        }[]
+      }
       restore_pending_account: {
         Args: { p_recovery_token_hash?: string; p_user_id: string }
         Returns: string
@@ -9516,6 +9893,14 @@ export type Database = {
           p_reject_reason: string | null
           p_reviewer_id: string
         }
+        Returns: Json
+      }
+      review_group_join_request_atomic: {
+        Args: { p_actor_id: string; p_decision: string; p_request_id: string }
+        Returns: Json
+      }
+      revoke_group_invite_atomic: {
+        Args: { p_actor_id: string; p_group_id: string; p_invite_id: string }
         Returns: Json
       }
       rollup_api_key_usage: { Args: never; Returns: undefined }
@@ -9602,6 +9987,26 @@ export type Database = {
           trader_type: string
         }[]
       }
+      send_direct_message_atomic: {
+        Args: {
+          p_content: string
+          p_media_name?: string | null
+          p_media_type?: string | null
+          p_media_url?: string | null
+          p_receiver_id: string
+          p_reply_to_id?: string | null
+          p_sender_id: string
+        }
+        Returns: Json
+      }
+      service_actor_has_current_global_pro_entitlement: {
+        Args: { p_actor_id: string }
+        Returns: boolean
+      }
+      service_actor_has_current_group_entitlement: {
+        Args: { p_actor_id: string; p_group_id: string }
+        Returns: boolean
+      }
       set_primary_linked_trader: {
         Args: { p_link_id: string; p_user_id: string }
         Returns: {
@@ -9626,6 +10031,17 @@ export type Database = {
         }
       }
       snapshot_score_backtest: { Args: never; Returns: number }
+      submit_content_report: {
+        Args: {
+          p_content_id: string
+          p_content_type: string
+          p_description?: string | null
+          p_images?: string[]
+          p_reason: string
+          p_reporter_id: string
+        }
+        Returns: Json
+      }
       submit_group_application_atomic: {
         Args: {
           p_actor_id: string
@@ -9692,14 +10108,6 @@ export type Database = {
         }
       }
       text_to_bytea: { Args: { data: string }; Returns: string }
-      cast_post_poll_vote_atomic: {
-        Args: {
-          p_actor_id: string
-          p_option_indexes: number[]
-          p_post_id: string
-        }
-        Returns: Json
-      }
       toggle_comment_reaction: {
         Args: {
           p_comment_id: string
@@ -9709,12 +10117,17 @@ export type Database = {
         }
         Returns: Json
       }
-      toggle_post_bookmark_atomic: {
+      toggle_comment_reaction_locked_impl: {
         Args: {
-          p_actor_id: string
-          p_folder_id?: string | null
+          p_comment_id: string
           p_post_id: string
+          p_reaction_type?: string
+          p_user_id: string
         }
+        Returns: Json
+      }
+      toggle_post_bookmark_atomic: {
+        Args: { p_actor_id: string; p_folder_id?: string | null; p_post_id: string }
         Returns: Json
       }
       toggle_post_emoji_reaction_atomic: {
@@ -9740,6 +10153,37 @@ export type Database = {
         }[]
       }
       update_own_comment: {
+        Args: {
+          p_comment_id: string
+          p_content: string
+          p_post_id: string
+          p_user_id: string
+        }
+        Returns: {
+          author_handle: string | null
+          author_id: string | null
+          content: string
+          created_at: string | null
+          delete_reason: string | null
+          deleted_at: string | null
+          deleted_by: string | null
+          dislike_count: number
+          id: string
+          like_count: number
+          parent_id: string | null
+          post_id: string
+          ranking_score: number
+          updated_at: string | null
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: '*'
+          to: 'comments'
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      update_own_comment_locked_impl: {
         Args: {
           p_comment_id: string
           p_content: string

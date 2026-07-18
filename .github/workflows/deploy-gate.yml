@@ -3,9 +3,10 @@ name: Deploy Gate (CI-green production deploy)
 # 企业级差距整改 C2：main 的生产部署由本 workflow 在 CI 门禁作业全绿后执行。
 # 配套 vercel.json 内联 ignoreCommand（git push 不再直接触发生产构建）。
 #
-# 门禁只看 4 个 gate 作业：Pre-flight Checks / Lint & Type Check / Unit Tests /
-# Build。E2E 按设计被更新的 push 折叠取消（per-ref concurrency），Data
-# Consistency 是 continue-on-error 的 advisory——都不算门禁。
+# 门禁只看 6 个 gate 作业：离线类型生成契约、生产类型/Schema 漂移、
+# Pre-flight Checks、Lint & Type Check、Unit Tests、Build。E2E 按设计被更新
+# 的 push 折叠取消（per-ref concurrency），Data Consistency 是
+# continue-on-error 的 advisory——都不算门禁。
 #
 # 防乱序：CI 完成顺序 ≠ push 顺序，部署前核对该 run 的 SHA 仍是 origin/main
 # HEAD，被超越则跳过（否则旧 commit 的迟到 CI 会把生产回滚到旧版本）。
@@ -47,11 +48,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          JOBS=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/jobs?per_page=50" \
+          JOBS=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/jobs?per_page=100" \
             --jq '[.jobs[] | {name, conclusion}]')
           echo "$JOBS"
           PASS=true
-          for JOB in "Pre-flight Checks" "Lint & Type Check" "Unit Tests" "Build"; do
+          for JOB in \
+            "Types generation contract (offline, no secrets)" \
+            "Types live drift check (push main only)" \
+            "Pre-flight Checks" \
+            "Lint & Type Check" \
+            "Unit Tests" \
+            "Build"; do
             C=$(echo "$JOBS" | jq -r --arg n "$JOB" '.[] | select(.name==$n) | .conclusion')
             echo "gate job [$JOB] => $C"
             [ "$C" = "success" ] || PASS=false

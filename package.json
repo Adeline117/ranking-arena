@@ -26,6 +26,7 @@
     "lint:fix": "eslint . --fix",
     "type-check": "tsc --noEmit",
     "gen:types": "bash scripts/gen-types.sh",
+    "gen:types:contract": "node --test scripts/qa/gen-types-contract.test.mjs",
     "gen:types:check": "CHECK=1 bash scripts/gen-types.sh",
     "clean": "rm -rf .next out",
     "worker": "node -e \"require('dotenv').config({path:'worker/.env'})\" && tsx worker/src/index.ts",
