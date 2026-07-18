@@ -1,298 +1,935 @@
 #!/usr/bin/env node
 /**
- * 填充率契约检查(数据全面度第 1 层:该有 vs 真有)
+ * Source x timeframe x metric completeness sentinel.
  *
- * 对照 arena.mv_source_capabilities(能力矩阵,唯一"该有"真源)与
- * arena.trader_stats 实际填充:某源声明提供指标 M(cap.metrics 含 M),
- * 但该源全部 stats 行里 M 的非空计数为 0 → 断链(parser 漏提取 / 能力谎报 /
- * 管道断裂)。这正是 2026-07-03 手工审计抓到的 gate sharpe、okx copier_count、
- * binance copier_pnl 一类 bug 的自动化形态。
+ * Authority boundaries:
+ * - expected set: active+serving registry rows, declared 7/30/90 windows, and
+ *   explicit sources.meta.expected_metrics only;
+ * - population: membership of the latest count-check-passed board snapshot;
+ * - upstream freshness: leaderboard_source_freshness.source_as_of, never a
+ *   score recomputation timestamp;
+ * - evidence: arena.metric_completeness_daily (one row per contract cell).
  *
- * 第 1 层阈值刻意取"恰好为 0":合法稀疏指标(如 bybit_copytrade 的 pnl 仅
- * profile 深抓可得,~9%)不误报;字面 0 = 必然有问题。
- *
- * 第 1.5 层(2026-07-07 新增):低填充比率 + 按 timeframe 拆分。补上「声明提供
- * 却长期近空」(binance sharpe 2%、gate sharpe ~1%、hyperliquid tf7/30 ~5%)——
- * 这类有几行非空、被第 1 层放行、又被 slug 聚合掩盖(tf90 盖 tf7/30)的断裂。
- * 默认只报不红(STRICT_LOW_FILL=1 计入 exit);填充率趋势(60%→20% 回退)属第
- * 3 层趋势哨兵。
- *
- * 豁免:确认"能力矩阵夸大/上游停供"且不修的,记入 EXEMPT 并注明理由。
- *
- * Run: node scripts/qa/fill-rate-check.mjs   (needs DATABASE_URL; unset = skip)
- * Exit: 0 = green/skipped, 1 = violations found.
+ * DATABASE_URL may be omitted for local/offline checks. Scheduled callers set
+ * REQUIRE_DATABASE_URL=1. Once a database is configured, every contract,
+ * query, snapshot, and evidence-write failure exits non-zero.
  */
 
-import pg from 'pg'
-import { TREND_METRICS as TREND_METRIC_LIST } from './metric-columns.mjs'
+import { createHash } from 'node:crypto'
+import { pathToFileURL } from 'node:url'
+import { TREND_METRICS as TREND_METRIC_LIST, TYPED_METRICS } from './metric-columns.mjs'
 
-/** slug:metric → 理由。只豁免核实过的,别用来消音。 */
-const EXEMPT = new Map([
-  // ['example_source:volume', '2026-07-03 核实:上游 2026-06 起停供 volume 字段'],
-])
+const ALLOWED_TIMEFRAMES = new Set([7, 30, 90])
+const TYPED_METRIC_SET = new Set(TYPED_METRICS)
+const STATS_FRESHNESS_HOURS_DEFAULT = 48
+const FUTURE_TOLERANCE_MS = 5 * 60 * 1000
+const TREND_METRICS = new Set(TREND_METRIC_LIST)
+const TREND_PLATEAU_OK = 0.9
 
-// ── 第 1.5 层:低填充比率哨兵(2026-07-07)──────────────────────────────
-// 「仅字面 0」的硬门放行了 binance sharpe(2%)、gate sharpe(~1%)、binance
-// mdd(16%)一类「声明提供却长期近空」的断裂 —— 有几行非空就算绿。这一层补上
-// 比率维度:声明的指标在「成熟时间框」(行数 ≥ MIN_ROWS)填充率低于 LOW_FILL_PCT
-// → 告警。默认只报不红(STRICT_LOW_FILL=1 才计入 exit),因为 series-backfill
-// 游标 bug(docs/SERIES_BACKFILL_CURSOR_FIX_PLAN.md)未修前长尾会长期偏低,
-// 硬红会天天误报;修复+回填铺满后应开 STRICT 让它守回退。
-const LOW_FILL_PCT = Number(process.env.LOW_FILL_PCT ?? 0.2)
-const LOW_FILL_MIN_ROWS = Number(process.env.LOW_FILL_MIN_ROWS ?? 200)
-const STRICT_LOW_FILL = process.env.STRICT_LOW_FILL === '1'
-/** slug:metric → 理由。核实为「合法稀疏」的声明指标,不进低填充告警。 */
+/** slug:metric -> verified reason. Never use this as a generic mute switch. */
+const ZERO_FILL_EXEMPT = new Map()
+
+/** Legitimately sparse declarations that should not trigger the low-fill warning. */
 const LOW_FILL_EXEMPT = new Map([
-  ['bybit_copytrade:pnl', '核实:pnl 仅 profile 深抓可得 ~9%,roi 才是板级 headline'],
+  ['bybit_copytrade:pnl', 'pnl is available only from the sparse deep-profile crawl'],
 ])
 
-// "该有"真源优先级(P0 2026-07-04):adapter 代码声明的 expected_metrics
-// (reconcile 每小时同步进 sources.meta)> mv cap.metrics 兜底。
-// mv 的 metrics 是从 trader_stats count>0 反推的 —— 度量"真有"而非"该有",
-// 用它当契约是循环论证(parser 漏提取 → count=0 → 不声明 → 永不违规,
-// gate-sharpe 类 bug 隐形)。声明未铺满前,未声明的源回落 mv(弱保护)。
-const SQL = `
-with caps as (
-  select s.slug, m.metric,
-         (s.meta ? 'expected_metrics') as declared
-  from arena.sources s
-  join arena.mv_source_capabilities c on c.slug = s.slug
-  cross join lateral jsonb_array_elements_text(
-    coalesce(s.meta->'expected_metrics', c.cap->'metrics')
-  ) m(metric)
-  where s.status = 'active'
-    and coalesce(c.cap->>'servingMode','serving') = 'serving'
-),
-fill as (
-  select s.slug,
-    count(*) total,
-    count(ts.roi) roi, count(ts.pnl) pnl, count(ts.sharpe) sharpe, count(ts.mdd) mdd,
-    count(ts.win_rate) win_rate, count(ts.win_positions) win_positions,
-    count(ts.total_positions) total_positions, count(ts.copier_pnl) copier_pnl,
-    count(ts.copier_count) copier_count, count(ts.aum) aum, count(ts.volume) volume,
-    count(ts.profit_share_rate) profit_share_rate,
-    count(ts.holding_duration_avg) holding_duration_avg
-  from arena.trader_stats ts
-  join arena.traders t on t.id = ts.trader_id
-  join arena.sources s on s.id = t.source_id and s.status = 'active'
-  group by s.slug
-)
-select c.slug, c.metric, f.total,
-  case c.metric
-    when 'roi' then f.roi when 'pnl' then f.pnl when 'sharpe' then f.sharpe
-    when 'mdd' then f.mdd when 'win_rate' then f.win_rate
-    when 'win_positions' then f.win_positions when 'total_positions' then f.total_positions
-    when 'copier_pnl' then f.copier_pnl when 'copier_count' then f.copier_count
-    when 'aum' then f.aum when 'volume' then f.volume
-    when 'profit_share_rate' then f.profit_share_rate
-    when 'holding_duration_avg' then f.holding_duration_avg end as filled
-from caps c join fill f on f.slug = c.slug
+function compareText(left, right) {
+  return left < right ? -1 : left > right ? 1 : 0
+}
+
+export const SOURCE_CONTRACT_SQL = `
+select
+  source_row.id as source_id,
+  source_row.slug,
+  coalesce(
+    nullif(pg_catalog.btrim(source_row.meta->>'legacy_platform'), ''),
+    source_row.slug
+  ) as filter_source,
+  source_row.timeframes_native,
+  source_row.timeframes_derived,
+  source_row.meta->'expected_metrics' as expected_metrics
+from arena.sources as source_row
+where source_row.status = 'active'
+  and source_row.serving_mode = 'serving'
+  and pg_catalog.btrim(
+    coalesce(source_row.meta->>'legacy_platform', '')
+  ) <> 'null'
+order by source_row.id
 `
 
-/**
- * 第 3 层:每日快照 + 回填趋势哨兵。
- * series-backfill 是数天/周级渐进回填 — 「7 天填充零增长且未接近满」=
- * 回填带被饿死/楔死的早期信号(2026-07-03 事故的预警形态)。
- * 满 7 天数据前静默(建库期不误报);只盯开了 series_backfill 的源的
- * profile-refill 指标(mdd/win_positions/copier_pnl 等),合法稀疏但稳定
- * 的指标(如 bybit_copytrade 的 pnl)不在盯范围。
- */
-const TREND_METRICS = new Set(TREND_METRIC_LIST) // 单一来源 metric-columns.mjs(P4)
-const TREND_PLATEAU_OK = 0.9 // 填充 ≥90% 视为已完成,平坦不再告警
+export const MEASUREMENT_SQL = `
+with expected as (
+  select *
+  from pg_catalog.jsonb_to_recordset($3::jsonb) as contract(
+    source_id smallint,
+    slug text,
+    filter_source text,
+    timeframe smallint,
+    metric text
+  )
+),
+contract_keys as (
+  select distinct source_id, timeframe
+  from expected
+),
+latest_snapshot as (
+  select distinct on (snapshot.source_id, snapshot.timeframe)
+    snapshot.id as snapshot_id,
+    snapshot.source_id,
+    snapshot.timeframe,
+    snapshot.scraped_at as board_snapshot_at,
+    snapshot.actual_count as declared_actual_count
+  from arena.leaderboard_snapshots as snapshot
+  join contract_keys as contract_key
+    on contract_key.source_id = snapshot.source_id
+   and contract_key.timeframe = snapshot.timeframe
+  where snapshot.count_check_passed
+  order by
+    snapshot.source_id,
+    snapshot.timeframe,
+    snapshot.scraped_at desc,
+    snapshot.id desc
+),
+cohort as (
+  select
+    latest.source_id,
+    latest.timeframe,
+    latest.board_snapshot_at,
+    latest.declared_actual_count,
+    count(entry.trader_id)::bigint as population_total,
+    count(distinct entry.trader_id)::bigint as distinct_trader_total,
+    coalesce(
+      bool_and(
+        entry.trader_id is null
+        or (
+          entry.scraped_at = latest.board_snapshot_at
+          and entry.timeframe = latest.timeframe
+          and member.id is not null
+          and member.source_id = latest.source_id
+        )
+      ),
+      true
+    ) as membership_consistent,
+    count(stats.trader_id)::bigint as stats_total,
+    count(stats.trader_id) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_stats_total,
+    min(stats.as_of) as oldest_stats_as_of,
+    max(stats.as_of) as newest_stats_as_of,
+    count(stats.roi)::bigint as roi,
+    count(stats.roi) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_roi,
+    count(stats.pnl)::bigint as pnl,
+    count(stats.pnl) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_pnl,
+    count(stats.sharpe)::bigint as sharpe,
+    count(stats.sharpe) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_sharpe,
+    count(stats.mdd)::bigint as mdd,
+    count(stats.mdd) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_mdd,
+    count(stats.win_rate)::bigint as win_rate,
+    count(stats.win_rate) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_win_rate,
+    count(stats.win_positions)::bigint as win_positions,
+    count(stats.win_positions) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_win_positions,
+    count(stats.total_positions)::bigint as total_positions,
+    count(stats.total_positions) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_total_positions,
+    count(stats.copier_pnl)::bigint as copier_pnl,
+    count(stats.copier_pnl) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_copier_pnl,
+    count(stats.copier_count)::bigint as copier_count,
+    count(stats.copier_count) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_copier_count,
+    count(stats.aum)::bigint as aum,
+    count(stats.aum) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_aum,
+    count(stats.volume)::bigint as volume,
+    count(stats.volume) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_volume,
+    count(stats.profit_share_rate)::bigint as profit_share_rate,
+    count(stats.profit_share_rate) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_profit_share_rate,
+    count(stats.holding_duration_avg)::bigint as holding_duration_avg,
+    count(stats.holding_duration_avg) filter (
+      where stats.as_of >= $1::timestamptz - ($2::integer * interval '1 hour')
+    )::bigint as fresh_holding_duration_avg
+  from latest_snapshot as latest
+  left join arena.leaderboard_entries as entry
+    on entry.snapshot_id = latest.snapshot_id
+  left join arena.traders as member
+    on member.id = entry.trader_id
+  left join arena.trader_stats as stats
+    on stats.trader_id = member.id
+   and stats.timeframe = latest.timeframe
+  group by
+    latest.source_id,
+    latest.timeframe,
+    latest.board_snapshot_at,
+    latest.declared_actual_count
+)
+select
+  expected.source_id,
+  expected.slug,
+  expected.filter_source,
+  expected.timeframe,
+  expected.metric,
+  cohort.board_snapshot_at,
+  watermark.source_as_of as upstream_source_as_of,
+  cohort.declared_actual_count,
+  coalesce(cohort.population_total, 0)::bigint as population_total,
+  cohort.distinct_trader_total,
+  cohort.membership_consistent,
+  coalesce(cohort.stats_total, 0)::bigint as stats_total,
+  coalesce(cohort.fresh_stats_total, 0)::bigint as fresh_stats_total,
+  coalesce(
+    case expected.metric
+      when 'roi' then cohort.roi
+      when 'pnl' then cohort.pnl
+      when 'sharpe' then cohort.sharpe
+      when 'mdd' then cohort.mdd
+      when 'win_rate' then cohort.win_rate
+      when 'win_positions' then cohort.win_positions
+      when 'total_positions' then cohort.total_positions
+      when 'copier_pnl' then cohort.copier_pnl
+      when 'copier_count' then cohort.copier_count
+      when 'aum' then cohort.aum
+      when 'volume' then cohort.volume
+      when 'profit_share_rate' then cohort.profit_share_rate
+      when 'holding_duration_avg' then cohort.holding_duration_avg
+    end,
+    0
+  )::bigint as filled,
+  coalesce(
+    case expected.metric
+      when 'roi' then cohort.fresh_roi
+      when 'pnl' then cohort.fresh_pnl
+      when 'sharpe' then cohort.fresh_sharpe
+      when 'mdd' then cohort.fresh_mdd
+      when 'win_rate' then cohort.fresh_win_rate
+      when 'win_positions' then cohort.fresh_win_positions
+      when 'total_positions' then cohort.fresh_total_positions
+      when 'copier_pnl' then cohort.fresh_copier_pnl
+      when 'copier_count' then cohort.fresh_copier_count
+      when 'aum' then cohort.fresh_aum
+      when 'volume' then cohort.fresh_volume
+      when 'profit_share_rate' then cohort.fresh_profit_share_rate
+      when 'holding_duration_avg' then cohort.fresh_holding_duration_avg
+    end,
+    0
+  )::bigint as fresh_filled,
+  cohort.oldest_stats_as_of,
+  cohort.newest_stats_as_of
+from expected
+left join cohort
+  on cohort.source_id = expected.source_id
+ and cohort.timeframe = expected.timeframe
+left join public.leaderboard_source_freshness as watermark
+  on watermark.season_id = (expected.timeframe::text || 'D')
+ and watermark.source = expected.filter_source
+order by expected.source_id, expected.timeframe, expected.metric
+`
 
-async function snapshotAndTrend(pool, rows) {
-  // 1) upsert 今日快照(幂等,同日重跑覆盖)
-  const values = []
-  const params = []
-  let i = 1
-  for (const r of rows) {
-    values.push(`(current_date, $${i++}, $${i++}, $${i++}, $${i++})`)
-    params.push(r.slug, r.metric, Number(r.filled), Number(r.total))
+export const LEGACY_TREND_SQL = `
+with contract as (
+  select *
+  from pg_catalog.jsonb_to_recordset($1::jsonb) as expected(
+    source_id smallint,
+    slug text,
+    filter_source text,
+    timeframe smallint,
+    metric text
+  )
+),
+expected as (
+  select distinct source_id, slug, metric
+  from contract
+),
+fill as (
+  select
+    trader.source_id,
+    count(*)::bigint as total,
+    count(stats.roi)::bigint as roi,
+    count(stats.pnl)::bigint as pnl,
+    count(stats.sharpe)::bigint as sharpe,
+    count(stats.mdd)::bigint as mdd,
+    count(stats.win_rate)::bigint as win_rate,
+    count(stats.win_positions)::bigint as win_positions,
+    count(stats.total_positions)::bigint as total_positions,
+    count(stats.copier_pnl)::bigint as copier_pnl,
+    count(stats.copier_count)::bigint as copier_count,
+    count(stats.aum)::bigint as aum,
+    count(stats.volume)::bigint as volume,
+    count(stats.profit_share_rate)::bigint as profit_share_rate,
+    count(stats.holding_duration_avg)::bigint as holding_duration_avg
+  from arena.traders as trader
+  join arena.trader_stats as stats on stats.trader_id = trader.id
+  group by trader.source_id
+)
+select
+  expected.slug,
+  expected.metric,
+  fill.total,
+  case expected.metric
+    when 'roi' then fill.roi
+    when 'pnl' then fill.pnl
+    when 'sharpe' then fill.sharpe
+    when 'mdd' then fill.mdd
+    when 'win_rate' then fill.win_rate
+    when 'win_positions' then fill.win_positions
+    when 'total_positions' then fill.total_positions
+    when 'copier_pnl' then fill.copier_pnl
+    when 'copier_count' then fill.copier_count
+    when 'aum' then fill.aum
+    when 'volume' then fill.volume
+    when 'profit_share_rate' then fill.profit_share_rate
+    when 'holding_duration_avg' then fill.holding_duration_avg
+  end::bigint as filled
+from expected
+join fill on fill.source_id = expected.source_id
+order by expected.slug, expected.metric
+`
+
+const UPSERT_EVIDENCE_SQL = `
+insert into arena.metric_completeness_daily (
+  taken_on,
+  measured_at,
+  source_id,
+  timeframe,
+  metric,
+  board_snapshot_at,
+  upstream_source_as_of,
+  population_total,
+  stats_total,
+  fresh_stats_total,
+  filled,
+  fresh_filled,
+  oldest_stats_as_of,
+  newest_stats_as_of,
+  stats_freshness_hours,
+  contract_hash,
+  measurement_state
+)
+select
+  evidence.taken_on,
+  evidence.measured_at,
+  evidence.source_id,
+  evidence.timeframe,
+  evidence.metric,
+  evidence.board_snapshot_at,
+  evidence.upstream_source_as_of,
+  evidence.population_total,
+  evidence.stats_total,
+  evidence.fresh_stats_total,
+  evidence.filled,
+  evidence.fresh_filled,
+  evidence.oldest_stats_as_of,
+  evidence.newest_stats_as_of,
+  evidence.stats_freshness_hours,
+  evidence.contract_hash,
+  evidence.measurement_state
+from pg_catalog.jsonb_to_recordset($1::jsonb) as evidence(
+  taken_on date,
+  measured_at timestamptz,
+  source_id smallint,
+  timeframe smallint,
+  metric text,
+  board_snapshot_at timestamptz,
+  upstream_source_as_of timestamptz,
+  population_total bigint,
+  stats_total bigint,
+  fresh_stats_total bigint,
+  filled bigint,
+  fresh_filled bigint,
+  oldest_stats_as_of timestamptz,
+  newest_stats_as_of timestamptz,
+  stats_freshness_hours smallint,
+  contract_hash text,
+  measurement_state text
+)
+on conflict (taken_on, source_id, timeframe, metric)
+do update set
+  measured_at = excluded.measured_at,
+  board_snapshot_at = excluded.board_snapshot_at,
+  upstream_source_as_of = excluded.upstream_source_as_of,
+  population_total = excluded.population_total,
+  stats_total = excluded.stats_total,
+  fresh_stats_total = excluded.fresh_stats_total,
+  filled = excluded.filled,
+  fresh_filled = excluded.fresh_filled,
+  oldest_stats_as_of = excluded.oldest_stats_as_of,
+  newest_stats_as_of = excluded.newest_stats_as_of,
+  stats_freshness_hours = excluded.stats_freshness_hours,
+  contract_hash = excluded.contract_hash,
+  measurement_state = excluded.measurement_state
+returning 1
+`
+
+function parsePositiveInteger(value, label, fallback) {
+  const parsed = Number(value ?? fallback)
+  if (!Number.isInteger(parsed) || parsed <= 0 || parsed > 32767) {
+    throw new Error(`${label} must be an integer between 1 and 32767`)
   }
-  if (values.length > 0) {
-    await pool.query(
-      `insert into arena.metric_fill_trend (taken_on, slug, metric, filled, total)
-       values ${values.join(',')}
-       on conflict (taken_on, slug, metric)
-       do update set filled = excluded.filled, total = excluded.total`,
-      params
+  return parsed
+}
+
+function parseRatio(value, label, fallback) {
+  const parsed = Number(value ?? fallback)
+  if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 1) {
+    throw new Error(`${label} must be greater than 0 and at most 1`)
+  }
+  return parsed
+}
+
+function parseCount(value, label) {
+  const parsed = Number(value)
+  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+    throw new Error(`${label} must be a non-negative safe integer`)
+  }
+  return parsed
+}
+
+function timestampMs(value, label, { nullable = false } = {}) {
+  if (value == null && nullable) return null
+  const parsed = value instanceof Date ? value.getTime() : Date.parse(value)
+  if (!Number.isFinite(parsed)) throw new Error(`${label} must be a valid timestamp`)
+  return parsed
+}
+
+function timestampIso(value, label, { nullable = false } = {}) {
+  const parsed = timestampMs(value, label, { nullable })
+  return parsed == null ? null : new Date(parsed).toISOString()
+}
+
+export function buildContractCells(sourceRows) {
+  if (!Array.isArray(sourceRows) || sourceRows.length === 0) {
+    throw new Error('active+serving source contract is empty')
+  }
+
+  const cells = []
+  const seenSourceIds = new Set()
+  const seenSlugs = new Set()
+
+  for (const source of sourceRows) {
+    const sourceId = Number(source.source_id)
+    const slug = typeof source.slug === 'string' ? source.slug.trim() : ''
+    const filterSource = typeof source.filter_source === 'string' ? source.filter_source.trim() : ''
+
+    if (!Number.isInteger(sourceId) || sourceId <= 0) {
+      throw new Error(`source ${slug || '<unknown>'} has an invalid source_id`)
+    }
+    if (!slug || !filterSource || filterSource === 'null') {
+      throw new Error(`source ${sourceId} has an invalid slug/filter_source`)
+    }
+    if (seenSourceIds.has(sourceId) || seenSlugs.has(slug)) {
+      throw new Error(`duplicate source identity in contract: ${slug}`)
+    }
+    seenSourceIds.add(sourceId)
+    seenSlugs.add(slug)
+
+    if (!Array.isArray(source.timeframes_native) || !Array.isArray(source.timeframes_derived)) {
+      throw new Error(`${slug} timeframes must be PostgreSQL integer arrays`)
+    }
+    const timeframes = [
+      ...new Set(
+        [...source.timeframes_native, ...source.timeframes_derived]
+          .map(Number)
+          .filter((timeframe) => ALLOWED_TIMEFRAMES.has(timeframe))
+      ),
+    ].sort((a, b) => a - b)
+    if (timeframes.length === 0) {
+      throw new Error(`${slug} declares no ranking timeframe in 7/30/90`)
+    }
+
+    const metrics = source.expected_metrics
+    if (!Array.isArray(metrics) || metrics.length === 0) {
+      throw new Error(`${slug} meta.expected_metrics must be a non-empty JSON array`)
+    }
+    if (
+      metrics.some(
+        (metric) =>
+          typeof metric !== 'string' || metric !== metric.trim() || !TYPED_METRIC_SET.has(metric)
+      )
+    ) {
+      throw new Error(`${slug} meta.expected_metrics contains an unsupported metric`)
+    }
+    if (new Set(metrics).size !== metrics.length) {
+      throw new Error(`${slug} meta.expected_metrics contains duplicates`)
+    }
+
+    for (const timeframe of timeframes) {
+      for (const metric of metrics) {
+        cells.push({
+          source_id: sourceId,
+          slug,
+          filter_source: filterSource,
+          timeframe,
+          metric,
+        })
+      }
+    }
+  }
+
+  cells.sort(
+    (left, right) =>
+      left.source_id - right.source_id ||
+      left.timeframe - right.timeframe ||
+      compareText(left.metric, right.metric)
+  )
+  return cells
+}
+
+export function completenessContractHash(cells, statsFreshnessHours) {
+  return createHash('sha256')
+    .update(
+      JSON.stringify({
+        version: 1,
+        stats_freshness_hours: statsFreshnessHours,
+        cells,
+      })
+    )
+    .digest('hex')
+}
+
+export function deriveMeasurementState(row, measuredAt, statsFreshnessHours) {
+  const measuredMs = timestampMs(measuredAt, 'measured_at')
+  const cutoffMs = measuredMs - statsFreshnessHours * 60 * 60 * 1000
+  const boardMs = timestampMs(row.board_snapshot_at, 'board_snapshot_at', {
+    nullable: true,
+  })
+  const upstreamMs = timestampMs(row.upstream_source_as_of, 'upstream_source_as_of', {
+    nullable: true,
+  })
+
+  if (boardMs != null && boardMs > measuredMs + FUTURE_TOLERANCE_MS) {
+    throw new Error(`${row.slug}[tf${row.timeframe}] board snapshot is in the future`)
+  }
+  if (upstreamMs != null && upstreamMs > measuredMs + FUTURE_TOLERANCE_MS) {
+    throw new Error(`${row.slug}[tf${row.timeframe}] upstream watermark is in the future`)
+  }
+  if (boardMs == null) return 'missing_board_snapshot'
+  if (boardMs < cutoffMs) return 'stale_board_snapshot'
+  if (upstreamMs == null) return 'missing_upstream_watermark'
+  if (upstreamMs < cutoffMs) return 'stale_upstream_watermark'
+  if (row.population_total === 0) return 'empty_population'
+  if (row.stats_total === 0) return 'no_stats'
+  if (row.fresh_stats_total === 0) return 'no_fresh_stats'
+  return 'measured'
+}
+
+export function normalizeEvidenceRows(
+  measurementRows,
+  cells,
+  measuredAt,
+  statsFreshnessHours,
+  contractHash
+) {
+  if (!Array.isArray(measurementRows) || measurementRows.length !== cells.length) {
+    throw new Error(
+      `measurement returned ${measurementRows?.length ?? 'invalid'} rows for ${cells.length} cells`
     )
   }
 
-  // 2) 趋势:回填源 × 盯梢指标,今日 filled ≤ 7 天前 filled 且未达 90% → 停滞
-  const { rows: stalled } = await pool.query(
-    `with backfill_sources as (
-       select slug from arena.sources
-       where status = 'active' and (meta->>'series_backfill_topn')::bigint > deep_profile_topn
-     )
-     select today.slug, today.metric, today.filled, today.total, old.filled as filled_7d_ago
-     from arena.metric_fill_trend today
-     join arena.metric_fill_trend old
-       on old.slug = today.slug and old.metric = today.metric
-      and old.taken_on = current_date - 7
-     join backfill_sources b on b.slug = today.slug
-     where today.taken_on = current_date
-       and today.filled <= old.filled
-       and today.total > 0
-       and today.filled::float / today.total < ${TREND_PLATEAU_OK}`
+  const measuredIso = timestampIso(measuredAt, 'measured_at')
+  const takenOn = measuredIso.slice(0, 10)
+  const expectedKeys = new Set(
+    cells.map((cell) => `${cell.source_id}:${cell.timeframe}:${cell.metric}`)
   )
-  return stalled.filter((s) => TREND_METRICS.has(s.metric))
-}
+  const expectedByKey = new Map(
+    cells.map((cell) => [`${cell.source_id}:${cell.timeframe}:${cell.metric}`, cell])
+  )
+  const seen = new Set()
 
-/**
- * 第 1.5 层:每 (slug, timeframe, 声明指标) 的填充比率。按 timeframe 拆分
- * 是关键 —— 现有 SQL 按 slug 聚合会让健康的 tf90 掩盖死掉的 tf7/tf30
- * (hyperliquid sharpe tf90 63% 盖住 tf7/30 的 ~5%)。只看声明提供的指标,
- * 只看行数 ≥ MIN_ROWS 的成熟时间框,避免小样本噪声。
- */
-const LOW_FILL_SQL = `
-with caps as (
-  select s.slug, m.metric
-  from arena.sources s
-  join arena.mv_source_capabilities c on c.slug = s.slug
-  cross join lateral jsonb_array_elements_text(
-    coalesce(s.meta->'expected_metrics', c.cap->'metrics')
-  ) m(metric)
-  where s.status = 'active'
-    and coalesce(c.cap->>'servingMode','serving') = 'serving'
-),
-fill as (
-  select s.slug, ts.timeframe,
-    count(*) total,
-    count(ts.roi) roi, count(ts.pnl) pnl, count(ts.sharpe) sharpe, count(ts.mdd) mdd,
-    count(ts.win_rate) win_rate, count(ts.win_positions) win_positions,
-    count(ts.total_positions) total_positions, count(ts.copier_pnl) copier_pnl,
-    count(ts.copier_count) copier_count, count(ts.aum) aum, count(ts.volume) volume,
-    count(ts.profit_share_rate) profit_share_rate,
-    count(ts.holding_duration_avg) holding_duration_avg
-  from arena.trader_stats ts
-  join arena.traders t on t.id = ts.trader_id
-  join arena.sources s on s.id = t.source_id and s.status = 'active'
-  where ts.timeframe in (7, 30, 90)
-  group by s.slug, ts.timeframe
-)
-select c.slug, f.timeframe, c.metric, f.total,
-  case c.metric
-    when 'roi' then f.roi when 'pnl' then f.pnl when 'sharpe' then f.sharpe
-    when 'mdd' then f.mdd when 'win_rate' then f.win_rate
-    when 'win_positions' then f.win_positions when 'total_positions' then f.total_positions
-    when 'copier_pnl' then f.copier_pnl when 'copier_count' then f.copier_count
-    when 'aum' then f.aum when 'volume' then f.volume
-    when 'profit_share_rate' then f.profit_share_rate
-    when 'holding_duration_avg' then f.holding_duration_avg end as filled
-from caps c join fill f on f.slug = c.slug
-`
-
-async function lowFillWarnings(pool) {
-  const { rows } = await pool.query(LOW_FILL_SQL)
-  const warns = []
-  for (const r of rows) {
-    const total = Number(r.total)
-    const filled = Number(r.filled)
-    if (total < LOW_FILL_MIN_ROWS) continue // 小样本不判
-    if (filled === 0) continue // 字面 0 归第 1 层硬门,不在这里重复
-    if (LOW_FILL_EXEMPT.has(`${r.slug}:${r.metric}`)) continue
-    const ratio = filled / total
-    if (ratio < LOW_FILL_PCT) {
-      warns.push({
-        slug: r.slug,
-        timeframe: r.timeframe,
-        metric: r.metric,
-        pct: (ratio * 100).toFixed(1),
-        filled,
-        total,
-      })
+  const evidence = measurementRows.map((row) => {
+    const key = `${row.source_id}:${row.timeframe}:${row.metric}`
+    if (!expectedKeys.has(key) || seen.has(key)) {
+      throw new Error(`measurement returned an unexpected or duplicate cell: ${key}`)
     }
-  }
-  // 最低填充优先,便于一眼看最坏的
-  warns.sort((a, b) => Number(a.pct) - Number(b.pct))
-  return warns
-}
-
-async function main() {
-  const dbUrl = process.env.DATABASE_URL
-  if (!dbUrl) {
-    // 与 insert-column-drift-check 同模式:无凭据的环境(如部分 CI)fail-open,
-    // 哨兵机器(有 DATABASE_URL)才是硬门。
-    console.log('⏭️  fill-rate-check SKIPPED — DATABASE_URL not set (set it to enable the gate)')
-    return 0
-  }
-  const pool = new pg.Pool({ connectionString: dbUrl, max: 2 })
-  try {
-    const { rows } = await pool.query(SQL)
-    const violations = []
-    let checked = 0
-    for (const r of rows) {
-      checked++
-      if (Number(r.filled) !== 0) continue
-      const key = `${r.slug}:${r.metric}`
-      if (EXEMPT.has(key)) continue
-      violations.push(`${r.slug}.${r.metric} 声明提供但 0/${r.total} 行有值`)
-    }
-    console.log(`fill-rate-check: ${checked} 个 source×metric 契约已核`)
-
-    // 第 3 层快照+趋势 — 基建性失败不红(表缺失/写失败只打日志)
-    let stalled = []
-    try {
-      stalled = await snapshotAndTrend(pool, rows)
-      console.log('📈 今日填充快照已写入 arena.metric_fill_trend')
-    } catch (err) {
-      console.error('trend snapshot failed (not a violation):', err.message)
-    }
-    for (const s of stalled) {
-      violations.push(
-        `${s.slug}.${s.metric} 回填停滞:7 天零增长(${s.filled_7d_ago}→${s.filled}/${s.total})— 查 series-backfill 是否又被饿死`
-      )
+    seen.add(key)
+    const expected = expectedByKey.get(key)
+    if (row.slug !== expected.slug || row.filter_source !== expected.filter_source) {
+      throw new Error(`measurement identity disagrees with contract for cell: ${key}`)
     }
 
-    // 第 1.5 层:低填充比率(按 timeframe 拆分)。默认只报不红。
-    let lowFill = []
-    try {
-      lowFill = await lowFillWarnings(pool)
-    } catch (err) {
-      console.error('low-fill scan failed (not a violation):', err.message)
+    const normalized = {
+      taken_on: takenOn,
+      measured_at: measuredIso,
+      source_id: Number(row.source_id),
+      slug: row.slug,
+      timeframe: Number(row.timeframe),
+      metric: row.metric,
+      board_snapshot_at: timestampIso(row.board_snapshot_at, 'board_snapshot_at', {
+        nullable: true,
+      }),
+      upstream_source_as_of: timestampIso(row.upstream_source_as_of, 'upstream_source_as_of', {
+        nullable: true,
+      }),
+      population_total: parseCount(row.population_total, `${key}.population_total`),
+      stats_total: parseCount(row.stats_total, `${key}.stats_total`),
+      fresh_stats_total: parseCount(row.fresh_stats_total, `${key}.fresh_stats_total`),
+      filled: parseCount(row.filled, `${key}.filled`),
+      fresh_filled: parseCount(row.fresh_filled, `${key}.fresh_filled`),
+      oldest_stats_as_of: timestampIso(row.oldest_stats_as_of, 'oldest_stats_as_of', {
+        nullable: true,
+      }),
+      newest_stats_as_of: timestampIso(row.newest_stats_as_of, 'newest_stats_as_of', {
+        nullable: true,
+      }),
+      stats_freshness_hours: statsFreshnessHours,
+      contract_hash: contractHash,
     }
-    if (lowFill.length > 0) {
-      console.warn(
-        `⚠️  ${lowFill.length} 处声明指标填充率 < ${(LOW_FILL_PCT * 100).toFixed(0)}%` +
-          `(成熟时间框, ≥${LOW_FILL_MIN_ROWS} 行):`
-      )
-      for (const w of lowFill) {
-        console.warn(
-          `   - ${w.slug}.${w.metric} [tf${w.timeframe}] ${w.pct}% (${w.filled}/${w.total})`
+
+    if (normalized.board_snapshot_at != null) {
+      const declaredActual = parseCount(row.declared_actual_count, `${key}.declared_actual_count`)
+      const distinctTraders = parseCount(row.distinct_trader_total, `${key}.distinct_trader_total`)
+      if (
+        declaredActual !== normalized.population_total ||
+        distinctTraders !== normalized.population_total ||
+        row.membership_consistent !== true
+      ) {
+        throw new Error(
+          `${row.slug}[tf${row.timeframe}] passed snapshot membership is inconsistent`
         )
       }
-      console.warn(
-        '   多数系 series-backfill 游标 bug 导致长尾未抓(见 docs/SERIES_BACKFILL_CURSOR_FIX_PLAN.md);' +
-          '\n   修复+回填铺满后设 STRICT_LOW_FILL=1 让本层守住回退。真上游稀疏的记入 LOW_FILL_EXEMPT。'
+    }
+    if (
+      normalized.stats_total > normalized.population_total ||
+      normalized.fresh_stats_total > normalized.stats_total ||
+      normalized.filled > normalized.stats_total ||
+      normalized.fresh_filled > normalized.filled ||
+      normalized.fresh_filled > normalized.fresh_stats_total
+    ) {
+      throw new Error(`${key} aggregate counts are inconsistent`)
+    }
+    const measuredMs = timestampMs(measuredIso, 'measured_at')
+    const newestMs = timestampMs(normalized.newest_stats_as_of, 'newest_stats_as_of', {
+      nullable: true,
+    })
+    if (newestMs != null && newestMs > measuredMs + FUTURE_TOLERANCE_MS) {
+      throw new Error(`${row.slug}[tf${row.timeframe}] stats timestamp is in the future`)
+    }
+
+    return {
+      ...normalized,
+      measurement_state: deriveMeasurementState(normalized, measuredIso, statsFreshnessHours),
+    }
+  })
+
+  if (seen.size !== expectedKeys.size) {
+    throw new Error('measurement did not close over the complete expected contract')
+  }
+  return evidence
+}
+
+export function evaluateEvidence(
+  evidence,
+  {
+    lowFillPct = 0.2,
+    lowFillMinRows = 200,
+    strictLowFill = false,
+    zeroFillExempt = ZERO_FILL_EXEMPT,
+    lowFillExempt = LOW_FILL_EXEMPT,
+  } = {}
+) {
+  const violations = []
+  const lowFill = []
+  const stateFailures = new Set()
+
+  for (const row of evidence) {
+    if (row.measurement_state !== 'measured') {
+      const stateKey = `${row.source_id}:${row.timeframe}:${row.measurement_state}`
+      if (!stateFailures.has(stateKey)) {
+        stateFailures.add(stateKey)
+        violations.push(
+          `${row.slug}[tf${row.timeframe}] completeness state=${row.measurement_state}`
+        )
+      }
+      continue
+    }
+
+    const metricKey = `${row.slug}:${row.metric}`
+    if (row.fresh_filled === 0 && !zeroFillExempt.has(metricKey)) {
+      violations.push(
+        `${row.slug}.${row.metric}[tf${row.timeframe}] has 0/${row.population_total} fresh values`
       )
-      if (STRICT_LOW_FILL) {
-        for (const w of lowFill) {
+      continue
+    }
+
+    if (
+      row.population_total >= lowFillMinRows &&
+      row.fresh_filled > 0 &&
+      !lowFillExempt.has(metricKey)
+    ) {
+      const ratio = row.fresh_filled / row.population_total
+      if (ratio < lowFillPct) {
+        const warning = {
+          slug: row.slug,
+          timeframe: row.timeframe,
+          metric: row.metric,
+          ratio,
+          fresh_filled: row.fresh_filled,
+          population_total: row.population_total,
+        }
+        lowFill.push(warning)
+        if (strictLowFill) {
           violations.push(
-            `${w.slug}.${w.metric} [tf${w.timeframe}] 填充仅 ${w.pct}% (${w.filled}/${w.total})`
+            `${row.slug}.${row.metric}[tf${row.timeframe}] fresh coverage ${(ratio * 100).toFixed(
+              1
+            )}% (${row.fresh_filled}/${row.population_total})`
           )
         }
       }
     }
+  }
 
-    if (violations.length === 0) {
-      console.log(`✅ 无断链、无回填停滞${lowFill.length ? '(低填充仅告警,未计入)' : ''}`)
+  lowFill.sort((left, right) => left.ratio - right.ratio)
+  return { violations, lowFill }
+}
+
+function evidencePayload(evidence) {
+  return evidence.map(({ slug: _slug, ...row }) => row)
+}
+
+async function writeEvidence(client, evidence, takenOn, contractHash) {
+  const result = await client.query(UPSERT_EVIDENCE_SQL, [
+    JSON.stringify(evidencePayload(evidence)),
+  ])
+  if (result.rowCount !== evidence.length) {
+    throw new Error(
+      `evidence upsert returned ${result.rowCount ?? 'unknown'} rows for ${evidence.length} cells`
+    )
+  }
+
+  await client.query(
+    `delete from arena.metric_completeness_daily
+     where taken_on = $1::date and contract_hash <> $2`,
+    [takenOn, contractHash]
+  )
+  const exact = await client.query(
+    `select count(*)::bigint as cell_count
+     from arena.metric_completeness_daily
+     where taken_on = $1::date and contract_hash = $2`,
+    [takenOn, contractHash]
+  )
+  const persisted = parseCount(exact.rows[0]?.cell_count, 'persisted evidence cell_count')
+  if (persisted !== evidence.length) {
+    throw new Error(`persisted evidence has ${persisted} rows, expected ${evidence.length}`)
+  }
+}
+
+async function snapshotLegacyTrend(client, cells, takenOn) {
+  const legacy = await client.query(LEGACY_TREND_SQL, [JSON.stringify(cells)])
+  const rows = legacy.rows.map((row) => ({
+    slug: row.slug,
+    metric: row.metric,
+    filled: parseCount(row.filled, `${row.slug}.${row.metric}.legacy_filled`),
+    total: parseCount(row.total, `${row.slug}.${row.metric}.legacy_total`),
+  }))
+  await client.query(`delete from arena.metric_fill_trend where taken_on = $1::date`, [takenOn])
+  await client.query(
+    `insert into arena.metric_fill_trend (taken_on, slug, metric, filled, total)
+     select $1::date, trend.slug, trend.metric, trend.filled, trend.total
+     from pg_catalog.jsonb_to_recordset($2::jsonb) as trend(
+       slug text,
+       metric text,
+       filled bigint,
+       total bigint
+     )
+     on conflict (taken_on, slug, metric)
+     do update set filled = excluded.filled, total = excluded.total`,
+    [takenOn, JSON.stringify(rows)]
+  )
+
+  const { rows: stalled } = await client.query(
+    `with backfill_sources as (
+       select slug
+       from arena.sources
+       where status = 'active'
+         and serving_mode = 'serving'
+         and (meta->>'series_backfill_topn') ~ '^[0-9]+$'
+         and (meta->>'series_backfill_topn')::bigint > deep_profile_topn
+     )
+     select
+       today.slug,
+       today.metric,
+       today.filled,
+       today.total,
+       old.filled as filled_7d_ago
+     from arena.metric_fill_trend as today
+     join arena.metric_fill_trend as old
+       on old.slug = today.slug
+      and old.metric = today.metric
+      and old.taken_on = $1::date - 7
+     join backfill_sources as source_row on source_row.slug = today.slug
+     where today.taken_on = $1::date
+       and today.filled <= old.filled
+       and today.total > 0
+       and today.filled::double precision / today.total < $2`,
+    [takenOn, TREND_PLATEAU_OK]
+  )
+  return stalled
+    .filter((row) => TREND_METRICS.has(row.metric))
+    .sort(
+      (left, right) => compareText(left.slug, right.slug) || compareText(left.metric, right.metric)
+    )
+}
+
+function formatStateSummary(evidence) {
+  const counts = new Map()
+  for (const row of evidence) {
+    counts.set(row.measurement_state, (counts.get(row.measurement_state) ?? 0) + 1)
+  }
+  return [...counts.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([state, count]) => `${state}=${count}`)
+    .join(', ')
+}
+
+async function executeCheck(pool, config) {
+  const client = await pool.connect()
+  let transactionOpen = false
+  try {
+    await client.query('begin isolation level repeatable read')
+    transactionOpen = true
+    await client.query(`set local lock_timeout = '5s'`)
+    await client.query(`set local statement_timeout = '110s'`)
+    const lock = await client.query(
+      `select pg_catalog.pg_try_advisory_xact_lock(174598901, 1) as acquired`
+    )
+    if (lock.rows[0]?.acquired !== true) {
+      throw new Error('another metric completeness measurement is already running')
+    }
+
+    const clock = await client.query(`select pg_catalog.transaction_timestamp() as measured_at`)
+    const measuredAt = clock.rows[0]?.measured_at
+    timestampMs(measuredAt, 'transaction measured_at')
+
+    const sourceResult = await client.query(SOURCE_CONTRACT_SQL)
+    const cells = buildContractCells(sourceResult.rows)
+    const contractHash = completenessContractHash(cells, config.statsFreshnessHours)
+
+    const measurementResult = await client.query(MEASUREMENT_SQL, [
+      measuredAt,
+      config.statsFreshnessHours,
+      JSON.stringify(cells),
+    ])
+    const evidence = normalizeEvidenceRows(
+      measurementResult.rows,
+      cells,
+      measuredAt,
+      config.statsFreshnessHours,
+      contractHash
+    )
+    const takenOn = evidence[0].taken_on
+    const evaluation = evaluateEvidence(evidence, config)
+
+    await writeEvidence(client, evidence, takenOn, contractHash)
+    const stalled = await snapshotLegacyTrend(client, cells, takenOn)
+    for (const row of stalled) {
+      evaluation.violations.push(
+        `${row.slug}.${row.metric} backfill stalled for 7 days ` +
+          `(${row.filled_7d_ago}->${row.filled}/${row.total})`
+      )
+    }
+    await client.query('commit')
+    transactionOpen = false
+
+    console.log(
+      `metric-completeness: ${sourceResult.rows.length} sources, ${cells.length} cells, ` +
+        `contract=${contractHash.slice(0, 12)}`
+    )
+    console.log(`measurement states: ${formatStateSummary(evidence)}`)
+    console.log('daily evidence and aggregate compatibility trend committed')
+
+    if (evaluation.lowFill.length > 0) {
+      console.log(
+        `${evaluation.lowFill.length} cells below ${(config.lowFillPct * 100).toFixed(
+          0
+        )}% fresh population coverage:`
+      )
+      for (const warning of evaluation.lowFill) {
+        console.log(
+          `  - ${warning.slug}.${warning.metric}[tf${warning.timeframe}] ` +
+            `${(warning.ratio * 100).toFixed(1)}% ` +
+            `(${warning.fresh_filled}/${warning.population_total})`
+        )
+      }
+    }
+
+    if (evaluation.violations.length === 0) {
+      console.log('✅ completeness contract is healthy')
       return 0
     }
-    console.error(`❌ ${violations.length} 处异常:`)
-    for (const v of violations) console.error(`   - ${v}`)
-    console.error('   (断链→修 parser 或记 EXEMPT;停滞→查 worker tierbs 日志/队列)')
+    console.error(`❌ ${evaluation.violations.length} completeness violations:`)
+    for (const violation of evaluation.violations) console.error(`  - ${violation}`)
     return 1
+  } catch (error) {
+    if (transactionOpen) {
+      await client.query('rollback').catch(() => {})
+    }
+    throw error
+  } finally {
+    client.release()
+  }
+}
+
+export async function main(env = process.env) {
+  const databaseUrl = env.DATABASE_URL
+  if (!databaseUrl) {
+    if (env.REQUIRE_DATABASE_URL === '1') {
+      console.error('fill-rate-check requires DATABASE_URL in this environment')
+      return 1
+    }
+    console.log('fill-rate-check SKIPPED - DATABASE_URL not set')
+    return 0
+  }
+
+  const config = {
+    statsFreshnessHours: parsePositiveInteger(
+      env.STATS_FRESHNESS_HOURS,
+      'STATS_FRESHNESS_HOURS',
+      STATS_FRESHNESS_HOURS_DEFAULT
+    ),
+    lowFillPct: parseRatio(env.LOW_FILL_PCT, 'LOW_FILL_PCT', 0.2),
+    lowFillMinRows: parsePositiveInteger(env.LOW_FILL_MIN_ROWS, 'LOW_FILL_MIN_ROWS', 200),
+    strictLowFill: env.STRICT_LOW_FILL === '1',
+  }
+  const { default: pg } = await import('pg')
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: 1 })
+  try {
+    return await executeCheck(pool, config)
   } finally {
     await pool.end()
   }
 }
 
-main().then(
-  (code) => process.exit(code),
-  (err) => {
-    // 基建错误(连不上库等)≠ 契约违规:报出来但不红——避免网络抖动天天误报。
-    console.error('fill-rate-check infrastructure error (not a violation):', err.message)
-    process.exit(0)
-  }
-)
+const invokedDirectly =
+  process.argv[1] != null && import.meta.url === pathToFileURL(process.argv[1]).href
+
+if (invokedDirectly) {
+  main().then(
+    (code) => process.exit(code),
+    (error) => {
+      console.error(
+        'fill-rate-check infrastructure/contract error:',
+        error instanceof Error ? error.message : String(error)
+      )
+      process.exit(1)
+    }
+  )
+}

@@ -121,9 +121,10 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          # 填充率契约(fill-rate-check)需直连 arena schema;缺失时该检查
-          # fail-open 跳过,不阻断其余检查。
+          # 定时环境必须提供直连 arena schema；缺失、查询失败或证据写入失败
+          # 都硬红，不能把监控失明当成数据健康。
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          REQUIRE_DATABASE_URL: '1'
         run: node scripts/openclaw/schema-canary-sentinel.mjs
 
   daily-pipeline-report:
