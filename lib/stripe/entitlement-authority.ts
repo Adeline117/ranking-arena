@@ -160,6 +160,28 @@ export type TrialAuthority = {
   subscriptionStatus: 'trialing'
 }
 
+/**
+ * Identity and product authority carried by one signature-verified Stripe
+ * subscription event snapshot. This deliberately does not imply payment:
+ * non-entitling states must be reconciled against the exact local
+ * payment/trial binding by `reconcile_recurring_subscription_state_atomic`.
+ */
+export type SubscriptionEventStateAuthority = {
+  kind: 'subscription_state'
+  userId: string
+  customerId: string
+  subscriptionId: string
+  currentInvoiceId: string | null
+  priceId: string
+  plan: ProPlan
+  currency: string
+  periodStart: number
+  periodEnd: number
+  subscriptionStatus: Stripe.Subscription.Status
+  cancelAtPeriodEnd: boolean
+  canceledAt: number | null
+}
+
 export type CheckoutEntitlementAuthority =
   | RecurringPaymentAuthority
   | LifetimePaymentAuthority
@@ -1090,6 +1112,188 @@ export async function resolveSubscriptionAuthority(
     objectIds
   )
   return resolveRecurringInvoiceAuthority(client, invoiceId, options)
+}
+
+/**
+ * Resolve identity and product state from a Stripe-signature-verified
+ * subscription event snapshot without turning that state into payment
+ * authority.
+ *
+ * Unlike `resolveSubscriptionAuthority`, this function intentionally does not
+ * retrieve the current Subscription or follow `latest_invoice`: replacing an
+ * older webhook snapshot with today's Stripe state would attach the older
+ * event id/timestamp to a newer state transition. The customer is still
+ * retrieved so both required identity sources must agree.
+ */
+export async function resolveSubscriptionEventStateAuthority(
+  client: StripeAuthorityClient,
+  subscription: Stripe.Subscription,
+  options: StripeAuthorityOptions
+): Promise<SubscriptionEventStateAuthority> {
+  const objectIds: StripeAuthorityObjectIds = {}
+  const subscriptionId = nonEmptyId(subscription, 'subscription', 'subscription', 'sub_', objectIds)
+  objectIds.subscriptionId = subscriptionId
+  const customerId = nonEmptyId(
+    subscription.customer,
+    'subscription',
+    'subscription.customer',
+    'cus_',
+    objectIds
+  )
+  objectIds.customerId = customerId
+
+  const supportedStatuses: readonly Stripe.Subscription.Status[] = [
+    'active',
+    'trialing',
+    'past_due',
+    'canceled',
+    'unpaid',
+    'incomplete',
+    'incomplete_expired',
+    'paused',
+  ]
+  if (!supportedStatuses.includes(subscription.status)) {
+    authorityError(
+      'invalid_payment_state',
+      'subscription',
+      'Subscription event status is unsupported',
+      objectIds,
+      { status: subscription.status ?? null }
+    )
+  }
+  if (typeof subscription.cancel_at_period_end !== 'boolean') {
+    authorityError(
+      'invalid_object',
+      'subscription',
+      'Subscription cancellation state is malformed',
+      objectIds,
+      { cancelAtPeriodEnd: subscription.cancel_at_period_end ?? null }
+    )
+  }
+  if (subscription.items.data.length !== 1) {
+    authorityError(
+      'ambiguous_product',
+      'subscription',
+      'Subscription event must contain exactly one item',
+      objectIds,
+      { itemIds: subscription.items.data.map((item) => item.id) }
+    )
+  }
+
+  const item = subscription.items.data[0]
+  if (item.quantity !== 1) {
+    authorityError(
+      'ambiguous_product',
+      'subscription',
+      'Subscription event product quantity is not one',
+      objectIds,
+      { itemId: item.id, quantity: item.quantity ?? null }
+    )
+  }
+  const priceId = nonEmptyId(
+    item.price,
+    'subscription',
+    'subscription event price',
+    'price_',
+    objectIds
+  )
+  const product = resolveConfiguredProduct(
+    priceId,
+    options.products,
+    ['monthly', 'yearly'],
+    objectIds
+  )
+  if (product.plan === 'lifetime') {
+    authorityError(
+      'unsupported_product',
+      'subscription',
+      'Lifetime products cannot create recurring subscription state',
+      objectIds,
+      { priceId }
+    )
+  }
+
+  const periodStart = item.current_period_start
+  const periodEnd = item.current_period_end
+  if (
+    !Number.isSafeInteger(periodStart) ||
+    periodStart <= 0 ||
+    !Number.isSafeInteger(periodEnd) ||
+    periodEnd <= periodStart
+  ) {
+    authorityError(
+      'invalid_period',
+      'subscription',
+      'Subscription event period is invalid',
+      objectIds,
+      { periodStart: periodStart ?? null, periodEnd: periodEnd ?? null }
+    )
+  }
+
+  const currentInvoiceId =
+    subscription.latest_invoice === null
+      ? null
+      : nonEmptyId(
+          subscription.latest_invoice,
+          'subscription',
+          'subscription.latest_invoice',
+          'in_',
+          objectIds
+        )
+  if (currentInvoiceId) objectIds.invoiceId = currentInvoiceId
+  if (subscription.status === 'past_due' && !currentInvoiceId) {
+    authorityError(
+      'invalid_object',
+      'subscription',
+      'Past-due subscription event has no current invoice',
+      objectIds
+    )
+  }
+
+  const canceledAt = subscription.canceled_at
+  if (canceledAt !== null && (!Number.isSafeInteger(canceledAt) || (canceledAt as number) <= 0)) {
+    authorityError(
+      'invalid_object',
+      'subscription',
+      'Subscription cancellation timestamp is malformed',
+      objectIds,
+      { canceledAt: canceledAt ?? null }
+    )
+  }
+
+  const customer = await retrieveCustomer(client, customerId, objectIds)
+  const currency = assertCurrencies(
+    [
+      { source: 'subscription.currency', value: subscription.currency },
+      { source: 'price.currency', value: item.price.currency },
+    ],
+    options.products.expectedCurrency,
+    objectIds
+  )
+  const userId = resolveIdentity(
+    [
+      { source: 'subscription.metadata', metadata: subscription.metadata, required: true },
+      { source: 'customer.metadata', metadata: customer.metadata, required: true },
+    ],
+    options.expectedUserId,
+    objectIds
+  )
+
+  return {
+    kind: 'subscription_state',
+    userId,
+    customerId,
+    subscriptionId,
+    currentInvoiceId,
+    priceId,
+    plan: product.plan,
+    currency,
+    periodStart,
+    periodEnd,
+    subscriptionStatus: subscription.status,
+    cancelAtPeriodEnd: subscription.cancel_at_period_end,
+    canceledAt,
+  }
 }
 
 async function resolveCheckoutProduct(
