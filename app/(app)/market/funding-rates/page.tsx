@@ -45,44 +45,59 @@ interface FundingRateRow {
   funding_time: string
 }
 
-async function getFundingRates(): Promise<FundingRateRow[]> {
-  const supabase = getSupabaseAdmin()
+interface FundingRatesLoadResult {
+  rates: FundingRateRow[]
+  loadError: boolean
+}
 
-  // Use DB-side deduplication via RPC (DISTINCT ON is far more efficient than
-  // fetching 200 rows and deduplicating in memory)
+async function getFundingRates(): Promise<FundingRatesLoadResult> {
   try {
-    const { data, error } = await supabase.rpc('get_latest_funding_rates')
-    if (!error && data) return data as FundingRateRow[]
-  } catch {
-    // RPC not available, fall back to client-side dedup
-  }
+    const supabase = getSupabaseAdmin()
 
-  // Fallback: fetch and deduplicate in memory
-  const { data, error } = await supabase
-    .from('funding_rates')
-    .select('platform, symbol, funding_rate, funding_time')
-    .order('funding_time', { ascending: false })
-    .limit(500)
-
-  if (error) {
-    logger.error('[funding-rates] fetch error:', error.message)
-    return []
-  }
-
-  const seen = new Set<string>()
-  const deduped: FundingRateRow[] = []
-  for (const row of data || []) {
-    const key = `${row.platform}:${row.symbol}`
-    if (!seen.has(key)) {
-      seen.add(key)
-      deduped.push(row)
+    // Use DB-side deduplication via RPC (DISTINCT ON is far more efficient than
+    // fetching 200 rows and deduplicating in memory).
+    try {
+      const { data, error } = await supabase.rpc('get_latest_funding_rates')
+      if (!error && data) {
+        return { rates: data as FundingRateRow[], loadError: false }
+      }
+    } catch {
+      // RPC not available, fall back to client-side dedup.
     }
+
+    // Fallback: fetch and deduplicate in memory.
+    const { data, error } = await supabase
+      .from('funding_rates')
+      .select('platform, symbol, funding_rate, funding_time')
+      .order('funding_time', { ascending: false })
+      .limit(500)
+
+    if (error) {
+      logger.error('[funding-rates] fetch error:', error.message)
+      return { rates: [], loadError: true }
+    }
+
+    const seen = new Set<string>()
+    const deduped: FundingRateRow[] = []
+    for (const row of data || []) {
+      const key = `${row.platform}:${row.symbol}`
+      if (!seen.has(key)) {
+        seen.add(key)
+        deduped.push(row)
+      }
+    }
+    return { rates: deduped, loadError: false }
+  } catch (error) {
+    logger.error(
+      '[funding-rates] fetch error:',
+      error instanceof Error ? error.message : String(error)
+    )
+    return { rates: [], loadError: true }
   }
-  return deduped
 }
 
 export default async function FundingRatesPage() {
-  const rates = await getFundingRates()
+  const { rates, loadError } = await getFundingRates()
 
-  return <FundingRatesClient rates={rates} />
+  return <FundingRatesClient rates={rates} loadError={loadError} />
 }

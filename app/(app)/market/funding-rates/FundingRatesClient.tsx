@@ -2,8 +2,10 @@
 
 import { useState, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
+import ErrorState from '@/app/components/ui/ErrorState'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { formatMarketTimeUtc } from '@/lib/market/time'
@@ -48,7 +50,19 @@ function formatApr(apr: number): string {
   return (apr * 100).toFixed(2) + '%'
 }
 
-export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] }) {
+function FundingRatesLoadError({ title, description }: { title: string; description: string }) {
+  const router = useRouter()
+
+  return <ErrorState title={title} description={description} retry={() => router.refresh()} />
+}
+
+export default function FundingRatesClient({
+  rates,
+  loadError = false,
+}: {
+  rates: FundingRateRow[]
+  loadError?: boolean
+}) {
   const { t } = useLanguage()
   const [sortField, setSortField] = useState<SortField>('funding_rate')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
@@ -243,7 +257,12 @@ export default function FundingRatesClient({ rates }: { rates: FundingRateRow[] 
         </div>
 
         {/* Table */}
-        {rates.length === 0 ? (
+        {loadError ? (
+          <FundingRatesLoadError
+            title={t('marketDataError')}
+            description={t('checkNetworkAndRetry')}
+          />
+        ) : rates.length === 0 ? (
           <EmptyState title={t('noFundingData')} description={t('marketDataPending')} />
         ) : (
           <div style={{ overflowX: 'auto' }}>
