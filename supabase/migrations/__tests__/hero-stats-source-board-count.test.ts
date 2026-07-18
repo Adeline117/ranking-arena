@@ -7,6 +7,15 @@ const migration = readFileSync(
 )
 
 describe('hero stats live source-board count', () => {
+  it('is an atomic, bounded migration accepted by the launch runner', () => {
+    expect(migration.match(/^BEGIN;$/gm)).toHaveLength(1)
+    expect(migration.match(/^COMMIT;$/gm)).toHaveLength(1)
+    expect(migration).toContain("SET LOCAL lock_timeout = '5s'")
+    expect(migration).toContain("SET LOCAL statement_timeout = '30s'")
+    expect(migration).toContain("NOTIFY pgrst, 'reload schema'")
+    expect(migration.trimEnd()).toMatch(/COMMIT;$/)
+  })
+
   it('counts one positive cache row per live ranking board', () => {
     expect(migration).toContain('SELECT COUNT(*) INTO v_source_board_count')
     expect(migration).toContain("RIGHT(source, 4) = '_gt0'")

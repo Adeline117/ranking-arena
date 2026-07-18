@@ -7,6 +7,11 @@
 -- 20260716063000_rebuild_leaderboard_count_cache.sql, so every positive live
 -- board has exactly one <source>_gt0 row and retired boards are absent.
 
+BEGIN;
+
+SET LOCAL lock_timeout = '5s';
+SET LOCAL statement_timeout = '30s';
+
 CREATE OR REPLACE FUNCTION public.get_hero_stats()
 RETURNS TABLE(exchange_count bigint, trader_count bigint)
 LANGUAGE plpgsql
@@ -49,3 +54,7 @@ END;
 $$;
 
 GRANT EXECUTE ON FUNCTION public.get_hero_stats() TO anon, authenticated, service_role;
+
+NOTIFY pgrst, 'reload schema';
+
+COMMIT;
