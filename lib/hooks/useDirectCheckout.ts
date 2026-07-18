@@ -9,15 +9,21 @@
  *
  * Usage:
  *   const { checkout, isLoading } = useDirectCheckout()
- *   <button onClick={() => checkout('yearly')} disabled={isLoading}>Subscribe</button>
+ *   <button onClick={() => checkout({ plan: 'yearly' })} disabled={isLoading}>Subscribe</button>
  */
 
 import { useState, useCallback, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCsrfHeaders } from '@/lib/api/csrf'
 import { tokenRefreshCoordinator } from '@/lib/auth/token-refresh'
+import {
+  buildPricingCheckoutLoginHref,
+  type PricingCheckoutIntent,
+} from '@/lib/premium/pricing-login-intent'
 
-type Plan = 'monthly' | 'yearly' | 'lifetime'
+type DirectCheckoutIntent = PricingCheckoutIntent & {
+  promotionCode?: string
+}
 
 export function useDirectCheckout() {
   const router = useRouter()
@@ -30,7 +36,7 @@ export function useDirectCheckout() {
   const inFlightRef = useRef(false)
 
   const checkout = useCallback(
-    async (plan: Plan, options?: { promotionCode?: string; trial?: boolean }) => {
+    async (intent: DirectCheckoutIntent) => {
       if (inFlightRef.current) return
       inFlightRef.current = true
       setIsLoading(true)
@@ -38,12 +44,13 @@ export function useDirectCheckout() {
       setAlreadySubscribed(false)
 
       try {
+        const loginHref = buildPricingCheckoutLoginHref(intent)
         // Server auth reads the Authorization Bearer header (cookie fallback is
         // unreliable — sessions live in localStorage, not cookies). Without this
         // header, logged-in users got a 401 and the subscribe button did nothing.
         const accessToken = await tokenRefreshCoordinator.getValidToken()
         if (!accessToken) {
-          router.push(`/login?redirect=${encodeURIComponent('/pricing')}`)
+          router.push(loginHref)
           return
         }
 
@@ -55,9 +62,9 @@ export function useDirectCheckout() {
             ...getCsrfHeaders(),
           },
           body: JSON.stringify({
-            plan,
-            promotionCode: options?.promotionCode,
-            trial: options?.trial,
+            plan: intent.plan,
+            promotionCode: intent.promotionCode,
+            trial: intent.plan === 'lifetime' ? undefined : intent.trial,
           }),
         })
 
@@ -65,8 +72,9 @@ export function useDirectCheckout() {
 
         if (!res.ok) {
           if (res.status === 401) {
-            // Not logged in — redirect to login with return URL
-            router.push(`/login?redirect=${encodeURIComponent('/pricing')}`)
+            // Keep only the typed pricing intent in a fixed internal return path.
+            // The pricing page restores the selection but never auto-starts payment.
+            router.push(loginHref)
             return
           }
           if (data.code === 'ALREADY_SUBSCRIBED') {
