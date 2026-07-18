@@ -29,6 +29,7 @@ import {
   claimedTraderCanonicalHref,
   type ClaimedTraderIdentity,
 } from '@/lib/identity/claimed-trader'
+import { buildTraderClaimReturnPath } from '@/lib/auth/trader-claim-login'
 import { Box, Text } from '@/app/components/base'
 // TopNav is now rendered by app/(app)/trader/[handle]/layout.tsx
 // (was pulled into this client bundle unnecessarily before).
@@ -1013,7 +1014,11 @@ export default function TraderProfileClient({
                       claimHref={
                         isVerifiedData
                           ? undefined
-                          : `/claim?trader=${encodeURIComponent(data.source_trader_id)}&source=${encodeURIComponent(data.source)}&handle=${encodeURIComponent(data.handle || data.source_trader_id)}&step=verify`
+                          : buildTraderClaimReturnPath({
+                              traderId: data.source_trader_id,
+                              source: data.source,
+                              handle: data.handle,
+                            })
                       }
                     />
                   </Box>
