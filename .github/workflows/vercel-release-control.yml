@@ -1,0 +1,85 @@
+name: Vercel Release Control
+
+# Vercel's Git integration and Deploy Gate must never both write the production
+# domains. Keep Git deployments staged; Deploy Gate is the sole promoter after
+# CI, exact-SHA smoke, and rollback-anchor capture.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: vercel-release-control-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  enforce-single-production-writer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+    steps:
+      - name: Disable Git auto-assignment and verify project state
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            if [ -z "${!name:-}" ]; then
+              echo "::error::${name} is required to enforce the single production writer"
+              exit 1
+            fi
+          done
+
+          project_url="https://api.vercel.com/v9/projects/${VERCEL_PROJECT_ID}?teamId=${VERCEL_ORG_ID}"
+          patch_file="${RUNNER_TEMP}/vercel-project-patch.json"
+          verify_file="${RUNNER_TEMP}/vercel-project-verify.json"
+
+          patch_http=$(curl --silent --show-error \
+            --connect-timeout 5 --max-time 30 \
+            --output "$patch_file" --write-out '%{http_code}' \
+            --request PATCH \
+            --header "Authorization: Bearer ${VERCEL_TOKEN}" \
+            --header 'Content-Type: application/json' \
+            --data '{"autoAssignCustomDomains":false}' \
+            "$project_url")
+          if [[ "$patch_http" != 2* ]]; then
+            patch_error=$(jq -r '.error.message // .message // "unknown Vercel error"' \
+              "$patch_file" 2>/dev/null || true)
+            echo "::error::Vercel release-control PATCH failed HTTP=${patch_http}: ${patch_error}"
+            exit 1
+          fi
+
+          patch_value=$(jq -r \
+            '.autoAssignCustomDomains | if . == false then "false" elif . == true then "true" else "missing" end' \
+            "$patch_file")
+          if [ "$patch_value" != 'false' ]; then
+            echo "::error::Vercel PATCH did not disable autoAssignCustomDomains"
+            exit 1
+          fi
+
+          verify_http=$(curl --silent --show-error \
+            --connect-timeout 5 --max-time 30 \
+            --output "$verify_file" --write-out '%{http_code}' \
+            --header "Authorization: Bearer ${VERCEL_TOKEN}" \
+            "$project_url")
+          if [[ "$verify_http" != 2* ]]; then
+            verify_error=$(jq -r '.error.message // .message // "unknown Vercel error"' \
+              "$verify_file" 2>/dev/null || true)
+            echo "::error::Vercel release-control verification failed HTTP=${verify_http}: ${verify_error}"
+            exit 1
+          fi
+
+          verify_value=$(jq -r \
+            '.autoAssignCustomDomains | if . == false then "false" elif . == true then "true" else "missing" end' \
+            "$verify_file")
+          if [ "$verify_value" != 'false' ]; then
+            echo "::error::Vercel Git deployments can still auto-assign production domains"
+            exit 1
+          fi
+
+          echo "Vercel autoAssignCustomDomains=false; Deploy Gate is the sole production writer."
