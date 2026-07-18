@@ -244,7 +244,7 @@ export const ScoreBreakdownTooltip = memo(function ScoreBreakdownTooltip({
   return (
     <div
       ref={ref}
-      className="score-tooltip-trigger"
+      className="score-tooltip-trigger score-tooltip-hit-target"
       role="button"
       tabIndex={0}
       aria-label={t('scoreBreakdownLabel')}
