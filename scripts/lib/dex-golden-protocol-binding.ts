@@ -28,9 +28,9 @@ import {
   type DexSolanaProtocolArtifact,
 } from './dex-solana-protocol-manifest'
 
-export const DEX_GOLDEN_PROTOCOL_BINDING_SCHEMA_VERSION = 2 as const
+export const DEX_GOLDEN_PROTOCOL_BINDING_SCHEMA_VERSION = 3 as const
 export const DEX_GOLDEN_PROTOCOL_BINDING_CONTRACT =
-  'arena.dex.protocol-decoder-golden-binding@2' as const
+  'arena.dex.protocol-decoder-golden-binding@3' as const
 
 export const DEX_GOLDEN_PROTOCOL_BINDING_REQUIRED_BLOCKERS = [
   'commercial_decoder_clearance_unverified',
@@ -619,7 +619,7 @@ export function buildDexGoldenProtocolBinding(
     throw new Error(`Solana protocol does not exist: ${selection.protocol_id}`)
   }
   if (protocol.loader_evidence.state !== 'not_verified' || protocol.code_epochs.length !== 0) {
-    throw new Error('draft binding v1 requires an unverified Solana loader and no code epochs')
+    throw new Error('draft binding requires an unverified Solana loader and no code epochs')
   }
   const artifactIds = [
     ...new Set([...protocol.reference_artifact_ids, protocol.program_address_artifact_id]),

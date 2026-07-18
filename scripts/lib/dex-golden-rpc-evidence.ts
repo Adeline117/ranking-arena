@@ -11,17 +11,18 @@ import {
   DEX_SOLANA_STABLE_TRANSACTION_FACTS_CONTRACT,
 } from './dex-golden-transaction-facts'
 
-export const DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION = 2 as const
+export const DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION = 3 as const
 export const DEX_GOLDEN_RPC_EVIDENCE_CONTRACT =
-  'arena.dex.golden-rpc-transaction-evidence@2' as const
+  'arena.dex.golden-rpc-transaction-evidence@3' as const
 export const DEX_GOLDEN_RPC_EXCHANGE_BINDING_CONTRACT =
-  'arena.dex.golden-rpc-exchange-binding@1' as const
+  'arena.dex.golden-rpc-exchange-binding@2' as const
 
 export const DEX_GOLDEN_RPC_REQUIRED_BLOCKERS = [
   'decoder_facts_unverified',
   'normalized_documents_not_replayed',
   'protocol_invocation_unverified',
   'provider_independence_not_attested',
+  'raw_and_normalized_bodies_not_persisted',
   'raw_blob_persistence_not_authorized',
 ] as const
 
@@ -197,18 +198,11 @@ const rawRequestBodySchema = z
     byte_length: positiveByteLengthSchema.max(MAX_REQUEST_BODY_BYTES),
     media_type: z.literal('application/json'),
     hash_basis: z.literal('utf8_json_rpc_request_body_bytes'),
-    blob_locator: z.string(),
+    persistence_state: z.literal('not_persisted'),
+    content_available_for_replay: z.literal(false),
     contains_secrets: z.literal(false),
   })
   .strict()
-  .superRefine((body, context) => {
-    if (body.blob_locator !== `sha256:${body.sha256}`) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'request blob locator must be content addressed by its exact SHA-256',
-      })
-    }
-  })
 
 const rawResponseBodySchema = z
   .object({
@@ -216,18 +210,11 @@ const rawResponseBodySchema = z
     byte_length: positiveByteLengthSchema.max(MAX_RESPONSE_BODY_BYTES),
     media_type: z.literal('application/json'),
     hash_basis: z.literal('fetch_content_decoded_http_entity_body_bytes_before_utf8'),
-    blob_locator: z.string(),
+    persistence_state: z.literal('not_persisted'),
+    content_available_for_replay: z.literal(false),
     contains_secrets: z.literal(false),
   })
   .strict()
-  .superRefine((body, context) => {
-    if (body.blob_locator !== `sha256:${body.sha256}`) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'response blob locator must be content addressed by its exact SHA-256',
-      })
-    }
-  })
 
 const rpcExchangeSchema = z
   .object({
@@ -247,18 +234,11 @@ const normalizedDocumentSchema = z
     sha256: sha256Schema,
     byte_length: positiveByteLengthSchema.max(MAX_RESPONSE_BODY_BYTES),
     hash_basis: z.literal('strict_canonical_json_utf8_bytes'),
-    blob_locator: z.string(),
+    persistence_state: z.literal('not_persisted'),
+    content_available_for_replay: z.literal(false),
     contains_secrets: z.literal(false),
   })
   .strict()
-  .superRefine((document, context) => {
-    if (document.blob_locator !== `sha256:${document.sha256}`) {
-      context.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: 'normalized document locator must be content addressed by its exact SHA-256',
-      })
-    }
-  })
 
 const bscFinalityWitnessSchema = z
   .object({
@@ -421,7 +401,7 @@ export function dexGoldenRpcExchangeBindingSha256(input: DexGoldenRpcExchangeBin
     {
       domain: 'arena.dex.golden-rpc-exchange-binding',
       schema_id: DEX_GOLDEN_RPC_EXCHANGE_BINDING_CONTRACT,
-      schema_version: 1,
+      schema_version: 2,
     },
     input
   )

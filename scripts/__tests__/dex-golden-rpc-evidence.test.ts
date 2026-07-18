@@ -44,7 +44,8 @@ function rawBody(label: string, kind: 'request' | 'response') {
       kind === 'request'
         ? ('utf8_json_rpc_request_body_bytes' as const)
         : ('fetch_content_decoded_http_entity_body_bytes_before_utf8' as const),
-    blob_locator: `sha256:${sha256}`,
+    persistence_state: 'not_persisted' as const,
+    content_available_for_replay: false as const,
     contains_secrets: false as const,
   }
 }
@@ -55,7 +56,8 @@ function normalizedDocument(label: string) {
     sha256,
     byte_length: label.length + 32,
     hash_basis: 'strict_canonical_json_utf8_bytes' as const,
-    blob_locator: `sha256:${sha256}`,
+    persistence_state: 'not_persisted' as const,
+    content_available_for_replay: false as const,
     contains_secrets: false as const,
   }
 }
@@ -204,13 +206,21 @@ function rebuildExchangeBinding(
 }
 
 describe('DEX golden double-RPC evidence contract', () => {
-  it('pins the v2 envelope while preserving the unchanged v1 exchange binding', () => {
-    expect(DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION).toBe(2)
-    expect(DEX_GOLDEN_RPC_EVIDENCE_CONTRACT).toBe('arena.dex.golden-rpc-transaction-evidence@2')
-    expect(DEX_GOLDEN_RPC_EXCHANGE_BINDING_CONTRACT).toBe('arena.dex.golden-rpc-exchange-binding@1')
+  it('pins the metadata-only v3 envelope and its v2 exchange binding', () => {
+    expect(DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION).toBe(3)
+    expect(DEX_GOLDEN_RPC_EVIDENCE_CONTRACT).toBe('arena.dex.golden-rpc-transaction-evidence@3')
+    expect(DEX_GOLDEN_RPC_EXCHANGE_BINDING_CONTRACT).toBe('arena.dex.golden-rpc-exchange-binding@2')
+    expect(DEX_GOLDEN_RPC_REQUIRED_BLOCKERS).toEqual([
+      'decoder_facts_unverified',
+      'normalized_documents_not_replayed',
+      'protocol_invocation_unverified',
+      'provider_independence_not_attested',
+      'raw_and_normalized_bodies_not_persisted',
+      'raw_blob_persistence_not_authorized',
+    ])
     expect(DEX_BSC_GOLDEN_RPC_LANES).toHaveLength(8)
     expect(baseEnvelope('bsc').captures[0].rpc_exchanges[0].exchange_binding_sha256).toBe(
-      'd976d46c7af66aff527a7c11e5e37b27d240198d7c397ab7c65000814042c92f'
+      '1a2408ce84f7f45a5f22b39dbac30df6842a12aedbd93098e12056c683138f76'
     )
   })
 
@@ -221,8 +231,8 @@ describe('DEX golden double-RPC evidence contract', () => {
       expect(parseDexGoldenRpcEvidence(evidence)).toEqual(evidence)
       expect(dexGoldenRpcEvidenceSha256(evidence)).toBe(
         chain === 'bsc'
-          ? '0dd902355dca6a62f685431f7cec687ae42c4b558033021645f0585cd178066f'
-          : 'b8031f747ae37ab94163a401cda6312f026c18015e87e53c9d0f3d545f825844'
+          ? '0d9e1b85d623905a0474d91614d9ea4e718db0d9b8408a1bdc5f4379ea4ccc5a'
+          : 'db974a0e9d72be2c888ffcae8ef7daec0782d3075b5dc91d2157267b76016a47'
       )
     }
   )
@@ -320,14 +330,22 @@ describe('DEX golden double-RPC evidence contract', () => {
     }
   })
 
-  it('rejects every legacy v1 Solana envelope boundary independently', () => {
+  it('rejects every legacy v1/v2 Solana envelope boundary independently', () => {
     const oldSchema = clone(baseEnvelope('solana')) as any
     oldSchema.schema_version = 1
     expect(() => parseDexGoldenRpcEvidence(oldSchema)).toThrow()
 
+    const v2Schema = clone(baseEnvelope('solana')) as any
+    v2Schema.schema_version = 2
+    expect(() => parseDexGoldenRpcEvidence(v2Schema)).toThrow()
+
     const oldContract = clone(baseEnvelope('solana')) as any
     oldContract.data_contract = 'arena.dex.golden-rpc-transaction-evidence@1'
     expect(() => parseDexGoldenRpcEvidence(oldContract)).toThrow()
+
+    const v2Contract = clone(baseEnvelope('solana')) as any
+    v2Contract.data_contract = 'arena.dex.golden-rpc-transaction-evidence@2'
+    expect(() => parseDexGoldenRpcEvidence(v2Contract)).toThrow()
 
     const oldWitness = clone(baseEnvelope('solana')) as any
     oldWitness.captures[0].provider_finality_witness.policy =
@@ -384,7 +402,19 @@ describe('DEX golden double-RPC evidence contract', () => {
     )
   })
 
-  it('rejects unsafe blob metadata, zero hashes, and oversized responses', () => {
+  it('rejects persisted/replayable claims, legacy locators, zero hashes, and oversized responses', () => {
+    const persisted = clone(baseEnvelope('bsc')) as any
+    persisted.captures[0].rpc_exchanges[0].request.persistence_state = 'persisted'
+    expect(() => parseDexGoldenRpcEvidence(persisted)).toThrow()
+
+    const replayable = clone(baseEnvelope('solana')) as any
+    replayable.captures[0].normalized_documents.chain_anchor.content_available_for_replay = true
+    expect(() => parseDexGoldenRpcEvidence(replayable)).toThrow()
+
+    const legacyLocator = clone(baseEnvelope('bsc')) as any
+    legacyLocator.captures[0].rpc_exchanges[0].response.blob_locator = `sha256:${legacyLocator.captures[0].rpc_exchanges[0].response.sha256}`
+    expect(() => parseDexGoldenRpcEvidence(legacyLocator)).toThrow()
+
     const wrongBasis = baseEnvelope('bsc')
     ;(wrongBasis.captures[0].rpc_exchanges[0].response as any).hash_basis =
       'json_string_reencoded_bytes'
@@ -440,8 +470,8 @@ describe('DEX golden double-RPC evidence contract', () => {
 
     const serialized = JSON.stringify(baseEnvelope('bsc'))
     const duplicateKey = serialized.replace(
-      '"schema_version":2',
-      '"schema_version":2,"schema_version":2'
+      '"schema_version":3',
+      '"schema_version":3,"schema_version":3'
     )
     expect(() => parseDexGoldenRpcEvidenceJson(duplicateKey)).toThrow('invalid strict JSON')
   })

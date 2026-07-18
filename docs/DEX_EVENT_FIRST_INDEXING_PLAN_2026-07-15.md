@@ -57,9 +57,12 @@ flowchart LR
 - **证据持久化边界**：新增 DEX event/golden/acquisition 路径的网络响应只在内存中做有界读取、
   严格解析与哈希，随后清零或释放。可持久化的只有 endpoint identity、请求区间/参数哈希、HTTP
   状态、content length/hash、公开 block/tx 定位、确定性规范事实及 decoder/manifest SHA；
-  `sha256:<digest>` 只是内容标识，不表示对应 body 已保存或可取回。没有通过重新获取与重算演练
-  的批次必须标为 `declared_not_replayed`，不得进入 population denominator、serving、rank 或
-  score。
+  content SHA 只是内容完整性承诺，不是对象 locator，也不表示对应 body 已保存或可取回。
+  `golden-rpc-transaction-evidence@3` 因此固定
+  `persistence_state=not_persisted`、`content_available_for_replay=false` 并拒绝旧 @2 的
+  `blob_locator`；引用它的 `protocol-decoder-golden-binding` 同步升为 @3 并拒绝旧 @2，不能只换
+  source literal 后继续沿用旧 binding contract。没有通过重新获取与重算演练的批次必须标为
+  `declared_not_replayed`，不得进入 population denominator、serving、rank 或 score。
 - **前一版契约冲突（结构已解除，授权仍关闭）**：`arena.dex.acquisition-run-manifest@2` 曾把
   `transport.raw_page_archive_required=true` 固定为旧的 raw-replay 目标，同时把
   `claims.artifact_persistence_authorized=false` 固定为安全门。后者优先，因此 @2 只能作为未授权
