@@ -5,7 +5,7 @@
  * computeSeason main-loop split (TASKS.md "Open follow-ups").
  *
  * The gate distinguishes three cases per platform:
- *   • Has data in traderMap → use latest captured_at
+ *   • Has data in traderMap → use its conservative source_board_as_of
  *   • No data in traderMap but DB has fresh rows → query-failed, retry next cron
  *   • No data anywhere → truly stale
  *
@@ -57,15 +57,15 @@ export async function checkPlatformFreshness(
   for (const source of SOURCES_WITH_DATA) {
     const sourceTraders = Array.from(traderMap.values()).filter((t) => t.source === source)
     if (sourceTraders.length > 0) {
-      const capturedTimestamps = sourceTraders.map((trader) => Date.parse(trader.captured_at))
-      const hasInvalidCapture = capturedTimestamps.some((timestamp) => !Number.isFinite(timestamp))
+      const boardTimestamps = sourceTraders.map((trader) => Date.parse(trader.source_board_as_of))
+      const hasInvalidBoard = boardTimestamps.some((timestamp) => !Number.isFinite(timestamp))
       // A mixed source board is only as fresh as its oldest row. Using max()
-      // would let one newly captured row hide an older partial board.
-      const oldestCaptured = hasInvalidCapture ? Number.NaN : Math.min(...capturedTimestamps)
+      // would let one newly published row hide an older partial board.
+      const oldestBoard = hasInvalidBoard ? Number.NaN : Math.min(...boardTimestamps)
       if (
-        !Number.isFinite(oldestCaptured) ||
-        oldestCaptured > now + RANKING_SOURCE_FUTURE_TOLERANCE_MS ||
-        now - oldestCaptured > RANKING_SOURCE_STALE_MS
+        !Number.isFinite(oldestBoard) ||
+        oldestBoard > now + RANKING_SOURCE_FUTURE_TOLERANCE_MS ||
+        now - oldestBoard > RANKING_SOURCE_STALE_MS
       ) {
         stalePlatforms.push(source)
       } else {
