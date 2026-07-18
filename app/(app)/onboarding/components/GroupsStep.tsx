@@ -1,7 +1,7 @@
 'use client'
 
 import Image from 'next/image'
-import { Box, Text } from '@/app/components/base'
+import { Box, Button, Text } from '@/app/components/base'
 import { tokens } from '@/lib/design-tokens'
 import type { OnboardingTheme, Group } from './types'
 
@@ -11,9 +11,11 @@ interface GroupsStepProps {
   groups: Group[]
   joinedGroups: Set<string>
   loadingGroups: boolean
+  loadFailed: boolean
   saving: boolean
   tr: (key: string) => string
   onJoinGroup: (groupId: string) => void
+  onRetry: () => void
   onBack: () => void
   onComplete: () => void
 }
@@ -24,9 +26,11 @@ export default function GroupsStep({
   groups,
   joinedGroups,
   loadingGroups,
+  loadFailed,
   saving,
   tr,
   onJoinGroup,
+  onRetry,
   onBack,
   onComplete,
 }: GroupsStepProps) {
@@ -94,6 +98,18 @@ export default function GroupsStep({
           Array.from({ length: 4 }).map((_, i) => (
             <div key={i} style={{ height: 60, borderRadius: 14, background: theme.optionBg }} />
           ))
+        ) : loadFailed ? (
+          <Box role="alert" style={{ textAlign: 'center', padding: `${tokens.spacing[5]} 0` }}>
+            <Text
+              size="sm"
+              style={{ color: tokens.colors.accent.error, marginBottom: tokens.spacing[3] }}
+            >
+              {tr('loadFailedRetryMsg')}
+            </Text>
+            <Button type="button" variant="secondary" size="sm" onClick={onRetry}>
+              {tr('retryButton')}
+            </Button>
+          </Box>
         ) : groups.length === 0 ? (
           <Text style={{ textAlign: 'center', color: theme.textSecondary, padding: '20px 0' }}>
             {tr('noGroupsYet')}
