@@ -150,6 +150,7 @@ export default async function Page() {
               page={page}
               totalCount={totalCount}
               perPage={PER_PAGE}
+              lastUpdated={lastUpdated}
             />
             <SSRRankingTable traders={traders} startRank={page * PER_PAGE} />
           </div>

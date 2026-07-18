@@ -19,6 +19,7 @@ interface Props {
   page: number
   totalCount: number
   perPage: number
+  lastUpdated: string | null
 }
 
 /** Format a Date to "HH:MM" in the user's locale */
@@ -35,32 +36,42 @@ function formatTime(date: Date): string {
   }
 }
 
-export default function RankingControls({ activeRange, page, totalCount, perPage }: Props) {
+function formatDataTimestamp(value: string | null): string {
+  if (!value) return ''
+  const date = new Date(value)
+  return Number.isFinite(date.getTime()) ? formatTime(date) : ''
+}
+
+export default function RankingControls({
+  activeRange,
+  page,
+  totalCount,
+  perPage,
+  lastUpdated,
+}: Props) {
   const router = useRouter()
   const { t } = useLanguage()
   const [isPending, startTransition] = useTransition()
   const [isOffline, setIsOffline] = useState(false)
   const [navError, setNavError] = useState(false)
   const navTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Track the last time data was successfully loaded (page render = fresh data)
-  const lastDataTimeRef = useRef<Date>(new Date())
   const [lastDataTime, setLastDataTime] = useState<string>('')
 
   const totalPages = Math.max(1, Math.ceil(totalCount / perPage))
 
-  // Detect online/offline status
+  // Format only after hydration because the browser timezone can differ from
+  // the server timezone. The value itself is the leaderboard's compute time,
+  // never the page-load/navigation time.
   useEffect(() => {
-    // Capture initial render time as the data timestamp
-    lastDataTimeRef.current = new Date()
-    setLastDataTime(formatTime(lastDataTimeRef.current))
+    setLastDataTime(formatDataTimestamp(lastUpdated))
+  }, [lastUpdated])
 
+  // Detect online/offline status.
+  useEffect(() => {
     const goOffline = () => setIsOffline(true)
     const goOnline = () => {
       setIsOffline(false)
       setNavError(false)
-      // Update data timestamp on reconnect (page will refresh)
-      lastDataTimeRef.current = new Date()
-      setLastDataTime(formatTime(lastDataTimeRef.current))
     }
     // Check initial state
     if (typeof navigator !== 'undefined' && !navigator.onLine) setIsOffline(true)
@@ -77,9 +88,6 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
     if (!isPending && navTimerRef.current) {
       clearTimeout(navTimerRef.current)
       navTimerRef.current = null
-      // Update data timestamp — successful navigation means fresh data
-      lastDataTimeRef.current = new Date()
-      setLastDataTime(formatTime(lastDataTimeRef.current))
     }
   }, [isPending])
 
@@ -137,9 +145,9 @@ export default function RankingControls({ activeRange, page, totalCount, perPage
             padding: '2px 4px 0',
           }}
         >
-          <span>
+          <time dateTime={lastUpdated ?? undefined}>
             {t('rankingControlsDataAsOf')} {lastDataTime}
-          </span>
+          </time>
         </div>
       )}
 
