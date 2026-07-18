@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useCallback, useRef } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { getCsrfHeaders } from '@/lib/api/client'
 import { usePostStore } from '@/lib/stores/postStore'
@@ -9,8 +9,16 @@ import { haptic } from '@/lib/utils/haptics'
 import { getNetworkErrorMessage } from '@/lib/utils/network-error'
 import { trackEvent } from '@/lib/analytics/track'
 import { type PollChoice, type PostWithUserState } from '@/lib/types'
+import {
+  bookmarkPostTarget,
+  consumePostBookmarkLogin,
+  queueProfileActionLogin,
+} from '@/lib/auth/profile-action-login'
 
 type Post = PostWithUserState
+
+const EMPTY_BOOKMARK_FLAGS: Record<string, boolean> = {}
+const EMPTY_BOOKMARK_COUNTS: Record<string, number> = {}
 
 interface CustomPollState {
   customPoll: {
@@ -242,7 +250,8 @@ export function usePostActions({
     },
     [claimBookmarkScope]
   )
-  const userBookmarks = bookmarkOwnerScopeKeyRef.current === scopeKey ? userBookmarksState : {}
+  const userBookmarks =
+    bookmarkOwnerScopeKeyRef.current === scopeKey ? userBookmarksState : EMPTY_BOOKMARK_FLAGS
   const setUserBookmarks = useCallback<
     React.Dispatch<React.SetStateAction<Record<string, boolean>>>
   >(
@@ -277,7 +286,7 @@ export function usePostActions({
   )
   const bookmarkScopeOwned = bookmarkOwnerScopeKeyRef.current === scopeKey
   const bookmarkLoading = bookmarkScopeOwned ? bookmarkLoadingState : {}
-  const bookmarkCounts = bookmarkScopeOwned ? bookmarkCountsState : {}
+  const bookmarkCounts = bookmarkScopeOwned ? bookmarkCountsState : EMPTY_BOOKMARK_COUNTS
   const showBookmarkModal = bookmarkScopeOwned ? showBookmarkModalState : false
   const bookmarkingPostId = bookmarkScopeOwned ? bookmarkingPostIdState : null
   const repostOwnerScopeKeyRef = useRef(scopeKey)
@@ -649,6 +658,20 @@ export function usePostActions({
     [accessToken, captureRenderedScope, claimPollScope, scopeIsCurrent, selectedPollOptions]
   )
 
+  const redirectBookmarkToLogin = useCallback(
+    (postId: string) => {
+      router.push(
+        queueProfileActionLogin({
+          action: 'bookmark-post',
+          target: bookmarkPostTarget(postId),
+          fallbackPath: `/post/${postId}`,
+          initiatingUserId: currentUserId,
+        })
+      )
+    },
+    [currentUserId, router]
+  )
+
   // Bookmark (with optimistic update, matching toggleReaction pattern)
   // Uses ref-based lock (synchronous) to prevent duplicate clicks — state-based
   // guards have a tiny race window because React batches setState calls.
@@ -657,8 +680,7 @@ export function usePostActions({
       const capturedScope = captureRenderedScope()
       if (!scopeIsCurrent(capturedScope)) return
       if (!accessToken) {
-        const { useLoginModal } = await import('@/lib/hooks/useLoginModal')
-        if (scopeIsCurrent(capturedScope)) useLoginModal.getState().openLoginModal()
+        if (scopeIsCurrent(capturedScope)) redirectBookmarkToLogin(postId)
         return
       }
       const lockKey = `${capturedScope.viewerKey}\u0000${capturedScope.sessionGeneration}\u0000${postId}`
@@ -709,6 +731,11 @@ export function usePostActions({
           // Rollback on server error
           setUserBookmarks((prev) => ({ ...prev, [postId]: prevBookmarked }))
           setBookmarkCounts((prev) => ({ ...prev, [postId]: prevCount }))
+          if (response.status === 401) {
+            showToast(t('loginExpiredPleaseRelogin'), 'error')
+            redirectBookmarkToLogin(postId)
+            return
+          }
           showToast(result.error || t('operationFailed'), 'error')
         }
       } catch (err) {
@@ -732,11 +759,23 @@ export function usePostActions({
       bookmarkCounts,
       captureRenderedScope,
       openPostAliasesPosts,
+      setBookmarkCounts,
+      setBookmarkLoading,
       setOpenPost,
       setPosts,
+      setUserBookmarks,
       scopeIsCurrent,
+      redirectBookmarkToLogin,
     ]
   )
+
+  useEffect(() => {
+    if (!accessToken || !currentUserId) return
+    const resumedPostId = consumePostBookmarkLogin({ currentUserId })
+    if (resumedPostId) {
+      void handleBookmark(resumedPostId)
+    }
+  }, [accessToken, currentUserId, handleBookmark])
 
   const openBookmarkFolderModal = useCallback(
     (postId: string) => {
