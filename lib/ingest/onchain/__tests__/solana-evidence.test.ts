@@ -45,6 +45,17 @@ const TEST_CONNECTION_HASH = createHash('sha256')
     JSON.stringify(['solana_evidence_connection_v1', 'local', TEST_ENDPOINT_ID, TEST_RPC_ORIGIN])
   )
   .digest('hex')
+const PUBLICNODE_SOLANA_ORIGIN = 'https://solana-rpc.publicnode.com'
+const PUBLICNODE_SOLANA_CONNECTION_HASH = createHash('sha256')
+  .update(
+    JSON.stringify([
+      'solana_evidence_connection_v1',
+      'publicnode',
+      'publicnode_solana_mainnet',
+      PUBLICNODE_SOLANA_ORIGIN,
+    ])
+  )
+  .digest('hex')
 const FIXED_NOW = '2026-07-16T21:00:41.000Z'
 
 function finalizedBlock(overrides: Record<string, unknown> = {}) {
@@ -734,6 +745,95 @@ describe('fetchSolanaChainAnchorEvidence', () => {
     )
   })
 
+  it('pins PublicNode to its exact secret-free root origin and rejects identity forgery', async () => {
+    const calls = mockRpc(() => ({}))
+    const pendingAnchor = fetchSolanaChainAnchorEvidence({
+      rpcUrl: `${PUBLICNODE_SOLANA_ORIGIN}/`,
+      endpointId: 'publicnode_solana_mainnet',
+    })
+    await jest.advanceTimersByTimeAsync(0)
+    expect(calls.map(({ request }) => request.method)).toEqual(['getGenesisHash', 'getSlot'])
+
+    await jest.advanceTimersByTimeAsync(19_999)
+    expect(calls.map(({ request }) => request.method)).toEqual(['getGenesisHash', 'getSlot'])
+
+    await jest.advanceTimersByTimeAsync(1)
+    const anchor = await pendingAnchor
+    expect(calls).toHaveLength(4)
+    expect(calls.every(({ url }) => url === `${PUBLICNODE_SOLANA_ORIGIN}/`)).toBe(true)
+    expect(calls.filter(({ request }) => request.method === 'getBlocks')).toHaveLength(1)
+    expect(calls[2].request).toEqual({
+      jsonrpc: '2.0',
+      id: 1,
+      method: 'getBlocks',
+      params: [SLOT - 512, SLOT, { commitment: 'finalized', minContextSlot: SLOT }],
+    })
+    for (const lane of [
+      anchor.genesisHash,
+      anchor.finalizedRootSlot,
+      anchor.producedSlotResolution,
+      anchor.finalizedBlock,
+    ]) {
+      expect(lane.provider).toEqual({
+        servedBy: {
+          providerId: 'publicnode',
+          endpointId: 'publicnode_solana_mainnet',
+          connectionHash: PUBLICNODE_SOLANA_CONNECTION_HASH,
+        },
+        attempted: [
+          {
+            providerId: 'publicnode',
+            endpointId: 'publicnode_solana_mainnet',
+            connectionHash: PUBLICNODE_SOLANA_CONNECTION_HASH,
+          },
+        ],
+      })
+    }
+    expect(requireSolanaVerifiedChainAnchor(anchor).endpoint).toEqual({
+      providerId: 'publicnode',
+      endpointId: 'publicnode_solana_mainnet',
+      connectionHash: PUBLICNODE_SOLANA_CONNECTION_HASH,
+    })
+    expect(JSON.stringify(anchor)).not.toContain(PUBLICNODE_SOLANA_ORIGIN)
+
+    const forged = clone(anchor) as any
+    for (const lane of [
+      forged.genesisHash,
+      forged.finalizedRootSlot,
+      forged.producedSlotResolution,
+      forged.finalizedBlock,
+    ]) {
+      lane.provider.servedBy.connectionHash = '0'.repeat(64)
+      lane.provider.attempted[0].connectionHash = '0'.repeat(64)
+    }
+    expect(() => requireSolanaVerifiedChainAnchor(forged)).toThrow(
+      'Solana chain anchor is not fully verified'
+    )
+  })
+
+  it.each([
+    ['official', 'https://api.mainnet-beta.solana.com/', 'solana_official_mainnet'],
+    ['local', TEST_RPC_URL, TEST_ENDPOINT_ID],
+  ] as const)(
+    'does not apply the PublicNode history settle delay to %s RPC',
+    async (_label, rpcUrl, endpointId) => {
+      const calls = mockRpc(() => ({}))
+      const pendingAnchor = fetchSolanaChainAnchorEvidence({ rpcUrl, endpointId })
+      await jest.advanceTimersByTimeAsync(0)
+      expect(calls.map(({ request }) => request.method)).toEqual([
+        'getGenesisHash',
+        'getSlot',
+        'getBlocks',
+        'getBlock',
+      ])
+      expect(new Date().toISOString()).toBe(FIXED_NOW)
+      await expect(pendingAnchor).resolves.toMatchObject({
+        finalizedRootSlot: { status: 'available', value: SLOT },
+        producedSlotResolution: { status: 'available', value: { selectedSlot: SLOT } },
+      })
+    }
+  )
+
   it('enforces capture-time freshness while allowing nullable block height', async () => {
     mockRpc(() => ({}))
     const anchor = await fetchSolanaChainAnchorEvidence({
@@ -913,6 +1013,11 @@ describe('fetchSolanaChainAnchorEvidence', () => {
     ['https://api.mainnet-beta.solana.com/?key=secret', 'solana_official_mainnet'],
     ['https://api.mainnet-beta.solana.com.evil.test/', 'solana_official_mainnet'],
     ['https://user:password@api.mainnet-beta.solana.com/', 'solana_official_mainnet'],
+    ['http://solana-rpc.publicnode.com/', 'publicnode_solana_mainnet'],
+    ['https://solana-rpc.publicnode.com/private', 'publicnode_solana_mainnet'],
+    ['https://solana-rpc.publicnode.com/?key=secret', 'publicnode_solana_mainnet'],
+    ['https://solana-rpc.publicnode.com.evil.test/', 'publicnode_solana_mainnet'],
+    ['https://user:password@solana-rpc.publicnode.com/', 'publicnode_solana_mainnet'],
     ['https://mainnet.helius-rpc.com/', 'helius_solana_mainnet'],
     ['https://mainnet.helius-rpc.com/?api-key=', 'helius_solana_mainnet'],
     ['https://mainnet.helius-rpc.com/?api-key=a&api-key=b', 'helius_solana_mainnet'],

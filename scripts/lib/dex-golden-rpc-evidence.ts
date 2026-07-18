@@ -101,6 +101,12 @@ const REMOTE_ENDPOINTS = {
     origin: 'https://mainnet.helius-rpc.com',
     hash_domain: 'solana_evidence_connection_v1',
   },
+  publicnode_solana_mainnet: {
+    chain: 'solana',
+    provider_id: 'publicnode',
+    origin: 'https://solana-rpc.publicnode.com',
+    hash_domain: 'solana_evidence_connection_v1',
+  },
   solana_official_mainnet: {
     chain: 'solana',
     provider_id: 'solana_foundation',
