@@ -34,9 +34,14 @@ type SubTabKey = 'following' | 'recommended'
 interface GroupsFeedPageProps {
   initialPosts?: unknown[]
   initialGroups?: unknown[]
+  initialGroupsStatus?: 'success' | 'error'
 }
 
-export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFeedPageProps) {
+export default function GroupsFeedPage({
+  initialPosts,
+  initialGroups,
+  initialGroupsStatus = 'success',
+}: GroupsFeedPageProps) {
   const { language, t } = useLanguage()
   const { userId } = useAuthSession()
   const [myGroups, setMyGroups] = useState<Group[]>([])
@@ -45,6 +50,13 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
   const [groupsLoadAttempt, setGroupsLoadAttempt] = useState(0)
   const [subTab, setSubTab] = useState<SubTabKey>('recommended')
   const [groupQuery, setGroupQuery] = useState('')
+  const [recommendedGroups, setRecommendedGroups] = useState<Group[]>(
+    Array.isArray(initialGroups) ? (initialGroups as Group[]) : []
+  )
+  const [recommendedGroupsError, setRecommendedGroupsError] = useState(
+    initialGroupsStatus === 'error'
+  )
+  const [loadingRecommendedGroups, setLoadingRecommendedGroups] = useState(false)
 
   // Load user's joined groups
   useEffect(() => {
@@ -115,6 +127,30 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
   }, [groupsLoadAttempt, userId])
 
   const myGroupIds = myGroups.map((g) => g.id)
+  const showRecommendedGroups =
+    !loadingRecommendedGroups && !recommendedGroupsError && recommendedGroups.length > 0
+
+  const retryRecommendedGroups = async () => {
+    setLoadingRecommendedGroups(true)
+    setRecommendedGroupsError(false)
+
+    try {
+      const { data, error } = await supabase
+        .from('groups')
+        .select('id, name, name_en, avatar_url, member_count, description')
+        .order('member_count', { ascending: false })
+        .limit(8)
+      if (error) throw error
+
+      setRecommendedGroups((data as Group[]) || [])
+    } catch (err) {
+      logger.error('Failed to retry recommended groups:', err)
+      setRecommendedGroups([])
+      setRecommendedGroupsError(true)
+    } finally {
+      setLoadingRecommendedGroups(false)
+    }
+  }
 
   return (
     <Box
@@ -341,7 +377,29 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
         {subTab === 'recommended' && (
           <>
             {/* Show popular groups grid for all users, especially useful for unauthenticated visitors */}
-            {Array.isArray(initialGroups) && initialGroups.length > 0 && (
+            {loadingRecommendedGroups && (
+              <Box
+                aria-busy="true"
+                style={{
+                  padding: `${tokens.spacing[6]} ${tokens.spacing[4]}`,
+                  marginBottom: tokens.spacing[5],
+                  background: tokens.colors.bg.secondary,
+                  borderRadius: tokens.radius.xl,
+                  border: `1px solid ${tokens.colors.border.primary}`,
+                }}
+              >
+                <div className="skeleton" style={{ height: 120, borderRadius: tokens.radius.lg }} />
+              </Box>
+            )}
+            {!loadingRecommendedGroups && recommendedGroupsError && (
+              <ErrorState
+                variant="compact"
+                title={t('sidebarLoadFailedShort')}
+                description={t('loadFailedRetryShort')}
+                retry={() => void retryRecommendedGroups()}
+              />
+            )}
+            {showRecommendedGroups && (
               <Box style={{ marginBottom: tokens.spacing[5] }}>
                 <Text
                   size="sm"
@@ -374,12 +432,12 @@ export default function GroupsFeedPage({ initialPosts, initialGroups }: GroupsFe
                 {(() => {
                   const q = groupQuery.trim().toLowerCase()
                   const filteredGroups = q
-                    ? (initialGroups as Group[]).filter((g) =>
+                    ? recommendedGroups.filter((g) =>
                         [g.name, g.name_en]
                           .filter(Boolean)
                           .some((n) => (n as string).toLowerCase().includes(q))
                       )
-                    : (initialGroups as Group[])
+                    : recommendedGroups
                   if (filteredGroups.length === 0) {
                     return (
                       <Text
