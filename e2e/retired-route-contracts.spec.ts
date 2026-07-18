@@ -17,4 +17,13 @@ test.describe('retired page contracts', () => {
       expect(response.status()).toBe(404)
     })
   }
+
+  test('/admin/data-health permanently redirects to the canonical monitor tab', async ({
+    request,
+  }) => {
+    const response = await request.get('/admin/data-health', { maxRedirects: 0 })
+
+    expect(response.status()).toBe(308)
+    expect(response.headers().location).toBe('/admin?tab=scraperStatus')
+  })
 })

@@ -3,10 +3,10 @@
 /**
  * AdminNav — shared cross-navigation for the sibling admin routes.
  *
- * Root cause fix: the 5 admin routes (/admin, /admin/monitoring,
- * /admin/data-health, /admin/pro-metrics, /admin/reports) had NO links
- * between them, so every page except the one you typed was unreachable UI.
- * Rendered once in the admin layout so it sits above every admin page.
+ * Root cause fix: the admin routes had no links between them, so every page
+ * except the one you typed was unreachable UI. Freshness now lives only in the
+ * /admin scraper-status tab; /admin/data-health remains a bookmark redirect,
+ * not a duplicate navigation destination.
  *
  * A11y: <nav aria-label> landmark + aria-current="page" on the active route.
  */
@@ -19,7 +19,6 @@ import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 const NAV_ITEMS: { href: string; labelKey: string }[] = [
   { href: '/admin', labelKey: 'adminNavDashboard' },
   { href: '/admin/monitoring', labelKey: 'adminNavMonitoring' },
-  { href: '/admin/data-health', labelKey: 'adminNavDataHealth' },
   { href: '/admin/pro-metrics', labelKey: 'adminNavProMetrics' },
   { href: '/admin/reports', labelKey: 'adminNavReports' },
 ]

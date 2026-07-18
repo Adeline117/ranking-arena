@@ -23,7 +23,7 @@
   × 4 编辑器);**/trader/authorize** 本轮改服务端 redirect(灭 2s 空跳);exchange/[slug] token 化(B4)。
 - **市场/事件**:funding APR/OI/热力图/搜索、market 全局态条、flash-news(并行波);**competitions
   9 子项**本轮收尾 — 7 项核实已做,2 项新修(join 平台自由文本→下拉[真数据 bug]、名次 ▲/▼ 轮询差分)。
-- **内容/Admin/法务**:TOC/锚点/learn hub/api-docs、admin shell nav/reports/data-health/KPI、
+- **内容/Admin/法务**:TOC/锚点/learn hub/api-docs、admin shell nav/reports/canonical data-health/KPI、
   /status、watchlist error-empty、settings、legal 单语言+TOC(并行波)。
 - **/post/[id] SSR 重构**:已由 6b15e9921(06-30)完成,本轮逐文件复核零缺口。
 - **验证**:lint 0 error、test 2264/2264、post-deploy 5/5、qa:schema 绿。
@@ -71,7 +71,8 @@
 ## i18n 回归(违反铁律)
 
 - 全英文：`/admin/monitoring`、`/admin/monitoring/pipeline`、`/admin/pro-metrics`、`/referral`、多 success/`logout`/`trader/authorize`。
-- 硬编码中文：`/admin/data-health` 副标题 + `toLocaleString('zh-CN')`。
+- ~~硬编码中文：`/admin/data-health` 副标题 + `toLocaleString('zh-CN')`~~（2026-07-17
+  旧页面退役，永久跳转到四语 canonical freshness tab）。
 - 双语堆叠(应按 locale 单显)：`/terms`、`/privacy`、`/methodology`。
 - 非响应 `t`：`/offline`。硬编码 `en-US` 日期：`/feed/[id]`、funding/OI。
 
@@ -107,7 +108,9 @@
 - **`/status`**：显可用性 % + 事件历史(非进程 uptime);真错误文案。
 - **静默失败→error/empty 分离**：watchlist(非 ok 静默)、portfolio、monitoring、status;watchlist 行用 `<Link>` 不要 `window.location.href`;移动改卡片。
 - **settings**：修「Linked Accounts」标签 vs 内容(实为 trader/exchange links)错配 + `TraderLinksSection` 双渲染;section nav 用 `<nav>` landmark + `?section=` 入 URL + IntersectionObserver。
-- **admin**：5 兄弟路由 UI 不可达 → 加 admin shell nav;tab 入 `?tab=`;tab 10>7 收 overflow;`/admin/reports` 加 triage 动作+内容链接+访问拒绝态;`/admin/pro-metrics` KPI 加趋势 Δ;data-health 状态点加形状。
+- **admin**：兄弟路由 UI 不可达 → 加 admin shell nav；tab 入 `?tab=`（2026-07-17 已完成，
+  含前进/后退同步）；tab 10>7 收 overflow；`/admin/reports` 加 triage 动作+内容链接+访问拒绝态；
+  `/admin/pro-metrics` KPI 加趋势 Δ；旧 data-health 已合并到 canonical freshness tab。
 - **legal**：5 页统一 `t()` 单语言 + TOC + Key-Points 摘要 + Last-Updated。
 - **`/s/[token]`**：token 格式校验、过期不发 live OG、view-count `.catch()`。
 - **`/offline`**：`useLanguage()`、online 事件自动重试、token 化 PnL 色。

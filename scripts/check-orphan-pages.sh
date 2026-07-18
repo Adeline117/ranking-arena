@@ -17,7 +17,6 @@ ALLOWED_ORPHANS=(
   "app/(app)/auth/callback/page.tsx"               # Supabase OAuth redirect
   "app/(app)/exchange/auth/callback/page.tsx"      # Exchange OAuth redirect
   "app/(app)/admin/page.tsx"                       # Admin — direct URL only
-  "app/(app)/admin/data-health/page.tsx"
   "app/(app)/admin/monitoring/page.tsx"
   "app/(app)/admin/monitoring/pipeline/page.tsx"
   "app/(app)/admin/pipeline/page.tsx"

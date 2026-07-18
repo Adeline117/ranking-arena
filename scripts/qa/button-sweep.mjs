@@ -91,7 +91,6 @@ const STATIC_ROUTES = [
   '/admin/monitoring',
   '/admin/monitoring/pipeline',
   '/admin/pro-metrics',
-  '/admin/data-health',
   '/admin/reports',
   // 硬编码 token/tag 动态路由
   '/rankings/tokens/BTC', // /rankings/tokens/[token]

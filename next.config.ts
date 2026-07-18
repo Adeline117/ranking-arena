@@ -720,6 +720,13 @@ const nextConfig = {
       { source: '/profile', destination: '/settings', permanent: true },
       { source: '/events', destination: '/market', permanent: true },
       { source: '/market/events', destination: '/market', permanent: true },
+      // Legacy snapshots-based data health was removed. The authoritative
+      // registry/source_as_of monitor is the scraper-status admin tab.
+      {
+        source: '/admin/data-health',
+        destination: '/admin?tab=scraperStatus',
+        permanent: true,
+      },
       // /rankings (bare) → / (homepage has the main ranking table)
       { source: '/rankings', destination: '/', permanent: true },
       // /rankings/traders → / (legacy). The :exchange wildcard below now

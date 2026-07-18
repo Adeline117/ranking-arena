@@ -1,8 +1,7 @@
 'use client'
 
-import { useEffect } from 'react'
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useCallback, useEffect, useState } from 'react'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -25,20 +24,29 @@ import TraderClaimsTab from './components/TraderClaimsTab'
 import AuditLogTab from './components/AuditLogTab'
 import ModerationQueueTab from './components/ModerationQueueTab'
 
-type AdminTab =
-  | 'dashboard'
-  | 'scraperStatus'
-  | 'users'
-  | 'reports'
-  | 'applications'
-  | 'editApplications'
-  | 'alertConfig'
-  | 'traderClaims'
-  | 'auditLog'
-  | 'moderationQueue'
+const ADMIN_TABS = [
+  'dashboard',
+  'scraperStatus',
+  'users',
+  'reports',
+  'applications',
+  'editApplications',
+  'alertConfig',
+  'traderClaims',
+  'auditLog',
+  'moderationQueue',
+] as const
+
+type AdminTab = (typeof ADMIN_TABS)[number]
+
+function adminTabFromQuery(value: string | null): AdminTab {
+  return ADMIN_TABS.includes(value as AdminTab) ? (value as AdminTab) : 'dashboard'
+}
 
 export default function AdminPage() {
   const router = useRouter()
+  const pathname = usePathname()
+  const searchParams = useSearchParams()
   const { t } = useLanguage()
   const { accessToken, isAdmin, authChecking } = useAdminAuth()
   const {
@@ -50,7 +58,29 @@ export default function AdminPage() {
   const { applications, editApplications, loadApplications, loadEditApplications } =
     useApplications(accessToken)
 
-  const [activeTab, setActiveTab] = useState<AdminTab>('dashboard')
+  const requestedTab = adminTabFromQuery(searchParams.get('tab'))
+  const [activeTab, setActiveTab] = useState<AdminTab>(requestedTab)
+
+  useEffect(() => {
+    setActiveTab(requestedTab)
+  }, [requestedTab])
+
+  const handleTabChange = useCallback(
+    (id: string) => {
+      const nextTab = adminTabFromQuery(id)
+      setActiveTab(nextTab)
+
+      const params = new URLSearchParams(searchParams.toString())
+      if (nextTab === 'dashboard') {
+        params.delete('tab')
+      } else {
+        params.set('tab', nextTab)
+      }
+      const query = params.toString()
+      router.replace(`${pathname}${query ? `?${query}` : ''}`, { scroll: false })
+    },
+    [pathname, router, searchParams]
+  )
 
   // Load data on mount
   useEffect(() => {
@@ -206,7 +236,7 @@ export default function AdminPage() {
         <AdminTabs
           tabs={tabs}
           active={activeTab}
-          onChange={(id) => setActiveTab(id as AdminTab)}
+          onChange={handleTabChange}
           label={t('adminDashboard')}
           idPrefix="admin"
         />
