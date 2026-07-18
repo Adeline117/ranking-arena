@@ -75,7 +75,7 @@ export default function TraderFollowButton({
   useEffect(() => {
     const unsubscribe = on('FOLLOW_CHANGED', (payload: FollowChangePayload) => {
       // 只处理同一交易员的状态变化
-      if (payload.traderId === traderId && payload.userId === userId) {
+      if (payload.traderId === traderId && payload.source === source && payload.userId === userId) {
         // 避免在有待处理操作时更新
         if (!pendingRef.current) {
           setFollowing(payload.following)
@@ -85,7 +85,7 @@ export default function TraderFollowButton({
     })
 
     return unsubscribe
-  }, [traderId, userId, on, onFollowChange])
+  }, [traderId, source, userId, on, onFollowChange])
 
   // Loading state for follow action
   const [isLoading, setIsLoading] = useState(false)
@@ -94,7 +94,7 @@ export default function TraderFollowButton({
 
   // 刷新关注状态（从服务器获取真实状态）
   const refreshFollowState = useCallback(async () => {
-    if (!userId) return
+    if (!userId || !source) return
 
     try {
       const authHeaders = await getAuthHeadersAsync()
@@ -120,6 +120,7 @@ export default function TraderFollowButton({
     async (action: 'follow' | 'unfollow') => {
       setIsLoading(true)
       try {
+        if (!source) throw new Error('Trader source is unavailable')
         const authHeaders = await getAuthHeadersAsync()
         const csrfHeaders = getCsrfHeaders()
         const response = await fetch('/api/follow', {
@@ -182,6 +183,7 @@ export default function TraderFollowButton({
         if (userId) {
           broadcast('FOLLOW_CHANGED', {
             traderId,
+            source,
             following: data.following,
             userId,
           })
@@ -216,17 +218,22 @@ export default function TraderFollowButton({
         setIsLoading(false)
       }
     },
-    [traderId, source, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange]
+    [traderId, source, userId, getAuthHeadersAsync, showToast, broadcast, onFollowChange, t]
   )
 
   // UF8: Resume pending follow action after login
   useEffect(() => {
-    if (!userId || !traderId) return
+    if (!userId || !traderId || !source) return
     try {
       const pending = sessionStorage.getItem('pendingFollow')
       if (pending) {
-        const { traderId: pendingTraderId, action } = JSON.parse(pending)
-        if (pendingTraderId === traderId && action === 'follow' && !following) {
+        const { traderId: pendingTraderId, source: pendingSource, action } = JSON.parse(pending)
+        if (
+          pendingTraderId === traderId &&
+          pendingSource === source &&
+          action === 'follow' &&
+          !following
+        ) {
           sessionStorage.removeItem('pendingFollow')
           // Auto-execute the follow
           executeFollow('follow').then(() => {
@@ -243,7 +250,7 @@ export default function TraderFollowButton({
   }, [userId, traderId, source]) // eslint-disable-line react-hooks/exhaustive-deps -- intentional: only resume pending follow when account identity changes; executeFollow and onFollowChange are stable refs
 
   useEffect(() => {
-    if (!userId) return
+    if (!userId || !source) return
 
     const abortController = new AbortController()
 
@@ -280,6 +287,10 @@ export default function TraderFollowButton({
       showToast(t('pleaseLogin'), 'warning')
       return
     }
+    if (!source) {
+      showToast(t('operationFailed'), 'error')
+      return
+    }
 
     // 防止重复点击
     if (pendingRef.current || isLoading) {
@@ -308,7 +319,7 @@ export default function TraderFollowButton({
     setFollowing(newState)
 
     executeFollow(newState ? 'follow' : 'unfollow')
-  }, [userId, following, isLoading, executeFollow, showToast, refreshFollowState, t])
+  }, [userId, source, following, isLoading, executeFollow, showToast, refreshFollowState, t])
 
   // 功能未开放时显示禁用状态
   if (featureDisabled) {
@@ -340,7 +351,10 @@ export default function TraderFollowButton({
         onClick={() => {
           // UF8: Save pending follow action for after login
           if (typeof window !== 'undefined') {
-            sessionStorage.setItem('pendingFollow', JSON.stringify({ traderId, action: 'follow' }))
+            sessionStorage.setItem(
+              'pendingFollow',
+              JSON.stringify({ traderId, source, action: 'follow' })
+            )
           }
           useLoginModal.getState().openLoginModal()
         }}

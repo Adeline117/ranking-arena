@@ -16,14 +16,25 @@ import { invalidateFollowingCache } from '@/app/api/following/route'
 
 const logger = createLogger('follow-api')
 
-// Zod schema for POST /api/follow
-const FollowActionSchema = z.object({
-  traderId: z.string().min(1, 'traderId is required'),
-  // A trader id is only unambiguous within an exchange. Persist this account's
-  // source so broadcast-trader-events can resolve the exact board row.
-  source: z.string().min(1).max(64).optional(),
-  action: z.enum(['follow', 'unfollow'], { message: 'action must be follow or unfollow' }),
-})
+const TraderIdSchema = z.string().trim().min(1, 'traderId is required')
+const TraderSourceSchema = z.string().trim().min(1, 'source is required').max(64)
+
+// A trader account is identified by (source, traderId), never by traderId
+// alone. The only nullable source accepted is an explicit legacy unfollow:
+// pre-composite rows are surfaced by /api/following with source=null so users
+// can remove them precisely instead of leaving an invisible/undeletable edge.
+const FollowActionSchema = z.discriminatedUnion('action', [
+  z.object({
+    traderId: TraderIdSchema,
+    source: TraderSourceSchema,
+    action: z.literal('follow'),
+  }),
+  z.object({
+    traderId: TraderIdSchema,
+    source: TraderSourceSchema.nullable(),
+    action: z.literal('unfollow'),
+  }),
+])
 
 export const dynamic = 'force-dynamic'
 
@@ -39,13 +50,16 @@ export const GET = withAuth(
     if (!traderId) {
       return badRequest('Missing traderId parameter')
     }
+    if (!source) {
+      return badRequest('Missing source parameter')
+    }
 
-    let query = supabase
+    const query = supabase
       .from('trader_follows')
       .select('id')
       .eq('user_id', user.id)
       .eq('trader_id', traderId)
-    if (source) query = query.eq('source', source)
+      .eq('source', source)
     const { data, error } = await query.maybeSingle()
 
     if (error) {
@@ -114,22 +128,11 @@ export const POST = withAuth(
       // 关注
       const { error } = await supabase
         .from('trader_follows')
-        .insert({ user_id: user.id, trader_id: traderId, source: source ?? null })
+        .insert({ user_id: user.id, trader_id: traderId, source })
 
       if (error) {
         // 如果是重复关注，忽略错误
         if (error.code === '23505') {
-          // Pre-A4 follows omitted the source. Upgrade the old row whenever
-          // the user follows again from a concrete profile.
-          if (source) {
-            const { error: sourceError } = await supabase
-              .from('trader_follows')
-              .update({ source })
-              .eq('user_id', user.id)
-              .eq('trader_id', traderId)
-              .is('source', null)
-            if (sourceError) logger.warn('Failed to upgrade legacy follow source', sourceError)
-          }
           return { following: true }
         }
         // 如果表不存在
@@ -144,7 +147,7 @@ export const POST = withAuth(
         return serverError('Follow failed')
       }
 
-      logger.info('用户关注交易员', { userId: user.id, traderId })
+      logger.info('用户关注交易员', { userId: user.id, traderId, source })
       fireAndForget(invalidateFollowingCache(user.id), 'invalidate-following-cache')
 
       // Fire-and-forget: notify the followed trader's claimed user (if any)
@@ -154,6 +157,7 @@ export const POST = withAuth(
             .from('verified_traders')
             .select('user_id')
             .eq('trader_id', traderId)
+            .eq('source', source)
             .maybeSingle()
           if (claim?.user_id && claim.user_id !== user.id) {
             sendNotification(
@@ -163,9 +167,9 @@ export const POST = withAuth(
                 type: 'new_follower',
                 title: 'New Follower',
                 message: 'Someone started following your trader profile',
-                link: `/trader/${encodeURIComponent(traderId)}`,
+                link: `/trader/${encodeURIComponent(traderId)}?platform=${encodeURIComponent(source)}`,
                 actor_id: user.id,
-                reference_id: traderId,
+                reference_id: `${source}:${traderId}`,
               },
               'Trader follow notification'
             )
@@ -177,11 +181,14 @@ export const POST = withAuth(
       return { following: true }
     } else {
       // 取消关注
-      const { error } = await supabase
+      let deleteQuery = supabase
         .from('trader_follows')
         .delete()
         .eq('user_id', user.id)
         .eq('trader_id', traderId)
+      deleteQuery =
+        source === null ? deleteQuery.is('source', null) : deleteQuery.eq('source', source)
+      const { error } = await deleteQuery
 
       if (error) {
         // 如果表不存在
@@ -196,7 +203,7 @@ export const POST = withAuth(
         return serverError('Unfollow failed')
       }
 
-      logger.info('用户取消关注交易员', { userId: user.id, traderId })
+      logger.info('用户取消关注交易员', { userId: user.id, traderId, source })
       fireAndForget(invalidateFollowingCache(user.id), 'invalidate-following-cache')
       return { following: false }
     }
