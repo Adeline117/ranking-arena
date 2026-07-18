@@ -69,6 +69,7 @@ PREDEPLOY_MIGRATIONS=(
   20260717222500_notification_type_contract.sql
   20260718120000_leaderboard_source_freshness.sql
   20260718123000_shadow_sources_without_roi_basis.sql
+  20260718130000_count_trader_account_followers.sql
 )
 
 # These contracts revoke compatibility writes or change identity uniqueness
