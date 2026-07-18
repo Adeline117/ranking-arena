@@ -2,6 +2,7 @@
 
 import React, { useCallback, useRef, useState } from 'react'
 import { t as i18nTFn } from '@/lib/i18n'
+import { useToast } from '@/app/components/ui/Toast'
 import {
   SWIPE_COMPARE_BTN_STYLE,
   SWIPE_SHARE_BTN_STYLE,
@@ -11,7 +12,7 @@ import {
 
 export interface TraderRowSwipeActionsProps {
   /** Toggle compare for this trader */
-  onCompareToggle: (e: React.MouseEvent) => void
+  onCompareToggle: (e: React.MouseEvent) => boolean
   /** Share URL for this trader */
   shareUrl: string
   /** Display name for share dialog */
@@ -28,6 +29,7 @@ export function TraderRowSwipeActions({
   displayName,
   children,
 }: TraderRowSwipeActionsProps) {
+  const { showToast } = useToast()
   const swipeRef = useRef<{ startX: number; startY: number; swiping: boolean }>({
     startX: 0,
     startY: 0,
@@ -128,7 +130,9 @@ export function TraderRowSwipeActions({
             e.preventDefault()
             e.stopPropagation()
             closeSwipe()
-            onCompareToggle(e)
+            if (!onCompareToggle(e)) {
+              showToast(i18nTFn('compareListFull'), 'warning')
+            }
           }}
           style={SWIPE_COMPARE_BTN_STYLE}
           title={i18nTFn('compare')}

@@ -14,6 +14,7 @@ import { ActionButton } from './TraderHeaderHelpers'
 import { formatDisplayName } from '@/app/components/ranking/utils'
 import { trackEvent } from '@/lib/analytics/track'
 import type { CompareAccountRef } from '@/lib/compare/identity'
+import { useToast } from '@/app/components/ui/Toast'
 
 interface TraderHeaderActionsProps {
   traderId: string
@@ -49,14 +50,20 @@ function CompareToggle({
   const removeTrader = useComparisonStore((s) => s.removeTrader)
   const canAddMore = useComparisonStore((s) => s.canAddMore())
   const { t } = useLanguage()
+  const { showToast } = useToast()
 
   const handleToggle = () => {
     if (isSelected) {
       removeTrader(compareAccount)
+      trackEvent('compare_trader', { traderId, source, selected: false })
     } else {
-      addTrader({ id: traderId, handle, source, avatarUrl })
+      const added = addTrader({ id: traderId, handle, source, avatarUrl })
+      if (!added) {
+        showToast(t('compareListFull'), 'warning')
+        return
+      }
+      trackEvent('compare_trader', { traderId, source, selected: true })
     }
-    trackEvent('compare_trader', { traderId, source, selected: !isSelected })
   }
 
   const label = isSelected ? t('comparing') : t('compare')
