@@ -263,7 +263,7 @@ const telemetrySchema = z
       .object({
         measurement_state: z.enum(['unknown', 'public_tier_zero_billed', 'measured']),
         currency: z.literal('USD'),
-        billed_usd: z.string().regex(NON_NEGATIVE_CANONICAL_DECIMAL).nullable(),
+        billed_usd: z.string().max(32).regex(NON_NEGATIVE_CANONICAL_DECIMAL).nullable(),
         pricing_evidence_sha256: sha256Schema.nullable(),
       })
       .strict(),
