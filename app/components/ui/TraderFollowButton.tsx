@@ -109,10 +109,11 @@ export default function TraderFollowButton({
           action,
           target: profileTraderTarget(source, traderId),
           fallbackPath: loginReturnPath,
+          initiatingUserId: userId,
         })
       )
     },
-    [loginReturnPath, router, showToast, source, t, traderId]
+    [loginReturnPath, router, showToast, source, t, traderId, userId]
   )
 
   // 刷新关注状态（从服务器获取真实状态）
@@ -287,6 +288,7 @@ export default function TraderFollowButton({
     const action = consumeProfileActionLogin({
       actions: ['follow-trader', 'unfollow-trader'],
       target: profileTraderTarget(source, traderId),
+      currentUserId: userId,
     })
     if (action) {
       pendingRef.current = true

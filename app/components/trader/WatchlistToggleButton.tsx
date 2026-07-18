@@ -29,7 +29,7 @@ export default function WatchlistToggleButton({
   loginReturnPath,
 }: WatchlistToggleButtonProps) {
   const router = useRouter()
-  const { isLoggedIn } = useAuthSession()
+  const { isLoggedIn, userId } = useAuthSession()
   const { isWatched, addToWatchlist, removeFromWatchlist } = useWatchlist()
   const { showToast } = useToast()
   const { t } = useLanguage()
@@ -45,10 +45,11 @@ export default function WatchlistToggleButton({
           action,
           target: profileTraderTarget(source, sourceTraderID),
           fallbackPath: loginReturnPath,
+          initiatingUserId: userId,
         })
       )
     },
-    [loginReturnPath, router, source, sourceTraderID]
+    [loginReturnPath, router, source, sourceTraderID, userId]
   )
 
   const executeWatchlistAction = useCallback(
@@ -100,15 +101,16 @@ export default function WatchlistToggleButton({
   }
 
   useEffect(() => {
-    if (!isLoggedIn) return
+    if (!isLoggedIn || !userId) return
     const action = consumeProfileActionLogin({
       actions: ['watch-trader', 'unwatch-trader'],
       target: profileTraderTarget(source, sourceTraderID),
+      currentUserId: userId,
     })
     if (action) {
       void executeWatchlistAction(action === 'watch-trader' ? 'watch' : 'unwatch')
     }
-  }, [executeWatchlistAction, isLoggedIn, source, sourceTraderID])
+  }, [executeWatchlistAction, isLoggedIn, source, sourceTraderID, userId])
 
   return (
     <button
