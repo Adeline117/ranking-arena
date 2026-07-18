@@ -5343,6 +5343,8 @@ const ko = {
   watchlistSubtitle: '저장한 트레이더 목록입니다. 트레이더 프로필의 별표를 클릭하여 추가하세요.',
   watchlistSignInTitle: '관심 목록을 보려면 로그인하세요',
   watchlistSignInDesc: '계정을 만들거나 로그인하여 즐겨찾는 트레이더를 저장하고 추적하세요.',
+  traderAlertsSignInTitle: '트레이더 알림을 보려면 로그인하세요',
+  traderAlertsSignInDesc: '로그인하여 팔로우한 트레이더의 성과 알림을 만들고 관리하세요.',
   watchlistEmptyTitle: '관심 목록이 비어 있습니다',
   watchlistEmptyDesc: '랭킹을 살펴보고 트레이더 프로필의 별표 아이콘을 클릭하여 추가하세요.',
   watchlistBrowseRankings: '랭킹 보기',

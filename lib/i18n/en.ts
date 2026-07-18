@@ -5507,6 +5507,8 @@ const en = {
   watchlistSubtitle: 'Your saved traders. Click the star on any trader profile to add them.',
   watchlistSignInTitle: 'Sign in to view your watchlist',
   watchlistSignInDesc: 'Create an account or log in to save and track your favorite traders.',
+  traderAlertsSignInTitle: 'Sign in to view trader alerts',
+  traderAlertsSignInDesc: 'Log in to create and manage performance alerts for traders you follow.',
   watchlistEmptyTitle: 'Your watchlist is empty',
   watchlistEmptyDesc:
     'Browse the rankings and click the star icon on any trader profile to add them here.',
