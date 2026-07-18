@@ -8,6 +8,10 @@ import test from 'node:test'
 const root = path.resolve(import.meta.dirname, '../..')
 const ignoreRules = fs.readFileSync(path.join(root, '.vercelignore'), 'utf8')
 const deployGate = fs.readFileSync(path.join(root, '.github/workflows/deploy-gate.yml'), 'utf8')
+const releaseControl = fs.readFileSync(
+  path.join(root, '.github/workflows/vercel-release-control.yml'),
+  'utf8'
+)
 const nextConfig = fs.readFileSync(path.join(root, 'next.config.ts'), 'utf8')
 const ciWorkflow = fs.readFileSync(path.join(root, '.github/workflows/ci.yml'), 'utf8')
 
@@ -117,6 +121,25 @@ test('keeps Vercel candidate failures reproducible and diagnosable', () => {
   assert.match(workflow, /timeout 60s npx vercel@56\.2\.1 inspect "\$DEPLOY_URL" --logs/)
   assert.match(workflow, /::error title=Vercel candidate build failed::/)
   assert.match(workflow, /::error title=Vercel candidate did not become ready::/)
+})
+
+test('keeps Deploy Gate as the only writer of production domains', () => {
+  assert.match(releaseControl, /push:\n    branches: \[main\]/)
+  assert.match(releaseControl, /workflow_dispatch:/)
+  assert.match(releaseControl, /cancel-in-progress: false/)
+  assert.match(
+    releaseControl,
+    /https:\/\/api\.vercel\.com\/v9\/projects\/\$\{VERCEL_PROJECT_ID\}\?teamId=\$\{VERCEL_ORG_ID\}/
+  )
+  assert.match(releaseControl, /--request PATCH/)
+  assert.match(releaseControl, /--data '\{"autoAssignCustomDomains":false\}'/)
+  assert.match(releaseControl, /patch_value.*\n[\s\S]*\[ "\$patch_value" != 'false' \]/)
+  assert.match(releaseControl, /verify_value.*\n[\s\S]*\[ "\$verify_value" != 'false' \]/)
+  assert.match(
+    releaseControl,
+    /Vercel autoAssignCustomDomains=false; Deploy Gate is the sole production writer/
+  )
+  assert.doesNotMatch(releaseControl, /curl[^\n]*\|\| true/)
 })
 
 test('waits for Vercel READY within the job budget before allowing promotion', () => {
