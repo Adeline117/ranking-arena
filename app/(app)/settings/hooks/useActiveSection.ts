@@ -1,12 +1,14 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useSearchParams } from 'next/navigation'
-import { SECTION_IDS, type SectionId } from '../components'
+import { usePathname, useRouter, useSearchParams } from 'next/navigation'
+import { SECTION_IDS, type SectionId } from '../components/shared'
 
 /**
  * Hook to manage active section state for settings page.
  * Handles URL param sync and scroll-based detection.
  */
 export function useActiveSection() {
+  const pathname = usePathname()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const [activeSection, setActiveSection] = useState<SectionId>('profile')
 
@@ -15,9 +17,10 @@ export function useActiveSection() {
     const section = searchParams.get('section') as SectionId | null
     if (section && SECTION_IDS.includes(section)) {
       setActiveSection(section)
-      setTimeout(() => {
+      const timer = window.setTimeout(() => {
         document.getElementById(section)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
       }, 100)
+      return () => window.clearTimeout(timer)
     }
   }, [searchParams])
 
@@ -49,10 +52,24 @@ export function useActiveSection() {
     return () => window.removeEventListener('scroll', handleScroll)
   }, [])
 
-  const scrollToSection = useCallback((sectionId: SectionId) => {
-    setActiveSection(sectionId)
-    document.getElementById(sectionId)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-  }, [])
+  const scrollToSection = useCallback(
+    (sectionId: SectionId) => {
+      setActiveSection(sectionId)
+
+      const params = new URLSearchParams(searchParams.toString())
+      if (params.get('section') !== sectionId) {
+        params.set('section', sectionId)
+        const query = params.toString()
+        router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+      }
+
+      document.getElementById(sectionId)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'start',
+      })
+    },
+    [pathname, router, searchParams]
+  )
 
   return { activeSection, setActiveSection, scrollToSection }
 }
