@@ -134,7 +134,28 @@ describe('getWeeklyLeaders', () => {
     expect(out?.bitmart).toBeNull()
   })
 
-  it('returns null on RPC error', async () => {
-    expect(await getWeeklyLeaders(rpcClient(null, { message: 'boom' }))).toBeNull()
+  it('throws on RPC error so the page cannot render a false empty board', async () => {
+    await expect(getWeeklyLeaders(rpcClient(null, { message: 'boom' }))).rejects.toThrow(
+      'Weekly rankings request failed'
+    )
+  })
+
+  it('throws on a malformed response instead of treating schema drift as empty data', async () => {
+    await expect(getWeeklyLeaders(rpcClient({ rows: [] }))).rejects.toThrow(
+      'Weekly rankings returned an invalid response'
+    )
+    await expect(getWeeklyLeaders(rpcClient({ nonLegacyCount: 5 }))).rejects.toThrow(
+      'Weekly rankings returned an invalid response'
+    )
+  })
+
+  it('keeps a successful empty response distinct from request failure', async () => {
+    await expect(
+      getWeeklyLeaders(rpcClient({ nonLegacyCount: 5, rows: [], bitmartWeekly: null }))
+    ).resolves.toMatchObject({
+      nonLegacyCount: 5,
+      rows: [],
+      bitmart: null,
+    })
   })
 })
