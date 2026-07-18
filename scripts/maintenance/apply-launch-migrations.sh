@@ -5,10 +5,15 @@
 # Usage:
 #   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh status
 #   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh dry-run-all
+#   DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh dry-run-recovery
+#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_CONCURRENT_RECOVERY \
+#     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-concurrent-recovery
 #   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_PREDEPLOY \
 #     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-predeploy
 #   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_POSTDEPLOY \
 #     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-postdeploy
+#   ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_RECOVERY \
+#     DATABASE_URL=... scripts/maintenance/apply-launch-migrations.sh apply-recovery
 #
 # Every phase is one outer transaction. Migration files keep their original
 # BEGIN/COMMIT in the ledger, while only those two outer statements are stripped
@@ -69,6 +74,37 @@ POSTDEPLOY_MIGRATIONS=(
   20260716192000_social_edge_write_contract.sql
 )
 
+# These index migrations were present in the immutable target application
+# snapshot but omitted from the original cutover manifest. PostgreSQL forbids
+# CREATE INDEX CONCURRENTLY inside a transaction, so each file runs in its own
+# resumable autocommit session and receives its exact-body ledger row only after
+# every index postflight succeeds.
+CONCURRENT_RECOVERY_MIGRATIONS=(
+  20260716090000_add_account_export_cursor_indexes.sql
+  20260716091500_add_security_export_cursor_indexes.sql
+  20260716094500_add_bookmark_export_cursor_indexes.sql
+  20260716101500_add_interaction_export_cursor_indexes.sql
+  20260716110000_add_domain_export_cursor_indexes.sql
+)
+
+# These transactional migrations were also present in the immutable target
+# application snapshot but omitted from the original cutover manifest. Apply
+# them only after all 41 original cutover ledger rows exist. Each migration and
+# its exact-body ledger row commit together in a short, resumable transaction
+# so unrelated table locks are never held across the whole recovery phase.
+RECOVERY_MIGRATIONS=(
+  20260716112000_exchange_connections_server_only.sql
+  20260716112200_atomic_impression_recording.sql
+  20260716083256_repair_legacy_exchange_logo_paths.sql
+)
+
+# Do not replay this older collection boundary. The separately applied
+# 20260717230000 migration replaces its policies with current-owner/current-
+# resource audience checks and atomic service-only writes.
+SUPERSEDED_MIGRATIONS=(
+  20260716104500_collection_read_write_boundaries.sql
+)
+
 require_environment() {
   if [[ -z "${DATABASE_URL:-}" ]]; then
     echo "DATABASE_URL is required" >&2
@@ -89,7 +125,7 @@ migration_name() {
   printf '%s' "${without_extension#*_}"
 }
 
-validate_migration_file() {
+validate_transactional_migration_file() {
   local migration="$1"
   local file="$MIGRATIONS_DIR/$migration"
   local begin_count
@@ -103,6 +139,26 @@ validate_migration_file() {
   commit_count="$(rg -c '^COMMIT;$' "$file" || true)"
   if [[ "$begin_count" != "1" || "$commit_count" != "1" ]]; then
     echo "migration must contain one exact outer BEGIN/COMMIT: $migration" >&2
+    exit 1
+  fi
+}
+
+validate_concurrent_migration_file() {
+  local migration="$1"
+  local file="$MIGRATIONS_DIR/$migration"
+  local begin_count
+  local commit_count
+  local concurrent_count
+
+  [[ -f "$file" ]] || {
+    echo "migration file is missing: $migration" >&2
+    exit 1
+  }
+  begin_count="$(rg -c '^BEGIN;$' "$file" || true)"
+  commit_count="$(rg -c '^COMMIT;$' "$file" || true)"
+  concurrent_count="$(rg -c '^CREATE INDEX CONCURRENTLY ' "$file" || true)"
+  if [[ -n "$begin_count" || -n "$commit_count" || -z "$concurrent_count" ]]; then
+    echo "concurrent migration must have CREATE INDEX CONCURRENTLY and no outer transaction: $migration" >&2
     exit 1
   fi
 }
@@ -155,17 +211,75 @@ emit_migration() {
   local migration="$1"
   local version
   local file="$MIGRATIONS_DIR/$migration"
-  validate_migration_file "$migration"
+  validate_transactional_migration_file "$migration"
   version="$(migration_version "$migration")"
 
   printf '\\echo APPLY %s\n' "$migration"
   emit_ledger_absence_preflight "$version"
-  perl -0pe 's/(^|\n)BEGIN;\n/$1/; s/\nCOMMIT;\s*\z/\n/' "$file"
+  # The exact outer COMMIT may be followed by rollback documentation. Strip
+  # the one validated statement wherever its exact line occurs; otherwise a
+  # dry run could commit before the runner emits its terminal ROLLBACK.
+  perl -0pe \
+    's/(^|\n)BEGIN;\n/$1/; s/(^|\n)COMMIT;(?:\n|\z)/$1/' \
+    "$file"
   printf '%s\n' \
     'SET LOCAL search_path TO DEFAULT;' \
     'SET LOCAL lock_timeout TO DEFAULT;' \
     'SET LOCAL statement_timeout TO DEFAULT;'
   emit_ledger_insert "$migration"
+}
+
+emit_concurrent_migration() {
+  local migration="$1"
+  local version
+  local file="$MIGRATIONS_DIR/$migration"
+  local lock_key
+
+  validate_concurrent_migration_file "$migration"
+  version="$(migration_version "$migration")"
+  lock_key="arena:concurrent-recovery:$version"
+
+  printf '\\echo APPLY %s\n' "$migration"
+  printf '%s\n' \
+    "SELECT pg_catalog.pg_advisory_lock(" \
+    "  pg_catalog.hashtextextended('$lock_key', 0)" \
+    ');'
+  emit_ledger_absence_preflight "$version"
+  perl -0pe '' "$file"
+  emit_ledger_insert "$migration"
+  printf '%s\n' \
+    "SELECT pg_catalog.pg_advisory_unlock(" \
+    "  pg_catalog.hashtextextended('$lock_key', 0)" \
+    ');'
+}
+
+ledger_state() {
+  local migration="$1"
+  local version
+  local name
+  local hash
+
+  version="$(migration_version "$migration")"
+  name="$(migration_name "$migration")"
+  hash="$(shasum -a 256 "$MIGRATIONS_DIR/$migration" | awk '{print $1}')"
+
+  psql "$DATABASE_URL" -X -q -v ON_ERROR_STOP=1 -Atc \
+    "SELECT CASE
+       WHEN ledger.version IS NULL THEN 'missing'
+       WHEN ledger.name = '$name'
+        AND ledger.created_by = 'codex'
+        AND ledger.idempotency_key = 'codex:$version:$hash'
+        AND pg_catalog.array_length(ledger.statements, 1) = 1
+        AND pg_catalog.encode(
+          extensions.digest(ledger.statements[1], 'sha256'),
+          'hex'
+        ) = '$hash'
+       THEN 'exact'
+       ELSE 'drift'
+     END
+     FROM (SELECT 1) AS seed
+     LEFT JOIN supabase_migrations.schema_migrations AS ledger
+       ON ledger.version = '$version';"
 }
 
 emit_predeploy_ledger_requirement() {
@@ -191,6 +305,35 @@ emit_predeploy_ledger_requirement() {
     '  END IF;' \
     'END' \
     '$arena_predeploy_requirement$;'
+}
+
+emit_cutover_ledger_requirement() {
+  local versions=()
+  local migration
+  local quoted
+  local required_count
+  for migration in \
+    "${PREDEPLOY_MIGRATIONS[@]}" \
+    "${POSTDEPLOY_MIGRATIONS[@]}"; do
+    versions+=("'$(migration_version "$migration")'")
+  done
+  quoted="$(IFS=,; printf '%s' "${versions[*]}")"
+  required_count="$((${#PREDEPLOY_MIGRATIONS[@]} + ${#POSTDEPLOY_MIGRATIONS[@]}))"
+
+  printf '%s\n' \
+    'DO $arena_cutover_requirement$' \
+    'DECLARE' \
+    '  v_recorded integer;' \
+    'BEGIN' \
+    '  SELECT pg_catalog.count(*)' \
+    '  INTO STRICT v_recorded' \
+    '  FROM supabase_migrations.schema_migrations' \
+    "  WHERE version IN ($quoted);" \
+    "  IF v_recorded <> $required_count THEN" \
+    "    RAISE EXCEPTION 'recovery requires all launch cutover ledger rows: found %/$required_count', v_recorded;" \
+    '  END IF;' \
+    'END' \
+    '$arena_cutover_requirement$;'
 }
 
 emit_transaction() {
@@ -220,6 +363,10 @@ emit_all_dry_run() {
   for migration in "${POSTDEPLOY_MIGRATIONS[@]}"; do
     emit_migration "$migration"
   done
+  emit_cutover_ledger_requirement
+  for migration in "${RECOVERY_MIGRATIONS[@]}"; do
+    emit_migration "$migration"
+  done
   printf '%s\n' 'ROLLBACK;'
 }
 
@@ -230,12 +377,18 @@ status() {
     printf '%s\n' 'WITH target(version, phase, ordinal) AS (VALUES'
     local ordinal=0
     local separator=''
-    for phase in predeploy postdeploy; do
+    for phase in predeploy postdeploy concurrent-recovery recovery superseded; do
       local -a phase_migrations
       if [[ "$phase" == "predeploy" ]]; then
         phase_migrations=("${PREDEPLOY_MIGRATIONS[@]}")
-      else
+      elif [[ "$phase" == "postdeploy" ]]; then
         phase_migrations=("${POSTDEPLOY_MIGRATIONS[@]}")
+      elif [[ "$phase" == "concurrent-recovery" ]]; then
+        phase_migrations=("${CONCURRENT_RECOVERY_MIGRATIONS[@]}")
+      elif [[ "$phase" == "recovery" ]]; then
+        phase_migrations=("${RECOVERY_MIGRATIONS[@]}")
+      else
+        phase_migrations=("${SUPERSEDED_MIGRATIONS[@]}")
       fi
       for migration in "${phase_migrations[@]}"; do
         ordinal=$((ordinal + 1))
@@ -247,7 +400,15 @@ status() {
     printf '%s\n' \
       ')' \
       "SELECT target.phase || '|' || target.version || '|' ||" \
-      "  CASE WHEN ledger.version IS NULL THEN 'missing' ELSE 'recorded' END" \
+      "  CASE" \
+      "    WHEN target.phase = 'superseded' AND EXISTS (" \
+      "      SELECT 1 FROM supabase_migrations.schema_migrations AS replacement" \
+      "      WHERE replacement.version = '20260717230000'" \
+      "    ) THEN 'superseded-by-20260717230000'" \
+      "    WHEN target.phase = 'superseded' THEN 'missing-superseder'" \
+      "    WHEN ledger.version IS NULL THEN 'missing'" \
+      "    ELSE 'recorded'" \
+      "  END" \
       'FROM target' \
       'LEFT JOIN supabase_migrations.schema_migrations AS ledger USING (version)' \
       'ORDER BY target.ordinal;'
@@ -267,6 +428,58 @@ main() {
       ;;
     dry-run-all)
       emit_all_dry_run | run_sql_stream
+      ;;
+    dry-run-recovery)
+      local migration
+      local state
+      for migration in "${RECOVERY_MIGRATIONS[@]}"; do
+        validate_transactional_migration_file "$migration"
+        state="$(ledger_state "$migration")"
+        if [[ "$state" == "exact" ]]; then
+          echo "SKIP exact ledger: $migration"
+          continue
+        fi
+        if [[ "$state" != "missing" ]]; then
+          echo "refusing drifted ledger: $migration" >&2
+          exit 1
+        fi
+        {
+          printf '%s\n' \
+            'BEGIN;' \
+            "SET LOCAL client_min_messages = 'warning';"
+          emit_cutover_ledger_requirement
+          emit_migration "$migration"
+          printf '%s\n' 'ROLLBACK;'
+        } | run_sql_stream
+      done
+      ;;
+    apply-concurrent-recovery)
+      if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_CONCURRENT_RECOVERY" ]]; then
+        echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_CONCURRENT_RECOVERY" >&2
+        exit 1
+      fi
+      {
+        printf '%s\n' \
+          'BEGIN READ ONLY;' \
+          "SET LOCAL client_min_messages = 'warning';"
+        emit_cutover_ledger_requirement
+        printf '%s\n' 'COMMIT;'
+      } | run_sql_stream
+      local migration
+      local state
+      for migration in "${CONCURRENT_RECOVERY_MIGRATIONS[@]}"; do
+        validate_concurrent_migration_file "$migration"
+        state="$(ledger_state "$migration")"
+        if [[ "$state" == "exact" ]]; then
+          echo "SKIP exact ledger: $migration"
+          continue
+        fi
+        if [[ "$state" != "missing" ]]; then
+          echo "refusing drifted ledger: $migration" >&2
+          exit 1
+        fi
+        emit_concurrent_migration "$migration" | run_sql_stream
+      done
       ;;
     apply-predeploy)
       if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_PREDEPLOY" ]]; then
@@ -292,8 +505,36 @@ main() {
         printf '%s\n' 'COMMIT;'
       } | run_sql_stream
       ;;
+    apply-recovery)
+      if [[ "${ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_RECOVERY" ]]; then
+        echo "set ARENA_PRODUCTION_MIGRATION_CONFIRM=APPLY_RECOVERY" >&2
+        exit 1
+      fi
+      local migration
+      local state
+      for migration in "${RECOVERY_MIGRATIONS[@]}"; do
+        validate_transactional_migration_file "$migration"
+        state="$(ledger_state "$migration")"
+        if [[ "$state" == "exact" ]]; then
+          echo "SKIP exact ledger: $migration"
+          continue
+        fi
+        if [[ "$state" != "missing" ]]; then
+          echo "refusing drifted ledger: $migration" >&2
+          exit 1
+        fi
+        {
+          printf '%s\n' \
+            'BEGIN;' \
+            "SET LOCAL client_min_messages = 'warning';"
+          emit_cutover_ledger_requirement
+          emit_migration "$migration"
+          printf '%s\n' 'COMMIT;'
+        } | run_sql_stream
+      done
+      ;;
     *)
-      echo "usage: $0 {status|dry-run-all|apply-predeploy|apply-postdeploy}" >&2
+      echo "usage: $0 {status|dry-run-all|dry-run-recovery|apply-concurrent-recovery|apply-predeploy|apply-postdeploy|apply-recovery}" >&2
       exit 2
       ;;
   esac
