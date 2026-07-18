@@ -66,7 +66,7 @@ jobs:
           echo "pass=$PASS" >> "$GITHUB_OUTPUT"
 
       - name: Alert on red gate (deploy withheld)
-        if: steps.gate.outputs.pass != 'true'
+        if: always() && steps.gate.outputs.pass != 'true'
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
