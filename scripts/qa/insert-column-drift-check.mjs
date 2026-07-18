@@ -11,12 +11,13 @@
  *   - Same audit found the same class in Stripe webhooks, quiz save, exchange
  *     OAuth PKCE, tip/gifts, group comment soft-delete, …
  *
- * This scanner extracts the object keys from every `.from('t').insert/update/
- * upsert({...})` in app/api + lib/data, and diffs them against the LIVE prod
- * column list (information_schema via DATABASE_URL). Any key not a real column
- * = a write that 500s. Heuristic (regex + brace-aware key extraction), so it
- * has an ALLOWLIST for the unavoidable false positives (JSONB sub-keys, dynamic
- * keys, columns on non-public tables). Exit 1 on any un-allowlisted drift.
+ * This scanner extracts object keys from runtime `.from('t').insert/update/
+ * upsert({...})` calls in app/api + lib/data (tests/mocks are not application
+ * query surfaces), and diffs them against the LIVE production column list
+ * (information_schema via DATABASE_URL). Any key not a real column = a write
+ * that 500s. Heuristic (regex + brace-aware key extraction), so it has an
+ * ALLOWLIST for unavoidable false positives (JSONB sub-keys, dynamic keys,
+ * columns on non-public tables). Exit 1 on any un-allowlisted drift.
  *
  * Run: node scripts/qa/insert-column-drift-check.mjs   (needs DATABASE_URL)
  */
@@ -36,6 +37,7 @@ const ALLOWLIST = new Set([
 
 const SCAN_DIRS = ['app/api', 'lib/data']
 const REPO = path.resolve(new URL('../..', import.meta.url).pathname)
+const NON_RUNTIME_DIRS = new Set(['__mocks__', '__tests__'])
 
 function walk(dir, acc = []) {
   let entries
@@ -46,8 +48,14 @@ function walk(dir, acc = []) {
   }
   for (const e of entries) {
     const p = path.join(dir, e.name)
-    if (e.isDirectory()) walk(p, acc)
-    else if (e.name.endsWith('.ts') || e.name.endsWith('.tsx')) acc.push(p)
+    if (e.isDirectory()) {
+      if (!NON_RUNTIME_DIRS.has(e.name)) walk(p, acc)
+    } else if (
+      (e.name.endsWith('.ts') || e.name.endsWith('.tsx')) &&
+      !/\.(?:spec|test)\.[cm]?tsx?$/.test(e.name)
+    ) {
+      acc.push(p)
+    }
   }
   return acc
 }
