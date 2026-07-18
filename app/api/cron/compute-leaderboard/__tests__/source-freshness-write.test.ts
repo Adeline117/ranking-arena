@@ -70,7 +70,7 @@ describe('compute leaderboard source freshness writes', () => {
     })
   })
 
-  it('keeps independent sources/windows and uses the oldest capture in a mixed source board', () => {
+  it('keeps independent sources/windows and uses the oldest watermark in a mixed source board', () => {
     const rows = buildSourceFreshnessWriteRows(
       '30D',
       [
@@ -124,7 +124,7 @@ describe('compute leaderboard source freshness writes', () => {
     expect(JSON.stringify(upsert.mock.calls)).not.toContain('absent_source')
   })
 
-  it('fails closed by skipping a source when any capture timestamp is invalid', () => {
+  it('fails closed by skipping a source when any board watermark is invalid', () => {
     const rows = buildSourceFreshnessWriteRows(
       '7D',
       [

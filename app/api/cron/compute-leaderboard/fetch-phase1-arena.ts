@@ -59,6 +59,7 @@ interface RpcRow {
   volatility_pct: number | string | null
   trader_kind: string | null
   as_of: string
+  board_as_of: string
 }
 
 const num = (v: number | string | null): number | null => {
@@ -102,6 +103,22 @@ export async function fetchPhase1FromArena(
     )
   }
 
+  // Fail the entire read before mutating traderMap when the RPC cannot prove
+  // the independent source-board watermark. Row `as_of` is metric observation
+  // time and must never be substituted for board publication time.
+  const invalidBoardRow = rows.find(
+    (row) =>
+      typeof row.board_as_of !== 'string' ||
+      row.board_as_of.trim() === '' ||
+      !Number.isFinite(Date.parse(row.board_as_of))
+  )
+  if (invalidBoardRow) {
+    throw new Error(
+      `[${season}] arena_score_inputs_json returned an invalid board_as_of for ` +
+        `${invalidBoardRow.platform || 'unknown'}:${invalidBoardRow.trader_key || 'unknown'} — aborting`
+    )
+  }
+
   for (const d of rows) {
     addToTraderMap({
       source: d.platform,
@@ -115,6 +132,7 @@ export async function fetchPhase1FromArena(
       copiers: num(d.copiers),
       arena_score: null, // recomputed downstream; the input value is unused
       captured_at: d.as_of,
+      source_board_as_of: d.board_as_of,
       full_confidence_at: null,
       profitability_score: null,
       risk_control_score: null,
