@@ -27,7 +27,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
   const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
 
-  assert.equal(predeploy.length, 44)
+  assert.equal(predeploy.length, 45)
   assert.deepEqual(postdeploy, [
     '20260716192000_social_edge_write_contract.sql',
     '20260717120000_trader_follows_composite_identity.sql',
@@ -41,6 +41,7 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
           '20260718120000_leaderboard_source_freshness.sql',
           '20260718123000_shadow_sources_without_roi_basis.sql',
           '20260718130000_count_trader_account_followers.sql',
+          '20260718131000_source_scope_trader_follow_activity.sql',
         ].includes(migration)
     ),
     '20260716192000_social_edge_write_contract.sql',
@@ -58,15 +59,16 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716083256_repair_legacy_exchange_logo_paths.sql',
   ])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 55)
+  assert.equal(new Set(all).size, 56)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.deepEqual(predeploy.slice(-6), [
+  assert.deepEqual(predeploy.slice(-7), [
     '20260717130000_hero_stats_count_live_source_boards.sql',
     '20260717220000_notification_read_authority.sql',
     '20260717222500_notification_type_contract.sql',
     '20260718120000_leaderboard_source_freshness.sql',
     '20260718123000_shadow_sources_without_roi_basis.sql',
     '20260718130000_count_trader_account_followers.sql',
+    '20260718131000_source_scope_trader_follow_activity.sql',
   ])
   assert.ok(!recoveryPrerequisites.includes('20260717120000_trader_follows_composite_identity.sql'))
 })
