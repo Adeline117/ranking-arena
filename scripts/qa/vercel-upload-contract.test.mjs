@@ -143,6 +143,10 @@ test('skips duplicate Next type validation only for a CI-attested candidate', ()
 
 test('makes every deploy-gate Telegram failure observable without blocking the gate', () => {
   const workflow = deployGate
+  assert.match(
+    workflow,
+    /- name: Alert on red gate \(deploy withheld\)\n        if: always\(\) && steps\.gate\.outputs\.pass != 'true'/
+  )
   assert.equal(workflow.match(/send_telegram_alert\(\) \{/g)?.length, 3)
   assert.equal(workflow.match(/--connect-timeout 5 --max-time 10/g)?.length, 3)
   assert.equal(workflow.match(/--write-out '%\{http_code\}'/g)?.length, 3)
