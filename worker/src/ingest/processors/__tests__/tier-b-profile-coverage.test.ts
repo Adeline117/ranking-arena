@@ -199,6 +199,35 @@ describe('Tier-B profile coverage accounting', () => {
     ).toBe(true)
   })
 
+  it('skips product-specific histories declared unsupported by a shared adapter', async () => {
+    mockProfileTimeframes.mockReturnValue([30])
+    mockParseProfile.mockReturnValue(profile(30, true))
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positions: true,
+        positionHistory: true,
+        orders: false,
+        transfers: false,
+        copiers: true,
+      },
+      supportsSurface: (_source: SourceRow, surface: string) =>
+        surface !== 'positionHistory' && surface !== 'copiers',
+      getProfile: mockGetProfile,
+      getHistory: mockGetHistory,
+      parseProfile: mockParseProfile,
+      validateProfile: mockValidateProfile,
+    })
+
+    await expect(processTierB(job)).resolves.toMatchObject({
+      tradersCrawled: 1,
+      surfacesFetched: 1,
+      historyRowsWritten: 0,
+      errors: 0,
+    })
+    expect(mockGetHistory).not.toHaveBeenCalled()
+  })
+
   it('audits a bundle-wide quality reject before any validation or publication', async () => {
     mockProfileTimeframes.mockReturnValue([30])
     mockGetProfile.mockResolvedValue({

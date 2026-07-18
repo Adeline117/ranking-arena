@@ -16,6 +16,11 @@ import type { Job } from 'bullmq'
 import { getConnection } from '../../connection'
 import { getSourceBySlug } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
+import {
+  supportsSourceSurface,
+  UnsupportedSourceSurfaceError,
+  type SurfaceCapability,
+} from '@/lib/ingest/core/surface-capabilities'
 import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
 import {
   findIncompleteProfileWindow,
@@ -205,6 +210,17 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
   const redis = getConnection()
   const resultKey = tierCResultKey(job.data)
   const scrapedAt = new Date().toISOString()
+  const capabilityBySurface: Record<Exclude<typeof surface, 'profile'>, SurfaceCapability> = {
+    positions: 'positions',
+    position_history: 'positionHistory',
+    orders: 'orders',
+    transfers: 'transfers',
+    copiers: 'copiers',
+  }
+  const capability = capabilityBySurface[surface as Exclude<typeof surface, 'profile'>]
+  if (!capability || !supportsSourceSurface(adapter, src, capability)) {
+    throw new UnsupportedSourceSurfaceError(sourceSlug, capability ?? 'profile')
+  }
 
   // Profile and heavy-tab jobs share the same bounded Tier-C slot pool.
   const session = await openSession(src, {
@@ -238,9 +254,6 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
     let rawPersisted = false
 
     if (surface === 'positions') {
-      if (!adapter.capabilities.positions) {
-        throw new Error(`[tier-c] ${sourceSlug} does not expose positions`)
-      }
       const bundle = await adapter.getPositions(session, src, exchangeTraderId, traderMeta)
       rawPayload = bundle.pages
       const positions = bundle.pages.flatMap((p) => adapter.parsePositions(p.payload, ctx))
@@ -257,15 +270,6 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
       await publishPositions(src, traderId, positions, asOf)
     } else {
       const kind = surface as import('@/lib/ingest/core/types').HistoryKind
-      const capabilityByKind: Record<string, boolean> = {
-        position_history: adapter.capabilities.positionHistory,
-        orders: adapter.capabilities.orders,
-        transfers: adapter.capabilities.transfers,
-        copiers: adapter.capabilities.copiers,
-      }
-      if (!capabilityByKind[kind]) {
-        throw new Error(`[tier-c] ${sourceSlug} does not expose ${kind}`)
-      }
 
       const cursor = await getHistoryCursor(traderId, kind)
       const pages: import('@/lib/ingest/core/types').RawPage[] = []
@@ -321,14 +325,16 @@ async function processHeavySurface(job: Job<TierCJobData>): Promise<unknown> {
                 copierLabel: _pii,
                 raw: _raw,
                 ...rest
-              } = r as Record<string, unknown> & {
+              } = r as unknown as Record<string, unknown> & {
                 copierLabel?: unknown
                 raw?: unknown
               }
               return rest
             })
           : parsed.map((r) => {
-              const { raw: _raw, ...rest } = r as Record<string, unknown> & { raw?: unknown }
+              const { raw: _raw, ...rest } = r as unknown as Record<string, unknown> & {
+                raw?: unknown
+              }
               return rest
             })
 

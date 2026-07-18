@@ -6,6 +6,7 @@ const mockRedisSet = jest.fn()
 const mockGetSourceBySlug = jest.fn()
 const mockGetAdapter = jest.fn()
 const mockGetProfile = jest.fn()
+const mockGetPositions = jest.fn()
 const mockParseProfile = jest.fn()
 const mockValidateProfile = jest.fn()
 const mockOpenSession = jest.fn()
@@ -329,5 +330,38 @@ describe('Tier-C incomplete profile window gate', () => {
       mockDbQuery.mock.calls.some(([sql]) => String(sql).includes('arena.profile_cache'))
     ).toBe(false)
     expect(mockSessionClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects a source-specific unsupported heavy surface before opening a session', async () => {
+    mockGetAdapter.mockReturnValue({
+      capabilities: {
+        profile: true,
+        positions: true,
+        positionHistory: true,
+        orders: false,
+        transfers: false,
+        copiers: true,
+      },
+      supportsSurface: (_source: SourceRow, surface: string) => surface !== 'positions',
+      getPositions: mockGetPositions,
+    })
+
+    const heavyJob = {
+      data: {
+        sourceSlug: 'okx_spot',
+        exchangeTraderId: 'F503A5D5F1F6989F',
+        timeframe: 90,
+        surface: 'positions',
+      },
+    } as Job<TierCJobData>
+
+    await expect(processTierC(heavyJob)).rejects.toMatchObject({
+      name: 'UnsupportedSourceSurfaceError',
+      code: 'UNSUPPORTED_SOURCE_SURFACE',
+      sourceSlug: 'okx_spot',
+      surface: 'positions',
+    })
+    expect(mockOpenSession).not.toHaveBeenCalled()
+    expect(mockGetPositions).not.toHaveBeenCalled()
   })
 })

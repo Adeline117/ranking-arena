@@ -27,6 +27,7 @@ import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
+import { supportsSourceSurface } from '@/lib/ingest/core/surface-capabilities'
 import {
   findIncompleteProfileWindow,
   IncompleteProfileWindowError,
@@ -216,7 +217,7 @@ export async function processTierBSeries(job: Job<TierJobData>): Promise<TierBSe
     return empty
   }
   const adapter = getAdapter(src.adapter_slug)
-  if (!adapter.capabilities.profile) return empty
+  if (!supportsSourceSurface(adapter, src, 'profile')) return empty
 
   const batch = Math.max(1, Number(src.meta.series_backfill_batch ?? DEFAULT_BATCH))
   // Wall-clock budget (root fix 2026-06-16): series backfill is the LOWEST
