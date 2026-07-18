@@ -21,6 +21,9 @@ DECLARE
   relation_oid pg_catalog.regclass;
   user_id_attnum smallint;
   auth_user_id_attnum smallint;
+  user_fk_count integer;
+  canonical_user_fk_count integer;
+  group_members_user_fk_state text;
 BEGIN
   FOREACH required_role IN ARRAY ARRAY[
     'anon',
@@ -114,7 +117,6 @@ BEGIN
   -- RESTRICT blocker even when the canonical FK is also present.
   FOREACH relation_name IN ARRAY ARRAY[
     'user_profiles',
-    'group_members',
     'group_bans'
   ]::text[]
   LOOP
@@ -155,6 +157,77 @@ BEGIN
         relation_name;
     END IF;
   END LOOP;
+
+  -- Production can predate the group_members -> auth.users edge entirely.
+  -- Repair only that exact absence. Any existing FK involving user_id must be
+  -- the single named, immediate, validated CASCADE contract; a differently
+  -- shaped, differently named, composite, or duplicate edge fails closed.
+  relation_oid := 'public.group_members'::pg_catalog.regclass;
+  SELECT attribute.attnum
+  INTO STRICT user_id_attnum
+  FROM pg_catalog.pg_attribute AS attribute
+  WHERE attribute.attrelid = relation_oid
+    AND attribute.attname = 'user_id'
+    AND attribute.attnum > 0
+    AND NOT attribute.attisdropped;
+
+  SELECT
+    pg_catalog.count(*)::integer,
+    pg_catalog.count(*) FILTER (
+      WHERE constraint_info.conname = 'group_members_user_id_fkey'
+        AND constraint_info.conkey = ARRAY[user_id_attnum]::smallint[]
+        AND constraint_info.confrelid = 'auth.users'::pg_catalog.regclass
+        AND constraint_info.confkey =
+          ARRAY[auth_user_id_attnum]::smallint[]
+        AND constraint_info.confmatchtype = 's'
+        AND constraint_info.confupdtype = 'a'
+        AND constraint_info.confdeltype = 'c'
+        AND constraint_info.convalidated
+        AND NOT constraint_info.condeferrable
+        AND NOT constraint_info.condeferred
+    )::integer
+  INTO user_fk_count, canonical_user_fk_count
+  FROM pg_catalog.pg_constraint AS constraint_info
+  WHERE constraint_info.conrelid = relation_oid
+    AND constraint_info.contype = 'f'
+    AND user_id_attnum = ANY (constraint_info.conkey);
+
+  IF user_fk_count = 0 THEN
+    IF EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_constraint AS constraint_info
+      WHERE constraint_info.conrelid = relation_oid
+        AND constraint_info.conname = 'group_members_user_id_fkey'
+    ) THEN
+      RAISE EXCEPTION
+        'account purge CASCADE FK name is occupied: public.group_members';
+    END IF;
+
+    IF EXISTS (
+      SELECT 1
+      FROM public.group_members AS member
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM auth.users AS auth_user
+        WHERE auth_user.id = member.user_id
+      )
+    ) THEN
+      RAISE EXCEPTION
+        'group_members user_id FK is missing and orphan rows exist';
+    END IF;
+    group_members_user_fk_state := 'missing';
+  ELSIF user_fk_count = 1 AND canonical_user_fk_count = 1 THEN
+    group_members_user_fk_state := 'canonical';
+  ELSE
+    RAISE EXCEPTION
+      'account purge CASCADE FK is incompatible: public.group_members';
+  END IF;
+
+  PERFORM pg_catalog.set_config(
+    'app.group_members_user_fk_state',
+    group_members_user_fk_state,
+    true
+  );
 
   IF pg_catalog.to_regprocedure(
     'public.sync_group_member_count()'
@@ -268,6 +341,87 @@ $preflight$;
 -- Close the trigger installation gap. The edge tables are locked before any
 -- profile table lock, matching the runtime edge-first discipline.
 LOCK TABLE public.group_members, public.group_bans IN ACCESS EXCLUSIVE MODE;
+
+DO $converge_group_members_user_fk$
+DECLARE
+  expected_state text := pg_catalog.current_setting(
+    'app.group_members_user_fk_state'
+  );
+  user_id_attnum smallint;
+  auth_user_id_attnum smallint;
+  user_fk_count integer;
+  canonical_user_fk_count integer;
+BEGIN
+  SELECT attribute.attnum
+  INTO STRICT user_id_attnum
+  FROM pg_catalog.pg_attribute AS attribute
+  WHERE attribute.attrelid = 'public.group_members'::pg_catalog.regclass
+    AND attribute.attname = 'user_id'
+    AND attribute.attnum > 0
+    AND NOT attribute.attisdropped;
+  SELECT attribute.attnum
+  INTO STRICT auth_user_id_attnum
+  FROM pg_catalog.pg_attribute AS attribute
+  WHERE attribute.attrelid = 'auth.users'::pg_catalog.regclass
+    AND attribute.attname = 'id'
+    AND attribute.attnum > 0
+    AND NOT attribute.attisdropped;
+
+  SELECT
+    pg_catalog.count(*)::integer,
+    pg_catalog.count(*) FILTER (
+      WHERE constraint_info.conname = 'group_members_user_id_fkey'
+        AND constraint_info.conkey = ARRAY[user_id_attnum]::smallint[]
+        AND constraint_info.confrelid = 'auth.users'::pg_catalog.regclass
+        AND constraint_info.confkey =
+          ARRAY[auth_user_id_attnum]::smallint[]
+        AND constraint_info.confmatchtype = 's'
+        AND constraint_info.confupdtype = 'a'
+        AND constraint_info.confdeltype = 'c'
+        AND constraint_info.convalidated
+        AND NOT constraint_info.condeferrable
+        AND NOT constraint_info.condeferred
+    )::integer
+  INTO user_fk_count, canonical_user_fk_count
+  FROM pg_catalog.pg_constraint AS constraint_info
+  WHERE constraint_info.conrelid =
+      'public.group_members'::pg_catalog.regclass
+    AND constraint_info.contype = 'f'
+    AND user_id_attnum = ANY (constraint_info.conkey);
+
+  IF expected_state = 'missing' THEN
+    IF user_fk_count <> 0 OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_constraint AS constraint_info
+      WHERE constraint_info.conrelid =
+          'public.group_members'::pg_catalog.regclass
+        AND constraint_info.conname = 'group_members_user_id_fkey'
+    ) THEN
+      RAISE EXCEPTION
+        'group_members user_id FK changed while acquiring the edge lock';
+    END IF;
+
+    -- Do not use NOT VALID: PostgreSQL validates every existing member while
+    -- holding the required table locks. An orphan committed after preflight
+    -- therefore aborts this transaction instead of being grandfathered in.
+    ALTER TABLE public.group_members
+      ADD CONSTRAINT group_members_user_id_fkey
+      FOREIGN KEY (user_id)
+      REFERENCES auth.users(id)
+      MATCH SIMPLE
+      ON UPDATE NO ACTION
+      ON DELETE CASCADE
+      NOT DEFERRABLE;
+  ELSIF expected_state = 'canonical' THEN
+    IF user_fk_count <> 1 OR canonical_user_fk_count <> 1 THEN
+      RAISE EXCEPTION
+        'group_members user_id FK changed while acquiring the edge lock';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'group_members user_id FK preflight state is invalid';
+  END IF;
+END
+$converge_group_members_user_fk$;
 
 CREATE OR REPLACE FUNCTION public.reject_inactive_group_edge()
 RETURNS trigger
@@ -542,7 +696,53 @@ DECLARE
     FROM pg_catalog.pg_roles AS role_info
     WHERE role_info.rolname = 'service_role'
   );
+  group_member_user_id_attnum smallint;
+  auth_user_id_attnum smallint;
 BEGIN
+  SELECT attribute.attnum
+  INTO STRICT group_member_user_id_attnum
+  FROM pg_catalog.pg_attribute AS attribute
+  WHERE attribute.attrelid = 'public.group_members'::pg_catalog.regclass
+    AND attribute.attname = 'user_id'
+    AND attribute.attnum > 0
+    AND NOT attribute.attisdropped;
+  SELECT attribute.attnum
+  INTO STRICT auth_user_id_attnum
+  FROM pg_catalog.pg_attribute AS attribute
+  WHERE attribute.attrelid = 'auth.users'::pg_catalog.regclass
+    AND attribute.attname = 'id'
+    AND attribute.attnum > 0
+    AND NOT attribute.attisdropped;
+
+  IF (
+    SELECT pg_catalog.count(*)
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_members'::pg_catalog.regclass
+      AND constraint_info.contype = 'f'
+      AND group_member_user_id_attnum = ANY (constraint_info.conkey)
+  ) <> 1 OR NOT EXISTS (
+    SELECT 1
+    FROM pg_catalog.pg_constraint AS constraint_info
+    WHERE constraint_info.conrelid =
+        'public.group_members'::pg_catalog.regclass
+      AND constraint_info.conname = 'group_members_user_id_fkey'
+      AND constraint_info.contype = 'f'
+      AND constraint_info.conkey =
+        ARRAY[group_member_user_id_attnum]::smallint[]
+      AND constraint_info.confrelid = 'auth.users'::pg_catalog.regclass
+      AND constraint_info.confkey = ARRAY[auth_user_id_attnum]::smallint[]
+      AND constraint_info.confmatchtype = 's'
+      AND constraint_info.confupdtype = 'a'
+      AND constraint_info.confdeltype = 'c'
+      AND constraint_info.convalidated
+      AND NOT constraint_info.condeferrable
+      AND NOT constraint_info.condeferred
+  ) THEN
+    RAISE EXCEPTION
+      'group_members user_id CASCADE FK postflight is incompatible';
+  END IF;
+
   IF EXISTS (
     SELECT 1
     FROM pg_catalog.pg_proc AS function_info
