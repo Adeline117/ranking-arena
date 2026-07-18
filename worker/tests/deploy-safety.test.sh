@@ -80,6 +80,58 @@ test_docker_inspection_failure_aborts_deploy() {
   echo 'ok - Docker inspection failure aborts deploy before mutation'
 }
 
+test_concurrent_deploy_refuses_before_backup() {
+  git() { printf '%s\n' '0123456789abcdef0123456789abcdef01234567'; }
+  date() { printf '%s\n' '20260715-120000'; }
+  sha1sum() { printf '%s  %s\n' 'same-lock-hash' "${1:-file}"; }
+  ssh() {
+    if [[ "$*" == *'docker ps'*'--format'* ]]; then
+      return 0
+    fi
+    if [[ "$*" == *'test -f /opt/arena-ingest/package-lock.json'* ]]; then
+      return 0
+    fi
+    if [[ "$*" == *'sha1sum /opt/arena-ingest/package-lock.json'* ]]; then
+      printf '%s\n' 'same-lock-hash'
+      return 0
+    fi
+    if [[ "$*" == *'/opt/arena-ingest.deploy-lock'*'mkdir'* ]]; then
+      printf '%s\n' 'BUSY: SG ingest deploy lease is held by existing-run' >&2
+      return 75
+    fi
+    fail "unexpected SSH after deploy lease contention: $*"
+  }
+  export -f git date sha1sum ssh fail
+
+  local output status
+  set +e
+  output="$(INGEST_SG_HOST=test@sg bash "$DEPLOY_SCRIPT" --code-only 2>&1)"
+  status=$?
+  set -e
+  [[ "$status" -ne 0 ]] || fail 'concurrent deploy must be refused'
+  assert_contains "$output" 'BUSY: SG ingest deploy lease is held' \
+    'contention must identify the existing deploy lease'
+  [[ "$output" != *'backing up remote'* ]] || fail 'lease contention must precede backup'
+  [[ "$output" != *'gracefully stopping'* ]] || fail 'lease contention must precede PM2 stop'
+  echo 'ok - concurrent SG deploy is refused before remote mutation'
+}
+
+test_deploy_lease_is_fenced_and_recoverable() {
+  local deploy
+  deploy="$(<"$DEPLOY_SCRIPT")"
+  assert_contains "$deploy" 'DEPLOY_LOCK_STALE_SECONDS=900' \
+    'deploy lease must have a bounded crash-recovery window'
+  assert_contains "$deploy" 'touch \"\$lock_dir/heartbeat\"' \
+    'deploy lease must publish a heartbeat'
+  assert_contains "$deploy" 'mv \"\$lock_dir\" \"\$stale_dir\"' \
+    'stale lease takeover must use an atomic rename'
+  assert_contains "$deploy" '= '\''$DEPLOY_LOCK_TOKEN'\'' ]; then rm -rf' \
+    'lease cleanup must be token fenced'
+  [[ "${deploy%%1/5 backing up remote*}" == *'acquire_deploy_lock'* ]] || \
+    fail 'deploy lease must be acquired before backup'
+  echo 'ok - deploy lease is token-fenced with bounded stale recovery'
+}
+
 test_stable_docker_node_identity() {
   local docker_script compose
   docker_script="$(<"$DOCKER_SCRIPT")"
@@ -132,6 +184,8 @@ bash -n "$DEPLOY_SCRIPT" "$DOCKER_SCRIPT" "$0"
 test_dry_run_itemizes_changes
 test_running_container_refuses_pm2_deploy
 test_docker_inspection_failure_aborts_deploy
+test_concurrent_deploy_refuses_before_backup
+test_deploy_lease_is_fenced_and_recoverable
 test_stable_docker_node_identity
 test_running_pm2_refuses_docker_deploy
 test_ready_check_requires_fresh_sha_evidence

@@ -38,6 +38,8 @@ cd "$REPO_DIR"
 VPS_HOST="${INGEST_SG_HOST:-root@45.76.152.169}"
 REMOTE_DIR="/opt/arena-ingest"
 PM2_APP="arena-ingest-worker-sg"
+DEPLOY_LOCK_DIR="$REMOTE_DIR.deploy-lock"
+DEPLOY_LOCK_STALE_SECONDS=900
 
 MODE="full"
 FORCE_NPM_CI=0
@@ -54,6 +56,9 @@ FROM_ARTIFACT="${FROM_ARTIFACT:-}"
 
 SHA="$(git rev-parse HEAD)"
 TS="$(date +%Y%m%d-%H%M%S)"
+DEPLOY_LOCK_TOKEN="${SHA}-${TS}-$$-${RANDOM}"
+DEPLOY_LOCK_HELD=0
+DEPLOY_LOCK_RENEW_PID=""
 
 # CODE paths only (never node_modules). package-lock is synced in full mode so the
 # remote lock hash reflects intent, but deps are NEVER installed here by default.
@@ -65,6 +70,90 @@ RSYNC_EXCLUDES=(
 )
 
 ssh_sg() { ssh -o BatchMode=yes "$VPS_HOST" "$@"; }
+
+release_deploy_lock() {
+  local status=$?
+  trap - EXIT INT TERM
+  if [ -n "$DEPLOY_LOCK_RENEW_PID" ]; then
+    kill "$DEPLOY_LOCK_RENEW_PID" 2>/dev/null || true
+    wait "$DEPLOY_LOCK_RENEW_PID" 2>/dev/null || true
+  fi
+  if [ "$DEPLOY_LOCK_HELD" = 1 ]; then
+    # Token fencing prevents an old/crashed invocation from deleting a newer
+    # deploy's lease after stale-lock recovery.
+    ssh_sg "if [ \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN' ]; then rm -rf '$DEPLOY_LOCK_DIR'; fi" \
+      >/dev/null 2>&1 || true
+  fi
+  exit "$status"
+}
+
+acquire_deploy_lock() {
+  local output
+  if ! output="$(
+    ssh_sg "set -eu
+      lock_dir='$DEPLOY_LOCK_DIR'
+      token='$DEPLOY_LOCK_TOKEN'
+      stale_after='$DEPLOY_LOCK_STALE_SECONDS'
+      now=\$(date +%s)
+      created=0
+
+      if mkdir \"\$lock_dir\" 2>/dev/null; then
+        created=1
+      else
+        heartbeat=\$(
+          stat -c %Y \"\$lock_dir/heartbeat\" 2>/dev/null ||
+            stat -c %Y \"\$lock_dir\" 2>/dev/null ||
+            echo 0
+        )
+        age=\$((now - heartbeat))
+        if [ \"\$heartbeat\" -gt 0 ] && [ \"\$age\" -gt \"\$stale_after\" ]; then
+          stale_dir=\"\$lock_dir.stale.\$token\"
+          if mv \"\$lock_dir\" \"\$stale_dir\" 2>/dev/null; then
+            rm -rf \"\$stale_dir\"
+            mkdir \"\$lock_dir\"
+            created=1
+          fi
+        fi
+      fi
+
+      if [ \"\$created\" -ne 1 ]; then
+        owner=\$(cat \"\$lock_dir/owner\" 2>/dev/null || echo unknown)
+        printf 'BUSY: SG ingest deploy lease is held by %s\\n' \"\$owner\" >&2
+        exit 75
+      fi
+
+      printf '%s\\n' \"\$token\" > \"\$lock_dir/owner\"
+      touch \"\$lock_dir/heartbeat\"
+      printf 'LOCKED\\n'"
+  )"; then
+    printf '%s\n' "$output" >&2
+    return 1
+  fi
+  [ "$output" = "LOCKED" ] || {
+    echo "✗ SG deploy lease returned unexpected evidence: $output" >&2
+    return 1
+  }
+
+  DEPLOY_LOCK_HELD=1
+  trap release_deploy_lock EXIT INT TERM
+
+  # Keep long artifact uploads/backups live. A crashed caller stops renewing;
+  # after 15 minutes a later deploy can atomically quarantine the stale lease.
+  (
+    while sleep 30; do
+      ssh_sg "if [ \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN' ]; then touch '$DEPLOY_LOCK_DIR/heartbeat'; else exit 1; fi" \
+        >/dev/null 2>&1 || exit 0
+    done
+  ) &
+  DEPLOY_LOCK_RENEW_PID=$!
+}
+
+assert_deploy_lock() {
+  ssh_sg "test \"\$(cat '$DEPLOY_LOCK_DIR/owner' 2>/dev/null || true)\" = '$DEPLOY_LOCK_TOKEN'" || {
+    echo "✗ Lost the SG deploy lease; refusing further remote mutation." >&2
+    exit 1
+  }
+}
 
 echo "=== Deploy ingest worker → $VPS_HOST:$REMOTE_DIR (main @ ${SHA:0:9}, mode=$MODE) ==="
 
@@ -121,20 +210,30 @@ fi
 
 if [ "$MODE" = "code-only" ]; then PATHS=("${CODE_PATHS[@]}"); else PATHS=("${FULL_PATHS[@]}"); fi
 
+# Serialize every deployment channel, including local/manual calls that are
+# outside GitHub Actions' concurrency group. This must precede the first remote
+# mutation (backup) and remain held through readiness or rollback.
+echo "0/5 acquiring exclusive SG deploy lease"
+acquire_deploy_lock
+assert_deploy_lock
+
 # 1. Backup (full dir — node_modules included — so rollback restores a consistent pair).
 echo "1/5 backing up remote → $REMOTE_DIR.bak-$TS (keep last 3)"
 ssh_sg "cp -a $REMOTE_DIR $REMOTE_DIR.bak-$TS && ls -d $REMOTE_DIR.bak-* 2>/dev/null | sort | head -n -3 | xargs -r rm -rf"
 
 # 2. Graceful stop — SIGTERM lets in-flight BullMQ jobs finish (kill_timeout=30s in ecosystem).
+assert_deploy_lock
 echo "2/5 gracefully stopping $PM2_APP"
 ssh_sg "pm2 stop $PM2_APP" || true
 
 # 3. Sync code (+ lock in full mode). node_modules is always excluded.
+assert_deploy_lock
 echo "3/5 rsync ($MODE)"
 rsync -az --delete "${RSYNC_EXCLUDES[@]}" "${PATHS[@]}" "$VPS_HOST:$REMOTE_DIR/"
 ssh_sg "echo '$SHA' > $REMOTE_DIR/DEPLOYED_SHA"
 
 # 4. Deps.
+assert_deploy_lock
 if [ "$MODE" = "artifact" ]; then
   # Ship a CI-built, platform-matched node_modules tree and swap it in atomically.
   # This is the SAFE dep-deploy path (no npm on the box → no .js-drop hazard). The
@@ -180,6 +279,7 @@ wait_for_fresh_ready() {
   exit 1"
 }
 
+assert_deploy_lock
 ssh_sg "mkdir -p '$REMOTE_DIR/worker/logs'; printf '%s\\n' '$READY_MARKER' >> '$READY_LOG'"
 echo "5/5 restarting $PM2_APP"
 ssh_sg "pm2 restart $PM2_APP --update-env || pm2 start $REMOTE_DIR/worker/ecosystem.sg.config.cjs --only $PM2_APP" || true
