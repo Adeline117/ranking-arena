@@ -79,6 +79,7 @@ PREDEPLOY_MIGRATIONS=(
   20260718182917_arena_resolver_fetch_region.sql
   20260718183000_atomic_stripe_entitlement_identity.sql
   20260718183500_harden_stripe_entitlement_null_validation.sql
+  20260718184000_arena_score_inputs_board_as_of.sql
 )
 
 # These contracts revoke compatibility writes or change identity uniqueness
