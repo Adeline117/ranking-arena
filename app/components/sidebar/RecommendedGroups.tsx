@@ -112,11 +112,13 @@ async function fetchRecommendedGroups(
     }
   }
 
-  const { data } = await supabase
+  const { data, error } = await supabase
     .from('groups')
     .select('id, name, name_en, description, description_en, avatar_url, member_count')
     .order('member_count', { ascending: false })
     .limit(8)
+  if (error) throw new Error(error.message)
+
   return { groups: (data as Group[]) || [], personalized: false }
 }
 
@@ -157,6 +159,7 @@ export default function RecommendedGroups() {
         </div>
       ) : error ? (
         <div
+          role="alert"
           style={{
             padding: `${tokens.spacing[3]} 0`,
             textAlign: 'center',
