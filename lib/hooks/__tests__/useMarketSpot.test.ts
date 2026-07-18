@@ -50,4 +50,14 @@ describe('useMarketSpotData initial snapshot time', () => {
       })
     )
   })
+
+  it('ends a failed request after the bounded fetch so the page can offer manual retry', () => {
+    useMarketSpotData()
+
+    expect(mockedUseQuery).toHaveBeenCalledWith(
+      expect.objectContaining({
+        retry: false,
+      })
+    )
+  })
 })
