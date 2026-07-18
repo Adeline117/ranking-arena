@@ -1,4 +1,5 @@
 import { safeInternalReturnPath } from './safe-return-path'
+import type { CompareAccountRef } from '@/lib/compare/identity'
 
 export const PROFILE_ACTION_QUERY_PARAM = 'resumeAction'
 
@@ -15,6 +16,7 @@ export type ProfileActionIntent =
   | 'watch-trader'
   | 'unwatch-trader'
   | 'claim-trader'
+  | 'compare-traders'
 
 type PendingProfileAction = {
   version: 2
@@ -210,4 +212,15 @@ export function profileUserTarget(userId: string): string {
 
 export function profileTraderTarget(source: string, traderId: string): string {
   return `trader:${source.toLowerCase()}:${traderId}`
+}
+
+/**
+ * Preserve ordered, source-qualified trader identities for a comparison login
+ * handoff. Order is intentional because it is also the comparison column order.
+ */
+export function compareAccountsTarget(accounts: readonly CompareAccountRef[]): string {
+  if (accounts.length === 0) {
+    throw new Error('Compare login requires at least one trader account')
+  }
+  return `compare:${JSON.stringify(accounts.map(({ source, id }) => [source, id]))}`
 }
