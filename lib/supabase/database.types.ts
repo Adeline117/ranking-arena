@@ -8447,6 +8447,10 @@ export type Database = {
         Args: { p_group_id: string; p_user_id: string }
         Returns: boolean
       }
+      can_actor_read_activity_id: {
+        Args: { p_activity_id: string; p_actor_id?: string | null }
+        Returns: boolean
+      }
       can_actor_read_post_fields: {
         Args: {
           p_author_id: string
@@ -8462,8 +8466,16 @@ export type Database = {
         Args: { p_post_id: string; p_viewer_id: string }
         Returns: boolean
       }
+      can_current_user_read_collection_item: {
+        Args: { p_item_id: string; p_item_type: string }
+        Returns: boolean
+      }
       can_current_user_read_repost_root: {
         Args: { p_original_post_id: string }
+        Returns: boolean
+      }
+      can_service_actor_read_activity: {
+        Args: { p_activity_id: string; p_actor_id?: string | null }
         Returns: boolean
       }
       can_service_actor_read_post: {
@@ -9357,11 +9369,36 @@ export type Database = {
           strike_type: string | null
         }[]
       }
+      mutate_collection_item_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_collection_id: string
+          p_item_id: string
+          p_item_type: string
+          p_note?: string | null
+        }
+        Returns: Json
+      }
       mutate_user_block_atomic: {
         Args: {
           p_action: string
           p_actor_id: string
           p_target_id: string
+        }
+        Returns: Json
+      }
+      mutate_user_collection_atomic: {
+        Args: {
+          p_action: string
+          p_actor_id: string
+          p_collection_id: string | null
+          p_description: string | null
+          p_description_present: boolean
+          p_is_public: boolean | null
+          p_is_public_present: boolean
+          p_name: string | null
+          p_name_present: boolean
         }
         Returns: Json
       }
