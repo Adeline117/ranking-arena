@@ -5,7 +5,7 @@ import { usePathname } from 'next/navigation'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { useToast } from '@/app/components/ui/Toast'
-import { isFloatingActionRoute } from '@/lib/features'
+import { isFeedbackSuppressedRoute, isFloatingActionRoute } from '@/lib/features'
 
 export default function FeedbackWidget() {
   const [open, setOpen] = useState(false)
@@ -22,6 +22,9 @@ export default function FeedbackWidget() {
   // fabPages detection as ScrollToTop. Stack this ABOVE the reserved ScrollToTop
   // slot so all three widgets are legible regardless of scroll state.
   const hasFab = isFloatingActionRoute(pathname)
+  const suppressed = isFeedbackSuppressedRoute(pathname)
+
+  if (suppressed) return null
 
   const handleSubmit = async () => {
     if (!message.trim() || submitting) return
