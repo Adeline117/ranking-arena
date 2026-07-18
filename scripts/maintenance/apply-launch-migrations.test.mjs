@@ -21,13 +21,29 @@ function migrationArray(name) {
 test('predeploy, postdeploy and recovery phases are exact, unique and ordered', () => {
   const predeploy = migrationArray('PREDEPLOY_MIGRATIONS')
   const postdeploy = migrationArray('POSTDEPLOY_MIGRATIONS')
+  const recoveryPrerequisites = migrationArray('RECOVERY_PREREQUISITE_MIGRATIONS')
   const concurrentRecovery = migrationArray('CONCURRENT_RECOVERY_MIGRATIONS')
   const recovery = migrationArray('RECOVERY_MIGRATIONS')
   const superseded = migrationArray('SUPERSEDED_MIGRATIONS')
   const all = [...predeploy, ...postdeploy, ...concurrentRecovery, ...recovery, ...superseded]
 
-  assert.equal(predeploy.length, 40)
-  assert.deepEqual(postdeploy, ['20260716192000_social_edge_write_contract.sql'])
+  assert.equal(predeploy.length, 43)
+  assert.deepEqual(postdeploy, [
+    '20260716192000_social_edge_write_contract.sql',
+    '20260717120000_trader_follows_composite_identity.sql',
+  ])
+  assert.equal(recoveryPrerequisites.length, 41)
+  assert.deepEqual(recoveryPrerequisites, [
+    ...predeploy.filter(
+      (migration) =>
+        ![
+          '20260717130000_hero_stats_count_live_source_boards.sql',
+          '20260718120000_leaderboard_source_freshness.sql',
+          '20260718123000_shadow_sources_without_roi_basis.sql',
+        ].includes(migration)
+    ),
+    '20260716192000_social_edge_write_contract.sql',
+  ])
   assert.deepEqual(concurrentRecovery, [
     '20260716090000_add_account_export_cursor_indexes.sql',
     '20260716091500_add_security_export_cursor_indexes.sql',
@@ -41,9 +57,16 @@ test('predeploy, postdeploy and recovery phases are exact, unique and ordered', 
     '20260716083256_repair_legacy_exchange_logo_paths.sql',
   ])
   assert.deepEqual(superseded, ['20260716104500_collection_read_write_boundaries.sql'])
-  assert.equal(new Set(all).size, 50)
+  assert.equal(new Set(all).size, 54)
   assert.equal(predeploy[0], '20260716111600_atomic_group_application_review.sql')
-  assert.equal(predeploy.at(-1), '20260717222500_notification_type_contract.sql')
+  assert.deepEqual(predeploy.slice(-5), [
+    '20260717130000_hero_stats_count_live_source_boards.sql',
+    '20260717220000_notification_read_authority.sql',
+    '20260717222500_notification_type_contract.sql',
+    '20260718120000_leaderboard_source_freshness.sql',
+    '20260718123000_shadow_sources_without_roi_basis.sql',
+  ])
+  assert.ok(!recoveryPrerequisites.includes('20260717120000_trader_follows_composite_identity.sql'))
 })
 
 test('runner records exact file bodies and hashes in the same transaction', () => {
@@ -57,6 +80,7 @@ test('runner records exact file bodies and hashes in the same transaction', () =
 
 test('transactional body stripping survives documentation after COMMIT', () => {
   assert.ok(source.includes('s/(^|\\n)COMMIT;(?:\\n|\\z)/$1/'))
+  assert.ok(source.includes('s/(^|\\n)SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;\\n/$1/'))
 
   for (const migration of [
     ...migrationArray('PREDEPLOY_MIGRATIONS'),
@@ -64,12 +88,51 @@ test('transactional body stripping survives documentation after COMMIT', () => {
     ...migrationArray('RECOVERY_MIGRATIONS'),
   ]) {
     const body = readFileSync(resolve(ROOT, 'supabase/migrations', migration), 'utf8')
-    const stripped = body.replace(/(^|\n)BEGIN;\n/, '$1').replace(/(^|\n)COMMIT;(?:\n|$)/, '$1')
-    assert.doesNotMatch(stripped, /^BEGIN;$|^COMMIT;$/m, migration)
+    const stripped = body
+      .replace(/(^|\n)BEGIN;\n/, '$1')
+      .replace(/(^|\n)SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;\n/, '$1')
+      .replace(/(^|\n)COMMIT;(?:\n|$)/, '$1')
+    assert.doesNotMatch(
+      stripped,
+      /^BEGIN;$|^COMMIT;$|^SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;$/m,
+      migration
+    )
   }
 })
 
+test('repeatable-read migrations promote isolation to the outer transaction', () => {
+  const shadowMigration = '20260718123000_shadow_sources_without_roi_basis.sql'
+  const shadowBody = readFileSync(resolve(ROOT, 'supabase/migrations', shadowMigration), 'utf8')
+
+  assert.match(shadowBody, /^SET TRANSACTION ISOLATION LEVEL REPEATABLE READ;$/m)
+  assert.match(source, /transaction_begin_for_migrations/)
+  assert.match(source, /BEGIN ISOLATION LEVEL REPEATABLE READ;/)
+  assert.match(source, /migration has an unsupported transaction mode/)
+  assert.match(
+    source,
+    /emit_all_dry_run[\s\S]*transaction_begin_for_migrations[\s\S]*PREDEPLOY_MIGRATIONS/
+  )
+})
+
+test('predeploy and postdeploy are exact-ledger resumable and fail closed on drift', () => {
+  assert.match(source, /emit_pending_migration/)
+  assert.match(source, /SKIP exact ledger/)
+  assert.match(source, /refusing drifted ledger/)
+  assert.match(
+    source,
+    /apply-predeploy\)[\s\S]*emit_transaction 'COMMIT' "\$\{PREDEPLOY_MIGRATIONS\[@\]\}"/
+  )
+  assert.match(
+    source,
+    /apply-postdeploy\)[\s\S]*require_exact_migrations 'postdeploy'[\s\S]*emit_pending_migration/
+  )
+  assert.match(source, /echo "\$phase requires exact ledger: \$migration \(\$state\)"/)
+})
+
 test('production writes require phase-specific confirmations', () => {
+  assert.match(source, /require_session_connection/)
+  assert.match(source, /refuses transaction-pooler port 6543/)
+  assert.match(source, /if \[\[ "\$command" != "status" \]\]/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_PREDEPLOY"/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_POSTDEPLOY"/)
   assert.match(source, /ARENA_PRODUCTION_MIGRATION_CONFIRM:-}" != "APPLY_CONCURRENT_RECOVERY"/)
@@ -104,4 +167,6 @@ test('status makes the intentionally superseded migration explicit', () => {
   assert.match(source, /phase in predeploy postdeploy concurrent-recovery recovery superseded/)
   assert.match(source, /superseded-by-20260717230000/)
   assert.match(source, /missing-superseder/)
+  assert.match(source, /THEN 'exact'/)
+  assert.match(source, /ELSE 'drift'/)
 })
