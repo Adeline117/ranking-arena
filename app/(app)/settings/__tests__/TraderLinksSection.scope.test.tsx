@@ -352,7 +352,9 @@ describe('TraderLinksSection viewer ownership', () => {
       expect(mockShowToast).toHaveBeenCalledWith('loadLinkedTradersFailed', 'error')
     )
     expect(screen.queryByText('Foreign')).not.toBeInTheDocument()
-    expect(screen.getByText('noLinkedAccounts')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('loadLinkedTradersFailed')
+    expect(screen.queryByText('noLinkedAccounts')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'linkNewAccount' })).not.toBeInTheDocument()
   })
 
   it('rejects malformed nested stats before numeric rendering', async () => {
@@ -378,6 +380,26 @@ describe('TraderLinksSection viewer ownership', () => {
       expect(mockShowToast).toHaveBeenCalledWith('loadLinkedTradersFailed', 'error')
     )
     expect(screen.queryByText('Malformed stats')).not.toBeInTheDocument()
-    expect(screen.getByText('noLinkedAccounts')).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent('loadLinkedTradersFailed')
+    expect(screen.queryByText('noLinkedAccounts')).not.toBeInTheDocument()
+  })
+
+  it('shows an honest load error and recovers through the visible retry action', async () => {
+    mockAuthedFetch
+      .mockResolvedValueOnce({ ok: false, status: 503, data: { error: 'unavailable' } })
+      .mockResolvedValueOnce(listResult([linkedTrader('user-a', 'Recovered')]))
+
+    render(<TraderLinksSection userId="user-a" />)
+
+    const alert = await screen.findByRole('alert')
+    expect(alert).toHaveTextContent('loadLinkedTradersFailed')
+    expect(screen.queryByText('noLinkedAccounts')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'linkNewAccount' })).not.toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: 'retry' }))
+
+    expect(await screen.findByText('Recovered')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockAuthedFetch).toHaveBeenCalledTimes(2)
   })
 })
