@@ -22,6 +22,11 @@ import { createLogger } from '@/lib/utils/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { verifyCronSecret } from '@/lib/auth/verify-service-auth'
 import { acquireCronLock } from '@/lib/cron/with-cron-lock'
+import {
+  sourceFreshnessStatusMap,
+  summarizeSourceFreshness,
+  type SourceFreshnessRow,
+} from '@/lib/rankings/source-freshness'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300 // Was 120 — consistently timing out since 2026-05-17 as DB grew
@@ -32,7 +37,6 @@ const logger = createLogger('precompute-composite')
 const COMPOSITE_WEIGHTS = ARENA_CONFIG.OVERALL_WEIGHTS
 const ROI_ANOMALY_THRESHOLD = 5000
 const _CACHE_TTL_SECONDS = 10800 // 3 hours (cron runs every 2h, overlap for safety)
-const _FRESHNESS_HOURS = 168 // 7 days — resilient to intermittent fetch failures
 
 // Statement timeout for the heavy per-window queries. Root cause fix: 90s was
 // too short for 7D — the largest partition grew past what 90s could scan,
@@ -46,7 +50,8 @@ const WINDOW_QUERY_TIMEOUT_S = 30
 interface SnapshotRow {
   platform: string
   trader_key: string
-  as_of_ts: string
+  as_of_ts: string | null
+  computed_at: string | null
   arena_score: string | number | null
   roi_pct: string | number | null
   pnl_usd: string | number | null
@@ -85,19 +90,16 @@ export async function GET(request: NextRequest) {
   }, 280_000) // 280s safety margin for 300s maxDuration
 
   try {
-    // Include data from the last 7 days — some platforms (Bybit VPS scraper) may
-    // have intermittent failures; 72h was too aggressive and dropped platforms entirely
-    const freshnessThreshold = new Date(Date.now() - 168 * 3600 * 1000).toISOString()
-
     /**
      * Fetch top 2000 traders for a window using raw SQL via pg pool.
      * This bypasses PostgREST's 30s statement_timeout — we SET LOCAL to 90s.
      *
      * Key optimizations vs the old PostgREST query:
-     * 1. SET LOCAL statement_timeout = '90s' (per-transaction, not per-connection)
-     * 2. Explicit as_of_ts range enables partition pruning on the monthly-partitioned table
+     * 1. SET LOCAL statement_timeout per transaction, not per connection.
+     * 2. Source freshness comes from leaderboard_source_freshness; stale
+     *    last-good ranks remain eligible and are labeled stale in the payload.
      * 3. roi_pct anomaly filter applied in-app after index scan (avoids recheck on every row)
-     * 4. Uses idx_snapshots_v2_window_arena_score (window, arena_score DESC WHERE NOT NULL)
+     * 4. Uses the season/arena_score leaderboard index.
      */
     const fetchWindow = async (seasonId: string): Promise<SnapshotRow[]> => {
       const client = await getPool().connect()
@@ -107,19 +109,25 @@ export async function GET(request: NextRequest) {
 
         // Migrated off retiring trader_latest → leaderboard_ranks (the scored
         // top-N is exactly what this composite needs; season_id↔window,
-        // source↔platform, roi/pnl aliased, computed_at as as_of_ts).
+        // source↔platform, roi/pnl aliased). The source-data watermark is
+        // joined separately; computed_at remains score provenance only.
         const result = await client.query<SnapshotRow>(
-          `SELECT source AS platform, source_trader_id AS trader_key,
-                  computed_at AS as_of_ts, arena_score,
-                  roi AS roi_pct, pnl AS pnl_usd, max_drawdown, win_rate,
-                  trades_count, followers
-           FROM leaderboard_ranks
-           WHERE season_id = $1
-             AND arena_score IS NOT NULL
-             AND computed_at >= $2
-           ORDER BY arena_score DESC NULLS LAST
+          `SELECT ranks.source AS platform, ranks.source_trader_id AS trader_key,
+                  freshness.source_as_of AS as_of_ts, ranks.computed_at,
+                  ranks.arena_score, ranks.roi AS roi_pct, ranks.pnl AS pnl_usd,
+                  ranks.max_drawdown, ranks.win_rate, ranks.trades_count,
+                  ranks.followers
+           FROM leaderboard_ranks AS ranks
+           LEFT JOIN leaderboard_source_freshness AS freshness
+             ON freshness.season_id = ranks.season_id
+            AND freshness.source = ranks.source
+           WHERE ranks.season_id = $1
+             AND ranks.arena_score > 0
+             AND ranks.roi IS NOT NULL
+             AND (ranks.is_outlier IS NULL OR ranks.is_outlier = false)
+           ORDER BY ranks.arena_score DESC NULLS LAST
            LIMIT 2500`,
-          [seasonId, freshnessThreshold]
+          [seasonId]
         )
 
         await client.query('COMMIT')
@@ -257,10 +265,34 @@ export async function GET(request: NextRequest) {
       for (const r of m.values()) allSources.add(r.platform)
     }
 
+    // A composite source is only as fresh as its oldest contributing window.
+    // Missing watermarks stay null/stale; no score-compute timestamp fallback.
+    const sourceCaptureState = new Map<string, { oldestMs: number; invalid: boolean }>()
+    for (const row of [...rows7d, ...rows30d, ...rows90d]) {
+      const timestamp = row.as_of_ts ? Date.parse(row.as_of_ts) : Number.NaN
+      const current = sourceCaptureState.get(row.platform)
+      sourceCaptureState.set(row.platform, {
+        oldestMs: Number.isFinite(timestamp)
+          ? Math.min(current?.oldestMs ?? timestamp, timestamp)
+          : (current?.oldestMs ?? Number.POSITIVE_INFINITY),
+        invalid: (current?.invalid ?? false) || !Number.isFinite(timestamp),
+      })
+    }
+    const sourceWatermarks: SourceFreshnessRow[] = [...allSources].map((source) => {
+      const state = sourceCaptureState.get(source)
+      return {
+        source,
+        source_as_of: state && !state.invalid ? new Date(state.oldestMs).toISOString() : null,
+      }
+    })
+    const freshnessSummary = summarizeSourceFreshness(sourceWatermarks, [...allSources])
+    const freshnessBySource = sourceFreshnessStatusMap(freshnessSummary)
+
     // Build final traders array (top 1000)
     const traders = entries.slice(0, 1000).map((entry, idx) => {
       const info = displayNameMap.get(entry.key)
       const row = entry.primaryRow
+      const sourceFreshness = freshnessBySource.get(entry.platform)
       return {
         platform: entry.platform,
         trader_key: entry.trader_key,
@@ -268,8 +300,8 @@ export async function GET(request: NextRequest) {
         avatar_url: info?.avatar_url || null,
         rank: idx + 1,
         metrics: {
-          roi: row.roi_pct != null ? parseFloat(row.roi_pct as string) : 0,
-          pnl: row.pnl_usd != null ? parseFloat(row.pnl_usd as string) : 0,
+          roi: row.roi_pct != null ? parseFloat(row.roi_pct as string) : null,
+          pnl: row.pnl_usd != null ? parseFloat(row.pnl_usd as string) : null,
           win_rate: row.win_rate != null ? parseFloat(row.win_rate as string) : null,
           max_drawdown: row.max_drawdown != null ? parseFloat(row.max_drawdown as string) : null,
           trades_count: row.trades_count ?? null,
@@ -285,7 +317,9 @@ export async function GET(request: NextRequest) {
           platform_rank: idx + 1,
         },
         quality_flags: { is_suspicious: false, suspicion_reasons: [], data_completeness: 1.0 },
-        updated_at: row.as_of_ts,
+        updated_at: sourceFreshness?.updated_at ?? null,
+        is_stale: sourceFreshness?.is_stale ?? true,
+        computed_at: row.computed_at,
         profitability_score: null,
         risk_control_score: null,
         execution_score: null,
@@ -303,27 +337,37 @@ export async function GET(request: NextRequest) {
       window: 'COMPOSITE' as const,
       totalcount: entries.length,
       total_count: entries.length,
-      as_of: new Date().toISOString(),
-      is_stale: false, // freshly precomputed — will become stale when TTL expires
+      as_of: freshnessSummary.asOf,
+      is_stale: freshnessSummary.isStale,
+      source_freshness: freshnessSummary.sources,
       availableSources: [...allSources].sort(),
       precomputed: true,
     }
 
     // Store the full composite result
-    await tieredSet('precomputed:composite:all', compositeData, 'hot', ['rankings', 'composite'])
+    await tieredSet('precomputed:composite:all:v2', compositeData, 'hot', ['rankings', 'composite'])
 
     // Also store per-category composites for faster filtered queries
     const categories = ['futures', 'spot', 'onchain'] as const
     for (const cat of categories) {
       const catTraders = traders.filter((t) => t.category === cat)
       if (catTraders.length > 0) {
+        const catSources = [...new Set(catTraders.map((trader) => trader.platform))]
+        const catFreshness = summarizeSourceFreshness(sourceWatermarks, catSources)
         const catData = {
           ...compositeData,
           traders: catTraders.map((t, idx) => ({ ...t, rank: idx + 1 })),
           totalcount: catTraders.length,
           total_count: catTraders.length,
+          as_of: catFreshness.asOf,
+          is_stale: catFreshness.isStale,
+          source_freshness: catFreshness.sources,
+          availableSources: catSources.sort(),
         }
-        await tieredSet(`precomputed:composite:${cat}`, catData, 'hot', ['rankings', 'composite'])
+        await tieredSet(`precomputed:composite:${cat}:v2`, catData, 'hot', [
+          'rankings',
+          'composite',
+        ])
       }
     }
 
