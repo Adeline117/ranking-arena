@@ -4,7 +4,6 @@ import { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useQuery } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
-import { useAuthSession } from '@/lib/hooks/useAuthSession'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -12,28 +11,18 @@ import Link from 'next/link'
 import { tokens, alpha } from '@/lib/design-tokens'
 import ErrorState from '@/app/components/ui/ErrorState'
 import EmptyState from '@/app/components/ui/EmptyState'
+import Avatar from '@/app/components/ui/Avatar'
 import type { UnifiedSearchResponse } from '@/app/api/search/route'
 import { features } from '@/lib/features'
 import { EXCHANGE_CONFIG } from '@/lib/constants/exchanges'
 import { useDebounce } from '@/lib/hooks/useDebounce'
 import { getScoreColor } from '@/lib/utils/score-colors'
 import { trackEvent } from '@/lib/analytics/track'
-
-interface SearchResult {
-  type: 'group' | 'post' | 'trader'
-  id: string
-  title: string
-  subtitle?: string
-  meta?: string
-  /**
-   * Pre-built destination URL from the API (trader results). Already
-   * percent-encoded server-side — must be used verbatim, never re-encoded.
-   */
-  href?: string
-  /** Structured metrics (trader results) for sign/tier-colored subtitle. */
-  roi?: number | null
-  score?: number | null
-}
+import {
+  getSearchResultHref,
+  mapPeopleSearchResults,
+  type SearchResult,
+} from './search-result-model'
 
 const SECTION_LIMIT = 5
 
@@ -64,6 +53,8 @@ interface MappedSearchResults {
   traderTotal: number
   postResults: SearchResult[]
   postTotal: number
+  peopleResults: SearchResult[]
+  peopleTotal: number
   groupResults: SearchResult[]
   groupTotal: number
   availablePlatforms: string[]
@@ -73,7 +64,6 @@ interface MappedSearchResults {
 function SearchContent() {
   const searchParams = useSearchParams()
   const { t } = useLanguage()
-  const { email } = useAuthSession()
   const query = searchParams.get('q') || ''
   const activeTab = searchParams.get('tab') || 'all'
   const platformFilter = searchParams.get('platform') || ''
@@ -166,7 +156,8 @@ function SearchContent() {
         traderTotal: 0,
         postResults: [],
         postTotal: 0,
-
+        peopleResults: [],
+        peopleTotal: 0,
         groupResults: [],
         groupTotal: 0,
         availablePlatforms: [],
@@ -200,6 +191,7 @@ function SearchContent() {
     ]
 
     const groupsResults = data.results.groups || []
+    const peopleResults = mapPeopleSearchResults(data.results.users || [])
     const mappedGroups = groupsResults.map((g) => ({
       type: 'group' as const,
       id: g.id,
@@ -215,6 +207,8 @@ function SearchContent() {
       postTotal: data.results.posts.length,
       traderResults: mappedTraders,
       traderTotal: data.results.traders.length,
+      peopleResults,
+      peopleTotal: peopleResults.length,
       groupResults: mappedGroups,
       groupTotal: groupsResults.length,
       availablePlatforms: platforms,
@@ -227,6 +221,8 @@ function SearchContent() {
     groupTotal,
     postResults,
     postTotal,
+    peopleResults,
+    peopleTotal,
     traderResults,
     traderTotal,
     availablePlatforms,
@@ -249,6 +245,7 @@ function SearchContent() {
     const totalReceived =
       rawSearchData.results.posts.length +
       rawSearchData.results.traders.length +
+      (rawSearchData.results.users || []).length +
       (rawSearchData.results.groups || []).length
     if (totalReceived > 0) {
       saveSearchHistory(debouncedQuery)
@@ -322,32 +319,38 @@ function SearchContent() {
     return parts.length > 0 ? parts : text
   }, [])
 
-  const getHref = (result: SearchResult) => {
-    if (result.type === 'group') return `/groups/${result.id}`
-    if (result.type === 'post') return `/post/${result.id}`
-    // Use the API-built href verbatim: it is already encoded once server-side,
-    // so re-encoding here would double-encode handles with special characters.
-    if (result.type === 'trader') return result.href ?? '#'
-    return '#'
-  }
-
-  const totalResults = groupResults.length + postResults.length + traderResults.length
+  const totalResults =
+    groupResults.length + peopleResults.length + postResults.length + traderResults.length
 
   // 3.10 — roving-tabindex / arrow-key navigation over the full results list.
   // Build a flat ordered list matching the section render order so a single
   // index maps each result link to its keyboard position.
   const tradersShown = activeTab === 'all' || activeTab === 'traders'
   const postsShown = features.social && (activeTab === 'all' || activeTab === 'posts')
+  const peopleShown = features.social && (activeTab === 'all' || activeTab === 'people')
   const groupsShown = features.social && (activeTab === 'all' || activeTab === 'groups')
   const flatResults = useMemo(() => {
     const list: SearchResult[] = []
+    // Keep trader discovery first. Social categories retain their existing
+    // order, with People inserted before Groups.
     if (tradersShown) list.push(...traderResults)
     if (postsShown) list.push(...postResults)
+    if (peopleShown) list.push(...peopleResults)
     if (groupsShown) list.push(...groupResults)
     return list
-  }, [tradersShown, postsShown, groupsShown, traderResults, postResults, groupResults])
+  }, [
+    tradersShown,
+    postsShown,
+    peopleShown,
+    groupsShown,
+    traderResults,
+    postResults,
+    peopleResults,
+    groupResults,
+  ])
   const postOffset = tradersShown ? traderResults.length : 0
-  const groupOffset = postOffset + (postsShown ? postResults.length : 0)
+  const peopleOffset = postOffset + (postsShown ? postResults.length : 0)
+  const groupOffset = peopleOffset + (peopleShown ? peopleResults.length : 0)
 
   const [selectedIndex, setSelectedIndex] = useState(-1)
   const linkRefs = useRef<(HTMLAnchorElement | null)[]>([])
@@ -516,7 +519,7 @@ function SearchContent() {
           return (
             <Link
               key={`${result.type}-${result.id}-${idx}`}
-              href={getHref(result)}
+              href={getSearchResultHref(result)}
               ref={(el) => {
                 linkRefs.current[globalIndex] = el
               }}
@@ -548,6 +551,17 @@ function SearchContent() {
                 e.currentTarget.style.background = 'transparent'
               }}
             >
+              {result.type === 'user' && (
+                <span aria-hidden="true" style={{ display: 'inline-flex', flexShrink: 0 }}>
+                  <Avatar
+                    userId={result.id}
+                    name={result.title.replace(/^@/, '')}
+                    avatarUrl={result.avatar}
+                    size={32}
+                    style={{ boxShadow: 'none' }}
+                  />
+                </span>
+              )}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                   style={{
@@ -763,7 +777,8 @@ function SearchContent() {
 
         {/* Tab filters */}
         {query && !loading && !searchError && totalResults > 0 && (
-          <div
+          <nav
+            aria-label={t('searchResults')}
             style={{
               display: 'flex',
               gap: 8,
@@ -772,10 +787,17 @@ function SearchContent() {
             }}
           >
             {[
-              { key: 'all', label: t('searchTabAll'), count: groupTotal + postTotal + traderTotal },
+              {
+                key: 'all',
+                label: t('searchTabAll'),
+                count: groupTotal + peopleTotal + postTotal + traderTotal,
+              },
               { key: 'traders', label: t('traders'), count: traderTotal },
               ...(features.social
                 ? [{ key: 'posts', label: t('searchTabPosts'), count: postTotal }]
+                : []),
+              ...(features.social
+                ? [{ key: 'people', label: t('searchTabPeople'), count: peopleTotal }]
                 : []),
               ...(features.social
                 ? [{ key: 'groups', label: t('groups'), count: groupTotal }]
@@ -787,6 +809,7 @@ function SearchContent() {
                   key={tab.key}
                   href={`/search?q=${encodeURIComponent(query)}${tab.key !== 'all' ? `&tab=${tab.key}` : ''}`}
                   className="touch-target"
+                  aria-current={activeTab === tab.key ? 'page' : undefined}
                   style={{
                     padding: '6px 16px',
                     borderRadius: tokens.radius.full,
@@ -808,7 +831,7 @@ function SearchContent() {
                   {tab.label} {tab.count > 0 && <span style={{ fontSize: 11 }}>({tab.count})</span>}
                 </Link>
               ))}
-          </div>
+          </nav>
         )}
 
         {/* Platform filter pills (when viewing traders tab and multiple platforms exist) */}
@@ -1264,6 +1287,7 @@ function SearchContent() {
             }}
           >
             {tradersShown &&
+              (activeTab !== 'all' || traderResults.length > 0) &&
               renderSection(
                 t('traders'),
                 traderResults,
@@ -1275,6 +1299,7 @@ function SearchContent() {
                 0
               )}
             {postsShown &&
+              (activeTab !== 'all' || postResults.length > 0) &&
               renderSection(
                 t('searchPostsSection'),
                 postResults,
@@ -1285,7 +1310,20 @@ function SearchContent() {
                 tokens.gradient.primarySubtle || 'var(--color-indigo-subtle)',
                 postOffset
               )}
+            {peopleShown &&
+              (activeTab !== 'all' || peopleResults.length > 0) &&
+              renderSection(
+                t('searchTabPeople'),
+                peopleResults,
+                peopleTotal,
+                'people',
+                'U',
+                tokens.colors.accent.primary,
+                'var(--color-accent-primary-12)',
+                peopleOffset
+              )}
             {groupsShown &&
+              (activeTab !== 'all' || groupResults.length > 0) &&
               renderSection(
                 t('groups'),
                 groupResults,
