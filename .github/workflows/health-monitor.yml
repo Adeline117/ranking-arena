@@ -21,8 +21,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .hm-alert-marker
-          key: hm-alert-marker-${{ github.run_id }}
-          restore-keys: hm-alert-marker-
+          key: hm-alert-marker-v2-${{ github.run_id }}
+          restore-keys: hm-alert-marker-v2-
 
       - name: Check pipeline health
         id: health
@@ -134,7 +134,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .hm-alert-marker
-          key: hm-alert-marker-${{ github.run_id }}
+          key: hm-alert-marker-v2-${{ github.run_id }}
 
       - name: Fail unhealthy health-monitor run
         if: always() && steps.health.outputs.status != 'healthy'

@@ -216,6 +216,8 @@ test('dedups only a valid recent marker and retries invalid or future markers', 
 test('restores and saves cache explicitly before failing unhealthy runs', () => {
   assert.match(workflow, /uses: actions\/cache\/restore@v4/)
   assert.match(workflow, /uses: actions\/cache\/save@v4/)
+  assert.equal(workflow.match(/hm-alert-marker-v2-/g)?.length, 3)
+  assert.doesNotMatch(workflow, /hm-alert-marker-\$\{\{/)
   assert.match(workflow, /if: steps\.telegram\.outputs\.delivered == 'true'/)
   assert.match(
     workflow,
