@@ -124,15 +124,19 @@ export async function POST(request: NextRequest) {
 
     // The customer↔user link is required for every subscription/invoice/refund
     // webhook. Never create a payable session if this write did not persist.
-    const { error: customerLinkError } = await getSupabaseAdmin().from('user_profiles').upsert({
-      id: user.id,
-      stripe_customer_id: customerId,
-      updated_at: new Date().toISOString(),
-    })
-    if (customerLinkError) {
+    const { data: customerLink, error: customerLinkError } = await supabaseAdmin
+      .from('user_profiles')
+      .update({
+        stripe_customer_id: customerId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id)
+      .select('id')
+      .maybeSingle()
+    if (customerLinkError || customerLink?.id !== user.id) {
       logger.error('Failed to persist stripe_customer_id link; checkout blocked', {
         userId: user.id,
-        error: customerLinkError.message,
+        error: customerLinkError?.message,
       })
       return NextResponse.json(
         { error: 'Unable to prepare payment account. Please retry.' },

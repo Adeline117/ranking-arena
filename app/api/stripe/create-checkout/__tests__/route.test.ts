@@ -124,9 +124,19 @@ jest.mock('@/lib/stripe', () => ({
   getStripe: () => mockGetStripe(),
 }))
 
-// Mock supabase: auth.getUser and from().upsert()
+// Mock supabase: auth.getUser and profile lookup/update
 const mockGetUser = jest.fn()
-const mockProfileUpsert = jest.fn().mockResolvedValue({ data: null, error: null })
+const mockBillingProfileSingle = jest.fn().mockResolvedValue({
+  data: { stripe_customer_id: null },
+  error: null,
+})
+const mockProfileUpdate = jest.fn()
+const mockProfileUpdateEq = jest.fn()
+const mockProfileUpdateSelect = jest.fn()
+const mockProfileUpdateMaybeSingle = jest.fn().mockResolvedValue({
+  data: { id: 'user-123' },
+  error: null,
+})
 
 // The route uses getSupabaseAdmin() from '@/lib/supabase/server', not createClient directly
 const mockSubscriptionQuery = {
@@ -138,15 +148,28 @@ jest.mock('@/lib/supabase/server', () => ({
   getSupabaseAdmin: jest.fn(() => ({
     auth: { getUser: (...args: unknown[]) => mockGetUser(...args) },
     from: jest.fn(() => ({
-      upsert: (...args: unknown[]) => mockProfileUpsert(...args),
+      update: (...args: unknown[]) => {
+        mockProfileUpdate(...args)
+        return {
+          eq: (...eqArgs: unknown[]) => {
+            mockProfileUpdateEq(...eqArgs)
+            return {
+              select: (...selectArgs: unknown[]) => {
+                mockProfileUpdateSelect(...selectArgs)
+                return {
+                  maybeSingle: (...singleArgs: unknown[]) =>
+                    mockProfileUpdateMaybeSingle(...singleArgs),
+                }
+              },
+            }
+          },
+        }
+      },
       select: jest.fn().mockReturnValue({
         ...mockSubscriptionQuery,
         eq: jest.fn().mockReturnValue({
           ...mockSubscriptionQuery,
-          single: jest.fn().mockResolvedValue({
-            data: { stripe_customer_id: null },
-            error: null,
-          }),
+          single: (...args: unknown[]) => mockBillingProfileSingle(...args),
           mockResolvedValue: undefined,
         }),
       }),
@@ -186,7 +209,14 @@ describe('POST /api/stripe/create-checkout', () => {
     mockGetUser.mockResolvedValue({ data: { user: validUser }, error: null })
     mockExtractUser.mockResolvedValue({ user: validUser, error: null })
     mockGetOrCreateStripeCustomer.mockResolvedValue('cus_test123')
-    mockProfileUpsert.mockResolvedValue({ data: null, error: null })
+    mockBillingProfileSingle.mockResolvedValue({
+      data: { stripe_customer_id: null },
+      error: null,
+    })
+    mockProfileUpdateMaybeSingle.mockResolvedValue({
+      data: { id: 'user-123' },
+      error: null,
+    })
     mockAssertProPriceReady.mockResolvedValue(undefined)
     mockCreateCheckoutSession.mockResolvedValue({
       url: 'https://checkout.stripe.com/session',
@@ -301,7 +331,7 @@ describe('POST /api/stripe/create-checkout', () => {
   })
 
   it('blocks checkout when the customer-to-user webhook link cannot persist', async () => {
-    mockProfileUpsert.mockResolvedValue({
+    mockProfileUpdateMaybeSingle.mockResolvedValue({
       data: null,
       error: { message: 'database unavailable' },
     })
@@ -314,6 +344,58 @@ describe('POST /api/stripe/create-checkout', () => {
     const res = await POST(req)
 
     expect(res.status).toBe(503)
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('blocks checkout when the profile disappears before the customer link update', async () => {
+    mockProfileUpdateMaybeSingle.mockResolvedValue({
+      data: null,
+      error: null,
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly' }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('fails closed before creating a Stripe customer when the billing profile is missing', async () => {
+    mockBillingProfileSingle.mockResolvedValue({ data: null, error: null })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly' }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+    expect(mockProfileUpdate).not.toHaveBeenCalled()
+    expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
+  })
+
+  it('fails closed before creating a Stripe customer when the billing profile lookup errors', async () => {
+    mockBillingProfileSingle.mockResolvedValue({
+      data: null,
+      error: { message: 'database unavailable' },
+    })
+    const req = new NextRequest('http://localhost/api/stripe/create-checkout', {
+      method: 'POST',
+      headers: { authorization: 'Bearer valid-token' },
+      body: JSON.stringify({ plan: 'monthly' }),
+    })
+
+    const res = await POST(req)
+
+    expect(res.status).toBe(503)
+    expect(mockGetOrCreateStripeCustomer).not.toHaveBeenCalled()
+    expect(mockProfileUpdate).not.toHaveBeenCalled()
     expect(mockCreateCheckoutSession).not.toHaveBeenCalled()
   })
 
@@ -343,6 +425,12 @@ describe('POST /api/stripe/create-checkout', () => {
         priceId: 'price_monthly123',
       })
     )
+    expect(mockProfileUpdate).toHaveBeenCalledWith({
+      stripe_customer_id: 'cus_test123',
+      updated_at: expect.any(String),
+    })
+    expect(mockProfileUpdateEq).toHaveBeenCalledWith('id', 'user-123')
+    expect(mockProfileUpdateSelect).toHaveBeenCalledWith('id')
   })
 
   it('creates yearly subscription checkout session', async () => {

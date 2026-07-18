@@ -52,11 +52,22 @@ export async function POST(request: NextRequest) {
 
     // Check if user already has an active API tier subscription
     const supabaseAdmin = getSupabaseAdmin()
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('user_profiles')
       .select('api_tier, api_stripe_subscription_id, stripe_customer_id')
       .eq('id', user.id)
       .maybeSingle()
+
+    if (profileError || !profile) {
+      logger.error('Billing profile lookup failed', {
+        userId: user.id,
+        error: profileError?.message,
+      })
+      return NextResponse.json(
+        { error: 'Unable to prepare payment account. Please retry.' },
+        { status: 503 }
+      )
+    }
 
     if (profile?.api_tier === plan) {
       return NextResponse.json(
@@ -97,20 +108,24 @@ export async function POST(request: NextRequest) {
         source: 'ranking-arena-api',
         plan: `api_${plan}`,
       },
-      profile?.stripe_customer_id
+      profile.stripe_customer_id
     )
 
     // Invoice/subscription webhooks resolve ownership through this link. Do
     // not expose a payable Checkout Session if the link failed to persist.
-    const { error: customerLinkError } = await supabaseAdmin.from('user_profiles').upsert({
-      id: user.id,
-      stripe_customer_id: customerId,
-      updated_at: new Date().toISOString(),
-    })
-    if (customerLinkError) {
+    const { data: customerLink, error: customerLinkError } = await supabaseAdmin
+      .from('user_profiles')
+      .update({
+        stripe_customer_id: customerId,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', user.id)
+      .select('id')
+      .maybeSingle()
+    if (customerLinkError || customerLink?.id !== user.id) {
       logger.error('Failed to persist Stripe customer link; API checkout blocked', {
         userId: user.id,
-        error: customerLinkError.message,
+        error: customerLinkError?.message,
       })
       return NextResponse.json(
         { error: 'Unable to prepare payment account. Please retry.' },
