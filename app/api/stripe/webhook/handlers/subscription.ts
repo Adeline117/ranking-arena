@@ -68,8 +68,8 @@ export async function handleSubscriptionUpdate(subscription: Stripe.Subscription
       subscriptionId: subscription.id,
     })
     try {
-      const { sendTelegramAlert } = await import('@/lib/notifications/telegram')
-      await sendTelegramAlert({
+      const { sendAlert } = await import('@/lib/alerts/send-alert')
+      await sendAlert({
         level: 'critical',
         source: 'stripe',
         title: 'Unknown Stripe price — Pro NOT granted',

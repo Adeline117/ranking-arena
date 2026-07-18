@@ -161,8 +161,8 @@ export async function handleChargeDisputeCreated(dispute: Stripe.Dispute) {
     status: dispute.status,
   })
   try {
-    const { sendTelegramAlert } = await import('@/lib/notifications/telegram')
-    await sendTelegramAlert({
+    const { sendAlert } = await import('@/lib/alerts/send-alert')
+    await sendAlert({
       level: 'critical',
       source: 'stripe',
       title: 'Chargeback / 支付争议',
