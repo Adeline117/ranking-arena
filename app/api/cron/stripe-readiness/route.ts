@@ -31,12 +31,61 @@ export const REQUIRED_WEBHOOK_EVENTS = [
   'charge.dispute.created',
 ] as const
 
+const ENTITLEMENT_READINESS_METRIC_KEYS = [
+  'open_manual_reviews',
+  'unfinished_effects',
+  'completed_effects_without_external_ref',
+  'paid_unbound_payments',
+  'unresolved_refund_tombstones',
+  'reservation_anomalies',
+  'projection_drift',
+  'authority_drift',
+] as const
+
+export const STRIPE_PAID_READINESS_KEYS = ['status', ...ENTITLEMENT_READINESS_METRIC_KEYS] as const
+
+type EntitlementReadinessMetric = (typeof ENTITLEMENT_READINESS_METRIC_KEYS)[number]
+
+type StripePaidReadiness = {
+  status: 'ready' | 'blocked'
+} & Record<EntitlementReadinessMetric, number>
+
 const WEBHOOK_URL = 'https://www.arenafi.org/api/stripe/webhook'
 
 function keyMode(value: string | undefined, livePrefix: string, testPrefix: string) {
   if (value?.startsWith(livePrefix)) return 'live'
   if (value?.startsWith(testPrefix)) return 'test'
   return 'invalid'
+}
+
+function parseStripePaidReadiness(value: unknown): StripePaidReadiness | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null
+
+  const record = value as Record<string, unknown>
+  const actualKeys = Object.keys(record).sort()
+  const expectedKeys = [...STRIPE_PAID_READINESS_KEYS].sort()
+  if (
+    actualKeys.length !== expectedKeys.length ||
+    actualKeys.some((key, index) => key !== expectedKeys[index])
+  ) {
+    return null
+  }
+  if (record.status !== 'ready' && record.status !== 'blocked') return null
+  for (const key of ENTITLEMENT_READINESS_METRIC_KEYS) {
+    if (!Number.isSafeInteger(record[key]) || (record[key] as number) < 0) return null
+  }
+
+  return {
+    status: record.status,
+    open_manual_reviews: record.open_manual_reviews as number,
+    unfinished_effects: record.unfinished_effects as number,
+    completed_effects_without_external_ref: record.completed_effects_without_external_ref as number,
+    paid_unbound_payments: record.paid_unbound_payments as number,
+    unresolved_refund_tombstones: record.unresolved_refund_tombstones as number,
+    reservation_anomalies: record.reservation_anomalies as number,
+    projection_drift: record.projection_drift as number,
+    authority_drift: record.authority_drift as number,
+  }
 }
 
 export const GET = withCron(
@@ -111,7 +160,7 @@ export const GET = withCron(
     }
 
     const staleCutoff = new Date(Date.now() - 10 * 60 * 1000).toISOString()
-    const [failedEvents, staleEvents] = await Promise.all([
+    const [failedEvents, staleEvents, paidReadinessResult] = await Promise.all([
       supabase
         .from('stripe_events')
         .select('event_id', { count: 'exact', head: true })
@@ -121,6 +170,7 @@ export const GET = withCron(
         .select('event_id', { count: 'exact', head: true })
         .eq('status', 'processing')
         .lt('started_at', staleCutoff),
+      supabase.rpc('stripe_paid_launch_readiness_v2'),
     ])
     if (failedEvents.error || staleEvents.error) {
       failures.push('Stripe webhook event health query failed')
@@ -130,6 +180,26 @@ export const GET = withCron(
       }
       if ((staleEvents.count || 0) > 0) {
         failures.push(`${staleEvents.count} Stripe webhook event(s) are stuck processing`)
+      }
+    }
+
+    let entitlementReadiness: StripePaidReadiness | null = null
+    if (paidReadinessResult.error) {
+      failures.push('Stripe entitlement authority readiness query failed')
+    } else {
+      const parsedReadiness = parseStripePaidReadiness(paidReadinessResult.data)
+      entitlementReadiness = parsedReadiness
+      if (!parsedReadiness) {
+        failures.push('Stripe entitlement authority readiness contract is invalid')
+      } else if (parsedReadiness.status !== 'ready') {
+        const blockedMetrics = ENTITLEMENT_READINESS_METRIC_KEYS.filter(
+          (key) => parsedReadiness[key] !== 0
+        ).map((key) => `${key}=${parsedReadiness[key]}`)
+        failures.push(
+          `Stripe entitlement authority is blocked${
+            blockedMetrics.length > 0 ? `: ${blockedMetrics.join(', ')}` : ''
+          }`
+        )
       }
     }
 
@@ -155,6 +225,7 @@ export const GET = withCron(
       paidLaunchReady,
       mode: secretMode,
       promoEnabled,
+      entitlementReadiness,
       failures,
       warnings,
     }
