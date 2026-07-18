@@ -1,10 +1,12 @@
 import {
   BroadcastEventDataReadError,
+  loadBroadcastEventPreferences,
   loadBroadcastEventRows,
   type BroadcastEventPageLoaders,
   type CurrentRankRow,
   type DailySnapshotRow,
   type RankHistoryRow,
+  type TraderEventPreferenceRow,
   type TraderFollowRow,
 } from '../event-data'
 
@@ -130,4 +132,53 @@ describe('broadcast trader event data pagination', () => {
       }
     }
   )
+
+  it('reads 1,001 user preferences across bounded id chunks and result pages', async () => {
+    const userIds = Array.from({ length: 1001 }, (_, index) => `user-${index}`)
+    const loadPage = jest.fn(async (chunk: string[], from: number, to: number) => ({
+      data: chunk.slice(from, to + 1).map<TraderEventPreferenceRow>((id, index) => ({
+        id,
+        notify_trader_events: index % 2 === 0,
+      })),
+      error: null,
+    }))
+
+    const result = await loadBroadcastEventPreferences(userIds, loadPage, {
+      pageSize: 128,
+      filterChunkSize: 300,
+    })
+
+    expect(result).toHaveLength(1001)
+    expect(new Set(result.map((preference) => preference.id)).size).toBe(1001)
+    expect(loadPage).toHaveBeenNthCalledWith(1, userIds.slice(0, 300), 0, 127)
+    expect(loadPage).toHaveBeenNthCalledWith(2, userIds.slice(0, 300), 128, 255)
+    expect(loadPage).toHaveBeenNthCalledWith(3, userIds.slice(0, 300), 256, 383)
+    expect(loadPage).toHaveBeenLastCalledWith(userIds.slice(900), 0, 127)
+    expect(loadPage).toHaveBeenCalledTimes(10)
+    for (const [chunk] of loadPage.mock.calls) expect(chunk.length).toBeLessThanOrEqual(300)
+  })
+
+  it('discards all user preferences when a later id chunk fails', async () => {
+    const userIds = Array.from({ length: 1001 }, (_, index) => `user-${index}`)
+    const loadPage = jest.fn(async (chunk: string[]) => {
+      if (chunk[0] === 'user-300') {
+        return { data: null, error: { message: 'preference page failed' } }
+      }
+      return {
+        data: chunk.map<TraderEventPreferenceRow>((id) => ({
+          id,
+          notify_trader_events: true,
+        })),
+        error: null,
+      }
+    })
+
+    await expect(loadBroadcastEventPreferences(userIds, loadPage)).rejects.toMatchObject<
+      Partial<BroadcastEventDataReadError>
+    >({
+      name: 'BroadcastEventDataReadError',
+      dataset: 'userPreferences',
+    })
+    expect(loadPage).toHaveBeenCalledTimes(2)
+  })
 })
