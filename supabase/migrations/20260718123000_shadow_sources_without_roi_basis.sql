@@ -119,8 +119,7 @@ BEGIN
   WHERE rank_row.source IN ('gtrade', 'bitfinex')
     AND rank_row.season_id IN ('7D', '30D', '90D')
     AND rank_row.arena_score > 0
-    AND rank_row.is_outlier IS NOT TRUE
-    AND rank_row.roi BETWEEN -50000 AND 50000;
+    AND rank_row.is_outlier IS NOT TRUE;
 
   IF v_visible_rank_rows <> 0 THEN
     RAISE EXCEPTION
