@@ -18,22 +18,21 @@ export const GET = withAuth(
     // 获取用户的所有会话
     const { data: conversations, error } = await supabase
       .from('conversations')
-      .select(`
+      .select(
+        `
         id,
         user1_id,
         user2_id,
         last_message_at,
         last_message_preview,
         created_at
-      `)
+      `
+      )
       .or(`user1_id.eq.${userId},user2_id.eq.${userId}`)
       .order('last_message_at', { ascending: false })
       .limit(50)
 
     if (error) {
-      if (error.message?.includes('Could not find')) {
-        return NextResponse.json({ conversations: [] })
-      }
       return NextResponse.json({ error: 'Failed to fetch conversations' }, { status: 500 })
     }
 
@@ -42,11 +41,11 @@ export const GET = withAuth(
     }
 
     // 批量获取对方用户信息（避免 N+1 查询）
-    const otherUserIds = conversations.map(conv =>
+    const otherUserIds = conversations.map((conv) =>
       conv.user1_id === userId ? conv.user2_id : conv.user1_id
     )
     const uniqueOtherUserIds = [...new Set(otherUserIds)]
-    const conversationIds = conversations.map(c => c.id)
+    const conversationIds = conversations.map((c) => c.id)
 
     const [profilesResult, unreadResult, memberSettingsResult] = await Promise.all([
       // 一次性获取所有对方用户资料
@@ -74,8 +73,11 @@ export const GET = withAuth(
     ])
 
     // 构建用户资料映射
-    const profileMap = new Map<string, { id: string; handle: string | null; avatar_url: string | null; bio: string | null }>()
-    profilesResult.data?.forEach(p => {
+    const profileMap = new Map<
+      string,
+      { id: string; handle: string | null; avatar_url: string | null; bio: string | null }
+    >()
+    profilesResult.data?.forEach((p) => {
       profileMap.set(p.id, {
         id: p.id,
         handle: p.handle || null,
@@ -94,7 +96,10 @@ export const GET = withAuth(
     }
 
     // 构建成员设置映射
-    const memberSettingsMap = new Map<string, { remark: string | null; is_muted: boolean; is_pinned: boolean; is_blocked: boolean }>()
+    const memberSettingsMap = new Map<
+      string,
+      { remark: string | null; is_muted: boolean; is_pinned: boolean; is_blocked: boolean }
+    >()
     if (memberSettingsResult.data) {
       for (const setting of memberSettingsResult.data) {
         memberSettingsMap.set(setting.conversation_id, {
@@ -107,7 +112,7 @@ export const GET = withAuth(
     }
 
     // 组装结果
-    const enhancedConversations = conversations.map(conv => {
+    const enhancedConversations = conversations.map((conv) => {
       const otherUserId = conv.user1_id === userId ? conv.user2_id : conv.user1_id
       const otherUser = profileMap.get(otherUserId)
 
