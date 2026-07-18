@@ -11,6 +11,7 @@ import { formatDisplayName } from './utils'
 import { RankDisplay, ArenaScoreCircle, areTraderPropsEqual } from './shared/TraderDisplay'
 import ScoreMiniBar from './ScoreMiniBar'
 import { useComparisonStore } from '@/lib/stores/comparisonStore'
+import type { CompareAccountRef } from '@/lib/compare/identity'
 import { classifyStyle, getStyleInfo, type TradingStyle } from '@/lib/utils/trading-style'
 
 // Sub-components
@@ -102,10 +103,17 @@ export const TraderRow = memo(
     const displayName =
       trader.display_name || formatDisplayName(trader.handle || trader.id, trader.source || source)
     const isAddress = traderHandle.startsWith('0x') && traderHandle.length > 20
-    const sourceInfo = parseSourceInfo(trader.source || source || '')
+    const traderSource = trader.source || source || ''
+    const sourceInfo = parseSourceInfo(traderSource)
+    const compareAccount: CompareAccountRef = { id: trader.id, source: traderSource }
 
     // Compare checkbox state
-    const isSelected = useComparisonStore(useCallback((s) => s.isSelected(trader.id), [trader.id]))
+    const isSelected = useComparisonStore(
+      useCallback(
+        (s) => s.isSelected({ id: trader.id, source: traderSource }),
+        [trader.id, traderSource]
+      )
+    )
     // 桌面对比可发现性(2026-07-04 #5):桌面行此前只有移动 swipe 才能加对比,
     // 桌面用户发现不了。canAddMore 用于满 10 个时禁用未选中项。
     const canAddMore = useComparisonStore(useCallback((s) => s.canAddMore(), []))
@@ -133,12 +141,12 @@ export const TraderRow = memo(
       e.preventDefault()
       e.stopPropagation()
       if (isSelected) {
-        useComparisonStore.getState().removeTrader(trader.id)
+        useComparisonStore.getState().removeTrader(compareAccount)
       } else {
         useComparisonStore.getState().addTrader({
           id: trader.id,
           handle: traderHandle,
-          source: trader.source || source || '',
+          source: traderSource,
           avatarUrl: trader.avatar_url || undefined,
         })
       }

@@ -26,11 +26,18 @@ import { logger } from '@/lib/logger'
 import { BETA_PRO_FEATURES_FREE } from '@/lib/premium/hooks'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import type { UnifiedSearchResult } from '@/app/api/search/route'
+import {
+  buildCompareApiUrl,
+  buildCompareUrl,
+  compareAccountKey,
+  isSameCompareAccount,
+  parseCompareAccounts,
+  parseUnifiedSearchTraderId,
+  type CompareAccountRef,
+} from '@/lib/compare/identity'
 
-interface TraderCompareData {
-  id: string
+interface TraderCompareData extends CompareAccountRef {
   handle: string | null
-  source: string
   roi: number
   roi_7d?: number
   roi_30d?: number
@@ -71,7 +78,9 @@ function CompareContent() {
       type: string
       avatar_url?: string
       roi?: number
-      source?: string
+      source?: string | null
+      platform?: string
+      identity_key?: string
       arena_score?: number
     }>
   >([])
@@ -112,7 +121,17 @@ function CompareContent() {
         .catch((err) => logger.error('Subscription fetch failed:', err))
 
       const ids = searchParams.get('ids')
-      const tradersPromise = ids ? loadTraders(ids.split(',')) : Promise.resolve()
+      const platforms = searchParams.get('platforms')
+      let tradersPromise: Promise<void> = Promise.resolve()
+      if (ids || platforms) {
+        const parsed = parseCompareAccounts(ids, platforms)
+        if (parsed.ok) {
+          tradersPromise = loadTraders(parsed.accounts)
+        } else {
+          logger.warn('Invalid compare URL identity parameters:', parsed.error)
+          setError(t('errorOccurred'))
+        }
+      }
 
       try {
         await Promise.all([subPromise, tradersPromise])
@@ -209,11 +228,11 @@ function CompareContent() {
   }, [searchInput])
 
   // Load traders with equity curve data
-  const loadTraders = async (traderIds: string[]) => {
-    if (!accessToken || traderIds.length === 0) return
+  const loadTraders = async (accounts: CompareAccountRef[]) => {
+    if (!accessToken || accounts.length === 0) return
 
     try {
-      const res = await fetch(`/api/compare?ids=${traderIds.join(',')}&include_equity=1`, {
+      const res = await fetch(buildCompareApiUrl(accounts, { includeEquity: true }), {
         headers: { Authorization: `Bearer ${accessToken}` },
       })
 
@@ -222,7 +241,10 @@ function CompareContent() {
         if (res.status === 403) {
           setError(t('portfolioProRequired'))
         } else {
-          setError(data.error || t('errorOccurred'))
+          setError(
+            (typeof data.error === 'string' ? data.error : data.error?.message) ||
+              t('errorOccurred')
+          )
         }
         return
       }
@@ -243,39 +265,41 @@ function CompareContent() {
   }
 
   // Add trader
-  const handleAddTrader = async (traderId: string) => {
+  const handleAddTrader = async (account: CompareAccountRef) => {
     if (traders.length >= 10) {
       showToast(t('compareMax10'), 'warning')
       return
     }
-    if (traders.some((tr) => tr.id === traderId)) {
+    if (traders.some((trader) => isSameCompareAccount(trader, account))) {
       showToast(t('compareAlreadyAdded'), 'warning')
       return
     }
 
-    const newIds = [...traders.map((tr) => tr.id), traderId]
-    await loadTraders(newIds)
-    router.replace(`/compare?ids=${newIds.join(',')}`, { scroll: false })
+    const newAccounts = [...traders.map(({ id, source }) => ({ id, source })), account]
+    await loadTraders(newAccounts)
+    router.replace(buildCompareUrl(newAccounts), { scroll: false })
   }
 
   // Add trader picked from a search result. Search result ids are
-  // `platform:traderKey`; /api/compare resolves by traderKey (source_trader_id).
+  // `platform:traderKey`; retain both parts for exact account resolution.
   const handleAddFromSearch = async (result: UnifiedSearchResult) => {
-    const traderKey = result.id.includes(':')
-      ? result.id.slice(result.id.indexOf(':') + 1)
-      : result.id
-    await handleAddTrader(traderKey)
+    const account = parseUnifiedSearchTraderId(result.id)
+    if (!account) {
+      showToast(t('errorOccurred'), 'error')
+      return
+    }
+    await handleAddTrader(account)
     setSearchInput('')
     setSearchResults([])
     setSearchDone(false)
   }
 
   // Remove trader
-  const handleRemoveTrader = (traderId: string) => {
-    const newTraders = traders.filter((tr) => tr.id !== traderId)
+  const handleRemoveTrader = (account: CompareAccountRef) => {
+    const newTraders = traders.filter((trader) => !isSameCompareAccount(trader, account))
     setTraders(newTraders)
     if (newTraders.length > 0) {
-      router.replace(`/compare?ids=${newTraders.map((tr) => tr.id).join(',')}`, { scroll: false })
+      router.replace(buildCompareUrl(newTraders), { scroll: false })
     } else {
       router.replace('/compare', { scroll: false })
     }
@@ -482,15 +506,16 @@ function CompareContent() {
                   </Text>
                 ) : (
                   searchResults.map((result, idx) => {
-                    const traderKey = result.id.includes(':')
-                      ? result.id.slice(result.id.indexOf(':') + 1)
-                      : result.id
-                    const isAdded = traders.some((tr) => tr.id === traderKey)
+                    const account = parseUnifiedSearchTraderId(result.id)
+                    const isUnavailable = account === null
+                    const isAdded =
+                      account !== null &&
+                      traders.some((trader) => isSameCompareAccount(trader, account))
                     return (
                       <button
                         key={result.id}
                         type="button"
-                        disabled={isAdded}
+                        disabled={isAdded || isUnavailable}
                         onClick={() => handleAddFromSearch(result)}
                         style={{
                           display: 'flex',
@@ -504,8 +529,8 @@ function CompareContent() {
                             idx < searchResults.length - 1
                               ? `1px solid ${tokens.colors.border.primary}`
                               : 'none',
-                          cursor: isAdded ? 'not-allowed' : 'pointer',
-                          opacity: isAdded ? 0.45 : 1,
+                          cursor: isAdded || isUnavailable ? 'not-allowed' : 'pointer',
+                          opacity: isAdded || isUnavailable ? 0.45 : 1,
                           textAlign: 'left',
                           color: tokens.colors.text.primary,
                         }}
@@ -619,11 +644,19 @@ function CompareContent() {
                 }}
               >
                 {followedTraders.map((ft) => {
-                  const isAdded = traders.some((tr) => tr.id === ft.id)
+                  const followedSource = ft.platform || ft.source || ''
+                  const account = { id: ft.id, source: followedSource }
+                  const isUnavailable = !followedSource
+                  const isAdded =
+                    !isUnavailable &&
+                    traders.some((trader) => isSameCompareAccount(trader, account))
                   return (
                     <Box
-                      key={ft.id}
-                      onClick={() => !isAdded && handleAddTrader(ft.id)}
+                      key={
+                        ft.identity_key ||
+                        (isUnavailable ? `legacy:${ft.id}` : compareAccountKey(account))
+                      }
+                      onClick={() => !isAdded && !isUnavailable && handleAddTrader(account)}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -634,12 +667,12 @@ function CompareContent() {
                         background: isAdded
                           ? `${tokens.colors.bg.tertiary}`
                           : tokens.colors.bg.primary,
-                        cursor: isAdded ? 'not-allowed' : 'pointer',
-                        opacity: isAdded ? 0.45 : 1,
+                        cursor: isAdded || isUnavailable ? 'not-allowed' : 'pointer',
+                        opacity: isAdded || isUnavailable ? 0.45 : 1,
                         transition: 'all 0.2s',
                       }}
                       onMouseEnter={(e) => {
-                        if (!isAdded)
+                        if (!isAdded && !isUnavailable)
                           e.currentTarget.style.borderColor = tokens.colors.accent.primary
                       }}
                       onMouseLeave={(e) => {
@@ -705,7 +738,7 @@ function CompareContent() {
                           style={{ display: 'flex', alignItems: 'center', gap: tokens.spacing[1] }}
                         >
                           <Text size="xs" color="tertiary">
-                            {ft.source || ''}
+                            {followedSource}
                           </Text>
                           <Text
                             size="xs"
