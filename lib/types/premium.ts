@@ -57,7 +57,7 @@ export const PRO_FREE_PROMO = process.env.NEXT_PUBLIC_PRO_FREE_PROMO !== 'false'
 export type SubscriptionTier = 'free' | 'pro'
 
 /** How the user obtained their subscription */
-export type SubscriptionSource = 'stripe' | 'nft' | 'admin' | 'free'
+export type SubscriptionSource = 'stripe' | 'admin' | 'free'
 
 /** 活跃订阅等级（不包含 free） */
 export type ActiveSubscriptionTier = Exclude<SubscriptionTier, 'free'>
