@@ -4,24 +4,32 @@ import { useState, useEffect, useCallback } from 'react'
 import { tokens } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text } from '@/app/components/base'
+import ErrorMessage from '@/app/components/ui/ErrorMessage'
 import { SearchResult } from './types'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 
 export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) => void }) {
   const { t } = useLanguage()
+  const searchFailedMessage = t('searchFailed')
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
 
-  const search = useCallback(async (q: string) => {
-    if (q.length < 2) {
+  const search = useCallback(
+    async (q: string) => {
+      if (q.length < 2) {
+        setResults([])
+        setSearchError(null)
+        return
+      }
+      setSearching(true)
+      setSearchError(null)
       setResults([])
-      return
-    }
-    setSearching(true)
-    try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=10`)
-      if (res.ok) {
+      try {
+        const res = await fetch(`/api/search?q=${encodeURIComponent(q)}&limit=10`)
+        if (!res.ok) throw new Error(`Search request failed (${res.status})`)
+
         const raw = await res.json()
         // /api/search returns { success, data: { results: { traders: UnifiedSearchResult[] } } }.
         // Map UnifiedSearchResult ({ id: 'platform:key', title: '@handle', avatar, meta })
@@ -42,13 +50,14 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
             roi: item.meta?.roi,
           }))
         )
+      } catch {
+        setSearchError(searchFailedMessage)
+      } finally {
+        setSearching(false)
       }
-    } catch {
-      // Search failed silently
-    } finally {
-      setSearching(false)
-    }
-  }, [])
+    },
+    [searchFailedMessage]
+  )
 
   useEffect(() => {
     const timer = setTimeout(() => search(query), 300)
@@ -83,6 +92,16 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
         <Text style={{ padding: tokens.spacing[3], color: tokens.colors.text.tertiary }}>
           {t('searching')}
         </Text>
+      )}
+
+      {searchError && !searching && (
+        <Box style={{ marginTop: tokens.spacing[3] }}>
+          <ErrorMessage
+            title={t('searchFailedTitle')}
+            message={searchError}
+            onRetry={() => void search(query)}
+          />
+        </Box>
       )}
 
       {results.length > 0 && (
@@ -122,7 +141,9 @@ export function SearchSection({ onSelect }: { onSelect: (result: SearchResult) =
                 />
               )}
               <Box style={{ flex: 1 }}>
-                <Text style={{ fontWeight: 600 }}>{r.handle}</Text>
+                <Text style={{ fontWeight: tokens.typography.fontWeight.semibold }}>
+                  {r.handle}
+                </Text>
                 <Text
                   style={{
                     fontSize: tokens.typography.fontSize.sm,
