@@ -173,6 +173,74 @@ describe('runTraderAlerts', () => {
     )
   })
 
+  it('keeps duplicate trader ids source-scoped and skips ambiguous legacy alerts', async () => {
+    const bybitAlert = {
+      ...alert,
+      id: 'alert-bybit',
+      source: 'bybit',
+    }
+    const binanceAlert = {
+      ...alert,
+      id: 'alert-binance',
+      source: 'binance',
+    }
+    const legacyAlert = {
+      ...alert,
+      id: 'alert-legacy',
+      source: null,
+    }
+    const { client, calls, rpc } = clientWith({
+      trader_alerts: [{ data: [bybitAlert, binanceAlert, legacyAlert], error: null }],
+      subscriptions: [{ data: [{ user_id: 'user-1' }], error: null }],
+      user_profiles: [{ data: [{ id: 'user-1' }], error: null }],
+      leaderboard_ranks: [
+        {
+          data: [
+            { ...observation, source: 'bybit', roi: 11 },
+            { ...observation, source: 'binance', roi: 22 },
+          ],
+          error: null,
+        },
+      ],
+      trader_alert_states: [
+        { data: [], error: null },
+        { data: null, error: null },
+      ],
+      trader_alert_deliveries: [{ data: [], error: null }],
+    })
+
+    const result = await runTraderAlerts(client as never, now)
+
+    expect(result).toMatchObject({
+      alertsConfigured: 3,
+      alertsChecked: 3,
+      tradersChecked: 2,
+      statesWritten: 10,
+      alertsSent: 0,
+    })
+    expect(rpc).not.toHaveBeenCalled()
+    const upsert = calls.find(
+      (call) => call.table === 'trader_alert_states' && call.method === 'upsert'
+    )
+    expect(upsert?.args[0]).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          alert_id: 'alert-bybit',
+          metric: 'roi',
+          baseline_value: 11,
+        }),
+        expect.objectContaining({
+          alert_id: 'alert-binance',
+          metric: 'roi',
+          baseline_value: 22,
+        }),
+      ])
+    )
+    expect(upsert?.args[0]).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ alert_id: 'alert-legacy' })])
+    )
+  })
+
   it('reserves and atomically finalizes a threshold event', async () => {
     const { client, rpc } = clientWith({
       trader_alerts: [{ data: [alert], error: null }],
