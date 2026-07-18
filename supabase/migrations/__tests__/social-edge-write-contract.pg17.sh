@@ -5,7 +5,7 @@
 set -Eeuo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
-FIXTURE="$ROOT_DIR/supabase/migrations/__tests__/social-edge-write-contract.fixture.sql"
+FIXTURE="$ROOT_DIR/supabase/migrations/__tests__/social-edge-write-contract.fixture.psql"
 FOLLOW_MIGRATION="$ROOT_DIR/supabase/migrations/20260716190000_atomic_user_follow.sql"
 BLOCK_MIGRATION="$ROOT_DIR/supabase/migrations/20260716191000_atomic_user_block.sql"
 CONTRACT_MIGRATION="$ROOT_DIR/supabase/migrations/20260716192000_social_edge_write_contract.sql"

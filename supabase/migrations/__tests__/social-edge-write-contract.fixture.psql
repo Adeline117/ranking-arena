@@ -1,3 +1,4 @@
+-- PostgreSQL fixture; deliberately not a ledger migration.
 CREATE ROLE postgres NOLOGIN;
 CREATE ROLE anon NOLOGIN;
 CREATE ROLE authenticated NOLOGIN;
