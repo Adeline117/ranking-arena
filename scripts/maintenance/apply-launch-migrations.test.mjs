@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { chmodSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { resolve } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
@@ -174,6 +176,52 @@ test('production writes require phase-specific confirmations', () => {
   assert.match(source, /printf '%s\\n' 'ROLLBACK;'/)
   assert.match(source, /emit_ledger_exact_preflight "\$migration" 'postdeploy'/)
   assert.match(source, /emit_ledger_exact_preflight "\$migration" 'recovery'/)
+})
+
+test('keeps the database credential out of psql process arguments', () => {
+  assert.match(source, /psql_with_database\(\)[\s\S]*PGDATABASE="\$DATABASE_URL" psql "\$@"/)
+  assert.doesNotMatch(source, /psql\s+"\$DATABASE_URL"/)
+  assert.equal(source.match(/\bpsql_with_database\b/g)?.length, 4)
+
+  const directory = mkdtempSync(resolve(tmpdir(), 'arena-migration-psql-'))
+  try {
+    const fakePsql = resolve(directory, 'psql')
+    const argsPath = resolve(directory, 'args')
+    const databasePath = resolve(directory, 'database')
+    writeFileSync(
+      fakePsql,
+      [
+        '#!/usr/bin/env bash',
+        'printf "%s\\n" "$@" > "$FAKE_PSQL_ARGS"',
+        'printf "%s" "$PGDATABASE" > "$FAKE_PSQL_DATABASE"',
+        'cat >/dev/null',
+        '',
+      ].join('\n')
+    )
+    chmodSync(fakePsql, 0o755)
+    const databaseUrl = 'postgresql://runner:argv-secret@db.example.test:5432/arena'
+    const result = spawnSync(
+      'bash',
+      [resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh'), 'status'],
+      {
+        cwd: ROOT,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${directory}:${process.env.PATH}`,
+          DATABASE_URL: databaseUrl,
+          FAKE_PSQL_ARGS: argsPath,
+          FAKE_PSQL_DATABASE: databasePath,
+        },
+      }
+    )
+
+    assert.equal(result.status, 0, result.stderr)
+    assert.equal(readFileSync(databasePath, 'utf8'), databaseUrl)
+    assert.doesNotMatch(readFileSync(argsPath, 'utf8'), /argv-secret|postgresql:\/\//)
+  } finally {
+    rmSync(directory, { recursive: true, force: true })
+  }
 })
 
 test('concurrent recovery is resumable and never enters a transaction', () => {
