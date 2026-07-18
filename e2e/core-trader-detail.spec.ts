@@ -7,14 +7,16 @@ import { dismissOverlays } from './helpers'
  */
 
 test.describe('Core Trader Detail', () => {
-  test('navigate to a trader profile, verify tabs render (Overview/Stats/Portfolio)', async ({ page }) => {
+  test('navigate to a trader profile, verify tabs render (Overview/Stats/Portfolio)', async ({
+    page,
+  }) => {
     // Go to homepage and find a real trader link
     await page.goto('/', { timeout: 60_000 })
     await page.waitForLoadState('domcontentloaded')
     await dismissOverlays(page)
 
     // Wait for trader links in the rankings table
-    const traderLinks = page.locator('a[href*="/trader/"]')
+    const traderLinks = page.locator('#homepage-interactive a[href*="/trader/"]')
     await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 })
 
     // Click the first trader to navigate to their profile
@@ -38,7 +40,7 @@ test.describe('Core Trader Detail', () => {
     await page.waitForLoadState('domcontentloaded')
     await dismissOverlays(page)
 
-    const traderLinks = page.locator('a[href*="/trader/"]')
+    const traderLinks = page.locator('#homepage-interactive a[href*="/trader/"]')
     await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 })
     await traderLinks.first().click()
     await page.waitForLoadState('domcontentloaded')
@@ -74,7 +76,7 @@ test.describe('Core Trader Detail', () => {
     await page.waitForLoadState('domcontentloaded')
     await dismissOverlays(page)
 
-    const traderLinks = page.locator('a[href*="/trader/"]')
+    const traderLinks = page.locator('#homepage-interactive a[href*="/trader/"]')
     await traderLinks.first().waitFor({ state: 'visible', timeout: 30_000 })
     await traderLinks.first().click()
     await page.waitForLoadState('domcontentloaded')
@@ -84,7 +86,10 @@ test.describe('Core Trader Detail', () => {
       hasText: /^(7D|30D|90D|7天|30天|90天|All)$/i,
     })
 
-    await periodButtons.first().waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {})
+    await periodButtons
+      .first()
+      .waitFor({ state: 'visible', timeout: 15_000 })
+      .catch(() => {})
 
     const count = await periodButtons.count()
     if (count >= 2) {
