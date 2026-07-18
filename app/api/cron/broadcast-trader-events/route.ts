@@ -25,6 +25,7 @@ import {
   EVENT_ROI_MOVE_PCT,
   EVENT_PNL_MOVE_USD,
 } from '@/lib/constants/trader-events'
+import { traderEventLink, traderEventReference } from './notification-identity'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -302,7 +303,8 @@ export async function GET(request: NextRequest) {
       const sep = bk.indexOf('|')
       const traderId = bk.slice(0, sep)
       const source = bk.slice(sep + 1)
-      const link = `/trader/${encodeURIComponent(traderId)}${source ? `?platform=${source}` : ''}`
+      const kind = key.endsWith('#pos') ? 'position' : 'metric'
+      const link = traderEventLink(traderId, source)
       for (const uid of followersByTrader.get(bk) ?? []) {
         if (optedOut.has(uid)) continue
         rows.push({
@@ -311,7 +313,7 @@ export async function GET(request: NextRequest) {
           title: ev.title,
           message: ev.message,
           link,
-          reference_id: traderId,
+          reference_id: traderEventReference(traderId, source, kind),
         })
       }
     }
