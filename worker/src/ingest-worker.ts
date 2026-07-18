@@ -31,6 +31,7 @@ import {
 import { reconcileSchedulers } from './ingest/scheduler'
 import { startHeartbeat } from './ingest/heartbeat'
 import { startFailoverManager } from './ingest/failover'
+import { withSourceJobLease } from './ingest/source-job-lease'
 
 // Per-region worker concurrency. Bumped 3→5 (2026-06-12): at 3 the drain
 // rate (~12-18 jobs/h, dragged by giant crawls like bybit_mt5's 29k rows)
@@ -60,7 +61,23 @@ async function route(job: Job): Promise<unknown> {
   switch (job.name) {
     case INGEST_JOB.TIER_A: {
       const { processTierA } = await import('./ingest/processors/tier-a-leaderboard')
-      return processTierA(job)
+      const sourceSlug = job.data?.sourceSlug
+      if (typeof sourceSlug !== 'string' || sourceSlug.length === 0) {
+        throw new Error('[ingest-worker] Tier-A job is missing sourceSlug')
+      }
+      const result = await withSourceJobLease({
+        redis: getConnection(),
+        lane: 'tier-a',
+        sourceSlug,
+        run: () => processTierA(job),
+      })
+      if (result.coalesced) {
+        console.log(
+          `[ingest-worker] ↪ coalesced duplicate Tier-A iteration ${job.id} (${sourceSlug})`
+        )
+        return { coalesced: true, sourceSlug }
+      }
+      return result.value
     }
     case INGEST_JOB.TIER_B: {
       const { processTierB } = await import('./ingest/processors/tier-b-profiles')
