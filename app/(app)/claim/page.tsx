@@ -10,7 +10,8 @@
  * - Stats (claimed/total traders)
  */
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import type { User } from '@supabase/supabase-js'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -40,7 +41,9 @@ export default function ClaimPage() {
   const searchParams = useSearchParams()
   const { showToast } = useToast()
 
-  const [user, setUser] = useState<import('@supabase/supabase-js').User | null>(null)
+  const [user, setUser] = useState<User | null>(null)
+  const [authChecked, setAuthChecked] = useState(false)
+  const authLookupRef = useRef<Promise<User | null> | null>(null)
   const [selectedTrader, setSelectedTrader] = useState<SearchResult | null>(null)
   const [step, setStep] = useState<'search' | 'verify' | 'done'>('search')
   const [linkedTraders, setLinkedTraders] = useState<LinkedTrader[]>([])
@@ -65,6 +68,16 @@ export default function ClaimPage() {
     }
   }, [])
 
+  const getAuthUser = useCallback((): Promise<User | null> => {
+    if (!authLookupRef.current) {
+      authLookupRef.current = supabase.auth
+        .getUser()
+        .then(({ data }) => data.user)
+        .catch(() => null)
+    }
+    return authLookupRef.current
+  }, [])
+
   // Check URL params for direct link
   useEffect(() => {
     const traderId = searchParams?.get('trader')
@@ -86,19 +99,27 @@ export default function ClaimPage() {
 
   // Check auth + fetch linked traders
   useEffect(() => {
-    supabase.auth
-      .getUser()
-      .then(({ data }) => {
-        setUser(data.user)
-        if (data.user) {
-          fetchLinkedTraders()
-        }
-      })
-      .catch(() => {}) // eslint-disable-line no-restricted-syntax -- fire-and-forget
-  }, [fetchLinkedTraders])
+    let alive = true
+    void getAuthUser().then((resolvedUser) => {
+      if (!alive) return
+      setUser(resolvedUser)
+      setAuthChecked(true)
+      if (resolvedUser) {
+        void fetchLinkedTraders()
+      }
+    })
+    return () => {
+      alive = false
+    }
+  }, [fetchLinkedTraders, getAuthUser])
 
-  const handleTraderSelect = (result: SearchResult) => {
-    if (!user) {
+  const handleTraderSelect = async (result: SearchResult) => {
+    const activeUser = authChecked ? user : await getAuthUser()
+    if (!authChecked) {
+      setUser(activeUser)
+      setAuthChecked(true)
+    }
+    if (!activeUser) {
       showToast(t('pleaseLoginFirst'), 'warning')
       router.push(
         buildTraderClaimLoginHref({
@@ -235,7 +256,11 @@ export default function ClaimPage() {
             </Box>
 
             {/* Verification form */}
-            {!user ? (
+            {!authChecked ? (
+              <Box style={{ textAlign: 'center' }}>
+                <Text>{t('loading')}</Text>
+              </Box>
+            ) : !user ? (
               <Box style={{ textAlign: 'center' }}>
                 <Text style={{ marginBottom: tokens.spacing[3] }}>{t('pleaseLoginFirst')}</Text>
                 <button

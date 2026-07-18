@@ -1,8 +1,10 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react'
+import type { User } from '@supabase/supabase-js'
 
 const mockPush = jest.fn()
 const mockShowToast = jest.fn()
+const mockGetUser = jest.fn()
 
 jest.mock('next/navigation', () => ({
   useRouter: () => ({ push: mockPush }),
@@ -13,7 +15,7 @@ jest.mock('@/lib/supabase/client', () => ({
   supabase: {
     auth: {
       getSession: jest.fn().mockResolvedValue({ data: { session: null } }),
-      getUser: jest.fn().mockResolvedValue({ data: { user: null } }),
+      getUser: (...args: unknown[]) => mockGetUser(...args),
     },
   },
 }))
@@ -35,7 +37,9 @@ jest.mock('../components/HeroSection', () => ({ HeroSection: () => null }))
 jest.mock('../components/BenefitsSection', () => ({ BenefitsSection: () => null }))
 jest.mock('../components/FaqSection', () => ({ FaqSection: () => null }))
 jest.mock('../components/LinkedAccountsSidebar', () => ({ LinkedAccountsSidebar: () => null }))
-jest.mock('../components/CexVerifyForm', () => ({ CexVerifyForm: () => null }))
+jest.mock('../components/CexVerifyForm', () => ({
+  CexVerifyForm: () => <div>cex verify form</div>,
+}))
 jest.mock('../components/DexVerifyForm', () => ({ DexVerifyForm: () => null }))
 jest.mock('../components/SearchSection', () => ({
   SearchSection: ({
@@ -63,16 +67,37 @@ import ClaimPage from '../page'
 describe('claim page login intent', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockGetUser.mockResolvedValue({ data: { user: null } })
   })
 
-  it('carries an anonymous search selection through login to verification', () => {
+  it('carries an anonymous search selection through login to verification', async () => {
     render(<ClaimPage />)
 
     fireEvent.click(screen.getByRole('button', { name: 'select trader' }))
 
-    expect(mockPush).toHaveBeenCalledWith(
-      '/login?returnUrl=%2Fclaim%3Ftrader%3Daccount%252F42%26source%3Dbinance%26handle%3DAlice%2BTrader%26step%3Dverify'
+    await waitFor(() =>
+      expect(mockPush).toHaveBeenCalledWith(
+        '/login?returnUrl=%2Fclaim%3Ftrader%3Daccount%252F42%26source%3Dbinance%26handle%3DAlice%2BTrader%26step%3Dverify'
+      )
     )
     expect(mockShowToast).toHaveBeenCalledWith('pleaseLoginFirst', 'warning')
+  })
+
+  it('waits for auth bootstrap before deciding whether a selection needs login', async () => {
+    let resolveUser!: (value: { data: { user: User } }) => void
+    mockGetUser.mockReturnValue(
+      new Promise<{ data: { user: User } }>((resolve) => {
+        resolveUser = resolve
+      })
+    )
+    render(<ClaimPage />)
+
+    fireEvent.click(screen.getByRole('button', { name: 'select trader' }))
+    expect(mockPush).not.toHaveBeenCalled()
+
+    resolveUser({ data: { user: { id: 'viewer-1' } as User } })
+
+    expect(await screen.findByText('cex verify form')).toBeInTheDocument()
+    expect(mockPush).not.toHaveBeenCalled()
   })
 })
