@@ -271,6 +271,45 @@ emit_ledger_absence_preflight() {
     "\$$tag\$;"
 }
 
+emit_ledger_exact_preflight() {
+  local migration="$1"
+  local phase="${2:-migration}"
+  local version
+  local name
+  local hash
+  local tag
+  local file="$MIGRATIONS_DIR/$migration"
+
+  version="$(migration_version "$migration")"
+  name="$(migration_name "$migration")"
+  hash="$(shasum -a 256 "$file" | awk '{print $1}')"
+  tag="arena_ledger_exact_${version}"
+
+  # Re-attest and lock an exact ledger row inside the migration transaction.
+  # The host-side status check decides whether to emit a migration, but it
+  # cannot protect the interval before psql begins the transaction.
+  printf '%s\n' \
+    "DO \$$tag\$" \
+    'BEGIN' \
+    '  PERFORM 1' \
+    '  FROM supabase_migrations.schema_migrations AS ledger' \
+    "  WHERE ledger.version = '$version'" \
+    "    AND ledger.name = '$name'" \
+    "    AND ledger.created_by = 'codex'" \
+    "    AND ledger.idempotency_key = 'codex:$version:$hash'" \
+    '    AND pg_catalog.array_length(ledger.statements, 1) = 1' \
+    '    AND pg_catalog.encode(' \
+    "      extensions.digest(ledger.statements[1], 'sha256')," \
+    "      'hex'" \
+    "    ) = '$hash'" \
+    '  FOR SHARE;' \
+    '  IF NOT FOUND THEN' \
+    "    RAISE EXCEPTION '$phase requires exact ledger: $migration';" \
+    '  END IF;' \
+    'END' \
+    "\$$tag\$;"
+}
+
 emit_ledger_insert() {
   local migration="$1"
   local version
@@ -330,6 +369,7 @@ emit_pending_migration() {
   state="$(ledger_state "$migration")"
   if [[ "$state" == "exact" ]]; then
     printf '\\echo SKIP exact ledger: %s\n' "$migration"
+    emit_ledger_exact_preflight "$migration"
     return
   fi
   if [[ "$state" != "missing" ]]; then
@@ -409,55 +449,17 @@ ledger_state() {
 }
 
 emit_predeploy_ledger_requirement() {
-  local versions=()
   local migration
-  local quoted
   for migration in "${PREDEPLOY_MIGRATIONS[@]}"; do
-    versions+=("'$(migration_version "$migration")'")
+    emit_ledger_exact_preflight "$migration" 'postdeploy'
   done
-  quoted="$(IFS=,; printf '%s' "${versions[*]}")"
-
-  printf '%s\n' \
-    'DO $arena_predeploy_requirement$' \
-    'DECLARE' \
-    '  v_recorded integer;' \
-    'BEGIN' \
-    '  SELECT pg_catalog.count(*)' \
-    '  INTO STRICT v_recorded' \
-    '  FROM supabase_migrations.schema_migrations' \
-    "  WHERE version IN ($quoted);" \
-    "  IF v_recorded <> ${#PREDEPLOY_MIGRATIONS[@]} THEN" \
-    "    RAISE EXCEPTION 'postdeploy requires all predeploy ledger rows: found %/${#PREDEPLOY_MIGRATIONS[@]}', v_recorded;" \
-    '  END IF;' \
-    'END' \
-    '$arena_predeploy_requirement$;'
 }
 
 emit_cutover_ledger_requirement() {
-  local versions=()
   local migration
-  local quoted
-  local required_count
   for migration in "${RECOVERY_PREREQUISITE_MIGRATIONS[@]}"; do
-    versions+=("'$(migration_version "$migration")'")
+    emit_ledger_exact_preflight "$migration" 'recovery'
   done
-  quoted="$(IFS=,; printf '%s' "${versions[*]}")"
-  required_count="${#RECOVERY_PREREQUISITE_MIGRATIONS[@]}"
-
-  printf '%s\n' \
-    'DO $arena_cutover_requirement$' \
-    'DECLARE' \
-    '  v_recorded integer;' \
-    'BEGIN' \
-    '  SELECT pg_catalog.count(*)' \
-    '  INTO STRICT v_recorded' \
-    '  FROM supabase_migrations.schema_migrations' \
-    "  WHERE version IN ($quoted);" \
-    "  IF v_recorded <> $required_count THEN" \
-    "    RAISE EXCEPTION 'recovery requires all launch cutover ledger rows: found %/$required_count', v_recorded;" \
-    '  END IF;' \
-    'END' \
-    '$arena_cutover_requirement$;'
 }
 
 emit_transaction() {

@@ -124,6 +124,10 @@ test('predeploy and postdeploy are exact-ledger resumable and fail closed on dri
   assert.match(source, /refusing drifted ledger/)
   assert.match(
     source,
+    /emit_pending_migration\(\)[\s\S]*SKIP exact ledger[\s\S]*emit_ledger_exact_preflight "\$migration"/
+  )
+  assert.match(
+    source,
     /apply-predeploy\)[\s\S]*emit_transaction 'COMMIT' "\$\{PREDEPLOY_MIGRATIONS\[@\]\}"/
   )
   assert.match(
@@ -131,6 +135,30 @@ test('predeploy and postdeploy are exact-ledger resumable and fail closed on dri
     /apply-postdeploy\)[\s\S]*require_exact_migrations 'postdeploy'[\s\S]*emit_pending_migration/
   )
   assert.match(source, /echo "\$phase requires exact ledger: \$migration \(\$state\)"/)
+})
+
+test('transactional exact-ledger checks re-attest and lock every skipped prerequisite', () => {
+  assert.match(
+    source,
+    /emit_ledger_exact_preflight\(\)[\s\S]*ledger\.name = '\$name'[\s\S]*ledger\.created_by = 'codex'/
+  )
+  assert.match(
+    source,
+    /emit_ledger_exact_preflight\(\)[\s\S]*ledger\.idempotency_key = 'codex:\$version:\$hash'/
+  )
+  assert.match(
+    source,
+    /emit_ledger_exact_preflight\(\)[\s\S]*extensions\.digest\(ledger\.statements\[1\], 'sha256'\)/
+  )
+  assert.match(source, /emit_ledger_exact_preflight\(\)[\s\S]*FOR SHARE;/)
+  assert.match(
+    source,
+    /emit_predeploy_ledger_requirement\(\)[\s\S]*emit_ledger_exact_preflight "\$migration" 'postdeploy'/
+  )
+  assert.match(
+    source,
+    /emit_cutover_ledger_requirement\(\)[\s\S]*emit_ledger_exact_preflight "\$migration" 'recovery'/
+  )
 })
 
 test('production writes require phase-specific confirmations', () => {
@@ -144,8 +172,8 @@ test('production writes require phase-specific confirmations', () => {
   assert.match(source, /dry-run-all[\s\S]*emit_all_dry_run/)
   assert.match(source, /dry-run-recovery[\s\S]*emit_cutover_ledger_requirement/)
   assert.match(source, /printf '%s\\n' 'ROLLBACK;'/)
-  assert.match(source, /postdeploy requires all predeploy ledger rows/)
-  assert.match(source, /recovery requires all launch cutover ledger rows/)
+  assert.match(source, /emit_ledger_exact_preflight "\$migration" 'postdeploy'/)
+  assert.match(source, /emit_ledger_exact_preflight "\$migration" 'recovery'/)
 })
 
 test('concurrent recovery is resumable and never enters a transaction', () => {
