@@ -7,6 +7,7 @@ import solanaManifestJson from '../fixtures/dex-solana-protocol-manifest.v1.json
 import {
   DEX_BSC_GOLDEN_RPC_LANES,
   DEX_GOLDEN_RPC_EVIDENCE_CONTRACT,
+  DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION,
   DEX_GOLDEN_RPC_REQUIRED_BLOCKERS,
   DEX_SOLANA_GOLDEN_RPC_LANES,
   dexGoldenRemoteEndpointIdentity,
@@ -18,7 +19,9 @@ import {
   type DexGoldenRpcExchange,
 } from '../lib/dex-golden-rpc-evidence'
 import {
+  DEX_GOLDEN_PROTOCOL_BINDING_CONTRACT,
   DEX_GOLDEN_PROTOCOL_BINDING_REQUIRED_BLOCKERS,
+  DEX_GOLDEN_PROTOCOL_BINDING_SCHEMA_VERSION,
   buildDexGoldenProtocolBinding,
   dexGoldenProtocolBindingSha256,
   parseDexGoldenProtocolBinding,
@@ -123,7 +126,7 @@ function capture(
             semantic_sha256: null,
           }
         : {
-            policy: 'solana_verified_transaction_finality_semantics_v1',
+            policy: 'solana_verified_transaction_finality_semantics_v2',
             semantic_sha256: hash(`${endpointId}:semantic`),
           },
     stable_transaction_facts_sha256: stableHash,
@@ -138,7 +141,7 @@ function makeEvidence(chain: 'bsc' | 'solana'): DexGoldenRpcEvidence {
     ? ['alchemy_bnb_mainnet', 'publicnode_bsc_mainnet']
     : ['alchemy_solana_mainnet', 'helius_solana_mainnet']
   return {
-    schema_version: 1,
+    schema_version: DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION,
     data_contract: DEX_GOLDEN_RPC_EVIDENCE_CONTRACT,
     purpose: 'phase0_shadow_finality_membership_evidence_only',
     proof_boundary:
@@ -261,6 +264,9 @@ describe('DEX protocol/decoder/golden draft binding', () => {
       'pancake-v2-factory-cb079908',
       'pancake-v2-pair-cb079908',
     ])
+    expect(dexGoldenProtocolBindingSha256(bsc)).toBe(
+      'baa7dee78f5e7224e57c2b054d5ea3414fd3362513ee8e6da988a9b4e710ab70'
+    )
 
     const solanaEvidence = makeEvidence('solana')
     const solana = buildSolana(solanaManifestJson, solanaEvidence)
@@ -541,10 +547,27 @@ describe('DEX protocol/decoder/golden draft binding', () => {
 
     const serialized = JSON.stringify(buildBsc())
     const duplicate = serialized.replace(
-      '"schema_version":1',
-      '"schema_version":1,"schema_version":1'
+      `"schema_version":${DEX_GOLDEN_PROTOCOL_BINDING_SCHEMA_VERSION}`,
+      `"schema_version":${DEX_GOLDEN_PROTOCOL_BINDING_SCHEMA_VERSION},"schema_version":${DEX_GOLDEN_PROTOCOL_BINDING_SCHEMA_VERSION}`
     )
     expect(() => parseDexGoldenProtocolBindingJson(duplicate)).toThrow('invalid strict JSON')
+  })
+
+  it('rejects the superseded binding schema and contract instead of mutating @1 semantics', () => {
+    const oldSchema = clone(buildBsc()) as any
+    oldSchema.schema_version = 1
+    expect(() => parseDexGoldenProtocolBinding(oldSchema)).toThrow()
+
+    const oldContract = clone(buildBsc()) as any
+    oldContract.data_contract = 'arena.dex.protocol-decoder-golden-binding@1'
+    expect(() => parseDexGoldenProtocolBinding(oldContract)).toThrow()
+
+    const current = buildBsc()
+    expect(current).toMatchObject({
+      schema_version: DEX_GOLDEN_PROTOCOL_BINDING_SCHEMA_VERSION,
+      data_contract: DEX_GOLDEN_PROTOCOL_BINDING_CONTRACT,
+      golden_rpc_evidence: { data_contract: DEX_GOLDEN_RPC_EVIDENCE_CONTRACT },
+    })
   })
 
   it('normalizes manifest set ordering and hashes semantic binding changes', () => {
@@ -558,6 +581,8 @@ describe('DEX protocol/decoder/golden draft binding', () => {
     expect(buildBsc(shuffledManifest)).toEqual(buildBsc(bscManifestJson))
 
     const baseline = buildSolana()
+    const baselineHash = dexGoldenProtocolBindingSha256(baseline)
+    expect(baselineHash).toBe('c6c856dca4a7caeb3fd7a6e2245749f21d2509b6f1d8b01907493ae20c1bb21f')
     const reorderedObject = {
       authorization: baseline.authorization,
       claims: baseline.claims,
@@ -576,9 +601,7 @@ describe('DEX protocol/decoder/golden draft binding', () => {
       data_contract: baseline.data_contract,
       schema_version: baseline.schema_version,
     }
-    expect(dexGoldenProtocolBindingSha256(reorderedObject)).toBe(
-      dexGoldenProtocolBindingSha256(baseline)
-    )
+    expect(dexGoldenProtocolBindingSha256(reorderedObject)).toBe(baselineHash)
 
     const changed = clone(baseline)
     changed.golden_case.case_id = 'jupiter-v6-multihop-002'

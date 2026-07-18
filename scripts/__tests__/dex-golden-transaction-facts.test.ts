@@ -162,13 +162,16 @@ function solanaVerified(): SolanaVerifiedTransactionFinality {
         endpointId: 'solana_official_mainnet',
         connectionHash: '3'.repeat(64),
       },
-      verifiedAnchorHashPolicy: 'solana_verified_anchor_semantics_v1',
+      verifiedAnchorHashPolicy: 'solana_verified_anchor_semantics_v2',
       verifiedAnchorHash: '4'.repeat(64),
       observedAt: '2026-07-17T00:00:00.000Z',
       anchorPolicy: {
-        version: 'solana_current_finalized_block_v1',
+        version: 'solana_current_finalized_produced_block_v2',
         genesisMethod: 'getGenesisHash',
-        slotMethod: 'getSlot',
+        rootSlotMethod: 'getSlot',
+        producedSlotsMethod: 'getBlocks',
+        producedSlotLookback: 512,
+        minContextSlotPolicy: 'finalized_root_slot',
         blockMethod: 'getBlock',
         commitment: 'finalized',
         encoding: 'json',
@@ -177,6 +180,14 @@ function solanaVerified(): SolanaVerifiedTransactionFinality {
         rewards: false,
         maxFutureBlockSkewMs: 60_000,
         maxCurrentAnchorLagMs: 900_000,
+      },
+      finalizedRootSlot: 112,
+      producedSlotResolution: {
+        rangeStartSlot: 0,
+        rangeEndSlot: 112,
+        producedSlots: [110],
+        selectedSlot: 110,
+        selectionPolicy: 'highest_returned_finalized_produced_slot_v1',
       },
       finalizedSlot: 110,
       finalizedBlock: {
@@ -201,7 +212,7 @@ function solanaVerified(): SolanaVerifiedTransactionFinality {
     transactionIndex: 1,
     executionStatus: 'succeeded',
     candidateHitEligible: true,
-    semanticHashPolicy: 'solana_verified_transaction_finality_semantics_v1',
+    semanticHashPolicy: 'solana_verified_transaction_finality_semantics_v2',
     semanticHash: '5'.repeat(64),
   }
 }
@@ -264,6 +275,9 @@ describe('provider-neutral DEX golden transaction facts', () => {
     expect(facts.data_contract).toBe(DEX_SOLANA_STABLE_TRANSACTION_FACTS_CONTRACT)
     expect(facts.transaction).not.toHaveProperty('reportedTransactionIndex')
     expect(facts.signature_status).not.toHaveProperty('contextSlot')
+    expect(dexSolanaStableTransactionFactsSha256(first)).toBe(
+      'b457b57f13b1ee68f8586f8a45807d321a05422d4b0b187203516ef0b3bffa72'
+    )
     expect(dexSolanaStableTransactionFactsSha256(second)).toBe(
       dexSolanaStableTransactionFactsSha256(first)
     )
