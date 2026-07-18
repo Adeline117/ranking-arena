@@ -7,6 +7,7 @@ import test from 'node:test'
 
 const root = path.resolve(import.meta.dirname, '../..')
 const ignoreRules = fs.readFileSync(path.join(root, '.vercelignore'), 'utf8')
+const deployGate = fs.readFileSync(path.join(root, '.github/workflows/deploy-gate.yml'), 'utf8')
 
 function ignoredByVercelRules(relativePath) {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-vercel-upload-'))
@@ -28,6 +29,64 @@ function ignoredByVercelRules(relativePath) {
   }
 }
 
+function telegramFunctions() {
+  const marker = '          send_telegram_alert() {'
+  const closing = '\n          }\n'
+  const functions = []
+  let cursor = 0
+  while ((cursor = deployGate.indexOf(marker, cursor)) !== -1) {
+    const end = deployGate.indexOf(closing, cursor)
+    assert.notEqual(end, -1, 'Telegram helper must have a closing brace')
+    functions.push(
+      deployGate
+        .slice(cursor, end + closing.length - 1)
+        .split('\n')
+        .map((line) => line.replace(/^ {10}/, ''))
+        .join('\n')
+    )
+    cursor = end + closing.length
+  }
+  return functions
+}
+
+function runTelegramFunction({ http = '200', curlExit = '0', token = 'bot-secret', chat = '42' }) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'arena-telegram-alert-'))
+  try {
+    const fakeCurl = path.join(directory, 'curl')
+    fs.writeFileSync(
+      fakeCurl,
+      [
+        '#!/usr/bin/env bash',
+        'printf "%s" "${FAKE_CURL_HTTP:-000}"',
+        'exit "${FAKE_CURL_EXIT:-0}"',
+        '',
+      ].join('\n')
+    )
+    fs.chmodSync(fakeCurl, 0o755)
+    const summary = path.join(directory, 'summary.md')
+    fs.writeFileSync(summary, '')
+    const result = spawnSync(
+      'bash',
+      ['-c', `${telegramFunctions()[0]}\nsend_telegram_alert "test alert"`],
+      {
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: `${directory}:${process.env.PATH}`,
+          FAKE_CURL_HTTP: http,
+          FAKE_CURL_EXIT: curlExit,
+          GITHUB_STEP_SUMMARY: summary,
+          TELEGRAM_BOT_TOKEN: token,
+          TELEGRAM_ALERT_CHAT_ID: chat,
+        },
+      }
+    )
+    return { ...result, summary: fs.readFileSync(summary, 'utf8') }
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true })
+  }
+}
+
 test('uploads the build lifecycle checker required by package.json', () => {
   const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'))
   assert.match(packageJson.scripts.postbuild, /qa:build-bigint/)
@@ -42,7 +101,7 @@ test('keeps unrelated operational scripts out of the Vercel upload', () => {
 })
 
 test('keeps Vercel candidate failures reproducible and diagnosable', () => {
-  const workflow = fs.readFileSync(path.join(root, '.github/workflows/deploy-gate.yml'), 'utf8')
+  const workflow = deployGate
   assert.doesNotMatch(workflow, /vercel@latest/)
   assert.match(workflow, /vercel@56\.2\.1 deploy[^\n]+--logs/)
   assert.match(workflow, /vercel@56\.2\.1 deploy --dry --format=json/)
@@ -50,4 +109,58 @@ test('keeps Vercel candidate failures reproducible and diagnosable', () => {
   assert.match(workflow, /--build-env VERCEL_BUILD_SYSTEM_REPORT=1/)
   assert.match(workflow, /vercel@56\.2\.1 inspect "\$CANDIDATE_URL" --logs/)
   assert.match(workflow, /::error title=Vercel candidate build failed::/)
+})
+
+test('makes every deploy-gate Telegram failure observable without blocking the gate', () => {
+  const workflow = deployGate
+  assert.equal(workflow.match(/send_telegram_alert\(\) \{/g)?.length, 3)
+  assert.equal(workflow.match(/--connect-timeout 5 --max-time 10/g)?.length, 3)
+  assert.equal(workflow.match(/--write-out '%\{http_code\}'/g)?.length, 3)
+  assert.equal(workflow.match(/\[\[ "\$\{http:-000\}" != 2\* \]\]/g)?.length, 3)
+  assert.equal(workflow.match(/::warning title=Telegram alert delivery failed::/g)?.length, 6)
+  assert.equal(
+    workflow.match(/TELEGRAM_BOT_TOKEN: \$\{\{ secrets\.TELEGRAM_BOT_TOKEN \}\}/g)?.length,
+    3
+  )
+  assert.equal(
+    workflow.match(/TELEGRAM_ALERT_CHAT_ID: \$\{\{ secrets\.TELEGRAM_ALERT_CHAT_ID \}\}/g)?.length,
+    3
+  )
+  assert.doesNotMatch(workflow, /api\.telegram\.org[^\n]+\|\| true/)
+  assert.doesNotMatch(workflow, /if \[ -n "\$\{\{ secrets\.TELEGRAM_BOT_TOKEN \}\}"/)
+})
+
+test('treats Telegram HTTP failures as non-blocking but visible', () => {
+  const functions = telegramFunctions()
+  assert.equal(functions.length, 3)
+  assert.equal(new Set(functions).size, 1)
+
+  const unauthorized = runTelegramFunction({ http: '401' })
+  assert.equal(unauthorized.status, 0)
+  assert.match(
+    unauthorized.stdout,
+    /::warning title=Telegram alert delivery failed::curl=0 HTTP=401/
+  )
+  assert.match(unauthorized.summary, /Telegram alert delivery failed .* HTTP=401/)
+  assert.doesNotMatch(
+    `${unauthorized.stdout}${unauthorized.stderr}${unauthorized.summary}`,
+    /bot-secret|42/
+  )
+
+  const timedOut = runTelegramFunction({ http: '000', curlExit: '28' })
+  assert.equal(timedOut.status, 0)
+  assert.match(timedOut.stdout, /curl=28 HTTP=000/)
+})
+
+test('keeps successful Telegram delivery quiet and missing credentials visible', () => {
+  const delivered = runTelegramFunction({ http: '200' })
+  assert.equal(delivered.status, 0)
+  assert.match(delivered.stdout, /Telegram alert delivered HTTP 200/)
+  assert.doesNotMatch(delivered.stdout, /::warning/)
+  assert.equal(delivered.summary, '')
+
+  const missing = runTelegramFunction({ token: '', chat: '' })
+  assert.equal(missing.status, 0)
+  assert.match(missing.stdout, /required secret is missing/)
+  assert.match(missing.summary, /required secret is missing/)
 })
