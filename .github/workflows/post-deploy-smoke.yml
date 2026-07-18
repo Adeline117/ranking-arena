@@ -12,9 +12,10 @@ jobs:
   smoke-test:
     if: github.event.deployment_status.state == 'success' && github.event.deployment.environment == 'Production'
     runs-on: ubuntu-latest
-    # 45s propagation + five bounded retries + rollback + notification. The
-    # former 3m cap could kill the job before rollback even started.
-    timeout-minutes: 10
+    # 45s propagation + five bounded retries + rollback + public SHA
+    # verification + notification. Keep a hard cap while leaving enough room
+    # for the full failure path.
+    timeout-minutes: 15
     steps:
       - name: Wait for deployment to propagate
         run: sleep 45
@@ -72,8 +73,40 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+          FAILED_DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
+          SMOKE_FAIL: ${{ steps.smoke.outputs.fail }}
+          SMOKE_TOTAL: ${{ steps.smoke.outputs.total }}
+          SMOKE_FAILURES: ${{ steps.smoke.outputs.failures }}
         run: |
+          send_telegram_alert() {
+            local message="$1"
+            if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_ALERT_CHAT_ID:-}" ]; then
+              echo "::warning title=Telegram alert delivery failed::required secret is missing"
+              echo "### Telegram alert delivery failed — required secret is missing" >> "$GITHUB_STEP_SUMMARY"
+              return 0
+            fi
+            local curl_rc=0
+            local http
+            http=$(curl --silent --show-error \
+              --connect-timeout 5 --max-time 10 \
+              --output /dev/null --write-out '%{http_code}' \
+              --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_ALERT_CHAT_ID}" \
+              --data-urlencode "text=${message}") || curl_rc=$?
+            if [ "$curl_rc" -ne 0 ] || [[ "${http:-000}" != 2* ]]; then
+              echo "::warning title=Telegram alert delivery failed::curl=$curl_rc HTTP=${http:-000}"
+              echo "### Telegram alert delivery failed — curl=$curl_rc HTTP=${http:-000}" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Telegram alert delivered HTTP $http"
+            fi
+            return 0
+          }
+
           ROLLED_BACK="false"
+          ROLLBACK_ACCEPTED="false"
+          ROLLBACK_SHA=""
 
           # Vercel Instant Rollback selects the previous deployment that
           # actually served production. Do not infer it from READY list order:
@@ -87,8 +120,50 @@ jobs:
             ROLLBACK_EXIT=$?
             set -e
             if [ "$ROLLBACK_EXIT" -eq 0 ]; then
-              ROLLED_BACK="true"
-              echo "✅ Vercel confirmed rollback to the previous production deployment"
+              ROLLBACK_ACCEPTED="true"
+              echo "Vercel accepted rollback; verifying public serving SHA and health..."
+              if [ -z "${FAILED_DEPLOYMENT_SHA:-}" ]; then
+                echo "⚠️ Deployment event did not provide a SHA — refusing to claim rollback success"
+              else
+                LAST_HEALTHY_SHA=""
+                STABLE_HEALTHY_COUNT=0
+                for attempt in $(seq 1 10); do
+                  rm -f /tmp/rollback-health.json
+                  HEALTH_CURL_EXIT=0
+                  HEALTH_HTTP=$(curl --silent --show-error \
+                    --connect-timeout 3 --max-time 8 \
+                    --output /tmp/rollback-health.json --write-out '%{http_code}' \
+                    "https://www.arenafi.org/api/health?rollback_verify=$(date +%s)") \
+                    || HEALTH_CURL_EXIT=$?
+                  HEALTH_BODY=$(cat /tmp/rollback-health.json 2>/dev/null || true)
+                  HEALTH_STATUS=$(jq -r '.status // empty' <<< "$HEALTH_BODY" 2>/dev/null || true)
+                  SERVING_SHA=$(jq -r '.commit // empty' <<< "$HEALTH_BODY" 2>/dev/null || true)
+                  echo "rollback verification $attempt/10: curl=$HEALTH_CURL_EXIT HTTP=${HEALTH_HTTP:-000} status=${HEALTH_STATUS:-missing} serving=${SERVING_SHA:-missing}"
+                  if [ "$HEALTH_CURL_EXIT" -eq 0 ] \
+                    && [ "$HEALTH_HTTP" = "200" ] \
+                    && [ "$HEALTH_STATUS" = "healthy" ] \
+                    && [[ "$SERVING_SHA" =~ ^[0-9a-f]{40}$ ]] \
+                    && [ "$SERVING_SHA" != "$FAILED_DEPLOYMENT_SHA" ]; then
+                    if [ "$SERVING_SHA" = "$LAST_HEALTHY_SHA" ]; then
+                      STABLE_HEALTHY_COUNT=$((STABLE_HEALTHY_COUNT+1))
+                    else
+                      LAST_HEALTHY_SHA="$SERVING_SHA"
+                      STABLE_HEALTHY_COUNT=1
+                    fi
+                    echo "healthy recovery candidate ${SERVING_SHA:0:8} confirmation $STABLE_HEALTHY_COUNT/2"
+                    if [ "$STABLE_HEALTHY_COUNT" -ge 2 ]; then
+                      ROLLED_BACK="true"
+                      ROLLBACK_SHA="$SERVING_SHA"
+                      echo "✅ Rollback verified twice: healthy production serves ${ROLLBACK_SHA:0:8}"
+                      break
+                    fi
+                  else
+                    LAST_HEALTHY_SHA=""
+                    STABLE_HEALTHY_COUNT=0
+                  fi
+                  if [ "$attempt" -lt 10 ]; then sleep 5; fi
+                done
+              fi
             else
               echo "⚠️ Auto-rollback failed (exit $ROLLBACK_EXIT)"
               tail -40 /tmp/vercel-rollback.log
@@ -97,24 +172,28 @@ jobs:
             echo "⚠️ Vercel project credentials are incomplete — cannot auto-rollback"
           fi
 
-          # Send Telegram alert with rollback status
-          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" ]; then
-            if [ "$ROLLED_BACK" = "true" ]; then
-              MSG="🚨 *SMOKE TEST FAILED → ROLLBACK ACCEPTED*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned an unhealthy status%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A✅ Vercel accepted the rollback to the previous deployment"
-            else
-              MSG="🚨 *SMOKE TEST FAILED — MANUAL ROLLBACK NEEDED*%0A%0A${{ steps.smoke.outputs.fail }}/${{ steps.smoke.outputs.total }} critical paths returned an unhealthy status%0A${{ steps.smoke.outputs.failures }}%0A%0ACommit: \`${GITHUB_SHA:0:8}\`%0A⚡ Roll back: Vercel Dashboard → Deployments → Previous green → Promote"
-            fi
-            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-              -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
-              -d "text=${MSG}" \
-              -d "parse_mode=Markdown" || true
+          if [ "$ROLLED_BACK" = "true" ]; then
+            ROLLBACK_NOTE="✅ Rollback verified on public health: ${ROLLBACK_SHA:0:8}"
+            ALERT_TITLE="SMOKE TEST FAILED → ROLLBACK VERIFIED"
+          elif [ "$ROLLBACK_ACCEPTED" = "true" ]; then
+            ROLLBACK_NOTE="⚠️ Vercel accepted rollback, but public health did not confirm a healthy different SHA. Manual verification required."
+            ALERT_TITLE="SMOKE TEST FAILED — ROLLBACK UNVERIFIED"
+          else
+            ROLLBACK_NOTE="⚡ Roll back manually in Vercel: Deployments → Previous green → Promote"
+            ALERT_TITLE="SMOKE TEST FAILED — MANUAL ROLLBACK NEEDED"
           fi
-          echo "::error::Post-deploy smoke test failed: ${{ steps.smoke.outputs.fail }} critical paths returned an unhealthy status"
+          MSG=$(printf '🚨 %s\n\n%s/%s critical paths returned an unhealthy status\n%s\n\nFailed deployment: %.8s\n%s' \
+            "$ALERT_TITLE" "$SMOKE_FAIL" "$SMOKE_TOTAL" "$SMOKE_FAILURES" \
+            "$FAILED_DEPLOYMENT_SHA" "$ROLLBACK_NOTE")
+          send_telegram_alert "$MSG"
+          echo "::error::Post-deploy smoke test failed: $SMOKE_FAIL critical paths returned an unhealthy status"
           exit 1
 
       - name: Report success
         if: steps.smoke.outputs.fail == '0'
-        run: echo "✅ All ${{ steps.smoke.outputs.total }} critical paths healthy after deployment"
+        env:
+          SMOKE_TOTAL: ${{ steps.smoke.outputs.total }}
+        run: echo "✅ All $SMOKE_TOTAL critical paths healthy after deployment"
 
       # 写路径金丝雀(P2):GET smoke 过后,用 QA 账号真跑 发帖→赞→评论→删
       # (自动清理)—— 在部署当下(分钟级)抓住"发帖对全员 500"这类写路径中断,
@@ -133,11 +212,34 @@ jobs:
 
       - name: Alert if write-path canary failed
         if: steps.canary.outcome == 'failure'
+        env:
+          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
+          DEPLOYMENT_SHA: ${{ github.event.deployment.sha }}
         run: |
-          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" ]; then
-            MSG="⚠️ *写路径金丝雀失败(部署后)*%0A%0AGET 路径正常,但 发帖/赞/评论/删 链路有问题%0ACommit: \`${GITHUB_SHA:0:8}\`%0A未自动回滚 —— 人工确认写路径(可能是 schema/RLS/依赖)。"
-            curl -s -X POST "https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendMessage" \
-              -d "chat_id=${{ secrets.TELEGRAM_ALERT_CHAT_ID }}" \
-              -d "text=${MSG}" -d "parse_mode=Markdown" || true
-          fi
+          send_telegram_alert() {
+            local message="$1"
+            if [ -z "${TELEGRAM_BOT_TOKEN:-}" ] || [ -z "${TELEGRAM_ALERT_CHAT_ID:-}" ]; then
+              echo "::warning title=Telegram alert delivery failed::required secret is missing"
+              echo "### Telegram alert delivery failed — required secret is missing" >> "$GITHUB_STEP_SUMMARY"
+              return 0
+            fi
+            local curl_rc=0
+            local http
+            http=$(curl --silent --show-error \
+              --connect-timeout 5 --max-time 10 \
+              --output /dev/null --write-out '%{http_code}' \
+              --request POST "https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage" \
+              --data-urlencode "chat_id=${TELEGRAM_ALERT_CHAT_ID}" \
+              --data-urlencode "text=${message}") || curl_rc=$?
+            if [ "$curl_rc" -ne 0 ] || [[ "${http:-000}" != 2* ]]; then
+              echo "::warning title=Telegram alert delivery failed::curl=$curl_rc HTTP=${http:-000}"
+              echo "### Telegram alert delivery failed — curl=$curl_rc HTTP=${http:-000}" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "Telegram alert delivered HTTP $http"
+            fi
+            return 0
+          }
+          MSG=$(printf '⚠️ 写路径金丝雀失败（部署后）\n\nGET 路径正常，但发帖/赞/评论/删链路有问题\nDeployment: %.8s\n未自动回滚——人工确认写路径（可能是 schema/RLS/依赖）。' "$DEPLOYMENT_SHA")
+          send_telegram_alert "$MSG"
           echo "::warning::Post-deploy write-path canary failed — 见上方日志"
