@@ -7,7 +7,7 @@ Emergency operations manual for the Arena crypto trader ranking platform.
 - [Pipeline Failure Troubleshooting](#pipeline-failure-troubleshooting)
 - [Leaderboard Anomaly Troubleshooting](#leaderboard-anomaly-troubleshooting)
 - [Telegram Alert Response](#telegram-alert-response)
-- [Manual Data Collection](#manual-data-collection)
+- [Manual Ingest Canary](#manual-ingest-canary)
 - [Manual Leaderboard Recompute](#manual-leaderboard-recompute)
 - [Arena Score Recalculation](#arena-score-recalculation)
 - [Deployment Rollback](#deployment-rollback)
@@ -62,7 +62,9 @@ Emergency operations manual for the Arena crypto trader ranking platform.
 ```sql
 -- Find stuck jobs (running > 10 minutes)
 UPDATE pipeline_logs
-SET status = 'error', error = 'Force-closed: stuck job', ended_at = NOW()
+SET status = 'error',
+    error_message = 'Force-closed: stuck job',
+    ended_at = NOW()
 WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes';
 ```
 
@@ -72,46 +74,156 @@ WHERE status = 'running' AND started_at < NOW() - INTERVAL '10 minutes';
 
 ### Symptom: Trader with impossibly high ROI
 
-1. Check the raw data:
+1. Check the serving row and its source-data watermark:
 
    ```sql
-   SELECT source, source_trader_id, roi, pnl, arena_score, captured_at
-   FROM trader_snapshots
+   SELECT
+     source,
+     source_trader_id,
+     season_id,
+     roi,
+     pnl,
+     arena_score,
+     is_outlier,
+     source_as_of,
+     computed_at
+   FROM leaderboard_ranks
    WHERE source_trader_id = '<trader_key>'
-   ORDER BY captured_at DESC LIMIT 5;
+   ORDER BY season_id, computed_at DESC;
    ```
 
-2. If ROI is a data error (e.g., > 5000%):
-   - The `/api/rankings` route already filters `roi <= 5000` and `roi >= -5000`
-   - For persistent issues, mark as outlier:
-     ```sql
-     UPDATE trader_snapshots SET is_outlier = true
-     WHERE source_trader_id = '<trader_key>';
-     ```
+2. Trace the exact PASSED board evidence that fed serving:
+
+   ```sql
+   SELECT
+     source.slug,
+     trader.exchange_trader_id,
+     snapshot.timeframe,
+     snapshot.scraped_at,
+     snapshot.count_check_passed,
+     snapshot.raw_object_id,
+     entry.rank,
+     entry.headline_roi,
+     entry.headline_pnl,
+     entry.raw
+   FROM arena.traders AS trader
+   JOIN arena.sources AS source ON source.id = trader.source_id
+   JOIN arena.leaderboard_entries AS entry ON entry.trader_id = trader.id
+   JOIN arena.leaderboard_snapshots AS snapshot
+     ON snapshot.id = entry.snapshot_id
+    AND snapshot.scraped_at = entry.scraped_at
+   WHERE trader.exchange_trader_id = '<trader_key>'
+   ORDER BY snapshot.scraped_at DESC
+   LIMIT 20;
+   ```
+
+3. `compute-leaderboard` marks deterministic ROI/PnL corruption as
+   `leaderboard_ranks.is_outlier`; public ranking reads exclude those rows.
+   Do not hand-edit evidence or the derived rank row. Fix the adapter/parser or
+   source normalization, publish a new count-check-PASSED snapshot, then
+   recompute the affected season. If the whole source is unsafe, move it out of
+   serving through the reviewed registry control rather than deleting rows.
 
 ### Symptom: Leaderboard shows stale data
 
-1. Check freshness of the compute-leaderboard cron:
+1. Read the shared authority without firing pager side effects:
 
-   ```sql
-   SELECT * FROM pipeline_logs
-   WHERE job_name = 'compute-leaderboard'
-   ORDER BY started_at DESC LIMIT 5;
+   ```bash
+   curl -sS \
+     -H "Authorization: Bearer $CRON_SECRET" \
+     "https://www.arenafi.org/api/admin/data-freshness" | jq
    ```
 
-2. Trigger a manual recompute (see [Manual Leaderboard Recompute](#manual-leaderboard-recompute)).
+   `unknown` means the registry/visible/watermark closure is broken; `stale` or
+   `critical` means the authority is available and the upstream watermark is
+   genuinely old. Do not call `/api/cron/check-data-freshness` just to inspect
+   state: that endpoint intentionally triggers real alerts.
+
+2. Inspect each published source watermark and the last successful monitor run:
+
+   ```sql
+   -- Independent registry promises. This service-role-only RPC must not be
+   -- replaced by current rank counts.
+   SELECT *
+   FROM arena_freshness_expected_sources()
+   ORDER BY season_id, filter_source, registry_slug;
+
+   -- Current positive-count boards exposed by public navigation.
+   SELECT '7D' AS season_id, visible.*
+   FROM arena_visible_sources('7D') AS visible
+   UNION ALL
+   SELECT '30D' AS season_id, visible.*
+   FROM arena_visible_sources('30D') AS visible
+   UNION ALL
+   SELECT '90D' AS season_id, visible.*
+   FROM arena_visible_sources('90D') AS visible;
+
+   SELECT
+     season_id,
+     source,
+     source_as_of,
+     recorded_at,
+     round(extract(epoch FROM (now() - source_as_of)) / 3600.0, 1) AS age_hours
+   FROM leaderboard_source_freshness
+   ORDER BY source_as_of ASC, season_id, source;
+
+   SELECT job_name, status, started_at, ended_at, metadata
+   FROM pipeline_logs
+   WHERE job_name = 'check-data-freshness'
+   ORDER BY started_at DESC
+   LIMIT 5;
+   ```
+
+3. Distinguish upstream staleness from publish lag:
+
+   ```sql
+   SELECT
+     source.slug AS registry_slug,
+     coalesce(
+       nullif(btrim(source.meta->>'legacy_platform'), ''),
+       source.slug
+     ) AS public_source,
+     snapshot.timeframe,
+     max(snapshot.scraped_at) FILTER (WHERE snapshot.count_check_passed)
+       AS latest_passed_source_at
+   FROM arena.sources AS source
+   LEFT JOIN arena.leaderboard_snapshots AS snapshot
+     ON snapshot.source_id = source.id
+    AND snapshot.timeframe IN (7, 30, 90)
+   WHERE source.status = 'active'
+     AND source.serving_mode = 'serving'
+     AND btrim(coalesce(source.meta->>'legacy_platform', '')) <> 'null'
+   GROUP BY source.slug, source.meta, snapshot.timeframe
+   ORDER BY latest_passed_source_at ASC NULLS FIRST, source.slug;
+   ```
+
+   - Old/missing PASSED snapshot: fix that source's worker, adapter, route,
+     credentials, or upstream availability first.
+   - Fresh PASSED snapshot but old `source_as_of`: inspect the complete
+     leaderboard publish and its freshness upsert.
+   - Only after fresh upstream data exists should you trigger
+     [Manual Leaderboard Recompute](#manual-leaderboard-recompute).
+
+Never update `source_as_of` manually and never substitute
+`leaderboard_ranks.computed_at` or `now()`. A score recompute over unchanged
+snapshots is not a data refresh.
 
 ### Symptom: Duplicate traders in rankings
 
-- The `trader_snapshots` table has a unique constraint on `(source, source_trader_id, season_id)`.
-- The frontend also deduplicates 0x addresses case-insensitively.
-- If duplicates appear, check for inconsistent casing in `source_trader_id`.
+- `arena.traders` enforces uniqueness on `(source_id, exchange_trader_id)`.
+- The serving compute lowercases `0x` identities before deduplicating on
+  `(public source, source_trader_id)`.
+- If duplicates appear, compare registry aliases and upstream identity
+  canonicalization before attempting a data delete; two physical sources may
+  intentionally map to one public source.
 
 ---
 
 ## Telegram Alert Response
 
-Alerts are sent via `lib/alerts/send-alert.ts` with 5-minute rate limiting per platform:level.
+Alerts are sent via `lib/alerts/send-alert.ts`. Warnings are buffered for the
+digest path; critical alerts send immediately and use shared cooldown plus
+delivery deduplication.
 
 | Alert Level | Action                                                                      |
 | ----------- | --------------------------------------------------------------------------- |
@@ -127,40 +239,34 @@ Alerts are sent via `lib/alerts/send-alert.ts` with 5-minute rate limiting per p
 
 ---
 
-## Manual Data Collection
+## Manual Ingest Canary
 
-### Trigger a single platform fetch
+The retired `unified-connector`, `batch-fetch-traders`, and `batch-enrich` HTTP
+routes must not be used. First-party collection is owned by the region-affine
+BullMQ ingest workers.
 
-```bash
-# Via unified connector endpoint (requires CRON_SECRET)
-curl -H "Authorization: Bearer $CRON_SECRET" \
-  "https://www.arenafi.org/api/cron/unified-connector?platform=hyperliquid&window=90d"
-```
+1. Read the source's authoritative execution region:
 
-### Trigger batch fetch for a group
+   ```sql
+   SELECT slug, status, serving_mode, fetch_region
+   FROM arena.sources
+   WHERE slug = 'binance_spot';
+   ```
 
-```bash
-# Groups: a, a2, b, c, d1, d2, e, f, h, g1, g2, i
-curl -H "Authorization: Bearer $CRON_SECRET" \
-  "https://www.arenafi.org/api/cron/batch-fetch-traders?group=a"
-```
+2. From an operator checkout with `worker/.env`, enqueue one fail-fast Tier-A
+   canary using the exact `fetch_region` returned above:
 
-### Run enrichment for a platform
+   ```bash
+   npx tsx scripts/ingest-enqueue-region-smoke.mts binance_spot vps_sg
+   ```
 
-```bash
-curl -H "Authorization: Bearer $CRON_SECRET" \
-  "https://www.arenafi.org/api/cron/batch-enrich?platform=binance_futures&period=90D"
-```
+3. Watch the region worker and verify a new RAW capture, a count-check-PASSED
+   leaderboard snapshot, and only then a serving publish. The canary enqueues
+   real work and is not a dry run.
 
-### VPS Scraper manual trigger
-
-```bash
-# Bybit example (VPS SG: 45.76.152.169)
-curl "http://45.76.152.169:3456/bybit/leaderboard"
-
-# Bitget example
-curl "http://45.76.152.169:3456/bitget/leaderboard"
-```
+Never move a job to a different region merely to make the canary pass. See
+`docs/INGEST_WORKER_TOPOLOGY.md` for node ownership, deploy paths, and heartbeat
+verification.
 
 ---
 
@@ -168,23 +274,32 @@ curl "http://45.76.152.169:3456/bitget/leaderboard"
 
 ```bash
 curl -H "Authorization: Bearer $CRON_SECRET" \
-  "https://www.arenafi.org/api/cron/compute-leaderboard"
+  "https://www.arenafi.org/api/cron/compute-leaderboard?season=90D"
 ```
 
-This reads from `trader_snapshots`, computes Arena Scores, and writes to `leaderboard_ranks`.
+This recomputes one serving season from the configured `COMPUTE_READ_SOURCE` and
+writes `leaderboard_ranks`. It does not fetch upstream data and must not be used
+to advance `leaderboard_source_freshness.source_as_of`.
 
-The cron normally runs every 30 minutes (`0,30 * * * *`).
+The Mac Mini BullMQ worker normally schedules each season every 2 hours, staggered
+by 5 minutes. Vercel's `compute-leaderboard-watchdog` checks twice per hour and
+only intervenes when a season's serving compute is more than 3 hours old.
 
 ---
 
 ## Arena Score Recalculation
 
-The Arena Score formula:
+The serving leaderboard uses Arena Score v4:
 
-- `ReturnScore = 60 * tanh(coeff * ROI)^exponent` (0-60 points)
-- `PnlScore = 40 * tanh(coeff * ln(1 + PnL/base))` (0-40 points)
-- `ArenaScore = (ReturnScore + PnlScore) * confidenceMultiplier * trustWeight`
-- Overall composite: `90D * 0.70 + 30D * 0.25 + 7D * 0.05`
+- quality weights: PnL 0.30, ROI percentile 0.20, inverse-drawdown percentile
+  0.20, Sharpe percentile 0.20, consistency 0.10;
+- consistency combines available win-rate and profit-factor percentiles;
+- sample size and optional-metric completeness produce a confidence discount;
+- the displayed score blends the confidence-adjusted cohort percentile (0.70)
+  with relative composite magnitude (0.30).
+
+The older ROI+PnL score remains in `arena_score_v3` as a rollback value; it is
+not the flagship `arena_score`.
 
 To force recalculation:
 
@@ -195,7 +310,8 @@ To force recalculation:
      "https://www.arenafi.org/api/cron/precompute-composite"
    ```
 
-Source: `lib/utils/arena-score.ts`
+Sources: `lib/utils/arena-score.ts`,
+`app/api/cron/compute-leaderboard/score-traders.ts`
 
 ---
 
@@ -341,8 +457,9 @@ SELECT relname, pg_size_pretty(pg_total_relation_size(relid))
 FROM pg_catalog.pg_statio_user_tables
 ORDER BY pg_total_relation_size(relid) DESC LIMIT 10;
 
--- Manual VACUUM (non-blocking)
-VACUUM (VERBOSE) trader_snapshots;
+-- Example for a current serving relation; confirm the target from the size
+-- query before running this in production.
+VACUUM (VERBOSE, ANALYZE) public.leaderboard_ranks;
 ```
 
 **WARNING**: Never DELETE historical data (daily snapshots, equity curves, timeseries). These are retained for long-term analysis.
@@ -455,5 +572,5 @@ Redis is non-critical — all Redis consumers fail-open:
 | **VPS Japan**        | `149.28.27.242` (proxy port 3001)                    |
 | **CF Worker**        | `ranking-arena-proxy.broosbook.workers.dev`          |
 | **Live Site**        | `https://www.arenafi.org`                            |
-| **Cron Schedule**    | 42 active jobs, staggered across groups A-I          |
+| **Cron Schedule**    | 53 endpoints / 44 Vercel schedules, staggered        |
 | **Scraper PM2 name** | `arena-scraper`                                      |

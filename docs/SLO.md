@@ -20,14 +20,27 @@
 - **告警**：health 端点连续 3 次 >1s 或不可达 → Telegram
 - **违约动作**：查 Vercel region/Supabase pool/Redis，参照 RUNBOOK
 
-### 3. 数据新鲜度：serving 层 ≤ 2h（tier A 源）
+### 3. 数据新鲜度：默认源 < 8h（tier A 产品目标 ≤ 2h）
 
-- **定义**：leaderboard_ranks 派生时间距今 ≤ 2h；单源 stale 阈值见
-  check-data-freshness（stale/critical 分级已有）
-- **测量**：`/api/health/pipeline` + cron/check-data-freshness + 心跳哨兵
-- **告警**：critical 级 stale → Telegram（现有）；≥2 个 live SHA（节点漂移）→ Telegram
-- **违约动作**：查 worker 两节点（RUNBOOK 拓扑节）；数据不可信时宁可显示
-  stale 标记也不静默喂旧数据
+- **定义**：这里有两只不能混用的时钟。serving publish lag 衡量一次完整排名发布
+  何时完成；upstream freshness 则取当前 active + serving registry 对每个公开来源、
+  每个 7D/30D/90D board 承诺的 `leaderboard_source_freshness.source_as_of`，
+  同一公开来源以最旧 board 为准。`leaderboard_ranks.computed_at` 只是重算分时间，
+  不能证明上游更新。
+- **当前执行门槛**：默认来源 `>=8h` 为 stale、`>=24h` 为 critical；
+  BloFin/GMX/Gains 等慢源按代码中的 48h/72h override。缺失、非法、超前或
+  registry 承诺但当前榜单不可见，一律为 unknown critical。Tier A `≤2h` 仍是
+  产品目标；在 registry 有可执行 tier 策略前，不把它伪装成已有 pager。
+- **测量**：无告警只读 `/api/admin/data-freshness`；生产
+  `/api/cron/check-data-freshness` 每 3 小时 UTC `:39` 执行；meta-monitor
+  每 6 小时检查其最近成功记录，并按 180 分钟期望间隔的 2 倍判定失联。
+- **告警**：unknown/critical → Telegram + Sentry；stale 进入 warning 路径。
+  检查成功发现旧数据仍记作 pipeline success，因为 meta-monitor 监控的是
+  “检查有没有运行”，不是把数据健康误写成执行失败。
+- **违约动作**：先查对应 ingest worker/adapter 和最近
+  count-check-PASSED snapshot，再完成一次无错误排名发布。不得手改
+  `source_as_of`，也不得用 `computed_at` 或 `now()` 回填来制造假新鲜；
+  数据不可信时宁可显示 stale 标记也不静默喂旧数据。
 
 ### 4. 备份新鲜度 ≤ 26h + 可恢复
 
