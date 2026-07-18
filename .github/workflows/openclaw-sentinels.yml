@@ -4,7 +4,8 @@
 # cron 错峰冗余：Mac Mini down 时监控/告警继续（同 health-monitor.yml 的 M-17）。
 # 全部用现有 GH secrets，零新凭据。抓取类脚本(住宅 IP 反封锁)不在此——必须留本地。
 #
-# 每个 job continue-on-error 独立、各自 Telegram 告警；手动 workflow_dispatch 跑全部。
+# 各哨兵自行发送 Telegram；硬失败也必须让 job 变红。pipeline-health 的三个
+# 独立探针会全部执行，再由末尾聚合步骤统一传播失败；手动 workflow_dispatch 跑全部。
 # 脚本内 dotenv 读 ../../.env 在 CI 无该文件时静默 no-op，改用下方 env: 注入。
 
 name: OpenClaw Sentinels
@@ -41,8 +42,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - name: pipeline-health-monitor
+        id: pipeline-health-monitor
         continue-on-error: true
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
@@ -52,6 +54,7 @@ jobs:
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: node scripts/openclaw/pipeline-health-monitor.mjs
       - name: trust-scorecard-snapshot（日内幂等守卫,今日已写即秒退;含净倒退 Telegram 告警）
+        id: trust-scorecard-snapshot
         continue-on-error: true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
@@ -59,12 +62,28 @@ jobs:
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: node scripts/qa/trust-scorecard-snapshot.mjs --daily-guard
       - name: db-size-sentinel（容量红线,日内幂等,超阈 Telegram）
+        id: db-size-sentinel
         continue-on-error: true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: node scripts/openclaw/db-size-sentinel.mjs --daily-guard
+      - name: Propagate sentinel failures
+        if: always()
+        env:
+          PIPELINE_HEALTH_OUTCOME: ${{ steps.pipeline-health-monitor.outcome }}
+          TRUST_SCORECARD_OUTCOME: ${{ steps.trust-scorecard-snapshot.outcome }}
+          DB_SIZE_OUTCOME: ${{ steps.db-size-sentinel.outcome }}
+        run: |
+          failed=()
+          [[ "$PIPELINE_HEALTH_OUTCOME" == "failure" ]] && failed+=("pipeline-health-monitor")
+          [[ "$TRUST_SCORECARD_OUTCOME" == "failure" ]] && failed+=("trust-scorecard-snapshot")
+          [[ "$DB_SIZE_OUTCOME" == "failure" ]] && failed+=("db-size-sentinel")
+          if (( ${#failed[@]} > 0 )); then
+            echo "::error::Failed sentinels: ${failed[*]}"
+            exit 1
+          fi
 
   weekly-metrics:
     if: github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch'
@@ -76,9 +95,8 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - name: weekly-metrics
-        continue-on-error: true
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
@@ -97,9 +115,8 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - name: schema-canary-sentinel（契约 + 填充率 + 写路径金丝雀，自清理）
-        continue-on-error: true
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
@@ -119,9 +136,8 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - name: daily-pipeline-report
-        continue-on-error: true
         env:
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -138,9 +154,8 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - name: ux-patrol
-        continue-on-error: true
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
@@ -157,9 +172,8 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - name: backup-freshness-check
-        continue-on-error: true
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
           R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
@@ -179,9 +193,8 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - name: sentry-convergence
-        continue-on-error: true
         env:
           SENTRY_AUTH_TOKEN: ${{ secrets.SENTRY_AUTH_TOKEN }}
           SENTRY_ORG: ${{ secrets.SENTRY_ORG }}
@@ -202,9 +215,8 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - name: payment-path-canary
-        continue-on-error: true
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
@@ -228,10 +240,9 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm ci --ignore-scripts
       - run: npx playwright install --with-deps chromium
       - name: lang-sweep-sentinel (${{ matrix.lang }})
-        continue-on-error: true
         # LANG_SWEEP（不是 LANG）——GH runner 会设 POSIX LANG，会冲突。
         env:
           BASE_URL: https://www.arenafi.org
