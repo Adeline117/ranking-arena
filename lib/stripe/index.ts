@@ -1,6 +1,7 @@
 import 'server-only'
 import Stripe from 'stripe'
 import { API_PRICING, PRICING } from '@/app/(app)/user-center/membership-config'
+import { stripeMetadataUserId } from '@/lib/stripe/identity'
 
 /**
  * Validates that a required Stripe environment variable is set.
@@ -201,13 +202,32 @@ export async function getOrCreateStripeCustomer(
   metadata?: Record<string, string>,
   existingCustomerId?: string | null
 ): Promise<string> {
+  const forbiddenOwnerAliases = ['userId', 'user_id', 'supabase_user_id'] as const
+  const injectedOwnerAlias = metadata
+    ? forbiddenOwnerAliases.find((key) => Object.prototype.hasOwnProperty.call(metadata, key))
+    : undefined
+  if (injectedOwnerAlias) {
+    throw new Error(`Stripe customer metadata must not include owner alias ${injectedOwnerAlias}`)
+  }
+
   if (existingCustomerId) {
     try {
       const existing = await stripe.customers.retrieve(existingCustomerId)
       if (!existing.deleted) {
-        const owner = existing.metadata.userId
+        const owner = stripeMetadataUserId(
+          existing.metadata,
+          `Stored Stripe customer ${existing.id}`
+        )
         if (owner && owner !== userId) {
           throw new Error('Stored Stripe customer belongs to a different user')
+        }
+        if (!owner) {
+          // The local profile link is strong enough to repair a legacy
+          // ownerless Customer. Exact payment authority requires the Stripe
+          // Customer itself to carry the same user identity before Checkout.
+          await stripe.customers.update(existing.id, {
+            metadata: { userId },
+          })
         }
         return existing.id
       }
@@ -219,16 +239,31 @@ export async function getOrCreateStripeCustomer(
     }
   }
 
-  const existingCustomers = await stripe.customers.list({
-    email,
-    limit: 10,
-  })
+  let startingAfter: string | undefined
+  while (true) {
+    const existingCustomers = await stripe.customers.list({
+      email,
+      limit: 100,
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    })
 
-  const ownedCustomer = existingCustomers.data.find(
-    (customer) => !customer.metadata?.userId || customer.metadata.userId === userId
-  )
-  if (ownedCustomer) {
-    return ownedCustomer.id
+    const ownedCustomer = existingCustomers.data.find((customer) => {
+      try {
+        return stripeMetadataUserId(customer.metadata, `Stripe customer ${customer.id}`) === userId
+      } catch {
+        return false
+      }
+    })
+    if (ownedCustomer) {
+      return ownedCustomer.id
+    }
+
+    if (!existingCustomers.has_more) break
+    const lastCustomer = existingCustomers.data.at(-1)
+    if (!lastCustomer || lastCustomer.id === startingAfter) {
+      throw new Error('Stripe customer email lookup pagination did not advance')
+    }
+    startingAfter = lastCustomer.id
   }
 
   const mode = requireEnv('STRIPE_SECRET_KEY').startsWith('sk_live_') ? 'live' : 'test'
@@ -236,8 +271,8 @@ export async function getOrCreateStripeCustomer(
     {
       email,
       metadata: {
-        userId,
         ...metadata,
+        userId,
       },
     },
     { idempotencyKey: `arena_customer_${mode}_${userId}` }

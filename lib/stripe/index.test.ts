@@ -31,6 +31,7 @@ jest.mock('stripe', () => {
       list: jest.fn(),
       create: jest.fn(),
       retrieve: jest.fn(),
+      update: jest.fn(),
     },
     subscriptions: {
       list: jest.fn(),
@@ -225,18 +226,79 @@ describe('Stripe price readiness', () => {
 })
 
 describe('getOrCreateStripeCustomer', () => {
-  test('should return existing customer ID', async () => {
+  test('reuses an email-matched customer only when Stripe metadata names the same user', async () => {
     const mockCustomerId = 'cus_existing123'
     stripe.customers.list = jest.fn().mockResolvedValue({
-      data: [{ id: mockCustomerId }],
+      data: [{ id: mockCustomerId, metadata: { userId: 'user123' } }],
     })
 
     const result = await getOrCreateStripeCustomer('user123', 'test@example.com')
     expect(result).toBe(mockCustomerId)
     expect(stripe.customers.list).toHaveBeenCalledWith({
       email: 'test@example.com',
-      limit: 10,
+      limit: 100,
     })
+  })
+
+  test('continues email pagination until an owned customer after the first ten results is found', async () => {
+    const firstTen = Array.from({ length: 10 }, (_, index) => ({
+      id: `cus_other_${index + 1}`,
+      metadata: { userId: `other-user-${index + 1}` },
+    }))
+    stripe.customers.list = jest
+      .fn()
+      .mockResolvedValueOnce({ data: firstTen, has_more: true })
+      .mockResolvedValueOnce({
+        data: [{ id: 'cus_owned_11', metadata: { userId: 'user123' } }],
+        has_more: false,
+      })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).resolves.toBe(
+      'cus_owned_11'
+    )
+    expect(stripe.customers.list).toHaveBeenNthCalledWith(1, {
+      email: 'test@example.com',
+      limit: 100,
+    })
+    expect(stripe.customers.list).toHaveBeenNthCalledWith(2, {
+      email: 'test@example.com',
+      limit: 100,
+      starting_after: 'cus_other_10',
+    })
+    expect(stripe.customers.create).not.toHaveBeenCalled()
+  })
+
+  test('fails closed when Stripe customer email pagination does not advance', async () => {
+    stripe.customers.list = jest.fn().mockResolvedValue({ data: [], has_more: true })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).rejects.toThrow(
+      'Stripe customer email lookup pagination did not advance'
+    )
+    expect(stripe.customers.create).not.toHaveBeenCalled()
+  })
+
+  test('does not claim an ownerless email-matched customer', async () => {
+    stripe.customers.list = jest.fn().mockResolvedValue({
+      data: [{ id: 'cus_ownerless', metadata: {} }],
+    })
+    stripe.customers.create = jest.fn().mockResolvedValue({ id: 'cus_new123' })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).resolves.toBe(
+      'cus_new123'
+    )
+    expect(stripe.customers.create).toHaveBeenCalled()
+  })
+
+  test('does not reuse an email-matched customer owned by another user', async () => {
+    stripe.customers.list = jest.fn().mockResolvedValue({
+      data: [{ id: 'cus_other', metadata: { userId: 'other-user' } }],
+    })
+    stripe.customers.create = jest.fn().mockResolvedValue({ id: 'cus_new123' })
+
+    await expect(getOrCreateStripeCustomer('user123', 'test@example.com')).resolves.toBe(
+      'cus_new123'
+    )
+    expect(stripe.customers.create).toHaveBeenCalled()
   })
 
   test('should create new customer when not found', async () => {
@@ -269,6 +331,21 @@ describe('getOrCreateStripeCustomer', () => {
     )
   })
 
+  test.each(['userId', 'user_id', 'supabase_user_id'])(
+    'rejects caller-supplied Stripe customer owner alias %s',
+    async (ownerAlias) => {
+      await expect(
+        getOrCreateStripeCustomer('user123', 'test@example.com', {
+          plan: 'pro',
+          [ownerAlias]: 'attacker-user',
+        })
+      ).rejects.toThrow(`Stripe customer metadata must not include owner alias ${ownerAlias}`)
+      expect(stripe.customers.list).not.toHaveBeenCalled()
+      expect(stripe.customers.create).not.toHaveBeenCalled()
+      expect(stripe.customers.retrieve).not.toHaveBeenCalled()
+    }
+  )
+
   test('reuses the customer already linked to the user profile', async () => {
     stripe.customers.retrieve = jest.fn().mockResolvedValue({
       id: 'cus_linked',
@@ -279,6 +356,54 @@ describe('getOrCreateStripeCustomer', () => {
     await expect(
       getOrCreateStripeCustomer('user123', 'test@example.com', undefined, 'cus_linked')
     ).resolves.toBe('cus_linked')
+    expect(stripe.customers.list).not.toHaveBeenCalled()
+  })
+
+  test('repairs owner metadata before reusing a locally linked legacy customer', async () => {
+    stripe.customers.retrieve = jest.fn().mockResolvedValue({
+      id: 'cus_linked',
+      deleted: false,
+      metadata: {},
+    })
+    stripe.customers.update = jest.fn().mockResolvedValue({
+      id: 'cus_linked',
+      metadata: { userId: 'user123' },
+    })
+
+    await expect(
+      getOrCreateStripeCustomer('user123', 'test@example.com', undefined, 'cus_linked')
+    ).resolves.toBe('cus_linked')
+    expect(stripe.customers.update).toHaveBeenCalledWith('cus_linked', {
+      metadata: { userId: 'user123' },
+    })
+    expect(stripe.customers.list).not.toHaveBeenCalled()
+  })
+
+  test('blocks Checkout when linked-customer owner repair fails', async () => {
+    stripe.customers.retrieve = jest.fn().mockResolvedValue({
+      id: 'cus_linked',
+      deleted: false,
+      metadata: {},
+    })
+    stripe.customers.update = jest.fn().mockRejectedValue(new Error('Stripe metadata unavailable'))
+
+    await expect(
+      getOrCreateStripeCustomer('user123', 'test@example.com', undefined, 'cus_linked')
+    ).rejects.toThrow('Stripe metadata unavailable')
+    expect(stripe.customers.list).not.toHaveBeenCalled()
+  })
+
+  test('rejects conflicting identity metadata on a locally linked customer', async () => {
+    stripe.customers.retrieve = jest.fn().mockResolvedValue({
+      id: 'cus_linked',
+      deleted: false,
+      metadata: { userId: 'user123', supabase_user_id: 'other-user' },
+    })
+
+    await expect(
+      getOrCreateStripeCustomer('user123', 'test@example.com', undefined, 'cus_linked')
+    ).rejects.toThrow('Stored Stripe customer cus_linked has conflicting user identities')
+    expect(stripe.customers.update).not.toHaveBeenCalled()
     expect(stripe.customers.list).not.toHaveBeenCalled()
   })
 })
