@@ -10,6 +10,7 @@ import type { Job } from 'bullmq'
 import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug } from '@/lib/ingest/sources'
 import { getAdapter } from '@/lib/ingest/core/adapter'
+import { supportsSourceSurface } from '@/lib/ingest/core/surface-capabilities'
 import type { ParseCtx } from '@/lib/ingest/core/types'
 import { openSession } from '@/lib/ingest/fetch/fetcher'
 import { writeRawObject } from '@/lib/ingest/raw'
@@ -67,7 +68,7 @@ export async function processTierD(job: Job<TierJobData>): Promise<TierDResult> 
   if (src.status !== 'active') return { tradersCrawled: 0, positionsWritten: 0, errors: 0 }
 
   const adapter = getAdapter(src.adapter_slug)
-  if (!adapter.capabilities.positions) {
+  if (!supportsSourceSurface(adapter, src, 'positions')) {
     return { tradersCrawled: 0, positionsWritten: 0, errors: 0 }
   }
 

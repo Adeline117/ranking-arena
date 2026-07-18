@@ -42,6 +42,14 @@ export interface SourceAdapter {
   /** Matches arena.sources.adapter_slug. */
   readonly slug: string
   readonly capabilities: SurfaceCapabilities
+  /**
+   * Optional source-row refinement for adapters shared by more than one
+   * product. The static capability remains the adapter-wide upper bound;
+   * returning false here declares that a specific source cannot expose the
+   * surface (for example, OKX's public position APIs are SWAP-only even
+   * though the same adapter also serves its SPOT leaderboard).
+   */
+  supportsSurface?(src: SourceRow, surface: keyof SurfaceCapabilities): boolean
   /** Declarative "should-have" metric contract (see ExpectedMetrics in
    *  types.ts): metrics the exchange provides and our parsers must emit.
    *  Locked by the expected-metrics-parity test + the fill-rate sentinel.

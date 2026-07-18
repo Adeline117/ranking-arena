@@ -10,6 +10,7 @@ import { getIngestPool } from '@/lib/ingest/db'
 import { getSourceBySlug, profileTimeframes } from '@/lib/ingest/sources'
 import { getAdapter, type SourceAdapter } from '@/lib/ingest/core/adapter'
 import { nextHistoryCursor } from '@/lib/ingest/core/history-cursor'
+import { supportsSourceSurface } from '@/lib/ingest/core/surface-capabilities'
 import {
   findIncompleteProfileWindow,
   IncompleteProfileWindowError,
@@ -120,12 +121,12 @@ export interface TierBResult {
 }
 
 /** History kinds this source can serve, per adapter capabilities. */
-function historyKinds(adapter: SourceAdapter): HistoryKind[] {
+function historyKinds(adapter: SourceAdapter, src: SourceRow): HistoryKind[] {
   const kinds: HistoryKind[] = []
-  if (adapter.capabilities.positionHistory) kinds.push('position_history')
-  if (adapter.capabilities.orders) kinds.push('orders')
-  if (adapter.capabilities.transfers) kinds.push('transfers')
-  if (adapter.capabilities.copiers) kinds.push('copiers')
+  if (supportsSourceSurface(adapter, src, 'positionHistory')) kinds.push('position_history')
+  if (supportsSourceSurface(adapter, src, 'orders')) kinds.push('orders')
+  if (supportsSourceSurface(adapter, src, 'transfers')) kinds.push('transfers')
+  if (supportsSourceSurface(adapter, src, 'copiers')) kinds.push('copiers')
   return kinds
 }
 
@@ -142,7 +143,7 @@ async function crawlTraderHistories(
   ctx: ParseCtx
 ): Promise<number> {
   let written = 0
-  for (const kind of historyKinds(adapter)) {
+  for (const kind of historyKinds(adapter, src)) {
     const cursor = await getHistoryCursor(trader.id, kind)
     const rawPages: unknown[] = []
     let fetchError: unknown = null
@@ -201,7 +202,7 @@ export async function processTierB(job: Job<TierJobData>): Promise<TierBResult> 
   if (src.status !== 'active') return empty
 
   const adapter = getAdapter(src.adapter_slug)
-  if (!adapter.capabilities.profile) return empty
+  if (!supportsSourceSurface(adapter, src, 'profile')) return empty
 
   // Deadline chunking (2026-07-03 slot-monopoly root fix): a full top-300
   // deep-profile pass ran 3-4h per source and, phase-locked across sources,

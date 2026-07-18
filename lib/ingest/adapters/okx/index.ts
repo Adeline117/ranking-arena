@@ -20,9 +20,15 @@
  *     public-pnl?uniqueCode&lastDays              daily cumulative pnl +
  *         pnlRatio series, newest-first, window start = 0
  *     public-preference-currency?uniqueCode       traded-coin ratios
- *     public-current-subpositions?uniqueCode      open lead positions
- *     public-subpositions-history?uniqueCode&after=subPosId   closed
- *     public-copy-traders?uniqueCode              aggregate + top-10 list
+ *     public-current-subpositions?uniqueCode      SWAP-only open positions
+ *     public-subpositions-history?uniqueCode&after=subPosId
+ *                                                 SWAP-only closed positions
+ *     public-copy-traders?uniqueCode              SWAP-only aggregate + top-10
+ *
+ * IMPORTANT: those three record endpoints document only instType=SWAP.
+ * Sending SPOT returns HTTP 400 / code 51000. Omitting instType is worse:
+ * OKX defaults to SWAP, and many SPOT/SWAP boards share the same uniqueCode,
+ * so the response can silently belong to the trader's futures surface.
  *
  * The web's internal priapi (/priapi/v5/ecotrade/public/follow-rank,
  * ~84 pages) has wider membership but is undocumented — noted in
@@ -42,6 +48,7 @@ import type {
 import { registerAdapter, type SourceAdapter } from '../../core/adapter'
 import type { FetchSession } from '../../fetch/types'
 import { BlockedUpstreamError, isBlockedStatus } from '../../fetch/rate-limiter'
+import { assertSourceSurfaceSupported } from '../../core/surface-capabilities'
 import {
   parseOkxHistory,
   parseOkxLeaderboardPage,
@@ -65,9 +72,24 @@ function base(src: SourceRow): string {
   return endpoints.base ?? API_BASE
 }
 
-/** SWAP (futures) | SPOT — explicit in meta, defaulted from product_type. */
-function instType(src: SourceRow): string {
-  return String(src.meta.inst_type ?? (src.product_type === 'spot' ? 'SPOT' : 'SWAP'))
+type OkxInstType = 'SPOT' | 'SWAP'
+
+/** SPOT | SWAP — explicit in meta, defaulted from product_type, fail-closed. */
+function instType(src: SourceRow): OkxInstType {
+  const configured = String(
+    src.meta.inst_type ?? (src.product_type === 'spot' ? 'SPOT' : 'SWAP')
+  ).toUpperCase()
+  if (configured !== 'SPOT' && configured !== 'SWAP') {
+    throw new Error(`[okx] invalid inst_type "${configured}" for source ${src.slug}`)
+  }
+  return configured
+}
+
+/** Public record surfaces are documented and live-verified as SWAP-only. */
+function supportsSwapRecords(src: SourceRow): boolean {
+  // Require both canonical dimensions. This prevents a bad SPOT source meta
+  // override from routing a shared uniqueCode into the default SWAP surface.
+  return src.product_type === 'futures' && instType(src) === 'SWAP'
 }
 
 /** Paced plain-HTTP GET; OKX envelopes everything as {code,data,msg}. */
@@ -117,11 +139,18 @@ const okxAdapter: SourceAdapter = {
   slug: 'okx',
   capabilities: {
     profile: true, // public-stats + public-pnl + preference-currency
-    positions: true, // public-current-subpositions
-    positionHistory: true, // public-subpositions-history
+    positions: true, // public-current-subpositions (SWAP sources only)
+    positionHistory: true, // public-subpositions-history (SWAP sources only)
     orders: false, // not exposed publicly
     transfers: false,
-    copiers: true, // public-copy-traders (aggregate + top 10)
+    copiers: true, // public-copy-traders (SWAP sources only)
+  },
+
+  supportsSurface(src, surface) {
+    if (surface === 'positions' || surface === 'positionHistory' || surface === 'copiers') {
+      return supportsSwapRecords(src)
+    }
+    return true
   },
 
   /**
@@ -231,6 +260,7 @@ const okxAdapter: SourceAdapter = {
     src: SourceRow,
     exchangeTraderId: string
   ): Promise<RawBundle> {
+    assertSourceSurfaceSupported(okxAdapter, src, 'positions')
     // NOTE: public-current-subpositions rejects a `limit` param with HTTP 400
     // (verified 2026-07-03 — the &limit=500 here silently 0'd every okx open
     // position). It returns the full current set unpaginated; no limit needed.
@@ -256,6 +286,7 @@ const okxAdapter: SourceAdapter = {
   ): AsyncIterable<RawPage> {
     const it = instType(src)
     if (kind === 'copiers') {
+      assertSourceSurfaceSupported(okxAdapter, src, 'copiers')
       const url = `${base(src)}/public-copy-traders?instType=${it}&uniqueCode=${exchangeTraderId}`
       const data = await fetchData(session, url)
       yield { pageIndex: 1, payload: { data }, url, fetchedAt: new Date().toISOString() }
@@ -264,6 +295,7 @@ const okxAdapter: SourceAdapter = {
     if (kind !== 'position_history') {
       throw new Error(`[okx] history surface ${kind} not supported`)
     }
+    assertSourceSurfaceSupported(okxAdapter, src, 'positionHistory')
 
     const maxPages =
       Number(src.meta.history_max_pages ?? DEFAULT_HISTORY_MAX_PAGES) || DEFAULT_HISTORY_MAX_PAGES
