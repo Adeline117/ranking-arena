@@ -164,17 +164,21 @@ require_environment() {
     echo "DATABASE_URL is required" >&2
     exit 1
   fi
+  if ! command -v node >/dev/null 2>&1; then
+    echo "node is required" >&2
+    exit 1
+  fi
   if ! command -v psql >/dev/null 2>&1; then
     echo "psql is required" >&2
     exit 1
   fi
 }
 
-# libpq accepts a connection URI through PGDATABASE. Keep the credential in
-# the inherited environment instead of placing DATABASE_URL in psql's argv,
-# where same-host process inspection and CI diagnostics can expose it.
+# PGDATABASE is a literal database name, not a connection-URI expansion point.
+# Parse DATABASE_URL in the wrapper and pass only individual libpq environment
+# variables to psql. The credential never enters psql's argv.
 psql_with_database() {
-  PGDATABASE="$DATABASE_URL" psql "$@"
+  node "$ROOT/scripts/maintenance/psql-from-database-url.mjs" "$@"
 }
 
 require_session_connection() {

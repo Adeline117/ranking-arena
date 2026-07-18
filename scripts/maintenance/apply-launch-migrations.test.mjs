@@ -179,7 +179,7 @@ test('production writes require phase-specific confirmations', () => {
 })
 
 test('keeps the database credential out of psql process arguments', () => {
-  assert.match(source, /psql_with_database\(\)[\s\S]*PGDATABASE="\$DATABASE_URL" psql "\$@"/)
+  assert.match(source, /psql_with_database\(\)[\s\S]*psql-from-database-url\.mjs" "\$@"/)
   assert.doesNotMatch(source, /psql\s+"\$DATABASE_URL"/)
   assert.equal(source.match(/\bpsql_with_database\b/g)?.length, 4)
 
@@ -187,19 +187,25 @@ test('keeps the database credential out of psql process arguments', () => {
   try {
     const fakePsql = resolve(directory, 'psql')
     const argsPath = resolve(directory, 'args')
-    const databasePath = resolve(directory, 'database')
+    const environmentPath = resolve(directory, 'environment')
     writeFileSync(
       fakePsql,
       [
         '#!/usr/bin/env bash',
         'printf "%s\\n" "$@" > "$FAKE_PSQL_ARGS"',
-        'printf "%s" "$PGDATABASE" > "$FAKE_PSQL_DATABASE"',
+        'printf "%s\\n" \\',
+        '  "$PGHOST" "$PGPORT" "$PGDATABASE" "$PGUSER" "$PGPASSWORD" \\',
+        '  "$PGSSLMODE" "$PGAPPNAME" "${DATABASE_URL-unset}" \\',
+        '  "${PGSERVICE-unset}" "${PGPASSFILE-unset}" "${PGHOSTADDR-unset}" \\',
+        '  > "$FAKE_PSQL_ENVIRONMENT"',
         'cat >/dev/null',
         '',
       ].join('\n')
     )
     chmodSync(fakePsql, 0o755)
-    const databaseUrl = 'postgresql://runner:argv-secret@db.example.test:5432/arena'
+    const databaseUrl =
+      'postgresql://runner%40team:argv%2Dsecret@db.example.test:5433/' +
+      'arena%2Dprod?application_name=launch%20runner'
     const result = spawnSync(
       'bash',
       [resolve(ROOT, 'scripts/maintenance/apply-launch-migrations.sh'), 'status'],
@@ -211,16 +217,48 @@ test('keeps the database credential out of psql process arguments', () => {
           PATH: `${directory}:${process.env.PATH}`,
           DATABASE_URL: databaseUrl,
           FAKE_PSQL_ARGS: argsPath,
-          FAKE_PSQL_DATABASE: databasePath,
+          FAKE_PSQL_ENVIRONMENT: environmentPath,
+          PGSERVICE: 'must-not-survive',
+          PGPASSFILE: '/must/not/survive',
+          PGHOSTADDR: '192.0.2.1',
         },
       }
     )
 
     assert.equal(result.status, 0, result.stderr)
-    assert.equal(readFileSync(databasePath, 'utf8'), databaseUrl)
+    assert.deepEqual(readFileSync(environmentPath, 'utf8').trimEnd().split('\n'), [
+      'db.example.test',
+      '5433',
+      'arena-prod',
+      'runner@team',
+      'argv-secret',
+      'require',
+      'launch runner',
+      'unset',
+      'unset',
+      'unset',
+      'unset',
+    ])
     assert.doesNotMatch(readFileSync(argsPath, 'utf8'), /argv-secret|postgresql:\/\//)
   } finally {
     rmSync(directory, { recursive: true, force: true })
+  }
+})
+
+test('database URL parser fails closed on unsupported or duplicate libpq options', () => {
+  const helper = resolve(ROOT, 'scripts/maintenance/psql-from-database-url.mjs')
+  for (const databaseUrl of [
+    'postgresql://runner:secret@db.example.test:5432/arena?unknown=value',
+    'postgresql://runner:secret@db.example.test:5432/arena?sslmode=require&sslmode=verify-full',
+  ]) {
+    const result = spawnSync(process.execPath, [helper, '--version'], {
+      cwd: ROOT,
+      encoding: 'utf8',
+      env: { ...process.env, DATABASE_URL: databaseUrl },
+    })
+    assert.equal(result.status, 2)
+    assert.match(result.stderr, /psql connection configuration error/)
+    assert.doesNotMatch(result.stderr, /runner|secret|db\.example|postgresql/)
   }
 })
 
