@@ -29,6 +29,7 @@ import {
   type OnboardingMembershipIntent,
   type OnboardingMembershipScope,
 } from './membership-intent'
+import { loadOnboardingGroups, loadOnboardingTraders } from './load-data'
 import { trackEvent } from '@/lib/analytics/track'
 import { safeInternalReturnPath } from '@/lib/auth/safe-return-path'
 
@@ -59,7 +60,11 @@ export default function OnboardingPage() {
   const [joinedGroups, setJoinedGroups] = useState<Set<string>>(new Set())
   const [loadingTraders, setLoadingTraders] = useState(false)
   const [loadingGroups, setLoadingGroups] = useState(false)
+  const [tradersLoadFailed, setTradersLoadFailed] = useState(false)
+  const [groupsLoadFailed, setGroupsLoadFailed] = useState(false)
   const startedRef = useRef(false)
+  const tradersLoadRevisionRef = useRef(0)
+  const groupsLoadRevisionRef = useRef(0)
   const followedTradersRef = useRef(followedTraders)
   const joinedGroupsRef = useRef(joinedGroups)
   const languageRef = useRef(language)
@@ -172,29 +177,44 @@ export default function OnboardingPage() {
   }, [router, afterOnboarding])
 
   const fetchTraders = useCallback(async () => {
+    const revision = ++tradersLoadRevisionRef.current
+    setTradersLoadFailed(false)
     setLoadingTraders(true)
     try {
-      const res = await fetch('/api/sidebar/top-traders')
-      const data = await res.json()
-      setTraders(data.traders || [])
+      const nextTraders = await loadOnboardingTraders()
+      if (membershipScopeRef.current.active && tradersLoadRevisionRef.current === revision) {
+        setTraders(nextTraders)
+      }
     } catch (err) {
       logger.error('Failed to fetch traders', err)
+      if (membershipScopeRef.current.active && tradersLoadRevisionRef.current === revision) {
+        setTradersLoadFailed(true)
+      }
     } finally {
-      setLoadingTraders(false)
+      if (membershipScopeRef.current.active && tradersLoadRevisionRef.current === revision) {
+        setLoadingTraders(false)
+      }
     }
   }, [])
 
   const fetchGroups = useCallback(async () => {
+    const revision = ++groupsLoadRevisionRef.current
+    setGroupsLoadFailed(false)
     setLoadingGroups(true)
     try {
-      const res = await fetch('/api/groups?limit=8&sort_by=member_count')
-      const data = await res.json()
-      const raw = data.data?.groups || data.data || data.groups || []
-      setGroups(Array.isArray(raw) ? raw : [])
+      const nextGroups = await loadOnboardingGroups()
+      if (membershipScopeRef.current.active && groupsLoadRevisionRef.current === revision) {
+        setGroups(nextGroups)
+      }
     } catch (err) {
       logger.error('Failed to fetch groups', err)
+      if (membershipScopeRef.current.active && groupsLoadRevisionRef.current === revision) {
+        setGroupsLoadFailed(true)
+      }
     } finally {
-      setLoadingGroups(false)
+      if (membershipScopeRef.current.active && groupsLoadRevisionRef.current === revision) {
+        setLoadingGroups(false)
+      }
     }
   }, [])
 
@@ -735,8 +755,10 @@ export default function OnboardingPage() {
             traders={traders}
             followedTraders={followedTraders}
             loadingTraders={loadingTraders}
+            loadFailed={tradersLoadFailed}
             tr={tr}
             onFollowTrader={handleFollowTrader}
+            onRetry={fetchTraders}
             onBack={() => goToStep('interests')}
             onContinue={() => goToStep('groups')}
           />
@@ -748,9 +770,11 @@ export default function OnboardingPage() {
             groups={groups}
             joinedGroups={joinedGroups}
             loadingGroups={loadingGroups}
+            loadFailed={groupsLoadFailed}
             saving={saving}
             tr={tr}
             onJoinGroup={handleJoinGroup}
+            onRetry={fetchGroups}
             onBack={() => goToStep('traders')}
             onComplete={saveAndComplete}
           />

@@ -25,12 +25,15 @@ export const GET = withPublic(
           .order('arena_score', { ascending: false })
           .limit(50)
 
-        if (snapErr || !snapData || snapData.length === 0) {
+        if (snapErr) {
+          throw snapErr
+        }
+        if (!snapData || snapData.length === 0) {
           return { traders: [] }
         }
 
         // Diversify: pick top 1 per exchange first, then fill remaining slots by score
-        const perExchange = new Map<string, typeof snapData[0]>()
+        const perExchange = new Map<string, (typeof snapData)[0]>()
         const rest: typeof snapData = []
         for (const d of snapData) {
           if (!perExchange.has(d.source)) {
@@ -40,9 +43,11 @@ export const GET = withPublic(
           }
         }
         // Start with 1 per exchange (diverse), sorted by score
-        const diverse = [...perExchange.values()].sort((a, b) => (b.arena_score ?? 0) - (a.arena_score ?? 0))
+        const diverse = [...perExchange.values()].sort(
+          (a, b) => (b.arena_score ?? 0) - (a.arena_score ?? 0)
+        )
         // Fill remaining to reach 10
-        const traders = [...diverse, ...rest].slice(0, 10).map(d => ({
+        const traders = [...diverse, ...rest].slice(0, 10).map((d) => ({
           source: d.source,
           source_trader_id: d.source_trader_id,
           handle: d.handle || null,
