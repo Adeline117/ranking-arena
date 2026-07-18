@@ -38,60 +38,76 @@ export const metadata: Metadata = {
   },
 }
 
-interface PopularToken {
+export interface PopularToken {
   token: string
   trade_count: number
   trader_count: number
   total_pnl: number
 }
 
-const getPopularTokens = unstable_cache(
-  async (): Promise<PopularToken[]> => {
-    try {
-      const supabase = getSupabaseAdmin()
-      // SQL aggregate via the same RPC as /api/rankings/by-token — replaces the
-      // cold-path 50k-row trader_position_history scan into JS (was guarded only
-      // by a 4s SSR timeout). The MV now filters junk symbols at source
-      // (migration 20260709232817 — mirrors isValidTokenSymbol), so the RPC's
-      // top-50 is already clean; the filter below is belt-and-suspenders.
-      const { data, error } = await supabase.rpc('get_popular_tokens', {
-        lookback_days: 90,
-        max_tokens: 50,
-      })
-      if (error || !data || data.length === 0) return []
-      return (
-        data as Array<{
-          token: string
-          trade_count: number
-          trader_count: number
-          total_pnl: number
-        }>
-      )
-        .filter((row) => isValidTokenSymbol(String(row.token ?? '').toUpperCase()))
-        .map((row) => ({
-          token: row.token,
-          trade_count: Number(row.trade_count),
-          trader_count: Number(row.trader_count),
-          total_pnl: Number(row.total_pnl),
-        }))
-    } catch {
-      return []
-    }
-  },
-  ['popular-tokens-ssr'],
-  { revalidate: 3600, tags: ['rankings', 'popular-tokens'] }
-)
+export async function loadPopularTokensSSR(): Promise<PopularToken[]> {
+  const supabase = getSupabaseAdmin()
+  // SQL aggregate via the same RPC as /api/rankings/by-token — replaces the
+  // cold-path 50k-row trader_position_history scan into JS (was guarded only
+  // by a 4s SSR timeout). The MV now filters junk symbols at source
+  // (migration 20260709232817 — mirrors isValidTokenSymbol), so the RPC's
+  // top-50 is already clean; the filter below is belt-and-suspenders.
+  const { data, error } = await supabase.rpc('get_popular_tokens', {
+    lookback_days: 90,
+    max_tokens: 50,
+  })
+  if (error) throw new Error(error.message)
+  if (!data || data.length === 0) return []
+
+  return (
+    data as Array<{
+      token: string
+      trade_count: number
+      trader_count: number
+      total_pnl: number
+    }>
+  )
+    .filter((row) => isValidTokenSymbol(String(row.token ?? '').toUpperCase()))
+    .map((row) => ({
+      token: row.token,
+      trade_count: Number(row.trade_count),
+      trader_count: Number(row.trader_count),
+      total_pnl: Number(row.total_pnl),
+    }))
+}
+
+// Bump the cache namespace so empty values written by the former fail-soft
+// loader cannot survive this error-contract change for another ISR window.
+const getPopularTokens = unstable_cache(loadPopularTokensSSR, ['popular-tokens-ssr-v2'], {
+  revalidate: 3600,
+  tags: ['rankings', 'popular-tokens'],
+})
+
+async function withSsrTimeout<T>(promise: Promise<T>): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<T>((_resolve, reject) => {
+        timeout = setTimeout(
+          () => reject(new Error('Token rankings SSR timed out')),
+          SSR_TIMEOUT_MS
+        )
+      }),
+    ])
+  } finally {
+    if (timeout) clearTimeout(timeout)
+  }
+}
 
 export default async function TokensPage() {
   let initialTokens: PopularToken[] = []
+  let initialStatus: 'success' | 'error' = 'success'
   try {
-    initialTokens = await Promise.race([
-      getPopularTokens(),
-      new Promise<PopularToken[]>((resolve) => setTimeout(() => resolve([]), SSR_TIMEOUT_MS)),
-    ])
+    initialTokens = await withSsrTimeout(getPopularTokens())
   } catch {
-    // Timeout or error — render with empty data, client can fetch
+    initialStatus = 'error'
   }
 
-  return <TokensIndexClient initialTokens={initialTokens} />
+  return <TokensIndexClient initialTokens={initialTokens} initialStatus={initialStatus} />
 }
