@@ -3,6 +3,7 @@ import {
   formatWeeklyRange,
   formatWeeklyRoi,
   formatWeeklyWinRate,
+  weeklyTraderHref,
 } from './weekly-format'
 
 describe('weekly ranking display formatting', () => {
@@ -28,5 +29,14 @@ describe('weekly ranking display formatting', () => {
   it('rejects a missing or invalid snapshot timestamp', () => {
     expect(formatWeeklyRange(null, 'en')).toBeNull()
     expect(formatWeeklyRange('not-a-date', 'en')).toBeNull()
+  })
+
+  it('keeps the complete exchange-account identity in weekly trader links', () => {
+    expect(weeklyTraderHref('shared/id', 'bybit futures')).toBe(
+      '/trader/shared%2Fid?platform=bybit%20futures'
+    )
+    expect(weeklyTraderHref('shared-id', 'binance_futures')).not.toBe(
+      weeklyTraderHref('shared-id', 'bybit_futures')
+    )
   })
 })

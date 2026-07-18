@@ -28,6 +28,7 @@ import {
   formatWeeklyRange,
   formatWeeklyRoi,
   formatWeeklyWinRate,
+  weeklyTraderHref,
 } from '@/lib/rankings/weekly-format'
 import type {
   BitmartWeeklyCategoryKey,
@@ -246,7 +247,7 @@ function ExchangeLogo({ source, name, size }: { source: string; name: string; si
 function PodiumCard({ row, place }: { row: WeeklyLeaderRow; place: number }) {
   return (
     <Link
-      href={`/trader/${encodeURIComponent(row.exchangeTraderId)}`}
+      href={weeklyTraderHref(row.exchangeTraderId, row.source)}
       style={{ textDecoration: 'none', color: 'inherit', display: 'block' }}
     >
       <Box
@@ -558,7 +559,7 @@ export default function WeeklyArenaClient({ data }: WeeklyArenaClientProps) {
                       }}
                     >
                       <Link
-                        href={`/trader/${encodeURIComponent(row.exchangeTraderId)}`}
+                        href={weeklyTraderHref(row.exchangeTraderId, row.source)}
                         data-trader-name={row.nickname ?? row.exchangeTraderId}
                         style={{
                           display: 'inline-flex',
