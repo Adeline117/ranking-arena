@@ -1,10 +1,9 @@
 'use client'
 
 import { features } from '@/lib/features'
-import { redirect } from 'next/navigation'
+import { redirect, useRouter, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { useEffect, useState, useCallback, useMemo, useRef, useLayoutEffect } from 'react'
-import { useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
 import { tokens, alpha } from '@/lib/design-tokens'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
@@ -34,6 +33,7 @@ import { trackEvent } from '@/lib/analytics/track'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import dynamic from 'next/dynamic'
 import { buildJoinMembershipBody, parseMembershipAck } from './membership-client'
+import { buildGroupLoginHref } from './login-intent'
 import {
   advanceGroupDetailResourceScope,
   canonicalGroupDetailId,
@@ -205,6 +205,7 @@ function GroupDetailScopedPage({
   const { showToast: unsafeShowToast } = useToast()
   const { showDangerConfirm: unsafeShowDangerConfirm } = useDialog()
   const { isFeaturesUnlocked: isPro } = useSubscription()
+  const router = useRouter()
   const searchParams = useSearchParams()
   const { accessToken, email, userId } = auth
   const mountedRef = useRef(true)
@@ -730,6 +731,12 @@ function GroupDetailScopedPage({
       if (!requestIsCurrent()) return
       if (!requestUserId) {
         showToast(t('pleaseLogin'), 'warning')
+        router.push(
+          buildGroupLoginHref(
+            requestGroupId || groupId,
+            inviteToken || searchParams.get('invite') || undefined
+          )
+        )
         return
       }
       if (!inviteToken && group?.is_premium_only && !isPro) {
@@ -801,7 +808,18 @@ function GroupDetailScopedPage({
       }
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [userId, group, isPro, groupId, accessToken, showToast, ownerScope, isCurrent]
+    [
+      userId,
+      group,
+      isPro,
+      groupId,
+      accessToken,
+      showToast,
+      ownerScope,
+      isCurrent,
+      router,
+      searchParams,
+    ]
   )
 
   // Leave group (with confirmation)
