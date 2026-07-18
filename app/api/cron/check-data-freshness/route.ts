@@ -13,11 +13,12 @@
 import { NextResponse } from 'next/server'
 import { getSupabaseAdmin } from '@/lib/supabase/server'
 import { isAuthorized } from '@/lib/cron/utils'
-import { sendScraperAlert, sendRateLimitedAlert } from '@/lib/alerts/send-alert'
+import { sendRateLimitedAlert } from '@/lib/alerts/send-alert'
 import { captureMessage } from '@/lib/utils/logger'
 import { logger } from '@/lib/logger'
 import { PipelineLogger } from '@/lib/services/pipeline-logger'
 import { evaluateAndAlert } from '@/lib/services/pipeline-self-heal'
+import { acquireCronLock } from '@/lib/cron/with-cron-lock'
 import {
   parseVisibleLeaderboardSources,
   type LeaderboardTimeRange,
@@ -286,6 +287,27 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
   }
 
+  const releaseLock = await acquireCronLock('check-data-freshness', {
+    // Keep the lease past Vercel's hard timeout so a duplicate delivery cannot
+    // start while the first invocation is still being terminated.
+    ttlSeconds: maxDuration + 30,
+  })
+  if (!releaseLock) {
+    return NextResponse.json({
+      ok: true,
+      skipped: true,
+      reason: 'concurrent_execution',
+    })
+  }
+
+  try {
+    return await runFreshnessCheck()
+  } finally {
+    await bestEffort('Failed to release freshness cron lock', releaseLock)
+  }
+}
+
+async function runFreshnessCheck() {
   let plog: PipelineLogHandle | null = null
   try {
     plog = await PipelineLogger.start('check-data-freshness')
@@ -396,17 +418,6 @@ export async function GET(req: Request) {
         6 * 60 * 60 * 1000
       )
     )
-  }
-
-  // ── 外部告警通知（Slack / 飞书等）────────────────────────
-  if (criticalPlatforms.length > 0 || stalePlatforms.length > 0) {
-    await bestEffort('Failed to send freshness alert', async () => {
-      await sendScraperAlert(
-        criticalPlatforms.map((p) => p.platform),
-        stalePlatforms.map((p) => p.platform),
-        PLATFORM_NAMES
-      )
-    })
   }
 
   // ── Self-heal evaluation (Redis-backed consecutive failure tracking) ──
