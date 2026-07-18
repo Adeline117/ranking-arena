@@ -66,6 +66,16 @@ interface CompareLoadResult {
   missingAccounts: CompareAccountRef[]
 }
 
+interface CompareLoadRequest {
+  accounts: CompareAccountRef[]
+  replaceUrlOnSuccess: boolean
+}
+
+interface CompareLoadFailure {
+  message: string
+  retry: CompareLoadRequest | null
+}
+
 function CompareContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
@@ -75,9 +85,11 @@ function CompareContent() {
   const { tryUnlock } = useAchievements()
   const redirectingToLoginRef = useRef(false)
   const rejectedResumeRef = useRef(false)
+  const compareRetryPendingRef = useRef(false)
 
   const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
+  const [compareFailure, setCompareFailure] = useState<CompareLoadFailure | null>(null)
+  const [availabilityWarning, setAvailabilityWarning] = useState<string | null>(null)
   const [traders, setTraders] = useState<TraderCompareData[]>([])
   // Trader search (unified /api/search, traders category) — debounced
   const [searchInput, setSearchInput] = useState('')
@@ -180,14 +192,10 @@ function CompareContent() {
       let tradersPromise: Promise<void> = Promise.resolve()
       if (ids || platforms) {
         if (parsed.ok) {
-          tradersPromise = loadTraders(parsed.accounts).then((result) => {
-            if (result && result.missingAccounts.length > 0) {
-              router.replace(buildCompareUrl(result.traders), { scroll: false })
-            }
-          })
+          tradersPromise = loadTraders(parsed.accounts).then(() => undefined)
         } else {
           logger.warn('Invalid compare URL identity parameters:', parsed.error)
-          setError(t('errorOccurred'))
+          setCompareFailure({ message: t('errorOccurred'), retry: null })
         }
       }
 
@@ -289,8 +297,16 @@ function CompareContent() {
   }, [searchFailedMessage, searchInput, searchRetryKey])
 
   // Load traders with equity curve data
-  const loadTraders = async (accounts: CompareAccountRef[]): Promise<CompareLoadResult | null> => {
+  const loadTraders = async (
+    accounts: CompareAccountRef[],
+    { replaceUrlOnSuccess = false }: { replaceUrlOnSuccess?: boolean } = {}
+  ): Promise<CompareLoadResult | null> => {
     if (!accessToken || accounts.length === 0) return null
+
+    const retry: CompareLoadRequest = {
+      accounts: accounts.map(({ id, source }) => ({ id, source })),
+      replaceUrlOnSuccess,
+    }
 
     try {
       const res = await fetch(buildCompareApiUrl(accounts, { includeEquity: true }), {
@@ -298,14 +314,31 @@ function CompareContent() {
       })
 
       if (!res.ok) {
-        const data = await res.json()
+        const data = (await res.json().catch(() => null)) as {
+          error?: string | { message?: string }
+        } | null
+        const responseMessage =
+          (typeof data?.error === 'string' ? data.error : data?.error?.message) ||
+          t('errorOccurred')
+        if (res.status === 401) {
+          if (!redirectingToLoginRef.current) {
+            redirectingToLoginRef.current = true
+            router.push(
+              queueProfileActionLogin({
+                action: 'compare-traders',
+                target: compareAccountsTarget(accounts),
+                fallbackPath: buildCompareUrl(accounts),
+                initiatingUserId: userId,
+              })
+            )
+          }
+          setCompareFailure({ message: t('loginExpiredPleaseRelogin'), retry: null })
+          return null
+        }
         if (res.status === 403) {
-          setError(t('portfolioProRequired'))
+          setCompareFailure({ message: t('portfolioProRequired'), retry: null })
         } else {
-          setError(
-            (typeof data.error === 'string' ? data.error : data.error?.message) ||
-              t('errorOccurred')
-          )
+          setCompareFailure({ message: responseMessage, retry })
         }
         return null
       }
@@ -319,15 +352,35 @@ function CompareContent() {
         ? (payload.missingAccounts as CompareAccountRef[])
         : []
       setTraders(list)
-      setError(missingAccounts.length > 0 ? t('compareSomeUnavailable') : null)
+      setCompareFailure(null)
+      setAvailabilityWarning(missingAccounts.length > 0 ? t('compareSomeUnavailable') : null)
+      if (replaceUrlOnSuccess || missingAccounts.length > 0) {
+        router.replace(buildCompareUrl(list), { scroll: false })
+      }
       if (list.length >= 2) {
         tryUnlock('first_comparison')
       }
       return { traders: list, missingAccounts }
     } catch (err) {
       logger.error('Load traders failed:', err)
-      setError(t('errorOccurred'))
+      setCompareFailure({ message: t('errorOccurred'), retry })
       return null
+    }
+  }
+
+  const handleRetryCompare = async () => {
+    const retry = compareFailure?.retry
+    if (!retry || compareRetryPendingRef.current) return
+
+    compareRetryPendingRef.current = true
+    setLoading(true)
+    try {
+      await loadTraders(retry.accounts, {
+        replaceUrlOnSuccess: retry.replaceUrlOnSuccess,
+      })
+    } finally {
+      compareRetryPendingRef.current = false
+      setLoading(false)
     }
   }
 
@@ -343,10 +396,9 @@ function CompareContent() {
     }
 
     const newAccounts = [...traders.map(({ id, source }) => ({ id, source })), account]
-    const result = await loadTraders(newAccounts)
+    const result = await loadTraders(newAccounts, { replaceUrlOnSuccess: true })
     if (!result) return
 
-    router.replace(buildCompareUrl(result.traders), { scroll: false })
     if (result.missingAccounts.length > 0) {
       showToast(t('compareSomeUnavailable'), 'warning')
     }
@@ -466,8 +518,18 @@ function CompareContent() {
           </Box>
         )}
 
-        {/* Error */}
-        {error && (
+        {/* Retryable load error — never present a failed request as an empty comparison. */}
+        {compareFailure && (
+          <Box style={{ marginBottom: tokens.spacing[4] }}>
+            <ErrorMessage
+              message={compareFailure.message}
+              onRetry={compareFailure.retry ? () => void handleRetryCompare() : undefined}
+            />
+          </Box>
+        )}
+
+        {/* A successful partial response remains usable, but names omitted accounts honestly. */}
+        {availabilityWarning && (
           <Box
             style={{
               padding: tokens.spacing[4],
@@ -478,7 +540,7 @@ function CompareContent() {
             }}
           >
             <Text size="sm" style={{ color: tokens.colors.accent.error }}>
-              {error}
+              {availabilityWarning}
             </Text>
           </Box>
         )}
@@ -854,7 +916,7 @@ function CompareContent() {
         )}
 
         {/* Comparison component */}
-        {isPro && (
+        {isPro && (!compareFailure || traders.length > 0) && (
           <TraderComparison
             traders={traders}
             onRemove={handleRemoveTrader}
