@@ -4609,6 +4609,8 @@ const ko = {
     '거래소가 요청을 거부했습니다. API 키가 유효하고 읽기 권한이 있는지 확인하세요.',
   portfolioSyncSuccess: '동기화 성공',
   portfolioNetworkError: '네트워크 오류',
+  portfolioLoadFailed:
+    '포트폴리오를 새로고침할 수 없습니다. 저장된 데이터는 빈 결과로 덮어쓰지 않았습니다.',
   portfolioRemoveExchange: '거래소 제거',
   portfolioRemoveConfirm:
     '이 거래소 연결을 제거하시겠습니까? 관련 포지션 데이터도 함께 삭제됩니다.',

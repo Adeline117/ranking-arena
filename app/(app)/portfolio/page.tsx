@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase/client'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import dynamic from 'next/dynamic'
 import PageHeader from '@/app/components/ui/PageHeader'
+import ErrorState from '@/app/components/ui/ErrorState'
 import PortfolioOverview from '@/app/components/portfolio/PortfolioOverview'
 import PositionList from '@/app/components/portfolio/PositionList'
 
@@ -20,6 +21,7 @@ import { useToast } from '@/app/components/ui/Toast'
 import { useDialog } from '@/app/components/ui/Dialog'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { getCsrfHeaders } from '@/lib/api/client'
+import { logger } from '@/lib/logger'
 
 interface Portfolio {
   id: string
@@ -49,6 +51,19 @@ interface Snapshot {
   snapshot_at: string
 }
 
+async function readListResponse<T>(response: Response, endpoint: string): Promise<T[]> {
+  if (!response.ok) {
+    throw new Error(`${endpoint} returned HTTP ${response.status}`)
+  }
+
+  const payload = (await response.json()) as { data?: unknown } | null
+  if (!Array.isArray(payload?.data)) {
+    throw new Error(`${endpoint} returned an invalid portfolio payload`)
+  }
+
+  return payload.data as T[]
+}
+
 export default function PortfolioPage() {
   const router = useRouter()
   const { showToast } = useToast()
@@ -59,6 +74,8 @@ export default function PortfolioPage() {
   const [portfolios, setPortfolios] = useState<Portfolio[]>([])
   const [positions, setPositions] = useState<Position[]>([])
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
+  const [hasSuccessfulLoad, setHasSuccessfulLoad] = useState(false)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [showAddModal, setShowAddModal] = useState(false)
   const [syncingId, setSyncingId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -93,12 +110,15 @@ export default function PortfolioPage() {
 
   // Load portfolios + positions in parallel with request dedup
   const lastFetchRef = useRef<number>(0)
+  const loadInFlightRef = useRef(false)
   const loadAll = useCallback(
     async (force = false) => {
       if (!token) return
+      if (loadInFlightRef.current) return
       // Skip if fetched < 30s ago (dedup rapid remounts)
       if (!force && Date.now() - lastFetchRef.current < 30_000) return
       lastFetchRef.current = Date.now()
+      loadInFlightRef.current = true
       setLoading(true)
       const headers = { Authorization: `Bearer ${token}` }
       try {
@@ -107,21 +127,29 @@ export default function PortfolioPage() {
           fetch('/api/portfolio/positions', { headers }),
           fetch('/api/portfolio/snapshots', { headers }),
         ])
-        const [pJson, posJson, snapJson] = await Promise.all([
-          pRes.json(),
-          posRes.json(),
-          snapRes.json(),
+        const [nextPortfolios, nextPositions, nextSnapshots] = await Promise.all([
+          readListResponse<Portfolio>(pRes, '/api/portfolio'),
+          readListResponse<Position>(posRes, '/api/portfolio/positions'),
+          readListResponse<Snapshot>(snapRes, '/api/portfolio/snapshots'),
         ])
-        if (pJson.data) setPortfolios(pJson.data)
-        if (posJson.data) setPositions(posJson.data)
-        if (snapJson.data) setSnapshots(snapJson.data)
-      } catch {
-        // Intentionally swallowed: portfolio load failure is non-critical
+
+        // Treat the three endpoints as one snapshot. A partial refresh must not
+        // replace last-good data with misleading empty/$0 sections.
+        setPortfolios(nextPortfolios)
+        setPositions(nextPositions)
+        setSnapshots(nextSnapshots)
+        setHasSuccessfulLoad(true)
+        setLoadFailed(false)
+      } catch (error) {
+        logger.error('Failed to refresh portfolio:', error)
+        setLoadFailed(true)
+        showToast(t('portfolioLoadFailed'), 'error')
       } finally {
+        loadInFlightRef.current = false
         setLoading(false)
       }
     },
-    [token]
+    [showToast, t, token]
   )
 
   useEffect(() => {
@@ -218,6 +246,7 @@ export default function PortfolioPage() {
   const totalPnl = positions.reduce((sum, p) => sum + Number(p.pnl), 0)
   const totalEquity = positions.reduce((sum, p) => sum + Number(p.size) * Number(p.mark_price), 0)
   const totalPnlPct = totalEquity > 0 ? (totalPnl / totalEquity) * 100 : 0
+  const isInitialLoad = loading && !hasSuccessfulLoad
 
   return (
     <>
@@ -233,9 +262,18 @@ export default function PortfolioPage() {
             }
           />
 
+          {loadFailed && (
+            <ErrorState
+              title={t('failedToLoad')}
+              description={t('portfolioLoadFailed')}
+              retry={() => void loadAll(true)}
+              variant="compact"
+            />
+          )}
+
           {/* First-run: no connected exchange yet → a focused connect prompt
               instead of hollow $0.00 metric cards + "no positions". */}
-          {!loading && portfolios.length === 0 ? (
+          {hasSuccessfulLoad && portfolios.length === 0 ? (
             <div style={styles.emptyState}>
               <div style={styles.emptyIcon} aria-hidden="true">
                 📊
@@ -246,15 +284,15 @@ export default function PortfolioPage() {
                 + {t('portfolioConnectExchange')}
               </button>
             </div>
-          ) : (
+          ) : hasSuccessfulLoad || isInitialLoad ? (
             <PortfolioOverview
               totalEquity={totalEquity}
               totalPnl={totalPnl}
               totalPnlPct={totalPnlPct}
               snapshots={snapshots}
-              isLoading={loading}
+              isLoading={isInitialLoad}
             />
-          )}
+          ) : null}
 
           {/* Connected exchanges */}
           {portfolios.length > 0 && (
@@ -294,7 +332,7 @@ export default function PortfolioPage() {
           )}
 
           {/* Analytics Dashboard */}
-          {!loading && positions.length > 0 && (
+          {hasSuccessfulLoad && positions.length > 0 && (
             <div style={styles.section}>
               <h2 style={styles.sectionTitle}>{t('portfolioAnalytics')}</h2>
               <PortfolioAnalytics positions={positions} snapshots={snapshots} />
@@ -302,10 +340,10 @@ export default function PortfolioPage() {
           )}
 
           {/* Positions — hidden on the first-run empty state (handled above) */}
-          {(loading || portfolios.length > 0) && (
+          {(isInitialLoad || (hasSuccessfulLoad && portfolios.length > 0)) && (
             <div style={styles.section}>
               <h2 style={styles.sectionTitle}>{t('openPositions')}</h2>
-              <PositionList positions={positions} isLoading={loading} />
+              <PositionList positions={positions} isLoading={isInitialLoad} />
             </div>
           )}
         </div>
