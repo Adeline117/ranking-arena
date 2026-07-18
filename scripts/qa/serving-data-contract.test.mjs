@@ -7,6 +7,7 @@ const root = resolve(import.meta.dirname, '..', '..')
 const coverage = readFileSync(resolve(root, 'scripts/qa/pipeline-coverage-audit.mjs'), 'utf8')
 const rankCacheDiff = readFileSync(resolve(root, 'scripts/ingest-shadow-diff.ts'), 'utf8')
 const acceptance = readFileSync(resolve(root, 'scripts/qa/serving-acceptance.mjs'), 'utf8')
+const profileRender = readFileSync(resolve(root, 'scripts/qa/serving-profiles-e2e.mjs'), 'utf8')
 
 test('coverage audit checks every registry-declared window against the current serving generation', () => {
   assert.doesNotMatch(coverage, /public\.trader_latest\b/)
@@ -51,4 +52,11 @@ test('rank/cache diff rejects ranked rows outside an active declared source wind
 test('serving acceptance names the canonical DB probe honestly', () => {
   assert.match(acceptance, /Serving rank\/cache diff/)
   assert.doesNotMatch(acceptance, /Shadow compat diff/)
+})
+
+test('dormant profile acceptance selects the zero-activity period before asserting', () => {
+  assert.match(profileRender, /expectedDormantPeriod/)
+  assert.match(profileRender, /name: `\$\{expectedDormantPeriod\} period`/)
+  assert.match(profileRender, /getAttribute\('aria-pressed'\) === 'true'/)
+  assert.match(profileRender, /c\.kind === 'dormant' \? '30D' : null/)
 })

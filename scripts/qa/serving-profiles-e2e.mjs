@@ -71,7 +71,7 @@ async function pickRepresentatives() {
   return cases
 }
 
-async function checkPage(browser, url, label, expectDormant) {
+async function checkPage(browser, url, label, expectedDormantPeriod = null) {
   const page = await browser.newPage({ viewport: { width: 1280, height: 1400 } })
   const errs = []
   const unexpectedHttp = []
@@ -96,6 +96,19 @@ async function checkPage(browser, url, label, expectDormant) {
         .first()
         .waitFor({ state: 'visible', timeout: readiness.readyTimeoutMs })
     }
+    if (expectedDormantPeriod) {
+      const periodButton = page.getByRole('button', {
+        name: `${expectedDormantPeriod} period`,
+      })
+      await periodButton.click()
+      await page.waitForFunction(
+        (period) =>
+          document
+            .querySelector(`button[aria-label="${period} period"]`)
+            ?.getAttribute('aria-pressed') === 'true',
+        expectedDormantPeriod
+      )
+    }
     await page.waitForTimeout(readiness.observeMs)
   } catch (e) {
     await page.close()
@@ -115,7 +128,7 @@ async function checkPage(browser, url, label, expectDormant) {
   }
   if (txt.length < 400) problems.push('empty(' + txt.length + ')')
   if (
-    expectDormant &&
+    expectedDormantPeriod &&
     !/No trading activity|无交易活动|取引活動はありません|거래 활동이 없습니다/.test(txt)
   ) {
     problems.push('dormant-notice-missing')
@@ -139,7 +152,9 @@ for (const [path, label] of [
 }
 for (const c of cases) {
   const url = `${BASE}/trader/${encodeURIComponent(c.id)}?source=${c.slug}`
-  results.push(await checkPage(browser, url, `${c.kind}:${c.slug}`, c.kind === 'dormant'))
+  results.push(
+    await checkPage(browser, url, `${c.kind}:${c.slug}`, c.kind === 'dormant' ? '30D' : null)
+  )
 }
 
 let fails = 0
