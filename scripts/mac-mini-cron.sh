@@ -1,1 +1,0 @@
-cron/local-arena-cron.sh
