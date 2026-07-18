@@ -20,18 +20,21 @@ config({ path: resolve(__dirname, '..', '.env') })
 import { Worker, type Job } from 'bullmq'
 import { getConnection, closeConnection } from './connection'
 import {
-  TIERC_QUEUE_NAME,
   INGEST_JOB,
   ingestConnection,
   consumedRegions,
   regionQueueName,
   regionFastQueueName,
+  tierCQueueName,
   fastLaneEnabled,
+  type IngestRegion,
+  type TierCJobData,
 } from './ingest/queues'
 import { reconcileSchedulers } from './ingest/scheduler'
 import { startHeartbeat } from './ingest/heartbeat'
 import { startFailoverManager } from './ingest/failover'
 import { withSourceJobLease } from './ingest/source-job-lease'
+import { routeTierCJobRegion } from './ingest/tier-c-region-router'
 
 // Per-region worker concurrency. Bumped 3→5 (2026-06-12): at 3 the drain
 // rate (~12-18 jobs/h, dragged by giant crawls like bybit_mt5's 29k rows)
@@ -88,8 +91,7 @@ async function route(job: Job): Promise<unknown> {
       return processTierBSeries(job)
     }
     case INGEST_JOB.TIER_C: {
-      const { processTierC } = await import('./ingest/processors/tier-c-profile')
-      return processTierC(job)
+      throw new Error('[ingest-worker] Tier-C job arrived on a bulk queue')
     }
     case INGEST_JOB.FIRST_PARTY: {
       const { processFirstPartySync } = await import('./ingest/processors/first-party-sync')
@@ -126,6 +128,18 @@ async function route(job: Job): Promise<unknown> {
     default:
       throw new Error(`[ingest-worker] unknown job: ${job.name}`)
   }
+}
+
+async function routeTierC(job: Job<TierCJobData>, region: IngestRegion): Promise<unknown> {
+  const decision = await routeTierCJobRegion(job, region)
+  if (decision.action === 'rerouted') {
+    console.warn(
+      `[ingest-worker] ↪ tierc ${decision.jobId} rerouted ${decision.from} → ${decision.to}`
+    )
+    return decision
+  }
+  const { processTierC } = await import('./ingest/processors/tier-c-profile')
+  return processTierC(job)
 }
 
 async function main(): Promise<void> {
@@ -182,26 +196,27 @@ async function main(): Promise<void> {
         return w
       })
 
-  // Dedicated Tier-C worker: user-facing on-demand fetches get their own
-  // slots so they never queue behind hours-long Tier-A/B bulk crawls
-  // (the API route's polling window is 8s).
-  // ONLY on the primary node (consumes 'local'): a region-pinned satellite
-  // (e.g. SG VPS, INGEST_REGIONS=vps_sg) must not steal Tier-C jobs for
-  // local-region sources — it would run them from the wrong egress IP and
-  // lacks the branded-chrome channel some sources need (bybit).
-  let tiercWorker: Worker | null = null
-  if (regions.includes('local')) {
-    tiercWorker = new Worker(TIERC_QUEUE_NAME, route, {
-      connection: ingestConnection(),
-      concurrency: 2,
+  // Dedicated Tier-C workers: user-facing on-demand fetches get their own
+  // region-affine slots so they never queue behind bulk work or run from the
+  // wrong egress. The local queue keeps the historical name and reroutes old
+  // remote-source jobs only after their authoritative queue accepts them.
+  const tiercWorkers = regions.map((region) => {
+    const worker = new Worker<TierCJobData>(
+      tierCQueueName(region),
+      (job) => routeTierC(job, region),
+      {
+        connection: ingestConnection(),
+        concurrency: 2,
+      }
+    )
+    worker.on('completed', (job) => {
+      console.log(`[ingest-worker] ✓ tierc ${job.id} [${region}]`)
     })
-    tiercWorker.on('completed', (job) => {
-      console.log(`[ingest-worker] ✓ tierc ${job.id}`)
+    worker.on('failed', (job, err) => {
+      console.error(`[ingest-worker] ✗ tierc ${job?.id} [${region}]:`, err.message)
     })
-    tiercWorker.on('failed', (job, err) => {
-      console.error(`[ingest-worker] ✗ tierc ${job?.id}:`, err.message)
-    })
-  }
+    return worker
+  })
 
   await reconcileSchedulers()
   // Re-reconcile hourly: sources rows are the live config (spec §2.1).
@@ -239,8 +254,7 @@ async function main(): Promise<void> {
     clearInterval(reconcileTimer)
     clearInterval(heartbeatTimer)
     await failover.stop()
-    await Promise.all([...workers, ...fastWorkers].map((w) => w.close()))
-    await tiercWorker?.close()
+    await Promise.all([...workers, ...fastWorkers, ...tiercWorkers].map((w) => w.close()))
     const { closeIngestPool } = await import('@/lib/ingest/db')
     await closeIngestPool()
     await closeConnection()
