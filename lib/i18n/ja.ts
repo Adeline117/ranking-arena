@@ -729,7 +729,7 @@ const ja = {
   welcomeJoin: 'ようこそ',
   welcomeDesc: '主要取引所のトップトレーダーが集まる場所',
   stepViewRanking: 'トレーダーランキングを見る',
-  stepViewRankingDesc: '22取引所、26以上のデータソースからのリアルタイムROIデータ',
+  stepViewRankingDesc: '現在の CEX・DEX・オンチェーンソースボードのランキングデータ',
   stepFollowTraders: 'トップトレーダーをフォロー',
   stepFollowTradersDesc: '彼らの更新と戦略をトラッキング',
   stepJoinCommunity: 'コミュニティに参加',
@@ -1974,7 +1974,7 @@ const ja = {
   helpGettingStartedTitle: '使い始め',
   helpWhatIsArenaQ: 'Arenaとは？',
   helpWhatIsArenaA:
-    'Arenaは暗号資産トレーダーのランキングとコミュニティプラットフォームです。現在、18以上の稼働中の取引所ソースから9,600人以上のトレーダーをランク付けしています。',
+    'Arenaは暗号資産トレーダーのランキングとコミュニティプラットフォームです。稼働中の CEX・DEX・オンチェーンのソースボードにある数千件の公開トレーダー記録を順位付けします。',
   helpHowToStartQ: '始め方は？',
   helpHowToStartA:
     'Google、メール、または暗号資産ウォレットで登録します。登録後、興味を選択してトップトレーダーをフォローすることで体験をパーソナライズできます。その後、ランキングページでトレーダーを探索しましょう。',
@@ -2772,7 +2772,7 @@ const ja = {
   noOpenPositions: 'オープンポジションなし',
   favorites: 'お気に入り',
 
-  viewLiveLeaderboard: 'ライブリーダーボードを見る',
+  viewLiveLeaderboard: '現在のランキングを見る',
   popularTraders: '人気トレーダー',
   followingTab: 'フォロー中',
   recommendedTab: 'おすすめ',
@@ -2866,16 +2866,16 @@ const ja = {
   aboutSubtitle: '暗号資産トレーダーのためのオープンランキングプラットフォーム',
   aboutIntroTitle: 'Arenaとは？',
   aboutIntroP1:
-    'Arenaはデータ駆動型の暗号資産トレーダーランキングプラットフォームです。現在、18以上の稼働中のCEX・DEX・オンチェーンソースから9,600人以上のトレーダーをランク付けしています。',
+    'Arenaはデータ駆動型の暗号資産トレーダーランキングプラットフォームです。稼働中の CEX・DEX・オンチェーンのソースボードにある数千件の公開トレーダー記録を順位付けします。',
   aboutIntroP2:
     'フォローするトップパフォーマーを探す場合も、取引所間の戦略を比較する場合も、自分のトラックレコードを紹介する場合も、Arenaは必要なツールとデータを提供します。',
   aboutFeaturesTitle: 'コア機能',
-  aboutFeature1Title: 'リアルタイムリーダーボード',
+  aboutFeature1Title: '2時間ごとのリーダーボード',
   aboutFeature1Desc:
-    '検証済みのPnL、ROI、勝率、リスク指標で継続的に更新されるランキング（複数のタイムフレーム対応）。',
-  aboutFeature2Title: 'マルチ取引所カバレッジ',
+    '最新の利用可能な PnL、ROI、勝率、リスク指標から2時間ごとに再計算します。項目の有無はソースごとに異なります。',
+  aboutFeature2Title: '稼働中ソースボード',
   aboutFeature2Desc:
-    'Binance、Bybit、OKX、Bitget、Gate.io、MEXC、Hyperliquid、dYdX、Driftなど27以上の取引所からデータを集約。',
+    '現在のボードには Binance、Bybit、OKX、Bitget、Gate、MEXC、Hyperliquid、GMX などの CEX・DEX・現物・デリバティブ・オンチェーンソースが含まれます。',
   aboutFeature3Title: 'トレーダー比較',
   aboutFeature3Desc:
     '最大4人のトレーダーを並べて比較、詳細な指標の内訳とパフォーマンスチャート付き。',
@@ -2889,11 +2889,11 @@ const ja = {
     'トレーディング戦略、リスク管理、マーケット分析に関する56K+の厳選された教育リソース。',
   aboutDataTitle: 'データソース',
   aboutDataDesc:
-    '27以上の中央集権型・分散型取引所と統合し、暗号資産トレーディングの包括的なカバレッジを提供しています。すべてのランキングデータは検証済みの取引記録から導出されています — 自己申告の数値はありません。',
+    '鮮度と品質ゲートを通過し、現在データを提供している公開ソースボードだけを表示します。ソース状態に応じて対象範囲は変わります。',
   aboutDataCEX:
-    'CEX：Binance、Bybit、OKX、Bitget、Gate.io、MEXC、BingX、HTX、CoinEx、Phemex、BTCC、Bitunix、Bitfinex、eToroなど',
-  aboutDataDEX: 'DEX：Hyperliquid、dYdX、GMX、Jupiter、Drift、Aevo、Kwenta、Gains Network',
-  aboutDataOnChain: 'ブロックチェーンエクスプローラーとAPI統合によるオンチェーンデータの検証',
+    'CEX・デリバティブ：Binance、Bybit、OKX、Bitget、Gate、MEXC、BingX、HTX、BTCC、BitMart、Bitunix、Blofin、Phemex、Toobit、XTなど',
+  aboutDataDEX: 'オンチェーン：Hyperliquid、GMX、Binance Wallet、OKX Wallet',
+  aboutDataOnChain: 'ソースデータは公開 API、公開ボード、チェーンインデクサーから取得します',
   aboutVisionTitle: 'ビジョン',
   aboutVisionDesc:
     '透明性が信頼を生むと信じています。水増しされたスクリーンショットや偽のPnLが横行する空間で、Arenaはパフォーマンスが自ら語る、中立的でデータに裏付けられたアリーナを提供します。世界中の暗号資産トレーダー評価のスタンダードになることが目標です。',
@@ -4846,8 +4846,8 @@ const ja = {
   postListView: 'リスト',
   snapshotExpiredDesc: 'このスナップショットは期限切れのため、表示できません。',
   snapshotCopied: 'コピーしました',
-  snapshotWantLive: 'リアルタイムのリーダーボードを見ますか？',
-  snapshotViewLive: 'リアルタイムランキングを見る',
+  snapshotWantLive: '現在のリーダーボードを見ますか？',
+  snapshotViewLive: '現在のランキングを見る',
 
   // --- Core path i18n: ranking, trader, auth, score, filter ---
   rankingNoMatchCriteria: '条件に一致するトレーダーがいません',
@@ -5014,7 +5014,7 @@ const ja = {
   // Exchange Rankings (spec §6.1)
   exchangeRankingsTitle: '取引所ランキング',
   exchangeRankingsSubtitle:
-    'どの取引所のコピートレーダーが本当に稼いでいるか——リアルタイムのリーダーボードデータから算出',
+    'どのソースボードの過去ランキング成績が強いか——最新の公開リーダーボードから算出',
   exchangeRankingsColExchange: '取引所',
   exchangeRankingsColTraders: 'ランクイン数',
   exchangeRankingsColMedianRoi: '中央値 ROI',
@@ -6156,7 +6156,7 @@ const ja = {
   termsKeyPoint4: 'アカウントはいつでも削除でき、当社の責任は法律で認められる範囲に限定されます。',
   termsSec1Title: '1. サービスの説明',
   termsSec1Body:
-    'Arena は暗号資産トレーダーのランキングおよびパフォーマンス分析プラットフォームです。当社は25以上の中央集権型および分散型取引所から公開されている取引データを集約し、独自の Arena Score アルゴリズムを用いてトレーダーのランキングを算出します。',
+    'Arena は暗号資産トレーダーのランキングおよびパフォーマンス分析プラットフォームです。現在の CEX・DEX・オンチェーンのソースボードから公開データを集約し、Arena Score アルゴリズムでランキングを算出します。',
   termsSec1Warning:
     '重要: Arena は投資顧問サービスではありません。本プラットフォームで提供されるランキングおよびデータは、金融アドバイス、取引の推奨、または取引の勧誘を構成するものではありません。投資判断を行う前に、必ずご自身で調査してください。',
   termsSec2Title: '2. 免責事項',
@@ -6242,24 +6242,24 @@ const ja = {
     '本プライバシーポリシーに関するご質問やご懸念は、次の宛先までメッセージをお送りください:',
   methodologyTitle: '算定方法',
   methodologySubtitle:
-    'Arena が25以上の取引所の暗号資産トレーダーをランク付けする方法 — 透明・データ駆動・30分ごとに更新',
+    'Arena が稼働中ソースボードの暗号資産トレーダーを順位付けする方法 — 透明・データ駆動・2時間ごとに再計算',
   methodologyBackRankings: 'ランキングに戻る',
   methodologyKeyPoint1:
     'Arena Score（0〜100）は、単純な ROI ではなくリスク調整後のパフォーマンスを測定します。',
   methodologyKeyPoint2:
-    '25以上の取引所の公開データを集約し、リーダーボードを30分ごとに再計算します。',
+    '稼働中の CEX・DEX・オンチェーンのソースボードから公開データを集約し、2時間ごとに再計算します。',
   methodologyKeyPoint3: '長期的な一貫性を重視: 90日が70%、30日が25%、7日が5%の重み付けです。',
   methodologyKeyPoint4: 'tanh 正規化、外れ値チェック、サーバー側計算により不正操作を防止します。',
   methodologySec1Title: 'データソース',
   methodologySec1Intro:
-    'Arena は、25以上の中央集権型および分散型取引所から公開されている取引データを集約します。対象には以下が含まれます:',
+    'Arena は、現在ランキングに表示される公開ソースボードのデータを集約します。対象には以下が含まれます:',
   methodologySec1List:
-    'CEX: Binance Futures、Binance Spot、Bybit、OKX、Bitget、MEXC、HTX、Gate.io、CoinEx、BingX、BTCC、Bitfinex、Bitunix、eToro など\nDEX: Hyperliquid、GMX、dYdX、Vertex、Drift、Aevo、Gains Network、Kwenta など',
+    'CEX・デリバティブ: Binance、Bybit、OKX、Bitget、MEXC、HTX、Gate、BingX、BTCC、BitMart、Bitunix、Blofin、Phemex、Toobit、XT など\nオンチェーン: Hyperliquid、GMX、Binance Wallet、OKX Wallet',
   methodologySec1Outro:
     'データは公式の取引所 API を通じて収集し、地域制限や WAF 保護のある取引所については、複数の地域（シンガポール、日本）に配置した VPS ベースのスクレイパーで収集します。',
   methodologySec2Title: '更新頻度',
   methodologySec2List:
-    'CEX データ: 3〜6時間ごとに更新\nDEX データ: 4時間ごとに更新\nリーダーボード: 30分ごとに再計算\n鮮度のしきい値: 48時間（CEX）または72時間（DEX）を超えたデータは総合スコアの計算から除外されます',
+    'CEX データ: 通常3〜6時間ごとに更新\nDEX データ: 通常4時間ごとに更新\nリーダーボード: 2時間ごとに再計算\n鮮度のしきい値: 48時間（CEX）または72時間（DEX）を超えたデータは総合スコアの計算から除外されます',
   methodologySec3Title: 'Arena Score アルゴリズム (0-100)',
   methodologySec3Intro:
     'Arena Score は、取引所横断でリスク調整後のパフォーマンスを測定するために設計された総合評価です。主に2つの要素で構成されます:',
@@ -6295,13 +6295,13 @@ const ja = {
     'A: Arena Score は長期的な一貫性を重視します（90日＝70%）。短期的に目覚ましい利益を上げても履歴が不安定なトレーダーは、安定したトレーダーよりスコアが低くなる場合があります。データの完全性もスコアに影響し、指標の欠如は信頼度ペナルティにつながります。',
   methodologyFaqQ2: 'Q: ランキングはどのくらいの頻度で更新されますか？',
   methodologyFaqA2:
-    'A: 生データは3〜6時間ごとに取得します。リーダーボードは最新の利用可能なデータを用いて30分ごとに再計算されます。',
+    'A: 生データは通常3〜6時間ごとに取得します。リーダーボードは最新の利用可能なデータを用いて2時間ごとに再計算されます。',
   methodologyFaqQ3: 'Q: 異なる取引所のトレーダーを比較できますか？',
   methodologyFaqA3:
     'A: はい、それが Arena Score の主な目的です。ただし、最も正確に比較するには、データ報告基準がプラットフォームによって異なるため、取引所別のランキングも併せて確認することをお勧めします。',
   methodologyFaqQ4: 'Q: 取引所でフォローしているトレーダーが Arena に表示されないのはなぜですか？',
   methodologyFaqA4:
-    'A: 当社は各取引所から上位のトレーダーを取得します。トレーダーが取引所の公開リーダーボードに含まれていない場合やデータが不十分な場合は、表示されないことがあります。現在、全プラットフォームで8,000人以上のトレーダーを追跡しています。',
+    'A: 公開ソースボードから上位のトレーダーを取得します。トレーダーが公開ランキングに含まれていない場合やデータが不十分な場合は、表示されないことがあります。',
   methodologyFaqQ5: 'Q: Arena Score は ROI と同じですか？',
   methodologyFaqA5:
     'A: いいえ。Arena Score は ROI、絶対 PnL、データ品質の要素を組み合わせた総合指標です。ROI は中程度でも安定して大きな利益を上げるトレーダーは、ROI が極端に高くても PnL が小さいトレーダーより高いスコアになる場合があります。',

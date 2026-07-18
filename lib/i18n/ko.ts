@@ -765,7 +765,7 @@ const ko = {
   welcomeJoin: '환영합니다',
   welcomeDesc: '주요 거래소 최고 트레이더들의 홈',
   stepViewRanking: '트레이더 순위 보기',
-  stepViewRankingDesc: '22개 거래소, 26개 이상의 데이터 소스에서 실시간 ROI 데이터',
+  stepViewRankingDesc: '현재 CEX, DEX 및 온체인 소스 보드의 순위 데이터',
   stepFollowTraders: '최고 트레이더 팔로우',
   stepFollowTradersDesc: '업데이트와 전략을 추적하세요',
   stepJoinCommunity: '커뮤니티 참여',
@@ -2065,7 +2065,7 @@ const ko = {
   helpGettingStartedTitle: '시작하기',
   helpWhatIsArenaQ: 'Arena란 무엇인가요?',
   helpWhatIsArenaA:
-    'Arena는 암호화폐 트레이더 리더보드 및 커뮤니티 플랫폼입니다. 현재 18개 이상의 활성 거래소 소스에서 9,600명 이상의 트레이더 순위를 제공합니다.',
+    'Arena는 암호화폐 트레이더 리더보드 및 커뮤니티 플랫폼입니다. 운영 중인 CEX, DEX 및 온체인 소스 보드의 수천 개 공개 트레이더 기록을 순위화합니다.',
   helpHowToStartQ: '어떻게 시작하나요?',
   helpHowToStartA:
     'Google, 이메일 또는 암호화폐 지갑으로 가입하세요. 가입 후 관심사를 선택하고 최고의 트레이더를 팔로우하여 경험을 개인화할 수 있습니다. 그런 다음 순위 페이지에서 트레이더를 탐색해 보세요.',
@@ -2898,7 +2898,7 @@ const ko = {
   favorites: '즐겨찾기',
 
   // Common UI text
-  viewLiveLeaderboard: '실시간 리더보드 보기',
+  viewLiveLeaderboard: '현재 리더보드 보기',
   popularTraders: '인기 트레이더',
   followingTab: '팔로잉',
   recommendedTab: '추천',
@@ -2998,16 +2998,16 @@ const ko = {
   aboutSubtitle: '암호화폐 트레이더를 위한 오픈 순위 플랫폼',
   aboutIntroTitle: 'Arena란?',
   aboutIntroP1:
-    'Arena는 데이터 기반 암호화폐 트레이더 순위 플랫폼입니다. 현재 18개 이상의 활성 CEX, DEX 및 온체인 소스에서 9,600명 이상의 트레이더 순위를 제공합니다.',
+    'Arena는 데이터 기반 암호화폐 트레이더 순위 플랫폼입니다. 운영 중인 CEX, DEX 및 온체인 소스 보드의 수천 개 공개 트레이더 기록을 순위화합니다.',
   aboutIntroP2:
     '팔로우할 최고 성과 트레이더를 찾거나, 거래소 간 전략을 비교하거나, 자신의 실적을 선보이려는 경우 Arena는 필요한 도구와 데이터를 제공합니다.',
   aboutFeaturesTitle: '핵심 기능',
-  aboutFeature1Title: '실시간 리더보드',
+  aboutFeature1Title: '2시간 단위 리더보드',
   aboutFeature1Desc:
-    '검증된 PnL, ROI, 승률 및 리스크 지표로 여러 기간에 걸쳐 지속적으로 업데이트되는 순위입니다.',
-  aboutFeature2Title: '다중 거래소 지원',
+    '최신 가용 PnL, ROI, 승률 및 리스크 지표로 2시간마다 재계산하며, 제공 필드는 소스마다 다릅니다.',
+  aboutFeature2Title: '운영 중 소스 보드',
   aboutFeature2Desc:
-    'Binance, Bybit, OKX, Bitget, Gate.io, MEXC, Hyperliquid, dYdX, Drift 등 27개 이상의 거래소에서 데이터를 집계합니다.',
+    '현재 보드에는 Binance, Bybit, OKX, Bitget, Gate, MEXC, Hyperliquid, GMX 등의 CEX, DEX, 현물, 파생상품 및 온체인 소스가 포함됩니다.',
   aboutFeature3Title: '트레이더 비교',
   aboutFeature3Desc:
     '상세 지표 분석 및 성과 차트로 최대 4명의 트레이더를 나란히 비교할 수 있습니다.',
@@ -3021,11 +3021,11 @@ const ko = {
     '트레이딩 전략, 리스크 관리 및 시장 분석에 관한 56K+ 엄선된 교육 리소스입니다.',
   aboutDataTitle: '데이터 소스',
   aboutDataDesc:
-    '27개 이상의 CEX 및 DEX와 통합하여 암호화폐 거래 시장을 종합적으로 제공합니다. 모든 순위 데이터는 검증된 거래 기록에서 도출되며, 자가 보고된 수치는 없습니다.',
+    '신선도 및 품질 게이트를 통과해 현재 데이터를 제공하는 공개 소스 보드만 표시합니다. 소스 상태에 따라 범위가 달라집니다.',
   aboutDataCEX:
-    'CEX: Binance, Bybit, OKX, Bitget, Gate.io, MEXC, BingX, HTX, CoinEx, Phemex, BTCC, Bitunix, Bitfinex, eToro 등',
-  aboutDataDEX: 'DEX: Hyperliquid, dYdX, GMX, Jupiter, Drift, Aevo, Kwenta, Gains Network',
-  aboutDataOnChain: '블록체인 탐색기 및 API 통합을 통해 검증된 온체인 데이터',
+    'CEX 및 파생상품: Binance, Bybit, OKX, Bitget, Gate, MEXC, BingX, HTX, BTCC, BitMart, Bitunix, Blofin, Phemex, Toobit, XT 등',
+  aboutDataDEX: '온체인: Hyperliquid, GMX, Binance Wallet, OKX Wallet',
+  aboutDataOnChain: '소스 데이터는 공개 API, 공개 보드 및 체인 인덱서에서 가져옵니다',
   aboutVisionTitle: '우리의 비전',
   aboutVisionDesc:
     '투명성이 신뢰를 만든다고 믿습니다. 부풀려진 스크린샷과 가짜 PnL이 난무하는 세상에서 Arena는 실적이 스스로 말하는 중립적이고 데이터 기반의 경기장을 제공합니다. 전 세계 암호화폐 트레이더 평가의 표준이 되는 것이 목표입니다.',
@@ -5092,8 +5092,8 @@ const ko = {
   postListView: '리스트',
   snapshotExpiredDesc: '이 스냅샷은 만료되어 더 이상 볼 수 없습니다.',
   snapshotCopied: '복사됨',
-  snapshotWantLive: '실시간 리더보드를 보시겠습니까?',
-  snapshotViewLive: '실시간 순위 보기',
+  snapshotWantLive: '현재 리더보드를 보시겠습니까?',
+  snapshotViewLive: '현재 순위 보기',
 
   // --- Core path i18n: ranking, trader, auth, score, filter ---
   rankingNoMatchCriteria: '조건에 맞는 트레이더가 없습니다',
@@ -5254,8 +5254,7 @@ const ko = {
 
   // Exchange Rankings (spec §6.1)
   exchangeRankingsTitle: '거래소 랭킹',
-  exchangeRankingsSubtitle:
-    '어느 거래소의 카피 트레이더가 실제로 수익을 내는가 — 실시간 리더보드 데이터로 계산',
+  exchangeRankingsSubtitle: '어느 소스 보드의 과거 순위 성과가 강한가 — 최신 공개 리더보드로 계산',
   exchangeRankingsColExchange: '거래소',
   exchangeRankingsColTraders: '랭크인 트레이더',
   exchangeRankingsColMedianRoi: '중앙값 ROI',
@@ -6382,7 +6381,7 @@ const ko = {
     '언제든지 계정을 삭제할 수 있으며, 당사의 책임은 법이 허용하는 범위로 제한됩니다.',
   termsSec1Title: '1. 서비스 설명',
   termsSec1Body:
-    'Arena는 암호화폐 트레이더 순위 및 성과 분석 플랫폼입니다. 당사는 25개 이상의 중앙화 및 탈중앙화 거래소에서 공개된 거래 데이터를 집계하여 독자적인 Arena Score 알고리즘으로 트레이더 순위를 산출합니다.',
+    'Arena는 암호화폐 트레이더 순위 및 성과 분석 플랫폼입니다. 현재 CEX, DEX 및 온체인 소스 보드의 공개 데이터를 집계해 Arena Score 알고리즘으로 순위를 산출합니다.',
   termsSec1Warning:
     '중요: Arena는 투자 자문 서비스가 아닙니다. 본 플랫폼에서 제공되는 순위와 데이터는 금융 자문, 거래 추천 또는 거래 권유를 구성하지 않습니다. 투자 결정을 내리기 전에 항상 직접 조사하십시오.',
   termsSec2Title: '2. 면책 조항',
@@ -6466,23 +6465,23 @@ const ko = {
     '본 개인정보 처리방침에 대한 질문이나 우려 사항은 다음으로 메시지를 보내주세요:',
   methodologyTitle: '산정 방법',
   methodologySubtitle:
-    'Arena가 25개 이상 거래소의 암호화폐 트레이더 순위를 매기는 방법 — 투명하고 데이터 기반이며 30분마다 업데이트',
+    'Arena가 운영 중인 소스 보드의 암호화폐 트레이더 순위를 매기는 방법 — 투명하고 데이터 기반이며 2시간마다 재계산',
   methodologyBackRankings: '랭킹으로 돌아가기',
   methodologyKeyPoint1: 'Arena Score(0–100)는 단순 ROI가 아니라 위험 조정 성과를 측정합니다.',
   methodologyKeyPoint2:
-    '25개 이상 거래소의 공개 데이터를 집계하고 30분마다 리더보드를 다시 계산합니다.',
+    '운영 중인 CEX, DEX 및 온체인 소스 보드의 공개 데이터를 집계하고 2시간마다 다시 계산합니다.',
   methodologyKeyPoint3: '장기 일관성이 가장 중요합니다: 90일 70%, 30일 25%, 7일 5% 가중치.',
   methodologyKeyPoint4: 'tanh 정규화, 이상치 검사, 서버 측 계산으로 조작을 방지합니다.',
   methodologySec1Title: '데이터 출처',
   methodologySec1Intro:
-    'Arena는 25개 이상의 중앙화 및 탈중앙화 거래소에서 공개된 거래 데이터를 집계하며, 여기에는 다음이 포함됩니다:',
+    'Arena는 현재 순위에 표시되는 공개 소스 보드 데이터를 집계하며, 여기에는 다음이 포함됩니다:',
   methodologySec1List:
-    'CEX: Binance Futures, Binance Spot, Bybit, OKX, Bitget, MEXC, HTX, Gate.io, CoinEx, BingX, BTCC, Bitfinex, Bitunix, eToro 등\nDEX: Hyperliquid, GMX, dYdX, Vertex, Drift, Aevo, Gains Network, Kwenta 등',
+    'CEX 및 파생상품: Binance, Bybit, OKX, Bitget, MEXC, HTX, Gate, BingX, BTCC, BitMart, Bitunix, Blofin, Phemex, Toobit, XT 등\n온체인: Hyperliquid, GMX, Binance Wallet, OKX Wallet',
   methodologySec1Outro:
     '데이터는 공식 거래소 API를 통해 수집하며, 지역 제한이나 WAF 보호가 있는 거래소의 경우 여러 지역(싱가포르, 일본)에 배치된 VPS 기반 스크레이퍼를 통해 수집합니다.',
   methodologySec2Title: '업데이트 빈도',
   methodologySec2List:
-    'CEX 데이터: 3-6시간마다 갱신\nDEX 데이터: 4시간마다 갱신\n리더보드: 30분마다 재계산\n신선도 임계값: 48시간(CEX) 또는 72시간(DEX)을 초과한 데이터는 종합 점수 계산에서 제외됩니다',
+    'CEX 데이터: 보통 3-6시간마다 갱신\nDEX 데이터: 보통 4시간마다 갱신\n리더보드: 2시간마다 재계산\n신선도 임계값: 48시간(CEX) 또는 72시간(DEX)을 초과한 데이터는 종합 점수 계산에서 제외됩니다',
   methodologySec3Title: 'Arena Score 알고리즘 (0-100)',
   methodologySec3Intro:
     'Arena Score는 거래소 전반의 위험 조정 성과를 측정하도록 설계된 종합 평가입니다. 두 가지 주요 구성 요소로 이루어집니다:',
@@ -6518,13 +6517,13 @@ const ko = {
     'A: Arena Score는 장기 일관성을 중시합니다(90일 = 70%). 단기 수익이 뛰어나지만 기록이 일관되지 않은 트레이더는 꾸준한 트레이더보다 점수가 낮을 수 있습니다. 데이터 완전성도 점수에 영향을 미치며, 지표 누락은 신뢰도 페널티로 이어집니다.',
   methodologyFaqQ2: 'Q: 순위는 얼마나 자주 업데이트되나요?',
   methodologyFaqA2:
-    'A: 원시 데이터는 3-6시간마다 가져옵니다. 리더보드는 최신 데이터를 사용해 30분마다 재계산됩니다.',
+    'A: 원시 데이터는 보통 3-6시간마다 가져옵니다. 리더보드는 최신 데이터를 사용해 2시간마다 재계산됩니다.',
   methodologyFaqQ3: 'Q: 서로 다른 거래소의 트레이더를 비교할 수 있나요?',
   methodologyFaqA3:
     'A: 예, 그것이 Arena Score의 주요 목적입니다. 다만 가장 정확한 비교를 위해서는 플랫폼마다 데이터 보고 기준이 다르므로 거래소별 순위도 함께 확인하시길 권장합니다.',
   methodologyFaqQ4: 'Q: 거래소에서 팔로우하는 트레이더가 Arena에 표시되지 않는 이유는 무엇인가요?',
   methodologyFaqA4:
-    'A: 당사는 각 거래소에서 상위 트레이더를 가져옵니다. 트레이더가 거래소의 공개 리더보드에 없거나 데이터가 부족하면 표시되지 않을 수 있습니다. 현재 모든 플랫폼에서 8,000명 이상의 트레이더를 추적하고 있습니다.',
+    'A: 공개 소스 보드에서 상위 트레이더를 가져옵니다. 트레이더가 공개 순위에 없거나 데이터가 부족하면 표시되지 않을 수 있습니다.',
   methodologyFaqQ5: 'Q: Arena Score는 ROI와 같은가요?',
   methodologyFaqA5:
     'A: 아니요. Arena Score는 ROI, 절대 PnL, 데이터 품질 요소를 결합한 종합 지표입니다. ROI는 보통이지만 꾸준히 큰 이익을 내는 트레이더가 ROI는 매우 높지만 PnL이 작은 트레이더보다 높은 점수를 받을 수 있습니다.',

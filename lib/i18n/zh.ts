@@ -815,7 +815,7 @@ const zh = {
   welcomeJoin: '欢迎加入',
   welcomeDesc: '这里汇聚了各大交易所的顶级交易员',
   stepViewRanking: '查看交易员排名',
-  stepViewRankingDesc: '聚合 22 大交易所 26+ 数据源实时 ROI 数据',
+  stepViewRankingDesc: '汇总当前 CEX、DEX 与链上来源板的排名数据',
   stepFollowTraders: '关注优秀交易员',
   stepFollowTradersDesc: '追踪他们的动态和策略分享',
   stepJoinCommunity: '参与社区讨论',
@@ -2155,7 +2155,7 @@ const zh = {
   helpGettingStartedTitle: '快速上手',
   helpWhatIsArenaQ: 'Arena 是什么？',
   helpWhatIsArenaA:
-    'Arena 追踪 30+ 交易所的顶级交易员，按 ROI、Arena Score 和 PnL 排名，帮你发现最佳交易员。',
+    'Arena 是加密交易员排行榜与社区，覆盖当前有数据的 CEX、DEX 与链上来源板中的数千条公开交易员记录。',
   helpHowToStartQ: '如何开始使用？',
   helpHowToStartA:
     '使用 Google、邮箱或加密钱包注册。注册后可以选择感兴趣的领域并关注顶级交易员。然后访问排行榜页面探索更多交易员。',
@@ -2928,7 +2928,7 @@ const zh = {
   favorites: '收藏',
 
   // 通用 UI 文本（减少硬编码）
-  viewLiveLeaderboard: '查看实时排行榜',
+  viewLiveLeaderboard: '查看当前排行榜',
   popularTraders: '热门交易员',
   followingTab: '关注',
   recommendedTab: '推荐',
@@ -3026,16 +3026,16 @@ const zh = {
   aboutSubtitle: '开放的加密货币交易员排名平台',
   aboutIntroTitle: '什么是 Arena？',
   aboutIntroP1:
-    'Arena 是一个数据驱动的加密货币交易员排名平台。目前从 18+ 个活跃的中心化、去中心化及链上交易所数据源中排名 9,600+ 名交易员。',
+    'Arena 是一个数据驱动的加密交易员排名平台，覆盖当前有数据的 CEX、DEX 与链上来源板中的数千条公开交易员记录。',
   aboutIntroP2:
     '无论你是在寻找值得关注的优秀交易员、比较不同交易所的策略表现，还是展示自己的交易记录，Arena 都能提供所需的工具和数据。',
   aboutFeaturesTitle: '核心功能',
-  aboutFeature1Title: '实时排行榜',
+  aboutFeature1Title: '两小时重算榜单',
   aboutFeature1Desc:
-    '持续更新的排名数据，涵盖已验证的盈亏、ROI、胜率和风险指标，支持多个时间维度。',
-  aboutFeature2Title: '多交易所覆盖',
+    '每两小时使用最新可用的盈亏、ROI、胜率和风险指标重算；不同来源可提供的字段并不完全相同。',
+  aboutFeature2Title: '当前来源板覆盖',
   aboutFeature2Desc:
-    '聚合来自 Binance、Bybit、OKX、Bitget、Gate.io、MEXC、Hyperliquid、dYdX、Drift 等 20+ 家交易所的数据。',
+    '当前榜单包括 Binance、Bybit、OKX、Bitget、Gate、MEXC、Hyperliquid、GMX 等 CEX、DEX、现货、衍生品与链上来源。',
   aboutFeature3Title: '交易员对比',
   aboutFeature3Desc: '最多 4 位交易员并排对比，提供详细的指标分解和绩效图表。',
   aboutFeature4Title: '组合追踪',
@@ -3046,11 +3046,11 @@ const zh = {
   aboutFeature6Desc: '56K+ 精选交易策略、风险管理和市场分析教育资源。',
   aboutDataTitle: '数据来源',
   aboutDataDesc:
-    '我们对接了 27+ 家中心化和去中心化交易所，提供加密货币交易领域的全面覆盖。所有排名数据均来源于已验证的交易记录，不接受自报数据。',
+    '我们只展示当前通过新鲜度与质量门、并正在提供数据的公开来源板；来源状态变化时，覆盖范围也会变化。',
   aboutDataCEX:
-    'CEX：Binance、Bybit、OKX、Bitget、Gate.io、MEXC、BingX、HTX、CoinEx、Phemex、BTCC、Bitunix、Bitfinex、eToro 等',
-  aboutDataDEX: 'DEX：Hyperliquid、dYdX、GMX、Jupiter、Drift、Aevo、Kwenta、Gains Network',
-  aboutDataOnChain: '链上数据通过区块链浏览器和 API 集成验证',
+    'CEX 与衍生品：Binance、Bybit、OKX、Bitget、Gate、MEXC、BingX、HTX、BTCC、BitMart、Bitunix、Blofin、Phemex、Toobit、XT 等',
+  aboutDataDEX: '链上：Hyperliquid、GMX、Binance Wallet、OKX Wallet',
+  aboutDataOnChain: '来源数据取自公开 API、公开榜单与链上索引器',
   aboutVisionTitle: '我们的愿景',
   aboutVisionDesc:
     '我们相信透明带来信任。在一个充斥着虚假截图和伪造盈亏的行业中，Arena 提供一个中立的、数据支撑的竞技场，让实力说话。我们的目标是成为全球加密交易员评估的标准。',
@@ -5120,8 +5120,8 @@ const zh = {
   postListView: '列表',
   snapshotExpiredDesc: '此快照已过期，无法查看。',
   snapshotCopied: '已复制',
-  snapshotWantLive: '想查看实时排行榜？',
-  snapshotViewLive: '查看实时排行榜',
+  snapshotWantLive: '想查看当前排行榜？',
+  snapshotViewLive: '查看当前排行榜',
 
   // --- Core path i18n: ranking, trader, auth, score, filter ---
   rankingNoMatchCriteria: '没有符合条件的交易员',
@@ -5287,7 +5287,7 @@ const zh = {
 
   // Exchange Rankings (spec §6.1)
   exchangeRankingsTitle: '交易所排行',
-  exchangeRankingsSubtitle: '哪家交易所的跟单交易员真的赚钱——基于实时榜单数据计算',
+  exchangeRankingsSubtitle: '哪个来源板的历史排名表现更强——基于最新已发布排行榜计算',
   exchangeRankingsColExchange: '交易所',
   exchangeRankingsColTraders: '上榜交易员',
   exchangeRankingsColMedianRoi: '中位 ROI',
@@ -6347,7 +6347,7 @@ const zh = {
   termsKeyPoint4: '您可随时删除账户，我们的责任在法律允许的范围内受到限制。',
   termsSec1Title: '1. 服务说明',
   termsSec1Body:
-    'Arena 是一个加密货币交易者排名和绩效分析平台。我们从 25 多个中心化和去中心化交易所聚合公开的交易数据，使用我们专有的 Arena Score 算法计算交易者排名。',
+    'Arena 是一个加密交易员排名和绩效分析平台。我们聚合当前 CEX、DEX 与链上来源板的公开数据，并使用 Arena Score 算法计算排名。',
   termsSec1Warning:
     '重要提示：Arena 不是投资咨询服务。本平台上提供的排名和数据不构成财务建议、交易推荐或交易招揽。在做出任何投资决定之前，请始终进行自己的研究。',
   termsSec2Title: '2. 免责声明',
@@ -6427,22 +6427,22 @@ const zh = {
   privacySec10Title: '10. 联系方式',
   privacySec10Body: '如对本隐私政策有任何疑问或顾虑，请私信联系：',
   methodologyTitle: '方法论',
-  methodologySubtitle:
-    'Arena 如何对 25+ 交易所的加密交易者进行排名 —— 透明、数据驱动、每 30 分钟更新',
+  methodologySubtitle: 'Arena 如何对当前来源板中的加密交易员排名——透明、数据驱动、每 2 小时重算',
   methodologyBackRankings: '返回排行榜',
   methodologyKeyPoint1: 'Arena Score（0–100）衡量的是风险调整后的绩效，而非单纯的 ROI。',
-  methodologyKeyPoint2: '我们聚合 25+ 交易所的公开数据，并每 30 分钟重新计算一次排行榜。',
+  methodologyKeyPoint2:
+    '我们聚合当前有数据的 CEX、DEX 与链上来源板公开数据，并每 2 小时重新计算排行榜。',
   methodologyKeyPoint3: '长期一致性占主导：90 天权重 70%、30 天 25%、7 天 5%。',
   methodologyKeyPoint4: 'tanh 归一化、异常检测和服务端计算共同防止作弊。',
   methodologySec1Title: '数据来源',
-  methodologySec1Intro: 'Arena 从 25 多个中心化和去中心化交易所聚合公开的交易数据，包括：',
+  methodologySec1Intro: 'Arena 聚合当前进入排行榜的公开来源板数据，包括：',
   methodologySec1List:
-    'CEX：Binance Futures、Binance Spot、Bybit、OKX、Bitget、MEXC、HTX、Gate.io、CoinEx、BingX、BTCC、Bitfinex、Bitunix、eToro 等\nDEX：Hyperliquid、GMX、dYdX、Vertex、Drift、Aevo、Gains Network、Kwenta 等',
+    'CEX 与衍生品：Binance、Bybit、OKX、Bitget、MEXC、HTX、Gate、BingX、BTCC、BitMart、Bitunix、Blofin、Phemex、Toobit、XT 等\n链上：Hyperliquid、GMX、Binance Wallet、OKX Wallet',
   methodologySec1Outro:
     '数据通过官方交易所 API 收集，对于有地理限制或 WAF 保护的交易所，则通过部署在多个地区（新加坡、日本）的 VPS 爬虫收集。',
   methodologySec2Title: '更新频率',
   methodologySec2List:
-    'CEX 数据：每 3-6 小时刷新\nDEX 数据：每 4 小时刷新\n排行榜：每 30 分钟重新计算\n过期阈值：超过 48 小时（CEX）或 72 小时（DEX）的数据将被排除在综合评分计算之外',
+    'CEX 数据：通常每 3-6 小时刷新\nDEX 数据：通常每 4 小时刷新\n排行榜：每 2 小时重新计算\n过期阈值：超过 48 小时（CEX）或 72 小时（DEX）的数据将被排除在综合评分计算之外',
   methodologySec3Title: 'Arena Score 算法 (0-100)',
   methodologySec3Intro:
     'Arena Score 是一个综合评分，旨在衡量跨交易所的风险调整绩效。它由两个主要部分组成：',
@@ -6475,13 +6475,14 @@ const zh = {
   methodologyFaqA1:
     '答：Arena Score 侧重长期一致性（90D = 70%）。短期表现出色但历史不稳定的交易者可能得分低于稳定表现的交易者。数据完整性也会影响评分 —— 缺少指标会导致置信度惩罚。',
   methodologyFaqQ2: '问：排名多久更新一次？',
-  methodologyFaqA2: '答：原始数据每 3-6 小时获取一次。排行榜每 30 分钟使用最新可用数据重新计算。',
+  methodologyFaqA2:
+    '答：原始数据通常每 3-6 小时获取一次。排行榜每 2 小时使用最新可用数据重新计算。',
   methodologyFaqQ3: '问：可以比较不同交易所的交易者吗？',
   methodologyFaqA3:
     '答：可以，这正是 Arena Score 的主要目的。但为了最准确的比较，我们建议同时查看各交易所的排名，因为数据报告标准因平台而异。',
   methodologyFaqQ4: '问：为什么我在某交易所关注的交易者没有出现在 Arena 上？',
   methodologyFaqA4:
-    '答：我们从每个交易所获取排名靠前的交易者。如果交易者不在交易所的公开排行榜中或数据不足，可能不会出现。我们目前跟踪所有平台的 8,000 多名交易者。',
+    '答：我们从公开来源板获取排名靠前的交易员。如果交易员不在来源的公开排行榜中或数据不足，可能不会出现。',
   methodologyFaqQ5: '问：Arena Score 和 ROI 一样吗？',
   methodologyFaqA5:
     '答：不一样。Arena Score 是结合 ROI、绝对 PnL 和数据质量因素的综合指标。ROI 适中但利润大且稳定的交易者可能得分高于 ROI 极高但 PnL 很小的交易者。',
