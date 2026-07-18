@@ -12,7 +12,6 @@ name: OpenClaw Sentinels
 on:
   schedule:
     - cron: '10,40 * * * *' # pipeline-health（错峰 health-monitor 的 15,45 / OpenClaw 的 0,30）
-    - cron: '5 */6 * * *' # scraper-health 每 6h
     - cron: '0 9 * * 1' # weekly-metrics 周一 09:00 UTC
     - cron: '30 6 * * *' # schema-canary 每日 06:30 UTC（错峰 Mac Mini 本地 07:30）
     - cron: '0 8 * * *' # daily-pipeline-report 每日 08:00 UTC
@@ -66,27 +65,6 @@ jobs:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
         run: node scripts/openclaw/db-size-sentinel.mjs --daily-guard
-
-  scraper-health:
-    if: github.event.schedule == '5 */6 * * *' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
-    timeout-minutes: 8
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v6
-        with:
-          node-version: '22'
-          cache: 'npm'
-      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
-      - name: check-scraper-health
-        continue-on-error: true
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-          TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_ALERT_CHAT_ID: ${{ secrets.TELEGRAM_ALERT_CHAT_ID }}
-        run: node scripts/openclaw/check-scraper-health.mjs
 
   weekly-metrics:
     if: github.event.schedule == '0 9 * * 1' || github.event_name == 'workflow_dispatch'
