@@ -61,3 +61,21 @@ test('obsolete scraper sentinel cannot return through workflow drift', () => {
   assert.doesNotMatch(workflow, /scraper-health|check-scraper-health/)
   assert.equal(existsSync(join(repoRoot, 'scripts/openclaw/check-scraper-health.mjs')), false)
 })
+
+test('OpenClaw workflow installs deterministically and propagates hard failures', () => {
+  const workflow = readFileSync(join(repoRoot, '.github/workflows/openclaw-sentinels.yml'), 'utf8')
+
+  assert.doesNotMatch(workflow, /npm ci[^\n]*\|\|[^\n]*npm install/)
+  assert.equal((workflow.match(/run: npm ci --ignore-scripts/g) || []).length, 9)
+
+  // Only the three independent checks in the shared pipeline-health job may
+  // continue so all of them get evidence. Their outcomes are aggregated into
+  // a final red job instead of being silently converted to green.
+  assert.equal((workflow.match(/continue-on-error:\s*true/g) || []).length, 3)
+  for (const id of ['pipeline-health-monitor', 'trust-scorecard-snapshot', 'db-size-sentinel']) {
+    assert.match(workflow, new RegExp(`id: ${id}`))
+    assert.match(workflow, new RegExp(`steps\\.${id}\\.outcome`))
+  }
+  assert.match(workflow, /name: Propagate sentinel failures/)
+  assert.match(workflow, /echo "::error::Failed sentinels:/)
+})
