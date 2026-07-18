@@ -7,6 +7,8 @@ const mockLoadApplications = jest.fn().mockResolvedValue(undefined)
 const mockLoadEditApplications = jest.fn().mockResolvedValue(undefined)
 const mockUseFreshness = jest.fn()
 const mockScraperStatusTab = jest.fn()
+const mockRouterReplace = jest.fn()
+let mockQuery = ''
 
 const translations: Record<string, string> = {
   adminDashboard: 'Admin Dashboard',
@@ -24,7 +26,9 @@ const translations: Record<string, string> = {
 }
 
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn() }),
+  usePathname: () => '/admin',
+  useRouter: () => ({ push: jest.fn(), replace: mockRouterReplace }),
+  useSearchParams: () => new URLSearchParams(mockQuery),
 }))
 
 jest.mock('@/app/components/Providers/LanguageProvider', () => ({
@@ -186,6 +190,7 @@ function report(summary: FreshnessReport['summary'], ok: boolean): FreshnessRepo
 describe('AdminPage freshness integration', () => {
   beforeEach(() => {
     jest.clearAllMocks()
+    mockQuery = ''
   })
 
   it('announces unknown authority and passes the one shared hook state into the tab', async () => {
@@ -208,6 +213,9 @@ describe('AdminPage freshness integration', () => {
 
     fireEvent.click(scraperTab)
     expect(screen.getByTestId('scraper-status-tab')).toBeInTheDocument()
+    expect(mockRouterReplace).toHaveBeenCalledWith('/admin?tab=scraperStatus', {
+      scroll: false,
+    })
     expect(mockScraperStatusTab).toHaveBeenLastCalledWith(
       expect.objectContaining({
         freshnessReport,
@@ -233,5 +241,62 @@ describe('AdminPage freshness integration', () => {
         name: 'Scraper Status. 1 sources or checks need attention',
       })
     ).toBeInTheDocument()
+  })
+
+  it('opens the canonical freshness tab from a legacy deep link and preserves other query state', () => {
+    mockQuery = 'tab=scraperStatus&focus=authority'
+    mockUseFreshness.mockReturnValue({
+      freshnessReport: report({ total: 1, fresh: 1, stale: 0, critical: 0, unknown: 0 }, true),
+      loading: false,
+      error: null,
+      loadFreshnessReport: mockLoadFreshnessReport,
+    })
+
+    render(<AdminPage />)
+
+    expect(screen.getByTestId('scraper-status-tab')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Scraper Status' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dashboard' }))
+    expect(mockRouterReplace).toHaveBeenCalledWith('/admin?focus=authority', {
+      scroll: false,
+    })
+  })
+
+  it('tracks back-forward query changes and rejects unknown tab values', async () => {
+    mockQuery = 'tab=users'
+    mockUseFreshness.mockReturnValue({
+      freshnessReport: null,
+      loading: false,
+      error: null,
+      loadFreshnessReport: mockLoadFreshnessReport,
+    })
+    const page = render(<AdminPage />)
+
+    expect(screen.getByRole('button', { name: 'User Management' })).toHaveAttribute(
+      'aria-selected',
+      'true'
+    )
+
+    mockQuery = 'tab=scraperStatus'
+    page.rerender(<AdminPage />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Scraper Status' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+    )
+
+    mockQuery = 'tab=removedLegacyTab'
+    page.rerender(<AdminPage />)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Dashboard' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+    )
   })
 })
