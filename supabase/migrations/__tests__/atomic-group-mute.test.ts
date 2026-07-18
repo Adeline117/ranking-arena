@@ -216,8 +216,8 @@ describe('atomic group mute boundary', () => {
   })
 
   it('cuts the route over to one RPC without any direct-message or visible UI mutation', () => {
-    expect(route).toContain('await admin.rpc(')
-    expect(route).toContain("'moderate_group_mute_atomic' as never")
+    expect(route).toContain("await admin.rpc('moderate_group_mute_atomic', {")
+    expect(route).not.toContain("'moderate_group_mute_atomic' as never")
     expect(route).toContain("req.headers.get('Idempotency-Key')")
     expect(route).toContain('p_operation_id: input.operationId')
     expect(route).toContain('acknowledgement.operationId !== input.operationId')
