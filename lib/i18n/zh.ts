@@ -4659,6 +4659,7 @@ const zh = {
   portfolioSyncExchangeError: '交易所拒绝了请求，请检查 API 密钥是否有效且已开启读取权限。',
   portfolioSyncSuccess: '同步成功',
   portfolioNetworkError: '网络错误',
+  portfolioLoadFailed: '无法刷新投资组合。已保存的数据不会被空结果覆盖。',
   portfolioRemoveExchange: '移除交易所',
   portfolioRemoveConfirm: '确定要移除此交易所连接吗？相关仓位数据也会被清除。',
   portfolioRemoveFailed: '移除失败',

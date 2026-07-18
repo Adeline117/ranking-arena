@@ -4321,6 +4321,8 @@ const ja = {
     '取引所がリクエストを拒否しました。API キーが有効で読み取り権限があるか確認してください。',
   portfolioSyncSuccess: '同期に成功しました',
   portfolioNetworkError: 'ネットワークエラー',
+  portfolioLoadFailed:
+    'ポートフォリオを更新できませんでした。保存済みのデータは空の結果で置き換えられていません。',
   portfolioRemoveExchange: '取引所を削除',
   portfolioRemoveConfirm:
     'この取引所接続を削除してもよろしいですか？関連するポジションデータもクリアされます。',

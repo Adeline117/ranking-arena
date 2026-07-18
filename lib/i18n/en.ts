@@ -4769,6 +4769,8 @@ const en = {
     'The exchange rejected the request. Check that your API key is valid and read-enabled.',
   portfolioSyncSuccess: 'Synced successfully',
   portfolioNetworkError: 'Network error',
+  portfolioLoadFailed:
+    "We couldn't refresh your portfolio. Saved data was not replaced with an empty result.",
   portfolioRemoveExchange: 'Remove Exchange',
   portfolioRemoveConfirm:
     'Are you sure you want to remove this exchange connection? Related position data will also be cleared.',
