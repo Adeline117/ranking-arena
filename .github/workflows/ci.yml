@@ -15,13 +15,65 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-  NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
-  SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-  SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
   NODE_ENV: test
 
 jobs:
+  # PR 只证明本地 AST/fixture/脚本契约，完全不注入生产 secret，也不联网。
+  # 生产漂移是下面独立的 push-main job；PR 中尚未部署的 migration 不应拿
+  # 当前生产 schema 做 diff。
+  types-contract:
+    name: Types generation contract (offline, no secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - run: npm run gen:types:contract
+
+  # 真实生产 diff 只允许在已合入 main 的可信代码上运行。secret 在各 step
+  # 显式最小化注入；attestor 缺 DB/URL/key 任一项都会 fail-closed。
+  types-live-drift:
+    name: Types live drift check (push main only)
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+          cache: 'npm'
+      - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      - name: Regenerate from attested production and diff
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          # Keep one credential in this process. New Supabase secret keys are
+          # preferred; the legacy service-role value is only a compatibility
+          # fallback and is exposed under the same env name.
+          SUPABASE_SECRET_KEY: ${{ secrets.SUPABASE_SECRET_KEY || secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run gen:types:check
+
+      - name: Schema contract check (代码 DB 依赖 vs 生产 schema)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run qa:schema
+
+      - name: Column-drift check (写/读列 vs 生产 schema)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          STRICT_READS: '1'
+        run: npm run qa:insert-drift
+
+      - name: Read-column-drift check (.select 读列 vs 生产 schema)
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: npm run qa:read-drift
+
   # ─────────────────────────────────────────────
   # Stage 1: Fast pre-flight checks
   # ─────────────────────────────────────────────
@@ -114,41 +166,16 @@ jobs:
           node-version: '22'
           cache: 'npm'
       - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
+      # The repository ruleset already requires this job. Keep the offline
+      # contract here as well as in its named job so PRs cannot merge while an
+      # older four-check ruleset is still being updated.
+      - run: npm run gen:types:contract
       - run: npm run lint
       - run: npx tsc --noEmit
       - name: VPS process topology safety
         run: npm run qa:vps-topology
       - name: UI sweep unit contracts
         run: npm run qa:sweep-unit
-
-      # Schema 契约真阻断门(P1)。放在 lint-typecheck(而非 data-consistency)是
-      # 因为它只需 node + 生产访问,不依赖 build/unit-tests —— 这样它独立运行,
-      # 不被预先的 Build/测试腐烂卡住(2026-06 自查:CI 早已多处全红)。
-      # 代码引用生产不存在的表/RPC = 漂移 = CI 红。env 由顶层提供,缺 env fail-loud。
-      - name: Schema contract check (代码 DB 依赖 vs 生产 schema)
-        run: npm run qa:schema
-
-      # 列级写+读漂移门(2026-07)。qa:schema 只验表/RPC 存在，本检查验
-      # .insert/.update/.upsert 写的列 + .select 读的列在生产真实存在——代码写/读
-      # 不存在的列 = 每次 PGRST 500/400 静默崩(groups.slug、整个 Stripe webhook 同步
-      # 都是这么崩的，被 PRO_FREE_PROMO 掩盖)。需 DATABASE_URL secret;未设则跳过(不阻断)。
-      - name: Column-drift check (写/读列 vs 生产 schema)
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-          STRICT_READS: '1' # 读漂移已清零(19/19)——升级为硬门,锁死不回退
-        run: npm run qa:insert-drift
-
-      # 读路径列漂移硬门(2026-07,W3)。insert-drift 只把 app/api+lib/data 的
-      # .select 读漂移当 advisory；本检查扫全部 app/+lib/ 的 .from().select(),
-      # 用 PostgREST 探针(REST=前端真实查询面,含 view/别名)核实每个选取的列在
-      # 生产存在。选错列名 = 400/42703 被 safeQuery 静默吞成空数据、用户无报错
-      # (data-source-priority roi_pct、getUserProfile display_name 等即此类)。
-      # 需 NEXT_PUBLIC_SUPABASE_URL + SUPABASE_SERVICE_ROLE_KEY;未设则跳过(不阻断)。
-      - name: Read-column-drift check (.select 读列 vs 生产 schema)
-        env:
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
-        run: npm run qa:read-drift
 
       # API 鉴权覆盖兜底(默认拒绝)：无根级 middleware，313+ route 靠自觉调 auth
       # wrapper——本检查强制每个 route 要么有 auth 原语要么在显式公开白名单，
@@ -162,14 +189,6 @@ jobs:
       # 纯本地 fs 扫描 <1s，无外部依赖。
       - name: Supabase typed-client bypass ratchet
         run: npm run qa:cast-ratchet
-
-      # 类型漂移门(header 一直声称有此 job 却从未接进 CI —— 2026-07 补齐)。
-      # 从生产重生成 database.types.ts + diff 已提交版本，有 diff = schema 变了没同步
-      # 类型 → tsc 对着陈旧类型校验会放过漂移。需 SUPABASE_ACCESS_TOKEN secret;未设则跳过。
-      - name: Types drift check (生产 schema vs 已提交类型)
-        env:
-          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-        run: npm run gen:types:check
 
       - name: Migration lint — block dangerous DDL
         run: |
@@ -240,15 +259,14 @@ jobs:
           NODE_ENV: production
           # build 时 next 收集页面数据会评估路由模块，@/lib/env 对 CRON_SECRET /
           # SUPABASE_* 做 fail-fast 校验（NODE_ENV=production 时硬抛）。Vercel build
-          # 这些 env 全有，CI 之前没给 → "Failed to collect page data" 卡 build。
-          # 优先用 repo secrets（匹配 Vercel，潜在 build 时 fetch 不挂），缺则 dummy 兜底
-          # （build 是静态的，纯占位让模块校验通过即可）。
-          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'ci-build-anon-placeholder' }}
-          SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'https://placeholder.supabase.co' }}
-          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY || 'ci-build-service-placeholder' }}
+          # 这些 env 全有，CI 也只需通过静态模块校验。PR 可修改 build 脚本，
+          # 因此这里永远只给 dummy，绝不把生产 Supabase/cron secret 注入 PR。
+          NEXT_PUBLIC_SUPABASE_URL: https://placeholder.supabase.co
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: ci-build-anon-placeholder
+          SUPABASE_URL: https://placeholder.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ci-build-service-placeholder
           # CriticalEnvSchema 要求 CRON_SECRET ≥32 字符，dummy 兜底须够长。
-          CRON_SECRET: ${{ secrets.CRON_SECRET || 'ci-build-placeholder-cron-secret-0000000000' }}
+          CRON_SECRET: ci-build-placeholder-cron-secret-0000000000
 
       - name: Bundle size check
         run: |
@@ -275,18 +293,20 @@ jobs:
           include-hidden-files: true
 
   # ─────────────────────────────────────────────
-  # Stage 4: E2E Tests (needs build)
+  # Stage 4: Public production E2E canary (push main only)
   # ─────────────────────────────────────────────
   e2e:
-    name: E2E Tests
+    name: Production E2E Canary (read-only)
     runs-on: ubuntu-latest
-    needs: build
-    # 关键路径只跑 desktop 冒烟（smoke-critical-path + smoke = 7 用例），~3-5min 就
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # 关键路径只跑 desktop smoke-critical-path（当前 5 用例），~3-5min 就
     # 完成。此前跑全量 46 spec × 4 端设备 × workers=1 × retries=2 → 永远跑不完、必到
     # 30min job 超时被取消：既不给真实 green/red 信号，又让 CI「完成」晚 30min → 每次
     # 安静 main 上的部署被 deploy-gate 白等半小时。全量矩阵（含 mobile/tablet）由
-    # e2e-nightly.yml（每日 03:00 UTC）兜底。E2E 仍非门禁（门禁只看
-    # pre-checks/lint-typecheck/unit/build），但现在能快速完成并给出可用信号。
+    # e2e-nightly.yml（每日 03:00 UTC）兜底。这里直接打公开生产站，不读取 secret、
+    # 不下载 placeholder build artifact、不启动本地 server。E2E 仍非部署门禁
+    # （门禁看 types-contract/types-live-drift 与四个核心作业），只提供 live
+    # canary 信号。
     timeout-minutes: 12
     # E2E 只保留"最新 commit"一份在跑（成本控制）；被取消不影响部署门禁
     concurrency:
@@ -300,11 +320,6 @@ jobs:
           cache: 'npm'
       - run: npm ci --ignore-scripts || npm install --legacy-peer-deps
 
-      - uses: actions/download-artifact@v6
-        with:
-          name: nextjs-build
-          path: .next
-
       # Desktop smoke only → chromium is enough. Nightly installs webkit for the
       # full mobile/tablet matrix.
       - run: npx playwright install --with-deps chromium
@@ -315,6 +330,7 @@ jobs:
       - run: npm run test:e2e:smoke
         env:
           CI: true
+          PLAYWRIGHT_BASE_URL: https://www.arenafi.org
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v6
@@ -345,6 +361,9 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       NEXT_PUBLIC_SITE_URL: https://www.arenafi.org
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v6
