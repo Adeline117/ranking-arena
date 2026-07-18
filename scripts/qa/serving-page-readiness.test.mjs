@@ -11,11 +11,11 @@ test('uses the visible ranking flow instead of background network silence for ho
   })
 })
 
-test('preserves the existing full-network profile contract', () => {
+test('uses visible core identity instead of optional provider idleness for profiles', () => {
   assert.deepEqual(servingPageReadiness('active:gmx'), {
-    waitUntil: 'networkidle',
-    readySelector: null,
-    readyTimeoutMs: 0,
-    observeMs: 3_000,
+    waitUntil: 'domcontentloaded',
+    readySelector: 'main#main-content h1:visible',
+    readyTimeoutMs: 15_000,
+    observeMs: 5_000,
   })
 })
