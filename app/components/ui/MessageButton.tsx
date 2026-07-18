@@ -51,9 +51,10 @@ export default function MessageButton({
         action: 'message-user',
         target: profileUserTarget(targetUserId),
         fallbackPath: loginReturnPath,
+        initiatingUserId: currentUserId,
       })
     )
-  }, [loginReturnPath, router, targetUserId])
+  }, [currentUserId, loginReturnPath, router, targetUserId])
 
   const { mutate, isLoading } = useApiMutation<StartMessageResponse, void>(
     async () => {
@@ -127,12 +128,13 @@ export default function MessageButton({
   }, [currentUserId, mutate, redirectToLogin, router, showToast, t, targetUserId])
 
   useEffect(() => {
-    if (!currentUserId || currentUserId === targetUserId || isLoading) return
+    if (!currentUserId || isLoading) return
     const action = consumeProfileActionLogin({
       actions: ['message-user'],
       target: profileUserTarget(targetUserId),
+      currentUserId,
     })
-    if (action === 'message-user') {
+    if (action === 'message-user' && currentUserId !== targetUserId) {
       void handleClick()
     }
   }, [currentUserId, handleClick, isLoading, targetUserId])

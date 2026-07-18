@@ -119,152 +119,160 @@ export default function UserFollowButton({
           action,
           target: profileUserTarget(targetUserId),
           fallbackPath: loginReturnPath,
+          initiatingUserId: currentUserId,
         })
       )
     },
-    [loginReturnPath, router, targetUserId]
+    [currentUserId, loginReturnPath, router, targetUserId]
   )
 
-  const handleToggle = useCallback(async () => {
-    if (!currentUserId) {
-      redirectToLogin('follow-user')
-      return
-    }
-
-    if (currentUserId === targetUserId) {
-      showToast(t('cannotFollowSelf'), 'warning')
-      return
-    }
-
-    // Prevent double-click
-    if (pendingRef.current || loading) return
-    pendingRef.current = true
-    setLoading(true)
-
-    // Optimistic update — revert on failure
-    const previousFollowing = following
-    setFollowing(!following)
-
-    // Create AbortController for request cancellation
-    const abortController = new AbortController()
-
-    // Timeout protection: 10 seconds (increased from 5s for slow networks)
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current)
-    }
-    timeoutRef.current = setTimeout(() => {
-      if (pendingRef.current) {
-        abortController.abort()
-        pendingRef.current = false
-        setLoading(false)
-        showToast(t('timeoutRetry'), 'warning')
-      }
-    }, 8000) // Unified 8s timeout (same as TraderFollowButton)
-
-    try {
-      const authHeaders = await getAuthHeadersAsync()
-      const response = await fetch('/api/users/follow', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...authHeaders,
-          ...getCsrfHeaders(),
-        },
-        body: JSON.stringify({
-          followingId: targetUserId,
-          action: following ? 'unfollow' : 'follow',
-        }),
-        signal: abortController.signal,
-      })
-
-      // Clear timeout on response
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
-
-      if (response.status === 401) {
-        setFollowing(previousFollowing)
-        showToast(t('loginExpiredPleaseRelogin'), 'error')
-        redirectToLogin(following ? 'unfollow-user' : 'follow-user')
+  const executeFollowAction = useCallback(
+    async (desiredFollowing: boolean) => {
+      if (!currentUserId) {
+        redirectToLogin('follow-user')
         return
       }
 
-      const result = await response.json()
+      if (currentUserId === targetUserId) {
+        showToast(t('cannotFollowSelf'), 'warning')
+        return
+      }
 
-      if (response.ok && result.success !== false) {
-        setFollowing(result.following)
-        if (result.mutual !== undefined) {
-          setFollowedBy(result.mutual)
+      // Prevent double-click
+      if (pendingRef.current || loading) return
+      pendingRef.current = true
+      setLoading(true)
+
+      // Optimistic update — revert on failure
+      const previousFollowing = following
+      setFollowing(desiredFollowing)
+
+      // Create AbortController for request cancellation
+      const abortController = new AbortController()
+
+      // Timeout protection: 10 seconds (increased from 5s for slow networks)
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+      timeoutRef.current = setTimeout(() => {
+        if (pendingRef.current) {
+          abortController.abort()
+          pendingRef.current = false
+          setLoading(false)
+          showToast(t('timeoutRetry'), 'warning')
         }
-        onFollowChange?.(result.following, result.mutual ?? false)
-        broadcast('FOLLOW_CHANGED', {
-          targetUserId,
-          following: result.following,
-          currentUserId: currentUserId!,
+      }, 8000) // Unified 8s timeout (same as TraderFollowButton)
+
+      try {
+        const authHeaders = await getAuthHeadersAsync()
+        const response = await fetch('/api/users/follow', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authHeaders,
+            ...getCsrfHeaders(),
+          },
+          body: JSON.stringify({
+            followingId: targetUserId,
+            action: desiredFollowing ? 'follow' : 'unfollow',
+          }),
+          signal: abortController.signal,
         })
-        haptic('success')
-        showToast(result.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
-      } else if (result.tableNotFound) {
-        setFollowing(previousFollowing) // rollback
-        showToast(t('followFeatureComingSoon'), 'warning')
-      } else {
-        setFollowing(previousFollowing) // rollback
-        const errorMsg = result.error || t('operationFailedRetry')
-        showToast(errorMsg, 'error')
-      }
-    } catch (error) {
-      setFollowing(previousFollowing) // rollback optimistic update
-      // Clear timeout on error
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current)
-        timeoutRef.current = null
-      }
 
-      // Handle abort errors silently (user already notified via timeout)
-      if (error instanceof Error && error.name === 'AbortError') {
-        return
-      }
+        // Clear timeout on response
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
 
-      // #22: Show retry hint on network error
-      const isNetworkError =
-        error instanceof TypeError && (error as TypeError).message.includes('fetch')
-      showToast(
-        isNetworkError
-          ? `${t('operationFailedRetry')} — ${t('tapToRetry')}`
-          : t('operationFailedRetry'),
-        'error'
-      )
-    } finally {
-      setLoading(false)
-      pendingRef.current = false
-    }
-  }, [
-    currentUserId,
-    targetUserId,
-    following,
-    loading,
-    getAuthHeadersAsync,
-    showToast,
-    t,
-    onFollowChange,
-    redirectToLogin,
-    broadcast,
-  ])
+        if (response.status === 401) {
+          setFollowing(previousFollowing)
+          showToast(t('loginExpiredPleaseRelogin'), 'error')
+          redirectToLogin(desiredFollowing ? 'follow-user' : 'unfollow-user')
+          return
+        }
+
+        const result = await response.json()
+
+        if (response.ok && result.success !== false) {
+          setFollowing(result.following)
+          if (result.mutual !== undefined) {
+            setFollowedBy(result.mutual)
+          }
+          onFollowChange?.(result.following, result.mutual ?? false)
+          broadcast('FOLLOW_CHANGED', {
+            targetUserId,
+            following: result.following,
+            currentUserId: currentUserId!,
+          })
+          haptic('success')
+          showToast(result.following ? t('followSuccess') : t('unfollowSuccess'), 'success')
+        } else if (result.tableNotFound) {
+          setFollowing(previousFollowing) // rollback
+          showToast(t('followFeatureComingSoon'), 'warning')
+        } else {
+          setFollowing(previousFollowing) // rollback
+          const errorMsg = result.error || t('operationFailedRetry')
+          showToast(errorMsg, 'error')
+        }
+      } catch (error) {
+        setFollowing(previousFollowing) // rollback optimistic update
+        // Clear timeout on error
+        if (timeoutRef.current) {
+          clearTimeout(timeoutRef.current)
+          timeoutRef.current = null
+        }
+
+        // Handle abort errors silently (user already notified via timeout)
+        if (error instanceof Error && error.name === 'AbortError') {
+          return
+        }
+
+        // #22: Show retry hint on network error
+        const isNetworkError =
+          error instanceof TypeError && (error as TypeError).message.includes('fetch')
+        showToast(
+          isNetworkError
+            ? `${t('operationFailedRetry')} — ${t('tapToRetry')}`
+            : t('operationFailedRetry'),
+          'error'
+        )
+      } finally {
+        setLoading(false)
+        pendingRef.current = false
+      }
+    },
+    [
+      currentUserId,
+      targetUserId,
+      following,
+      loading,
+      getAuthHeadersAsync,
+      showToast,
+      t,
+      onFollowChange,
+      redirectToLogin,
+      broadcast,
+    ]
+  )
+
+  const handleToggle = useCallback(() => {
+    void executeFollowAction(!following)
+  }, [executeFollowAction, following])
 
   useEffect(() => {
-    if (!currentUserId || currentUserId === targetUserId || initialLoading) return
+    if (!currentUserId || initialLoading) return
     const action = consumeProfileActionLogin({
       actions: ['follow-user', 'unfollow-user'],
       target: profileUserTarget(targetUserId),
+      currentUserId,
     })
     if (!action) return
 
-    const desiredFollowing = action === 'follow-user'
-    if (following !== desiredFollowing) {
-      void handleToggle()
+    if (currentUserId !== targetUserId) {
+      void executeFollowAction(action === 'follow-user')
     }
-  }, [currentUserId, following, handleToggle, initialLoading, targetUserId])
+  }, [currentUserId, executeFollowAction, initialLoading, targetUserId])
 
   const sizeStyles = BUTTON_SIZE_STYLES
 
