@@ -196,7 +196,7 @@ function MarketTableInner<T>({
                       <line x1="3" y1="9" x2="21" y2="9" />
                       <line x1="9" y1="21" x2="9" y2="9" />
                     </svg>
-                    <span style={{ fontSize: 13 }}>{t('noDataAvailable')}</span>
+                    <span style={{ fontSize: 13 }}>{t('noDataGeneric')}</span>
                   </div>
                 </td>
               </tr>
