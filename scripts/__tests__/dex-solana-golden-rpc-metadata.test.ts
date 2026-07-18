@@ -498,7 +498,7 @@ function propertyNames(value: unknown, names = new Set<string>()): Set<string> {
 }
 
 describe('Solana in-memory golden RPC metadata compiler', () => {
-  it('builds a canonical parseable two-provider v2 envelope and zeroes every raw byte', () => {
+  it('builds a canonical parseable metadata-only v3 envelope and zeroes every raw byte', () => {
     const input = compilerInput()
     const bytes = allRawBytes(input)
     const expectedRaw = input.captures.map((capture) =>
@@ -539,7 +539,7 @@ describe('Solana in-memory golden RPC metadata compiler', () => {
     expect(parseDexGoldenRpcEvidence(evidence)).toEqual(evidence)
     expect(evidence.data_contract).toBe(DEX_GOLDEN_RPC_EVIDENCE_CONTRACT)
     expect(dexGoldenRpcEvidenceSha256(evidence)).toBe(
-      '1f676f8480ad4f071ff44d4c160197f74c076e469ac9431a598aa0109373b983'
+      'bdd5a82e8db3c9f7d85e202b205cd1cd3527779e9ea724acc331d1b291fe0d45'
     )
     expect(evidence.captures.map((capture) => capture.endpoint.endpoint_id)).toEqual([
       'publicnode_solana_mainnet',
@@ -562,6 +562,7 @@ describe('Solana in-memory golden RPC metadata compiler', () => {
     expect(names.has('text')).toBe(false)
     expect(names.has('raw_body')).toBe(false)
     expect(names.has('normalized_body')).toBe(false)
+    expect(names.has('blob_locator')).toBe(false)
 
     for (const capture of evidence.captures) {
       const inputIndex = input.captures.findIndex(
@@ -576,12 +577,14 @@ describe('Solana in-memory golden RPC metadata compiler', () => {
           request: {
             sha256: raw[index].requestSha256,
             byte_length: raw[index].requestLength,
-            blob_locator: `sha256:${raw[index].requestSha256}`,
+            persistence_state: 'not_persisted',
+            content_available_for_replay: false,
           },
           response: {
             sha256: raw[index].responseSha256,
             byte_length: raw[index].responseLength,
-            blob_locator: `sha256:${raw[index].responseSha256}`,
+            persistence_state: 'not_persisted',
+            content_available_for_replay: false,
           },
         })
       })
@@ -594,7 +597,8 @@ describe('Solana in-memory golden RPC metadata compiler', () => {
         documents?.verified ?? {}
       )
       for (const document of Object.values(capture.normalized_documents)) {
-        expect(document.blob_locator).toBe(`sha256:${document.sha256}`)
+        expect(document.persistence_state).toBe('not_persisted')
+        expect(document.content_available_for_replay).toBe(false)
       }
       expect(capture.provider_finality_witness).toMatchObject({
         policy: 'solana_verified_transaction_finality_semantics_v2',

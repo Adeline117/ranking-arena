@@ -22,6 +22,7 @@ import { strictCanonicalJson } from './dex-contract-hash'
 import {
   DEX_GOLDEN_RPC_EVIDENCE_CONTRACT,
   DEX_GOLDEN_RPC_EVIDENCE_SCHEMA_VERSION,
+  DEX_GOLDEN_RPC_REQUIRED_BLOCKERS,
   DEX_SOLANA_GOLDEN_RPC_LANES,
   dexGoldenRemoteEndpointIdentity,
   dexGoldenRpcExchangeBindingSha256,
@@ -38,14 +39,6 @@ import {
 } from './dex-golden-transaction-facts'
 
 const ALLOWED_ENDPOINT_IDS = ['publicnode_solana_mainnet', 'solana_official_mainnet'] as const
-const REQUIRED_BLOCKERS = [
-  'decoder_facts_unverified',
-  'normalized_documents_not_replayed',
-  'protocol_invocation_unverified',
-  'provider_independence_not_attested',
-  'raw_and_normalized_bodies_not_persisted',
-  'raw_blob_persistence_not_authorized',
-] as const
 const CREDENTIAL_KEY_NAMES = new Set([
   'apikey',
   'authorization',
@@ -423,7 +416,8 @@ function bodyMetadata(
     sha256: actualSha256,
     byte_length: byteLength,
     media_type: 'application/json' as const,
-    blob_locator: `sha256:${actualSha256}`,
+    persistence_state: 'not_persisted' as const,
+    content_available_for_replay: false as const,
     contains_secrets: false as const,
   }
   return kind === 'request'
@@ -492,7 +486,8 @@ function normalizedDocument(value: unknown) {
     sha256,
     byte_length: bytes.byteLength,
     hash_basis: 'strict_canonical_json_utf8_bytes' as const,
-    blob_locator: `sha256:${sha256}`,
+    persistence_state: 'not_persisted' as const,
+    content_available_for_replay: false as const,
     contains_secrets: false as const,
   }
 }
@@ -677,7 +672,7 @@ function compileInternal(input: DexSolanaGoldenRpcMetadataInput): DexGoldenRpcEv
     stable_transaction_facts_contract: DEX_SOLANA_STABLE_TRANSACTION_FACTS_CONTRACT,
     stable_transaction_facts_sha256: firstFactsHash,
     captures,
-    required_blockers: [...REQUIRED_BLOCKERS],
+    required_blockers: [...DEX_GOLDEN_RPC_REQUIRED_BLOCKERS],
     claims: {
       normalized_documents_replayed: false,
       provider_independence_verified: false,

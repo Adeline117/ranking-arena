@@ -53,7 +53,8 @@ function rawBody(label: string, kind: 'request' | 'response') {
       kind === 'request'
         ? ('utf8_json_rpc_request_body_bytes' as const)
         : ('fetch_content_decoded_http_entity_body_bytes_before_utf8' as const),
-    blob_locator: `sha256:${sha256}`,
+    persistence_state: 'not_persisted' as const,
+    content_available_for_replay: false as const,
     contains_secrets: false as const,
   }
 }
@@ -64,7 +65,8 @@ function normalizedDocument(label: string) {
     sha256,
     byte_length: label.length + 32,
     hash_basis: 'strict_canonical_json_utf8_bytes' as const,
-    blob_locator: `sha256:${sha256}`,
+    persistence_state: 'not_persisted' as const,
+    content_available_for_replay: false as const,
     contains_secrets: false as const,
   }
 }
@@ -265,7 +267,7 @@ describe('DEX protocol/decoder/golden draft binding', () => {
       'pancake-v2-pair-cb079908',
     ])
     expect(dexGoldenProtocolBindingSha256(bsc)).toBe(
-      'baa7dee78f5e7224e57c2b054d5ea3414fd3362513ee8e6da988a9b4e710ab70'
+      '641d8c2aa59070c60320fcaba448c44f3c773f195fc306cffd65219bea29ad5a'
     )
 
     const solanaEvidence = makeEvidence('solana')
@@ -553,14 +555,25 @@ describe('DEX protocol/decoder/golden draft binding', () => {
     expect(() => parseDexGoldenProtocolBindingJson(duplicate)).toThrow('invalid strict JSON')
   })
 
-  it('rejects the superseded binding schema and contract instead of mutating @1 semantics', () => {
+  it('rejects superseded binding schemas and contracts instead of mutating their semantics', () => {
+    expect(DEX_GOLDEN_PROTOCOL_BINDING_SCHEMA_VERSION).toBe(3)
+    expect(DEX_GOLDEN_PROTOCOL_BINDING_CONTRACT).toBe('arena.dex.protocol-decoder-golden-binding@3')
+
     const oldSchema = clone(buildBsc()) as any
     oldSchema.schema_version = 1
     expect(() => parseDexGoldenProtocolBinding(oldSchema)).toThrow()
 
+    const v2Schema = clone(buildBsc()) as any
+    v2Schema.schema_version = 2
+    expect(() => parseDexGoldenProtocolBinding(v2Schema)).toThrow()
+
     const oldContract = clone(buildBsc()) as any
     oldContract.data_contract = 'arena.dex.protocol-decoder-golden-binding@1'
     expect(() => parseDexGoldenProtocolBinding(oldContract)).toThrow()
+
+    const v2Contract = clone(buildBsc()) as any
+    v2Contract.data_contract = 'arena.dex.protocol-decoder-golden-binding@2'
+    expect(() => parseDexGoldenProtocolBinding(v2Contract)).toThrow()
 
     const current = buildBsc()
     expect(current).toMatchObject({
@@ -582,7 +595,7 @@ describe('DEX protocol/decoder/golden draft binding', () => {
 
     const baseline = buildSolana()
     const baselineHash = dexGoldenProtocolBindingSha256(baseline)
-    expect(baselineHash).toBe('c6c856dca4a7caeb3fd7a6e2245749f21d2509b6f1d8b01907493ae20c1bb21f')
+    expect(baselineHash).toBe('642abec4b6cdc6a3a0a3ca6d0e6c655b0f21ca257ce1c00869d100cc5fc21623')
     const reorderedObject = {
       authorization: baseline.authorization,
       claims: baseline.claims,

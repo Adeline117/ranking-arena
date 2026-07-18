@@ -5,6 +5,7 @@ const PLAN_PATH = join(process.cwd(), 'docs', 'DEX_EVENT_FIRST_INDEXING_PLAN_202
 
 describe('DEX indexing plan persistence boundary', () => {
   const plan = readFileSync(PLAN_PATH, 'utf8')
+  const normalizedPlan = plan.replace(/\s+/gu, ' ')
   const candidateContracts = plan.slice(
     plan.indexOf('#### `candidate_selection_index` / `transaction_membership_index`'),
     plan.indexOf('#### `chain_event_observations`')
@@ -21,7 +22,12 @@ describe('DEX indexing plan persistence boundary', () => {
   it('keeps new DEX artifacts metadata-only and fail-closed', () => {
     expect(plan).toContain('新增 DEX event/golden/acquisition 路径')
     expect(plan).toContain('`declared_not_replayed`')
-    expect(plan).toContain('不得进入 population denominator、serving、rank 或')
+    expect(normalizedPlan).toContain('不得进入 population denominator、serving、rank 或')
+    expect(plan).toContain('`golden-rpc-transaction-evidence@3`')
+    expect(plan).toContain('`persistence_state=not_persisted`')
+    expect(plan).toContain('`content_available_for_replay=false`')
+    expect(plan).toContain('content SHA 只是内容完整性承诺，不是对象 locator')
+    expect(plan).toContain('`protocol-decoder-golden-binding` 同步升为 @3 并拒绝旧 @2')
     expect(plan).toContain('metadata-only `acquisition-run-manifest@3`')
     expect(plan).toContain(
       '[x] 固定 metadata-only `acquisition-run-manifest@3` / `acquisition-query-policy@2`'
