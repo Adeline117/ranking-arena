@@ -1,10 +1,12 @@
 'use client'
 
-import { useEffect, useState, Suspense } from 'react'
+import { useCallback, useEffect, useState, Suspense } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase/client'
+import { bootstrapClientAuth } from '@/lib/auth/client-auth-bootstrap'
 import { tokens, alpha } from '@/lib/design-tokens'
 import { Box, Text, Button } from '@/app/components/base'
+import ErrorState from '@/app/components/ui/ErrorState'
 import ExchangeLogo from '@/app/components/ui/ExchangeLogo'
 import { useToast } from '@/app/components/ui/Toast'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
@@ -17,27 +19,35 @@ const EXCHANGES = EXCHANGE_BIND_LIST
 function ExchangeAuthContent() {
   const searchParams = useSearchParams()
   const router = useRouter()
+  const push = router.push
   const { showToast } = useToast()
   const { t } = useLanguage()
   const exchangeParam = searchParams.get('exchange')
   const [userId, setUserId] = useState<string | null>(null)
+  const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const loadAuth = useCallback(async () => {
+    setAuthStatus('loading')
+    const result = await bootstrapClientAuth(supabase.auth)
+
+    if (result.status === 'signed-out') {
+      push('/login?redirect=/exchange/auth')
+      return
+    }
+    if (result.status === 'error') {
+      setAuthStatus('error')
+      return
+    }
+
+    setUserId(result.user.id)
+    setAuthStatus('ready')
+  }, [push])
+
   useEffect(() => {
-    supabase.auth
-      .getUser()
-      .then(({ data }) => {
-        if (!data.user) {
-          router.push('/login?redirect=/exchange/auth')
-          return
-        }
-        setUserId(data.user.id)
-      })
-      .catch(() => {
-        /* Intentionally swallowed: auth check non-critical for exchange auth page */
-      })
-  }, [router])
+    void loadAuth()
+  }, [loadAuth])
 
   const handleOAuth = async (exchange: string) => {
     if (!userId) {
@@ -72,7 +82,28 @@ function ExchangeAuthContent() {
     router.push(`/exchange/auth/api-key?exchange=${exchange}`)
   }
 
-  if (!userId) {
+  if (authStatus === 'error') {
+    return (
+      <Box
+        style={{
+          minHeight: '100vh',
+          background: tokens.colors.bg.primary,
+          color: tokens.colors.text.primary,
+        }}
+      >
+        <Box style={{ maxWidth: 600, margin: '0 auto', padding: tokens.spacing[10] }}>
+          <ErrorState
+            title={t('somethingWentWrong')}
+            description={t('loadFailedRetryShort')}
+            retry={() => void loadAuth()}
+            variant="compact"
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (authStatus === 'loading' || !userId) {
     return (
       <Box
         style={{

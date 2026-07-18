@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, Suspense } from 'react'
+import { useState, useEffect, Suspense, useCallback } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 // MobileBottomNav is rendered by root layout — do not duplicate here
 import LevelBadge from '@/app/components/user/LevelBadge'
@@ -11,10 +11,12 @@ import { supabase } from '@/lib/supabase/client'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
 import { Box, Text, Button } from '@/app/components/base'
 import Breadcrumb from '@/app/components/ui/Breadcrumb'
+import ErrorState from '@/app/components/ui/ErrorState'
 import MembershipContent from './MembershipContent'
 import LevelTab from './components/LevelTab'
 import { avatarSrc } from '@/lib/utils/avatar-proxy'
 import { useTabsA11y } from '@/lib/hooks/useTabsA11y'
+import { bootstrapClientAuth } from '@/lib/auth/client-auth-bootstrap'
 
 type Tab = 'level' | 'membership'
 
@@ -125,6 +127,7 @@ function UserCenterPage() {
   const [activeTab, setActiveTab] = useState<Tab>(initialTab)
   const [levelData, setLevelData] = useState<UserLevelData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [authStatus, setAuthStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [userId, setUserId] = useState<string | null>(null)
   const [userHandle, setUserHandle] = useState<string | null>(null)
   const [userAvatarUrl, setUserAvatarUrl] = useState<string | null>(null)
@@ -144,58 +147,58 @@ function UserCenterPage() {
     router.replace(url.pathname + url.search, { scroll: false })
   }
 
-  useEffect(() => {
-    async function init() {
-      try {
-        // getUser() revalidates over the network and can race AHEAD of the
-        // session being restored from localStorage on a fresh load, returning
-        // null for a genuinely logged-in user → a false "Login Required" with no
-        // recovery. Fall back to the locally-restored session before giving up.
-        const {
-          data: { user },
-        } = await supabase.auth.getUser()
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        const authedUser = user ?? session?.user ?? null
-        if (!authedUser) {
-          setLoading(false)
-          return
-        }
-        setUserId(authedUser.id)
-        setEmail(authedUser.email ?? null)
+  const init = useCallback(async () => {
+    setLoading(true)
+    setAuthStatus('loading')
 
-        // Fetch profile + exp in parallel (reduced from 5 separate queries)
-        const [profileResult, expResult] = await Promise.all([
-          supabase
-            .from('user_profiles')
-            .select('handle, avatar_url')
-            .eq('id', authedUser.id)
-            .maybeSingle(),
-          fetch('/api/user/exp', {
-            headers: session?.access_token
-              ? { Authorization: `Bearer ${session.access_token}` }
-              : undefined,
-          }),
-        ])
-
-        if (profileResult.data) {
-          setUserHandle(profileResult.data.handle)
-          setUserAvatarUrl(profileResult.data.avatar_url || null)
-        }
-
-        if (expResult.ok) {
-          const json = await expResult.json()
-          setLevelData(json.data)
-        }
-      } catch {
-        // ignore
-      } finally {
-        setLoading(false)
-      }
+    const authResult = await bootstrapClientAuth(supabase.auth)
+    if (authResult.status === 'error') {
+      setAuthStatus('error')
+      setLoading(false)
+      return
     }
-    init()
+    if (authResult.status === 'signed-out') {
+      setUserId(null)
+      setAuthStatus('ready')
+      setLoading(false)
+      return
+    }
+
+    const { user, session } = authResult
+    setUserId(user.id)
+    setEmail(user.email ?? null)
+    setAuthStatus('ready')
+
+    try {
+      // Fetch profile + exp in parallel (reduced from 5 separate queries)
+      const [profileResult, expResult] = await Promise.all([
+        supabase.from('user_profiles').select('handle, avatar_url').eq('id', user.id).maybeSingle(),
+        fetch('/api/user/exp', {
+          headers: session?.access_token
+            ? { Authorization: `Bearer ${session.access_token}` }
+            : undefined,
+        }),
+      ])
+
+      if (profileResult.data) {
+        setUserHandle(profileResult.data.handle)
+        setUserAvatarUrl(profileResult.data.avatar_url || null)
+      }
+
+      if (expResult.ok) {
+        const json = await expResult.json()
+        setLevelData(json.data)
+      }
+    } catch {
+      // Profile and level data are optional; render safe defaults.
+    } finally {
+      setLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    void init()
+  }, [init])
 
   const tabs: { key: Tab; label: string }[] = [
     { key: 'level', label: t('userCenterMyLevel') },
@@ -211,7 +214,22 @@ function UserCenterPage() {
     sharedPanelId: 'ucenter-panel',
   })
 
-  if (!loading && !userId) {
+  if (authStatus === 'error') {
+    return (
+      <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
+        <Box style={{ maxWidth: 800, margin: '0 auto', padding: tokens.spacing[6] }}>
+          <ErrorState
+            title={t('somethingWentWrong')}
+            description={t('loadFailedRetryShort')}
+            retry={() => void init()}
+            variant="compact"
+          />
+        </Box>
+      </Box>
+    )
+  }
+
+  if (!loading && authStatus === 'ready' && !userId) {
     return (
       <Box style={{ minHeight: '100vh', background: tokens.colors.bg.primary }}>
         <Box

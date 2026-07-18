@@ -19,7 +19,9 @@ const translations: Record<string, string> = {
   portfolioSync: 'Sync',
   portfolioSyncSuccess: 'Synced successfully',
   portfolioTitle: 'Portfolio',
+  loadFailedRetryShort: 'Failed to load, please retry',
   retry: 'Retry',
+  somethingWentWrong: 'Something went wrong',
 }
 const mockT = (key: string) => translations[key] ?? key
 
@@ -161,6 +163,23 @@ describe('PortfolioPage load state', () => {
 
   afterEach(() => {
     jest.restoreAllMocks()
+  })
+
+  it('shows a retryable auth error without treating the failure as signed out', async () => {
+    mockGetSession.mockRejectedValueOnce(new Error('auth service unavailable'))
+    mockFetch.mockResolvedValue(response({ data: [] }))
+
+    render(<PortfolioPage />)
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load, please retry')
+    expect(mockPush).not.toHaveBeenCalled()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(3))
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(mockGetSession).toHaveBeenCalledTimes(2)
+    expect(mockPush).not.toHaveBeenCalled()
   })
 
   it('shows a persistent retry error instead of a false empty or $0 portfolio', async () => {
