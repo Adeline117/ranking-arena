@@ -1,7 +1,7 @@
 'use client'
 
 import { useRef, useEffect, useState, useCallback } from 'react'
-import { queryClient } from '@/app/components/Providers'
+import { useQueryClient } from '@tanstack/react-query'
 import { STALE_STANDARD } from '@/lib/hooks/cache-presets'
 import { tokens, alpha, alpha as colorAlpha } from '@/lib/design-tokens'
 import { formatROI } from '@/lib/utils/format'
@@ -35,6 +35,7 @@ export default function LinkedAccountTabs({
   onAccountChange,
 }: LinkedAccountTabsProps) {
   const { t } = useLanguage()
+  const queryClient = useQueryClient()
   const scrollRef = useRef<HTMLDivElement>(null)
   const [isMobileDropdown, setIsMobileDropdown] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
@@ -63,15 +64,18 @@ export default function LinkedAccountTabs({
   }, [activeAccount, isMobileDropdown])
 
   // Prefetch trader data on tab hover (desktop) for instant account switching
-  const prefetchAccount = useCallback((account: LinkedAccount) => {
-    const handle = account.handle || account.traderKey
-    const url = `/api/traders/${encodeURIComponent(handle)}?source=${encodeURIComponent(account.platform)}`
-    queryClient.prefetchQuery({
-      queryKey: ['trader-profile', url],
-      queryFn: () => traderFetcher(url),
-      staleTime: STALE_STANDARD,
-    })
-  }, [])
+  const prefetchAccount = useCallback(
+    (account: LinkedAccount) => {
+      const handle = account.handle || account.traderKey
+      const url = `/api/traders/${encodeURIComponent(handle)}?source=${encodeURIComponent(account.platform)}`
+      queryClient.prefetchQuery({
+        queryKey: ['trader-profile', url],
+        queryFn: () => traderFetcher(url),
+        staleTime: STALE_STANDARD,
+      })
+    },
+    [queryClient]
+  )
 
   // #32: Close dropdown on outside mousedown (faster than click)
   useEffect(() => {

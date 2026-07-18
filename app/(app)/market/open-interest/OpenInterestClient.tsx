@@ -5,8 +5,8 @@ import Link from 'next/link'
 import FloatingActionButton from '@/app/components/layout/FloatingActionButton'
 import EmptyState from '@/app/components/ui/EmptyState'
 import { useLanguage } from '@/app/components/Providers/LanguageProvider'
-import { getLocaleFromLanguage } from '@/lib/utils/format'
 import { tokens, alpha } from '@/lib/design-tokens'
+import { formatMarketTimeUtc } from '@/lib/market/time'
 
 interface OpenInterestRow {
   platform: string
@@ -48,20 +48,8 @@ function formatShare(share: number): string {
 // change (e.g. a window-function RPC returning value-24h-ago) in page.tsx, which
 // is out of scope for this surgical client edit.
 
-function formatTime(iso: string, locale: string): string {
-  const d = new Date(iso)
-  return d.toLocaleString(locale, {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    hour12: false,
-  })
-}
-
 export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }) {
-  const { t, language } = useLanguage()
-  const locale = getLocaleFromLanguage(language)
+  const { t } = useLanguage()
   const [sortField, setSortField] = useState<SortField>('open_interest_usd')
   const [sortDir, setSortDir] = useState<SortDir>('desc')
   const [filterPlatform, setFilterPlatform] = useState<string>('all')
@@ -202,7 +190,7 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
             >
               {t('dataAsOf').replace(
                 '{time}',
-                formatTime(new Date(freshestTs).toISOString(), locale)
+                formatMarketTimeUtc(new Date(freshestTs).toISOString())
               )}
               {staleCount > 0 && ` · ${t('staleRowsHidden').replace('{n}', String(staleCount))}`}
             </p>
@@ -515,7 +503,7 @@ export default function OpenInterestClient({ rows }: { rows: OpenInterestRow[] }
                           fontSize: tokens.typography.fontSize.sm,
                         }}
                       >
-                        {formatTime(row.timestamp, locale)}
+                        {formatMarketTimeUtc(row.timestamp)}
                       </td>
                     </tr>
                   )

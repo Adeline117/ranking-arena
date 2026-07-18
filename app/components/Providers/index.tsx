@@ -11,7 +11,7 @@ import { useMemo } from 'react'
 import { initCsrfToken } from '@/lib/api/client'
 import { ErrorBoundary } from '../utils/ErrorBoundary'
 // SWR fully migrated to React Query — SWRConfigProvider removed
-import { createQueryClient, setupQueryErrorLogging } from '@/lib/hooks/queryClient'
+import { getQueryClient } from '@/lib/hooks/queryClient'
 import { initializeErrorInterceptors } from '@/lib/middleware/error-interceptor'
 import dynamic from 'next/dynamic'
 import { useLoginModal } from '@/lib/hooks/useLoginModal'
@@ -22,11 +22,6 @@ const LoginModal = dynamic(() => import('../auth/LoginModal'), { ssr: false })
 // Web3Provider is NO LONGER loaded at root level.
 // It's lazy-loaded only when wallet features are needed.
 // See: lib/web3/provider.tsx (LazyWeb3Provider) and components that use useWeb3()
-
-// React Query client — singleton for the app lifetime.
-const queryClient = createQueryClient()
-setupQueryErrorLogging(queryClient)
-export { queryClient }
 
 // 内部组件，用于初始化错误拦截器
 function ErrorInterceptorInitializer({ children }: { children: ReactNode }) {
@@ -86,6 +81,10 @@ function PremiumProviderWithSSRHint({ children }: { children: ReactNode }) {
 }
 
 export default function Providers({ children }: { children: ReactNode }) {
+  // Server renders get an isolated cache per request; the browser receives the
+  // same singleton across renders and Suspense retries.
+  const queryClient = getQueryClient()
+
   // 初始化 CSRF Token — deferred to avoid blocking hydration
   useEffect(() => {
     if ('requestIdleCallback' in window) {

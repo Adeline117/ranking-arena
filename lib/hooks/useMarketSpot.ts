@@ -34,9 +34,11 @@ export interface SpotCoin {
  * @param initialData SSR-fetched spot coins (from page.tsx getSpotMarketData).
  *   When provided, it seeds React Query so the hook does NOT immediately refetch
  *   the same ~33KB/100-coin dataset on mount — the SSR already delivered it.
- *   Marked fresh-as-of-now so the first background refetch waits out staleTime.
+ * @param initialDataUpdatedAt Epoch milliseconds captured with the SSR payload.
+ *   This must not be Date.now() at render time: the server and browser render at
+ *   different moments, and cached SSR data may already be older than staleTime.
  */
-export function useMarketSpotData(initialData?: SpotCoin[]) {
+export function useMarketSpotData(initialData?: SpotCoin[], initialDataUpdatedAt?: number) {
   const hasSeed = !!initialData && initialData.length > 0
   return useQuery<SpotCoin[]>({
     queryKey: ['market-spot'],
@@ -45,6 +47,13 @@ export function useMarketSpotData(initialData?: SpotCoin[]) {
     refetchInterval: REFETCH_REALTIME,
     refetchOnWindowFocus: false,
     staleTime: STALE_REALTIME,
-    ...(hasSeed ? { initialData, initialDataUpdatedAt: () => Date.now() } : {}),
+    ...(hasSeed
+      ? {
+          initialData,
+          // Unknown collection time is deliberately stale rather than being
+          // relabeled as freshly fetched during each render.
+          initialDataUpdatedAt: initialDataUpdatedAt ?? 0,
+        }
+      : {}),
   })
 }

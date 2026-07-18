@@ -52,9 +52,14 @@ interface SpotCoinSSR {
   rank: number
 }
 
+interface SpotMarketSnapshot {
+  coins: SpotCoinSSR[]
+  fetchedAt: number
+}
+
 // Prefetch spot market data server-side via CoinGecko
 const getSpotMarketData = unstable_cache(
-  async (): Promise<SpotCoinSSR[]> => {
+  async (): Promise<SpotMarketSnapshot> => {
     try {
       const url =
         'https://api.coingecko.com/api/v3/coins/markets?vs_currency=usd&order=market_cap_desc&per_page=100&page=1&sparkline=false&price_change_percentage=24h'
@@ -68,35 +73,48 @@ const getSpotMarketData = unstable_cache(
       })
       clearTimeout(timeoutId)
 
-      if (!res.ok) return []
+      if (!res.ok) return { coins: [], fetchedAt: 0 }
 
       const raw = await res.json()
-      if (!Array.isArray(raw)) return []
+      if (!Array.isArray(raw)) return { coins: [], fetchedAt: 0 }
 
-      return raw.map((c: Record<string, unknown>) => ({
-        id: String(c.id ?? ''),
-        symbol: String(c.symbol ?? '').toUpperCase(),
-        name: String(c.name ?? ''),
-        image: typeof c.image === 'string' ? c.image.replace('/large/', '/small/') : '',
-        price: Number(c.current_price) || 0,
-        change24h: Number(c.price_change_percentage_24h) || 0,
-        high24h: Number(c.high_24h) || 0,
-        low24h: Number(c.low_24h) || 0,
-        volume24h: Number(c.total_volume) || 0,
-        marketCap: Number(c.market_cap) || 0,
-        rank: Number(c.market_cap_rank) || 0,
-      }))
+      return {
+        coins: raw.map((c: Record<string, unknown>) => ({
+          id: String(c.id ?? ''),
+          symbol: String(c.symbol ?? '').toUpperCase(),
+          name: String(c.name ?? ''),
+          image: typeof c.image === 'string' ? c.image.replace('/large/', '/small/') : '',
+          price: Number(c.current_price) || 0,
+          change24h: Number(c.price_change_percentage_24h) || 0,
+          high24h: Number(c.high_24h) || 0,
+          low24h: Number(c.low_24h) || 0,
+          volume24h: Number(c.total_volume) || 0,
+          marketCap: Number(c.market_cap) || 0,
+          rank: Number(c.market_cap_rank) || 0,
+        })),
+        // Stored inside unstable_cache with the payload, so server markup and
+        // browser hydration share one truthful collection timestamp.
+        fetchedAt: Date.now(),
+      }
     } catch {
-      return []
+      return { coins: [], fetchedAt: 0 }
     }
   },
-  ['market-spot-ssr'],
+  // Version the cache key because the cached value changed from an array to a
+  // snapshot object; a rolling deploy must never deserialize the old shape.
+  ['market-spot-ssr-v2'],
   { revalidate: 60, tags: ['market'] }
 )
 
 export default async function MarketPage() {
-  const initialSpotData = await getSpotMarketData()
-  const hasData = initialSpotData.length > 0
+  const initialSpotSnapshot = await getSpotMarketData()
+  const hasData = initialSpotSnapshot.coins.length > 0
 
-  return <MarketPageClient initialSpotData={initialSpotData} initialError={!hasData} />
+  return (
+    <MarketPageClient
+      initialSpotData={initialSpotSnapshot.coins}
+      initialSpotDataUpdatedAt={initialSpotSnapshot.fetchedAt}
+      initialError={!hasData}
+    />
+  )
 }
