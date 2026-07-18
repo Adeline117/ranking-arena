@@ -1,4 +1,5 @@
 import {
+  buildPricingCheckoutLoginHref,
   buildPricingLoginHref,
   buildPricingReturnPath,
   parsePricingBilling,
@@ -17,5 +18,17 @@ describe('pricing login intent', () => {
     expect(parsePricingBilling('yearly')).toBe('yearly')
     expect(parsePricingBilling('lifetime')).toBeNull()
     expect(parsePricingBilling(null)).toBeNull()
+  })
+
+  it('maps checkout state to the exact typed pricing intent', () => {
+    expect(buildPricingCheckoutLoginHref({ plan: 'monthly' })).toBe(
+      '/login?returnUrl=%2Fpricing%3Fplan%3Dpro%26billing%3Dmonthly'
+    )
+    expect(buildPricingCheckoutLoginHref({ plan: 'yearly', trial: true })).toBe(
+      '/login?returnUrl=%2Fpricing%3Fplan%3Dtrial%26billing%3Dyearly'
+    )
+    expect(buildPricingCheckoutLoginHref({ plan: 'lifetime', billing: 'monthly' })).toBe(
+      '/login?returnUrl=%2Fpricing%3Fplan%3Dlifetime%26billing%3Dmonthly'
+    )
   })
 })
