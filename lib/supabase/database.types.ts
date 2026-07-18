@@ -8470,6 +8470,10 @@ export type Database = {
         Returns: Json
       }
       arena_exchange_rankings: { Args: { p_timeframe: number }; Returns: Json }
+      arena_first_screen: {
+        Args: { p_source: string; p_trader: string }
+        Returns: Json
+      }
       arena_freshness_expected_sources: {
         Args: never
         Returns: {
@@ -8478,10 +8482,6 @@ export type Database = {
           registry_slug: string
           season_id: string
         }[]
-      }
-      arena_first_screen: {
-        Args: { p_source: string; p_trader: string }
-        Returns: Json
       }
       arena_latest_snapshot_at: { Args: never; Returns: string }
       arena_pipeline_panel: {
