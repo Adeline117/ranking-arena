@@ -110,11 +110,26 @@ BEGIN
     RAISE EXCEPTION 'public.user_profiles write-authority columns are incompatible';
   END IF;
 
+  -- posts.author_handle is an immutable historical snapshot.  Current handles
+  -- are resolved from user_profiles at read time, so the old profile-update
+  -- propagator must not be revived.
+  IF pg_catalog.to_regprocedure('public.sync_author_handle()') IS NOT NULL
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_trigger AS trigger_row
+      WHERE trigger_row.tgrelid = 'public.user_profiles'::pg_catalog.regclass
+        AND trigger_row.tgname = 'trg_sync_author_handle'
+        AND NOT trigger_row.tgisinternal
+    )
+  THEN
+    RAISE EXCEPTION
+      'legacy author-handle snapshot propagator must remain retired';
+  END IF;
+
   FOREACH v_signature IN ARRAY ARRAY[
     'public.calculate_user_weight(uuid)'::pg_catalog.regprocedure,
     'public.trigger_update_user_weight()'::pg_catalog.regprocedure,
-    'public.trigger_update_weight_on_activity()'::pg_catalog.regprocedure,
-    'public.sync_author_handle()'::pg_catalog.regprocedure
+    'public.trigger_update_weight_on_activity()'::pg_catalog.regprocedure
   ]
   LOOP
     IF NOT EXISTS (
@@ -190,13 +205,6 @@ ALTER FUNCTION public.trigger_update_user_weight()
   SET search_path = pg_catalog, public;
 ALTER FUNCTION public.trigger_update_user_weight() OWNER TO postgres;
 REVOKE ALL ON FUNCTION public.trigger_update_user_weight()
-  FROM PUBLIC, anon, authenticated, service_role;
-
-ALTER FUNCTION public.sync_author_handle() SECURITY DEFINER;
-ALTER FUNCTION public.sync_author_handle()
-  SET search_path = pg_catalog, public;
-ALTER FUNCTION public.sync_author_handle() OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.sync_author_handle()
   FROM PUBLIC, anon, authenticated, service_role;
 
 DROP TRIGGER IF EXISTS trigger_auto_update_user_weight
@@ -471,12 +479,24 @@ BEGIN
     RAISE EXCEPTION 'profile mutation policy set did not converge';
   END IF;
 
+  IF pg_catalog.to_regprocedure('public.sync_author_handle()') IS NOT NULL
+    OR EXISTS (
+      SELECT 1
+      FROM pg_catalog.pg_trigger AS trigger_row
+      WHERE trigger_row.tgrelid = 'public.user_profiles'::pg_catalog.regclass
+        AND trigger_row.tgname = 'trg_sync_author_handle'
+        AND NOT trigger_row.tgisinternal
+    )
+  THEN
+    RAISE EXCEPTION
+      'legacy author-handle snapshot propagator reappeared';
+  END IF;
+
   FOREACH v_signature IN ARRAY ARRAY[
     'public.calculate_user_weight(uuid)'::pg_catalog.regprocedure,
     'public.trigger_update_user_weight()'::pg_catalog.regprocedure,
     'public.trigger_update_user_weight_after()'::pg_catalog.regprocedure,
-    'public.trigger_update_weight_on_activity()'::pg_catalog.regprocedure,
-    'public.sync_author_handle()'::pg_catalog.regprocedure
+    'public.trigger_update_weight_on_activity()'::pg_catalog.regprocedure
   ]
   LOOP
     IF NOT EXISTS (

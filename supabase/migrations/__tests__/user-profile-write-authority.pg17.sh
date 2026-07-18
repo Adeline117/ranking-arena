@@ -198,23 +198,9 @@ BEGIN
 END
 $function$;
 
-CREATE FUNCTION public.sync_author_handle()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = public
-AS $function$
-BEGIN
-  RETURN NEW;
-END
-$function$;
-
 CREATE TRIGGER trigger_auto_update_user_weight
 BEFORE INSERT OR UPDATE ON public.user_profiles
 FOR EACH ROW EXECUTE FUNCTION public.trigger_update_user_weight();
-CREATE TRIGGER trg_sync_author_handle
-AFTER UPDATE OF handle ON public.user_profiles
-FOR EACH ROW EXECUTE FUNCTION public.sync_author_handle();
 
 -- Reproduce Supabase's historical grants plus the overlapping permissive
 -- policies.  The weak policy makes the broader policy irrelevant for UPDATE.
@@ -286,6 +272,44 @@ expect_migration_failure \
 psql_cmd -c \
   'ALTER TABLE public.user_profiles RENAME COLUMN notify_trader_events_drift TO notify_trader_events' \
   >/dev/null
+
+# Historical post handles are snapshots.  Either the retired function or its
+# old trigger name must stop this migration before it changes profile authority.
+psql_cmd <<'SQL'
+CREATE FUNCTION public.sync_author_handle()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  RETURN NEW;
+END
+$function$;
+SQL
+expect_migration_failure \
+  'legacy author-handle snapshot propagator must remain retired' \
+  'retired-author-function'
+psql_cmd -c 'DROP FUNCTION public.sync_author_handle()' >/dev/null
+
+psql_cmd <<'SQL'
+CREATE FUNCTION public.retired_author_handle_probe()
+RETURNS trigger
+LANGUAGE plpgsql
+AS $function$
+BEGIN
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER trg_sync_author_handle
+AFTER UPDATE OF handle ON public.user_profiles
+FOR EACH ROW EXECUTE FUNCTION public.retired_author_handle_probe();
+SQL
+expect_migration_failure \
+  'legacy author-handle snapshot propagator must remain retired' \
+  'retired-author-trigger'
+psql_cmd <<'SQL'
+DROP TRIGGER trg_sync_author_handle ON public.user_profiles;
+DROP FUNCTION public.retired_author_handle_probe();
+SQL
 
 psql_cmd -f "$MIGRATION" >/dev/null
 
@@ -463,6 +487,13 @@ BEGIN
       AND trigger_row.tgfoid =
         'public.trigger_update_user_weight_after()'::pg_catalog.regprocedure
       AND trigger_row.tgtype = 17
+  ) OR pg_catalog.to_regprocedure(
+    'public.sync_author_handle()'
+  ) IS NOT NULL OR EXISTS (
+    SELECT 1 FROM pg_catalog.pg_trigger AS trigger_row
+    WHERE trigger_row.tgrelid = 'public.user_profiles'::pg_catalog.regclass
+      AND trigger_row.tgname = 'trg_sync_author_handle'
+      AND NOT trigger_row.tgisinternal
   ) THEN
     RAISE EXCEPTION 'profile authority replay did not remove drift';
   END IF;

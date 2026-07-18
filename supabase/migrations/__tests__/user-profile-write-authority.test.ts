@@ -26,10 +26,14 @@ describe('user profile write authority migration', () => {
       'public.calculate_user_weight(uuid)',
       'public.trigger_update_user_weight()',
       'public.trigger_update_weight_on_activity()',
-      'public.sync_author_handle()',
     ]) {
       expect(migration).toContain(`'${signature}'::pg_catalog.regprocedure`)
     }
+    expect(migration).toContain(
+      "pg_catalog.to_regprocedure('public.sync_author_handle()') IS NOT NULL"
+    )
+    expect(migration).toContain("trigger_row.tgname = 'trg_sync_author_handle'")
+    expect(migration).toContain('legacy author-handle snapshot propagator must remain retired')
   })
 
   it('removes every historical mutation policy and installs only the two canonical policies', () => {
@@ -103,13 +107,12 @@ describe('user profile write authority migration', () => {
     expect(migration).toContain('safe profile update column is unavailable')
   })
 
-  it('keeps trusted weight and author side effects working behind private definers', () => {
+  it('keeps trusted weight side effects private while author handles remain snapshots', () => {
     for (const signature of [
       'public.calculate_user_weight(uuid)',
       'public.trigger_update_user_weight()',
       'public.trigger_update_user_weight_after()',
       'public.trigger_update_weight_on_activity()',
-      'public.sync_author_handle()',
     ]) {
       expect(migration).toContain(`ALTER FUNCTION ${signature} OWNER TO postgres`)
       expect(migration).toMatch(
@@ -118,6 +121,8 @@ describe('user profile write authority migration', () => {
         )
       )
     }
+    expect(migration).not.toContain('ALTER FUNCTION public.sync_author_handle()')
+    expect(migration).toContain('legacy author-handle snapshot propagator reappeared')
     expect(migration).toMatch(
       /CREATE TRIGGER trigger_auto_update_user_weight[\s\S]*?AFTER UPDATE[\s\S]*?EXECUTE FUNCTION public\.trigger_update_user_weight_after\(\)/
     )
