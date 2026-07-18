@@ -342,6 +342,8 @@ export async function createCheckoutSession(params: {
     // B2C paid authority can explicitly disable the promotion-code field
     // without changing the API-tier/default helper behavior.
     allow_promotion_codes: params.allowPromotionCodes ?? !params.promotionCode,
+    automatic_tax: { enabled: false },
+    adaptive_pricing: { enabled: false },
     billing_address_collection: 'auto',
     locale: 'auto',
   }
